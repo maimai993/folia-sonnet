@@ -40,7 +40,7 @@ import {
 } from '../utils/audioEqualizer';
 import { AUDIO_SOUND_PRESETS } from '../utils/audioPresets';
 import { setStatusMessage, type StatusSetter } from './useStatusMessageStore';
-import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePrimitives';
 import {
     VISUALIZER_OPACITY_STORAGE_KEY,
     clampCladdaghEllipseTiltDeg,
@@ -127,26 +127,11 @@ export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_displa
 export const MOD_SYSTEM_ENABLED_STORAGE_KEY = 'mod_system_enabled';
 export const SLEEP_TIMER_HOURS_STORAGE_KEY = 'sleep_timer_hours';
 export const SLEEP_TIMER_MINUTES_STORAGE_KEY = 'sleep_timer_minutes';
-export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
 export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
-export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
-export const SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY = 'subtitle_overlay_background';
-export const SHOW_HARMONY_SUBTITLE_STORAGE_KEY = 'show_harmony_subtitle';
-export const HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY = 'harmony_subtitle_background';
-export const SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY = 'show_subtitle_translation';
-export const SUBTITLE_CONTENT_MODE_STORAGE_KEY = 'subtitle_content_mode';
 export const FOLLOW_SYSTEM_THEME_STORAGE_KEY = 'follow_system_theme';
-const LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'lyrics_font_fallback_families';
-const LYRICS_FONT_WEIGHT_STORAGE_KEY = 'lyrics_font_weight';
-const SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY = 'subtitle_font_inherits_lyrics';
-const SUBTITLE_FONT_SCALE_STORAGE_KEY = 'subtitle_font_scale';
-const SUBTITLE_FONT_STYLE_STORAGE_KEY = 'subtitle_font_style';
-const SUBTITLE_FONT_FAMILY_STORAGE_KEY = 'subtitle_font_family';
-const SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY = 'subtitle_font_fallback_families';
-const SUBTITLE_FONT_WEIGHT_STORAGE_KEY = 'subtitle_font_weight';
 
 /**
  * The card border's switch, seeded once from the switch the two renderers used to share.
@@ -256,24 +241,6 @@ export const readSystemThemeIsDaylight = (): boolean | null => {
     return window.matchMedia('(prefers-color-scheme: light)').matches;
 };
 
-export const readStoredSubtitleContentMode = (): SubtitleContentMode => {
-    if (typeof window === 'undefined') {
-        return 'translation';
-    }
-    const saved = localStorage.getItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY);
-    if (saved === 'translation' || saved === 'romanization' || saved === 'none') {
-        return saved;
-    }
-    return getStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, true) ? 'translation' : 'none';
-};
-
-const getStoredString = (key: string, fallback: string) => {
-    if (typeof window === 'undefined') {
-        return fallback;
-    }
-
-    return localStorage.getItem(key) || fallback;
-};
 
 // OBS overlay theme mode for the copied web OBS URL (default 'builtin' — per-song follow):
 //   'static'  – bake the current theme into cfg (the original behavior; frozen in OBS).
@@ -320,186 +287,21 @@ const readStoredAudioQuality = (): AudioQuality => {
     return quality;
 };
 
-const readStoredSubtitleOverlayOpacity = () => {
-    if (typeof window === 'undefined') {
-        return 0.6;
-    }
 
-    const saved = localStorage.getItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY);
-    const parsed = saved ? parseFloat(saved) : 0.6;
-    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 0.6;
-};
 
-// Device-local audio/visual latency compensation (Bluetooth headphones and the like). Deliberately
-// NOT part of the synced visual config: the right value belongs to this machine's output path.
-export const GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS = 2000;
 
-export const clampGlobalLyricTimelineOffsetMs = (value: number): number => {
-    if (!Number.isFinite(value)) {
-        return 0;
-    }
 
-    return Math.round(Math.min(GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS, Math.max(-GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS, value)));
-};
 
-const readStoredGlobalLyricTimelineOffsetMs = (): number => {
-    if (typeof window === 'undefined') {
-        return 0;
-    }
 
-    return clampGlobalLyricTimelineOffsetMs(Number(localStorage.getItem(GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY)));
-};
 
-const readStoredLyricsFontStyle = (): Theme['fontStyle'] => {
-    if (typeof window === 'undefined') {
-        return 'sans';
-    }
 
-    const saved = localStorage.getItem('lyrics_font_style');
-    return saved === 'serif' || saved === 'mono' ? saved : 'sans';
-};
 
-const readStoredFontScale = (key: string): number => {
-    if (typeof window === 'undefined') {
-        return 1;
-    }
 
-    const saved = localStorage.getItem(key);
-    if (!saved) return 1;
 
-    const parsed = parseFloat(saved);
-    if (!Number.isFinite(parsed)) return 1;
 
-    return Math.min(1.4, Math.max(0.85, parsed));
-};
 
-const readStoredFontWeight = (key: string): number | null => {
-    if (typeof window === 'undefined') return null;
 
-    const saved = localStorage.getItem(key);
-    if (saved === null) return null;
 
-    return normalizeFontWeight(Number(saved));
-};
-
-const readStoredFontFamilyStack = (key: string): string[] => {
-    if (typeof window === 'undefined') {
-        return [];
-    }
-
-    const saved = localStorage.getItem(key);
-    if (!saved) return [];
-
-    try {
-        const parsed = JSON.parse(saved) as unknown;
-        if (Array.isArray(parsed)) {
-            return normalizeFontFamilyStack(parsed.map(item => typeof item === 'string' ? item : ''));
-        }
-
-        if (typeof parsed === 'string') {
-            return normalizeFontFamilyStack(parsed.split(','));
-        }
-    } catch {
-        return normalizeFontFamilyStack(saved.split(','));
-    }
-
-    return [];
-};
-
-const readStoredSubtitleFontStyle = (): Theme['fontStyle'] => {
-    if (typeof window === 'undefined') {
-        return 'sans';
-    }
-
-    const saved = localStorage.getItem(SUBTITLE_FONT_STYLE_STORAGE_KEY);
-    return saved === 'serif' || saved === 'mono' ? saved : 'sans';
-};
-
-const readStoredSubtitleFontFamily = (): string | null => {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
-    return localStorage.getItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY)?.trim() || null;
-};
-
-const storeFontFamilyStack = (key: string, families: string[]) => {
-    if (typeof window !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(normalizeFontFamilyStack(families)));
-    }
-};
-
-export const resolveStoredCustomLyricsFont = (parsed: Partial<StoredCustomLyricsFont>): StoredCustomLyricsFont | null => {
-    const family = parsed.family?.trim();
-    if (!family) return null;
-
-    const source = parsed.source === 'uploaded' ? 'uploaded' : 'system';
-    const label = parsed.label?.trim() || family;
-
-    if (source === 'uploaded') {
-        const fontId = parsed.fontId?.trim();
-        if (!fontId) return null;
-
-        return {
-            source,
-            family,
-            label,
-            fontId,
-        };
-    }
-
-    return {
-        source,
-        family,
-        label,
-    };
-};
-
-const readStoredCustomLyricsFont = (): StoredCustomLyricsFont | null => {
-    if (typeof window === 'undefined') {
-        return null;
-    }
-
-    const saved = localStorage.getItem('lyrics_custom_font');
-    if (!saved) return null;
-
-    try {
-        const parsed = JSON.parse(saved) as Partial<StoredCustomLyricsFont>;
-        return resolveStoredCustomLyricsFont(parsed);
-    } catch {
-        return null;
-    }
-};
-
-const readStoredLyricFilterPattern = (): string => {
-    if (typeof window === 'undefined') {
-        return '';
-    }
-
-    return localStorage.getItem('lyrics_filter_pattern')?.trim() || '';
-};
-
-const readStoredLyricStaffPolicy = (): LyricStaffPolicy => {
-    if (typeof window === 'undefined') {
-        return DEFAULT_LYRIC_STAFF_POLICY;
-    }
-
-    const saved = localStorage.getItem('lyrics_staff_policy');
-    return saved === 'keep' || saved === 'hide' || saved === 'smart' ? saved : DEFAULT_LYRIC_STAFF_POLICY;
-};
-
-const readStoredLyricStaffMinDwellSeconds = (): number => {
-    if (typeof window === 'undefined') {
-        return DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
-    }
-
-    const parsed = Number.parseFloat(localStorage.getItem('lyrics_staff_min_dwell') || '');
-    if (!Number.isFinite(parsed)) {
-        return DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
-    }
-
-    return Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, parsed));
-};
 
 const readStoredLoopMode = (): 'off' | 'all' | 'one' => {
     if (typeof window === 'undefined') {
@@ -559,24 +361,8 @@ const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
     return 'grid';
 };
 
-const PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2 = 'preferred_alternative_lyric_source_v2';
-export const LOCAL_LYRICS_PRIORITY_STORAGE_KEY = 'local_lyrics_priority';
 
-export const readStoredLocalLyricsPriority = (): LocalLyricsPriority => {
-    if (typeof window === 'undefined') return 'local';
-    return localStorage.getItem(LOCAL_LYRICS_PRIORITY_STORAGE_KEY) === 'online' ? 'online' : 'local';
-};
 
-const readStoredPreferredAlternativeLyricSource = (): LyricProviderSource => {
-    if (typeof window === 'undefined') return 'qq';
-    const versioned = localStorage.getItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2);
-    const legacy = localStorage.getItem('preferred_alternative_lyric_source');
-    const migrated = migratePreferredLyricSource(versioned, legacy);
-    if (versioned !== migrated) {
-        localStorage.setItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2, migrated);
-    }
-    return migrated;
-};
 
 /**
  * Reads the stored card style for the Grid3D desktop home view from localStorage.
@@ -619,13 +405,7 @@ export type SettingsUiState = {
     useCoverColorBg: boolean;
     staticMode: boolean;
     disableHomeDynamicBackground: boolean;
-    autoUseBestLyric: boolean;
-    preferredAlternativeLyricSource: LyricProviderSource;
-    localLyricsPriority: LocalLyricsPriority;
     hidePlayerProgressBar: boolean;
-    hidePlayerTranslationSubtitle: boolean;
-    showSubtitleTranslation: boolean;
-    subtitleContentMode: SubtitleContentMode;
     hidePlayerRightPanelButton: boolean;
     alwaysShowPlayerBackButton: boolean;
     alwaysShowTrackSwitchButtons: boolean;
@@ -677,30 +457,9 @@ export type SettingsUiState = {
      * animation on and never seeing the ring again on the page most people watch.
      */
     transitionAnimationCard: boolean;
-    subtitleOverlayOpacity: number;
-    subtitleOverlayBackground: boolean;
-    showHarmonySubtitle: boolean;
-    harmonySubtitleBackground: boolean;
-    globalLyricTimelineOffsetMs: number;
     isDaylight: boolean;
     followSystemTheme: boolean;
     appLanguagePreference: AppLanguagePreference;
-    lyricsFontStyle: Theme['fontStyle'];
-    lyricsFontScale: number;
-    lyricsFontWeight: number | null;
-    lyricsCustomFont: StoredCustomLyricsFont | null;
-    lyricsFontFallbackFamilies: string[];
-    subtitleFontInheritsLyrics: boolean;
-    subtitleFontScale: number;
-    subtitleFontStyle: Theme['fontStyle'];
-    subtitleFontWeight: number | null;
-    subtitleFontFamily: string | null;
-    subtitleFontFallbackFamilies: string[];
-    lyricFilterPattern: string;
-    // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
-    lyricStaffPolicy: LyricStaffPolicy;
-    lyricStaffMinDwellSeconds: number;
-    lyricStaffPattern: string;
     showOpenPanelCloseButton: boolean;
     enableNowPlayingStage: boolean;
     // PlayerCap lyrics source (third stage source) config. enablePlayerCapStage is Web-only (Electron uses stageStatus.source).
@@ -740,20 +499,13 @@ export type SettingsUiState = {
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
     handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
     setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; }) => void;
-    clearLyricsCustomFontAfterRestoreFailure: (message: StatusMessage) => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null, initialVisualizerSection?: VisualizerSettingsSection | null) => void;
     closeSettings: () => void;
     handleToggleCoverColorBg: (enable: boolean) => void;
     handleToggleStaticMode: (enable: boolean) => void;
     handleToggleDisableHomeDynamicBackground: (disable: boolean) => void;
-    handleToggleAutoUseBestLyric: (enable: boolean) => void;
-    handleSetPreferredAlternativeLyricSource: (source: LyricProviderSource) => void;
-    handleSetLocalLyricsPriority: (priority: LocalLyricsPriority) => void;
     handleToggleHidePlayerProgressBar: (enable: boolean) => void;
-    handleToggleHidePlayerTranslationSubtitle: (enable: boolean) => void;
-    handleToggleShowSubtitleTranslation: (enable: boolean) => void;
-    handleSetSubtitleContentMode: (mode: SubtitleContentMode) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleAlwaysShowPlayerBackButton: (enable: boolean) => void;
     handleToggleAlwaysShowTrackSwitchButtons: (enable: boolean) => void;
@@ -782,31 +534,10 @@ export type SettingsUiState = {
     handleToggleTransitionPerformance: (enable: boolean) => void;
     handleToggleTransitionAnimation: (enable: boolean) => void;
     handleToggleTransitionAnimationCard: (enable: boolean) => void;
-    handleSetSubtitleOverlayOpacity: (opacity: number) => void;
-    handleToggleSubtitleOverlayBackground: (enabled: boolean) => void;
-    handleToggleShowHarmonySubtitle: (enabled: boolean) => void;
-    handleToggleHarmonySubtitleBackground: (enabled: boolean) => void;
-    handleSetGlobalLyricTimelineOffsetMs: (offsetMs: number) => void;
     setDaylightPreference: (isDaylight: boolean) => void;
     setDaylightPreferenceFromSystem: (isDaylight: boolean) => void;
     setFollowSystemTheme: (enabled: boolean) => void;
-    handleSetLyricsFontStyle: (fontStyle: Theme['fontStyle']) => void;
-    handleSetLyricsFontScale: (fontScale: number) => void;
-    handleSetLyricsFontWeight: (fontWeight: number | null) => void;
-    handleSetLyricsCustomFont: (font: StoredCustomLyricsFont | null) => void;
-    handleUploadLyricsCustomFont: (file: File) => Promise<{ ok: boolean; error?: string; }>;
-    handleSetLyricsFontFallbackFamilies: (families: string[]) => void;
-    handleSetSubtitleFontInheritsLyrics: (inheritsLyrics: boolean) => void;
-    handleSetSubtitleFontScale: (fontScale: number) => void;
-    handleSetSubtitleFontStyle: (fontStyle: Theme['fontStyle']) => void;
-    handleSetSubtitleFontWeight: (fontWeight: number | null) => void;
-    handleSetSubtitleFontFamily: (fontFamily: string | null) => void;
-    handleSetSubtitleFontFallbackFamilies: (families: string[]) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
-    handleSetLyricFilterPattern: (pattern: string) => void;
-    handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
-    handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
-    handleSetLyricStaffPattern: (pattern: string) => void;
     handleToggleOpenPanelCloseButton: (enable: boolean) => void;
     handleToggleNowPlayingStage: (enable: boolean) => void;
     // Web stage-source tri-state mutually-exclusive selection: null disables, else one of 'now-playing' or 'playercap'. Electron uses stageStatus.source.
@@ -848,13 +579,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     useCoverColorBg: getStoredBoolean('use_cover_color_bg', false),
     staticMode: getStoredBoolean('static_mode', false),
     disableHomeDynamicBackground: readStoredDisableHomeDynamicBackground(),
-    autoUseBestLyric: getStoredBoolean('auto_use_best_lyric', true),
-    preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
-    localLyricsPriority: readStoredLocalLyricsPriority(),
     hidePlayerProgressBar: getStoredBoolean('hide_player_progress_bar', false),
-    hidePlayerTranslationSubtitle: getStoredBoolean('hide_player_translation_subtitle', false),
-    showSubtitleTranslation: readStoredSubtitleContentMode() !== 'none',
-    subtitleContentMode: readStoredSubtitleContentMode(),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
     alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', false),
@@ -889,29 +614,9 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     // choice to make rather than one to arrive at after an update.
     transitionAnimation: getStoredBoolean(TRANSITION_ANIMATION_KEY, false),
     transitionAnimationCard: readTransitionAnimationCard(),
-    subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
-    subtitleOverlayBackground: getStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, true),
-    showHarmonySubtitle: getStoredBoolean(SHOW_HARMONY_SUBTITLE_STORAGE_KEY, true),
-    harmonySubtitleBackground: getStoredBoolean(HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY, true),
-    globalLyricTimelineOffsetMs: readStoredGlobalLyricTimelineOffsetMs(),
     followSystemTheme: initialFollowSystemTheme,
     isDaylight: initialDaylight,
     appLanguagePreference: readStoredAppLanguagePreference(),
-    lyricsFontStyle: readStoredLyricsFontStyle(),
-    lyricsFontScale: readStoredFontScale('lyrics_font_scale'),
-    lyricsFontWeight: readStoredFontWeight(LYRICS_FONT_WEIGHT_STORAGE_KEY),
-    lyricsCustomFont: readStoredCustomLyricsFont(),
-    lyricsFontFallbackFamilies: readStoredFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
-    subtitleFontInheritsLyrics: getStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, true),
-    subtitleFontScale: readStoredFontScale(SUBTITLE_FONT_SCALE_STORAGE_KEY),
-    subtitleFontStyle: readStoredSubtitleFontStyle(),
-    subtitleFontWeight: readStoredFontWeight(SUBTITLE_FONT_WEIGHT_STORAGE_KEY),
-    subtitleFontFamily: readStoredSubtitleFontFamily(),
-    subtitleFontFallbackFamilies: readStoredFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY),
-    lyricFilterPattern: readStoredLyricFilterPattern(),
-    lyricStaffPolicy: readStoredLyricStaffPolicy(),
-    lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
-    lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
     showOpenPanelCloseButton: getStoredBoolean('show_open_panel_close_button', true),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
     enablePlayerCapStage: getStoredBoolean('enable_playercap_stage', false),
@@ -1006,13 +711,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set(patch);
     },
-    clearLyricsCustomFontAfterRestoreFailure: (message) => {
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem('lyrics_custom_font');
-        }
-        set({ lyricsCustomFont: null });
-        setStatusMessage(message);
-    },
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
     openSettings: (initialTab = 'help', initialSubview = null, initialVisualizerSection = null) => set({
         settingsModalState: {
@@ -1052,30 +750,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             text: i18n.t('notifications.' + (disable ? 'homeBgDisabled' : 'homeBgEnabled')),
         });
     },
-    handleToggleAutoUseBestLyric: (enable) => {
-        setStoredBoolean('auto_use_best_lyric', enable);
-        set({ autoUseBestLyric: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'autoBestLyricOn' : 'autoBestLyricOff')),
-        });
-    },
-    handleSetPreferredAlternativeLyricSource: (source) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(PREFERRED_LYRIC_SOURCE_STORAGE_KEY_V2, source);
-        }
-        set({ preferredAlternativeLyricSource: source });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.lyricSourceChanged', { source: getLyricProviderPreferenceLabel(source) }),
-        });
-    },
-    handleSetLocalLyricsPriority: (priority) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_LYRICS_PRIORITY_STORAGE_KEY, priority);
-        }
-        set({ localLyricsPriority: priority });
-    },
     handleToggleHidePlayerProgressBar: (enable) => {
         setStoredBoolean('hide_player_progress_bar', enable);
         set({ hidePlayerProgressBar: enable });
@@ -1106,38 +780,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'mainWindowTitlebarAlwaysShown' : 'mainWindowTitlebarAutoHidden')),
-        });
-    },
-    handleToggleHidePlayerTranslationSubtitle: (enable) => {
-        setStoredBoolean('hide_player_translation_subtitle', enable);
-        set({ hidePlayerTranslationSubtitle: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'subtitleHidden' : 'subtitleShown')),
-        });
-    },
-    handleToggleShowSubtitleTranslation: (enable) => {
-        setStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, enable);
-        const subtitleContentMode: SubtitleContentMode = enable ? 'translation' : 'none';
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY, subtitleContentMode);
-        }
-        set({ showSubtitleTranslation: enable, subtitleContentMode });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'translationShown' : 'translationHidden')),
-        });
-    },
-    handleSetSubtitleContentMode: (subtitleContentMode) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY, subtitleContentMode);
-        }
-        const showSubtitleTranslation = subtitleContentMode !== 'none';
-        setStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, showSubtitleTranslation);
-        set({ subtitleContentMode, showSubtitleTranslation });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t(`notifications.subtitleMode.${subtitleContentMode}`),
         });
     },
     handleToggleHidePlayerRightPanelButton: (enable) => {
@@ -1336,32 +978,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         setStoredBoolean(TRANSITION_ANIMATION_CARD_KEY, enable);
         set({ transitionAnimationCard: enable });
     },
-    handleSetSubtitleOverlayOpacity: (opacity) => {
-        const next = Math.min(1, Math.max(0.2, opacity));
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY, String(next));
-        }
-        set({ subtitleOverlayOpacity: next });
-    },
-    handleToggleSubtitleOverlayBackground: (enabled) => {
-        setStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, enabled);
-        set({ subtitleOverlayBackground: enabled });
-    },
-    handleToggleShowHarmonySubtitle: (enabled) => {
-        setStoredBoolean(SHOW_HARMONY_SUBTITLE_STORAGE_KEY, enabled);
-        set({ showHarmonySubtitle: enabled });
-    },
-    handleToggleHarmonySubtitleBackground: (enabled) => {
-        setStoredBoolean(HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY, enabled);
-        set({ harmonySubtitleBackground: enabled });
-    },
-    handleSetGlobalLyricTimelineOffsetMs: (offsetMs) => {
-        const nextOffsetMs = clampGlobalLyricTimelineOffsetMs(offsetMs);
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY, String(nextOffsetMs));
-        }
-        set({ globalLyricTimelineOffsetMs: nextOffsetMs });
-    },
     // System updates are kept separate from the manual setter so a user click can disable auto-follow.
     setDaylightPreferenceFromSystem: (enabled) => {
         if (!get().followSystemTheme) {
@@ -1400,126 +1016,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             void window.electron.setNativeTheme(enabled ? 'light' : 'dark');
         }
     },
-    handleSetLyricsFontStyle: (fontStyle) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('lyrics_font_style', fontStyle);
-        }
-        set({ lyricsFontStyle: fontStyle });
-    },
-    handleSetLyricsFontScale: (fontScale) => {
-        const next = Math.min(1.4, Math.max(0.85, fontScale));
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('lyrics_font_scale', String(next));
-        }
-        set({ lyricsFontScale: next });
-    },
-    handleSetLyricsFontWeight: (fontWeight) => {
-        const next = normalizeFontWeight(fontWeight);
-        if (typeof window !== 'undefined') {
-            if (next === null) localStorage.removeItem(LYRICS_FONT_WEIGHT_STORAGE_KEY);
-            else localStorage.setItem(LYRICS_FONT_WEIGHT_STORAGE_KEY, String(next));
-        }
-        set({ lyricsFontWeight: next });
-    },
-    handleSetLyricsCustomFont: (font) => {
-        if (!font?.family?.trim()) {
-            set({ lyricsCustomFont: null, lyricsFontFallbackFamilies: [] });
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('lyrics_custom_font');
-                localStorage.removeItem(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY);
-            }
-            void clearUploadedLyricsFont();
-            return;
-        }
-
-        const next = resolveStoredCustomLyricsFont(font);
-        if (!next) {
-            set({ lyricsCustomFont: null, lyricsFontFallbackFamilies: [] });
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('lyrics_custom_font');
-                localStorage.removeItem(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY);
-            }
-            void clearUploadedLyricsFont();
-            return;
-        }
-
-        if (next.source !== 'uploaded') {
-            void clearUploadedLyricsFont();
-        }
-
-        set({ lyricsCustomFont: next });
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('lyrics_custom_font', JSON.stringify(next));
-        }
-    },
-    handleUploadLyricsCustomFont: async (file) => {
-        try {
-            const { meta } = await uploadAndRegisterLyricsFont(file);
-            set({ lyricsCustomFont: meta });
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('lyrics_custom_font', JSON.stringify(meta));
-            }
-            setStatusMessage({
-                type: 'success',
-                text: i18n.t('notifications.fontEnabled', { fontName: meta.label || meta.family }),
-            });
-
-            return { ok: true };
-        } catch (error) {
-            const message = error instanceof Error && error.message
-                ? error.message
-                : i18n.t('notifications.fontUploadFailed');
-            setStatusMessage({ type: 'error', text: message });
-
-            return { ok: false, error: message };
-        }
-    },
-    handleSetLyricsFontFallbackFamilies: (families) => {
-        const next = normalizeFontFamilyStack(families);
-        storeFontFamilyStack(LYRICS_FONT_FALLBACK_FAMILIES_STORAGE_KEY, next);
-        set({ lyricsFontFallbackFamilies: next });
-    },
-    handleSetSubtitleFontInheritsLyrics: (inheritsLyrics) => {
-        setStoredBoolean(SUBTITLE_FONT_INHERITS_LYRICS_STORAGE_KEY, inheritsLyrics);
-        set({ subtitleFontInheritsLyrics: inheritsLyrics });
-    },
-    handleSetSubtitleFontScale: (fontScale) => {
-        const next = Math.min(1.4, Math.max(0.85, fontScale));
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(SUBTITLE_FONT_SCALE_STORAGE_KEY, String(next));
-        }
-        set({ subtitleFontScale: next });
-    },
-    handleSetSubtitleFontStyle: (fontStyle) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(SUBTITLE_FONT_STYLE_STORAGE_KEY, fontStyle);
-        }
-        set({ subtitleFontStyle: fontStyle });
-    },
-    handleSetSubtitleFontWeight: (fontWeight) => {
-        const next = normalizeFontWeight(fontWeight);
-        if (typeof window !== 'undefined') {
-            if (next === null) localStorage.removeItem(SUBTITLE_FONT_WEIGHT_STORAGE_KEY);
-            else localStorage.setItem(SUBTITLE_FONT_WEIGHT_STORAGE_KEY, String(next));
-        }
-        set({ subtitleFontWeight: next });
-    },
-    handleSetSubtitleFontFamily: (fontFamily) => {
-        const next = fontFamily?.trim() || null;
-        if (typeof window !== 'undefined') {
-            if (next) {
-                localStorage.setItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY, next);
-            } else {
-                localStorage.removeItem(SUBTITLE_FONT_FAMILY_STORAGE_KEY);
-            }
-        }
-        set({ subtitleFontFamily: next });
-    },
-    handleSetSubtitleFontFallbackFamilies: (families) => {
-        const next = normalizeFontFamilyStack(families);
-        storeFontFamilyStack(SUBTITLE_FONT_FALLBACK_FAMILIES_STORAGE_KEY, next);
-        set({ subtitleFontFallbackFamilies: next });
-    },
     handleSetAppLanguagePreference: async (preference) => {
         await applyAppLanguagePreference(preference);
         set({ appLanguagePreference: preference });
@@ -1538,56 +1034,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
                 ? i18n.t('notifications.langFollowSystem')
                 : i18n.t('notifications.langManual', { language: getLanguageLabel(preference) }),
         });
-    },
-    handleSetLyricFilterPattern: (pattern) => {
-        const next = pattern.trim();
-        set({ lyricFilterPattern: next });
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (next) {
-            localStorage.setItem('lyrics_filter_pattern', next);
-        } else {
-            localStorage.removeItem('lyrics_filter_pattern');
-        }
-    },
-    handleSetLyricStaffPolicy: (policy) => {
-        set({ lyricStaffPolicy: policy });
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        localStorage.setItem('lyrics_staff_policy', policy);
-    },
-    handleSetLyricStaffMinDwellSeconds: (seconds) => {
-        const next = Number.isFinite(seconds)
-            ? Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, seconds))
-            : DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS;
-
-        set({ lyricStaffMinDwellSeconds: next });
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        localStorage.setItem('lyrics_staff_min_dwell', String(next));
-    },
-    handleSetLyricStaffPattern: (pattern) => {
-        const next = pattern.trim();
-        set({ lyricStaffPattern: next });
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (next) {
-            localStorage.setItem('lyrics_staff_pattern', next);
-        } else {
-            localStorage.removeItem('lyrics_staff_pattern');
-        }
     },
     handleToggleOpenPanelCloseButton: (enable) => {
         setStoredBoolean('show_open_panel_close_button', enable);
@@ -1788,9 +1234,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     staticMode: state.staticMode,
     disableHomeDynamicBackground: state.disableHomeDynamicBackground,
     hidePlayerProgressBar: state.hidePlayerProgressBar,
-    hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
-    showSubtitleTranslation: state.showSubtitleTranslation,
-    subtitleContentMode: state.subtitleContentMode,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
     alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
@@ -1815,11 +1258,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     enableMediaCache: state.enableMediaCache,
     mediaCacheLimitGb: state.mediaCacheLimitGb,
-    subtitleOverlayOpacity: state.subtitleOverlayOpacity,
-    subtitleOverlayBackground: state.subtitleOverlayBackground,
-    showHarmonySubtitle: state.showHarmonySubtitle,
-    harmonySubtitleBackground: state.harmonySubtitleBackground,
-    globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
     isDaylight: state.isDaylight,
     followSystemTheme: state.followSystemTheme,
     lastSeenGuideVersion: state.lastSeenGuideVersion,
@@ -1829,24 +1267,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     grid3dCardStyle: state.grid3dCardStyle,
     handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
     appLanguagePreference: state.appLanguagePreference,
-    lyricsFontStyle: state.lyricsFontStyle,
-    lyricsFontScale: state.lyricsFontScale,
-    lyricsFontWeight: state.lyricsFontWeight,
-    lyricsCustomFontFamily: state.lyricsCustomFont?.family ?? null,
-    lyricsCustomFontLabel: state.lyricsCustomFont?.label ?? null,
-    lyricsFontFallbackFamilies: state.lyricsFontFallbackFamilies,
-    subtitleFontInheritsLyrics: state.subtitleFontInheritsLyrics,
-    subtitleFontScale: state.subtitleFontScale,
-    subtitleFontStyle: state.subtitleFontStyle,
-    subtitleFontWeight: state.subtitleFontWeight,
-    subtitleFontFamily: state.subtitleFontFamily,
-    subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
-    lyricFilterPattern: state.lyricFilterPattern,
-    lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
-    lyricStaffPolicy: state.lyricStaffPolicy,
-    lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
-    lyricStaffPattern: state.lyricStaffPattern,
-    lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
     showOpenPanelCloseButton: state.showOpenPanelCloseButton,
     enableNowPlayingStage: state.enableNowPlayingStage,
     enablePlayerCapStage: state.enablePlayerCapStage,
@@ -1868,9 +1288,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleStaticMode: state.handleToggleStaticMode,
     handleToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
     handleToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
-    handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
-    handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
-    handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
     handleToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
@@ -1888,33 +1305,12 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
-    handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
-    handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
-    handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
-    handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
-    handleSetGlobalLyricTimelineOffsetMs: state.handleSetGlobalLyricTimelineOffsetMs,
     setDaylightPreference: state.setDaylightPreference,
     setDaylightPreferenceFromSystem: state.setDaylightPreferenceFromSystem,
     setFollowSystemTheme: state.setFollowSystemTheme,
     setLastSeenGuideVersion: state.setLastSeenGuideVersion,
     setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
-    handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
-    handleSetLyricsFontScale: state.handleSetLyricsFontScale,
-    handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
-    handleSetLyricsCustomFont: state.handleSetLyricsCustomFont,
-    handleUploadLyricsCustomFont: state.handleUploadLyricsCustomFont,
-    handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
-    handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
-    handleSetSubtitleFontScale: state.handleSetSubtitleFontScale,
-    handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
-    handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
-    handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
-    handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
-    handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
-    handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
-    handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
-    handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
     handleToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
     handleToggleNowPlayingStage: state.handleToggleNowPlayingStage,
     handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,

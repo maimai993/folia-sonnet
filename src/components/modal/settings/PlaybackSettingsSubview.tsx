@@ -11,6 +11,7 @@ import { getLyricProviderPreferenceLabel } from '../../../utils/lyrics/lyricSour
 import TransitionSettingsSection from './TransitionSettingsSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 
 // src/components/modal/settings/PlaybackSettingsSubview.tsx
 // Playback behavior and output-device settings extracted from the global settings modal.
@@ -45,26 +46,29 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     const { t } = useTranslation();
     const {
         audioOutputDeviceId,
+        queueAddBehavior,
+        onQueueAddBehaviorChange,
+    } = useSettingsUiStore(useShallow(state => ({
+        audioOutputDeviceId: state.audioOutputDeviceId,
+        queueAddBehavior: state.queueAddBehavior,
+        onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
+    })));
+    const {
         autoUseBestLyric,
         preferredAlternativeLyricSource,
         localLyricsPriority,
-        queueAddBehavior,
         globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange,
         onLocalLyricsPriorityChange,
-        onQueueAddBehaviorChange,
-    } = useSettingsUiStore(useShallow(state => ({
-        audioOutputDeviceId: state.audioOutputDeviceId,
+    } = useLyricSettingsStore(useShallow(state => ({
         autoUseBestLyric: state.autoUseBestLyric,
         preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
         localLyricsPriority: state.localLyricsPriority,
-        queueAddBehavior: state.queueAddBehavior,
         globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange: state.handleSetPreferredAlternativeLyricSource,
         onLocalLyricsPriorityChange: state.handleSetLocalLyricsPriority,
-        onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     const {
         devices: audioOutputDevices,

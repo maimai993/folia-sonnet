@@ -7,7 +7,6 @@ import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
 import {
-    resolveStoredCustomLyricsFont,
     readSystemThemeIsDaylight,
     selectSettingsUiSnapshot,
     useSettingsUiStore,
@@ -22,6 +21,8 @@ import i18n from '../i18n/config';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
+import { resolveStoredCustomLyricsFont } from '../stores/useTypographySettingsStore';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
@@ -43,8 +44,8 @@ export function useAppPreferences() {
     const setIsLoadingMonetPortraitImage = useVisualizerAssetStore(state => state.setIsLoadingMonetPortraitImage);
     const handleSetMonetTuning = useVisualizerSettingsStore(state => state.handleSetMonetTuning);
     const handleSetMonetBackgroundTuning = useVisualizerSettingsStore(state => state.handleSetMonetBackgroundTuning);
-    const clearLyricsCustomFontAfterRestoreFailure = useSettingsUiStore(state => state.clearLyricsCustomFontAfterRestoreFailure);
-    const lyricsCustomFont = useSettingsUiStore(state => state.lyricsCustomFont);
+    const clearLyricsCustomFontAfterRestoreFailure = useTypographySettingsStore(state => state.clearLyricsCustomFontAfterRestoreFailure);
+    const lyricsCustomFont = useTypographySettingsStore(state => state.lyricsCustomFont);
     const storedCappellaEmojiPack = useVisualizerAssetStore(state => state.storedCappellaEmojiPack);
     const storedCappellaAvatarPack = useVisualizerAssetStore(state => state.storedCappellaAvatarPack);
     const storedMonetBackgroundImage = useVisualizerAssetStore(state => state.storedMonetBackgroundImage);

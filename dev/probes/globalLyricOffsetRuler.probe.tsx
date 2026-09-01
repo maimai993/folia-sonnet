@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import GlobalLyricOffsetRuler from '../../src/components/modal/settings/GlobalLyricOffsetRuler';
-import { clampGlobalLyricTimelineOffsetMs, GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS } from '../../src/stores/useSettingsUiStore';
+import { clampGlobalLyricTimelineOffsetMs, GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS } from '../../src/stores/useLyricSettingsStore';
 import type { ProbeDefinition } from './definition';
 // dev/probes/globalLyricOffsetRuler.probe.tsx
 

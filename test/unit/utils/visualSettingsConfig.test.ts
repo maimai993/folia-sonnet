@@ -18,6 +18,7 @@ import { extractCfgFromInput } from '@/utils/obsUrl';
 import { DEFAULT_SONNET_TUNING } from '@/types';
 import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore } from '@/stores/useTypographySettingsStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -84,7 +85,7 @@ describe('buildVisualSettingsConfig', () => {
     // table was the one place they were missing, so a copied link and the OBS overlay used to fall
     // back to the mode's default weight regardless of the setting.
     it('carries the custom font weights and round-trips them through a copied OBS URL', () => {
-        useSettingsUiStore.setState({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
+        useTypographySettingsStore.setState({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
         const config = buildVisualSettingsConfig();
         expect(config).toMatchObject({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(config))));
@@ -95,7 +96,7 @@ describe('buildVisualSettingsConfig', () => {
     // null means "use the mode default"; it has to survive the round trip so a config that overrides
     // no weight can reset one that does, rather than being read as "no weight was carried".
     it('round-trips a null weight as the mode default', () => {
-        useSettingsUiStore.setState({ lyricsFontWeight: null, subtitleFontWeight: null });
+        useTypographySettingsStore.setState({ lyricsFontWeight: null, subtitleFontWeight: null });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored.lyricsFontWeight).toBeNull();
         expect(restored.subtitleFontWeight).toBeNull();
@@ -131,8 +132,8 @@ describe('buildVisualSettingsConfig', () => {
         useSettingsUiStore.setState({
             useCoverColorBg: true,
             staticMode: true,
-            subtitleOverlayOpacity: 0.45,
         });
+        useTypographySettingsStore.setState({ subtitleOverlayOpacity: 0.45 });
 
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored).toMatchObject({

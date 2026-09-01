@@ -27,6 +27,7 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -152,6 +153,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
+        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
+
+        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
+        handleToggleStaticMode: state.handleToggleStaticMode,
+    })));
+    const storeTypographySettings = useTypographySettingsStore(useShallow(state => ({
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
@@ -168,15 +175,11 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         subtitleFontWeight: state.subtitleFontWeight,
         subtitleFontFamily: state.subtitleFontFamily,
         subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
-        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
-
         handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
         handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
-        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
-        handleToggleStaticMode: state.handleToggleStaticMode,
         handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
         handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
@@ -331,7 +334,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             // Import accepts a bare shortcode/JSON or a full OBS URL (extracting its cfg param), so a look can be re-tuned from someone's link.
             const config = decompressConfig(extractCfgFromInput(importText));
             const uiStore = useSettingsUiStore.getState();
-            const customFont = uiStore.lyricsCustomFont;
+  const uiStoreTypographySettings = useTypographySettingsStore.getState();
+            const customFont = uiStoreTypographySettings.lyricsCustomFont;
             const plan = buildImportPlan({
                 incoming: config,
                 current: { ...buildVisualSettingsConfig(), theme: customTheme ?? null },
@@ -392,28 +396,28 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 storeVisualizer.handleSetVisualizerOpacity(config.visualizerOpacity);
             }
             if (has('hidePlayerTranslationSubtitle')) {
-                store.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
+                storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
             }
             if (has('showSubtitleTranslation')) {
-                store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
+                storeTypographySettings.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
             }
             if (has('subtitleContentMode')
                 && (config.subtitleContentMode === 'translation'
                     || config.subtitleContentMode === 'romanization'
                     || config.subtitleContentMode === 'none')) {
-                store.handleSetSubtitleContentMode(config.subtitleContentMode);
+                storeTypographySettings.handleSetSubtitleContentMode(config.subtitleContentMode);
             }
             if (has('subtitleOverlayBackground')) {
-                store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+                storeTypographySettings.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
             }
             if (has('subtitleOverlayOpacity')) {
-                store.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
+                storeTypographySettings.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
             }
             if (has('showHarmonySubtitle')) {
-                store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
+                storeTypographySettings.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
             }
             if (has('harmonySubtitleBackground')) {
-                store.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
+                storeTypographySettings.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
             }
 
             if (has('visualizerBackgroundMode') && config.visualizerBackgroundMode) {
@@ -439,40 +443,40 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
 
             if (has('lyricsFontStyle') && config.lyricsFontStyle) {
-                store.handleSetLyricsFontStyle(config.lyricsFontStyle);
+                storeTypographySettings.handleSetLyricsFontStyle(config.lyricsFontStyle);
             }
             if (has('lyricsFontScale')) {
-                store.handleSetLyricsFontScale(config.lyricsFontScale);
+                storeTypographySettings.handleSetLyricsFontScale(config.lyricsFontScale);
             }
             if (has('lyricsFontWeight')) {
-                store.handleSetLyricsFontWeight(config.lyricsFontWeight);
+                storeTypographySettings.handleSetLyricsFontWeight(config.lyricsFontWeight);
             }
             if (has('lyricsFontFallbackFamilies') && config.lyricsFontFallbackFamilies) {
-                store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
+                storeTypographySettings.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
             }
             // Only a system family is portable. Setting one evicts an uploaded font and deletes
             // its stored file, which is why the confirmation calls that out separately.
             if (has('lyricsCustomFontFamily') && config.lyricsCustomFontFamily) {
                 const family = String(config.lyricsCustomFontFamily);
-                useSettingsUiStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
+                useTypographySettingsStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
             }
             if (has('subtitleFontInheritsLyrics')) {
-                store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
+                storeTypographySettings.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
             }
             if (has('subtitleFontScale')) {
-                store.handleSetSubtitleFontScale(config.subtitleFontScale);
+                storeTypographySettings.handleSetSubtitleFontScale(config.subtitleFontScale);
             }
             if (has('subtitleFontStyle') && config.subtitleFontStyle) {
-                store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
+                storeTypographySettings.handleSetSubtitleFontStyle(config.subtitleFontStyle);
             }
             if (has('subtitleFontWeight')) {
-                store.handleSetSubtitleFontWeight(config.subtitleFontWeight);
+                storeTypographySettings.handleSetSubtitleFontWeight(config.subtitleFontWeight);
             }
             if (has('subtitleFontFamily')) {
-                store.handleSetSubtitleFontFamily(config.subtitleFontFamily);
+                storeTypographySettings.handleSetSubtitleFontFamily(config.subtitleFontFamily);
             }
             if (has('subtitleFontFallbackFamilies') && config.subtitleFontFallbackFamilies) {
-                store.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
+                storeTypographySettings.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
             }
 
             // Tunings. The bundle wins over the individual ones, which is why the plan never offers

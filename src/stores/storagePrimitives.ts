@@ -18,3 +18,11 @@ export const setStoredBoolean = (key: string, value: boolean) => {
         localStorage.setItem(key, String(value));
     }
 };
+
+export const getStoredString = (key: string, fallback: string) => {
+    if (typeof window === 'undefined') {
+        return fallback;
+    }
+
+    return localStorage.getItem(key) || fallback;
+};

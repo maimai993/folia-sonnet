@@ -49,6 +49,7 @@ import { applyMatchedMetadata } from '../services/localLibraryCatalogService';
 import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata, shouldRunLocalSongAutomaticMatch } from '../utils/lyrics/localSongMatchContext';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -372,7 +373,7 @@ export function useLibraryPlaybackController({
     const handleLocalSongMatch = useCallback(async (localSong: LocalSong): Promise<{ updatedLocalSong: LocalSong; matchedSongResult: SongResult | null; }> => {
         let updatedLocalSong = localSong;
         let matchedSongResult: SongResult | null = null;
-        const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+        const onlineFirst = useLyricSettingsStore.getState().localLyricsPriority === 'online';
         const needsLyricsMatch = (
             (onlineFirst || (!localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics))
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
@@ -416,7 +417,7 @@ export function useLibraryPlaybackController({
         } else if (source === 'local' && localData.localLyricsContent) {
             nextLyrics = await parseLocalSongLyrics(localData);
         } else if (!source) {
-            const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+            const onlineFirst = useLyricSettingsStore.getState().localLyricsPriority === 'online';
             if (onlineFirst && localData.matchedLyrics) {
                 nextLyrics = localData.matchedLyrics;
             } else if (localData.hasLocalLyrics && localData.localLyricsContent) {
@@ -457,7 +458,7 @@ export function useLibraryPlaybackController({
                 return parseLocalSongLyrics(localData);
             }
             if (!source) {
-                const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+                const onlineFirst = useLyricSettingsStore.getState().localLyricsPriority === 'online';
                 if (onlineFirst && localData.matchedLyrics) {
                     return localData.matchedLyrics;
                 }
@@ -530,7 +531,7 @@ export function useLibraryPlaybackController({
         const preparedLocalSong = await ensureLocalSongCoverAsset(localSong);
         Object.assign(localSong, preparedLocalSong);
 
-        const onlineFirst = useSettingsUiStore.getState().localLyricsPriority === 'online';
+        const onlineFirst = useLyricSettingsStore.getState().localLyricsPriority === 'online';
         const needsLyricsMatch = (
             (onlineFirst || (!localSong.hasLocalLyrics && !localSong.hasEmbeddedLyrics))
             && (!localSong.matchedLyrics && !localSong.matchedIsPureMusic
@@ -746,11 +747,12 @@ export function useLibraryPlaybackController({
                     const artistName = navidromeMetadata.artists.map(artist => artist.name).filter(Boolean).join(', ');
                     const albumName = navidromeMetadata.album?.name || '';
                     const settings = useSettingsUiStore.getState();
+  const settingsLyricSettings = useLyricSettingsStore.getState();
 
-                    if (settings.autoUseBestLyric) {
+                    if (settingsLyricSettings.autoUseBestLyric) {
                         const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeMetadata.durationMs, {
                             album: albumName,
-                            preferredSource: settings.preferredAlternativeLyricSource,
+                            preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                         });
                         if (bestMatch?.isPureMusic) {
                             isAutoMatched = true;
@@ -1191,6 +1193,7 @@ export function useLibraryPlaybackController({
         }
 
         const settings = useSettingsUiStore.getState();
+  const settingsLyricSettings = useLyricSettingsStore.getState();
         setStatusMsg({ type: 'info', text: t('status.matchingBestLyrics') || '' });
 
         try {
@@ -1205,7 +1208,7 @@ export function useLibraryPlaybackController({
                 });
                 const bestMatch = await autoMatchBestLyric(matchContext.title, matchContext.artist, matchContext.durationMs, {
                     album: matchContext.album,
-                    preferredSource: settings.preferredAlternativeLyricSource,
+                    preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                     metadataCandidate: matchContext.metadataCandidate,
                 });
 
@@ -1251,7 +1254,7 @@ export function useLibraryPlaybackController({
                 const albumName = navidromeMetadata.album?.name || '';
                 const bestMatch = await autoMatchBestLyric(navidromeSong.name, artistName, navidromeMetadata.durationMs, {
                     album: albumName,
-                    preferredSource: settings.preferredAlternativeLyricSource,
+                    preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                 });
 
                 if (!bestMatch) {
@@ -1300,7 +1303,7 @@ export function useLibraryPlaybackController({
             const ownLyricsResult = await omni.getLyrics(currentSong);
             const bestMatch = await autoMatchBestLyric(currentSong.name, artistName, currentSongMetadata.durationMs, {
                 album: albumName,
-                preferredSource: settings.preferredAlternativeLyricSource,
+                preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                 providerCandidate: sourceRef.kind === 'online'
                     && (sourceRef.providerId === 'netease' || sourceRef.providerId === 'kugou')
                     ? { providerId: sourceRef.providerId as 'netease' | 'kugou', song: currentSong, lyricsResult: ownLyricsResult }

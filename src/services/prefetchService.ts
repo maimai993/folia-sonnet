@@ -20,6 +20,7 @@ import { toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { ensureTrackProfile, setAnalysisScope } from './automix/profileService';
 import { modeNeedsBeatGrid } from './automix/transitionStrategy';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 
 // Prefetch configuration
 //
@@ -46,6 +47,7 @@ const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond
  */
 const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined) => {
     const settings = useSettingsUiStore.getState();
+  const settingsLyricSettings = useLyricSettingsStore.getState();
     // Nothing reads a profile while blending is switched off, and this is not a cheap thing to
     // produce for nobody: the whole file is read, decoded, and put through the beat model in the
     // inference process - per prefetched track, and a prefetch pass covers three of them. Blending
@@ -183,8 +185,9 @@ const prefetchSong = async (
         existing.audioUrl = toSafePlaybackUrl(existing.audioUrl) ?? null;
     }
     const currentSettings = useSettingsUiStore.getState();
-    const lyricPreferenceMatches = !currentSettings.autoUseBestLyric
-        || existing?.lyricPreferenceSource === currentSettings.preferredAlternativeLyricSource;
+  const currentSettingsLyricSettings = useLyricSettingsStore.getState();
+    const lyricPreferenceMatches = !currentSettingsLyricSettings.autoUseBestLyric
+        || existing?.lyricPreferenceSource === currentSettingsLyricSettings.preferredAlternativeLyricSource;
     if (existing && lyricPreferenceMatches && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && (existing.lyrics || existing.lyricRaw?.isPureMusic)) {
         console.log(`[Prefetch] Already cached: ${song.name}`);
         touchPrefetchCacheEntry(songKey, existing);
@@ -244,8 +247,8 @@ const prefetchSong = async (
                 // The same stamp the fetched path leaves below. Without it a track whose lyrics came
                 // from the cache can never satisfy the "already cached" test at the top of this
                 // function, so every prefetch pass re-enters the whole thing for it.
-                data.lyricPreferenceSource = currentSettings.autoUseBestLyric
-                    ? currentSettings.preferredAlternativeLyricSource
+                data.lyricPreferenceSource = currentSettingsLyricSettings.autoUseBestLyric
+                    ? currentSettingsLyricSettings.preferredAlternativeLyricSource
                     : null;
             } else if (!signal.aborted) {
                 const lyricResult = await omni.getLyrics(song, { userId });
@@ -271,8 +274,9 @@ const prefetchSong = async (
                 const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
 
                 const settings = useSettingsUiStore.getState();
-                const autoUseBest = settings.autoUseBestLyric;
-                const preferredSource = settings.preferredAlternativeLyricSource;
+  const settingsLyricSettings = useLyricSettingsStore.getState();
+                const autoUseBest = settingsLyricSettings.autoUseBestLyric;
+                const preferredSource = settingsLyricSettings.preferredAlternativeLyricSource;
                 const shouldAutoMatch = autoUseBest && !onlineLyricsState?.hasOnlineOverride;
 
                 if (shouldAutoMatch) {
@@ -281,7 +285,7 @@ const prefetchSong = async (
                         const artistName = metadata.artists.map(a => a.name).join(', ');
                         const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
                             album: metadata.album?.name,
-                            preferredSource: settings.preferredAlternativeLyricSource,
+                            preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                             ...(sourceRef.providerId === 'netease' || sourceRef.providerId === 'kugou' || sourceRef.providerId === 'qq'
                                 ? { providerCandidate: {
                                     providerId: sourceRef.providerId as 'netease' | 'kugou' | 'qq',

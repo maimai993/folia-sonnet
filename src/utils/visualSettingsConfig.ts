@@ -4,6 +4,7 @@ import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, r
 import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBackgroundImage, MonetBackgroundTuning, MonetPortraitImage, MonetTuning, NomandBackgroundTuning } from '../types';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -11,6 +12,7 @@ import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
   const store = useSettingsUiStore.getState();
+  const storeTypographySettings = useTypographySettingsStore.getState();
   const storeVisualizer = useVisualizerSettingsStore.getState();
   // The song-theme automation flags live in theme preferences, not the settings store. The overlay
   // ignores them, but a copied OBS URL is also a restore payload (the import box accepts one), so
@@ -39,30 +41,30 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // several renderers, so a web overlay without it animates where the main window does not.
     staticMode: store.staticMode,
     visualizerOpacity: storeVisualizer.visualizerOpacity,
-    hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
-    showSubtitleTranslation: store.showSubtitleTranslation,
-    subtitleContentMode: store.subtitleContentMode,
-    subtitleOverlayBackground: store.subtitleOverlayBackground,
-    subtitleOverlayOpacity: store.subtitleOverlayOpacity,
-    showHarmonySubtitle: store.showHarmonySubtitle,
-    harmonySubtitleBackground: store.harmonySubtitleBackground,
-    lyricsFontStyle: store.lyricsFontStyle,
-    lyricsFontScale: store.lyricsFontScale,
+    hidePlayerTranslationSubtitle: storeTypographySettings.hidePlayerTranslationSubtitle,
+    showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
+    subtitleContentMode: storeTypographySettings.subtitleContentMode,
+    subtitleOverlayBackground: storeTypographySettings.subtitleOverlayBackground,
+    subtitleOverlayOpacity: storeTypographySettings.subtitleOverlayOpacity,
+    showHarmonySubtitle: storeTypographySettings.showHarmonySubtitle,
+    harmonySubtitleBackground: storeTypographySettings.harmonySubtitleBackground,
+    lyricsFontStyle: storeTypographySettings.lyricsFontStyle,
+    lyricsFontScale: storeTypographySettings.lyricsFontScale,
     // The codec, the OBS overlay (obsWebAppearance -> buildVisualizerTheme) and the import path all
     // already handle the custom font weights; this field table is the only place they were missing,
     // so without them a copied link and the OBS overlay silently fall back to the mode's default
     // weight. null means "use the mode default" and is carried as-is so it round-trips.
-    lyricsFontWeight: store.lyricsFontWeight,
-    lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
-    subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
-    subtitleFontScale: store.subtitleFontScale,
-    subtitleFontStyle: store.subtitleFontStyle,
-    subtitleFontWeight: store.subtitleFontWeight,
-    subtitleFontFamily: store.subtitleFontFamily,
-    subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
+    lyricsFontWeight: storeTypographySettings.lyricsFontWeight,
+    lyricsFontFallbackFamilies: storeTypographySettings.lyricsFontFallbackFamilies,
+    subtitleFontInheritsLyrics: storeTypographySettings.subtitleFontInheritsLyrics,
+    subtitleFontScale: storeTypographySettings.subtitleFontScale,
+    subtitleFontStyle: storeTypographySettings.subtitleFontStyle,
+    subtitleFontWeight: storeTypographySettings.subtitleFontWeight,
+    subtitleFontFamily: storeTypographySettings.subtitleFontFamily,
+    subtitleFontFallbackFamilies: storeTypographySettings.subtitleFontFallbackFamilies,
     // Only a system font's family name is portable; an uploaded font is a browser-local FontFace
     // (its generated family resolves nowhere else), so it is not carried.
-    lyricsCustomFontFamily: store.lyricsCustomFont?.source === 'system' ? store.lyricsCustomFont.family : null,
+    lyricsCustomFontFamily: storeTypographySettings.lyricsCustomFont?.source === 'system' ? storeTypographySettings.lyricsCustomFont.family : null,
     visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
     classicTuning: storeVisualizer.classicTuning,
     cadenzaTuning: storeVisualizer.cadenzaTuning,
@@ -95,10 +97,11 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
 // that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
 export function hasCustomObsFont(): boolean {
   const store = useSettingsUiStore.getState();
-  return Boolean(store.lyricsCustomFont)
-    || (store.lyricsFontFallbackFamilies?.length ?? 0) > 0
-    || Boolean(store.subtitleFontFamily)
-    || (store.subtitleFontFallbackFamilies?.length ?? 0) > 0;
+  const storeTypographySettings = useTypographySettingsStore.getState();
+  return Boolean(storeTypographySettings.lyricsCustomFont)
+    || (storeTypographySettings.lyricsFontFallbackFamilies?.length ?? 0) > 0
+    || Boolean(storeTypographySettings.subtitleFontFamily)
+    || (storeTypographySettings.subtitleFontFallbackFamilies?.length ?? 0) > 0;
 }
 
 // The subset of settings that decide whether an uploaded image asset is in play. Kept structural

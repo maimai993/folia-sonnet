@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-    readStoredSubtitleContentMode,
-    SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY,
-    SUBTITLE_CONTENT_MODE_STORAGE_KEY,
-} from '@/stores/useSettingsUiStore';
+import { readStoredSubtitleContentMode, SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, SUBTITLE_CONTENT_MODE_STORAGE_KEY } from '@/stores/useTypographySettingsStore';
 
 // test/unit/stores/subtitleContentMode.test.ts
 // Locks the one-time compatibility mapping from the former translation visibility boolean.

@@ -10,6 +10,7 @@ import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -52,7 +53,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         alwaysShowPlayerBackButton,
         alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle,
         isDaylight,
         showOpenPanelCloseButton,
         staticMode,
@@ -62,7 +62,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleAlwaysShowPlayerBackButton,
         onToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,
         onToggleOpenPanelCloseButton,
@@ -81,7 +80,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
         alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         isDaylight: state.isDaylight,
         showOpenPanelCloseButton: state.showOpenPanelCloseButton,
         staticMode: state.staticMode,
@@ -92,7 +90,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
         onToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
         onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
         onToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
@@ -103,6 +100,13 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled: state.modSystemEnabled,
         onToggleModSystem: state.handleToggleModSystem,
+    })));
+    const {
+        hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle,
+    } = useTypographySettingsStore(useShallow(state => ({
+        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
     })));
     const visualizerFrameRate = useVisualizerSettingsStore(state => state.visualizerFrameRate);
     const onVisualizerFrameRateChange = useVisualizerSettingsStore(state => state.handleSetVisualizerFrameRate);

@@ -31,6 +31,12 @@ vi.mock('@/stores/useSettingsUiStore', () => ({
         getState: () => lyricSettings,
     },
 }));
+// Lyric sourcing moved to its own store; this suite drives it through the same fixture.
+vi.mock('@/stores/useLyricSettingsStore', () => ({
+    useLyricSettingsStore: {
+        getState: () => lyricSettings,
+    },
+}));
 
 const song = (): LocalSong => ({
     id: 'local-song',
