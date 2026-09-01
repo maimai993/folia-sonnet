@@ -22,16 +22,20 @@ export const isTextEntryTarget = (target: EventTarget | null) => {
 };
 
 type UseCommandPaletteParams = {
-    currentView: 'home' | 'player';
     isBlocked: boolean;
     context: CommandPaletteContext;
 };
 
 export const useCommandPalette = ({
-    currentView,
     isBlocked,
     context,
 }: UseCommandPaletteParams) => {
+    // The palette used to refuse to open anywhere but the player. That gate is gone: a command
+    // decides for itself whether it applies, through `isAvailable` and `context.scope`. What is
+    // still view-dependent is the *keyboard*, and only for keys with no modifier — the home surface
+    // treats every bare printable character as input (the online search box, the grids' type-to-
+    // filter), so a modifier-free palette shortcut there would fire two things at once.
+    const ownsBareKeys = context.scope.view === 'player';
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [matchQuery, setMatchQuery] = useState('');
@@ -110,12 +114,12 @@ export const useCommandPalette = ({
     }, [activeIndex, matches]);
 
     const open = useCallback(() => {
-        if (currentView !== 'player' || isBlocked) {
+        if (isBlocked) {
             return;
         }
         setIsOpen(true);
         setActiveIndex(0);
-    }, [currentView, isBlocked]);
+    }, [isBlocked]);
 
     const recordRecentCommand = useCallback((command: CommandPaletteCommand) => {
         if (isRecordableRecentCommand(command, COMMAND_PALETTE_COMMANDS)) {
@@ -134,14 +138,14 @@ export const useCommandPalette = ({
 
     // Opens the palette straight into one command, used by the per-command openHotkey entries.
     const openCommand = useCallback((command: CommandPaletteCommand) => {
-        if (currentView !== 'player' || isBlocked || isExecuting) {
+        if (isBlocked || isExecuting) {
             return;
         }
 
         setIsOpen(true);
         setIsComposing(false);
         activateInputCommand(command);
-    }, [activateInputCommand, currentView, isBlocked, isExecuting]);
+    }, [activateInputCommand, isBlocked, isExecuting]);
 
     // Lets a UI surface outside the palette jump straight into one command, without having to
     // import the registry or know how a command is activated.
@@ -316,12 +320,24 @@ export const useCommandPalette = ({
             ));
             if (hotkeyCommand) {
                 const needsIdleFocus = !hotkeyCommand.openHotkey?.ctrl;
-                if (currentView !== 'player' || isBlocked || (needsIdleFocus && isTextEntryTarget(event.target))) {
+                if (isBlocked || (needsIdleFocus && !ownsBareKeys) || (needsIdleFocus && isTextEntryTarget(event.target))) {
                     return;
                 }
 
                 event.preventDefault();
                 openCommand(hotkeyCommand);
+                return;
+            }
+
+            // The one entry that works everywhere, because it carries a modifier and so cannot
+            // collide with a surface that reads bare characters.
+            if (event.code === 'KeyK' && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
+                if (isBlocked) {
+                    return;
+                }
+
+                event.preventDefault();
+                open();
                 return;
             }
 
@@ -334,7 +350,7 @@ export const useCommandPalette = ({
             if (isTextEntryTarget(event.target)) {
                 return;
             }
-            if (currentView !== 'player' || isBlocked) {
+            if (!ownsBareKeys || isBlocked) {
                 return;
             }
 
@@ -344,7 +360,7 @@ export const useCommandPalette = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [context, currentView, isBlocked, open, openCommand]);
+    }, [context, isBlocked, open, openCommand, ownsBareKeys]);
 
     return {
         activeIndex,

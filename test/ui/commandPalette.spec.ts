@@ -34,18 +34,22 @@ const readStore = (page: import('@playwright/test').Page, key: string) => page.e
     return undefined;
 }, key);
 
-const openPlayerPage = async (page: import('@playwright/test').Page) => {
-    await page.addInitScript(([version, guideKey]) => {
+const seedApp = async (page: import('@playwright/test').Page, openPlayerOnLaunch: boolean) => {
+    await page.addInitScript(([version, guideKey, onLaunch]) => {
         localStorage.clear();
         localStorage.setItem('i18nextLng', 'zh-CN');
-        localStorage.setItem('open_player_on_launch', 'true');
+        localStorage.setItem('open_player_on_launch', String(onLaunch));
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
         localStorage.setItem(guideKey, version);
-    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY]);
+    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY, openPlayerOnLaunch] as const);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
+};
+
+const openPlayerPage = async (page: import('@playwright/test').Page) => {
+    await seedApp(page, true);
 
     await page.goto('/');
     await page.waitForTimeout(2000);
@@ -62,9 +66,67 @@ const openPlayerPage = async (page: import('@playwright/test').Page) => {
 const palette = (page: import('@playwright/test').Page) => page.getByTestId('command-palette-panel');
 const paletteInput = (page: import('@playwright/test').Page) => palette(page).getByRole('combobox');
 
+// 首页没有可播放的曲目，也不需要——这几条只关心面板本身在首页能不能开、开出什么。
+const openHomePage = async (page: import('@playwright/test').Page) => {
+    await seedApp(page, false);
+    await page.goto('/');
+    await page.waitForTimeout(2000);
+};
+
+/**
+ * 全局键盘监听比首屏晚装上一拍，定长 sleep 只是赌它已经装好了——本文件长期偶发的
+ * 「面板没打开」就是这么来的，并发负载下等待窗口不够。改成反复敲入口键直到面板真的响应。
+ * 顺带让「不该打开」那条断言变得有意义：先证明监听器在，再证明它没反应。
+ */
+const pressUntilPaletteOpens = async (page: import('@playwright/test').Page, key = 'ControlOrMeta+k') => {
+    await expect.poll(async () => {
+        await page.keyboard.press(key);
+        return palette(page).count();
+    }).toBeGreaterThan(0);
+};
+
+test('opens on home with the primary modifier and K', async ({ page }) => {
+    await openHomePage(page);
+
+    await pressUntilPaletteOpens(page);
+    await expect(palette(page)).toBeVisible();
+});
+
+test('leaves the bare s key to the home surface', async ({ page }) => {
+    await openHomePage(page);
+    await pressUntilPaletteOpens(page);
+    await page.keyboard.press('Escape');
+    await expect(palette(page)).toBeHidden();
+
+    // 首页把任意单字符当成输入（在线搜索框、网格的即打即筛），所以全局入口必须带修饰键。
+    await page.keyboard.press('s');
+    await page.waitForTimeout(400);
+
+    await expect(palette(page)).toBeHidden();
+});
+
+test('withdraws the player-surface commands on home', async ({ page }) => {
+    await openHomePage(page);
+    await pressUntilPaletteOpens(page);
+    await paletteInput(page).fill('panel cover');
+    await page.waitForTimeout(400);
+
+    // 面板长在播放页上；首页没有可开的东西，所以这条命令连匹配都不该产生。
+    await expect(palette(page).getByText('面板：封面', { exact: true })).toHaveCount(0);
+});
+
+test('still offers the player-surface commands on the player', async ({ page }) => {
+    await openPlayerPage(page);
+    await pressUntilPaletteOpens(page, 's');
+    await paletteInput(page).fill('panel cover');
+    await page.waitForTimeout(400);
+
+    await expect(palette(page).getByText('面板：封面', { exact: true }).first()).toBeVisible();
+});
+
 test('opens with s and shows the declared landing commands', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press('s');
+    await pressUntilPaletteOpens(page, 's');
 
     await expect(palette(page)).toBeVisible();
     await expect(palette(page).getByText('队列', { exact: true }).first()).toBeVisible();
@@ -73,7 +135,7 @@ test('opens with s and shows the declared landing commands', async ({ page }) =>
 
 test('volume command takes over the panel with a slider surface', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press('s');
+    await pressUntilPaletteOpens(page, 's');
     await paletteInput(page).fill('volume');
     await page.waitForTimeout(400);
     await palette(page).getByText('音量条', { exact: true }).first().click();
@@ -104,7 +166,7 @@ test('visualizer picker switches the mode from the list', async ({ page }) => {
     await openPlayerPage(page);
     expect(await readStore(page, 'visualizerMode')).toBe('classic');
 
-    await page.keyboard.press('s');
+    await pressUntilPaletteOpens(page, 's');
     await paletteInput(page).fill('选择可视化');
     // 匹配走 120ms 防抖，回车必须等列表刷新后再按，否则命中的是落地列表首项。
     await page.waitForTimeout(400);
@@ -122,7 +184,7 @@ test('visualizer picker switches the mode from the list', async ({ page }) => {
 
 test('visualizer picker walks the mode list and marks the live mode', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press('s');
+    await pressUntilPaletteOpens(page, 's');
     await paletteInput(page).fill('选择可视化');
     await page.waitForTimeout(400);
     await page.keyboard.press('Enter');
@@ -195,7 +257,7 @@ const readPersonalFmSelection = (page: import('@playwright/test').Page) => page.
 });
 
 const openFmModeSurface = async (page: import('@playwright/test').Page) => {
-    await page.keyboard.press('s');
+    await pressUntilPaletteOpens(page, 's');
     await paletteInput(page).fill('私人 FM 模式');
     // 匹配走 120ms 防抖，回车必须等列表刷新后再按。
     await page.waitForTimeout(400);

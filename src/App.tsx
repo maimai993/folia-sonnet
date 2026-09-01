@@ -1723,7 +1723,6 @@ export default function App() {
         canUseTransitionPerformance,
     });
     const commandPalette = useCommandPalette({
-        currentView,
         isBlocked: isSettingsModalOpen
             || (currentView === 'home' && isSearchOpen)
             || showLyricMatchModal
