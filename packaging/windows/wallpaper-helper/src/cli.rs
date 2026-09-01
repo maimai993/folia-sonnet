@@ -19,6 +19,7 @@ pub enum Command {
     /// The resident attach process also accepts `detach` on stdin; this subcommand exists
     /// for the case where the resident helper is hung or was killed first.
     Detach { hwnd: isize },
+    Refresh,
 }
 
 fn parse_isize(value: &str) -> Result<isize, String> {
@@ -86,6 +87,12 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         }),
         "move" => Ok(Command::Move { hwnd: take_hwnd()? }),
         "detach" => Ok(Command::Detach { hwnd: take_hwnd()? }),
+        "refresh" => {
+            if let Some((name, _)) = options.first() {
+                return Err(format!("unexpected option for refresh: {name}"));
+            }
+            Ok(Command::Refresh)
+        }
         other => Err(format!("unknown command: {other}")),
     }
 }
@@ -144,6 +151,13 @@ mod tests {
             parse(&args(&["detach", "--hwnd=9"])).unwrap(),
             Command::Detach { hwnd: 9 }
         );
+        assert_eq!(parse(&args(&["refresh"])).unwrap(), Command::Refresh);
+    }
+
+    #[test]
+    fn rejects_refresh_with_stray_options() {
+        // refresh takes no options; a --hwnd would silently change nothing, so reject it.
+        assert!(parse(&args(&["refresh", "--hwnd", "1"])).is_err());
     }
 
     #[test]

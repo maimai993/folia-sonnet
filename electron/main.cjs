@@ -290,6 +290,24 @@ function resolveWallpaperHelperPath() {
   const candidate = path.join(process.resourcesPath, 'folia-wallpaper-helper.exe');
   return fs.existsSync(candidate) ? candidate : null;
 }
+function refreshWindowsDesktopWallpaper() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+  const helperPath = resolveWallpaperHelperPath();
+  if (!helperPath) {
+    return;
+  }
+  try {
+    const child = spawn(helperPath, ['refresh'], { stdio: 'ignore', detached: true });
+    child.on('error', (err) => {
+      console.warn('[WallpaperWin] desktop wallpaper refresh failed:', err.message);
+    });
+    child.unref();
+  } catch (err) {
+    console.warn('[WallpaperWin] desktop wallpaper refresh could not be spawned:', err?.message);
+  }
+}
 
 function getMainWindowNativeHwnd() {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -405,6 +423,7 @@ const windowsWallpaper = windowsWallpaperModule.createWindowsWallpaperController
   helperPath: () => resolveWallpaperHelperPath(),
   getHwnd: getMainWindowNativeHwnd,
   onDegrade: () => {
+    refreshWindowsDesktopWallpaper();
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('wallpaper-mode-changed', getPublicSettings());
     }
@@ -461,7 +480,29 @@ async function relaunchForWallpaperModeChange(nextEnabled, expectedGeneration = 
     }
     if (!nextEnabled) {
       // Release the helper before its hwnd is destroyed (the recreate path would only kill it).
-      windowsWallpaper.detach();
+      await new Promise((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        };
+        const safety = setTimeout(done, 500);
+        if (typeof safety?.unref === 'function') {
+          safety.unref();
+        }
+        const hadHelper = windowsWallpaper.detach({
+          onDetached: () => {
+            clearTimeout(safety);
+            done();
+          },
+        });
+        if (!hadHelper) {
+          clearTimeout(safety);
+          done();
+        }
+      });
     }
     recreateMainWindowWithTransparencyMode(isTransparentPlayerBackgroundEnabled(), handoff);
     return;
