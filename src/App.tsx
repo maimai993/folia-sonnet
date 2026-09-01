@@ -85,7 +85,6 @@ import { useStagePlaybackController } from './hooks/useStagePlaybackController';
 import { useSongThemeAutoGeneration } from './hooks/useSongThemeAutoGeneration';
 import { useThemeController } from './hooks/useThemeController';
 import { useOnlineSongMetadataHydration } from './hooks/useOnlineSongMetadataHydration';
-import { useThemeQuickEditorStore } from './stores/useThemeQuickEditorStore';
 import { resolveCommandPaletteSearchSource, resolveSearchSource, useSearchNavigationStore } from './stores/useSearchNavigationStore';
 import { useCollectionNavigationStore } from './stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from './stores/useOnlineProviderAccountStore';
@@ -129,6 +128,7 @@ import { useElectronWindowChrome } from './hooks/useElectronWindowChrome';
 import { useTransportCommandRefs } from './hooks/useTransportCommandRefs';
 import { useHomeProviderRefresh } from './hooks/useHomeProviderRefresh';
 import { useAudioOutputDevice } from './hooks/useAudioOutputDevice';
+import { useThemeQuickEditorContext } from './hooks/useThemeQuickEditorContext';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -260,7 +260,6 @@ export default function App() {
         () => ({ mode: transitionMode, crossfadeMaxSec, performance: transitionPerformance }),
         [transitionMode, crossfadeMaxSec, transitionPerformance],
     );
-    const setThemeQuickEditorContext = useThemeQuickEditorStore(state => state.setContext);
 
     useEffect(() => {
         if (
@@ -618,36 +617,13 @@ export default function App() {
         handleThemeGenerationSourceChange,
     } = themeController;
 
-    useEffect(() => {
-        const handleSyncCompleted = () => {
-            if (currentSong) {
-                void restoreCachedThemeForSong(currentSong, { allowLastUsedFallback: true });
-            }
-        };
-
-        window.addEventListener('folia-themes-synced', handleSyncCompleted);
-        return () => window.removeEventListener('folia-themes-synced', handleSyncCompleted);
-    }, [currentSong, restoreCachedThemeForSong]);
-
-    useEffect(() => {
-        const isPureMusic = Boolean(currentSong?.isPureMusic);
-        const songTitle = currentSong?.name;
-        const allText = lyrics?.lines.map(l => l.fullText).join('\n') || null;
-        const promptSourceText = (isPureMusic ? songTitle : allText) || allText;
-
-        setThemeQuickEditorContext({
-            aiTheme,
-            customTheme,
-            bgMode,
-            coverUrl,
-            song: currentSong,
-            songKey: currentSong?.id ?? null,
-            isDaylight,
-            promptSourceText,
-            isPureMusic,
-            songTitle,
-        });
-    }, [aiTheme, bgMode, coverUrl, currentSong, currentSong?.id, currentSong?.isPureMusic, currentSong?.name, customTheme, isDaylight, lyrics, setThemeQuickEditorContext]);
+    useThemeQuickEditorContext({
+        aiTheme,
+        customTheme,
+        bgMode,
+        coverUrl,
+        restoreCachedThemeForSong,
+    });
 
     // Navigation and Library Hooks
     // manages current view, selected items, and navigation functions across the app
