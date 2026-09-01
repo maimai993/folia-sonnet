@@ -6,6 +6,7 @@ import { volumeCommand } from './volumeCommand';
 import { fmModeCommand } from './fmModeCommand';
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createReplayGainCommand, createSoundPresetCommand } from '../commandFactories';
+import { isPlayerSurfaceCommandAvailable } from '../availability';
 
 // src/components/command-palette/commands/playbackCommands.ts
 // Commands in the `playback` group: transport, queue, volume, Personal FM mode, ReplayGain, and
@@ -21,6 +22,8 @@ export const playbackCommands: CommandPaletteCommand[] = [
     createReplayGainCommand('album', 'ReplayGain: Album mode', 'Apply album ReplayGain adjustment', ['replaygain album', 'album gain', '专辑增益', '专辑 replaygain', 'zhuanjizengyi', 'zjzy']),
     {
         id: 'playback-equalizer',
+        // It opens the controls panel tab to reach the equalizer, so it needs the player surface.
+        isAvailable: isPlayerSurfaceCommandAvailable,
         executeShortcut: 'e',
         group: 'playback',
         title: 'Audio effects',

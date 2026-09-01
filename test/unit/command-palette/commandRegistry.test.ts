@@ -12,6 +12,8 @@ type CommandPaletteContextOverrides = {
 // fields it actually cares about.
 const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
     const base: CommandPaletteContext = {
+        // The palette's original and still most common surface; the home cases say so explicitly.
+        scope: { view: 'player' },
         shared: {
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
@@ -764,6 +766,44 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('visualizer-toggle-random-per-song');
         match.command.execute('', context);
         expect(context.visualizer.toggleRandomVisualizerModePerSong).toHaveBeenCalled();
+    });
+});
+
+describe('the player surface gates the panel commands', () => {
+    // 面板长在播放页上；命令面板放开到全 app 之后，这些命令在首页没有可开的东西。
+    // 置灰而不是隐藏——它们在播放页始终存在，凭视图消失会让列表看起来在闪。
+    const PLAYER_SURFACE_COMMAND_IDS = [
+        'panel-cover', 'panel-controls', 'panel-queue', 'panel-account',
+        'panel-local', 'panel-navi', 'panel-onlineLyrics', 'playback-equalizer',
+    ];
+
+    const availableIds = (view: 'home' | 'player') => (
+        getAvailableCommandPaletteCommands(createContext({ scope: { view } })).map(command => command.id)
+    );
+
+    it('offers them on the player', () => {
+        const ids = availableIds('player');
+        PLAYER_SURFACE_COMMAND_IDS.forEach(id => expect(ids).toContain(id));
+    });
+
+    it('withdraws them on home', () => {
+        const ids = availableIds('home');
+        PLAYER_SURFACE_COMMAND_IDS.forEach(id => expect(ids).not.toContain(id));
+    });
+
+    it('leaves the rest of the registry alone on home', () => {
+        const ids = availableIds('home');
+        expect(ids).toContain('playback-next');
+        expect(ids).toContain('navigate-player');
+        expect(ids).toContain('visualizer-picker');
+    });
+
+    it('keeps them listed when nobody states a scope', () => {
+        // 契约测试与固定命令选择器都在没有 app 的情况下问可用性，两者都要看到完整注册表。
+        const ids = COMMAND_PALETTE_COMMANDS
+            .filter(command => command.isAvailable?.(undefined) ?? true)
+            .map(command => command.id);
+        PLAYER_SURFACE_COMMAND_IDS.forEach(id => expect(ids).toContain(id));
     });
 });
 

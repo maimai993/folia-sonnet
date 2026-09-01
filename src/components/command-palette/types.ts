@@ -5,6 +5,7 @@ import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters
 import type { HomeViewTab, LatentBackgroundTuning, LocalSong, LyricData, PlayerState, ReplayGainMode, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
+import type { AppView } from '../../stores/useAppViewStore';
 import { type SettingsModalInitialTab, type SettingsSubviewId } from '../../stores/useSettingsModalStore';
 import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
@@ -214,10 +215,23 @@ export type CommandPaletteVisualizerContext = {
     setLatentBackgroundTuning: (patch: Partial<LatentBackgroundTuning>) => void;
 };
 
-// Namespaces mirror CommandPaletteGroup one-to-one (plus `shared`), so a command's group
-// tells you where to look for its dependencies. Cross-group access stays legal but visible.
+/**
+ * Where the palette was opened, so a command can decide for itself whether it applies.
+ *
+ * The palette used to be player-only, which meant "does this command make sense here?" never had
+ * to be asked. Now that it opens anywhere, the commands that act on the player's own chrome answer
+ * it through `isAvailable` instead of the palette withholding itself entirely.
+ */
+export type CommandPaletteScopeContext = {
+    view: AppView;
+};
+
+// Namespaces mirror CommandPaletteGroup one-to-one (plus `shared` and `scope`), so a command's
+// group tells you where to look for its dependencies. Cross-group access stays legal but visible.
+// `scope` belongs to no group: it describes the palette's surroundings rather than a capability.
 export type CommandPaletteContext = {
     shared: CommandPaletteSharedContext;
+    scope: CommandPaletteScopeContext;
     search: CommandPaletteSearchContext;
     playback: CommandPalettePlaybackContext;
     navigation: CommandPaletteNavigationContext;
