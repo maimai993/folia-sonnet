@@ -124,6 +124,7 @@ import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mi
 import { useAppChromeStore } from './stores/useAppChromeStore';
 import { useAppViewStore } from './stores/useAppViewStore';
 import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayLyrics, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from './stores/usePlaybackStore';
+import { useLibraryStore } from './stores/useLibraryStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -137,6 +138,21 @@ const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
     const { t } = useTranslation();
+    const {
+        navidromeEnabled, setNavidromeEnabledState,
+        starredNavidromeSongIds, setStarredNavidromeSongIds,
+        isProviderSyncing, setIsProviderSyncing,
+        providerSwitchPending, setProviderSwitchPending,
+    } = useLibraryStore(useShallow(state => ({
+        navidromeEnabled: state.navidromeEnabled,
+        setNavidromeEnabledState: state.setNavidromeEnabledState,
+        starredNavidromeSongIds: state.starredNavidromeSongIds,
+        setStarredNavidromeSongIds: state.setStarredNavidromeSongIds,
+        isProviderSyncing: state.isProviderSyncing,
+        setIsProviderSyncing: state.setIsProviderSyncing,
+        providerSwitchPending: state.providerSwitchPending,
+        setProviderSwitchPending: state.setProviderSwitchPending,
+    })));
     const {
         currentSong, setCurrentSong,
         audioSrc, setAudioSrc,
@@ -217,8 +233,6 @@ export default function App() {
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
-    const [navidromeEnabled, setNavidromeEnabledState] = useState(() => isNavidromeEnabled());
-    const [starredNavidromeSongIds, setStarredNavidromeSongIds] = useState<Set<string>>(new Set());
     const {
         closeSettings,
         isSettingsSubviewOpen,
@@ -1001,7 +1015,6 @@ export default function App() {
         refresh: refreshQqLibrary,
         logout: logoutQqLibrary,
     } = useQqLibrary();
-    const [isProviderSyncing, setIsProviderSyncing] = useState(false);
     const onlineProviderRefreshers = useMemo(() => ({
         netease: refreshUserData,
         kugou: refreshKugouLibrary,
@@ -1012,10 +1025,6 @@ export default function App() {
         kugou: logoutKugouLibrary,
         qq: logoutQqLibrary,
     }), [handleLogout, logoutKugouLibrary, logoutQqLibrary]);
-    const [providerSwitchPending, setProviderSwitchPending] = useState<{
-        nextProviderId: OnlineProviderId;
-        resolve: (confirmed: boolean) => void;
-    } | null>(null);
 
     const prepareOnlineProviderSwitch = useCallback((_currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId): Promise<boolean> => {
         return new Promise<boolean>((resolve) => {

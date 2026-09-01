@@ -53,6 +53,7 @@ import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { selectHomeLayoutSettingsSnapshot, useHomeLayoutSettingsStore } from '../../stores/useHomeLayoutSettingsStore';
+import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -684,7 +685,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const handleOpenBaiduDownload = () => handleOpenDownloadUrl(BAIDU_DOWNLOAD_URL);
 
     // Navidrome Settings State
-    const [navidromeEnabled, setNavidromeEnabledState] = useState(false);
+    // One truth: this used to be a second copy kept in step with App.tsx's by hand.
+    const navidromeEnabled = useLibraryStore(state => state.navidromeEnabled);
     const [navidromeUrl, setNavidromeUrl] = useState('');
     const [navidromeUsername, setNavidromeUsername] = useState('');
     const [navidromePassword, setNavidromePassword] = useState('');
@@ -694,7 +696,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     // Load Navidrome config on mount
     useEffect(() => {
-        setNavidromeEnabledState(isNavidromeEnabled());
         const config = getNavidromeConfig();
         if (config) {
             setNavidromeUrl(config.serverUrl);
