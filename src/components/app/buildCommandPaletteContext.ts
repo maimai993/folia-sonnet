@@ -12,6 +12,7 @@ import type { TransitionMode } from '../../services/automix/transitionStrategy';
 import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { PersonalFmSelection } from '../../services/onlineMusic/fmModes';
 import type { QueueBatchAction } from '../command-palette/queueQuery';
+import { setStatusMessage as setStatusMsg } from '../../stores/useStatusMessageStore';
 
 // src/components/app/buildCommandPaletteContext.ts
 // Groups App-level state and handlers into the command palette's namespaced context, so the
@@ -19,7 +20,6 @@ import type { QueueBatchAction } from '../command-palette/queueQuery';
 
 export type CommandPaletteContextDeps = {
     t: (key: string, fallback?: string) => string;
-    setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     currentSong: SongResult | null;
     lyrics: LyricData | null;
     playerState: PlayerState;
@@ -135,7 +135,7 @@ export type CommandPaletteContextDeps = {
 export const buildCommandPaletteContext = (deps: CommandPaletteContextDeps): CommandPaletteContext => ({
     shared: {
         t: deps.t,
-        setStatusMsg: deps.setStatusMsg,
+        setStatusMsg,
         currentSong: deps.currentSong,
         lyrics: deps.lyrics,
         playerState: deps.playerState,

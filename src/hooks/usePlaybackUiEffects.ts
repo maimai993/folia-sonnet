@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import type React from 'react';
 import type { StatusMessage } from '../types';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // App-level UI side effects that do not own playback business logic.
 type UsePlaybackUiEffectsOptions = {
     statusMsg: StatusMessage | null;
-    setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     isPanelOpen: boolean;
     panelTab: string;
     updateCacheSize: () => void;
@@ -19,7 +19,6 @@ type UsePlaybackUiEffectsOptions = {
 
 export const usePlaybackUiEffects = ({
     statusMsg,
-    setStatusMsg,
     isPanelOpen,
     panelTab,
     updateCacheSize,

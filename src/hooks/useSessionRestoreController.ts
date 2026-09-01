@@ -10,6 +10,7 @@ import { restorePlaybackSourceForSong } from '../components/app/playback/restore
 import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } from '../utils/appPlaybackGuards';
 import type { LyricData, SongResult, StatusMessage } from '../types';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/useSessionRestoreController.ts
 
@@ -25,7 +26,6 @@ type UseSessionRestoreControllerParams = {
     setCachedCoverUrl: SetState<string | null>;
     setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setStatusMsg: SetState<StatusMessage | null>;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
@@ -48,7 +48,6 @@ export function useSessionRestoreController({
     setCachedCoverUrl,
     setAudioSrc,
     setLyrics,
-    setStatusMsg,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
     clearPersistedStagePlaybackCache,
@@ -146,7 +145,6 @@ export function useSessionRestoreController({
                         setCachedCoverUrl,
                         setAudioSrc,
                         setLyrics,
-                        setStatusMsg,
                         restoreCachedThemeForSong,
                         persistLastPlaybackCache,
                         queue: lastQueue || [lastSong],

@@ -20,6 +20,7 @@ import {
     loadProviderAccountSnapshot,
     saveProviderAccountSnapshot,
 } from '../services/onlineMusic/providerAccountCache';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 
@@ -64,10 +65,8 @@ const getUserCloudPlaylist = async (user: ProviderUser, t: (key: string) => stri
 };
 
 export function useNeteaseLibrary({
-    setStatusMsg,
     t,
 }: {
-    setStatusMsg: StatusSetter;
     t: (key: string) => string;
 }) {
     const [user, setUser] = useState<ProviderUser | null>(null);

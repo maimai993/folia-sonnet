@@ -21,9 +21,7 @@ import { createSafeObjectUrl } from '../utils/blobGuards';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
-type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
-
-export function useAppPreferences(setStatusMsg: StatusSetter) {
+export function useAppPreferences() {
     const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
     const setTransparentPlayerBackgroundFromSystem = useSettingsUiStore(state => state.setTransparentPlayerBackgroundFromSystem);
     const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);

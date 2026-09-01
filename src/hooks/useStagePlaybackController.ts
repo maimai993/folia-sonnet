@@ -37,6 +37,7 @@ import type {
     StageLyricsClockState,
     WindowPlaybackHandoff,
 } from '../types/appPlayback';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/useStagePlaybackController.ts
 
@@ -80,7 +81,6 @@ type UseStagePlaybackControllerParams = {
     setPlayerState: SetState<PlayerState>;
     setCurrentLineIndex: SetState<number>;
     setDuration: SetState<number>;
-    setStatusMsg: SetState<StatusMessage | null>;
     navigateToPlayer: () => void;
 };
 
@@ -142,7 +142,6 @@ export function useStagePlaybackController({
     setPlayerState,
     setCurrentLineIndex,
     setDuration,
-    setStatusMsg,
     navigateToPlayer,
 }: UseStagePlaybackControllerParams) {
     const [stageStatus, setStageStatus] = useState<StageStatus | null>(null);

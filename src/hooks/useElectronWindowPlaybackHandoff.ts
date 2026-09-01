@@ -12,6 +12,7 @@ import type {
     StageLyricsClockState,
     WindowPlaybackHandoff,
 } from '../types/appPlayback';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/useElectronWindowPlaybackHandoff.ts
 // Captures and restores renderer playback state across Electron BrowserWindow rebuilds.
@@ -59,7 +60,6 @@ type UseElectronWindowPlaybackHandoffParams = {
     setPlayerState: SetState<PlayerState>;
     setCurrentLineIndex: SetState<number>;
     setDuration: SetState<number>;
-    setStatusMsg: SetState<StatusMessage | null>;
     blobUrlRef: MutableRefObject<string | null>;
     shouldAutoPlayRef: MutableRefObject<boolean>;
     pendingResumeTimeRef: MutableRefObject<number | null>;
@@ -156,7 +156,6 @@ export function useElectronWindowPlaybackHandoff({
     setPlayerState,
     setCurrentLineIndex,
     setDuration,
-    setStatusMsg,
     blobUrlRef,
     shouldAutoPlayRef,
     pendingResumeTimeRef,
@@ -308,7 +307,6 @@ export function useElectronWindowPlaybackHandoff({
             setCachedCoverUrl,
             setAudioSrc,
             setLyrics,
-            setStatusMsg,
             restoreCachedThemeForSong,
             persistLastPlaybackCache,
             queue: restoredQueue,

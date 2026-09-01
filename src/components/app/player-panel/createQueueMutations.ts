@@ -6,6 +6,7 @@ import type { QueueAddBehavior, SongResult, StatusMessage } from '../../../types
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { applyQueueBatchOperation as transformQueueBatch } from '../../../utils/queueBatchOperations';
 import type { QueueBatchAction } from '../../command-palette/queueQuery';
+import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 
 // src/components/app/player-panel/createQueueMutations.ts
 
@@ -14,7 +15,6 @@ type CreateQueueMutationsParams = {
     playQueue: SongResult[];
     setPlayQueue: Dispatch<SetStateAction<SongResult[]>>;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
-    setStatusMsg: Dispatch<SetStateAction<StatusMessage | null>>;
     t: (key: string) => string;
     queueAddBehavior: QueueAddBehavior;
 };
@@ -25,7 +25,6 @@ export const createQueueMutations = ({
     playQueue,
     setPlayQueue,
     persistLastPlaybackCache,
-    setStatusMsg,
     t,
     queueAddBehavior,
 }: CreateQueueMutationsParams) => {

@@ -34,6 +34,7 @@ import {
     resolveBgModeTheme,
 } from './themeControllerState';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 export type GenerateAIThemeOptions = {
@@ -130,7 +131,6 @@ export function useThemeController({
     daylightTheme,
     isDaylight,
     setDaylightPreference,
-    setStatusMsg,
     coverUrl,
     t,
 }: {
@@ -138,7 +138,6 @@ export function useThemeController({
     daylightTheme: Theme;
     isDaylight: boolean;
     setDaylightPreference: (enabled: boolean) => void;
-    setStatusMsg: StatusSetter;
     coverUrl?: string | null;
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {

@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
 import type { StatusMessage } from '../types';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/useElectronNeteaseApiStatus.ts
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 
 // Watches the Electron NetEase API startup state and surfaces backend failures through the app toast.
-export function useElectronNeteaseApiStatus(setStatusMsg: StatusSetter, t: TFunction) {
+export function useElectronNeteaseApiStatus(t: TFunction) {
     const lastReportedFailureAtRef = useRef<number | null>(null);
 
     useEffect(() => {

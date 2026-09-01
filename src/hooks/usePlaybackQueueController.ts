@@ -29,6 +29,7 @@ import type { LocalLibraryDisplayCatalog } from '../services/playbackAdapters';
 import type { SearchReturnView, SearchSource } from '../stores/useSearchNavigationStore';
 import { dispatchSearchTrackAction } from '../components/app/search/searchTrackActions';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -81,7 +82,6 @@ type UsePlaybackQueueControllerParams = {
     setCurrentLineIndex: SetState<number>;
     setDuration: SetState<number>;
     setIsLyricsLoading: SetState<boolean>;
-    setStatusMsg: SetState<StatusMessage | null>;
     setIsFmMode: SetState<boolean>;
     setPanelTab: SetState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>;
     setIsPanelOpen: SetState<boolean>;
@@ -183,7 +183,6 @@ export function usePlaybackQueueController({
     setCurrentLineIndex,
     setDuration,
     setIsLyricsLoading,
-    setStatusMsg,
     setIsFmMode,
     setPanelTab,
     setIsPanelOpen,

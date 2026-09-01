@@ -107,6 +107,7 @@ import { clearTrackProfileRuntime } from './services/automix/profileService';
 import { transitionCapabilities } from './services/automix/stems';
 import { buildLocalLibraryIndex, followEntityRedirect } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
+import { setStatusMessage as setStatusMsg, useStatusMessage } from './stores/useStatusMessageStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -141,10 +142,10 @@ export default function App() {
     const [playQueue, setPlayQueue] = useState<SongResult[]>([]);
 
     // UI State
-    const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
+    const statusMsg = useStatusMessage();
     const [isPanelOpen, setIsPanelOpen] = useState(false);
     const [isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive] = useState(false);
-    useElectronNeteaseApiStatus(setStatusMsg, t);
+    useElectronNeteaseApiStatus(t);
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
@@ -343,7 +344,7 @@ export default function App() {
     // Manages user preferences for audio quality, theme settings, 
     // and related actions like toggling cover color backgrounds and static mode,
     // as well as setting daylight mode preference
-    const appPreferences = useAppPreferences(setStatusMsg);
+    const appPreferences = useAppPreferences();
     const {
         audioQuality,
         setAudioQuality,
@@ -793,7 +794,6 @@ export default function App() {
         daylightTheme: DAYLIGHT_THEME,
         isDaylight,
         setDaylightPreference,
-        setStatusMsg,
         coverUrl,
         t,
     });
@@ -930,7 +930,6 @@ export default function App() {
         handleLogout,
         setLikedSongIds,
     } = useNeteaseLibrary({
-        setStatusMsg,
         t,
     });
 
@@ -1154,7 +1153,6 @@ export default function App() {
         setPlayerState,
         setCurrentLineIndex,
         setDuration,
-        setStatusMsg,
         navigateToPlayer,
     });
 
@@ -1201,7 +1199,6 @@ export default function App() {
         setPlayerState,
         setCurrentLineIndex,
         setDuration,
-        setStatusMsg,
         blobUrlRef,
         shouldAutoPlayRef: shouldAutoPlay,
         pendingResumeTimeRef,
@@ -1277,7 +1274,6 @@ export default function App() {
         setCurrentLineIndex,
         setDuration,
         setIsLyricsLoading,
-        setStatusMsg,
         setIsPanelOpen,
         setLikedSongIds,
         starredNavidromeSongIds,
@@ -1302,7 +1298,6 @@ export default function App() {
         setCachedCoverUrl,
         setAudioSrc,
         setLyrics,
-        setStatusMsg,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
         clearPersistedStagePlaybackCache,
@@ -1332,7 +1327,6 @@ export default function App() {
         loadCurrentSongLyricPreview,
         setLyrics: (nextLyrics) => setLyricsRef.current(nextLyrics),
         setCurrentLineIndex,
-        setStatusMsg,
     });
 
     const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
@@ -1340,7 +1334,6 @@ export default function App() {
         playQueue,
         setPlayQueue,
         persistLastPlaybackCache,
-        setStatusMsg,
         t: key => t(key),
         queueAddBehavior,
     });
@@ -1403,7 +1396,6 @@ export default function App() {
         setCurrentLineIndex,
         setDuration,
         setIsLyricsLoading,
-        setStatusMsg,
         setIsFmMode,
         setPanelTab,
         setIsPanelOpen,
@@ -1472,7 +1464,6 @@ export default function App() {
 
     usePlaybackUiEffects({
         statusMsg,
-        setStatusMsg,
         isPanelOpen,
         panelTab,
         updateCacheSize,
@@ -1743,7 +1734,6 @@ export default function App() {
         suppressAutoplayRef: automix.suppressAutoplayRef,
         isAutoplayHeld: automix.autoplayHeld,
         setPlayerState,
-        setStatusMsg,
         syncOutputGain,
         getTargetPlaybackVolume,
         getCoverUrl,
@@ -1781,7 +1771,6 @@ export default function App() {
         currentTime,
         stageLyricsClockRef,
         setPlayerState,
-        setStatusMsg,
         setupAudioAnalyzer,
         syncOutputGain,
         getTargetPlaybackVolume,
@@ -2008,7 +1997,6 @@ export default function App() {
         cyclePlayerChromeVisibilityMode,
         setIsPanelOpen,
         setReplayGainMode,
-        setStatusMsg,
         handleNextTrack,
         handlePrevTrack,
         handleToggleLoopMode,
@@ -2022,7 +2010,6 @@ export default function App() {
         isFmMode,
         currentSong,
         playSong,
-        setStatusMsg,
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
     });
 
@@ -2355,7 +2342,6 @@ export default function App() {
     });
     const commandPaletteContext = useMemo(() => buildCommandPaletteContext({
         t: (key: string, fallback?: string) => t(key, fallback ?? ''),
-        setStatusMsg,
         currentSong,
         // What is on screen, transitions included - surfaces that publish lyrics
         // (the mod runtime snapshot) must send the rendered ones, not a guess
@@ -3075,7 +3061,6 @@ export default function App() {
         setLocalMusicState,
         setNavidromeFocusedAlbumIndex,
         setPendingNavidromeSelection,
-        setStatusMsg,
         setStageStatus,
         showOpenPanelCloseButton,
         songThemeAutoSwitchEnabled,
@@ -3302,7 +3287,7 @@ export default function App() {
                 }, 'player');
             }
         },
-        handleCopySongInfoSuccess: createCopySongInfoSuccessHandler({ setStatusMsg, t }),
+        handleCopySongInfoSuccess: createCopySongInfoSuccessHandler({ t }),
         user,
         handleLogout,
         audioQuality,

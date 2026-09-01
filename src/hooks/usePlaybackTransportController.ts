@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import { PlayerState } from '../types';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/usePlaybackTransportController.ts
 
@@ -20,7 +21,6 @@ type UsePlaybackTransportControllerParams = {
         startedAtMs: number | null;
     }>;
     setPlayerState: Dispatch<SetStateAction<PlayerState>>;
-    setStatusMsg: Dispatch<SetStateAction<any>>;
     setupAudioAnalyzer: () => void;
     syncOutputGain: (targetVolume: number, smoothing?: number) => void;
     getTargetPlaybackVolume: () => number;
@@ -57,7 +57,6 @@ export function usePlaybackTransportController({
     currentTime,
     stageLyricsClockRef,
     setPlayerState,
-    setStatusMsg,
     setupAudioAnalyzer,
     syncOutputGain,
     getTargetPlaybackVolume,

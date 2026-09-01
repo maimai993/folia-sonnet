@@ -6,6 +6,7 @@ import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
 import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
 import { isMacPlatform as isMac } from '../utils/platform';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/usePlaybackInteractionBridge.ts
 
@@ -73,7 +74,6 @@ type UsePlaybackInteractionBridgeParams = {
     cyclePlayerChromeVisibilityMode: () => void;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setReplayGainMode: React.Dispatch<React.SetStateAction<ReplayGainMode>>;
-    setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     handleNextTrack: () => Promise<void> | void;
     handlePrevTrack: () => void;
     handleToggleLoopMode: () => void;
@@ -105,7 +105,6 @@ export function usePlaybackInteractionBridge({
     cyclePlayerChromeVisibilityMode,
     setIsPanelOpen,
     setReplayGainMode,
-    setStatusMsg,
     handleNextTrack,
     handlePrevTrack,
     handleToggleLoopMode,

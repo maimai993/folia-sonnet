@@ -28,6 +28,7 @@ import { omni } from '../../../services/onlineMusic/omni';
 import { getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../../services/onlineMusic/resourceCache';
 import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -44,7 +45,6 @@ type RestorePlaybackSourceParams = {
     setCachedCoverUrl: SetState<string | null>;
     setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setStatusMsg: SetState<StatusMessage | null>;
     restoreCachedThemeForSong?: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
@@ -75,7 +75,6 @@ export const restorePlaybackSourceForSong = async (
         setCachedCoverUrl,
         setAudioSrc,
         setLyrics,
-        setStatusMsg,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
         queue,

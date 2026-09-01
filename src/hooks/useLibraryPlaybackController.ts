@@ -48,6 +48,7 @@ import { getLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
 import { applyMatchedMetadata } from '../services/localLibraryCatalogService';
 import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata, shouldRunLocalSongAutomaticMatch } from '../utils/lyrics/localSongMatchContext';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -90,7 +91,6 @@ type UseLibraryPlaybackControllerParams = {
     setCurrentLineIndex: SetState<number>;
     setDuration: SetState<number>;
     setIsLyricsLoading: SetState<boolean>;
-    setStatusMsg: SetState<StatusMessage | null>;
     setIsPanelOpen: SetState<boolean>;
     setLikedSongIds: Dispatch<SetStateAction<Set<MediaId>>>;
     setStarredNavidromeSongIds: Dispatch<SetStateAction<Set<string>>>;
@@ -128,7 +128,6 @@ export function useLibraryPlaybackController({
     setCurrentLineIndex,
     setDuration,
     setIsLyricsLoading,
-    setStatusMsg,
     setIsPanelOpen,
     setLikedSongIds,
     setStarredNavidromeSongIds,
