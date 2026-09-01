@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TEMPERA_LAYER_IMAGE, DEFAULT_TEMPERA_TUNING, TEMPERA_MAX_LAYER_IMAGES } from '@/types';
-import { resolveStoredTemperaTuning, useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { resolveStoredTemperaTuning } from '@/stores/visualizerSettingsPersistence';
 import { TemperaPixiRuntime } from '@/components/visualizer/tempera/createTemperaPixiRuntime';
 
 // test/unit/visualizer/temperaSettings.test.ts

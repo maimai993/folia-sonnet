@@ -7,15 +7,17 @@ import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
 import {
-    resolveStoredMonetBackgroundTuning,
-    resolveStoredMonetTuning,
-    resolveStoredCappellaTuning,
     resolveStoredCustomLyricsFont,
-    resolveVisualizerBackgroundMode,
     readSystemThemeIsDaylight,
     selectSettingsUiSnapshot,
     useSettingsUiStore,
 } from '../stores/useSettingsUiStore';
+import {
+    resolveStoredCappellaTuning,
+    resolveStoredMonetBackgroundTuning,
+    resolveStoredMonetTuning,
+    resolveVisualizerBackgroundMode,
+} from '../stores/visualizerSettingsPersistence';
 import i18n from '../i18n/config';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 

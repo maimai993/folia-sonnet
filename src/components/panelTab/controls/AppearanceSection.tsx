@@ -8,7 +8,8 @@ import {
     getVisualizerBackgroundRegistryEntry,
     VISUALIZER_BACKGROUND_REGISTRY,
 } from '../../visualizer/backgrounds/registry';
-import { resolveVisualizerBackgroundMode, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { resolveVisualizerBackgroundMode } from '../../../stores/visualizerSettingsPersistence';
 import { useVisualizerModeStepper } from '../../../hooks/useVisualizerModeStepper';
 import { QuickControlChip } from '../../shared/QuickControlChip';
 import ModeStepperRow from './ModeStepperRow';
