@@ -110,14 +110,13 @@ import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from './stores
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from './stores/useLyricSettingsStore';
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from './stores/useTypographySettingsStore';
 import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from './stores/usePlayerChromeSettingsStore';
-import { useHomeLayoutSettingsStore } from './stores/useHomeLayoutSettingsStore';
 import { selectThemeSettingsSnapshot, useThemeSettingsStore } from './stores/useThemeSettingsStore';
 import { useAutomixSettingsStore } from './stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from './stores/useDesktopSettingsStore';
 import { selectSleepTimerSnapshot, useSleepTimerStore } from './stores/useSleepTimerStore';
 import { selectStageSettingsSnapshot, useStageSettingsStore } from './stores/useStageSettingsStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from './stores/useAudioSettingsStore';
-import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/useSettingsModalStore';
+import { useSettingsModalStore } from './stores/useSettingsModalStore';
 import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mid, spectrum, treble, vocal } from './stores/motionSignals';
 import { useAppChromeStore } from './stores/useAppChromeStore';
 import { useAppViewStore } from './stores/useAppViewStore';
@@ -160,11 +159,11 @@ export default function App() {
         cachedCoverUrl, setCachedCoverUrl,
         duration, setDuration,
         playerState, setPlayerState,
-        currentLineIndex, setCurrentLineIndex,
+        currentLineIndex,
         playQueue, setPlayQueue,
-        activePlaybackContext, setActivePlaybackContext,
+        activePlaybackContext,
         isFmMode, setIsFmMode,
-        replayGainMode, setReplayGainMode,
+        setReplayGainMode,
         lyricTimelineOffsetMs, setLyricTimelineOffsetMs,
     } = usePlaybackStore(useShallow(state => ({
         currentSong: state.currentSong, setCurrentSong: state.setCurrentSong,
@@ -193,30 +192,24 @@ export default function App() {
         setIsHomeFullyHidden: state.setIsHomeFullyHidden,
     })));
     const {
-        isTitlebarRevealed, setIsTitlebarRevealed,
-        showTransparentWindowBorder, setShowTransparentWindowBorder,
+        isTitlebarRevealed,
+        showTransparentWindowBorder,
         isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled,
         isClickThroughToggleHotspotActive, setIsClickThroughToggleHotspotActive,
-        isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive,
+        setIsPlayerPanelGuideHotspotActive,
         isPlayerChromeHidden, setIsPlayerChromeHidden,
-        isDevDebugOverlayVisible, setIsDevDebugOverlayVisible,
-        setIsMemoryMonitorVisible,
+        isDevDebugOverlayVisible,
     } = useAppChromeStore(useShallow(state => ({
         isTitlebarRevealed: state.isTitlebarRevealed,
-        setIsTitlebarRevealed: state.setIsTitlebarRevealed,
         showTransparentWindowBorder: state.showTransparentWindowBorder,
-        setShowTransparentWindowBorder: state.setShowTransparentWindowBorder,
         isMainWindowClickThroughEnabled: state.isMainWindowClickThroughEnabled,
         setIsMainWindowClickThroughEnabled: state.setIsMainWindowClickThroughEnabled,
         isClickThroughToggleHotspotActive: state.isClickThroughToggleHotspotActive,
         setIsClickThroughToggleHotspotActive: state.setIsClickThroughToggleHotspotActive,
-        isPlayerPanelGuideHotspotActive: state.isPlayerPanelGuideHotspotActive,
         setIsPlayerPanelGuideHotspotActive: state.setIsPlayerPanelGuideHotspotActive,
         isPlayerChromeHidden: state.isPlayerChromeHidden,
         setIsPlayerChromeHidden: state.setIsPlayerChromeHidden,
         isDevDebugOverlayVisible: state.isDevDebugOverlayVisible,
-        setIsDevDebugOverlayVisible: state.setIsDevDebugOverlayVisible,
-        setIsMemoryMonitorVisible: state.setIsMemoryMonitorVisible,
     })));
     const isDev = import.meta.env.DEV;
     const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
@@ -244,18 +237,6 @@ export default function App() {
         lastSeenGuideVersion: state.lastSeenGuideVersion,
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
-    })));
-    const {
-        openAudioEqualizer,
-        applyAudioSoundPreset,
-    } = useAudioSettingsStore(useShallow(state => ({
-        openAudioEqualizer: state.openAudioEqualizer,
-        applyAudioSoundPreset: state.handleApplyAudioSoundPreset,
-    })));
-    const {
-        homeLayoutStyle,
-    } = useHomeLayoutSettingsStore(useShallow(state => ({
-        homeLayoutStyle: state.homeLayoutStyle,
     })));
     const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
     const transitionMode = useAutomixSettingsStore(state => state.transitionMode);
@@ -399,62 +380,32 @@ export default function App() {
     useAppPreferences();
     const {
         audioQuality,
-        enableMediaCache,
         queueAddBehavior,
         audioOutputDeviceId,
         loopMode,
-        handleToggleMediaCache,
-        handleSetQueueAddBehavior,
         handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
         volume,
         isMuted,
         handleToggleLoopMode,
     } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
     const {
-        handleSetAppLanguagePreference,
-    } = useSettingsModalStore(useShallow(selectSettingsModalSnapshot));
-    const {
-        minimizeToTray,
-        hideTaskbarIcon,
-        openPlayerOnLaunch,
-        handleToggleMinimizeToTray,
-        handleToggleHideTaskbarIcon,
-        handleToggleOpenPlayerOnLaunch,
-        voiceInputPauseEnabled,
-        handleToggleVoiceInputPause,
         preventDisplaySleepDuringPlayback,
-        handleTogglePreventDisplaySleepDuringPlayback,
-        modSystemEnabled,
         wallpaperMode,
-        handleToggleWallpaperMode,
     } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
     const {
-        enableNowPlayingStage,
-        enablePlayerCapStage,
-        playerCapHost,
-        playerCapPlayer,
-        playerCapTimeBasis,
-        playerCapSticky,
         stageTrackPillMode,
         stageTrackPillOnHome,
-        handleToggleNowPlayingStage,
     } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
     const {
         sleepTimerEnabled,
         sleepTimerHours,
         sleepTimerMinutes,
-        sleepTimerDeadlineMs,
-        handleToggleSleepTimer,
-        handleSetSleepTimerHours,
-        handleSetSleepTimerMinutes,
     } = useSleepTimerStore(useShallow(selectSleepTimerSnapshot));
     const {
         useCoverColorBg,
         staticMode,
         disableHomeDynamicBackground,
         isDaylight,
-        handleToggleStaticMode,
-        handleToggleDisableHomeDynamicBackground,
         setDaylightPreference,
     } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
     const {
@@ -464,17 +415,9 @@ export default function App() {
         enablePlayerPageNativeBlur,
         autoHidePlayerChrome,
         handleToggleAutoHidePlayerChrome,
-        showOpenPanelCloseButton,
         alwaysShowPlayerBackButton,
-        alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
-        handleToggleHidePlayerProgressBar,
-        handleToggleHidePlayerRightPanelButton,
         handleToggleTransparentPlayerBackground,
-        handleToggleOpenPanelCloseButton,
-        handleToggleAlwaysShowPlayerBackButton,
-        handleToggleAlwaysShowTrackSwitchButtons,
-        handleToggleAlwaysShowMainWindowTitlebar,
     } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
     const {
         hidePlayerTranslationSubtitle,
@@ -494,17 +437,7 @@ export default function App() {
         subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
-        handleToggleHidePlayerTranslationSubtitle,
-        handleToggleShowSubtitleTranslation,
-        handleSetSubtitleContentMode,
-        handleToggleSubtitleOverlayBackground,
-        handleSetLyricsFontStyle,
-        handleSetLyricsFontScale,
-        handleSetLyricsFontWeight,
-        handleSetLyricsCustomFont,
-        handleUploadLyricsCustomFont,
         lyricsCustomFontFamily,
-        lyricsCustomFontLabel,
     } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
     const {
         globalLyricTimelineOffsetMs,
@@ -542,31 +475,11 @@ export default function App() {
         temperaTuning,
         urlBackgroundList,
         urlBackgroundSelectedId,
-        handleToggleDisableVisualizerVignette,
-        handleToggleDisableVisualizerGeometricBackground,
-        handleSetBackgroundOpacity,
         handleSetVisualizerMode,
-        handleToggleRandomVisualizerModePerSong,
-        handleSetVisualizerBackgroundMode,
-        handleSetMonetBackgroundTuning,
-        handleSetLatentBackgroundTuning,
         handleSetMonetTuning,
-        handleSetCadenzaTuning,
-        handleResetCadenzaTuning,
-        handleSetPartitaTuning,
-        handleResetPartitaTuning,
-        handleSetFumeTuning,
-        handleResetFumeTuning,
-        handleSetCappellaTuning,
-        handleResetCappellaTuning,
-        handleSetTiltTuning,
-        handleResetTiltTuning,
-        handleImportCustomCappellaEmojiPack,
-        handleClearCustomCappellaEmojiPack,
     } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
     const {
         cappellaCustomEmojiImages,
-        isLoadingCappellaCustomEmojiPack,
         cappellaCustomAvatarImages,
         monetBackgroundImage,
         monetPortraitImage,
@@ -960,16 +873,12 @@ export default function App() {
 
     const {
         isSearchOpen,
-        searchQuery,
         searchSourceTab,
-        searchReturnView,
         submitSearch,
         loadMoreSearchResults,
     } = useSearchNavigationStore(useShallow(state => ({
         isSearchOpen: state.isSearchOpen,
-        searchQuery: state.searchQuery,
         searchSourceTab: state.searchSourceTab,
-        searchReturnView: state.searchReturnView,
         submitSearch: state.submitSearch,
         loadMoreSearchResults: state.loadMoreSearchResults,
     })));
