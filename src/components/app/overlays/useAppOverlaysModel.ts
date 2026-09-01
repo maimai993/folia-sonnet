@@ -1,0 +1,105 @@
+import { useMemo } from 'react';
+import { currentTime, lyricCurrentTime } from '../../../stores/motionSignals';
+import { useAppViewStore } from '../../../stores/useAppViewStore';
+import { useAppChromeStore } from '../../../stores/useAppChromeStore';
+import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
+import { useTranslation } from 'react-i18next';
+import {
+    selectDisplayCoverUrl,
+    selectDisplayDuration,
+    selectDisplayLyrics,
+    selectDisplayPlayerState,
+    selectDisplaySong,
+    usePlaybackStore,
+} from '../../../stores/usePlaybackStore';
+import { buildAppOverlaysModel, type AppOverlaysDeps, type AppOverlaysModel } from './buildAppOverlaysModel';
+
+// src/components/app/overlays/useAppOverlaysModel.ts
+
+const MEMORY_MONITOR_SHORTCUT_LABEL = 'Alt+Shift+M';
+
+/**
+ * The overlay model with everything this file can reach on its own already filled in.
+ *
+ * Store reads, the two motion signals and the five translated labels used to be 25 entries in
+ * App.tsx's argument list plus 25 more in its dependency array - and adding one overlay field meant
+ * editing App.tsx, the params type and the mapping below. Now a store-backed field is this file
+ * alone.
+ */
+export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => {
+    const { t } = useTranslation();
+    const currentView = useAppViewStore(state => state.view);
+    const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
+    const isDevDebugOverlayVisible = useAppChromeStore(state => state.isDevDebugOverlayVisible);
+    const isMemoryMonitorVisible = useAppChromeStore(state => state.isMemoryMonitorVisible);
+    const isSearchOpen = useSearchNavigationStore(state => state.isSearchOpen);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const stageTrackPillMode = useStageSettingsStore(state => state.stageTrackPillMode);
+    const stageTrackPillTimeoutSec = useStageSettingsStore(state => state.stageTrackPillTimeoutSec);
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    // The held picture, not the live one: a blend keeps song, lyrics, duration and cover describing
+    // the same track for its whole length. See the note on `coverUrl` above.
+    const displaySong = usePlaybackStore(selectDisplaySong);
+    const displayLyrics = usePlaybackStore(selectDisplayLyrics);
+    const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
+    const displayDuration = usePlaybackStore(selectDisplayDuration);
+    const displayPlayerState = usePlaybackStore(selectDisplayPlayerState);
+
+    return useMemo(() => buildAppOverlaysModel({
+        ...deps,
+        currentView,
+        isSearchOpen,
+        isDaylight,
+        isDevDebugOverlayVisible,
+        isMemoryMonitorVisible,
+        memoryMonitorShortcutLabel: MEMORY_MONITOR_SHORTCUT_LABEL,
+        currentTime,
+        lyricCurrentTime,
+        currentSong: displaySong,
+        playerState: displayPlayerState,
+        duration: displayDuration,
+        audioSrc,
+        lyrics: displayLyrics,
+        activePlaybackContext,
+        isPlayerChromeHidden,
+        playQueue,
+        isFmMode,
+        coverUrl: displayCoverUrl,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        noTrackText: t('ui.noTrack'),
+        prevTrackLabel: t('ui.previousTrack'),
+        nextTrackLabel: t('ui.nextTrack'),
+        stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
+        stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
+        // Spread rather than `deps`: the caller passes an object literal, so depending on the object
+        // itself would rebuild this on every render and defeat the memo entirely. The key set is
+        // fixed by the call site, so the array keeps a constant length.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [
+        ...Object.values(deps),
+        currentView,
+        isSearchOpen,
+        isDaylight,
+        isDevDebugOverlayVisible,
+        isMemoryMonitorVisible,
+        displaySong,
+        displayPlayerState,
+        displayDuration,
+        audioSrc,
+        displayLyrics,
+        activePlaybackContext,
+        isPlayerChromeHidden,
+        playQueue,
+        isFmMode,
+        displayCoverUrl,
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        t,
+    ]);
+};

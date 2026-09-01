@@ -16,7 +16,14 @@ export type HomeViewModel = {
     onBackCollection: () => void;
 };
 
-type BuildHomeModelParams = {
+// What this file can read for itself, so the caller never names it. See useHomeModel below.
+type HomeModelAmbient = {
+    currentSong: HomeSurfaceProps['currentTrack'];
+    activePlaybackContext: 'main' | 'stage';
+    navidromeEnabled: HomeSurfaceProps['navidromeEnabled'];
+};
+
+export type HomeModelDeps = {
     onlineProviderPlatform?: OnlineProviderPlatformState;
     playSong: HomeSurfaceProps['onPlaySong'];
     navigateToPlayer: HomeSurfaceProps['onBackToPlayer'];
@@ -24,7 +31,6 @@ type BuildHomeModelParams = {
     user: HomeSurfaceProps['user'];
     playlists: HomeSurfaceProps['playlists'];
     cloudPlaylist?: HomeSurfaceProps['cloudPlaylist'];
-    currentSong: HomeSurfaceProps['currentTrack'];
     focusedPlaylistIndex?: HomeSurfaceProps['focusedPlaylistIndex'];
     setFocusedPlaylistIndex?: HomeSurfaceProps['setFocusedPlaylistIndex'];
     navigateToSearch: (args: { query: string; sourceTab: SearchSource; replace?: boolean }) => void;
@@ -41,10 +47,8 @@ type BuildHomeModelParams = {
     pendingNavidromeSelection?: HomeSurfaceProps['pendingNavidromeSelection'];
     setPendingNavidromeSelection: React.Dispatch<React.SetStateAction<any>>;
     stageSource?: StageSource | null;
-    activePlaybackContext: 'main' | 'stage';
     openStagePlayer: () => Promise<void>;
     theme: HomeSurfaceProps['theme'];
-    navidromeEnabled: HomeSurfaceProps['navidromeEnabled'];
     playAll: (songs: SongResult[]) => void;
     addAllToQueue: (songs: SongResult[]) => void;
     addSongToQueue: (song: SongResult) => void;
@@ -53,6 +57,8 @@ type BuildHomeModelParams = {
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
     onBackCollection: () => void;
 };
+
+type BuildHomeModelParams = HomeModelAmbient & HomeModelDeps;
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
 export const buildHomeModel = ({

@@ -29,49 +29,29 @@ export type AppOverlaysModel = {
     nowPlayingToast?: NowPlayingToastProps | null;
 };
 
-type BuildAppOverlaysModelParams = {
+// What the model needs that this file can read for itself: store state, the per-frame motion
+// signals, and its own translated labels. Keeping these out of the caller's argument list is the
+// whole point of useAppOverlaysModel below - App.tsx had to name all 25 of them.
+type AppOverlaysAmbient = {
+
     currentView: FloatingControlsProps['currentView'];
     isSearchOpen: boolean;
-    theme: any;
     isDaylight: boolean;
-    closeSearchView: () => void;
-    handleSearchOverlaySubmit: SearchOverlayProps['onSubmitSearch'];
-    handleSearchLoadMore: () => Promise<void>;
-    handleSearchResultPlay: (track: UnifiedSong) => void;
-    handleSearchResultAddToQueue: (track: UnifiedSong) => void;
-    handleSearchResultArtistOpen: SearchOverlayProps['onOpenArtist'];
-    handleSearchResultAlbumOpen: SearchOverlayProps['onOpenAlbum'];
     isDevDebugOverlayVisible: boolean;
     isMemoryMonitorVisible: boolean;
     memoryMonitorShortcutLabel: string;
-    devDebugSnapshot: any;
     currentTime: MotionValue<number>;
     lyricCurrentTime: MotionValue<number>;
     currentSong: SongResult | null;
     playerState: PlayerState;
     duration: number;
-    effectiveLoopMode: 'off' | 'all' | 'one';
     audioSrc: string | null;
-    canToggleCurrentPlayback: boolean;
-    isNowPlayingControlDisabled: boolean;
     lyrics: LyricData | null;
     activePlaybackContext: 'main' | 'stage';
-    stageActiveEntryKind: string | null;
-    syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
-    stageLyricsClockRef: React.MutableRefObject<{ startTimeSec: number }>;
-    togglePlay: FloatingControlsProps['onTogglePlay'];
-    toggleLoop: FloatingControlsProps['onToggleLoop'];
-    navigateToPlayer: () => void;
     isPlayerChromeHidden: boolean;
-    shouldHidePlayerProgressBar: boolean;
-    onSeekMainAudio: (time: number) => void;
-    onStagePlayerSeek: () => Promise<unknown>;
     noTrackText: string;
     playQueue: SongResult[];
     isFmMode: boolean;
-    isNowPlayingStageActive: boolean;
-    handlePrevTrack: () => void;
-    handleNextTrack: () => void;
     prevTrackLabel: string;
     nextTrackLabel: string;
     /**
@@ -84,6 +64,37 @@ type BuildAppOverlaysModelParams = {
     coverUrl: string | null;
     stageTrackPillMode: 'auto' | 'always' | 'never';
     stageTrackPillTimeoutSec: number;
+    /** 卡片上的两种动作各自的无障碍名字 */
+    stageTrackPillOpenPlayerLabel: string;
+    stageTrackPillOpenSongCardLabel: string;
+};
+
+// What only the caller can supply: controller callbacks and values App.tsx computes.
+export type AppOverlaysDeps = {
+    theme: any;
+    closeSearchView: () => void;
+    handleSearchOverlaySubmit: SearchOverlayProps['onSubmitSearch'];
+    handleSearchLoadMore: () => Promise<void>;
+    handleSearchResultPlay: (track: UnifiedSong) => void;
+    handleSearchResultAddToQueue: (track: UnifiedSong) => void;
+    handleSearchResultArtistOpen: SearchOverlayProps['onOpenArtist'];
+    handleSearchResultAlbumOpen: SearchOverlayProps['onOpenAlbum'];
+    devDebugSnapshot: any;
+    effectiveLoopMode: 'off' | 'all' | 'one';
+    canToggleCurrentPlayback: boolean;
+    isNowPlayingControlDisabled: boolean;
+    stageActiveEntryKind: string | null;
+    syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
+    stageLyricsClockRef: React.MutableRefObject<{ startTimeSec: number }>;
+    togglePlay: FloatingControlsProps['onTogglePlay'];
+    toggleLoop: FloatingControlsProps['onToggleLoop'];
+    navigateToPlayer: () => void;
+    shouldHidePlayerProgressBar: boolean;
+    onSeekMainAudio: (time: number) => void;
+    onStagePlayerSeek: () => Promise<unknown>;
+    isNowPlayingStageActive: boolean;
+    handlePrevTrack: () => void;
+    handleNextTrack: () => void;
     /** 自动切歌预览（下一首）；isNextUp 时整卡展示它 */
     stageNextUp: { title: string; artist: string | null; coverUrl: string | null } | null;
     /** 预览态：接下来播放标签 + 挂起 auto 隐藏计时 */
@@ -92,10 +103,9 @@ type BuildAppOverlaysModelParams = {
     stageTrackPillOnScreen: boolean;
     /** 点卡片时展开右侧面板的歌曲卡片（切到 cover 页并打开） */
     openSongCardPanel: () => void;
-    /** 卡片上的两种动作各自的无障碍名字 */
-    stageTrackPillOpenPlayerLabel: string;
-    stageTrackPillOpenSongCardLabel: string;
 };
+
+type BuildAppOverlaysModelParams = AppOverlaysAmbient & AppOverlaysDeps;
 
 // Builds the full overlay model, including detail overlays and floating playback controls.
 export const buildAppOverlaysModel = ({

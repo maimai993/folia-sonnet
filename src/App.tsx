@@ -14,7 +14,7 @@ import PlayerPanel from './components/app/PlayerPanel';
 import ThemeQuickEditorHost from './components/panelTab/ThemeQuickEditor';
 import AppDialogs from './components/app/dialogs/AppDialogs';
 import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
-import { buildSettingsDialogModel } from './components/app/dialogs/buildSettingsDialogModel';
+import { useSettingsDialogModel } from './components/app/dialogs/useSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import AutomixModelReminder from './components/modal/AutomixModelReminder';
 // Lazy so animejs (~38KB gz) stays out of the bootstrap chunk: this overlay only ever draws when the
@@ -22,8 +22,8 @@ import AutomixModelReminder from './components/modal/AutomixModelReminder';
 const AutomixTransitionAnimation = lazy(() => import('./components/app/overlays/AutomixTransitionAnimation'));
 import { UserGuideModal } from './components/modal/UserGuideModal';
 import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
-import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
-import { buildHomeModel } from './components/app/home/buildHomeModel';
+import { useAppDialogsModel } from './components/app/dialogs/useAppDialogsModel';
+import { useHomeModel } from './components/app/home/useHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
 import { nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
@@ -37,7 +37,7 @@ import { createCoverUrlResolver } from './components/app/playback/createCoverUrl
 import { createLyricsSetter } from './components/app/playback/createLyricsSetter';
 import { createOnlineRecoveryController } from './components/app/playback/createOnlineRecoveryController';
 import { persistPlaybackCache } from './components/app/playback/persistPlaybackCache';
-import { buildAppOverlaysModel } from './components/app/overlays/buildAppOverlaysModel';
+import { useAppOverlaysModel } from './components/app/overlays/useAppOverlaysModel';
 import { resolveNextUpTrack } from './components/app/overlays/now-playing-toast/resolveNextUpTrack';
 import {
     createSearchAlbumCollection,
@@ -128,7 +128,6 @@ import { countRender } from './dev/renderCount';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
-const MEMORY_MONITOR_SHORTCUT_LABEL = 'Alt+Shift+M';
 const ONLINE_AUDIO_URL_TTL_MS = 1200 * 1000;
 const ONLINE_AUDIO_URL_REFRESH_BUFFER_MS = 60 * 1000;
 const HOME_PROVIDER_REFRESH_COOLDOWN_MS = 5_000;
@@ -201,7 +200,7 @@ export default function App() {
         isPlayerPanelGuideHotspotActive, setIsPlayerPanelGuideHotspotActive,
         isPlayerChromeHidden, setIsPlayerChromeHidden,
         isDevDebugOverlayVisible, setIsDevDebugOverlayVisible,
-        isMemoryMonitorVisible, setIsMemoryMonitorVisible,
+        setIsMemoryMonitorVisible,
     } = useAppChromeStore(useShallow(state => ({
         isTitlebarRevealed: state.isTitlebarRevealed,
         setIsTitlebarRevealed: state.setIsTitlebarRevealed,
@@ -217,7 +216,6 @@ export default function App() {
         setIsPlayerChromeHidden: state.setIsPlayerChromeHidden,
         isDevDebugOverlayVisible: state.isDevDebugOverlayVisible,
         setIsDevDebugOverlayVisible: state.setIsDevDebugOverlayVisible,
-        isMemoryMonitorVisible: state.isMemoryMonitorVisible,
         setIsMemoryMonitorVisible: state.setIsMemoryMonitorVisible,
     })));
     const isDev = import.meta.env.DEV;
@@ -438,7 +436,6 @@ export default function App() {
         playerCapTimeBasis,
         playerCapSticky,
         stageTrackPillMode,
-        stageTrackPillTimeoutSec,
         stageTrackPillOnHome,
         handleToggleNowPlayingStage,
     } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
@@ -2727,7 +2724,7 @@ export default function App() {
         setStatusMsg({ type: 'error', text: t('search.catalogUnavailable') });
     }, [navigateToCollection, setStatusMsg, t]);
 
-    const homeModel = useMemo(() => buildHomeModel({
+    const homeModel = useHomeModel({
         onlineProviderPlatform,
         playSong,
         navigateToPlayer,
@@ -2735,7 +2732,6 @@ export default function App() {
         user,
         playlists,
         cloudPlaylist,
-        currentSong,
         focusedPlaylistIndex,
         setFocusedPlaylistIndex,
         navigateToSearch,
@@ -2752,10 +2748,8 @@ export default function App() {
         pendingNavidromeSelection,
         setPendingNavidromeSelection,
         stageSource,
-        activePlaybackContext,
         openStagePlayer,
         theme,
-        navidromeEnabled,
         playAll: playOnlineQueueFromStart,
         addAllToQueue: addOnlineSongsToQueue,
         addSongToQueue: addOnlineSongToQueue,
@@ -2763,42 +2757,7 @@ export default function App() {
         onOpenCollection: openHomeCollection,
         onPushCollection: pushCollection,
         onBackCollection: backCollection,
-    }), [
-        activePlaybackContext,
-        addNavidromeSongsToQueue,
-        addOnlineSongsToQueue,
-        addOnlineSongToQueue,
-        backCollection,
-        cloudPlaylist,
-        currentSong,
-        focusedPlaylistIndex,
-        handleLocalQueueAdd,
-        localLibraryCatalog,
-        localMusicState,
-        localPlaylists,
-        localSongs,
-        navidromeEnabled,
-        navidromeFocusedAlbumIndex,
-        navigateToPlayer,
-        navigateToSearch,
-        onRefreshLocalSongs,
-        onlineProviderPlatform,
-        openHomeCollection,
-        openStagePlayer,
-        pendingNavidromeSelection,
-        playlists,
-        playOnlineQueueFromStart,
-        playSong,
-        pushCollection,
-        refreshActiveProviderPlaylists,
-        setFocusedPlaylistIndex,
-        setLocalMusicState,
-        setNavidromeFocusedAlbumIndex,
-        setPendingNavidromeSelection,
-        stageSource,
-        theme,
-        user,
-    ]);
+    });
     const playerDisplayCatalogIndex = useMemo(() => buildLocalLibraryIndex(
         localLibraryCatalog.entities,
         localLibraryCatalog.assignments,
@@ -3092,11 +3051,8 @@ export default function App() {
         transparentPlayerBackground,
         toggleTransparentModeWithHandoff,
     ]);
-    const appOverlaysModel = useMemo(() => buildAppOverlaysModel({
-        currentView,
-        isSearchOpen,
+    const appOverlaysModel = useAppOverlaysModel({
         theme,
-        isDaylight,
         closeSearchView,
         handleSearchOverlaySubmit,
         handleSearchLoadMore,
@@ -3104,117 +3060,35 @@ export default function App() {
         handleSearchResultAddToQueue,
         handleSearchResultArtistOpen,
         handleSearchResultAlbumOpen,
-        isDevDebugOverlayVisible,
-        isMemoryMonitorVisible,
-        memoryMonitorShortcutLabel: MEMORY_MONITOR_SHORTCUT_LABEL,
         devDebugSnapshot,
-        currentTime,
-        lyricCurrentTime,
-        currentSong: displaySong,
-        playerState: displayPlayerState,
-        duration: displayDuration,
         effectiveLoopMode,
-        audioSrc,
         canToggleCurrentPlayback,
         isNowPlayingControlDisabled,
-        lyrics: displayLyrics,
-        activePlaybackContext,
         stageActiveEntryKind,
         syncStageLyricsClock,
         stageLyricsClockRef,
         togglePlay,
         toggleLoop,
         navigateToPlayer,
-        isPlayerChromeHidden,
         shouldHidePlayerProgressBar,
         onSeekMainAudio: seekMainAudio,
         onStagePlayerSeek: publishStagePlayerPlaybackUpdate,
-        noTrackText: t('ui.noTrack'),
-        playQueue,
-        isFmMode,
         isNowPlayingStageActive,
         handlePrevTrack,
         handleNextTrack,
-        prevTrackLabel: t('ui.previousTrack'),
-        nextTrackLabel: t('ui.nextTrack'),
-        // The HELD cover, to match `currentSong: displaySong` above it. The live one was the odd
-        // consumer out - every other surface fed from the frozen picture (media session, the
-        // electron bridge, the panel) already takes `displayCoverUrl` - and pairing it with the
-        // held song put the arriving track's cover under the outgoing track's title for the length
-        // of a blend. Worse at the start of one: the advance nulls `cachedCoverUrl` and the
-        // replacement is two async hops away, so a queue entry without its own `album.coverUrl`
-        // left the card on its placeholder icon while every other cover on screen was fine.
-        coverUrl: displayCoverUrl,
-        stageTrackPillMode,
-        stageTrackPillTimeoutSec,
         stageNextUp,
         stageIsNextUp,
         stageTrackPillOnScreen,
         openSongCardPanel,
-        stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
-        stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
-    }), [
-        activePlaybackContext,
-        audioSrc,
-        canToggleCurrentPlayback,
-        closeSearchView,
-        displaySong,
-        currentTime,
-        currentView,
-        devDebugSnapshot,
-        displayDuration,
-        effectiveLoopMode,
-        handleNextTrack,
-        handlePrevTrack,
-        isFmMode,
-        isNowPlayingStageActive,
-        playQueue,
-        displayCoverUrl,
-        stageTrackPillMode,
-        stageTrackPillTimeoutSec,
-        stageNextUp,
-        stageIsNextUp,
-        stageTrackPillOnScreen,
-        openSongCardPanel,
-        handleSearchResultAddToQueue,
-        handleSearchResultAlbumOpen,
-        handleSearchResultArtistOpen,
-        handleSearchLoadMore,
-        handleSearchOverlaySubmit,
-        handleSearchResultPlay,
-        isDaylight,
-        isDevDebugOverlayVisible,
-        isMemoryMonitorVisible,
-        isNowPlayingControlDisabled,
-        isSearchOpen,
-        isPlayerChromeHidden,
-        displayLyrics,
-        navigateToPlayer,
-        displayPlayerState,
-        publishStagePlayerPlaybackUpdate,
-        seekMainAudio,
-        shouldHidePlayerProgressBar,
-        stageActiveEntryKind,
-        stageLyricsClockRef,
-        syncStageLyricsClock,
-        t,
-        theme,
-        toggleLoop,
-        togglePlay,
-    ]);
-    const settingsDialog = useMemo(() => buildSettingsDialogModel({
-        state: settingsModalState,
+    });
+    const settingsDialog = useSettingsDialogModel({
         themeController,
         themeParkInitialTheme: themeParkSeedTheme,
         onToggleNavidrome: handleToggleNavidromeEnabled,
-        currentSongTitle: currentSong?.name || null,
         loadLyricFilterPreview: loadCurrentSongLyricPreview,
         onSaveLyricFilterPattern: handleSaveLyricFilterPattern,
-        currentLyrics: lyrics,
-        lyricCurrentTime,
         stageStatus,
         stageSource,
-        activePlaybackContext,
         setStageStatus,
         leaveStagePlayback,
         clearStagePlaybackSession,
@@ -3228,45 +3102,13 @@ export default function App() {
         lyricApiStatus,
         setLyricApiEnabled,
         onAudioOutputDeviceChange: handleAudioOutputDeviceChange,
-        replayGainMode,
         onReplayGainModeChange: handleChangeReplayGainMode,
         onToggleTransparentPlayerBackground: toggleTransparentModeWithHandoff,
-    }), [
-        activePlaybackContext,
-        clearPersistedStagePlaybackCache,
-        clearStagePlaybackSession,
-        currentSong?.name,
-        handleAudioOutputDeviceChange,
-        handleChangeReplayGainMode,
-        handleSaveLyricFilterPattern,
-        handleToggleNavidromeEnabled,
-        leaveStagePlayback,
-        loadCurrentSongLyricPreview,
-        loadStageSessionIntoPlayback,
-        lyricCurrentTime,
-        lyrics,
-        nowPlayingConnectionStatus,
-        playerCapConnectionStatus,
-        playerCapPlayers,
-        obsBrowserSourceStatus,
-        refreshObsBrowserSourceStatus,
-        lyricApiStatus,
-        setLyricApiEnabled,
-        replayGainMode,
-        settingsModalState,
-        stageSource,
-        stageStatus,
-        themeController,
-        themeParkSeedTheme,
-        toggleTransparentModeWithHandoff,
-    ]);
-    const appDialogsModel = useMemo(() => buildAppDialogsModel({
-        statusMsg,
-        isDaylight,
+    });
+    const appDialogsModel = useAppDialogsModel({
         showLyricMatchModal,
         showNaviLyricMatchModal,
         showOnlineLyricMatchModal,
-        currentSong,
         localSongs,
         setShowLyricMatchModal,
         setShowNaviLyricMatchModal,
@@ -3279,26 +3121,7 @@ export default function App() {
         handleUnavailableReplacementConfirm,
         settingsDialog,
         providerSwitchConfirmDialog,
-    }), [
-        currentSong,
-        handleLyricMatchComplete,
-        handleNaviLyricMatchComplete,
-        handleOnlineLyricMatchComplete,
-        handleUnavailableReplacementConfirm,
-        isDaylight,
-        localSongs,
-        pendingUnavailableReplacement,
-        providerSwitchConfirmDialog,
-        setPendingUnavailableReplacement,
-        setShowLyricMatchModal,
-        setShowNaviLyricMatchModal,
-        setShowOnlineLyricMatchModal,
-        settingsDialog,
-        showLyricMatchModal,
-        showNaviLyricMatchModal,
-        showOnlineLyricMatchModal,
-        statusMsg,
-    ]);
+    });
 
     useEffect(() => {
         isNowPlayingControlDisabledRef.current = isNowPlayingControlDisabled;

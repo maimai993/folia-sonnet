@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type React from 'react';
 import type { MotionValue } from 'framer-motion';
 import type SettingsModal from '../../modal/SettingsModal';
@@ -10,7 +11,7 @@ import type {
     StageStatus,
 } from '../../../types';
 import type { useThemeController } from '../../../hooks/useThemeController';
-import { type SettingsModalState } from '../../../stores/useSettingsModalStore';
+import { type SettingsModalState, useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import type { LyricApiStatus } from '../../../types/lyricApi';
@@ -22,19 +23,24 @@ import { closeSettings } from '../../../stores/useSettingsModalStore';
 type SettingsDialogProps = React.ComponentProps<typeof SettingsModal>;
 type ThemeController = ReturnType<typeof useThemeController>;
 
-type BuildSettingsDialogModelParams = {
+// What this file can read for itself, so the caller never names it. See useSettingsDialogModel.
+type SettingsDialogAmbient = {
     state: SettingsModalState;
+    currentSongTitle?: string | null;
+    currentLyrics: LyricData | null;
+    lyricCurrentTime: MotionValue<number>;
+    activePlaybackContext: 'main' | 'stage';
+    replayGainMode: ReplayGainMode;
+};
+
+export type SettingsDialogDeps = {
     themeController: ThemeController;
     themeParkInitialTheme: DualTheme;
     onToggleNavidrome?: (enabled: boolean) => void;
-    currentSongTitle?: string | null;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
     onSaveLyricFilterPattern: SettingsDialogProps['onSaveLyricFilterPattern'];
-    currentLyrics: LyricData | null;
-    lyricCurrentTime: MotionValue<number>;
     stageStatus?: StageStatus | null;
     stageSource?: StageSource | null;
-    activePlaybackContext: 'main' | 'stage';
     setStageStatus: React.Dispatch<React.SetStateAction<any>>;
     leaveStagePlayback: () => void;
     clearStagePlaybackSession: () => void;
@@ -44,7 +50,6 @@ type BuildSettingsDialogModelParams = {
     playerCapConnectionStatus?: PlayerCapConnectionStatus;
     playerCapPlayers?: string[];
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
-    replayGainMode: ReplayGainMode;
     onReplayGainModeChange: (mode: ReplayGainMode) => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => Promise<void> | void;
     obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
@@ -52,6 +57,8 @@ type BuildSettingsDialogModelParams = {
     lyricApiStatus?: LyricApiStatus | null;
     setLyricApiEnabled?: (enabled: boolean) => Promise<LyricApiStatus>;
 };
+
+type BuildSettingsDialogModelParams = SettingsDialogAmbient & SettingsDialogDeps;
 
 // Builds the global settings dialog props without tying the modal to Home.
 export const buildSettingsDialogModel = ({
