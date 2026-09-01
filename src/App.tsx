@@ -640,6 +640,7 @@ export default function App() {
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
     setLyricsRef.current = setLyrics;
+    const setLyricsStable = useCallback((nextLyrics: LyricData | null) => setLyricsRef.current(nextLyrics), []);
 
     const handleLyricTimelineOffsetChange = useCallback((offsetMs: number) => {
         setLyricTimelineOffsetMs(offsetMs);
@@ -1264,7 +1265,10 @@ export default function App() {
         persistLastPlaybackCache,
     });
 
-    const { handleDirectHomeFromPanel } = createPanelNavigation(navigateDirectHome);
+    const { handleDirectHomeFromPanel } = useMemo(
+        () => createPanelNavigation(navigateDirectHome),
+        [navigateDirectHome],
+    );
 
     // --- Local Music Functions ---
 
@@ -1346,34 +1350,46 @@ export default function App() {
     });
 
     const localLibraryCatalog = useLocalLibraryCatalog(localSongs);
+    const openHomeCollection = useCallback(
+        (collection: GridViewCollectionDescriptor) => navigateToCollection(collection, 'home'),
+        [navigateToCollection],
+    );
     const {
         openLocalAlbumByName,
         openLocalArtistByName,
-    } = createLocalLibraryNavigation({
+    } = useMemo(() => createLocalLibraryNavigation({
         currentSong,
         localSongs,
         localLibraryCatalog,
         setHomeViewTab,
-        onOpenCollection: collection => navigateToCollection(collection, 'home'),
+        onOpenCollection: openHomeCollection,
         t,
-    });
-    const handleSaveLyricFilterPattern = createLyricFilterPatternSaver({
+    }), [currentSong, localSongs, localLibraryCatalog, setHomeViewTab, openHomeCollection, t]);
+    const handleSaveLyricFilterPattern = useMemo(() => createLyricFilterPatternSaver({
         currentPattern: lyricFilterPattern,
         handleSetLyricFilterPattern,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffPattern,
         loadCurrentSongLyricPreview,
-        setLyrics: (nextLyrics) => setLyricsRef.current(nextLyrics),
-    });
+        setLyrics: setLyricsStable,
+    }), [
+        lyricFilterPattern,
+        handleSetLyricFilterPattern,
+        handleSetLyricStaffPolicy,
+        handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffPattern,
+        loadCurrentSongLyricPreview,
+        setLyricsStable,
+    ]);
 
-    const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
+    const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = useMemo(() => createQueueMutations({
         currentSong,
         playQueue,
         persistLastPlaybackCache,
-        t: key => t(key),
+        t,
         queueAddBehavior,
-    });
+    }), [currentSong, playQueue, persistLastPlaybackCache, t, queueAddBehavior]);
 
     // --- Effects ---
 
