@@ -12,13 +12,13 @@ import type { LyricData, SongResult, StatusMessage } from '../types';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setCurrentSong, setPlayQueue } from '../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 // src/hooks/useSessionRestoreController.ts
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseSessionRestoreControllerParams = {
-    audioQuality: AudioQualityPreference;
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
@@ -36,7 +36,6 @@ type UseSessionRestoreControllerParams = {
 
 // Restores the main playback session without pushing more boot logic into App.tsx.
 export function useSessionRestoreController({
-    audioQuality,
     userId,
     blobUrlRef,
     currentOnlineAudioUrlFetchedAtRef,
@@ -48,6 +47,8 @@ export function useSessionRestoreController({
     loadLocalPlaylists,
     canRestoreSession = true,
 }: UseSessionRestoreControllerParams) {
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+
     const hasInitializedRef = useRef(false);
     const hasLoadedLocalLibraryRef = useRef(false);
 

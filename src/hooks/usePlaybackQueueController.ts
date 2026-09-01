@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { applyOnlineAudioSourceMetadata, loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onlinePlayback';
@@ -63,6 +63,7 @@ type SearchDeps = {
 };
 
 type UsePlaybackQueueControllerParams = {
+
     isNowPlayingStageActive: boolean;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryDisplayCatalog;
@@ -107,10 +108,7 @@ type UsePlaybackQueueControllerParams = {
         duration: number;
         currentLineIndex: number;
     } | null>;
-    playbackRequestIdRef: MutableRefObject<number>;
     playbackAutoSkipCountRef: MutableRefObject<number>;
-    pendingUnavailableSkipTimerRef: MutableRefObject<number | null>;
-    pendingUnavailableSkipIntervalRef: MutableRefObject<number | null>;
     pendingResumeTimeRef: MutableRefObject<number | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
@@ -162,16 +160,20 @@ export function usePlaybackQueueController({
     shouldAutoPlayRef,
     currentSongRef,
     mainPlaybackSnapshotRef,
-    playbackRequestIdRef,
     playbackAutoSkipCountRef,
-    pendingUnavailableSkipTimerRef,
-    pendingUnavailableSkipIntervalRef,
     pendingResumeTimeRef,
     currentOnlineAudioUrlFetchedAtRef,
     lastAudioRecoverySourceRef,
     getDisplaySong,
     endHeldTransition,
 }: UsePlaybackQueueControllerParams) {
+    // Owned here, not passed in: nothing outside this hook reads or writes them. They were declared
+    // in App.tsx only because everything about playback used to be.
+    /** Rising id that lets a newer load invalidate an in-flight older one. */
+    const playbackRequestIdRef = useRef(0);
+    const pendingUnavailableSkipTimerRef = useRef<number | null>(null);
+    const pendingUnavailableSkipIntervalRef = useRef<number | null>(null);
+
     // Read here rather than passed in: every one of these lives in a store, a module-level setter or
     // i18n, and App.tsx was naming 15 of them purely to hand them straight back.
     const { t } = useTranslation();

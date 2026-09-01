@@ -125,6 +125,7 @@ import { resolveSongLiked } from './utils/resolveSongLiked';
 import StageSessionEmptyState from './components/app/stage/StageSessionEmptyState';
 import { useVisualizerRendererModel } from './components/visualizer/useVisualizerRendererModel';
 import { useVisualizerTunings } from './components/visualizer/useVisualizerTunings';
+import { usePlaybackRuntimeRefs } from './hooks/usePlaybackRuntimeRefs';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -320,10 +321,26 @@ export default function App() {
     // Audio Analysis State
 
     // Refs
-    // Points at whichever automix deck is currently the one being listened to. Everything
-    // downstream - transport, progress, lyrics, media session - reads playback through here and
-    // stays unaware that there are two elements.
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    // The mutable substrate the playback controllers coordinate through; see the hook for why it
+    // has to be held here rather than by any one of them.
+    const {
+        audioRef,
+        audioContextRef,
+        analyserRef,
+        gainNodeRef,
+        blobUrlRef,
+        animationFrameRef,
+        shouldAutoPlay,
+        currentSongRef,
+        currentSongFullRef,
+        playbackAutoSkipCountRef,
+        volumePreviewFrameRef,
+        pendingVolumePreviewRef,
+        pendingResumeTimeRef,
+        onlinePlaybackRecoveryRef,
+        lastAudioRecoverySourceRef,
+        currentOnlineAudioUrlFetchedAtRef,
+    } = usePlaybackRuntimeRefs();
     // The automix decks are set up much further down, but a few reset paths declared above here
     // need to be able to stop a transition, and queue navigation needs the track being SHOWN. A ref
     // keeps both reachable without reordering them; it is reassigned on every render, so the
@@ -332,35 +349,13 @@ export default function App() {
         abortTransition: () => void;
         transitionDisplay: { song: SongResult | null } | null;
     } | null>(null);
-    const animationFrameRef = useRef<number>(0);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const analyserRef = useRef<AnalyserNode | null>(null);
-    const gainNodeRef = useRef<GainNode | null>(null);
-    const blobUrlRef = useRef<string | null>(null);
     const queueScrollRef = useRef<HTMLDivElement>(null);
-    const shouldAutoPlay = useRef(false);
-    const currentSongRef = useRef<string | number | null>(null);
-    const currentSongFullRef = useRef<SongResult | null>(null);
-    useEffect(() => {
-        currentSongFullRef.current = currentSong;
-    }, [currentSong]);
-    const playbackRequestIdRef = useRef(0);
-    const playbackAutoSkipCountRef = useRef(0);
-    const pendingUnavailableSkipTimerRef = useRef<number | null>(null);
-    const pendingUnavailableSkipIntervalRef = useRef<number | null>(null);
-    const volumePreviewFrameRef = useRef<number | null>(null);
-    const pendingVolumePreviewRef = useRef<number | null>(null);
-    const pendingResumeTimeRef = useRef<number | null>(null);
-    const onlinePlaybackRecoveryRef = useRef<Promise<boolean> | null>(null);
-    const lastAudioRecoverySourceRef = useRef<string | null>(null);
-    const currentOnlineAudioUrlFetchedAtRef = useRef<number | null>(null);
     // Buffer progress debug helper. Uncomment this ref, the reset effect below,
     // and the audio `onProgress` handler to log buffered percent again.
     // const lastBufferedPercentLogRef = useRef<number | null>(null);
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
     const isNowPlayingControlDisabledRef = useRef(false);
 
-    const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation persistence state shared by the Grid home surfaces.
     const homeViewTab = useSearchNavigationStore(state => state.homeViewTab);
@@ -1129,7 +1124,6 @@ export default function App() {
     });
 
     useSessionRestoreController({
-        audioQuality,
         userId: user?.id,
         blobUrlRef,
         currentOnlineAudioUrlFetchedAtRef,
@@ -1229,10 +1223,7 @@ export default function App() {
         shouldAutoPlayRef: shouldAutoPlay,
         currentSongRef,
         mainPlaybackSnapshotRef,
-        playbackRequestIdRef,
         playbackAutoSkipCountRef,
-        pendingUnavailableSkipTimerRef,
-        pendingUnavailableSkipIntervalRef,
         pendingResumeTimeRef,
         currentOnlineAudioUrlFetchedAtRef,
         lastAudioRecoverySourceRef,
@@ -1276,8 +1267,6 @@ export default function App() {
 
     usePlaybackUiEffects({
         statusMsg,
-        isPanelOpen,
-        panelTab,
         updateCacheSize,
         loadLocalSongs,
         loadLocalPlaylists,
@@ -1683,13 +1672,6 @@ export default function App() {
         // or the bar and the lyrics run on the incoming track under the outgoing one's title.
         getDisplayElement: automix.getDisplayElement,
         animationFrameRef,
-        activePlaybackContext,
-        audioPower,
-        audioBands,
-        currentTime,
-        lyrics: displayLyrics,
-        playerState,
-        duration,
         effectiveLoopMode,
         isNowPlayingStageActive,
         isPlayerCapStageActive,
@@ -1702,7 +1684,6 @@ export default function App() {
         getPlayerCapDisplayTime,
         syncNowPlayingClock,
         lyricTimelineOffsetMs: effectiveLyricTimelineOffsetMs,
-        lyricCurrentTime,
     });
 
     const {
@@ -2146,8 +2127,6 @@ export default function App() {
     const themeParkSeedTheme = useMemo(() => getThemeParkSeedTheme(), [getThemeParkSeedTheme]);
     useSongThemeAutoGeneration({
         enabled: songThemeAutoSwitchEnabled && songThemeAutoGenerateEnabled,
-        currentSong,
-        lyrics,
         isLyricsLoading,
         themeGenerationSource,
         generateAITheme,
