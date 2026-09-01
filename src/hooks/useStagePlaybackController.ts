@@ -40,32 +40,18 @@ import type {
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 import { useStableActionSurface } from './useStableCallbacks';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useStageSettingsStore } from '../stores/useStageSettingsStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/useStagePlaybackController.ts
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseStagePlaybackControllerParams = {
-    t: (key: string) => string;
     isDev: boolean;
     isElectronWindow: boolean;
-    enableNowPlayingStage: boolean;
-    enablePlayerCapStage: boolean;
-    playerCapHost: string;
-    playerCapPlayer: string;
-    playerCapTimeBasis: 'timestamp' | 'play_time';
-    playerCapSticky: boolean;
-    activePlaybackContext: 'main' | 'stage';
-    currentSong: SongResult | null;
-    lyrics: LyricData | null;
-    cachedCoverUrl: string | null;
-    audioSrc: string | null;
-    playQueue: SongResult[];
-    isFmMode: boolean;
-    playerState: PlayerState;
-    duration: number;
-    currentLineIndex: number;
-    currentTime: MotionValue<number>;
     audioRef: RefObject<HTMLAudioElement | null>;
     currentSongRef: MutableRefObject<string | number | null>;
     shouldAutoPlayRef: MutableRefObject<boolean>;
@@ -98,26 +84,8 @@ const EMPTY_STAGE_ENTRY_KEY = '__empty-stage-entry__';
 
 // Keeps Stage / Now Playing state isolated from the main player snapshot.
 export function useStagePlaybackController({
-    t,
     isDev,
     isElectronWindow,
-    enableNowPlayingStage,
-    enablePlayerCapStage,
-    playerCapHost,
-    playerCapPlayer,
-    playerCapTimeBasis,
-    playerCapSticky,
-    activePlaybackContext,
-    currentSong,
-    lyrics,
-    cachedCoverUrl,
-    audioSrc,
-    playQueue,
-    isFmMode,
-    playerState,
-    duration,
-    currentLineIndex,
-    currentTime,
     audioRef,
     currentSongRef,
     shouldAutoPlayRef,
@@ -128,6 +96,25 @@ export function useStagePlaybackController({
     setIsLyricsLoading,
     navigateToPlayer,
 }: UseStagePlaybackControllerParams) {
+    // Read here rather than passed in: all store fields, a module-level motion signal, or i18n.
+    const { t } = useTranslation();
+    const enableNowPlayingStage = useStageSettingsStore(state => state.enableNowPlayingStage);
+    const enablePlayerCapStage = useStageSettingsStore(state => state.enablePlayerCapStage);
+    const playerCapHost = useStageSettingsStore(state => state.playerCapHost);
+    const playerCapPlayer = useStageSettingsStore(state => state.playerCapPlayer);
+    const playerCapTimeBasis = useStageSettingsStore(state => state.playerCapTimeBasis);
+    const playerCapSticky = useStageSettingsStore(state => state.playerCapSticky);
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+    const cachedCoverUrl = usePlaybackStore(state => state.cachedCoverUrl);
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const duration = usePlaybackStore(state => state.duration);
+    const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);
+
     const [stageStatus, setStageStatus] = useState<StageStatus | null>(null);
     const [nowPlayingConnectionStatus, setNowPlayingConnectionStatus] = useState<NowPlayingConnectionStatus>('disabled');
     const [nowPlayingTrack, setNowPlayingTrack] = useState<NowPlayingTrackSnapshot | null>(null);

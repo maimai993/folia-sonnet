@@ -93,7 +93,7 @@ import { useCollectionNavigationStore } from './stores/useCollectionNavigationSt
 import { useOnlineProviderAccountStore } from './stores/useOnlineProviderAccountStore';
 import { useShallow } from 'zustand/react/shallow';
 import { clampMediaVolume, toSafeRemoteUrl } from './utils/appPlaybackHelpers';
-import { getOnlineProviderIdForSong, getPlaybackSongKey, isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong, resolveNavidromePlaybackCarrier } from './utils/appPlaybackGuards';
+import { getOnlineProviderIdForSong, getPlaybackSongKey, isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from './utils/appPlaybackGuards';
 import { readLyricOffset, writeLyricOffset } from './utils/lyrics/lyricOffsetMemory';
 import { FALLBACK_AI_DUAL_THEME } from './services/themeSanitizer';
 import { BASE_DUAL_THEME, DAYLIGHT_THEME, DEFAULT_THEME } from './services/baseThemes';
@@ -124,6 +124,7 @@ import { useAppViewStore } from './stores/useAppViewStore';
 import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayLyrics, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from './stores/usePlaybackStore';
 import { useLibraryStore } from './stores/useLibraryStore';
 import { countRender } from './dev/renderCount';
+import { resolveSongLiked } from './utils/resolveSongLiked';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -1170,26 +1171,8 @@ export default function App() {
         interruptStagePlaybackForMainTransition,
         clearStagePlaybackSession,
     } = useStagePlaybackController({
-        t: (key) => t(key),
         isDev,
         isElectronWindow,
-        enableNowPlayingStage,
-        enablePlayerCapStage,
-        playerCapHost,
-        playerCapPlayer,
-        playerCapTimeBasis,
-        playerCapSticky,
-        activePlaybackContext,
-        currentSong,
-        lyrics,
-        cachedCoverUrl,
-        audioSrc,
-        playQueue,
-        isFmMode,
-        playerState,
-        duration,
-        currentLineIndex,
-        currentTime,
         audioRef,
         currentSongRef,
         shouldAutoPlayRef: shouldAutoPlay,
@@ -1206,21 +1189,8 @@ export default function App() {
         toggleTransparentModeWithHandoff,
     } = useElectronWindowPlaybackHandoff({
         isElectronWindow,
-        audioQuality,
         userId: user?.id,
-        activePlaybackContext,
-        currentView,
         navigateToPlayer,
-        currentSong,
-        lyrics,
-        cachedCoverUrl,
-        audioSrc,
-        playQueue,
-        isFmMode,
-        playerState,
-        duration,
-        currentLineIndex,
-        currentTime,
         audioRef,
         mainPlaybackSnapshotRef,
         stageStatus,
@@ -1240,11 +1210,6 @@ export default function App() {
         pendingResumeTimeRef,
         lastAudioRecoverySourceRef,
         currentOnlineAudioUrlFetchedAtRef,
-        isPlayerChromeHidden,
-        setIsPlayerChromeHidden,
-        showTransparentWindowBorder,
-        setShowTransparentWindowBorder,
-        transparentPlayerBackground,
         applyTransparentPlayerBackground: handleToggleTransparentPlayerBackground,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
@@ -1865,36 +1830,15 @@ export default function App() {
         publishStagePlayerPlaybackUpdate,
     } = useElectronPlaybackBridge({
         isElectronWindow,
-        setIsTitlebarRevealed,
-        isPlayerChromeHidden,
-        setIsPlayerChromeHidden,
         playerChromeVisibilityMode,
         onRemotePlayerChromeVisibilityModeCycle: cyclePlayerChromeVisibilityMode,
-        showTransparentWindowBorder,
-        setShowTransparentWindowBorder,
-        transparentPlayerBackground,
-        activePlaybackContext,
         isStagePlayerSnapshotEnabled: stageStatus?.enabled === true,
-        mainWindowClickThroughEnabled: isMainWindowClickThroughEnabled,
         isNowPlayingControlDisabledRef,
         audioRef,
-        // The held picture and its clock, so the remote/Discord/taskbar switch song when the blend
-        // settles - not when it arms. Mirrors what useMediaSessionBridge above already shows.
+        // The deck the held picture belongs to. Its song, lyrics, cover, duration and transport are
+        // read from the display selectors inside the bridge; this is the element that goes with them.
         getDisplayAudioElement: automix.getDisplayElement,
-        audioSrc,
-        currentTime,
-        duration: displayDuration,
-        currentSong: displaySong,
-        coverUrl: displayCoverUrl,
-        cachedCoverUrl,
-        // The held picture's transport, matching the song/duration/cover above it and what
-        // useMediaSessionBridge already publishes. The raw state reads IDLE for the length of a
-        // blend's lead, which drew a stopped player on the remote over a track the listener could
-        // still hear - and the button it offered there was play.
-        playerState: displayPlayerState,
-        playQueue,
         effectiveLoopMode,
-        isFmMode,
         isNowPlayingStageActive,
         mediaSessionPlayRef,
         mediaSessionPauseRef,
@@ -1905,8 +1849,6 @@ export default function App() {
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
         exportState,
-        isDaylight,
-        lyrics: displayLyrics,
         lyricTimelineOffsetMs: effectiveLyricTimelineOffsetMs,
         onRemoteExportCommand: handleExportCommand,
         onExternalPlayRequest: handleStageExternalPlayRequest,
@@ -1916,17 +1858,7 @@ export default function App() {
         isTrackTransitionAudible: automix.isTransitionAudible,
         // Keyed on the displayed track, so the like state matches the song the remote is showing
         // while a blend is held rather than the one arriving underneath it.
-        isLiked: (() => {
-            if (!displaySong) return false;
-            if (isLocalPlaybackSong(displaySong)) {
-                return isLocalSongLiked(displaySong);
-            }
-            if (isNavidromePlaybackSong(displaySong)) {
-                const navidromeSong = resolveNavidromePlaybackCarrier(displaySong);
-                return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
-            }
-            return omni.isSongLiked(displaySong, likedSongIds);
-        })(),
+        isLiked: resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
         onLike: handleLike,
     });
 
@@ -2231,38 +2163,15 @@ export default function App() {
         refreshObsBrowserSourceStatus,
     } = useObsBrowserSourcePublisher({
         isElectronWindow,
-        activePlaybackContext,
         stageSource,
-        currentSong,
-        lyrics,
         coverUrl,
-        currentTime,
         offsetMs: effectiveLyricTimelineOffsetMs,
-        duration,
-        playerState,
         theme: visualizerTheme,
         subtitleTheme: visualizerSubtitleTheme,
-        isDaylight,
-        visualizerMode,
         visualizerTunings,
         background: obsBrowserSourceBackground,
-        lyricsFontScale,
-        subtitleFontScale,
-        visualizerOpacity,
-        subtitleOverlayOpacity,
-        subtitleOverlayBackground,
-        showHarmonySubtitle,
-        harmonySubtitleBackground,
-        staticMode,
         hideTranslationSubtitle: shouldHidePlayerTranslationSubtitle,
-        showSubtitleTranslation,
-        subtitleContentMode,
         seed: visualizerGeometrySeed,
-        audioPower,
-        audioBands,
-        cappellaCustomEmojiImages,
-        cappellaCustomAvatarImages,
-        monetPortraitImage,
     });
     const {
         lyricApiStatus,

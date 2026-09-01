@@ -15,6 +15,12 @@ import type {
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 import { useStableActionSurface } from './useStableCallbacks';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useAppViewStore } from '../stores/useAppViewStore';
+import { useAppChromeStore } from '../stores/useAppChromeStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/useElectronWindowPlaybackHandoff.ts
 // Captures and restores renderer playback state across Electron BrowserWindow rebuilds.
@@ -23,22 +29,10 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 export type WindowPlaybackHandoffRestoreStatus = 'checking' | 'none' | 'restored';
 
 type UseElectronWindowPlaybackHandoffParams = {
+
     isElectronWindow: boolean;
-    audioQuality: AudioQualityPreference;
     userId?: MediaId;
-    activePlaybackContext: 'main' | 'stage';
-    currentView: 'home' | 'player';
     navigateToPlayer: () => void;
-    currentSong: SongResult | null;
-    lyrics: LyricData | null;
-    cachedCoverUrl: string | null;
-    audioSrc: string | null;
-    playQueue: SongResult[];
-    isFmMode: boolean;
-    playerState: PlayerState;
-    duration: number;
-    currentLineIndex: number;
-    currentTime: MotionValue<number>;
     audioRef: RefObject<HTMLAudioElement | null>;
     mainPlaybackSnapshotRef: MutableRefObject<PlaybackSnapshot | null>;
     stageStatus: StageStatus | null;
@@ -58,11 +52,6 @@ type UseElectronWindowPlaybackHandoffParams = {
     pendingResumeTimeRef: MutableRefObject<number | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    isPlayerChromeHidden: boolean;
-    setIsPlayerChromeHidden: SetState<boolean>;
-    showTransparentWindowBorder: boolean;
-    setShowTransparentWindowBorder: SetState<boolean>;
-    transparentPlayerBackground: boolean;
     applyTransparentPlayerBackground: (enabled: boolean) => void;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
@@ -83,20 +72,13 @@ const buildPlaybackSnapshot = ({
     lyrics,
     playQueue,
     playerState,
-}: Pick<
-    UseElectronWindowPlaybackHandoffParams,
-    | 'audioRef'
-    | 'audioSrc'
-    | 'cachedCoverUrl'
-    | 'currentLineIndex'
-    | 'currentSong'
-    | 'currentTime'
-    | 'duration'
-    | 'isFmMode'
-    | 'lyrics'
-    | 'playQueue'
-    | 'playerState'
->): PlaybackSnapshot => ({
+// Spelled out rather than Pick<Params, ...>: the playback fields are read from the store inside the
+// hook now, so they are no longer part of its parameter type.
+}: Omit<PlaybackSnapshot, 'currentTime'> & {
+    audioRef: MutableRefObject<HTMLAudioElement | null>;
+    /** The signal, not a value: the snapshot resolves it to a number on the way out. */
+    currentTime: MotionValue<number>;
+}): PlaybackSnapshot => ({
     currentSong,
     lyrics,
     cachedCoverUrl,
@@ -111,21 +93,8 @@ const buildPlaybackSnapshot = ({
 
 export function useElectronWindowPlaybackHandoff({
     isElectronWindow,
-    audioQuality,
     userId,
-    activePlaybackContext,
-    currentView,
     navigateToPlayer,
-    currentSong,
-    lyrics,
-    cachedCoverUrl,
-    audioSrc,
-    playQueue,
-    isFmMode,
-    playerState,
-    duration,
-    currentLineIndex,
-    currentTime,
     audioRef,
     mainPlaybackSnapshotRef,
     stageStatus,
@@ -145,15 +114,29 @@ export function useElectronWindowPlaybackHandoff({
     pendingResumeTimeRef,
     lastAudioRecoverySourceRef,
     currentOnlineAudioUrlFetchedAtRef,
-    isPlayerChromeHidden,
-    setIsPlayerChromeHidden,
-    showTransparentWindowBorder,
-    setShowTransparentWindowBorder,
-    transparentPlayerBackground,
     applyTransparentPlayerBackground,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
 }: UseElectronWindowPlaybackHandoffParams) {
+    // Read here rather than passed in: all store fields or a module-level motion signal.
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+    const currentView = useAppViewStore(state => state.view);
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+    const cachedCoverUrl = usePlaybackStore(state => state.cachedCoverUrl);
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const duration = usePlaybackStore(state => state.duration);
+    const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);
+    const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
+    const setIsPlayerChromeHidden = useAppChromeStore(state => state.setIsPlayerChromeHidden);
+    const showTransparentWindowBorder = useAppChromeStore(state => state.showTransparentWindowBorder);
+    const setShowTransparentWindowBorder = useAppChromeStore(state => state.setShowTransparentWindowBorder);
+    const transparentPlayerBackground = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground);
+
     const [restoreStatus, setRestoreStatus] = useState<WindowPlaybackHandoffRestoreStatus>(() => (
         isElectronWindow && window.electron?.consumeWindowPlaybackHandoff ? 'checking' : 'none'
     ));

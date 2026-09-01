@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { omni } from '../../../services/onlineMusic/omni';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
-import { isLocalPlaybackSong, isNavidromePlaybackSong, resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
+import { resolveSongLiked } from '../../../utils/resolveSongLiked';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
@@ -75,21 +74,10 @@ export const usePlayerPanelModel = ({
     const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
     const displayLyrics = usePlaybackStore(selectDisplayLyrics);
 
-    // Three liked-state backends behind one boolean: local files answer from disk, Navidrome from
-    // the starred set keyed by its own id, everything else from the active provider's set.
-    const isLiked = useMemo(() => {
-        if (!currentSong) {
-            return false;
-        }
-        if (isLocalPlaybackSong(currentSong)) {
-            return isLocalSongLiked(currentSong);
-        }
-        if (isNavidromePlaybackSong(currentSong)) {
-            const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
-            return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
-        }
-        return omni.isSongLiked(currentSong, likedSongIds);
-    }, [currentSong, isLocalSongLiked, likedSongIds, starredNavidromeSongIds]);
+    const isLiked = useMemo(
+        () => resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+        [currentSong, isLocalSongLiked, likedSongIds, starredNavidromeSongIds],
+    );
 
     const collectionEntries = useMemo(() => createPlayerPanelCollectionEntries({
         currentSong,
