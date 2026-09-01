@@ -182,11 +182,22 @@ test('a day/night switch reaches every surface', async ({ page }) => {
         const { useThemeSettingsStore } = await import(modulePath);
         useThemeSettingsStore.getState().setDaylightPreference(true);
     });
-    await page.waitForTimeout(600);
-    const counts = await collect(page);
+
+    // Poll instead of waiting a fixed slice: a theme change lands over two commits (the switch, then
+    // the regenerated palette), and on a slow machine the second one arrives after any timeout worth
+    // writing. Waiting for the names to appear is what this test is actually about.
+    const expected = ['Home', 'PlayerPanel', 'AppOverlays', 'AppDialogs'];
+    let counts: Counts = {};
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        await page.waitForTimeout(300);
+        counts = await collect(page);
+        if (expected.every(name => (counts[name] ?? 0) > 0)) {
+            break;
+        }
+    }
     show('player: 1x daylight toggle', counts);
 
-    for (const name of ['Home', 'PlayerPanel', 'AppOverlays', 'AppDialogs']) {
+    for (const name of expected) {
         expect(counts[name] ?? 0, `${name} did not see the theme change`).toBeGreaterThan(0);
     }
 });
