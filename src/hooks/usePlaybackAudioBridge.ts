@@ -13,19 +13,17 @@ import { rampGain, type AutomixDeckChain } from '../services/automix/crossfadeGr
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 import { setPlayerState } from '../stores/usePlaybackStore';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useAppViewStore } from '../stores/useAppViewStore';
 
 // src/hooks/usePlaybackAudioBridge.ts
 
 type UsePlaybackAudioBridgeParams = {
+
     audioRef: RefObject<HTMLAudioElement | null>;
-    audioSrc: string | null;
-    currentSong: SongResult | null;
     localSongs: LocalSong[];
     isLyricsLoading: boolean;
-    enableMediaCache: boolean;
-    isPanelOpen: boolean;
-    panelTab: string;
-    replayGainMode: ReplayGainMode;
     shouldAutoPlayRef: MutableRefObject<boolean>;
     audioContextRef: MutableRefObject<AudioContext | null>;
     analyserRef: MutableRefObject<AnalyserNode | null>;
@@ -42,20 +40,13 @@ type UsePlaybackAudioBridgeParams = {
     getTargetPlaybackVolume: () => number;
     getCoverUrl: () => string | null;
     updateCacheSize: () => void;
-    t: (key: string) => string;
 };
 
 // Bridges audio element setup, autoplay, replay gain, and media caching.
 export function usePlaybackAudioBridge({
     audioRef,
-    audioSrc,
-    currentSong,
     localSongs,
     isLyricsLoading,
-    enableMediaCache,
-    isPanelOpen,
-    panelTab,
-    replayGainMode,
     shouldAutoPlayRef,
     audioContextRef,
     analyserRef,
@@ -68,8 +59,16 @@ export function usePlaybackAudioBridge({
     getTargetPlaybackVolume,
     getCoverUrl,
     updateCacheSize,
-    t,
 }: UsePlaybackAudioBridgeParams) {
+    // Read here rather than passed in: all store fields or i18n.
+    const { t } = useTranslation();
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const replayGainMode = usePlaybackStore(state => state.replayGainMode);
+    const enableMediaCache = useAudioSettingsStore(state => state.enableMediaCache);
+    const isPanelOpen = useAppViewStore(state => state.isPanelOpen);
+    const panelTab = useAppViewStore(state => state.panelTab);
+
     const previousAudioSrcRef = useRef<string | null>(null);
     const replayGainLogSignatureRef = useRef<string | null>(null);
     const equalizerNodesRef = useRef<BiquadFilterNode[]>([]);

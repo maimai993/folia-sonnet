@@ -1449,16 +1449,9 @@ export default function App() {
     const automix = useAutomixDecks({
         audioRef,
         audioContextRef,
-        audioSrc,
-        currentSong,
         currentSongKeyRef: currentSongRef,
-        lyrics,
         coverUrl,
-        duration,
-        playQueue,
         loopMode: effectiveLoopMode,
-        audioQuality,
-        playerState,
         isEnabled: automixEnabled && !isNowPlayingStageActive,
         transition: transitionSettings,
         onAdvanceTrack: () => {
@@ -1673,14 +1666,8 @@ export default function App() {
 
     const { setupAudioAnalyzer, cacheSongAssets, cacheSongAssetsFor, adoptActiveDeckSource } = usePlaybackAudioBridge({
         audioRef,
-        audioSrc,
-        currentSong,
         localSongs,
         isLyricsLoading,
-        enableMediaCache,
-        isPanelOpen,
-        panelTab,
-        replayGainMode,
         shouldAutoPlayRef: shouldAutoPlay,
         audioContextRef,
         analyserRef,
@@ -1693,7 +1680,6 @@ export default function App() {
         getTargetPlaybackVolume,
         getCoverUrl,
         updateCacheSize,
-        t: key => t(key),
     });
 
     // Now the writer exists, point the automix settle path at it. A track that blends out never fires
@@ -1716,14 +1702,10 @@ export default function App() {
     const handlePauseDuringTransition = useCallback(() => pauseDuringTransitionRef.current(), []);
 
     const { resumePlayback, pausePlayback } = usePlaybackTransportController({
-        activePlaybackContext,
         stageActiveEntryKind,
         isNowPlayingStageActive,
-        audioSrc,
-        duration,
         audioRef,
         audioContextRef,
-        currentTime,
         stageLyricsClockRef,
         setupAudioAnalyzer,
         syncOutputGain,
@@ -1733,7 +1715,6 @@ export default function App() {
         getSyntheticStageLyricsTime,
         syncStageLyricsClock,
         pauseDuringTransition: handlePauseDuringTransition,
-        t: key => t(key),
     });
     useNavidromeScrobbleReporter({
         audioRef,

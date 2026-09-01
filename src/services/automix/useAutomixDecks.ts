@@ -18,6 +18,7 @@ import {
 import { AUTOMIX_MAX_OVERLAP_SEC } from './transitionPlanner';
 import type { TransitionSettings } from './transitionStrategy';
 import { usePlaybackStore, type TransitionDisplay } from '../../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 
 export type { TransitionDisplay };
 
@@ -138,10 +139,9 @@ export const resolveDeckSrc = ({
 
 
 type UseAutomixDecksParams = {
+
     audioRef: MutableRefObject<HTMLAudioElement | null>;
     audioContextRef: MutableRefObject<AudioContext | null>;
-    audioSrc: string | null;
-    currentSong: SongResult | null;
     /**
      * Playback key of the track the app has committed to, updated synchronously by playSong.
      *
@@ -150,14 +150,9 @@ type UseAutomixDecksParams = {
      * inside that window.
      */
     currentSongKeyRef: MutableRefObject<string | number | null>;
-    lyrics: LyricData | null;
     /** Only ever read to freeze the picture across a transition - see `transitionDisplay`. */
     coverUrl: string | null;
-    duration: number;
-    playQueue: SongResult[];
     loopMode: StageLoopMode;
-    audioQuality: AudioQualityPreference;
-    playerState: PlayerState;
     /** False when blending is switched off, or while another subsystem owns playback. */
     isEnabled: boolean;
     /** Which strategy plans each song change, and the crossfade mode's length setting. */
@@ -182,22 +177,26 @@ type UseAutomixDecksParams = {
 export function useAutomixDecks({
     audioRef,
     audioContextRef,
-    audioSrc,
-    currentSong,
     currentSongKeyRef,
-    lyrics,
     coverUrl,
-    duration,
-    playQueue,
     loopMode,
-    audioQuality,
-    playerState,
     isEnabled,
     transition,
     onAdvanceTrack,
     onDeckPlayedOut,
     getLocalStemBytes,
 }: UseAutomixDecksParams) {
+    // Read here rather than passed in. Plain reads of the same store App.tsx was reading from, so
+    // the values are identical within a render - this does not touch the advance ordering the note
+    // further down describes.
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+    const duration = usePlaybackStore(state => state.duration);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+
     const [activeDeck, setActiveDeck] = useState<AutomixDeckId>('A');
     const [tailSrc, setTailSrc] = useState<string | null>(null);
     /**
