@@ -17,18 +17,17 @@ import {
     stopMediaStream,
     wait,
 } from '../services/electronVideoExport';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useAppChromeStore } from '../stores/useAppChromeStore';
+import { setIsPanelOpen } from '../stores/useAppViewStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/useElectronVideoExportController.ts
 // Records the real player window so audio.currentTime remains the single animation clock.
 type UseElectronVideoExportControllerOptions = {
-    t: (key: string) => string;
     isElectronWindow: boolean;
     audioRef: RefObject<HTMLAudioElement | null>;
-    currentTime: MotionValue<number>;
-    duration: number;
-    currentSong: SongResult | null;
-    setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     navigateToPlayer: () => void;
     pausePlayback: () => void;
     resumePlayback: () => Promise<void>;
@@ -39,18 +38,18 @@ const COUNTDOWN_SECONDS = 3;
 const toArrayBuffer = (blob: Blob) => blob.arrayBuffer();
 
 export const useElectronVideoExportController = ({
-    t,
     isElectronWindow,
     audioRef,
-    currentTime,
-    duration,
-    currentSong,
-    setIsPlayerChromeHidden,
-    setIsPanelOpen,
     navigateToPlayer,
     pausePlayback,
     resumePlayback,
 }: UseElectronVideoExportControllerOptions) => {
+    // Read here rather than passed in: store fields, a module-level motion signal, or i18n.
+    const { t } = useTranslation();
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const duration = usePlaybackStore(state => state.duration);
+    const setIsPlayerChromeHidden = useAppChromeStore(state => state.setIsPlayerChromeHidden);
+
     const [exportState, setExportState] = useState<VideoExportState>(idleVideoExportState);
     const recorderRef = useRef<MediaRecorder | null>(null);
     const cancelRequestedRef = useRef(false);

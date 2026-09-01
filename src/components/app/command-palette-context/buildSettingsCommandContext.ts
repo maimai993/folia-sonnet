@@ -8,6 +8,7 @@ import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSet
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorStore';
 
 // src/components/app/command-palette-context/buildSettingsCommandContext.ts
 // The `settings` namespace of the palette context.
@@ -23,12 +24,9 @@ export type SettingsCommandContextDeps = {
     toggleDaylightMode: () => void;
     /** Composes handleSaveLyricFilterPattern; not a plain store setter. */
     cycleLyricStaffPolicy: () => void;
-    lyricStaffPolicy: LyricStaffPolicy;
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
-    openThemeQuickEditor: () => void;
-    canOpenThemeQuickEditor: boolean;
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
     voiceInputPauseSupported: boolean;
@@ -45,6 +43,7 @@ export const buildSettingsCommandContext = (
     const automix = useAutomixSettingsStore.getState();
     const sleepTimer = useSleepTimerStore.getState();
     const modal = useSettingsModalStore.getState();
+    const themeQuickEditor = useThemeQuickEditorStore.getState();
 
     return {
         openSettings: modal.openSettings,
@@ -92,8 +91,8 @@ export const buildSettingsCommandContext = (
         canGenerateAITheme: deps.canGenerateAITheme,
         isGeneratingTheme: deps.isGeneratingTheme,
         generateAITheme: deps.generateAITheme,
-        openThemeQuickEditor: deps.openThemeQuickEditor,
-        canOpenThemeQuickEditor: deps.canOpenThemeQuickEditor,
+        openThemeQuickEditor: themeQuickEditor.openEditor,
+        canOpenThemeQuickEditor: themeQuickEditor.canOpenEditor,
         themeGenerationSource: deps.themeGenerationSource,
         setThemeGenerationSource: deps.setThemeGenerationSource,
         lyricStaffPolicy: useLyricSettingsStore.getState().lyricStaffPolicy,

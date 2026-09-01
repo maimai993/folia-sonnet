@@ -1,4 +1,8 @@
 import { useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { selectDisplayLyrics, selectDisplayPlayerState, usePlaybackStore } from '../stores/usePlaybackStore';
+import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
+import { setIsPanelOpen, setPanelTab } from '../stores/useAppViewStore';
 import { useShallow } from 'zustand/react/shallow';
 import type { CommandPaletteContext } from '../components/command-palette/types';
 import {
@@ -36,15 +40,52 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 // wrong entries. The subscriptions are deliberately narrow: only fields the palette actually shows
 // or gates on, not whole stores.
 
-export type CommandPaletteContextDeps =
+/** What this hook fills in from stores, i18n and the display selectors. */
+const AMBIENT_KEYS = [
+    't', 'currentSong', 'lyrics', 'playerState',
+    'queue', 'isFmMode',
+    'setHomeViewTab', 'setPanelTab', 'setIsPanelOpen',
+] as const;
+
+type AmbientKey = (typeof AMBIENT_KEYS)[number];
+
+export type CommandPaletteContextDeps = Omit<
     SharedCommandContextDeps
     & SearchCommandContextDeps
     & PlaybackCommandContextDeps
     & NavigationCommandContextDeps
     & PanelCommandContextDeps
-    & SettingsCommandContextDeps;
+    & SettingsCommandContextDeps,
+    AmbientKey
+>;
 
 export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): CommandPaletteContext => {
+    const { t } = useTranslation();
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const queue = usePlaybackStore(state => state.playQueue);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
+    // What is on screen, transitions included: surfaces that publish lyrics (the mod runtime
+    // snapshot) must send the rendered ones, not a guess rebuilt from the song's stored state.
+    const lyrics = usePlaybackStore(selectDisplayLyrics);
+    // The transport the listener can hear, like the main controls, the remote and the taskbar.
+    // The raw state goes IDLE for the length of an arm while the outgoing deck is still playing,
+    // and the palette read that as "paused": its Play command called toggle, which during a blend
+    // pauses - so Play paused - while Pause saw no PLAYING to toggle and did nothing at all. Both
+    // commands named the opposite of what they did, for up to half a minute per track.
+    const playerState = usePlaybackStore(selectDisplayPlayerState);
+    const ambient = useMemo(() => ({
+        t: (key: string, fallback?: string) => t(key, fallback ?? ''),
+        currentSong,
+        lyrics,
+        playerState,
+        queue,
+        isFmMode,
+        setHomeViewTab,
+        setPanelTab,
+        setIsPanelOpen,
+    }), [t, currentSong, lyrics, playerState, queue, isFmMode, setHomeViewTab]);
+
     // Narrow subscriptions: these are the store fields the palette displays or gates on.
     const settingsSignals = useTypographySettingsStore(useShallow(state => ({
         subtitleContentMode: state.subtitleContentMode,
@@ -104,7 +145,9 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         .map(([, value]) => value);
 
     return useMemo(() => {
-        const stableDeps = { ...deps, ...stableCallbacks } as CommandPaletteContextDeps;
+        // `ambient` is what this hook reads for itself; `deps` is what only App.tsx can supply.
+        const stableDeps = { ...deps, ...stableCallbacks, ...ambient } as CommandPaletteContextDeps
+            & typeof ambient;
         return {
             shared: buildSharedCommandContext(stableDeps),
             search: buildSearchCommandContext(stableDeps),
@@ -117,6 +160,7 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
     // eslint-disable-next-line react-hooks/exhaustive-deps -- value list is derived, shape is fixed
     }, [
         ...valueDeps,
+        ambient,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, audioSignals, visualizerSignals,
         lyricStaffPolicy, personalFmSelection,
