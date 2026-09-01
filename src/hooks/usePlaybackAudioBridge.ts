@@ -12,6 +12,7 @@ import { cachePlayedTrackAssets } from '../services/playedTrackCache';
 import { rampGain, type AutomixDeckChain } from '../services/automix/crossfadeGraph';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/usePlaybackAudioBridge.ts
 
@@ -37,7 +38,6 @@ type UsePlaybackAudioBridgeParams = {
     suppressAutoplayRef: MutableRefObject<boolean>;
     /** True while automix has the next track loaded but its blend is not due to start yet. */
     isAutoplayHeld: boolean;
-    setPlayerState: React.Dispatch<React.SetStateAction<PlayerState>>;
     syncOutputGain: (targetVolume: number, smoothing?: number) => void;
     getTargetPlaybackVolume: () => number;
     getCoverUrl: () => string | null;
@@ -64,7 +64,6 @@ export function usePlaybackAudioBridge({
     getActiveChain,
     suppressAutoplayRef,
     isAutoplayHeld,
-    setPlayerState,
     syncOutputGain,
     getTargetPlaybackVolume,
     getCoverUrl,

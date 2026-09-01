@@ -30,6 +30,7 @@ import type { SearchReturnView, SearchSource } from '../stores/useSearchNavigati
 import { dispatchSearchTrackAction } from '../components/app/search/searchTrackActions';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -73,16 +74,8 @@ type UsePlaybackQueueControllerParams = {
     localLibraryCatalog: LocalLibraryDisplayCatalog;
     userId?: MediaId;
     currentTime: MotionValue<number>;
-    setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: any) => void;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setPlayerState: SetState<PlayerState>;
-    setCurrentLineIndex: SetState<number>;
-    setDuration: SetState<number>;
     setIsLyricsLoading: SetState<boolean>;
-    setIsFmMode: SetState<boolean>;
     setPanelTab: SetState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>;
     setIsPanelOpen: SetState<boolean>;
     navigateToPlayer: () => void;
@@ -174,16 +167,8 @@ export function usePlaybackQueueController({
     localLibraryCatalog,
     userId,
     currentTime,
-    setCurrentSong,
     setLyrics,
-    setCachedCoverUrl,
-    setAudioSrc,
-    setPlayQueue,
-    setPlayerState,
-    setCurrentLineIndex,
-    setDuration,
     setIsLyricsLoading,
-    setIsFmMode,
     setPanelTab,
     setIsPanelOpen,
     navigateToPlayer,

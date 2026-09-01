@@ -13,6 +13,7 @@ import type {
     WindowPlaybackHandoff,
 } from '../types/appPlayback';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/useElectronWindowPlaybackHandoff.ts
 // Captures and restores renderer playback state across Electron BrowserWindow rebuilds.
@@ -25,7 +26,6 @@ type UseElectronWindowPlaybackHandoffParams = {
     audioQuality: AudioQualityPreference;
     userId?: MediaId;
     activePlaybackContext: 'main' | 'stage';
-    setActivePlaybackContext: SetState<'main' | 'stage'>;
     currentView: 'home' | 'player';
     navigateToPlayer: () => void;
     currentSong: SongResult | null;
@@ -50,16 +50,8 @@ type UseElectronWindowPlaybackHandoffParams = {
     nowPlayingProgressQuality: 'precise' | 'coarse';
     getNowPlayingDisplayTime: () => number;
     restoreStagePlaybackHandoff: (handoff: WindowPlaybackHandoff) => Promise<void>;
-    setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setIsFmMode: SetState<boolean>;
     setIsLyricsLoading: SetState<boolean>;
-    setPlayerState: SetState<PlayerState>;
-    setCurrentLineIndex: SetState<number>;
-    setDuration: SetState<number>;
     blobUrlRef: MutableRefObject<string | null>;
     shouldAutoPlayRef: MutableRefObject<boolean>;
     pendingResumeTimeRef: MutableRefObject<number | null>;
@@ -121,7 +113,6 @@ export function useElectronWindowPlaybackHandoff({
     audioQuality,
     userId,
     activePlaybackContext,
-    setActivePlaybackContext,
     currentView,
     navigateToPlayer,
     currentSong,
@@ -146,16 +137,8 @@ export function useElectronWindowPlaybackHandoff({
     nowPlayingProgressQuality,
     getNowPlayingDisplayTime,
     restoreStagePlaybackHandoff,
-    setCurrentSong,
     setLyrics,
-    setCachedCoverUrl,
-    setAudioSrc,
-    setPlayQueue,
-    setIsFmMode,
     setIsLyricsLoading,
-    setPlayerState,
-    setCurrentLineIndex,
-    setDuration,
     blobUrlRef,
     shouldAutoPlayRef,
     pendingResumeTimeRef,
@@ -302,10 +285,7 @@ export function useElectronWindowPlaybackHandoff({
             userId,
             blobUrlRef,
             currentOnlineAudioUrlFetchedAtRef,
-            setCurrentSong,
             setPlayQueue,
-            setCachedCoverUrl,
-            setAudioSrc,
             setLyrics,
             restoreCachedThemeForSong,
             persistLastPlaybackCache,

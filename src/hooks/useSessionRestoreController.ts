@@ -11,6 +11,7 @@ import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } 
 import type { LyricData, SongResult, StatusMessage } from '../types';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setCurrentSong, setPlayQueue } from '../stores/usePlaybackStore';
 
 // src/hooks/useSessionRestoreController.ts
 
@@ -21,10 +22,6 @@ type UseSessionRestoreControllerParams = {
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
@@ -43,10 +40,6 @@ export function useSessionRestoreController({
     userId,
     blobUrlRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setCurrentSong,
-    setPlayQueue,
-    setCachedCoverUrl,
-    setAudioSrc,
     setLyrics,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
@@ -140,10 +133,6 @@ export function useSessionRestoreController({
                         userId,
                         blobUrlRef,
                         currentOnlineAudioUrlFetchedAtRef,
-                        setCurrentSong,
-                        setPlayQueue,
-                        setCachedCoverUrl,
-                        setAudioSrc,
                         setLyrics,
                         restoreCachedThemeForSong,
                         persistLastPlaybackCache,

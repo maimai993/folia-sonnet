@@ -4,6 +4,7 @@ import type { MotionValue } from 'framer-motion';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
 import { PlayerState } from '../types';
 import type { AudioBands, LyricData } from '../types';
+import { setCurrentLineIndex, setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/usePlaybackVisualizerBridge.ts
 
@@ -29,8 +30,6 @@ type UsePlaybackVisualizerBridgeParams = {
         baseTimeSec: number;
         startedAtMs: number | null;
     }>;
-    setCurrentLineIndex: React.Dispatch<React.SetStateAction<number>>;
-    setPlayerState: React.Dispatch<React.SetStateAction<PlayerState>>;
     getSyntheticStageLyricsTime: () => number;
     syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
     getNowPlayingDisplayTime: () => number;
@@ -69,8 +68,6 @@ export function usePlaybackVisualizerBridge({
     stageActiveEntryKind,
     stageLyricsSession,
     stageLyricsClockRef,
-    setCurrentLineIndex,
-    setPlayerState,
     getSyntheticStageLyricsTime,
     syncStageLyricsClock,
     getNowPlayingDisplayTime,

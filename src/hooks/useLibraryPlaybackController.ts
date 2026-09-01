@@ -49,6 +49,7 @@ import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetada
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/useLibraryPlaybackController.ts
 
@@ -82,14 +83,7 @@ type UseLibraryPlaybackControllerParams = {
     starredNavidromeSongIds: Set<string>;
     userId?: MediaId;
     currentTime: MotionValue<number>;
-    setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setPlayerState: SetState<PlayerState>;
-    setCurrentLineIndex: SetState<number>;
-    setDuration: SetState<number>;
     setIsLyricsLoading: SetState<boolean>;
     setIsPanelOpen: SetState<boolean>;
     setLikedSongIds: Dispatch<SetStateAction<Set<MediaId>>>;
@@ -119,14 +113,7 @@ export function useLibraryPlaybackController({
     starredNavidromeSongIds,
     userId,
     currentTime,
-    setCurrentSong,
     setLyrics,
-    setCachedCoverUrl,
-    setAudioSrc,
-    setPlayQueue,
-    setPlayerState,
-    setCurrentLineIndex,
-    setDuration,
     setIsLyricsLoading,
     setIsPanelOpen,
     setLikedSongIds,

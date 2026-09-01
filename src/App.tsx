@@ -123,6 +123,7 @@ import { selectSettingsModalSnapshot, useSettingsModalStore } from './stores/use
 import { audioBands, audioPower, bass, currentTime, lowMid, lyricCurrentTime, mid, spectrum, treble, vocal } from './stores/motionSignals';
 import { useAppChromeStore } from './stores/useAppChromeStore';
 import { useAppViewStore } from './stores/useAppViewStore';
+import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayLyrics, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from './stores/usePlaybackStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -136,6 +137,33 @@ const NEXT_UP_LEAD_SEC = 5;
 
 export default function App() {
     const { t } = useTranslation();
+    const {
+        currentSong, setCurrentSong,
+        audioSrc, setAudioSrc,
+        lyrics, setLyricsState,
+        cachedCoverUrl, setCachedCoverUrl,
+        duration, setDuration,
+        playerState, setPlayerState,
+        currentLineIndex, setCurrentLineIndex,
+        playQueue, setPlayQueue,
+        activePlaybackContext, setActivePlaybackContext,
+        isFmMode, setIsFmMode,
+        replayGainMode, setReplayGainMode,
+        lyricTimelineOffsetMs, setLyricTimelineOffsetMs,
+    } = usePlaybackStore(useShallow(state => ({
+        currentSong: state.currentSong, setCurrentSong: state.setCurrentSong,
+        audioSrc: state.audioSrc, setAudioSrc: state.setAudioSrc,
+        lyrics: state.lyrics, setLyricsState: state.setLyricsState,
+        cachedCoverUrl: state.cachedCoverUrl, setCachedCoverUrl: state.setCachedCoverUrl,
+        duration: state.duration, setDuration: state.setDuration,
+        playerState: state.playerState, setPlayerState: state.setPlayerState,
+        currentLineIndex: state.currentLineIndex, setCurrentLineIndex: state.setCurrentLineIndex,
+        playQueue: state.playQueue, setPlayQueue: state.setPlayQueue,
+        activePlaybackContext: state.activePlaybackContext, setActivePlaybackContext: state.setActivePlaybackContext,
+        isFmMode: state.isFmMode, setIsFmMode: state.setIsFmMode,
+        replayGainMode: state.replayGainMode, setReplayGainMode: state.setReplayGainMode,
+        lyricTimelineOffsetMs: state.lyricTimelineOffsetMs, setLyricTimelineOffsetMs: state.setLyricTimelineOffsetMs,
+    })));
     const {
         isPanelOpen, setIsPanelOpen,
         panelTab, setPanelTab,
@@ -179,16 +207,9 @@ export default function App() {
     const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
 
     // Player Data
-    const [audioSrc, setAudioSrc] = useState<string | null>(null);
-    const [currentSong, setCurrentSong] = useState<SongResult | null>(null);
     useOnlineSongMetadataHydration(currentSong, setCurrentSong);
-    const [lyrics, setLyricsState] = useState<LyricData | null>(null);
-    const [lyricTimelineOffsetMs, setLyricTimelineOffsetMs] = useState(0);
-    const [cachedCoverUrl, setCachedCoverUrl] = useState<string | null>(null);
-    const [activePlaybackContext, setActivePlaybackContext] = useState<PlaybackContext>('main');
 
     // Queue
-    const [playQueue, setPlayQueue] = useState<SongResult[]>([]);
 
     // UI State
     const statusMsg = useStatusMessage();
@@ -300,13 +321,9 @@ export default function App() {
     }, [settingsModalState.isOpen, navidromeEnabled, loadNavidromeFavorites]);
 
     // Player State
-    const [playerState, setPlayerState] = useState<PlayerState>(PlayerState.IDLE);
     useEffect(() => {
         (window as any).__folia_current_time = currentTime;
     }, []);
-    const [duration, setDuration] = useState(0);
-    const [currentLineIndex, setCurrentLineIndex] = useState(-1);
-    const [isFmMode, setIsFmMode] = useState(false);
 
     // Progress Bar State
     // Removed isDragging and sliderValue as they are handled by ProgressBar component
@@ -354,10 +371,6 @@ export default function App() {
     const [isLyricsLoading, setIsLyricsLoading] = useState(false);
     const isNowPlayingControlDisabledRef = useRef(false);
 
-    const [replayGainMode, setReplayGainMode] = useState<ReplayGainMode>(() => {
-        const saved = localStorage.getItem('local_replaygain_mode');
-        return saved === 'track' || saved === 'album' ? saved : 'off';
-    });
     const localFileBlobsRef = useRef<Map<string, string>>(new Map()); // id -> blob URL
 
     // Navigation persistence state shared by the Grid home surfaces.
@@ -819,9 +832,6 @@ export default function App() {
         onlinePlaybackRecoveryRef,
         lastAudioRecoverySourceRef,
         currentOnlineAudioUrlFetchedAtRef,
-        setAudioSrc,
-        setCurrentSong,
-        setPlayQueue,
         persistLastPlaybackCache,
         playQueue,
         onlineAudioUrlTtlMs: ONLINE_AUDIO_URL_TTL_MS,
@@ -1175,7 +1185,6 @@ export default function App() {
         playerCapTimeBasis,
         playerCapSticky,
         activePlaybackContext,
-        setActivePlaybackContext,
         currentSong,
         lyrics,
         cachedCoverUrl,
@@ -1192,16 +1201,8 @@ export default function App() {
         pendingResumeTimeRef,
         lastAudioRecoverySourceRef,
         currentOnlineAudioUrlFetchedAtRef,
-        setCurrentSong,
         setLyrics,
-        setCachedCoverUrl,
-        setAudioSrc,
-        setPlayQueue,
-        setIsFmMode,
         setIsLyricsLoading,
-        setPlayerState,
-        setCurrentLineIndex,
-        setDuration,
         navigateToPlayer,
     });
 
@@ -1213,7 +1214,6 @@ export default function App() {
         audioQuality,
         userId: user?.id,
         activePlaybackContext,
-        setActivePlaybackContext,
         currentView,
         navigateToPlayer,
         currentSong,
@@ -1238,16 +1238,8 @@ export default function App() {
         nowPlayingProgressQuality,
         getNowPlayingDisplayTime,
         restoreStagePlaybackHandoff,
-        setCurrentSong,
         setLyrics,
-        setCachedCoverUrl,
-        setAudioSrc,
-        setPlayQueue,
-        setIsFmMode,
         setIsLyricsLoading,
-        setPlayerState,
-        setCurrentLineIndex,
-        setDuration,
         blobUrlRef,
         shouldAutoPlayRef: shouldAutoPlay,
         pendingResumeTimeRef,
@@ -1314,14 +1306,7 @@ export default function App() {
         likedSongIds,
         userId: user?.id,
         currentTime,
-        setCurrentSong,
         setLyrics,
-        setCachedCoverUrl,
-        setAudioSrc,
-        setPlayQueue,
-        setPlayerState,
-        setCurrentLineIndex,
-        setDuration,
         setIsLyricsLoading,
         setIsPanelOpen,
         setLikedSongIds,
@@ -1342,10 +1327,6 @@ export default function App() {
         userId: user?.id,
         blobUrlRef,
         currentOnlineAudioUrlFetchedAtRef,
-        setCurrentSong,
-        setPlayQueue,
-        setCachedCoverUrl,
-        setAudioSrc,
         setLyrics,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
@@ -1375,13 +1356,11 @@ export default function App() {
         handleSetLyricStaffPattern,
         loadCurrentSongLyricPreview,
         setLyrics: (nextLyrics) => setLyricsRef.current(nextLyrics),
-        setCurrentLineIndex,
     });
 
     const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext } = createQueueMutations({
         currentSong,
         playQueue,
-        setPlayQueue,
         persistLastPlaybackCache,
         t: key => t(key),
         queueAddBehavior,
@@ -1436,16 +1415,8 @@ export default function App() {
         localLibraryCatalog,
         userId: user?.id,
         currentTime,
-        setCurrentSong,
         setLyrics,
-        setCachedCoverUrl,
-        setAudioSrc,
-        setPlayQueue,
-        setPlayerState,
-        setCurrentLineIndex,
-        setDuration,
         setIsLyricsLoading,
-        setIsFmMode,
         setPanelTab,
         setIsPanelOpen,
         navigateToPlayer,
@@ -1584,14 +1555,15 @@ export default function App() {
      * tracks and the advance is the only thing that ever gives the incoming deck a source. What is
      * safe to hold back is the picture.
      */
-    const displaySong = automix.transitionDisplay?.song ?? currentSong;
-    // Ternaries rather than `??`, because null is a real value for all three: a track with no
-    // lyrics, no cover and no known length must hold those, not fall through to the new track's.
-    const displayLyrics = automix.transitionDisplay ? automix.transitionDisplay.lyrics : lyrics;
-    const displayCoverUrl = automix.transitionDisplay ? automix.transitionDisplay.coverUrl : coverUrl;
-    const displayDuration = automix.transitionDisplay ? automix.transitionDisplay.duration : duration;
+    // Derived in usePlaybackStore now, so that any consumer can read the display layer without
+    // being handed it. The ternaries (rather than `??`) live there for the same reason they lived
+    // here: null is a real value for lyrics, cover and duration.
+    const displaySong = usePlaybackStore(selectDisplaySong);
+    const displayLyrics = usePlaybackStore(selectDisplayLyrics);
+    const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
+    const displayDuration = usePlaybackStore(selectDisplayDuration);
     /** While true the progress bar is driven by the deck that is finishing, not the active one. */
-    const isShowingTail = automix.transitionDisplay !== null;
+    const isShowingTail = usePlaybackStore(selectIsShowingTail);
     /**
      * The transport the picture belongs to, which is not idle just because the next track is.
      *
@@ -1602,9 +1574,7 @@ export default function App() {
      *
      * IDLE only. PAUSED during a blend is a listener pressing pause and has to be shown.
      */
-    const displayPlayerState = isShowingTail && playerState === PlayerState.IDLE
-        ? PlayerState.PLAYING
-        : playerState;
+    const displayPlayerState = usePlaybackStore(selectDisplayPlayerState);
     // The bar is driven by the tail deck for the length of a blend, so at BOTH edges of the hold
     // it briefly reads one track's position against the other's length. One write at each edge
     // rather than waiting up to a quarter second for the next timeupdate to correct it.
@@ -1782,7 +1752,6 @@ export default function App() {
         getActiveChain: automix.getActiveChain,
         suppressAutoplayRef: automix.suppressAutoplayRef,
         isAutoplayHeld: automix.autoplayHeld,
-        setPlayerState,
         syncOutputGain,
         getTargetPlaybackVolume,
         getCoverUrl,
@@ -1819,7 +1788,6 @@ export default function App() {
         audioContextRef,
         currentTime,
         stageLyricsClockRef,
-        setPlayerState,
         setupAudioAnalyzer,
         syncOutputGain,
         getTargetPlaybackVolume,
@@ -2002,8 +1970,6 @@ export default function App() {
         stageActiveEntryKind,
         stageLyricsSession,
         stageLyricsClockRef,
-        setCurrentLineIndex,
-        setPlayerState,
         getSyntheticStageLyricsTime,
         syncStageLyricsClock,
         getNowPlayingDisplayTime,
@@ -2045,7 +2011,6 @@ export default function App() {
         setIsMemoryMonitorVisible,
         cyclePlayerChromeVisibilityMode,
         setIsPanelOpen,
-        setReplayGainMode,
         handleNextTrack,
         handlePrevTrack,
         handleToggleLoopMode,
@@ -2713,7 +2678,6 @@ export default function App() {
         playerState,
         publishStagePlayerPlaybackUpdate,
         seekMainAudio,
-        setPlayerState,
         stageActiveEntryKind,
         stageLyricsClockRef,
         syncStageLyricsClock,
@@ -3317,7 +3281,6 @@ export default function App() {
         stageActiveEntryKind,
         syncStageLyricsClock,
         stageLyricsClockRef,
-        setPlayerState,
         togglePlay,
         toggleLoop,
         navigateToPlayer,
@@ -3391,7 +3354,6 @@ export default function App() {
         displayPlayerState,
         publishStagePlayerPlaybackUpdate,
         seekMainAudio,
-        setPlayerState,
         shouldHidePlayerProgressBar,
         stageActiveEntryKind,
         stageLyricsClockRef,

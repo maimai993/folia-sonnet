@@ -10,6 +10,7 @@ import type { SongResult, UnifiedSong, LyricData } from '../../../types';
 import { resolvePlaybackNeighbors } from '../../../utils/playbackNeighbors';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
+import { setPlayerState } from '../../../stores/usePlaybackStore';
 
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
@@ -59,7 +60,6 @@ type BuildAppOverlaysModelParams = {
     stageActiveEntryKind: string | null;
     syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
     stageLyricsClockRef: React.MutableRefObject<{ startTimeSec: number }>;
-    setPlayerState: React.Dispatch<React.SetStateAction<PlayerState>>;
     togglePlay: FloatingControlsProps['onTogglePlay'];
     toggleLoop: FloatingControlsProps['onToggleLoop'];
     navigateToPlayer: () => void;
@@ -131,7 +131,6 @@ export const buildAppOverlaysModel = ({
     stageActiveEntryKind,
     syncStageLyricsClock,
     stageLyricsClockRef,
-    setPlayerState,
     togglePlay,
     toggleLoop,
     navigateToPlayer,

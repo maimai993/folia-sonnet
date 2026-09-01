@@ -7,13 +7,13 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { applyQueueBatchOperation as transformQueueBatch } from '../../../utils/queueBatchOperations';
 import type { QueueBatchAction } from '../../command-palette/queueQuery';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setPlayQueue } from '../../../stores/usePlaybackStore';
 
 // src/components/app/player-panel/createQueueMutations.ts
 
 type CreateQueueMutationsParams = {
     currentSong: SongResult | null;
     playQueue: SongResult[];
-    setPlayQueue: Dispatch<SetStateAction<SongResult[]>>;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
     t: (key: string) => string;
     queueAddBehavior: QueueAddBehavior;
@@ -23,7 +23,6 @@ type CreateQueueMutationsParams = {
 export const createQueueMutations = ({
     currentSong,
     playQueue,
-    setPlayQueue,
     persistLastPlaybackCache,
     t,
     queueAddBehavior,

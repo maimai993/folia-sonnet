@@ -29,6 +29,7 @@ import { getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../..
 import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setAudioSrc, setCachedCoverUrl, setCurrentSong } from '../../../stores/usePlaybackStore';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -40,10 +41,7 @@ type RestorePlaybackSourceParams = {
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
     setPlayQueue?: SetState<SongResult[]>;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
     restoreCachedThemeForSong?: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
@@ -70,10 +68,7 @@ export const restorePlaybackSourceForSong = async (
         userId,
         blobUrlRef,
         currentOnlineAudioUrlFetchedAtRef,
-        setCurrentSong,
         setPlayQueue,
-        setCachedCoverUrl,
-        setAudioSrc,
         setLyrics,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,

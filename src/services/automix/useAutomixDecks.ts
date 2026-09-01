@@ -17,6 +17,9 @@ import {
 } from './automixSession';
 import { AUTOMIX_MAX_OVERLAP_SEC } from './transitionPlanner';
 import type { TransitionSettings } from './transitionStrategy';
+import { usePlaybackStore, type TransitionDisplay } from '../../stores/usePlaybackStore';
+
+export type { TransitionDisplay };
 
 // src/services/automix/useAutomixDecks.ts
 // The React shell around the automix state machine: two audio elements, which one the app's
@@ -133,15 +136,6 @@ export const resolveDeckSrc = ({
     return warm ?? audioSrc ?? undefined;
 };
 
-/** The now-playing picture, frozen for as long as a transition is running. */
-export interface TransitionDisplay {
-    song: SongResult | null;
-    lyrics: LyricData | null;
-    /** Held with the song: the cover cache is repointed at the arriving track during the blend. */
-    coverUrl: string | null;
-    /** Held for the same reason, or the progress bar reads the old position against a new length. */
-    duration: number;
-}
 
 type UseAutomixDecksParams = {
     audioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -220,7 +214,11 @@ export function useAutomixDecks({
      * it would leave that deck silent for the whole blend. What is safe to defer is the picture, which is
      * this.
      */
-    const [transitionDisplay, setTransitionDisplay] = useState<TransitionDisplay | null>(null);
+    // Lives in usePlaybackStore so the display layer can be derived anywhere, not just where this
+    // hook's return value happens to be in scope. The write below is still synchronous, which is
+    // the whole point of it — see the comment at the call site.
+    const transitionDisplay = usePlaybackStore(state => state.transitionDisplay);
+    const setTransitionDisplay = usePlaybackStore(state => state.setTransitionDisplay);
     /**
      * The next track's source, handed to the idle deck so it can buffer before it is needed.
      *

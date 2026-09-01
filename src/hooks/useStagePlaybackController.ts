@@ -38,6 +38,7 @@ import type {
     WindowPlaybackHandoff,
 } from '../types/appPlayback';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState } from '../stores/usePlaybackStore';
 
 // src/hooks/useStagePlaybackController.ts
 
@@ -54,7 +55,6 @@ type UseStagePlaybackControllerParams = {
     playerCapTimeBasis: 'timestamp' | 'play_time';
     playerCapSticky: boolean;
     activePlaybackContext: 'main' | 'stage';
-    setActivePlaybackContext: SetState<'main' | 'stage'>;
     currentSong: SongResult | null;
     lyrics: LyricData | null;
     cachedCoverUrl: string | null;
@@ -71,16 +71,8 @@ type UseStagePlaybackControllerParams = {
     pendingResumeTimeRef: MutableRefObject<number | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setIsFmMode: SetState<boolean>;
     setIsLyricsLoading: SetState<boolean>;
-    setPlayerState: SetState<PlayerState>;
-    setCurrentLineIndex: SetState<number>;
-    setDuration: SetState<number>;
     navigateToPlayer: () => void;
 };
 
@@ -115,7 +107,6 @@ export function useStagePlaybackController({
     playerCapTimeBasis,
     playerCapSticky,
     activePlaybackContext,
-    setActivePlaybackContext,
     currentSong,
     lyrics,
     cachedCoverUrl,
@@ -132,16 +123,8 @@ export function useStagePlaybackController({
     pendingResumeTimeRef,
     lastAudioRecoverySourceRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setCurrentSong,
     setLyrics,
-    setCachedCoverUrl,
-    setAudioSrc,
-    setPlayQueue,
-    setIsFmMode,
     setIsLyricsLoading,
-    setPlayerState,
-    setCurrentLineIndex,
-    setDuration,
     navigateToPlayer,
 }: UseStagePlaybackControllerParams) {
     const [stageStatus, setStageStatus] = useState<StageStatus | null>(null);
