@@ -4,7 +4,6 @@ import {
     DIORAMA_PARTICLE_DENSITY_MIN,
 } from '../../src/types';
 import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
-import { useSettingsModalStore } from '@/stores/useSettingsModalStore';
 
 // test/ui/dioramaSettings.spec.ts
 // Verifies Diorama's point-cloud controls - including the mutually-exclusive clouds/corridor mode
@@ -22,8 +21,8 @@ test('switches between clouds and corridor mode and keeps particle controls inte
     });
     await page.goto('/');
     await page.evaluate(async () => {
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-        const { useSettingsUiStore } = await import(storeModulePath);
+        const storeModulePath = '/src/stores/useSettingsModalStore.ts';
+        const { useSettingsModalStore } = await import(storeModulePath);
         useSettingsModalStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 

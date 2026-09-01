@@ -17,7 +17,11 @@ const QUEUE_FIXTURE = [
 const readStore = (page: import('@playwright/test').Page, key: string) => page.evaluate(async (stateKey) => {
     const modulePaths = [
         '/src/stores/useVisualizerSettingsStore.ts',
-        '/src/stores/useSettingsUiStore.ts',
+        '/src/stores/useThemeSettingsStore.ts',
+        '/src/stores/usePlayerChromeSettingsStore.ts',
+        '/src/stores/useAudioSettingsStore.ts',
+        '/src/stores/useAutomixSettingsStore.ts',
+        '/src/stores/usePlaybackStore.ts',
     ];
     for (const modulePath of modulePaths) {
         const module = await import(modulePath) as Record<string, { getState: () => Record<string, unknown> }>;

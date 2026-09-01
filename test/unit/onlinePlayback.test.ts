@@ -22,8 +22,8 @@ vi.mock('@/services/onlineMusic/omni', () => ({
     },
 }));
 
-vi.mock('@/stores/useSettingsUiStore', () => ({
-    useSettingsUiStore: {
+vi.mock('@/stores/useLyricSettingsStore', () => ({
+    useLyricSettingsStore: {
         getState: () => ({ autoUseBestLyric: true, preferredAlternativeLyricSource: 'qq' }),
     },
 }));

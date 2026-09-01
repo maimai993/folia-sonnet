@@ -99,4 +99,36 @@ describe('store contract', () => {
 
         expect(edges).toEqual([]);
     });
+
+    it('leaves no reference to a store module that no longer exists', () => {
+        // Two ways to name a store that tsc cannot check, both of which fail silently:
+        //   a Playwright spec importing a store by runtime path string inside page.evaluate
+        //   a vi.mock naming a store by alias - mocking a missing module is a no-op, so the suite
+        //   quietly runs the real store instead of the fixture it thinks it installed
+        // Splitting a store leaves both behind. This is the only thing that reports it.
+        const ROOTS = ['src', 'test', 'dev'].map(dir => path.resolve(__dirname, '../../..', dir));
+        const known = new Set(storeFiles.map(name => name.replace(/\.ts$/, '')));
+        const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : walk(full);
+            return /\.tsx?$/.test(entry.name) ? [full] : [];
+        });
+
+        const dangling: string[] = [];
+        for (const file of ROOTS.flatMap(walk)) {
+            const source = readFileSync(file, 'utf8');
+            const named = [
+                ...source.matchAll(/['"]\/src\/stores\/(\w+)\.ts['"]/g),
+                ...source.matchAll(/['"]@\/stores\/(\w+)['"]/g),
+                ...source.matchAll(/\bsrc\/stores\/(\w+)\.ts\b/g),
+            ].map(match => match[1]);
+            for (const name of new Set(named)) {
+                if (!known.has(name)) {
+                    dangling.push(`${path.relative(path.resolve(__dirname, '../../..'), file)} -> ${name}`);
+                }
+            }
+        }
+
+        expect(dangling).toEqual([]);
+    });
 });

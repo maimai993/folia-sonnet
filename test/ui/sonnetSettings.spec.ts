@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import { APP_VERSION } from './helpers/appState';
-import { useSettingsModalStore } from '@/stores/useSettingsModalStore';
 
 // test/ui/sonnetSettings.spec.ts
 // Verifies entering Sonnet from the real settings UI and the visibility tuning controls it exposes.
@@ -20,8 +19,8 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
     });
     await page.goto('/');
     await page.evaluate(async () => {
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-        const { useSettingsUiStore } = await import(storeModulePath);
+        const storeModulePath = '/src/stores/useSettingsModalStore.ts';
+        const { useSettingsModalStore } = await import(storeModulePath);
         useSettingsModalStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 

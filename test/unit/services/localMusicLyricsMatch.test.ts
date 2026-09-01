@@ -26,11 +26,6 @@ vi.mock('@/services/netease', () => ({
         getSongDetail: vi.fn(),
     },
 }));
-vi.mock('@/stores/useSettingsUiStore', () => ({
-    useSettingsUiStore: {
-        getState: () => lyricSettings,
-    },
-}));
 // Lyric sourcing moved to its own store; this suite drives it through the same fixture.
 vi.mock('@/stores/useLyricSettingsStore', () => ({
     useLyricSettingsStore: {
