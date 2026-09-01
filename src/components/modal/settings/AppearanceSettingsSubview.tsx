@@ -28,6 +28,7 @@ import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -152,11 +153,13 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
 
     // Access ZUSTAND settings store directly for setters & configurations
     const store = useSettingsUiStore(useShallow(state => ({
-        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
         handleToggleFollowSystemTheme: state.setFollowSystemTheme,
 
         handleToggleCoverColorBg: state.handleToggleCoverColorBg,
         handleToggleStaticMode: state.handleToggleStaticMode,
+    })));
+    const storePlayerChromeSettings = usePlayerChromeSettingsStore(useShallow(state => ({
+        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
     })));
     const storeTypographySettings = useTypographySettingsStore(useShallow(state => ({
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
@@ -735,7 +738,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             <SettingsAnchor anchorId="lyricsRenderer" label={t('options.lyricsRenderer')}>
                 <SettingsSectionHeading icon={Monitor} label={t('options.lyricsRenderer')} />
                 <div className="space-y-3">
-                    {store.enablePlayerPageNativeBlur && (
+                    {storePlayerChromeSettings.enablePlayerPageNativeBlur && (
                         <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
                             <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                             <span>{t('options.nativeBlurBackgroundNotice')}</span>

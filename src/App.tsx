@@ -112,6 +112,8 @@ import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from './
 import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from './stores/useVisualizerAssetStore';
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from './stores/useLyricSettingsStore';
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from './stores/useTypographySettingsStore';
+import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from './stores/usePlayerChromeSettingsStore';
+import { useHomeLayoutSettingsStore } from './stores/useHomeLayoutSettingsStore';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -167,7 +169,6 @@ export default function App() {
         isSettingsSubviewOpen,
         openSettings,
         settingsModalState,
-        homeLayoutStyle,
         lastSeenGuideVersion,
         setLastSeenGuideVersion,
         setIsUserGuideModalOpen,
@@ -178,12 +179,16 @@ export default function App() {
         isSettingsSubviewOpen: state.isSubSettingsViewOpen,
         openSettings: state.openSettings,
         settingsModalState: state.settingsModalState,
-        homeLayoutStyle: state.homeLayoutStyle,
         lastSeenGuideVersion: state.lastSeenGuideVersion,
         setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
         openAudioEqualizer: state.openAudioEqualizer,
         applyAudioSoundPreset: state.handleApplyAudioSoundPreset,
+    })));
+    const {
+        homeLayoutStyle,
+    } = useHomeLayoutSettingsStore(useShallow(state => ({
+        homeLayoutStyle: state.homeLayoutStyle,
     })));
     const automixEnabled = useSettingsUiStore(state => state.automixEnabled);
     const transitionMode = useSettingsUiStore(state => state.transitionMode);
@@ -355,21 +360,11 @@ export default function App() {
         useCoverColorBg,
         staticMode,
         disableHomeDynamicBackground,
-        hidePlayerProgressBar,
-        hidePlayerRightPanelButton,
-        transparentPlayerBackground,
-        enablePlayerPageNativeBlur,
-        autoHidePlayerChrome,
-        handleToggleAutoHidePlayerChrome,
         minimizeToTray,
         hideTaskbarIcon,
         openPlayerOnLaunch,
         enableMediaCache,
         isDaylight,
-        showOpenPanelCloseButton,
-        alwaysShowPlayerBackButton,
-        alwaysShowTrackSwitchButtons,
-        alwaysShowMainWindowTitlebar,
         enableNowPlayingStage,
         enablePlayerCapStage,
         playerCapHost,
@@ -385,9 +380,6 @@ export default function App() {
         handleToggleCoverColorBg,
         handleToggleStaticMode,
         handleToggleDisableHomeDynamicBackground,
-        handleToggleHidePlayerProgressBar,
-        handleToggleHidePlayerRightPanelButton,
-        handleToggleTransparentPlayerBackground,
         handleToggleMinimizeToTray,
         handleToggleHideTaskbarIcon,
         handleToggleOpenPlayerOnLaunch,
@@ -408,10 +400,6 @@ export default function App() {
         handleToggleMediaCache,
         setDaylightPreference,
         handleSetAppLanguagePreference,
-        handleToggleOpenPanelCloseButton,
-        handleToggleAlwaysShowPlayerBackButton,
-        handleToggleAlwaysShowTrackSwitchButtons,
-        handleToggleAlwaysShowMainWindowTitlebar,
         handleToggleNowPlayingStage,
         handleSetQueueAddBehavior,
         handleSetAudioOutputDeviceId: persistAudioOutputDeviceId,
@@ -421,6 +409,25 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+    const {
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        transparentPlayerBackground,
+        enablePlayerPageNativeBlur,
+        autoHidePlayerChrome,
+        handleToggleAutoHidePlayerChrome,
+        showOpenPanelCloseButton,
+        alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
+        alwaysShowMainWindowTitlebar,
+        handleToggleHidePlayerProgressBar,
+        handleToggleHidePlayerRightPanelButton,
+        handleToggleTransparentPlayerBackground,
+        handleToggleOpenPanelCloseButton,
+        handleToggleAlwaysShowPlayerBackButton,
+        handleToggleAlwaysShowTrackSwitchButtons,
+        handleToggleAlwaysShowMainWindowTitlebar,
+    } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
     const {
         hidePlayerTranslationSubtitle,
         showSubtitleTranslation,

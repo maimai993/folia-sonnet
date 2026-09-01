@@ -349,17 +349,6 @@ const readStoredAudioOutputDeviceId = (): string => {
     return localStorage.getItem('audio_output_device_id') ?? '';
 };
 
-const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
-    if (typeof window === 'undefined') {
-        return 'grid';
-    }
-
-    const saved = localStorage.getItem('home_layout_style');
-    if (saved === 'carousel' || saved === 'desktop') {
-        localStorage.setItem('home_layout_style', 'grid');
-    }
-    return 'grid';
-};
 
 
 
@@ -405,14 +394,6 @@ export type SettingsUiState = {
     useCoverColorBg: boolean;
     staticMode: boolean;
     disableHomeDynamicBackground: boolean;
-    hidePlayerProgressBar: boolean;
-    hidePlayerRightPanelButton: boolean;
-    alwaysShowPlayerBackButton: boolean;
-    alwaysShowTrackSwitchButtons: boolean;
-    alwaysShowMainWindowTitlebar: boolean;
-    transparentPlayerBackground: boolean;
-    enablePlayerPageNativeBlur: boolean;
-    autoHidePlayerChrome: boolean;
     minimizeToTray: boolean;
     voiceInputPauseEnabled: boolean;
     preventDisplaySleepDuringPlayback: boolean;
@@ -460,7 +441,6 @@ export type SettingsUiState = {
     isDaylight: boolean;
     followSystemTheme: boolean;
     appLanguagePreference: AppLanguagePreference;
-    showOpenPanelCloseButton: boolean;
     enableNowPlayingStage: boolean;
     // PlayerCap lyrics source (third stage source) config. enablePlayerCapStage is Web-only (Electron uses stageStatus.source).
     enablePlayerCapStage: boolean;
@@ -482,12 +462,7 @@ export type SettingsUiState = {
     /** auto 模式下的显示时长（秒），3-60 */
     stageTrackPillTimeoutSec: number;
     stageTrackPillOnHome: boolean;
-    homeLayoutStyle: 'carousel' | 'grid';
     grid3dCardStyle: 'image' | 'card';
-    showHomeTabPlaylist: boolean;
-    showHomeTabRadio: boolean;
-    showHomeTabAlbums: boolean;
-    showHomeTabLocal: boolean;
     pinnedCommandIds: PinnedCommandIds;
     isSubSettingsViewOpen: boolean;
     settingsModalState: SettingsModalState;
@@ -496,8 +471,6 @@ export type SettingsUiState = {
     setLastSeenGuideVersion: (version: string) => void;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setAudioQuality: (quality: AudioQuality) => void;
-    setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
-    handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
     setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; }) => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
     openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null, initialVisualizerSection?: VisualizerSettingsSection | null) => void;
@@ -505,14 +478,6 @@ export type SettingsUiState = {
     handleToggleCoverColorBg: (enable: boolean) => void;
     handleToggleStaticMode: (enable: boolean) => void;
     handleToggleDisableHomeDynamicBackground: (disable: boolean) => void;
-    handleToggleHidePlayerProgressBar: (enable: boolean) => void;
-    handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
-    handleToggleAlwaysShowPlayerBackButton: (enable: boolean) => void;
-    handleToggleAlwaysShowTrackSwitchButtons: (enable: boolean) => void;
-    handleToggleAlwaysShowMainWindowTitlebar: (enable: boolean) => void;
-    handleToggleTransparentPlayerBackground: (enable: boolean) => void;
-    handleWallpaperTransparentRefused: () => void;
-    handleToggleAutoHidePlayerChrome: (enable: boolean) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
     handleToggleModSystem: (enable: boolean) => void;
@@ -538,7 +503,6 @@ export type SettingsUiState = {
     setDaylightPreferenceFromSystem: (isDaylight: boolean) => void;
     setFollowSystemTheme: (enabled: boolean) => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
-    handleToggleOpenPanelCloseButton: (enable: boolean) => void;
     handleToggleNowPlayingStage: (enable: boolean) => void;
     // Web stage-source tri-state mutually-exclusive selection: null disables, else one of 'now-playing' or 'playercap'. Electron uses stageStatus.source.
     setWebStageSource: (source: 'now-playing' | 'playercap' | null) => void;
@@ -559,12 +523,7 @@ export type SettingsUiState = {
     handleSetStageTrackPillMode: (mode: StageTrackPillMode) => void;
     handleSetStageTrackPillTimeoutSec: (sec: number) => void;
     handleToggleStageTrackPillOnHome: (enable: boolean) => void;
-    handleSetHomeLayoutStyle: (style: 'carousel' | 'grid') => void;
     handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
-    handleToggleHomeTabPlaylist: (show: boolean) => void;
-    handleToggleHomeTabRadio: (show: boolean) => void;
-    handleToggleHomeTabAlbums: (show: boolean) => void;
-    handleToggleHomeTabLocal: (show: boolean) => void;
     setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
 };
 
@@ -579,14 +538,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     useCoverColorBg: getStoredBoolean('use_cover_color_bg', false),
     staticMode: getStoredBoolean('static_mode', false),
     disableHomeDynamicBackground: readStoredDisableHomeDynamicBackground(),
-    hidePlayerProgressBar: getStoredBoolean('hide_player_progress_bar', false),
-    hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
-    alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
-    alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', false),
-    alwaysShowMainWindowTitlebar: getStoredBoolean('always_show_main_window_titlebar', false),
-    transparentPlayerBackground: getStoredBoolean('transparent_player_background', false),
-    enablePlayerPageNativeBlur: getStoredBoolean('enable_player_page_native_blur', false),
-    autoHidePlayerChrome: getStoredBoolean('auto_hide_player_chrome', false),
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
@@ -617,7 +568,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     followSystemTheme: initialFollowSystemTheme,
     isDaylight: initialDaylight,
     appLanguagePreference: readStoredAppLanguagePreference(),
-    showOpenPanelCloseButton: getStoredBoolean('show_open_panel_close_button', true),
     enableNowPlayingStage: getStoredBoolean('enable_now_playing_stage', false),
     enablePlayerCapStage: getStoredBoolean('enable_playercap_stage', false),
     playerCapHost: getStoredString('playercap_host', 'localhost:8765'),
@@ -635,12 +585,7 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
     stageTrackPillMode: readStoredStageTrackPillMode(),
     stageTrackPillTimeoutSec: readStoredStageTrackPillTimeoutSec(),
     stageTrackPillOnHome: getStoredBoolean('stage_track_pill_on_home', false),
-    homeLayoutStyle: readStoredHomeLayoutStyle(),
     grid3dCardStyle: readStoredGrid3dCardStyle(),
-    showHomeTabPlaylist: getStoredBoolean('show_home_tab_playlist', true),
-    showHomeTabRadio: getStoredBoolean('show_home_tab_radio', true),
-    showHomeTabAlbums: getStoredBoolean('show_home_tab_albums', true),
-    showHomeTabLocal: getStoredBoolean('show_home_tab_local', true),
     pinnedCommandIds: readPinnedCommandIds(),
     isSubSettingsViewOpen: false,
     settingsModalState: {
@@ -663,21 +608,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             localStorage.setItem('default_audio_quality', quality);
         }
         set({ audioQuality: quality });
-    },
-    setTransparentPlayerBackgroundFromSystem: (enabled) => {
-        setStoredBoolean('transparent_player_background', enabled);
-        set({ transparentPlayerBackground: enabled });
-    },
-    handleTogglePlayerPageNativeBlur: (enable) => {
-        setStoredBoolean('enable_player_page_native_blur', enable);
-        set({ enablePlayerPageNativeBlur: enable });
-        if (window.electron?.saveSettings) {
-            void window.electron.saveSettings('enable_player_page_native_blur', enable);
-        }
-    },
-    handleToggleAutoHidePlayerChrome: (enabled: boolean) => {
-        localStorage.setItem('auto_hide_player_chrome', enabled ? 'true' : 'false');
-        set({ autoHidePlayerChrome: enabled });
     },
     setDesktopPreferenceSnapshot: (settings) => {
         const patch: Partial<SettingsUiState> = {};
@@ -748,62 +678,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (disable ? 'homeBgDisabled' : 'homeBgEnabled')),
-        });
-    },
-    handleToggleHidePlayerProgressBar: (enable) => {
-        setStoredBoolean('hide_player_progress_bar', enable);
-        set({ hidePlayerProgressBar: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'progressBarHidden' : 'progressBarShown')),
-        });
-    },
-    handleToggleAlwaysShowPlayerBackButton: (enable) => {
-        setStoredBoolean('always_show_player_back_button', enable);
-        set({ alwaysShowPlayerBackButton: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'playerBackButtonAlwaysShown' : 'playerBackButtonAutoHidden')),
-        });
-    },
-    handleToggleAlwaysShowTrackSwitchButtons: (enable) => {
-        setStoredBoolean('always_show_track_switch_buttons', enable);
-        set({ alwaysShowTrackSwitchButtons: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'trackSwitchButtonsAlwaysShown' : 'trackSwitchButtonsAutoHidden')),
-        });
-    },
-    handleToggleAlwaysShowMainWindowTitlebar: (enable) => {
-        setStoredBoolean('always_show_main_window_titlebar', enable);
-        set({ alwaysShowMainWindowTitlebar: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'mainWindowTitlebarAlwaysShown' : 'mainWindowTitlebarAutoHidden')),
-        });
-    },
-    handleToggleHidePlayerRightPanelButton: (enable) => {
-        setStoredBoolean('hide_player_right_panel_button', enable);
-        set({ hidePlayerRightPanelButton: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'rightBtnHidden' : 'rightBtnShown')),
-        });
-    },
-    handleToggleTransparentPlayerBackground: (enable) => {
-        setStoredBoolean('transparent_player_background', enable);
-        set({ transparentPlayerBackground: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'transparentBgOn' : 'transparentBgOff')),
-        });
-    },
-    // Main-process guard fired the refusal (classic Windows wallpaper mode cannot present a
-    // transparent wallpaper window): surface why the toggle did not take effect.
-    handleWallpaperTransparentRefused: () => {
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.transparentBgWallpaperUnsupported'),
         });
     },
     handleToggleMinimizeToTray: (enable) => {
@@ -1035,14 +909,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
                 : i18n.t('notifications.langManual', { language: getLanguageLabel(preference) }),
         });
     },
-    handleToggleOpenPanelCloseButton: (enable) => {
-        setStoredBoolean('show_open_panel_close_button', enable);
-        set({ showOpenPanelCloseButton: enable });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'panelCloseBtnShown' : 'panelCloseBtnHidden')),
-        });
-    },
     setWebStageSource: (source) => {
         const wasEnabled = get().enableNowPlayingStage || get().enablePlayerCapStage;
         const enableNowPlaying = source === 'now-playing';
@@ -1178,16 +1044,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
         }
         set({ stageTrackPillOnHome: enable });
     },
-    handleSetHomeLayoutStyle: () => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('home_layout_style', 'grid');
-        }
-        set({ homeLayoutStyle: 'grid' });
-        setStatusMessage({
-            type: 'info',
-            text: i18n.t('notifications.homeLayoutGrid'),
-        });
-    },
     handleSetGrid3dCardStyle: (style) => {
         set({ grid3dCardStyle: style });
         if (typeof window !== 'undefined') localStorage.setItem('grid3d_card_style', style);
@@ -1195,22 +1051,6 @@ export const useSettingsUiStore = create<SettingsUiState>((set, get) => ({
             type: 'info',
             text: i18n.t('notifications.' + (style === 'image' ? 'cardStyleImage' : 'cardStyleCard')),
         });
-    },
-    handleToggleHomeTabPlaylist: (show) => {
-        set({ showHomeTabPlaylist: show });
-        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_playlist', show.toString());
-    },
-    handleToggleHomeTabRadio: (show) => {
-        set({ showHomeTabRadio: show });
-        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_radio', show.toString());
-    },
-    handleToggleHomeTabAlbums: (show) => {
-        set({ showHomeTabAlbums: show });
-        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_albums', show.toString());
-    },
-    handleToggleHomeTabLocal: (show) => {
-        set({ showHomeTabLocal: show });
-        if (typeof window !== 'undefined') localStorage.setItem('show_home_tab_local', show.toString());
     },
     setPinnedCommandId: (slotIndex, commandId) => {
         if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 3) {
@@ -1233,13 +1073,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     useCoverColorBg: state.useCoverColorBg,
     staticMode: state.staticMode,
     disableHomeDynamicBackground: state.disableHomeDynamicBackground,
-    hidePlayerProgressBar: state.hidePlayerProgressBar,
-    hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
-    alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
-    alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
-    alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
-    transparentPlayerBackground: state.transparentPlayerBackground,
-    autoHidePlayerChrome: state.autoHidePlayerChrome,
     minimizeToTray: state.minimizeToTray,
     voiceInputPauseEnabled: state.voiceInputPauseEnabled,
     preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
@@ -1262,12 +1095,9 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     followSystemTheme: state.followSystemTheme,
     lastSeenGuideVersion: state.lastSeenGuideVersion,
     isUserGuideModalOpen: state.isUserGuideModalOpen,
-    homeLayoutStyle: state.homeLayoutStyle,
-    handleSetHomeLayoutStyle: state.handleSetHomeLayoutStyle,
     grid3dCardStyle: state.grid3dCardStyle,
     handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
     appLanguagePreference: state.appLanguagePreference,
-    showOpenPanelCloseButton: state.showOpenPanelCloseButton,
     enableNowPlayingStage: state.enableNowPlayingStage,
     enablePlayerCapStage: state.enablePlayerCapStage,
     playerCapHost: state.playerCapHost,
@@ -1287,15 +1117,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     handleToggleCoverColorBg: state.handleToggleCoverColorBg,
     handleToggleStaticMode: state.handleToggleStaticMode,
     handleToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
-    handleToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
-    handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
-    handleToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
-    handleToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
-    handleToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
-    handleToggleTransparentPlayerBackground: state.handleToggleTransparentPlayerBackground,
-    enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
-    handleTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
-    handleToggleAutoHidePlayerChrome: state.handleToggleAutoHidePlayerChrome,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
     handleToggleVoiceInputPause: state.handleToggleVoiceInputPause,
     handleToggleModSystem: state.handleToggleModSystem,
@@ -1311,7 +1132,6 @@ export const selectSettingsUiSnapshot = (state: SettingsUiState) => ({
     setLastSeenGuideVersion: state.setLastSeenGuideVersion,
     setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     handleSetAppLanguagePreference: state.handleSetAppLanguagePreference,
-    handleToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
     handleToggleNowPlayingStage: state.handleToggleNowPlayingStage,
     handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,
     handleSetAudioOutputDeviceId: state.handleSetAudioOutputDeviceId,

@@ -46,6 +46,7 @@ import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '..
 import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
 import { selectTypographySettingsSnapshot, useTypographySettingsStore } from '../../stores/useTypographySettingsStore';
+import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -168,10 +169,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         useCoverColorBg,
         staticMode,
         disableHomeDynamicBackground,
-        hidePlayerProgressBar,
-        hidePlayerRightPanelButton,
-        transparentPlayerBackground,
-        autoHidePlayerChrome,
         minimizeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
@@ -186,14 +183,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setDaylightPreference: onSetDaylightPreference,
         setFollowSystemTheme: onSetFollowSystemTheme,
         grid3dCardStyle,
-        showOpenPanelCloseButton,
         handleToggleCoverColorBg: onToggleCoverColorBg,
         handleToggleStaticMode: onToggleStaticMode,
         handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
-        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
-        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
-        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
-        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
@@ -201,7 +193,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
         handleToggleMediaCache: onToggleMediaCache,
         handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
-        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
         handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
@@ -210,6 +201,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
         handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
     } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    const {
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        transparentPlayerBackground,
+        autoHidePlayerChrome,
+        showOpenPanelCloseButton,
+        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
+        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
+        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
+        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
+        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
+    } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
     const {
         lyricsCustomFontFamily,
         lyricsCustomFontLabel,

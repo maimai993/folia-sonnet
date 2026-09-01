@@ -2,6 +2,8 @@ import { useSettingsUiStore, type SettingsUiState } from '../../stores/useSettin
 import { useVisualizerSettingsStore, type VisualizerSettingsState } from '../../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore, type TypographySettingsState } from '../../stores/useTypographySettingsStore';
 import { useLyricSettingsStore, type LyricSettingsState } from '../../stores/useLyricSettingsStore';
+import { useHomeLayoutSettingsStore, type HomeLayoutSettingsState } from '../../stores/useHomeLayoutSettingsStore';
+import { usePlayerChromeSettingsStore, type PlayerChromeSettingsState } from '../../stores/usePlayerChromeSettingsStore';
 import type { SyncedSettingsRecord, SyncedVisualSettings } from './syncTypes';
 import { SYNC_SCHEMA_VERSION } from './syncTypes';
 import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../../components/visualizer/tuningRegistry';
@@ -15,13 +17,16 @@ import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../.
 
 /** The two stores the synced visual document spans, read as one snapshot. */
 export type SyncableSettingsState = SettingsUiState & VisualizerSettingsState
-    & TypographySettingsState & LyricSettingsState;
+    & TypographySettingsState & LyricSettingsState
+    & HomeLayoutSettingsState & PlayerChromeSettingsState;
 
 export const readSyncableSettingsState = (): SyncableSettingsState => ({
     ...useSettingsUiStore.getState(),
     ...useVisualizerSettingsStore.getState(),
     ...useTypographySettingsStore.getState(),
     ...useLyricSettingsStore.getState(),
+    ...useHomeLayoutSettingsStore.getState(),
+    ...usePlayerChromeSettingsStore.getState(),
 });
 
 export const buildSyncedVisualSettings = (state: SyncableSettingsState): SyncedVisualSettings => ({

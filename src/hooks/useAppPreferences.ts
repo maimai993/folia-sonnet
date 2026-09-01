@@ -23,12 +23,13 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { resolveStoredCustomLyricsFont } from '../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
 export function useAppPreferences() {
     const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
-    const setTransparentPlayerBackgroundFromSystem = useSettingsUiStore(state => state.setTransparentPlayerBackgroundFromSystem);
+    const setTransparentPlayerBackgroundFromSystem = usePlayerChromeSettingsStore(state => state.setTransparentPlayerBackgroundFromSystem);
     const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);
     const setStoredCappellaEmojiPack = useVisualizerAssetStore(state => state.setStoredCappellaEmojiPack);
     const setCappellaCustomEmojiImages = useVisualizerAssetStore(state => state.setCappellaCustomEmojiImages);
@@ -157,7 +158,7 @@ export function useAppPreferences() {
         // Main refused a transparent-enable toggle (classic Windows wallpaper mode): the toggle
         // stays in its previous state, this only explains why nothing happened.
         return window.electron?.onWallpaperTransparentRefused?.(() => {
-            useSettingsUiStore.getState().handleWallpaperTransparentRefused();
+            usePlayerChromeSettingsStore.getState().handleWallpaperTransparentRefused();
         });
     }, []);
 

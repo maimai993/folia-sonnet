@@ -9,6 +9,7 @@ import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 
 // src/components/modal/settings/GeneralSettingsSubview.tsx
 // Global app preferences that should stay independent from playback and desktop-only settings.
@@ -28,6 +29,11 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
     const {
         appLanguagePreference,
         onAppLanguagePreferenceChange,
+    } = useSettingsUiStore(useShallow(state => ({
+        appLanguagePreference: state.appLanguagePreference,
+        onAppLanguagePreferenceChange: state.handleSetAppLanguagePreference,
+    })));
+    const {
         showHomeTabPlaylist,
         showHomeTabRadio,
         showHomeTabAlbums,
@@ -36,9 +42,7 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
         handleToggleHomeTabRadio,
         handleToggleHomeTabAlbums,
         handleToggleHomeTabLocal,
-    } = useSettingsUiStore(useShallow(state => ({
-        appLanguagePreference: state.appLanguagePreference,
-        onAppLanguagePreferenceChange: state.handleSetAppLanguagePreference,
+    } = useHomeLayoutSettingsStore(useShallow(state => ({
         showHomeTabPlaylist: state.showHomeTabPlaylist,
         showHomeTabRadio: state.showHomeTabRadio,
         showHomeTabAlbums: state.showHomeTabAlbums,

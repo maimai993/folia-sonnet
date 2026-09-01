@@ -31,6 +31,7 @@ import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccou
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import qqIcon from '../assets/providers/qq.svg';
 import wechatIcon from '../assets/providers/wechat.svg';
+import { useHomeLayoutSettingsStore } from '../stores/useHomeLayoutSettingsStore';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -150,12 +151,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const { t } = useTranslation();
     const {
         isDaylight,
+    } = useSettingsUiStore(useShallow(state => ({
+        isDaylight: state.isDaylight,
+    })));
+    const {
         showHomeTabPlaylist,
         showHomeTabRadio,
         showHomeTabAlbums,
         showHomeTabLocal,
-    } = useSettingsUiStore(useShallow(state => ({
-        isDaylight: state.isDaylight,
+    } = useHomeLayoutSettingsStore(useShallow(state => ({
         showHomeTabPlaylist: state.showHomeTabPlaylist,
         showHomeTabRadio: state.showHomeTabRadio,
         showHomeTabAlbums: state.showHomeTabAlbums,
