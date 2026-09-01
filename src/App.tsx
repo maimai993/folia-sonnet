@@ -13,7 +13,6 @@ import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
 import ThemeQuickEditorHost from './components/panelTab/ThemeQuickEditor';
 import AppDialogs from './components/app/dialogs/AppDialogs';
-import { createCopySongInfoSuccessHandler } from './components/app/dialogs/createCopySongInfoSuccessHandler';
 import { useSettingsDialogModel } from './components/app/dialogs/useSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import AutomixModelReminder from './components/modal/AutomixModelReminder';
@@ -43,7 +42,7 @@ import {
     createSearchAlbumCollection,
     createSearchArtistCollection,
 } from './components/app/search/searchCollectionAdapters';
-import { buildPlayerPanelModel } from './components/app/player-panel/buildPlayerPanelModel';
+import { usePlayerPanelModel } from './components/app/player-panel/usePlayerPanelModel';
 import { createQueueMutations } from './components/app/player-panel/createQueueMutations';
 import { Album, Artist, LyricData, Theme, PlayerState, SongResult, ReplayGainMode, StatusMessage, PlaybackContext, StageLoopMode, UnifiedSong } from './types';
 import type { LocalSong } from './types';
@@ -103,7 +102,7 @@ import { applyLocalLibraryEntityDisplay } from './services/playbackAdapters';
 import { clearPrefetchRuntime } from './services/prefetchService';
 import { clearTrackProfileRuntime } from './services/automix/profileService';
 import { transitionCapabilities } from './services/automix/stems';
-import { buildLocalLibraryIndex, followEntityRedirect } from './utils/localLibraryIndex';
+import { buildLocalLibraryIndex } from './utils/localLibraryIndex';
 import type { PlayerChromeVisibilityMode } from './types/remoteControl';
 import { setStatusMessage as setStatusMsg, useStatusMessage } from './stores/useStatusMessageStore';
 import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from './stores/useVisualizerSettingsStore';
@@ -2774,32 +2773,17 @@ export default function App() {
         return playerDisplayCurrentSong ? omni.getPlaylistsForSong(playerDisplayCurrentSong) : [];
     }, [onlineProviderPlatform.providers, playerDisplayCurrentSong]);
 
-    const playerPanelModel = useMemo(() => buildPlayerPanelModel({
-        isPanelOpen,
-        panelTab,
+    const playerPanelModel = usePlayerPanelModel({
         navigateToHome,
         handleDirectHomeFromPanel,
-        coverUrl: displayCoverUrl,
         currentSong: playerDisplayCurrentSong,
         handleAlbumSelect: handlePlayerPanelAlbumSelect,
         handleArtistSelect: handlePlayerPanelArtistSelect,
         effectiveLoopMode,
         toggleLoop,
         handleLike,
-        isLiked: (() => {
-            if (!currentSong) return false;
-            if (isLocalPlaybackSong(currentSong)) {
-                return isLocalSongLiked(currentSong);
-            }
-            if (isNavidromePlaybackSong(currentSong)) {
-                const navidromeSong = resolveNavidromePlaybackCarrier(currentSong);
-                return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
-            }
-            return omni.isSongLiked(currentSong, likedSongIds);
-        })(),
         generateAITheme: generateCurrentSongTheme,
         isGeneratingTheme,
-        hasLyrics: !!displayLyrics,
         canGenerateAITheme,
         theme,
         setTheme,
@@ -2808,38 +2792,23 @@ export default function App() {
         hasCustomTheme,
         themeSourceModel,
         handleResetTheme,
-        defaultTheme: DEFAULT_THEME,
-        daylightTheme: DAYLIGHT_THEME,
-        visualizerMode,
-        transparentPlayerBackground,
         toggleTransparentModeWithHandoff,
         handleManualMatchOnline,
         handleUpdateLocalLyrics,
         handleChangeLyricsSource,
-        onlineLyricsState: currentSong?.onlineLyricsState ?? null,
         handleImportOnlineLyrics,
         handleChangeOnlineLyricsSource,
         handleMatchOnlineLyrics,
         handleClearOnlineLyricsState,
-        lyricTimelineOffsetMs,
         handleLyricTimelineOffsetChange,
-        replayGainMode,
         handleChangeReplayGainMode,
-        isFmMode,
         fmModeLabel: personalFmSelectionLabel,
         handleOpenFmModePicker,
         handleFmTrash,
         handleNextTrack,
         handlePrevTrack,
-        playerState,
         togglePlay,
-        volume,
-        isMuted,
         handlePreviewVolume,
-        showOpenPanelCloseButton,
-        isPanelGuideHotspotActive: isPlayerPanelGuideHotspotActive,
-        hideToggleButton: isPlayerChromeHidden || shouldHidePlayerRightPanelButton,
-        activePlaybackContext,
         isNowPlayingControlDisabled,
         openCommandPalette: commandPalette.open,
         isCommandPaletteOpen: commandPalette.isOpen,
@@ -2858,199 +2827,21 @@ export default function App() {
         addCurrentSongToOnlinePlaylist,
         addCurrentSongToNavidromePlaylist,
         createCurrentNavidromePlaylist,
-        openCurrentLocalAlbum: () => {
-            if (currentSong && isLocalPlaybackSong(currentSong)) {
-                const catalogIndex = buildLocalLibraryIndex(
-                    localLibraryCatalog.entities,
-                    localLibraryCatalog.assignments,
-                );
-                const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localRef.songId);
-                const albumEntityId = assignment?.albumEntityId
-                    ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
-                    : undefined;
-                const albumEntity = albumEntityId
-                    ? catalogIndex.entitiesById.get(albumEntityId)
-                    : undefined;
-                if (albumEntity?.kind === 'album') {
-                    const memberIds = new Set(localLibraryCatalog.assignments
-                        .filter(item => item.albumEntityId && (
-                            followEntityRedirect(item.albumEntityId, catalogIndex.entitiesById) === albumEntity.id
-                        ))
-                        .map(item => item.songId));
-                    const songs = localSongs.filter(song => memberIds.has(song.id));
-                    if (songs.length > 0) {
-                        navigateToCollection({
-                            source: 'local',
-                            id: albumEntity.id,
-                            entityId: albumEntity.id,
-                            name: albumEntity.displayName,
-                            type: 'album',
-                            coverUrl: getSongCoverUrl(playerDisplayCurrentSong),
-                            description: getSongArtistLabel(playerDisplayCurrentSong),
-                            trackCount: songs.length,
-                            songIds: songs.map(song => song.id),
-                        }, 'player');
-                    }
-                }
-            }
-        },
-        openCurrentLocalArtist: (requestedEntityId?: string) => {
-            if (currentSong && isLocalPlaybackSong(currentSong)) {
-                const catalogIndex = buildLocalLibraryIndex(
-                    localLibraryCatalog.entities,
-                    localLibraryCatalog.assignments,
-                );
-                const assignment = catalogIndex.assignmentsBySongId.get(currentSong.localRef.songId);
-                const sourceEntityId = requestedEntityId || assignment?.artistEntityIds[0];
-                const artistEntityId = sourceEntityId
-                    ? followEntityRedirect(sourceEntityId, catalogIndex.entitiesById)
-                    : undefined;
-                const artistEntity = artistEntityId
-                    ? catalogIndex.entitiesById.get(artistEntityId)
-                    : undefined;
-                if (artistEntity?.kind === 'artist') {
-                    const memberIds = new Set(localLibraryCatalog.assignments
-                        .filter(item => item.artistEntityIds.some(entityId => (
-                            followEntityRedirect(entityId, catalogIndex.entitiesById) === artistEntity.id
-                        )))
-                        .map(item => item.songId));
-                    const songs = localSongs.filter(song => memberIds.has(song.id));
-                    if (songs.length > 0) {
-                        navigateToCollection({
-                            source: 'local',
-                            id: artistEntity.id,
-                            entityId: artistEntity.id,
-                            name: artistEntity.displayName,
-                            type: 'artist',
-                            coverUrl: getSongCoverUrl(currentSong),
-                            description: `${songs.length} ${t('home.songs')}`,
-                            trackCount: songs.length,
-                            songIds: songs.map(song => song.id),
-                        }, 'player');
-                    }
-                }
-            }
-        },
-        openCurrentNavidromeAlbum: () => {
-            const currentNavidromeSong = (currentSong as any)?.navidromeData;
-            const playbackCarrier = currentNavidromeSong?.navidromeData;
-            const albumId = currentNavidromeSong?.albumId || playbackCarrier?.albumId;
-            if (albumId) {
-                const albumName = getSongAlbumLabel(currentSong) || t('localMusic.unknownAlbum');
-                navigateToCollection({
-                    source: 'navidrome',
-                    id: albumId,
-                    name: albumName,
-                    type: 'album',
-                    coverUrl: getSongCoverUrl(currentSong),
-                }, 'player');
-            }
-        },
-        openCurrentNavidromeArtist: () => {
-            const currentNavidromeSong = (currentSong as any)?.navidromeData;
-            const playbackCarrier = currentNavidromeSong?.navidromeData;
-            const artistId = currentNavidromeSong?.artistId || playbackCarrier?.artistId;
-            if (artistId) {
-                const artistName = getSongArtistLabel(currentSong).split(',')[0]?.trim() || t('localMusic.unknownArtist');
-                navigateToCollection({
-                    source: 'navidrome',
-                    id: artistId,
-                    name: artistName,
-                    type: 'artist',
-                    coverUrl: getSongCoverUrl(currentSong),
-                }, 'player');
-            }
-        },
-        handleCopySongInfoSuccess: createCopySongInfoSuccessHandler({ t }),
         user,
         handleLogout,
-        audioQuality,
         cacheSize,
         handleClearCache,
         handleSyncData: handleActiveProviderSyncData,
         isSyncing: isActiveProviderSyncing,
-        useCoverColorBg,
-        isDaylight,
         handleToggleDaylight: toggleDaylightMode,
-    }), [
-        activePlaybackContext,
-        addCurrentSongToLocalPlaylist,
-        addCurrentSongToNavidromePlaylist,
-        addCurrentSongToOnlinePlaylist,
-        audioQuality,
-        cacheSize,
-        canGenerateAITheme,
-        commandPalette.open,
-        commandPalette.isOpen,
-        coverUrl,
-        createCurrentLocalPlaylist,
-        createCurrentNavidromePlaylist,
-        currentSong,
-        playerDisplayCurrentSong,
-        playerDisplayQueue,
-        effectiveLoopMode,
-        generateCurrentSongTheme,
-        personalFmSelectionLabel,
-        localLibraryCatalog,
-        handleBgModeChange,
-        handleChangeOnlineLyricsSource,
-        handleChangeLyricsSource,
-        handleClearCache,
-        handleOpenFmModePicker,
-        handleImportOnlineLyrics,
-        handleLike,
-        handleLogout,
-        handleManualMatchOnline,
-        handleMatchOnlineLyrics,
-        handleNextTrack,
-        handlePreviewVolume,
-        handlePrevTrack,
-        handleResetTheme,
-        handleActiveProviderSyncData,
-        handleToggleDaylight,
-        handleUpdateLocalLyrics,
-        hasCustomTheme,
-        isDaylight,
-        isFmMode,
-        isGeneratingTheme,
-        isMuted,
-        isNowPlayingControlDisabled,
-        isPanelOpen,
-        isPlayerPanelGuideHotspotActive,
-        isActiveProviderSyncing,
+        // Derived inside the hook, but these are the sources only App.tsx holds.
+        isLocalSongLiked,
         likedSongIds,
-        onlinePlaylists,
-        starredNavidromeSongIds,
-        localPlaylists,
-        lyricTimelineOffsetMs,
-        navigateToHome,
-        panelTab,
-        playSong,
-        playerState,
-        queueScrollRef,
-        replayGainMode,
-        saveCurrentQueueAsLocalPlaylist,
-        setTheme,
-        showOpenPanelCloseButton,
-        shuffleQueue,
-        removeQueueSong,
-        moveQueueSongToEnd,
-        moveQueueSongToNext,
-        theme,
-        themeSourceModel,
-        toggleLoop,
-        togglePlay,
-        t,
-        useCoverColorBg,
-        user,
-        visualizerMode,
-        volume,
+        shouldHidePlayerRightPanelButton,
         localSongs,
-        handlePlayerPanelAlbumSelect,
-        handlePlayerPanelArtistSelect,
-        transparentPlayerBackground,
-        toggleTransparentModeWithHandoff,
-    ]);
+        localLibraryCatalog,
+        navigateToCollection,
+    });
     const appOverlaysModel = useAppOverlaysModel({
         theme,
         closeSearchView,
