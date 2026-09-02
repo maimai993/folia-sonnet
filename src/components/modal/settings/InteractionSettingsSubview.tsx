@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Command, Keyboard, MousePointerClick } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -11,6 +11,7 @@ import {
     isScopeIndependentCommand,
 } from '../../command-palette/customShortcut';
 import { CustomSelect } from '../../shared/CustomSelect';
+import ShortcutCaptureField from './ShortcutCaptureField';
 import { PRIMARY_MODIFIER_LABEL } from '../../../utils/platform';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
@@ -95,14 +96,17 @@ export const InteractionSettingsSubview: React.FC<InteractionSettingsSubviewProp
         },
     ];
 
-    // Only the letters nothing else has claimed. The check reads the registry rather than a list
-    // kept here, so a hotkey added later takes its letter out of this picker on its own.
-    const letterOptions = [
-        { value: '', label: t('options.customShortcutNoKey') },
-        ...CUSTOM_SHORTCUT_LETTERS
-            .filter(letter => isCustomShortcutLetterAvailable(letter, COMMAND_PALETTE_COMMANDS))
-            .map(letter => ({ value: letter, label: `Alt + ${letter.toUpperCase()}` })),
-    ];
+    // The field records whatever is pressed, so the refusal has to be stated here rather than by
+    // leaving a key out of a list. Reads the registry rather than a list kept here, so a hotkey
+    // added later starts refusing its own letter on its own.
+    const validateShortcutKey = useCallback((letter: string): string | null => {
+        if (!CUSTOM_SHORTCUT_LETTERS.includes(letter)) {
+            return t('options.customShortcutLettersOnly');
+        }
+        return isCustomShortcutLetterAvailable(letter, COMMAND_PALETTE_COMMANDS)
+            ? null
+            : t('options.customShortcutTaken');
+    }, [t]);
 
     // A shortcut fires from anywhere, so only the commands that work anywhere may be bound to one.
     const commandOptions = [
@@ -184,12 +188,11 @@ export const InteractionSettingsSubview: React.FC<InteractionSettingsSubviewProp
                             <div className="text-xs opacity-65" style={{ color: 'var(--text-secondary)' }}>
                                 {t('options.customShortcutKey')}
                             </div>
-                            <CustomSelect
-                                value={customShortcutLetter ?? ''}
-                                onChange={(value) => setCustomShortcutLetter(value || null)}
-                                options={letterOptions}
-                                ariaLabel={t('options.customShortcutKey')}
-                                placeholder={t('options.customShortcutNoKey')}
+                            <ShortcutCaptureField
+                                value={customShortcutLetter}
+                                onChange={setCustomShortcutLetter}
+                                validate={validateShortcutKey}
+                                label={t('options.customShortcutKey')}
                                 isDaylight={isDaylight}
                                 theme={theme}
                             />
