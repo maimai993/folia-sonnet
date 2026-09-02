@@ -987,6 +987,7 @@ export default {
     "customShortcutDesc": "Alt is fixed and you choose the other half: click the key field and press the letter you want. A key something else has claimed is refused, and only commands that work on any surface are listed.",
     "customShortcutKey": "Key",
     "customShortcutCommand": "Runs",
+    "customShortcutNoKey": "Not set",
     "customShortcutNoCommand": "None selected",
     "customShortcutListening": "Press a key\u2026",
     "customShortcutClear": "Clear",

@@ -183,24 +183,18 @@ export const InteractionSettingsSubview: React.FC<InteractionSettingsSubviewProp
                             {t('options.customShortcutDesc')}
                         </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="min-w-0 space-y-1.5">
-                            <div className="text-xs opacity-65" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.customShortcutKey')}
-                            </div>
-                            <ShortcutCaptureField
-                                value={customShortcutLetter}
-                                onChange={setCustomShortcutLetter}
-                                validate={validateShortcutKey}
-                                label={t('options.customShortcutKey')}
-                                isDaylight={isDaylight}
-                                theme={theme}
-                            />
-                        </div>
-                        <div className="min-w-0 space-y-1.5">
-                            <div className="text-xs opacity-65" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.customShortcutCommand')}
-                            </div>
+                    {/* One row, two halves of one sentence: this key runs that command. The column
+                        captions are gone because the caps and the select already say which is which. */}
+                    <div className="grid items-center gap-3 sm:grid-cols-2">
+                        <ShortcutCaptureField
+                            value={customShortcutLetter}
+                            onChange={setCustomShortcutLetter}
+                            validate={validateShortcutKey}
+                            label={t('options.customShortcutKey')}
+                            isDaylight={isDaylight}
+                            theme={theme}
+                        />
+                        <div className="min-w-0">
                             <CustomSelect
                                 value={customShortcutCommandId ?? ''}
                                 onChange={(value) => setCustomShortcutCommandId(value || null)}

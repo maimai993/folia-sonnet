@@ -987,6 +987,7 @@ export default {
     "customShortcutDesc": "Alt 是固定的，你选另一半：点一下按键框，按下想用的字母。已经被占用的键会被拒绝，命令只列出在任何界面都可用的。",
     "customShortcutKey": "按键",
     "customShortcutCommand": "运行",
+    "customShortcutNoKey": "未设置",
     "customShortcutNoCommand": "未选择",
     "customShortcutListening": "按下一个键…",
     "customShortcutClear": "清除",

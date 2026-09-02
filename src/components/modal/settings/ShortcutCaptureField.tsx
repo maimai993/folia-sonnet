@@ -73,18 +73,22 @@ export const ShortcutCaptureField: React.FC<ShortcutCaptureFieldProps> = ({
     }, [isListening, onChange, validate]);
 
     const accentColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
-    const capClass = `inline-flex min-w-9 items-center justify-center rounded-md border px-2 py-1 font-mono text-xs ${
+    // Sized to stand level with the command select beside it: the two halves of one setting should
+    // read as one row, not as a caption next to a control.
+    const capClass = `inline-flex min-w-11 items-center justify-center rounded-lg border px-3.5 py-2 font-mono text-sm ${
         isDaylight ? 'border-black/15 bg-black/5' : 'border-white/15 bg-white/10'
     }`;
     const slotText = isListening
         ? t('options.customShortcutListening')
         : value
             ? value.toUpperCase()
-            : '—';
+            // Spelt out rather than a dash: a one-character cap next to a full-width select reads
+            // as an afterthought, and this half of the row carries the same weight as the other.
+            : t('options.customShortcutNoKey');
 
     return (
         <div className="space-y-1.5">
-            <div className="relative">
+            <div className="flex items-center gap-1">
                 <button
                     type="button"
                     onClick={() => {
@@ -96,16 +100,16 @@ export const ShortcutCaptureField: React.FC<ShortcutCaptureFieldProps> = ({
                         setRejection(null);
                     }}
                     aria-label={label}
-                    className="w-full rounded-xl border px-4 py-3 text-left text-sm transition-all focus:outline-none cursor-pointer"
-                    style={{
-                        backgroundColor: 'var(--overlay-medium)',
-                        borderColor: isListening ? accentColor : 'var(--border-color)',
-                        color: 'var(--text-primary)',
-                    }}
+                    // No frame of its own: the key caps are the control, and a box around them
+                    // would read as a second, empty field wrapping them.
+                    className={`flex min-h-[52px] items-center rounded-xl px-2 py-2 text-left transition-colors focus:outline-none cursor-pointer ${
+                        isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5'
+                    }`}
+                    style={{ color: 'var(--text-primary)' }}
                 >
                     {/* Alt is the half the listener does not choose, so it is drawn as a key that is
                         already down rather than as part of the editable value. */}
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-2">
                         <span className={`${capClass} opacity-60`}>Alt</span>
                         <span className="opacity-40">+</span>
                         <span
@@ -123,7 +127,7 @@ export const ShortcutCaptureField: React.FC<ShortcutCaptureFieldProps> = ({
                         onClick={() => onChange(null)}
                         aria-label={t('options.customShortcutClear')}
                         title={t('options.customShortcutClear')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
+                        className="rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
                     >
                         <X size={14} />
                     </button>

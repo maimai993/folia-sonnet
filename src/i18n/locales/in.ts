@@ -984,6 +984,7 @@ export default {
     "customShortcutDesc": "Alt sudah tetap dan Anda memilih separuh lainnya: klik kolom tombol lalu tekan huruf yang diinginkan. Tombol yang sudah dipakai akan ditolak, dan hanya perintah yang berlaku di semua tampilan yang ditawarkan.",
     "customShortcutKey": "Tombol",
     "customShortcutCommand": "Menjalankan",
+    "customShortcutNoKey": "Belum diatur",
     "customShortcutNoCommand": "Belum dipilih",
     "customShortcutListening": "Tekan sebuah tombol\u2026",
     "customShortcutClear": "Hapus",
