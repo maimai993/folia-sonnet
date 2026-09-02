@@ -393,9 +393,9 @@ function createWindowsWallpaperController(options = {}) {
   }
 
   // Detach: ask the helper to restore the window, then kill it after a grace period.
-  function detach() {
+  function detach({ onDetached } = {}) {
     if (degraded) {
-      return;
+      return false;
     }
     stopHeartbeatMonitor();
     stopHealthyReset();
@@ -413,12 +413,26 @@ function createWindowsWallpaperController(options = {}) {
     attached = false;
     attaching = false;
     if (!child) {
-      return;
+      return false;
     }
     try {
       child.stdin?.write('detach\n');
     } catch {
       // helper already gone
+    }
+    if (typeof onDetached === 'function') {
+      let notified = false;
+      const notify = () => {
+        if (!notified) {
+          notified = true;
+          onDetached();
+        }
+      };
+      child.stdout?.on('data', (chunk) => {
+        if (String(chunk).includes('"event":"detached"')) {
+          notify();
+        }
+      });
     }
     setTimeoutFn(() => {
       try {
@@ -427,6 +441,7 @@ function createWindowsWallpaperController(options = {}) {
         // already dead
       }
     }, detachGraceMs);
+    return true;
   }
 
   return {
