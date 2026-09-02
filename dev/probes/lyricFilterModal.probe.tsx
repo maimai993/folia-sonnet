@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import LyricFilterSettingsModal from '../../src/components/modal/LyricFilterSettingsModal';
 import type { LyricFilterDraft } from '../../src/components/modal/LyricFilterSettingsModal';
 import { parseLyricsByFormat } from '../../src/utils/lyrics/parserCore';
-import { DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS } from '../../src/utils/lyrics/staffCreditsPolicy';
+import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS } from '../../src/utils/lyrics/staffCreditsPolicy';
 import type { ProbeDefinition } from './definition';
 // dev/probes/lyricFilterModal.probe.tsx
 
@@ -35,6 +35,7 @@ const LyricFilterModalProbe: React.FC = () => {
                 initialPattern=""
                 initialStaffPolicy="smart"
                 initialStaffMinDwellSeconds={DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS}
+                initialStaffAbsorbMode={DEFAULT_LYRIC_STAFF_ABSORB_MODE}
                 initialStaffPattern=""
                 loadPreviewLyrics={loadPreviewLyrics}
                 onClose={() => {}}

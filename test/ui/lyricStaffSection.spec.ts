@@ -69,28 +69,28 @@ test.describe('lyric filter modal', () => {
     });
 });
 
-test.describe('lyric staff policy picker', () => {
-    // 早先选中态和未选中态都是白色叠加层，亮色背景下两者渲染结果几乎一致。
-    const readPolicyBackgrounds = (page: Page) =>
+test.describe('lyric staff segmented pickers', () => {
+    const readGroupBackgrounds = (page: Page, group: 'policy' | 'absorb') =>
         sample(page, 'long-intro')
-            .locator('button[aria-pressed]')
+            .locator(`[data-staff-${group}-group] button[aria-pressed]`)
             .evaluateAll(nodes => nodes.map(node => getComputedStyle(node).backgroundColor));
 
-    test('marks the selected policy distinctly in both themes', async ({ page }) => {
-        await openProbe(page, 'lyricStaffSection');
+    for (const group of ['policy', 'absorb'] as const) {
+        test(`marks the selected ${group} option distinctly in both themes`, async ({ page }) => {
+            await openProbe(page, 'lyricStaffSection');
 
-        for (const theme of ['dark', 'daylight']) {
-            if (theme === 'daylight') {
-                await page.locator('[data-probe-toggle-daylight]').click();
-                await expect(page.locator('[data-probe-daylight="true"]')).toBeVisible();
+            for (const theme of ['dark', 'daylight']) {
+                if (theme === 'daylight') {
+                    await page.locator('[data-probe-toggle-daylight]').click();
+                    await expect(page.locator('[data-probe-daylight="true"]')).toBeVisible();
+                }
+
+                const backgrounds = await readGroupBackgrounds(page, group);
+                expect(backgrounds, `${group} / ${theme}`).toHaveLength(3);
+                expect(new Set(backgrounds).size, `${group} / ${theme}`).toBe(2);
             }
-
-            const backgrounds = await readPolicyBackgrounds(page);
-            expect(backgrounds, theme).toHaveLength(3);
-            // 选中的那个背景必须和另外两个都不同，且另外两个彼此相同。
-            expect(new Set(backgrounds).size, theme).toBe(2);
-        }
-    });
+        });
+    }
 });
 
 test.describe('playback lyrics settings', () => {

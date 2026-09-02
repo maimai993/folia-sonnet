@@ -15,25 +15,35 @@ export interface LyricProcessingOptions {
 export type LyricStaffPolicy = 'keep' | 'smart' | 'hide';
 export type LyricStaffVerdict = 'none' | 'keep' | 'retime' | 'hide';
 
+// 是否把前奏块相邻的行并入块：off 不吸收，before 只吸收块之前的行，both 前后都吸收。
+// 判据是单行耗时（低于「每行最少停留」），不是字数。
+export type LyricStaffAbsorbMode = 'off' | 'before' | 'both';
+
 export interface LyricStaffPolicyOptions {
     policy?: LyricStaffPolicy;
     minDwellSeconds?: number;
     /** 自定义识别正则；留空使用内置词表。 */
     pattern?: string | null;
+    /** 是否把前奏块相邻的行并入块；缺省 'off' 保证旧调用行为不变。 */
+    absorbMode?: LyricStaffAbsorbMode;
 }
 
 export interface LyricStaffDecision {
     verdict: LyricStaffVerdict;
-    /** 命中的 staff 行数。 */
+    /** 命中的 staff 行数，不含吸收进来的行。 */
     blockLineCount: number;
     /** 从块首到第一句歌词之间的可用秒数。 */
     windowSeconds: number;
-    /** 完整展示这些 staff 行所需的秒数。 */
+    /** 完整展示这些 staff 行所需的秒数，吸收行也算一行。 */
     requiredSeconds: number;
     /** 判定为署名的行下标。 */
     staffIndexes: number[];
-    /** 块占据的全部行下标，含分隔符行；隐藏时整组一起去掉。 */
+    /** 块占据的全部行下标，含分隔符行与吸收行；隐藏时整组一起去掉。 */
     memberIndexes: number[];
+    /** 吸收进块的相邻行数量。 */
+    absorbedLineCount: number;
+    /** 吸收进块的行下标，升序；始终是 memberIndexes 的子集。 */
+    absorbedIndexes: number[];
 }
 
 export interface RawEmbeddedLyric {

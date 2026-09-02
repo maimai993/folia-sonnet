@@ -220,6 +220,19 @@ export const settingsCommands: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'lyric-staff-absorb-cycle',
+        // 与设置面板同一个判断：吸收只在 smart 下有意义，hide 不吸收、keep 不处理。
+        isAvailable: context => (context ? context.settings.lyricStaffPolicy === 'smart' : true),
+        group: 'settings',
+        title: 'Opening credits absorb mode',
+        description: 'Cycle whether neighbouring lines are folded into the opening credit block',
+        keywords: ['absorb', 'absorb neighbouring lines', 'lyric credits absorb', '吸收相邻行', '吸收', '署名吸收', '前奏吸收', 'xishou', 'xishouxianglinxing', 'xsh', 'xsxlx'],
+        execute: (_input, context) => {
+            context.settings.cycleLyricStaffAbsorbMode();
+            return true;
+        },
+    },
+    {
         id: 'theme-generate-current',
         isAvailable: context => (context ? context.settings.canGenerateAITheme && !context.settings.isGeneratingTheme : true),
         group: 'settings',

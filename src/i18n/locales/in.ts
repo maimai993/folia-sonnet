@@ -349,6 +349,7 @@ export default {
       "transition-performance-toggle": { "title": "Mode performa transisi", "description": "Alihkan transisi yang lebih agresif (perlu model stem)" },
       "settings-discord-presence": { "title": "Status pemutaran Discord", "description": "Buka pengaturan Discord Rich Presence" },
       "lyric-staff-policy-cycle": { "title": "Penanganan kredit pembuka", "description": "Ganti cara blok kredit di awal lirik ditangani" },
+      "lyric-staff-absorb-cycle": { "title": "Mode serap kredit pembuka", "description": "Ganti apakah baris di sekitarnya ikut digabung ke blok kredit" },
       "settings-obs-browser-source": { "title": "Sumber browser OBS", "description": "Buka pengaturan sumber browser OBS" },
       "desktop-toggle-lyric-api": { "title": "API Lirik", "description": "Alihkan endpoint lirik lokal tanpa autentikasi" },
       "settings-obs-copy-css": { "title": "Salin CSS OBS", "description": "Salin Custom CSS OBS Browser Source yang membawa aset unggahan" },
@@ -930,6 +931,13 @@ export default {
     "minDwell": "Durasi minimum per baris",
     "minDwellValue": "{{seconds}} dtk",
     "minDwellDesc": "Durasi minimum yang diizinkan untuk satu baris lirik",
+    "absorb": "Serap baris di sekitarnya",
+    "absorbOff": "Nonaktif",
+    "absorbBefore": "Sebelum blok",
+    "absorbBoth": "Sebelum dan sesudah",
+    "absorbOffDesc": "Hanya baris kredit yang terdeteksi yang diproses.",
+    "absorbBeforeDesc": "Baris sebelum blok yang durasinya lebih pendek dari \"Durasi minimum per baris\" ikut digabung ke blok.",
+    "absorbBothDesc": "Baris sebelum dan sesudah blok yang durasinya lebih pendek dari \"Durasi minimum per baris\" ikut digabung ke blok.",
     "customPattern": "Pola deteksi kustom",
     "customPatternDesc": "Kosongkan untuk memakai kamus kredit bawaan. Pola kustom menggantikannya, dan tetap hanya berlaku pada blok pembuka.",
     "customPatternPlaceholder": "Kosongkan untuk memakai kamus bawaan",
@@ -938,7 +946,8 @@ export default {
     "verdictKeep": "Ditampilkan apa adanya",
     "verdictRetime": "Ditampilkan, disebar sepanjang intro",
     "verdictHide": "Disembunyikan",
-    "verdictSummary": "{{lines}} baris kredit, intro {{window}} dtk, butuh {{required}} dtk untuk menampilkan semuanya"
+    "verdictSummary": "{{lines}} baris kredit, intro {{window}} dtk, butuh {{required}} dtk untuk menampilkan semuanya",
+    "verdictSummaryAbsorbed": "{{lines}} baris kredit + {{absorbed}} baris terserap, intro {{window}} dtk, butuh {{required}} dtk untuk menampilkan semuanya"
   },
   "replayGain": {
     "off": "ReplayGain Mati",

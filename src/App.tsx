@@ -25,7 +25,7 @@ import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideConten
 import { buildAppDialogsModel } from './components/app/dialogs/buildAppDialogsModel';
 import { buildHomeModel } from './components/app/home/buildHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
-import { nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
+import { nextLyricStaffAbsorbMode, nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
 import { createLocalLibraryNavigation } from './components/app/navigation/createLocalLibraryNavigation';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
 import { createOnlineGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
@@ -413,6 +413,7 @@ export default function App() {
         lyricFilterPattern,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
+        lyricStaffAbsorbMode,
         lyricStaffPattern,
         showOpenPanelCloseButton,
         alwaysShowPlayerBackButton,
@@ -489,6 +490,7 @@ export default function App() {
         handleSetLyricFilterPattern,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffAbsorbMode,
         handleSetLyricStaffPattern,
         handleToggleOpenPanelCloseButton,
         handleToggleAlwaysShowPlayerBackButton,
@@ -555,9 +557,10 @@ export default function App() {
         () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef, {
             policy: lyricStaffPolicy,
             minDwellSeconds: lyricStaffMinDwellSeconds,
+            absorbMode: lyricStaffAbsorbMode,
             pattern: lyricStaffPattern,
         }),
-        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffPattern],
+        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
     );
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
@@ -1328,6 +1331,7 @@ export default function App() {
         handleSetLyricFilterPattern,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffAbsorbMode,
         handleSetLyricStaffPattern,
         loadCurrentSongLyricPreview,
         setLyrics: (nextLyrics) => setLyricsRef.current(nextLyrics),
@@ -2459,6 +2463,15 @@ export default function App() {
             pattern: lyricFilterPattern,
             staffPolicy: nextLyricStaffPolicy(lyricStaffPolicy),
             staffMinDwellSeconds: lyricStaffMinDwellSeconds,
+            staffAbsorbMode: lyricStaffAbsorbMode,
+            staffPattern: lyricStaffPattern,
+        }),
+        lyricStaffAbsorbMode,
+        cycleLyricStaffAbsorbMode: () => handleSaveLyricFilterPattern({
+            pattern: lyricFilterPattern,
+            staffPolicy: lyricStaffPolicy,
+            staffMinDwellSeconds: lyricStaffMinDwellSeconds,
+            staffAbsorbMode: nextLyricStaffAbsorbMode(lyricStaffAbsorbMode),
             staffPattern: lyricStaffPattern,
         }),
 
@@ -2526,6 +2539,11 @@ export default function App() {
         isPersonalFmModeSupported,
         localLibraryCatalog,
         localSongs,
+        lyricFilterPattern,
+        lyricStaffAbsorbMode,
+        lyricStaffMinDwellSeconds,
+        lyricStaffPattern,
+        lyricStaffPolicy,
         moveQueueSongToEnd,
         moveQueueSongToNext,
         navigateToHome,
