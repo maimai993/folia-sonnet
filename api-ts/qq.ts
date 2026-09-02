@@ -7,7 +7,9 @@ import handleRequest from '@yakult-green-tea/qq-music-api/serverless';
  *
  * frameworkless 项目里嵌套 catch-all（`api/qq/[...path].ts`）会被当成字面路由，三条嵌套路径全部
  * `NOT_FOUND`，所以这里是**扁平**入口：`vercel.json` 先把 `/api/qq/login/status`
- * rewrite 成 `/api/qq?path=login/status`，再由本文件还原成后端认识的 `/login/status`。
+ * rewrite 成 `/api/qq?path=/login/status`，再由本文件还原成后端认识的 `/login/status`。
+ * 注入值写成 `/:path*` 而不是 `:path*`：裸的重复段在新版 path-to-regexp 里非法，`vercel dev`
+ * 每次校验 `vercel.json` 都会刷一行 `[vc] PATH TO REGEXP ERROR`；带前缀后两版解析器都认。
  * Folia 侧因此两个平台都只填 `VITE_QQ_API_BASE=/api/qq`，不需要理解平台差异。
  *
  * 跑 Edge Runtime：3.0.0 的 `./serverless` 闭包已经是零 npm 包、零 `node:*`，Edge 能收；
