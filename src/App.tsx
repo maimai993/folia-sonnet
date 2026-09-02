@@ -24,7 +24,7 @@ import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideConten
 import { useAppDialogsModel } from './components/app/dialogs/useAppDialogsModel';
 import { useHomeModel } from './components/app/home/useHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
-import { nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
+import { nextLyricStaffAbsorbMode, nextLyricStaffPolicy } from './utils/lyrics/staffCreditsPolicy';
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
 import { createOnlineGridViewCollection, type GridViewCollectionDescriptor } from './components/app/home/gridViewCollectionAdapters';
 import { buildAppStyle } from './components/app/presentation/buildAppStyle';
@@ -421,10 +421,12 @@ export default function App() {
         lyricFilterPattern,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
+        lyricStaffAbsorbMode,
         lyricStaffPattern,
         handleSetLyricFilterPattern,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffAbsorbMode,
         handleSetLyricStaffPattern,
     } = useLyricSettingsStore(useShallow(selectLyricSettingsSnapshot));
     const {
@@ -471,9 +473,10 @@ export default function App() {
         () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef, {
             policy: lyricStaffPolicy,
             minDwellSeconds: lyricStaffMinDwellSeconds,
+            absorbMode: lyricStaffAbsorbMode,
             pattern: lyricStaffPattern,
         }),
-        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffPattern],
+        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
     );
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
@@ -967,6 +970,7 @@ export default function App() {
         handleSetLyricFilterPattern,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
+        handleSetLyricStaffAbsorbMode,
         handleSetLyricStaffPattern,
         loadCurrentSongLyricPreview,
         setLyrics: setLyricsStable,
@@ -1715,6 +1719,14 @@ export default function App() {
             pattern: lyricFilterPattern,
             staffPolicy: nextLyricStaffPolicy(lyricStaffPolicy),
             staffMinDwellSeconds: lyricStaffMinDwellSeconds,
+            staffAbsorbMode: lyricStaffAbsorbMode,
+            staffPattern: lyricStaffPattern,
+        }),
+        cycleLyricStaffAbsorbMode: () => handleSaveLyricFilterPattern({
+            pattern: lyricFilterPattern,
+            staffPolicy: lyricStaffPolicy,
+            staffMinDwellSeconds: lyricStaffMinDwellSeconds,
+            staffAbsorbMode: nextLyricStaffAbsorbMode(lyricStaffAbsorbMode),
             staffPattern: lyricStaffPattern,
         }),
         canGenerateAITheme,

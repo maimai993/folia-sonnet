@@ -4,7 +4,7 @@ import LyricFilterRuleSection from '../../src/components/modal/lyric-filter/Lyri
 import { buildLyricFilterPreviewModel } from '../../src/components/modal/lyric-filter/buildLyricFilterPreviewModel';
 import LyricFilterPreviewList from '../../src/components/modal/lyric-filter/LyricFilterPreviewList';
 import { parseLyricsByFormat } from '../../src/utils/lyrics/parserCore';
-import { DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, type LyricStaffPolicy } from '../../src/utils/lyrics/staffCreditsPolicy';
+import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, type LyricStaffAbsorbMode, type LyricStaffPolicy } from '../../src/utils/lyrics/staffCreditsPolicy';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../src/services/baseThemes';
 import type { ProbeDefinition } from './definition';
 // dev/probes/lyricStaffSection.probe.tsx
@@ -47,14 +47,28 @@ const SHORT_INTRO = [
     '[00:07.00]第二句歌词',
 ].join('\n');
 
+// 块前一条短标题行、块后一条词表认不出来的短行，用来看吸收把块撑大之后的效果。
+// 行尾那句 "Ah~" 是反向对照：字数也很短，但唱足了三秒，按耗时应被放过。
+const NEIGHBOURS = [
+    '[00:00.00]某首歌 - 某歌手',
+    '[00:01.00]作词 : A',
+    '[00:01.20]作曲 : B',
+    '[00:01.40]Genshin Folk Ensemble',
+    '[00:04.00]Ah~~~~~~',
+    '[00:07.00]第一句歌词',
+    '[00:11.00]第二句歌词',
+].join('\n');
+
 const SAMPLES = [
     { id: 'long-intro', label: '长前奏', lrc: LONG_INTRO },
     { id: 'short-intro', label: '短前奏', lrc: SHORT_INTRO },
+    { id: 'neighbours', label: '块外相邻行', lrc: NEIGHBOURS },
 ] as const;
 
 const LyricStaffSectionProbe: React.FC = () => {
     const [policy, setPolicy] = useState<LyricStaffPolicy>('smart');
     const [minDwell, setMinDwell] = useState(DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS);
+    const [absorbMode, setAbsorbMode] = useState<LyricStaffAbsorbMode>(DEFAULT_LYRIC_STAFF_ABSORB_MODE);
     const [pattern, setPattern] = useState('');
     const [filterPattern, setFilterPattern] = useState('');
     const [isFilterEnabled, setIsFilterEnabled] = useState(false);
@@ -90,6 +104,7 @@ const LyricStaffSectionProbe: React.FC = () => {
                 const preview = buildLyricFilterPreviewModel(lyrics, isFilterEnabled ? filterPattern : '', {
                     policy,
                     minDwellSeconds: minDwell,
+                    absorbMode,
                     pattern,
                 });
 
@@ -114,10 +129,12 @@ const LyricStaffSectionProbe: React.FC = () => {
                             isDaylight={isDaylight}
                             policy={policy}
                             minDwellSeconds={minDwell}
+                            absorbMode={absorbMode}
                             pattern={pattern}
                             decision={preview.staff}
                             onPolicyChange={setPolicy}
                             onMinDwellChange={setMinDwell}
+                            onAbsorbModeChange={setAbsorbMode}
                             onPatternChange={setPattern}
                         />
                         <div className="mt-4 rounded-2xl border border-white/10 p-3" data-probe-preview={id}>

@@ -87,18 +87,25 @@ export const createStaffCreditMatcher = (pattern?: string | null): ((line: Line)
 export interface StaffCreditBlock {
     /** 词表或结构规则判定为署名的行下标。 */
     staffIndexes: number[];
-    /** 块实际占据的全部行下标，含块内和块尾的分隔符行。 */
+    /** 块实际占据的全部行下标，含块内和块尾的分隔符行，以及吸收进来的行。 */
     memberIndexes: number[];
-    /** 块后第一条真正的歌词行下标；整首都是署名时为 null。 */
+    /**
+     * 块后第一条真正的歌词行下标；块后面没有歌词时为 null。
+     * 检测阶段只在「整首都是署名」时才是 null，吸收阶段还可能因为块吃到数组末尾而取不到。
+     */
     firstLyricIndex: number | null;
     /** 块之前被容忍跳过的行数（通常是标题行）。 */
     headerLineCount: number;
+    /** 吸收进块的相邻行下标，升序；detectLeadingStaffBlock 恒为空，由 absorbAdjacentLines 填充。 */
+    absorbedIndexes: number[];
 }
 
 // 只有符号、标点或装饰字符的短行（"#"、"//"、"---"），署名块之间常用来分隔。
 const FILLER_REGEX = /^[^\p{L}\p{N}]+$/u;
 
-const isFillerLine = (line: Line): boolean => {
+// 导出给吸收逻辑复用：块里哪几行算「真正的歌词」必须只有一个判据，
+// 两边各判一次迟早会算出不同的 firstLyricIndex。
+export const isFillerLine = (line: Line): boolean => {
     const text = line.fullText?.trim() || '';
     return !text || (text.length <= 8 && FILLER_REGEX.test(text));
 };
@@ -249,5 +256,5 @@ export const detectLeadingStaffBlock = (
         }
     }
 
-    return { staffIndexes, memberIndexes, firstLyricIndex, headerLineCount };
+    return { staffIndexes, memberIndexes, firstLyricIndex, headerLineCount, absorbedIndexes: [] };
 };

@@ -24,6 +24,7 @@ describe('lyric filter pattern saver', () => {
             handleSetLyricFilterPattern: vi.fn(),
             handleSetLyricStaffPolicy: vi.fn(),
             handleSetLyricStaffMinDwellSeconds: vi.fn(),
+            handleSetLyricStaffAbsorbMode: vi.fn(),
             handleSetLyricStaffPattern: vi.fn(),
             loadCurrentSongLyricPreview: vi.fn(async () => null),
             setLyrics,
@@ -44,6 +45,7 @@ describe('lyric filter pattern saver', () => {
             pattern: '^赞助',
             staffPolicy: 'hide',
             staffMinDwellSeconds: 2,
+            staffAbsorbMode: 'both',
             staffPattern: '',
         });
 
@@ -60,6 +62,7 @@ describe('lyric filter pattern saver', () => {
             pattern: '^广告',
             staffPolicy: 'smart',
             staffMinDwellSeconds: 1.5,
+            staffAbsorbMode: 'off',
             staffPattern: '',
         });
 

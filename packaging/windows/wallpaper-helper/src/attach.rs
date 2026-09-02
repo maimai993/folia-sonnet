@@ -198,6 +198,18 @@ pub unsafe fn detach_window(hwnd: HWND) -> Result<(), String> {
     restore_styles(hwnd);
     Ok(())
 }
+pub unsafe fn refresh_desktop_wallpaper() -> Result<(), String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE,
+    };
+    let ok = SystemParametersInfoW(
+        SPI_SETDESKWALLPAPER,
+        0,
+        None,
+        SPIF_UPDATEINIFILE,
+    );
+    ok.map_err(|err| format!("SPI_SETDESKWALLPAPER refresh failed: {err}"))
+}
 
 /// Forces a full repaint of `hwnd`. Called on the WorkerW after our window leaves it: a window
 /// destroyed while still parented (app exit racing the detach) otherwise leaves its last frame

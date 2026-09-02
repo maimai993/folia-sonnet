@@ -76,6 +76,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             openSettings: vi.fn(),
             lyricStaffPolicy: 'smart' as const,
             cycleLyricStaffPolicy: vi.fn(),
+            lyricStaffAbsorbMode: 'off' as const,
+            cycleLyricStaffAbsorbMode: vi.fn(),
             setIsUserGuideModalOpen: vi.fn(),
             setAppLanguagePreference: vi.fn(async () => undefined),
             toggleTransparentBackground: vi.fn(),

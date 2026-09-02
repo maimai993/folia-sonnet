@@ -20,6 +20,8 @@ pub enum Event {
     Moved { hwnd: isize },
     /// Detach completed: window un-parented from WorkerW, styles restored.
     Detached { hwnd: isize },
+    /// Desktop wallpaper re-applied (`refresh` subcommand or after a detach).
+    Refreshed,
     /// Desktop mouse position update in 96-DPI virtualized screen pixels (the helper is
     /// DPI-unaware, which is exactly Electron's DIP space), coalesced to ~60 Hz and gated by
     /// the desktop-foreground filter (see mouse_forward.rs for why injection happens in the
@@ -75,6 +77,7 @@ impl Event {
             Event::Reasserted { .. } => "reasserted",
             Event::Moved { .. } => "moved",
             Event::Detached { .. } => "detached",
+            Event::Refreshed => "refreshed",
             Event::MouseMove { .. } => "mousemove",
             Event::MouseButtonDown { .. } => "mousedown",
             Event::MouseButtonUp { .. } => "mouseup",
@@ -98,6 +101,7 @@ impl Event {
             Event::Reasserted { hwnd } => format!("{{\"event\":\"reasserted\",\"hwnd\":{}}}", hwnd),
             Event::Moved { hwnd } => format!("{{\"event\":\"moved\",\"hwnd\":{}}}", hwnd),
             Event::Detached { hwnd } => format!("{{\"event\":\"detached\",\"hwnd\":{}}}", hwnd),
+            Event::Refreshed => "{\"event\":\"refreshed\"}".to_string(),
             Event::MouseMove { x, y } => {
                 format!("{{\"event\":\"mousemove\",\"x\":{x},\"y\":{y}}}")
             }
@@ -169,6 +173,7 @@ mod tests {
             Event::Detached { hwnd: 5 }.to_json(),
             "{\"event\":\"detached\",\"hwnd\":5}"
         );
+        assert_eq!(Event::Refreshed.to_json(), "{\"event\":\"refreshed\"}");
         assert_eq!(
             Event::MouseMove { x: 1920, y: 1080 }.to_json(),
             "{\"event\":\"mousemove\",\"x\":1920,\"y\":1080}"

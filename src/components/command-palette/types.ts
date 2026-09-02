@@ -7,7 +7,7 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
 import { type SettingsModalInitialTab, type SettingsSubviewId } from '../../stores/useSettingsModalStore';
-import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
+import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import type { TransitionMode } from '../../services/automix/transitionStrategy';
@@ -212,6 +212,9 @@ export type CommandPaletteSettingsContext = {
     /** 开头制作人员信息的处理策略；命令只负责在三态之间轮换。 */
     lyricStaffPolicy: LyricStaffPolicy;
     cycleLyricStaffPolicy: () => void;
+    /** 署名块是否吸收相邻行；命令只负责在三态之间轮换。 */
+    lyricStaffAbsorbMode: LyricStaffAbsorbMode;
+    cycleLyricStaffAbsorbMode: () => void;
     /** The FOLIA smart-transition switches, stated in each command's title the way the pickers do. */
     automixEnabled: boolean;
     transitionMode: TransitionMode;

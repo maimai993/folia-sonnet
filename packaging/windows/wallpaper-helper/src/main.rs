@@ -26,9 +26,10 @@ fn main() {
     match cli::parse(&args) {
         Ok(command) => run(command),
         Err(message) => {
-            eprintln!("usage: folia-wallpaper-helper attach --hwnd <n> [--forward-mouse] [--zguard]");
-            eprintln!("       folia-wallpaper-helper move --hwnd <n>");
-            eprintln!("       folia-wallpaper-helper detach --hwnd <n>");
+        eprintln!("usage: folia-wallpaper-helper attach --hwnd <n> [--forward-mouse] [--zguard]");
+        eprintln!("       folia-wallpaper-helper move --hwnd <n>");
+        eprintln!("       folia-wallpaper-helper detach --hwnd <n>");
+        eprintln!("       folia-wallpaper-helper refresh");
             eprintln!("error: {message}");
             std::process::exit(2);
         }
@@ -65,6 +66,13 @@ fn run_windows(command: Command) {
                 attach::reassert_geometry(HWND(hwnd as _));
                 events::emit(&Event::Moved { hwnd });
             }
+            Command::Refresh => {
+                if let Err(message) = attach::refresh_desktop_wallpaper() {
+                    events::emit(&Event::Error { message, kind: None });
+                    std::process::exit(1);
+                }
+                events::emit(&Event::Refreshed {});
+            }
             Command::Detach { hwnd } => {
                 detach_and_report(hwnd);
             }
@@ -79,11 +87,17 @@ fn run_windows(command: Command) {
     }
 }
 
-/// One-shot detach (`detach` subcommand): un-parent and restore styles, then exit.
+/// One-shot detach (`detach` subcommand): un-parent and restore styles, repaint the WorkerW,
+/// then re-apply the desktop wallpaper before exiting.
 #[cfg(windows)]
 unsafe fn detach_and_report(hwnd: isize) {
     match attach::detach_window(HWND(hwnd as _)) {
-        Ok(()) => events::emit(&Event::Detached { hwnd }),
+        Ok(()) => {
+            events::emit(&Event::Detached { hwnd });
+            if let Err(message) = attach::refresh_desktop_wallpaper() {
+                events::emit(&Event::Error { message, kind: None });
+            }
+        }
         Err(message) => {
             events::emit(&Event::Error { message, kind: None });
             std::process::exit(1);
@@ -178,6 +192,9 @@ pub fn handle_detach_request() {
         // welded onto the desktop layer.
         if let Some(worker_w) = monitor::resident_worker_w() {
             attach::invalidate_window(HWND(worker_w as _));
+        }
+        if let Err(message) = attach::refresh_desktop_wallpaper() {
+            events::emit(&Event::Error { message, kind: None });
         }
     }
 }

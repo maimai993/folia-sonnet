@@ -122,6 +122,7 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
     // would keep the answer it had when the context was last built.
     const canAddCurrentSongToPlaylist = useAddToPlaylistStore(state => state.availability.canAdd);
     const lyricStaffPolicy = useLyricSettingsStore(state => state.lyricStaffPolicy);
+    const lyricStaffAbsorbMode = useLyricSettingsStore(state => state.lyricStaffAbsorbMode);
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);
     // Which surface the palette is opening over; commands that only apply to one of them gate on it.
     const view = useAppViewStore(state => state.view);
@@ -174,6 +175,6 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         ambient,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, audioSignals, visualizerSignals,
-        lyricStaffPolicy, personalFmSelection, view, commandFilter, canAddCurrentSongToPlaylist,
+        lyricStaffPolicy, lyricStaffAbsorbMode, personalFmSelection, view, commandFilter, canAddCurrentSongToPlaylist,
     ]);
 };

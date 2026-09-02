@@ -71,15 +71,17 @@ export const rebuildStaffLines = (
     minDwell: number
 ): Line[] => {
     const memberIndexes = new Set(block.memberIndexes);
-    const staffLines = block.staffIndexes.map(index => lines[index]);
+    // 摊开的是署名行加吸收行：吸收行进块之后就按块的一部分对待，和署名行平分整段前奏。
+    const spreadIndexes = [...block.staffIndexes, ...block.absorbedIndexes].sort((a, b) => a - b);
+    const spreadLines = spreadIndexes.map(index => lines[index]);
     const windowStart = lines[block.memberIndexes[0]].startTime;
     const firstLyric = block.firstLyricIndex === null ? null : lines[block.firstLyricIndex];
-    const windowEnd = firstLyric ? firstLyric.startTime - TAIL_MARGIN_SECONDS : staffLines[staffLines.length - 1].endTime;
+    const windowEnd = firstLyric ? firstLyric.startTime - TAIL_MARGIN_SECONDS : spreadLines[spreadLines.length - 1].endTime;
 
     // 重排时分隔符行不再保留：它们的作用是隔开原时间轴上的署名，摊开之后只会占位置。
     const replacement = decision.verdict === 'retime'
-        ? staffLines.map((line, index) => {
-            const slot = Math.max((windowEnd - windowStart) / staffLines.length, minDwell);
+        ? spreadLines.map((line, index) => {
+            const slot = Math.max((windowEnd - windowStart) / spreadLines.length, minDwell);
             return retimeLine(line, windowStart + index * slot, windowStart + (index + 1) * slot);
         })
         : [];

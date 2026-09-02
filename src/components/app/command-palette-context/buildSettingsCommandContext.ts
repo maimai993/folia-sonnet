@@ -22,8 +22,9 @@ export type SettingsCommandContextDeps = {
     /** Wraps the Electron transparent-window handoff, not just the stored boolean. */
     toggleTransparentBackground: () => void;
     toggleDaylightMode: () => void;
-    /** Composes handleSaveLyricFilterPattern; not a plain store setter. */
+    /** Both compose handleSaveLyricFilterPattern; neither is a plain store setter. */
     cycleLyricStaffPolicy: () => void;
+    cycleLyricStaffAbsorbMode: () => void;
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
@@ -97,6 +98,8 @@ export const buildSettingsCommandContext = (
         setThemeGenerationSource: deps.setThemeGenerationSource,
         lyricStaffPolicy: useLyricSettingsStore.getState().lyricStaffPolicy,
         cycleLyricStaffPolicy: deps.cycleLyricStaffPolicy,
+        lyricStaffAbsorbMode: useLyricSettingsStore.getState().lyricStaffAbsorbMode,
+        cycleLyricStaffAbsorbMode: deps.cycleLyricStaffAbsorbMode,
         automixEnabled: automix.automixEnabled,
         transitionMode: automix.transitionMode,
         transitionPerformance: automix.transitionPerformance,

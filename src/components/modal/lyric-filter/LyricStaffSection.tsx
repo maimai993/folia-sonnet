@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     LYRIC_STAFF_MIN_DWELL_RANGE,
+    type LyricStaffAbsorbMode,
     type LyricStaffDecision,
     type LyricStaffPolicy,
 } from '../../../utils/lyrics/staffCreditsPolicy';
@@ -17,16 +18,26 @@ const POLICY_LABEL_KEYS: Record<LyricStaffPolicy, { label: string; description: 
     hide: { label: 'lyricStaff.policyHide', description: 'lyricStaff.policyHideDesc' },
 };
 
+const ABSORB_ORDER: LyricStaffAbsorbMode[] = ['off', 'before', 'both'];
+
+const ABSORB_LABEL_KEYS: Record<LyricStaffAbsorbMode, { label: string; description: string }> = {
+    off: { label: 'lyricStaff.absorbOff', description: 'lyricStaff.absorbOffDesc' },
+    before: { label: 'lyricStaff.absorbBefore', description: 'lyricStaff.absorbBeforeDesc' },
+    both: { label: 'lyricStaff.absorbBoth', description: 'lyricStaff.absorbBothDesc' },
+};
+
 const formatSeconds = (seconds: number): string => (Math.round(seconds * 10) / 10).toFixed(1);
 
 interface LyricStaffSectionProps {
     isDaylight: boolean;
     policy: LyricStaffPolicy;
     minDwellSeconds: number;
+    absorbMode: LyricStaffAbsorbMode;
     pattern: string;
     decision: LyricStaffDecision;
     onPolicyChange: (policy: LyricStaffPolicy) => void;
     onMinDwellChange: (seconds: number) => void;
+    onAbsorbModeChange: (mode: LyricStaffAbsorbMode) => void;
     onPatternChange: (pattern: string) => void;
 }
 
@@ -34,10 +45,12 @@ const LyricStaffSection: React.FC<LyricStaffSectionProps> = ({
     isDaylight,
     policy,
     minDwellSeconds,
+    absorbMode,
     pattern,
     decision,
     onPolicyChange,
     onMinDwellChange,
+    onAbsorbModeChange,
     onPatternChange,
 }) => {
     const { t } = useTranslation();
@@ -59,8 +72,12 @@ const LyricStaffSection: React.FC<LyricStaffSectionProps> = ({
             <div className={`mt-1 text-xs ${mutedText}`}>{t('lyricStaff.description')}</div>
 
             {/* 选中态沿用设置页分段控件的做法：白天用实心白药丸 + 深色字，夜间用高亮层，
-                未选中一律压透明度。早先两种状态都是 white/x 叠加，在亮色背景上分不出来。 */}
-            <div className={`mt-4 grid grid-cols-3 gap-1 rounded-2xl border p-1 ${borderColor} ${trackBg}`}>
+                未选中一律压透明度。早先两种状态都是 white/x 叠加，在亮色背景上分不出来。
+                两排分段控件结构完全一致，靠 data-staff-*-group 区分，测试才能只挑其中一排断言。 */}
+            <div
+                data-staff-policy-group=""
+                className={`mt-4 grid grid-cols-3 gap-1 rounded-2xl border p-1 ${borderColor} ${trackBg}`}
+            >
                 {POLICY_ORDER.map((option) => {
                     const isSelected = policy === option;
 
@@ -103,6 +120,40 @@ const LyricStaffSection: React.FC<LyricStaffSectionProps> = ({
                     <div className={`mt-1 text-xs ${mutedText}`}>{t('lyricStaff.minDwellDesc')}</div>
                 </div>
             )}
+            {/* 只在 smart 下露出：吸收的边界面就是上面那个滑块的阈值，而 hide 压根不做吸收。 */}
+            {policy === 'smart' && (
+                <div className="mt-4">
+                    <div className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                        <span>{t('lyricStaff.absorb')}</span>
+                    </div>
+                    <div
+                        data-staff-absorb-group=""
+                        className={`mt-2 grid grid-cols-3 gap-1 rounded-2xl border p-1 ${borderColor} ${trackBg}`}
+                    >
+                        {ABSORB_ORDER.map((option) => {
+                            const isSelected = absorbMode === option;
+
+                            return (
+                                <button
+                                    key={option}
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() => onAbsorbModeChange(option)}
+                                    className={`rounded-xl px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                                        isSelected
+                                            ? (isDaylight ? 'bg-white text-zinc-900 shadow-sm' : 'bg-white/10 shadow-sm')
+                                            : 'opacity-50 hover:opacity-100'
+                                    }`}
+                                    style={{ color: isSelected && isDaylight ? undefined : 'var(--text-primary)' }}
+                                >
+                                    {t(ABSORB_LABEL_KEYS[option].label)}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className={`mt-2 px-1 text-xs ${mutedText}`}>{t(ABSORB_LABEL_KEYS[absorbMode].description)}</div>
+                </div>
+            )}
 
             {policy !== 'keep' && (
                 <>
@@ -132,12 +183,20 @@ const LyricStaffSection: React.FC<LyricStaffSectionProps> = ({
                             {t('lyricStaff.verdict')}：{verdictLabel}
                         </div>
                         {decision.verdict !== 'none' && policy === 'smart' && (
+                            // 吸收行数是额外信息：大多数歌词吸不到东西，常驻一行 0 反而是噪音。
                             <div className={`mt-1 text-xs ${mutedText}`}>
-                                {t('lyricStaff.verdictSummary', {
-                                    lines: decision.blockLineCount,
-                                    window: formatSeconds(decision.windowSeconds),
-                                    required: formatSeconds(decision.requiredSeconds),
-                                })}
+                                {decision.absorbedLineCount > 0
+                                    ? t('lyricStaff.verdictSummaryAbsorbed', {
+                                        lines: decision.blockLineCount,
+                                        absorbed: decision.absorbedLineCount,
+                                        window: formatSeconds(decision.windowSeconds),
+                                        required: formatSeconds(decision.requiredSeconds),
+                                    })
+                                    : t('lyricStaff.verdictSummary', {
+                                        lines: decision.blockLineCount,
+                                        window: formatSeconds(decision.windowSeconds),
+                                        required: formatSeconds(decision.requiredSeconds),
+                                    })}
                             </div>
                         )}
                     </div>

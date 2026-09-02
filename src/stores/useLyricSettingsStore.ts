@@ -12,7 +12,7 @@ import i18n from '../i18n/config';
 import { type LocalLyricsPriority, type LyricProviderSource } from '../types';
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
 import { migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
-import { DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
+import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffAbsorbMode, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
 import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePrimitives';
 import { setStatusMessage } from './useStatusMessageStore';
 
@@ -88,6 +88,15 @@ const readStoredLyricStaffMinDwellSeconds = (): number => {
     return Math.min(LYRIC_STAFF_MIN_DWELL_RANGE.max, Math.max(LYRIC_STAFF_MIN_DWELL_RANGE.min, parsed));
 };
 
+const readStoredLyricStaffAbsorbMode = (): LyricStaffAbsorbMode => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_LYRIC_STAFF_ABSORB_MODE;
+    }
+
+    const saved = localStorage.getItem('lyrics_staff_absorb_mode');
+    return saved === 'before' || saved === 'both' || saved === 'off' ? saved : DEFAULT_LYRIC_STAFF_ABSORB_MODE;
+};
+
 export type LyricSettingsState = {
     autoUseBestLyric: boolean;
     preferredAlternativeLyricSource: LyricProviderSource;
@@ -97,6 +106,7 @@ export type LyricSettingsState = {
     // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
     lyricStaffPolicy: LyricStaffPolicy;
     lyricStaffMinDwellSeconds: number;
+    lyricStaffAbsorbMode: LyricStaffAbsorbMode;
     lyricStaffPattern: string;
     handleToggleAutoUseBestLyric: (enable: boolean) => void;
     handleSetPreferredAlternativeLyricSource: (source: LyricProviderSource) => void;
@@ -105,6 +115,7 @@ export type LyricSettingsState = {
     handleSetLyricFilterPattern: (pattern: string) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
+    handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
 };
 
@@ -116,6 +127,7 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
     lyricFilterPattern: readStoredLyricFilterPattern(),
     lyricStaffPolicy: readStoredLyricStaffPolicy(),
     lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
+    lyricStaffAbsorbMode: readStoredLyricStaffAbsorbMode(),
     lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
     handleToggleAutoUseBestLyric: (enable) => {
         setStoredBoolean('auto_use_best_lyric', enable);
@@ -184,6 +196,15 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
 
         localStorage.setItem('lyrics_staff_min_dwell', String(next));
     },
+    handleSetLyricStaffAbsorbMode: (mode) => {
+        set({ lyricStaffAbsorbMode: mode });
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        localStorage.setItem('lyrics_staff_absorb_mode', mode);
+    },
     handleSetLyricStaffPattern: (pattern) => {
         const next = pattern.trim();
         set({ lyricStaffPattern: next });
@@ -209,6 +230,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     lyricFilterPattern: state.lyricFilterPattern,
     lyricStaffPolicy: state.lyricStaffPolicy,
     lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
+    lyricStaffAbsorbMode: state.lyricStaffAbsorbMode,
     lyricStaffPattern: state.lyricStaffPattern,
     handleToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
     handleSetPreferredAlternativeLyricSource: state.handleSetPreferredAlternativeLyricSource,
@@ -217,6 +239,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
     handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
+    handleSetLyricStaffAbsorbMode: state.handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
     lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
     lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),

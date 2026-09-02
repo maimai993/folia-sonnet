@@ -5,7 +5,7 @@ import { ChevronLeft, RotateCcw } from 'lucide-react';
 import type { LyricData } from '../../types';
 import { getLyricFilterError } from '../../utils/lyrics/filtering';
 import { getLyricStaffPatternError } from '../../utils/lyrics/staffCredits';
-import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
+import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import { buildLyricFilterPreviewModel } from './lyric-filter/buildLyricFilterPreviewModel';
 import LyricFilterPreviewList from './lyric-filter/LyricFilterPreviewList';
 import LyricFilterRuleSection from './lyric-filter/LyricFilterRuleSection';
@@ -17,6 +17,7 @@ export interface LyricFilterDraft {
     pattern: string;
     staffPolicy: LyricStaffPolicy;
     staffMinDwellSeconds: number;
+    staffAbsorbMode: LyricStaffAbsorbMode;
     staffPattern: string;
 }
 
@@ -27,6 +28,7 @@ interface LyricFilterSettingsModalProps {
     initialPattern: string;
     initialStaffPolicy: LyricStaffPolicy;
     initialStaffMinDwellSeconds: number;
+    initialStaffAbsorbMode: LyricStaffAbsorbMode;
     initialStaffPattern: string;
     loadPreviewLyrics: () => Promise<LyricData | null>;
     onClose: () => void;
@@ -51,6 +53,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
     initialPattern,
     initialStaffPolicy,
     initialStaffMinDwellSeconds,
+    initialStaffAbsorbMode,
     initialStaffPattern,
     loadPreviewLyrics,
     onClose,
@@ -61,6 +64,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
     const [isFilterEnabled, setIsFilterEnabled] = useState(Boolean(initialPattern.trim()));
     const [draftStaffPolicy, setDraftStaffPolicy] = useState<LyricStaffPolicy>(initialStaffPolicy);
     const [draftStaffMinDwell, setDraftStaffMinDwell] = useState(initialStaffMinDwellSeconds);
+    const [draftStaffAbsorbMode, setDraftStaffAbsorbMode] = useState<LyricStaffAbsorbMode>(initialStaffAbsorbMode);
     const [draftStaffPattern, setDraftStaffPattern] = useState(initialStaffPattern);
     const [previewLyrics, setPreviewLyrics] = useState<LyricData | null>(null);
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -75,6 +79,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         setIsFilterEnabled(Boolean(initialPattern.trim()));
         setDraftStaffPolicy(initialStaffPolicy);
         setDraftStaffMinDwell(initialStaffMinDwellSeconds);
+        setDraftStaffAbsorbMode(initialStaffAbsorbMode);
         setDraftStaffPattern(initialStaffPattern);
         setIsLoadingPreview(true);
         let active = true;
@@ -94,7 +99,15 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         return () => {
             active = false;
         };
-    }, [initialPattern, initialStaffMinDwellSeconds, initialStaffPattern, initialStaffPolicy, isOpen, loadPreviewLyrics]);
+    }, [
+        initialPattern,
+        initialStaffMinDwellSeconds,
+        initialStaffAbsorbMode,
+        initialStaffPattern,
+        initialStaffPolicy,
+        isOpen,
+        loadPreviewLyrics,
+    ]);
 
     const effectivePattern = isFilterEnabled ? draftPattern : '';
     const error = isFilterEnabled ? getLyricFilterError(draftPattern) : null;
@@ -105,9 +118,10 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         () => buildLyricFilterPreviewModel(previewLyrics, effectivePattern, {
             policy: draftStaffPolicy,
             minDwellSeconds: draftStaffMinDwell,
+            absorbMode: draftStaffAbsorbMode,
             pattern: draftStaffPattern,
         }),
-        [draftStaffMinDwell, draftStaffPattern, draftStaffPolicy, effectivePattern, previewLyrics]
+        [draftStaffAbsorbMode, draftStaffMinDwell, draftStaffPattern, draftStaffPolicy, effectivePattern, previewLyrics]
     );
 
     const glassBg = isDaylight ? 'bg-white/70' : 'bg-black/40';
@@ -126,6 +140,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
                 pattern: isFilterEnabled ? draftPattern.trim() : '',
                 staffPolicy: draftStaffPolicy,
                 staffMinDwellSeconds: draftStaffMinDwell,
+                staffAbsorbMode: draftStaffAbsorbMode,
                 staffPattern: draftStaffPattern.trim(),
             });
             onClose();
@@ -229,10 +244,12 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
                                     isDaylight={isDaylight}
                                     policy={draftStaffPolicy}
                                     minDwellSeconds={draftStaffMinDwell}
+                                    absorbMode={draftStaffAbsorbMode}
                                     pattern={draftStaffPattern}
                                     decision={preview.staff}
                                     onPolicyChange={setDraftStaffPolicy}
                                     onMinDwellChange={setDraftStaffMinDwell}
+                                    onAbsorbModeChange={setDraftStaffAbsorbMode}
                                     onPatternChange={setDraftStaffPattern}
                                 />
                             </div>
