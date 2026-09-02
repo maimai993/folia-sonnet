@@ -136,6 +136,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         lastFilterAnchorRef.current = liveFilterAnchor;
     }
     const filterAnchor = isOpen ? liveFilterAnchor : lastFilterAnchorRef.current;
+    const isInlineFrame = Boolean(filterAnchor);
     // One input, two frames. The overlay's row and the inline pill differ only in dress: the
     // composition handling, the surface's own inputProps and the executing lock have to be
     // identical, so they are written once.
@@ -185,7 +186,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         });
 
         return () => window.cancelAnimationFrame(frame);
-    }, [isOpen]);
+        // Switching between the two frames remounts the input, so the focus has to be taken again:
+        // picking `filter-view` out of the overlay's list leaves the caret nowhere otherwise. Every
+        // other surface keeps the overlay's own input, so this is the one crossing that needs it.
+    }, [isOpen, isInlineFrame]);
 
     // The grid that handed over its keyboard still has to know the box is up — it used to read its
     // own `showSearchPanel` to keep Enter from opening a card while the listener was typing.

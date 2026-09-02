@@ -44,6 +44,27 @@ test('a printable character opens the palette as the grid filter box', async ({ 
     await expect(filterInput(page)).toHaveValue('');
 });
 
+test('takes the caret with it when picked out of the command list', async ({ page }) => {
+    await openTrackGrid(page);
+
+    // 从 Ctrl/Cmd+K 的根列表进——这一步会把面板从遮罩换成 inline 框，输入框是重新挂载的，
+    // 不重新取焦点的话光标会落在空处。
+    await expect.poll(async () => {
+        await page.keyboard.press('ControlOrMeta+k');
+        return page.getByTestId('command-palette-panel').count();
+    }).toBeGreaterThan(0);
+    await page.getByTestId('command-palette-panel').getByRole('combobox').fill('filter');
+    await page.waitForTimeout(400);
+    await page.getByTestId('command-palette-panel').getByText('Filter this view', { exact: true }).first().click();
+
+    await expect(filterBox(page)).toBeVisible();
+    await expect(filterInput(page)).toBeFocused();
+
+    // 焦点真的在框里：直接打字就能筛。
+    await page.keyboard.type('nothing matches this');
+    await expect(trackCard(page)).toHaveCount(0);
+});
+
 test('filters the grid as the listener types, and keeps the box up on Enter', async ({ page }) => {
     await openTrackGrid(page);
     await typeUntilFilterOpens(page, 'm');
