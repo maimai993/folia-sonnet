@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ImagePlus, Trash2, Upload } from 'lucide-react';
+import { Download, ImagePlus, Loader2, Plus, Replace, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import type { TemperaLayerImage } from '../../../types';
 import ThemedDialog from '../../shared/ThemedDialog';
@@ -35,7 +35,14 @@ interface TemperaImageLayerDialogProps {
     onClearAll: () => void;
     onDepthChange: (depth: 'back' | 'front') => void;
     onFrequencyChange: (frequency: number) => void;
+    /** Whole-pool zip backup. `mode` decides whether incoming images replace the pool or join it. */
+    onImportPool: (file: File, mode: 'replace' | 'append') => void;
+    onExportPool: () => void;
+    busy: TemperaPoolBusyAction;
 }
+
+/** Which pool-wide file action is in flight, so its button can show a spinner. */
+export type TemperaPoolBusyAction = 'idle' | 'exporting' | 'importing';
 
 interface ChipProps {
     label: string;
@@ -60,6 +67,28 @@ const Chip: React.FC<ChipProps> = ({ label, active, tokens, onClick }) => (
     </button>
 );
 
+interface PoolActionProps {
+    label: string;
+    icon: React.ReactNode;
+    tokens: TemperaDialogTokens;
+    disabled?: boolean;
+    spinning?: boolean;
+    onClick: () => void;
+}
+
+const PoolAction: React.FC<PoolActionProps> = ({ label, icon, tokens, disabled, spinning, onClick }) => (
+    <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-35 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
+        style={{ color: tokens.textPrimary, borderColor: tokens.line }}
+    >
+        {spinning ? <Loader2 size={14} className="animate-spin" /> : icon}
+        {label}
+    </button>
+);
+
 const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     isOpen,
     onClose,
@@ -77,17 +106,34 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     onClearAll,
     onDepthChange,
     onFrequencyChange,
+    onImportPool,
+    onExportPool,
+    busy,
 }) => {
-    const inputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const importInputRef = useRef<HTMLInputElement>(null);
+    const pendingImportModeRef = useRef<'replace' | 'append'>('append');
     const [dragging, setDragging] = useState(false);
     const full = images.length >= maxImages;
     const tokens = temperaDialogTokens(isDaylight);
 
+    const openImportPicker = useCallback((mode: 'replace' | 'append') => {
+        pendingImportModeRef.current = mode;
+        importInputRef.current?.click();
+    }, []);
+
     const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         setDragging(false);
-        onAddFiles(Array.from(event.dataTransfer.files ?? []));
-    }, [onAddFiles]);
+        const files = Array.from(event.dataTransfer.files ?? []);
+        // A dropped zip is a pool backup, not an image; anything else is artwork.
+        const archive = files.find(file => file.name.toLowerCase().endsWith('.zip'));
+        if (archive) {
+            onImportPool(archive, 'append');
+            return;
+        }
+        onAddFiles(files);
+    }, [onAddFiles, onImportPool]);
 
     // Portalled to the document body like the app's other dialogs: both hosts of this panel -
     // VisPlayground and the settings modal - animate a transformed ancestor, and a transformed
@@ -115,109 +161,155 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                 </button>
             )}
             footer={(
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className={`rounded-full border px-5 py-2 text-sm transition-colors ${tokens.hoverSurfaceClass}`}
-                    style={{ color: tokens.textPrimary, borderColor: tokens.line }}
-                >
-                    {t('options.temperaLayerImageSave') || '保存'}
-                </button>
+                <div className="flex w-full flex-wrap items-center gap-2">
+                    <PoolAction
+                        label={t('options.temperaAddLayerImage') || '添加图片'}
+                        icon={<ImagePlus size={14} />}
+                        tokens={tokens}
+                        disabled={full || busy !== 'idle'}
+                        onClick={() => fileInputRef.current?.click()}
+                    />
+                    <PoolAction
+                        label={t('options.temperaImportAppendImages') || '追加导入'}
+                        icon={<Plus size={14} />}
+                        tokens={tokens}
+                        disabled={full || busy !== 'idle'}
+                        onClick={() => openImportPicker('append')}
+                    />
+                    <PoolAction
+                        label={t('options.temperaImportReplaceImages') || '替换导入'}
+                        icon={<Replace size={14} />}
+                        tokens={tokens}
+                        disabled={busy !== 'idle'}
+                        onClick={() => openImportPicker('replace')}
+                    />
+                    <PoolAction
+                        label={t('options.temperaExportImages') || '导出'}
+                        icon={<Download size={14} />}
+                        tokens={tokens}
+                        disabled={images.length === 0 || busy !== 'idle'}
+                        spinning={busy === 'exporting'}
+                        onClick={onExportPool}
+                    />
+                    <span className="ml-auto flex items-center gap-3">
+                        <span className="text-xs opacity-60" style={{ color: tokens.textSecondary }}>
+                            {t('options.temperaImagePoolCount', {
+                                defaultValue: '{{count}} / {{max}}',
+                                count: images.length,
+                                max: maxImages,
+                            })}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className={`rounded-full border px-5 py-2 text-sm transition-colors ${tokens.hoverSurfaceClass}`}
+                            style={{ color: tokens.textPrimary, borderColor: tokens.line }}
+                        >
+                            {t('options.temperaLayerImageSave') || '保存'}
+                        </button>
+                    </span>
+                </div>
             )}
         >
-            <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1" style={temperaDialogTextVars(tokens)}>
-                <div
-                    className="space-y-3 rounded-2xl border p-4"
-                    style={{ borderColor: tokens.line, backgroundColor: tokens.surface }}
-                >
-                    <div className="space-y-2">
-                        <span className="text-sm" style={{ color: tokens.textPrimary }}>
-                            {t('options.temperaLayerImageDepth') || '图层位置'}
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                            {([
-                                ['back', t('options.temperaLayerImageBack') || '歌词之后'],
-                                ['front', t('options.temperaLayerImageFront') || '歌词之前'],
-                            ] as const).map(([value, label]) => (
-                                <Chip
-                                    key={value}
-                                    label={label}
-                                    active={depth === value}
+            <div
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className="flex min-h-0 flex-col gap-4 rounded-2xl border border-dashed p-4"
+                style={{ borderColor: dragging ? tokens.textPrimary : 'transparent' }}
+            >
+                <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1" style={temperaDialogTextVars(tokens)}>
+                    <div
+                        className="space-y-3 rounded-2xl border p-4"
+                        style={{ borderColor: tokens.line, backgroundColor: tokens.surface }}
+                    >
+                        <div className="space-y-2">
+                            <span className="text-sm" style={{ color: tokens.textPrimary }}>
+                                {t('options.temperaLayerImageDepth') || '图层位置'}
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                                {([
+                                    ['back', t('options.temperaLayerImageBack') || '歌词之后'],
+                                    ['front', t('options.temperaLayerImageFront') || '歌词之前'],
+                                ] as const).map(([value, label]) => (
+                                    <Chip
+                                        key={value}
+                                        label={label}
+                                        active={depth === value}
+                                        tokens={tokens}
+                                        onClick={() => onDepthChange(value)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        <TemperaRangeControl
+                            label={t('options.temperaLayerImageFrequency') || '出现频率'}
+                            value={frequency}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            rangeInputClass={rangeInputClass}
+                            onChange={onFrequencyChange}
+                        />
+                    </div>
+
+                    {images.length === 0 ? (
+                        <p className="py-6 text-center text-xs opacity-50" style={{ color: tokens.textSecondary }}>
+                            {t('options.temperaLayerImageEmpty') || '还没有图片。加入立绘、logo 或纹理后，每个分镜会随机取用。'}
+                        </p>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {images.map(image => (
+                                <TemperaImagePlacementEditor
+                                    key={image.id}
+                                    image={image}
+                                    thumbnail={thumbnails.get(image.id)}
+                                    t={t}
                                     tokens={tokens}
-                                    onClick={() => onDepthChange(value)}
+                                    rangeInputClass={rangeInputClass}
+                                    onPatch={onPatch}
+                                    onRemove={onRemove}
                                 />
                             ))}
                         </div>
-                    </div>
-                    <TemperaRangeControl
-                        label={t('options.temperaLayerImageFrequency') || '出现频率'}
-                        value={frequency}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        rangeInputClass={rangeInputClass}
-                        onChange={onFrequencyChange}
-                    />
+                    )}
                 </div>
 
-                <input
-                    ref={inputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => {
-                        onAddFiles(Array.from(event.target.files ?? []));
-                        event.target.value = '';
-                    }}
-                />
-                <div
-                    onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={handleDrop}
-                    className="flex flex-col items-center gap-2 rounded-2xl border border-dashed p-5 text-center transition-colors"
-                    style={{
-                        borderColor: dragging ? tokens.textPrimary : tokens.lineStrong,
-                        backgroundColor: dragging ? tokens.surface : 'transparent',
-                    }}
-                >
-                    <ImagePlus size={20} style={{ color: tokens.textSecondary }} className="opacity-60" />
-                    <button
-                        type="button"
-                        disabled={full}
-                        onClick={() => inputRef.current?.click()}
-                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
-                        style={{ color: tokens.textPrimary, borderColor: tokens.line }}
-                    >
-                        <Upload size={14} />
-                        {t('options.temperaAddLayerImage') || '添加图片'}
-                    </button>
-                    <span className="text-xs opacity-50" style={{ color: tokens.textSecondary }}>
-                        {t('options.temperaLayerImageDropHint') || '也可以把文件拖到这里'} · {images.length} / {maxImages}
-                    </span>
-                </div>
-
-                {images.length === 0 ? (
-                    <p className="py-6 text-center text-xs opacity-50" style={{ color: tokens.textSecondary }}>
-                        {t('options.temperaLayerImageEmpty') || '还没有图片。加入立绘、logo 或纹理后，每个分镜会随机取用。'}
+                {/* The drop hint stays at the bottom of the drop area: the pool can run several
+                    screens long when it holds sixteen entries, and a hint that scrolled with the
+                    list would be off-screen exactly when a file is being dragged in. Hidden once
+                    the pool is full, because there is then nothing a drop can do - the images
+                    would be refused, and the hint would be promising the opposite. The drop zone
+                    itself stays live: a zip can still replace the whole pool. */}
+                {!full && (
+                    <p className="text-xs opacity-50" style={{ color: tokens.textSecondary }}>
+                        {t('options.temperaLayerImageDropHint') || '也可以把文件拖到这里'}
                     </p>
-                ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        {images.map(image => (
-                            <TemperaImagePlacementEditor
-                                key={image.id}
-                                image={image}
-                                thumbnail={thumbnails.get(image.id)}
-                                t={t}
-                                tokens={tokens}
-                                rangeInputClass={rangeInputClass}
-                                onPatch={onPatch}
-                                onRemove={onRemove}
-                            />
-                        ))}
-                    </div>
                 )}
             </div>
+
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                    onAddFiles(Array.from(event.target.files ?? []));
+                    event.target.value = '';
+                }}
+            />
+            <input
+                ref={importInputRef}
+                type="file"
+                accept="application/zip,.zip"
+                className="hidden"
+                onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) onImportPool(file, pendingImportModeRef.current);
+                    event.target.value = '';
+                }}
+            />
         </ThemedDialog>
     ), document.body);
 };
