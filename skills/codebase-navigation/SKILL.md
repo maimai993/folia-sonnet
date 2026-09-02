@@ -8,7 +8,7 @@ description: Use when you need to locate code in this repository - unfamiliar ar
 **先读 `docs/CODEMAP.md`，再用 rg，最后才用 cli。**
 
 这份 skill 不维护路径表，`CODEMAP.md` 也不是人写的——它由 `npm run codemap` 从编译器和模块图
-生成，CI 会比对。仓库有 1300 个源文件、3800 条依赖，任何手写清单都覆盖不全且必然过期
+生成，main 落地后由 `codemap-sync` workflow 自动重生成并提交。仓库有 1300 个源文件、3800 条依赖，任何手写清单都覆盖不全且必然过期
 （这里曾同时存在 7 处死引用，visualizer 模式清单也少了两个）。
 
 ## 三层，按成本从低到高

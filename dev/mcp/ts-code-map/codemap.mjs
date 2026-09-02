@@ -11,9 +11,9 @@ import { buildModuleGraph, edgeKey } from './graph/modules.mjs';
  *
  * 存在的理由：手维护的路径表必然过期（这个仓库的 skill 里曾同时存在 7 处死引用，
  * visualizer 模式清单也少了两个）。地图改成生成的之后，过期在结构上就不可能发生——
- * CI 会重新生成并比对，有 diff 就失败。
+ * `codemap-sync` workflow 在 main 上重新生成，有 diff 就提交。
  *
- * 输出必须是确定性的：所有集合都排序，否则 CI 每次都会报假 diff。
+ * 输出必须是确定性的：所有集合都排序，否则每次 push 都会产生一个假的同步提交。
  */
 
 const HUB_COUNT = 15;
