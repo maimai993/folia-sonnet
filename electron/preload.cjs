@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld('electron', {
     fetchLyricProxy: (url, init) => ipcRenderer.invoke('lyric-proxy-fetch', url, init),
     getNeteasePort: () => ipcRenderer.invoke('get-netease-port'),
     getNeteaseApiStatus: () => ipcRenderer.invoke('get-netease-api-status'),
+    restartNeteaseApi: () => ipcRenderer.invoke('restart-netease-api'),
     onNeteaseApiStatusChanged: (callback) => {
         const listener = (_event, status) => callback(status);
         ipcRenderer.on('netease-api-status-changed', listener);

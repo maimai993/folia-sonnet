@@ -3,8 +3,33 @@
 const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_BASE_DELAY_MS = 250;
 const DEFAULT_RETRY_JITTER_MS = 100;
+const DEFAULT_OPERATION_TIMEOUT_MS = 10000;
 
 const wait = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+// Bounds a single startup network call. The upstream api-enhanced requests carry no axios timeout,
+// so a black-holed route to interface.music.163.com would otherwise stall startup until the OS
+// gives up on the socket (minutes on some platforms). Pass timeoutMs = 0 to opt out.
+function withTimeout(promise, timeoutMs, label) {
+  if (!(timeoutMs > 0)) {
+    return promise;
+  }
+
+  let timer = null;
+  return Promise.race([
+    promise,
+    new Promise((_resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  });
+}
 
 function getErrorMessage(error) {
   if (error instanceof Error && error.message) {
@@ -85,11 +110,16 @@ async function resolveXeapiPublicKey({
   getXeapiPublicKey,
   logger = console,
   retryOptions,
+  timeoutMs = DEFAULT_OPERATION_TIMEOUT_MS,
 }) {
   try {
     const publicKey = await retryStartupOperation(
       async () => {
-        const refreshedPublicKey = await getXeapiPublicKey(currentPublicKey, deviceId);
+        const refreshedPublicKey = await withTimeout(
+          getXeapiPublicKey(currentPublicKey, deviceId),
+          timeoutMs,
+          'xeapi public key refresh',
+        );
         if (!hasUsableXeapiPublicKey(refreshedPublicKey)) {
           throw new Error('xeapi public key response missing sk');
         }
@@ -126,10 +156,15 @@ async function refreshAnonymousToken({
   persistToken,
   logger = console,
   retryOptions,
+  timeoutMs = DEFAULT_OPERATION_TIMEOUT_MS,
 }) {
   try {
     await retryStartupOperation(async () => {
-      const registration = await registerAnonymous();
+      const registration = await withTimeout(
+        registerAnonymous(),
+        timeoutMs,
+        'anonymous registration',
+      );
       const anonymousCookie = getAnonymousCookie(registration);
       if (!anonymousCookie.trim()) {
         throw new Error(
@@ -162,8 +197,10 @@ async function refreshAnonymousToken({
 }
 
 module.exports = {
+  DEFAULT_OPERATION_TIMEOUT_MS,
   hasUsableXeapiPublicKey,
   refreshAnonymousToken,
   resolveXeapiPublicKey,
   retryStartupOperation,
+  withTimeout,
 };

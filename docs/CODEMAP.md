@@ -5,7 +5,7 @@
 全部内容由 TypeScript 编译器和模块图推导，不是人工维护的清单。
 想知道某个具体符号在哪，用 `node dev/mcp/ts-code-map/cli.mjs search '{"query":"..."}'`。
 
-规模：1309 个源文件，3804 条模块依赖（893 条是纯类型导入，运行时不存在；74 条是动态 `import()`，由 bundler 切成独立 chunk，不进首屏）。
+规模：1310 个源文件，3806 条模块依赖（893 条是纯类型导入，运行时不存在；74 条是动态 `import()`，由 bundler 切成独立 chunk，不进首屏）。
 
 ## 区域分布
 
@@ -17,7 +17,7 @@
 | utils | 115 |
 | hooks | 61 |
 | backend/electron | 54 |
-| stores | 28 |
+| stores | 29 |
 | 其他 | 19 |
 | src (其他) | 13 |
 | types | 13 |

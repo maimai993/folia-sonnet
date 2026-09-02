@@ -1,4 +1,4 @@
-import { Check, Loader2, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, RotateCcw, ServerCog, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // src/components/app/home/OnlineProviderLoginModal.tsx
@@ -15,6 +15,17 @@ type LoginMethodsProps = {
     onSelect: (id: string) => void;
 };
 
+// 后端没起来时二维码永远拿不到，重试只会再报一次同样的错。这里直接把二维码换成失败原因
+// 和「重启后端」按钮，让用户不必重开整个 App。
+type BackendFailureProps = {
+    title: string;
+    detail: string | null;
+    restartLabel: string;
+    restartingLabel: string;
+    restarting: boolean;
+    onRestart: () => void;
+};
+
 type OnlineProviderLoginModalProps = {
     title: string;
     note: string;
@@ -24,6 +35,7 @@ type OnlineProviderLoginModalProps = {
     retryLabel: string;
     closeLabel: string;
     loginMethods?: LoginMethodsProps;
+    backendFailure?: BackendFailureProps;
     onRetry: () => void;
     onClose: () => void;
 };
@@ -37,12 +49,14 @@ const OnlineProviderLoginModal = ({
     retryLabel,
     closeLabel,
     loginMethods,
+    backendFailure,
     onRetry,
     onClose,
 }: OnlineProviderLoginModalProps) => {
     // 步骤一：还没选登录方式，二维码区显示占位框，且不会向后端发出任何请求。
     const awaitingMethod = Boolean(loginMethods) && loginMethods?.selectedId == null;
-    const canRetry = (state === 'expired' || state === 'error') && !awaitingMethod;
+    // 后端故障优先于其余所有状态：这时候刷新二维码没有意义。
+    const canRetry = (state === 'expired' || state === 'error') && !awaitingMethod && !backendFailure;
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -106,7 +120,17 @@ const OnlineProviderLoginModal = ({
                     </div>
                 )}
                 <div className="relative inline-block bg-white p-2 rounded-xl mb-4 shadow-inner">
-                    {awaitingMethod ? (
+                    {backendFailure ? (
+                        <div className="w-40 h-40 flex flex-col items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 text-center">
+                            <AlertTriangle className="text-red-500 shrink-0" size={22} />
+                            <p className="text-[11px] font-semibold leading-snug text-red-600">{backendFailure.title}</p>
+                            {backendFailure.detail && (
+                                <p className="max-h-14 w-full overflow-y-auto break-words text-[9px] leading-tight text-red-500/80">
+                                    {backendFailure.detail}
+                                </p>
+                            )}
+                        </div>
+                    ) : awaitingMethod ? (
                         <div className="w-40 h-40 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 px-4 text-center text-[11px] font-medium leading-snug text-gray-400">
                             {loginMethods?.pendingText}
                         </div>
@@ -125,8 +149,21 @@ const OnlineProviderLoginModal = ({
                 )}
                 {/* 步骤一不显示状态文案：关窗重开时 hook 里还留着上一轮的状态，照原样显示会是过期信息。 */}
                 <p className={`text-xs font-medium mt-2 ${state === 'confirmed' ? 'text-green-400' : 'opacity-60'}`} style={{ color: state === 'confirmed' ? undefined : 'var(--text-secondary)' }}>
-                    {awaitingMethod ? '' : statusText}
+                    {awaitingMethod || backendFailure ? '' : statusText}
                 </p>
+                {backendFailure && (
+                    <button
+                        type="button"
+                        onClick={backendFailure.onRestart}
+                        disabled={backendFailure.restarting}
+                        className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-default"
+                    >
+                        {backendFailure.restarting
+                            ? <Loader2 size={13} className="animate-spin" />
+                            : <ServerCog size={13} />}
+                        {backendFailure.restarting ? backendFailure.restartingLabel : backendFailure.restartLabel}
+                    </button>
+                )}
                 {canRetry && (
                     <button type="button" onClick={onRetry} className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors">
                         <RotateCcw size={13} />

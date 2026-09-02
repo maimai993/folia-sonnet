@@ -36,14 +36,50 @@ const getConfiguredApiBase = () => {
   return null;
 };
 
-const getApiBase = async () => {
-  if (API_BASE) return API_BASE;
+// Thrown when the Electron backend is not listening. The QR login modal keys its "restart backend"
+// overlay off this, so it must stay distinguishable from an ordinary request failure.
+export const NETEASE_API_UNAVAILABLE = 'NETEASE_API_UNAVAILABLE';
 
-  if (isElectronRuntime()) {
-    const port = await getElectronBridge().getNeteasePort();
-    API_BASE = `http://localhost:${port}`;
-    return API_BASE;
+const NETEASE_PORT_POLL_INTERVAL_MS = 250;
+// Backstop only. The main process bounds every startup network call, so `starting` always resolves
+// well inside this; the deadline exists so a wedged backend cannot hang a request forever.
+const NETEASE_PORT_WAIT_TIMEOUT_MS = 45000;
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+// The Electron backend no longer blocks window creation, so the renderer can outrun it. Wait while
+// it is still starting, but return null the moment it reports a failure — the login modal turns
+// that into a restart button rather than another opaque request error.
+const waitForNeteasePort = async (bridge: any): Promise<number | null> => {
+  const deadline = Date.now() + NETEASE_PORT_WAIT_TIMEOUT_MS;
+
+  for (;;) {
+    const port = await bridge.getNeteasePort();
+    if (Number.isInteger(port) && port > 0) return port;
+
+    const status = typeof bridge.getNeteaseApiStatus === 'function'
+      ? await bridge.getNeteaseApiStatus()
+      : null;
+    if (status?.status !== 'starting' || Date.now() >= deadline) return null;
+
+    await delay(NETEASE_PORT_POLL_INTERVAL_MS);
   }
+};
+
+const getApiBase = async () => {
+  // Deliberately uncached under Electron: the local server starts asynchronously and can be
+  // restarted from the login modal on a fresh port. Caching the first answer used to pin the
+  // renderer to the dead default port for the rest of the session, so every online feature kept
+  // failing with a bare network error long after the backend recovered.
+  if (isElectronRuntime()) {
+    const port = await waitForNeteasePort(getElectronBridge());
+    if (port === null) {
+      throw new Error(NETEASE_API_UNAVAILABLE);
+    }
+    return `http://localhost:${port}`;
+  }
+
+  if (API_BASE) return API_BASE;
 
   const configuredApiBase = getConfiguredApiBase();
   if (configuredApiBase) {

@@ -13,6 +13,9 @@ const {
     }>;
 };
 
+// 上游 axios 请求没有超时，网络黑洞时会一直挂住；这里用一个永不 settle 的 promise 模拟。
+const neverSettles = () => new Promise(() => {});
+
 const quietLogger = {
     warn: vi.fn(),
 };
@@ -153,6 +156,41 @@ describe('NetEase API startup recovery', () => {
             persistToken,
             logger: quietLogger,
             retryOptions: immediateRetryOptions(),
+        });
+
+        expect(refreshed).toBe(false);
+        expect(registerAnonymous).toHaveBeenCalledTimes(3);
+        expect(persistToken).not.toHaveBeenCalled();
+    });
+
+    it('times out a hung xeapi refresh instead of stalling startup', async () => {
+        const cachedKey = { sk: 'cached-key', version: '1' };
+        const getXeapiPublicKey = vi.fn(neverSettles);
+
+        const result = await resolveXeapiPublicKey({
+            currentPublicKey: cachedKey,
+            deviceId: 'device-id',
+            getXeapiPublicKey,
+            logger: quietLogger,
+            retryOptions: immediateRetryOptions(),
+            timeoutMs: 5,
+        });
+
+        expect(result).toEqual({ publicKey: cachedKey, refreshed: false });
+        expect(getXeapiPublicKey).toHaveBeenCalledTimes(3);
+    });
+
+    it('times out a hung anonymous registration instead of stalling startup', async () => {
+        const registerAnonymous = vi.fn(neverSettles);
+        const persistToken = vi.fn();
+
+        const refreshed = await refreshAnonymousToken({
+            registerAnonymous,
+            cookieToJson: vi.fn(),
+            persistToken,
+            logger: quietLogger,
+            retryOptions: immediateRetryOptions(),
+            timeoutMs: 5,
         });
 
         expect(refreshed).toBe(false);

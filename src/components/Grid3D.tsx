@@ -31,6 +31,7 @@ import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineM
 import qqIcon from '../assets/providers/qq.svg';
 import wechatIcon from '../assets/providers/wechat.svg';
 import { useHomeLayoutSettingsStore } from '../stores/useHomeLayoutSettingsStore';
+import { useNeteaseApiStatusStore } from '../stores/useNeteaseApiStatusStore';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 import { countRender } from '../dev/renderCount';
 
@@ -321,6 +322,23 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         // 有多种登录方式时先停在步骤一，选定之前不向后端要二维码。
         if (methods.length > 0) return;
         await startQrLogin(providerId);
+    };
+
+    // 网易云的本地后端起不来时，二维码请求必然失败；弹窗改为直接暴露原因和重启入口。
+    const neteaseApiSupported = useNeteaseApiStatusStore(state => state.supported);
+    const neteaseApiStatus = useNeteaseApiStatusStore(state => state.status);
+    const neteaseApiRestarting = useNeteaseApiStatusStore(state => state.restarting);
+    const restartNeteaseApi = useNeteaseApiStatusStore(state => state.restart);
+    const neteaseBackendFailed = neteaseApiSupported
+        && loginProviderId === 'netease'
+        && neteaseApiStatus?.status === 'error';
+
+    const handleRestartNeteaseApi = async () => {
+        await restartNeteaseApi();
+        // 重启成功后直接把二维码要回来，省掉一次手动刷新。
+        if (useNeteaseApiStatusStore.getState().status?.status === 'running') {
+            await startQrLogin('netease');
+        }
     };
 
     const selectLoginMethod = (methodId: string) => {
@@ -932,6 +950,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 })),
                                 selectedId: selectedLoginMethodId,
                                 onSelect: selectLoginMethod,
+                            }
+                            : undefined}
+                        backendFailure={neteaseBackendFailed
+                            ? {
+                                title: t('home.loginBackendDown'),
+                                detail: neteaseApiStatus?.error ?? null,
+                                restartLabel: t('home.restartBackend'),
+                                restartingLabel: t('home.restartingBackend'),
+                                restarting: neteaseApiRestarting,
+                                onRestart: () => void handleRestartNeteaseApi(),
                             }
                             : undefined}
                         // 刷新时保留已选的登录方式，否则用户会被踢回步骤一。

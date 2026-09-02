@@ -2972,7 +2972,9 @@ const {
 } = require('./qqApiStartup.cjs');
 
 const net = require('net');
-let assignedPort = 30000; // default fallback
+// null until serveNcmApi is actually listening. A numeric fallback used to be handed to the
+// renderer on failure, which turned "backend never started" into an opaque fetch error.
+let assignedPort = null;
 const NETEASE_API_STATUS_CHANNEL = 'netease-api-status-changed';
 let neteaseApiStatus = {
   status: 'starting',
@@ -3046,6 +3048,9 @@ async function initializeNcmApiRuntime() {
   if (refreshed) {
     fs.writeFileSync(xeapiPublicKeyPath, JSON.stringify(nextPublicKey), 'utf-8');
   }
+  console.log(
+    `[Netease API] xeapi public key ready (source=${refreshed ? 'network' : 'cache'}, version=${nextPublicKey?.version ?? 'unknown'})`,
+  );
 
   await refreshAnonymousToken({
     registerAnonymous: register_anonimous,
@@ -3064,9 +3069,30 @@ async function startApi() {
     updateNeteaseApiStatus({ status: 'running', port: assignedPort, error: null });
     console.log('Netease API started on port', assignedPort);
   } catch (e) {
+    assignedPort = null;
     updateNeteaseApiStatus({ status: 'error', port: null, error: serializeError(e) });
     console.error('Failed to start Netease API', e);
   }
+
+  return neteaseApiStatus;
+}
+
+let neteaseApiStartPromise = null;
+
+// Serializes start attempts. The renderer can now ask for a restart, and serveNcmApi has no
+// shutdown hook, so a second concurrent attempt would leak a listening server on another port.
+function startNeteaseApi() {
+  if (neteaseApiStatus.status === 'running') {
+    return Promise.resolve(neteaseApiStatus);
+  }
+
+  if (!neteaseApiStartPromise) {
+    neteaseApiStartPromise = startApi().finally(() => {
+      neteaseApiStartPromise = null;
+    });
+  }
+
+  return neteaseApiStartPromise;
 }
 
 const QQ_API_STATUS_CHANNEL = 'qq-api-status-changed';
@@ -4119,7 +4145,10 @@ app.whenReady().then(async () => {
   });
 
   setupAutoUpdater();
-  await startApi();
+  // Not awaited: this performs network round trips (xeapi key, anonymous token) that used to keep
+  // the window from appearing at all on a slow or blocked route. Status reaches the renderer over
+  // NETEASE_API_STATUS_CHANNEL, and get-netease-port reports null until the server is listening.
+  void startNeteaseApi();
   await startQqApi();
   try {
     await stageApi.startStageServerIfNeeded();
@@ -4678,6 +4707,8 @@ ipcMain.handle('clear-local-cover-assets', async () => {
 ipcMain.handle('get-netease-port', () => {
   return assignedPort;
 });
+
+ipcMain.handle('restart-netease-api', () => startNeteaseApi());
 
 ipcMain.handle('get-netease-api-status', () => {
   return neteaseApiStatus;

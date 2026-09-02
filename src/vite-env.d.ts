@@ -704,6 +704,7 @@ declare global {
       ) => Promise<ElectronLyricProxyResponse>;
       getNeteasePort: () => Promise<number>;
       getNeteaseApiStatus: () => Promise<ElectronNeteaseApiStatus>;
+      restartNeteaseApi: () => Promise<ElectronNeteaseApiStatus>;
       onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       getKugouApiStatus: () => Promise<ElectronKugouApiStatus>;
       kugouRequest: (
