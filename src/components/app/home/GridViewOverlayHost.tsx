@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import GridView, { GridViewSourceActions } from '../../GridView';
 import ArtistGridView from '../../ArtistGridView';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
@@ -30,6 +29,8 @@ import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/loc
 import { applyLocalSongCoverDisplay } from '../../../services/playbackAdapters';
 import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { countRender } from '../../../dev/renderCount';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -119,9 +120,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     isInteractive = true,
     children,
 }) => {
+    countRender('GridViewOverlayHost');
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);

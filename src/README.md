@@ -71,7 +71,8 @@ App.tsx
 - 外部 surface：`useStagePlaybackController`、`useNowPlayingSource`、`usePlayerCapSource`、`useObsBrowserSourcePublisher`。
 - 恢复、主题和窗口：`useSessionRestoreController`、`useThemeController`、`useAppPreferences`、Electron bridge hooks。
 - 导航/搜索/集合：`useAppNavigation.ts`、`useSearchNavigationStore.ts`、`useCollectionNavigationStore.ts`。
-- 设置/账户/quick editor：`useSettingsUiStore.ts`、`useOnlineProviderAccountStore.ts`、`useThemeQuickEditorStore.ts`。
+- 设置按领域拆分：`useThemeSettingsStore.ts`、`useTypographySettingsStore.ts`、`useLyricSettingsStore.ts`、`useVisualizerSettingsStore.ts`、`useVisualizerAssetStore.ts`、`usePlayerChromeSettingsStore.ts`、`useHomeLayoutSettingsStore.ts`、`useAutomixSettingsStore.ts`、`useAudioSettingsStore.ts`、`useDesktopSettingsStore.ts`、`useStageSettingsStore.ts`、`useSleepTimerStore.ts`、`useSettingsModalStore.ts`。
+- 账户/quick editor：`useOnlineProviderAccountStore.ts`、`useThemeQuickEditorStore.ts`。
 
 ### Services
 

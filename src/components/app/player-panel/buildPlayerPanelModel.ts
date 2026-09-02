@@ -1,6 +1,11 @@
 import type React from 'react';
 import type { RefObject } from 'react';
 import type UnifiedPanel from '../../UnifiedPanel';
+import { setIsPanelOpen, setPanelTab } from '../../../stores/useAppViewStore';
+import { handleSetVisualizerMode } from '../../../stores/useVisualizerSettingsStore';
+import { handleSetVolume, handleToggleMute, setAudioQuality } from '../../../stores/useAudioSettingsStore';
+import { openSettings } from '../../../stores/useSettingsModalStore';
+import { handleToggleCoverColorBg } from '../../../stores/useThemeSettingsStore';
 
 // src/components/app/player-panel/buildPlayerPanelModel.ts
 
@@ -10,24 +15,53 @@ export type PlayerPanelViewModel = {
     panelProps: UnifiedPanelProps;
 };
 
-type BuildPlayerPanelModelParams = {
+// What usePlayerPanelModel can produce for itself: store reads, two theme constants, the four
+// "open what is playing in the grid" entries and the copy-success handler. All 28 used to be named
+// in App.tsx twice - once as an argument and once as a dependency.
+type PlayerPanelAmbient = {
+
     isPanelOpen: boolean;
-    setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     panelTab: UnifiedPanelProps['playback']['currentTab'];
-    setPanelTab: React.Dispatch<React.SetStateAction<UnifiedPanelProps['playback']['currentTab']>>;
+    coverUrl: string | null;
+    isLiked: boolean;
+    hasLyrics: boolean;
+    defaultTheme: UnifiedPanelProps['playback']['defaultTheme'];
+    daylightTheme: UnifiedPanelProps['playback']['daylightTheme'];
+    visualizerMode: UnifiedPanelProps['playback']['visualizerMode'];
+    transparentPlayerBackground: UnifiedPanelProps['playback']['transparentPlayerBackground'];
+    onlineLyricsState: UnifiedPanelProps['playback']['onlineLyricsState'];
+    lyricTimelineOffsetMs: number;
+    replayGainMode: UnifiedPanelProps['playback']['replayGainMode'];
+    isFmMode: boolean;
+    playerState: UnifiedPanelProps['playback']['playerState'];
+    volume: UnifiedPanelProps['playback']['volume'];
+    isMuted: UnifiedPanelProps['playback']['isMuted'];
+    showOpenPanelCloseButton: UnifiedPanelProps['playback']['showOpenPanelCloseButton'];
+    isPanelGuideHotspotActive: boolean;
+    hideToggleButton: boolean;
+    activePlaybackContext: 'main' | 'stage';
+    openCurrentLocalAlbum: UnifiedPanelProps['library']['onOpenCurrentLocalAlbum'];
+    openCurrentLocalArtist: UnifiedPanelProps['library']['onOpenCurrentLocalArtist'];
+    openCurrentNavidromeAlbum: UnifiedPanelProps['library']['onOpenCurrentNavidromeAlbum'];
+    openCurrentNavidromeArtist: UnifiedPanelProps['library']['onOpenCurrentNavidromeArtist'];
+    handleCopySongInfoSuccess: UnifiedPanelProps['library']['onCopySongInfoSuccess'];
+    audioQuality: UnifiedPanelProps['account']['audioQuality'];
+    useCoverColorBg: UnifiedPanelProps['account']['useCoverColorBg'];
+    isDaylight: UnifiedPanelProps['account']['isDaylight'];
+};
+
+// What only the caller can supply: controller callbacks and values App.tsx computes.
+export type PlayerPanelDeps = {
     navigateToHome: UnifiedPanelProps['playback']['onNavigateHome'];
     handleDirectHomeFromPanel: UnifiedPanelProps['playback']['onNavigateHomeDirect'];
-    coverUrl: string | null;
     currentSong: UnifiedPanelProps['playback']['currentSong'];
     handleAlbumSelect: UnifiedPanelProps['playback']['onAlbumSelect'];
     handleArtistSelect: UnifiedPanelProps['playback']['onSelectArtist'];
     effectiveLoopMode: UnifiedPanelProps['playback']['loopMode'];
     toggleLoop: UnifiedPanelProps['playback']['onToggleLoop'];
     handleLike: UnifiedPanelProps['playback']['onLike'];
-    isLiked: boolean;
     generateAITheme: () => void;
     isGeneratingTheme: boolean;
-    hasLyrics: boolean;
     canGenerateAITheme: boolean;
     theme: UnifiedPanelProps['playback']['theme'];
     setTheme: UnifiedPanelProps['playback']['onThemeChange'];
@@ -36,43 +70,24 @@ type BuildPlayerPanelModelParams = {
     hasCustomTheme: UnifiedPanelProps['playback']['hasCustomTheme'];
     themeSourceModel: UnifiedPanelProps['playback']['themeSourceModel'];
     handleResetTheme: UnifiedPanelProps['playback']['onResetTheme'];
-    defaultTheme: UnifiedPanelProps['playback']['defaultTheme'];
-    daylightTheme: UnifiedPanelProps['playback']['daylightTheme'];
-    visualizerMode: UnifiedPanelProps['playback']['visualizerMode'];
-    handleSetVisualizerMode: UnifiedPanelProps['playback']['onVisualizerModeChange'];
-    transparentPlayerBackground: UnifiedPanelProps['playback']['transparentPlayerBackground'];
     toggleTransparentModeWithHandoff: UnifiedPanelProps['playback']['onToggleTransparentPlayerBackground'];
     handleManualMatchOnline: UnifiedPanelProps['playback']['onMatchOnline'];
     handleUpdateLocalLyrics: UnifiedPanelProps['playback']['onUpdateLocalLyrics'];
     handleChangeLyricsSource: UnifiedPanelProps['playback']['onChangeLyricsSource'];
-    onlineLyricsState: UnifiedPanelProps['playback']['onlineLyricsState'];
     handleImportOnlineLyrics: UnifiedPanelProps['playback']['onImportOnlineLyrics'];
     handleChangeOnlineLyricsSource: UnifiedPanelProps['playback']['onChangeOnlineLyricsSource'];
     handleMatchOnlineLyrics: UnifiedPanelProps['playback']['onMatchOnlineLyrics'];
     handleClearOnlineLyricsState: () => void;
-    lyricTimelineOffsetMs: number;
     handleLyricTimelineOffsetChange: UnifiedPanelProps['playback']['onLyricTimelineOffsetChange'];
-    replayGainMode: UnifiedPanelProps['playback']['replayGainMode'];
     handleChangeReplayGainMode: UnifiedPanelProps['playback']['onChangeReplayGainMode'];
-    isFmMode: boolean;
     fmModeLabel: string;
     handleOpenFmModePicker?: () => void;
     handleFmTrash: UnifiedPanelProps['playback']['onFmTrash'];
     handleNextTrack: UnifiedPanelProps['playback']['onNextTrack'];
     handlePrevTrack: UnifiedPanelProps['playback']['onPrevTrack'];
-    playerState: UnifiedPanelProps['playback']['playerState'];
     togglePlay: UnifiedPanelProps['playback']['onTogglePlay'];
-    volume: UnifiedPanelProps['playback']['volume'];
-    isMuted: UnifiedPanelProps['playback']['isMuted'];
     handlePreviewVolume: UnifiedPanelProps['playback']['onVolumePreview'];
-    handleSetVolume: UnifiedPanelProps['playback']['onVolumeChange'];
-    handleToggleMute: UnifiedPanelProps['playback']['onToggleMute'];
-    showOpenPanelCloseButton: UnifiedPanelProps['playback']['showOpenPanelCloseButton'];
-    isPanelGuideHotspotActive: boolean;
-    hideToggleButton: boolean;
-    activePlaybackContext: 'main' | 'stage';
     isNowPlayingControlDisabled: boolean;
-    openSettings: (initialTab: 'help' | 'options') => void;
     openCommandPalette?: UnifiedPanelProps['playback']['onOpenCommandPalette'];
     isCommandPaletteOpen?: boolean;
     playQueue: UnifiedPanelProps['queue']['playQueue'];
@@ -82,39 +97,22 @@ type BuildPlayerPanelModelParams = {
     removeQueueSong: UnifiedPanelProps['queue']['onRemoveSong'];
     moveQueueSongToEnd: UnifiedPanelProps['queue']['onMoveSongToEnd'];
     moveQueueSongToNext: UnifiedPanelProps['queue']['onMoveSongToNext'];
-    localPlaylists: UnifiedPanelProps['library']['localPlaylists'];
-    onlinePlaylists: UnifiedPanelProps['library']['onlinePlaylists'];
     saveCurrentQueueAsLocalPlaylist: UnifiedPanelProps['library']['onSaveCurrentQueueAsPlaylist'];
-    addCurrentSongToLocalPlaylist: UnifiedPanelProps['library']['onAddCurrentSongToLocalPlaylist'];
-    createCurrentLocalPlaylist: UnifiedPanelProps['library']['onCreateCurrentLocalPlaylist'];
-    addCurrentSongToOnlinePlaylist: UnifiedPanelProps['library']['onAddCurrentSongToOnlinePlaylist'];
-    addCurrentSongToNavidromePlaylist: UnifiedPanelProps['library']['onAddCurrentSongToNavidromePlaylist'];
-    createCurrentNavidromePlaylist: UnifiedPanelProps['library']['onCreateCurrentNavidromePlaylist'];
-    openCurrentLocalAlbum: UnifiedPanelProps['library']['onOpenCurrentLocalAlbum'];
-    openCurrentLocalArtist: UnifiedPanelProps['library']['onOpenCurrentLocalArtist'];
-    openCurrentNavidromeAlbum: UnifiedPanelProps['library']['onOpenCurrentNavidromeAlbum'];
-    openCurrentNavidromeArtist: UnifiedPanelProps['library']['onOpenCurrentNavidromeArtist'];
-    handleCopySongInfoSuccess: UnifiedPanelProps['library']['onCopySongInfoSuccess'];
     user: UnifiedPanelProps['account']['user'];
     handleLogout: UnifiedPanelProps['account']['onLogout'];
-    audioQuality: UnifiedPanelProps['account']['audioQuality'];
-    setAudioQuality: UnifiedPanelProps['account']['onAudioQualityChange'];
     cacheSize: UnifiedPanelProps['account']['cacheSize'];
     handleClearCache: UnifiedPanelProps['account']['onClearCache'];
     handleSyncData: UnifiedPanelProps['account']['onSyncData'];
     isSyncing: UnifiedPanelProps['account']['isSyncing'];
-    useCoverColorBg: UnifiedPanelProps['account']['useCoverColorBg'];
-    handleToggleCoverColorBg: UnifiedPanelProps['account']['onToggleCoverColorBg'];
-    isDaylight: UnifiedPanelProps['account']['isDaylight'];
     handleToggleDaylight: () => void;
 };
+
+type BuildPlayerPanelModelParams = PlayerPanelAmbient & PlayerPanelDeps;
 
 // Builds the player panel model from raw app state and actions so App.tsx no longer assembles nested props inline.
 export const buildPlayerPanelModel = ({
     isPanelOpen,
-    setIsPanelOpen,
     panelTab,
-    setPanelTab,
     navigateToHome,
     handleDirectHomeFromPanel,
     coverUrl,
@@ -139,7 +137,6 @@ export const buildPlayerPanelModel = ({
     defaultTheme,
     daylightTheme,
     visualizerMode,
-    handleSetVisualizerMode,
     transparentPlayerBackground,
     toggleTransparentModeWithHandoff,
     handleManualMatchOnline,
@@ -165,14 +162,11 @@ export const buildPlayerPanelModel = ({
     volume,
     isMuted,
     handlePreviewVolume,
-    handleSetVolume,
-    handleToggleMute,
     showOpenPanelCloseButton,
     isPanelGuideHotspotActive,
     hideToggleButton,
     activePlaybackContext,
     isNowPlayingControlDisabled,
-    openSettings,
     openCommandPalette,
     isCommandPaletteOpen,
     playQueue,
@@ -182,14 +176,7 @@ export const buildPlayerPanelModel = ({
     removeQueueSong,
     moveQueueSongToEnd,
     moveQueueSongToNext,
-    localPlaylists,
-    onlinePlaylists,
     saveCurrentQueueAsLocalPlaylist,
-    addCurrentSongToLocalPlaylist,
-    createCurrentLocalPlaylist,
-    addCurrentSongToOnlinePlaylist,
-    addCurrentSongToNavidromePlaylist,
-    createCurrentNavidromePlaylist,
     openCurrentLocalAlbum,
     openCurrentLocalArtist,
     openCurrentNavidromeAlbum,
@@ -198,13 +185,11 @@ export const buildPlayerPanelModel = ({
     user,
     handleLogout,
     audioQuality,
-    setAudioQuality,
     cacheSize,
     handleClearCache,
     handleSyncData,
     isSyncing,
     useCoverColorBg,
-    handleToggleCoverColorBg,
     isDaylight,
     handleToggleDaylight,
 }: BuildPlayerPanelModelParams): PlayerPanelViewModel => ({
@@ -287,14 +272,7 @@ export const buildPlayerPanelModel = ({
             onMoveSongToNext: moveQueueSongToNext,
         },
         library: {
-            localPlaylists,
-            onlinePlaylists,
             onSaveCurrentQueueAsPlaylist: saveCurrentQueueAsLocalPlaylist,
-            onAddCurrentSongToLocalPlaylist: addCurrentSongToLocalPlaylist,
-            onCreateCurrentLocalPlaylist: createCurrentLocalPlaylist,
-            onAddCurrentSongToOnlinePlaylist: addCurrentSongToOnlinePlaylist,
-            onAddCurrentSongToNavidromePlaylist: addCurrentSongToNavidromePlaylist,
-            onCreateCurrentNavidromePlaylist: createCurrentNavidromePlaylist,
             onOpenCurrentLocalAlbum: openCurrentLocalAlbum,
             onOpenCurrentLocalArtist: openCurrentLocalArtist,
             onOpenCurrentNavidromeAlbum: openCurrentNavidromeAlbum,

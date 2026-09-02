@@ -30,6 +30,7 @@ vi.mock('../../../src/stores/useOnlineProviderAccountStore', () => ({
 }));
 
 const { usePersonalFmModeController } = await import('../../../src/hooks/usePersonalFmModeController');
+const { useStatusMessageStore } = await import('../../../src/stores/useStatusMessageStore');
 
 const SONGS = [
     { id: 1, name: 'First' },
@@ -40,18 +41,17 @@ const CURRENT_SONG = { id: 99, name: 'On air' } as never;
 
 const createController = (overrides: { isFmMode?: boolean; currentSong?: unknown } = {}) => {
     const playSong = vi.fn();
-    const setStatusMsg = vi.fn();
     const controller = usePersonalFmModeController({
         isFmMode: overrides.isFmMode ?? true,
         currentSong: (overrides.currentSong === undefined ? CURRENT_SONG : overrides.currentSong) as never,
         playSong,
-        setStatusMsg,
         t: (_key: string, fallback?: string) => fallback ?? '',
     });
-    return { controller, playSong, setStatusMsg };
+    return { controller, playSong };
 };
 
 beforeEach(() => {
+    useStatusMessageStore.setState({ message: null });
     storeMock.selection = { mode: 'DEFAULT', scene: null };
     storeMock.setSelection.mockReset();
     storeMock.setSelection.mockImplementation((selection: typeof storeMock.selection) => selection);
@@ -91,12 +91,12 @@ describe('usePersonalFmModeController', () => {
 
     it('keeps the current track when the new mode returns nothing', async () => {
         omniMock.getPersonalFm.mockResolvedValue([]);
-        const { controller, playSong, setStatusMsg } = createController();
+        const { controller, playSong } = createController();
 
         await controller.setPersonalFmSelection({ mode: 'FAMILIAR', scene: null });
 
         expect(playSong).not.toHaveBeenCalled();
-        expect(setStatusMsg).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+        expect(useStatusMessageStore.getState().message).toMatchObject({ type: 'error' });
     });
 
     it('hides itself when the active provider has no FM modes', () => {

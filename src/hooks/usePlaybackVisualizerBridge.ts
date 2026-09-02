@@ -4,20 +4,17 @@ import type { MotionValue } from 'framer-motion';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
 import { PlayerState } from '../types';
 import type { AudioBands, LyricData } from '../types';
+import { setCurrentLineIndex, setPlayerState } from '../stores/usePlaybackStore';
+import { selectDisplayLyrics, usePlaybackStore } from '../stores/usePlaybackStore';
+import { audioBands, audioPower, currentTime, lyricCurrentTime } from '../stores/motionSignals';
 
 // src/hooks/usePlaybackVisualizerBridge.ts
 
 type UsePlaybackVisualizerBridgeParams = {
+
     audioRef: MutableRefObject<HTMLAudioElement | null>;
     analyserRef: MutableRefObject<AnalyserNode | null>;
     animationFrameRef: MutableRefObject<number>;
-    activePlaybackContext: 'main' | 'stage';
-    audioPower: MotionValue<number>;
-    audioBands: AudioBands;
-    currentTime: MotionValue<number>;
-    lyrics: LyricData | null;
-    playerState: PlayerState;
-    duration: number;
     effectiveLoopMode: 'off' | 'all' | 'one';
     isNowPlayingStageActive: boolean;
     isPlayerCapStageActive: boolean;
@@ -29,15 +26,12 @@ type UsePlaybackVisualizerBridgeParams = {
         baseTimeSec: number;
         startedAtMs: number | null;
     }>;
-    setCurrentLineIndex: React.Dispatch<React.SetStateAction<number>>;
-    setPlayerState: React.Dispatch<React.SetStateAction<PlayerState>>;
     getSyntheticStageLyricsTime: () => number;
     syncStageLyricsClock: (timeSec: number, endTimeSec: number, nextPlayerState: PlayerState, startTimeSec?: number) => void;
     getNowPlayingDisplayTime: () => number;
     getPlayerCapDisplayTime: () => number;
     syncNowPlayingClock: (progressSec: number, durationSec: number, paused: boolean) => void;
     lyricTimelineOffsetMs: number;
-    lyricCurrentTime: MotionValue<number>;
     /** True while an automix handover is in progress and a deck other than the active one sounds. */
     isTransitionAudible: () => boolean;
     /**
@@ -56,31 +50,28 @@ export function usePlaybackVisualizerBridge({
     audioRef,
     analyserRef,
     animationFrameRef,
-    activePlaybackContext,
-    audioPower,
-    audioBands,
-    currentTime,
-    lyrics,
-    playerState,
-    duration,
     effectiveLoopMode,
     isNowPlayingStageActive,
     isPlayerCapStageActive,
     stageActiveEntryKind,
     stageLyricsSession,
     stageLyricsClockRef,
-    setCurrentLineIndex,
-    setPlayerState,
     getSyntheticStageLyricsTime,
     syncStageLyricsClock,
     getNowPlayingDisplayTime,
     getPlayerCapDisplayTime,
     syncNowPlayingClock,
     lyricTimelineOffsetMs,
-    lyricCurrentTime,
     isTransitionAudible,
     getDisplayElement,
 }: UsePlaybackVisualizerBridgeParams) {
+    // Read here rather than passed in: store fields and the module-level motion signals.
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const duration = usePlaybackStore(state => state.duration);
+    // The lyrics on screen, matching the deck getDisplayElement points at.
+    const lyrics = usePlaybackStore(selectDisplayLyrics);
+
     const currentLineIndexRef = useRef(-1);
 
     const updateLoop = useCallback(() => {

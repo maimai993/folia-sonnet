@@ -16,7 +16,10 @@ import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, r
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { extractCfgFromInput } from '@/utils/obsUrl';
 import { DEFAULT_SONNET_TUNING } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore } from '@/stores/useTypographySettingsStore';
+import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '@/stores/useStageSettingsStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -31,18 +34,18 @@ describe('buildVisualSettingsConfig', () => {
         switchMock.mockReset().mockReturnValue(true);
         generationSourceMock.mockReset().mockReturnValue('ai');
         generateMock.mockReset().mockReturnValue(false);
-        useSettingsUiStore.setState({ followSystemTheme: false, isDaylight: false });
+        useThemeSettingsStore.setState({ followSystemTheme: false, isDaylight: false });
     });
 
     it('carries the system theme preference and keeps manual daylight changes authoritative', () => {
-        useSettingsUiStore.setState({ followSystemTheme: true, isDaylight: false });
+        useThemeSettingsStore.setState({ followSystemTheme: true, isDaylight: false });
         expect(buildVisualSettingsConfig().followSystemTheme).toBe(true);
 
         const restored = decompressConfig(compressConfig(buildVisualSettingsConfig()));
         expect(restored.followSystemTheme).toBe(true);
 
-        useSettingsUiStore.getState().setDaylightPreference(true);
-        expect(useSettingsUiStore.getState()).toMatchObject({
+        useThemeSettingsStore.getState().setDaylightPreference(true);
+        expect(useThemeSettingsStore.getState()).toMatchObject({
             followSystemTheme: false,
             isDaylight: true,
         });
@@ -83,7 +86,7 @@ describe('buildVisualSettingsConfig', () => {
     // table was the one place they were missing, so a copied link and the OBS overlay used to fall
     // back to the mode's default weight regardless of the setting.
     it('carries the custom font weights and round-trips them through a copied OBS URL', () => {
-        useSettingsUiStore.setState({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
+        useTypographySettingsStore.setState({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
         const config = buildVisualSettingsConfig();
         expect(config).toMatchObject({ lyricsFontWeight: 700, subtitleFontWeight: 300 });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(config))));
@@ -94,7 +97,7 @@ describe('buildVisualSettingsConfig', () => {
     // null means "use the mode default"; it has to survive the round trip so a config that overrides
     // no weight can reset one that does, rather than being read as "no weight was carried".
     it('round-trips a null weight as the mode default', () => {
-        useSettingsUiStore.setState({ lyricsFontWeight: null, subtitleFontWeight: null });
+        useTypographySettingsStore.setState({ lyricsFontWeight: null, subtitleFontWeight: null });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored.lyricsFontWeight).toBeNull();
         expect(restored.subtitleFontWeight).toBeNull();
@@ -123,13 +126,12 @@ describe('buildVisualSettingsConfig', () => {
     // The five fields that were missing. Booleans and a number, so a regression here reads as a real
     // absence rather than as an empty value the codec is allowed to drop.
     it('carries the background toggles, static mode and the subtitle overlay opacity', () => {
-        useSettingsUiStore.setState({
-            useCoverColorBg: true,
+        useVisualizerSettingsStore.setState({
             disableVisualizerGeometricBackground: true,
             disableVisualizerVignette: true,
-            staticMode: true,
-            subtitleOverlayOpacity: 0.45,
         });
+        useThemeSettingsStore.setState({ useCoverColorBg: true, staticMode: true });
+        useTypographySettingsStore.setState({ subtitleOverlayOpacity: 0.45 });
 
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored).toMatchObject({
@@ -152,7 +154,7 @@ describe('buildVisualSettingsConfig', () => {
             postProcessLensDistortion: 0.65,
             postProcessLensDispersion: 0.45,
         };
-        useSettingsUiStore.setState({ sonnetTuning });
+        useVisualizerSettingsStore.setState({ sonnetTuning });
 
         expect(buildVisualSettingsConfig()).toMatchObject({ sonnetTuning });
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
@@ -174,11 +176,7 @@ describe('buildVisualSettingsConfig', () => {
     // are the interesting values: a truthy-only guard anywhere along the way drops them, and the
     // failure looks like "the card came back" rather than like a lost setting.
     it('carries the now playing card settings and round-trips them through a copied OBS URL', () => {
-        useSettingsUiStore.setState({
-            stageTrackPillMode: 'always',
-            stageTrackPillTimeoutSec: 24,
-            stageTrackPillOnHome: true,
-        });
+        useStageSettingsStore.setState({ stageTrackPillMode: 'always', stageTrackPillTimeoutSec: 24, stageTrackPillOnHome: true });
 
         const config = buildVisualSettingsConfig();
         expect(config).toMatchObject({
@@ -196,7 +194,7 @@ describe('buildVisualSettingsConfig', () => {
     });
 
     it('round-trips a card that is turned off and kept off the home page', () => {
-        useSettingsUiStore.setState({ stageTrackPillMode: 'never', stageTrackPillOnHome: false });
+        useStageSettingsStore.setState({ stageTrackPillMode: 'never', stageTrackPillOnHome: false });
 
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored.stageTrackPillMode).toBe('never');

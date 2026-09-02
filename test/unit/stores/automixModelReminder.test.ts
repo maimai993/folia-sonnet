@@ -19,7 +19,8 @@ vi.mock('@/services/automix/modelAvailability', () => ({
 // own and takes over five seconds inside the full suite - this store pulls in the visualizer
 // registries and half of services/ - so the first version of this file passed alone and timed out
 // in CI. `vi.mock` is hoisted above the imports either way, so the mock still lands.
-import { AUTOMIX_MODEL_REMINDER_MUTED_KEY, shouldRemindAboutModels, useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { AUTOMIX_MODEL_REMINDER_MUTED_KEY, shouldRemindAboutModels } from '@/stores/useAutomixSettingsStore';
+import { useAutomixSettingsStore } from '@/stores/useAutomixSettingsStore';
 
 
 describe('the analysis model reminder', () => {
@@ -71,24 +72,24 @@ describe('the analysis model reminder', () => {
 
     it('only mutes when the mute button was the one pressed', () => {
         // "Got it" closes the prompt for now; it must not be a silent forever.
-        useSettingsUiStore.getState().dismissAutomixModelReminder(false);
+        useAutomixSettingsStore.getState().dismissAutomixModelReminder(false);
         expect(localStorage.getItem(AUTOMIX_MODEL_REMINDER_MUTED_KEY)).toBeNull();
-        expect(useSettingsUiStore.getState().isAutomixModelReminderOpen).toBe(false);
+        expect(useAutomixSettingsStore.getState().isAutomixModelReminderOpen).toBe(false);
 
-        useSettingsUiStore.getState().dismissAutomixModelReminder(true);
+        useAutomixSettingsStore.getState().dismissAutomixModelReminder(true);
         expect(localStorage.getItem(AUTOMIX_MODEL_REMINDER_MUTED_KEY)).toBe('true');
     });
 
     it('opens on the switch going on, and never on it going off', () => {
-        useSettingsUiStore.getState().handleToggleAutomix(true);
-        expect(useSettingsUiStore.getState().isAutomixModelReminderOpen).toBe(true);
+        useAutomixSettingsStore.getState().handleToggleAutomix(true);
+        expect(useAutomixSettingsStore.getState().isAutomixModelReminderOpen).toBe(true);
 
-        useSettingsUiStore.getState().handleToggleAutomix(false);
-        expect(useSettingsUiStore.getState().isAutomixModelReminderOpen).toBe(false);
+        useAutomixSettingsStore.getState().handleToggleAutomix(false);
+        expect(useAutomixSettingsStore.getState().isAutomixModelReminderOpen).toBe(false);
 
         present.beat_this = true;
         present.htdemucs = true;
-        useSettingsUiStore.getState().handleToggleAutomix(true);
-        expect(useSettingsUiStore.getState().isAutomixModelReminderOpen).toBe(false);
+        useAutomixSettingsStore.getState().handleToggleAutomix(true);
+        expect(useAutomixSettingsStore.getState().isAutomixModelReminderOpen).toBe(false);
     });
 });

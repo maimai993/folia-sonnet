@@ -8,12 +8,14 @@ import {
     getVisualizerBackgroundRegistryEntry,
     VISUALIZER_BACKGROUND_REGISTRY,
 } from '../../visualizer/backgrounds/registry';
-import { resolveVisualizerBackgroundMode, useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { resolveVisualizerBackgroundMode } from '../../../stores/visualizerSettingsPersistence';
 import { useVisualizerModeStepper } from '../../../hooks/useVisualizerModeStepper';
 import { QuickControlChip } from '../../shared/QuickControlChip';
 import ModeStepperRow from './ModeStepperRow';
 import ThemeSourceRow from './ThemeSourceRow';
 import { BackgroundModeGlyph, VisualizerModeGlyph } from '../../visualizer/modeGlyphs';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/panelTab/controls/AppearanceSection.tsx
 // 外观区：歌词样式、背景、主题来源三件事放在一起。
@@ -54,15 +56,15 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
     onClosePanel,
 }) => {
     const { t } = useTranslation();
-    const openSettings = useSettingsUiStore(state => state.openSettings);
-    const visualizerBackgroundMode = useSettingsUiStore(state => state.visualizerBackgroundMode);
-    const setVisualizerBackgroundMode = useSettingsUiStore(state => state.handleSetVisualizerBackgroundMode);
-    const monetBackgroundTuning = useSettingsUiStore(state => state.monetBackgroundTuning);
-    const setMonetBackgroundTuning = useSettingsUiStore(state => state.handleSetMonetBackgroundTuning);
-    const nomandBackgroundTuning = useSettingsUiStore(state => state.nomandBackgroundTuning);
-    const setNomandBackgroundTuning = useSettingsUiStore(state => state.handleSetNomandBackgroundTuning);
-    const latentBackgroundTuning = useSettingsUiStore(state => state.latentBackgroundTuning);
-    const setLatentBackgroundTuning = useSettingsUiStore(state => state.handleSetLatentBackgroundTuning);
+    const openSettings = useSettingsModalStore(state => state.openSettings);
+    const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
+    const setVisualizerBackgroundMode = useVisualizerSettingsStore(state => state.handleSetVisualizerBackgroundMode);
+    const monetBackgroundTuning = useVisualizerSettingsStore(state => state.monetBackgroundTuning);
+    const setMonetBackgroundTuning = useVisualizerSettingsStore(state => state.handleSetMonetBackgroundTuning);
+    const nomandBackgroundTuning = useVisualizerSettingsStore(state => state.nomandBackgroundTuning);
+    const setNomandBackgroundTuning = useVisualizerSettingsStore(state => state.handleSetNomandBackgroundTuning);
+    const latentBackgroundTuning = useVisualizerSettingsStore(state => state.latentBackgroundTuning);
+    const setLatentBackgroundTuning = useVisualizerSettingsStore(state => state.handleSetLatentBackgroundTuning);
 
     const visualizerOptions = useMemo(
         () => VISUALIZER_REGISTRY.map(entry => ({

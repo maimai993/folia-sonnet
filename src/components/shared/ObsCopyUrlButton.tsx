@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Copy } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../stores/useStageSettingsStore';
 
 type ObsThemeMode = 'static' | 'builtin' | 'ai';
 
@@ -27,9 +28,9 @@ const MENU_WIDTH = 224; // w-56
 // trigger rect, kept fresh on scroll/resize while open.
 export const ObsCopyUrlButton: React.FC<ObsCopyUrlButtonProps> = ({ onCopy, copied, disabled, buttonClassName }) => {
     const { t } = useTranslation();
-    const mode = useSettingsUiStore((s) => s.webObsThemeMode);
-    const setMode = useSettingsUiStore((s) => s.setWebObsThemeMode);
-    const isDaylight = useSettingsUiStore((s) => s.isDaylight);
+    const mode = useStageSettingsStore((s) => s.webObsThemeMode);
+    const setMode = useStageSettingsStore((s) => s.setWebObsThemeMode);
+    const isDaylight = useThemeSettingsStore((s) => s.isDaylight);
     const [open, setOpen] = useState(false);
     const [openUp, setOpenUp] = useState(false);
     const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);

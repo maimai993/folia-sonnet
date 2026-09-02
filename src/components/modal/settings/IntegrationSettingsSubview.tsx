@@ -12,10 +12,12 @@ import { resolveWebObsTarget } from '../../../utils/webObsTarget';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
 import { resolveObsCopyHintKey } from '../../../utils/visualSettingsConfig';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import type { LyricApiStatus } from '../../../types/lyricApi';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -172,8 +174,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis,
         setPlayerCapSticky,
         setWebStageSource,
-        isDaylight,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useStageSettingsStore(useShallow(state => ({
         playerCapHost: state.playerCapHost,
         playerCapPlayer: state.playerCapPlayer,
         playerCapTimeBasis: state.playerCapTimeBasis,
@@ -183,8 +184,8 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis: state.setPlayerCapTimeBasis,
         setPlayerCapSticky: state.setPlayerCapSticky,
         setWebStageSource: state.setWebStageSource,
-        isDaylight: state.isDaylight,
     })));
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const [playerCapHostDraft, setPlayerCapHostDraft] = useState(playerCapHost);
     useEffect(() => { setPlayerCapHostDraft(playerCapHost); }, [playerCapHost]);
     const playerCapConnected = playerCapConnectionStatus === 'connected';
@@ -244,7 +245,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         // state, so a plain "copied" success would be redundant.
         const hint = resolveObsCopyHintKey();
         if (hint.type === 'info') {
-            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t(hint.key) });
+            setStatusMessage({ type: 'info', text: t(hint.key) });
         }
     };
 

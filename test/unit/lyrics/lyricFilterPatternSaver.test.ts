@@ -28,8 +28,6 @@ describe('lyric filter pattern saver', () => {
             handleSetLyricStaffPattern: vi.fn(),
             loadCurrentSongLyricPreview: vi.fn(async () => null),
             setLyrics,
-            setCurrentLineIndex: vi.fn(),
-            setStatusMsg: vi.fn(),
         });
 
         return { saver, setLyrics };

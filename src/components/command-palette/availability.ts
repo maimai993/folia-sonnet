@@ -1,6 +1,8 @@
+import type { CommandPaletteContext, CommandScope } from './types';
+
 // src/components/command-palette/availability.ts
-// Declarative platform gating for command palette entries, replacing the id switchboard that
-// used to live inside getAvailableCommandPaletteCommands.
+// Declarative platform and scope gating for command palette entries, replacing the id switchboard
+// that used to live inside getAvailableCommandPaletteCommands.
 
 // 'electron' matches any desktop build; the OS names imply desktop; 'web' means a browser
 // without the Electron bridge.
@@ -53,4 +55,23 @@ export const matchesCommandPlatform = (platform?: CommandPlatform[]): boolean =>
         }
         return runtime.isElectron && runtime.os === candidate;
     });
+};
+
+/**
+ * Whether the palette's surroundings are what a command declared it needs: the unified panel only
+ * exists on the player, and a filter only exists where something registered one. They grey out
+ * elsewhere rather than executing into nothing.
+ *
+ * An absent context means "nobody is asking about a live app" (the registry contract test, the
+ * pinned-command picker), and every one of those callers wants the full list — same convention as
+ * the rest of the registry's gating.
+ */
+export const matchesCommandScope = (scope: CommandScope | undefined, context?: CommandPaletteContext): boolean => {
+    if (!scope || !context) {
+        return true;
+    }
+
+    return scope === 'player-surface'
+        ? context.scope.view === 'player'
+        : context.scope.filter !== null;
 };

@@ -1,12 +1,35 @@
-import type { SettingsUiState } from '../../stores/useSettingsUiStore';
+import { useVisualizerSettingsStore, type VisualizerSettingsState } from '../../stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore, type TypographySettingsState } from '../../stores/useTypographySettingsStore';
+import { useLyricSettingsStore, type LyricSettingsState } from '../../stores/useLyricSettingsStore';
+import { useHomeLayoutSettingsStore, type HomeLayoutSettingsState } from '../../stores/useHomeLayoutSettingsStore';
+import { usePlayerChromeSettingsStore, type PlayerChromeSettingsState } from '../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore, type ThemeSettingsState } from '../../stores/useThemeSettingsStore';
 import type { SyncedSettingsRecord, SyncedVisualSettings } from './syncTypes';
 import { SYNC_SCHEMA_VERSION } from './syncTypes';
 import { applyVisualizerTuningsToSettings, collectVisualizerTunings } from '../../components/visualizer/tuningRegistry';
 
 // src/services/sync/settingsSnapshot.ts
-// Maps the settings store to the syncable visual settings JSON document.
+// Maps the settings stores to the syncable visual settings JSON document.
+//
+// The synced document is deliberately cross-domain — it is one visual config covering both the
+// general settings and the visualizer ones — so this is the single place allowed to read both
+// stores at once. The document's shape is unchanged by that split.
 
-export const buildSyncedVisualSettings = (state: SettingsUiState): SyncedVisualSettings => ({
+/** The two stores the synced visual document spans, read as one snapshot. */
+export type SyncableSettingsState = VisualizerSettingsState
+    & TypographySettingsState & LyricSettingsState
+    & HomeLayoutSettingsState & PlayerChromeSettingsState & ThemeSettingsState;
+
+export const readSyncableSettingsState = (): SyncableSettingsState => ({
+    ...useVisualizerSettingsStore.getState(),
+    ...useTypographySettingsStore.getState(),
+    ...useLyricSettingsStore.getState(),
+    ...useHomeLayoutSettingsStore.getState(),
+    ...usePlayerChromeSettingsStore.getState(),
+    ...useThemeSettingsStore.getState(),
+});
+
+export const buildSyncedVisualSettings = (state: SyncableSettingsState): SyncedVisualSettings => ({
     followSystemTheme: state.followSystemTheme,
     visualizerMode: state.visualizerMode,
     randomVisualizerModePerSong: state.randomVisualizerModePerSong,
@@ -49,7 +72,7 @@ export const buildSyncedVisualSettings = (state: SettingsUiState): SyncedVisualS
 });
 
 export const buildSyncedSettingsRecord = (
-    state: SettingsUiState,
+    state: SyncableSettingsState,
     updatedAt = new Date().toISOString(),
 ): SyncedSettingsRecord => ({
     schemaVersion: SYNC_SCHEMA_VERSION,
@@ -57,12 +80,12 @@ export const buildSyncedSettingsRecord = (
     data: buildSyncedVisualSettings(state),
 });
 
-export const getSyncedSettingsSignature = (state: SettingsUiState) => (
+export const getSyncedSettingsSignature = (state: SyncableSettingsState) => (
     JSON.stringify(buildSyncedVisualSettings(state))
 );
 
 export const applySyncedVisualSettings = (
-    state: SettingsUiState,
+    state: SyncableSettingsState,
     settings: SyncedVisualSettings,
 ) => {
     if (settings.followSystemTheme !== undefined) state.setFollowSystemTheme(Boolean(settings.followSystemTheme));
@@ -91,22 +114,22 @@ export const applySyncedVisualSettings = (
     if (settings.visualizerTunings !== undefined) {
         applyVisualizerTuningsToSettings(state as unknown as Record<string, unknown>, settings.visualizerTunings);
     }
-    if (settings.visualizerTunings === undefined && settings.classicTuning !== undefined) state.handleSetClassicTuning(settings.classicTuning as Parameters<SettingsUiState['handleSetClassicTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.cadenzaTuning !== undefined) state.handleSetCadenzaTuning(settings.cadenzaTuning as Parameters<SettingsUiState['handleSetCadenzaTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.partitaTuning !== undefined) state.handleSetPartitaTuning(settings.partitaTuning as Parameters<SettingsUiState['handleSetPartitaTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.fumeTuning !== undefined) state.handleSetFumeTuning(settings.fumeTuning as Parameters<SettingsUiState['handleSetFumeTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.claddaghTuning !== undefined) state.handleSetCladdaghTuning(settings.claddaghTuning as Parameters<SettingsUiState['handleSetCladdaghTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.cappellaTuning !== undefined) state.handleSetCappellaTuning(settings.cappellaTuning as Parameters<SettingsUiState['handleSetCappellaTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.tiltTuning !== undefined) state.handleSetTiltTuning(settings.tiltTuning as Parameters<SettingsUiState['handleSetTiltTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.dioramaTuning !== undefined) state.handleSetDioramaTuning(settings.dioramaTuning as Parameters<SettingsUiState['handleSetDioramaTuning']>[0]);
-    if (settings.monetBackgroundTuning !== undefined) state.handleSetMonetBackgroundTuning(settings.monetBackgroundTuning as Parameters<SettingsUiState['handleSetMonetBackgroundTuning']>[0]);
-    if (settings.nomandBackgroundTuning !== undefined) state.handleSetNomandBackgroundTuning(settings.nomandBackgroundTuning as Parameters<SettingsUiState['handleSetNomandBackgroundTuning']>[0]);
-    if (settings.latentBackgroundTuning !== undefined) state.handleSetLatentBackgroundTuning(settings.latentBackgroundTuning as Parameters<SettingsUiState['handleSetLatentBackgroundTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.monetTuning !== undefined) state.handleSetMonetTuning(settings.monetTuning as Parameters<SettingsUiState['handleSetMonetTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.pendoloTuning !== undefined) state.handleSetPendoloTuning(settings.pendoloTuning as Parameters<SettingsUiState['handleSetPendoloTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.sonnetTuning !== undefined) state.handleSetSonnetTuning(settings.sonnetTuning as Parameters<SettingsUiState['handleSetSonnetTuning']>[0]);
-    if (settings.visualizerTunings === undefined && settings.temperaTuning !== undefined) state.handleSetTemperaTuning(settings.temperaTuning as Parameters<SettingsUiState['handleSetTemperaTuning']>[0]);
-    if (settings.urlBackgroundList !== undefined) state.handleSetUrlBackgroundList(settings.urlBackgroundList as Parameters<SettingsUiState['handleSetUrlBackgroundList']>[0]);
+    if (settings.visualizerTunings === undefined && settings.classicTuning !== undefined) state.handleSetClassicTuning(settings.classicTuning as Parameters<SyncableSettingsState['handleSetClassicTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.cadenzaTuning !== undefined) state.handleSetCadenzaTuning(settings.cadenzaTuning as Parameters<SyncableSettingsState['handleSetCadenzaTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.partitaTuning !== undefined) state.handleSetPartitaTuning(settings.partitaTuning as Parameters<SyncableSettingsState['handleSetPartitaTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.fumeTuning !== undefined) state.handleSetFumeTuning(settings.fumeTuning as Parameters<SyncableSettingsState['handleSetFumeTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.claddaghTuning !== undefined) state.handleSetCladdaghTuning(settings.claddaghTuning as Parameters<SyncableSettingsState['handleSetCladdaghTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.cappellaTuning !== undefined) state.handleSetCappellaTuning(settings.cappellaTuning as Parameters<SyncableSettingsState['handleSetCappellaTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.tiltTuning !== undefined) state.handleSetTiltTuning(settings.tiltTuning as Parameters<SyncableSettingsState['handleSetTiltTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.dioramaTuning !== undefined) state.handleSetDioramaTuning(settings.dioramaTuning as Parameters<SyncableSettingsState['handleSetDioramaTuning']>[0]);
+    if (settings.monetBackgroundTuning !== undefined) state.handleSetMonetBackgroundTuning(settings.monetBackgroundTuning as Parameters<SyncableSettingsState['handleSetMonetBackgroundTuning']>[0]);
+    if (settings.nomandBackgroundTuning !== undefined) state.handleSetNomandBackgroundTuning(settings.nomandBackgroundTuning as Parameters<SyncableSettingsState['handleSetNomandBackgroundTuning']>[0]);
+    if (settings.latentBackgroundTuning !== undefined) state.handleSetLatentBackgroundTuning(settings.latentBackgroundTuning as Parameters<SyncableSettingsState['handleSetLatentBackgroundTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.monetTuning !== undefined) state.handleSetMonetTuning(settings.monetTuning as Parameters<SyncableSettingsState['handleSetMonetTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.pendoloTuning !== undefined) state.handleSetPendoloTuning(settings.pendoloTuning as Parameters<SyncableSettingsState['handleSetPendoloTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.sonnetTuning !== undefined) state.handleSetSonnetTuning(settings.sonnetTuning as Parameters<SyncableSettingsState['handleSetSonnetTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.temperaTuning !== undefined) state.handleSetTemperaTuning(settings.temperaTuning as Parameters<SyncableSettingsState['handleSetTemperaTuning']>[0]);
+    if (settings.urlBackgroundList !== undefined) state.handleSetUrlBackgroundList(settings.urlBackgroundList as Parameters<SyncableSettingsState['handleSetUrlBackgroundList']>[0]);
     if (settings.urlBackgroundSelectedId !== undefined) state.handleSetUrlBackgroundSelectedId(settings.urlBackgroundSelectedId);
     if (settings.homeLayoutStyle !== undefined) state.handleSetHomeLayoutStyle(settings.homeLayoutStyle);
     if (settings.grid3dCardStyle !== undefined) state.handleSetGrid3dCardStyle(settings.grid3dCardStyle);

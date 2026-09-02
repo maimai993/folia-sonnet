@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Search, Loader2, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../stores/useSearchNavigationStore';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import type { LocalLibraryCatalogSnapshot } from '../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
 import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState, type StatusMessage } from '../types';
@@ -31,6 +30,9 @@ import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccou
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import qqIcon from '../assets/providers/qq.svg';
 import wechatIcon from '../assets/providers/wechat.svg';
+import { useHomeLayoutSettingsStore } from '../stores/useHomeLayoutSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { countRender } from '../dev/renderCount';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -58,18 +60,10 @@ interface Grid3DProps {
     playlists: ProviderCollection[];
     cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
-    isPlaying: boolean;
-    onSelectPlaylist: (playlist: ProviderCollection) => void;
-    onSelectAlbum: (albumId: MediaId) => void;
-    onSelectArtist: (artistId: MediaId) => void;
-    onSelectLocalAlbum?: (albumName: string) => void;
-    onSelectLocalArtist?: (artistName: string) => void;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryCatalogSnapshot;
     localPlaylists: LocalPlaylist[];
     onRefreshLocalSongs: () => Promise<void> | void;
-    onPlayLocalSong: (song: LocalSong, queue?: LocalSong[]) => void;
-    onAddLocalSongToQueue?: (song: LocalSong) => void;
     localMusicState: {
         activeRow: 0 | 1 | 2 | 3;
         selectedGroup: LocalLibraryGroup | null;
@@ -90,10 +84,6 @@ interface Grid3DProps {
         focusedArtistIndex: number;
         focusedPlaylistIndex: number;
     }>>;
-    onMatchSong?: (song: LocalSong) => void;
-    onPlayNavidromeSong?: (song: any, queue?: any[]) => void;
-    onAddNavidromeSongsToQueue?: (songs: any[]) => void;
-    onMatchNavidromeSong?: (song: any) => void;
     navidromeFocusedAlbumIndex?: number;
     setNavidromeFocusedAlbumIndex?: (index: number) => void;
     pendingNavidromeSelection?: any;
@@ -104,7 +94,6 @@ interface Grid3DProps {
     navidromeEnabled?: boolean;
     onPlayAll?: (songs: SongResult[]) => void;
     onAddAllToQueue?: (songs: SongResult[]) => void;
-    onAddSongToQueue?: (song: SongResult) => void;
     onStatusMessage?: (message: StatusMessage) => void;
     onOpenGridView?: (collection: any) => void;
     stageEnabled?: boolean;
@@ -114,6 +103,7 @@ interface Grid3DProps {
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
+    countRender('Grid3D');
     const {
         onPlaySong,
         onBackToPlayer,
@@ -150,12 +140,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const { t } = useTranslation();
     const {
         isDaylight,
+    } = useThemeSettingsStore(useShallow(state => ({
+        isDaylight: state.isDaylight,
+    })));
+    const {
         showHomeTabPlaylist,
         showHomeTabRadio,
         showHomeTabAlbums,
         showHomeTabLocal,
-    } = useSettingsUiStore(useShallow(state => ({
-        isDaylight: state.isDaylight,
+    } = useHomeLayoutSettingsStore(useShallow(state => ({
         showHomeTabPlaylist: state.showHomeTabPlaylist,
         showHomeTabRadio: state.showHomeTabRadio,
         showHomeTabAlbums: state.showHomeTabAlbums,

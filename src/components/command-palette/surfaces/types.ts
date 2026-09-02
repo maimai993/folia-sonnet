@@ -37,12 +37,21 @@ export type CommandSurfaceMatchArgs = {
 
 export type CommandPaletteSurface = {
     /**
+     * How the palette dresses itself for this command. `overlay` is the full-screen panel;
+     * `inline` drops the backdrop, the match list and the pinned row and renders just the input,
+     * portalled into the place the command's own surface points at. Used where the palette stands
+     * in for a control that already had a home on screen.
+     */
+    presentation?: 'overlay' | 'inline';
+    /**
      * Lazily imported so the registry stays a pure-TS module: pulling react-window,
      * react-i18next or the eager visualizer glob into the module graph would break the
      * node-environment registry tests.
+     *
+     * Optional, because an `inline` surface has no body — its input row is the whole UI.
      */
-    load: () => Promise<{ default: React.ComponentType<any> }>;
-    mapProps: (args: CommandSurfaceRenderArgs) => Record<string, unknown>;
+    load?: () => Promise<{ default: React.ComponentType<any> }>;
+    mapProps?: (args: CommandSurfaceRenderArgs) => Record<string, unknown>;
     /** Input element overrides, e.g. the volume command's numeric input. */
     inputProps?: (args: CommandSurfaceRenderArgs) => React.InputHTMLAttributes<HTMLInputElement>;
     /** Replaces the default match list source, e.g. the queue command's songs. */

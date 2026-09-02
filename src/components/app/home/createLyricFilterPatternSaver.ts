@@ -3,6 +3,8 @@ import { clearCacheByCategory } from '../../../services/db';
 import { invalidatePrefetchedLyrics } from '../../../services/prefetchService';
 import type { LyricData, StatusMessage } from '../../../types';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
+import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setCurrentLineIndex } from '../../../stores/usePlaybackStore';
 
 // src/components/app/home/createLyricFilterPatternSaver.ts
 
@@ -24,8 +26,6 @@ type CreateLyricFilterPatternSaverParams = {
     handleSetLyricStaffPattern: (pattern: string) => void;
     loadCurrentSongLyricPreview: () => Promise<LyricData | null>;
     setLyrics: (lyrics: LyricData | null) => void;
-    setCurrentLineIndex: (index: number) => void;
-    setStatusMsg: (message: StatusMessage | null) => void;
 };
 
 // Creates the Home-facing lyric filter save action without keeping the implementation in App.tsx.
@@ -38,8 +38,6 @@ export const createLyricFilterPatternSaver = ({
     handleSetLyricStaffPattern,
     loadCurrentSongLyricPreview,
     setLyrics,
-    setCurrentLineIndex,
-    setStatusMsg,
 }: CreateLyricFilterPatternSaverParams) => {
     return async (draft: LyricFilterSaveDraft) => {
         handleSetLyricFilterPattern(draft.pattern);

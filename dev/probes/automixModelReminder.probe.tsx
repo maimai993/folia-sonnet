@@ -1,7 +1,7 @@
 import React from 'react';
 import AutomixModelReminder from '../../src/components/modal/AutomixModelReminder';
-import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
+import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/automixModelReminder.probe.tsx
 
 /**
@@ -14,7 +14,7 @@ import type { ProbeDefinition } from './definition';
  * 深浅两套都挂出来：按钮的边框和主按钮的底色在白天配色下是另一组值。
  */
 const AutomixModelReminderProbe: React.FC = () => {
-    const isOpen = useSettingsUiStore(state => state.isAutomixModelReminderOpen);
+    const isOpen = useAutomixSettingsStore(state => state.isAutomixModelReminderOpen);
     const [isDaylight, setIsDaylight] = React.useState(false);
 
     return (
@@ -24,7 +24,7 @@ const AutomixModelReminderProbe: React.FC = () => {
                     type="button"
                     data-probe-action="open"
                     className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10"
-                    onClick={() => useSettingsUiStore.setState({ isAutomixModelReminderOpen: true })}
+                    onClick={() => useAutomixSettingsStore.setState({ isAutomixModelReminderOpen: true })}
                 >
                     {isOpen ? '已打开' : '打开提示'}
                 </button>

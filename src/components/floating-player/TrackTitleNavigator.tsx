@@ -2,7 +2,7 @@ import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTrackTitlePreview, type TrackNavSide } from '../../hooks/useTrackTitlePreview';
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 // src/components/floating-player/TrackTitleNavigator.tsx
 
 const PREVIEW_OPACITY = 0.55;
@@ -57,7 +57,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
         leaveZone,
         beginSwitch,
     } = useTrackTitlePreview({ title, trackKey, prevTitle, nextTitle, disabled });
-    const alwaysShowArrows = useSettingsUiStore(state => state.alwaysShowTrackSwitchButtons);
+    const alwaysShowArrows = usePlayerChromeSettingsStore(state => state.alwaysShowTrackSwitchButtons);
 
     const isPreview = previewTitle !== null;
     const zoneClass = 'absolute inset-y-0 flex items-center';

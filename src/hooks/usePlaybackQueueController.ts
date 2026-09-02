@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { MotionValue } from 'framer-motion';
 import { applyOnlineAudioSourceMetadata, loadOnlineSongAudioSource, loadOnlineSongLyrics } from '../services/onlinePlayback';
@@ -29,6 +29,14 @@ import type { LocalLibraryDisplayCatalog } from '../services/playbackAdapters';
 import type { SearchReturnView, SearchSource } from '../stores/useSearchNavigationStore';
 import { dispatchSearchTrackAction } from '../components/app/search/searchTrackActions';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState, usePlaybackStore } from '../stores/usePlaybackStore';
+import { useTranslation } from 'react-i18next';
+import { currentTime } from '../stores/motionSignals';
+import { setIsPanelOpen, setPanelTab } from '../stores/useAppViewStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
+import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/usePlaybackQueueController.ts
 
@@ -55,36 +63,13 @@ type SearchDeps = {
 };
 
 type UsePlaybackQueueControllerParams = {
-    t: (key: string, options?: any) => string;
-    audioQuality: AudioQualityPreference;
-    activePlaybackContext: 'main' | 'stage';
-    currentSong: SongResult | null;
-    playQueue: SongResult[];
-    playerState: PlayerState;
-    loopMode: 'off' | 'all' | 'one';
-    isFmMode: boolean;
+
     isNowPlayingStageActive: boolean;
-    queueAddBehavior: QueueAddBehavior;
-    searchQuery: string;
-    searchSourceTab: SearchSource;
-    searchReturnView: SearchReturnView;
     localSongs: LocalSong[];
     localLibraryCatalog: LocalLibraryDisplayCatalog;
     userId?: MediaId;
-    currentTime: MotionValue<number>;
-    setCurrentSong: SetState<SongResult | null>;
     setLyrics: (nextLyrics: any) => void;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setPlayerState: SetState<PlayerState>;
-    setCurrentLineIndex: SetState<number>;
-    setDuration: SetState<number>;
     setIsLyricsLoading: SetState<boolean>;
-    setStatusMsg: SetState<StatusMessage | null>;
-    setIsFmMode: SetState<boolean>;
-    setPanelTab: SetState<'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'>;
-    setIsPanelOpen: SetState<boolean>;
     navigateToPlayer: () => void;
     navigateToSearch: (args: {
         query: string;
@@ -123,10 +108,7 @@ type UsePlaybackQueueControllerParams = {
         duration: number;
         currentLineIndex: number;
     } | null>;
-    playbackRequestIdRef: MutableRefObject<number>;
     playbackAutoSkipCountRef: MutableRefObject<number>;
-    pendingUnavailableSkipTimerRef: MutableRefObject<number | null>;
-    pendingUnavailableSkipIntervalRef: MutableRefObject<number | null>;
     pendingResumeTimeRef: MutableRefObject<number | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
@@ -157,36 +139,12 @@ type StagePlayerQueueDiffDraft = {
 
 // Owns queue navigation, online playback loading, and search-triggered playback.
 export function usePlaybackQueueController({
-    t,
-    audioQuality,
-    activePlaybackContext,
-    currentSong,
-    playQueue,
-    playerState,
-    loopMode,
-    isFmMode,
     isNowPlayingStageActive,
-    queueAddBehavior,
-    searchQuery,
-    searchSourceTab,
-    searchReturnView,
     localSongs,
     localLibraryCatalog,
     userId,
-    currentTime,
-    setCurrentSong,
     setLyrics,
-    setCachedCoverUrl,
-    setAudioSrc,
-    setPlayQueue,
-    setPlayerState,
-    setCurrentLineIndex,
-    setDuration,
     setIsLyricsLoading,
-    setStatusMsg,
-    setIsFmMode,
-    setPanelTab,
-    setIsPanelOpen,
     navigateToPlayer,
     navigateToSearch,
     persistLastPlaybackCache,
@@ -202,16 +160,35 @@ export function usePlaybackQueueController({
     shouldAutoPlayRef,
     currentSongRef,
     mainPlaybackSnapshotRef,
-    playbackRequestIdRef,
     playbackAutoSkipCountRef,
-    pendingUnavailableSkipTimerRef,
-    pendingUnavailableSkipIntervalRef,
     pendingResumeTimeRef,
     currentOnlineAudioUrlFetchedAtRef,
     lastAudioRecoverySourceRef,
     getDisplaySong,
     endHeldTransition,
 }: UsePlaybackQueueControllerParams) {
+    // Owned here, not passed in: nothing outside this hook reads or writes them. They were declared
+    // in App.tsx only because everything about playback used to be.
+    /** Rising id that lets a newer load invalidate an in-flight older one. */
+    const playbackRequestIdRef = useRef(0);
+    const pendingUnavailableSkipTimerRef = useRef<number | null>(null);
+    const pendingUnavailableSkipIntervalRef = useRef<number | null>(null);
+
+    // Read here rather than passed in: every one of these lives in a store, a module-level setter or
+    // i18n, and App.tsx was naming 15 of them purely to hand them straight back.
+    const { t } = useTranslation();
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+    const queueAddBehavior = useAudioSettingsStore(state => state.queueAddBehavior);
+    const loopMode = useAudioSettingsStore(state => state.loopMode);
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const searchQuery = useSearchNavigationStore(state => state.searchQuery);
+    const searchSourceTab = useSearchNavigationStore(state => state.searchSourceTab);
+    const searchReturnView = useSearchNavigationStore(state => state.searchReturnView);
+
     const [pendingUnavailableReplacement, setPendingUnavailableReplacement] = useState<UnavailableReplacementRequest | null>(null);
 
     const appendOnlineSongsToMainQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
@@ -1290,7 +1267,10 @@ export function usePlaybackQueueController({
         setStatusMsg({ type: 'success', text: t('status.queueCleared') || 'Queue cleared', nonce: Date.now(), durationMs: 1200 });
     }, [currentSong, isNowPlayingStageActive, persistLastPlaybackCache, playQueue, setPlayQueue, setStatusMsg, t]);
 
-    return {
+    // Wrapped so the callbacks this hook hands back keep one identity for the app's lifetime. They
+    // are all invoked from events or effects, and their churn was what kept every build*Model memo
+    // in App.tsx from ever holding - see useStableCallbacks.ts.
+    return useStableActionSurface({
         pendingUnavailableReplacement,
         setPendingUnavailableReplacement,
         clearPendingUnavailableSkip,
@@ -1310,5 +1290,5 @@ export function usePlaybackQueueController({
         handleStageExternalPlayRequest,
         shuffleQueue,
         clearQueue,
-    };
+    });
 }

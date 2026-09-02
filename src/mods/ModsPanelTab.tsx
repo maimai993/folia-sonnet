@@ -4,13 +4,15 @@ import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshC
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { LyricData, SongResult, Theme, VisualizerMode } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
 import { readLyricOffset } from '@/utils/lyrics/lyricOffsetMemory';
 import type { ModRuntimeInfo } from './types';
 import { resolveOnlineLyrics } from '@/utils/onlineLyricsState';
 import { ModSurfaceRenderer } from './ModSurfaceRenderer';
 import { pushRuntimeSnapshot } from './ipc';
 import { useModsStore } from './useModsStore';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
 // src/mods/ModsPanelTab.tsx
 // The mod manager surface rendered as a single-column accordion: each mod
@@ -204,7 +206,7 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
 
     // Lift the current visualizer tunings from the settings store so exports can
     // reproduce the song's animation verbatim (rather than the default settings).
-    const visualizerTunings = useSettingsUiStore(useShallow((state) => ({
+    const visualizerTunings = useVisualizerSettingsStore(useShallow((state) => ({
         classic: state.classicTuning,
         cadenza: state.cadenzaTuning,
         partita: state.partitaTuning,
@@ -218,8 +220,8 @@ const ModsPanelTab: React.FC<ModsPanelTabProps> = ({
         sonnet: state.sonnetTuning,
         tempera: state.temperaTuning,
     })));
-    const globalLyricTimelineOffsetMs = useSettingsUiStore((state) => state.globalLyricTimelineOffsetMs);
-    const isDaylight = useSettingsUiStore((state) => state.isDaylight);
+    const globalLyricTimelineOffsetMs = useLyricSettingsStore((state) => state.globalLyricTimelineOffsetMs);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
 
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

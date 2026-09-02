@@ -1,5 +1,5 @@
 import { PlayerState } from '../../../types';
-import { ListX, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from 'lucide-react';
+import { Heart, ListX, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Star, VolumeX } from 'lucide-react';
 import { executeModeCommand } from './executeModeCommand';
 import { queueCommand } from './queueCommand';
 import { volumeCommand } from './volumeCommand';
@@ -21,6 +21,8 @@ export const playbackCommands: CommandPaletteCommand[] = [
     createReplayGainCommand('album', 'ReplayGain: Album mode', 'Apply album ReplayGain adjustment', ['replaygain album', 'album gain', '专辑增益', '专辑 replaygain', 'zhuanjizengyi', 'zjzy']),
     {
         id: 'playback-equalizer',
+        // It opens the controls panel tab to reach the equalizer, so it needs the player surface.
+        scope: 'player-surface',
         executeShortcut: 'e',
         group: 'playback',
         title: 'Audio effects',
@@ -72,6 +74,40 @@ export const playbackCommands: CommandPaletteCommand[] = [
     createToggleCommand('playback-next', 'playback', 'Next track', 'Play the next track', ['next', '下一首', 'xiayishou', 'xys'], context => context.playback.next(), { icon: SkipForward, executeShortcut: 'n' }),
     createToggleCommand('playback-prev', 'playback', 'Previous track', 'Play the previous track', ['prev', 'previous', '上一首', 'shangyishou', 'sys'], context => context.playback.prev(), { icon: SkipBack, executeShortcut: 'b' }),
     createToggleCommand('playback-loop', 'playback', 'Toggle loop', 'Change loop mode', ['loop', '循环', 'xunhuan', 'xh'], context => context.playback.toggleLoop(), { icon: Repeat, executeShortcut: 'l' }),
+    createToggleCommand(
+        'playback-like',
+        'playback',
+        'Like current song',
+        'Add the current song to your favourites, or take it back out',
+        ['like', 'unlike', 'favourite', 'favorite', 'star', '喜欢', '收藏', '取消收藏', 'xihuan', 'shoucang', 'xh', 'sc'],
+        context => { void context.playback.toggleSongLike(); },
+        {
+            icon: Heart,
+            // Whether it likes or unlikes is the one thing the static title cannot say.
+            isAvailable: context => (context ? Boolean(context.shared.currentSong) : true),
+        },
+    ),
+    createToggleCommand(
+        'playback-add-to-playlist',
+        'playback',
+        'Add to a playlist',
+        'Put the current song in one of your playlists',
+        ['add to playlist', 'playlist', 'collect', '添加到歌单', '收藏到歌单', '加入歌单', 'tianjiadaogedan', 'jiarugedan', 'tjdgd', 'jrgd'],
+        context => context.playback.openAddToPlaylist(),
+        {
+            icon: Star,
+            isAvailable: context => (context ? context.playback.canAddCurrentSongToPlaylist : true),
+        },
+    ),
+    createToggleCommand(
+        'playback-mute',
+        'playback',
+        'Mute',
+        'Silence playback, or bring the sound back',
+        ['mute', 'unmute', 'silence', '静音', '取消静音', 'jingyin', 'jy'],
+        context => context.playback.toggleMute(),
+        { icon: VolumeX },
+    ),
     createToggleCommand('playback-shuffle', 'playback', 'Shuffle queue', 'Shuffle current play queue', ['shuffle queue', 'shuffle', '打乱', '打乱队列', 'daluan', 'daluanduilie', 'dl'], context => context.playback.shuffleQueue(), { icon: Shuffle, executeShortcut: 'r', isAvailable: context => !context?.playback.isFmMode }),
     {
         id: 'playback-clear-queue',

@@ -3,7 +3,6 @@ import { AlertTriangle, Blend, ChevronDown, Disc3, Orbit, Sparkles, Waves } from
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC } from '../../../services/automix/crossfadePlanner';
 import { canAnalyseTracks, type TransitionMode } from '../../../services/automix/transitionStrategy';
 import { transitionCapabilities } from '../../../services/automix/stems';
@@ -12,6 +11,8 @@ import { announceTransition, type TransitionRenderer } from '../../../services/a
 import AutomixModelsSection from './AutomixModelsSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 
 // src/components/modal/settings/TransitionSettingsSection.tsx
 // The Folia transition block on the playback options page: the master switch, the choice between
@@ -48,35 +49,38 @@ const TransitionSettingsSection: React.FC<TransitionSettingsSectionProps> = ({
 }) => {
     const { t } = useTranslation();
     const {
+        enableMediaCache,
+        onToggleMediaCache,
+    } = useAudioSettingsStore(useShallow(state => ({
+        enableMediaCache: state.enableMediaCache,
+        onToggleMediaCache: state.handleToggleMediaCache,
+    })));
+    const {
         automixEnabled,
         transitionMode,
         crossfadeMaxSec,
         transitionPerformance,
         transitionAnimation,
         transitionAnimationCard,
-        enableMediaCache,
         onToggleAutomix,
         onSetTransitionMode,
         onSetCrossfadeMaxSec,
         onToggleTransitionPerformance,
         onToggleTransitionAnimation,
         onToggleTransitionAnimationCard,
-        onToggleMediaCache,
-    } = useSettingsUiStore(useShallow(state => ({
+    } = useAutomixSettingsStore(useShallow(state => ({
         automixEnabled: state.automixEnabled,
         transitionMode: state.transitionMode,
         crossfadeMaxSec: state.crossfadeMaxSec,
         transitionPerformance: state.transitionPerformance,
         transitionAnimation: state.transitionAnimation,
         transitionAnimationCard: state.transitionAnimationCard,
-        enableMediaCache: state.enableMediaCache,
         onToggleAutomix: state.handleToggleAutomix,
         onSetTransitionMode: state.handleSetTransitionMode,
         onSetCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
         onToggleTransitionPerformance: state.handleToggleTransitionPerformance,
         onToggleTransitionAnimation: state.handleToggleTransitionAnimation,
         onToggleTransitionAnimationCard: state.handleToggleTransitionAnimationCard,
-        onToggleMediaCache: state.handleToggleMediaCache,
     })));
 
     const [animationOpen, setAnimationOpen] = React.useState(false);

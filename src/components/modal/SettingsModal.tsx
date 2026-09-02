@@ -21,12 +21,13 @@ import type { PlayerCapConnectionStatus } from '../../types/playerCap';
 import LabSettingsModal from './settings/LabSettingsModal';
 import DeveloperSettingsSubview from './settings/DeveloperSettingsSubview';
 import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
+import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
-import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettingsSection, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
 import SettingsSidebarChips from './settings/navigation/SettingsSidebarChips';
 import SettingsSidebarWide from './settings/navigation/SettingsSidebarWide';
@@ -42,6 +43,18 @@ import type { SongResult } from '../../types';
 import type { ThemeCacheSongKey } from '../../services/themeCache';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import { isMacPlatform as isMac } from '../../utils/platform';
+import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
+import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
+import { selectTypographySettingsSnapshot, useTypographySettingsStore } from '../../stores/useTypographySettingsStore';
+import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
+import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
+import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores/useStageSettingsStore';
+import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
+import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { selectHomeLayoutSettingsSnapshot, useHomeLayoutSettingsStore } from '../../stores/useHomeLayoutSettingsStore';
+import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -161,18 +174,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
     const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
-        useCoverColorBg,
-        staticMode,
-        disableHomeDynamicBackground,
-        hidePlayerProgressBar,
-        hidePlayerTranslationSubtitle,
-        showSubtitleTranslation,
-        subtitleContentMode,
-        hidePlayerRightPanelButton,
-        transparentPlayerBackground,
-        autoHidePlayerChrome,
-        disableVisualizerVignette,
-        disableVisualizerGeometricBackground,
+        grid3dCardStyle,
+        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
+    } = useHomeLayoutSettingsStore(useShallow(selectHomeLayoutSettingsSnapshot));
+    const {
+        enableMediaCache,
+        mediaCacheLimitGb,
+        handleToggleMediaCache: onToggleMediaCache,
+        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
+    } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
+    const {
         minimizeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
@@ -180,88 +191,97 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         wallpaperMode,
         handleToggleWallpaperMode: onToggleWallpaperMode,
         openPlayerOnLaunch,
-        enableMediaCache,
-        mediaCacheLimitGb,
-        backgroundOpacity,
-        subtitleOverlayOpacity,
-        subtitleOverlayBackground,
-        showHarmonySubtitle,
-        harmonySubtitleBackground,
-        visualizerOpacity,
-        visualizerBackgroundMode,
+        handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleVoiceInputPause: onToggleVoiceInputPause,
+        handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
+        handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
+        handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
+    } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
+    const {
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageTrackPillOnHome,
+        handleSetStageTrackPillMode: onChangeStageTrackPillMode,
+        handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
+        handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
+    } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
+    const {
+        useCoverColorBg,
+        staticMode,
+        disableHomeDynamicBackground,
         isDaylight,
         followSystemTheme,
         setDaylightPreference: onSetDaylightPreference,
         setFollowSystemTheme: onSetFollowSystemTheme,
-        visualizerMode,
-        grid3dCardStyle,
-        classicTuning,
-        cadenzaTuning,
-        partitaTuning,
-        fumeTuning,
-        claddaghTuning,
-        cappellaTuning,
-        tiltTuning,
-        dioramaTuning,
-        monetBackgroundTuning,
-        nomandBackgroundTuning,
-        latentBackgroundTuning,
-        monetTuning,
-        pendoloTuning,
-        sonnetTuning,
-        temperaTuning,
-        cappellaCustomEmojiImages,
-        isLoadingCappellaCustomEmojiPack,
-        cappellaCustomAvatarImages,
-        isLoadingCappellaCustomAvatarPack,
-        monetBackgroundImage,
-        isLoadingMonetBackgroundImage,
-        monetPortraitImage,
-        isLoadingMonetPortraitImage,
-        urlBackgroundList,
-        urlBackgroundSelectedId,
+        handleToggleCoverColorBg: onToggleCoverColorBg,
+        handleToggleStaticMode: onToggleStaticMode,
+        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
+    } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
+    const {
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        transparentPlayerBackground,
+        autoHidePlayerChrome,
+        showOpenPanelCloseButton,
+        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
+        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
+        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
+        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
+        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
+    } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
+    const {
+        lyricsCustomFontFamily,
+        lyricsCustomFontLabel,
+    } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
+    const {
+        hidePlayerTranslationSubtitle,
+        showSubtitleTranslation,
+        subtitleContentMode,
+        subtitleOverlayOpacity,
+        subtitleOverlayBackground,
+        showHarmonySubtitle,
+        harmonySubtitleBackground,
         lyricsFontStyle,
         lyricsFontScale,
         subtitleFontScale,
         lyricsFontWeight,
-        lyricsCustomFontFamily,
-        lyricsCustomFontLabel,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
         subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
+        handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation: onToggleShowSubtitleTranslation,
+        handleSetSubtitleContentMode: onSubtitleContentModeChange,
+        handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
+        handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
+        handleToggleShowHarmonySubtitle: onToggleShowHarmonySubtitle,
+        handleToggleHarmonySubtitleBackground: onToggleHarmonySubtitleBackground,
+        handleSetLyricsFontStyle: onLyricsFontStyleChange,
+        handleSetLyricsFontScale: onLyricsFontScaleChange,
+        handleSetSubtitleFontScale: onSubtitleFontScaleChange,
+        handleSetLyricsFontWeight: onLyricsFontWeightChange,
+        handleSetLyricsCustomFont: onLyricsCustomFontChange,
+        handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
+        handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
+        handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
+        handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
+        handleSetSubtitleFontWeight: onSubtitleFontWeightChange,
+        handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
+        handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
+    } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
+    const {
         lyricFilterPattern,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
         lyricStaffAbsorbMode,
         lyricStaffPattern,
-        showOpenPanelCloseButton,
-        handleToggleCoverColorBg: onToggleCoverColorBg,
-        handleToggleStaticMode: onToggleStaticMode,
-        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
-        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
-        handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
-        handleToggleShowSubtitleTranslation: onToggleShowSubtitleTranslation,
-        handleSetSubtitleContentMode: onSubtitleContentModeChange,
-        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
-        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
-        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
+    } = useLyricSettingsStore(useShallow(selectLyricSettingsSnapshot));
+    const {
         handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
         handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
-        handleToggleMinimizeToTray: onToggleMinimizeToTray,
-        handleToggleVoiceInputPause: onToggleVoiceInputPause,
-        handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
-        handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
-        handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
-        handleToggleMediaCache: onToggleMediaCache,
-        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
         handleSetBackgroundOpacity: setBackgroundOpacity,
-        handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
-        handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
-        handleToggleShowHarmonySubtitle: onToggleShowHarmonySubtitle,
-        handleToggleHarmonySubtitleBackground: onToggleHarmonySubtitleBackground,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
         handleSetVisualizerMode: onVisualizerModeChange,
@@ -305,30 +325,45 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleClearCustomCappellaEmojiPack: onClearCappellaCustomEmojiPack,
         handleImportCustomCappellaAvatar: onImportCappellaCustomAvatar,
         handleClearCustomCappellaAvatar: onClearCappellaCustomAvatar,
-        handleSetLyricsFontStyle: onLyricsFontStyleChange,
-        handleSetLyricsFontScale: onLyricsFontScaleChange,
-        handleSetSubtitleFontScale: onSubtitleFontScaleChange,
-        handleSetLyricsFontWeight: onLyricsFontWeightChange,
-        handleSetLyricsCustomFont: onLyricsCustomFontChange,
-        handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
-        handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
-        handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
-        handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
-        handleSetSubtitleFontWeight: onSubtitleFontWeightChange,
-        handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
-        handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
-        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
-        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
-        stageTrackPillMode,
-        stageTrackPillTimeoutSec,
-        stageTrackPillOnHome,
-        handleSetStageTrackPillMode: onChangeStageTrackPillMode,
-        handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
-        handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
-    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
+    const {
+        disableVisualizerVignette,
+        disableVisualizerGeometricBackground,
+        backgroundOpacity,
+        visualizerOpacity,
+        visualizerBackgroundMode,
+        visualizerMode,
+        classicTuning,
+        cadenzaTuning,
+        partitaTuning,
+        fumeTuning,
+        claddaghTuning,
+        cappellaTuning,
+        tiltTuning,
+        dioramaTuning,
+        monetBackgroundTuning,
+        nomandBackgroundTuning,
+        latentBackgroundTuning,
+        monetTuning,
+        pendoloTuning,
+        sonnetTuning,
+        temperaTuning,
+        urlBackgroundList,
+        urlBackgroundSelectedId,
+    } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
+    const {
+        cappellaCustomEmojiImages,
+        isLoadingCappellaCustomEmojiPack,
+        cappellaCustomAvatarImages,
+        isLoadingCappellaCustomAvatarPack,
+        monetBackgroundImage,
+        isLoadingMonetBackgroundImage,
+        monetPortraitImage,
+        isLoadingMonetPortraitImage,
+    } = useVisualizerAssetStore(useShallow(selectVisualizerAssetSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
-    const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
-    const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
+    const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
+    const setIsUserGuideModalOpen = useSettingsModalStore(state => state.setIsUserGuideModalOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [tabDirection, setTabDirection] = useState<'left' | 'right'>('right');
     const handleTabChange = (tab: 'help' | 'options') => {
@@ -364,6 +399,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'appearance' ||
             initialSubview === 'general' ||
             initialSubview === 'playback' ||
+            initialSubview === 'interaction' ||
             initialSubview === 'integration' ||
             initialSubview === 'storage' ||
             initialSubview === 'desktop' ||
@@ -652,7 +688,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const handleOpenBaiduDownload = () => handleOpenDownloadUrl(BAIDU_DOWNLOAD_URL);
 
     // Navidrome Settings State
-    const [navidromeEnabled, setNavidromeEnabledState] = useState(false);
+    // One truth: this used to be a second copy kept in step with App.tsx's by hand.
+    const navidromeEnabled = useLibraryStore(state => state.navidromeEnabled);
     const [navidromeUrl, setNavidromeUrl] = useState('');
     const [navidromeUsername, setNavidromeUsername] = useState('');
     const [navidromePassword, setNavidromePassword] = useState('');
@@ -662,7 +699,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     // Load Navidrome config on mount
     useEffect(() => {
-        setNavidromeEnabledState(isNavidromeEnabled());
         const config = getNavidromeConfig();
         if (config) {
             setNavidromeUrl(config.serverUrl);
@@ -1581,6 +1617,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 settingsCardClass={settingsCardClass}
                                                 theme={theme}
                                                 utilityGhostButtonClass={utilityGhostButtonClass}
+                                            />
+                                        )}
+                                        {activeSettingsSection === 'interaction' && (
+                                            <InteractionSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                theme={theme}
                                             />
                                         )}
                                         {activeSettingsSection === 'integration' && (

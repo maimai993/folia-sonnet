@@ -4,13 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { ChevronLeft, RotateCcw } from 'lucide-react';
 import type { LyricData } from '../../../types';
-import {
-    clampGlobalLyricTimelineOffsetMs,
-    GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS,
-    useSettingsUiStore,
-} from '../../../stores/useSettingsUiStore';
 import GlobalLyricOffsetPreview from './GlobalLyricOffsetPreview';
 import GlobalLyricOffsetRuler from './GlobalLyricOffsetRuler';
+import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
+import { clampGlobalLyricTimelineOffsetMs, GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS } from '../../../stores/useLyricSettingsStore';
 
 // src/components/modal/settings/GlobalLyricOffsetModal.tsx
 // 实验室里的“全局时间偏移”校准窗口：正在播放的歌词按草稿偏移实时推进，
@@ -45,8 +42,8 @@ const GlobalLyricOffsetModal: React.FC<GlobalLyricOffsetModalProps> = ({
     onClose,
 }) => {
     const { t } = useTranslation();
-    const appliedOffsetMs = useSettingsUiStore(state => state.globalLyricTimelineOffsetMs);
-    const setGlobalOffsetMs = useSettingsUiStore(state => state.handleSetGlobalLyricTimelineOffsetMs);
+    const appliedOffsetMs = useLyricSettingsStore(state => state.globalLyricTimelineOffsetMs);
+    const setGlobalOffsetMs = useLyricSettingsStore(state => state.handleSetGlobalLyricTimelineOffsetMs);
     const [draftOffsetMs, setDraftOffsetMs] = useState(appliedOffsetMs);
 
     useEffect(() => {

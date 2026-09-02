@@ -2,6 +2,7 @@
 
 exports[`command palette registry contract > keeps the registered command order stable 1`] = `
 [
+  "filter-view",
   "search-current",
   "search-local",
   "search-navidrome",
@@ -27,6 +28,9 @@ exports[`command palette registry contract > keeps the registered command order 
   "playback-next",
   "playback-prev",
   "playback-loop",
+  "playback-like",
+  "playback-add-to-playlist",
+  "playback-mute",
   "playback-shuffle",
   "playback-clear-queue",
   "playback-auto-match-best-lyric",

@@ -9,7 +9,6 @@ import {
     type UrlBackgroundItem,
 } from '../../../types';
 import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistry';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
 import { mergeUrlBackgroundList } from '../../../utils/urlBackground';
 import { compressConfig, decompressConfig, readSavedCustomTheme } from '../../../utils/appearanceCodec';
@@ -24,6 +23,13 @@ import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../utils
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -117,7 +123,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     // OBS static URL points to this web deploy, so the copy button is web-only (no shareable URL under Electron).
     // The link follows the selected web stage source (Now Playing / PlayerCap); disabled when none is on.
     const isElectron = typeof window !== 'undefined' && Boolean((window as { electron?: unknown }).electron);
-    const webObsSource = useSettingsUiStore(selectWebObsSource);
+    const webObsSource = useStageSettingsStore(selectWebObsSource);
     const [importText, setImportText] = useState('');
     const [copiedType, setCopiedType] = useState<'none' | 'shortcode' | 'json' | 'obsurl'>('none');
     // Parsed config held back until the user confirms which groups to take.
@@ -146,15 +152,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         });
     }, [aiTheme, customTheme]);
 
-    // Access ZUSTAND settings store directly for setters & configurations
-    const store = useSettingsUiStore(useShallow(state => ({
-        statusSetter: state.statusSetter,
+    const storeThemeSettings = useThemeSettingsStore(useShallow(state => ({
+        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
+        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
+        handleToggleStaticMode: state.handleToggleStaticMode,
+    })));
+    const storePlayerChromeSettings = usePlayerChromeSettingsStore(useShallow(state => ({
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
-        visualizerMode: state.visualizerMode,
-        randomVisualizerModePerSong: state.randomVisualizerModePerSong,
-        visualizerBackgroundMode: state.visualizerBackgroundMode,
-        backgroundOpacity: state.backgroundOpacity,
-        visualizerOpacity: state.visualizerOpacity,
+    })));
+    const storeTypographySettings = useTypographySettingsStore(useShallow(state => ({
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
@@ -171,6 +177,30 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         subtitleFontWeight: state.subtitleFontWeight,
         subtitleFontFamily: state.subtitleFontFamily,
         subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
+        handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+        handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
+        handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
+        handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+        handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
+        handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
+        handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
+        handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
+        handleSetLyricsFontScale: state.handleSetLyricsFontScale,
+        handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
+        handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
+        handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
+        handleSetSubtitleFontScale: state.handleSetSubtitleFontScale,
+        handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
+        handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
+        handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
+        handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
+    })));
+    const storeVisualizer = useVisualizerSettingsStore(useShallow(state => ({
+        visualizerMode: state.visualizerMode,
+        randomVisualizerModePerSong: state.randomVisualizerModePerSong,
+        visualizerBackgroundMode: state.visualizerBackgroundMode,
+        backgroundOpacity: state.backgroundOpacity,
+        visualizerOpacity: state.visualizerOpacity,
         classicTuning: state.classicTuning,
         cadenzaTuning: state.cadenzaTuning,
         partitaTuning: state.partitaTuning,
@@ -188,34 +218,13 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         temperaTuning: state.temperaTuning,
         urlBackgroundList: state.urlBackgroundList,
         urlBackgroundSelectedId: state.urlBackgroundSelectedId,
-        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
-
         handleSetVisualizerMode: state.handleSetVisualizerMode,
         handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
         handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
         handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
         handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
-        handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
-        handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
-        handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
-        handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
-        handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
-        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
-        handleToggleStaticMode: state.handleToggleStaticMode,
         handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
         handleToggleDisableVisualizerVignette: state.handleToggleDisableVisualizerVignette,
-        handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
-        handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
-        handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
-        handleSetLyricsFontScale: state.handleSetLyricsFontScale,
-        handleSetLyricsFontWeight: state.handleSetLyricsFontWeight,
-        handleSetLyricsFontFallbackFamilies: state.handleSetLyricsFontFallbackFamilies,
-        handleSetSubtitleFontInheritsLyrics: state.handleSetSubtitleFontInheritsLyrics,
-        handleSetSubtitleFontScale: state.handleSetSubtitleFontScale,
-        handleSetSubtitleFontStyle: state.handleSetSubtitleFontStyle,
-        handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
-        handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
-        handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
         handleSetClassicTuning: state.handleSetClassicTuning,
         handleSetCadenzaTuning: state.handleSetCadenzaTuning,
         handleSetPartitaTuning: state.handleSetPartitaTuning,
@@ -274,7 +283,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('shortcode');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy shortcode:', err);
         }
@@ -287,7 +296,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('json');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy JSON:', err);
         }
@@ -310,12 +319,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             setCopiedType('obsurl');
             setTimeout(() => setCopiedType('none'), 2000);
             const hint = resolveObsCopyHintKey();
-            store.statusSetter?.({ type: hint.type, text: t(hint.key) });
+            setStatusMessage({ type: hint.type, text: t(hint.key) });
         } catch (err) {
             // The URL is built asynchronously, so a browser that requires the write to stay inside the
             // click's own task can reject here. Say so instead of leaving the button looking inert.
             console.error('Failed to copy OBS URL:', err);
-            store.statusSetter?.({ type: 'error', text: t('status.copyFailed') });
+            setStatusMessage({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
@@ -326,8 +335,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         try {
             // Import accepts a bare shortcode/JSON or a full OBS URL (extracting its cfg param), so a look can be re-tuned from someone's link.
             const config = decompressConfig(extractCfgFromInput(importText));
-            const uiStore = useSettingsUiStore.getState();
-            const customFont = uiStore.lyricsCustomFont;
+  const uiStoreTypographySettings = useTypographySettingsStore.getState();
+            const customFont = uiStoreTypographySettings.lyricsCustomFont;
             const plan = buildImportPlan({
                 incoming: config,
                 current: { ...buildVisualSettingsConfig(), theme: customTheme ?? null },
@@ -340,9 +349,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 isCustomThemeActive: bgMode === 'custom',
                 // A config names an uploaded image or emoji pack by source, but never carries it.
                 assets: {
-                    hasCappellaEmojiPack: uiStore.storedCappellaEmojiPack.length > 0,
-                    hasMonetBackgroundImage: Boolean(uiStore.storedMonetBackgroundImage),
-                    hasMonetPortraitImage: Boolean(uiStore.storedMonetPortraitImage),
+                    hasCappellaEmojiPack: useVisualizerAssetStore.getState().storedCappellaEmojiPack.length > 0,
+                    hasMonetBackgroundImage: Boolean(useVisualizerAssetStore.getState().storedMonetBackgroundImage),
+                    hasMonetPortraitImage: Boolean(useVisualizerAssetStore.getState().storedMonetPortraitImage),
                 },
             });
 
@@ -351,7 +360,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             setPendingImport({ config, plan });
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
         }
     };
 
@@ -379,126 +388,126 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
 
             // 2. Restore Visualizer Setup
             if (has('visualizerMode') && config.visualizerMode) {
-                store.handleSetVisualizerMode(config.visualizerMode);
+                storeVisualizer.handleSetVisualizerMode(config.visualizerMode);
             }
             if (has('randomVisualizerModePerSong')) {
-                store.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
+                storeVisualizer.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
             }
             if (has('visualizerOpacity')) {
-                store.handleSetVisualizerOpacity(config.visualizerOpacity);
+                storeVisualizer.handleSetVisualizerOpacity(config.visualizerOpacity);
             }
             if (has('hidePlayerTranslationSubtitle')) {
-                store.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
+                storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
             }
             if (has('showSubtitleTranslation')) {
-                store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
+                storeTypographySettings.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
             }
             if (has('subtitleContentMode')
                 && (config.subtitleContentMode === 'translation'
                     || config.subtitleContentMode === 'romanization'
                     || config.subtitleContentMode === 'none')) {
-                store.handleSetSubtitleContentMode(config.subtitleContentMode);
+                storeTypographySettings.handleSetSubtitleContentMode(config.subtitleContentMode);
             }
             if (has('subtitleOverlayBackground')) {
-                store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+                storeTypographySettings.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
             }
             if (has('subtitleOverlayOpacity')) {
-                store.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
+                storeTypographySettings.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
             }
             if (has('showHarmonySubtitle')) {
-                store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
+                storeTypographySettings.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
             }
             if (has('harmonySubtitleBackground')) {
-                store.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
+                storeTypographySettings.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
             }
 
             if (has('visualizerBackgroundMode') && config.visualizerBackgroundMode) {
-                store.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
+                storeVisualizer.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
             }
             if (has('backgroundOpacity')) {
-                store.handleSetBackgroundOpacity(config.backgroundOpacity);
+                storeVisualizer.handleSetBackgroundOpacity(config.backgroundOpacity);
             }
             // Each of these four setters raises its own toast. They fire before the importSuccess
             // message below, which writes the same single status slot last, so the user still ends
             // on "imported" rather than on whichever toggle happened to be applied last.
             if (has('useCoverColorBg')) {
-                store.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
+                storeThemeSettings.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
             }
             if (has('disableVisualizerGeometricBackground')) {
-                store.handleToggleDisableVisualizerGeometricBackground(Boolean(config.disableVisualizerGeometricBackground));
+                storeVisualizer.handleToggleDisableVisualizerGeometricBackground(Boolean(config.disableVisualizerGeometricBackground));
             }
             if (has('disableVisualizerVignette')) {
-                store.handleToggleDisableVisualizerVignette(Boolean(config.disableVisualizerVignette));
+                storeVisualizer.handleToggleDisableVisualizerVignette(Boolean(config.disableVisualizerVignette));
             }
             if (has('staticMode')) {
-                store.handleToggleStaticMode(Boolean(config.staticMode));
+                storeThemeSettings.handleToggleStaticMode(Boolean(config.staticMode));
             }
 
             if (has('lyricsFontStyle') && config.lyricsFontStyle) {
-                store.handleSetLyricsFontStyle(config.lyricsFontStyle);
+                storeTypographySettings.handleSetLyricsFontStyle(config.lyricsFontStyle);
             }
             if (has('lyricsFontScale')) {
-                store.handleSetLyricsFontScale(config.lyricsFontScale);
+                storeTypographySettings.handleSetLyricsFontScale(config.lyricsFontScale);
             }
             if (has('lyricsFontWeight')) {
-                store.handleSetLyricsFontWeight(config.lyricsFontWeight);
+                storeTypographySettings.handleSetLyricsFontWeight(config.lyricsFontWeight);
             }
             if (has('lyricsFontFallbackFamilies') && config.lyricsFontFallbackFamilies) {
-                store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
+                storeTypographySettings.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
             }
             // Only a system family is portable. Setting one evicts an uploaded font and deletes
             // its stored file, which is why the confirmation calls that out separately.
             if (has('lyricsCustomFontFamily') && config.lyricsCustomFontFamily) {
                 const family = String(config.lyricsCustomFontFamily);
-                useSettingsUiStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
+                useTypographySettingsStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
             }
             if (has('subtitleFontInheritsLyrics')) {
-                store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
+                storeTypographySettings.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
             }
             if (has('subtitleFontScale')) {
-                store.handleSetSubtitleFontScale(config.subtitleFontScale);
+                storeTypographySettings.handleSetSubtitleFontScale(config.subtitleFontScale);
             }
             if (has('subtitleFontStyle') && config.subtitleFontStyle) {
-                store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
+                storeTypographySettings.handleSetSubtitleFontStyle(config.subtitleFontStyle);
             }
             if (has('subtitleFontWeight')) {
-                store.handleSetSubtitleFontWeight(config.subtitleFontWeight);
+                storeTypographySettings.handleSetSubtitleFontWeight(config.subtitleFontWeight);
             }
             if (has('subtitleFontFamily')) {
-                store.handleSetSubtitleFontFamily(config.subtitleFontFamily);
+                storeTypographySettings.handleSetSubtitleFontFamily(config.subtitleFontFamily);
             }
             if (has('subtitleFontFallbackFamilies') && config.subtitleFontFallbackFamilies) {
-                store.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
+                storeTypographySettings.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
             }
 
             // Tunings. The bundle wins over the individual ones, which is why the plan never offers
             // both -- picking the bundle is picking every renderer at once.
             if (has('visualizerTunings') && config.visualizerTunings) {
-                applyVisualizerTuningsToSettings(store as unknown as Record<string, unknown>, config.visualizerTunings);
+                applyVisualizerTuningsToSettings(useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>, config.visualizerTunings);
             }
             if (!config.visualizerTunings) {
-                if (has('classicTuning') && config.classicTuning) store.handleSetClassicTuning(config.classicTuning);
-                if (has('cadenzaTuning') && config.cadenzaTuning) store.handleSetCadenzaTuning(config.cadenzaTuning);
-                if (has('partitaTuning') && config.partitaTuning) store.handleSetPartitaTuning(config.partitaTuning);
-                if (has('fumeTuning') && config.fumeTuning) store.handleSetFumeTuning(config.fumeTuning);
-                if (has('claddaghTuning') && config.claddaghTuning) store.handleSetCladdaghTuning(config.claddaghTuning);
-                if (has('cappellaTuning') && config.cappellaTuning) store.handleSetCappellaTuning(config.cappellaTuning);
-                if (has('tiltTuning') && config.tiltTuning) store.handleSetTiltTuning(config.tiltTuning);
-                if (has('dioramaTuning') && config.dioramaTuning) store.handleSetDioramaTuning(config.dioramaTuning);
-                if (has('monetTuning') && config.monetTuning) store.handleSetMonetTuning(config.monetTuning);
-                if (has('pendoloTuning') && config.pendoloTuning) store.handleSetPendoloTuning(config.pendoloTuning);
-                if (has('sonnetTuning') && config.sonnetTuning) store.handleSetSonnetTuning(config.sonnetTuning);
-                if (has('temperaTuning') && config.temperaTuning) store.handleSetTemperaTuning(config.temperaTuning);
+                if (has('classicTuning') && config.classicTuning) storeVisualizer.handleSetClassicTuning(config.classicTuning);
+                if (has('cadenzaTuning') && config.cadenzaTuning) storeVisualizer.handleSetCadenzaTuning(config.cadenzaTuning);
+                if (has('partitaTuning') && config.partitaTuning) storeVisualizer.handleSetPartitaTuning(config.partitaTuning);
+                if (has('fumeTuning') && config.fumeTuning) storeVisualizer.handleSetFumeTuning(config.fumeTuning);
+                if (has('claddaghTuning') && config.claddaghTuning) storeVisualizer.handleSetCladdaghTuning(config.claddaghTuning);
+                if (has('cappellaTuning') && config.cappellaTuning) storeVisualizer.handleSetCappellaTuning(config.cappellaTuning);
+                if (has('tiltTuning') && config.tiltTuning) storeVisualizer.handleSetTiltTuning(config.tiltTuning);
+                if (has('dioramaTuning') && config.dioramaTuning) storeVisualizer.handleSetDioramaTuning(config.dioramaTuning);
+                if (has('monetTuning') && config.monetTuning) storeVisualizer.handleSetMonetTuning(config.monetTuning);
+                if (has('pendoloTuning') && config.pendoloTuning) storeVisualizer.handleSetPendoloTuning(config.pendoloTuning);
+                if (has('sonnetTuning') && config.sonnetTuning) storeVisualizer.handleSetSonnetTuning(config.sonnetTuning);
+                if (has('temperaTuning') && config.temperaTuning) storeVisualizer.handleSetTemperaTuning(config.temperaTuning);
             }
 
             if (has('monetBackgroundTuning') && config.monetBackgroundTuning) {
-                store.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
+                storeVisualizer.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
             }
             if (has('nomandBackgroundTuning') && config.nomandBackgroundTuning) {
-                store.handleSetNomandBackgroundTuning(config.nomandBackgroundTuning);
+                storeVisualizer.handleSetNomandBackgroundTuning(config.nomandBackgroundTuning);
             }
             if (has('latentBackgroundTuning') && config.latentBackgroundTuning) {
-                store.handleSetLatentBackgroundTuning(config.latentBackgroundTuning);
+                storeVisualizer.handleSetLatentBackgroundTuning(config.latentBackgroundTuning);
             }
 
             let mergedUrlList: UrlBackgroundItem[] | undefined;
@@ -507,15 +516,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 // Batch merge: compute the final list once, then apply with a single store update to
                 // avoid sequential localStorage writes per item. The plan diffs against this same
                 // helper, so the row's count is the count that gets stored.
-                mergedUrlList = mergeUrlBackgroundList(store.urlBackgroundList, config.urlBackgroundList);
-                store.handleSetUrlBackgroundList(mergedUrlList);
+                mergedUrlList = mergeUrlBackgroundList(storeVisualizer.urlBackgroundList, config.urlBackgroundList);
+                storeVisualizer.handleSetUrlBackgroundList(mergedUrlList);
             }
             // Validate that the imported selectedId still exists in the final list
             // to avoid a dangling reference that renders UrlBackgroundLayer blank.
             if (has('urlBackgroundSelectedId') && config.urlBackgroundSelectedId) {
-                const list = mergedUrlList ?? store.urlBackgroundList;
+                const list = mergedUrlList ?? storeVisualizer.urlBackgroundList;
                 if (list.some(i => i.id === config.urlBackgroundSelectedId)) {
-                    store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
+                    storeVisualizer.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
                 }
             }
 
@@ -529,7 +538,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 onChangeThemeGenerationSource(config.themeGenerationSource);
             }
             if (has('followSystemTheme')) {
-                store.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
+                storeThemeSettings.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
             }
 
             // The now playing card. Applied through the panel's own props, the same setters the three
@@ -553,12 +562,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 onToggleStageTrackPillOnHome(Boolean(config.stageTrackPillOnHome));
             }
 
-            store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
+            setStatusMessage({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
             setPendingImport(null);
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
             setPendingImport(null);
         }
     };
@@ -727,7 +736,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             <SettingsAnchor anchorId="lyricsRenderer" label={t('options.lyricsRenderer')}>
                 <SettingsSectionHeading icon={Monitor} label={t('options.lyricsRenderer')} />
                 <div className="space-y-3">
-                    {store.enablePlayerPageNativeBlur && (
+                    {storePlayerChromeSettings.enablePlayerPageNativeBlur && (
                         <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
                             <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                             <span>{t('options.nativeBlurBackgroundNotice')}</span>

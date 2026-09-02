@@ -1,6 +1,6 @@
 import { getFromCache, removeFromCache, saveToCache } from './db';
 import { isBlob } from '../utils/blobGuards';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 /**
  * The ceiling the desktop cache is pruned back to after each write, in bytes.
@@ -10,7 +10,7 @@ import { useSettingsUiStore } from '../stores/useSettingsUiStore';
  * no ceiling and reaches the main process unchanged.
  */
 const cacheLimitBytes = () =>
-  useSettingsUiStore.getState().mediaCacheLimitGb * 1024 * 1024 * 1024;
+  useAudioSettingsStore.getState().mediaCacheLimitGb * 1024 * 1024 * 1024;
 
 interface ElectronAudioCacheEntry {
   found: boolean;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { syncNow } from '../services/sync/syncCoordinator';
 import { isSyncConfigured } from '../services/sync/syncConfig';
+import { setStatusMessage } from '../stores/useStatusMessageStore';
 
 // src/hooks/useThemeSyncAction.ts
 // 面板底部主题同步按钮的 idle / syncing / complete 状态机。
@@ -13,7 +13,6 @@ export type ThemeSyncState = 'idle' | 'syncing' | 'complete';
 
 export const useThemeSyncAction = () => {
     const { t } = useTranslation();
-    const statusSetter = useSettingsUiStore(state => state.statusSetter);
     const [themeSyncState, setThemeSyncState] = useState<ThemeSyncState>('idle');
     const completeTimerRef = useRef<number | null>(null);
 
@@ -29,7 +28,7 @@ export const useThemeSyncAction = () => {
         }
 
         if (!isSyncConfigured()) {
-            statusSetter?.({
+            setStatusMessage({
                 type: 'info',
                 text: t('commandPalette.syncNotConfigured'),
             });
@@ -52,7 +51,7 @@ export const useThemeSyncAction = () => {
             setThemeSyncState('idle');
             completeTimerRef.current = null;
         }, COMPLETE_STATE_HOLD_MS);
-    }, [statusSetter, t, themeSyncState]);
+    }, [t, themeSyncState]);
 
     return { themeSyncState, runThemeSync };
 };

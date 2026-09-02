@@ -4,11 +4,15 @@ import { Boxes, Check, ChevronLeft, ChevronsLeftRight, Cpu, GamepadDirectional, 
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
 import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
@@ -45,68 +49,75 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const isMouseDownOnOverlayRef = useRef(false);
     const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
     const {
-        disableHomeDynamicBackground,
-        hidePlayerProgressBar,
-        hidePlayerRightPanelButton,
-        alwaysShowPlayerBackButton,
-        alwaysShowTrackSwitchButtons,
-        alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle,
-        isDaylight,
-        showOpenPanelCloseButton,
-        staticMode,
-        visualizerFrameRate,
-        onToggleDisableHomeDynamicBackground,
-        onToggleHidePlayerProgressBar,
-        onToggleHidePlayerRightPanelButton,
-        onToggleAlwaysShowPlayerBackButton,
-        onToggleAlwaysShowTrackSwitchButtons,
-        onToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle,
         onToggleHideTaskbarIcon,
         onToggleMinimizeToTray,
-        onToggleOpenPanelCloseButton,
         onToggleOpenPlayerOnLaunch,
-        onToggleStaticMode,
-        onVisualizerFrameRateChange,
-        enablePlayerPageNativeBlur,
-        onTogglePlayerPageNativeBlur,
         preventDisplaySleepDuringPlayback,
         onTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled,
         onToggleModSystem,
-    } = useSettingsUiStore(useShallow(state => ({
-        disableHomeDynamicBackground: state.disableHomeDynamicBackground,
-        hidePlayerProgressBar: state.hidePlayerProgressBar,
-        hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
-        alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
-        alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
-        alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
-        isDaylight: state.isDaylight,
-        showOpenPanelCloseButton: state.showOpenPanelCloseButton,
-        staticMode: state.staticMode,
-        visualizerFrameRate: state.visualizerFrameRate,
-        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
-        onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
-        onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
-        onToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
-        onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
-        onToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
-        onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+    } = useDesktopSettingsStore(useShallow(state => ({
         onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
         onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
-        onToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
         onToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
-        onToggleStaticMode: state.handleToggleStaticMode,
-        onVisualizerFrameRateChange: state.handleSetVisualizerFrameRate,
-        onTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
         preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
         onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
         modSystemEnabled: state.modSystemEnabled,
         onToggleModSystem: state.handleToggleModSystem,
     })));
+    const {
+        disableHomeDynamicBackground,
+        isDaylight,
+        staticMode,
+        onToggleDisableHomeDynamicBackground,
+        onToggleStaticMode,
+    } = useThemeSettingsStore(useShallow(state => ({
+        disableHomeDynamicBackground: state.disableHomeDynamicBackground,
+        isDaylight: state.isDaylight,
+        staticMode: state.staticMode,
+        onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
+        onToggleStaticMode: state.handleToggleStaticMode,
+    })));
+    const {
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
+        alwaysShowMainWindowTitlebar,
+        showOpenPanelCloseButton,
+        enablePlayerPageNativeBlur,
+        onToggleHidePlayerProgressBar,
+        onToggleHidePlayerRightPanelButton,
+        onToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons,
+        onToggleAlwaysShowMainWindowTitlebar,
+        onToggleOpenPanelCloseButton,
+        onTogglePlayerPageNativeBlur,
+    } = usePlayerChromeSettingsStore(useShallow(state => ({
+        hidePlayerProgressBar: state.hidePlayerProgressBar,
+        hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
+        alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
+        alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
+        showOpenPanelCloseButton: state.showOpenPanelCloseButton,
+        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
+        onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
+        onToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
+        onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
+        onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
+        onToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
+        onTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
+    })));
+    const {
+        hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle,
+    } = useTypographySettingsStore(useShallow(state => ({
+        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+    })));
+    const visualizerFrameRate = useVisualizerSettingsStore(state => state.visualizerFrameRate);
+    const onVisualizerFrameRateChange = useVisualizerSettingsStore(state => state.handleSetVisualizerFrameRate);
     const borderColor = isDaylight ? 'border-zinc-300/70' : 'border-white/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
     const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';

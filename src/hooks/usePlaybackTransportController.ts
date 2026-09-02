@@ -1,26 +1,25 @@
 import { useCallback } from 'react';
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import { PlayerState } from '../types';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setPlayerState } from '../stores/usePlaybackStore';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/usePlaybackTransportController.ts
 
 type UsePlaybackTransportControllerParams = {
-    activePlaybackContext: 'main' | 'stage';
     stageActiveEntryKind: string | null;
     isNowPlayingStageActive: boolean;
-    audioSrc: string | null;
-    duration: number;
     audioRef: RefObject<HTMLAudioElement | null>;
     audioContextRef: MutableRefObject<AudioContext | null>;
-    currentTime: { set: (value: number) => void };
     stageLyricsClockRef: MutableRefObject<{
         startTimeSec: number;
         endTimeSec: number;
         baseTimeSec: number;
         startedAtMs: number | null;
     }>;
-    setPlayerState: Dispatch<SetStateAction<PlayerState>>;
-    setStatusMsg: Dispatch<SetStateAction<any>>;
     setupAudioAnalyzer: () => void;
     syncOutputGain: (targetVolume: number, smoothing?: number) => void;
     getTargetPlaybackVolume: () => number;
@@ -42,22 +41,15 @@ type UsePlaybackTransportControllerParams = {
      * seek uses. Returns false (and the ordinary pause runs) when no blend is in flight.
      */
     pauseDuringTransition?: () => boolean;
-    t: (key: string) => string;
 };
 
 // Owns play and pause transport behavior across main playback and Stage lyric-only playback.
 export function usePlaybackTransportController({
-    activePlaybackContext,
     stageActiveEntryKind,
     isNowPlayingStageActive,
-    audioSrc,
-    duration,
     audioRef,
     audioContextRef,
-    currentTime,
     stageLyricsClockRef,
-    setPlayerState,
-    setStatusMsg,
     setupAudioAnalyzer,
     syncOutputGain,
     getTargetPlaybackVolume,
@@ -66,8 +58,13 @@ export function usePlaybackTransportController({
     getSyntheticStageLyricsTime,
     syncStageLyricsClock,
     pauseDuringTransition,
-    t,
 }: UsePlaybackTransportControllerParams) {
+    // Read here rather than passed in: store fields, a module-level motion signal, or i18n.
+    const { t } = useTranslation();
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const audioSrc = usePlaybackStore(state => state.audioSrc);
+    const duration = usePlaybackStore(state => state.duration);
+
     const resumePlayback = useCallback(async () => {
         if (isNowPlayingStageActive) {
             return;

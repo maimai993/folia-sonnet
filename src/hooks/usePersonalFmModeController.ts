@@ -10,6 +10,7 @@ import {
 import { usePersonalFmModeStore } from '../stores/usePersonalFmModeStore';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import type { SongResult, StatusMessage } from '../types';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 
 // src/hooks/usePersonalFmModeController.ts
 // Owns "apply a Personal FM mode": persist it, and when FM is on air jump straight to the first
@@ -19,7 +20,6 @@ type UsePersonalFmModeControllerParams = {
     isFmMode: boolean;
     currentSong: SongResult | null;
     playSong: (song: SongResult, queue?: SongResult[], isFmCall?: boolean) => void | Promise<void>;
-    setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     t: (key: string, fallback?: string) => string;
 };
 
@@ -27,7 +27,6 @@ export function usePersonalFmModeController({
     isFmMode,
     currentSong,
     playSong,
-    setStatusMsg,
     t,
 }: UsePersonalFmModeControllerParams) {
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);

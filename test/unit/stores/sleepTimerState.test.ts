@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useStatusMessageStore } from '@/stores/useStatusMessageStore';
+import { useSleepTimerStore } from '@/stores/useSleepTimerStore';
 
 // test/unit/stores/sleepTimerState.test.ts
 
@@ -14,44 +15,32 @@ describe('sleep timer settings state', () => {
         };
         vi.stubGlobal('localStorage', storage);
         vi.stubGlobal('window', { localStorage: storage });
-        useSettingsUiStore.setState({
-            sleepTimerEnabled: false,
-            sleepTimerHours: 0,
-            sleepTimerMinutes: 0,
-            sleepTimerDeadlineMs: null,
-            sleepTimerActivationId: 0,
-            statusSetter: vi.fn(),
-        });
+        useSleepTimerStore.setState({ sleepTimerEnabled: false, sleepTimerHours: 0, sleepTimerMinutes: 0, sleepTimerDeadlineMs: null, sleepTimerActivationId: 0 });
+        useStatusMessageStore.setState({ message: null });
     });
 
     afterEach(() => {
-        useSettingsUiStore.setState({
-            sleepTimerEnabled: false,
-            sleepTimerHours: 0,
-            sleepTimerMinutes: 0,
-            sleepTimerDeadlineMs: null,
-            sleepTimerActivationId: 0,
-            statusSetter: null,
-        });
+        useSleepTimerStore.setState({ sleepTimerEnabled: false, sleepTimerHours: 0, sleepTimerMinutes: 0, sleepTimerDeadlineMs: null, sleepTimerActivationId: 0 });
+        useStatusMessageStore.setState({ message: null });
         vi.unstubAllGlobals();
     });
 
     it('does not arm a zero-duration timer or persist the armed state', () => {
-        useSettingsUiStore.getState().handleToggleSleepTimer(true);
+        useSleepTimerStore.getState().handleToggleSleepTimer(true);
 
-        expect(useSettingsUiStore.getState().sleepTimerEnabled).toBe(false);
-        expect(useSettingsUiStore.getState().statusSetter).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+        expect(useSleepTimerStore.getState().sleepTimerEnabled).toBe(false);
+        expect(useStatusMessageStore.getState().message).toMatchObject({ type: 'error' });
         expect(values.has('sleep_timer_enabled')).toBe(false);
     });
 
     it('keeps the preferred duration but disarms when it becomes zero', () => {
-        useSettingsUiStore.getState().handleSetSleepTimerMinutes(30);
-        useSettingsUiStore.getState().handleToggleSleepTimer(true);
-        expect(useSettingsUiStore.getState()).toMatchObject({ sleepTimerEnabled: true, sleepTimerMinutes: 30 });
+        useSleepTimerStore.getState().handleSetSleepTimerMinutes(30);
+        useSleepTimerStore.getState().handleToggleSleepTimer(true);
+        expect(useSleepTimerStore.getState()).toMatchObject({ sleepTimerEnabled: true, sleepTimerMinutes: 30 });
 
-        useSettingsUiStore.getState().handleSetSleepTimerMinutes(0);
+        useSleepTimerStore.getState().handleSetSleepTimerMinutes(0);
 
-        expect(useSettingsUiStore.getState()).toMatchObject({
+        expect(useSleepTimerStore.getState()).toMatchObject({
             sleepTimerEnabled: false,
             sleepTimerHours: 0,
             sleepTimerMinutes: 0,
@@ -61,13 +50,13 @@ describe('sleep timer settings state', () => {
     });
 
     it('creates a new activation when an enabled timer is started with the same duration', () => {
-        useSettingsUiStore.getState().handleSetSleepTimerMinutes(30);
-        useSettingsUiStore.getState().handleToggleSleepTimer(true);
-        const firstActivationId = useSettingsUiStore.getState().sleepTimerActivationId;
+        useSleepTimerStore.getState().handleSetSleepTimerMinutes(30);
+        useSleepTimerStore.getState().handleToggleSleepTimer(true);
+        const firstActivationId = useSleepTimerStore.getState().sleepTimerActivationId;
 
-        useSettingsUiStore.getState().handleToggleSleepTimer(true);
+        useSleepTimerStore.getState().handleToggleSleepTimer(true);
 
-        expect(useSettingsUiStore.getState()).toMatchObject({
+        expect(useSleepTimerStore.getState()).toMatchObject({
             sleepTimerEnabled: true,
             sleepTimerMinutes: 30,
             sleepTimerActivationId: firstActivationId + 1,

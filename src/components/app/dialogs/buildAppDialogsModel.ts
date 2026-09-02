@@ -1,4 +1,3 @@
-import type React from 'react';
 import type LyricMatchModal from '../../modal/LyricMatchModal';
 import type NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
 import type OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
@@ -7,6 +6,7 @@ import type SettingsModal from '../../modal/SettingsModal';
 import type ConfirmDialog from '../../shared/ConfirmDialog';
 import type { StatusMessage, SongResult, LocalSong } from '../../../types';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../../../utils/appPlaybackGuards';
+import type React from 'react';
 
 // src/components/app/dialogs/buildAppDialogsModel.ts
 
@@ -32,13 +32,17 @@ export type AppDialogsModel = {
     providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
 
-type BuildAppDialogsModelParams = {
+// What this file can read for itself, so the caller never names it. See useAppDialogsModel below.
+type AppDialogsAmbient = {
     statusMsg: StatusMessage | null;
     isDaylight: boolean;
+    currentSong: SongResult | null;
+};
+
+export type AppDialogsDeps = {
     showLyricMatchModal: boolean;
     showNaviLyricMatchModal: boolean;
     showOnlineLyricMatchModal: boolean;
-    currentSong: SongResult | null;
     localSongs: LocalSong[];
     setShowLyricMatchModal: React.Dispatch<React.SetStateAction<boolean>>;
     setShowNaviLyricMatchModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -56,6 +60,8 @@ type BuildAppDialogsModelParams = {
     settingsDialog?: SettingsDialogProps | null;
     providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
+
+type BuildAppDialogsModelParams = AppDialogsAmbient & AppDialogsDeps;
 
 // Builds the centralized dialog model for toast, lyric matching, and unavailable-song replacement.
 export const buildAppDialogsModel = ({

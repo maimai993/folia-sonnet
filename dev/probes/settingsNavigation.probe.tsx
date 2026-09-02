@@ -32,7 +32,7 @@ const LATE_SECTION = { id: 'bravoLate', label: 'Bravo Late Section', icon: Setti
 
 const LABELS: Record<string, string> = {
     'options.settingsGroupAppearance': 'Appearance',
-    'options.settingsGroupPlayback': 'Playback',
+    'options.settingsGroupControls': 'Controls',
     'options.settingsGroupConnections': 'Connections & Data',
     'options.settingsGroupSystem': 'System',
 };

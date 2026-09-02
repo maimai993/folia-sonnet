@@ -139,6 +139,8 @@ export const createPanelCommand = (
     description,
     keywords,
     icon,
+    // The panel is part of the player surface; on home there is nothing for these to open.
+    scope: 'player-surface',
     ...options,
     execute: (_input, context) => {
         context.panel.setPanelTab(tab);

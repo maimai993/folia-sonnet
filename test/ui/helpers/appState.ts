@@ -14,5 +14,5 @@ export const APP_VERSION: string = JSON.parse(
     readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8'),
 ).version as string;
 
-/** 对应 src/stores/useSettingsUiStore.ts 的 LAST_SEEN_GUIDE_VERSION_STORAGE_KEY */
+/** 对应 src/stores/useSettingsModalStore.ts 的 LAST_SEEN_GUIDE_VERSION_STORAGE_KEY */
 export const GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';

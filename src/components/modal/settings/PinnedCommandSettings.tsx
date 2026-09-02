@@ -3,12 +3,12 @@ import { Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../../command-palette/commandRegistry';
 import { getCommandTitle } from '../../command-palette/commandText';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/modal/settings/PinnedCommandSettings.tsx
 // Configures the three registry-backed shortcuts shown below the command palette.
@@ -25,7 +25,7 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
     theme,
 }) => {
     const { t } = useTranslation();
-    const { pinnedCommandIds, setPinnedCommandId } = useSettingsUiStore(useShallow(state => ({
+    const { pinnedCommandIds, setPinnedCommandId } = useSettingsModalStore(useShallow(state => ({
         pinnedCommandIds: state.pinnedCommandIds,
         setPinnedCommandId: state.setPinnedCommandId,
     })));

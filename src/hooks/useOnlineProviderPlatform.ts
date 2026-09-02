@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import type { OnlineProviderId, ProviderAccountSummary } from '../types/onlineMusic';
+import { useStableCallbacks } from './useStableCallbacks';
 
 // src/hooks/useOnlineProviderPlatform.ts
 
@@ -98,5 +99,12 @@ export const useOnlineProviderPlatform = (
     }), [activeProviderId, prepareSwitch, refreshers, setActiveProviderId]);
 
     const activeProvider = providers.find(provider => provider.providerId === activeProviderId) || providers[0];
-    return { providers, activeProviderId, activeProvider, switchProvider, refreshProvider, logoutProvider, completeLogin };
+    // The whole object is a dependency of buildHomeModel, so unlike the other hooks here it is not
+    // enough to stabilise the callbacks - the object itself has to keep its identity while nothing
+    // in it changed. The callbacks get a permanent identity first so they cannot invalidate it.
+    const actions = useStableCallbacks({ switchProvider, refreshProvider, logoutProvider, completeLogin });
+    return useMemo(
+        () => ({ providers, activeProviderId, activeProvider, ...actions }),
+        [providers, activeProviderId, activeProvider, actions],
+    );
 };

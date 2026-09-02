@@ -1,8 +1,8 @@
 import React from 'react';
 import NowPlayingToast from '../../src/components/app/overlays/NowPlayingToast';
 import { announceTransition } from '../../src/services/automix/transitionCue';
-import { useSettingsUiStore } from '../../src/stores/useSettingsUiStore';
 import type { ProbeDefinition } from './definition';
+import { useAutomixSettingsStore } from '../../src/stores/useAutomixSettingsStore';
 // dev/probes/nowPlayingToastTransitionBorder.probe.tsx
 
 /**
@@ -68,7 +68,7 @@ const NowPlayingToastTransitionBorderProbe: React.FC = () => {
 
     // cue 到达时开关是从 store 里读的，所以这个探针要把两个设置真的拨上去，不能只给 prop。
     React.useEffect(() => {
-        useSettingsUiStore.setState({ transitionAnimationCard: transitionBorder, transitionMode: 'automix' });
+        useAutomixSettingsStore.setState({ transitionAnimationCard: transitionBorder, transitionMode: 'automix' });
     }, [transitionBorder]);
 
     const buttonClass = 'rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10';
@@ -93,9 +93,9 @@ const NowPlayingToastTransitionBorderProbe: React.FC = () => {
                         // 一字不差地照抄设置页那个开关：先关掉，再在同一个处理函数里拨上去并立刻
                         // 广播预览。React 要等这次事件结束才提交，所以只有「无条件订阅 + cue 到达
                         // 时读 store」才收得到这一条。
-                        useSettingsUiStore.setState({ transitionAnimationCard: false });
+                        useAutomixSettingsStore.setState({ transitionAnimationCard: false });
                         setTransitionBorder(true);
-                        useSettingsUiStore.setState({ transitionAnimationCard: true, transitionMode: 'automix' });
+                        useAutomixSettingsStore.setState({ transitionAnimationCard: true, transitionMode: 'automix' });
                         announceTransition(PREVIEW_CUE);
                     }}
                 >

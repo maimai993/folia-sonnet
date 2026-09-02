@@ -5,9 +5,9 @@ import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from './helpers/appState';
 // 覆盖播放面板控制页的模式取景器：箭头步进、完整列表入口，以及步进经过商籁时不再被拦截。
 
 const readVisualizerMode = (page: import('@playwright/test').Page) => page.evaluate(async () => {
-    const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-    const { useSettingsUiStore } = await import(storeModulePath);
-    return useSettingsUiStore.getState().visualizerMode as string;
+    const storeModulePath = '/src/stores/useVisualizerSettingsStore.ts';
+    const { useVisualizerSettingsStore } = await import(storeModulePath);
+    return useVisualizerSettingsStore.getState().visualizerMode as string;
 });
 
 const openPlayerPage = async (page: import('@playwright/test').Page) => {
@@ -51,7 +51,11 @@ const openQueueWithFixture = async (page: import('@playwright/test').Page) => {
     }, queue);
     await page.reload();
     await page.waitForTimeout(1800);
-    await page.keyboard.press('Control+P');
+    // 全局键盘监听比首屏晚装上一拍，定长 sleep 只是赌它已经装好了。反复敲直到面板真的响应。
+    await expect.poll(async () => {
+        await page.keyboard.press('Control+P');
+        return page.getByTestId('command-palette-panel').count();
+    }).toBeGreaterThan(0);
 };
 
 test('steps lyric modes with the arrows and opens the full list from the name', async ({ page }) => {
@@ -88,14 +92,14 @@ test('steps straight through sonnet without an interstitial dialog', async ({ pa
     // 不要写死模式名——重排 order 时这个用例应当继续有效。
     const stepDirection = await page.evaluate(async () => {
         const registryModulePath = '/src/components/visualizer/registry.tsx';
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
+        const storeModulePath = '/src/stores/useVisualizerSettingsStore.ts';
         const { VISUALIZER_REGISTRY } = await import(registryModulePath);
-        const { useSettingsUiStore } = await import(storeModulePath);
+        const { useVisualizerSettingsStore } = await import(storeModulePath);
         const modes = (VISUALIZER_REGISTRY as Array<{ mode: string }>).map(entry => entry.mode);
         const sonnetIndex = modes.indexOf('sonnet');
         // 商籁排在首位时没有前一格，改成从后一格往回步进。
         const forward = sonnetIndex > 0;
-        useSettingsUiStore.getState().handleSetVisualizerMode(modes[sonnetIndex + (forward ? -1 : 1)], { notify: false });
+        useVisualizerSettingsStore.getState().handleSetVisualizerMode(modes[sonnetIndex + (forward ? -1 : 1)], { notify: false });
         return forward ? '+' : '−';
     });
     await page.waitForTimeout(300);

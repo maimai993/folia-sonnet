@@ -34,6 +34,8 @@ import {
     resolveBgModeTheme,
 } from './themeControllerState';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { useStableCallbacks } from './useStableCallbacks';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 export type GenerateAIThemeOptions = {
@@ -130,7 +132,6 @@ export function useThemeController({
     daylightTheme,
     isDaylight,
     setDaylightPreference,
-    setStatusMsg,
     coverUrl,
     t,
 }: {
@@ -138,7 +139,6 @@ export function useThemeController({
     daylightTheme: Theme;
     isDaylight: boolean;
     setDaylightPreference: (enabled: boolean) => void;
-    setStatusMsg: StatusSetter;
     coverUrl?: string | null;
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -689,26 +689,21 @@ export function useThemeController({
         }
     };
 
-    return {
-        theme,
-        setTheme: (nextTheme: Theme) => {
-            if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {
-                saveStoredAnimationIntensity(nextTheme.animationIntensity);
-            }
-            setTheme(applyStoredAnimationIntensityToTheme(nextTheme));
-        },
-        aiTheme,
+    const setThemeWithStoredIntensity = (nextTheme: Theme) => {
+        if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {
+            saveStoredAnimationIntensity(nextTheme.animationIntensity);
+        }
+        setTheme(applyStoredAnimationIntensityToTheme(nextTheme));
+    };
+
+    // Every one of these is invoked from an event, an effect or async work - never read during
+    // render for its identity - so a permanent identity is safe here and is what lets the five
+    // build*Model memos in App.tsx hold. Before this they changed on every render of this hook,
+    // which cascaded into playSong and from there into all four view models.
+    const actions = useStableCallbacks({
+        setTheme: setThemeWithStoredIntensity,
         setAiTheme,
-        customTheme,
-        hasCustomTheme: Boolean(customTheme),
-        themeSourceModel,
-        isCustomThemePreferred,
-        songThemeAutoSwitchEnabled,
-        songThemeAutoGenerateEnabled,
-        themeGenerationSource,
-        bgMode,
         setBgMode,
-        isGeneratingTheme,
         handleToggleDaylight,
         handleBgModeChange,
         handleResetTheme,
@@ -726,5 +721,20 @@ export function useThemeController({
         handleSongThemeAutoSwitchChange,
         handleSongThemeAutoGenerateChange,
         handleThemeGenerationSourceChange,
+    });
+
+    return {
+        theme,
+        aiTheme,
+        customTheme,
+        hasCustomTheme: Boolean(customTheme),
+        themeSourceModel,
+        isCustomThemePreferred,
+        songThemeAutoSwitchEnabled,
+        songThemeAutoGenerateEnabled,
+        themeGenerationSource,
+        bgMode,
+        isGeneratingTheme,
+        ...actions,
     };
 }

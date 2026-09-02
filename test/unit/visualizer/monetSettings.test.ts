@@ -14,7 +14,7 @@ import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/
 import { buildMonetVisibleLineEntries, measureMonetLineLayout, resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '@/components/visualizer/monet/monetLyricsModel';
 import { colorWithAlpha, mixColors, parseColorChannels } from '@/components/visualizer/colorMix';
 import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
-import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/useSettingsUiStore';
+import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/visualizerSettingsPersistence';
 
 // test/unit/visualizer/monetSettings.test.ts
 // Locks Monet tuning normalization, background cache keys, and lyric helper contracts.

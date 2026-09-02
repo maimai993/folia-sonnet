@@ -7,60 +7,54 @@ import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
 import {
+    resolveStoredCappellaTuning,
     resolveStoredMonetBackgroundTuning,
     resolveStoredMonetTuning,
-    resolveStoredCappellaTuning,
-    resolveStoredCustomLyricsFont,
     resolveVisualizerBackgroundMode,
-    readSystemThemeIsDaylight,
-    selectSettingsUiSnapshot,
-    useSettingsUiStore,
-} from '../stores/useSettingsUiStore';
+} from '../stores/visualizerSettingsPersistence';
 import i18n from '../i18n/config';
 import { createSafeObjectUrl } from '../utils/blobGuards';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
+import { resolveStoredCustomLyricsFont } from '../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { readSystemThemeIsDaylight } from '../stores/useThemeSettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useDesktopSettingsStore } from '../stores/useDesktopSettingsStore';
 
 export { resolveStoredCappellaTuning, resolveStoredCustomLyricsFont, resolveStoredMonetBackgroundTuning, resolveVisualizerBackgroundMode };
 
-type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
-
-export function useAppPreferences(setStatusMsg: StatusSetter) {
-    const preferences = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
-    const setStatusSetter = useSettingsUiStore(state => state.setStatusSetter);
-    const setTransparentPlayerBackgroundFromSystem = useSettingsUiStore(state => state.setTransparentPlayerBackgroundFromSystem);
-    const setDesktopPreferenceSnapshot = useSettingsUiStore(state => state.setDesktopPreferenceSnapshot);
-    const setStoredCappellaEmojiPack = useSettingsUiStore(state => state.setStoredCappellaEmojiPack);
-    const setCappellaCustomEmojiImages = useSettingsUiStore(state => state.setCappellaCustomEmojiImages);
-    const setIsLoadingCappellaCustomEmojiPack = useSettingsUiStore(state => state.setIsLoadingCappellaCustomEmojiPack);
-    const setStoredCappellaAvatarPack = useSettingsUiStore(state => state.setStoredCappellaAvatarPack);
-    const setCappellaCustomAvatarImages = useSettingsUiStore(state => state.setCappellaCustomAvatarImages);
-    const setIsLoadingCappellaCustomAvatarPack = useSettingsUiStore(state => state.setIsLoadingCappellaCustomAvatarPack);
-    const setStoredMonetBackgroundImage = useSettingsUiStore(state => state.setStoredMonetBackgroundImage);
-    const setMonetBackgroundImage = useSettingsUiStore(state => state.setMonetBackgroundImage);
-    const setIsLoadingMonetBackgroundImage = useSettingsUiStore(state => state.setIsLoadingMonetBackgroundImage);
-    const setStoredMonetPortraitImage = useSettingsUiStore(state => state.setStoredMonetPortraitImage);
-    const setMonetPortraitImage = useSettingsUiStore(state => state.setMonetPortraitImage);
-    const setIsLoadingMonetPortraitImage = useSettingsUiStore(state => state.setIsLoadingMonetPortraitImage);
-    const handleSetMonetTuning = useSettingsUiStore(state => state.handleSetMonetTuning);
-    const handleSetMonetBackgroundTuning = useSettingsUiStore(state => state.handleSetMonetBackgroundTuning);
-    const clearLyricsCustomFontAfterRestoreFailure = useSettingsUiStore(state => state.clearLyricsCustomFontAfterRestoreFailure);
-    const lyricsCustomFont = useSettingsUiStore(state => state.lyricsCustomFont);
-    const storedCappellaEmojiPack = useSettingsUiStore(state => state.storedCappellaEmojiPack);
-    const storedCappellaAvatarPack = useSettingsUiStore(state => state.storedCappellaAvatarPack);
-    const storedMonetBackgroundImage = useSettingsUiStore(state => state.storedMonetBackgroundImage);
-    const isLoadingMonetBackgroundImage = useSettingsUiStore(state => state.isLoadingMonetBackgroundImage);
-    const storedMonetPortraitImage = useSettingsUiStore(state => state.storedMonetPortraitImage);
-    const isLoadingMonetPortraitImage = useSettingsUiStore(state => state.isLoadingMonetPortraitImage);
-    const monetBackgroundTuning = useSettingsUiStore(state => state.monetBackgroundTuning);
-    const monetTuning = useSettingsUiStore(state => state.monetTuning);
-    const isDaylight = useSettingsUiStore(state => state.isDaylight);
-    const setDaylightPreferenceFromSystem = useSettingsUiStore(state => state.setDaylightPreferenceFromSystem);
-
-    useEffect(() => {
-        setStatusSetter(setStatusMsg);
-        return () => {
-            setStatusSetter(null);
-        };
-    }, [setStatusMsg, setStatusSetter]);
+export function useAppPreferences() {
+    const followSystemTheme = useThemeSettingsStore(state => state.followSystemTheme);
+    const setTransparentPlayerBackgroundFromSystem = usePlayerChromeSettingsStore(state => state.setTransparentPlayerBackgroundFromSystem);
+    const setDesktopPreferenceSnapshot = useDesktopSettingsStore(state => state.setDesktopPreferenceSnapshot);
+    const setStoredCappellaEmojiPack = useVisualizerAssetStore(state => state.setStoredCappellaEmojiPack);
+    const setCappellaCustomEmojiImages = useVisualizerAssetStore(state => state.setCappellaCustomEmojiImages);
+    const setIsLoadingCappellaCustomEmojiPack = useVisualizerAssetStore(state => state.setIsLoadingCappellaCustomEmojiPack);
+    const setStoredCappellaAvatarPack = useVisualizerAssetStore(state => state.setStoredCappellaAvatarPack);
+    const setCappellaCustomAvatarImages = useVisualizerAssetStore(state => state.setCappellaCustomAvatarImages);
+    const setIsLoadingCappellaCustomAvatarPack = useVisualizerAssetStore(state => state.setIsLoadingCappellaCustomAvatarPack);
+    const setStoredMonetBackgroundImage = useVisualizerAssetStore(state => state.setStoredMonetBackgroundImage);
+    const setMonetBackgroundImage = useVisualizerAssetStore(state => state.setMonetBackgroundImage);
+    const setIsLoadingMonetBackgroundImage = useVisualizerAssetStore(state => state.setIsLoadingMonetBackgroundImage);
+    const setStoredMonetPortraitImage = useVisualizerAssetStore(state => state.setStoredMonetPortraitImage);
+    const setMonetPortraitImage = useVisualizerAssetStore(state => state.setMonetPortraitImage);
+    const setIsLoadingMonetPortraitImage = useVisualizerAssetStore(state => state.setIsLoadingMonetPortraitImage);
+    const handleSetMonetTuning = useVisualizerSettingsStore(state => state.handleSetMonetTuning);
+    const handleSetMonetBackgroundTuning = useVisualizerSettingsStore(state => state.handleSetMonetBackgroundTuning);
+    const clearLyricsCustomFontAfterRestoreFailure = useTypographySettingsStore(state => state.clearLyricsCustomFontAfterRestoreFailure);
+    const lyricsCustomFont = useTypographySettingsStore(state => state.lyricsCustomFont);
+    const storedCappellaEmojiPack = useVisualizerAssetStore(state => state.storedCappellaEmojiPack);
+    const storedCappellaAvatarPack = useVisualizerAssetStore(state => state.storedCappellaAvatarPack);
+    const storedMonetBackgroundImage = useVisualizerAssetStore(state => state.storedMonetBackgroundImage);
+    const isLoadingMonetBackgroundImage = useVisualizerAssetStore(state => state.isLoadingMonetBackgroundImage);
+    const storedMonetPortraitImage = useVisualizerAssetStore(state => state.storedMonetPortraitImage);
+    const isLoadingMonetPortraitImage = useVisualizerAssetStore(state => state.isLoadingMonetPortraitImage);
+    const monetBackgroundTuning = useVisualizerSettingsStore(state => state.monetBackgroundTuning);
+    const monetTuning = useVisualizerSettingsStore(state => state.monetTuning);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const setDaylightPreferenceFromSystem = useThemeSettingsStore(state => state.setDaylightPreferenceFromSystem);
 
     useEffect(() => {
         const root = document.documentElement;
@@ -77,7 +71,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
 
     // Keep the persisted daylight value in sync with OS changes only while auto-follow is enabled.
     useEffect(() => {
-        if (!preferences.followSystemTheme || typeof window.matchMedia !== 'function') {
+        if (!followSystemTheme || typeof window.matchMedia !== 'function') {
             return;
         }
 
@@ -102,7 +96,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
 
         mediaQuery.addListener(handleSystemThemeChange);
         return () => mediaQuery.removeListener(handleSystemThemeChange);
-    }, [preferences.followSystemTheme, setDaylightPreferenceFromSystem]);
+    }, [followSystemTheme, setDaylightPreferenceFromSystem]);
 
     useEffect(() => {
         if (!window.electron?.getWindowTransparentMode) {
@@ -162,7 +156,7 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         // Main refused a transparent-enable toggle (classic Windows wallpaper mode): the toggle
         // stays in its previous state, this only explains why nothing happened.
         return window.electron?.onWallpaperTransparentRefused?.(() => {
-            useSettingsUiStore.getState().handleWallpaperTransparentRefused();
+            usePlayerChromeSettingsStore.getState().handleWallpaperTransparentRefused();
         });
     }, []);
 
@@ -393,5 +387,4 @@ export function useAppPreferences(setStatusMsg: StatusSetter) {
         }));
     }, [handleSetMonetTuning, isLoadingMonetPortraitImage, monetTuning, storedMonetPortraitImage]);
 
-    return preferences;
 }

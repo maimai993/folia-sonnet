@@ -65,7 +65,7 @@ import {
     type DioramaParticleCorridorSpan,
 } from '@/components/visualizer/diorama/dioramaParticleCorridor';
 import { appendSegment, createSequencerState } from '@/components/visualizer/diorama/dioramaSequencer';
-import { resolveStoredDioramaTuning } from '@/stores/useSettingsUiStore';
+import { resolveStoredDioramaTuning } from '@/stores/visualizerSettingsPersistence';
 import {
     getDioramaParticleContrastRatio,
     getDioramaParticleDisplayedContrastRatio,

@@ -21,9 +21,9 @@ test('switches between clouds and corridor mode and keeps particle controls inte
     });
     await page.goto('/');
     await page.evaluate(async () => {
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-        const { useSettingsUiStore } = await import(storeModulePath);
-        useSettingsUiStore.getState().openSettings('options', 'visualizer', 'visualizer');
+        const storeModulePath = '/src/stores/useSettingsModalStore.ts';
+        const { useSettingsModalStore } = await import(storeModulePath);
+        useSettingsModalStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 
     // 不能用 getByText：fieldset 的 sr-only <legend> 也叫这个名字，会撞上 strict mode。

@@ -19,9 +19,9 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
     });
     await page.goto('/');
     await page.evaluate(async () => {
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-        const { useSettingsUiStore } = await import(storeModulePath);
-        useSettingsUiStore.getState().openSettings('options', 'visualizer', 'visualizer');
+        const storeModulePath = '/src/stores/useSettingsModalStore.ts';
+        const { useSettingsModalStore } = await import(storeModulePath);
+        useSettingsModalStore.getState().openSettings('options', 'visualizer', 'visualizer');
     });
 
     const sonnetMode = page.getByRole('button', { name: 'Sonnet', exact: true });
@@ -36,9 +36,9 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
     await expect(page.getByText('Background decorations', { exact: true })).toBeVisible();
 
     const visualizerMode = await page.evaluate(async () => {
-        const storeModulePath = '/src/stores/useSettingsUiStore.ts';
-        const { useSettingsUiStore } = await import(storeModulePath);
-        return useSettingsUiStore.getState().visualizerMode;
+        const storeModulePath = '/src/stores/useVisualizerSettingsStore.ts';
+        const { useVisualizerSettingsStore } = await import(storeModulePath);
+        return useVisualizerSettingsStore.getState().visualizerMode;
     });
     expect(visualizerMode).toBe('sonnet');
 });

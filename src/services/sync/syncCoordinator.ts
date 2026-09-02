@@ -1,8 +1,7 @@
-import { useSettingsUiStore } from '../../stores/useSettingsUiStore';
 import { getSyncConfig, isSyncConfigured, setSyncStatus } from './syncConfig';
 import { getRemoteState, testSyncConnection } from './syncClient';
 import type { SyncProviderConfig } from './syncTypes';
-import { applySyncedVisualSettings, buildSyncedSettingsRecord } from './settingsSnapshot';
+import { applySyncedVisualSettings, buildSyncedSettingsRecord, readSyncableSettingsState } from './settingsSnapshot';
 import {
     fetchRemoteSyncState,
     fetchRemoteSettingsIfNewer,
@@ -42,7 +41,7 @@ const pushCurrentSettings = async () => {
     }
 
     const updatedAt = new Date().toISOString();
-    const record = buildSyncedSettingsRecord(useSettingsUiStore.getState(), updatedAt);
+    const record = buildSyncedSettingsRecord(readSyncableSettingsState(), updatedAt);
     setLocalSettingsUpdatedAt(updatedAt);
     return await pushRemoteSettings(record);
 };
@@ -74,7 +73,7 @@ export const pullRemoteVisualSettings = async (remoteState?: SyncRemoteState | n
 
     applyingRemoteSettings = true;
     try {
-        applySyncedVisualSettings(useSettingsUiStore.getState(), remoteSettings.data);
+        applySyncedVisualSettings(readSyncableSettingsState(), remoteSettings.data);
         setLocalSettingsUpdatedAt(remoteSettings.updatedAt);
         return true;
     } finally {
@@ -152,7 +151,7 @@ export const syncNow = async (options: { syncThemes?: boolean; applyRemoteSettin
 export const exportSyncLibraryBundle = async (): Promise<SyncLibraryExportBundle> => {
     setSyncStatus({ state: 'syncing', lastError: null });
     try {
-        const settings = buildSyncedSettingsRecord(useSettingsUiStore.getState(), new Date().toISOString());
+        const settings = buildSyncedSettingsRecord(readSyncableSettingsState(), new Date().toISOString());
         const themes = await mergeLocalThemesIntoRecords(await listAllRemoteThemeRecords());
         const bundle: SyncLibraryExportBundle = {
             kind: 'folia-sync-export',
@@ -191,7 +190,7 @@ export const importSyncLibraryBundle = async (
         if (validatedBundle.settings) {
             applyingRemoteSettings = true;
             try {
-                applySyncedVisualSettings(useSettingsUiStore.getState(), validatedBundle.settings.data);
+                applySyncedVisualSettings(readSyncableSettingsState(), validatedBundle.settings.data);
                 setLocalSettingsUpdatedAt(validatedBundle.settings.updatedAt);
             } finally {
                 applyingRemoteSettings = false;

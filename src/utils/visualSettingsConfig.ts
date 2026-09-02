@@ -1,14 +1,21 @@
 import { collectVisualizerTunings } from '../components/visualizer/tuningRegistry';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { readStoredThemeAutoGenerateEnabled, readStoredThemeAutoSwitchEnabled, readStoredThemeGenerationSource } from '../services/themePreferences';
 import type { CappellaAvatarImage, CappellaEmojiImage, CappellaTuning, MonetBackgroundImage, MonetBackgroundTuning, MonetPortraitImage, MonetTuning, NomandBackgroundTuning } from '../types';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 
 // src/utils/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
 // the import/export "copy config" and the OBS URL builder stay in sync from a single field list.
 
 export function buildVisualSettingsConfig(): Record<string, unknown> {
-  const store = useSettingsUiStore.getState();
+  const storeStageSettings = useStageSettingsStore.getState();
+  const storeThemeSettings = useThemeSettingsStore.getState();
+  const storeTypographySettings = useTypographySettingsStore.getState();
+  const storeVisualizer = useVisualizerSettingsStore.getState();
   // The song-theme automation flags live in theme preferences, not the settings store. The overlay
   // ignores them, but a copied OBS URL is also a restore payload (the import box accepts one), so
   // dropping them here would silently lose both toggles on re-import. Auto-generate is ANDed with
@@ -20,70 +27,70 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     songThemeAutoSwitchEnabled,
     songThemeAutoGenerateEnabled,
     themeGenerationSource: readStoredThemeGenerationSource(),
-    followSystemTheme: store.followSystemTheme,
-    visualizerMode: store.visualizerMode,
-    randomVisualizerModePerSong: store.randomVisualizerModePerSong,
-    visualizerBackgroundMode: store.visualizerBackgroundMode,
-    backgroundOpacity: store.backgroundOpacity,
+    followSystemTheme: storeThemeSettings.followSystemTheme,
+    visualizerMode: storeVisualizer.visualizerMode,
+    randomVisualizerModePerSong: storeVisualizer.randomVisualizerModePerSong,
+    visualizerBackgroundMode: storeVisualizer.visualizerBackgroundMode,
+    backgroundOpacity: storeVisualizer.backgroundOpacity,
     // The other three legs of background.common, alongside the opacity above. The local OBS browser
     // source has always carried them (it publishes the whole VisualizerBackgroundConfig), so leaving
     // them out here made the two OBS paths disagree — and a copied config silently lost the cover-color,
     // geometric-background and vignette toggles on re-import.
-    useCoverColorBg: store.useCoverColorBg,
-    disableVisualizerGeometricBackground: store.disableVisualizerGeometricBackground,
-    disableVisualizerVignette: store.disableVisualizerVignette,
+    useCoverColorBg: storeThemeSettings.useCoverColorBg,
+    disableVisualizerGeometricBackground: storeVisualizer.disableVisualizerGeometricBackground,
+    disableVisualizerVignette: storeVisualizer.disableVisualizerVignette,
     // Static mode is not merely an audio-reactivity switch: it selects the low-motion branch inside
     // several renderers, so a web overlay without it animates where the main window does not.
-    staticMode: store.staticMode,
-    visualizerOpacity: store.visualizerOpacity,
-    hidePlayerTranslationSubtitle: store.hidePlayerTranslationSubtitle,
-    showSubtitleTranslation: store.showSubtitleTranslation,
-    subtitleContentMode: store.subtitleContentMode,
-    subtitleOverlayBackground: store.subtitleOverlayBackground,
-    subtitleOverlayOpacity: store.subtitleOverlayOpacity,
-    showHarmonySubtitle: store.showHarmonySubtitle,
-    harmonySubtitleBackground: store.harmonySubtitleBackground,
-    lyricsFontStyle: store.lyricsFontStyle,
-    lyricsFontScale: store.lyricsFontScale,
+    staticMode: storeThemeSettings.staticMode,
+    visualizerOpacity: storeVisualizer.visualizerOpacity,
+    hidePlayerTranslationSubtitle: storeTypographySettings.hidePlayerTranslationSubtitle,
+    showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
+    subtitleContentMode: storeTypographySettings.subtitleContentMode,
+    subtitleOverlayBackground: storeTypographySettings.subtitleOverlayBackground,
+    subtitleOverlayOpacity: storeTypographySettings.subtitleOverlayOpacity,
+    showHarmonySubtitle: storeTypographySettings.showHarmonySubtitle,
+    harmonySubtitleBackground: storeTypographySettings.harmonySubtitleBackground,
+    lyricsFontStyle: storeTypographySettings.lyricsFontStyle,
+    lyricsFontScale: storeTypographySettings.lyricsFontScale,
     // The codec, the OBS overlay (obsWebAppearance -> buildVisualizerTheme) and the import path all
     // already handle the custom font weights; this field table is the only place they were missing,
     // so without them a copied link and the OBS overlay silently fall back to the mode's default
     // weight. null means "use the mode default" and is carried as-is so it round-trips.
-    lyricsFontWeight: store.lyricsFontWeight,
-    lyricsFontFallbackFamilies: store.lyricsFontFallbackFamilies,
-    subtitleFontInheritsLyrics: store.subtitleFontInheritsLyrics,
-    subtitleFontScale: store.subtitleFontScale,
-    subtitleFontStyle: store.subtitleFontStyle,
-    subtitleFontWeight: store.subtitleFontWeight,
-    subtitleFontFamily: store.subtitleFontFamily,
-    subtitleFontFallbackFamilies: store.subtitleFontFallbackFamilies,
+    lyricsFontWeight: storeTypographySettings.lyricsFontWeight,
+    lyricsFontFallbackFamilies: storeTypographySettings.lyricsFontFallbackFamilies,
+    subtitleFontInheritsLyrics: storeTypographySettings.subtitleFontInheritsLyrics,
+    subtitleFontScale: storeTypographySettings.subtitleFontScale,
+    subtitleFontStyle: storeTypographySettings.subtitleFontStyle,
+    subtitleFontWeight: storeTypographySettings.subtitleFontWeight,
+    subtitleFontFamily: storeTypographySettings.subtitleFontFamily,
+    subtitleFontFallbackFamilies: storeTypographySettings.subtitleFontFallbackFamilies,
     // Only a system font's family name is portable; an uploaded font is a browser-local FontFace
     // (its generated family resolves nowhere else), so it is not carried.
-    lyricsCustomFontFamily: store.lyricsCustomFont?.source === 'system' ? store.lyricsCustomFont.family : null,
-    visualizerTunings: collectVisualizerTunings(store as unknown as Record<string, unknown>),
-    classicTuning: store.classicTuning,
-    cadenzaTuning: store.cadenzaTuning,
-    partitaTuning: store.partitaTuning,
-    fumeTuning: store.fumeTuning,
-    claddaghTuning: store.claddaghTuning,
-    cappellaTuning: store.cappellaTuning,
-    tiltTuning: store.tiltTuning,
-    dioramaTuning: store.dioramaTuning,
-    monetBackgroundTuning: store.monetBackgroundTuning,
-    nomandBackgroundTuning: store.nomandBackgroundTuning,
-    latentBackgroundTuning: store.latentBackgroundTuning,
-    monetTuning: store.monetTuning,
-    pendoloTuning: store.pendoloTuning,
-    sonnetTuning: store.sonnetTuning,
-    temperaTuning: store.temperaTuning,
-    urlBackgroundList: store.urlBackgroundList,
-    urlBackgroundSelectedId: store.urlBackgroundSelectedId,
+    lyricsCustomFontFamily: storeTypographySettings.lyricsCustomFont?.source === 'system' ? storeTypographySettings.lyricsCustomFont.family : null,
+    visualizerTunings: collectVisualizerTunings(storeVisualizer as unknown as Record<string, unknown>),
+    classicTuning: storeVisualizer.classicTuning,
+    cadenzaTuning: storeVisualizer.cadenzaTuning,
+    partitaTuning: storeVisualizer.partitaTuning,
+    fumeTuning: storeVisualizer.fumeTuning,
+    claddaghTuning: storeVisualizer.claddaghTuning,
+    cappellaTuning: storeVisualizer.cappellaTuning,
+    tiltTuning: storeVisualizer.tiltTuning,
+    dioramaTuning: storeVisualizer.dioramaTuning,
+    monetBackgroundTuning: storeVisualizer.monetBackgroundTuning,
+    nomandBackgroundTuning: storeVisualizer.nomandBackgroundTuning,
+    latentBackgroundTuning: storeVisualizer.latentBackgroundTuning,
+    monetTuning: storeVisualizer.monetTuning,
+    pendoloTuning: storeVisualizer.pendoloTuning,
+    sonnetTuning: storeVisualizer.sonnetTuning,
+    temperaTuning: storeVisualizer.temperaTuning,
+    urlBackgroundList: storeVisualizer.urlBackgroundList,
+    urlBackgroundSelectedId: storeVisualizer.urlBackgroundSelectedId,
     // The now playing card. Not a visualizer setting, but it is chrome the listener sees over the
     // same picture, and all three legs are needed together: the mode alone restores a card that
     // hides after someone else's timeout, and on a page the importer never asked for.
-    stageTrackPillMode: store.stageTrackPillMode,
-    stageTrackPillTimeoutSec: store.stageTrackPillTimeoutSec,
-    stageTrackPillOnHome: store.stageTrackPillOnHome,
+    stageTrackPillMode: storeStageSettings.stageTrackPillMode,
+    stageTrackPillTimeoutSec: storeStageSettings.stageTrackPillTimeoutSec,
+    stageTrackPillOnHome: storeStageSettings.stageTrackPillOnHome,
   };
 }
 
@@ -91,11 +98,13 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
 // custom fallback family) rather than only a builtin sans/serif/mono style — used to warn on copy
 // that the font may be unavailable on the OBS machine (and that an uploaded font never transfers).
 export function hasCustomObsFont(): boolean {
-  const store = useSettingsUiStore.getState();
-  return Boolean(store.lyricsCustomFont)
-    || (store.lyricsFontFallbackFamilies?.length ?? 0) > 0
-    || Boolean(store.subtitleFontFamily)
-    || (store.subtitleFontFallbackFamilies?.length ?? 0) > 0;
+  const storeStageSettings = useStageSettingsStore.getState();
+  const storeThemeSettings = useThemeSettingsStore.getState();
+  const storeTypographySettings = useTypographySettingsStore.getState();
+  return Boolean(storeTypographySettings.lyricsCustomFont)
+    || (storeTypographySettings.lyricsFontFallbackFamilies?.length ?? 0) > 0
+    || Boolean(storeTypographySettings.subtitleFontFamily)
+    || (storeTypographySettings.subtitleFontFallbackFamilies?.length ?? 0) > 0;
 }
 
 // The subset of settings that decide whether an uploaded image asset is in play. Kept structural
@@ -131,7 +140,10 @@ export function computeHasUploadedObsAsset(inputs: UploadedObsAssetInputs): bool
 }
 
 export function hasUploadedObsAsset(): boolean {
-  return computeHasUploadedObsAsset(useSettingsUiStore.getState());
+  return computeHasUploadedObsAsset({
+    ...useVisualizerSettingsStore.getState(),
+    ...useVisualizerAssetStore.getState(),
+  });
 }
 
 // Single source of truth for the OBS copy toast: an uploaded image is the more surprising loss

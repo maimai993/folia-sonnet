@@ -10,6 +10,7 @@ import {
     isStagePlaybackSong,
     replacePlaybackSongInQueue,
 } from '../../../utils/appPlaybackGuards';
+import { setAudioSrc, setCurrentSong, setPlayQueue } from '../../../stores/usePlaybackStore';
 
 // src/components/app/playback/createOnlineRecoveryController.ts
 
@@ -25,9 +26,6 @@ type RecoveryControllerParams = {
     onlinePlaybackRecoveryRef: MutableRefObject<Promise<boolean> | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setAudioSrc: Dispatch<SetStateAction<string | null>>;
-    setCurrentSong: Dispatch<SetStateAction<SongResult | null>>;
-    setPlayQueue: Dispatch<SetStateAction<SongResult[]>>;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
     playQueue: SongResult[];
     onlineAudioUrlTtlMs: number;
@@ -68,9 +66,6 @@ export const createOnlineRecoveryController = ({
     onlinePlaybackRecoveryRef,
     lastAudioRecoverySourceRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setAudioSrc,
-    setCurrentSong,
-    setPlayQueue,
     persistLastPlaybackCache,
     playQueue,
     onlineAudioUrlTtlMs,

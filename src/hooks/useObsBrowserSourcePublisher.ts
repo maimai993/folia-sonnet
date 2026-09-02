@@ -45,6 +45,15 @@ import { loadTemperaLayerImageBlobs } from '../services/temperaLayerImages';
 import type { VisualizerTuningBundle } from '../components/visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../components/visualizer/backgrounds/definition';
 import { getSongAlbumLabel, getSongArtistLabel } from '../services/onlineMusic/songMetadata';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
+import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
+import { audioBands, audioPower, currentTime } from '../stores/motionSignals';
+import { useVisualizerTunings } from '../components/visualizer/useVisualizerTunings';
+import { useVisualizerBackgroundConfig } from '../components/visualizer/useVisualizerBackgroundConfig';
+import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
 
 // src/hooks/useObsBrowserSourcePublisher.ts
 // Publishes the single playback surface to the local OBS browser source.
@@ -54,39 +63,16 @@ const OBS_AUDIO_INTERVAL_MS = 50;
 const OBS_CLOCK_JUMP_THRESHOLD_SEC = 0.35;
 const OBS_CLOCK_JUMP_MIN_INTERVAL_MS = 80;
 type UseObsBrowserSourcePublisherOptions = {
+
+
     isElectronWindow: boolean;
-    activePlaybackContext: PlaybackContext;
     stageSource: StageSource | null;
-    currentSong: SongResult | null;
-    lyrics: LyricData | null;
     coverUrl: string | null;
-    currentTime: MotionValue<number>;
     offsetMs: number;
-    duration: number;
-    playerState: PlayerState;
     theme: Theme;
     subtitleTheme?: Theme;
-    isDaylight: boolean;
-    visualizerMode: VisualizerMode;
-    visualizerTunings?: VisualizerTuningBundle;
-    background?: VisualizerBackgroundConfig;
-    lyricsFontScale: number;
-    subtitleFontScale: number;
-    visualizerOpacity: number;
-    subtitleOverlayOpacity: number;
-    subtitleOverlayBackground: boolean;
-    showHarmonySubtitle: boolean;
-    harmonySubtitleBackground: boolean;
-    staticMode: boolean;
     hideTranslationSubtitle: boolean;
-    showSubtitleTranslation: boolean;
-    subtitleContentMode: SubtitleContentMode;
     seed: string | number;
-    audioPower: MotionValue<number>;
-    audioBands: AudioBands;
-    cappellaCustomEmojiImages?: CappellaEmojiImage[];
-    cappellaCustomAvatarImages?: CappellaAvatarImage[];
-    monetPortraitImage?: MonetPortraitImage | null;
 };
 
 const emptyObsStatus = (): ObsBrowserSourceStatus => ({
@@ -126,39 +112,48 @@ const resolveTemperaLayerAssets = async (
 
 export const useObsBrowserSourcePublisher = ({
     isElectronWindow,
-    activePlaybackContext,
     stageSource,
-    currentSong,
-    lyrics,
     coverUrl,
-    currentTime,
     offsetMs,
-    duration,
-    playerState,
     theme,
     subtitleTheme,
-    isDaylight,
-    visualizerMode,
-    visualizerTunings,
-    background,
-    lyricsFontScale,
-    subtitleFontScale,
-    visualizerOpacity,
-    subtitleOverlayOpacity,
-    subtitleOverlayBackground,
-    showHarmonySubtitle,
-    harmonySubtitleBackground,
-    staticMode,
     hideTranslationSubtitle,
-    showSubtitleTranslation,
-    subtitleContentMode,
     seed,
-    audioPower,
-    audioBands,
-    cappellaCustomEmojiImages,
-    cappellaCustomAvatarImages,
-    monetPortraitImage,
 }: UseObsBrowserSourcePublisherOptions) => {
+    const visualizerTunings = useVisualizerTunings();
+    const backgroundConfig = useVisualizerBackgroundConfig();
+    const transparentPlayerBackground = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground);
+    const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
+    // The overlay is composited by OBS, so it always publishes the transparent variant when the
+    // player page itself is transparent - there is no window chrome behind it to show through.
+    const background = useMemo(() => ({
+        ...backgroundConfig,
+        transparent: transparentPlayerBackground || enablePlayerPageNativeBlur,
+    }), [backgroundConfig, transparentPlayerBackground, enablePlayerPageNativeBlur]);
+
+    // Read here rather than passed in. Every one of these is a store field or a module-level motion
+    // signal, and App.tsx was naming 22 of them purely to forward them to this hook.
+    const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+    const duration = usePlaybackStore(state => state.duration);
+    const playerState = usePlaybackStore(state => state.playerState);
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const staticMode = useThemeSettingsStore(state => state.staticMode);
+    const visualizerMode = useVisualizerSettingsStore(state => state.visualizerMode);
+    const visualizerOpacity = useVisualizerSettingsStore(state => state.visualizerOpacity);
+    const lyricsFontScale = useTypographySettingsStore(state => state.lyricsFontScale);
+    const subtitleFontScale = useTypographySettingsStore(state => state.subtitleFontScale);
+    const subtitleOverlayOpacity = useTypographySettingsStore(state => state.subtitleOverlayOpacity);
+    const subtitleOverlayBackground = useTypographySettingsStore(state => state.subtitleOverlayBackground);
+    const showHarmonySubtitle = useTypographySettingsStore(state => state.showHarmonySubtitle);
+    const harmonySubtitleBackground = useTypographySettingsStore(state => state.harmonySubtitleBackground);
+    const showSubtitleTranslation = useTypographySettingsStore(state => state.showSubtitleTranslation);
+    const subtitleContentMode = useTypographySettingsStore(state => state.subtitleContentMode);
+    const cappellaCustomEmojiImages = useVisualizerAssetStore(state => state.cappellaCustomEmojiImages);
+    const cappellaCustomAvatarImages = useVisualizerAssetStore(state => state.cappellaCustomAvatarImages);
+    const monetPortraitImage = useVisualizerAssetStore(state => state.monetPortraitImage);
+
     // The pool rides in the tuning bundle that is already published; only the files are missing
     // on the overlay side, and those are resolved below.
     const temperaLayerImages = visualizerTunings?.tempera?.layerImages;

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    clampGlobalLyricTimelineOffsetMs,
-    GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS,
-} from '@/stores/useSettingsUiStore';
+import { clampGlobalLyricTimelineOffsetMs, GLOBAL_LYRIC_TIMELINE_OFFSET_LIMIT_MS } from '@/stores/useLyricSettingsStore';
 
 // test/unit/stores/globalLyricTimelineOffset.test.ts
 // The device-level lyric offset is read straight from localStorage on startup, so the clamp is the

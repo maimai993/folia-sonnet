@@ -10,22 +10,19 @@ import { restorePlaybackSourceForSong } from '../components/app/playback/restore
 import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } from '../utils/appPlaybackGuards';
 import type { LyricData, SongResult, StatusMessage } from '../types';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setCurrentSong, setPlayQueue } from '../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 
 // src/hooks/useSessionRestoreController.ts
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseSessionRestoreControllerParams = {
-    audioQuality: AudioQualityPreference;
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setStatusMsg: SetState<StatusMessage | null>;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
@@ -39,16 +36,10 @@ type UseSessionRestoreControllerParams = {
 
 // Restores the main playback session without pushing more boot logic into App.tsx.
 export function useSessionRestoreController({
-    audioQuality,
     userId,
     blobUrlRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setCurrentSong,
-    setPlayQueue,
-    setCachedCoverUrl,
-    setAudioSrc,
     setLyrics,
-    setStatusMsg,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
     clearPersistedStagePlaybackCache,
@@ -56,6 +47,8 @@ export function useSessionRestoreController({
     loadLocalPlaylists,
     canRestoreSession = true,
 }: UseSessionRestoreControllerParams) {
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+
     const hasInitializedRef = useRef(false);
     const hasLoadedLocalLibraryRef = useRef(false);
 
@@ -141,12 +134,7 @@ export function useSessionRestoreController({
                         userId,
                         blobUrlRef,
                         currentOnlineAudioUrlFetchedAtRef,
-                        setCurrentSong,
-                        setPlayQueue,
-                        setCachedCoverUrl,
-                        setAudioSrc,
                         setLyrics,
-                        setStatusMsg,
                         restoreCachedThemeForSong,
                         persistLastPlaybackCache,
                         queue: lastQueue || [lastSong],

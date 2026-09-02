@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SONNET_TUNING } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 
 // test/unit/visualizer/sonnetSettings.test.ts
 // Verifies Sonnet visibility tuning at the store boundary.
@@ -26,7 +26,7 @@ describe('Sonnet settings', () => {
         storage = createLocalStorageMock();
         vi.stubGlobal('localStorage', storage);
         vi.stubGlobal('window', { localStorage: storage });
-        useSettingsUiStore.setState({
+        useVisualizerSettingsStore.setState({
             visualizerMode: 'classic',
             sonnetTuning: { ...DEFAULT_SONNET_TUNING },
         });
@@ -38,7 +38,7 @@ describe('Sonnet settings', () => {
 
     it('updates and persists visibility tuning', () => {
         expect(DEFAULT_SONNET_TUNING.textureResolution).toBe(1.5);
-        useSettingsUiStore.getState().handleSetSonnetTuning({
+        useVisualizerSettingsStore.getState().handleSetSonnetTuning({
             showOnlyText: true,
             showGuide: false,
             showBackgroundMg: false,
@@ -49,7 +49,7 @@ describe('Sonnet settings', () => {
             postProcessLensDispersion: 0.7,
         });
 
-        expect(useSettingsUiStore.getState().sonnetTuning).toMatchObject({
+        expect(useVisualizerSettingsStore.getState().sonnetTuning).toMatchObject({
             showOnlyText: true,
             showGuide: false,
             showBackgroundMg: false,
@@ -73,15 +73,15 @@ describe('Sonnet settings', () => {
     });
 
     it('enters Sonnet directly without an interstitial confirmation', () => {
-        useSettingsUiStore.getState().handleSetVisualizerMode('sonnet');
+        useVisualizerSettingsStore.getState().handleSetVisualizerMode('sonnet');
 
-        expect(useSettingsUiStore.getState().visualizerMode).toBe('sonnet');
+        expect(useVisualizerSettingsStore.getState().visualizerMode).toBe('sonnet');
         expect(storage.getItem('visualizer_mode')).toBe('sonnet');
     });
 
     it('allows the stronger lens distortion range without accepting out-of-range values', () => {
-        useSettingsUiStore.getState().handleSetSonnetTuning({ postProcessLensDistortion: 3 });
+        useVisualizerSettingsStore.getState().handleSetSonnetTuning({ postProcessLensDistortion: 3 });
 
-        expect(useSettingsUiStore.getState().sonnetTuning.postProcessLensDistortion).toBe(2);
+        expect(useVisualizerSettingsStore.getState().sonnetTuning.postProcessLensDistortion).toBe(2);
     });
 });

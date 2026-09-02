@@ -2,7 +2,6 @@ import { LocalSong, LyricData, LocalLibrarySnapshot, LocalLibrarySnapshotFile, L
 import { saveLocalSong, saveLocalSongs, deleteLocalSong as dbDeleteLocalSong, deleteLocalSongs as dbDeleteLocalSongs, saveDirHandles, getDirHandles, deleteDirHandle, getLocalSongs, getLocalLibrarySnapshot, saveLocalLibrarySnapshot, deleteLocalLibrarySnapshot } from './db';
 import { getLocalPlaylists, saveLocalPlaylists } from './localPlaylistService';
 import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../utils/localMetadataWorkerClient';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
 import { createSafeObjectUrl } from '../utils/blobGuards';
@@ -26,6 +25,7 @@ import { hasLocalCoverBinary } from './localCoverBinaryStore';
 import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 import { getLocalLibraryAvailability } from './localLibraryAvailability';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -1250,14 +1250,14 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
             (song.hasLocalLyrics && song.localLyricsContent)
             || (song.hasEmbeddedLyrics && song.embeddedLyricsContent)
         );
-        const settings = useSettingsUiStore.getState();
-        const onlineFirst = settings.localLyricsPriority === 'online';
+  const settingsLyricSettings = useLyricSettingsStore.getState();
+        const onlineFirst = settingsLyricSettings.localLyricsPriority === 'online';
 
         console.log(`[LocalMusic] Searching lyrics for: "${searchQuery}"`);
 
         // A selected GridView metadata identity is authoritative and must not be replaced by lyric fallback metadata.
         if (!hasLocalOrEmbeddedLyrics || onlineFirst) {
-            const shouldUseBestLyric = settings.autoUseBestLyric;
+            const shouldUseBestLyric = settingsLyricSettings.autoUseBestLyric;
             if (shouldUseBestLyric || matchContext.metadataCandidate) {
                 const bestMatch = await autoMatchBestLyric(
                     matchContext.title,
@@ -1265,7 +1265,7 @@ export async function matchLyrics(song: LocalSong): Promise<LyricData | null> {
                     matchContext.durationMs,
                     {
                         album: matchContext.album,
-                        preferredSource: shouldUseBestLyric ? settings.preferredAlternativeLyricSource : undefined,
+                        preferredSource: shouldUseBestLyric ? settingsLyricSettings.preferredAlternativeLyricSource : undefined,
                         metadataCandidate: matchContext.metadataCandidate,
                         exactMatchOnly: Boolean(matchContext.metadataCandidate && !shouldUseBestLyric),
                     },
