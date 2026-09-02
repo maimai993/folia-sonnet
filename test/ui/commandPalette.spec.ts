@@ -92,17 +92,13 @@ test('opens on home with the primary modifier and K', async ({ page }) => {
     await expect(palette(page)).toBeVisible();
 });
 
-test('leaves the bare s key to the home surface', async ({ page }) => {
+test('still opens with bare s on the home shelf', async ({ page }) => {
     await openHomePage(page);
-    await pressUntilPaletteOpens(page);
-    await page.keyboard.press('Escape');
-    await expect(palette(page)).toBeHidden();
 
-    // 首页把任意单字符当成输入（在线搜索框、网格的即打即筛），所以全局入口必须带修饰键。
-    await page.keyboard.press('s');
-    await page.waitForTimeout(400);
-
-    await expect(palette(page)).toBeHidden();
+    // 首页这一层没有任何东西读单字符，所以裸键 s 和播放页一样管用。让位只发生在网格里，
+    // 那里注册了筛选。
+    await pressUntilPaletteOpens(page, 's');
+    await expect(palette(page)).toBeVisible();
 });
 
 test('withdraws the player-surface commands on home', async ({ page }) => {

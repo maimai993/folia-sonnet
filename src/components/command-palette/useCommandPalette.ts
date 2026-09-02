@@ -33,11 +33,13 @@ export const useCommandPalette = ({
     context,
 }: UseCommandPaletteParams) => {
     // The palette used to refuse to open anywhere but the player. That gate is gone: a command
-    // decides for itself whether it applies, through `isAvailable` and `context.scope`. What is
-    // still view-dependent is the *keyboard*, and only for keys with no modifier: a filtering
-    // surface reads them as input, and so does the home surface's online search box. A
-    // modifier-free palette key in either place would fire two things at once.
-    const ownsBareKeys = !context.scope.filter && context.scope.view === 'player';
+    // decides for itself whether it applies, through `isAvailable` and `context.scope`.
+    //
+    // Modifier-free keys are the one thing still contended, and the contender is not the view —
+    // it is whether something on screen reads typed characters as input. Nothing does on the
+    // player, and nothing does on the home shelf either, so bare `s` opens the palette on both.
+    // Inside a grid the filter owns them, or one press would fire two things at once.
+    const ownsBareKeys = !context.scope.filter;
     const filterCommand = context.scope.filter
         ? COMMAND_PALETTE_COMMANDS.find(command => command.id === FILTER_VIEW_COMMAND_ID) ?? null
         : null;
@@ -132,8 +134,8 @@ export const useCommandPalette = ({
         }
     }, []);
 
-    const activateInputCommand = useCallback((command: CommandPaletteCommand, overrideInput?: string) => {
-        const initialInput = overrideInput ?? command.getInitialInput?.(context) ?? '';
+    const activateInputCommand = useCallback((command: CommandPaletteCommand) => {
+        const initialInput = command.getInitialInput?.(context) ?? '';
         recordRecentCommand(command);
         setActiveCommand(command);
         setQuery(initialInput);
@@ -142,16 +144,14 @@ export const useCommandPalette = ({
     }, [context, recordRecentCommand]);
 
     // Opens the palette straight into one command, used by the per-command openHotkey entries.
-    // `initialInput` overrides what the command would seed itself with: typing a character on a
-    // filtering surface has to land in the box, not be swallowed by the act of opening it.
-    const openCommand = useCallback((command: CommandPaletteCommand, initialInput?: string) => {
+    const openCommand = useCallback((command: CommandPaletteCommand) => {
         if (isBlocked || isExecuting) {
             return;
         }
 
         setIsOpen(true);
         setIsComposing(false);
-        activateInputCommand(command, initialInput);
+        activateInputCommand(command);
     }, [activateInputCommand, isBlocked, isExecuting]);
 
     // Lets a UI surface outside the palette jump straight into one command, without having to
@@ -355,14 +355,19 @@ export const useCommandPalette = ({
             // grids' type-to-filter, except that the palette now holds the input — which is what
             // lets one command, one box and one keyword list serve all three of them.
             if (filterCommand && !isOpen && !event.ctrlKey && !event.altKey && !event.metaKey && !isTextEntryTarget(event.target)) {
-                // An IME hands over 'Process' before it has any text; open and let it compose.
+                // An IME announces itself with 'Process' before it has any text; open and let the
+                // composition land in the box.
                 if (event.key === 'Process' || event.key === 'Unidentified') {
                     openCommand(filterCommand);
                     return;
                 }
                 if (event.key.length === 1) {
+                    // The opening keystroke is deliberately dropped rather than seeded into the
+                    // box. Replaying it would put a stray latin character in front of an IME
+                    // composition that the same press is already starting — the grids swallowed it
+                    // for exactly this reason, and the palette has to keep doing so.
                     event.preventDefault();
-                    openCommand(filterCommand, (context.scope.filter?.getQuery() ?? '') + event.key);
+                    openCommand(filterCommand);
                     return;
                 }
             }
