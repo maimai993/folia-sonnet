@@ -13,7 +13,7 @@ type CommandPaletteContextOverrides = {
 const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
     const base: CommandPaletteContext = {
         // The palette's original and still most common surface; the home cases say so explicitly.
-        scope: { view: 'player' },
+        scope: { view: 'player', filter: null },
         shared: {
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
@@ -260,7 +260,8 @@ describe('command palette registry', () => {
             settings: { sleepTimerHours: 0, sleepTimerMinutes: 15 },
         });
 
-        const props = sleepTimerSurface.mapProps({
+        // This surface always declares a body; `mapProps` is only optional for the inline ones.
+        const props = sleepTimerSurface.mapProps!({
             context,
             query: '--on 90',
             setQuery: vi.fn(),
@@ -769,6 +770,72 @@ describe('command palette registry', () => {
     });
 });
 
+describe('filter-view stands in for the grids own search box', () => {
+    // 这条命令只有在有人「读键入」时才成立：它写的是注册方，不是自己的状态。
+    const withFilter = (query = '') => {
+        const setQuery = vi.fn();
+        const context = createContext({
+            scope: { view: 'home', filter: { getQuery: () => query, setQuery, getAnchor: () => null } },
+        });
+        return { context, setQuery };
+    };
+
+    const surface = () => COMMAND_PALETTE_COMMANDS.find(command => command.id === 'filter-view')!.surface!;
+
+    const surfaceArgs = (context: CommandPaletteContext, query: string) => ({
+        context,
+        query,
+        setQuery: vi.fn(),
+        matches: [],
+        activeIndex: 0,
+        setActiveIndex: vi.fn(),
+        isExecuting: false,
+        executeMatch: vi.fn(async () => true),
+        executeCommand: vi.fn(async () => true),
+        close: vi.fn(),
+    });
+
+    it('is withheld where nothing reads typed characters', () => {
+        const ids = getAvailableCommandPaletteCommands(createContext()).map(command => command.id);
+        expect(ids).not.toContain('filter-view');
+    });
+
+    it('is offered as soon as a surface registers one', () => {
+        const ids = getAvailableCommandPaletteCommands(withFilter().context).map(command => command.id);
+        expect(ids).toContain('filter-view');
+    });
+
+    it('resumes the filter already in place instead of discarding it', () => {
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === 'filter-view')!;
+        expect(command.getInitialInput!(withFilter('blue').context)).toBe('blue');
+    });
+
+    it('writes every keystroke straight through', () => {
+        const { context, setQuery } = withFilter();
+        surface().onQueryChange!(surfaceArgs(context, 'blu'));
+        expect(setQuery).toHaveBeenCalledWith('blu');
+    });
+
+    it('clears the filter on escape, then lets the box close', () => {
+        const { context, setQuery } = withFilter('blue');
+        const keepOpen = surface().onEscape!(surfaceArgs(context, 'blue'));
+        expect(setQuery).toHaveBeenCalledWith('');
+        expect(keepOpen).toBe(false);
+    });
+
+    it('swallows Enter, because closing would hide the only sign the view is filtered', () => {
+        const { context } = withFilter('blue');
+        const args = surfaceArgs(context, 'blue');
+        expect(surface().onSubmit!(args)).toBe(true);
+        expect(args.close).not.toHaveBeenCalled();
+    });
+
+    it('draws itself inline, with no body of its own', () => {
+        expect(surface().presentation).toBe('inline');
+        expect(surface().load).toBeUndefined();
+    });
+});
+
 describe('the player surface gates the panel commands', () => {
     // 面板长在播放页上；命令面板放开到全 app 之后，这些命令在首页没有可开的东西。
     // 置灰而不是隐藏——它们在播放页始终存在，凭视图消失会让列表看起来在闪。
@@ -778,7 +845,7 @@ describe('the player surface gates the panel commands', () => {
     ];
 
     const availableIds = (view: 'home' | 'player') => (
-        getAvailableCommandPaletteCommands(createContext({ scope: { view } })).map(command => command.id)
+        getAvailableCommandPaletteCommands(createContext({ scope: { view, filter: null } })).map(command => command.id)
     );
 
     it('offers them on the player', () => {

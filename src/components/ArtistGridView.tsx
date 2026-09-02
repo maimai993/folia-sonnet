@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { ChevronLeft, Disc, Loader2, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
@@ -17,7 +17,8 @@ import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexView
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { CollectionListItem, SidePanelList } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
-import { gridSearchPanelMotion } from './shared/gridSearchPanelMotion';
+import { useGridCommandFilter } from '../hooks/useGridCommandFilter';
+import { closeCommandFilter, openCommandFilter } from '../stores/useAppViewStore';
 import { appendUniqueByKey, deriveProgressiveLoadingState } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalLibraryCatalog } from '../hooks/useLocalLibraryCatalog';
@@ -320,14 +321,20 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [backgroundLoadFailed, setBackgroundLoadFailed] = useState(false);
     const [showFullBio, setShowFullBio] = useState(false);
-    const [showSearchPanel, setShowSearchPanel] = useState(false);
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
-    const [draftSearchQuery, setDraftSearchQuery] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
-    const searchInputRef = useRef<HTMLInputElement>(null);
-    const isComposingSearchRef = useRef(false);
+    // The filter box is the command palette now; this grid only says who owns typing and where the
+    // box belongs. See useGridCommandFilter for why all three grids stopped carrying their own.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const isFiltering = useGridCommandFilter({
+        isInteractive,
+        query: searchQuery,
+        setQuery: setSearchQuery,
+        // The box was positioned against this component's root, not the drag canvas.
+        anchorRef: rootRef,
+    });
     const loadGenerationRef = useRef(0);
 
     // Coordinate motion values mapping grid drags
@@ -356,9 +363,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
             };
             if (pendingRestoreStateRef.current.searchQuery) {
-                setShowSearchPanel(true);
-                setDraftSearchQuery(pendingRestoreStateRef.current.searchQuery);
                 setSearchQuery(pendingRestoreStateRef.current.searchQuery);
+                // 恢复出来的筛选也要把框带回来，否则网格是筛过的、屏幕上却没有任何说明。
+                openCommandFilter();
             }
         } catch {
             sessionStorage.removeItem(navigationStorageKey);
@@ -541,15 +548,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     }, [collection.id, collection.source, localLibraryCatalog, resolveLocalSongCoverUrl]);
 
     useEffect(() => {
-        if (!showSearchPanel) return;
-        const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
-        return () => cancelAnimationFrame(frame);
-    }, [showSearchPanel]);
-
-    useEffect(() => {
         if (!isInteractive) return;
 
-        const handleSearchTyping = (event: KeyboardEvent) => {
+        // Typing itself is the palette's now; what stays here is the Escape ladder, which is about
+        // this grid's own panels and has nothing to do with the filter box.
+        const handleEscape = (event: KeyboardEvent) => {
             const target = event.target;
             if (
                 target instanceof HTMLInputElement ||
@@ -557,34 +560,24 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 (target instanceof HTMLElement && target.isContentEditable)
             ) return;
 
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                if (showSearchPanel) {
-                    setShowSearchPanel(false);
-                    setDraftSearchQuery('');
-                    setSearchQuery('');
-                } else if (showSidePanel) {
-                    setShowSidePanel(false);
-                } else if (showCutInPanel) {
-                    setShowCutInPanel(false);
-                } else {
-                    onBack();
-                }
-                return;
-            }
-            if (event.altKey || event.ctrlKey || event.metaKey) return;
-            if (event.key === 'Process' || event.key === 'Unidentified') {
-                setShowSearchPanel(true);
-                return;
-            }
-            if (event.key.length !== 1) return;
+            if (event.key !== 'Escape') return;
+
             event.preventDefault();
-            setShowSearchPanel(true);
+            // A filter still applied is the first thing Escape undoes, as it always was.
+            if (searchQuery) {
+                setSearchQuery('');
+            } else if (showSidePanel) {
+                setShowSidePanel(false);
+            } else if (showCutInPanel) {
+                setShowCutInPanel(false);
+            } else {
+                onBack();
+            }
         };
 
-        window.addEventListener('keydown', handleSearchTyping);
-        return () => window.removeEventListener('keydown', handleSearchTyping);
-    }, [isInteractive, onBack, showCutInPanel, showSearchPanel, showSidePanel]);
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [isInteractive, onBack, searchQuery, showCutInPanel, showSidePanel]);
 
     const filteredAlbums = useMemo(() => {
         const query = deferredSearchQuery.trim().toLowerCase();
@@ -943,7 +936,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             ) return;
 
             if (e.key === 'Enter') {
-                if (e.repeat || showSearchPanel || showSidePanel || showCutInPanel || showFullBio) return;
+                if (e.repeat || isFiltering || showSidePanel || showCutInPanel || showFullBio) return;
 
                 const focusedItem = gridItems[focusedIndex];
                 if (!focusedItem) return;
@@ -1007,8 +1000,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         onSelectTrack,
         persistNavigationState,
         showCutInPanel,
+        isFiltering,
         showFullBio,
-        showSearchPanel,
         showSidePanel,
         playableTopSongs,
     ]);
@@ -1214,6 +1207,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
     return (
         <motion.div
+            ref={rootRef}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1250,7 +1244,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             {/* Title display inside viewport header */}
             <div
                 onClick={() => {
-                    setShowSearchPanel(false);
+                    closeCommandFilter();
                     setShowSidePanel(false);
                     setShowCutInPanel(current => !current);
                 }}
@@ -1286,58 +1280,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 } : undefined}
             />
 
-            <AnimatePresence>
-                {showSearchPanel && (
-                    <motion.div
-                        {...gridSearchPanelMotion}
-                        className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
-                    >
-                        <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
-                            <input
-                                ref={searchInputRef}
-                                value={draftSearchQuery}
-                                onChange={(event) => {
-                                    const value = event.target.value;
-                                    setDraftSearchQuery(value);
-                                    if (!isComposingSearchRef.current) setSearchQuery(value);
-                                }}
-                                onCompositionStart={() => { isComposingSearchRef.current = true; }}
-                                onCompositionEnd={(event) => {
-                                    isComposingSearchRef.current = false;
-                                    setDraftSearchQuery(event.currentTarget.value);
-                                    setSearchQuery(event.currentTarget.value);
-                                }}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Escape') {
-                                        setShowSearchPanel(false);
-                                        setDraftSearchQuery('');
-                                        setSearchQuery('');
-                                    }
-                                }}
-                                placeholder={t('artistGrid.searchAlbums')}
-                                className="w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40"
-                                style={{ color: 'var(--text-primary)' }}
-                            />
-                            <button
-                                onClick={() => {
-                                    if (draftSearchQuery) {
-                                        setDraftSearchQuery('');
-                                        setSearchQuery('');
-                                        searchInputRef.current?.focus();
-                                    } else {
-                                        setShowSearchPanel(false);
-                                    }
-                                }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
-                                aria-label={draftSearchQuery ? t('ui.clear') : t('ui.close')}
-                            >
-                                <X size={15} />
-                            </button>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
 
             {(progressiveLoading.backgroundLoading || backgroundLoadFailed) && (
                 <button
@@ -1434,7 +1376,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     listTitle={t('artistGrid.viewAlbums')}
                     searchTitle={t('artistGrid.searchAlbums')}
                     onOpenList={() => setShowSidePanel(true)}
-                    onOpenSearch={() => setShowSearchPanel(true)}
+                    onOpenSearch={openCommandFilter}
                 />
             )}
 

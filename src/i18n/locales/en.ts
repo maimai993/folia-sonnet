@@ -377,6 +377,7 @@ export default {
       "home-albums": { "title": "Open albums", "description": "Open albums tab" },
       "home-navidrome": { "title": "Open Navidrome", "description": "Open Navidrome tab" },
       "home-radio": { "title": "Open radio", "description": "Open radio tab" },
+      "filter-view": { "title": "Filter this view", "description": "Narrow the cards on screen by name" },
       "panel-cover": { "title": "Panel: cover", "description": "Open the cover panel tab" },
       "panel-controls": { "title": "Panel: controls", "description": "Open the controls panel tab" },
       "panel-queue": { "title": "Panel: queue", "description": "Open the queue panel tab" },

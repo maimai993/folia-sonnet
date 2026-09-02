@@ -377,6 +377,7 @@ export default {
       "home-albums": { "title": "打开专辑", "description": "打开专辑 tab" },
       "home-navidrome": { "title": "打开 Navidrome", "description": "打开 Navidrome tab" },
       "home-radio": { "title": "打开电台", "description": "打开电台 tab" },
+      "filter-view": { "title": "筛选当前视图", "description": "按名称缩小屏幕上的卡片范围" },
       "panel-cover": { "title": "面板：封面", "description": "打开封面面板 tab" },
       "panel-controls": { "title": "面板：控制", "description": "打开控制面板 tab" },
       "panel-queue": { "title": "面板：队列", "description": "打开队列面板 tab" },

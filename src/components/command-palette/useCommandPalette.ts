@@ -3,8 +3,10 @@ import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, isCommand
 import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
+import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
 import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../utils/platform';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
+import { useAppViewStore } from '../../stores/useAppViewStore';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -32,10 +34,13 @@ export const useCommandPalette = ({
 }: UseCommandPaletteParams) => {
     // The palette used to refuse to open anywhere but the player. That gate is gone: a command
     // decides for itself whether it applies, through `isAvailable` and `context.scope`. What is
-    // still view-dependent is the *keyboard*, and only for keys with no modifier — the home surface
-    // treats every bare printable character as input (the online search box, the grids' type-to-
-    // filter), so a modifier-free palette shortcut there would fire two things at once.
-    const ownsBareKeys = context.scope.view === 'player';
+    // still view-dependent is the *keyboard*, and only for keys with no modifier: a filtering
+    // surface reads them as input, and so does the home surface's online search box. A
+    // modifier-free palette key in either place would fire two things at once.
+    const ownsBareKeys = !context.scope.filter && context.scope.view === 'player';
+    const filterCommand = context.scope.filter
+        ? COMMAND_PALETTE_COMMANDS.find(command => command.id === FILTER_VIEW_COMMAND_ID) ?? null
+        : null;
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [matchQuery, setMatchQuery] = useState('');
@@ -127,8 +132,8 @@ export const useCommandPalette = ({
         }
     }, []);
 
-    const activateInputCommand = useCallback((command: CommandPaletteCommand) => {
-        const initialInput = command.getInitialInput?.(context) ?? '';
+    const activateInputCommand = useCallback((command: CommandPaletteCommand, overrideInput?: string) => {
+        const initialInput = overrideInput ?? command.getInitialInput?.(context) ?? '';
         recordRecentCommand(command);
         setActiveCommand(command);
         setQuery(initialInput);
@@ -137,14 +142,16 @@ export const useCommandPalette = ({
     }, [context, recordRecentCommand]);
 
     // Opens the palette straight into one command, used by the per-command openHotkey entries.
-    const openCommand = useCallback((command: CommandPaletteCommand) => {
+    // `initialInput` overrides what the command would seed itself with: typing a character on a
+    // filtering surface has to land in the box, not be swallowed by the act of opening it.
+    const openCommand = useCallback((command: CommandPaletteCommand, initialInput?: string) => {
         if (isBlocked || isExecuting) {
             return;
         }
 
         setIsOpen(true);
         setIsComposing(false);
-        activateInputCommand(command);
+        activateInputCommand(command, initialInput);
     }, [activateInputCommand, isBlocked, isExecuting]);
 
     // Lets a UI surface outside the palette jump straight into one command, without having to
@@ -238,6 +245,29 @@ export const useCommandPalette = ({
         setActiveIndex(0);
     }, [matchQuery]);
 
+    // A filtering surface can ask for its box without knowing anything about the palette — a grid
+    // restoring a view it had filtered, or a click that used to dismiss the box. Keyed on the
+    // request object alone: everything else is read when it fires, and re-running on their identity
+    // would reopen the box every time a grid re-registered.
+    const filterRequest = useAppViewStore(state => state.commandFilterRequest);
+    useEffect(() => {
+        if (!filterRequest.seq) {
+            return;
+        }
+        if (filterRequest.open) {
+            if (filterCommand) {
+                openCommand(filterCommand);
+            }
+            return;
+        }
+        // Only ever takes down the filter box. A request must not close a palette the listener
+        // opened for something else.
+        if (activeCommand?.surface?.presentation === 'inline') {
+            close();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterRequest]);
+
     // Execute mode fires as soon as the buffer is unambiguous, so the surface gets a chance to
     // act on every keystroke. The ref keeps one buffer from being judged twice.
     const handledQueryRef = useRef<string | null>(null);
@@ -305,6 +335,38 @@ export const useCommandPalette = ({
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            // Ordered by who has the stronger claim on the keystroke, not by how the palette is
+            // built. A modifier shortcut can never be mistaken for input, so it goes first; a
+            // surface that reads bare characters outranks every modifier-free palette key, or the
+            // same press would do two things at once.
+
+            // Works everywhere, because it carries a modifier.
+            if (event.code === 'KeyK' && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
+                if (isBlocked) {
+                    return;
+                }
+
+                event.preventDefault();
+                open();
+                return;
+            }
+
+            // A surface that reads typed characters gets them, whatever they are. This is the home
+            // grids' type-to-filter, except that the palette now holds the input — which is what
+            // lets one command, one box and one keyword list serve all three of them.
+            if (filterCommand && !isOpen && !event.ctrlKey && !event.altKey && !event.metaKey && !isTextEntryTarget(event.target)) {
+                // An IME hands over 'Process' before it has any text; open and let it compose.
+                if (event.key === 'Process' || event.key === 'Unidentified') {
+                    openCommand(filterCommand);
+                    return;
+                }
+                if (event.key.length === 1) {
+                    event.preventDefault();
+                    openCommand(filterCommand, (context.scope.filter?.getQuery() ?? '') + event.key);
+                    return;
+                }
+            }
+
             // Commands declare their own entry shortcut; the palette just dispatches them.
             // `ctrl` in a declaration means the platform's primary modifier, so the same entry is
             // Ctrl+P on Windows/Linux and Cmd+P on macOS. Availability is honoured here too, or a
@@ -329,18 +391,6 @@ export const useCommandPalette = ({
                 return;
             }
 
-            // The one entry that works everywhere, because it carries a modifier and so cannot
-            // collide with a surface that reads bare characters.
-            if (event.code === 'KeyK' && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
-                if (isBlocked) {
-                    return;
-                }
-
-                event.preventDefault();
-                open();
-                return;
-            }
-
             if (event.code !== 'KeyS') {
                 return;
             }
@@ -360,7 +410,7 @@ export const useCommandPalette = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [context, isBlocked, open, openCommand, ownsBareKeys]);
+    }, [context, filterCommand, isBlocked, isOpen, open, openCommand, ownsBareKeys]);
 
     return {
         activeIndex,

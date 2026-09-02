@@ -376,6 +376,7 @@ export default {
       "home-albums": { "title": "Buka album", "description": "Buka tab album" },
       "home-navidrome": { "title": "Buka Navidrome", "description": "Buka tab Navidrome" },
       "home-radio": { "title": "Buka radio", "description": "Buka tab radio" },
+      "filter-view": { "title": "Saring tampilan ini", "description": "Persempit kartu di layar berdasarkan nama" },
       "panel-cover": { "title": "Panel: sampul", "description": "Buka tab panel sampul" },
       "panel-controls": { "title": "Panel: kontrol", "description": "Buka tab panel kontrol" },
       "panel-queue": { "title": "Panel: antrean", "description": "Buka tab panel antrean" },

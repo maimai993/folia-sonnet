@@ -2,6 +2,7 @@
 
 exports[`command palette registry contract > keeps the registered command order stable 1`] = `
 [
+  "filter-view",
   "search-current",
   "search-local",
   "search-navidrome",

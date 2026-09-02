@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +9,8 @@ import type { CommandPaletteSurface, CommandSurfaceRenderArgs } from './surfaces
 import { getCommandDescription, getCommandTitle } from './commandText';
 import { isTextEntryTarget } from './useCommandPalette';
 import PinnedCommandRow from './PinnedCommandRow';
+import { setIsCommandFilterOpen } from '../../stores/useAppViewStore';
+import { gridSearchPanelMotion } from '../shared/gridSearchPanelMotion';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -43,6 +46,10 @@ type CommandPaletteProps = {
 const surfaceComponentCache = new WeakMap<CommandPaletteSurface, React.ComponentType<any>>();
 
 const resolveSurfaceComponent = (surface: CommandPaletteSurface) => {
+    if (!surface.load) {
+        return null;
+    }
+
     const cached = surfaceComponentCache.get(surface);
     if (cached) {
         return cached;
@@ -114,6 +121,55 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         executeCommand: onExecutePinnedCommand,
         close: onClose,
     }), [activeIndex, context, isDaylight, isExecuting, matches, onActiveIndexChange, onClose, onExecuteMatch, onExecutePinnedCommand, onQueryCommit, query, theme]);
+    const surfaceBody = surface ? resolveSurfaceComponent(surface) : null;
+    // An inline surface draws itself where the control it replaces used to sit, so it needs a host
+    // element from the surface that registered. Without one there is nowhere to put it, and the
+    // overlay is the honest fallback rather than a box floating at a guessed offset.
+    const liveFilterAnchor = surface?.presentation === 'inline'
+        ? context.scope.filter?.getAnchor() ?? null
+        : null;
+    // Closing drops isOpen and the active command in one commit, so reading the live anchor alone
+    // would swap branches mid-close and the box would vanish instead of animating out. Remember the
+    // host until the palette has finished leaving it.
+    const lastFilterAnchorRef = useRef<HTMLElement | null>(null);
+    if (liveFilterAnchor) {
+        lastFilterAnchorRef.current = liveFilterAnchor;
+    }
+    const filterAnchor = isOpen ? liveFilterAnchor : lastFilterAnchorRef.current;
+    // One input, two frames. The overlay's row and the inline pill differ only in dress: the
+    // composition handling, the surface's own inputProps and the executing lock have to be
+    // identical, so they are written once.
+    const renderQueryInput = (className: string) => (
+        <input
+            ref={inputRef}
+            type="text"
+            {...(surface?.inputProps?.(surfaceArgs) ?? {})}
+            value={query}
+            onChange={(event) => {
+                setIsShowingAllCommands(false);
+                onQueryChange(event.target.value);
+            }}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
+            placeholder={
+                activeCommand
+                    ? (activeCommand.placeholder?.(context) || getCommandDescription(activeCommand, t))
+                    : t(`commandPalette.idlePlaceholders.${idlePlaceholderIndex}`, 'Type anything — there are plenty of commands to try')
+            }
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            name="folia-command-palette-query"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={matches.length > 0}
+            disabled={isExecuting}
+            className={className}
+            style={{ color: 'var(--text-primary)' }}
+        />
+    );
+
     const panelBg = isDaylight ? 'bg-white/70 text-zinc-950' : 'bg-zinc-950/70 text-white';
     const itemActiveBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const itemIdleBg = isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5';
@@ -130,6 +186,14 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         return () => window.cancelAnimationFrame(frame);
     }, [isOpen]);
+
+    // The grid that handed over its keyboard still has to know the box is up — it used to read its
+    // own `showSearchPanel` to keep Enter from opening a card while the listener was typing.
+    const isFilterOpen = isOpen && Boolean(liveFilterAnchor);
+    useEffect(() => {
+        setIsCommandFilterOpen(isFilterOpen);
+        return () => setIsCommandFilterOpen(false);
+    }, [isFilterOpen]);
 
     useEffect(() => {
         if (!isOpen || query !== '' || activeCommand) {
@@ -213,6 +277,46 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onActiveCommandChange, onActiveIndexChange, onClose, onExecuteActive, onQueryChange, query, surface, surfaceArgs]);
 
+    if (filterAnchor) {
+        // Portalled into the host's own element, so the box keeps the position that host gave it
+        // rather than a viewport offset guessed here. Same entrance the grids animated with, too.
+        return createPortal(
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        {...gridSearchPanelMotion}
+                        data-folia-keyboard-window="true"
+                        data-testid="command-palette-filter"
+                        className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
+                    >
+                        <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
+                            {renderQueryInput('w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40')}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    // Clear first, close second — the grids' own button did the
+                                    // same, and it is the only way to undo a filter with the mouse.
+                                    if (query) {
+                                        onQueryCommit('');
+                                        window.requestAnimationFrame(() => inputRef.current?.focus());
+                                        return;
+                                    }
+                                    onClose();
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
+                                aria-label={query ? t('ui.clear') : t('ui.close')}
+                            >
+                                <X size={15} />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>,
+            filterAnchor,
+        );
+    }
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -280,34 +384,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     </button>
                                 </div>
                             )}
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                {...(surface?.inputProps?.(surfaceArgs) ?? {})}
-                                value={query}
-                                onChange={(event) => {
-                                    setIsShowingAllCommands(false);
-                                    onQueryChange(event.target.value);
-                                }}
-                                onCompositionStart={onCompositionStart}
-                                onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
-                                placeholder={
-                                    activeCommand
-                                        ? (activeCommand.placeholder?.(context) || getCommandDescription(activeCommand, t))
-                                        : t(`commandPalette.idlePlaceholders.${idlePlaceholderIndex}`, 'Type anything — there are plenty of commands to try')
-                                }
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                spellCheck={false}
-                                name="folia-command-palette-query"
-                                role="combobox"
-                                aria-autocomplete="list"
-                                aria-expanded={matches.length > 0}
-                                disabled={isExecuting}
-                                className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50"
-                                style={{ color: 'var(--text-primary)' }}
-                            />
+                            {renderQueryInput('min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50')}
                             <button
                                 type="button"
                                 onClick={() => setIsShowingAllCommands(current => !current)}
@@ -384,10 +461,10 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                         );
                                     })}
                                 </div>
-                            ) : surface ? (
+                            ) : surfaceBody ? (
                                 <Suspense fallback={<div className="flex h-full items-center justify-center opacity-40"><Loader2 size={20} className="animate-spin" /></div>}>
-                                    {React.createElement(resolveSurfaceComponent(surface), {
-                                        ...surface.mapProps(surfaceArgs),
+                                    {React.createElement(surfaceBody, {
+                                        ...surface?.mapProps?.(surfaceArgs),
                                         refocusInput: () => window.requestAnimationFrame(() => inputRef.current?.focus()),
                                     })}
                                 </Suspense>

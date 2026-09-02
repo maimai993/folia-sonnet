@@ -121,6 +121,10 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);
     // Which surface the palette is opening over; commands that only apply to one of them gate on it.
     const view = useAppViewStore(state => state.view);
+    // Whoever currently reads typed characters. Identity only changes when a grid takes or gives up
+    // the keyboard, so it does not rebuild the context per keystroke — the query itself never
+    // travels through here, the palette's own input holds it.
+    const commandFilter = useAppViewStore(state => state.commandFilter);
 
     // App.tsx recreates several of these callbacks on every render (handleSaveLyricFilterPattern
     // is not memoised, and the toggles close over it), so keying the memo on `deps` identity would
@@ -152,7 +156,7 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
             & typeof ambient;
         return {
             shared: buildSharedCommandContext(stableDeps),
-            scope: { view },
+            scope: { view, filter: commandFilter },
             search: buildSearchCommandContext(stableDeps),
             playback: buildPlaybackCommandContext(stableDeps),
             navigation: buildNavigationCommandContext(stableDeps),
@@ -166,6 +170,6 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         ambient,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, audioSignals, visualizerSignals,
-        lyricStaffPolicy, personalFmSelection, view,
+        lyricStaffPolicy, personalFmSelection, view, commandFilter,
     ]);
 };

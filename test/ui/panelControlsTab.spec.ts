@@ -51,7 +51,11 @@ const openQueueWithFixture = async (page: import('@playwright/test').Page) => {
     }, queue);
     await page.reload();
     await page.waitForTimeout(1800);
-    await page.keyboard.press('Control+P');
+    // 全局键盘监听比首屏晚装上一拍，定长 sleep 只是赌它已经装好了。反复敲直到面板真的响应。
+    await expect.poll(async () => {
+        await page.keyboard.press('Control+P');
+        return page.getByTestId('command-palette-panel').count();
+    }).toBeGreaterThan(0);
 };
 
 test('steps lyric modes with the arrows and opens the full list from the name', async ({ page }) => {

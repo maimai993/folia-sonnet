@@ -1,5 +1,6 @@
 import { assertExecuteShortcutsArePrefixFree } from '../executeShortcuts';
 import type { CommandPaletteCommand } from '../types';
+import { filterViewCommand } from './filterViewCommand';
 import { searchCommands } from './searchCommands';
 import { playbackCommands } from './playbackCommands';
 import { settingsCommands } from './settingsCommands';
@@ -29,8 +30,8 @@ const assertUniqueOpenHotkeys = (commands: CommandPaletteCommand[]) => {
             return;
         }
         const stroke = `${command.openHotkey.ctrl ? 'ctrl+' : ''}${command.openHotkey.key.toLowerCase()}`;
-        // `s` opens the palette itself; anything colliding with it would never fire.
-        if (stroke === 's') {
+        // These two open the palette itself; anything colliding with them would never fire.
+        if (stroke === 's' || stroke === 'ctrl+k') {
             throw new Error(`[CommandPalette] Command "${command.id}" claims the palette's own open key`);
         }
         const owner = seen.get(stroke);
@@ -43,6 +44,7 @@ const assertUniqueOpenHotkeys = (commands: CommandPaletteCommand[]) => {
 };
 
 export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecuteShortcutsArePrefixFree(assertUniqueOpenHotkeys(assertUniqueCommandIds([
+    filterViewCommand,
     ...searchCommands,
     ...playbackCommands,
     ...settingsCommands,

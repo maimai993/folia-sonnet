@@ -5,7 +5,7 @@ import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters
 import type { HomeViewTab, LatentBackgroundTuning, LocalSong, LyricData, PlayerState, ReplayGainMode, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
-import type { AppView } from '../../stores/useAppViewStore';
+import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
 import { type SettingsModalInitialTab, type SettingsSubviewId } from '../../stores/useSettingsModalStore';
 import type { LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
@@ -224,6 +224,11 @@ export type CommandPaletteVisualizerContext = {
  */
 export type CommandPaletteScopeContext = {
     view: AppView;
+    /**
+     * The surface that reads typed characters right now, if any — a home grid, today. `filter-view`
+     * writes through it; every other command ignores it.
+     */
+    filter: CommandFilterHandle | null;
 };
 
 // Namespaces mirror CommandPaletteGroup one-to-one (plus `shared` and `scope`), so a command's
