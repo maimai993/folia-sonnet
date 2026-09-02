@@ -50,11 +50,11 @@ describe('command filter registration', () => {
     });
 
     it('counts requests so two in a row both land', () => {
-        const before = useAppViewStore.getState().commandFilterRequest.seq;
+        const before = useAppViewStore.getState().commandPaletteRequest.seq;
 
-        useAppViewStore.getState().requestCommandFilter(true);
-        useAppViewStore.getState().requestCommandFilter(true);
+        useAppViewStore.getState().requestCommandPalette('filter');
+        useAppViewStore.getState().requestCommandPalette('filter');
 
-        expect(useAppViewStore.getState().commandFilterRequest).toEqual({ seq: before + 2, open: true });
+        expect(useAppViewStore.getState().commandPaletteRequest).toEqual({ seq: before + 2, kind: 'filter' });
     });
 });

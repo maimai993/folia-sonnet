@@ -23,6 +23,7 @@ export type PlaybackCommandContextDeps = Pick<
     | 'shuffleQueue' | 'clearQueue' | 'applyQueueBatchOperation' | 'removeQueueSong'
     | 'moveQueueSongToNext' | 'moveQueueSongToEnd' | 'setReplayGainMode' | 'isFmMode'
     | 'isPersonalFmModeSupported' | 'setPersonalFmSelection' | 'runAutoMatchBestLyric'
+    | 'toggleSongLike' | 'isSongLiked'
 >;
 
 export type NavigationCommandContextDeps = Pick<
@@ -52,6 +53,7 @@ export const buildPlaybackCommandContext = (
         volume: audio.volume,
         isMuted: audio.isMuted,
         setVolume: audio.handleSetVolume,
+        toggleMute: audio.handleToggleMute,
         personalFmSelection: usePersonalFmModeStore.getState().selection,
         openAudioEqualizer: audio.openAudioEqualizer,
         applyAudioSoundPreset: audio.handleApplyAudioSoundPreset,

@@ -1619,7 +1619,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                             />
                                         )}
                                         {activeSettingsSection === 'interaction' && (
-                                            <InteractionSettingsSubview settingsCardClass={settingsCardClass} />
+                                            <InteractionSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                theme={theme}
+                                            />
                                         )}
                                         {activeSettingsSection === 'integration' && (
                                             <IntegrationSettingsSubview

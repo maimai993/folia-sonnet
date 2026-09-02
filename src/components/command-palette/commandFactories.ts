@@ -3,7 +3,6 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { CommandPaletteCommand, CommandPaletteContext, CommandPaletteGroup } from './types';
-import { isPlayerSurfaceCommandAvailable } from './availability';
 
 // src/components/command-palette/commandFactories.ts
 // The single construction entry point for palette commands, plus the shaped factories the
@@ -141,7 +140,7 @@ export const createPanelCommand = (
     keywords,
     icon,
     // The panel is part of the player surface; on home there is nothing for these to open.
-    isAvailable: isPlayerSurfaceCommandAvailable,
+    scope: 'player-surface',
     ...options,
     execute: (_input, context) => {
         context.panel.setPanelTab(tab);

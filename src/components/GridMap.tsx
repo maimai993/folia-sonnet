@@ -8,7 +8,6 @@ import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { SidePanelList, CollectionListItem } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
 import { useGridCommandFilter } from '../hooks/useGridCommandFilter';
-import { openCommandFilter } from '../stores/useAppViewStore';
 import { matchesGridMapSearch } from './folia-grid/gridMapSearch';
 import GridMapBatchPanel from './folia-grid/GridMapBatchPanel';
 import { resolveGridMapBatchContext, type GridMapBatchConfig } from './folia-grid/gridMapBatch';
@@ -1026,7 +1025,6 @@ export const GridMap: React.FC<GridMapProps> = ({
                     listTitle={t('playlist.viewCollections') || 'View Collections'}
                     searchTitle={t('home.gridSearchPlaceholder')}
                     onOpenList={() => setShowSidePanel(true)}
-                    onOpenSearch={openCommandFilter}
                 />
             )}
 

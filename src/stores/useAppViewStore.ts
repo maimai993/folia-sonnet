@@ -24,6 +24,9 @@ export type AppView = 'home' | 'player';
  * `getAnchor` is the element the palette portals its inline shell into. Each grid already places
  * its own box, and the palette borrowing that position is what keeps the box exactly where it was.
  */
+/** What a surface can ask the palette for. See `commandPaletteRequest`. */
+export type CommandPaletteRequest = { seq: number; kind: 'filter' | 'dismiss-filter' | 'root' };
+
 export type CommandFilterHandle = {
     getQuery: () => string;
     setQuery: (query: string) => void;
@@ -42,11 +45,11 @@ type AppViewState = {
     /** True while the palette is standing in as that surface's filter box. */
     isCommandFilterOpen: boolean;
     /**
-     * A surface asking the palette to put its filter box up or take it down: restoring a view it
-     * had filtered, or a click elsewhere that used to dismiss the box. The counter is what makes
-     * two identical requests in a row both land; `open` says which way.
+     * A surface asking the palette to do something, without knowing anything about it: put this
+     * surface's filter box up, take it down, or open the ordinary command list. The counter is
+     * what makes two identical requests in a row both land.
      */
-    commandFilterRequest: { seq: number; open: boolean };
+    commandPaletteRequest: CommandPaletteRequest;
 
     /** Written only by useAppNavigation, which owns the history transitions. */
     setView: (view: AppView) => void;
@@ -56,7 +59,7 @@ type AppViewState = {
     /** Returns the unregister function. Registering replaces whoever held it. */
     registerCommandFilter: (handle: CommandFilterHandle) => () => void;
     setIsCommandFilterOpen: (isOpen: boolean) => void;
-    requestCommandFilter: (open: boolean) => void;
+    requestCommandPalette: (kind: CommandPaletteRequest['kind']) => void;
 };
 
 const resolve = <T,>(next: React.SetStateAction<T>, previous: T): T => (
@@ -70,7 +73,7 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
     isHomeFullyHidden: false,
     commandFilter: null,
     isCommandFilterOpen: false,
-    commandFilterRequest: { seq: 0, open: false },
+    commandPaletteRequest: { seq: 0, kind: 'filter' },
 
     setView: (view) => set({ view }),
     setIsPanelOpen: (next) => set({ isPanelOpen: resolve(next, get().isPanelOpen) }),
@@ -87,7 +90,7 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
         };
     },
     setIsCommandFilterOpen: (isOpen) => set({ isCommandFilterOpen: isOpen }),
-    requestCommandFilter: (open) => set({ commandFilterRequest: { seq: get().commandFilterRequest.seq + 1, open } }),
+    requestCommandPalette: (kind) => set({ commandPaletteRequest: { seq: get().commandPaletteRequest.seq + 1, kind } }),
 }));
 
 // Module-level handles for the assembly layer: these are actions, so they need no subscription.
@@ -97,6 +100,8 @@ export const setPanelTab: AppViewState['setPanelTab'] = (next) => useAppViewStor
 export const registerCommandFilter: AppViewState['registerCommandFilter'] = (handle) => useAppViewStore.getState().registerCommandFilter(handle);
 export const setIsCommandFilterOpen: AppViewState['setIsCommandFilterOpen'] = (isOpen) => useAppViewStore.getState().setIsCommandFilterOpen(isOpen);
 /** Put this surface's filter box back up — it is already filtered, or a button asked for it. */
-export const openCommandFilter = () => useAppViewStore.getState().requestCommandFilter(true);
+export const openCommandFilter = () => useAppViewStore.getState().requestCommandPalette('filter');
 /** Take it down again, for the clicks that used to dismiss a grid's own box. */
-export const closeCommandFilter = () => useAppViewStore.getState().requestCommandFilter(false);
+export const closeCommandFilter = () => useAppViewStore.getState().requestCommandPalette('dismiss-filter');
+/** Open the ordinary command list, for the affordances that can be pointed at it instead. */
+export const openCommandPalette = () => useAppViewStore.getState().requestCommandPalette('root');

@@ -18,7 +18,7 @@ export const filterViewCommand: CommandPaletteCommand = {
     openHotkey: { key: 'f', ctrl: true },
     surface: filterViewSurface,
     // Nothing registers a filter on the player, so the command is only offered where it can act.
-    isAvailable: context => (context ? context.scope.filter !== null : true),
+    scope: 'filtering-surface',
     requiresInput: true,
     // Picking the command out of the list resumes the filter already in place rather than
     // silently discarding it.

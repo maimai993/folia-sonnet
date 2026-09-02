@@ -99,6 +99,103 @@ test('a bare key that is a palette shortcut elsewhere still filters here', async
     await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
 });
 
+/** 直接写 store：这几条验的是设置的效果，不是设置面板本身。 */
+const setInteractionSetting = async (page: Page, patch: Record<string, unknown>) => {
+    await page.evaluate(async (values) => {
+        const storeModulePath = '/src/stores/useInteractionSettingsStore.ts';
+        const { useInteractionSettingsStore } = await import(storeModulePath);
+        useInteractionSettingsStore.setState(values);
+    }, patch);
+};
+
+const isMuted = (page: Page) => page.evaluate(async () => {
+    const storeModulePath = '/src/stores/useAudioSettingsStore.ts';
+    const { useAudioSettingsStore } = await import(storeModulePath);
+    return useAudioSettingsStore.getState().isMuted;
+});
+
+const currentView = (page: Page) => page.evaluate(async () => {
+    const storeModulePath = '/src/stores/useAppViewStore.ts';
+    const { useAppViewStore } = await import(storeModulePath);
+    return useAppViewStore.getState().view;
+});
+
+test('points the action button at the command list when asked to', async ({ page }) => {
+    await openTrackGrid(page);
+    await setInteractionSetting(page, { gridActionButtonSlideTarget: 'command-palette' });
+
+    // 手势本身不变：按住右下角按钮往左拖过阈值。变的只是它落到哪里。
+    const button = page.getByRole('button', { name: 'View tracks' });
+    const box = (await button.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect(page.getByTestId('command-palette-panel')).toBeVisible();
+    await expect(filterBox(page)).toBeHidden();
+});
+
+test('hands S to the command list only once the setting says so', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 's');
+    // 默认下 S 和别的字母一样，进筛选框。
+    await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
+    // 关框前先等焦点真的在输入框里：网格自己的 Escape 梯子也听着这个键，只靠
+    // 「焦点在 input 里」让路，而焦点是在一帧之后才取的。
+    await expect(filterInput(page)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(filterBox(page)).toBeHidden();
+
+    await setInteractionSetting(page, { gridCommandPaletteHotkey: true });
+    const panel = page.getByTestId('command-palette-panel');
+    await page.keyboard.press('s');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('combobox')).toBeFocused();
+
+    // 其余字符仍然是筛选输入，只有 S 被让出去。
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await page.keyboard.press('m');
+    await expect(filterBox(page)).toBeVisible();
+});
+
+test('runs the listeners own Alt shortcut from anywhere', async ({ page }) => {
+    await openTrackGrid(page);
+    await setInteractionSetting(page, { customShortcutLetter: 'j', customShortcutCommandId: 'navigate-player' });
+
+    expect(await currentView(page)).toBe('home');
+    await page.keyboard.press('Alt+j');
+
+    await expect.poll(() => currentView(page)).toBe('player');
+});
+
+test('binds a controls-tab action that used to need the panel open', async ({ page }) => {
+    await openTrackGrid(page);
+    await setInteractionSetting(page, { customShortcutLetter: 'm', customShortcutCommandId: 'playback-mute' });
+
+    expect(await isMuted(page)).toBe(false);
+    await page.keyboard.press('Alt+m');
+    await expect.poll(() => isMuted(page)).toBe(true);
+
+    // 面板一次都没开过，视图也没动——这正是「全局可用」要保证的。
+    expect(await currentView(page)).toBe('home');
+    await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
+});
+
+test('ignores an Alt shortcut whose letter has been claimed since', async ({ page }) => {
+    await openTrackGrid(page);
+    // ':' 是执行模式的入口，但它没有 alt——真正会被拒的是绑到需要特定界面的命令上，
+    // 那种绑定即使存进去了也不该开火。
+    await setInteractionSetting(page, { customShortcutLetter: 'j', customShortcutCommandId: 'panel-cover' });
+
+    await page.keyboard.press('Alt+j');
+    await page.waitForTimeout(400);
+
+    expect(await currentView(page)).toBe('home');
+    await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
+});
+
 test('gives the keyboard back when the grid is left', async ({ page }) => {
     await openTrackGrid(page);
     await typeUntilFilterOpens(page, 'm');

@@ -22,6 +22,17 @@ import type { CommandSyntaxSpec } from './syntax/types';
 
 export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel' | 'playback' | 'visualizer';
 
+/**
+ * What a command needs around it to mean anything.
+ *
+ * The third gating axis, beside `platform` (which build ships it) and `isAvailable` (whether the
+ * current state makes it worth offering). Declared rather than written as another `isAvailable`
+ * predicate because two other places have to read the same fact: the settings picker, which may
+ * only offer a global shortcut a command that works from anywhere, and anything else that asks
+ * "would this be reachable if I were somewhere else".
+ */
+export type CommandScope = 'player-surface' | 'filtering-surface';
+
 export type CommandPaletteSearchSource = SearchSource;
 
 export type CommandPaletteCommand = {
@@ -36,13 +47,16 @@ export type CommandPaletteCommand = {
     requiresInput?: boolean;
     /** Environment gating: which platforms ship this feature at all. */
     platform?: CommandPlatform[];
+    /** Surface gating: which surroundings the command needs. Omitted means anywhere. */
+    scope?: CommandScope;
     /** State gating: whether the command is worth offering right now. */
     isAvailable?: (context?: CommandPaletteContext) => boolean;
     /** Kept out of match results, the all-commands list, and the pinned-command picker. */
     hidden?: boolean;
     /** Global shortcut that opens the palette straight into this command. `ctrl` means the
-     *  platform's primary modifier — Ctrl on Windows/Linux, Cmd on macOS. */
-    openHotkey?: { key: string; ctrl?: boolean };
+     *  platform's primary modifier — Ctrl on Windows/Linux, Cmd on macOS. `alt` is legal but
+     *  unclaimed: the listener's own shortcut lives on Alt, and checks itself against these. */
+    openHotkey?: { key: string; ctrl?: boolean; alt?: boolean };
     /** Vim-style key sequence that runs this command from execute mode. Omit for anything
      *  dangerous, irreversible, or needing confirmation. Must stay prefix-free registry-wide. */
     executeShortcut?: string;
@@ -127,6 +141,16 @@ export type CommandPalettePlaybackContext = {
     /** Only the providers that actually implement FM modes offer the picker. */
     isPersonalFmModeSupported: boolean;
     setPersonalFmSelection: (selection: PersonalFmSelection) => Promise<void> | void;
+    toggleMute: () => void;
+    /**
+     * The like/star action from the controls tab. It travels here rather than staying inside the
+     * panel that drew the button, so a shortcut can be bound to it. The finer refusals — a stage
+     * track, a provider that has no like — stay inside the action, which already says so in a
+     * status message; only "there is no song" is worth withholding the command for.
+     */
+    toggleSongLike: () => void | Promise<void>;
+    /** Which way the toggle will go, so the command can say so before it runs. */
+    isSongLiked: boolean;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
     runAutoMatchBestLyric: () => Promise<boolean>;

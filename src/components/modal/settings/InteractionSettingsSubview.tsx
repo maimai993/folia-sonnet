@@ -1,27 +1,216 @@
 import React from 'react';
-import { Keyboard } from 'lucide-react';
+import { Command, Keyboard, MousePointerClick } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
+import type { Theme } from '../../../types';
+import { COMMAND_PALETTE_COMMANDS } from '../../command-palette/commandRegistry';
+import { getCommandTitle } from '../../command-palette/commandText';
+import {
+    CUSTOM_SHORTCUT_LETTERS,
+    isCustomShortcutLetterAvailable,
+    isScopeIndependentCommand,
+} from '../../command-palette/customShortcut';
+import { CustomSelect } from '../../shared/CustomSelect';
+import { PRIMARY_MODIFIER_LABEL } from '../../../utils/platform';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import {
+    useInteractionSettingsStore,
+    type GridActionButtonSlideTarget,
+} from '../../../stores/useInteractionSettingsStore';
 
 // src/components/modal/settings/InteractionSettingsSubview.tsx
-// Where the command palette's and the keyboard's own settings will live.
-//
-// Deliberately empty for now: the section exists so that the settings a listener would look for
-// under "how do I drive this app" has a place to be, rather than being scattered into whichever
-// panel each one happened to be built next to. Nothing has moved in yet.
+// How the listener reaches the command palette: what the grids' action button leads to, whether a
+// bare `s` on a grid means "filter" or "commands", and the one shortcut they define themselves.
 
 type InteractionSettingsSubviewProps = {
+    isDaylight: boolean;
     settingsCardClass: string;
+    theme?: Theme;
 };
 
-export const InteractionSettingsSubview: React.FC<InteractionSettingsSubviewProps> = ({ settingsCardClass }) => {
+export const InteractionSettingsSubview: React.FC<InteractionSettingsSubviewProps> = ({
+    isDaylight,
+    settingsCardClass,
+    theme,
+}) => {
     const { t } = useTranslation();
+    const {
+        gridActionButtonSlideTarget,
+        gridCommandPaletteHotkey,
+        customShortcutLetter,
+        customShortcutCommandId,
+        setGridActionButtonSlideTarget,
+        handleToggleGridCommandPaletteHotkey,
+        setCustomShortcutLetter,
+        setCustomShortcutCommandId,
+    } = useInteractionSettingsStore(useShallow(state => ({
+        gridActionButtonSlideTarget: state.gridActionButtonSlideTarget,
+        gridCommandPaletteHotkey: state.gridCommandPaletteHotkey,
+        customShortcutLetter: state.customShortcutLetter,
+        customShortcutCommandId: state.customShortcutCommandId,
+        setGridActionButtonSlideTarget: state.setGridActionButtonSlideTarget,
+        handleToggleGridCommandPaletteHotkey: state.handleToggleGridCommandPaletteHotkey,
+        setCustomShortcutLetter: state.setCustomShortcutLetter,
+        setCustomShortcutCommandId: state.setCustomShortcutCommandId,
+    })));
+
+    const accentOutlineColor = theme?.secondaryColor || 'rgba(114, 119, 134, 1)';
+    const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
+
+    const optionStyle = (selected: boolean) => (
+        selected
+            ? {
+                borderColor: accentOutlineColor,
+                boxShadow: `inset 0 0 0 1px ${accentOutlineColor}`,
+                backgroundColor: isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`,
+            }
+            : { borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.10)' }
+    );
+
+    const renderToggle = (checked: boolean, onChange: () => void, label: string) => (
+        <button
+            type="button"
+            onClick={onChange}
+            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${checked ? '' : toggleOffBackgroundClass}`}
+            style={{ backgroundColor: checked ? accentOutlineColor : undefined }}
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+        >
+            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
+        </button>
+    );
+
+    const slideOptions: Array<{ value: GridActionButtonSlideTarget; label: string; desc: string }> = [
+        {
+            value: 'filter',
+            label: t('options.gridSlideTargetFilter'),
+            desc: t('options.gridSlideTargetFilterDesc'),
+        },
+        {
+            value: 'command-palette',
+            label: t('options.gridSlideTargetCommandPalette'),
+            desc: t('options.gridSlideTargetCommandPaletteDesc', { modifier: PRIMARY_MODIFIER_LABEL }),
+        },
+    ];
+
+    // Only the letters nothing else has claimed. The check reads the registry rather than a list
+    // kept here, so a hotkey added later takes its letter out of this picker on its own.
+    const letterOptions = [
+        { value: '', label: t('options.customShortcutNoKey') },
+        ...CUSTOM_SHORTCUT_LETTERS
+            .filter(letter => isCustomShortcutLetterAvailable(letter, COMMAND_PALETTE_COMMANDS))
+            .map(letter => ({ value: letter, label: `Alt + ${letter.toUpperCase()}` })),
+    ];
+
+    // A shortcut fires from anywhere, so only the commands that work anywhere may be bound to one.
+    const commandOptions = [
+        { value: '', label: t('options.customShortcutNoCommand') },
+        ...COMMAND_PALETTE_COMMANDS
+            .filter(command => !command.hidden && isScopeIndependentCommand(command))
+            .map(command => ({ value: command.id, label: getCommandTitle(command, t) })),
+    ];
 
     return (
-        <div className={`${settingsCardClass} flex flex-col items-center gap-3 px-6 py-12 text-center`}>
-            <Keyboard size={26} className="opacity-30" />
-            <p className="text-sm opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                {t('options.interactionSettingsEmpty')}
-            </p>
+        <div className="space-y-5">
+            <SettingsAnchor anchorId="gridActionButton" label={t('options.gridActionButton')}>
+                <SettingsSectionHeading icon={MousePointerClick} label={t('options.gridActionButton')} />
+                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {t('options.gridSlideTarget')}
+                        </div>
+                        <div className="text-[11px] opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.gridSlideTargetDesc')}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {slideOptions.map(option => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setGridActionButtonSlideTarget(option.value)}
+                                className="rounded-xl border px-3 py-3 text-left transition-colors"
+                                style={optionStyle(gridActionButtonSlideTarget === option.value)}
+                                aria-pressed={gridActionButtonSlideTarget === option.value}
+                            >
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {option.label}
+                                </div>
+                                <div className="mt-1 text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                    {option.desc}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </SettingsAnchor>
+
+            <SettingsAnchor anchorId="gridPaletteHotkey" label={t('options.gridPaletteHotkey')}>
+                <SettingsSectionHeading icon={Command} label={t('options.gridPaletteHotkey')} />
+                <div className={`p-4 rounded-xl border ${settingsCardClass}`}>
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.gridPaletteHotkey')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.gridPaletteHotkeyDesc')}
+                            </div>
+                        </div>
+                        {renderToggle(
+                            gridCommandPaletteHotkey,
+                            () => handleToggleGridCommandPaletteHotkey(!gridCommandPaletteHotkey),
+                            t('options.gridPaletteHotkey'),
+                        )}
+                    </div>
+                </div>
+            </SettingsAnchor>
+
+            <SettingsAnchor anchorId="customShortcut" label={t('options.customShortcut')}>
+                <SettingsSectionHeading icon={Keyboard} label={t('options.customShortcut')} />
+                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {t('options.customShortcut')}
+                        </div>
+                        <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.customShortcutDesc')}
+                        </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="min-w-0 space-y-1.5">
+                            <div className="text-xs opacity-65" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.customShortcutKey')}
+                            </div>
+                            <CustomSelect
+                                value={customShortcutLetter ?? ''}
+                                onChange={(value) => setCustomShortcutLetter(value || null)}
+                                options={letterOptions}
+                                ariaLabel={t('options.customShortcutKey')}
+                                placeholder={t('options.customShortcutNoKey')}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                            />
+                        </div>
+                        <div className="min-w-0 space-y-1.5">
+                            <div className="text-xs opacity-65" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.customShortcutCommand')}
+                            </div>
+                            <CustomSelect
+                                value={customShortcutCommandId ?? ''}
+                                onChange={(value) => setCustomShortcutCommandId(value || null)}
+                                options={commandOptions}
+                                ariaLabel={t('options.customShortcutCommand')}
+                                placeholder={t('options.customShortcutNoCommand')}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </SettingsAnchor>
         </div>
     );
 };

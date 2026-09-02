@@ -7,6 +7,8 @@ import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
 import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../utils/platform';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { useAppViewStore } from '../../stores/useAppViewStore';
+import { useInteractionSettingsStore } from '../../stores/useInteractionSettingsStore';
+import { resolveCustomShortcutCommand } from './customShortcut';
 
 // src/components/command-palette/useCommandPalette.ts
 // Manages palette state, keyboard opening, and selected autocomplete item.
@@ -43,6 +45,16 @@ export const useCommandPalette = ({
     const filterCommand = context.scope.filter
         ? COMMAND_PALETTE_COMMANDS.find(command => command.id === FILTER_VIEW_COMMAND_ID) ?? null
         : null;
+    // Opt-in: `s` normally goes to the filter like any other letter, and the listener who wants it
+    // back for the command list has to say so.
+    const paletteHotkeyOnFilteringSurface = useInteractionSettingsStore(state => state.gridCommandPaletteHotkey);
+    const customShortcutLetter = useInteractionSettingsStore(state => state.customShortcutLetter);
+    const customShortcutCommandId = useInteractionSettingsStore(state => state.customShortcutCommandId);
+    const customShortcutCommand = resolveCustomShortcutCommand(
+        customShortcutLetter,
+        customShortcutCommandId,
+        COMMAND_PALETTE_COMMANDS,
+    );
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [matchQuery, setMatchQuery] = useState('');
@@ -220,6 +232,19 @@ export const useCommandPalette = ({
         }
     }, [activateInputCommand, close, context, isExecuting, recordRecentCommand]);
 
+    /**
+     * Runs one command from outside the palette. A command that takes input or draws its own panel
+     * needs the palette on screen to do either; everything else should just happen, without an
+     * overlay opening and closing around it.
+     */
+    const invokeCommand = useCallback((command: CommandPaletteCommand) => {
+        if (command.requiresInput || command.surface) {
+            openCommand(command);
+            return;
+        }
+        void executeCommand(command);
+    }, [executeCommand, openCommand]);
+
     const executeActive = useCallback(async () => {
         const handled = await surface?.onSubmit?.({
             context,
@@ -245,16 +270,20 @@ export const useCommandPalette = ({
         setActiveIndex(0);
     }, [matchQuery]);
 
-    // A filtering surface can ask for its box without knowing anything about the palette — a grid
-    // restoring a view it had filtered, or a click that used to dismiss the box. Keyed on the
-    // request object alone: everything else is read when it fires, and re-running on their identity
-    // would reopen the box every time a grid re-registered.
-    const filterRequest = useAppViewStore(state => state.commandFilterRequest);
+    // A surface can ask the palette for something without knowing anything about it — a grid
+    // restoring a view it had filtered, a click that used to dismiss the box, a button pointed at
+    // the command list. Keyed on the request object alone: everything else is read when it fires,
+    // and re-running on their identity would reopen the box every time a grid re-registered.
+    const paletteRequest = useAppViewStore(state => state.commandPaletteRequest);
     useEffect(() => {
-        if (!filterRequest.seq) {
+        if (!paletteRequest.seq) {
             return;
         }
-        if (filterRequest.open) {
+        if (paletteRequest.kind === 'root') {
+            open();
+            return;
+        }
+        if (paletteRequest.kind === 'filter') {
             if (filterCommand) {
                 openCommand(filterCommand);
             }
@@ -266,7 +295,7 @@ export const useCommandPalette = ({
             close();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filterRequest]);
+    }, [paletteRequest]);
 
     // Execute mode fires as soon as the buffer is unambiguous, so the surface gets a chance to
     // act on every keystroke. The ref keeps one buffer from being judged twice.
@@ -340,6 +369,26 @@ export const useCommandPalette = ({
             // surface that reads bare characters outranks every modifier-free palette key, or the
             // same press would do two things at once.
 
+            // The listener's own shortcut. First, like the other modifier entries, and resolved
+            // through the same function the settings picker uses — a binding the picker would
+            // refuse cannot fire from a value left in storage.
+            if (customShortcutCommand
+                && event.altKey
+                && !isPrimaryModifierPressed(event)
+                && !isSecondaryModifierPressed(event)
+                && !event.shiftKey
+                && event.key.toLowerCase() === customShortcutLetter
+                && isCommandPaletteCommandEnabled(customShortcutCommand, context)
+            ) {
+                if (isBlocked) {
+                    return;
+                }
+
+                event.preventDefault();
+                invokeCommand(customShortcutCommand);
+                return;
+            }
+
             // Works everywhere, because it carries a modifier.
             if (event.code === 'KeyK' && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
                 if (isBlocked) {
@@ -367,6 +416,10 @@ export const useCommandPalette = ({
                     // composition that the same press is already starting — the grids swallowed it
                     // for exactly this reason, and the palette has to keep doing so.
                     event.preventDefault();
+                    if (paletteHotkeyOnFilteringSurface && event.code === 'KeyS' && !event.shiftKey) {
+                        open();
+                        return;
+                    }
                     openCommand(filterCommand);
                     return;
                 }
@@ -381,7 +434,7 @@ export const useCommandPalette = ({
                 command.openHotkey
                 && command.openHotkey.key.toLowerCase() === event.key.toLowerCase()
                 && Boolean(command.openHotkey.ctrl) === isPrimaryModifierPressed(event)
-                && !event.altKey
+                && Boolean(command.openHotkey.alt) === event.altKey
                 && !isSecondaryModifierPressed(event)
                 && isCommandPaletteCommandEnabled(command, context)
             ));
@@ -415,7 +468,7 @@ export const useCommandPalette = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [context, filterCommand, isBlocked, isOpen, open, openCommand, ownsBareKeys]);
+    }, [context, customShortcutCommand, customShortcutLetter, filterCommand, invokeCommand, isBlocked, isOpen, open, openCommand, ownsBareKeys, paletteHotkeyOnFilteringSurface]);
 
     return {
         activeIndex,

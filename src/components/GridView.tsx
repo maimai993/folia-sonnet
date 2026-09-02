@@ -2573,7 +2573,6 @@ export const GridView: React.FC<GridViewProps> = ({
                     listTitle={t('playlist.viewTracks')}
                     searchTitle={t('home.gridSearchPlaceholder')}
                     onOpenList={() => setShowSidePanel(true)}
-                    onOpenSearch={openCommandFilter}
                 />
             )}
 

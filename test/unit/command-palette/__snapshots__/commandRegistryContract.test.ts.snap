@@ -28,6 +28,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "playback-next",
   "playback-prev",
   "playback-loop",
+  "playback-like",
+  "playback-mute",
   "playback-shuffle",
   "playback-clear-queue",
   "playback-auto-match-best-lyric",

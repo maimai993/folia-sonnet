@@ -1698,6 +1698,8 @@ export default function App() {
         isPersonalFmModeSupported,
         setPersonalFmSelection,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
+        toggleSongLike: handleLike,
+        isSongLiked: resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
 
         navigateToHome,
         navigateToPlayer,

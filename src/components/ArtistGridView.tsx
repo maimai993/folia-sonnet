@@ -1376,7 +1376,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     listTitle={t('artistGrid.viewAlbums')}
                     searchTitle={t('artistGrid.searchAlbums')}
                     onOpenList={() => setShowSidePanel(true)}
-                    onOpenSearch={openCommandFilter}
                 />
             )}
 

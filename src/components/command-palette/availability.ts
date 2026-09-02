@@ -1,4 +1,4 @@
-import type { CommandPaletteContext } from './types';
+import type { CommandPaletteContext, CommandScope } from './types';
 
 // src/components/command-palette/availability.ts
 // Declarative platform and scope gating for command palette entries, replacing the id switchboard
@@ -58,14 +58,20 @@ export const matchesCommandPlatform = (platform?: CommandPlatform[]): boolean =>
 };
 
 /**
- * State gate for commands that act on the player surface's own chrome — the unified panel and the
- * equalizer it hosts. The palette is reachable from home now, and there is no panel there, so they
- * grey out instead of executing into nothing.
+ * Whether the palette's surroundings are what a command declared it needs: the unified panel only
+ * exists on the player, and a filter only exists where something registered one. They grey out
+ * elsewhere rather than executing into nothing.
  *
  * An absent context means "nobody is asking about a live app" (the registry contract test, the
  * pinned-command picker), and every one of those callers wants the full list — same convention as
- * the rest of the registry's `isAvailable` predicates.
+ * the rest of the registry's gating.
  */
-export const isPlayerSurfaceCommandAvailable = (context?: CommandPaletteContext): boolean => (
-    context ? context.scope.view === 'player' : true
-);
+export const matchesCommandScope = (scope: CommandScope | undefined, context?: CommandPaletteContext): boolean => {
+    if (!scope || !context) {
+        return true;
+    }
+
+    return scope === 'player-surface'
+        ? context.scope.view === 'player'
+        : context.scope.filter !== null;
+};
