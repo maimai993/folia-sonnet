@@ -1,5 +1,5 @@
 import { PlayerState } from '../../../types';
-import { Heart, ListX, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, VolumeX } from 'lucide-react';
+import { Heart, ListX, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Star, VolumeX } from 'lucide-react';
 import { executeModeCommand } from './executeModeCommand';
 import { queueCommand } from './queueCommand';
 import { volumeCommand } from './volumeCommand';
@@ -85,6 +85,18 @@ export const playbackCommands: CommandPaletteCommand[] = [
             icon: Heart,
             // Whether it likes or unlikes is the one thing the static title cannot say.
             isAvailable: context => (context ? Boolean(context.shared.currentSong) : true),
+        },
+    ),
+    createToggleCommand(
+        'playback-add-to-playlist',
+        'playback',
+        'Add to a playlist',
+        'Put the current song in one of your playlists',
+        ['add to playlist', 'playlist', 'collect', '添加到歌单', '收藏到歌单', '加入歌单', 'tianjiadaogedan', 'jiarugedan', 'tjdgd', 'jrgd'],
+        context => context.playback.openAddToPlaylist(),
+        {
+            icon: Star,
+            isAvailable: context => (context ? context.playback.canAddCurrentSongToPlaylist : true),
         },
     ),
     createToggleCommand(

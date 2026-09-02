@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
 import VisualizerRenderer from './components/visualizer/VisualizerRenderer';
 import CommandPalette from './components/command-palette/CommandPalette';
+import AddToPlaylistHost from './components/app/AddToPlaylistHost';
 import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import { useCommandPaletteContext } from './hooks/useCommandPaletteContext';
 import AppShell from './components/app/AppShell';
@@ -2137,14 +2138,7 @@ export default function App() {
         removeQueueSong,
         moveQueueSongToEnd,
         moveQueueSongToNext,
-        localPlaylists,
-        onlinePlaylists,
         saveCurrentQueueAsLocalPlaylist,
-        addCurrentSongToLocalPlaylist,
-        createCurrentLocalPlaylist,
-        addCurrentSongToOnlinePlaylist,
-        addCurrentSongToNavidromePlaylist,
-        createCurrentNavidromePlaylist,
         user,
         handleLogout,
         cacheSize,
@@ -2590,6 +2584,19 @@ export default function App() {
             )}
 
             <ThemeQuickEditorHost onSaveAiTheme={saveEditedAiDualTheme} onSaveCustomTheme={saveCustomDualTheme} />
+
+            {/* Mounted here rather than inside the panel that used to own it: the picker answers a
+                question about the current song, and a shortcut has to reach it with the panel shut. */}
+            <AddToPlaylistHost
+                isDaylight={isDaylight}
+                localPlaylists={localPlaylists}
+                onlinePlaylists={onlinePlaylists}
+                onAddCurrentSongToLocalPlaylist={addCurrentSongToLocalPlaylist}
+                onCreateCurrentLocalPlaylist={createCurrentLocalPlaylist}
+                onAddCurrentSongToOnlinePlaylist={addCurrentSongToOnlinePlaylist}
+                onAddCurrentSongToNavidromePlaylist={addCurrentSongToNavidromePlaylist}
+                onCreateCurrentNavidromePlaylist={createCurrentNavidromePlaylist}
+            />
 
             <CommandPalette
                 activeIndex={commandPalette.activeIndex}

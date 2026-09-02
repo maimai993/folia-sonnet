@@ -2,8 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, MirrorRectangular } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
-import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, ThemeMode, VisualizerMode } from '../types';
+import type { ProviderUser } from '../types/onlineMusic';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -12,14 +12,13 @@ import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
 import NaviTab from './panelTab/NaviTab';
 import OnlineLyricsTab from './panelTab/OnlineLyricsTab';
-import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
-import TextInputDialog from './shared/TextInputDialog';
 import type { OnlineLyricsState } from '../types';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { omni } from '../services/onlineMusic/omni';
+import { openAddToPlaylist, useAddToPlaylistStore } from '../stores/useAddToPlaylistStore';
 import { usePlayerPanelTabShortcut } from '../hooks/usePlayerPanelTabShortcut';
 import { countRender } from '../dev/renderCount';
 
@@ -120,14 +119,7 @@ type UnifiedPanelAccountProps = {
 };
 
 type UnifiedPanelLibraryProps = {
-    localPlaylists: LocalPlaylist[];
-    onlinePlaylists: ProviderCollection[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
-    onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
-    onCreateCurrentLocalPlaylist: (name: string) => Promise<void>;
-    onAddCurrentSongToOnlinePlaylist: (playlist: ProviderCollection) => Promise<void>;
-    onAddCurrentSongToNavidromePlaylist: (playlistId: string) => Promise<void>;
-    onCreateCurrentNavidromePlaylist: (name: string) => Promise<void>;
     onOpenCurrentLocalAlbum: () => void;
     onOpenCurrentLocalArtist: (entityId?: string) => void;
     onOpenCurrentNavidromeAlbum: () => void;
@@ -217,14 +209,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     } = playback;
     const { playQueue, onPlaySong, queueScrollRef, onShuffle, onRemoveSong, onMoveSongToEnd, onMoveSongToNext } = queue;
     const {
-        localPlaylists,
-        onlinePlaylists,
         onSaveCurrentQueueAsPlaylist,
-        onAddCurrentSongToLocalPlaylist,
-        onCreateCurrentLocalPlaylist,
-        onAddCurrentSongToOnlinePlaylist,
-        onAddCurrentSongToNavidromePlaylist,
-        onCreateCurrentNavidromePlaylist,
         onOpenCurrentLocalAlbum,
         onOpenCurrentLocalArtist,
         onOpenCurrentNavidromeAlbum,
@@ -247,9 +232,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     } = account;
     const coverAreaRef = React.useRef<HTMLDivElement>(null);
     const [isCoverActionsVisible, setIsCoverActionsVisible] = React.useState(false);
-    const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = React.useState(false);
-    const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = React.useState(false);
-    const [navidromePlaylists, setNavidromePlaylists] = React.useState<Array<{ id: string; name: string; description?: string; }>>([]);
     const [showGuideLine, setShowGuideLine] = React.useState(false);
     const [isDragging, setIsDragging] = React.useState(false);
     const guideHideTimeoutRef = React.useRef<number | null>(null);
@@ -259,8 +241,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localRef?.songId));
     const playbackSourceRef = currentSong ? getPlaybackSourceRef(currentSong) : null;
     const isOnline = playbackSourceRef?.kind === 'online';
-    const canCreateLocalPlaylist = isLocal;
-    const canCreateNavidromePlaylist = isNavidrome;
     const onlineProviderLabel = playbackSourceRef?.kind === 'online'
         ? omni.getProviderLabel(playbackSourceRef.providerId)
         : '';
@@ -271,76 +251,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             ? t('status.providerLikeUnavailable', { provider: onlineProviderLabel })
             : undefined);
     const likeDisabled = !currentSong || Boolean(likeDisabledReason);
-    const canAddOnlineSongToPlaylist = Boolean(currentSong && isOnline && omni.canAddSongToPlaylist(currentSong));
-    const showAddToPlaylistAction = Boolean(currentSong && !isStage && (isLocal || isOnline || isNavidrome));
-    const canAddCurrentSongToPlaylist =
-        (isLocal && (localPlaylists.length > 0 || canCreateLocalPlaylist))
-        || (isOnline && canAddOnlineSongToPlaylist && onlinePlaylists.length > 0)
-        || (isNavidrome && (navidromePlaylists.length > 0 || canCreateNavidromePlaylist));
-    const addToPlaylistDisabledReason = isOnline && !canAddOnlineSongToPlaylist
-        ? t('status.providerPlaylistMutationUnavailable', { provider: onlineProviderLabel })
-        : (!canAddCurrentSongToPlaylist ? t('localMusic.noPlaylistsFound') : undefined);
+    // Answered by AddToPlaylistHost, which owns the picker now: the same question is asked by a
+    // command that can fire with this panel closed, so it cannot be derived from panel props.
+    const addToPlaylist = useAddToPlaylistStore(state => state.availability);
+    const showAddToPlaylistAction = addToPlaylist.isApplicable;
+    const canAddCurrentSongToPlaylist = addToPlaylist.canAdd;
+    const addToPlaylistDisabledReason = addToPlaylist.disabledReason;
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    const refreshNavidromePlaylists = React.useCallback(async () => {
-        const { getNavidromeConfig, navidromeApi } = await import('../services/navidromeService');
-        const config = getNavidromeConfig();
-        if (!config) {
-            setNavidromePlaylists([]);
-            return;
-        }
-
-        const playlists = await navidromeApi.getPlaylists(config);
-        setNavidromePlaylists(playlists.map((playlist) => ({
-            id: playlist.id,
-            name: playlist.name,
-            description: `${playlist.songCount} ${t('playlist.tracks')}`,
-        })));
-    }, [t]);
-
-    const availablePlaylists = React.useMemo(() => {
-        if (isLocal) {
-            return localPlaylists.map((playlist) => ({
-                id: playlist.id,
-                name: playlist.name,
-                description: `${playlist.songIds.length} ${t('playlist.tracks')}`,
-            }));
-        }
-
-        if (isOnline) {
-            return onlinePlaylists.map((playlist) => ({
-                id: playlist.id,
-                name: playlist.name,
-                description: `${playlist.trackCount || 0} ${t('playlist.tracks')}`,
-            }));
-        }
-
-        if (isNavidrome) {
-            return navidromePlaylists;
-        }
-
-        return [];
-    }, [isLocal, isOnline, isNavidrome, localPlaylists, navidromePlaylists, onlinePlaylists, t]);
-
-    React.useEffect(() => {
-        let cancelled = false;
-
-        const loadNavidromePlaylists = async () => {
-            if (!isNavidrome) {
-                setNavidromePlaylists([]);
-                return;
-            }
-
-            if (!cancelled) {
-                await refreshNavidromePlaylists();
-            }
-        };
-
-        void loadNavidromePlaylists();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [currentSong?.id, isNavidrome, refreshNavidromePlaylists]);
 
     const tabs = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
@@ -648,8 +565,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     React.useEffect(() => {
         if (!isOpen) {
             setIsCoverActionsVisible(false);
-            setIsPlaylistPickerOpen(false);
-            setIsCreatePlaylistOpen(false);
         }
     }, [isOpen]);
 
@@ -662,12 +577,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     React.useEffect(() => {
         setIsCoverActionsVisible(false);
     }, [currentTab, currentSong?.id]);
-
-    React.useEffect(() => {
-        if (!canAddCurrentSongToPlaylist) {
-            setIsPlaylistPickerOpen(false);
-        }
-    }, [canAddCurrentSongToPlaylist]);
 
     React.useEffect(() => {
         if (supportsHover || !isCoverActionsVisible) {
@@ -809,7 +718,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                     event.stopPropagation();
                                                     if (!canAddCurrentSongToPlaylist) return;
                                                     setIsCoverActionsVisible(false);
-                                                    setIsPlaylistPickerOpen(true);
+                                                    openAddToPlaylist();
                                                 }}
                                                 disabled={!canAddCurrentSongToPlaylist}
                                                 className="w-11 h-11 rounded-full border border-white/15 bg-black/25 text-white/90 backdrop-blur-md flex items-center justify-center transition-all hover:bg-black/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-black/25"
@@ -1018,61 +927,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
-
-            <div className="pointer-events-auto">
-                <PlaylistSelectionDialog
-                    isOpen={isPlaylistPickerOpen}
-                    onClose={() => setIsPlaylistPickerOpen(false)}
-                    isDaylight={isDaylight}
-                    title={t('localMusic.addToPlaylist')}
-                    description={t('home.playlists') || 'Playlists'}
-                    playlists={availablePlaylists}
-                    onSelect={async (playlistId) => {
-                        if (isLocal) {
-                            await onAddCurrentSongToLocalPlaylist(String(playlistId));
-                            return;
-                        }
-
-                        if (isOnline) {
-                            const playlist = onlinePlaylists.find(item => String(item.id) === String(playlistId));
-                            if (!playlist) throw new Error('Selected playlist is unavailable');
-                            await onAddCurrentSongToOnlinePlaylist(playlist);
-                            return;
-                        }
-
-                        if (isNavidrome) {
-                            await onAddCurrentSongToNavidromePlaylist(String(playlistId));
-                            await refreshNavidromePlaylists();
-                        }
-                    }}
-                    onCreate={(isLocal || isNavidrome) ? () => {
-                        setIsPlaylistPickerOpen(false);
-                        setIsCreatePlaylistOpen(true);
-                    } : undefined}
-                    createLabel={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist')}
-                />
-
-                <TextInputDialog
-                    isOpen={isCreatePlaylistOpen}
-                    onClose={() => setIsCreatePlaylistOpen(false)}
-                    isDaylight={isDaylight}
-                    title={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist')}
-                    description={t('localMusic.enterPlaylistName')}
-                    placeholder={t('localMusic.enterPlaylistName')}
-                    confirmLabel={t('options.save')}
-                    onConfirm={async (name) => {
-                        if (isLocal) {
-                            await onCreateCurrentLocalPlaylist(name);
-                            return;
-                        }
-
-                        if (isNavidrome) {
-                            await onCreateCurrentNavidromePlaylist(name);
-                            await refreshNavidromePlaylists();
-                        }
-                    }}
-                />
             </div>
 
             {/* Toggle Button */}

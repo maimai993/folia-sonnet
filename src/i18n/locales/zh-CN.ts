@@ -392,6 +392,7 @@ export default {
       "playback-prev": { "title": "上一首", "description": "播放上一首" },
       "playback-loop": { "title": "切换循环", "description": "切换循环模式" },
       "playback-like": { "title": "收藏当前歌曲", "description": "把当前歌曲加入收藏，或取消收藏" },
+      "playback-add-to-playlist": { "title": "添加到歌单", "description": "把当前歌曲放进你的某个歌单" },
       "playback-mute": { "title": "静音", "description": "静音，或恢复声音" },
       "playback-shuffle": { "title": "打乱队列", "description": "打乱当前播放队列" },
       "playback-clear-queue": { "title": "清空队列", "description": "移除当前播放队列中的所有歌曲" },

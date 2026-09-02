@@ -97,14 +97,7 @@ export type PlayerPanelDeps = {
     removeQueueSong: UnifiedPanelProps['queue']['onRemoveSong'];
     moveQueueSongToEnd: UnifiedPanelProps['queue']['onMoveSongToEnd'];
     moveQueueSongToNext: UnifiedPanelProps['queue']['onMoveSongToNext'];
-    localPlaylists: UnifiedPanelProps['library']['localPlaylists'];
-    onlinePlaylists: UnifiedPanelProps['library']['onlinePlaylists'];
     saveCurrentQueueAsLocalPlaylist: UnifiedPanelProps['library']['onSaveCurrentQueueAsPlaylist'];
-    addCurrentSongToLocalPlaylist: UnifiedPanelProps['library']['onAddCurrentSongToLocalPlaylist'];
-    createCurrentLocalPlaylist: UnifiedPanelProps['library']['onCreateCurrentLocalPlaylist'];
-    addCurrentSongToOnlinePlaylist: UnifiedPanelProps['library']['onAddCurrentSongToOnlinePlaylist'];
-    addCurrentSongToNavidromePlaylist: UnifiedPanelProps['library']['onAddCurrentSongToNavidromePlaylist'];
-    createCurrentNavidromePlaylist: UnifiedPanelProps['library']['onCreateCurrentNavidromePlaylist'];
     user: UnifiedPanelProps['account']['user'];
     handleLogout: UnifiedPanelProps['account']['onLogout'];
     cacheSize: UnifiedPanelProps['account']['cacheSize'];
@@ -183,14 +176,7 @@ export const buildPlayerPanelModel = ({
     removeQueueSong,
     moveQueueSongToEnd,
     moveQueueSongToNext,
-    localPlaylists,
-    onlinePlaylists,
     saveCurrentQueueAsLocalPlaylist,
-    addCurrentSongToLocalPlaylist,
-    createCurrentLocalPlaylist,
-    addCurrentSongToOnlinePlaylist,
-    addCurrentSongToNavidromePlaylist,
-    createCurrentNavidromePlaylist,
     openCurrentLocalAlbum,
     openCurrentLocalArtist,
     openCurrentNavidromeAlbum,
@@ -286,14 +272,7 @@ export const buildPlayerPanelModel = ({
             onMoveSongToNext: moveQueueSongToNext,
         },
         library: {
-            localPlaylists,
-            onlinePlaylists,
             onSaveCurrentQueueAsPlaylist: saveCurrentQueueAsLocalPlaylist,
-            onAddCurrentSongToLocalPlaylist: addCurrentSongToLocalPlaylist,
-            onCreateCurrentLocalPlaylist: createCurrentLocalPlaylist,
-            onAddCurrentSongToOnlinePlaylist: addCurrentSongToOnlinePlaylist,
-            onAddCurrentSongToNavidromePlaylist: addCurrentSongToNavidromePlaylist,
-            onCreateCurrentNavidromePlaylist: createCurrentNavidromePlaylist,
             onOpenCurrentLocalAlbum: openCurrentLocalAlbum,
             onOpenCurrentLocalArtist: openCurrentLocalArtist,
             onOpenCurrentNavidromeAlbum: openCurrentNavidromeAlbum,

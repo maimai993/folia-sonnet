@@ -392,6 +392,7 @@ export default {
       "playback-prev": { "title": "Previous track", "description": "Play the previous track" },
       "playback-loop": { "title": "Toggle loop", "description": "Change loop mode" },
       "playback-like": { "title": "Like current song", "description": "Add the current song to your favourites, or take it back out" },
+      "playback-add-to-playlist": { "title": "Add to a playlist", "description": "Put the current song in one of your playlists" },
       "playback-mute": { "title": "Mute", "description": "Silence playback, or bring the sound back" },
       "playback-shuffle": { "title": "Shuffle queue", "description": "Shuffle current play queue" },
       "playback-clear-queue": { "title": "Clear queue", "description": "Remove all songs from the current play queue" },

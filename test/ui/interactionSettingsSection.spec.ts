@@ -50,7 +50,7 @@ test('records the shortcut key by capturing the next press', async ({ page }) =>
     const keyField = page.getByLabel('Key');
     // Alt 是画出来的、不可编辑的那一半；只有右边这个位子是录的。
     await expect(keyField).toContainText('Alt');
-    await expect(shortcutSlot(page)).toHaveText('—');
+    await expect(shortcutSlot(page)).toHaveText('Not set');
 
     await keyField.click();
     await expect(shortcutSlot(page)).toHaveText('Press a key…');
@@ -95,6 +95,6 @@ test('clears the binding', async ({ page }) => {
 
     await page.getByRole('button', { name: 'Clear' }).click();
 
-    await expect(shortcutSlot(page)).toHaveText('—');
+    await expect(shortcutSlot(page)).toHaveText('Not set');
     expect(await storedShortcut(page)).toBeNull();
 });

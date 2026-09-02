@@ -3,6 +3,7 @@ import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { usePersonalFmModeStore } from '../../../stores/usePersonalFmModeStore';
 import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
+import { openAddToPlaylist, useAddToPlaylistStore } from '../../../stores/useAddToPlaylistStore';
 
 // src/components/app/command-palette-context/buildAppOwnedCommandContext.ts
 // The four namespaces whose state genuinely still lives in App.tsx: shared, playback, navigation
@@ -54,6 +55,8 @@ export const buildPlaybackCommandContext = (
         isMuted: audio.isMuted,
         setVolume: audio.handleSetVolume,
         toggleMute: audio.handleToggleMute,
+        openAddToPlaylist,
+        canAddCurrentSongToPlaylist: useAddToPlaylistStore.getState().availability.canAdd,
         personalFmSelection: usePersonalFmModeStore.getState().selection,
         openAudioEqualizer: audio.openAudioEqualizer,
         applyAudioSoundPreset: audio.handleApplyAudioSoundPreset,

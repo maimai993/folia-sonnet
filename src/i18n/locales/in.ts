@@ -391,6 +391,7 @@ export default {
       "playback-prev": { "title": "Lagu sebelumnya", "description": "Putar lagu sebelumnya" },
       "playback-loop": { "title": "Alihkan loop", "description": "Ubah mode loop" },
       "playback-like": { "title": "Sukai lagu ini", "description": "Tambahkan lagu ini ke favorit, atau keluarkan lagi" },
+      "playback-add-to-playlist": { "title": "Tambahkan ke daftar putar", "description": "Masukkan lagu ini ke salah satu daftar putar Anda" },
       "playback-mute": { "title": "Bisukan", "description": "Bisukan pemutaran, atau kembalikan suaranya" },
       "playback-shuffle": { "title": "Acak antrean", "description": "Acak antrean putar saat ini" },
       "playback-clear-queue": { "title": "Kosongkan antrean", "description": "Hapus semua lagu dari antrean putar saat ini" },

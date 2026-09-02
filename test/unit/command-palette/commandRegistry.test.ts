@@ -35,6 +35,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleMute: vi.fn(),
             toggleSongLike: vi.fn(),
             isSongLiked: false,
+            openAddToPlaylist: vi.fn(),
+            canAddCurrentSongToPlaylist: true,
             previewVolume: vi.fn(),
             isFmMode: false,
             personalFmSelection: { mode: 'DEFAULT' as const, scene: null },

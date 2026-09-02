@@ -151,6 +151,10 @@ export type CommandPalettePlaybackContext = {
     toggleSongLike: () => void | Promise<void>;
     /** Which way the toggle will go, so the command can say so before it runs. */
     isSongLiked: boolean;
+    /** Opens the playlist picker for the current song; it no longer needs the panel to be up. */
+    openAddToPlaylist: () => void;
+    /** Whether there is anywhere to put it — see AddToPlaylistHost, which answers this. */
+    canAddCurrentSongToPlaylist: boolean;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
     runAutoMatchBestLyric: () => Promise<boolean>;

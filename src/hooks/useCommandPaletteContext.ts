@@ -18,6 +18,7 @@ import {
 import { buildSearchCommandContext, type SearchCommandContextDeps } from '../components/app/command-palette-context/buildSearchCommandContext';
 import { buildSettingsCommandContext, type SettingsCommandContextDeps } from '../components/app/command-palette-context/buildSettingsCommandContext';
 import { buildVisualizerCommandContext } from '../components/app/command-palette-context/buildVisualizerCommandContext';
+import { useAddToPlaylistStore } from '../stores/useAddToPlaylistStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 import { useAutomixSettingsStore } from '../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../stores/useDesktopSettingsStore';
@@ -117,6 +118,9 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         visualizerBackgroundMode: state.visualizerBackgroundMode,
         randomVisualizerModePerSong: state.randomVisualizerModePerSong,
     })));
+    // Read through getState() by the builder, so the subscription has to be here or the command
+    // would keep the answer it had when the context was last built.
+    const canAddCurrentSongToPlaylist = useAddToPlaylistStore(state => state.availability.canAdd);
     const lyricStaffPolicy = useLyricSettingsStore(state => state.lyricStaffPolicy);
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);
     // Which surface the palette is opening over; commands that only apply to one of them gate on it.
@@ -170,6 +174,6 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         ambient,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, audioSignals, visualizerSignals,
-        lyricStaffPolicy, personalFmSelection, view, commandFilter,
+        lyricStaffPolicy, personalFmSelection, view, commandFilter, canAddCurrentSongToPlaylist,
     ]);
 };
