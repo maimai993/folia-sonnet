@@ -21,6 +21,7 @@ import type { PlayerCapConnectionStatus } from '../../types/playerCap';
 import LabSettingsModal from './settings/LabSettingsModal';
 import DeveloperSettingsSubview from './settings/DeveloperSettingsSubview';
 import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
+import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
@@ -397,6 +398,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'appearance' ||
             initialSubview === 'general' ||
             initialSubview === 'playback' ||
+            initialSubview === 'interaction' ||
             initialSubview === 'integration' ||
             initialSubview === 'storage' ||
             initialSubview === 'desktop' ||
@@ -1615,6 +1617,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 theme={theme}
                                                 utilityGhostButtonClass={utilityGhostButtonClass}
                                             />
+                                        )}
+                                        {activeSettingsSection === 'interaction' && (
+                                            <InteractionSettingsSubview settingsCardClass={settingsCardClass} />
                                         )}
                                         {activeSettingsSection === 'integration' && (
                                             <IntegrationSettingsSubview

@@ -1,4 +1,4 @@
-import { Command, Database, FlaskConical, Languages, PlayCircle, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
+import { Command, Database, FlaskConical, Keyboard, Languages, PlayCircle, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
 // src/components/modal/settings/navigation/settingsNavModel.ts
 // Single source of truth for the options-tab sections: sidebar order, grouping, titles and descriptions.
 
@@ -6,6 +6,7 @@ export type SettingsSectionId =
     | 'appearance'
     | 'general'
     | 'playback'
+    | 'interaction'
     | 'integration'
     | 'storage'
     | 'desktop'
@@ -56,10 +57,13 @@ export const SETTINGS_NAV_GROUP_SPECS: GroupSpec[] = [
         ],
     },
     {
-        id: 'playback',
-        labelKey: 'options.settingsGroupPlayback',
+        // Named for what the group is about rather than for its first section: it now holds how the
+        // listener drives the app as well as how the app plays.
+        id: 'controls',
+        labelKey: 'options.settingsGroupControls',
         sections: [
             { id: 'playback', icon: PlayCircle, labelKey: 'options.playbackSettings', descriptionKey: 'options.playbackSettingsPanelDesc' },
+            { id: 'interaction', icon: Keyboard, labelKey: 'options.interactionSettings', descriptionKey: 'options.interactionSettingsPanelDesc' },
         ],
     },
     {

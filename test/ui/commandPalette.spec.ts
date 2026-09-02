@@ -144,8 +144,7 @@ test('volume command takes over the panel with a slider surface', async ({ page 
 
 test('queue command parses the batch syntax and stages a preview', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press('Control+P');
-    await expect(palette(page)).toBeVisible();
+    await pressUntilPaletteOpens(page, 'Control+P');
 
     await paletteInput(page).fill('--rm @artist:Alpha');
     await page.waitForTimeout(400);

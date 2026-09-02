@@ -27,7 +27,7 @@ test.describe('settings navigation - wide layout', () => {
     test('groups the sections under their headings', async ({ page }) => {
         await openProbe(page, 'settingsNavigation');
 
-        for (const heading of ['Appearance', 'Playback', 'Connections & Data', 'System']) {
+        for (const heading of ['Appearance', 'Controls', 'Connections & Data', 'System']) {
             await expect(page.getByText(heading, { exact: true })).toBeVisible();
         }
     });

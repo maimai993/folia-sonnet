@@ -14,7 +14,7 @@ import { setStatusMessage } from './useStatusMessageStore';
 
 export type SettingsModalInitialTab = 'help' | 'options';
 
-export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter' | 'globalLyricOffset';
+export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'interaction' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter' | 'globalLyricOffset';
 
 export type VisualizerSettingsSection = 'common' | 'background' | 'visualizer' | 'subtitle';
 
