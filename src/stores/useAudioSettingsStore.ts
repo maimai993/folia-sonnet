@@ -193,6 +193,10 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleToggleAutoPlayOnLaunch: (enable) => {
         setStoredBoolean(AUTO_PLAY_ON_LAUNCH_KEY, enable);
         set({ autoPlayOnLaunch: enable });
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'autoPlayOnLaunchOn' : 'autoPlayOnLaunchOff')),
+        });
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });

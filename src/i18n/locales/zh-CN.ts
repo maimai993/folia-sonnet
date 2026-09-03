@@ -45,6 +45,8 @@ export default {
     "taskbarHidden": "主窗口任务栏图标已隐藏",
     "taskbarRestored": "主窗口任务栏图标已恢复",
     "openPlayerOnLaunch": "启动后将直接进入播放页",
+    "autoPlayOnLaunchOn": "启动后将自动续播上次的歌曲",
+    "autoPlayOnLaunchOff": "启动后将恢复上次的歌曲并保持暂停",
     "openHomeOnLaunch": "启动后将默认进入首页",
     "visualizerSwitched": "已切换到{{mode}}歌词",
     "classicReset": "流光参数已重置",

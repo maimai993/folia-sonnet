@@ -45,6 +45,8 @@ export default {
     "taskbarHidden": "Main window taskbar icon hidden",
     "taskbarRestored": "Main window taskbar icon restored",
     "openPlayerOnLaunch": "Launch directly to player page",
+    "autoPlayOnLaunchOn": "Playback will resume by itself on launch",
+    "autoPlayOnLaunchOff": "Launch will restore the last session paused",
     "openHomeOnLaunch": "Launch to home page by default",
     "visualizerSwitched": "Switched to {{mode}} visualizer",
     "classicReset": "Classic tuning reset",

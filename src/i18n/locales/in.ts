@@ -45,6 +45,8 @@ export default {
     "taskbarHidden": "Ikon jendela utama di taskbar disembunyikan",
     "taskbarRestored": "Ikon jendela utama di taskbar dipulihkan",
     "openPlayerOnLaunch": "Langsung buka halaman pemutar saat dibuka",
+    "autoPlayOnLaunchOn": "Pemutaran akan dilanjutkan sendiri saat aplikasi dibuka",
+    "autoPlayOnLaunchOff": "Sesi terakhir akan dipulihkan dalam keadaan dijeda",
     "openHomeOnLaunch": "Buka halaman beranda secara default saat dibuka",
     "visualizerSwitched": "Beralih ke visualizer {{mode}}",
     "classicReset": "Pengaturan Luminous direset",

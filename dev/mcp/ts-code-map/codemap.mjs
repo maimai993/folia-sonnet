@@ -97,10 +97,10 @@ function collect(root) {
     violations.sort(byPath);
     misplaced.sort(byPath);
 
-    return { graph, areas, hubs, registries, violations, misplaced };
+    return { areas, hubs, registries, violations, misplaced };
 }
 
-function render({ graph, areas, hubs, registries, violations, misplaced }) {
+function render({ areas, hubs, registries, violations, misplaced }) {
     const out = [];
     out.push('# 代码地图');
     out.push('');
@@ -108,15 +108,6 @@ function render({ graph, areas, hubs, registries, violations, misplaced }) {
     out.push('');
     out.push('全部内容由 TypeScript 编译器和模块图推导，不是人工维护的清单。');
     out.push('想知道某个具体符号在哪，用 `node dev/mcp/ts-code-map/cli.mjs search \'{"query":"..."}\'`。');
-    out.push('');
-
-    let edges = 0;
-    for (const set of graph.forward.values()) edges += set.size;
-    out.push(
-        `规模：${graph.files.length} 个源文件，${edges} 条模块依赖`
-        + `（${graph.typeOnly.size} 条是纯类型导入，运行时不存在；`
-        + `${graph.dynamic.size} 条是动态 \`import()\`，由 bundler 切成独立 chunk，不进首屏）。`,
-    );
     out.push('');
 
     out.push('## 区域分布');
