@@ -51,13 +51,13 @@ const LyricFilterRuleSection: React.FC<LyricFilterRuleSectionProps> = ({
                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
             </div>
-            <input
-                type="text"
+            <textarea
                 value={pattern}
                 onChange={(event) => onPatternChange(event.target.value)}
                 placeholder={t('lyricFilter.inputPlaceholder')}
                 disabled={!isEnabled}
-                className={`mt-4 w-full rounded-2xl border px-4 py-3 text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${inputBg}`}
+                rows={3}
+                className={`mt-4 w-full resize-none rounded-2xl border px-4 py-3 text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${inputBg}`}
                 style={{ color: 'var(--text-primary)' }}
             />
             <div className="mt-3 px-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
