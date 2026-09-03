@@ -45,6 +45,7 @@ import {
 } from './folia-grid/gridTrackNavigation';
 import { canResolveSongCatalogRef } from '../services/onlineMusic/catalogRefs';
 import type { MediaId, ProviderCollection } from '../types/onlineMusic';
+import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 
 export interface GridViewSourceActions {
     local?: {
@@ -543,6 +544,7 @@ export const GridView: React.FC<GridViewProps> = ({
     isInteractive = true,
 }) => {
     const { t } = useTranslation();
+    const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const containerRef = useRef<HTMLDivElement>(null);
     const dragControls = useDragControls();
     const [focusedIndex, setFocusedIndex] = useState(0);
@@ -2251,8 +2253,9 @@ export const GridView: React.FC<GridViewProps> = ({
                             animate={{ opacity: 1, x: 0, scale: 1 }}
                             exit={{ opacity: 0, x: -60, scale: 0.95 }}
                             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                            className="absolute left-6 top-24 bottom-28 sm:bottom-6 w-80 rounded-3xl z-[80] overflow-y-auto overscroll-contain hide-scrollbar flex flex-col p-6 shadow-2xl border backdrop-blur-2xl pointer-events-auto theme-glass-panel"
+                            className="absolute left-6 top-24 w-80 rounded-3xl z-[80] overflow-y-auto overscroll-contain hide-scrollbar flex flex-col p-6 shadow-2xl border backdrop-blur-2xl pointer-events-auto theme-glass-panel"
                             style={{
+                                bottom: bottomBarPanelBottomPx,
                                 boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
                             }}
                         >

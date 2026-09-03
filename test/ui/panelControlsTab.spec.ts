@@ -10,15 +10,24 @@ const readVisualizerMode = (page: import('@playwright/test').Page) => page.evalu
     return useVisualizerSettingsStore.getState().visualizerMode as string;
 });
 
-const openPlayerPage = async (page: import('@playwright/test').Page) => {
-    await page.addInitScript(([version, guideKey]) => {
+const openPlayerPage = async (page: import('@playwright/test').Page, bottomBarOffset = 32) => {
+    await page.addInitScript(({ version, guideKey, offset }: {
+        version: string;
+        guideKey: string;
+        offset: number;
+    }) => {
         localStorage.clear();
         localStorage.setItem('i18nextLng', 'zh-CN');
         localStorage.setItem('open_player_on_launch', 'true');
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
+        localStorage.setItem('player_bottom_bar_offset', String(offset));
         localStorage.setItem(guideKey, version);
-    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY]);
+    }, {
+        version: APP_VERSION,
+        guideKey: GUIDE_VERSION_STORAGE_KEY,
+        offset: bottomBarOffset,
+    });
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
@@ -29,7 +38,7 @@ const openPlayerPage = async (page: import('@playwright/test').Page) => {
 
 const openControlsTab = async (page: import('@playwright/test').Page) => {
     await openPlayerPage(page);
-    await page.locator('div.fixed.bottom-8.right-0 button').last().click();
+    await page.getByTestId('panel-toggle').locator('button').last().click();
     await page.waitForTimeout(500);
     await page.getByTitle('控制', { exact: true }).click();
     await page.waitForTimeout(600);
@@ -84,6 +93,41 @@ test('steps lyric modes with the arrows and opens the full list from the name', 
     await list.getByRole('option', { name: '云阶' }).click();
     await page.waitForTimeout(200);
     expect(await readVisualizerMode(page)).toBe('partita');
+});
+
+test('lifts the open right panel with the configured bottom bar baseline', async ({ page }) => {
+    const bottomBarOffset = 152;
+    await openPlayerPage(page, bottomBarOffset);
+    await page.getByTestId('panel-toggle').locator('button').last().click();
+
+    const panel = page.getByTestId('unified-panel-surface');
+    await expect(panel).toBeVisible();
+    const box = await panel.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+
+    // 桌面端面板保留原来的 8px 下边距，但基线和底栏共用同一个实时偏移。
+    expect(viewport!.height - box!.y - box!.height).toBeCloseTo(bottomBarOffset + 8, 0);
+    // 抬高时同步收缩滚动面板，不能把顶部推出视口。
+    expect(box!.y).toBeGreaterThanOrEqual(48);
+});
+
+test('keeps the configured bottom baseline after navigating to another page', async ({ page }) => {
+    const bottomBarOffset = 152;
+    await openPlayerPage(page, bottomBarOffset);
+    await page.evaluate(async () => {
+        const storeModulePath = '/src/stores/useAppViewStore.ts';
+        const { useAppViewStore } = await import(storeModulePath);
+        useAppViewStore.setState({ view: 'home' });
+    });
+
+    await expect.poll(() => page.evaluate(async () => {
+        const signalModulePath = '/src/stores/motionSignals.ts';
+        const { playerBottomBarLiveOffset } = await import(signalModulePath);
+        return playerBottomBarLiveOffset.get();
+    })).toBe(bottomBarOffset);
+
 });
 
 test('steps straight through sonnet without an interstitial dialog', async ({ page }) => {

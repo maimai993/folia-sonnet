@@ -186,6 +186,8 @@ export type CommandPaletteSettingsContext = {
     subtitleContentMode: SubtitleContentMode;
     cycleSubtitleContentMode: () => void;
     toggleSubtitleOverlayBackground: () => void;
+    startPlayerBottomBarPositioning: () => void;
+    canStartPlayerBottomBarPositioning: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;
     toggleAlwaysShowTrackSwitchButtons: () => void;
     toggleAlwaysShowMainWindowTitlebar: () => void;

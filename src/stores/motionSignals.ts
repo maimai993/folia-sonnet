@@ -1,4 +1,5 @@
 import { motionValue, type MotionValue } from 'framer-motion';
+import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX } from '../utils/playerBottomBarLayout';
 
 // src/stores/motionSignals.ts
 // The app's per-frame signals, held as MotionValue instances rather than React state.
@@ -7,6 +8,7 @@ import { motionValue, type MotionValue } from 'framer-motion';
 // clock, and the analyser's band energies. They must never become reactive store state — writing
 // `currentTime.get()` into a store would re-render the tree at frame rate. See
 // skills/frontend-runtime-guardrails.
+// 全局底部基线也在这里：拖动期间它是 pointer-move 频率的信号，不能进入 React/store state。
 //
 // What this module owns is only the *instances*. Their identity is stable for the process
 // lifetime, so reading one here costs nothing and never triggers a render; consumers subscribe
@@ -43,3 +45,6 @@ export const spectrum = motionValue(new Uint8Array(0));
 
 /** The band set as one stable object, so it can be passed straight to a visualizer. */
 export const audioBands: AudioBandSignals = { bass, lowMid, mid, vocal, treble, spectrum };
+
+/** Global bottom baseline offset in px; positioning writes it at pointer-move frequency. */
+export const playerBottomBarLiveOffset = motionValue(PLAYER_BOTTOM_BAR_BASE_OFFSET_PX);

@@ -232,6 +232,31 @@ export const useCommandPalette = ({
         }
     }, [openCommand]);
 
+    /** Uses the palette's platform, scope and availability gates for buttons outside the palette. */
+    const canInvokeCommandById = useCallback((commandId: string) => {
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
+        if (!command || !isCommandPaletteCommandEnabled(command, context)) {
+            return false;
+        }
+        return command.surface ? !isBlocked && !isExecuting : true;
+    }, [context, isBlocked, isExecuting]);
+
+    /** Opens surface commands in the palette and directly executes commands without a surface. */
+    const invokeCommandById = useCallback((commandId: string) => {
+        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
+        if (!command || !canInvokeCommandById(commandId)) {
+            return;
+        }
+
+        if (command.surface) {
+            openCommand(command);
+            return;
+        }
+
+        recordRecentCommand(command);
+        void command.execute('', context);
+    }, [canInvokeCommandById, context, openCommand, recordRecentCommand]);
+
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
             return false;
@@ -539,6 +564,8 @@ export const useCommandPalette = ({
         activePreview,
         activeCommand,
         openCommandById,
+        canInvokeCommandById,
+        invokeCommandById,
         availableCommands,
         setActiveCommand,
         isExecuting,

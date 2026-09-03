@@ -1,11 +1,12 @@
 import React from 'react';
-import { Languages, LayoutList } from 'lucide-react';
+import { Languages, LayoutList, Move } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
 import type { AppLanguagePreference } from '../../../i18n/config';
 import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
+import PlayerBottomBarSection from './PlayerBottomBarSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
@@ -18,12 +19,14 @@ type GeneralSettingsSubviewProps = {
     isDaylight: boolean;
     settingsCardClass: string;
     theme?: Theme;
+    utilityGhostButtonClass: string;
 };
 
 const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
     isDaylight,
     settingsCardClass,
     theme,
+    utilityGhostButtonClass,
 }) => {
     const { t, i18n } = useTranslation();
     const {
@@ -78,6 +81,10 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
         : null;
 
     const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-200' : 'bg-[#2A2D35]';
+    const rangeInputClass = [
+        'w-full accent-current',
+        isDaylight ? 'text-zinc-900' : 'text-white',
+    ].join(' ');
 
     return (
         <div className="space-y-5">
@@ -172,6 +179,17 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
+            </SettingsAnchor>
+
+            <SettingsAnchor anchorId="bottomUiSettings" label={t('options.bottomUiSettings')} className="space-y-4">
+                <SettingsSectionHeading icon={Move} label={t('options.bottomUiSettings')} />
+                <PlayerBottomBarSection
+                    settingsCardClass={settingsCardClass}
+                    utilityGhostButtonClass={utilityGhostButtonClass}
+                    rangeInputClass={rangeInputClass}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
             </SettingsAnchor>
 
             <PinnedCommandSettings

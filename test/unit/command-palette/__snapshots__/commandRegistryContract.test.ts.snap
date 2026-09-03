@@ -61,6 +61,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-wallpaper-mode",
   "desktop-toggle-wallpaper-mode",
   "settings-lab",
+  "settings-player-bottom-bar-position",
+  "settings-player-control-slots",
   "settings-visualizer",
   "settings-theme-park",
   "settings-global-lyric-offset",

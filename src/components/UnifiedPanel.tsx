@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useTransform } from 'framer-motion';
 import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, MirrorRectangular } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, ThemeMode, VisualizerMode } from '../types';
@@ -16,8 +16,9 @@ import type { OnlineLyricsState } from '../types';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
+import { resolveLikeAvailability } from '../utils/playerLikeAvailability';
+import { usePlayerBottomBarBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { getSizedCoverUrl } from '../utils/coverUrl';
-import { omni } from '../services/onlineMusic/omni';
 import { openAddToPlaylist, useAddToPlaylistStore } from '../stores/useAddToPlaylistStore';
 import { usePlayerPanelTabShortcut } from '../hooks/usePlayerPanelTabShortcut';
 import { countRender } from '../dev/renderCount';
@@ -241,16 +242,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localRef?.songId));
     const playbackSourceRef = currentSong ? getPlaybackSourceRef(currentSong) : null;
     const isOnline = playbackSourceRef?.kind === 'online';
-    const onlineProviderLabel = playbackSourceRef?.kind === 'online'
-        ? omni.getProviderLabel(playbackSourceRef.providerId)
-        : '';
-    const canLikeOnlineSong = Boolean(currentSong && isOnline && omni.canLikeSong(currentSong));
-    const likeDisabledReason = playbackControlsDisabled || isStage
-        ? t('status.stageLikeUnavailable')
-        : (isOnline && !canLikeOnlineSong
-            ? t('status.providerLikeUnavailable', { provider: onlineProviderLabel })
-            : undefined);
-    const likeDisabled = !currentSong || Boolean(likeDisabledReason);
+    const bottomBarBottomPx = usePlayerBottomBarBottomPx();
+    const panelMaxHeight = useTransform(
+        bottomBarBottomPx,
+        bottom => `calc(100dvh - ${bottom + 64}px)`,
+    );
+    const likeAvailability = resolveLikeAvailability(currentSong, playbackControlsDisabled, isStage);
+    const likeDisabledReason = likeAvailability.reason
+        ? t(likeAvailability.reason.key, likeAvailability.reason.params)
+        : undefined;
+    const likeDisabled = likeAvailability.disabled;
     // Answered by AddToPlaylistHost, which owns the picker now: the same question is asked by a
     // command that can fire with this panel closed, so it cannot be derived from panel props.
     const addToPlaylist = useAddToPlaylistStore(state => state.availability);
@@ -599,8 +600,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     }, [isCoverActionsVisible, supportsHover]);
 
     return (
-        <div
-            className="absolute bottom-8 right-0 z-[60] flex flex-col items-end gap-4 pointer-events-none"
+        <motion.div
+            style={{ bottom: bottomBarBottomPx }}
+            className="absolute right-0 z-[60] flex flex-col items-end gap-4 pointer-events-none"
             onClick={(e) => e.stopPropagation()}
         >
             <div className="pr-4 md:pr-8">
@@ -610,8 +612,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             initial={{ opacity: 0, scale: 0.9, originY: 1, originX: 1 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className={`pointer-events-auto w-80 max-h-[calc(100dvh-6rem)] ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-16 md:mb-2 overflow-y-auto hide-scrollbar`}
-                            style={{ color: theme.primaryColor }}
+                            data-testid="unified-panel-surface"
+                            className={`pointer-events-auto w-80 ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-16 md:mb-2 overflow-y-auto hide-scrollbar`}
+                            style={{ color: theme.primaryColor, maxHeight: panelMaxHeight }}
                         >
                             <div className="p-5 flex flex-col">
                                 {/* Top: Cover Art */}
@@ -940,7 +943,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             : { opacity: 0, x: 20, y: 12, scale: 0.92 }
                         }
                         transition={{ duration: 0.24, ease: 'easeOut' }}
-                        className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
+                        data-testid="panel-toggle"
+                        style={{ bottom: bottomBarBottomPx }}
+                        className="pointer-events-auto fixed right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
                         onMouseEnter={handleToggleButtonMouseEnter}
                         onMouseLeave={handleToggleButtonMouseLeave}
                         onPointerDown={handleToggleHotspotPointerDown}
@@ -1020,7 +1025,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </motion.div>
     );
 };
 
