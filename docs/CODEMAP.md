@@ -5,14 +5,14 @@
 全部内容由 TypeScript 编译器和模块图推导，不是人工维护的清单。
 想知道某个具体符号在哪，用 `node dev/mcp/ts-code-map/cli.mjs search '{"query":"..."}'`。
 
-规模：1310 个源文件，3806 条模块依赖（893 条是纯类型导入，运行时不存在；74 条是动态 `import()`，由 bundler 切成独立 chunk，不进首屏）。
+规模：1326 个源文件，3840 条模块依赖（899 条是纯类型导入，运行时不存在；74 条是动态 `import()`，由 bundler 切成独立 chunk，不进首屏）。
 
 ## 区域分布
 
 | 区域 | 文件数 |
 | --- | --- |
-| components | 502 |
-| test/dev | 379 |
+| components | 509 |
+| test/dev | 388 |
 | services | 117 |
 | utils | 115 |
 | hooks | 61 |
@@ -30,10 +30,10 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 490 | `src/types.ts` |
+| 492 | `src/types.ts` |
 | 61 | `src/types/onlineMusic.ts` |
 | 59 | `src/utils/appPlaybackGuards.ts` |
-| 51 | `src/components/command-palette/types.ts` |
+| 55 | `src/components/command-palette/types.ts` |
 | 46 | `src/components/visualizer/colorMix.ts` |
 | 42 | `src/stores/useStatusMessageStore.ts` |
 | 41 | `src/services/db.ts` |
