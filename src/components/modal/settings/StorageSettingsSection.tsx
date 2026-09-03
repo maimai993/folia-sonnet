@@ -7,6 +7,7 @@ import { exportSyncLibraryBundle, importSyncLibraryBundle, isSyncLibraryExportBu
 import { createSyncLibraryZipBlob, readSyncLibraryZipFile } from '../../../services/sync/syncArchive';
 import { SYNC_PROVIDER, type SyncProviderConfig, type SyncRuntimeStatus } from '../../../services/sync/syncTypes';
 import { createSafeObjectUrl } from '../../../utils/blobGuards';
+import { formatLocalDateTimeStamp } from '../../../utils/downloadFileName';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
@@ -201,7 +202,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
             if (!url) throw new TypeError('Sync export must produce a Blob');
             const link = document.createElement('a');
             link.href = url;
-            link.download = `folia-sync-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+            link.download = `folia-sync-${formatLocalDateTimeStamp()}.zip`;
             link.click();
             URL.revokeObjectURL(url);
         } finally {

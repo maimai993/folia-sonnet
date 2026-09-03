@@ -1,5 +1,6 @@
 import type { LocalPlaylist, LocalSong } from '../types';
 import { createSafeObjectUrl } from '../utils/blobGuards';
+import { sanitizeDownloadFileName } from '../utils/downloadFileName';
 import { createLocalPlaylist } from './localPlaylistService';
 
 // src/services/localPlaylistFileService.ts
@@ -215,10 +216,6 @@ export const serializeLocalPlaylistToM3u8 = (
     return `${lines.join('\r\n')}\r\n`;
 };
 
-const sanitizeDownloadFileName = (name: string): string => (
-    name.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim() || 'playlist'
-);
-
 export const downloadLocalPlaylistM3u8 = (playlist: LocalPlaylist, localSongs: LocalSong[]): void => {
     const content = serializeLocalPlaylistToM3u8(playlist, localSongs);
     const blob = new Blob([content], { type: 'application/vnd.apple.mpegurl;charset=utf-8' });
@@ -227,7 +224,7 @@ export const downloadLocalPlaylistM3u8 = (playlist: LocalPlaylist, localSongs: L
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${sanitizeDownloadFileName(playlist.name)}.m3u8`;
+    link.download = `${sanitizeDownloadFileName(playlist.name, 'playlist')}.m3u8`;
     document.body.appendChild(link);
     link.click();
     link.remove();

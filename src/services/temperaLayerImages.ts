@@ -17,9 +17,10 @@ export interface StoredTemperaLayerImage {
     blob: Blob;
     /**
      * Downscaled copy for the settings UI. Character art arrives at print resolution and the
-     * pool holds up to eight of them, so previewing off `blob` means decoding tens of
-     * megapixels into a row of 80px boxes. Absent on records saved before this existed, and on
-     * files small enough that a re-encode would only lose quality - callers fall back to `blob`.
+     * pool holds up to TEMPERA_MAX_LAYER_IMAGES of them, so previewing off `blob` means decoding
+     * tens of megapixels into a row of 80px boxes. Absent on records saved before this existed,
+     * and on files small enough that a re-encode would only lose quality - callers fall back to
+     * `blob`.
      */
     thumbnail?: Blob;
 }
