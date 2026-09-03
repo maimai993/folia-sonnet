@@ -3800,7 +3800,9 @@ function createWindow(options = {}) {
     win.show();
   }
 
-  loadAppEntry(win);
+  // 首屏加载遮罩是不透明的（index.html 里的 #app-splash）。透明播放背景和壁纸窗口在挂载前
+  // 本来就该透出桌面，盖一层黑底会在桌面上闪一个黑块，所以这两种窗口显式关掉它。
+  loadAppEntry(win, (useTransparentWindow || useWallpaperGeometry) ? { splash: '0' } : {});
   if (isElectronDevRuntime()) {
     win.webContents.openDevTools();
   }
