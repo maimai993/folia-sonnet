@@ -1521,7 +1521,7 @@ export default function App() {
     // click-through is managed by the main process), so the whole custom titlebar strip stays off.
     const usesCustomWindowChrome = isElectronWindow && !wallpaperMode;
     const isPlayerPageTransparent = transparentPlayerBackground || enablePlayerPageNativeBlur;
-    const shouldUseTransparentAppBackground = currentView === 'player' && isPlayerPageTransparent;
+    const shouldUseTransparentAppBackground = isPlayerPageTransparent;
     const appStyle = useMemo(() => buildAppStyle({
         bgMode,
         isDaylight,

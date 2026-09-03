@@ -107,14 +107,14 @@ export const useVisualizerRendererModel = ({
 
     const background = useMemo<VisualizerBackgroundConfig>(() => ({
         ...backgroundConfig,
-        transparent: currentView === 'player' && isPlayerPageTransparent && !isSettingsModalOpen,
+        transparent: isPlayerPageTransparent,
         common: {
             ...backgroundConfig.common,
             // A settings subview covers the geometry anyway, and drawing it under an opaque panel
             // is the one place the cost buys nothing.
             disableGeometricBackground: disableGeometricBackground || isSettingsSubviewOpen,
         },
-    }), [backgroundConfig, currentView, isPlayerPageTransparent, isSettingsModalOpen, disableGeometricBackground, isSettingsSubviewOpen]);
+    }), [backgroundConfig, isPlayerPageTransparent, disableGeometricBackground, isSettingsSubviewOpen]);
 
     const mode: VisualizerMode = isObsBrowserSourceRendering ? 'still' : visualizerMode;
 
