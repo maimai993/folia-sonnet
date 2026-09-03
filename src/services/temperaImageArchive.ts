@@ -1,11 +1,13 @@
 import { strFromU8, strToU8, unzip, unzipSync, zip, type AsyncZippable, type Unzipped } from 'fflate';
 import { TEMPERA_MAX_LAYER_IMAGES, type TemperaLayerImage } from '../types';
 import {
+    clearTemperaLayerImage,
     getTemperaLayerImage,
     prepareTemperaLayerImage,
     saveTemperaLayerImage,
     type StoredTemperaLayerImage,
 } from './temperaLayerImages';
+import { buildTemperaArchiveEntryPath, collectTemperaArchiveEntries } from './temperaImageArchiveFormat';
 
 // src/services/temperaImageArchive.ts
 // Moves the Tempera canvas-image pool in and out of a zip.
@@ -77,22 +79,7 @@ export interface TemperaImageArchiveImportResult {
     truncated: number;
 }
 
-const EXTENSION_BY_MIME: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'image/svg+xml': 'svg',
-};
-
 const encodeJson = (value: unknown) => strToU8(JSON.stringify(value, null, 2));
-
-/**
- * Rebuilds the on-disk name of an entry. The id already embeds the original file name
- * (including its extension, e.g. `12345-photo.png`), so the entry is exactly `images/${id}`
- * with no extra suffix appended.
- */
-const entryPath = (image: { id: string }) => `images/${image.id}`;
 
 const readJsonEntry = (files: Unzipped, path: string): unknown => {
     const file = files[path];
@@ -129,7 +116,7 @@ export const createTemperaImageArchive = async (
     await Promise.all(snapshot.layerImages.map(async image => {
         const stored = await getTemperaLayerImage(image.id).catch(() => null);
         if (!stored?.blob) return;
-        files[entryPath(image)] = new Uint8Array(await stored.blob.arrayBuffer());
+        files[buildTemperaArchiveEntryPath(image, stored.mimeType || stored.blob.type)] = new Uint8Array(await stored.blob.arrayBuffer());
         keptIds.add(image.id);
     }));
 
@@ -150,26 +137,6 @@ export const createTemperaImageArchive = async (
     };
 };
 
-const collectEntries = (
-    files: Unzipped,
-    manifest: TemperaLayerImage[],
-): Array<{ image: TemperaLayerImage; bytes: Uint8Array; mimeType: string }> => {
-    const paths = Object.keys(files);
-    const entries: Array<{ image: TemperaLayerImage; bytes: Uint8Array; mimeType: string }> = [];
-    manifest.forEach(image => {
-        const prefix = `images/${image.id}`;
-        const path = paths.find(name => name === prefix);
-        if (!path) return;
-        const bytes = files[path];
-        if (!bytes) return;
-        const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-        const mimeType = Object.entries(EXTENSION_BY_MIME)
-            .find(([, value]) => value === extension)?.[0] ?? 'application/octet-stream';
-        entries.push({ image, bytes, mimeType });
-    });
-    return entries;
-};
-
 /**
  * Restores a pool from a zip. Rebuilds those bytes through `prepareTemperaLayerImage`
  * instead of storing them as-is, so an import arrives in exactly the state a fresh drag-and-drop
@@ -177,7 +144,7 @@ const collectEntries = (
  */
 export const readTemperaImageArchiveFile = async (
     file: File,
-    options: { existing: TemperaLayerImage[]; maxImages?: number },
+    options: { existing: TemperaLayerImage[]; maxImages?: number; signal?: AbortSignal },
 ): Promise<TemperaImageArchiveImportResult> => {
     const maxImages = options.maxImages ?? TEMPERA_MAX_LAYER_IMAGES;
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -197,44 +164,58 @@ export const readTemperaImageArchiveFile = async (
     // Older backups also wrote `layerImageDepth` / `layerImageFrequency` here. Ignored rather than
     // rejected: the pool is still restorable, and those settings belong to the importer, not the zip.
     const pool = readJsonEntry(files, 'pool.json') as { layerImages?: unknown };
-    const manifest = Array.isArray(pool.layerImages) ? pool.layerImages as TemperaLayerImage[] : [];
-    const entries = collectEntries(files, manifest);
+    const manifest = Array.isArray(pool.layerImages) ? pool.layerImages : [];
+    const entries = collectTemperaArchiveEntries(files, manifest);
     const existingIds = new Set(options.existing.map(image => image.id));
     // Files named by the manifest but absent from the archive: a backup edited by hand, or one
     // that lost entries to a partial write. Counted rather than thrown so the rest still imports.
-    let skipped = manifest.length - entries.length;
+    const skipped = manifest.length - entries.length;
     let truncated = 0;
 
     const layerImages: TemperaLayerImage[] = [];
-    for (let index = 0; index < entries.length; index += 1) {
-        // A pool-size change means an older backup can hold more entries than fit now; those are
-        // dropped rather than silently overflowing the pool. Counted off the loop index rather
-        // than `entries.indexOf(entry)`: indexOf matches by object identity, so it only reports
-        // the right position while `collectEntries` happens to mint a fresh object per row - and
-        // the tail it names is the resolvable entries, not the manifest rows, which is the number
-        // the user is actually missing.
-        if (layerImages.length + options.existing.length >= maxImages) {
-            truncated = entries.length - index;
-            break;
-        }
+    const savedIds: string[] = [];
+    const throwIfAborted = () => {
+        if (!options.signal?.aborted) return;
+        const error = new Error('Tempera pool import was cancelled');
+        error.name = 'AbortError';
+        throw error;
+    };
+    try {
+        throwIfAborted();
+        for (let index = 0; index < entries.length; index += 1) {
+            // A pool-size change means an older backup can hold more entries than fit now; those
+            // are dropped rather than silently overflowing the pool. The tail is counted from the
+            // resolvable entries rather than from raw manifest rows that may already be invalid.
+            if (layerImages.length + options.existing.length >= maxImages) {
+                truncated = entries.length - index;
+                break;
+            }
 
-        const entry = entries[index];
-        // The id travelled with the file, so importing the same backup twice would have the
-        // second copy overwrite the first in IndexedDB instead of sitting next to it. A colliding
-        // id is therefore minted afresh, leaving the existing record untouched.
-        const source = new File(
-            [new Uint8Array(entry.bytes) as unknown as BlobPart],
-            entry.image.name || 'image',
-            { type: entry.mimeType },
-        );
-        const prepared = await prepareTemperaLayerImage(source);
-        const id = !existingIds.has(prepared.id) && !layerImages.some(image => image.id === prepared.id)
-            ? prepared.id
-            : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${prepared.name}`;
-        const stored: StoredTemperaLayerImage = { ...prepared, id };
-        await saveTemperaLayerImage(stored);
-        layerImages.push({ ...entry.image, id, name: stored.name || entry.image.name });
-        existingIds.add(id);
+            throwIfAborted();
+            const entry = entries[index];
+            // A colliding generated id is minted afresh, leaving the existing record untouched.
+            const source = new File(
+                [new Uint8Array(entry.bytes) as unknown as BlobPart],
+                entry.image.name,
+                { type: entry.mimeType },
+            );
+            const prepared = await prepareTemperaLayerImage(source);
+            throwIfAborted();
+            const id = !existingIds.has(prepared.id) && !layerImages.some(image => image.id === prepared.id)
+                ? prepared.id
+                : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${prepared.name}`;
+            const stored: StoredTemperaLayerImage = { ...prepared, id };
+            await saveTemperaLayerImage(stored);
+            savedIds.push(id);
+            throwIfAborted();
+            layerImages.push({ ...entry.image, id, name: stored.name || entry.image.name });
+            existingIds.add(id);
+        }
+    } catch (error) {
+        // Import is all-or-nothing. A quota error or cancellation after an earlier successful
+        // write must not leave records no placement can ever reach.
+        await Promise.all(savedIds.map(id => clearTemperaLayerImage(id).catch(() => undefined)));
+        throw error;
     }
 
     return { layerImages, skipped, truncated };

@@ -100,6 +100,7 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
     // removal is undone by simply not committing it.
     const [removedIds, setRemovedIds] = useState<string[]>([]);
     const [busy, setBusy] = useState<TemperaPoolBusyAction>('idle');
+    const activeWriteAbortRef = useRef<AbortController | null>(null);
 
     const previewImages = isDialogOpen ? draft.layerImages : images;
     const thumbnails = useTemperaLayerImageThumbnails(previewImages);
@@ -111,10 +112,8 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
     }, [depth, frequency, images]);
 
     const commit = useCallback(() => {
-        // The dialog blocks its own close paths, but an unmount - Escape out of the settings
-        // modal, the panel being swapped - goes through none of them. Committing there writes the
-        // pre-run pool and strands the async tail, which a replace ends by deleting files the
-        // tuning just written still names. Dropping the draft is the cheaper loss.
+        // The dialog blocks its own close paths, but an outer unmount goes through none of them.
+        // Its cleanup aborts the write and leaves the live tuning untouched.
         if (isTemperaPoolWriteLocked(busy)) return;
         setDialogOpen(false);
         void Promise.all(removedIds.map(id => clearTemperaLayerImage(id).catch(() => undefined)));
@@ -132,13 +131,18 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
     commitRef.current = commit;
     const isOpenRef = useRef(isDialogOpen);
     isOpenRef.current = isDialogOpen;
-    // An unmount cannot be undone by a later render, so `isOpenRef` stops tracking and would still
-    // read `true`; this tells a run that outlived the component apart from a run in a dialog that
-    // merely closed. Flipped after `commit` so that commit still sees the value it was written against.
+    // An outer settings close can unmount this component without going through ThemedDialog. Abort
+    // first so an in-flight write rolls back its newly stored blobs; the locked commit then leaves
+    // the unchanged live tuning alone.
     const isMountedRef = useRef(true);
-    useEffect(() => () => {
-        if (isOpenRef.current) commitRef.current();
-        isMountedRef.current = false;
+    useEffect(() => {
+        // StrictMode replays setup after its development-only cleanup, so restore the live marker.
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            activeWriteAbortRef.current?.abort();
+            if (isOpenRef.current) commitRef.current();
+        };
     }, []);
 
     // Files the pool cannot take are invisible otherwise: the strip looks exactly as it did, so
@@ -152,8 +156,7 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
         notAdded: number,
         detail: Record<string, unknown>,
     ) => {
-        // A run that outlived the component has nothing to report to: the pool it describes was
-        // dropped with the draft, and "added 2" over an unchanged pool misdirects.
+        // A run cancelled by unmount has been rolled back, so it has no result to report.
         if (!isMountedRef.current) return;
         const words = POOL_RESULT_WORDS[verb];
         const notes: string[] = [];
@@ -176,7 +179,10 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
     // as blobs no placement points at.
     const handleFiles = useCallback(async (files: File[]) => {
         if (files.length === 0 || busy !== 'idle') return;
+        const abortController = new AbortController();
+        activeWriteAbortRef.current = abortController;
         setBusy('adding');
+        let saved: StoredTemperaLayerImage[] = [];
         try {
             const room = Math.max(0, TEMPERA_MAX_LAYER_IMAGES - draft.layerImages.length);
             const supported = files.filter(isSupportedTemperaLayerImageFile);
@@ -200,7 +206,8 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
             // Only what IndexedDB accepted may enter the pool. A refused write used to reach no
             // further than the console while the id still landed in the draft, so the pool showed
             // a picture it cannot resolve - an id with nothing behind it.
-            const saved = (await Promise.all(prepared.map(image => (
+            if (abortController.signal.aborted) return;
+            saved = (await Promise.all(prepared.map(image => (
                 saveTemperaLayerImage(image)
                     .then(() => image)
                     .catch(error => {
@@ -208,6 +215,10 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                         return null;
                     })
             )))).filter((image): image is StoredTemperaLayerImage => image !== null);
+            if (abortController.signal.aborted || !isMountedRef.current) {
+                await Promise.all(saved.map(image => clearTemperaLayerImage(image.id).catch(() => undefined)));
+                return;
+            }
             setDraft(current => ({
                 ...current,
                 layerImages: [
@@ -234,7 +245,8 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                 },
             );
         } finally {
-            setBusy('idle');
+            if (activeWriteAbortRef.current === abortController) activeWriteAbortRef.current = null;
+            if (isMountedRef.current) setBusy('idle');
         }
     }, [busy, draft.layerImages.length, reportPoolResult]);
 
@@ -310,8 +322,8 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
     // while a picker is still waiting, and both resolve into the same draft.
     const importPool = useCallback(async (file: File, mode: 'replace' | 'append') => {
         if (busy !== 'idle') return;
-        // Replace wipes the current pool, and the only confirmation is here: the dialog has no
-        // closing state to lose, but the IndexedDB records it drops are gone for good.
+        // Replacement is destructive once the resulting draft is committed, so confirm the mode
+        // before reading or writing the selected archive.
         if (mode === 'replace' && draft.layerImages.length > 0
             && !window.confirm(t('options.temperaImportConfirmReplace', {
                 defaultValue: '替换导入会先清空当前 {{count}} 张图片，确定继续？',
@@ -320,11 +332,20 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
             return;
         }
 
+        const abortController = new AbortController();
+        activeWriteAbortRef.current = abortController;
         setBusy('importing');
         try {
             const result = await readTemperaImageArchiveFile(file, {
                 existing: mode === 'append' ? draft.layerImages : [],
+                signal: abortController.signal,
             });
+            if (abortController.signal.aborted || !isMountedRef.current) {
+                await Promise.all(result.layerImages.map(image => (
+                    clearTemperaLayerImage(image.id).catch(() => undefined)
+                )));
+                return;
+            }
             // A backup that yields nothing is a failure the user has to hear about, but there are
             // two very different reasons for it: a pool that was already full when the zip landed
             // (every entry was counted as left out) and a zip that simply held no picture worth
@@ -351,20 +372,14 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                 return;
             }
 
-            // Replacing the pool drops the old blobs here rather than through `removedIds`,
-            // because those files have to go even if the user never commits the dialog.
             if (mode === 'replace') {
-                // `removedIds` also names pictures that must go: deleted earlier this session, so
-                // `draft.layerImages` no longer lists them and clearing only the list would forget
-                // them with their blobs still in IndexedDB.
-                const doomed = new Set([
+                // Old files stay intact until the new draft is committed. This makes replacing
+                // transactional across the React boundary too: an outer unmount can abandon the
+                // draft without breaking the live tuning's existing ids.
+                setRemovedIds(current => Array.from(new Set([
+                    ...current,
                     ...draft.layerImages.map(image => image.id),
-                    ...removedIds,
-                ]);
-                await Promise.all([...doomed].map(id => (
-                    clearTemperaLayerImage(id).catch(() => undefined)
-                )));
-                setRemovedIds([]);
+                ])));
             }
 
             // Only the pool travels in the zip: depth and frequency are pool-wide tuning the user
@@ -388,6 +403,7 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                 },
             );
         } catch (error) {
+            if ((error as Error)?.name === 'AbortError') return;
             console.error('[Tempera] canvas image pool import failed:', error);
             setStatusMessage({
                 type: 'error',
@@ -396,9 +412,10 @@ const TemperaImageLayerControls: React.FC<TemperaImageLayerControlsProps> = ({
                     : (t('options.temperaPoolImportFailed') || '导入失败'),
             });
         } finally {
-            setBusy('idle');
+            if (activeWriteAbortRef.current === abortController) activeWriteAbortRef.current = null;
+            if (isMountedRef.current) setBusy('idle');
         }
-    }, [busy, draft.layerImages, removedIds, reportPoolResult, t]);
+    }, [busy, draft.layerImages, reportPoolResult, t]);
 
     return (
         <div className="space-y-3">

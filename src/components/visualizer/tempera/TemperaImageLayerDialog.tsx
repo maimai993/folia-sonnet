@@ -1,9 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, ImagePlus, Loader2, Plus, Replace, Trash2 } from 'lucide-react';
+import { Download, ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import type { TemperaLayerImage } from '../../../types';
 import ThemedDialog from '../../shared/ThemedDialog';
+import TemperaImageImportMenu from './TemperaImageImportMenu';
 import TemperaImagePlacementEditor from './TemperaImagePlacementEditor';
 import { TemperaRangeControl } from './TemperaSettingsControls';
 import type { TemperaDialogTokens } from './temperaDialogTokens';
@@ -139,9 +140,8 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     const [dragging, setDragging] = useState(false);
     const full = images.length >= maxImages;
     const tokens = temperaDialogTokens(isDaylight);
-    // A run outlives the click that started it, and an `importing` tail in particular deletes the
-    // old blobs the moment its entries arrive - files the tuning a close just committed still
-    // names. So every close path funnels through `requestClose` (see `isTemperaPoolWriteLocked`).
+    // A run outlives the click that started it and writes the draft after awaiting storage, so
+    // every close path owned by this dialog funnels through the same lock.
     const writeLocked = isTemperaPoolWriteLocked(busy);
 
     const requestClose = useCallback(() => {
@@ -208,19 +208,13 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                         disabled={full || busy !== 'idle'}
                         onClick={() => fileInputRef.current?.click()}
                     />
-                    <PoolAction
-                        label={t('options.temperaImportAppendImages') || '导入备份（追加）'}
-                        icon={<Plus size={14} />}
-                        tokens={tokens}
-                        disabled={full || busy !== 'idle'}
-                        onClick={() => openImportPicker('append')}
-                    />
-                    <PoolAction
-                        label={t('options.temperaImportReplaceImages') || '导入备份（替换）'}
-                        icon={<Replace size={14} />}
-                        tokens={tokens}
+                    <TemperaImageImportMenu
                         disabled={busy !== 'idle'}
-                        onClick={() => openImportPicker('replace')}
+                        appendDisabled={full}
+                        isDaylight={isDaylight}
+                        tokens={tokens}
+                        t={t}
+                        onChoose={openImportPicker}
                     />
                     <PoolAction
                         label={t('options.temperaExportImages') || '导出备份'}
@@ -231,7 +225,7 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                     />
                     <span className="ml-auto flex items-center gap-3">
                         {/* Busy takes the count's slot rather than a button's icon: a spinner
-                            among four greyed-out buttons is invisible, and a run started from a
+                            among several greyed-out buttons is invisible, and a run started from a
                             native picker outlives that picker. This slot never dims or moves. */}
                         {busy === 'idle' ? (
                             <span className="text-xs opacity-60" style={{ color: tokens.textSecondary }}>

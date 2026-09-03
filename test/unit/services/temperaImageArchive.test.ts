@@ -10,6 +10,7 @@ import {
 // counts the dialog turns into a status message.
 
 const mocks = vi.hoisted(() => ({
+    clearTemperaLayerImage: vi.fn(),
     getTemperaLayerImage: vi.fn(),
     saveTemperaLayerImage: vi.fn(),
 }));
@@ -19,6 +20,7 @@ vi.mock('@/services/temperaLayerImages', async importOriginal => {
     const actual = await importOriginal<typeof import('@/services/temperaLayerImages')>();
     return {
         ...actual,
+        clearTemperaLayerImage: mocks.clearTemperaLayerImage,
         getTemperaLayerImage: mocks.getTemperaLayerImage,
         saveTemperaLayerImage: mocks.saveTemperaLayerImage,
     };
@@ -45,6 +47,7 @@ const placement = (id: string, name = `${id}.png`) => ({
 describe('tempera image archive', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.clearTemperaLayerImage.mockResolvedValue(undefined);
         mocks.getTemperaLayerImage.mockResolvedValue(null);
         mocks.saveTemperaLayerImage.mockResolvedValue(undefined);
     });
@@ -86,6 +89,96 @@ describe('tempera image archive', () => {
         expect(Object.keys(pool)).toEqual(['layerImages']);
         expect(pool).not.toHaveProperty('layerImageDepth');
         expect(pool).not.toHaveProperty('layerImageFrequency');
+    });
+
+    it('adds a MIME-derived extension and restores extensionless SVG files with their type', async () => {
+        mocks.getTemperaLayerImage.mockResolvedValue({
+            id: 'extensionless',
+            name: 'artwork',
+            mimeType: 'image/svg+xml',
+            blob: new Blob(['<svg xmlns="http://www.w3.org/2000/svg"/>'], { type: 'image/svg+xml' }),
+        });
+        const archive = await createTemperaImageArchive({
+            layerImages: [placement('extensionless', 'artwork')],
+        });
+        const { unzipSync } = await import('fflate');
+        const files = unzipSync(new Uint8Array(await archive.blob.arrayBuffer()));
+
+        expect(Object.keys(files)).toContain('images/extensionless.svg');
+        await readTemperaImageArchiveFile(
+            new File([archive.blob], 'pool.zip', { type: 'application/zip' }),
+            { existing: [] },
+        );
+        expect(mocks.saveTemperaLayerImage.mock.calls[0][0].blob.type).toBe('image/svg+xml');
+    });
+
+    it('normalizes untrusted placement values into the editor range', async () => {
+        const { zipSync } = await import('fflate');
+        const blob = new Blob([zipSync({
+            'meta.json': strToU8('{"kind":"folia-tempera-pool","schemaVersion":1}'),
+            'pool.json': strToU8(JSON.stringify({
+                layerImages: [{
+                    id: 'unsafe',
+                    name: 'unsafe.png',
+                    align: 'sideways',
+                    verticalAlign: null,
+                    scale: 999,
+                    opacity: -4,
+                }],
+            })),
+            'images/unsafe.png': pngBytes,
+        })], { type: 'application/zip' });
+
+        const result = await readTemperaImageArchiveFile(
+            new File([blob], 'pool.zip', { type: 'application/zip' }),
+            { existing: [] },
+        );
+
+        expect(result.layerImages[0]).toMatchObject({
+            align: 'free',
+            verticalAlign: 'bottom',
+            scale: 2,
+            opacity: 0,
+        });
+    });
+
+    it('rolls back earlier records when a later archive write fails', async () => {
+        const { zipSync } = await import('fflate');
+        const blob = new Blob([zipSync({
+            'meta.json': strToU8('{"kind":"folia-tempera-pool","schemaVersion":1}'),
+            'pool.json': strToU8(JSON.stringify({ layerImages: [placement('a'), placement('b')] })),
+            'images/a.png': pngBytes,
+            'images/b.png': pngBytes,
+        })], { type: 'application/zip' });
+        mocks.saveTemperaLayerImage
+            .mockResolvedValueOnce(undefined)
+            .mockRejectedValueOnce(new Error('quota exceeded'));
+
+        await expect(readTemperaImageArchiveFile(
+            new File([blob], 'pool.zip', { type: 'application/zip' }),
+            { existing: [] },
+        )).rejects.toThrow('quota exceeded');
+
+        expect(mocks.clearTemperaLayerImage).toHaveBeenCalledWith(
+            mocks.saveTemperaLayerImage.mock.calls[0][0].id,
+        );
+    });
+
+    it('rolls back records when the caller aborts an import', async () => {
+        const controller = new AbortController();
+        const { zipSync } = await import('fflate');
+        const blob = new Blob([zipSync({
+            'meta.json': strToU8('{"kind":"folia-tempera-pool","schemaVersion":1}'),
+            'pool.json': strToU8(JSON.stringify({ layerImages: [placement('a')] })),
+            'images/a.png': pngBytes,
+        })], { type: 'application/zip' });
+        mocks.saveTemperaLayerImage.mockImplementationOnce(async () => controller.abort());
+
+        await expect(readTemperaImageArchiveFile(
+            new File([blob], 'pool.zip', { type: 'application/zip' }),
+            { existing: [], signal: controller.signal },
+        )).rejects.toMatchObject({ name: 'AbortError' });
+        expect(mocks.clearTemperaLayerImage).toHaveBeenCalledTimes(1);
     });
 
     it('imports a backup that still carries the old pool-wide settings', async () => {
