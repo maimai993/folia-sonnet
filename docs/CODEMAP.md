@@ -9,10 +9,10 @@
 
 | 区域 | 文件数 |
 | --- | --- |
-| components | 523 |
+| components | 524 |
 | test/dev | 403 |
 | services | 121 |
-| utils | 120 |
+| utils | 121 |
 | hooks | 65 |
 | backend/electron | 61 |
 | stores | 31 |
