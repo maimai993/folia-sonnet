@@ -9,10 +9,10 @@
 
 | 区域 | 文件数 |
 | --- | --- |
-| components | 509 |
-| test/dev | 388 |
-| services | 117 |
-| utils | 115 |
+| components | 510 |
+| test/dev | 390 |
+| services | 119 |
+| utils | 116 |
 | hooks | 61 |
 | backend/electron | 54 |
 | stores | 29 |
@@ -28,12 +28,12 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 492 | `src/types.ts` |
+| 493 | `src/types.ts` |
 | 61 | `src/types/onlineMusic.ts` |
 | 59 | `src/utils/appPlaybackGuards.ts` |
 | 55 | `src/components/command-palette/types.ts` |
 | 46 | `src/components/visualizer/colorMix.ts` |
-| 42 | `src/stores/useStatusMessageStore.ts` |
+| 43 | `src/stores/useStatusMessageStore.ts` |
 | 41 | `src/services/db.ts` |
 | 36 | `src/components/visualizer/definition.ts` |
 | 36 | `src/services/onlineMusic/songMetadata.ts` |
