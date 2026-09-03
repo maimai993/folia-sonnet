@@ -52,15 +52,20 @@ const openPlayerPage = async (page: import('@playwright/test').Page) => {
     await seedApp(page, true);
 
     await page.goto('/');
-    await page.waitForTimeout(2000);
-    await page.evaluate(async (songs) => {
-        const dbModulePath = '/src/services/db.ts';
-        const { saveToCache } = await import(dbModulePath);
-        await saveToCache('last_song', songs[0]);
-        await saveToCache('last_queue', songs);
-    }, QUEUE_FIXTURE);
+    // 种数据要等模块图和 IndexedDB 都就绪。定长 sleep 只是在赌，改成重试到真的写进去为止。
+    await expect.poll(async () => page.evaluate(async (songs) => {
+        try {
+            const dbModulePath = '/src/services/db.ts';
+            const { saveToCache } = await import(dbModulePath);
+            await saveToCache('last_song', songs[0]);
+            await saveToCache('last_queue', songs);
+            return true;
+        } catch {
+            return false;
+        }
+    }, QUEUE_FIXTURE)).toBe(true);
     await page.reload();
-    await page.waitForTimeout(1800);
+    // 重载后不再定长等待：下面每个入口要么轮询按键，要么轮询 store，自己会等。
 };
 
 const palette = (page: import('@playwright/test').Page) => page.getByTestId('command-palette-panel');
@@ -70,7 +75,7 @@ const paletteInput = (page: import('@playwright/test').Page) => palette(page).ge
 const openHomePage = async (page: import('@playwright/test').Page) => {
     await seedApp(page, false);
     await page.goto('/');
-    await page.waitForTimeout(2000);
+    // 不定长等待：紧接着的 pressUntilPaletteOpens 会一直敲到面板真的响应为止。
 };
 
 /**
@@ -83,6 +88,20 @@ const pressUntilPaletteOpens = async (page: import('@playwright/test').Page, key
         await page.keyboard.press(key);
         return palette(page).count();
     }).toBeGreaterThan(0);
+};
+
+/**
+ * 输入查询并等匹配列表真的跟上。
+ *
+ * 匹配走 120ms 防抖，之后还要重排；「等 400ms」只是在赌这段够用，机器一忙就不够——本文件
+ * 那几条偶发失败（surface 没打开、picker 一行都没有）全是这么来的：回车打在了旧列表上。
+ * 改成等某一行真的出现，Playwright 的断言自己会重试。
+ */
+const typeUntilRow = async (page: import('@playwright/test').Page, query: string, rowTitle: string) => {
+    await paletteInput(page).fill(query);
+    const row = palette(page).getByText(rowTitle, { exact: true }).first();
+    await expect(row).toBeVisible();
+    return row;
 };
 
 test('opens on home with the primary modifier and K', async ({ page }) => {
@@ -104,8 +123,12 @@ test('still opens with bare s on the home shelf', async ({ page }) => {
 test('withdraws the player-surface commands on home', async ({ page }) => {
     await openHomePage(page);
     await pressUntilPaletteOpens(page);
+
+    // 先拿落地列表当锚：队列在首页可用，所以打字前它一定在。
+    await expect(palette(page).getByText('队列', { exact: true }).first()).toBeVisible();
     await paletteInput(page).fill('panel cover');
-    await page.waitForTimeout(400);
+    // 它消失了，才说明排序确实按新查询跑过一遍——否则下面那条断言只是在对着旧列表空转。
+    await expect(palette(page).getByText('队列', { exact: true })).toHaveCount(0);
 
     // 面板长在播放页上；首页没有可开的东西，所以这条命令连匹配都不该产生。
     await expect(palette(page).getByText('面板：封面', { exact: true })).toHaveCount(0);
@@ -115,7 +138,6 @@ test('still offers the player-surface commands on the player', async ({ page }) 
     await openPlayerPage(page);
     await pressUntilPaletteOpens(page, 's');
     await paletteInput(page).fill('panel cover');
-    await page.waitForTimeout(400);
 
     await expect(palette(page).getByText('面板：封面', { exact: true }).first()).toBeVisible();
 });
@@ -132,10 +154,7 @@ test('opens with s and shows the declared landing commands', async ({ page }) =>
 test('volume command takes over the panel with a slider surface', async ({ page }) => {
     await openPlayerPage(page);
     await pressUntilPaletteOpens(page, 's');
-    await paletteInput(page).fill('volume');
-    await page.waitForTimeout(400);
-    await palette(page).getByText('音量条', { exact: true }).first().click();
-    await page.waitForTimeout(400);
+    await (await typeUntilRow(page, 'volume', '音量条')).click();
 
     // Surface 接管后输入框变成数字输入，面板主体是滑块而不是匹配列表。
     await expect(paletteInput(page)).toHaveAttribute('type', 'number');
@@ -147,43 +166,56 @@ test('queue command parses the batch syntax and stages a preview', async ({ page
     await pressUntilPaletteOpens(page, 'Control+P');
 
     await paletteInput(page).fill('--rm @artist:Alpha');
-    await page.waitForTimeout(400);
     await expect(palette(page).getByText('移除匹配歌曲')).toBeVisible();
 
     // Escape 先摘掉批量动作，再摘掉筛选，最后才关闭面板。
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
     await expect(paletteInput(page)).toHaveValue('@artist:Alpha');
     await expect(palette(page)).toBeVisible();
 });
 
+/**
+ * 执行模式的入口是单键 ':'，进去之后每个字符都会被当成命令键，所以不能像 s 那样反复敲到开为止。
+ * 先用 s 探一次全局监听是否已装好（开了就关掉，无副作用），再精确敲一次 ':'。
+ */
+const openExecuteMode = async (page: import('@playwright/test').Page) => {
+    await pressUntilPaletteOpens(page, 's');
+    await page.keyboard.press('Escape');
+    await expect(palette(page)).toBeHidden();
+
+    await page.keyboard.press(':');
+    await expect(palette(page)).toBeVisible();
+    await expect(palette(page).getByText('执行模式')).toBeVisible();
+};
+
+/** 打开可视化选择器：等命令行出现再回车，再等 surface 的行画出来。 */
+const openVisualizerPicker = async (page: import('@playwright/test').Page) => {
+    await typeUntilRow(page, '选择可视化', '选择可视化');
+    await page.keyboard.press('Enter');
+    await expect(palette(page).locator('[data-picker-mode]').first()).toBeVisible();
+};
+
 test('visualizer picker switches the mode from the list', async ({ page }) => {
     await openPlayerPage(page);
-    expect(await readStore(page, 'visualizerMode')).toBe('classic');
+    await expect.poll(() => readStore(page, 'visualizerMode')).toBe('classic');
 
     await pressUntilPaletteOpens(page, 's');
-    await paletteInput(page).fill('选择可视化');
-    // 匹配走 120ms 防抖，回车必须等列表刷新后再按，否则命中的是落地列表首项。
-    await page.waitForTimeout(400);
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(600);
+    await openVisualizerPicker(page);
 
     await paletteInput(page).fill('云阶');
-    await page.waitForTimeout(400);
-    await palette(page).getByRole('button').filter({ hasText: '云阶' }).first().click();
-    await page.waitForTimeout(600);
+    const target = palette(page).getByRole('button').filter({ hasText: '云阶' }).first();
+    await expect(target).toBeVisible();
+    await target.click();
 
-    expect(await readStore(page, 'visualizerMode')).toBe('partita');
+    // 切换是异步落到 store 的，轮询而不是睡一觉再读。
+    await expect.poll(() => readStore(page, 'visualizerMode')).toBe('partita');
     await expect(palette(page)).toBeHidden();
 });
 
 test('visualizer picker walks the mode list and marks the live mode', async ({ page }) => {
     await openPlayerPage(page);
     await pressUntilPaletteOpens(page, 's');
-    await paletteInput(page).fill('选择可视化');
-    await page.waitForTimeout(400);
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(600);
+    await openVisualizerPicker(page);
 
     const rows = palette(page).locator('[data-picker-mode]');
     const modes = await rows.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-picker-mode')));
@@ -215,31 +247,25 @@ test('visualizer picker walks the mode list and marks the live mode', async ({ p
     expect(await activeMode()).toBe(modes[targetIndex]);
 
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(600);
-    expect(await readStore(page, 'visualizerMode')).toBe(modes[targetIndex]);
+    await expect.poll(() => readStore(page, 'visualizerMode')).toBe(modes[targetIndex]);
 });
 
 test('execute mode runs a command from a single key', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press(':');
-
-    await expect(palette(page)).toBeVisible();
-    await expect(palette(page).getByText('执行模式')).toBeVisible();
+    await openExecuteMode(page);
 
     // d 是明暗切换；敲下去应立即执行并关闭面板，不需要回车。
     const before = await readStore(page, 'isDaylight');
     await paletteInput(page).pressSequentially('d');
-    await page.waitForTimeout(600);
 
-    expect(await readStore(page, 'isDaylight')).not.toBe(before);
+    await expect.poll(() => readStore(page, 'isDaylight')).not.toBe(before);
     await expect(palette(page)).toBeHidden();
 });
 
 test('execute mode reports an unknown key instead of guessing', async ({ page }) => {
     await openPlayerPage(page);
-    await page.keyboard.press(':');
+    await openExecuteMode(page);
     await paletteInput(page).pressSequentially('z');
-    await page.waitForTimeout(400);
 
     await expect(palette(page).getByText(/没有命令使用/)).toBeVisible();
     await expect(palette(page)).toBeVisible();
@@ -253,11 +279,10 @@ const readPersonalFmSelection = (page: import('@playwright/test').Page) => page.
 
 const openFmModeSurface = async (page: import('@playwright/test').Page) => {
     await pressUntilPaletteOpens(page, 's');
-    await paletteInput(page).fill('私人 FM 模式');
-    // 匹配走 120ms 防抖，回车必须等列表刷新后再按。
-    await page.waitForTimeout(400);
+    await typeUntilRow(page, '私人 FM 模式', '私人 FM 模式');
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(600);
+    // Surface 是 React.lazy，dev 下要现拉 chunk。等它的第一行真的画出来，别赌一个时长。
+    await expect(palette(page).locator('[data-fm-option]').first()).toBeVisible();
 };
 
 test('fm mode picker selects scene mode straight from a scene pill', async ({ page }) => {
@@ -270,23 +295,22 @@ test('fm mode picker selects scene mode straight from a scene pill', async ({ pa
     await expect(palette(page).locator('[data-fm-option="fm-mode-pick-DEFAULT"][data-fm-selected="true"]')).toBeVisible();
 
     await palette(page).locator('[data-fm-option="fm-scene-pick-SLEEP_HELP"]').click();
-    await page.waitForTimeout(600);
 
-    expect(await readPersonalFmSelection(page)).toEqual({ mode: 'SCENE_RCMD', scene: 'SLEEP_HELP' });
+    await expect.poll(() => readPersonalFmSelection(page)).toEqual({ mode: 'SCENE_RCMD', scene: 'SLEEP_HELP' });
 });
 
 test('fm mode picker filters to one section and walks it with arrows', async ({ page }) => {
     await openPlayerPage(page);
     await openFmModeSurface(page);
 
+    // 筛选后剩下的必须比全量少，也必须不为空——两头都钉住，才说明筛选真的生效过。
     await paletteInput(page).fill('语');
-    await page.waitForTimeout(300);
     const filtered = palette(page).locator('[data-fm-option]');
-    await expect(filtered).toHaveCount(await filtered.count());
-    expect(await filtered.count()).toBeGreaterThan(0);
+    await expect.poll(() => filtered.count()).toBeGreaterThan(0);
+    await expect.poll(() => filtered.count()).toBeLessThan(47);
 
     await paletteInput(page).fill('');
-    await page.waitForTimeout(300);
+    await expect(palette(page).locator('[data-fm-option]')).toHaveCount(47);
 
     const activeOption = () => palette(page).locator('[data-fm-active="true"]').getAttribute('data-fm-option');
     expect(await activeOption()).toBe('fm-mode-pick-DEFAULT');

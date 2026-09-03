@@ -158,8 +158,21 @@ const buildEntry = (command: CommandPaletteCommand, locale: string): CommandSear
     fuzzyParts.push(...triggerList, ...titleWordList);
     const fuzzyTargets = [...new Set(fuzzyParts.map(normalizeSearchText).filter(Boolean))];
 
-    const asciiTrigger = triggerList.find(trigger => /^[a-z0-9][a-z0-9 .+-]*$/.test(trigger));
-    const englishFirstWord = splitWords(normalizeSearchText(englishText?.title ?? ''))[0];
+    /**
+     * 行上那个等宽提示 chip 显示的就是它，语义是「把这段原样打进去就能精确命中这条命令」。
+     *
+     * 必须先看英文标题，不能从 triggerList 里挑：triggerList 按长度升序排，而生成的拼音缩写
+     * 几乎总是最短的那个，于是 chip 会显示 `fmms`、`xuanzekeshihua`、`mg pv` 这种东西。
+     * 英文标题本身就是全额触发词（上面 pushUnique 进去的），所以拿它当提示词既是人能读的英文，
+     * 也保证打进去精确命中。
+     *
+     * 退一步才用人写的英文同义词，且**按作者写下的顺序**取——不是按长度。再退一步才是 id。
+     * 生成的拼音永远不会进这个字段：这里根本不看 triggerList。
+     */
+    const englishTitleTerm = normalizeSearchText(englishText?.title ?? '');
+    const authoredAsciiKeyword = command.keywords
+        .map(keyword => normalizeSearchText(keyword))
+        .find(keyword => keyword && /^[a-z0-9][a-z0-9 .+-]*$/.test(keyword));
 
     return {
         command,
@@ -168,12 +181,45 @@ const buildEntry = (command: CommandPaletteCommand, locale: string): CommandSear
         initials: [...initials].sort(byLength),
         haystack: normalizeSearchText(haystackParts.join(' | ')),
         fuzzyTargets,
-        primaryTerm: asciiTrigger ?? englishFirstWord ?? command.id,
+        primaryTerm: englishTitleTerm || authoredAsciiKeyword || command.id,
     };
 };
 
+/**
+ * 条目缓存：语言 -> 命令对象 -> 条目。
+ *
+ * 一条命令的条目内容**只由它自己的文案推导**——同义词、拼音、本地化标题——和它当下是否可用
+ * 毫无关系。而下面那层索引缓存是按「可用命令数组的身份」建的，可用集一变就是新数组，于是
+ * 整份索引重建：实测 3.1ms，其中约 93% 花在重新推导那 125 条条目的文本上，而这些条目里
+ * 通常有 120 多条一个字都没变。
+ *
+ * 按命令对象缓存之后，可用集变化只需要重新装配 triggerIndex 和 byId 两张查找表，条目直接复用。
+ * 可用集真正会变的时刻是首页 ↔ 播放页切换、设置开关这类导航动作（稳定播放期间不会变），
+ * 频率不高，但这份开销本来就是纯浪费。
+ *
+ * WeakMap 以命令对象为键：注册表是模块常量，条目随进程存活；测试里临时构造的命令数组用完即被回收。
+ */
+const entryCacheByLocale = new Map<string, WeakMap<CommandPaletteCommand, CommandSearchEntry>>();
+
+const getEntry = (command: CommandPaletteCommand, locale: string): CommandSearchEntry => {
+    let byCommand = entryCacheByLocale.get(locale);
+    if (!byCommand) {
+        byCommand = new WeakMap();
+        entryCacheByLocale.set(locale, byCommand);
+    }
+
+    const cached = byCommand.get(command);
+    if (cached) {
+        return cached;
+    }
+
+    const built = buildEntry(command, locale);
+    byCommand.set(command, built);
+    return built;
+};
+
 const buildCommandSearchIndex = (commands: CommandPaletteCommand[], locale: string): CommandSearchIndex => {
-    const entries = commands.map(command => buildEntry(command, locale));
+    const entries = commands.map(command => getEntry(command, locale));
     const triggerIndex = new Map<string, CommandPaletteCommand[]>();
     const byId = new Map<string, CommandSearchEntry>();
 
@@ -193,11 +239,13 @@ const buildCommandSearchIndex = (commands: CommandPaletteCommand[], locale: stri
 };
 
 /**
- * 二级缓存，照抄 queueEvaluation.ts 的形状。
+ * 索引缓存，照抄 queueEvaluation.ts 的形状：命令数组身份 -> 语言 -> 索引。
  *
- * 失效条件只有两个，都写在键里：命令数组换了实例（WeakMap，随数组一起回收），
- * 或界面语言变了（每个语言一个条目，至多三个）。索引不依赖任何其它运行时状态——
- * 尤其不依赖 context，所以播放状态跳动不会让它失效。
+ * 失效条件只有两个，都写在键里：命令数组换了实例（WeakMap，随数组一起回收），或界面语言变了
+ * （每个语言一个条目，至多三个）。索引不依赖任何其它运行时状态——尤其不依赖 context，
+ * 所以换歌、调音量这些让 context 重建的事件不会让它失效（可用集不变时上游会返回同一个数组）。
+ *
+ * 这一层未命中时的代价由上面的条目缓存兜住：重建的只是两张查找表，不是 125 条条目的文本推导。
  */
 const indexCache = new WeakMap<CommandPaletteCommand[], Map<string, CommandSearchIndex>>();
 

@@ -5,6 +5,7 @@ import {
     getCommandSearchIndex,
 } from '../../../src/components/command-palette/search/commandSearchIndex';
 import { COMMAND_PALETTE_COMMANDS } from '../../../src/components/command-palette/commandRegistry';
+import { PINYIN_BY_PHRASE } from 'virtual:folia-command-pinyin';
 import type { CommandPaletteCommand } from '../../../src/components/command-palette/types';
 
 // test/unit/command-palette/commandSearchIndex.test.ts
@@ -76,6 +77,42 @@ describe('command search index', () => {
         expect(empty.map(command => command.id)).toEqual([]);
     });
 
+    it('shows the English name as the hint, never generated pinyin', () => {
+        // 真实回归：primaryTerm 原本取「最短的 ASCII 触发词」，而触发词按长度升序排，
+        // 生成的拼音缩写几乎总是最短的那个，于是行上的提示 chip 显示成了 fmms /
+        // xuanzekeshihua / mg pv。提示词必须是人能读的英文，且打进去要能精确命中。
+        const expected: Array<[string, string]> = [
+            ['playback-volume', 'volume'],
+            ['sleep-timer', 'sleep timer'],
+            ['playback-fm-mode', 'personal fm mode'],
+            ['visualizer-picker', 'pick a visualizer'],
+            ['visualizer-sonnet', 'visualizer: sonnet'],
+        ];
+
+        expected.forEach(([id, term]) => {
+            const command = commands.find(candidate => candidate.id === id)!;
+            expect(getCommandPrimaryTerm(commands, command)).toBe(term);
+        });
+    });
+
+    it('never surfaces a generated pinyin term as the hint', () => {
+        const pinyinTerms = new Set<string>();
+        Object.values(PINYIN_BY_PHRASE).forEach(entry => {
+            pinyinTerms.add(entry.full);
+            pinyinTerms.add(entry.initials);
+        });
+
+        const leaked = commands
+            .filter(command => command.textSource !== 'runtime' && !command.hidden)
+            .filter(command => {
+                const term = getCommandPrimaryTerm(commands, command).replace(/\s+/g, '');
+                return pinyinTerms.has(term);
+            })
+            .map(command => command.id);
+
+        expect(leaked).toEqual([]);
+    });
+
     it('falls back through ascii trigger, English title word, then id', () => {
         const withoutText: CommandPaletteCommand = {
             id: 'not-in-any-locale',
@@ -96,6 +133,37 @@ describe('command search index', () => {
 
         // 换数组实例就是换缓存条目——WeakMap 会随数组一起回收。
         expect(getCommandSearchIndex([...commands], 'en')).not.toBe(first);
+    });
+
+    it('reuses the per-command entries across different command arrays', () => {
+        // 这是条目缓存存在的理由。可用集一变就是新数组，索引必须重建；但条目内容只由命令自己的
+        // 文案推导，与可用性无关，所以那 120 多条没变的条目必须原样复用，而不是重新推导一遍文本。
+        const full = getCommandSearchIndex(commands, 'en');
+        // 模拟一次可用性变化：掉了一条命令，于是是一个全新的数组。
+        const narrowed = getCommandSearchIndex(commands.slice(1), 'en');
+
+        expect(narrowed).not.toBe(full);
+        commands.slice(1).forEach(command => {
+            expect(narrowed.byId.get(command.id)).toBe(full.byId.get(command.id));
+        });
+    });
+
+    it('keeps entries separate per locale', () => {
+        // 条目里含当前语言的标题，所以不同语言之间绝不能复用同一个条目。
+        const inEnglish = getCommandSearchIndex(commands, 'en');
+        const inChinese = getCommandSearchIndex(commands, 'zh-CN');
+
+        expect(inChinese.byId.get('settings-options')).not.toBe(inEnglish.byId.get('settings-options'));
+    });
+
+    it('rebuilds only the lookup tables when the available set changes', () => {
+        // 用一个观察得到的代理指标：重建后的索引里，查找表是新的对象，条目却是同一批。
+        const full = getCommandSearchIndex(commands, 'en');
+        const narrowed = getCommandSearchIndex(commands.slice(0, -1), 'en');
+
+        expect(narrowed.triggerIndex).not.toBe(full.triggerIndex);
+        expect(narrowed.byId).not.toBe(full.byId);
+        expect(narrowed.entries[0]).toBe(full.entries[0]);
     });
 
     it('maps a trigger back to its commands in registry order', () => {

@@ -27,15 +27,16 @@ const palette = (page: Page) => page.getByTestId('command-palette-panel');
 const openAllCommands = async (page: Page) => {
     await seedApp(page);
     await page.goto('/');
-    await page.waitForTimeout(2200);
 
+    // 不定长等待开机：一直敲到面板真的响应为止。
     await expect.poll(async () => {
         await page.keyboard.press('s');
         return palette(page).count();
     }).toBeGreaterThan(0);
 
     await palette(page).getByRole('button', { name: '查看全部命令' }).click();
-    await page.waitForTimeout(500);
+    // 表头那个计数是「全部命令」视图独有的，它出现就说明列表已经切过去了。
+    await expect(palette(page).locator('span.tabular-nums').first()).toBeVisible();
 };
 
 /** 表头右侧那个 tabular-nums 数字就是可用命令总数。 */
@@ -67,7 +68,12 @@ test('滚到底仍然能拿到最后一条命令', async ({ page }) => {
     await scroller.evaluate((element) => {
         element.scrollTop = element.scrollHeight;
     });
-    await page.waitForTimeout(500);
+
+    // 等窗口真的挪过去：渲染出来的那批行必须和滚动前不同。
+    await expect.poll(async () => {
+        const titles = await palette(page).getByRole('button').allInnerTexts();
+        return titles.join('|');
+    }).not.toBe(firstTitles.join('|'));
 
     const lastTitles = await palette(page).getByRole('button').allInnerTexts();
 
@@ -86,7 +92,9 @@ test('点击列表里的一项会回填一个仍能搜到它的词', async ({ pa
     const rows = palette(page).getByRole('button');
     const clickedTitle = (await rows.nth(3).innerText()).split('\n')[0].trim();
     await rows.nth(3).click();
-    await page.waitForTimeout(500);
+
+    // 点击会回填输入框并切回匹配列表；等输入框真的有值，而不是睡一觉。
+    await expect.poll(() => palette(page).getByRole('combobox').inputValue()).not.toBe('');
 
     const query = await palette(page).getByRole('combobox').inputValue();
     expect(query.trim()).toMatch(/^[\x20-\x7e]+$/);

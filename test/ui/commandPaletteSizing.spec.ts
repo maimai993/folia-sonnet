@@ -52,15 +52,20 @@ const openPlayerPage = async (page: Page, pinnedCommandIds: PinnedSlots = NO_PIN
     await seedApp(page, pinnedCommandIds);
 
     await page.goto('/');
-    await page.waitForTimeout(2000);
-    await page.evaluate(async (songs) => {
-        const dbModulePath = '/src/services/db.ts';
-        const { saveToCache } = await import(dbModulePath);
-        await saveToCache('last_song', songs[0]);
-        await saveToCache('last_queue', songs);
-    }, QUEUE_FIXTURE);
+    // 重试到真的写进 IndexedDB 为止；定长 sleep 只是在赌模块图和 DB 都已就绪。
+    await expect.poll(async () => page.evaluate(async (songs) => {
+        try {
+            const dbModulePath = '/src/services/db.ts';
+            const { saveToCache } = await import(dbModulePath);
+            await saveToCache('last_song', songs[0]);
+            await saveToCache('last_queue', songs);
+            return true;
+        } catch {
+            return false;
+        }
+    }, QUEUE_FIXTURE)).toBe(true);
     await page.reload();
-    await page.waitForTimeout(1800);
+    // 重载后不定长等待：pressUntilPaletteOpens 会一直敲到面板真的响应。
 };
 
 // 全局键盘监听比首屏晚装上一拍，定长 sleep 只是在赌它已经装好了。反复敲直到面板真的响应。
@@ -108,10 +113,22 @@ const measure = async (page: Page) => {
     };
 };
 
-/** 输入查询并等匹配列表跟上 120ms 的 matchQuery 防抖。 */
-const typeQuery = async (page: Page, query: string) => {
+/**
+ * 匹配行数：每一行都带一个等宽的提示 chip，「全部命令」那套行没有，所以它正好只数匹配列表。
+ * 用它当「列表已经渲染出来」的信号，比睡够 120ms 防抖再赌一把可靠。
+ */
+const matchRows = (page: Page) => palette(page).locator('span.font-mono');
+
+/** 输入查询，并等匹配列表铺满（MAX_COMMAND_MATCHES 是 10）。 */
+const typeUntilFullList = async (page: Page, query: string) => {
     await paletteInput(page).fill(query);
-    await page.waitForTimeout(400);
+    await expect(matchRows(page)).toHaveCount(10);
+};
+
+/** 输入一个一条都匹配不上的查询，等空态真的出现。 */
+const typeUntilEmpty = async (page: Page, query: string) => {
+    await paletteInput(page).fill(query);
+    await expect(palette(page).getByText('没有匹配的命令')).toBeVisible();
 };
 
 test('面板与 body 的尺寸在所有内容状态下保持一致', async ({ page }) => {
@@ -126,22 +143,22 @@ test('面板与 body 的尺寸在所有内容状态下保持一致', async ({ pa
     expect(baseline.body.height).toBeLessThanOrEqual(496);
 
     // 满列表：10 条匹配，足以在未虚拟化时溢出 body。
-    await typeQuery(page, 'e');
+    await typeUntilFullList(page, 'e');
     expect(await measure(page)).toEqual(baseline);
 
     // 空态：一条都不匹配，内容远少于一屏。
-    await typeQuery(page, 'zzzzzzzzzzzz');
-    await expect(palette(page).getByText('没有匹配的命令')).toBeVisible();
+    await typeUntilEmpty(page, 'zzzzzzzzzzzz');
     expect(await measure(page)).toEqual(baseline);
 
     // 全部命令列表：125 条，未虚拟化时是最容易撑破盒子的一屏。
-    await typeQuery(page, '');
+    await paletteInput(page).fill('');
     await palette(page).getByRole('button', { name: '查看全部命令' }).click();
-    await page.waitForTimeout(400);
+    // 全部命令列表是另一套渲染，等它的计数出现再量。
+    await expect(palette(page).locator('span.tabular-nums').first()).toBeVisible();
     expect(await measure(page)).toEqual(baseline);
 
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    await expect(palette(page).locator('span.tabular-nums')).toHaveCount(0);
     expect(await measure(page)).toEqual(baseline);
 });
 
@@ -152,9 +169,10 @@ test('每个 surface 接管面板后尺寸都不变', async ({ page }) => {
     const baseline = await measure(page);
 
     // 音量：居中的单控件 hero 布局，靠 h-full 填满固定父级。
-    await typeQuery(page, 'volume');
-    await palette(page).getByText('音量条', { exact: true }).first().click();
-    await page.waitForTimeout(400);
+    await paletteInput(page).fill('volume');
+    const volumeRow = palette(page).getByText('音量条', { exact: true }).first();
+    await expect(volumeRow).toBeVisible();
+    await volumeRow.click();
     await expect(palette(page).locator('input[type="range"]')).toBeVisible();
     expect(await measure(page)).toEqual(baseline);
 
@@ -162,18 +180,23 @@ test('每个 surface 接管面板后尺寸都不变', async ({ page }) => {
     await pressUntilPaletteOpens(page);
 
     // 队列：唯一内容长度无上限的 surface，已用 react-window 钉在 height:100%。
-    await typeQuery(page, 'queue');
-    await palette(page).getByText('队列', { exact: true }).first().click();
-    await page.waitForTimeout(400);
+    await paletteInput(page).fill('queue');
+    const queueRow = palette(page).getByText('队列', { exact: true }).first();
+    await expect(queueRow).toBeVisible();
+    await queueRow.click();
+    await expect(palette(page).locator('.custom-scrollbar').first()).toBeVisible();
     expect(await measure(page)).toEqual(baseline);
 
     await page.keyboard.press('Escape');
     await pressUntilPaletteOpens(page);
 
     // 可视化选择器：列表型 surface，走匹配行的形状。
-    await typeQuery(page, 'visualizer picker');
-    await palette(page).getByText('选择可视化', { exact: true }).first().click();
-    await page.waitForTimeout(400);
+    // 和 commandPalette.spec.ts 用同一条已验证的路径：等命令行出现再回车。
+    // 点击那一条会把查询词留在输入框里，picker 接管后拿它当过滤条件，可能一行都筛不出来。
+    await paletteInput(page).fill('选择可视化');
+    await expect(palette(page).getByText('选择可视化', { exact: true }).first()).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(palette(page).locator('[data-picker-mode]').first()).toBeVisible();
     expect(await measure(page)).toEqual(baseline);
 });
 
@@ -203,7 +226,7 @@ test('固定命令行的有无不影响面板与 body 的尺寸', async ({ brows
     expect(withPins.panel).toEqual(withoutPins.panel);
 
     // 有固定命令时，各内容状态之间仍必须彼此一致。
-    await typeQuery(page, 'zzzzzzzzzzzz');
+    await typeUntilEmpty(page, 'zzzzzzzzzzzz');
     expect(await measure(page)).toEqual(withPins);
 
     await pageWithout.close();
