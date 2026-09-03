@@ -204,6 +204,32 @@ export const settingsCommands: CommandPaletteCommand[] = [
         },
     },
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),
+    {
+        id: 'settings-player-bottom-bar-position',
+        group: 'settings',
+        title: 'Reposition bottom bar',
+        description: 'Drag the player bottom bar, song card and panel button to a new height',
+        keywords: [
+            'bottom bar height', 'move progress bar', 'player bar position',
+            '底部控制条位置', '进度条高度', '调整底部高度', '移动进度条',
+        ],
+        isAvailable: context => (context ? context.settings.canStartPlayerBottomBarPositioning : true),
+        execute: (_input, context) => {
+            context.settings.startPlayerBottomBarPositioning();
+            return true;
+        },
+    },
+    createSettingsCommand(
+        'settings-player-control-slots',
+        'Player button slots',
+        'Choose which actions the two buttons beside the progress bar run',
+        [
+            'progress bar buttons', 'customize player buttons',
+            '进度条按钮', '播放按钮自定义', '按钮槽位',
+        ],
+        'options',
+        'general',
+    ),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer workbench', '可视化', '歌词动画', 'donghua'], 'options', 'visualizer'),
     createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['theme park', 'theme', '配色', '主题', '主题公园'], 'options', 'themePark', { executeShortcut: 't' }),
     createSettingsCommand('settings-global-lyric-offset', 'Global timing offset', 'Calibrate lyric timing against Bluetooth or device audio latency', ['lyric delay', 'audio latency', 'bluetooth delay', 'sync lyrics', '全局时间偏移', '歌词延迟', '音画同步', '蓝牙延迟'], 'options', 'globalLyricOffset'),

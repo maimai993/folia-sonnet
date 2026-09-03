@@ -6,11 +6,51 @@
 
 import { create } from 'zustand';
 import i18n from '../i18n/config';
+import {
+    DEFAULT_PLAYER_CONTROL_SLOT_PRIMARY,
+    DEFAULT_PLAYER_CONTROL_SLOT_SECONDARY,
+    isPlayerControlSlotActionId,
+    type PlayerControlSlotActionId,
+} from '../types/playerControlSlots';
+import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX } from '../utils/playerBottomBarLayout';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
 import { setStatusMessage } from './useStatusMessageStore';
 
+const PLAYER_BOTTOM_BAR_OFFSET_STORAGE_KEY = 'player_bottom_bar_offset';
+const PLAYER_CONTROL_SLOT_PRIMARY_STORAGE_KEY = 'player_control_slot_primary';
+const PLAYER_CONTROL_SLOT_SECONDARY_STORAGE_KEY = 'player_control_slot_secondary';
+
+/** Reads the persisted lower-bounded offset; the viewport-dependent upper bound is applied by consumers. */
+const readStoredPlayerBottomBarOffset = (): number => {
+    if (typeof window === 'undefined') {
+        return PLAYER_BOTTOM_BAR_BASE_OFFSET_PX;
+    }
+
+    const parsed = parseFloat(localStorage.getItem(PLAYER_BOTTOM_BAR_OFFSET_STORAGE_KEY) ?? '');
+    if (!Number.isFinite(parsed)) {
+        return PLAYER_BOTTOM_BAR_BASE_OFFSET_PX;
+    }
+
+    return Math.max(PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, Math.round(parsed));
+};
+
+const readStoredPlayerControlSlot = (
+    key: string,
+    fallback: PlayerControlSlotActionId,
+): PlayerControlSlotActionId => {
+    if (typeof window === 'undefined') {
+        return fallback;
+    }
+
+    const saved = localStorage.getItem(key);
+    return isPlayerControlSlotActionId(saved) ? saved : fallback;
+};
+
 export type PlayerChromeSettingsState = {
     hidePlayerProgressBar: boolean;
+    playerBottomBarOffset: number;
+    playerControlSlotPrimary: PlayerControlSlotActionId;
+    playerControlSlotSecondary: PlayerControlSlotActionId;
     hidePlayerRightPanelButton: boolean;
     alwaysShowPlayerBackButton: boolean;
     alwaysShowTrackSwitchButtons: boolean;
@@ -22,6 +62,8 @@ export type PlayerChromeSettingsState = {
     setTransparentPlayerBackgroundFromSystem: (enabled: boolean) => void;
     handleTogglePlayerPageNativeBlur: (enable: boolean) => void;
     handleToggleHidePlayerProgressBar: (enable: boolean) => void;
+    handleSetPlayerBottomBarOffset: (offsetPx: number) => void;
+    handleSetPlayerControlSlot: (slot: 'primary' | 'secondary', actionId: PlayerControlSlotActionId) => void;
     handleToggleHidePlayerRightPanelButton: (enable: boolean) => void;
     handleToggleAlwaysShowPlayerBackButton: (enable: boolean) => void;
     handleToggleAlwaysShowTrackSwitchButtons: (enable: boolean) => void;
@@ -34,6 +76,15 @@ export type PlayerChromeSettingsState = {
 
 export const usePlayerChromeSettingsStore = create<PlayerChromeSettingsState>((set, get) => ({
     hidePlayerProgressBar: getStoredBoolean('hide_player_progress_bar', false),
+    playerBottomBarOffset: readStoredPlayerBottomBarOffset(),
+    playerControlSlotPrimary: readStoredPlayerControlSlot(
+        PLAYER_CONTROL_SLOT_PRIMARY_STORAGE_KEY,
+        DEFAULT_PLAYER_CONTROL_SLOT_PRIMARY,
+    ),
+    playerControlSlotSecondary: readStoredPlayerControlSlot(
+        PLAYER_CONTROL_SLOT_SECONDARY_STORAGE_KEY,
+        DEFAULT_PLAYER_CONTROL_SLOT_SECONDARY,
+    ),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
     alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', false),
@@ -64,6 +115,29 @@ export const usePlayerChromeSettingsStore = create<PlayerChromeSettingsState>((s
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'progressBarHidden' : 'progressBarShown')),
         });
+    },
+    handleSetPlayerBottomBarOffset: (offsetPx) => {
+        const next = Number.isFinite(offsetPx)
+            ? Math.max(PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, Math.round(offsetPx))
+            : PLAYER_BOTTOM_BAR_BASE_OFFSET_PX;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(PLAYER_BOTTOM_BAR_OFFSET_STORAGE_KEY, String(next));
+        }
+        set({ playerBottomBarOffset: next });
+    },
+    handleSetPlayerControlSlot: (slot, actionId) => {
+        if (!isPlayerControlSlotActionId(actionId)) {
+            return;
+        }
+        const key = slot === 'primary'
+            ? PLAYER_CONTROL_SLOT_PRIMARY_STORAGE_KEY
+            : PLAYER_CONTROL_SLOT_SECONDARY_STORAGE_KEY;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(key, actionId);
+        }
+        set(slot === 'primary'
+            ? { playerControlSlotPrimary: actionId }
+            : { playerControlSlotSecondary: actionId });
     },
     handleToggleAlwaysShowPlayerBackButton: (enable) => {
         setStoredBoolean('always_show_player_back_button', enable);
@@ -129,6 +203,9 @@ export const usePlayerChromeSettingsStore = create<PlayerChromeSettingsState>((s
  */
 export const selectPlayerChromeSettingsSnapshot = (state: PlayerChromeSettingsState) => ({
     hidePlayerProgressBar: state.hidePlayerProgressBar,
+    playerBottomBarOffset: state.playerBottomBarOffset,
+    playerControlSlotPrimary: state.playerControlSlotPrimary,
+    playerControlSlotSecondary: state.playerControlSlotSecondary,
     hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
     alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
     alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
@@ -138,6 +215,8 @@ export const selectPlayerChromeSettingsSnapshot = (state: PlayerChromeSettingsSt
     autoHidePlayerChrome: state.autoHidePlayerChrome,
     showOpenPanelCloseButton: state.showOpenPanelCloseButton,
     handleToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
+    handleSetPlayerBottomBarOffset: state.handleSetPlayerBottomBarOffset,
+    handleSetPlayerControlSlot: state.handleSetPlayerControlSlot,
     handleToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
     handleToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
     handleToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,

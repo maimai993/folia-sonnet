@@ -5,6 +5,7 @@ import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useTranslation } from 'react-i18next';
 import {
     selectDisplayCoverUrl,
@@ -14,6 +15,7 @@ import {
     selectDisplaySong,
     usePlaybackStore,
 } from '../../../stores/usePlaybackStore';
+import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
 import { buildAppOverlaysModel, type AppOverlaysDeps, type AppOverlaysModel } from './buildAppOverlaysModel';
 
 // src/components/app/overlays/useAppOverlaysModel.ts
@@ -38,6 +40,9 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const stageTrackPillMode = useStageSettingsStore(state => state.stageTrackPillMode);
     const stageTrackPillTimeoutSec = useStageSettingsStore(state => state.stageTrackPillTimeoutSec);
+    const playerControlSlotPrimary = usePlayerChromeSettingsStore(state => state.playerControlSlotPrimary);
+    const playerControlSlotSecondary = usePlayerChromeSettingsStore(state => state.playerControlSlotSecondary);
+    const handleSetPlayerBottomBarOffset = usePlayerChromeSettingsStore(state => state.handleSetPlayerBottomBarOffset);
     const audioSrc = usePlaybackStore(state => state.audioSrc);
     const playQueue = usePlaybackStore(state => state.playQueue);
     const isFmMode = usePlaybackStore(state => state.isFmMode);
@@ -49,6 +54,30 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
     const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
     const displayDuration = usePlaybackStore(selectDisplayDuration);
     const displayPlayerState = usePlaybackStore(selectDisplayPlayerState);
+    const playerControlSlotContext = useMemo(() => ({
+        onShuffle: deps.shuffleQueue,
+        canShuffle: !isFmMode && playQueue.length > 1,
+        onLike: deps.handleLike,
+        isLiked: deps.isDisplaySongLiked,
+        likeDisabled: resolveLikeAvailability(
+            displaySong,
+            deps.isNowPlayingControlDisabled,
+            activePlaybackContext === 'stage',
+        ).disabled,
+        invokeCommandById: deps.invokeCommandById,
+        canInvokeCommandById: deps.canInvokeCommandById,
+    }), [
+        activePlaybackContext,
+        deps.canInvokeCommandById,
+        deps.handleLike,
+        deps.invokeCommandById,
+        deps.isDisplaySongLiked,
+        deps.isNowPlayingControlDisabled,
+        deps.shuffleQueue,
+        displaySong,
+        isFmMode,
+        playQueue.length,
+    ]);
 
     return useMemo(() => buildAppOverlaysModel({
         ...deps,
@@ -77,6 +106,10 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         nextTrackLabel: t('ui.nextTrack'),
         stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
         stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
+        playerControlSlotPrimary,
+        playerControlSlotSecondary,
+        playerControlSlotContext,
+        onCommitPlayerBottomBarOffset: handleSetPlayerBottomBarOffset,
         // Spread rather than `deps`: the caller passes an object literal, so depending on the object
         // itself would rebuild this on every render and defeat the memo entirely. The key set is
         // fixed by the call site, so the array keeps a constant length.
@@ -100,6 +133,10 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         displayCoverUrl,
         stageTrackPillMode,
         stageTrackPillTimeoutSec,
+        playerControlSlotPrimary,
+        playerControlSlotSecondary,
+        playerControlSlotContext,
+        handleSetPlayerBottomBarOffset,
         t,
     ]);
 };

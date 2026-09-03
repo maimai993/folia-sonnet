@@ -4,6 +4,7 @@ import { Command, List, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { openCommandFilter, openCommandPalette } from '../../stores/useAppViewStore';
 import { useInteractionSettingsStore } from '../../stores/useInteractionSettingsStore';
+import { usePlayerBottomBarBottomPx } from '../../hooks/usePlayerBottomBarBottomPx';
 
 // Player-style grid action button: click for the list, or slide left to reveal search.
 //
@@ -40,6 +41,7 @@ export const GridListSearchButton: React.FC<GridListSearchButtonProps> = ({
     const trackEndIconRef = useRef<HTMLDivElement>(null);
     const trackFillRef = useRef<HTMLDivElement>(null);
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const bottomBarBottomPx = usePlayerBottomBarBottomPx();
     const motionClass = showGuideLine || isDragging
         ? 'translate-x-0 opacity-100'
         : supportsHover
@@ -149,7 +151,9 @@ export const GridListSearchButton: React.FC<GridListSearchButtonProps> = ({
             animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, y: 12, scale: 0.92 }}
             transition={{ duration: 0.24, ease: 'easeOut' }}
-            className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
+            data-testid="grid-list-search-button"
+            style={{ bottom: bottomBarBottomPx }}
+            className="pointer-events-auto fixed right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
         >
             <div className={`relative w-12 h-12 transition-all duration-300 transform ${motionClass}`}>
                 <div

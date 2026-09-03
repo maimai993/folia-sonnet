@@ -4,6 +4,7 @@ import { Music } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
 import { useTransitionBorderCue } from './now-playing-toast/useTransitionBorderCue';
+import { usePlayerBottomBarBottomPx } from '../../../hooks/usePlayerBottomBarBottomPx';
 
 // src/components/app/overlays/NowPlayingToast.tsx
 // 歌词页左下角的 now playing 卡片（playing-toast 样式：圆角 2xl、44px 封面、底部滑入）。
@@ -79,6 +80,7 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
     // 所以拿到非空 cue 就意味着「过渡动画开着 + 模式是 automix」，不用再问一遍 prop。
     // 它同时参与下面的 holdOpen：混音期间卡片必须留在屏幕上，否则描边跟着卡片一起卸载，
     // 而全屏圆环已经让位了。
+    const bottomBarBottomPx = usePlayerBottomBarBottomPx();
     const transitionCue = useTransitionBorderCue();
 
     // 可见性状态机：never 不渲染；always 常驻；auto 换歌重新计时。
@@ -133,9 +135,10 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -16 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    // bottom-8 跟右下角面板开关按钮（UnifiedPanel 的 fixed bottom-8）对齐，
-                    // 两边底边落在同一条线上。
-                    className="pointer-events-none fixed bottom-8 left-6 z-40"
+                    // 底边跟右下角面板开关按钮和中间的进度条胶囊落在同一条基线上，
+                    // 由共享 MotionValue 直接驱动 bottom（默认 32，即原来的 bottom-8）。
+                    style={{ bottom: bottomBarBottomPx }}
+                    className="pointer-events-none fixed left-6 z-40"
                 >
                     {/* 描边排在卡片前面：卡片自己是 relative，绘制顺序上压在描边上头，所以
                         描边内侧那一半被卡片背景盖住，露在外面的是外侧 + 辉光。

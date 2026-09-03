@@ -12,6 +12,8 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { setPlayerState } from '../../../stores/usePlaybackStore';
 import { setIsDevDebugOverlayVisible, setIsMemoryMonitorVisible } from '../../../stores/useAppChromeStore';
+import type { SlotContextFromApp } from '../../FloatingPlayerControls';
+import type { PlayerControlSlotActionId } from '../../../types/playerControlSlots';
 
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
@@ -67,6 +69,10 @@ type AppOverlaysAmbient = {
     /** 卡片上的两种动作各自的无障碍名字 */
     stageTrackPillOpenPlayerLabel: string;
     stageTrackPillOpenSongCardLabel: string;
+    playerControlSlotPrimary: PlayerControlSlotActionId;
+    playerControlSlotSecondary: PlayerControlSlotActionId;
+    playerControlSlotContext: SlotContextFromApp;
+    onCommitPlayerBottomBarOffset: (offsetPx: number) => void;
 };
 
 // What only the caller can supply: controller callbacks and values App.tsx computes.
@@ -95,6 +101,11 @@ export type AppOverlaysDeps = {
     isNowPlayingStageActive: boolean;
     handlePrevTrack: () => void;
     handleNextTrack: () => void;
+    shuffleQueue: () => void;
+    handleLike: () => void;
+    isDisplaySongLiked: boolean;
+    invokeCommandById: (commandId: string) => void;
+    canInvokeCommandById: (commandId: string) => boolean;
     /** 自动切歌预览（下一首）；isNextUp 时整卡展示它 */
     stageNextUp: { title: string; artist: string | null; coverUrl: string | null } | null;
     /** 预览态：接下来播放标签 + 挂起 auto 隐藏计时 */
@@ -162,6 +173,10 @@ export const buildAppOverlaysModel = ({
     openSongCardPanel,
     stageTrackPillOpenPlayerLabel,
     stageTrackPillOpenSongCardLabel,
+    playerControlSlotPrimary,
+    playerControlSlotSecondary,
+    playerControlSlotContext,
+    onCommitPlayerBottomBarOffset,
 }: BuildAppOverlaysModelParams): AppOverlaysModel => ({
     // Gated on stageTrackPillOnScreen (computed in App: display mode plus which page allows the
     // card) rather than on the view directly, so the countdown that feeds the "up next" preview
@@ -261,6 +276,10 @@ export const buildAppOverlaysModel = ({
             isDaylight,
             isHidden: currentView === 'player' && isPlayerChromeHidden,
             hideControlBar: shouldHidePlayerProgressBar,
+            slotPrimary: playerControlSlotPrimary,
+            slotSecondary: playerControlSlotSecondary,
+            slotContext: playerControlSlotContext,
+            onCommitBottomBarOffset: onCommitPlayerBottomBarOffset,
             trackNavigation: ((): FloatingControlsProps['trackNavigation'] => {
                 const neighbors = resolvePlaybackNeighbors({
                     playQueue,

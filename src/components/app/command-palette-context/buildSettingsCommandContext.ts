@@ -10,6 +10,8 @@ import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorStore';
+import { usePlayerBottomBarLayoutStore } from '../../../stores/usePlayerBottomBarLayoutStore';
+import type { SongResult } from '../../../types';
 
 // src/components/app/command-palette-context/buildSettingsCommandContext.ts
 // The `settings` namespace of the palette context.
@@ -20,6 +22,7 @@ import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorSto
 
 /** The few members that genuinely live in App.tsx rather than in a store. */
 export type SettingsCommandContextDeps = {
+    currentSong: SongResult | null;
     /** Wraps the Electron transparent-window handoff, not just the stored boolean. */
     toggleTransparentBackground: () => void;
     toggleDaylightMode: () => void;
@@ -64,6 +67,8 @@ export const buildSettingsCommandContext = (
         toggleSubtitleOverlayBackground: () => typography.handleToggleSubtitleOverlayBackground(
             !useTypographySettingsStore.getState().subtitleOverlayBackground,
         ),
+        startPlayerBottomBarPositioning: usePlayerBottomBarLayoutStore.getState().requestPositioning,
+        canStartPlayerBottomBarPositioning: Boolean(deps.currentSong) && !chrome.hidePlayerProgressBar,
         toggleAlwaysShowPlayerBackButton: () => chrome.handleToggleAlwaysShowPlayerBackButton(
             !usePlayerChromeSettingsStore.getState().alwaysShowPlayerBackButton,
         ),

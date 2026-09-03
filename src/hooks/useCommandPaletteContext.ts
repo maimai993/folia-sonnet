@@ -93,6 +93,7 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
     })));
     const chromeSignals = usePlayerChromeSettingsStore(useShallow(state => ({
         transparentPlayerBackground: state.transparentPlayerBackground,
+        hidePlayerProgressBar: state.hidePlayerProgressBar,
     })));
     const desktopSignals = useDesktopSettingsStore(useShallow(state => ({
         modSystemEnabled: state.modSystemEnabled,

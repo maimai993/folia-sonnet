@@ -1,8 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, LogIn, LogOut, UserRound } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
+import { playerBottomBarLiveOffset } from '../../../stores/motionSignals';
+import {
+    PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,
+    resolvePlayerBottomComponentBottomPx,
+} from '../../../utils/playerBottomBarLayout';
 
 // src/components/app/home/OnlineProviderSwitcher.tsx
 
@@ -50,9 +55,56 @@ const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
     const [open, setOpen] = useState(false);
     const [showProviderLabel, setShowProviderLabel] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
+    const baseBottomPxRef = useRef(16);
     const previousProviderIdRef = useRef(activeProviderId);
     const activeProvider = providers.find(provider => provider.providerId === activeProviderId) || providers[0];
     const surfaceClass = isDaylight ? 'bg-white text-zinc-900' : 'bg-zinc-950 text-white';
+
+    /**
+     * 默认高度保留原 CSS（`bottom-4 md:bottom-6`），只有真的产生抬升量时才写内联 bottom。
+     *
+     * 不是洁癖：把位置常驻交给 motion 的 style 会给这一层加上 will-change，元素被提升成
+     * 独立合成层，文字栅格化随之改变 —— app.screenshot 的 local-library 基线能直接照出来。
+     */
+    const syncBottomOffset = useCallback((globalOffsetPx: number) => {
+        const root = rootRef.current;
+        if (!root) return;
+        if (globalOffsetPx === PLAYER_BOTTOM_BAR_BASE_OFFSET_PX) {
+            root.style.removeProperty('bottom');
+            return;
+        }
+        root.style.bottom = `${resolvePlayerBottomComponentBottomPx(globalOffsetPx, baseBottomPxRef.current)}px`;
+    }, []);
+
+    useMotionValueEvent(playerBottomBarLiveOffset, 'change', syncBottomOffset);
+
+    /** 先撤掉内联值量回 CSS 里的原始底距（断点会改它），再按当前抬升量重写。 */
+    const measureAndSync = useCallback(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        root.style.removeProperty('bottom');
+        const measured = Number.parseFloat(getComputedStyle(root).bottom);
+        baseBottomPxRef.current = Number.isFinite(measured) ? measured : 16;
+        syncBottomOffset(playerBottomBarLiveOffset.get());
+    }, [syncBottomOffset]);
+
+    /**
+     * 用 callback ref 而不是挂载时的 layout effect：providers 还没到位时下面会 return null，
+     * 那一次 effect 拿到的 ref 是空的，而它不会再跑第二遍 —— 切换器就会一直停在原位，
+     * 底部其他组件却已经抬起来了。节点真正出现时才量，才不会有这个空窗。
+     */
+    const setRootNode = useCallback((node: HTMLDivElement | null) => {
+        rootRef.current = node;
+        if (node) {
+            measureAndSync();
+        }
+    }, [measureAndSync]);
+
+    // 断点跨过去时 CSS 里的原始底距会变，重量一次。
+    useEffect(() => {
+        window.addEventListener('resize', measureAndSync);
+        return () => window.removeEventListener('resize', measureAndSync);
+    }, [measureAndSync]);
 
     useEffect(() => {
         if (previousProviderIdRef.current === activeProviderId) return;
@@ -81,7 +133,11 @@ const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
     if (!activeProvider) return null;
 
     return (
-        <div ref={rootRef} className="pointer-events-auto absolute bottom-4 right-4 z-[100] md:bottom-6 md:right-6">
+        <div
+            ref={setRootNode}
+            data-testid="online-provider-switcher"
+            className="pointer-events-auto absolute bottom-4 right-4 z-[100] md:bottom-6 md:right-6"
+        >
             <div className={`flex items-center rounded-full p-0.5 shadow-lg md:p-1.5 ${surfaceClass}`}>
                 <button
                     type="button"

@@ -1604,6 +1604,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isDaylight={isDaylight}
                                                 settingsCardClass={settingsCardClass}
                                                 theme={theme}
+                                                utilityGhostButtonClass={utilityGhostButtonClass}
                                             />
                                         )}
                                         {activeSettingsSection === 'playback' && (

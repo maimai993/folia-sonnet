@@ -45,6 +45,18 @@ const TrackTitleNavigatorProbe: React.FC = () => {
                 onToggleLoop={() => {}}
                 onNavigateToPlayer={() => {}}
                 isDaylight={false}
+                slotPrimary="loop"
+                slotSecondary="lyrics-timeline"
+                slotContext={{
+                    onShuffle: () => {},
+                    canShuffle: false,
+                    onLike: () => {},
+                    isLiked: false,
+                    likeDisabled: true,
+                    invokeCommandById: () => {},
+                    canInvokeCommandById: () => true,
+                }}
+                onCommitBottomBarOffset={() => {}}
                 trackNavigation={{
                     currentTrackKey: `probe:${index}`,
                     onPrev: () => scheduleSwitch(-1),

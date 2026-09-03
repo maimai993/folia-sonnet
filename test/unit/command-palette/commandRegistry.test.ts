@@ -86,6 +86,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             subtitleContentMode: 'translation',
             cycleSubtitleContentMode: vi.fn(),
             toggleSubtitleOverlayBackground: vi.fn(),
+            startPlayerBottomBarPositioning: vi.fn(),
+            canStartPlayerBottomBarPositioning: true,
             toggleAlwaysShowPlayerBackButton: vi.fn(),
             toggleAlwaysShowTrackSwitchButtons: vi.fn(),
             toggleAutoPlayOnLaunch: vi.fn(),
@@ -323,6 +325,13 @@ describe('command palette registry', () => {
         expect(generalMatch.command.id).toBe('settings-general');
         generalMatch.command.execute(generalMatch.input, context);
         expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'general');
+
+        const playerControlSlotsCommand = COMMAND_PALETTE_COMMANDS.find(
+            command => command.id === 'settings-player-control-slots',
+        );
+        expect(playerControlSlotsCommand).toBeDefined();
+        playerControlSlotsCommand!.execute('', context);
+        expect(context.settings.openSettings).toHaveBeenLastCalledWith('options', 'general');
 
         const [systemLanguageMatch] = getCommandPaletteMatches('跟随系统');
         expect(systemLanguageMatch.command.id).toBe('settings-language-system');

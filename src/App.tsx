@@ -130,6 +130,9 @@ import { useTransportCommandRefs } from './hooks/useTransportCommandRefs';
 import { useHomeProviderRefresh } from './hooks/useHomeProviderRefresh';
 import { useAudioOutputDevice } from './hooks/useAudioOutputDevice';
 import { useThemeQuickEditorContext } from './hooks/useThemeQuickEditorContext';
+import { usePlayerBottomBarOffset } from './hooks/usePlayerBottomBarOffset';
+import { usePlayerBottomBarPositioningEntry } from './hooks/usePlayerBottomBarPositioningEntry';
+import { PlayerBottomBarLayoutContext } from './components/floating-player/PlayerBottomBarLayoutContext';
 
 const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
 const DEV_DEBUG_SHORTCUT_LABEL = 'Alt+Shift+D';
@@ -396,6 +399,7 @@ export default function App() {
     } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
     const {
         hidePlayerProgressBar,
+        playerBottomBarOffset,
         hidePlayerRightPanelButton,
         transparentPlayerBackground,
         enablePlayerPageNativeBlur,
@@ -651,6 +655,9 @@ export default function App() {
         pushCollection,
         backCollection,
     } = useAppNavigation();
+
+    usePlayerBottomBarOffset(playerBottomBarOffset);
+    usePlayerBottomBarPositioningEntry(navigateToPlayer);
 
     // Auto-close the player panel when leaving the player view
     useEffect(() => {
@@ -2192,6 +2199,11 @@ export default function App() {
         isNowPlayingStageActive,
         handlePrevTrack,
         handleNextTrack,
+        shuffleQueue,
+        handleLike,
+        isDisplaySongLiked: commandPaletteContext.playback.isSongLiked,
+        invokeCommandById: commandPalette.invokeCommandById,
+        canInvokeCommandById: commandPalette.canInvokeCommandById,
         stageNextUp,
         stageIsNextUp,
         stageTrackPillOnScreen,
@@ -2562,7 +2574,9 @@ export default function App() {
                 className="absolute inset-0 z-0"
                 onClick={handleContainerClick}
             >
-                <VisualizerRenderer {...visualizerRendererModel} />
+                <PlayerBottomBarLayoutContext.Provider value={currentView === 'player'}>
+                    <VisualizerRenderer {...visualizerRendererModel} />
+                </PlayerBottomBarLayoutContext.Provider>
             </div>
 
             <StageSessionEmptyState
