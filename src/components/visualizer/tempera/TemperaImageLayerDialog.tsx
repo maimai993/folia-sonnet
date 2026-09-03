@@ -41,8 +41,32 @@ interface TemperaImageLayerDialogProps {
     busy: TemperaPoolBusyAction;
 }
 
-/** Which pool-wide file action is in flight, so its button can show a spinner. */
-export type TemperaPoolBusyAction = 'idle' | 'exporting' | 'importing';
+/**
+ * Which pool-wide file action is in flight. `adding` is a state of its own rather than an import
+ * in miniature - it appends artwork the user picked, not rows of a backup - but it locks the
+ * dialog all the same: both it and `importing` write the draft after their last await.
+ */
+export type TemperaPoolBusyAction = 'idle' | 'adding' | 'exporting' | 'importing';
+
+/**
+ * What the footer says while a run is in flight. The count it replaces is the one thing in the
+ * footer that never dims, so it is also where an import that outlived its button has to show.
+ */
+const BUSY_LABELS: Record<Exclude<TemperaPoolBusyAction, 'idle'>, { key: string; fallback: string }> = {
+    adding: { key: 'options.temperaPoolBusyAdd', fallback: '正在添加…' },
+    exporting: { key: 'options.temperaPoolBusyExport', fallback: '正在导出…' },
+    importing: { key: 'options.temperaPoolBusyImport', fallback: '正在导入…' },
+};
+
+/**
+ * Whether the run in flight is one a close would corrupt. `exporting` is deliberately excluded:
+ * it reads the draft and writes nothing, so the download landing or not leaves the pool intact.
+ * `adding` and `importing` both touch the draft *after* their last await, so a close in between
+ * commits the pre-run pool and strands the tail in a draft nobody is looking at.
+ */
+export const isTemperaPoolWriteLocked = (busy: TemperaPoolBusyAction): boolean => (
+    busy === 'adding' || busy === 'importing'
+);
 
 interface ChipProps {
     label: string;
@@ -72,11 +96,10 @@ interface PoolActionProps {
     icon: React.ReactNode;
     tokens: TemperaDialogTokens;
     disabled?: boolean;
-    spinning?: boolean;
     onClick: () => void;
 }
 
-const PoolAction: React.FC<PoolActionProps> = ({ label, icon, tokens, disabled, spinning, onClick }) => (
+const PoolAction: React.FC<PoolActionProps> = ({ label, icon, tokens, disabled, onClick }) => (
     <button
         type="button"
         onClick={onClick}
@@ -84,7 +107,7 @@ const PoolAction: React.FC<PoolActionProps> = ({ label, icon, tokens, disabled, 
         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-35 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
         style={{ color: tokens.textPrimary, borderColor: tokens.line }}
     >
-        {spinning ? <Loader2 size={14} className="animate-spin" /> : icon}
+        {icon}
         {label}
     </button>
 );
@@ -116,17 +139,29 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     const [dragging, setDragging] = useState(false);
     const full = images.length >= maxImages;
     const tokens = temperaDialogTokens(isDaylight);
+    // A run outlives the click that started it, and an `importing` tail in particular deletes the
+    // old blobs the moment its entries arrive - files the tuning a close just committed still
+    // names. So every close path funnels through `requestClose` (see `isTemperaPoolWriteLocked`).
+    const writeLocked = isTemperaPoolWriteLocked(busy);
+
+    const requestClose = useCallback(() => {
+        if (writeLocked) return;
+        onClose();
+    }, [writeLocked, onClose]);
 
     const openImportPicker = useCallback((mode: 'replace' | 'append') => {
         pendingImportModeRef.current = mode;
         importInputRef.current?.click();
     }, []);
 
+    // The drop zone is the one import path a button's `disabled` cannot reach, but it lands in the
+    // same two callbacks, so the overlap guard lives there - the one place every path goes through.
     const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         setDragging(false);
         const files = Array.from(event.dataTransfer.files ?? []);
-        // A dropped zip is a pool backup, not an image; anything else is artwork.
+        // A dropped zip is a pool backup, not an image; anything else is artwork. It always
+        // appends: the picker is the only path that can choose `replace`, and a drop cannot ask.
         const archive = files.find(file => file.name.toLowerCase().endsWith('.zip'));
         if (archive) {
             onImportPool(archive, 'append');
@@ -143,7 +178,11 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
     return createPortal((
         <ThemedDialog
             isOpen={isOpen}
-            onClose={onClose}
+            onClose={requestClose}
+            closeDisabled={writeLocked}
+            closeDisabledTitle={writeLocked
+                ? (t('options.temperaPoolWaitToSave') || '还有图片在处理，完成后才能保存')
+                : undefined}
             isDaylight={isDaylight}
             title={t('options.temperaImageSection') || '画布图片'}
             description={`${t('options.temperaLayerImageHint') || '每个分镜会从图片池里随机取一张，位置由对齐倾向决定。'}\n${t('options.temperaLayerImageSaveHint') || '改动会在关闭本窗口时写入。'}`}
@@ -151,7 +190,7 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
             headerActions={(
                 <button
                     type="button"
-                    disabled={images.length === 0}
+                    disabled={images.length === 0 || busy !== 'idle'}
                     onClick={onClearAll}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-35 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
                     style={{ color: tokens.textPrimary, borderColor: tokens.line }}
@@ -170,39 +209,59 @@ const TemperaImageLayerDialog: React.FC<TemperaImageLayerDialogProps> = ({
                         onClick={() => fileInputRef.current?.click()}
                     />
                     <PoolAction
-                        label={t('options.temperaImportAppendImages') || '追加导入'}
+                        label={t('options.temperaImportAppendImages') || '导入备份（追加）'}
                         icon={<Plus size={14} />}
                         tokens={tokens}
                         disabled={full || busy !== 'idle'}
                         onClick={() => openImportPicker('append')}
                     />
                     <PoolAction
-                        label={t('options.temperaImportReplaceImages') || '替换导入'}
+                        label={t('options.temperaImportReplaceImages') || '导入备份（替换）'}
                         icon={<Replace size={14} />}
                         tokens={tokens}
                         disabled={busy !== 'idle'}
                         onClick={() => openImportPicker('replace')}
                     />
                     <PoolAction
-                        label={t('options.temperaExportImages') || '导出'}
+                        label={t('options.temperaExportImages') || '导出备份'}
                         icon={<Download size={14} />}
                         tokens={tokens}
                         disabled={images.length === 0 || busy !== 'idle'}
-                        spinning={busy === 'exporting'}
                         onClick={onExportPool}
                     />
                     <span className="ml-auto flex items-center gap-3">
-                        <span className="text-xs opacity-60" style={{ color: tokens.textSecondary }}>
-                            {t('options.temperaImagePoolCount', {
-                                defaultValue: '{{count}} / {{max}}',
-                                count: images.length,
-                                max: maxImages,
-                            })}
-                        </span>
+                        {/* Busy takes the count's slot rather than a button's icon: a spinner
+                            among four greyed-out buttons is invisible, and a run started from a
+                            native picker outlives that picker. This slot never dims or moves. */}
+                        {busy === 'idle' ? (
+                            <span className="text-xs opacity-60" style={{ color: tokens.textSecondary }}>
+                                {t('options.temperaImagePoolCount', {
+                                    defaultValue: '{{count}} / {{max}}',
+                                    count: images.length,
+                                    max: maxImages,
+                                })}
+                            </span>
+                        ) : (
+                            <span
+                                className="inline-flex items-center gap-1.5 text-xs"
+                                style={{ color: tokens.textPrimary }}
+                                role="status"
+                            >
+                                <Loader2 size={13} className="animate-spin" />
+                                {t(BUSY_LABELS[busy].key) || BUSY_LABELS[busy].fallback}
+                            </span>
+                        )}
                         <button
                             type="button"
-                            onClick={onClose}
-                            className={`rounded-full border px-5 py-2 text-sm transition-colors ${tokens.hoverSurfaceClass}`}
+                            onClick={requestClose}
+                            disabled={writeLocked}
+                            // Why the button is dead has to be said: once the file picker that
+                            // started the run has closed, nothing else on screen mentions it.
+                            // Names the consequence, where the busy label names the action.
+                            title={writeLocked
+                                ? (t('options.temperaPoolWaitToSave') || '还有图片在处理，完成后才能保存')
+                                : undefined}
+                            className={`rounded-full border px-5 py-2 text-sm transition-colors disabled:opacity-35 disabled:hover:bg-transparent ${tokens.hoverSurfaceClass}`}
                             style={{ color: tokens.textPrimary, borderColor: tokens.line }}
                         >
                             {t('options.temperaLayerImageSave') || '保存'}

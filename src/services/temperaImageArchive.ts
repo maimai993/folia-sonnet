@@ -14,8 +14,12 @@ import {
 // tuning carries ids and placement, which is what makes it small enough to sync, and also what
 // makes the pool invisible to every existing text export - a shortcode or a sync snapshot that
 // carried the artwork would blow its own size budget. So the pool gets a binary sidecar: a zip
-// holding the pool-wide settings plus the original bytes, rebuilt on import through the same
+// holding the placements plus the original bytes, rebuilt on import through the same
 // `prepareTemperaLayerImage` path a drag-and-drop upload takes, thumbnails included.
+//
+// The zip carries the pool and nothing else: `layerImageDepth` / `layerImageFrequency` are
+// pool-wide tuning the user is still looking at in the settings panel, so writing them back would
+// change when and where images the backup never touched are drawn. Import only touches placements.
 //
 // Compression and decompression run off-thread through fflate's async `zip`/`unzip`: the pool holds
 // up to sixteen images at print resolution, and deflating tens of megabytes on the main thread is
@@ -55,8 +59,6 @@ const probeUncompressedSize = (bytes: Uint8Array): number => {
 
 export interface TemperaImagePoolSnapshot {
     layerImages: TemperaLayerImage[];
-    layerImageDepth: 'back' | 'front';
-    layerImageFrequency: number;
 }
 
 export interface TemperaImageArchiveExportResult {
@@ -69,8 +71,6 @@ export interface TemperaImageArchiveExportResult {
 
 export interface TemperaImageArchiveImportResult {
     layerImages: TemperaLayerImage[];
-    layerImageDepth: 'back' | 'front';
-    layerImageFrequency: number;
     /** Files that were skipped because they were not images the pool accepts. */
     skipped: number;
     /** Files dropped because the pool was already full. */
@@ -100,12 +100,6 @@ const readJsonEntry = (files: Unzipped, path: string): unknown => {
     return JSON.parse(strFromU8(file));
 };
 
-const asDepth = (value: unknown): 'back' | 'front' => (value === 'front' ? 'front' : 'back');
-
-const asFrequency = (value: unknown) => (
-    typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
-);
-
 /**
  * Runs fflate's async entry points as promises. Both hand back a terminator that nothing calls:
  * a cancelled export leaves the worker to finish and be collected, which is cheaper than tracking
@@ -120,7 +114,7 @@ const runUnzip = (bytes: Uint8Array): Promise<Unzipped> => new Promise((resolve,
 });
 
 /**
- * Reads the whole pool - settings and files - into a zip. Entries whose file has gone
+ * Reads the whole pool - placements and files - into a zip. Entries whose file has gone
  * missing are dropped from the manifest instead of producing a zip with holes in it: importing
  * that back would restore placements that can never resolve to a picture. The two counts are
  * returned because a backup that silently holds fewer pictures than the pool shows is worse than
@@ -139,14 +133,10 @@ export const createTemperaImageArchive = async (
         keptIds.add(image.id);
     }));
 
-    // Order matters: the pool is rendered in array order and the pool-wide depth/frequency are
-    // restored alongside it, so the zip replays the same pool rather than a shuffled one.
+    // Order matters: the pool is rendered in array order, so the zip has to replay the same
+    // pool rather than a shuffled one.
     const ordered = snapshot.layerImages.filter(image => keptIds.has(image.id));
-    files['pool.json'] = encodeJson({
-        layerImages: ordered,
-        layerImageDepth: snapshot.layerImageDepth,
-        layerImageFrequency: snapshot.layerImageFrequency,
-    });
+    files['pool.json'] = encodeJson({ layerImages: ordered });
     files['meta.json'] = encodeJson({
         kind: ARCHIVE_KIND,
         schemaVersion: SCHEMA_VERSION,
@@ -199,16 +189,14 @@ export const readTemperaImageArchiveFile = async (
     }
 
     const files = await runUnzip(bytes);
-    const meta = readJsonEntry(files, 'meta.json') as { kind?: unknown; schemaVersion?: unknown } | null;
-    if (!meta || meta.kind !== ARCHIVE_KIND || meta.schemaVersion !== SCHEMA_VERSION) {
+    const meta = readJsonEntry(files, 'meta.json') as { kind?: unknown; schemaVersion?: unknown };
+    if (meta.kind !== ARCHIVE_KIND || meta.schemaVersion !== SCHEMA_VERSION) {
         throw new Error('Not a Folia canvas-image backup');
     }
 
-    const pool = readJsonEntry(files, 'pool.json') as {
-        layerImages?: unknown;
-        layerImageDepth?: unknown;
-        layerImageFrequency?: unknown;
-    };
+    // Older backups also wrote `layerImageDepth` / `layerImageFrequency` here. Ignored rather than
+    // rejected: the pool is still restorable, and those settings belong to the importer, not the zip.
+    const pool = readJsonEntry(files, 'pool.json') as { layerImages?: unknown };
     const manifest = Array.isArray(pool.layerImages) ? pool.layerImages as TemperaLayerImage[] : [];
     const entries = collectEntries(files, manifest);
     const existingIds = new Set(options.existing.map(image => image.id));
@@ -249,11 +237,5 @@ export const readTemperaImageArchiveFile = async (
         existingIds.add(id);
     }
 
-    return {
-        layerImages,
-        layerImageDepth: asDepth(pool.layerImageDepth),
-        layerImageFrequency: asFrequency(pool.layerImageFrequency),
-        skipped,
-        truncated,
-    };
+    return { layerImages, skipped, truncated };
 };
