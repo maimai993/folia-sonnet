@@ -3,11 +3,13 @@ import { backgroundPickerSurface, visualizerPickerSurface } from '../surfaces/pi
 import { LayoutGrid, Wallpaper } from 'lucide-react';
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createVisualizerCommand } from '../commandFactories';
+import { lyricSegmentationCommand } from './lyricSegmentationCommand';
 
 // src/components/command-palette/commands/visualizerCommands.ts
 // Commands in the `visualizer` group: switching lyric animation modes and background layouts.
 
 export const visualizerCommands: CommandPaletteCommand[] = [
+    lyricSegmentationCommand,
     defineCommand({
         id: 'visualizer-picker',
         executeShortcut: 'm',

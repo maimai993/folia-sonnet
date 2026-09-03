@@ -28,6 +28,8 @@ import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsS
 import { useSleepTimerStore } from '../stores/useSleepTimerStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
+import { useLyricSegmentationStore } from '../stores/useLyricSegmentationStore';
+import type { LyricSegmentationActions } from '../components/app/playback/createLyricSegmentationActions';
 
 // src/hooks/useCommandPaletteContext.ts
 // Assembles the command palette's namespaced context.
@@ -60,7 +62,10 @@ export type CommandPaletteContextDeps = Omit<
     AmbientKey
 >;
 
-export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): CommandPaletteContext => {
+export const useCommandPaletteContext = (
+    deps: CommandPaletteContextDeps,
+    lyricSegmentationActions: LyricSegmentationActions,
+): CommandPaletteContext => {
     const { t } = useTranslation();
     const currentSong = usePlaybackStore(state => state.currentSong);
     const queue = usePlaybackStore(state => state.playQueue);
@@ -131,6 +136,9 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
     // the keyboard, so it does not rebuild the context per keystroke — the query itself never
     // travels through here, the palette's own input holds it.
     const commandFilter = useAppViewStore(state => state.commandFilter);
+    // Subscribed, not read through getState: the segmentation surface and the panel chip both show
+    // whether the current song has a saved split, so the context has to be rebuilt when it changes.
+    const lyricSegmentationRecord = useLyricSegmentationStore(state => state.record);
 
     // App.tsx recreates several of these callbacks on every render (handleSaveLyricFilterPattern
     // is not memoised, and the toggles close over it), so keying the memo on `deps` identity would
@@ -168,7 +176,7 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
             navigation: buildNavigationCommandContext(stableDeps),
             panel: buildPanelCommandContext(stableDeps),
             settings: buildSettingsCommandContext(stableDeps),
-            visualizer: buildVisualizerCommandContext(),
+            visualizer: buildVisualizerCommandContext(lyricSegmentationActions),
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- value list is derived, shape is fixed
     }, [
@@ -177,5 +185,6 @@ export const useCommandPaletteContext = (deps: CommandPaletteContextDeps): Comma
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, audioSignals, visualizerSignals,
         lyricStaffPolicy, lyricStaffAbsorbMode, personalFmSelection, view, commandFilter, canAddCurrentSongToPlaylist,
+        lyricSegmentationRecord, lyricSegmentationActions,
     ]);
 };

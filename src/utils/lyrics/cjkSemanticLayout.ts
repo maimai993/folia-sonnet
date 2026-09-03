@@ -1,4 +1,5 @@
 import type { Line, Word } from '../../types';
+import { hasWordSegmentationOverride, segmentLyricWords } from './wordSegmentation';
 
 // src/utils/lyrics/cjkSemanticLayout.ts
 // Builds parser-preserving lyric layout units for visualizer display planning.
@@ -40,6 +41,9 @@ export interface LyricLayoutUnit {
     isSticky?: boolean;
 }
 
+/** The Line fields layout planning reads. `wordSegments` carries the user's saved split. */
+export type SegmentableLine = Pick<Line, 'fullText' | 'words' | 'wordSegments'>;
+
 export interface BuildPostLyricLayoutUnitsOptions {
     // Enables CJK semantic grouping before sticky punctuation is applied.
     semantic?: boolean;
@@ -72,20 +76,13 @@ export const createSingleWordLayoutUnits = (words: Word[]): LyricLayoutUnit[] =>
     isSemantic: false,
 }));
 
-const getWordSegments = (text: string): WordSegment[] | null => {
-    const Segmenter = Intl?.Segmenter;
-    if (!Segmenter) {
-        return null;
-    }
-
-    try {
-        return Array.from(new Segmenter(undefined, { granularity: 'word' }).segment(text), segment => ({
-            segment: segment.segment,
-            isWordLike: segment.isWordLike,
-        }));
-    } catch {
-        return null;
-    }
+// Delegates to the one word segmenter in the codebase, which also honours the user's saved
+// segmentation for this line. Only the two fields this file aligns on are kept.
+const getWordSegments = (line: SegmentableLine): WordSegment[] | null => {
+    const segments = segmentLyricWords(line);
+    return segments.length > 0
+        ? segments.map(({ segment, isWordLike }) => ({ segment, isWordLike }))
+        : null;
 };
 
 const appendWordsToUnit = (unit: LyricLayoutUnit, text: string, words: Word[]) => {
@@ -198,18 +195,20 @@ const mapSegmentsToWords = (segments: WordSegment[], words: Word[]): LyricLayout
 // Legacy-compatible helper: only performs CJK semantic grouping.
 // It does not apply sticky punctuation, so existing callers can keep the old behavior.
 export const buildCjkSemanticLayoutUnits = (
-    line: Pick<Line, 'fullText' | 'words'>
+    line: SegmentableLine
 ): LyricLayoutUnit[] => {
     if (line.words.length === 0) {
         return [];
     }
 
     const fallbackUnits = createSingleWordLayoutUnits(line.words);
-    if (!hasCjkText(line.fullText)) {
+    // The CJK gate exists because Intl.Segmenter only adds information over parser words for
+    // scripts without spaces. A user-supplied split is deliberate in any script, so it skips it.
+    if (!hasCjkText(line.fullText) && !hasWordSegmentationOverride(line)) {
         return fallbackUnits;
     }
 
-    const segments = getWordSegments(line.fullText);
+    const segments = getWordSegments(line);
     if (!segments) {
         return fallbackUnits;
     }
@@ -282,7 +281,7 @@ export const applyStickyPunctuationLayoutUnits = (units: LyricLayoutUnit[]): Lyr
 //   buildPostLyricLayoutUnits(line, { semantic: true, sticky: true })
 //   -> CJK semantic units, then punctuation/contraction attachment
 export const buildPostLyricLayoutUnits = (
-    line: Pick<Line, 'fullText' | 'words'>,
+    line: SegmentableLine,
     options: BuildPostLyricLayoutUnitsOptions = {}
 ): LyricLayoutUnit[] => {
     const rawUnits = options.semantic

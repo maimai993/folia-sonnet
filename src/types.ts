@@ -67,6 +67,9 @@ export interface Line {
   renderHints?: LineRenderHints;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
+  // User-saved fine word boundaries for fullText, baked in upstream by the lyric setter.
+  // join('') must equal fullText. When present it wins over Intl.Segmenter word segmentation.
+  wordSegments?: string[];
 }
 
 export interface LyricData {

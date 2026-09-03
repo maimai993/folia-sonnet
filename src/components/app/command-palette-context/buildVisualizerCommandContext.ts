@@ -1,10 +1,17 @@
 import type { CommandPaletteContext } from '../../command-palette/types';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useLyricSegmentationStore } from '../../../stores/useLyricSegmentationStore';
+import { getVisualizerRegistryEntry } from '../../visualizer/registry';
+import { isLyricSegmentationAiAvailable } from '../../../services/lyricSegmentationAi';
+import type { LyricSegmentationActions } from '../playback/createLyricSegmentationActions';
 
 // src/components/app/command-palette-context/buildVisualizerCommandContext.ts
-// The `visualizer` namespace. Entirely store-backed: App.tsx used to relay all seven members.
+// The `visualizer` namespace. Almost entirely store-backed: App.tsx used to relay all seven
+// members, and now only supplies the two segmentation actions, which need the lyric setter.
 
-export const buildVisualizerCommandContext = (): CommandPaletteContext['visualizer'] => {
+export const buildVisualizerCommandContext = (
+    lyricSegmentationActions: LyricSegmentationActions,
+): CommandPaletteContext['visualizer'] => {
     const visualizer = useVisualizerSettingsStore.getState();
     return {
         visualizerMode: visualizer.visualizerMode,
@@ -16,5 +23,12 @@ export const buildVisualizerCommandContext = (): CommandPaletteContext['visualiz
         setVisualizerBackgroundMode: visualizer.handleSetVisualizerBackgroundMode,
         setMonetBackgroundTuning: visualizer.handleSetMonetBackgroundTuning,
         setLatentBackgroundTuning: visualizer.handleSetLatentBackgroundTuning,
+        usesWordSegmentation: Boolean(getVisualizerRegistryEntry(visualizer.visualizerMode).usesWordSegmentation),
+        lyricSegmentation: {
+            record: useLyricSegmentationStore.getState().record,
+            isAiAvailable: isLyricSegmentationAiAvailable(),
+            save: lyricSegmentationActions.save,
+            reset: lyricSegmentationActions.reset,
+        },
     };
 };

@@ -15,6 +15,7 @@ export default defineVisualizer({
     previewSeed: 'sonnet',
     previewStartOffset: 0,
     tuningKind: 'sonnet',
+    usesWordSegmentation: true,
     // Deliberately unkeyed on the seed: the runtime hands a track change over in place
     // (see songHandover.ts / pixiRuntimeHost.ts). Remounting here would throw the WebGL
     // context away mid-transition and leave the frame empty for the whole rebuild.

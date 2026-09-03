@@ -694,6 +694,8 @@ declare global {
       removeLocalCoverAsset: (assetId: string) => Promise<boolean>;
       clearLocalCoverAssets: () => Promise<boolean>;
       generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
+      /** Word-segments lyric lines with the user's configured model. Resolves to one boundary array per line. */
+      segmentLyrics: (lines: string[]) => Promise<string[][]>;
       fetchLyricProxy: (
         url: string,
         init?: {

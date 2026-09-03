@@ -23,7 +23,7 @@
 
 ## 排版
 
-`temperaLayout.ts` + `temperaMeasure.ts` 做拼贴式排版：Intl.Segmenter 分词**只用来定字号层级**，不影响字间距——词间只有在原文确实有空白（比对 `startOffset`/`endOffset`）时才给一个空格宽，CJK 的分词边界只留 0.035em 视觉微距；每行一个 hero 词放大到 1.34~1.6×、其余压到 0.7~0.86×，形成视觉重心，行高 1.02~1.12 保持紧凑，每字有独立入场向量，并按词从 `temperaEnterStyles.ts` 的 7 种入场方式里选一种——以**方向变体**为主（slide 用镜头自身向量，from-left/right/above/below 换来向，swing 额外带旋转，stamp 是唯一的原地样式）；所有变体共用排版算好的同一段位移距离、且等比缩放，长距离飞入和单轴拉伸都刻意去掉了——整词同一种，相邻词不同，所以一句话是被「拼」上去而不是统一滑入；有位移的样式还会拖出 2 层运动浮影（`echoLayer`，不参与反色）；`decor.watermark` 是编译期选出的超大装饰词，取自本 shot 没在排的词，放在**反色层之下**，于是歌词压过它的笔画时会翻色；关键字着色走共享的 `wordColoring.ts`（`theme.wordColors`，无独立开关），命中的字带 `color` 并渲染到 textLayer 之上的 **keywordLayer**——那层不挂 difference filter，否则主题色会被反色抹掉。
+`temperaLayout.ts` + `temperaMeasure.ts` 做拼贴式排版：分词（走 `utils/lyrics/wordSegmentation.ts`，用户为这首歌存过精细分词就用那份，否则 Intl.Segmenter）**只用来定字号层级**，不影响字间距——词间只有在原文确实有空白（比对 `startOffset`/`endOffset`）时才给一个空格宽，CJK 的分词边界只留 0.035em 视觉微距；每行一个 hero 词放大到 1.34~1.6×、其余压到 0.7~0.86×，形成视觉重心，行高 1.02~1.12 保持紧凑，每字有独立入场向量，并按词从 `temperaEnterStyles.ts` 的 7 种入场方式里选一种——以**方向变体**为主（slide 用镜头自身向量，from-left/right/above/below 换来向，swing 额外带旋转，stamp 是唯一的原地样式）；所有变体共用排版算好的同一段位移距离、且等比缩放，长距离飞入和单轴拉伸都刻意去掉了——整词同一种，相邻词不同，所以一句话是被「拼」上去而不是统一滑入；有位移的样式还会拖出 2 层运动浮影（`echoLayer`，不参与反色）；`decor.watermark` 是编译期选出的超大装饰词，取自本 shot 没在排的词，放在**反色层之下**，于是歌词压过它的笔画时会翻色；关键字着色走共享的 `wordColoring.ts`（`theme.wordColors`，无独立开关），命中的字带 `color` 并渲染到 textLayer 之上的 **keywordLayer**——那层不挂 difference filter，否则主题色会被反色抹掉。
 
 ## 大面积色块与镜头
 

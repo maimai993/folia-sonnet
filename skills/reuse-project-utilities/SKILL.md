@@ -148,6 +148,22 @@ CJK 语义分组、sticky 标点、英文 contraction 已有布局工具：
 
 新增按词/按块 visualizer 时，优先使用 layout units。不要在组件里临时拼接标点、撇号、CJK 字符。
 
+### Word Segmentation
+
+歌词按词分词只有一个入口：`src/utils/lyrics/wordSegmentation.ts`
+
+- `segmentLyricWords(line)` —— 有用户保存的精细分词就用它，否则 `Intl.Segmenter`
+- `segmentTextWords(text)` —— 没有 `Line` 时的无覆盖版本
+- `segmentsFromBoundaries(boundaries)`、`isValidWordSegmentation(text, boundaries)`
+
+**不要再写 `new Intl.Segmenter(..., { granularity: 'word' })`。** 这里原本有三份各自为政的实现
+（`cjkSemanticLayout`、`sonnetSemantic`、`temperaProgram`，后两份逐字重复），用户的精细分词
+（命令 `lyric-segmentation`）就没法一次覆盖到所有模式。`granularity: 'grapheme'` 是另一回事，
+走 `graphemeTiming.ts`，与这里无关。
+
+新增按词排版的 visualizer 时，在它的 `entry.tsx` 上标 `usesWordSegmentation: true`，
+面板快捷按钮和命令的可用性都从注册表读这个字段。
+
 ### Grapheme Timing
 
 逐字或逐 grapheme 动画优先复用 `src/utils/lyrics/graphemeTiming.ts`：

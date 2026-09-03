@@ -25,7 +25,12 @@ export type AppView = 'home' | 'player';
  * its own box, and the palette borrowing that position is what keeps the box exactly where it was.
  */
 /** What a surface can ask the palette for. See `commandPaletteRequest`. */
-export type CommandPaletteRequest = { seq: number; kind: 'filter' | 'dismiss-filter' | 'root' };
+export type CommandPaletteRequest =
+    | { seq: number; kind: 'filter' | 'dismiss-filter' | 'root' }
+    // A button pointed at one specific command, so the palette opens straight into its surface.
+    // Carrying the id here rather than threading a callback keeps buttons deep in the panel tree
+    // from needing a prop chain back to the palette hook.
+    | { seq: number; kind: 'command'; commandId: string };
 
 export type CommandFilterHandle = {
     getQuery: () => string;
@@ -59,7 +64,8 @@ type AppViewState = {
     /** Returns the unregister function. Registering replaces whoever held it. */
     registerCommandFilter: (handle: CommandFilterHandle) => () => void;
     setIsCommandFilterOpen: (isOpen: boolean) => void;
-    requestCommandPalette: (kind: CommandPaletteRequest['kind']) => void;
+    requestCommandPalette: (kind: 'filter' | 'dismiss-filter' | 'root') => void;
+    requestCommandPaletteCommand: (commandId: string) => void;
 };
 
 const resolve = <T,>(next: React.SetStateAction<T>, previous: T): T => (
@@ -91,6 +97,9 @@ export const useAppViewStore = create<AppViewState>((set, get) => ({
     },
     setIsCommandFilterOpen: (isOpen) => set({ isCommandFilterOpen: isOpen }),
     requestCommandPalette: (kind) => set({ commandPaletteRequest: { seq: get().commandPaletteRequest.seq + 1, kind } }),
+    requestCommandPaletteCommand: (commandId) => set({
+        commandPaletteRequest: { seq: get().commandPaletteRequest.seq + 1, kind: 'command', commandId },
+    }),
 }));
 
 // Module-level handles for the assembly layer: these are actions, so they need no subscription.
@@ -105,3 +114,7 @@ export const openCommandFilter = () => useAppViewStore.getState().requestCommand
 export const closeCommandFilter = () => useAppViewStore.getState().requestCommandPalette('dismiss-filter');
 /** Open the ordinary command list, for the affordances that can be pointed at it instead. */
 export const openCommandPalette = () => useAppViewStore.getState().requestCommandPalette('root');
+/** Open the palette straight into one command's surface, for buttons that stand in for it. */
+export const openCommandPaletteCommand = (commandId: string) => (
+    useAppViewStore.getState().requestCommandPaletteCommand(commandId)
+);

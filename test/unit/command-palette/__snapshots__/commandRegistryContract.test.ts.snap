@@ -104,6 +104,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "panel-navi",
   "panel-onlineLyrics",
   "mods",
+  "lyric-segmentation",
   "visualizer-picker",
   "background-picker",
   "visualizer-sonnet",

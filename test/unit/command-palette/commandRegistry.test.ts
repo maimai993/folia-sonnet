@@ -127,6 +127,13 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setVisualizerBackgroundMode: vi.fn(),
             setMonetBackgroundTuning: vi.fn(),
             setLatentBackgroundTuning: vi.fn(),
+            usesWordSegmentation: true,
+            lyricSegmentation: {
+                record: null,
+                isAiAvailable: true,
+                save: vi.fn(async () => {}),
+                reset: vi.fn(async () => {}),
+            },
         },
     };
 

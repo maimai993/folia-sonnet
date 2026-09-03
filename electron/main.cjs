@@ -25,6 +25,25 @@ const { createDebugHost } = require('./debug/debugHost.cjs');
 const { createModelStore } = require('./analysis/modelStore.cjs');
 const { resolveLinuxPasswordStore } = require('./linuxPasswordStore.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
+const {
+  buildOpenAICompatibleRequestBody,
+  detectOpenAICompatibleProvider,
+  extractResponseContentText,
+  formatOpenAICompatibleError,
+  normalizeOpenAIChatCompletionsUrl,
+  resolveOpenAICompatibleModel,
+  resolveOpenAICompatibleTemperature,
+  runAiJsonCompletion,
+} = require('./aiTextClient.cjs');
+const {
+  SEGMENTATION_GEMINI_GENERATION_CONFIG,
+  SEGMENTATION_JSON_SCHEMA,
+  SEGMENTATION_MAX_OUTPUT_TOKENS,
+  SEGMENTATION_SCHEMA_NAME,
+  buildSegmentationSourcePrompt,
+  buildSegmentationSystemPrompt,
+  parseSegmentationResponse,
+} = require('../shared/lyricSegmentationPrompt.cjs');
 const useLinuxGraphicsDebugMode = process.env.ELECTRON_LINUX_PACKAGED_GRAPHICS === 'true';
 const isAppImageRuntime =
   process.platform === 'linux' &&
@@ -2381,9 +2400,6 @@ async function generateGeminiTheme({ apiKey, systemPrompt, sourcePrompt, customF
   return JSON.parse(jsonText);
 }
 
-const DEFAULT_OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_OPENAI_MODEL = 'gpt-4o';
-const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
 const THEME_JSON_SCHEMA_NAME = 'dual_theme';
 const THEME_JSON_SCHEMA = {
   type: 'object',
@@ -2457,113 +2473,6 @@ const THEME_JSON_SCHEMA = {
   required: ['light', 'dark'],
 };
 
-function normalizeOpenAIChatCompletionsUrl(rawUrl) {
-  const trimmedUrl = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-  if (!trimmedUrl) {
-    return DEFAULT_OPENAI_CHAT_COMPLETIONS_URL;
-  }
-
-  try {
-    const parsed = new URL(trimmedUrl);
-    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
-
-    if (!normalizedPath || normalizedPath === '/') {
-      parsed.pathname = '/v1/chat/completions';
-      return parsed.toString();
-    }
-
-    if (/\/v\d+$/.test(normalizedPath)) {
-      parsed.pathname = `${normalizedPath}/chat/completions`;
-      return parsed.toString();
-    }
-
-    parsed.pathname = normalizedPath;
-    return parsed.toString();
-  } catch {
-    return trimmedUrl.replace(/\/+$/, '');
-  }
-}
-
-function resolveOpenAICompatibleModel(apiUrl, configuredModel) {
-  const trimmedModel = typeof configuredModel === 'string' ? configuredModel.trim() : '';
-  if (trimmedModel) {
-    return trimmedModel;
-  }
-
-  try {
-    const hostname = new URL(apiUrl).hostname.toLowerCase();
-    if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
-      return DEEPSEEK_DEFAULT_MODEL;
-    }
-  } catch {
-    // Fall back to the generic OpenAI default when URL parsing fails.
-  }
-
-  return DEFAULT_OPENAI_MODEL;
-}
-
-function detectOpenAICompatibleProvider(apiUrl, model) {
-  const normalizedModel = model.trim().toLowerCase();
-  if (normalizedModel.startsWith('deepseek-')) {
-    return 'deepseek';
-  }
-
-  try {
-    const hostname = new URL(apiUrl).hostname.toLowerCase();
-    if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
-      return 'deepseek';
-    }
-    if (hostname === 'api.openai.com' || hostname.endsWith('.openai.com')) {
-      return 'openai';
-    }
-  } catch {
-    // Fall through to generic provider handling.
-  }
-
-  if (/^(gpt|o[1-9]|o[1-9]-|chatgpt-)/.test(normalizedModel)) {
-    return 'openai';
-  }
-
-  return 'generic';
-}
-
-function providerSupportsStructuredOutputs(provider) {
-  return provider === 'openai';
-}
-
-function extractProviderErrorMessage(payload) {
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const error = payload.error;
-  if (typeof error === 'string') {
-    return error;
-  }
-
-  if (error && typeof error === 'object' && typeof error.message === 'string') {
-    return error.message;
-  }
-
-  return typeof payload.message === 'string' ? payload.message : null;
-}
-
-async function formatOpenAICompatibleError(response) {
-  const rawText = await response.text();
-  let detail = rawText.trim();
-
-  try {
-    const parsed = JSON.parse(rawText);
-    detail = extractProviderErrorMessage(parsed) || detail;
-  } catch {
-    // Leave non-JSON responses as-is.
-  }
-
-  return detail
-    ? `OpenAI compatible API error (${response.status}): ${detail}`
-    : `OpenAI compatible API error (${response.status}): ${response.statusText}`;
-}
-
 function buildThemeSystemPrompt(includeSchemaText = false) {
   const instructionPrompt = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 
@@ -2627,70 +2536,6 @@ function buildThemeSourcePrompt(snippet, isPureMusic, songTitle) {
   return `Pure instrumental: ${isPureMusic ? 'yes' : 'no'}
 ${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
 ${snippet}`;
-}
-
-const DEFAULT_OPENAI_TEMPERATURE = 0.7;
-
-function resolveOpenAICompatibleTemperature(value) {
-  const temperature = typeof value === 'number' ? value : Number.parseFloat(String(value ?? '').trim());
-  return Number.isFinite(temperature) && temperature >= 0 && temperature <= 2
-    ? temperature
-    : DEFAULT_OPENAI_TEMPERATURE;
-}
-
-function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature) {
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: sourcePrompt }
-  ];
-
-  if (providerSupportsStructuredOutputs(provider)) {
-    return {
-      model,
-      messages,
-      temperature,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: THEME_JSON_SCHEMA_NAME,
-          strict: true,
-          schema: THEME_JSON_SCHEMA,
-        },
-      },
-    };
-  }
-
-  return {
-    model,
-    messages,
-    temperature,
-    response_format: { type: 'json_object' },
-  };
-}
-
-function extractResponseContentText(message) {
-  if (!message) {
-    return null;
-  }
-
-  if (typeof message.refusal === 'string' && message.refusal.trim()) {
-    throw new Error(`Model refused request: ${message.refusal}`);
-  }
-
-  if (typeof message.content === 'string') {
-    return message.content;
-  }
-
-  if (Array.isArray(message.content)) {
-    const text = message.content
-      .filter((part) => part && typeof part === 'object')
-      .filter((part) => part.type === 'text' && typeof part.text === 'string')
-      .map((part) => part.text)
-      .join('');
-    return text || null;
-  }
-
-  return null;
 }
 
 // Provide Netease API unblock parameter as requested
@@ -5365,7 +5210,7 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
         },
-        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, systemPrompt, sourcePrompt, temperature)),
+        body: JSON.stringify(buildOpenAICompatibleRequestBody(model, openAICompatibleProvider, systemPrompt, sourcePrompt, temperature, THEME_JSON_SCHEMA, THEME_JSON_SCHEMA_NAME)),
       });
 
       if (!response.ok) {
@@ -5411,5 +5256,58 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
   } catch (e) {
     console.error(e);
     throw new Error(e instanceof Error ? e.message : String(e));
+  }
+});
+
+// Word-segments the current song's lyric lines with whichever model the user configured. Shares
+// its prompt with the web handlers and with the client's copy-to-a-model-site path through
+// shared/lyricSegmentationPrompt.cjs, so all four routes ask for exactly the same thing.
+ipcMain.handle('segment-lyrics', async (event, lines) => {
+  // Held outside the try so the failure path can print what the model actually said. Without it a
+  // rejected response gives the user a stack trace and nothing to act on.
+  let rawResponse = null;
+  try {
+    const sourceLines = Array.isArray(lines) ? lines.map((line) => String(line == null ? '' : line)) : [];
+    if (sourceLines.length === 0) {
+      throw new Error('No lyric lines to segment');
+    }
+
+    const useSystemProxy = store.get('USE_SYSTEM_PROXY_FOR_AI') || false;
+    const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
+    console.log(`[segment-lyrics] segmenting ${sourceLines.length} lines`
+      + ` via ${store.get('AI_PROVIDER') || 'gemini'}${useSystemProxy ? ' (system proxy)' : ''}`);
+
+    rawResponse = await runAiJsonCompletion({
+      store,
+      systemPrompt: buildSegmentationSystemPrompt(),
+      sourcePrompt: buildSegmentationSourcePrompt(sourceLines),
+      schema: SEGMENTATION_JSON_SCHEMA,
+      schemaName: SEGMENTATION_SCHEMA_NAME,
+      // Gemini takes its own dialect plus a zero thinking budget; see the config's comment for
+      // the measurements. Sending neither is what made this take 40s.
+      geminiGenerationConfig: SEGMENTATION_GEMINI_GENERATION_CONFIG,
+      customFetch,
+      maxTokens: SEGMENTATION_MAX_OUTPUT_TOKENS,
+      // Splitting text at word boundaries has nothing to reason about, and a reasoning model left
+      // to its own devices spends the whole budget thinking and returns nothing. Same reason the
+      // Gemini config sets thinkingBudget to 0.
+      disableReasoning: true,
+    });
+
+    const { boundaries, rejections } = parseSegmentationResponse(rawResponse, sourceLines);
+    if (rejections.length > 0) {
+      // Not fatal: those lines keep the default split. Logged because a model that mangles many
+      // lines is worth noticing, and the renderer only sees a count.
+      console.warn(`[segment-lyrics] ${rejections.length}/${sourceLines.length} lines rejected;`
+        + ` first: ${rejections[0]}`);
+    }
+    return boundaries;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('[segment-lyrics] failed:', message);
+    if (rawResponse) {
+      console.error('[segment-lyrics] raw model response:', String(rawResponse).slice(0, 4000));
+    }
+    throw new Error(message);
   }
 });

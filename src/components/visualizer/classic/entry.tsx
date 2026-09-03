@@ -14,6 +14,7 @@ export default defineVisualizer({
     previewSeed: 'classic',
     previewStartOffset: 0,
     tuningKind: 'classic',
+    usesWordSegmentation: true,
     render: props => <Visualizer {...props} />,
     renderSettingsPanel: props => <ClassicSettingsPanel {...props} />,
     resetSettings: ({ resetClassicTuning }) => {

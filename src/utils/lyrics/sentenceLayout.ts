@@ -427,6 +427,11 @@ class SentenceLayout implements LyricLayoutUnit {
         return result.filter(r => r.length > 0);
     }
 
+    // The one word-granularity Segmenter left outside utils/lyrics/wordSegmentation, and so the one
+    // place the user's saved segmentation does not reach. It splits a sentence *fragment* rather
+    // than a whole line, purely to find a break point, so a per-line boundary list would have to be
+    // mapped into fragment coordinates first. Left as is deliberately; see the lyric-segmentation
+    // command, which is offered only for the modes that segment whole lines.
     private static secondarySplit(sentences: SentenceLayout[], targetCount: number, timeSeed?: number): SentenceLayout[] {
         const Segmenter = Intl?.Segmenter;
         const segmenter = Segmenter ? new Segmenter(undefined, { granularity: 'word' }) : null;

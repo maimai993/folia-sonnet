@@ -191,12 +191,39 @@ test('每个 surface 接管面板后尺寸都不变', async ({ page }) => {
     await pressUntilPaletteOpens(page);
 
     // 可视化选择器：列表型 surface，走匹配行的形状。
-    // 和 commandPalette.spec.ts 用同一条已验证的路径：等命令行出现再回车。
-    // 点击那一条会把查询词留在输入框里，picker 接管后拿它当过滤条件，可能一行都筛不出来。
+    //
+    // 点这一行，然后清空查询词。原来是敲回车，但回车执行的是 activeIndex 那一行，而上面的断言
+    // 只证明这一行在列表里；并行跑满负载时这里会打开别的命令的 surface（实测三次，面板停在队列
+    // 模式）。改成点击就没有这个不确定性 —— 清空查询是因为点击会把词留在输入框，picker 接管后
+    // 拿它当过滤条件，一行都筛不出来，这正是当初选择回车的原因。
     await paletteInput(page).fill('选择可视化');
-    await expect(palette(page).getByText('选择可视化', { exact: true }).first()).toBeVisible();
-    await page.keyboard.press('Enter');
+    const pickerRow = palette(page).getByRole('button').filter({ hasText: '选择可视化' }).first();
+    await expect(pickerRow).toBeVisible();
+    await pickerRow.click();
+    await paletteInput(page).fill('');
     await expect(palette(page).locator('[data-picker-mode]').first()).toBeVisible();
+    expect(await measure(page)).toEqual(baseline);
+});
+
+// 单独一条用例而不是接在上面那串后面：picker 的分级 Escape 会把面板留在一个中间状态，
+// 接着量下一个 surface 就变成在赌上一个 surface 的退出时序。
+test('歌词分词 surface 接管面板后尺寸不变', async ({ page }) => {
+    await openPlayerPage(page);
+    await pressUntilPaletteOpens(page);
+
+    const baseline = await measure(page);
+
+    // 这个夹具只塞了歌曲、没有已加载的歌词，所以这里量到的是空态那一版 h-full 布局。
+    // 装满内容的那一版（逐行预览滚动区）在 test/component/lyricSegmentationSurface.spec.ts 里量，
+    // 那边能直接把歌词喂给组件。两条合起来才盖住这个 surface 的两种形态。
+    // 点这一行而不是敲回车。回车执行的是 activeIndex 那一行，而上面的断言只证明这一行
+    // 存在于列表里、并没有证明它排在第一位；排名一变就会打开别的命令的 surface，量到的是
+    // 另一个盒子。这个 surface 不读查询词，所以点击把查询留在输入框里也没有副作用。
+    await paletteInput(page).fill('歌词分词');
+    const segmentationRow = palette(page).getByRole('button').filter({ hasText: '歌词分词调整' }).first();
+    await expect(segmentationRow).toBeVisible();
+    await segmentationRow.click();
+    await expect(palette(page).getByText('当前没有可分词的歌词')).toBeVisible();
     expect(await measure(page)).toEqual(baseline);
 });
 

@@ -14,6 +14,7 @@ export default defineVisualizer({
     previewSeed: 'partita',
     previewStartOffset: 0,
     tuningKind: 'partita',
+    usesWordSegmentation: true,
     render: props => <VisualizerPartita {...props} />,
     renderSettingsPanel: props => <PartitaSettingsPanel {...props} />,
     resetSettings: ({ resetPartitaTuning }) => {

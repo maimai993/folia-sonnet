@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld('electron', {
     removeLocalCoverAsset: (assetId) => ipcRenderer.invoke('remove-local-cover-asset', assetId),
     clearLocalCoverAssets: () => ipcRenderer.invoke('clear-local-cover-assets'),
     generateTheme: (lyricsText, options) => ipcRenderer.invoke('generate-theme', lyricsText, options),
+    segmentLyrics: (lines) => ipcRenderer.invoke('segment-lyrics', lines),
     fetchLyricProxy: (url, init) => ipcRenderer.invoke('lyric-proxy-fetch', url, init),
     getNeteasePort: () => ipcRenderer.invoke('get-netease-port'),
     getNeteaseApiStatus: () => ipcRenderer.invoke('get-netease-api-status'),

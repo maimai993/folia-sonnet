@@ -179,6 +179,14 @@ export interface VisualizerRegistryEntry {
     render: (props: VisualizerSharedProps) => React.ReactElement;
     renderSettingsPanel?: (props: VisualizerSettingsPanelProps) => React.ReactNode;
     resetSettings?: (props: VisualizerSettingsResetProps) => void;
+    /*
+     * True when this mode's layout atoms come from whole-line word segmentation
+     * (utils/lyrics/wordSegmentation), so the user's saved split for a song changes what it draws.
+     * Declared here rather than as a list in the panel: the panel and the command both ask the
+     * registry, so adding a mode does not mean remembering to edit a hardcoded set.
+     * Grapheme-level modes leave it unset — a word split would not affect them.
+     */
+    usesWordSegmentation?: boolean;
 }
 
 export interface VisualizerEntryModule {

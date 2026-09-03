@@ -34,6 +34,8 @@ import { buildPlayerViewFlags } from './components/app/presentation/buildPlayerV
 import { buildVisualizerTheme } from './components/app/presentation/buildVisualizerTheme';
 import { createCoverUrlResolver } from './components/app/playback/createCoverUrlResolver';
 import { createLyricsSetter } from './components/app/playback/createLyricsSetter';
+import { createLyricSegmentationActions } from './components/app/playback/createLyricSegmentationActions';
+import { useLyricWordSegmentation } from './hooks/useLyricWordSegmentation';
 import { createOnlineRecoveryController } from './components/app/playback/createOnlineRecoveryController';
 import { persistPlaybackCache } from './components/app/playback/persistPlaybackCache';
 import { useAppOverlaysModel } from './components/app/overlays/useAppOverlaysModel';
@@ -1688,6 +1690,14 @@ export default function App() {
         minutes: sleepTimerMinutes,
         onExpireFallback: handleSleepTimerExpireFallback,
     });
+    // Saving or clearing a segmentation has to re-lay the current song's lyrics, so it needs the
+    // same preview-then-setLyrics pair the lyric filter saver uses. currentSongFullRef rather than
+    // currentSong so the actions stay stable across renders.
+    const lyricSegmentationActions = useMemo(() => createLyricSegmentationActions({
+        getCurrentSong: () => currentSongFullRef.current,
+        loadCurrentSongLyricPreview,
+        setLyrics: setLyricsStable,
+    }), [loadCurrentSongLyricPreview, setLyricsStable]);
     const commandPaletteContext = useCommandPaletteContext({
 
         currentSearchSourceTab: currentSearchSourceTabInPalette,
@@ -1744,7 +1754,7 @@ export default function App() {
         setThemeGenerationSource: handleThemeGenerationSourceChange,
         voiceInputPauseSupported: isElectronWindow && typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win'),
         canUseTransitionPerformance,
-    });
+    }, lyricSegmentationActions);
     const commandPalette = useCommandPalette({
         isBlocked: isSettingsModalOpen
             || (currentView === 'home' && isSearchOpen)
@@ -1844,6 +1854,8 @@ export default function App() {
         themeGenerationSource,
         generateAITheme,
     });
+    // Loads the playing song's saved word segmentation into the store the lyric setter reads.
+    useLyricWordSegmentation();
     /**
      * Cancels a blend back onto the track the listener is hearing, or null when there is none.
      *

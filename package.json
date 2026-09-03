@@ -51,7 +51,8 @@
     "build:wallpaper-helper": "node packaging/windows/build-wallpaper-helper.mjs",
     "contributors:add": "npx all-contributors-cli add",
     "contributors:generate": "npx all-contributors-cli generate",
-    "models:fetch": "node build/fetchModels.mjs"
+    "models:fetch": "node build/fetchModels.mjs",
+    "manual:ai-probe": "node test/manual/ai_probe.mjs"
   },
   "build": {
     "appId": "top.izuna.foliamajor",

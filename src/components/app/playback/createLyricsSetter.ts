@@ -4,6 +4,8 @@ import { applyLyricDisplayFilter } from '../../../utils/lyrics/filtering';
 import { applyLyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
 import type { LyricStaffPolicyOptions } from '../../../utils/lyrics/staffCreditsPolicy';
 import { ensureLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
+import { applyLyricWordSegmentation } from '../../../utils/lyrics/lyricSegmentationRecord';
+import { getLyricSegmentationRecord } from '../../../stores/useLyricSegmentationStore';
 import { applyDetectedChorusEffects, applyNeteaseChorusByTime } from '../../../utils/lyrics/chorusEffects';
 import type { NeteaseChorusRange } from '../../../utils/lyrics/chorusEffects';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
@@ -86,6 +88,10 @@ export const createLyricsSetter = (
                     processed = applyDetectedChorusEffects(processed, rebuildLrcText);
                 }
             }
+            // Word segmentation is baked onto the lines here because visualizers receive lines
+            // with no song identity and so cannot look up a per-song override themselves. Last in
+            // the chain, so it sees the lines that actually survived filtering.
+            processed = applyLyricWordSegmentation(processed, getLyricSegmentationRecord());
             setLyricsState(ensureLyricDataRenderHints(processed));
         } else {
             setLyricsState(null);

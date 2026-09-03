@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { SearchReturnView, SearchSource } from '../../stores/useSearchNavigationStore';
 import type { LocalLibraryDisplayCatalog } from '../../services/playbackAdapters';
 import type { HomeViewTab, LatentBackgroundTuning, LocalSong, LyricData, PlayerState, ReplayGainMode, SongResult, StatusMessage, SubtitleContentMode, VisualizerMode, VisualizerBackgroundMode, MonetBackgroundTuning } from '../../types';
+import type { LyricSegmentationRecord, LyricSegmentationSource } from '../../types/lyricSegmentation';
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
@@ -238,6 +239,18 @@ export type CommandPaletteSettingsContext = {
     canUseTransitionPerformance: () => boolean;
 };
 
+/**
+ * The current song's saved word segmentation, plus the two actions that change it. Lives in the
+ * visualizer namespace because it only affects the modes whose typography is built from words.
+ */
+export type CommandPaletteLyricSegmentationContext = {
+    record: LyricSegmentationRecord | null;
+    /** True when this build can reach a model at all; false hides the AI action. */
+    isAiAvailable: boolean;
+    save: (lines: Record<string, string[]>, source: LyricSegmentationSource) => Promise<void>;
+    reset: () => Promise<void>;
+};
+
 export type CommandPaletteVisualizerContext = {
     /** The pickers state the current mode in their header, the way volume states its percent. */
     visualizerMode: VisualizerMode;
@@ -248,6 +261,13 @@ export type CommandPaletteVisualizerContext = {
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     setLatentBackgroundTuning: (patch: Partial<LatentBackgroundTuning>) => void;
+    /**
+     * Whether the active mode builds its typography from whole-line word segmentation. Resolved
+     * from the registry by the context builder rather than read here: the command modules are
+     * plain TS and must not pull the eager visualizer glob into the registry's module graph.
+     */
+    usesWordSegmentation: boolean;
+    lyricSegmentation: CommandPaletteLyricSegmentationContext;
 };
 
 /**

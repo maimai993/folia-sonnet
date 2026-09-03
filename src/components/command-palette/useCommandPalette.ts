@@ -365,6 +365,10 @@ export const useCommandPalette = ({
             open();
             return;
         }
+        if (paletteRequest.kind === 'command') {
+            openCommandById(paletteRequest.commandId);
+            return;
+        }
         if (paletteRequest.kind === 'filter') {
             if (filterCommand) {
                 openCommand(filterCommand);

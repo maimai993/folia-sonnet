@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Theme, ThemeMode, VisualizerBackgroundMode, VisualizerMode } from '../../../types';
 import type { ThemeSourceModel } from '../../../hooks/themeControllerState';
-import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '../../visualizer/registry';
+import { getVisualizerModeLabel, getVisualizerRegistryEntry, VISUALIZER_REGISTRY } from '../../visualizer/registry';
 import {
     getVisualizerBackgroundModeLabel,
     getVisualizerBackgroundRegistryEntry,
@@ -10,7 +10,11 @@ import {
 } from '../../visualizer/backgrounds/registry';
 import { resolveVisualizerBackgroundMode } from '../../../stores/visualizerSettingsPersistence';
 import { useVisualizerModeStepper } from '../../../hooks/useVisualizerModeStepper';
-import { QuickControlChip } from '../../shared/QuickControlChip';
+import { QuickControlChip, QuickControlToggle } from '../../shared/QuickControlChip';
+import { WholeWord } from 'lucide-react';
+import { openCommandPaletteCommand } from '../../../stores/useAppViewStore';
+import { useLyricSegmentationStore } from '../../../stores/useLyricSegmentationStore';
+import { LYRIC_SEGMENTATION_COMMAND_ID } from '../../command-palette/commands/lyricSegmentationCommand';
 import ModeStepperRow from './ModeStepperRow';
 import ThemeSourceRow from './ThemeSourceRow';
 import { BackgroundModeGlyph, VisualizerModeGlyph } from '../../visualizer/modeGlyphs';
@@ -57,6 +61,10 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
 }) => {
     const { t } = useTranslation();
     const openSettings = useSettingsModalStore(state => state.openSettings);
+    // Only the modes whose typography is built from word segmentation get the chip; the registry
+    // says which, so adding such a mode does not mean editing a list here.
+    const usesWordSegmentation = Boolean(getVisualizerRegistryEntry(visualizerMode).usesWordSegmentation);
+    const hasSavedSegmentation = useLyricSegmentationStore(state => Boolean(state.record));
     const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
     const setVisualizerBackgroundMode = useVisualizerSettingsStore(state => state.handleSetVisualizerBackgroundMode);
     const monetBackgroundTuning = useVisualizerSettingsStore(state => state.monetBackgroundTuning);
@@ -145,12 +153,27 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
                 isDaylight={isDaylight}
                 primaryColor={theme.primaryColor}
                 trailing={(
-                    <QuickControlChip
-                        isDaylight={isDaylight}
-                        label={t(`animation.${theme.animationIntensity}`)}
-                        title={`${t('ui.animationIntensity')}: ${t(`animation.${theme.animationIntensity}`)}`}
-                        onClick={cycleAnimationIntensity}
-                    />
+                    <>
+                        <QuickControlChip
+                            isDaylight={isDaylight}
+                            label={t(`animation.${theme.animationIntensity}`)}
+                            title={`${t('ui.animationIntensity')}: ${t(`animation.${theme.animationIntensity}`)}`}
+                            onClick={cycleAnimationIntensity}
+                        />
+                        {usesWordSegmentation && (
+                            <QuickControlToggle
+                                active={hasSavedSegmentation}
+                                theme={theme}
+                                label={t('commandPalette.commands.lyric-segmentation.title')}
+                                onToggle={() => {
+                                    openCommandPaletteCommand(LYRIC_SEGMENTATION_COMMAND_ID);
+                                    onClosePanel?.();
+                                }}
+                            >
+                                <WholeWord size={14} />
+                            </QuickControlToggle>
+                        )}
+                    </>
                 )}
             />
 

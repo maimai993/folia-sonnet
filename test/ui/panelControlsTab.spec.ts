@@ -95,6 +95,33 @@ test('steps lyric modes with the arrows and opens the full list from the name', 
     expect(await readVisualizerMode(page)).toBe('partita');
 });
 
+test('shows the word segmentation button only for the modes built from word splits', async ({ page }) => {
+    await openControlsTab(page);
+    expect(await readVisualizerMode(page)).toBe('classic');
+
+    const lyricRow = page.locator('div.space-y-1 > div').first();
+    const segmentationButton = lyricRow.getByRole('button', { name: '歌词分词调整' });
+
+    // classic 在注册表里标了 usesWordSegmentation。
+    await expect(segmentationButton).toBeVisible();
+
+    // 步到 cadenza —— 它是逐 grapheme 的，分词结果对它没有影响，按钮必须消失。
+    await lyricRow.getByRole('button', { name: '歌词样式 +' }).click();
+    await page.waitForTimeout(200);
+    expect(await readVisualizerMode(page)).toBe('cadenza');
+    await expect(segmentationButton).toBeHidden();
+
+    // 回到 classic 再出现，确认它跟着模式走而不是一次性渲染。
+    await lyricRow.getByRole('button', { name: '歌词样式 −' }).click();
+    await page.waitForTimeout(200);
+    await expect(segmentationButton).toBeVisible();
+
+    // 点它打开命令面板里那条命令的 surface，而不是另开一个弹窗。
+    await segmentationButton.click();
+    await expect(page.getByTestId('command-palette-panel')).toBeVisible();
+    await expect(page.getByTestId('command-palette-panel').getByText('当前没有可分词的歌词')).toBeVisible();
+});
+
 test('lifts the open right panel with the configured bottom bar baseline', async ({ page }) => {
     const bottomBarOffset = 152;
     await openPlayerPage(page, bottomBarOffset);

@@ -602,7 +602,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                         type="text"
                                         value={electronSettings.OPENAI_API_MODEL || ''}
                                         onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_MODEL: e.target.value })}
-                                        placeholder="gpt-4o / gpt-4.1-mini / deepseek-v4-flash"
+                                        placeholder="gpt-5.6-luna / gpt-4.1-mini / deepseek-v4-flash"
                                         className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
                                         style={{ color: 'var(--text-primary)' }}
                                     />
