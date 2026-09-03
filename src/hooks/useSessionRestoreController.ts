@@ -32,6 +32,11 @@ type UseSessionRestoreControllerParams = {
     loadLocalSongs: () => Promise<void>;
     loadLocalPlaylists: () => Promise<void>;
     canRestoreSession?: boolean;
+    /**
+     * The autoplay intent the audio bridge spends when a source lands. Restore normally leaves it
+     * alone so the session comes back paused; the lab switch below is the only thing that arms it.
+     */
+    shouldAutoPlayRef: MutableRefObject<boolean>;
 };
 
 // Restores the main playback session without pushing more boot logic into App.tsx.
@@ -46,6 +51,7 @@ export function useSessionRestoreController({
     loadLocalSongs,
     loadLocalPlaylists,
     canRestoreSession = true,
+    shouldAutoPlayRef,
 }: UseSessionRestoreControllerParams) {
     const audioQuality = useAudioSettingsStore(state => state.audioQuality);
 
@@ -128,6 +134,16 @@ export function useSessionRestoreController({
                 setCurrentSong(lastSong);
                 setPlayQueue(lastQueue && lastQueue.length > 0 ? lastQueue : [lastSong]);
 
+                // Read at restore time rather than subscribed: this effect runs once, and the
+                // switch only ever has to answer for this one launch.
+                const autoPlayOnLaunch = useAudioSettingsStore.getState().autoPlayOnLaunch;
+                if (autoPlayOnLaunch) {
+                    // Arm before the source lands. The bridge's autoplay effect fires on the commit
+                    // that gives the deck its src, and it spends this flag there; setting it after
+                    // would miss that run and leave the deck buffered in silence.
+                    shouldAutoPlayRef.current = true;
+                }
+
                 try {
                     await restorePlaybackSourceForSong(lastSong, {
                         audioQuality,
@@ -140,6 +156,9 @@ export function useSessionRestoreController({
                         queue: lastQueue || [lastSong],
                     });
                 } catch (error) {
+                    // No source ever landed, so the intent was never spent. Left standing it would
+                    // fire on whatever the listener plays next, which they did not ask for.
+                    shouldAutoPlayRef.current = false;
                     console.warn('Failed to restore audio/lyrics for last session', error);
                 }
 

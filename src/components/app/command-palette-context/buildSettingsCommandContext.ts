@@ -1,6 +1,7 @@
 import type { CommandPaletteContext } from '../../command-palette/types';
 import type { LyricStaffPolicy } from '../../../utils/lyrics/staffCreditsPolicy';
 import type { ThemeGenerationSource } from '../../../services/themePreferences';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
@@ -41,6 +42,7 @@ export const buildSettingsCommandContext = (
     const typography = useTypographySettingsStore.getState();
     const chrome = usePlayerChromeSettingsStore.getState();
     const desktop = useDesktopSettingsStore.getState();
+    const audio = useAudioSettingsStore.getState();
     const automix = useAutomixSettingsStore.getState();
     const sleepTimer = useSleepTimerStore.getState();
     const modal = useSettingsModalStore.getState();
@@ -70,6 +72,9 @@ export const buildSettingsCommandContext = (
         ),
         toggleAlwaysShowMainWindowTitlebar: () => chrome.handleToggleAlwaysShowMainWindowTitlebar(
             !usePlayerChromeSettingsStore.getState().alwaysShowMainWindowTitlebar,
+        ),
+        toggleAutoPlayOnLaunch: () => audio.handleToggleAutoPlayOnLaunch(
+            !useAudioSettingsStore.getState().autoPlayOnLaunch,
         ),
         voiceInputPauseSupported: deps.voiceInputPauseSupported,
         modSystemEnabled: desktop.modSystemEnabled,

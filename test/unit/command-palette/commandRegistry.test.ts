@@ -88,6 +88,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleSubtitleOverlayBackground: vi.fn(),
             toggleAlwaysShowPlayerBackButton: vi.fn(),
             toggleAlwaysShowTrackSwitchButtons: vi.fn(),
+            toggleAutoPlayOnLaunch: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
             voiceInputPauseSupported: false,
             modSystemEnabled: false,

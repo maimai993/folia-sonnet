@@ -958,6 +958,7 @@ export default function App() {
         loadLocalSongs,
         loadLocalPlaylists,
         canRestoreSession: windowPlaybackHandoffRestoreStatus === 'none',
+        shouldAutoPlayRef: shouldAutoPlay,
     });
 
     const localLibraryCatalog = useLocalLibraryCatalog(localSongs);

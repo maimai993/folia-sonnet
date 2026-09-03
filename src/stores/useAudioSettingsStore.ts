@@ -24,6 +24,9 @@ export const LEGACY_ENABLE_MEDIA_CACHE_KEY = 'enable_media_cache';
 
 export const MEDIA_CACHE_LIMIT_GB_KEY = 'folia_media_cache_limit_gb';
 
+/** Lab switch: start the restored last session playing instead of waiting for a press. */
+export const AUTO_PLAY_ON_LAUNCH_KEY = 'folia_auto_play_on_launch';
+
 /** Gigabytes of cached audio to keep. Zero is the listener asking for no ceiling at all. */
 export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 
@@ -125,6 +128,8 @@ export type AudioSettingsState = {
     /** Gigabytes of cached audio to keep before the oldest is dropped. Zero means no ceiling. */
     mediaCacheLimitGb: number;
     queueAddBehavior: QueueAddBehavior;
+    /** Whether entering the app starts the restored session by itself. Off unless asked for. */
+    autoPlayOnLaunch: boolean;
     audioOutputDeviceId: string;
     audioEqualizerSettings: AudioEqualizerSettings;
     isAudioEqualizerOpen: boolean;
@@ -135,6 +140,7 @@ export type AudioSettingsState = {
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetMediaCacheLimitGb: (gigabytes: number) => void;
     handleSetQueueAddBehavior: (behavior: QueueAddBehavior) => void;
+    handleToggleAutoPlayOnLaunch: (enable: boolean) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     handleSetAudioEqualizerSettings: (settings: AudioEqualizerSettings) => void;
     handleApplyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
@@ -150,6 +156,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     enableMediaCache: readStoredEnableMediaCache(),
     mediaCacheLimitGb: readStoredMediaCacheLimitGb(),
     queueAddBehavior: readStoredQueueAddBehavior(),
+    autoPlayOnLaunch: getStoredBoolean(AUTO_PLAY_ON_LAUNCH_KEY, false),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: readStoredAudioEqualizerSettings(),
     isAudioEqualizerOpen: false,
@@ -182,6 +189,10 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             type: 'info',
             text: i18n.t('notifications.' + (behavior === 'next' ? 'queueInsertNext' : 'queueAppend')),
         });
+    },
+    handleToggleAutoPlayOnLaunch: (enable) => {
+        setStoredBoolean(AUTO_PLAY_ON_LAUNCH_KEY, enable);
+        set({ autoPlayOnLaunch: enable });
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });
@@ -256,6 +267,7 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     enableMediaCache: state.enableMediaCache,
     mediaCacheLimitGb: state.mediaCacheLimitGb,
     queueAddBehavior: state.queueAddBehavior,
+    autoPlayOnLaunch: state.autoPlayOnLaunch,
     audioOutputDeviceId: state.audioOutputDeviceId,
     audioEqualizerSettings: state.audioEqualizerSettings,
     isAudioEqualizerOpen: state.isAudioEqualizerOpen,
@@ -266,6 +278,7 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
     handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,
+    handleToggleAutoPlayOnLaunch: state.handleToggleAutoPlayOnLaunch,
     handleSetAudioOutputDeviceId: state.handleSetAudioOutputDeviceId,
     handleSetAudioEqualizerSettings: state.handleSetAudioEqualizerSettings,
     handleApplyAudioSoundPreset: state.handleApplyAudioSoundPreset,
