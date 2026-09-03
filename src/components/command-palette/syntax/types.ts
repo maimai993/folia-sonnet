@@ -5,6 +5,12 @@
 export type SyntaxFlagSpec = {
     name: string;
     aliases?: string[];
+    /**
+     * What the flag does, shown when the user types `--`. A flag with no description still
+     * completes; it just lists its name alone.
+     */
+    descriptionKey?: string;
+    descriptionFallback?: string;
 };
 
 export type SyntaxFacetSpec = {

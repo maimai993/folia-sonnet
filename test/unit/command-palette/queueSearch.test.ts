@@ -50,12 +50,17 @@ describe('queue search evaluation', () => {
         expect(result.matches.map(match => match.entry.song)).toEqual([sameArtist]);
     });
 
-    it('offers batch actions but forbids an unfiltered batch target', () => {
-        const draft = evaluateQueueSearch(buildQueueSearchIndex(queue), current, '--');
+    it('forbids an unfiltered batch target', () => {
         const action = evaluateQueueSearch(buildQueueSearchIndex(queue), current, '--remove');
 
-        expect(draft.suggestions.map(suggestion => suggestion.action)).toEqual(['remove', 'next', 'end']);
         expect(action.hasMeaningfulFilter).toBe(false);
         expect(action.eligibleTargetIndices).toEqual([1, 2, 3]);
+    });
+
+    it('leaves flag completions to the palette shell, offering only facets here', () => {
+        // CommandPaletteSyntaxHints builds these from the spec for every command with a `syntax`,
+        // so building them again here would show each flag twice.
+        const draft = evaluateQueueSearch(buildQueueSearchIndex(queue), current, '--');
+        expect(draft.suggestions).toEqual([]);
     });
 });

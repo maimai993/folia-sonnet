@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
@@ -6,6 +6,9 @@ import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../types';
 import type { CommandPaletteContext, CommandPaletteMatch, CommandPaletteCommand } from './types';
 import type { CommandPaletteSurface, CommandSurfaceRenderArgs } from './surfaces/types';
+import CommandPaletteSyntaxHints from './CommandPaletteSyntaxHints';
+import { parseCommandQuery } from './syntax/parse';
+import { buildFlagSuggestions, type SyntaxSuggestion } from './syntax/suggest';
 import { getCommandDescription, getCommandTitle } from './commandText';
 import { getCommandPrimaryTerm } from './search/commandSearchIndex';
 import { isTextEntryTarget } from './useCommandPalette';
@@ -124,6 +127,24 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         close: onClose,
     }), [activeIndex, context, isDaylight, isExecuting, matches, onActiveIndexChange, onClose, onExecuteMatch, onExecutePinnedCommand, onQueryCommit, query, theme]);
     const surfaceBody = surface ? resolveSurfaceComponent(surface) : null;
+
+    // Generic `--` completions for any command that declares flags. Built from the live query, not
+    // the debounced one: a completion list that lags the caret by 120ms feels broken.
+    const syntaxSuggestions = useMemo<SyntaxSuggestion[]>(() => (
+        activeCommand?.syntax
+            ? buildFlagSuggestions(activeCommand.syntax, parseCommandQuery(activeCommand.syntax, query))
+            : []
+    ), [activeCommand, query]);
+    const [syntaxIndex, setSyntaxIndex] = useState(0);
+    // The list changes as the draft is typed, so the highlight has to come back into range.
+    useEffect(() => {
+        setSyntaxIndex(index => (index < syntaxSuggestions.length ? index : 0));
+    }, [syntaxSuggestions]);
+
+    const acceptSyntaxSuggestion = useCallback((suggestion: SyntaxSuggestion) => {
+        onQueryCommit(suggestion.replacement);
+        window.requestAnimationFrame(() => inputRef.current?.focus());
+    }, [onQueryCommit]);
     // An inline surface draws itself where the control it replaces used to sit, so it needs a host
     // element from the surface that registered. Without one there is nowhere to put it, and the
     // overlay is the honest fallback rather than a box floating at a guessed offset.
@@ -267,6 +288,25 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                 return;
             }
 
+            // The `--` completion list owns the keyboard while it is up, ahead of the surface. It
+            // only exists for a half-typed flag, which is a moment the surface has nothing to do
+            // with, and Enter there has to complete the flag rather than run a spent command.
+            if (syntaxSuggestions.length > 0) {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const step = event.key === 'ArrowDown' ? 1 : -1;
+                    setSyntaxIndex(index => (
+                        (index + step + syntaxSuggestions.length) % syntaxSuggestions.length
+                    ));
+                    return;
+                }
+                if (event.key === 'Enter' || event.key === 'Tab') {
+                    event.preventDefault();
+                    acceptSyntaxSuggestion(syntaxSuggestions[syntaxIndex] ?? syntaxSuggestions[0]);
+                    return;
+                }
+            }
+
             // Surfaces get first refusal on keys: a grid needs different arrow semantics than
             // the default one-per-step list, and only the surface knows its own layout.
             if (surface?.onKeyDown?.(event, surfaceArgs)) {
@@ -294,7 +334,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onActiveCommandChange, onActiveIndexChange, onClose, onExecuteActive, onQueryChange, query, surface, surfaceArgs]);
+    }, [acceptSyntaxSuggestion, activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onActiveCommandChange, onActiveIndexChange, onClose, onExecuteActive, onQueryChange, query, surface, surfaceArgs, syntaxIndex, syntaxSuggestions]);
 
     if (filterAnchor) {
         // Portalled into the host's own element, so the box keeps the position that host gave it
@@ -433,6 +473,15 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             className="h-[min(496px,50vh)] overflow-y-auto p-2"
                             onTouchStart={() => inputRef.current?.blur()}
                         >
+                            <CommandPaletteSyntaxHints
+                                suggestions={syntaxSuggestions}
+                                activeIndex={syntaxIndex}
+                                onAccept={acceptSyntaxSuggestion}
+                                onHover={setSyntaxIndex}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                                t={t}
+                            />
                             {isShowingAllCommands ? (
                                 <CommandPaletteAllCommandsList
                                     commands={availableCommands}

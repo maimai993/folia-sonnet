@@ -318,6 +318,23 @@ export default {
     "groupPlayback": "Pemutaran",
     "groupVisualizer": "Visualizer",
     "groupOther": "Perintah",
+    "syntax": {
+      "hint": "Opsi",
+      "queue": {
+        "remove": "Hapus semua lagu yang cocok dari antrean",
+        "next": "Pindahkan semua lagu yang cocok ke putar berikutnya",
+        "end": "Pindahkan semua lagu yang cocok ke akhir antrean"
+      },
+      "sleepTimer": {
+        "on": "Mulai timer tidur",
+        "off": "Batalkan timer tidur"
+      },
+      "lyricSegmentation": {
+        "ai": "Segmentasi lagu ini dengan model yang dikonfigurasi",
+        "copySeg": "Salin segmentasi saat ini",
+        "copyPrompt": "Salin prompt dan lirik untuk dijalankan sendiri"
+      }
+    },
     "commands": {
       "search-current": { "title": "Cari lagu", "description": "Cari lagu di sumber saat ini" },
       "search-local": { "title": "Cari lagu lokal", "description": "Cari di perpustakaan lokal" },

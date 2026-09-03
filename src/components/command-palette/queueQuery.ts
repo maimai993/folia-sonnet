@@ -11,9 +11,9 @@ export type QueueFacetKind = 'artist' | 'album';
 
 export const QUEUE_SYNTAX_SPEC: CommandSyntaxSpec = {
     flags: [
-        { name: 'remove', aliases: ['rm', 'delete'] },
-        { name: 'next' },
-        { name: 'end' },
+        { name: 'remove', aliases: ['rm', 'delete'], descriptionKey: 'commandPalette.syntax.queue.remove', descriptionFallback: 'Remove every matching song from the queue' },
+        { name: 'next', descriptionKey: 'commandPalette.syntax.queue.next', descriptionFallback: 'Move every matching song to play next' },
+        { name: 'end', descriptionKey: 'commandPalette.syntax.queue.end', descriptionFallback: 'Move every matching song to the end of the queue' },
     ],
     facets: [{ name: 'artist' }, { name: 'album' }],
 };

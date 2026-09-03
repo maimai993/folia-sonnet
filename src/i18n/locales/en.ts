@@ -319,6 +319,23 @@ export default {
     "groupPlayback": "Playback",
     "groupVisualizer": "Visualizer",
     "groupOther": "Command",
+    "syntax": {
+      "hint": "Options",
+      "queue": {
+        "remove": "Remove every matching song from the queue",
+        "next": "Move every matching song to play next",
+        "end": "Move every matching song to the end of the queue"
+      },
+      "sleepTimer": {
+        "on": "Start the sleep timer",
+        "off": "Cancel the sleep timer"
+      },
+      "lyricSegmentation": {
+        "ai": "Segment this song with the configured model",
+        "copySeg": "Copy the current segmentation",
+        "copyPrompt": "Copy the prompt and lyrics to run elsewhere"
+      }
+    },
     "commands": {
       "search-current": { "title": "Search songs", "description": "Search songs in the current source" },
       "search-local": { "title": "Search local songs", "description": "Search local library" },

@@ -11,6 +11,10 @@ export type SyntaxSuggestion = {
     type: 'flag' | 'facet';
     replacement: string;
     flag?: string;
+    /** Alternate spellings that resolve to the same flag, so the hint can show them. */
+    aliases?: string[];
+    descriptionKey?: string;
+    descriptionFallback?: string;
     facetKind?: string;
     label?: string;
     count?: number;
@@ -46,11 +50,15 @@ export const buildFlagSuggestions = (
 
     const draft = normalize(parsed.flagDraft);
     return spec.flags
-        .filter(flag => flag.name.startsWith(draft))
+        // An alias the user is part-way through typing has to match too, or `--rm` offers nothing.
+        .filter(flag => flag.name.startsWith(draft) || (flag.aliases ?? []).some(alias => alias.startsWith(draft)))
         .map(flag => ({
             id: `flag:${flag.name}`,
             type: 'flag' as const,
             flag: flag.name,
+            aliases: flag.aliases,
+            descriptionKey: flag.descriptionKey,
+            descriptionFallback: flag.descriptionFallback,
             replacement: formatCommandQuery({
                 flag: flag.name,
                 facetKind: parsed.facetKind,

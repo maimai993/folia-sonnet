@@ -250,6 +250,38 @@ test('visualizer picker walks the mode list and marks the live mode', async ({ p
     await expect.poll(() => readStore(page, 'visualizerMode')).toBe(modes[targetIndex]);
 });
 
+test('typing -- documents a command\'s flags, for any command that declares them', async ({ page }) => {
+    await openPlayerPage(page);
+    await pressUntilPaletteOpens(page, 's');
+
+    // The sleep timer, deliberately: it has always had flags and never had a way to discover them —
+    // it only rejected an unknown one with an error. Nothing about it is segmentation-specific.
+    // Click rather than Enter: Enter runs whatever sits at activeIndex, which is not necessarily
+    // the row just asserted to exist.
+    await paletteInput(page).fill('睡眠定时');
+    const sleepRow = palette(page).getByRole('button').filter({ hasText: '睡眠定时' }).first();
+    await expect(sleepRow).toBeVisible();
+    await sleepRow.click();
+    await paletteInput(page).fill('--');
+
+    const hints = palette(page).getByTestId('command-palette-syntax-hints');
+    await expect(hints).toBeVisible();
+    await expect(hints.locator('[data-syntax-flag]')).toHaveCount(2);
+    await expect(hints.getByText('--on', { exact: true })).toBeVisible();
+    await expect(hints.getByText('开启睡眠定时器')).toBeVisible();
+    // Aliases are listed too, so `--enable` is discoverable without guessing.
+    await expect(hints.getByText('--enable', { exact: true })).toBeVisible();
+
+    // Narrowing the draft narrows the list.
+    await paletteInput(page).fill('--of');
+    await expect(hints.locator('[data-syntax-flag]')).toHaveCount(1);
+
+    // Enter completes the highlighted flag rather than running a half-typed command.
+    await page.keyboard.press('Enter');
+    await expect(paletteInput(page)).toHaveValue('--off');
+    await expect(hints).toBeHidden();
+});
+
 test('execute mode runs a command from a single key', async ({ page }) => {
     await openPlayerPage(page);
     await openExecuteMode(page);

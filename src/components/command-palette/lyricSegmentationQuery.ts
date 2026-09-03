@@ -10,9 +10,9 @@ import type { CommandSyntaxSpec } from './syntax/types';
 
 export const LYRIC_SEGMENTATION_SYNTAX_SPEC: CommandSyntaxSpec = {
     flags: [
-        { name: 'ai', aliases: ['segment'] },
-        { name: 'copy-seg', aliases: ['copy-segmentation', 'copy-current'] },
-        { name: 'copy-prompt', aliases: ['prompt'] },
+        { name: 'ai', aliases: ['segment'], descriptionKey: 'commandPalette.syntax.lyricSegmentation.ai', descriptionFallback: 'Segment this song with the configured model' },
+        { name: 'copy-seg', aliases: ['copy-segmentation', 'copy-current'], descriptionKey: 'commandPalette.syntax.lyricSegmentation.copySeg', descriptionFallback: 'Copy the current segmentation' },
+        { name: 'copy-prompt', aliases: ['prompt'], descriptionKey: 'commandPalette.syntax.lyricSegmentation.copyPrompt', descriptionFallback: 'Copy the prompt and lyrics to run elsewhere' },
     ],
     facets: [],
 };

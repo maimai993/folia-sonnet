@@ -319,6 +319,23 @@ export default {
     "groupPlayback": "播放",
     "groupVisualizer": "可视化",
     "groupOther": "命令",
+    "syntax": {
+      "hint": "可用选项",
+      "queue": {
+        "remove": "把所有匹配的歌曲移出队列",
+        "next": "把所有匹配的歌曲移到下一首播放",
+        "end": "把所有匹配的歌曲移到队尾"
+      },
+      "sleepTimer": {
+        "on": "开启睡眠定时器",
+        "off": "取消睡眠定时器"
+      },
+      "lyricSegmentation": {
+        "ai": "用已配置的模型对这首歌分词",
+        "copySeg": "复制当前分词结果",
+        "copyPrompt": "复制提示词和歌词，自己去模型网站跑"
+      }
+    },
     "commands": {
       "search-current": { "title": "搜索歌曲", "description": "在当前来源搜索歌曲" },
       "search-local": { "title": "搜索本地歌曲", "description": "搜索本地音乐库" },

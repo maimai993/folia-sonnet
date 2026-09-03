@@ -1,4 +1,5 @@
 import { parseCommandQuery } from './syntax/parse';
+import { buildFlagSuggestions } from './syntax/suggest';
 import type { CommandSyntaxSpec } from './syntax/types';
 
 // src/components/command-palette/sleepTimerQuery.ts
@@ -8,13 +9,14 @@ export const SLEEP_TIMER_MAX_TOTAL_MINUTES = 999 * 60 + 59;
 
 export const SLEEP_TIMER_SYNTAX_SPEC: CommandSyntaxSpec = {
     flags: [
-        { name: 'on', aliases: ['enable'] },
-        { name: 'off', aliases: ['disable'] },
+        { name: 'on', aliases: ['enable'], descriptionKey: 'commandPalette.syntax.sleepTimer.on', descriptionFallback: 'Start the sleep timer' },
+        { name: 'off', aliases: ['disable'], descriptionKey: 'commandPalette.syntax.sleepTimer.off', descriptionFallback: 'Cancel the sleep timer' },
     ],
     facets: [],
 };
 
 export type SleepTimerQueryErrorCode =
+    | 'incomplete-option'
     | 'unknown-option'
     | 'conflicting-options'
     | 'invalid-minutes'
@@ -43,6 +45,12 @@ export const parseSleepTimerQuery = (
 ): SleepTimerQueryResult => {
     const parsed = parseCommandQuery(SLEEP_TIMER_SYNTAX_SPEC, input);
     if (parsed.flagDraft !== null) {
+        // A draft that still matches a flag is not an unknown option, it is a half-typed one — and
+        // the palette is showing its completions right now. Calling it an error under a list that
+        // offers it reads as a contradiction.
+        if (buildFlagSuggestions(SLEEP_TIMER_SYNTAX_SPEC, parsed).length > 0) {
+            return { ok: false, code: 'incomplete-option', token: parsed.flagDraft };
+        }
         return { ok: false, code: 'unknown-option', token: parsed.flagDraft };
     }
 
@@ -100,7 +108,14 @@ export const describeSleepTimerQuery = (
         };
     }
 
+    // A half-typed flag is not a mistake to report: the palette is listing its completions right
+    // above. Say nothing rather than contradict them.
+    if (result.code === 'incomplete-option') {
+        return { isError: false, text: '' };
+    }
+
     const messages: Record<SleepTimerQueryErrorCode, [string, string]> = {
+        'incomplete-option': ['commandPalette.sleepTimerUnknownOption', 'Unknown option --{{option}}'],
         'unknown-option': ['commandPalette.sleepTimerUnknownOption', 'Unknown option --{{option}}'],
         'conflicting-options': ['commandPalette.sleepTimerConflictingOptions', '--on and --off cannot be used together'],
         'invalid-minutes': ['commandPalette.sleepTimerInvalidMinutes', 'Minutes must be one positive integer'],

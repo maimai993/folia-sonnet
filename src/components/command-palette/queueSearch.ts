@@ -152,7 +152,9 @@ export const evaluateQueueSearch = (
     return {
         parsed,
         matches,
-        suggestions: [...buildFlagSuggestions(QUEUE_SYNTAX_SPEC, parsedCommandQuery).map(toQueueSuggestion), ...facetSuggestions],
+        // Only facets. Flag completions are the palette shell's job now (CommandPaletteSyntaxHints),
+        // so every command with a `syntax` gets them rather than just this one.
+        suggestions: facetSuggestions,
         eligibleTargetIndices,
         skippedCurrentCount: targetIndices.length - eligibleTargetIndices.length,
         hasMeaningfulFilter: Boolean(normalizedText || parsed.facetDraft !== null),
