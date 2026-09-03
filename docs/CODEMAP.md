@@ -9,16 +9,16 @@
 
 | 区域 | 文件数 |
 | --- | --- |
-| components | 510 |
-| test/dev | 390 |
+| components | 515 |
+| test/dev | 393 |
 | services | 119 |
-| utils | 116 |
-| hooks | 61 |
+| utils | 118 |
+| hooks | 64 |
 | backend/electron | 54 |
-| stores | 29 |
+| stores | 30 |
 | 其他 | 19 |
+| types | 14 |
 | src (其他) | 13 |
-| types | 13 |
 | i18n | 5 |
 | workers | 3 |
 
@@ -28,16 +28,16 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 493 | `src/types.ts` |
+| 497 | `src/types.ts` |
 | 61 | `src/types/onlineMusic.ts` |
-| 59 | `src/utils/appPlaybackGuards.ts` |
+| 60 | `src/utils/appPlaybackGuards.ts` |
 | 55 | `src/components/command-palette/types.ts` |
 | 46 | `src/components/visualizer/colorMix.ts` |
 | 43 | `src/stores/useStatusMessageStore.ts` |
 | 41 | `src/services/db.ts` |
 | 36 | `src/components/visualizer/definition.ts` |
 | 36 | `src/services/onlineMusic/songMetadata.ts` |
-| 31 | `src/stores/usePlaybackStore.ts` |
+| 32 | `src/stores/usePlaybackStore.ts` |
 | 30 | `src/utils/lyrics/renderHints.ts` |
 | 29 | `src/utils/lyrics/parserCore.ts` |
 | 28 | `src/components/visualizer/tempera/types.ts` |
@@ -49,7 +49,7 @@
 这些地方用 `import.meta.glob` 自动发现成员，**清单随目录变化，不要手写**。
 以下是当前的完整展开：
 
-### `dev/probes/registry.ts` (16)
+### `dev/probes/registry.ts` (17)
 
 - `dev/probes/audioEffectGrid.probe.tsx`
 - `dev/probes/automixModelReminder.probe.tsx`
@@ -63,6 +63,7 @@
 - `dev/probes/monetPortraitImage.probe.tsx`
 - `dev/probes/nowPlayingToastTransitionBorder.probe.tsx`
 - `dev/probes/playbackLyricsSettings.probe.tsx`
+- `dev/probes/playerBottomBar.probe.tsx`
 - `dev/probes/settingsNavigation.probe.tsx`
 - `dev/probes/themePark.probe.tsx`
 - `dev/probes/trackTitleNavigator.probe.tsx`
