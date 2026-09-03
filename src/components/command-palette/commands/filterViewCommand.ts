@@ -13,7 +13,7 @@ export const filterViewCommand: CommandPaletteCommand = {
     title: 'Filter this view',
     description: 'Narrow the cards on screen by name',
     icon: Filter,
-    keywords: ['filter', 'filter view', 'narrow', '筛选', '过滤', '筛选视图', 'shaixuan', 'guolv', 'sx', 'gl'],
+    keywords: ['filter', 'filter view', 'narrow', '筛选', '过滤', '筛选视图'],
     // Ctrl/Cmd+F was already how GridMap opened its box; it keeps working, now registry-wide.
     openHotkey: { key: 'f', ctrl: true },
     surface: filterViewSurface,

@@ -18,7 +18,7 @@ export const fmModeCommand: CommandPaletteCommand = defineCommand({
     description: 'Switch the Personal FM mode or scene',
     // No keyword may be a space-separated prefix of another one the user is likely to type in
     // full: the matcher would read the remainder as command input, and this command takes none.
-    keywords: ['personal fm mode', 'fm mode', 'fm scene', 'radio mode', '私人 fm 模式', '私人fm模式', 'fm 模式', 'fm模式', '私人电台', '电台模式', '场景电台', 'sirenfmmoshi', 'sirenfm', 'sirendiantai', 'fmmoshi', 'diantaimoshi', 'changjingdiantai', 'srfmms', 'srfm', 'srdt', 'fmms', 'dtms'],
+    keywords: ['fm mode', 'fm scene', 'radio mode', '私人 fm 模式', '私人fm模式', 'fm 模式', 'fm模式', '私人电台', '电台模式', '场景电台', 'sirenfmmoshi', 'sirenfm', 'fmmoshi', 'srfmms', 'srfm', 'fmms'],
     icon: Radio,
     surface: fmModeSurface,
     requiresInput: true,

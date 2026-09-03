@@ -228,6 +228,7 @@
     "electron": "^43.3.0",
     "electron-builder": "^26.15.3",
     "fake-indexeddb": "^6.2.5",
+    "pinyin-pro": "3.29.3",
     "postcss": "^8.5.19",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",

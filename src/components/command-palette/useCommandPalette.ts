@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAvailableCommandPaletteCommands, getCommandPaletteMatches, isCommandPaletteCommandEnabled, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { getAvailableCommandPaletteCommands, isCommandPaletteCommandEnabled, rankCommands, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { OPEN_HOTKEY_INDEX, openHotkeyStroke } from './commands';
+import { findCommandsByTrigger } from './search/commandSearchIndex';
+import { useTranslation } from 'react-i18next';
 import { isRecordableRecentCommand, readRecentCommandIds, recordRecentCommandId, resolveRecentCommandToRecord } from './recentCommands';
+import { readCommandFrequencyState, recordCommandUse, type CommandFrequencyState } from './commandFrequency';
 import type { CommandPaletteContext, CommandPaletteCommand, CommandPaletteMatch } from './types';
 import { resolvePinnedCommandSlots } from './pinnedCommandPreferences';
 import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
@@ -42,19 +46,29 @@ export const useCommandPalette = ({
     // player, and nothing does on the home shelf either, so bare `s` opens the palette on both.
     // Inside a grid the filter owns them, or one press would fire two things at once.
     const ownsBareKeys = !context.scope.filter;
-    const filterCommand = context.scope.filter
-        ? COMMAND_PALETTE_COMMANDS.find(command => command.id === FILTER_VIEW_COMMAND_ID) ?? null
-        : null;
+
+    // The search index carries the active locale's title and description alongside English
+    // and the generated pinyin, so it is bucketed per language. Only the language tag is read
+    // here — displayed text still goes through getCommandTitle / getCommandDescription.
+    const { i18n } = useTranslation();
+    const locale = i18n.language;
+    // Memoized because this hook lives in App: without it the registry was scanned on every
+    // single App render, not just when a filter appeared or went away.
+    const filterCommand = useMemo(() => (
+        context.scope.filter
+            ? COMMAND_PALETTE_COMMANDS.find(command => command.id === FILTER_VIEW_COMMAND_ID) ?? null
+            : null
+    ), [context.scope.filter]);
     // Opt-in: `s` normally goes to the filter like any other letter, and the listener who wants it
     // back for the command list has to say so.
     const paletteHotkeyOnFilteringSurface = useInteractionSettingsStore(state => state.gridCommandPaletteHotkey);
     const customShortcutLetter = useInteractionSettingsStore(state => state.customShortcutLetter);
     const customShortcutCommandId = useInteractionSettingsStore(state => state.customShortcutCommandId);
-    const customShortcutCommand = resolveCustomShortcutCommand(
+    const customShortcutCommand = useMemo(() => resolveCustomShortcutCommand(
         customShortcutLetter,
         customShortcutCommandId,
         COMMAND_PALETTE_COMMANDS,
-    );
+    ), [customShortcutLetter, customShortcutCommandId]);
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [matchQuery, setMatchQuery] = useState('');
@@ -63,6 +77,8 @@ export const useCommandPalette = ({
     const [activeCommand, setActiveCommand] = useState<CommandPaletteCommand | null>(null);
     const [isExecuting, setIsExecuting] = useState(false);
     const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => readRecentCommandIds());
+    // 使用频次，独立于上面那份 MRU 列表。只在命令执行成功后写一次，读取只发生在挂载时。
+    const [frequencyState, setFrequencyState] = useState<CommandFrequencyState>(() => readCommandFrequencyState());
     const close = useCallback(() => {
         setIsOpen(false);
         setQuery('');
@@ -73,7 +89,28 @@ export const useCommandPalette = ({
         setIsExecuting(false);
     }, []);
     const pinnedCommandIds = useSettingsModalStore(state => state.pinnedCommandIds);
-    const availableCommands = useMemo(() => getAvailableCommandPaletteCommands(context), [context]);
+    /**
+     * The available set, with a stable identity.
+     *
+     * The filter itself is re-run on every context change and on every open — the latter because
+     * some `isAvailable` predicates are getters whose answer moves without anything re-rendering
+     * (a finished model download, say), and the registry's contract is that opening the palette
+     * asks them again. But the *result* is usually identical across those runs, and returning a
+     * fresh array each time was enough to re-rank all 125 commands on every playback tick.
+     *
+     * So: recompute eagerly, hand back the previous array when nothing actually changed. That is
+     * what lets `defaultMatches` below leave `context` out of its dependencies.
+     */
+    const availableCommandsRef = useRef<CommandPaletteCommand[]>([]);
+    const availableCommands = useMemo(() => {
+        const next = getAvailableCommandPaletteCommands(context);
+        const previous = availableCommandsRef.current;
+        if (next.length === previous.length && next.every((command, index) => command === previous[index])) {
+            return previous;
+        }
+        availableCommandsRef.current = next;
+        return next;
+    }, [context, isOpen]);
     const pinnedCommands = useMemo(
         () => resolvePinnedCommandSlots(pinnedCommandIds, availableCommands),
         [availableCommands, pinnedCommandIds],
@@ -87,34 +124,53 @@ export const useCommandPalette = ({
         setActiveIndex(0);
     }, []);
 
-    const matches = useMemo(() => {
-        const activeInput = surface?.useLiveQuery ? query : matchQuery;
-        let list: CommandPaletteMatch[];
-        if (!activeCommand) {
-            list = getCommandPaletteMatches(matchQuery, context, recentCommandIds);
-        } else if (surface?.buildMatches) {
-            list = surface.buildMatches({ context, query });
-        } else {
-            const inputCommands = COMMAND_PALETTE_COMMANDS.filter(cmd => cmd.requiresInput);
-            const activeMatch: CommandPaletteMatch = {
-                command: activeCommand,
-                score: 100,
-                input: activeInput,
-            };
-            const otherMatches: CommandPaletteMatch[] = inputCommands
-                .filter(cmd => cmd.id !== activeCommand.id)
-                .filter(cmd => {
-                    if (cmd.id === 'search-current') return true;
-                    return false;
-                })
-                .map((cmd, idx) => ({
-                    command: cmd,
-                    score: 90 - idx,
-                    input: activeInput,
-                }));
-            list = [activeMatch, ...otherMatches];
-        }
+    // The three ways a match list gets produced, split apart so that only the one that genuinely
+    // needs the live context depends on it.
+    //
+    // They used to be one memo with `context` in its dependency array, which meant a volume tick
+    // or a track change re-ranked all 125 commands even though the query had not moved. Two of
+    // the three branches never read `context` at all; the third (a surface building its own list)
+    // does, and keeps it. `availableCommands` is identity-stable across ticks that do not change
+    // availability, which is what makes dropping `context` here sound rather than stale.
+    const defaultMatches = useMemo(() => (
+        activeCommand
+            ? null
+            : rankCommands(matchQuery, availableCommands, recentCommandIds, locale, frequencyState.counts)
+    ), [activeCommand, matchQuery, availableCommands, recentCommandIds, locale, frequencyState]);
 
+    const surfaceMatches = useMemo(() => (
+        activeCommand && surface?.buildMatches ? surface.buildMatches({ context, query }) : null
+    ), [activeCommand, surface, context, query]);
+
+    const inputModeMatches = useMemo(() => {
+        if (!activeCommand || surface?.buildMatches) {
+            return null;
+        }
+        const activeInput = surface?.useLiveQuery ? query : matchQuery;
+        const activeMatch: CommandPaletteMatch = {
+            command: activeCommand,
+            score: 100,
+            input: activeInput,
+        };
+        const otherMatches: CommandPaletteMatch[] = COMMAND_PALETTE_COMMANDS
+            .filter(cmd => cmd.requiresInput)
+            .filter(cmd => cmd.id !== activeCommand.id)
+            .filter(cmd => {
+                if (cmd.id === 'search-current') return true;
+                return false;
+            })
+            .map((cmd, idx) => ({
+                command: cmd,
+                score: 90 - idx,
+                input: activeInput,
+            }));
+        return [activeMatch, ...otherMatches];
+    }, [activeCommand, surface, query, matchQuery]);
+
+    // The preview pass is the only part that has to see the live context, and it is bounded by
+    // MAX_COMMAND_MATCHES — so a context tick now costs a map over at most ten entries.
+    const matches = useMemo(() => {
+        const list = defaultMatches ?? surfaceMatches ?? inputModeMatches ?? [];
         return list.map(match => {
             let previewText: string | null = null;
             if (match.command.getPreview && (!match.command.requiresInput || match.input)) {
@@ -125,7 +181,7 @@ export const useCommandPalette = ({
                 previewText,
             };
         });
-    }, [activeCommand, matchQuery, query, context, recentCommandIds, surface]);
+    }, [defaultMatches, surfaceMatches, inputModeMatches, context]);
 
     const activePreview = useMemo(() => {
         const match = matches[activeIndex];
@@ -143,6 +199,7 @@ export const useCommandPalette = ({
     const recordRecentCommand = useCallback((command: CommandPaletteCommand) => {
         if (isRecordableRecentCommand(command, COMMAND_PALETTE_COMMANDS)) {
             setRecentCommandIds(currentCommandIds => recordRecentCommandId(command.id, currentCommandIds));
+            setFrequencyState(currentState => recordCommandUse(command.id, currentState));
         }
     }, []);
 
@@ -332,17 +389,18 @@ export const useCommandPalette = ({
         if (query.endsWith(' ')) {
             const trimmed = query.trim();
             if (trimmed) {
-                const matchedCmd = COMMAND_PALETTE_COMMANDS.find(cmd =>
-                    cmd.requiresInput &&
-                    cmd.keywords.some(kw => kw.toLowerCase() === trimmed.toLowerCase()) &&
-                    isCommandPaletteCommandEnabled(cmd, context)
-                );
+                // This effect is not behind the 120ms match debounce — it fires on every raw
+                // keystroke — so it must not scan the registry. Going through the search index
+                // means the terms that turn into a pill are exactly the terms the `input` tier
+                // matches on; the old keyword scan and the ranker could disagree.
+                const matchedCmd = findCommandsByTrigger(availableCommands, trimmed, locale)
+                    .find(cmd => cmd.requiresInput && isCommandPaletteCommandEnabled(cmd, context));
                 if (matchedCmd) {
                     activateInputCommand(matchedCmd);
                 }
             }
         }
-    }, [activateInputCommand, context, query, isComposing, isOpen, activeCommand]);
+    }, [activateInputCommand, availableCommands, context, locale, query, isComposing, isOpen, activeCommand]);
 
     useEffect(() => {
         if (!isOpen || isComposing) {
@@ -430,14 +488,20 @@ export const useCommandPalette = ({
             // Ctrl+P on Windows/Linux and Cmd+P on macOS. Availability is honoured here too, or a
             // hotkey would still reach a command the current state has withdrawn — the queue's
             // ctrl+p during Personal FM, say.
-            const hotkeyCommand = COMMAND_PALETTE_COMMANDS.find(command => (
-                command.openHotkey
-                && command.openHotkey.key.toLowerCase() === event.key.toLowerCase()
-                && Boolean(command.openHotkey.ctrl) === isPrimaryModifierPressed(event)
-                && Boolean(command.openHotkey.alt) === event.altKey
-                && !isSecondaryModifierPressed(event)
-                && isCommandPaletteCommandEnabled(command, context)
-            ));
+            //
+            // This handler is attached to `window`, so it saw every keystroke in the entire app
+            // and used to answer them by scanning all 125 commands and calling
+            // isCommandPaletteCommandEnabled on each. The declared strokes are fixed at module
+            // load; only availability is dynamic, so look the stroke up and check that one.
+            const stroke = openHotkeyStroke({
+                key: event.key,
+                ctrl: isPrimaryModifierPressed(event),
+                alt: event.altKey,
+            });
+            const strokeCommand = isSecondaryModifierPressed(event) ? undefined : OPEN_HOTKEY_INDEX.get(stroke);
+            const hotkeyCommand = strokeCommand && isCommandPaletteCommandEnabled(strokeCommand, context)
+                ? strokeCommand
+                : undefined;
             if (hotkeyCommand) {
                 const needsIdleFocus = !hotkeyCommand.openHotkey?.ctrl;
                 if (isBlocked || (needsIdleFocus && !ownsBareKeys) || (needsIdleFocus && isTextEntryTarget(event.target))) {

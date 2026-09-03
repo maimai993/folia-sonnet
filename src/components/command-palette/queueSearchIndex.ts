@@ -3,6 +3,7 @@ import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata
 import type { ProviderSongMetadata } from '../../types/onlineMusic';
 import { getPlaybackSongKey, getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
 import type { QueueFacetKind } from './queueQuery';
+import { normalizeSearchText } from './search/normalize';
 
 // src/components/command-palette/queueSearchIndex.ts
 // Precomputes normalized queue text and stable artist/album facets when the queue changes.
@@ -21,7 +22,11 @@ export type QueueSearchEntry = {
     facets: QueueFacet[];
 };
 
-export const normalizeQueueSearchText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+/**
+ * 队列检索与命令检索共用同一份规范化。两处曾各有一份一模一样的实现；一旦漂移，同一段输入在
+ * 两个列表里会给出不同结果，而且不会有任何报错。
+ */
+export const normalizeQueueSearchText = normalizeSearchText;
 
 const getSourceScope = (song: SongResult) => {
     const sourceRef = getPlaybackSourceRef(song);

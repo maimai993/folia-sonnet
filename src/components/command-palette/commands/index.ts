@@ -43,6 +43,35 @@ const assertUniqueOpenHotkeys = (commands: CommandPaletteCommand[]) => {
     return commands;
 };
 
+/**
+ * The stroke a keydown event has to produce to reach a command, spelled the way the global
+ * listener spells it. `ctrl` means the platform's primary modifier, so the caller resolves that
+ * before looking up.
+ *
+ * `assertUniqueOpenHotkeys` above builds its own key deliberately without `alt` — that is the
+ * collision rule, and it stays as strict as it is. This one is the *lookup* key and does include
+ * `alt`, because the listener matches on it.
+ */
+export const openHotkeyStroke = (stroke: { key: string; ctrl?: boolean; alt?: boolean }) => (
+    `${stroke.ctrl ? 'ctrl+' : ''}${stroke.alt ? 'alt+' : ''}${stroke.key.toLowerCase()}`
+);
+
+/**
+ * Replaces a `COMMAND_PALETTE_COMMANDS.find(...)` that ran on **every keystroke anywhere in the
+ * app** and called `isCommandPaletteCommandEnabled` once per command to do it. The set of declared
+ * hotkeys is fixed at module load, so the scan was pure waste; only the availability check has to
+ * stay dynamic, and now it runs once on the single candidate instead of 125 times.
+ */
+const buildOpenHotkeyIndex = (commands: CommandPaletteCommand[]) => {
+    const index = new Map<string, CommandPaletteCommand>();
+    commands.forEach(command => {
+        if (command.openHotkey) {
+            index.set(openHotkeyStroke(command.openHotkey), command);
+        }
+    });
+    return index;
+};
+
 export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecuteShortcutsArePrefixFree(assertUniqueOpenHotkeys(assertUniqueCommandIds([
     filterViewCommand,
     ...searchCommands,
@@ -53,6 +82,9 @@ export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecu
     ...modsCommands,
     ...visualizerCommands,
 ])));
+
+export const OPEN_HOTKEY_INDEX = buildOpenHotkeyIndex(ALL_COMMAND_PALETTE_COMMANDS);
+
 
 // What the palette shows before anything is typed, after recently used commands. Declared so
 // that inserting a command into a group file cannot silently change the opening screen.

@@ -7,8 +7,10 @@ import type { Theme } from '../../types';
 import type { CommandPaletteContext, CommandPaletteMatch, CommandPaletteCommand } from './types';
 import type { CommandPaletteSurface, CommandSurfaceRenderArgs } from './surfaces/types';
 import { getCommandDescription, getCommandTitle } from './commandText';
+import { getCommandPrimaryTerm } from './search/commandSearchIndex';
 import { isTextEntryTarget } from './useCommandPalette';
 import PinnedCommandRow from './PinnedCommandRow';
+import CommandPaletteAllCommandsList from './CommandPaletteAllCommandsList';
 import { setIsCommandFilterOpen } from '../../stores/useAppViewStore';
 import { gridSearchPanelMotion } from '../shared/gridSearchPanelMotion';
 
@@ -102,7 +104,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onQueryChange,
     onQueryCommit,
 }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [idlePlaceholderIndex, setIdlePlaceholderIndex] = useState(() => Math.floor(Math.random() * IDLE_PLACEHOLDER_COUNT));
     const [isShowingAllCommands, setIsShowingAllCommands] = useState(false);
@@ -170,6 +172,19 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             style={{ color: 'var(--text-primary)' }}
         />
     );
+
+    /**
+     * The short mono hint shown on a row, and the text a click on the all-commands list types
+     * back into the box.
+     *
+     * This used to be `command.keywords[0]`, which only worked while every command carried a
+     * hand-written English alias first in its array. Keywords are synonyms now — some commands
+     * have none, and the first one is not guaranteed to be Latin — so the search index resolves
+     * a primary term instead (first ASCII trigger, else the English title's first word, else id).
+     */
+    const primaryTermOf = useMemo(() => (
+        (command: CommandPaletteCommand) => getCommandPrimaryTerm(availableCommands, command, i18n.language)
+    ), [availableCommands, i18n.language]);
 
     const panelBg = isDaylight ? 'bg-white/70 text-zinc-950' : 'bg-zinc-950/70 text-white';
     const itemActiveBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
@@ -245,7 +260,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
             if (event.key === 'Backspace' && query === '' && activeCommand && !isTextEntryTarget(event.target)) {
                 event.preventDefault();
-                const firstKw = activeCommand.keywords[0] || '';
+                const firstKw = primaryTermOf(activeCommand);
                 onActiveCommandChange(null);
                 onQueryChange(firstKw);
                 onActiveIndexChange(0);
@@ -410,61 +425,30 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
                         {/* Removed activePreview top panel, it is now shown inline in the list items description */}
 
+                        {/* The palette doubles as a canvas for UI-bearing commands, so this box is the
+                            one fixed dimension every surface renders into. It must stay CSS-resolved:
+                            no measurement, no content-driven height. commandPaletteSizing.spec.ts guards it. */}
                         <div
+                            data-testid="command-palette-body"
                             className="h-[min(496px,50vh)] overflow-y-auto p-2"
                             onTouchStart={() => inputRef.current?.blur()}
                         >
                             {isShowingAllCommands ? (
-                                <div>
-                                    <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium opacity-60">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsShowingAllCommands(false)}
-                                            className={`rounded-full p-1 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
-                                            aria-label={t('commandPalette.backToSearch') || 'Back to search'}
-                                        >
-                                            <ArrowLeft size={14} />
-                                        </button>
-                                        <span>{t('commandPalette.allCommands') || 'All commands'}</span>
-                                        <span className="ml-auto tabular-nums opacity-60">{availableCommands.length}</span>
-                                    </div>
-                                    {availableCommands.map(command => {
-                                        const groupLabel = t(groupLabelKey[command.group] || 'commandPalette.groupOther') || command.group;
-                                        const title = getCommandTitle(command, t);
-                                        const description = getCommandDescription(command, t);
-                                        const Icon = command.icon ?? Command;
-                                        return (
-                                            <button
-                                                key={command.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    onQueryChange(command.keywords[0] ?? command.title);
-                                                    onActiveIndexChange(0);
-                                                    setIsShowingAllCommands(false);
-                                                    window.requestAnimationFrame(() => inputRef.current?.focus());
-                                                }}
-                                                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors ${itemIdleBg}`}
-                                            >
-                                                <div
-                                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border"
-                                                    style={{
-                                                        borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
-                                                        color: theme.accentColor,
-                                                    }}
-                                                >
-                                                    <Icon size={16} />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="truncate text-sm font-medium">{title}</span>
-                                                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] opacity-50">{groupLabel}</span>
-                                                    </div>
-                                                    <div className="mt-0.5 truncate text-xs opacity-50">{description}</div>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                <CommandPaletteAllCommandsList
+                                    commands={availableCommands}
+                                    groupLabelKey={groupLabelKey}
+                                    isDaylight={isDaylight}
+                                    itemIdleBg={itemIdleBg}
+                                    theme={theme}
+                                    t={t}
+                                    onBack={() => setIsShowingAllCommands(false)}
+                                    onPick={(command) => {
+                                        onQueryChange(primaryTermOf(command));
+                                        onActiveIndexChange(0);
+                                        setIsShowingAllCommands(false);
+                                        window.requestAnimationFrame(() => inputRef.current?.focus());
+                                    }}
+                                />
                             ) : surfaceBody ? (
                                 <Suspense fallback={<div className="flex h-full items-center justify-center opacity-40"><Loader2 size={20} className="animate-spin" /></div>}>
                                     {React.createElement(surfaceBody, {
@@ -483,7 +467,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     const groupLabel = t(groupLabelKey[match.command.group] || 'commandPalette.groupOther') || match.command.group;
                                     const title = getCommandTitle(match.command, t);
                                     const displayDescription = match.previewText || getCommandDescription(match.command, t);
-                                    const commandHint = match.command.keywords[0] ?? match.command.id;
+                                    const commandHint = primaryTermOf(match.command);
                                     const Icon = match.command.icon ?? Command;
                                     return (
                                         <button

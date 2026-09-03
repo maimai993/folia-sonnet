@@ -14,7 +14,7 @@ export const modsCommands: CommandPaletteCommand[] = [
         group: 'panel',
         title: 'Mods (Experimental)',
         description: 'Experimental: manage mods and export transparent lyric videos',
-        keywords: ['mods', 'mod', 'mods manager', '模组', '模组管理', 'mokuai', 'mozu', 'mz', '导出透明视频'],
+        keywords: ['mods', 'mod', 'mods manager', '模组', '模组管理', 'mokuai', '导出透明视频'],
         icon: Boxes,
         // Behind the Lab switch: with the mod system off the main process loads
         // no mod at all, so the entry would open a manager over nothing.

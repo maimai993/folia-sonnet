@@ -11,7 +11,7 @@ export const sleepTimerCommand: CommandPaletteCommand = defineCommand({
     group: 'settings',
     title: 'Sleep timer',
     description: 'Pause playback after a chosen duration, or close the desktop app',
-    keywords: ['sleep timer', 'auto close', 'auto quit', 'shutdown timer', '定时关闭', '睡眠定时', '自动关闭', '到时关闭', '倒计时退出', 'dingshiguanbi', 'shuimiandingshi', 'zidongguanbi', 'daoshiguanbi', 'dsgb', 'smds', 'zdgb'],
+    keywords: ['auto close', 'auto quit', 'shutdown timer', '定时关闭', '睡眠定时', '自动关闭', '到时关闭', '倒计时退出'],
     icon: Timer,
     surface: sleepTimerSurface,
     syntax: SLEEP_TIMER_SYNTAX_SPEC,
