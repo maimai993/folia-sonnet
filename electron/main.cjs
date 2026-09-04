@@ -626,9 +626,13 @@ const mainProcessStartupPromise = prepareMainProcessStartup();
 const APP_LOCALE_KEY = 'APP_LOCALE';
 const mainLocale = {
   'zh-CN': {
+    trayShowWindow: '显示窗口',
     trayHideWindow: '隐藏窗口',
     trayOpenRemote: '遥控窗口',
     trayTransparentBackground: '透明背景',
+    trayToggleClickThrough: '点击穿透',
+    trayAlwaysOnTop: '窗口置顶',
+    trayHideTaskbar: '隐藏任务栏图标',
     trayDesktopLyricMode: '桌面歌词',
     trayToggleWallpaperMode: '壁纸模式',
     trayResetWindow: '重置窗口',
@@ -639,10 +643,14 @@ const mainLocale = {
     dialogCancel: '取消',
   },
   en: {
+    trayShowWindow: 'Show Window',
     trayHideWindow: 'Hide Window',
     trayOpenRemote: 'Remote Window',
     trayTransparentBackground: 'Transparent Background',
-    trayDesktopLyricMode: 'Desktop Lyric',
+    trayToggleClickThrough: 'Click-Through',
+    trayAlwaysOnTop: 'Always on Top',
+    trayHideTaskbar: 'Hide Taskbar Icon',
+    trayDesktopLyricMode: 'Desktop Lyrics',
     trayToggleWallpaperMode: 'Wallpaper Mode',
     trayResetWindow: 'Reset Window',
     trayQuit: 'Quit',
@@ -652,9 +660,13 @@ const mainLocale = {
     dialogCancel: 'Cancel',
   },
   in: {
+    trayShowWindow: 'Tampilkan Jendela',
     trayHideWindow: 'Sembunyikan Jendela',
     trayOpenRemote: 'Jendela Remote',
     trayTransparentBackground: 'Latar Belakang Transparan',
+    trayToggleClickThrough: 'Click-Through',
+    trayAlwaysOnTop: 'Selalu di Atas',
+    trayHideTaskbar: 'Sembunyikan Ikon Taskbar',
     trayDesktopLyricMode: 'Lirik Desktop',
     trayToggleWallpaperMode: 'Mode Wallpaper',
     trayResetWindow: 'Atur Ulang Jendela',
@@ -749,7 +761,6 @@ let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
 let mainWindowClickThroughUnlockHoverTimer = null;
 let mainWindowSkipTaskbarEnabled = false;
-let desktopLyricModeTransparentBefore = null;
 let videoExportWindowRestoreState = null;
 let autoUpdater = null;
 // Backed by the settings store so a handoff survives a full process relaunch (wallpaper mode)
@@ -1398,6 +1409,7 @@ function setMainWindowAlwaysOnTop(enabled) {
   patchRemoteControlSnapshot({
     mainWindowAlwaysOnTop,
   });
+  refreshTrayMenu();
   return mainWindowAlwaysOnTop;
 }
 
@@ -1414,40 +1426,22 @@ async function setDesktopLyricMode(enabled) {
     return false;
   }
 
-  if (!nextEnabled) {
-    const restoreTransparent = desktopLyricModeTransparentBefore;
-    desktopLyricModeTransparentBefore = null;
-    setMainWindowClickThroughEnabled(false);
-    setMainWindowAlwaysOnTop(false);
-    persistMainWindowSkipTaskbarEnabled(false);
-    if (isTransparentPlayerBackgroundEnabled() !== Boolean(restoreTransparent)) {
-      await setMainWindowTransparentModeFromRemote(Boolean(restoreTransparent));
-    }
-    return true;
+  // The preset has no state of its own: it only applies one exact combination of independent
+  // window switches. Drop click-through before a possible window rebuild, then reapply it last.
+  setMainWindowClickThroughEnabled(false);
+  setMainWindowAlwaysOnTop(nextEnabled);
+  persistMainWindowSkipTaskbarEnabled(nextEnabled);
+  if (isTransparentPlayerBackgroundEnabled() !== nextEnabled) {
+    await setMainWindowTransparentModeFromRemote(nextEnabled);
   }
-
-  desktopLyricModeTransparentBefore = isTransparentPlayerBackgroundEnabled();
-  persistMainWindowSkipTaskbarEnabled(true);
-  setMainWindowAlwaysOnTop(true);
-  if (!isTransparentPlayerBackgroundEnabled()) {
-    await setMainWindowTransparentModeFromRemote(true);
+  if (nextEnabled) {
+    setMainWindowClickThroughEnabled(true);
   }
-  // setMainWindowClickThroughEnabled refreshes the tray itself, so the checkbox is already correct.
-  setMainWindowClickThroughEnabled(true);
-  return true;
+  return nextEnabled;
 }
 
 async function resetMainWindowPresentation() {
-  if (isDesktopLyricModeActive()) {
-    return setDesktopLyricMode(false);
-  }
-
-  setMainWindowClickThroughEnabled(false);
-  setMainWindowAlwaysOnTop(false);
-  if (isTransparentPlayerBackgroundEnabled()) {
-    await setMainWindowTransparentModeFromRemote(false);
-  }
-  return true;
+  return setDesktopLyricMode(false);
 }
 
 function refreshTrayMenu() {
@@ -1456,29 +1450,48 @@ function refreshTrayMenu() {
   }
 
   const locale = getMainLocale();
+  const hasMainWindow = Boolean(mainWindow && !mainWindow.isDestroyed());
+  const remoteOpen = Boolean(remoteControlWindow && !remoteControlWindow.isDestroyed());
+  const wallpaperOn = isWallpaperModeEnabled();
+  // Reset only has something to undo while the window sits in a non-default presentation.
+  const canResetPresentation = hasMainWindow && (
+    mainWindowClickThroughEnabled
+    || mainWindowAlwaysOnTop
+    || isTransparentPlayerBackgroundEnabled()
+    || mainWindowSkipTaskbarEnabled
+  );
+  // One flat level, grouped by separators: window presence, whole-window modes, the individual
+  // switches those modes are made of, then reset and quit. No submenu: every switch is one click
+  // away, and a mode and its parts stay visible together so the checkboxes explain each other.
   const menu = Menu.buildFromTemplate([
+    {
+      label: isMainWindowVisible() ? locale.trayHideWindow : locale.trayShowWindow,
+      enabled: hasMainWindow,
+      click: () => {
+        toggleMainWindowVisibility();
+      },
+    },
     {
       label: locale.trayOpenRemote,
       type: 'checkbox',
-      checked: Boolean(remoteControlWindow && !remoteControlWindow.isDestroyed()),
+      checked: remoteOpen,
       click: () => {
+        // Both createRemoteControlWindow and the window's 'closed' handler refresh the tray.
         if (remoteControlWindow && !remoteControlWindow.isDestroyed()) {
           remoteControlWindow.close();
         } else {
           createRemoteControlWindow();
         }
-        refreshTrayMenu();
       },
     },
+    { type: 'separator' },
     {
-      label: locale.trayTransparentBackground,
+      label: locale.trayDesktopLyricMode,
       type: 'checkbox',
-      checked: isTransparentPlayerBackgroundEnabled(),
-      enabled: Boolean(mainWindow && !mainWindow.isDestroyed())
-        && !isDesktopLyricModeActive()
-        && !(process.platform === 'win32' && isWindowsWallpaperMode() && !isWindowsWallpaperTransparentSupported()),
+      checked: isDesktopLyricModeActive(),
+      enabled: hasMainWindow && !wallpaperOn,
       click: () => {
-        void setMainWindowTransparentModeFromRemote(!isTransparentPlayerBackgroundEnabled()).then(() => {
+        void setDesktopLyricMode(!isDesktopLyricModeActive()).then(() => {
           refreshTrayMenu();
         });
       },
@@ -1489,34 +1502,60 @@ function refreshTrayMenu() {
       checked: isWallpaperModeEnabled(),
       click: () => {
         const nextEnabled = !isWallpaperModeEnabled();
+        if (nextEnabled) {
+          setMainWindowClickThroughEnabled(false);
+          setMainWindowAlwaysOnTop(false);
+        }
         store.set(WALLPAPER_MODE_SETTING_KEY, nextEnabled);
         refreshTrayMenu();
         scheduleWallpaperModeRelaunch(nextEnabled);
       },
     }] : []),
+    { type: 'separator' },
     {
-      label: locale.trayDesktopLyricMode,
+      label: locale.trayTransparentBackground,
       type: 'checkbox',
-      checked: isDesktopLyricModeActive(),
-      enabled: Boolean(mainWindow && !mainWindow.isDestroyed()) && !isWallpaperModeEnabled(),
+      checked: isTransparentPlayerBackgroundEnabled(),
+      enabled: hasMainWindow && !(process.platform === 'win32'
+        && isWindowsWallpaperMode()
+        && !isWindowsWallpaperTransparentSupported()),
       click: () => {
-        void setDesktopLyricMode(!isDesktopLyricModeActive()).then(() => {
+        void setMainWindowTransparentModeFromRemote(!isTransparentPlayerBackgroundEnabled()).then(() => {
           refreshTrayMenu();
         });
       },
     },
     {
-      label: locale.trayHideWindow,
+      label: locale.trayToggleClickThrough,
       type: 'checkbox',
-      checked: !isMainWindowVisible(),
-      enabled: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      checked: mainWindowClickThroughEnabled,
+      enabled: hasMainWindow && !wallpaperOn,
       click: () => {
-        toggleMainWindowVisibility();
+        setMainWindowClickThroughEnabled(!mainWindowClickThroughEnabled);
       },
     },
     {
+      label: locale.trayAlwaysOnTop,
+      type: 'checkbox',
+      checked: mainWindowAlwaysOnTop,
+      enabled: hasMainWindow && !wallpaperOn,
+      click: () => {
+        setMainWindowAlwaysOnTop(!mainWindowAlwaysOnTop);
+      },
+    },
+    {
+      label: locale.trayHideTaskbar,
+      type: 'checkbox',
+      checked: mainWindowSkipTaskbarEnabled,
+      enabled: hasMainWindow,
+      click: () => {
+        persistMainWindowSkipTaskbarEnabled(!mainWindowSkipTaskbarEnabled);
+      },
+    },
+    { type: 'separator' },
+    {
       label: locale.trayResetWindow,
-      enabled: Boolean(mainWindow && !mainWindow.isDestroyed()),
+      enabled: canResetPresentation,
       click: () => {
         void resetMainWindowPresentation().then(() => {
           refreshTrayMenu();
