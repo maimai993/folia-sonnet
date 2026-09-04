@@ -2094,6 +2094,33 @@ export default {
         "title": "Independent Automix Visuals",
         "description": "The center ring and Now Playing card border now have separate switches and previews, with better synchronization across navigation and mid-transition mounts. Transitions shorter than five seconds remain intentionally unanimated."
       }
+    },
+    "v0_7_3": {
+      "intro": "Version 0.7.3 makes commands, lyric tuning, player controls, and Tempera assets more flexible, and adds optional playback resumption at launch.",
+      "commandPaletteUpgrade": {
+        "title": "A Faster, Global Command Palette",
+        "description": "Open the command palette from anywhere, find commands with fuzzy and pinyin matching, and reach frequent actions sooner. Grid filters and command options now open directly inside the palette."
+      },
+      "interactionControls": {
+        "title": "Custom Interaction Controls",
+        "description": "Choose whether grid gestures open filtering or commands, configure the S shortcut on grids, and record a global Alt+letter shortcut for an action you use often."
+      },
+      "lyricSegmentation": {
+        "title": "Per-song Lyric Segmentation",
+        "description": "Inspect and correct how the current song is split into words, either by hand or with AI. Saved adjustments take effect immediately in visualizers that use word segmentation."
+      },
+      "customPlayerControls": {
+        "title": "A Player Bar That Fits Your Layout",
+        "description": "Move the shared bottom-control baseline and choose the two buttons beside the progress bar from playback, favorite, queue, volume, lyrics, and timer actions."
+      },
+      "temperaImagePool": {
+        "title": "Portable Tempera Image Pools",
+        "description": "Manage custom images from a dedicated toolbar, then export the whole pool as a zip or import a backup by appending to or replacing the current pool."
+      },
+      "launchAutoplay": {
+        "title": "Optional Playback on Launch",
+        "description": "A new Lab switch can resume the last song automatically on desktop and installed PWAs. Ordinary browser tabs may still require one click because of autoplay policies."
+      }
     }
   },
   "export": {

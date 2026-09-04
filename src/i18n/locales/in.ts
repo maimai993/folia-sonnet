@@ -2030,6 +2030,33 @@ export default {
         "title": "Visual Automix yang Terpisah",
         "description": "Cincin tengah dan bingkai kartu Now Playing kini memiliki sakelar serta pratinjau masing-masing, dengan sinkronisasi lebih baik saat berpindah halaman atau bergabung di tengah transisi. Transisi di bawah lima detik tetap tidak dianimasikan."
       }
+    },
+    "v0_7_3": {
+      "intro": "Versi 0.7.3 membuat perintah, penyetelan lirik, kontrol pemutar, dan aset Tempera lebih fleksibel, serta menambahkan opsi untuk melanjutkan pemutaran saat aplikasi dibuka.",
+      "commandPaletteUpgrade": {
+        "title": "Panel Perintah Global yang Lebih Cepat",
+        "description": "Buka panel perintah dari tampilan mana pun, temukan perintah dengan pencocokan fuzzy dan pinyin, serta jangkau tindakan yang sering dipakai lebih cepat. Filter kisi dan opsi perintah kini terbuka langsung di panel."
+      },
+      "interactionControls": {
+        "title": "Kontrol Interaksi Khusus",
+        "description": "Pilih apakah gerakan kisi membuka filter atau perintah, atur pintasan S pada kisi, dan rekam pintasan global Alt+huruf untuk tindakan yang sering Anda gunakan."
+      },
+      "lyricSegmentation": {
+        "title": "Segmentasi Lirik per Lagu",
+        "description": "Periksa dan koreksi pembagian kata pada lagu saat ini secara manual atau dengan AI. Penyesuaian tersimpan langsung berlaku pada visualizer yang menggunakan segmentasi kata."
+      },
+      "customPlayerControls": {
+        "title": "Bilah Pemutar yang Sesuai Tata Letak Anda",
+        "description": "Geser garis dasar kontrol bawah bersama dan pilih dua tombol di samping bilah progres dari tindakan pemutaran, favorit, antrean, volume, lirik, dan timer."
+      },
+      "temperaImagePool": {
+        "title": "Kumpulan Gambar Tempera yang Portabel",
+        "description": "Kelola gambar khusus dari toolbar khusus, lalu ekspor seluruh kumpulan sebagai zip atau impor cadangan dengan menambahkannya ke kumpulan saat ini maupun menggantikannya."
+      },
+      "launchAutoplay": {
+        "title": "Pemutaran Opsional Saat Aplikasi Dibuka",
+        "description": "Sakelar Lab baru dapat melanjutkan lagu terakhir secara otomatis di desktop dan PWA terpasang. Tab peramban biasa mungkin tetap memerlukan satu klik karena kebijakan putar otomatis."
+      }
     }
   },
   "export": {

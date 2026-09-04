@@ -39,6 +39,8 @@ services:
     read_only: true
     environment:
       PORT: "3000"
+      # 歌词分词端点在服务端自己选 provider（前端不参与），所以 backend 也要拿到这个选择。
+      AI_PROVIDER: ${FOLIA_AI_PROVIDER:-google}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_API_URL: ${OPENAI_API_URL:-https://api.openai.com/v1}
