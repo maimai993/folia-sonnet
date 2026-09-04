@@ -62,6 +62,8 @@ export type DesktopSettingsPreferences = {
     openPlayerOnLaunch: boolean;
     wallpaperMode: boolean;
     onToggleWallpaperMode: (enabled: boolean) => void;
+    wallpaperMacAutohideDock: boolean;
+    onToggleWallpaperMacAutohideDock: (enabled: boolean) => void;
 };
 
 export type DesktopSettingsModel = {
@@ -116,9 +118,12 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         openPlayerOnLaunch,
         wallpaperMode,
         onToggleWallpaperMode,
+        wallpaperMacAutohideDock,
+        onToggleWallpaperMacAutohideDock,
     } = preferences;
     const isLinux = isElectron && window.electron?.platform === 'linux';
     const isWindows = isElectron && window.electron?.platform === 'win32';
+    const isMac = isElectron && window.electron?.platform === 'darwin';
     const {
         canDownloadUpdate,
         canEnableAutoUpdate,
@@ -254,7 +259,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                 )}
             </SettingsAnchor>
 
-            {(isLinux || isWindows) && (
+            {(isLinux || isWindows || isMac) && (
                 <SettingsAnchor anchorId="wallpaperMode" label={t('options.wallpaperMode') || 'Wallpaper Mode'} className="space-y-4">
                     <SettingsSectionHeading icon={AppWindow} label={t('options.wallpaperMode') || 'Wallpaper Mode'} />
                     <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
@@ -274,7 +279,30 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                             {renderToggle(wallpaperMode, () => onToggleWallpaperMode(!wallpaperMode))}
                         </div>
+                        {isMac && (
+                            <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
+                                        <AppWindow size={16} />
+                                    </div>
+                                    <div className="space-y-0.5 text-left">
+                                        <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
+                                            {t('options.wallpaperMacAutohideDock')}
+                                        </h4>
+                                        <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.wallpaperMacAutohideDockDesc')}
+                                        </p>
+                                    </div>
+                                </div>
+                                {renderToggle(wallpaperMacAutohideDock, () => onToggleWallpaperMacAutohideDock(!wallpaperMacAutohideDock))}
+                            </div>
+                        )}
                     </div>
+                    {isMac && (
+                        <div className="px-1 text-xs leading-relaxed text-left text-amber-500">
+                            {t('options.wallpaperModeMacPermissionHint') || 'Mac wallpaper mode needs Input Monitoring: enable Folia in System Settings → Privacy & Security → Input Monitoring, then restart the app.'}
+                        </div>
+                    )}
                 </SettingsAnchor>
             )}
 

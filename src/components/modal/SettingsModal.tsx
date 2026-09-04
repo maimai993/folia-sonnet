@@ -190,6 +190,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         hideRemoteControlTaskbarIcon,
         wallpaperMode,
         handleToggleWallpaperMode: onToggleWallpaperMode,
+        wallpaperMacAutohideDock,
+        handleToggleWallpaperMacAutohideDock: onToggleWallpaperMacAutohideDock,
         openPlayerOnLaunch,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
@@ -1751,6 +1753,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     openPlayerOnLaunch,
                                                     wallpaperMode,
                                                     onToggleWallpaperMode,
+                                                    wallpaperMacAutohideDock,
+                                                    onToggleWallpaperMacAutohideDock,
                                                 }}
                                             />
                                         )}

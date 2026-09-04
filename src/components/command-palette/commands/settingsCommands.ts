@@ -190,10 +190,10 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
-    createSettingsCommand('settings-wallpaper-mode', 'Wallpaper mode settings', 'Open wallpaper mode settings', ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸'], 'options', 'desktop', { platform: ['linux', 'win'] }),
+    createSettingsCommand('settings-wallpaper-mode', 'Wallpaper mode settings', 'Open wallpaper mode settings', ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸'], 'options', 'desktop', { platform: ['linux', 'win', 'mac'] }),
     {
         id: 'desktop-toggle-wallpaper-mode',
-        platform: ['linux', 'win'],
+        platform: ['linux', 'win', 'mac'],
         group: 'settings',
         title: 'Toggle wallpaper mode',
         description: 'Turn the app into a desktop lyrics wallpaper',

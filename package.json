@@ -83,7 +83,8 @@
       "build/thumbar/*.png"
     ],
     "asarUnpack": [
-      "electron/analysis/htdemucs_runner.py"
+      "electron/analysis/htdemucs_runner.py",
+      "node_modules/@koromix/koffi-*/**/*.node"
     ],
     "extraResources": [
       {
@@ -185,6 +186,7 @@
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
+    "koffi": "^3.2.0",
     "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz",
     "music-metadata": "^11.14.0",
     "onnxruntime-node": "^1.27.0",
