@@ -165,7 +165,6 @@ function initWindowLevel() {
     const koffi = require('koffi');
     const objc = koffi.load('/usr/lib/libobjc.A.dylib');
     const sel_registerName = objc.func('void* sel_registerName(const char*)');
-    const objc_getClass = objc.func('void* objc_getClass(const char*)');
     const msgSend_ptr = objc.func('objc_msgSend', 'void*', ['void*', 'void*']);
     const msgSend_long = objc.func('objc_msgSend', 'long', ['void*', 'void*']);
     const msgSend_ulong = objc.func('objc_msgSend', 'unsigned long', ['void*', 'void*']);
@@ -190,7 +189,6 @@ function initWindowLevel() {
       ok: true,
       koffi,
       SEL,
-      objc_getClass,
       msgSend_ptr,
       msgSend_long,
       msgSend_ulong,
@@ -437,65 +435,6 @@ function readWindowOcclusionState(win) {
     return Number(s.msgSend_ulong(w, s.SEL('occlusionState')));
   } catch (e) {
     return null;
-  }
-}
-
-// --- NSApplication presentation options ---
-// Electron's simple-full-screen emulation is the pre-Lion kind: entering it calls
-// [NSApp setPresentationOptions:] with AutoHideDock | AutoHideMenuBar, and leaving it restores
-// the options that were current WHEN THE WINDOW ENTERED. Those options are app-level, so a
-// rebuilt window re-entering simple full screen can capture a stale auto-hide value, and the
-// "restore" at exit then strands the auto-hide bits on an ordinary window (focusing the app
-// keeps hiding the menu bar / Dock). main.cjs clears exactly the bits that must not survive a
-// wallpaper session through these helpers, instead of trusting Electron's captured value.
-function sharedApplication() {
-  const s = initWindowLevel();
-  if (!s.ok) return null;
-  try {
-    let nsApplicationClass = s.objc_getClass('NSApplication');
-    if (!nsApplicationClass) {
-      // AppKit is loaded in the Electron main process, but stay self-sufficient: load it so the
-      // class exists (mirrors the dlopen pattern of the event-tap init).
-      try {
-        const libc = s.koffi.load('/usr/lib/libSystem.B.dylib');
-        const dlopen = libc.func('void *dlopen(const char *path, int flags)');
-        dlopen('/System/Library/Frameworks/AppKit.framework/AppKit', 2 /*RTLD_NOW*/);
-        nsApplicationClass = s.objc_getClass('NSApplication');
-      } catch (e) {
-        // ignore
-      }
-    }
-    if (!nsApplicationClass) return null;
-    return s.msgSend_ptr(nsApplicationClass, s.SEL('sharedApplication'));
-  } catch (e) {
-    return null;
-  }
-}
-
-// Returns the app's current NSApplicationPresentationOptions (NSUInteger), or null when the
-// bridge is unavailable.
-function currentAppPresentationOptions() {
-  const s = initWindowLevel();
-  const app = s && s.ok ? sharedApplication() : null;
-  if (!app) return null;
-  try {
-    return Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
-  } catch (e) {
-    return null;
-  }
-}
-
-// Clears the given presentation-option bits app-wide (fail-soft no-op when unavailable).
-function clearAppPresentationOptions(mask) {
-  const s = initWindowLevel();
-  const app = s && s.ok ? sharedApplication() : null;
-  if (!app) return false;
-  try {
-    const current = Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
-    s.msgSend_v_ulong(app, s.SEL('setPresentationOptions:'), (current & ~mask) >>> 0);
-    return true;
-  } catch (e) {
-    return false;
   }
 }
 
@@ -927,12 +866,6 @@ function createMacWallpaperController(options = {}) {
     },
     getOcclusionState(win) {
       return readWindowOcclusionState(win);
-    },
-    presentationOptions() {
-      return currentAppPresentationOptions();
-    },
-    clearPresentationOptions(mask) {
-      return clearAppPresentationOptions(mask);
     },
     isVisibleByOcclusion(win) {
       const state = readWindowOcclusionState(win);
