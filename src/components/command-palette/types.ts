@@ -200,6 +200,8 @@ export type CommandPaletteSettingsContext = {
     toggleVoiceInputPause: () => void;
     togglePreventDisplaySleepDuringPlayback: () => void;
     toggleWallpaperMode: () => void;
+    /** macOS-only: the wallpaper-mode Dock auto-hide override (on by default). */
+    toggleWallpaperMacAutohideDock: () => void;
     sleepTimerEnabled: boolean;
     setSleepTimerEnabled: (enabled: boolean) => void;
     sleepTimerHours: number;

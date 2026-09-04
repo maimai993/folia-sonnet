@@ -203,6 +203,19 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
+    {
+        // macOS-only functional desktop toggle; same store/IPC path as the settings row.
+        id: 'desktop-toggle-wallpaper-dock-autohide',
+        platform: ['mac'],
+        group: 'settings',
+        title: 'Toggle Dock auto-hide in wallpaper mode',
+        description: 'Auto-hide the Dock while Mac wallpaper mode is active (bottom Dock only)',
+        keywords: ['dock autohide', 'dock auto-hide', 'auto-hide the dock', 'hide the dock', '自动隐藏Dock', 'Dock自动隐藏', '隐藏Dock'],
+        execute: (_input, context) => {
+            context.settings.toggleWallpaperMacAutohideDock();
+            return true;
+        },
+    },
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),
     {
         id: 'settings-player-bottom-bar-position',

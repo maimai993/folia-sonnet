@@ -394,6 +394,7 @@ export default {
       "settings-lyric-filter": { "title": "Lyric filter", "description": "Open lyric filter settings" },
       "settings-wallpaper-mode": { "title": "Wallpaper mode settings", "description": "Open wallpaper mode settings" },
       "desktop-toggle-wallpaper-mode": { "title": "Toggle wallpaper mode", "description": "Turn the app into a desktop lyrics wallpaper" },
+      "desktop-toggle-wallpaper-dock-autohide": { "title": "Toggle Dock auto-hide in wallpaper mode", "description": "Auto-hide the Dock while Mac wallpaper mode is active (bottom Dock only)" },
       "sleep-timer": { "title": "Sleep timer", "description": "Pause playback after a chosen duration, or close the desktop app" },
       "navigate-home": { "title": "Go home", "description": "Return to home view" },
       "navigate-player": { "title": "Go player", "description": "Return to player view" },

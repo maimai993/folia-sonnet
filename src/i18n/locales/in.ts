@@ -393,6 +393,7 @@ export default {
       "settings-lyric-filter": { "title": "Filter lirik", "description": "Buka pengaturan filter lirik" },
       "settings-wallpaper-mode": { "title": "Pengaturan mode wallpaper", "description": "Buka pengaturan mode wallpaper" },
       "desktop-toggle-wallpaper-mode": { "title": "Alihkan mode wallpaper", "description": "Ubah aplikasi menjadi wallpaper lirik desktop" },
+      "desktop-toggle-wallpaper-dock-autohide": { "title": "Sembunyikan Dock otomatis selama mode wallpaper", "description": "Sembunyikan Dock secara otomatis selama mode wallpaper aktif (khusus Dock bawah)" },
       "sleep-timer": { "title": "Timer Tidur", "description": "Jeda pemutaran setelah durasi tertentu, atau tutup aplikasi desktop" },
       "navigate-home": { "title": "Ke beranda", "description": "Kembali ke tampilan beranda" },
       "navigate-player": { "title": "Ke pemutar", "description": "Kembali ke tampilan pemutar" },

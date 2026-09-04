@@ -50,6 +50,16 @@ const kCGEventTapDisabledByUserInput = 0xffffffff;
 // whole display and must not count as "covering" the point when deciding desktop hits.
 const FULLSCREEN_PRESENTATION_LAYER = 101;
 
+// Dock-owned windows up to the Dock level (measured layer 20) carry both the visible Dock bar
+// and — in auto-hide — the full-display tracking surface. Surfaces above this level (Dock
+// menus / popovers) are ordinary chrome and always cover the point.
+const DOCK_UI_LAYER_LIMIT = 20;
+
+// How much of a display a surface must span to count as the full-display desktop chrome (the
+// Finder desktop backdrop / the Dock's full-display surface). Menu-bar and rounding offsets keep
+// these frames a couple of pixels short of CGDisplayBounds.
+const FULL_DISPLAY_SLOP_PX = 2;
+
 // Pure classification of a raw CGEventType into the tap event kinds the forwarding layer
 // consumes. Returns null for event types we do not observe, and a 'disabled-*' marker for the
 // two tap-disabled sentinels (so a caller can react to a system-disabled tap without decoding
@@ -86,8 +96,51 @@ function isTransparentDesktopSurface(layer, alpha) {
   return layer < 0 && typeof alpha === 'number' && alpha <= 0;
 }
 
-// Marker file name (inside userData): records the user's pre-wallpaper Dock autohide so a hard
-// crash while the Dock is hidden can be recovered on the next launch.
+// Does the window frame span the whole display that contains the probe point? The Finder desktop
+// window (icons + empty desktop) and the Dock's full-display surface are reported at exactly the
+// display frame on every measured macOS, while real covering content (icon windows, a visible
+// Dock bar) is reported at its own smaller size. A few pixels of slop cover menu-bar/Dock overlap
+// and WindowServer rounding. Pure so the decision is unit-testable without the CGWindowList FFI.
+function isFullDisplaySurface(bounds, displayFrame) {
+  if (!bounds || !displayFrame) return false;
+  return bounds.x <= displayFrame.x + FULL_DISPLAY_SLOP_PX
+    && bounds.y <= displayFrame.y + FULL_DISPLAY_SLOP_PX
+    && bounds.x + bounds.width >= displayFrame.x + displayFrame.width - FULL_DISPLAY_SLOP_PX
+    && bounds.y + bounds.height >= displayFrame.y + displayFrame.height - FULL_DISPLAY_SLOP_PX;
+}
+
+// Parses a Dock crash-marker file. Markers written by this build are JSON
+// { autohide: '0'|'absent', delay: string|'absent' } — both prior values, so a crash recovery can
+// restore the user's reveal delay instead of deleting it. The very first markers held only the
+// autohide value; for those the delay prior is unknowable and treated as 'absent' (the historical
+// recovery deleted the zeroed key). Returns null for unreadable/unknown content so the caller can
+// drop the marker instead of acting on it. Pure so recovery is unit-testable without fs.
+function parseDockMarker(content) {
+  const trimmed = String(content || '').trim();
+  if (!trimmed) return null;
+  let autohide;
+  let delay;
+  if (trimmed[0] === '{') {
+    try {
+      const parsed = JSON.parse(trimmed);
+      autohide = parsed.autohide;
+      delay = parsed.delay;
+    } catch (e) {
+      return null;
+    }
+  } else {
+    autohide = trimmed;
+    delay = 'absent';
+  }
+  // A marker is only ever written when the Dock is about to be hidden, which never happens when
+  // the user's prior autohide is already '1'; anything else is not a marker we wrote.
+  if (autohide !== '0' && autohide !== 'absent') return null;
+  if (typeof delay !== 'string' || delay.length === 0) delay = 'absent';
+  return { autohide, delay };
+}
+
+// Marker file name (inside userData): records the user's pre-wallpaper Dock state (autohide and
+// reveal delay) so a hard crash while the Dock is hidden can be recovered on the next launch.
 const MAC_WALLPAPER_DOCK_MARKER = '.wallpaper-dock-autohidden';
 
 // Headless self-test / unit probes must not restart the real Dock or pop the Input Monitoring
@@ -112,6 +165,7 @@ function initWindowLevel() {
     const koffi = require('koffi');
     const objc = koffi.load('/usr/lib/libobjc.A.dylib');
     const sel_registerName = objc.func('void* sel_registerName(const char*)');
+    const objc_getClass = objc.func('void* objc_getClass(const char*)');
     const msgSend_ptr = objc.func('objc_msgSend', 'void*', ['void*', 'void*']);
     const msgSend_long = objc.func('objc_msgSend', 'long', ['void*', 'void*']);
     const msgSend_ulong = objc.func('objc_msgSend', 'unsigned long', ['void*', 'void*']);
@@ -136,6 +190,7 @@ function initWindowLevel() {
       ok: true,
       koffi,
       SEL,
+      objc_getClass,
       msgSend_ptr,
       msgSend_long,
       msgSend_ulong,
@@ -163,6 +218,9 @@ function initEventTap() {
     const libc = koffi.load('/usr/lib/libSystem.B.dylib');
 
     koffi.struct('FOLIA_CGPoint', { x: 'double', y: 'double' });
+    // Display-frame queries: the Finder desktop backdrop and the Dock's full-display surface are
+    // recognised by comparing their bounds against the display that contains the probe point.
+    koffi.struct('FOLIA_CGRect', { x: 'double', y: 'double', width: 'double', height: 'double' });
 
     const fn = {
       CGEventGetLocation: cg.func('FOLIA_CGPoint CGEventGetLocation(void *event)'),
@@ -173,6 +231,8 @@ function initEventTap() {
       CGRequestListenEventAccess: cg.func('void CGRequestListenEventAccess(void)'),
       CGWindowListCopyWindowInfo: cg.func('void *CGWindowListCopyWindowInfo(uint32 option, uint32 rel)'),
       CGRectMakeWithDictionaryRepresentation: cg.func('bool CGRectMakeWithDictionaryRepresentation(void *dict, _Out_ void *rect)'),
+      CGGetDisplaysWithPoint: cg.func('uint32 CGGetDisplaysWithPoint(uint32 maxDisplays, FOLIA_CGPoint point, _Out_ void *displays, _Out_ void *count)'),
+      CGDisplayBounds: cg.func('FOLIA_CGRect CGDisplayBounds(uint32 display)'),
       CFMachPortCreateRunLoopSource: cf.func('void *CFMachPortCreateRunLoopSource(void *allocator, void *port, long order)'),
       CFRunLoopGetMain: cf.func('void *CFRunLoopGetMain(void)'),
       CFRunLoopAddSource: cf.func('void CFRunLoopAddSource(void *rl, void *source, void *mode)'),
@@ -218,9 +278,9 @@ function initEventTap() {
   return eventTapState;
 }
 
-// Cached pid of the Dock process. The Dock owns a full-display tracking window (autohide mode)
-// whose layer sits above the desktop icons, so without this exclusion every point would look
-// "covered". Resolved lazily once; re-resolved if the cached pid goes away (killall Dock).
+// Cached pid of the Dock process: isDesktopPoint restricts the Dock pass-through to its
+// full-display surface (see DOCK_UI_LAYER_LIMIT), so the pid is resolved lazily once and
+// re-resolved if the cached pid goes away (killall Dock).
 let dockOwnerPid = null;
 function currentDockOwnerPid() {
   if (dockOwnerPid !== null) {
@@ -246,11 +306,48 @@ function currentDockOwnerPid() {
 // live on-screen window list and returns false when any window with a layer above the Finder
 // desktop covers the point. Only layer + bounds + owner pid + alpha are read — never window
 // names — so this does not trigger Screen Recording permission.
+//
+// The Finder desktop surface (icons + empty desktop) sits AT FINDER_DESKTOP_LAYER and spans the
+// whole display. It must not be treated as a covering window — that would make every point
+// "covered" and the wallpaper dead to input — so only the full-display Finder backdrop passes
+// through. Smaller surfaces at that layer (per-icon Finder windows on macOS versions that list
+// them, desktop widgets) still cover the point and stop forwarding, so a click on a desktop file
+// is not re-injected into the wallpaper underneath while Finder opens it. The Dock gets the same
+// rule: only its full-display surface (the auto-hide tracking window; measured as one
+// full-display layer-20 window in every Dock state on macOS 26) is pass-through chrome — a
+// visible, bar-sized Dock window keeps covering.
 function isDesktopPoint(x, y) {
   const s = eventTapState;
   if (!s || !s.ok) return false;
   let arr = null;
   try {
+    // Display frame of the display containing (x, y), resolved lazily and cached per probe: only
+    // the desktop-/dock-layer surfaces need it, and they are few.
+    let pointDisplayFrame;
+    const displayFrameAtPoint = () => {
+      if (pointDisplayFrame === undefined) {
+        pointDisplayFrame = null;
+        try {
+          const displays = Buffer.alloc(8 * 4);
+          const displayCount = Buffer.alloc(4);
+          if (s.fn.CGGetDisplaysWithPoint(8, { x, y }, displays, displayCount) === 0
+            && displayCount.readUInt32LE(0) > 0) {
+            const frame = s.fn.CGDisplayBounds(displays.readUInt32LE(0));
+            pointDisplayFrame = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
+          }
+        } catch (e) {
+          // ignore: unresolved frame falls back to "full display" below
+        }
+      }
+      return pointDisplayFrame;
+    };
+    // Full-display system chrome at a desktop/dock layer is not a covering window. When the
+    // display frame cannot be resolved the surface keeps the historical unconditional pass, so a
+    // probe failure cannot make the wallpaper unclickable.
+    const isPassThroughFullDisplay = (bx0, by0, bw0, bh0) => {
+      const frame = displayFrameAtPoint();
+      return !frame || isFullDisplaySurface({ x: bx0, y: by0, width: bw0, height: bh0 }, frame);
+    };
     arr = s.fn.CGWindowListCopyWindowInfo(1 /*onScreenOnly*/, 0);
     if (!arr) return false;
     const count = Number(s.fn.CFArrayGetCount(arr));
@@ -263,7 +360,8 @@ function isDesktopPoint(x, y) {
       if (!layerValue) continue;
       s.fn.CFNumberGetValue(layerValue, 3 /*SInt32*/, numBuf);
       const layer = numBuf.readInt32LE(0);
-      if (layer <= FINDER_DESKTOP_LAYER) continue; // desktop / wallpaper / below — not "on top"
+      // Strictly BELOW the Finder desktop layer: the wallpaper picture surfaces — never "on top".
+      if (layer < FINDER_DESKTOP_LAYER) continue;
       if (layer < 0) {
         // Only desktop-adjacent surfaces are probed: they are few, so reading the alpha key stays
         // cheap (normal-layer windows are many and never skipped by transparency).
@@ -282,9 +380,6 @@ function isDesktopPoint(x, y) {
       // Our own wallpaper window: WindowServer lists the simple-full-screen presentation at the
       // full-screen layer spanning the whole display, so it must not "cover" every desktop point.
       if (ownerPid === process.pid && layer >= FULLSCREEN_PRESENTATION_LAYER) continue;
-      // The Dock's full-display tracking window (autohide mode) is system chrome, not a real
-      // covering app — ignore it too so bare-desktop clicks can still be recognised.
-      if (ownerPid !== null && ownerPid === currentDockOwnerPid()) continue;
       const boundsValue = s.fn.CFDictionaryGetValue(dict, s.consts.kWindowBounds);
       if (!boundsValue) continue;
       if (!s.fn.CGRectMakeWithDictionaryRepresentation(boundsValue, rect)) continue;
@@ -292,7 +387,21 @@ function isDesktopPoint(x, y) {
       const by = rect.readDoubleLE(8);
       const bw = rect.readDoubleLE(16);
       const bh = rect.readDoubleLE(24);
-      if (x >= bx && x < bx + bw && y >= by && y < by + bh) return false; // covered by something above
+      if (x < bx || x >= bx + bw || y < by || y >= by + bh) continue; // not under the cursor
+      if (layer === FINDER_DESKTOP_LAYER) {
+        // The Finder backdrop spans the whole display; only that passes through. Anything smaller
+        // at the desktop layer is an actual surface (an icon window on macOS versions that expose
+        // them) and blocks forwarding.
+        if (isPassThroughFullDisplay(bx, by, bw, bh)) continue;
+        return false;
+      }
+      if (ownerPid !== null && ownerPid === currentDockOwnerPid() && layer <= DOCK_UI_LAYER_LIMIT) {
+        // Only the Dock's full-display tracking surface passes through; a visible bar-sized Dock
+        // window is real chrome and blocks forwarding.
+        if (isPassThroughFullDisplay(bx, by, bw, bh)) continue;
+        return false;
+      }
+      return false; // covered by something above
     }
     return true;
   } catch (e) {
@@ -331,6 +440,65 @@ function readWindowOcclusionState(win) {
   }
 }
 
+// --- NSApplication presentation options ---
+// Electron's simple-full-screen emulation is the pre-Lion kind: entering it calls
+// [NSApp setPresentationOptions:] with AutoHideDock | AutoHideMenuBar, and leaving it restores
+// the options that were current WHEN THE WINDOW ENTERED. Those options are app-level, so a
+// rebuilt window re-entering simple full screen can capture a stale auto-hide value, and the
+// "restore" at exit then strands the auto-hide bits on an ordinary window (focusing the app
+// keeps hiding the menu bar / Dock). main.cjs clears exactly the bits that must not survive a
+// wallpaper session through these helpers, instead of trusting Electron's captured value.
+function sharedApplication() {
+  const s = initWindowLevel();
+  if (!s.ok) return null;
+  try {
+    let nsApplicationClass = s.objc_getClass('NSApplication');
+    if (!nsApplicationClass) {
+      // AppKit is loaded in the Electron main process, but stay self-sufficient: load it so the
+      // class exists (mirrors the dlopen pattern of the event-tap init).
+      try {
+        const libc = s.koffi.load('/usr/lib/libSystem.B.dylib');
+        const dlopen = libc.func('void *dlopen(const char *path, int flags)');
+        dlopen('/System/Library/Frameworks/AppKit.framework/AppKit', 2 /*RTLD_NOW*/);
+        nsApplicationClass = s.objc_getClass('NSApplication');
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (!nsApplicationClass) return null;
+    return s.msgSend_ptr(nsApplicationClass, s.SEL('sharedApplication'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// Returns the app's current NSApplicationPresentationOptions (NSUInteger), or null when the
+// bridge is unavailable.
+function currentAppPresentationOptions() {
+  const s = initWindowLevel();
+  const app = s && s.ok ? sharedApplication() : null;
+  if (!app) return null;
+  try {
+    return Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
+  } catch (e) {
+    return null;
+  }
+}
+
+// Clears the given presentation-option bits app-wide (fail-soft no-op when unavailable).
+function clearAppPresentationOptions(mask) {
+  const s = initWindowLevel();
+  const app = s && s.ok ? sharedApplication() : null;
+  if (!app) return false;
+  try {
+    const current = Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
+    s.msgSend_v_ulong(app, s.SEL('setPresentationOptions:'), (current & ~mask) >>> 0);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Creates the controller. Every system effect is injectable so headless tests exercise the Dock
 // and permission state machines without touching `defaults` / killall or the Input Monitoring
 // prompt.
@@ -364,11 +532,11 @@ function createMacWallpaperController(options = {}) {
     }
   }
 
-  function writeDockMarker(prior) {
+  function writeDockMarker(priorAutohide, priorDelay) {
     const p = resolveDockMarkerPath();
     if (!p) return;
     try {
-      fsModule.writeFileSync(p, String(prior));
+      fsModule.writeFileSync(p, JSON.stringify({ autohide: priorAutohide, delay: priorDelay }));
     } catch (e) {
       // ignore
     }
@@ -433,11 +601,14 @@ function createMacWallpaperController(options = {}) {
         }
         if (on && dockPriorAutohide === '1') return; // already auto-hidden -> nothing to change
         if (on) {
-          // Marker BEFORE the write so a crash still recovers (prior is 'absent'|'0' here).
-          writeDockMarker(dockPriorAutohide);
+          // Read BOTH prior values before mutating anything, then write the marker with both:
+          // a crash after the reveal delay is zeroed must recover the user's custom delay, not
+          // delete the preference (the delay was previously read after the marker write, so a
+          // crash in between left recovery with no delay to restore).
           if (dockPriorAutohideDelay === null) {
             dockPriorAutohideDelay = readDockPref('autohide-delay');
           }
+          writeDockMarker(dockPriorAutohide, dockPriorAutohideDelay);
           await execDockStep('/usr/bin/defaults', ['write', 'com.apple.dock', 'autohide-delay', '-float', '0'], '[WallpaperMac] autohide-delay write failed:');
           await execDockStep('/usr/bin/defaults', ['write', 'com.apple.dock', 'autohide', '-bool', 'true'], '[WallpaperMac] autohide write failed:');
           await execDockStep('/usr/bin/killall', ['Dock'], '[WallpaperMac] Dock restart failed:');
@@ -527,9 +698,10 @@ function createMacWallpaperController(options = {}) {
   }
 
   // On startup: a surviving marker means a previous session auto-hid the Dock and died before
-  // restoring it. Restore the user's prior autohide so they never open to a permanently
-  // auto-hidden Dock. Runs on the Dock op queue BEFORE any later enter's hide, so that hide reads
-  // the restored state — never the still-hidden crash state — as "the user's" preference.
+  // restoring it. Restore the user's prior autohide AND reveal delay so they never open to a
+  // permanently auto-hidden Dock or a silently deleted autohide-delay preference. Runs on the
+  // Dock op queue BEFORE any later enter's hide, so that hide reads the restored state — never
+  // the still-hidden crash state — as "the user's" preference.
   function recoverStrandedDock() {
     return dockEnqueue(async () => {
       if (platform !== 'darwin' || testMode) return;
@@ -537,8 +709,15 @@ function createMacWallpaperController(options = {}) {
       if (!p) return;
       try {
         if (!fsModule.existsSync(p)) return;
-        const prior = fsModule.readFileSync(p, 'utf8').trim() || 'absent';
-        dockPriorAutohide = (prior === '0' || prior === 'absent') ? prior : 'absent'; // marker never stores '1'
+        const marker = parseDockMarker(fsModule.readFileSync(p, 'utf8'));
+        if (!marker) {
+          // Unknown / unreadable marker: nothing trustworthy to restore; drop it so recovery
+          // does not repeat forever (and does not reset unrelated Dock preferences).
+          clearDockMarker();
+          return;
+        }
+        dockPriorAutohide = marker.autohide; // marker never stores '1'
+        dockPriorAutohideDelay = marker.delay;
         await restoreDockInner();
       } catch (e) {
         // ignore
@@ -749,6 +928,12 @@ function createMacWallpaperController(options = {}) {
     getOcclusionState(win) {
       return readWindowOcclusionState(win);
     },
+    presentationOptions() {
+      return currentAppPresentationOptions();
+    },
+    clearPresentationOptions(mask) {
+      return clearAppPresentationOptions(mask);
+    },
     isVisibleByOcclusion(win) {
       const state = readWindowOcclusionState(win);
       if (state === null || state === undefined) return null;
@@ -791,12 +976,15 @@ module.exports = {
   WALLPAPER_MODE_SETTING_KEY,
   MAC_WALLPAPER_DOCK_MARKER,
   FINDER_DESKTOP_LAYER,
+  DOCK_UI_LAYER_LIMIT,
   MOVE_THROTTLE_MS,
   kCGEventTapDisabledByTimeout,
   kCGEventTapDisabledByUserInput,
   classifyMacTapEventType,
   computeDesktopLevel,
   isTransparentDesktopSurface,
+  isFullDisplaySurface,
+  parseDockMarker,
   createMacWallpaperController,
   isMacWallpaperTestMode,
 };

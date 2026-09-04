@@ -92,6 +92,9 @@ export const buildSettingsCommandContext = (
         toggleWallpaperMode: () => desktop.handleToggleWallpaperMode(
             !useDesktopSettingsStore.getState().wallpaperMode,
         ),
+        toggleWallpaperMacAutohideDock: () => desktop.handleToggleWallpaperMacAutohideDock(
+            !useDesktopSettingsStore.getState().wallpaperMacAutohideDock,
+        ),
         sleepTimerEnabled: sleepTimer.sleepTimerEnabled,
         setSleepTimerEnabled: sleepTimer.handleToggleSleepTimer,
         sleepTimerHours: sleepTimer.sleepTimerHours,

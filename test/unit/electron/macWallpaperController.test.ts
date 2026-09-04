@@ -15,6 +15,8 @@ const {
   classifyMacTapEventType,
   computeDesktopLevel,
   isTransparentDesktopSurface,
+  isFullDisplaySurface,
+  parseDockMarker,
   createMacWallpaperController,
   isMacWallpaperTestMode,
   FINDER_DESKTOP_LAYER,
@@ -22,10 +24,19 @@ const {
   classifyMacTapEventType: (type: number) => string | null;
   computeDesktopLevel: (iconLevel: number) => number;
   isTransparentDesktopSurface: (layer: number, alpha: number) => boolean;
+  isFullDisplaySurface: (bounds: Rect | null, displayFrame: Rect | null) => boolean;
+  parseDockMarker: (content: string) => { autohide: '0' | 'absent'; delay: string } | null;
   createMacWallpaperController: (options?: Record<string, unknown>) => Controller;
   isMacWallpaperTestMode: (env: Record<string, string>, testMode?: boolean) => boolean;
   FINDER_DESKTOP_LAYER: number;
 };
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface ExecCall {
   cmd: string;
@@ -170,6 +181,51 @@ describe('isTransparentDesktopSurface', () => {
   });
 });
 
+describe('isFullDisplaySurface', () => {
+  const displayFrame: Rect = { x: 0, y: 0, width: 1470, height: 956 };
+
+  it('recognises the full-display Finder backdrop / Dock surfaces', () => {
+    expect(isFullDisplaySurface({ x: 0, y: 0, width: 1470, height: 956 }, displayFrame)).toBe(true);
+    // Menu-bar / Dock overlap and WindowServer rounding leave a couple of pixels of slop.
+    expect(isFullDisplaySurface({ x: 0, y: 1, width: 1470, height: 955 }, displayFrame)).toBe(true);
+  });
+
+  it('keeps smaller real windows (icon windows, a visible Dock bar) distinct', () => {
+    expect(isFullDisplaySurface({ x: 0, y: 0, width: 1470, height: 90 }, displayFrame)).toBe(false);
+    expect(isFullDisplaySurface({ x: 0, y: 0, width: 1400, height: 956 }, displayFrame)).toBe(false);
+    expect(isFullDisplaySurface({ x: 20, y: 20, width: 64, height: 64 }, displayFrame)).toBe(false);
+  });
+
+  it('fails soft when either frame is missing', () => {
+    expect(isFullDisplaySurface({ x: 0, y: 0, width: 1470, height: 956 }, null)).toBe(false);
+    expect(isFullDisplaySurface(null, displayFrame)).toBe(false);
+  });
+});
+
+describe('parseDockMarker', () => {
+  it('parses the JSON markers this build writes (both prior values)', () => {
+    expect(parseDockMarker(JSON.stringify({ autohide: '0', delay: 'absent' })))
+      .toEqual({ autohide: '0', delay: 'absent' });
+    expect(parseDockMarker(JSON.stringify({ autohide: 'absent', delay: '0.8' })))
+      .toEqual({ autohide: 'absent', delay: '0.8' });
+  });
+
+  it('reads first-generation plain-value markers with an unknown delay', () => {
+    expect(parseDockMarker('0')).toEqual({ autohide: '0', delay: 'absent' });
+    expect(parseDockMarker('absent')).toEqual({ autohide: 'absent', delay: 'absent' });
+  });
+
+  it('rejects unknown content so recovery never guesses at the prior state', () => {
+    // A marker is only ever written right before hiding the Dock, so '1' can never be stored.
+    expect(parseDockMarker('1')).toBeNull();
+    expect(parseDockMarker('garbage')).toBeNull();
+    expect(parseDockMarker(JSON.stringify({ autohide: '1', delay: '0.5' }))).toBeNull();
+    expect(parseDockMarker(JSON.stringify({ delay: '0.5' }))).toBeNull();
+    expect(parseDockMarker('{broken json')).toBeNull();
+    expect(parseDockMarker('')).toBeNull();
+  });
+});
+
 describe('isDockAtBottom', () => {
   const makeController = (execFileSync: () => unknown) => createMacWallpaperController({
     store: { get: () => null, set: () => undefined },
@@ -236,9 +292,29 @@ describe('Dock auto-hide state machine', () => {
       { cmd: '/usr/bin/defaults', args: ['write', 'com.apple.dock', 'autohide', '-bool', 'true'] },
       { cmd: '/usr/bin/killall', args: ['Dock'] },
     ]);
-    // Marker written before the writes so a crash can still recover.
+    // Marker written before the writes so a crash can still recover; it carries BOTH prior values
+    // (JSON), so a crash after zeroing the delay restores it instead of deleting the preference.
     expect(fs.existsSync(harness.markerFile)).toBe(true);
-    expect(fs.readFileSync(harness.markerFile, 'utf8')).toBe('0');
+    expect(JSON.parse(fs.readFileSync(harness.markerFile, 'utf8')))
+      .toEqual({ autohide: '0', delay: 'absent' });
+  });
+
+  it('persists a custom reveal delay in the marker and restores it', async () => {
+    const custom = createDockHarness({ autohide: '0', autohideDelay: '0.8' });
+    await custom.controller.setDockAutohide(true);
+    expect(JSON.parse(fs.readFileSync(custom.markerFile, 'utf8')))
+      .toEqual({ autohide: '0', delay: '0.8' });
+    custom.execCalls.length = 0;
+
+    await custom.controller.restoreDock();
+    expect(custom.execCalls).toEqual([
+      // The user's own delay comes back, not a deleted preference.
+      { cmd: '/usr/bin/defaults', args: ['write', 'com.apple.dock', 'autohide-delay', '-float', '0.8'] },
+      { cmd: '/usr/bin/defaults', args: ['write', 'com.apple.dock', 'autohide', '-bool', 'false'] },
+      { cmd: '/usr/bin/killall', args: ['Dock'] },
+    ]);
+    expect(fs.existsSync(custom.markerFile)).toBe(false);
+    fs.rmSync(custom.tempDir, { recursive: true, force: true });
   });
 
   it('leaves an already auto-hidden Dock alone', async () => {
@@ -284,6 +360,29 @@ describe('Dock auto-hide state machine', () => {
     harness.controller.configureDockRecovery();
     await harness.controller.recoverStrandedDock();
     expect(harness.execCalls.map(call => call.args[0])).toEqual(['delete', 'write', 'Dock']);
+    expect(fs.existsSync(harness.markerFile)).toBe(false);
+  });
+
+  it('recoverStrandedDock restores the reveal delay a JSON marker recorded', async () => {
+    // Crash after the marker write: the JSON marker holds the user's delay ('0.8') as well, so
+    // recovery puts it back instead of deleting the preference.
+    fs.writeFileSync(harness.markerFile, JSON.stringify({ autohide: '0', delay: '0.8' }));
+    harness.controller.configureDockRecovery();
+    await harness.controller.recoverStrandedDock();
+    expect(harness.execCalls).toEqual([
+      { cmd: '/usr/bin/defaults', args: ['write', 'com.apple.dock', 'autohide-delay', '-float', '0.8'] },
+      { cmd: '/usr/bin/defaults', args: ['write', 'com.apple.dock', 'autohide', '-bool', 'false'] },
+      { cmd: '/usr/bin/killall', args: ['Dock'] },
+    ]);
+    expect(fs.existsSync(harness.markerFile)).toBe(false);
+  });
+
+  it('recoverStrandedDock drops an unknown marker instead of resetting preferences', async () => {
+    fs.writeFileSync(harness.markerFile, 'not a marker we wrote');
+    harness.controller.configureDockRecovery();
+    await harness.controller.recoverStrandedDock();
+    expect(harness.execCalls).toEqual([]);
+    expect(harness.execSyncCalls).toEqual([]);
     expect(fs.existsSync(harness.markerFile)).toBe(false);
   });
 

@@ -394,6 +394,7 @@ export default {
       "settings-lyric-filter": { "title": "歌词过滤", "description": "打开歌词过滤设置" },
       "settings-wallpaper-mode": { "title": "壁纸模式设置", "description": "打开壁纸模式设置" },
       "desktop-toggle-wallpaper-mode": { "title": "切换壁纸模式", "description": "将应用作为桌面歌词壁纸" },
+      "desktop-toggle-wallpaper-dock-autohide": { "title": "壁纸模式下自动隐藏 Dock 栏", "description": "开启后壁纸模式期间自动隐藏 Dock 栏（仅底部 Dock 生效）" },
       "sleep-timer": { "title": "睡眠定时", "description": "指定时长后暂停播放，桌面端将关闭应用" },
       "navigate-home": { "title": "回到首页", "description": "返回首页视图" },
       "navigate-player": { "title": "回到播放器", "description": "返回播放器视图" },
