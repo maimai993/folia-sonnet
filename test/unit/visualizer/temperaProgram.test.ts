@@ -131,6 +131,25 @@ describe('Tempera program compiler', () => {
         expect(segments.filter(segment => segment.text.includes('time'))[1].startTime).toBeGreaterThanOrEqual(2);
     });
 
+    // temperaLayout tells a real word gap (0.26em) from a bare CJK word boundary (0.035em) by the
+    // hole a dropped whitespace segment leaves in the offsets. A saved segmentation carrying the
+    // space inside a word left the segments touching, so every Latin word gap collapsed to the
+    // CJK hair. The edge split in segmentLyricWords is what restores the hole.
+    it('leaves an offset gap at a real space whether the split is saved or default', () => {
+        const words = [
+            { text: "It's", startTime: 0, endTime: 0.8 },
+            { text: 'unbelievable', startTime: 1, endTime: 2 },
+        ];
+        const fullText = "It's unbelievable";
+        const gaps = (source: Line) => {
+            const rendered = buildTemperaSegments(source).filter(segment => segment.text.trim().length > 0);
+            return rendered.slice(1).map((segment, index) => segment.startOffset > rendered[index].endOffset);
+        };
+
+        expect(gaps(line(fullText, 0, 3, words))).toEqual([true]);
+        expect(gaps(line(fullText, 0, 3, words, { wordSegments: ["It's ", 'unbelievable'] }))).toEqual([true]);
+    });
+
     it('falls back losslessly when Intl.Segmenter is unavailable', () => {
         const original = Intl.Segmenter;
         vi.stubGlobal('Intl', { ...Intl, Segmenter: undefined });

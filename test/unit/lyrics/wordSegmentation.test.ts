@@ -90,6 +90,50 @@ describe('segmentLyricWords', () => {
         expect(hasWordSegmentationOverride(line)).toBe(false);
         expect(segmentLyricWords(line).map(part => part.segment).join('')).toBe('我想要说');
     });
+
+    // The prompt tells the model a space belongs to the segment before it; realignSegmentsToText
+    // hands it to whichever slice sits next to it. Either way the consumers need it standing on
+    // its own, the way Intl.Segmenter emits it.
+    it('lifts trailing whitespace out into a segment of its own', () => {
+        const segments = segmentLyricWords({
+            fullText: "It's unbelievable",
+            wordSegments: ["It's ", 'unbelievable'],
+        });
+
+        expect(segments.map(part => part.segment)).toEqual(["It's", ' ', 'unbelievable']);
+        expect(segments.map(part => part.isWordLike)).toEqual([true, false, true]);
+        expect(segments.map(part => part.index)).toEqual([0, 4, 5]);
+    });
+
+    it('lifts leading whitespace out into a segment of its own', () => {
+        const segments = segmentLyricWords({
+            fullText: "It's unbelievable",
+            wordSegments: ["It's", ' unbelievable'],
+        });
+
+        expect(segments.map(part => part.segment)).toEqual(["It's", ' ', 'unbelievable']);
+        expect(segments.map(part => part.index)).toEqual([0, 4, 5]);
+    });
+
+    it('keeps whitespace inside a segment, which is the one thing Intl.Segmenter cannot express', () => {
+        const segments = segmentLyricWords({ fullText: 'New York City', wordSegments: ['New York', ' City'] });
+        expect(segments.map(part => part.segment)).toEqual(['New York', ' ', 'City']);
+    });
+
+    it('leaves a whitespace-only boundary alone', () => {
+        const segments = segmentLyricWords({ fullText: '把 你', wordSegments: ['把', ' ', '你'] });
+        expect(segments.map(part => part.segment)).toEqual(['把', ' ', '你']);
+    });
+
+    it('keeps offsets slicing the original text back out after the split', () => {
+        const fullText = '把回忆 拼好给你';
+        const segments = segmentLyricWords({ fullText, wordSegments: ['把', '回忆 ', '拼好', '给', '你'] });
+
+        expect(segments.map(part => part.segment).join('')).toBe(fullText);
+        segments.forEach(part => {
+            expect(fullText.slice(part.index, part.index + part.segment.length)).toBe(part.segment);
+        });
+    });
 });
 
 describe('cjkSemanticLayout with a saved segmentation', () => {
@@ -114,6 +158,19 @@ describe('cjkSemanticLayout with a saved segmentation', () => {
         );
 
         expect(units.map(unit => unit.text)).toEqual(['New York']);
+    });
+
+    it('aligns a CJK line whose saved segmentation carries the line’s space inside a word', () => {
+        // The model attaches the space to 「回忆」. Parser words never contain whitespace, so before
+        // the edge split this failed to align and dropped the whole line to one unit per word -
+        // leaving 拼好 as 拼 + 好, which is worse than having no saved segmentation at all.
+        const words = [word('把', 0, 1), word('回', 1, 2), word('忆', 2, 3), word('拼', 3, 4), word('好', 4, 5)];
+        const units = buildPostLyricLayoutUnits(
+            { fullText: '把回忆 拼好', words, wordSegments: ['把', '回忆 ', '拼好'] },
+            { semantic: true, sticky: true },
+        );
+
+        expect(units.map(unit => unit.text)).toEqual(['把', '回忆', '拼好']);
     });
 
     it('falls back to one unit per parser word when a boundary splits a parser word', () => {

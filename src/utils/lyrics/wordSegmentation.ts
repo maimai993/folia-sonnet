@@ -71,10 +71,36 @@ export const isValidWordSegmentation = (text: string, boundaries: string[] | und
     && boundaries.join('') === text
 );
 
+const EDGE_WHITESPACE = /^(\s*)(.*?)(\s*)$/su;
+
+/**
+ * Lifts the whitespace at a saved boundary's edges out into segments of its own, so a saved split
+ * reaches the consumers in the same shape Intl.Segmenter would have produced.
+ *
+ * Intl.Segmenter always emits a whitespace run as a segment in its own right, and every consumer is
+ * written against that. tempera tells a real word gap from a bare CJK word boundary by the hole a
+ * dropped whitespace segment leaves in the offsets, and cjkSemanticLayout skips whitespace segments
+ * when aligning to parser words, which never contain any. The saved format is the other way round:
+ * the prompt tells the model that a space belongs to the segment before it, and
+ * realignSegmentsToText attaches the line's real whitespace to whichever slice sits next to it. So
+ * an unsplit boundary arrives downstream as a word with a space glued on — which read as "no space
+ * here" in tempera, and failed to align at all in cjkSemanticLayout.
+ *
+ * Whitespace INSIDE a segment is deliberately left alone. It is the one thing this format can say
+ * that Intl.Segmenter cannot — a multi-word phrase the user kept together on purpose — and the
+ * consumers already handle it (or already fall back) exactly as they do today. Punctuation is left
+ * attached for the same reason: the sticky passes in tempera and sonnet would re-attach it anyway.
+ */
+const splitEdgeWhitespace = (boundaries: string[]): string[] => boundaries.flatMap(boundary => {
+    const [, lead, core, trail] = EDGE_WHITESPACE.exec(boundary) ?? [];
+    // No core means the boundary is whitespace only, which is already the shape we want.
+    return core ? [lead, core, trail].filter(Boolean) : [boundary].filter(Boolean);
+});
+
 /** Word segments for a line: the user's saved split when it is valid, else Intl.Segmenter. */
 export const segmentLyricWords = (line: Pick<Line, 'fullText' | 'wordSegments'>): LyricWordSegment[] => {
     if (isValidWordSegmentation(line.fullText, line.wordSegments)) {
-        return segmentsFromBoundaries(line.wordSegments!);
+        return segmentsFromBoundaries(splitEdgeWhitespace(line.wordSegments!));
     }
 
     return segmentTextWords(line.fullText);
