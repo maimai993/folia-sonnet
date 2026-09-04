@@ -92,6 +92,18 @@ const REASONING_SUPPRESSION_ATTEMPTS = [
   { params: {} },
 ];
 
+// Rules 4 and 5 and the Japanese half of the example block are load-bearing for weaker models. With
+// only the Chinese and English example, a model reads the English row as "split at spaces" and
+// applies that to everything: measured on deepseek-v4-flash over 19 Japanese lines, 5 to 10 of them
+// came back as a single segment, at 1.6-2.4 segments per line, where Intl.Segmenter gives 7 for the
+// same text. An abstract "never return a whole clause" rule on its own changed nothing (still 9
+// lines unsplit); it is the Japanese rule together with the two Japanese example rows that moved it
+// to 1 unsplit line at 3.8 segments. Not a Japanese-only patch: with them Chinese stopped being
+// over-split (摘不下 and 盒子里 survive as one segment, which rule 3 already asked for) and English
+// output was byte-identical. Gemini gains the same way, 2.8 segments per line to 3.4.
+//
+// The bracket clause in rule 7 pays for itself: without it the added rules pull (拼图女孩) apart
+// into three segments.
 const SEGMENTATION_SYSTEM_PROMPT = [
   'You segment song lyrics into words for a typography engine.',
   '',
@@ -106,18 +118,29 @@ const SEGMENTATION_SYSTEM_PROMPT = [
   '3. Split at meaning, not at characters. For Chinese, Japanese and Korean, group characters into',
   '   real words and set phrases (不知道 / 孤独的 / キラキラ), not one character per segment.',
   '   Keep verb–complement and noun–suffix pairs together when they read as one word.',
-  '4. Keep space-delimited words whole for Latin scripts, and keep contractions such as it’s or',
+  '4. One word per segment. A segment carries a single content word plus the grammatical tail glued',
+  '   to it. If a segment still holds a second noun, verb or adjective, split it again. Spaces are',
+  '   not the only split points: a Japanese or Chinese line usually has none and still needs one',
+  '   segment per word. Returning a whole clause, or a whole line, as one segment is a failure.',
+  '5. Japanese specifically: split before every content word, and keep each content word together',
+  '   with the okurigana, auxiliaries and particles that follow it (見えない / ように / 集めたい /',
+  '   けど). Sentence-final particles (よ / ね / さ) attach to what precedes them.',
+  '6. Keep space-delimited words whole for Latin scripts, and keep contractions such as it’s or',
   '   don’t in one segment.',
-  '5. Attach trailing punctuation to the segment it follows (世界。 not 世界 + 。). A space belongs to',
-  '   the segment that precedes it.',
-  '6. The "N. " prefix on each input line is numbering added by this request. It is NOT part of the',
+  '7. Attach trailing punctuation to the segment it follows (世界。 not 世界 + 。). A bracket or quote',
+  '   stays in one segment with the text it wraps ((拼图女孩) not ( + 拼图女孩 + )). A space belongs',
+  '   to the segment that precedes it.',
+  '8. The "N. " prefix on each input line is numbering added by this request. It is NOT part of the',
   '   lyric. Never include it in a segment.',
   '',
-  'Example. Given:',
+  'Examples. Given:',
   '  1. 把回忆拼好给你',
   '  2. It\u2019s unbelievable, isn\u2019t it?',
+  '  3. いっぱいあるんだよ欲しいもの',
+  '  4. 見えないようにさ 隠しても',
   'answer exactly:',
-  '  {"lines": [["把", "回忆", "拼好", "给", "你"], ["It\u2019s ", "unbelievable, ", "isn\u2019t ", "it?"]]}',
+  '  {"lines": [["把", "回忆", "拼好", "给", "你"], ["It\u2019s ", "unbelievable, ", "isn\u2019t ", "it?"],'
+  + ' ["いっぱい", "あるんだよ", "欲しい", "もの"], ["見えない", "ように", "さ ", "隠しても"]]}',
   '',
   'Respond with JSON only: {"lines": [["seg", "seg"], ["seg"]]}. No prose, no code fence.',
 ].join('\n');
