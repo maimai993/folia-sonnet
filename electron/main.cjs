@@ -621,17 +621,6 @@ const MAC_WALLPAPER_TAP_RETRY_DELAY_MS = 2000;
 const MAC_WALLPAPER_TAP_FAILURE_THRESHOLD = 3;
 const MAC_WALLPAPER_DRAG_FLUSH_MS = 16;
 
-// NSApplicationPresentationOptions bits involved in the wallpaper session. Electron's
-// simple-full-screen emulation is the pre-Lion kind: entering it sets the APP-LEVEL
-// AutoHideDock | AutoHideMenuBar presentation bits, and leaving it restores whatever options were
-// current when that window entered. The capture can be stale (a rebuilt window enters while the
-// bits are still set; entering while a native full-screen exit is still animating can capture the
-// FullScreen bit), which strands auto-hiding on an ordinary window after exit — focusing Folia
-// keeps hiding the menu bar / Dock until the next wallpaper session clears it.
-const NS_PRESENTATION_AUTOHIDE_DOCK = 1 << 0; // NSApplicationPresentationAutoHideDock
-const NS_PRESENTATION_AUTOHIDE_MENU_BAR = 1 << 2; // NSApplicationPresentationAutoHideMenuBar
-const NS_PRESENTATION_FULL_SCREEN = 1 << 10; // NSApplicationPresentationFullScreen
-
 function isMacWallpaperMode() {
   return process.platform === 'darwin' && isWallpaperModeEnabled();
 }
@@ -662,29 +651,6 @@ function isMacSimpleFullScreen(win) {
   }
   try {
     return win.isSimpleFullScreen();
-  } catch (error) {
-    return false;
-  }
-}
-
-// Clears the app-level presentation bits a wallpaper session must not leave behind. NSApp
-// presentation options survive window rebuilds, and Electron's simple-full-screen bookkeeping can
-// restore a stale capture (see the bit constants above) — so the session clears the AutoHide bits
-// itself before entering simple full screen and again after leaving it. The FullScreen bit is only
-// cleared once the window is no longer in a native full-screen transition (while it is, the system
-// owns that bit).
-function clearMacWallpaperPresentationLeftovers() {
-  const controller = getMacWallpaperController();
-  if (!controller || typeof controller.clearPresentationOptions !== 'function') {
-    return false;
-  }
-  let mask = NS_PRESENTATION_AUTOHIDE_DOCK | NS_PRESENTATION_AUTOHIDE_MENU_BAR;
-  const windowIsNativeFullScreen = Boolean(mainWindow && !mainWindow.isDestroyed());
-  if (!windowIsNativeFullScreen || !mainWindow.isFullScreen()) {
-    mask |= NS_PRESENTATION_FULL_SCREEN;
-  }
-  try {
-    return controller.clearPresentationOptions(mask);
   } catch (error) {
     return false;
   }
@@ -878,7 +844,6 @@ function enterMacWallpaperMode() {
         // ignore
       }
     }
-    clearMacWallpaperPresentationLeftovers();
     applyMacAmbientLevel();
     applyMacWallpaperFrame();
     // Hide the Dock while the wallpaper is up when the decision says so (default: only a bottom
@@ -937,9 +902,6 @@ function exitMacWallpaperMode() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     macWallpaperSavedState = null;
     if (wasActive) {
-      // App-level presentation options survive the window: Electron's simple-full-screen
-      // auto-hide bits would keep hiding the menu bar / Dock for the rest of the process.
-      clearMacWallpaperPresentationLeftovers();
       store.set(WALLPAPER_MODE_SETTING_KEY, false);
       notifyMacWallpaperModeChanged();
     }
@@ -1026,10 +988,6 @@ function exitMacWallpaperMode() {
   } catch (error) {
     console.warn('[WallpaperMac] exit wallpaper mode restore issue:', error && error.message);
   } finally {
-    // Electron's simple-full-screen exit restores the app-level presentation options it captured
-    // on entry — a capture that can be stale (see the bit constants). Force the wallpaper bits off
-    // after the restore so a normal window never keeps hiding the menu bar / Dock on focus.
-    clearMacWallpaperPresentationLeftovers();
     macWallpaperSavedState = null;
     store.set(WALLPAPER_MODE_SETTING_KEY, false);
     notifyMacWallpaperModeChanged();
@@ -1100,10 +1058,6 @@ function rebindMacWallpaperSessionToCurrentWindow() {
         // ignore
       }
     }
-    // Clear stale AutoHide presentation bits before the replacement window enters simple full
-    // screen (the old window's bits survive the swap and would otherwise be captured as the value
-    // Electron restores on exit — the "focusing Folia hides the menu bar" leftover).
-    clearMacWallpaperPresentationLeftovers();
     applyMacAmbientLevel();
     applyMacWallpaperFrame();
     if (shouldMacWallpaperAutohideDock(controller)) {
