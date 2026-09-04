@@ -2435,7 +2435,7 @@ const THEME_JSON_SCHEMA = {
           items: { type: 'string' }
         },
       },
-      required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
+      required: ['name', 'description', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
     },
     dark: {
       type: 'object',
@@ -2467,7 +2467,7 @@ const THEME_JSON_SCHEMA = {
           items: { type: 'string' }
         },
       },
-      required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
+      required: ['name', 'description', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons'],
     },
   },
   required: ['light', 'dark'],
