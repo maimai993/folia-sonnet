@@ -190,16 +190,29 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
-    createSettingsCommand('settings-wallpaper-mode', 'Wallpaper mode settings', 'Open wallpaper mode settings', ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸'], 'options', 'desktop', { platform: ['linux', 'win'] }),
+    createSettingsCommand('settings-wallpaper-mode', 'Wallpaper mode settings', 'Open wallpaper mode settings', ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸'], 'options', 'desktop', { platform: ['linux', 'win', 'mac'] }),
     {
         id: 'desktop-toggle-wallpaper-mode',
-        platform: ['linux', 'win'],
+        platform: ['linux', 'win', 'mac'],
         group: 'settings',
         title: 'Toggle wallpaper mode',
         description: 'Turn the app into a desktop lyrics wallpaper',
         keywords: ['wallpaper mode', 'desktop wallpaper', 'lyrics wallpaper', '壁纸模式', '桌面壁纸', '歌词壁纸'],
         execute: (_input, context) => {
             context.settings.toggleWallpaperMode();
+            return true;
+        },
+    },
+    {
+        // macOS-only functional desktop toggle; same store/IPC path as the settings row.
+        id: 'desktop-toggle-wallpaper-dock-autohide',
+        platform: ['mac'],
+        group: 'settings',
+        title: 'Toggle Dock auto-hide in wallpaper mode',
+        description: 'Auto-hide the Dock while Mac wallpaper mode is active (bottom Dock only)',
+        keywords: ['dock autohide', 'dock auto-hide', 'auto-hide the dock', 'hide the dock', '自动隐藏Dock', 'Dock自动隐藏', '隐藏Dock'],
+        execute: (_input, context) => {
+            context.settings.toggleWallpaperMacAutohideDock();
             return true;
         },
     },

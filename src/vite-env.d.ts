@@ -664,6 +664,7 @@ declare global {
       saveSettings: (key: string, value: any) => Promise<any>;
       onWallpaperModeChanged?: (callback: (settings: Record<string, unknown>) => void) => () => void;
       onWallpaperTransparentRefused?: (callback: (settings: Record<string, unknown>) => void) => () => void;
+      onWallpaperInputMonitorRequested?: (callback: () => void) => () => void;
       setPlaybackDisplaySleepBlockingActive: (active: boolean) => Promise<boolean>;
       setAppLocale: (localeKey: 'en' | 'zh-CN' | 'in') => Promise<string>;
       getCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;

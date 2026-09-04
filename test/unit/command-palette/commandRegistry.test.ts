@@ -97,6 +97,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleVoiceInputPause: vi.fn(),
             togglePreventDisplaySleepDuringPlayback: vi.fn(),
             toggleWallpaperMode: vi.fn(),
+            toggleWallpaperMacAutohideDock: vi.fn(),
             sleepTimerEnabled: false,
             setSleepTimerEnabled: vi.fn(),
             sleepTimerHours: 0,

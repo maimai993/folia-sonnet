@@ -13,6 +13,7 @@ import {
     resolveVisualizerBackgroundMode,
 } from '../stores/visualizerSettingsPersistence';
 import i18n from '../i18n/config';
+import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../stores/useVisualizerAssetStore';
@@ -157,6 +158,17 @@ export function useAppPreferences() {
         // stays in its previous state, this only explains why nothing happened.
         return window.electron?.onWallpaperTransparentRefused?.(() => {
             usePlayerChromeSettingsStore.getState().handleWallpaperTransparentRefused();
+        });
+    }, []);
+
+    useEffect(() => {
+        // macOS wallpaper mode refused to enter because Input Monitoring is not granted: the
+        // main process surfaces the System Settings prompt, this explains what to do next.
+        return window.electron?.onWallpaperInputMonitorRequested?.(() => {
+            setStatusMessage({
+                type: 'info',
+                text: i18n.t('notifications.macWallpaperInputMonitoringNeeded'),
+            });
         });
     }, []);
 

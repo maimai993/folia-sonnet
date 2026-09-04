@@ -23,6 +23,10 @@ export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_task
 
 export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 
+// macOS-only: auto-hide the Dock while a wallpaper session is active. On by default (a bottom Dock
+// is hidden automatically; the switch is the explicit override the main process honours).
+export const WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY = 'wallpaper_mac_autohide_dock';
+
 export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 
 export type DesktopSettingsState = {
@@ -38,8 +42,11 @@ export type DesktopSettingsState = {
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
     wallpaperMode: boolean;
+    /** macOS-only: auto-hide the Dock while wallpaper mode is active. On by default — a bottom Dock
+     *  is hidden automatically; switching it off overrides the automatic rule. */
+    wallpaperMacAutohideDock: boolean;
     openPlayerOnLaunch: boolean;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; wallpaper_mac_autohide_dock?: unknown; }) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
     handleToggleModSystem: (enable: boolean) => void;
@@ -47,6 +54,7 @@ export type DesktopSettingsState = {
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
     handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
     handleToggleWallpaperMode: (enable: boolean) => void;
+    handleToggleWallpaperMacAutohideDock: (enable: boolean) => void;
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
 };
 
@@ -58,6 +66,7 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
+    wallpaperMacAutohideDock: getStoredBoolean(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, true),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     setDesktopPreferenceSnapshot: (settings) => {
         const patch: Partial<DesktopSettingsState> = {};
@@ -88,6 +97,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         if (typeof settings.wallpaper_mode === 'boolean') {
             patch.wallpaperMode = settings.wallpaper_mode;
             setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, settings.wallpaper_mode);
+        }
+        if (typeof settings.wallpaper_mac_autohide_dock === 'boolean') {
+            patch.wallpaperMacAutohideDock = settings.wallpaper_mac_autohide_dock;
+            setStoredBoolean(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, settings.wallpaper_mac_autohide_dock);
         }
         set(patch);
     },
@@ -163,6 +176,19 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
             text: i18n.t('notifications.' + (enable ? 'wallpaperModeOn' : 'wallpaperModeOff')),
         });
     },
+    // macOS-only: explicit override for the position-aware Dock auto-hide. The main process applies
+    // it live on an already-active wallpaper session; otherwise it takes effect on the next entry.
+    handleToggleWallpaperMacAutohideDock: (enable) => {
+        setStoredBoolean(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, enable);
+        set({ wallpaperMacAutohideDock: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'macWallpaperAutohideDockOn' : 'macWallpaperAutohideDockOff')),
+        });
+    },
     handleToggleOpenPlayerOnLaunch: (enable) => {
         setStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, enable);
         set({ openPlayerOnLaunch: enable });
@@ -185,6 +211,7 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     hideTaskbarIcon: state.hideTaskbarIcon,
     hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
     wallpaperMode: state.wallpaperMode,
+    wallpaperMacAutohideDock: state.wallpaperMacAutohideDock,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
     handleToggleVoiceInputPause: state.handleToggleVoiceInputPause,
@@ -193,6 +220,7 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     handleToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
     handleToggleHideRemoteControlTaskbarIcon: state.handleToggleHideRemoteControlTaskbarIcon,
     handleToggleWallpaperMode: state.handleToggleWallpaperMode,
+    handleToggleWallpaperMacAutohideDock: state.handleToggleWallpaperMacAutohideDock,
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
     setDesktopPreferenceSnapshot: state.setDesktopPreferenceSnapshot,
 });
