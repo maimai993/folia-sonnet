@@ -208,7 +208,7 @@
     "@types/three": "^0.185.4",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.5",
-    "@xmldom/xmldom": "^0.9.10",
+    "@xmldom/xmldom": "^0.9.12",
     "animejs": "^4.5.0",
     "autoprefixer": "^10.5.4",
     "baseline-browser-mapping": "^2.11.13",
@@ -227,7 +227,7 @@
     "opencc-js": "^1.4.1",
     "pinyin-pro": "3.29.3",
     "pixi.js": "^8.20.1",
-    "postcss": "^8.5.19",
+    "postcss": "^8.5.28",
     "react": "^19.2.8",
     "react-colorful": "^5.8.0",
     "react-dom": "^19.2.8",
@@ -248,6 +248,10 @@
     "@babel/plugin-transform-runtime": "7.29.7",
     "@discordjs/rest": {
       "undici": "^6.27.0"
+    },
+    "qs": "6.16.0",
+    "three-stdlib": {
+      "fflate": "$fflate"
     }
   }
 }
