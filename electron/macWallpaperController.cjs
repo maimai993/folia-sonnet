@@ -165,6 +165,7 @@ function initWindowLevel() {
     const koffi = require('koffi');
     const objc = koffi.load('/usr/lib/libobjc.A.dylib');
     const sel_registerName = objc.func('void* sel_registerName(const char*)');
+    const objc_getClass = objc.func('void* objc_getClass(const char*)');
     const msgSend_ptr = objc.func('objc_msgSend', 'void*', ['void*', 'void*']);
     const msgSend_long = objc.func('objc_msgSend', 'long', ['void*', 'void*']);
     const msgSend_ulong = objc.func('objc_msgSend', 'unsigned long', ['void*', 'void*']);
@@ -189,6 +190,7 @@ function initWindowLevel() {
       ok: true,
       koffi,
       SEL,
+      objc_getClass,
       msgSend_ptr,
       msgSend_long,
       msgSend_ulong,
@@ -435,6 +437,60 @@ function readWindowOcclusionState(win) {
     return Number(s.msgSend_ulong(w, s.SEL('occlusionState')));
   } catch (e) {
     return null;
+  }
+}
+
+// NSApplicationPresentationOptions bits Electron's simple-full-screen emulation sets APP-WIDE
+// (not per window): AutoHideDock | AutoHideMenuBar. They apply whenever this app is frontmost.
+// Electron's simple-full-screen EXIT restores the options that were current when the window
+// ENTERED; when a window is destroyed while still in simple full screen no exit runs, the bits
+// survive, and the next session captures them as "the value to restore" — stranding macOS in
+// auto-hide every time the app is focused. Only these two bits are ever cleared here; the
+// FullScreen bit is owned by the system during native transitions and must never be touched
+// (clearing it mid-transition is what made an earlier fix loop).
+const NS_PRESENTATION_AUTOHIDE_DOCK = 1 << 0;
+const NS_PRESENTATION_AUTOHIDE_MENU_BAR = 1 << 2;
+
+function sharedApplication() {
+  const s = initWindowLevel();
+  if (!s.ok) return null;
+  try {
+    let nsApplicationClass = s.objc_getClass('NSApplication');
+    if (!nsApplicationClass) {
+      // AppKit is loaded in the Electron main process, but stay self-sufficient: load it so the
+      // class exists (mirrors the dlopen pattern of the event-tap init).
+      try {
+        const libc = s.koffi.load('/usr/lib/libSystem.B.dylib');
+        const dlopen = libc.func('void *dlopen(const char *path, int flags)');
+        dlopen('/System/Library/Frameworks/AppKit.framework/AppKit', 2 /*RTLD_NOW*/);
+        nsApplicationClass = s.objc_getClass('NSApplication');
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (!nsApplicationClass) return null;
+    return s.msgSend_ptr(nsApplicationClass, s.SEL('sharedApplication'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// Clears the app-level AutoHideDock|AutoHideMenuBar presentation bits (fail-soft no-op when the
+// bridge is unavailable). Callers must run this only after a wallpaper session has fully torn
+// down — never during a native full-screen transition.
+function clearAutoHidePresentationOptions() {
+  const s = initWindowLevel();
+  const app = s && s.ok ? sharedApplication() : null;
+  if (!app) return false;
+  try {
+    const current = Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
+    const mask = NS_PRESENTATION_AUTOHIDE_DOCK | NS_PRESENTATION_AUTOHIDE_MENU_BAR;
+    if ((current & mask) !== 0) {
+      s.msgSend_v_ulong(app, s.SEL('setPresentationOptions:'), (current & ~mask) >>> 0);
+    }
+    return true;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -873,6 +929,12 @@ function createMacWallpaperController(options = {}) {
       return (state & (1 << 1)) !== 0; // NSWindowOcclusionState.visible bit
     },
 
+    // Clears the app-level AutoHide menu-bar/Dock presentation bits Electron's simple
+    // full screen sets (see clearAutoHidePresentationOptions). Called by main.cjs after every
+    // wallpaper teardown so a stale capture can never strand the menu bar / Dock in auto-hide.
+    clearAutoHidePresentationOptions() {
+      return clearAutoHidePresentationOptions();
+    },
     hasPermission() {
       return listenAccessGranted();
     },
