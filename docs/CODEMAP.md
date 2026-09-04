@@ -16,7 +16,7 @@
 | hooks | 65 |
 | backend/electron | 61 |
 | stores | 31 |
-| 其他 | 19 |
+| 其他 | 20 |
 | types | 15 |
 | src (其他) | 13 |
 | i18n | 5 |
