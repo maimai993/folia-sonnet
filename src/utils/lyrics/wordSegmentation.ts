@@ -106,6 +106,18 @@ export const segmentLyricWords = (line: Pick<Line, 'fullText' | 'wordSegments'>)
     return segmentTextWords(line.fullText);
 };
 
+/**
+ * Fingerprint of a line's saved split, for layout cache keys and memo dependencies.
+ *
+ * Boundary LENGTHS rather than the segment text: the boundaries always join back to the line's own
+ * `fullText`, which every caller of this already keys on, so the lengths alone pin the split down
+ * exactly — and no second copy of the lyric is built on paths that run per frame. Empty string when
+ * the line is on the default split, so adding it to a key changes nothing for lyrics without one.
+ */
+export const getWordSegmentationKey = (line: Pick<Line, 'wordSegments'>): string => (
+    line.wordSegments ? line.wordSegments.map(segment => segment.length).join(',') : ''
+);
+
 /** Whether this line will render with a user-supplied split rather than the default one. */
 export const hasWordSegmentationOverride = (line: Pick<Line, 'fullText' | 'wordSegments'>): boolean => (
     isValidWordSegmentation(line.fullText, line.wordSegments)

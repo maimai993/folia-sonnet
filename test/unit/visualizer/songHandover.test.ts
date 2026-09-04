@@ -21,6 +21,9 @@ const line = (fullText: string, startTime = 0): Line => ({
     isChorus: false,
 });
 
+/** The shape a saved segmentation reaches the gate in: same line, `wordSegments` baked on. */
+const split = (source: Line, wordSegments: string[]): Line => ({ ...source, wordSegments });
+
 const LIMITS = {
     instrumentalCommitSeconds: DEFAULT_INSTRUMENTAL_COMMIT_SECONDS,
     readyGraceMs: DEFAULT_READY_GRACE_MS,
@@ -44,6 +47,38 @@ describe('getLyricsSignature', () => {
     it('separates different-length lyric sets', () => {
         expect(getLyricsSignature([line('a')]))
             .not.toBe(getLyricsSignature([line('a'), line('b')]));
+    });
+
+    // Saving a segmentation rewrites the lines in place - same count, same text - so a signature
+    // blind to it left tempera and sonnet rendering the old split until the song changed.
+    it('separates a saved word segmentation from the default split', () => {
+        const plain = [line('把回忆拼好给你'), line('b')];
+        const segmented = [split(line('把回忆拼好给你'), ['把', '回忆', '拼好', '给', '你']), line('b')];
+
+        expect(getLyricsSignature(segmented)).not.toBe(getLyricsSignature(plain));
+    });
+
+    it('separates two segmentations that cover the same lines differently', () => {
+        // Re-running the AI, or moving one boundary by hand, leaves the coverage count untouched.
+        const first = [split(line('把回忆拼好给你'), ['把', '回忆', '拼好', '给', '你'])];
+        const second = [split(line('把回忆拼好给你'), ['把回忆', '拼好', '给你'])];
+        const moved = [split(line('把回忆拼好给你'), ['把', '回忆拼', '好', '给', '你'])];
+
+        expect(getLyricsSignature(second)).not.toBe(getLyricsSignature(first));
+        // Same segment count, one boundary shifted.
+        expect(getLyricsSignature(moved)).not.toBe(getLyricsSignature(first));
+    });
+
+    it('separates the same segmentation applied to a different line', () => {
+        const onFirst = [split(line('aa'), ['a', 'a']), line('bb')];
+        const onSecond = [line('aa'), split(line('bb'), ['b', 'b'])];
+
+        expect(getLyricsSignature(onSecond)).not.toBe(getLyricsSignature(onFirst));
+    });
+
+    it('is stable across a fresh array carrying the same segmentation', () => {
+        const build = () => [split(line('把回忆'), ['把', '回忆']), line('b')];
+        expect(getLyricsSignature(build())).toBe(getLyricsSignature(build()));
     });
 });
 
@@ -76,6 +111,21 @@ describe('decideSongCommit', () => {
             committedSignature: '2|hello',
             isCommittedInstrumental: false,
         })).toEqual({ action: 'idle' });
+    });
+
+    it('takes a re-segmentation of the song already on screen in place', () => {
+        // End to end for the gate: the same lines, re-saved with a word segmentation, have to
+        // reach the stage now rather than waiting for the next track.
+        const plain = [line('把回忆拼好给你'), line('b')];
+        const segmented = [split(line('把回忆拼好给你'), ['把', '回忆', '拼好', '给', '你']), line('b')];
+
+        expect(decideSongCommit({
+            seed: 'current',
+            committedSeed: 'current',
+            lyricsSignature: getLyricsSignature(segmented),
+            committedSignature: getLyricsSignature(plain),
+            isCommittedInstrumental: false,
+        })).toEqual({ action: 'commit', isInstrumental: false });
     });
 
     it('ignores lyrics being cleared for the song already on screen', () => {

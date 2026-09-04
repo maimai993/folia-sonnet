@@ -18,6 +18,37 @@ export const DEFAULT_INSTRUMENTAL_COMMIT_SECONDS = 2;
 export const DEFAULT_READY_GRACE_MS = 8000;
 
 /**
+ * Fold of the saved word segmentation over the set, mixed into the signature below.
+ *
+ * Saving a segmentation rewrites the lines in place: same count, same text, only `wordSegments`
+ * added. Without this the signature could not see that, the gate answered `idle`, and the new
+ * split did not reach the screen until the song changed. It also covers the load order where the
+ * stored record resolves after the lyrics and is patched onto them (useLyricWordSegmentation).
+ *
+ * Hashing has to describe the split itself, not just how many lines carry one: re-running the AI
+ * or hand-editing a line leaves the coverage count untouched while changing what gets drawn.
+ * Boundary LENGTHS are enough, since the boundaries always join back to the line's own text.
+ *
+ * Numeric FNV-1a rather than the string key in wordSegmentation.ts because this runs over every
+ * line on every render of the modes that use it, and must not build a string per pass. Lyrics with
+ * no saved split cost one null check per line and always fold to the same constant.
+ */
+const hashWordSegments = (lines: Line[]): number => {
+    let hash = 2166136261;
+    const mix = (value: number) => {
+        hash = Math.imul(hash ^ value, 16777619);
+    };
+    lines.forEach((line, index) => {
+        if (!line.wordSegments) {
+            return;
+        }
+        mix(index);
+        line.wordSegments.forEach(segment => mix(segment.length));
+    });
+    return hash >>> 0;
+};
+
+/**
  * Content signature of a lyric set. Identity comparison is useless here: the parent hands down
  * a FRESH `[]` on every render for a loading or lyric-less song, so a `lines` dependency would
  * reset the gate's timer every render and it would never fire.
@@ -26,7 +57,7 @@ export const DEFAULT_READY_GRACE_MS = 8000;
  * and "instrumental" - only playback can tell those apart.
  */
 export const getLyricsSignature = (lines: Line[]): string =>
-    lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}`;
+    lines.length === 0 ? '' : `${lines.length}|${lines[0]?.fullText ?? ''}|${hashWordSegments(lines)}`;
 
 export interface VisualizerSongCommit {
     seed: string | number | undefined;

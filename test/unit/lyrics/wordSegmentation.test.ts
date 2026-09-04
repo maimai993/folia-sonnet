@@ -5,6 +5,7 @@ import {
     segmentLyricWords,
     segmentTextWords,
     segmentsFromBoundaries,
+    getWordSegmentationKey,
 } from '../../../src/utils/lyrics/wordSegmentation';
 import {
     buildDisplayWordsFromLayoutUnits,
@@ -133,6 +134,23 @@ describe('segmentLyricWords', () => {
         segments.forEach(part => {
             expect(fullText.slice(part.index, part.index + part.segment.length)).toBe(part.segment);
         });
+    });
+});
+
+describe('getWordSegmentationKey', () => {
+    it('is empty for a line on the default split, so adding it to a key changes nothing', () => {
+        expect(getWordSegmentationKey({})).toBe('');
+        expect(getWordSegmentationKey({ wordSegments: undefined })).toBe('');
+    });
+
+    it('separates splits that differ only in where a boundary falls', () => {
+        expect(getWordSegmentationKey({ wordSegments: ['把', '回忆拼', '好'] }))
+            .not.toBe(getWordSegmentationKey({ wordSegments: ['把', '回忆', '拼好'] }));
+    });
+
+    it('is stable for the same split', () => {
+        expect(getWordSegmentationKey({ wordSegments: ['把', '回忆'] }))
+            .toBe(getWordSegmentationKey({ wordSegments: ['把', '回忆'] }));
     });
 });
 

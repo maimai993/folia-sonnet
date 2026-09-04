@@ -3,6 +3,7 @@ import { motion, AnimatePresence, MotionValue, Variants, useMotionValueEvent } f
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line, Theme, Word as WordType, AudioBands, type PartitaTuning } from '../../../types';
 import { buildDisplayWordsFromLayoutUnits, buildPostLyricLayoutUnits, type LyricLayoutUnit } from '../../../utils/lyrics/cjkSemanticLayout';
+import { getWordSegmentationKey } from '../../../utils/lyrics/wordSegmentation';
 import { buildWordGraphemeTimings } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineRenderHints } from '../../../utils/lyrics/renderHints';
 import { shouldPreheatLine, useVisualizerRuntime, type VisualizerPreheatWindow } from '../runtime';
@@ -311,7 +312,7 @@ const buildSequentialColumns = (line: Line, theme: Theme, windowHeight: number, 
     };
 };
 
-const buildPartitaLayoutCacheKey = (
+export const buildPartitaLayoutCacheKey = (
     line: Line,
     theme: Theme,
     windowHeight: number,
@@ -324,6 +325,10 @@ const buildPartitaLayoutCacheKey = (
         line.endTime,
         line.words.length,
         line.fullText,
+        // The saved split feeds buildPostLyricLayoutUnits below, so it changes the columns. The
+        // cache outlives a re-segmentation of the song playing (it is only bounded by its LRU),
+        // so without this a line already on screen kept the layout built from the old split.
+        getWordSegmentationKey(line),
         theme.animationIntensity,
         theme.fontWeight ?? 'auto',
         windowHeightBucket,
