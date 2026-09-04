@@ -10,7 +10,7 @@
 | 区域 | 文件数 |
 | --- | --- |
 | components | 524 |
-| test/dev | 403 |
+| test/dev | 404 |
 | services | 121 |
 | utils | 121 |
 | hooks | 65 |
@@ -28,7 +28,7 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 506 | `src/types.ts` |
+| 507 | `src/types.ts` |
 | 63 | `src/utils/appPlaybackGuards.ts` |
 | 61 | `src/types/onlineMusic.ts` |
 | 56 | `src/components/command-palette/types.ts` |
