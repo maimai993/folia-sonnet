@@ -2184,6 +2184,32 @@ async function resetMainWindowPresentation() {
   return setDesktopLyricMode(false);
 }
 
+async function enableDesktopLyricsLeavingWallpaperMode() {
+  store.set(WALLPAPER_MODE_SETTING_KEY, false);
+  refreshTrayMenu();
+
+  if (process.platform === 'linux') {
+    mainWindowAlwaysOnTop = true;
+    mainWindowSkipTaskbarEnabled = true;
+    store.set(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, true);
+    store.set(HIDE_TASKBAR_ICON_SETTING_KEY, true);
+    store.set(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, true);
+    process.env.FOLIA_PENDING_DESKTOP_LYRIC = '1';
+    scheduleWallpaperModeRelaunch(false);
+    return;
+  }
+
+  wallpaperModeRelaunchGeneration += 1;
+  const generation = wallpaperModeRelaunchGeneration;
+  if (wallpaperModeRelaunchTimer) {
+    clearTimeout(wallpaperModeRelaunchTimer);
+    wallpaperModeRelaunchTimer = null;
+  }
+  await relaunchForWallpaperModeChange(false, generation);
+  await setDesktopLyricMode(true);
+  refreshTrayMenu();
+}
+
 function refreshTrayMenu() {
   if (!appTray) {
     return;
@@ -2229,9 +2255,14 @@ function refreshTrayMenu() {
       label: locale.trayDesktopLyricMode,
       type: 'checkbox',
       checked: isDesktopLyricModeActive(),
-      enabled: hasMainWindow && !wallpaperOn,
+      enabled: hasMainWindow,
       click: () => {
-        void setDesktopLyricMode(!isDesktopLyricModeActive()).then(() => {
+        const nextEnabled = !isDesktopLyricModeActive();
+        if (nextEnabled && isWallpaperModeEnabled()) {
+          void enableDesktopLyricsLeavingWallpaperMode();
+          return;
+        }
+        void setDesktopLyricMode(nextEnabled).then(() => {
           refreshTrayMenu();
         });
       },
@@ -2287,7 +2318,7 @@ function refreshTrayMenu() {
       label: locale.trayHideTaskbar,
       type: 'checkbox',
       checked: mainWindowSkipTaskbarEnabled,
-      enabled: hasMainWindow,
+      enabled: hasMainWindow && !wallpaperOn,
       click: () => {
         persistMainWindowSkipTaskbarEnabled(!mainWindowSkipTaskbarEnabled);
       },
@@ -4862,6 +4893,14 @@ app.whenReady().then(async () => {
   }
   createWindow();
   focusMainWindow();
+  if (process.env.FOLIA_PENDING_DESKTOP_LYRIC === '1') {
+    delete process.env.FOLIA_PENDING_DESKTOP_LYRIC;
+    if (!isWallpaperModeEnabled()) {
+      void setDesktopLyricMode(true).then(() => {
+        refreshTrayMenu();
+      });
+    }
+  }
   // Windows wallpaper mode: attach the helper once the window exists (startup with the setting
   // on; runtime toggles go through scheduleWallpaperModeRelaunch → relaunchForWallpaperModeChange).
   if (isWindowsWallpaperMode()) {
