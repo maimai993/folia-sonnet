@@ -10,11 +10,11 @@
 | 区域 | 文件数 |
 | --- | --- |
 | components | 524 |
-| test/dev | 404 |
+| test/dev | 405 |
 | services | 121 |
 | utils | 121 |
 | hooks | 65 |
-| backend/electron | 61 |
+| backend/electron | 62 |
 | stores | 31 |
 | 其他 | 20 |
 | types | 15 |
@@ -33,7 +33,7 @@
 | 61 | `src/types/onlineMusic.ts` |
 | 56 | `src/components/command-palette/types.ts` |
 | 46 | `src/components/visualizer/colorMix.ts` |
-| 44 | `src/stores/useStatusMessageStore.ts` |
+| 45 | `src/stores/useStatusMessageStore.ts` |
 | 42 | `src/services/db.ts` |
 | 36 | `src/components/visualizer/definition.ts` |
 | 36 | `src/services/onlineMusic/songMetadata.ts` |
