@@ -476,17 +476,24 @@ function sharedApplication() {
 }
 
 // Clears the app-level AutoHideDock|AutoHideMenuBar presentation bits (fail-soft no-op when the
-// bridge is unavailable). Callers must run this only after a wallpaper session has fully torn
-// down — never during a native full-screen transition.
+// bridge is unavailable). It clears the app's REQUESTED options ([NSApp presentationOptions],
+// which persist regardless of whether this app is frontmost) — reading
+// currentSystemPresentationOptions instead would miss the bits while the app is inactive and
+// let the auto-hide resurface on the next activation. Callers run this only after a wallpaper
+// session has fully torn down (window restored or gone). Calling setPresentationOptions: while
+// the wallpaper window is still in simple full screen makes AppKit re-adjust every window and
+// re-enter this call — measured: infinite recursion pegging the main thread. Only these two
+// bits are ever cleared; never the FullScreen bit (clearing that mid-transition made an
+// earlier fix loop).
 function clearAutoHidePresentationOptions() {
   const s = initWindowLevel();
   const app = s && s.ok ? sharedApplication() : null;
   if (!app) return false;
   try {
-    const current = Number(s.msgSend_ulong(app, s.SEL('currentSystemPresentationOptions')));
+    const requested = Number(s.msgSend_ulong(app, s.SEL('presentationOptions')));
     const mask = NS_PRESENTATION_AUTOHIDE_DOCK | NS_PRESENTATION_AUTOHIDE_MENU_BAR;
-    if ((current & mask) !== 0) {
-      s.msgSend_v_ulong(app, s.SEL('setPresentationOptions:'), (current & ~mask) >>> 0);
+    if ((requested & mask) !== 0) {
+      s.msgSend_v_ulong(app, s.SEL('setPresentationOptions:'), (requested & ~mask) >>> 0);
     }
     return true;
   } catch (e) {
