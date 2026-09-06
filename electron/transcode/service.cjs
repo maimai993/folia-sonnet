@@ -8,9 +8,13 @@ const { resolveFfmpeg } = require('../modSystem/ffmpeg.cjs');
 const { transcodeAudioFile } = require('./runner.cjs');
 const {
     buildTranscodeCacheKey,
+    clearTranscodeCacheEntries,
     getTranscodeCacheDirectory,
+    listTranscodeCacheEntries,
     publishCacheEntry,
     readValidCacheEntry,
+    removeTranscodeCacheEntry,
+    removeInvalidTranscodeCacheEntries,
 } = require('./cache.cjs');
 const { TRANSCODE_PROTOCOL_SCHEME, registerTranscodeProtocol } = require('./protocol.cjs');
 
@@ -40,7 +44,7 @@ const validateSource = source => {
 
 const shouldUseWavFallback = error => /(?:Unknown encoder|Requested output format).*flac/i.test(String(error?.message || ''));
 
-const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
+const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite } = {}) => {
     const cacheDirectory = getTranscodeCacheDirectory(app.getPath('userData'));
     const temporaryRoot = path.join(cacheDirectory, 'tmp');
     const jobs = new Map();
@@ -48,6 +52,11 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
     let ffmpegPromise = null;
     const pendingJobs = [];
     let isJobRunning = false;
+
+    const log = (level, event, details = {}) => {
+        const writer = level === 'warn' ? console.warn : console.info;
+        writer('[TranscodeFallback]', event, details);
+    };
 
     const pumpQueue = async () => {
         if (isJobRunning) return;
@@ -73,7 +82,16 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
     const initialize = async () => {
         await fs.promises.rm(temporaryRoot, { recursive: true, force: true });
         await fs.promises.mkdir(temporaryRoot, { recursive: true });
+        await removeInvalidTranscodeCacheEntries(cacheDirectory);
         registerTranscodeProtocol({ protocol, resolveEntry });
+    };
+
+    const listCacheEntries = () => listTranscodeCacheEntries(cacheDirectory);
+    const removeCacheEntry = cacheKey => removeTranscodeCacheEntry(cacheDirectory, cacheKey);
+    const clearCache = async () => {
+        log('info', 'cache-clear', { activeJobs: jobs.size });
+        jobs.forEach(job => job.controller.abort());
+        await clearTranscodeCacheEntries(cacheDirectory);
     };
 
     const resolveEntry = async (cacheKey, format) => {
@@ -101,7 +119,7 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
                 throw error;
             }
             await fs.promises.writeFile(inputPath, buffer, { signal });
-            return;
+            return buffer.byteLength;
         }
 
         const response = await net.fetch(source.url, { method: 'GET', redirect: 'follow', signal });
@@ -131,27 +149,36 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
             },
         });
         await pipeline(Readable.fromWeb(response.body.pipeThrough(limiter)), fs.createWriteStream(inputPath), { signal });
+        return received;
     };
 
-    const runJob = async (source, cacheKey, controller) => {
+    const runJob = async (source, cacheKey, controller, limitBytes) => {
+        const logId = cacheKey.slice(0, 12);
+        const startedAt = Date.now();
         const cached = await readValidCacheEntry(cacheDirectory, cacheKey);
-        if (cached) return cached;
+        if (cached) {
+            log('info', 'cache-hit', { cacheKey: logId, format: cached.format });
+            return cached;
+        }
+        log('info', 'cache-miss', { cacheKey: logId, sourceKind: source.kind });
         const executable = await resolveExecutable();
         const jobDirectory = await fs.promises.mkdtemp(path.join(temporaryRoot, `${cacheKey.slice(0, 12)}-`));
         const inputPath = path.join(jobDirectory, `input${safeExtension(source.fileName)}`);
         try {
-            await writeSource(source, inputPath, controller.signal);
+            const inputBytes = await writeSource(source, inputPath, controller.signal);
+            log('info', 'encode-start', { cacheKey: logId, inputBytes, sourceKind: source.kind });
             let format = 'flac';
             let outputPath = path.join(jobDirectory, 'output.flac');
             try {
                 await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess });
             } catch (error) {
                 if (!shouldUseWavFallback(error)) throw error;
+                log('warn', 'wav-fallback', { cacheKey: logId });
                 format = 'wav';
                 outputPath = path.join(jobDirectory, 'output.wav');
                 await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess });
             }
-            return await publishCacheEntry({
+            const entry = await publishCacheEntry({
                 cacheDirectory,
                 cacheKey,
                 format,
@@ -162,6 +189,19 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
                     createdAt: Date.now(),
                 },
             });
+            const outputStat = await fs.promises.stat(entry.audioPath);
+            await onCacheWrite?.(limitBytes, {
+                cacheKey,
+                size: outputStat.size,
+                usedAt: outputStat.mtimeMs,
+            });
+            log('info', 'complete', {
+                cacheKey: logId,
+                elapsedMs: Date.now() - startedAt,
+                format,
+                outputBytes: outputStat.size,
+            });
+            return entry;
         } finally {
             await fs.promises.rm(jobDirectory, { recursive: true, force: true });
         }
@@ -175,9 +215,14 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
             || (payload?.priority !== 'playback' && payload?.priority !== 'warm')
             || !validateSource(source)
         ) {
+            log('warn', 'invalid-request', {
+                requestId: REQUEST_ID_PATTERN.test(String(requestId || '')) ? requestId : 'invalid',
+            });
             return { ok: false, errorCode: 'INVALID_REQUEST', message: 'Invalid transcode request' };
         }
         const cacheKey = buildTranscodeCacheKey(source);
+        const logId = cacheKey.slice(0, 12);
+        log('info', 'request', { requestId, cacheKey: logId, priority: payload.priority, sourceKind: source.kind });
         let job = jobs.get(cacheKey);
         if (!job) {
             const controller = new AbortController();
@@ -186,7 +231,7 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
                 if (controller.signal.aborted) {
                     throw Object.assign(new Error('Transcode cancelled'), { code: 'CANCELLED' });
                 }
-                return runJob(source, cacheKey, controller);
+                return runJob(source, cacheKey, controller, payload.limitBytes);
             }, payload.priority === 'playback' ? 0 : 1);
             job.promise = queuedRun.finally(() => jobs.delete(cacheKey));
             jobs.set(cacheKey, job);
@@ -195,6 +240,11 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
         requestJobs.set(requestId, job);
         try {
             const entry = await job.promise;
+            log('info', 'representation-ready', {
+                requestId,
+                cacheKey: logId,
+                format: entry.format,
+            });
             return {
                 ok: true,
                 representation: {
@@ -208,6 +258,11 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
                 },
             };
         } catch (error) {
+            log('warn', error?.code === 'CANCELLED' || error?.name === 'AbortError' ? 'cancelled' : 'failed', {
+                requestId,
+                cacheKey: logId,
+                code: error?.code || error?.name || 'TRANSCODE_FAILED',
+            });
             return { ok: false, errorCode: error?.code || 'TRANSCODE_FAILED', message: String(error?.message || error) };
         } finally {
             job.consumers.delete(requestId);
@@ -221,6 +276,7 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
         job.consumers.delete(requestId);
         requestJobs.delete(requestId);
         if (job.consumers.size === 0) job.controller.abort();
+        log('info', 'cancel-request', { requestId, abortedJob: job.consumers.size === 0 });
         return true;
     };
 
@@ -230,7 +286,17 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess } = {}) => {
         requestJobs.clear();
     };
 
-    return { cacheDirectory, cancel, dispose, initialize, request, resolveEntry };
+    return {
+        cacheDirectory,
+        cancel,
+        clearCache,
+        dispose,
+        initialize,
+        listCacheEntries,
+        removeCacheEntry,
+        request,
+        resolveEntry,
+    };
 };
 
 module.exports = { createTranscodeService, safeExtension, shouldUseWavFallback, validateSource };

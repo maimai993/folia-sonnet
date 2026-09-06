@@ -1,10 +1,11 @@
 import { createRequire } from 'module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // Covers the main-process trust boundary and the intentionally narrow WAV capability fallback.
 
 const require = createRequire(import.meta.url);
-const { safeExtension, shouldUseWavFallback, validateSource } = require('../../../electron/transcode/service.cjs') as {
+const { createTranscodeService, safeExtension, shouldUseWavFallback, validateSource } = require('../../../electron/transcode/service.cjs') as {
+    createTranscodeService: (options: unknown) => { request: (payload: unknown) => Promise<unknown> };
     safeExtension: (name: string) => string;
     shouldUseWavFallback: (error: Error) => boolean;
     validateSource: (source: unknown) => boolean;
@@ -33,5 +34,19 @@ describe('transcode service request validation', () => {
     it('uses WAV only when the FLAC encoder or muxer is unavailable', () => {
         expect(shouldUseWavFallback(new Error("Unknown encoder 'flac'"))).toBe(true);
         expect(shouldUseWavFallback(new Error('Invalid data found when processing input'))).toBe(false);
+    });
+
+    it('logs rejected requests without echoing untrusted request ids', async () => {
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const service = createTranscodeService({
+            app: { getPath: () => 'unused' },
+            protocol: {},
+            net: {},
+        });
+
+        await service.request({ requestId: '../../secret', priority: 'playback', source: null });
+
+        expect(warning).toHaveBeenCalledWith('[TranscodeFallback]', 'invalid-request', { requestId: 'invalid' });
+        warning.mockRestore();
     });
 });

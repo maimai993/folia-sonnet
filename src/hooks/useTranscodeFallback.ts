@@ -9,7 +9,7 @@ import { registerPlaybackRepresentation } from '../services/playbackRecovery/rep
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
-import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
+import { getPlaybackSongKey, isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
 import i18n from '../i18n/config';
 
 // Coordinates asynchronous recovery ownership without rebuilding the playback graph or song state.
@@ -44,7 +44,6 @@ export function useTranscodeFallback({
     const enabled = useAudioSettingsStore(state => state.enableTranscodeFallback);
     const generationRef = useRef(0);
     const activeRequestsRef = useRef(new Map<string, string>());
-    const failedBindingsRef = useRef(new Set<string>());
 
     useEffect(() => {
         generationRef.current += 1;
@@ -81,7 +80,7 @@ export function useTranscodeFallback({
         if (!canRecover || !song) return false;
 
         const bindingKey = `${target.deck}:${failedSource}`;
-        if (failedBindingsRef.current.has(bindingKey) || activeRequestsRef.current.has(bindingKey)) return true;
+        if (activeRequestsRef.current.has(bindingKey)) return true;
 
         const generation = generationRef.current;
         const resumeAt = Math.max(0, element.currentTime || currentTime.get());
@@ -98,6 +97,12 @@ export function useTranscodeFallback({
             const request = startPlayableTranscode(song, failedSource, localSongs, target.role === 'warm' ? 'warm' : 'playback');
             const requestId = request.requestId;
             activeRequestsRef.current.set(bindingKey, requestId);
+            console.info('[TranscodeFallback] recovery-start', {
+                requestId,
+                deck: target.deck,
+                role: target.role,
+                songKey: getPlaybackSongKey(song),
+            });
             try {
                 const result = await request.result;
                 const representation = result.representation;
@@ -115,11 +120,19 @@ export function useTranscodeFallback({
                         && usePlaybackStore.getState().playerState !== PlayerState.PAUSED;
                 }
                 if (!replaceRecoverySource(element, failedSource, representation.url)) return;
+                console.info('[TranscodeFallback] source-replaced', {
+                    requestId,
+                    deck: target.deck,
+                    role: target.role,
+                    representationId: representation.representationId,
+                });
                 setStatusMessage({ type: 'success', text: i18n.t('status.transcodeFallbackReady') });
             } catch (error) {
                 if (generationRef.current !== generation) return;
-                failedBindingsRef.current.add(bindingKey);
-                console.warn('[PlaybackRecovery] Transcode fallback failed', {
+                console.warn('[TranscodeFallback] recovery-failed', {
+                    requestId,
+                    deck: target.deck,
+                    role: target.role,
                     code: (error as { code?: string }).code || 'TRANSCODE_FAILED',
                 });
                 setStatusMessage({ type: 'error', text: i18n.t('status.transcodeFallbackFailed') });

@@ -11,6 +11,7 @@ const song: SongResult = {
     album: { id: 0, name: '' },
     durationMs: 10_000,
     sourceRef: { kind: 'local', mediaId: 'local-id' },
+    playbackSourceRevision: 'size:mtime',
 };
 
 describe('playback representation registry', () => {
@@ -35,5 +36,21 @@ describe('playback representation registry', () => {
         expect(getPlaybackRepresentation(song)?.url).toContain('folia-transcode:');
         expect(getPlaybackRepresentationForRevision('local:local-id', 'size:mtime')).not.toBeNull();
         expect(getPlaybackRepresentationForRevision('local:local-id', 'changed')).toBeNull();
+        expect(getPlaybackRepresentationForRevision('local:local-id', 'size:mtime')).toBeNull();
+    });
+
+    it('never exposes a stale representation to analysis', () => {
+        registerPlaybackRepresentation({
+            songKey: 'local:local-id',
+            sourceRevision: 'old',
+            representationId: 'transcode:old',
+            kind: 'transcoded',
+            url: 'folia-transcode://media/old/audio.flac',
+            mimeType: 'audio/flac',
+            timelineOffsetSec: 0,
+        });
+
+        expect(getPlaybackRepresentation(song)).toBeNull();
+        expect(getPlaybackAnalysisKey(song)).toBe('local:local-id');
     });
 });

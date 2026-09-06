@@ -36,6 +36,8 @@ export interface TranscodeFallbackRequest {
     requestId: string;
     priority: 'playback' | 'warm';
     source: TranscodeFallbackSource;
+    /** Shared media-cache ceiling. Zero means no ceiling. */
+    limitBytes?: number;
 }
 
 export interface TranscodeFallbackResult {

@@ -79,7 +79,9 @@ interface ImportDiffPlan {
 // In-memory storage for hot-path access. Persistent recovery uses directory handles from IndexedDB.
 const fileHandleMap = new Map<string, FileSystemFileHandle>();
 const localCoverAssetRequestMap = new Map<string, Promise<LocalSong>>();
-const AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|caf)$/i;
+const BROWSER_AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i;
+const ELECTRON_FALLBACK_AUDIO_EXTENSIONS = /\.(alac|ape|wv|tta|wma|aif|aiff|caf)$/i;
+const KNOWN_AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|caf)$/i;
 const LYRIC_EXTENSIONS = /\.(lrc|vtt|ttml|qrc|yrc|krc)$/i;
 const TRANSLATION_LYRIC_EXTENSIONS = /\.t\.(lrc|vtt)$/i;
 const IMPORT_CONCURRENCY = 6;
@@ -205,7 +207,7 @@ function generateId(): string {
 // Expected format: "Artist - Title.mp3", "Artist-Title.mp3", or "Title.mp3".
 export function extractMetadataFromFilename(fileName: string): { title?: string; artist?: string; } {
     // 去掉扩展名
-    let nameWithoutExt = fileName.replace(AUDIO_EXTENSIONS, '');
+    let nameWithoutExt = fileName.replace(KNOWN_AUDIO_EXTENSIONS, '');
 
     // 去掉开头的cue切分产生的序号 "01. ", "01 - ", or "1-01 " 
     nameWithoutExt = nameWithoutExt.replace(/^\d{1,3}(?:[-.]\d{1,3})?(?:\s*[-.]\s*|\s+)/, '');
@@ -265,12 +267,18 @@ async function getAudioDuration(file: File): Promise<number> {
     });
 }
 
+function canImportElectronFallbackAudio(): boolean {
+    return typeof window !== 'undefined' && typeof window.electron?.requestTranscodeFallback === 'function';
+}
+
 function isAudioFile(file: File): boolean {
-    return file.type.startsWith('audio/') || AUDIO_EXTENSIONS.test(file.name);
+    return BROWSER_AUDIO_EXTENSIONS.test(file.name)
+        || (canImportElectronFallbackAudio() && ELECTRON_FALLBACK_AUDIO_EXTENSIONS.test(file.name));
 }
 
 function isAudioFileName(fileName: string): boolean {
-    return AUDIO_EXTENSIONS.test(fileName);
+    return BROWSER_AUDIO_EXTENSIONS.test(fileName)
+        || (canImportElectronFallbackAudio() && ELECTRON_FALLBACK_AUDIO_EXTENSIONS.test(fileName));
 }
 
 function getFolderCoverPriority(fileName: string): number {
@@ -306,7 +314,7 @@ function getParentRelativePath(relativePath: string): string {
 }
 
 function getAudioBasePath(relativePath: string): string {
-    return relativePath.replace(AUDIO_EXTENSIONS, '');
+    return relativePath.replace(KNOWN_AUDIO_EXTENSIONS, '');
 }
 
 function getSidecarLyricBasePath(relativePath: string, kind: 'lyric' | 'translationLyric'): string {

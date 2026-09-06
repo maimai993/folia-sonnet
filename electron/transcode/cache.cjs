@@ -6,7 +6,8 @@ const path = require('path');
 
 // Owns deterministic cache paths and atomic publication for complete transcode representations.
 
-const CACHE_VERSION = 'audio-v1-48k-stereo';
+const CACHE_VERSION = 'audio-v2-source-rate-stereo';
+const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/;
 
 const getTranscodeCacheDirectory = userDataDirectory => path.join(userDataDirectory, 'transcode-cache');
 
@@ -39,6 +40,8 @@ const readValidCacheEntry = async (cacheDirectory, cacheKey) => {
             ]);
             const metadata = JSON.parse(metadataText);
             if (metadata.cacheVersion === CACHE_VERSION && metadata.format === format && stat.isFile() && stat.size >= 128) {
+                const now = new Date();
+                await fs.promises.utimes(paths.audioPath, now, now).catch(() => {});
                 return { ...paths, format, mimeType: format === 'flac' ? 'audio/flac' : 'audio/wav' };
             }
         } catch {
@@ -46,6 +49,68 @@ const readValidCacheEntry = async (cacheDirectory, cacheKey) => {
         }
     }
     return null;
+};
+
+const listTranscodeCacheEntries = async cacheDirectory => {
+    let entries;
+    try {
+        entries = await fs.promises.readdir(cacheDirectory, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+
+    const cacheEntries = await Promise.all(entries
+        .filter(entry => entry.isDirectory() && CACHE_KEY_PATTERN.test(entry.name))
+        .map(async entry => {
+            for (const format of ['flac', 'wav']) {
+                const paths = getCacheEntryPaths(cacheDirectory, entry.name, format);
+                try {
+                    const [metadataText, stat] = await Promise.all([
+                        fs.promises.readFile(paths.metadataPath, 'utf8'),
+                        fs.promises.stat(paths.audioPath),
+                    ]);
+                    const metadata = JSON.parse(metadataText);
+                    if (metadata.cacheVersion === CACHE_VERSION && metadata.format === format && stat.isFile() && stat.size >= 128) {
+                        return { name: entry.name, size: stat.size, usedAt: stat.mtimeMs };
+                    }
+                } catch {
+                    // Ignore incomplete and obsolete entries; initialization removes them separately.
+                }
+            }
+            return null;
+        }));
+    return cacheEntries.filter(Boolean);
+};
+
+const removeTranscodeCacheEntry = async (cacheDirectory, cacheKey) => {
+    if (!CACHE_KEY_PATTERN.test(String(cacheKey || ''))) return false;
+    await fs.promises.rm(path.join(cacheDirectory, cacheKey), { recursive: true, force: true });
+    return true;
+};
+
+const clearTranscodeCacheEntries = async cacheDirectory => {
+    let entries;
+    try {
+        entries = await fs.promises.readdir(cacheDirectory, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    await Promise.allSettled(entries
+        .filter(entry => entry.isDirectory() && CACHE_KEY_PATTERN.test(entry.name))
+        .map(entry => removeTranscodeCacheEntry(cacheDirectory, entry.name)));
+};
+
+const removeInvalidTranscodeCacheEntries = async cacheDirectory => {
+    let entries;
+    try {
+        entries = await fs.promises.readdir(cacheDirectory, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    const valid = new Set((await listTranscodeCacheEntries(cacheDirectory)).map(entry => entry.name));
+    await Promise.allSettled(entries
+        .filter(entry => entry.isDirectory() && CACHE_KEY_PATTERN.test(entry.name) && !valid.has(entry.name))
+        .map(entry => removeTranscodeCacheEntry(cacheDirectory, entry.name)));
 };
 
 const publishCacheEntry = async ({ cacheDirectory, cacheKey, format, temporaryAudioPath, metadata }) => {
@@ -73,6 +138,10 @@ module.exports = {
     buildTranscodeCacheKey,
     getCacheEntryPaths,
     getTranscodeCacheDirectory,
+    clearTranscodeCacheEntries,
+    listTranscodeCacheEntries,
     publishCacheEntry,
     readValidCacheEntry,
+    removeTranscodeCacheEntry,
+    removeInvalidTranscodeCacheEntries,
 };

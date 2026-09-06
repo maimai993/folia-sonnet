@@ -259,6 +259,7 @@ describe('localMusicService', () => {
     });
 
     it('imports formats handled by the Electron transcode fallback', async () => {
+        (window as any).electron.requestTranscodeFallback = vi.fn();
         const fallbackFileNames = [
             'Track.alac',
             'Track.ape',
@@ -288,6 +289,21 @@ describe('localMusicService', () => {
                 }))),
             }),
         }));
+    });
+
+    it('does not import Electron-only fallback formats in the Web build', async () => {
+        const selectedHandle = new FakeDirectoryHandle('Music', [
+            new FakeFileHandle('Playable.mp3'),
+            new FakeFileHandle('Needs Electron.wv', { type: 'audio/wavpack' }),
+            new FakeFileHandle('Needs Electron.wma', { type: 'audio/x-ms-wma' }),
+        ]);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(
+            selectedHandle as unknown as FileSystemDirectoryHandle,
+        );
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs.map(song => song.fileName)).toEqual(['Playable.mp3']);
     });
 
     it('reuses handles collected during traversal without probing or resolving file paths again', async () => {
