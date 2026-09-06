@@ -9,6 +9,7 @@ import { SYNC_PROVIDER, type SyncProviderConfig, type SyncRuntimeStatus } from '
 import { createSafeObjectUrl } from '../../../utils/blobGuards';
 import { formatLocalDateTimeStamp } from '../../../utils/downloadFileName';
 import { CustomSelect } from '../../shared/CustomSelect';
+import LocalLibraryWatchSection from './LocalLibraryWatchSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 
@@ -427,6 +428,13 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                     </div>
                 </div>
             </SettingsAnchor>
+
+            <LocalLibraryWatchSection
+                errorTextColor={errorTextColor}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
+                toggleOffBackgroundClass={toggleOffBackgroundClass}
+            />
 
             <SettingsAnchor anchorId="mediaCache" label={t('options.mediaCache') || 'Media Cache'}>
                 <SettingsSectionHeading icon={Database} label={t('options.mediaCache') || 'Media Cache'} />

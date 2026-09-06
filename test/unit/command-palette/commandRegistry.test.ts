@@ -108,6 +108,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleAutoPlayOnLaunch: vi.fn(),
             toggleTranscodeFallback: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
+            canAutoScanLocalLibrary: vi.fn(() => false),
+            toggleLocalLibraryAutoScan: vi.fn(),
             voiceInputPauseSupported: false,
             modSystemEnabled: false,
             toggleVoiceInputPause: vi.fn(),
