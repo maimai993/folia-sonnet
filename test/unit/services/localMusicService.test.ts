@@ -187,6 +187,9 @@ describe('localMusicService', () => {
             ['01. Title.wav', 'Title'],
             ['01 - Title.wav', 'Title'],
             ['1-01 恋せよ乙女!.wav', '恋せよ乙女!'],
+            ['01 - Apple Lossless.alac', 'Apple Lossless'],
+            ['01 - WavPack fallback.wv', 'WavPack fallback'],
+            ['02 - Monkey fallback.ape', 'Monkey fallback'],
         ])('removes explicit track prefixes from %s', (fileName, title) => {
             expect(extractMetadataFromFilename(fileName)).toEqual({ title });
         });
@@ -253,6 +256,38 @@ describe('localMusicService', () => {
                 folderName: 'Music/Disc 1',
             }),
         ]);
+    });
+
+    it('imports formats handled by the Electron transcode fallback', async () => {
+        const fallbackFileNames = [
+            'Track.alac',
+            'Track.ape',
+            'Track.wv',
+            'Track.tta',
+            'Track.wma',
+            'Track.aif',
+            'Track.aiff',
+            'Track.caf',
+        ];
+        const selectedHandle = new FakeDirectoryHandle('Music', [
+            ...fallbackFileNames.map(name => new FakeFileHandle(name, { type: 'application/octet-stream' })),
+            new FakeFileHandle('Not Audio.txt', { type: 'text/plain' }),
+        ]);
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(
+            selectedHandle as unknown as FileSystemDirectoryHandle,
+        );
+
+        const importedSongs = await importFolder();
+
+        expect(importedSongs.map(song => song.fileName).sort()).toEqual(fallbackFileNames.sort());
+        expect(saveLocalLibrarySnapshot).toHaveBeenCalledWith(expect.objectContaining({
+            tree: expect.objectContaining({
+                files: expect.arrayContaining(fallbackFileNames.map(name => expect.objectContaining({
+                    name,
+                    kind: 'audio',
+                }))),
+            }),
+        }));
     });
 
     it('reuses handles collected during traversal without probing or resolving file paths again', async () => {

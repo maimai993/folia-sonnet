@@ -88,3 +88,9 @@
 - 新增 `test-results/transcode-fallback-sample.wv`，作为 Electron 手工回归用的 WavPack 输入；文件包含 12 秒、48 kHz、单声道的 440 Hz/880 Hz 混合测试音并带首尾淡化。
 - `ffprobe` 校验结果：`wavpack` 音轨、WavPack 容器、时长 12.000 秒、文件大小 1,252,984 bytes；SHA-256 为 `00A27F96F01D3F0CD917A23934A690643151847F64E8CD27C7C56F11F09DA190`。
 - 该格式用于触发 Chromium `<audio>` 不支持输入时的转码恢复路径；将文件导入本地曲库或 Navidrome 后，在 Electron 版本中播放即可验证。
+
+### 2026-09-06 — local import extension alignment
+
+- 扩展本地目录扫描的音频后缀白名单，新增显式 ALAC（`.alac`）、APE（`.ape`）、WavPack（`.wv`）、TTA（`.tta`）、WMA（`.wma`）、AIFF（`.aif`/`.aiff`）与 CAF（`.caf`），避免 fallback 目标格式在导入快照阶段被过滤；常见的 ALAC `.m4a` 封装仍沿用原有支持。
+- 文件名元数据解析改为复用同一音频后缀正则，新增格式不会把扩展名错误保留在歌曲标题中。
+- 新增本地导入单测，验证上述八种后缀以 `application/octet-stream` MIME 仍会进入音频快照和歌曲导入，同时普通 `.txt` 文件继续被排除。
