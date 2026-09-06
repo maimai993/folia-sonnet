@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { MotionValue } from 'framer-motion';
@@ -14,6 +14,7 @@ import './Lattice.css';
 import LatticeLyricsProvider from './lyrics/LatticeLyricsProvider';
 import type { LatticeLyricSource } from './lyrics/types';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
+import { isPrimaryModifierPressed, isSecondaryModifierPressed } from '../../../utils/platform';
 
 // Queue display layer; it renders the play queue and never mutates it.
 
@@ -63,6 +64,25 @@ export default function Lattice({
     const posterTintColor = useLatticeSettingsStore(state => state.latticePosterTintColor);
     const posterTintIntensity = useLatticeSettingsStore(state => state.latticePosterTintIntensity);
     const tiles = useMemo(() => buildLatticeTiles({ queue, currentSong }), [currentSong, queue]);
+
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.repeat
+                || event.key.toLowerCase() !== 'q'
+                || !isPrimaryModifierPressed(event)
+                || isSecondaryModifierPressed(event)
+                || event.altKey
+                || event.shiftKey
+            ) return;
+
+            event.preventDefault();
+            onBack();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onBack]);
+
     // App rebuilds these on every render of its own, and the wall hands them to every poster on
     // screen. Given a permanent identity here they stop being a reason for those posters to render.
     const wall = useStableCallbacks({

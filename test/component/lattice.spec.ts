@@ -163,6 +163,15 @@ test('Escape returns only after card focus has been cleared', async ({ mount, pa
     await expect(state).toHaveAttribute('data-backs', '1');
 });
 
+test('primary modifier Q exits Lattice immediately', async ({ mount, page }) => {
+    const wall = await mount('lattice');
+    const state = wall.locator('[data-backs]');
+
+    await page.keyboard.press('Control+q');
+
+    await expect(state).toHaveAttribute('data-backs', '1');
+});
+
 test('Enter expands first, then plays the focused card or toggles the current song', async ({ mount, page }) => {
     const wall = await mount('lattice');
     await settle(page);
