@@ -4,6 +4,8 @@ import type { ThemeGenerationSource } from '../../../services/themePreferences';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
+import { useLocalLibrarySettingsStore } from '../../../stores/useLocalLibrarySettingsStore';
+import { isLocalLibraryAutoScanSupported } from '../../../services/localLibraryAutoScan';
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -100,6 +102,8 @@ export const buildSettingsCommandContext = (
         toggleTranscodeFallback: () => audio.handleToggleTranscodeFallback(
             !useAudioSettingsStore.getState().enableTranscodeFallback,
         ),
+        canAutoScanLocalLibrary: isLocalLibraryAutoScanSupported,
+        toggleLocalLibraryAutoScan: () => useLocalLibrarySettingsStore.getState().toggleAutoScan(),
         voiceInputPauseSupported: deps.voiceInputPauseSupported,
         modSystemEnabled: desktop.modSystemEnabled,
         toggleVoiceInputPause: () => desktop.handleToggleVoiceInputPause(

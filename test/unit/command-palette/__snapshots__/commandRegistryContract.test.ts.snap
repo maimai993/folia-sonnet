@@ -54,6 +54,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-storage",
   "settings-r2-sync",
   "sync-now",
+  "settings-local-library-watch",
+  "local-library-auto-scan-toggle",
   "settings-desktop",
   "settings-update-channel",
   "desktop-toggle-voice-input-pause",

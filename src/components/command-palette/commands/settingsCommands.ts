@@ -165,6 +165,24 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
+    createSettingsCommand(
+        'settings-local-library-watch',
+        'Local folder watch settings',
+        'Open the auto scan settings for imported local folders',
+        ['local folder watch', 'auto scan', 'watch folder', '本地文件夹监视', '自动扫描'],
+        'options',
+        'storage',
+        { isAvailable: context => context?.settings.canAutoScanLocalLibrary() ?? true },
+    ),
+    createToggleCommand(
+        'local-library-auto-scan-toggle',
+        'settings',
+        'Auto scan local folders',
+        'Turn automatic rescanning of imported local folders on or off',
+        ['auto scan local', 'watch local folders', 'rescan folders', '自动扫描本地', '监视文件夹'],
+        context => context.settings.toggleLocalLibraryAutoScan(),
+        { isAvailable: context => context?.settings.canAutoScanLocalLibrary() ?? true },
+    ),
     createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron', '桌面', '桌面端'], 'options', 'desktop', { platform: ['electron'] }),
     createSettingsCommand('settings-update-channel', 'Update channel', 'Choose the desktop app release channel', ['release channel', 'realeco', 'limo', 'cielo', '更新通道', '发布通道'], 'options', 'desktop', { platform: ['electron'] }),
     {
