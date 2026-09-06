@@ -3,6 +3,7 @@ import { NavidromeSong } from '../types/navidrome';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
 import { buildLocalLibraryIndex, followEntityRedirect, type LocalLibraryIndex } from '../utils/localLibraryIndex';
 import { getLocalCoverAssetUrl } from './localCoverAssetUrl';
+import { buildLocalSourceRevision, buildNavidromeSourceRevision } from './playbackRecovery/sourceRevision';
 
 export type LocalLibraryDisplayCatalog = {
     entities: LocalLibraryEntity[];
@@ -168,6 +169,7 @@ export function buildUnifiedLocalSong({
         isLocal: true,
         localRef: { songId: localSong.id },
         sourceRef: { kind: 'local', mediaId: localSong.id },
+        playbackSourceRevision: buildLocalSourceRevision(localSong),
     };
 
     if (!matchedSong) {
@@ -234,7 +236,7 @@ export function buildUnifiedNavidromeSong(
         ? { ...displayAlbum, coverUrl: options.coverUrl }
         : displayAlbum;
 
-    return {
+    const unifiedSong = {
         id: navidromeSong.id,
         name: (options?.useOnlineMetadata && options.matchedAlbumName) ? options.matchedAlbumName : navidromeSong.name,
         artists: displayArtists,
@@ -246,21 +248,16 @@ export function buildUnifiedNavidromeSong(
         sourceRef: { kind: 'navidrome', mediaId: navidromeSong.navidromeData.id },
         matchedLyricsSource: options?.matchedLyricsSource,
         matchedLyricsProviderPlatform: options?.matchedLyricsProviderPlatform
-    } as any;
+    } as SongResult;
+    unifiedSong.playbackSourceRevision = buildNavidromeSourceRevision(
+        unifiedSong,
+        navidromeSong.navidromeData.streamUrl,
+    );
+    return unifiedSong;
 }
 
 export function buildNavidromeQueue(queue: NavidromeSong[], currentSong?: SongResult): SongResult[] {
-    const convertedQueue = queue.map(song => ({
-        id: song.id,
-        name: song.name,
-        artists: song.artists || [],
-        album: song.album || { id: 0, name: '' },
-        durationMs: song.durationMs || 0,
-        isPureMusic: song.lyricsSource === 'online' ? song.matchedIsPureMusic : false,
-        isNavidrome: true,
-        navidromeData: song,
-        sourceRef: { kind: 'navidrome', mediaId: song.navidromeData.id },
-    } as any));
+    const convertedQueue = queue.map(song => buildUnifiedNavidromeSong(song));
 
     if (!currentSong) {
         return convertedQueue;

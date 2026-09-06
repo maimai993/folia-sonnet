@@ -25,6 +25,8 @@ const { createAnalysisHost } = require('./analysis/host.cjs');
 const { createDebugHost } = require('./debug/debugHost.cjs');
 const { createModelStore } = require('./analysis/modelStore.cjs');
 const { resolveLinuxPasswordStore } = require('./linuxPasswordStore.cjs');
+const { createTranscodeService } = require('./transcode/service.cjs');
+const { TRANSCODE_PROTOCOL_SCHEME } = require('./transcode/protocol.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const {
   buildOpenAICompatibleRequestBody,
@@ -61,6 +63,16 @@ const linuxGraphicsMode =
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'folia-cover',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+  {
+    scheme: TRANSCODE_PROTOCOL_SCHEME,
     privileges: {
       standard: true,
       secure: true,
@@ -156,6 +168,12 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
+const transcodeService = createTranscodeService({
+  app,
+  protocol,
+  net: electronNet,
+  onCacheWrite: pruneMediaCache,
+});
 // KuGou credentials stay inside the main process and are encrypted lazily after Electron is ready.
 // The bridge refuses Linux's plaintext `basic_text` fallback and degrades to an in-memory session.
 const kugouApiBridge = createKugouApiBridge({ store, safeStorage });
@@ -3676,31 +3694,62 @@ async function readAudioCacheEntry(cacheKey) {
 }
 
 /**
- * Drops the least recently played files until the cache fits under `limitBytes`.
- *
- * Run after every write, which is the only moment the cache can grow, so there is nowhere for it
- * to exceed the ceiling unobserved. Which files go is decided in audioCachePrune.cjs.
+ * Lists original cached files for shared pruning and storage statistics.
  */
-async function pruneAudioCache(limitBytes) {
-  if (resolveCacheLimit(limitBytes) === Infinity) return;
-
+async function listAudioCacheEntries() {
   const audioDirectory = getAudioCacheDirectory();
   try {
     const names = (await fsp.readdir(audioDirectory)).filter((name) => name.endsWith('.bin'));
-    const entries = await Promise.all(names.map(async (name) => {
+    return Promise.all(names.map(async (name) => {
       const stat = await fsp.stat(path.join(audioDirectory, name));
       return { name, size: stat.size, usedAt: stat.mtimeMs };
     }));
+  } catch {
+    return [];
+  }
+}
 
-    for (const name of selectEvictions(entries, limitBytes)) {
-      const base = path.join(audioDirectory, name.replace(/\.bin$/, ''));
-      await Promise.allSettled([
-        fsp.rm(`${base}.bin`, { force: true }),
-        fsp.rm(`${base}.json`, { force: true }),
-      ]);
+async function removeAudioCacheEntry(name) {
+  if (!/^[a-zA-Z0-9_-]+\.bin$/.test(String(name || ''))) return;
+  const base = path.join(getAudioCacheDirectory(), name.replace(/\.bin$/, ''));
+  await Promise.allSettled([
+    fsp.rm(`${base}.bin`, { force: true }),
+    fsp.rm(`${base}.json`, { force: true }),
+  ]);
+}
+
+/** Prunes original and transcoded audio as one media-cache budget. */
+async function pruneMediaCache(limitBytes, protectedTranscodeEntry = null) {
+  const resolvedLimit = resolveCacheLimit(limitBytes);
+  if (resolvedLimit === Infinity) return;
+
+  try {
+    const [audioEntries, transcodeEntries] = await Promise.all([
+      listAudioCacheEntries(),
+      transcodeService.listCacheEntries(),
+    ]);
+    let entries = [
+      ...audioEntries.map(entry => ({ ...entry, name: `audio:${entry.name}` })),
+      ...transcodeEntries.map(entry => ({ ...entry, name: `transcode:${entry.name}` })),
+    ];
+    // Entries the renderer is streaming are unevictable but still spend the budget: a fully
+    // buffered media element stops touching its file, so LRU alone would drop it mid-playback.
+    const protectedNames = new Set(transcodeService.getPinnedCacheKeys().map(key => `transcode:${key}`));
+    if (protectedTranscodeEntry) protectedNames.add(`transcode:${protectedTranscodeEntry.cacheKey}`);
+    const protectedEntries = entries.filter(entry => protectedNames.has(entry.name));
+    let protectedBytes = protectedEntries.reduce((total, entry) => total + entry.size, 0);
+    if (protectedTranscodeEntry && !protectedEntries.some(entry => entry.name === `transcode:${protectedTranscodeEntry.cacheKey}`)) {
+      protectedBytes += protectedTranscodeEntry.size;
+    }
+    entries = entries.filter(entry => !protectedNames.has(entry.name));
+    const effectiveLimit = protectedBytes > 0 ? Math.max(1, resolvedLimit - protectedBytes) : resolvedLimit;
+
+    for (const name of selectEvictions(entries, effectiveLimit)) {
+      if (name.startsWith('audio:')) await removeAudioCacheEntry(name.slice('audio:'.length));
+      else if (name.startsWith('transcode:')) await transcodeService.removeCacheEntry(name.slice('transcode:'.length));
     }
   } catch (error) {
-    console.warn('[AudioCache] Failed to prune cache directory', error);
+    console.warn('[AudioCache] Failed to prune media cache directories', error);
   }
 }
 
@@ -3722,52 +3771,32 @@ async function writeAudioCacheEntry(cacheKey, data, mimeType, limitBytes) {
     }), 'utf-8'),
   ]);
 
-  await pruneAudioCache(limitBytes);
+  await pruneMediaCache(limitBytes);
 }
 
 async function getAudioCacheUsageBytes() {
-  const audioDirectory = getAudioCacheDirectory();
-
   try {
-    const entries = await fsp.readdir(audioDirectory, { withFileTypes: true });
-    let total = 0;
-
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.bin')) {
-        continue;
-      }
-
-      const stat = await fsp.stat(path.join(audioDirectory, entry.name));
-      total += stat.size;
-    }
-
-    return total;
+    const [audioEntries, transcodeEntries] = await Promise.all([
+      listAudioCacheEntries(),
+      transcodeService.listCacheEntries(),
+    ]);
+    return [...audioEntries, ...transcodeEntries].reduce((total, entry) => total + entry.size, 0);
   } catch {
     return 0;
   }
 }
 
 async function getAudioCacheStats() {
-  const audioDirectory = getAudioCacheDirectory();
-
   try {
-    const entries = await fsp.readdir(audioDirectory, { withFileTypes: true });
-    let totalSize = 0;
-    let totalCount = 0;
-
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.bin')) {
-        continue;
-      }
-
-      const stat = await fsp.stat(path.join(audioDirectory, entry.name));
-      totalSize += stat.size;
-      totalCount += 1;
-    }
+    const [audioEntries, transcodeEntries] = await Promise.all([
+      listAudioCacheEntries(),
+      transcodeService.listCacheEntries(),
+    ]);
+    const entries = [...audioEntries, ...transcodeEntries];
 
     return {
-      size: totalSize,
-      count: totalCount,
+      size: entries.reduce((total, entry) => total + entry.size, 0),
+      count: entries.length,
     };
   } catch {
     return {
@@ -3779,7 +3808,10 @@ async function getAudioCacheStats() {
 
 async function clearAudioCacheDirectory() {
   try {
-    await fsp.rm(getAudioCacheDirectory(), { recursive: true, force: true });
+    await Promise.all([
+      fsp.rm(getAudioCacheDirectory(), { recursive: true, force: true }),
+      transcodeService.clearCache(),
+    ]);
   } catch (error) {
     console.warn('[AudioCache] Failed to clear cache directory', error);
   }
@@ -5074,6 +5106,13 @@ app.whenReady().then(async () => {
   setupFileSystemAccessPermissionHandlers();
   setupCorsBypassHandlers();
   localCoverAssetStore.registerProtocolHandler(protocol, electronNet);
+  // Transcode fallback is an optional degradation path; a failure preparing it must never keep
+  // the rest of this handler, createWindow() included, from running.
+  try {
+    await transcodeService.initialize();
+  } catch (error) {
+    console.warn('[TranscodeFallback] Initialization failed; playback fallback is unavailable', error);
+  }
 
   session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
     if (details.isDirectory) {
@@ -5288,6 +5327,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  transcodeService.dispose();
   isAppQuitting = true;
   clearPendingWindowPlaybackHandoffRequests();
   if (modSystem) {
@@ -5751,6 +5791,14 @@ ipcMain.handle('get-audio-cache-stats', async () => {
 ipcMain.handle('clear-audio-cache', async () => {
   await clearAudioCacheDirectory();
   return true;
+});
+
+ipcMain.handle('transcode-fallback-request', async (_event, request) => {
+  return transcodeService.request(request);
+});
+
+ipcMain.handle('transcode-fallback-cancel', (_event, requestId) => {
+  return transcodeService.cancel(requestId);
 });
 
 ipcMain.handle('get-cover-cache', async (event, cacheKey) => {

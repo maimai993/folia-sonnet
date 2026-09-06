@@ -1122,6 +1122,8 @@ export interface SongResult {
   t?: 0 | 1 | 2;
   sourceType?: 'netease' | 'cloud';
   sourceRef?: PlaybackSourceRef;
+  /** Identity of the concrete bytes selected for playback; used to reject stale derived media. */
+  playbackSourceRevision?: string;
   fee?: number;
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;

@@ -685,6 +685,8 @@ declare global {
       getAudioCacheUsage: () => Promise<number>;
       getAudioCacheStats: () => Promise<ElectronAudioCacheStats>;
       clearAudioCache: () => Promise<boolean>;
+      requestTranscodeFallback?: (request: import('./types/playbackRecovery').TranscodeFallbackRequest) => Promise<import('./types/playbackRecovery').TranscodeFallbackResult>;
+      cancelTranscodeFallback?: (requestId: string) => Promise<boolean>;
       getCoverCache: (cacheKey: string) => Promise<ElectronAudioCacheEntry>;
       saveCoverCache: (cacheKey: string, data: ArrayBuffer, mimeType?: string) => Promise<boolean>;
       removeCoverCache: (cacheKey: string) => Promise<boolean>;

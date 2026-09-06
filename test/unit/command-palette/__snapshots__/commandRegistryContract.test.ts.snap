@@ -83,6 +83,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-toggle-track-switch-buttons",
   "settings-toggle-main-window-titlebar",
   "settings-toggle-auto-play-on-launch",
+  "settings-toggle-transcode-fallback",
   "settings-toggle-bottom-subtitle-overlay",
   "settings-cycle-subtitle-content-mode",
   "settings-toggle-subtitle-background",

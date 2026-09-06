@@ -97,6 +97,9 @@ export const buildSettingsCommandContext = (
         toggleAutoPlayOnLaunch: () => audio.handleToggleAutoPlayOnLaunch(
             !useAudioSettingsStore.getState().autoPlayOnLaunch,
         ),
+        toggleTranscodeFallback: () => audio.handleToggleTranscodeFallback(
+            !useAudioSettingsStore.getState().enableTranscodeFallback,
+        ),
         voiceInputPauseSupported: deps.voiceInputPauseSupported,
         modSystemEnabled: desktop.modSystemEnabled,
         toggleVoiceInputPause: () => desktop.handleToggleVoiceInputPause(

@@ -4,6 +4,7 @@ import { getCachedCoverUrl, loadCachedOrFetchCover } from '../../../services/cov
 import { getLocalSongs } from '../../../services/db';
 import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../../../services/localMusicService';
 import { applyLocalLibraryEntityDisplay, buildUnifiedLocalSong } from '../../../services/playbackAdapters';
+import { buildNavidromeSourceRevision } from '../../../services/playbackRecovery/sourceRevision';
 import { getLocalLibraryCatalogSnapshot } from '../../../services/localLibraryEntityRepository';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { applyOnlineAudioSourceMetadata, loadOnlineSongAudioSource } from '../../../services/onlinePlayback';
@@ -97,7 +98,8 @@ export const restorePlaybackSourceForSong = async (
         if (serverSong?.replayGain) {
             navidromeSongToRestore.navidromeData.replayGain = serverSong.replayGain;
         }
-        setAudioSrc(navidromeApi.getStreamUrl(config, navidromeId));
+        const restoredStreamUrl = navidromeApi.getStreamUrl(config, navidromeId);
+        setAudioSrc(restoredStreamUrl);
         const restoredCoverUrl = getSongCoverUrl(song) || navidromeSongToRestore.navidromeData.coverArtUrl;
         if (restoredCoverUrl) {
             setCachedCoverUrl(restoredCoverUrl);
@@ -114,7 +116,13 @@ export const restorePlaybackSourceForSong = async (
             setLyrics(restoredLyrics);
         }
 
-        const restoredSong = { ...song, navidromeData: navidromeSongToRestore } as SongResult;
+        const restoredCarrier = { ...song, navidromeData: navidromeSongToRestore } as SongResult;
+        // Recomputed rather than carried over from the persisted object: without a revision every
+        // representation lookup misses, and a restored session re-transcodes what is already cached.
+        const restoredSong = {
+            ...restoredCarrier,
+            playbackSourceRevision: buildNavidromeSourceRevision(restoredCarrier, restoredStreamUrl),
+        } as SongResult;
         setCurrentSong(restoredSong);
         void persistLastPlaybackCache?.(restoredSong, queue && queue.length > 0 ? queue : [restoredSong]);
         return true;

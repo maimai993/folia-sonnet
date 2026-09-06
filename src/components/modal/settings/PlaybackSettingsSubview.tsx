@@ -46,11 +46,15 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     const { t } = useTranslation();
     const {
         audioOutputDeviceId,
+        enableTranscodeFallback,
         queueAddBehavior,
+        onToggleTranscodeFallback,
         onQueueAddBehaviorChange,
     } = useAudioSettingsStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
+        enableTranscodeFallback: state.enableTranscodeFallback,
         queueAddBehavior: state.queueAddBehavior,
+        onToggleTranscodeFallback: state.handleToggleTranscodeFallback,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     const {
@@ -362,6 +366,19 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
             <SettingsAnchor anchorId="audioOutputSettings" label={t('options.audioOutputSettings')}>
                 <SettingsSectionHeading icon={Monitor} label={t('options.audioOutputSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    {window.electron?.requestTranscodeFallback && (
+                        <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.transcodeFallback')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.transcodeFallbackDesc')}
+                                </div>
+                            </div>
+                            {renderToggle(enableTranscodeFallback, () => onToggleTranscodeFallback(!enableTranscodeFallback))}
+                        </div>
+                    )}
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>

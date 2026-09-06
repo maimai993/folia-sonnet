@@ -208,6 +208,7 @@ export type CommandPaletteSettingsContext = {
     toggleAlwaysShowMainWindowTitlebar: () => void;
     /** Lab switch: whether the restored session starts playing by itself on launch. */
     toggleAutoPlayOnLaunch: () => void;
+    toggleTranscodeFallback: () => void;
     voiceInputPauseSupported: boolean;
     /** Lab switch for the experimental mod system; gates the `mods` command. */
     modSystemEnabled: boolean;
