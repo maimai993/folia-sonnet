@@ -324,6 +324,7 @@ const decompressLatentBackground = (o: any): any => ({
 const compressMonet = (t: any): any => ({
     kce: t.keywordColoringEnabled,
     msd: t.showDescription,
+    mav: t.showAudioVisualization,
     mas: t.audioStyle,
     mfs: t.fontScale,
     mps: t.portraitSource,
@@ -334,6 +335,7 @@ const compressMonet = (t: any): any => ({
 const decompressMonet = (o: any): any => ({
     keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: o.msd !== undefined ? o.msd : DEFAULT_MONET_TUNING.showDescription,
+    showAudioVisualization: o.mav !== undefined ? o.mav : DEFAULT_MONET_TUNING.showAudioVisualization,
     audioStyle: o.mas || DEFAULT_MONET_TUNING.audioStyle,
     fontScale: o.mfs !== undefined ? o.mfs : DEFAULT_MONET_TUNING.fontScale,
     portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,

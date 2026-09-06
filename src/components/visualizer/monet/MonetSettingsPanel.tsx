@@ -144,6 +144,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const resolvedTuning = {
         keywordColoringEnabled: monetTuning.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
         showDescription: monetTuning.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+        showAudioVisualization: monetTuning.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
         audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
@@ -170,6 +171,10 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
     const audioStyleOptions = useMemo<PresetOption<MonetAudioStyle>[]>(() => ([
         { value: 'bar', label: t('options.monetAudioStyleBar') },
         { value: 'line', label: t('options.monetAudioStyleLine') },
+    ]), [t]);
+    const showAudioVisualizationOptions = useMemo<PresetOption<boolean>[]>(() => ([
+        { value: true, label: t('options.monetAudioVisualizationShow') },
+        { value: false, label: t('options.monetAudioVisualizationHide') },
     ]), [t]);
     const portraitStyleOptions = useMemo<PresetOption<'rectangular' | 'square'>[]>(() => ([
         { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') },
@@ -332,6 +337,15 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 <div className="text-xs font-semibold uppercase tracking-wider opacity-65" style={{ color: theme.accentColor }}>
                     {t('options.monetAudioStyle')}
                 </div>
+
+                <PresetGroup
+                    label={t('options.monetShowAudioVisualization')}
+                    value={resolvedTuning.showAudioVisualization}
+                    options={showAudioVisualizationOptions}
+                    onChange={(value) => onMonetTuningChange?.({ showAudioVisualization: value })}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
 
                 <PresetGroup
                     label={t('options.monetAudioStyle')}

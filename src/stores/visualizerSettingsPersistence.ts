@@ -893,6 +893,7 @@ export type StoredMonetTuningInput = Partial<MonetTuning> & StoredMonetBackgroun
 export const resolveStoredMonetTuning = (parsed: StoredMonetTuningInput): MonetTuning => ({
     keywordColoringEnabled: parsed.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: parsed.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+    showAudioVisualization: parsed.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
     audioStyle: parsed.audioStyle === 'line' ? 'line' : DEFAULT_MONET_TUNING.audioStyle,
     fontScale: clampMonetFontScale(
         parsed.fontScale ?? DEFAULT_MONET_TUNING.fontScale,

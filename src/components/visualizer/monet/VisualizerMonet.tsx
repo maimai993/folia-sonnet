@@ -508,7 +508,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 </div>
             </div>
 
-            {showText && (
+            {showText && monetTuning.showAudioVisualization && (
                 <motion.div
                     key={`audio-${introKey}`}
                     initial={{ opacity: 0, y: 15 }}

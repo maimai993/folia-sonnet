@@ -22,6 +22,7 @@ const REAL_KEYS = new Set([
     'options.latentMeshSwirl',
     'options.monetPortraitSource',
     'options.monetAudioStyle',
+    'options.monetShowAudioVisualization',
 ]);
 
 const has = (key: string) => REAL_KEYS.has(key);
@@ -49,6 +50,7 @@ describe('resolveSettingLabelKey', () => {
         expect(resolve('latentBackgroundTuning', 'meshSwirl')).toBe('options.latentMeshSwirl');
         expect(resolve('monetTuning', 'portraitSource')).toBe('options.monetPortraitSource');
         expect(resolve('monetTuning', 'audioStyle')).toBe('options.monetAudioStyle');
+        expect(resolve('monetTuning', 'showAudioVisualization')).toBe('options.monetShowAudioVisualization');
     });
 
     // Nested groups are labelled by their own leaf.

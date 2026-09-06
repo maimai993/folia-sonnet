@@ -177,6 +177,7 @@ describe('Visual Settings Import and Export', () => {
         monetTuning: {
             keywordColoringEnabled: false,
             showDescription: false,
+            showAudioVisualization: false,
             audioStyle: 'line' as const,
             fontScale: 1.1,
             portraitSource: 'cover' as const,
@@ -230,6 +231,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.latentBackgroundTuning).toEqual(sampleConfig.latentBackgroundTuning);
         expect(decoded.monetTuning?.portraitOffsetX).toBe(-120);
         expect(decoded.monetTuning?.portraitStyle).toBe('square');
+        expect(decoded.monetTuning?.showAudioVisualization).toBe(false);
         expect(decoded.sonnetTuning?.enableTransitions).toBe(true);
         expect(decoded.sonnetTuning?.outerFrameMode).toBe('frame');
         expect(decoded.sonnetTuning?.postProcessLensDistortion)

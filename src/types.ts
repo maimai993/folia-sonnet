@@ -891,6 +891,7 @@ export interface LatentBackgroundTuning {
 export interface MonetTuning {
   keywordColoringEnabled: boolean;
   showDescription: boolean;
+  showAudioVisualization: boolean;
   audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
@@ -961,6 +962,7 @@ export const DEFAULT_LATENT_BACKGROUND_TUNING: LatentBackgroundTuning = {
 export const DEFAULT_MONET_TUNING: MonetTuning = {
   keywordColoringEnabled: true,
   showDescription: true,
+  showAudioVisualization: true,
   audioStyle: 'bar',
   fontScale: 1.2,
   portraitSource: 'cover',
