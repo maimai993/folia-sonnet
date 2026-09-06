@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
-const { resolveFfmpeg } = require('../modSystem/ffmpeg.cjs');
+const { resolveFfmpeg, TRANSCODE_RUNTIME_DIR } = require('../modSystem/ffmpeg.cjs');
 const { transcodeAudioFile } = require('./runner.cjs');
 const {
     buildTranscodeCacheKey,
@@ -126,7 +126,9 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
     };
 
     const resolveExecutable = async () => {
-        ffmpegPromise ??= resolveFfmpeg({ appGetAppPath: () => app.getAppPath() });
+        // The bundled audio-only runtime lives in its own directory; a mod export must never
+        // reach it, and it must never be shadowed by whatever the mods slot holds.
+        ffmpegPromise ??= resolveFfmpeg({ appGetAppPath: () => app.getAppPath(), packagedDirName: TRANSCODE_RUNTIME_DIR });
         const status = await ffmpegPromise;
         if (!status.available || !status.path) {
             const error = new Error('FFmpeg is not available');

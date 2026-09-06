@@ -23,7 +23,7 @@ const { unzipSync } = require('fflate');
 const { validateManifest, resolveLoadPlan } = require('./manifest.cjs');
 const { computeModDigest, shortDigest } = require('./modDigest.cjs');
 const { createModApi } = require('./modApi.cjs');
-const { resolveFfmpeg } = require('./ffmpeg.cjs');
+const { resolveFfmpeg, MODS_RUNTIME_DIR } = require('./ffmpeg.cjs');
 const { createExportService } = require('./exportService.cjs');
 const { attachModProtocolHandler } = require('./modProtocol.cjs');
 
@@ -950,7 +950,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
 
     const probeFfmpeg = () => {
         if (!ffmpegProbePromise) {
-            ffmpegProbePromise = resolveFfmpeg({ appGetAppPath: () => app.getAppPath() })
+            ffmpegProbePromise = resolveFfmpeg({ appGetAppPath: () => app.getAppPath(), packagedDirName: MODS_RUNTIME_DIR })
                 .then((status) => {
                     ffmpegStatus = status;
                     return status;

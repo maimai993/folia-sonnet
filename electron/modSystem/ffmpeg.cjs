@@ -2,6 +2,12 @@
 // Locates an ffmpeg executable with a clear, deterministic priority order.
 // The loader never hard-codes a machine-specific path; everything goes through
 // the candidates below, and the renderer always sees the resolution result.
+//
+// Two callers with different needs share this resolver, so they must not share a packaged
+// directory: mod exporters need a full build the user supplies, while the transcode fallback
+// ships its own audio-only runtime that can encode nothing but FLAC and WAV. Pointing both at
+// one directory makes the bundled binary shadow the user's ffmpeg on PATH, and a transparent
+// video export then dies on a missing rawvideo demuxer while `-version` still looks healthy.
 
 'use strict';
 
@@ -10,6 +16,11 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const FFMPEG_BINARY_NAME = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+
+/** `<resources>/ffmpeg`: a full build the user drops in, used by the mod export service. */
+const MODS_RUNTIME_DIR = 'ffmpeg';
+/** `<resources>/ffmpeg-audio`: the audio-only runtime this app bundles for the transcode fallback. */
+const TRANSCODE_RUNTIME_DIR = 'ffmpeg-audio';
 
 // A path is considered executable when it exists and (on POSIX) carries any
 // execute bit; Windows relies on extension + existence since ACL probing is unreliable.
@@ -33,7 +44,7 @@ const pathExists = (candidate) => {
     }
 };
 
-const buildCandidates = (appGetAppPath) => {
+const buildCandidates = (appGetAppPath, packagedDirName) => {
     const candidates = [];
 
     // 1. Explicit override wins over everything else.
@@ -50,9 +61,10 @@ const buildCandidates = (appGetAppPath) => {
         // app.getAppPath can fail before app ready; ignore this candidate then.
     }
 
-    // 3. Packaged resources: <resources>/ffmpeg/ffmpeg(.exe).
+    // 3. Packaged resources: <resources>/<packagedDirName>/ffmpeg(.exe). The directory differs
+    // per caller so the bundled audio-only runtime can never answer a mod export.
     if (process.resourcesPath) {
-        candidates.push(path.join(process.resourcesPath, 'ffmpeg', FFMPEG_BINARY_NAME));
+        candidates.push(path.join(process.resourcesPath, packagedDirName, FFMPEG_BINARY_NAME));
     }
 
     // 4. System PATH lookup is handled separately (no path to join).
@@ -79,8 +91,8 @@ const probeVersion = (ffmpegPath) => new Promise((resolve) => {
  * The result is cached by the caller (modSystem) so repeated IPC queries
  * never re-probe or re-stat the filesystem.
  */
-const resolveFfmpeg = async ({ appGetAppPath }) => {
-    const candidates = buildCandidates(appGetAppPath);
+const resolveFfmpeg = async ({ appGetAppPath, packagedDirName = MODS_RUNTIME_DIR }) => {
+    const candidates = buildCandidates(appGetAppPath, packagedDirName);
     const directHit = firstResolvable(candidates);
 
     if (directHit) {
@@ -111,4 +123,4 @@ const resolveFfmpeg = async ({ appGetAppPath }) => {
     return { available: false, path: null, version: null, probed: true, candidates };
 };
 
-module.exports = { resolveFfmpeg, FFMPEG_BINARY_NAME };
+module.exports = { resolveFfmpeg, FFMPEG_BINARY_NAME, MODS_RUNTIME_DIR, TRANSCODE_RUNTIME_DIR };

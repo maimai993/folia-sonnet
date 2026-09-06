@@ -28,7 +28,9 @@ Folia 模组（Mod）目录。桌面端启动时，加载器会扫描此目录�
 
 ## 依赖 ffmpeg（导出类模组）
 
-- 查找顺序：`FOLIA_FFMPEG_PATH` 环境变量 → 应用目录下 `ffmpeg-8.1.2/ffmpeg(.exe)` → 系统 PATH。
+- 查找顺序：`FOLIA_FFMPEG_PATH` 环境变量 → 应用目录下 `ffmpeg-8.1.2/ffmpeg(.exe)` → 打包资源目录下 `ffmpeg/ffmpeg(.exe)` → 系统 PATH。
+- 导出类模组需要**完整** ffmpeg（`rawvideo` demuxer、`prores_ks` 或 `libvpx-vp9`、MOV/WebM 封装）。
+  应用自带的 `ffmpeg-audio/` 是只含 FLAC/WAV 的音频转码运行时，不在上面的查找顺序里，也无法用于导出。
 - 输出目录：`视频/Folia Exports`。
 - 透明通道：Windows 完整支持；Linux/macOS 下捕获帧可能不含 Alpha，导出会在返回值中给出警告。
 

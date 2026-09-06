@@ -91,7 +91,7 @@
     "extraResources": [
       {
         "from": "build/ffmpeg/${os}-${arch}",
-        "to": "ffmpeg"
+        "to": "ffmpeg-audio"
       },
       {
         "from": "build/icon.png",
