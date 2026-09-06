@@ -55,7 +55,7 @@ interface FloatingPlayerControlsProps {
     lyricCurrentTime?: MotionValue<number>;
     duration: number;
     loopMode: 'off' | 'all' | 'one';
-    currentView: 'home' | 'player';
+    currentView: 'home' | 'player' | 'lattice';
     audioSrc: string | null;
     canTogglePlay?: boolean;
     lyrics: LyricData | null;
@@ -63,6 +63,7 @@ interface FloatingPlayerControlsProps {
     onTogglePlay: () => void;
     onToggleLoop: () => void;
     onNavigateToPlayer: () => void;
+    onFocusLatticeCurrentSong?: () => void;
     noTrackText?: string;
     primaryColor?: string;
     secondaryColor?: string;
@@ -97,6 +98,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     onTogglePlay,
     onToggleLoop,
     onNavigateToPlayer,
+    onFocusLatticeCurrentSong,
     noTrackText = 'No Track',
     primaryColor = 'var(--text-primary)',
     secondaryColor = 'var(--text-secondary)',
@@ -302,6 +304,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         }
         if (currentView === 'home') {
             onNavigateToPlayer();
+        } else if (currentView === 'lattice') {
+            onFocusLatticeCurrentSong?.();
         }
     };
 

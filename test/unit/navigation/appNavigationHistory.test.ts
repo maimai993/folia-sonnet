@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
+    blockLatticeNavigationInFm,
     shouldNavigatePlayerBackThroughHistory,
     shouldReplacePlayerNavigation,
     type NavigationHistoryState,
 } from '@/hooks/useAppNavigation';
+import i18n from '@/i18n/config';
+import { usePlaybackStore } from '@/stores/usePlaybackStore';
+import { useStatusMessageStore } from '@/stores/useStatusMessageStore';
 
 // test/unit/navigation/appNavigationHistory.test.ts
 // Guards player-back behavior so collection pages are popped instead of duplicated.
@@ -16,6 +20,11 @@ const state = (
     appHistoryIndex,
     search: null,
     collection: null,
+});
+
+afterEach(() => {
+    usePlaybackStore.setState({ isFmMode: false });
+    useStatusMessageStore.setState({ message: null });
 });
 
 describe('player navigation history', () => {
@@ -37,5 +46,26 @@ describe('player navigation history', () => {
 
     it('pushes a new entry when opening the player from home', () => {
         expect(shouldReplacePlayerNavigation(state('home', 2))).toBe(false);
+    });
+});
+
+describe('Lattice navigation availability', () => {
+    it('allows normal queues without emitting a toast', () => {
+        usePlaybackStore.setState({ isFmMode: false });
+        useStatusMessageStore.setState({ message: null });
+
+        expect(blockLatticeNavigationInFm()).toBe(false);
+        expect(useStatusMessageStore.getState().message).toBeNull();
+    });
+
+    it('blocks Personal FM and explains why in the status toast', () => {
+        usePlaybackStore.setState({ isFmMode: true });
+        useStatusMessageStore.setState({ message: null });
+
+        expect(blockLatticeNavigationInFm()).toBe(true);
+        expect(useStatusMessageStore.getState().message).toEqual({
+            type: 'info',
+            text: i18n.t('status.latticeUnavailableInFm'),
+        });
     });
 });

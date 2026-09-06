@@ -106,6 +106,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         nextTrackLabel: t('ui.nextTrack'),
         stageTrackPillOpenPlayerLabel: t('ui.stageTrackPillOpenPlayer'),
         stageTrackPillOpenSongCardLabel: t('ui.stageTrackPillOpenSongCard'),
+        stageTrackPillFocusLatticeLabel: t('home.latticeFocusCurrent'),
         playerControlSlotPrimary,
         playerControlSlotSecondary,
         playerControlSlotContext,

@@ -19,7 +19,7 @@ export const createToggleCommand = (
     description: string,
     keywords: string[],
     run: (context: CommandPaletteContext) => void,
-    options: Pick<CommandPaletteCommand, 'platform' | 'isAvailable' | 'icon' | 'executeShortcut'> = {},
+    options: Pick<CommandPaletteCommand, 'platform' | 'isAvailable' | 'icon' | 'openHotkey' | 'executeShortcut'> = {},
 ): CommandPaletteCommand => defineCommand({
     id,
     group,

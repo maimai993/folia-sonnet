@@ -32,7 +32,7 @@ export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel'
  * only offer a global shortcut a command that works from anywhere, and anything else that asks
  * "would this be reachable if I were somewhere else".
  */
-export type CommandScope = 'player-surface' | 'filtering-surface';
+export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice';
 
 export type CommandPaletteSearchSource = SearchSource;
 
@@ -59,7 +59,8 @@ export type CommandPaletteCommand = {
      *  unclaimed: the listener's own shortcut lives on Alt, and checks itself against these. */
     openHotkey?: { key: string; ctrl?: boolean; alt?: boolean };
     /** Vim-style key sequence that runs this command from execute mode. Omit for anything
-     *  dangerous, irreversible, or needing confirmation. Must stay prefix-free registry-wide. */
+     *  dangerous, irreversible, or needing confirmation. Commands available together must stay
+     *  prefix-free; mutually exclusive surface scopes may reuse a key. */
     executeShortcut?: string;
     /** Panel body this command renders instead of the default match list. */
     surface?: CommandPaletteSurface;
@@ -164,6 +165,9 @@ export type CommandPalettePlaybackContext = {
 export type CommandPaletteNavigationContext = {
     navigateToHome: () => void;
     navigateToPlayer: () => void;
+    navigateToLattice: () => void;
+    focusLatticeCurrentSong: () => boolean;
+    canFocusLatticeCurrentSong: boolean;
     setHomeViewTab: (tab: HomeViewTab) => void;
     toggleBrowserFullscreen: () => Promise<boolean>;
     toggleRemoteControlWindow: () => Promise<boolean>;
@@ -190,6 +194,16 @@ export type CommandPaletteSettingsContext = {
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;
+    toggleLatticeVignette: () => void;
+    toggleLatticeAutoFocusOnSongChange: () => void;
+    latticePosterTintEnabled: boolean;
+    latticePosterTintUseCustomColor: boolean;
+    latticePosterTintColor: string;
+    latticePosterTintIntensity: number;
+    setLatticePosterTintEnabled: (enabled: boolean) => void;
+    setLatticePosterTintUseCustomColor: (enabled: boolean) => void;
+    setLatticePosterTintColor: (color: string) => void;
+    setLatticePosterTintIntensity: (intensity: number) => void;
     toggleAlwaysShowTrackSwitchButtons: () => void;
     toggleAlwaysShowMainWindowTitlebar: () => void;
     /** Lab switch: whether the restored session starts playing by itself on launch. */

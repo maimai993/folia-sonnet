@@ -538,7 +538,7 @@ export const useCommandPalette = ({
                 }
 
                 event.preventDefault();
-                openCommand(hotkeyCommand);
+                invokeCommand(hotkeyCommand);
                 return;
             }
 

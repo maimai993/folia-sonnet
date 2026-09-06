@@ -1,12 +1,24 @@
 import type { CommandPaletteCommand } from '../types';
-import { createToggleCommand, createHomeTabCommand } from '../commandFactories';
+import { defineCommand, createToggleCommand, createHomeTabCommand } from '../commandFactories';
 
 // src/components/command-palette/commands/navigationCommands.ts
 // Commands in the `navigation` group: moving between home tabs, the player, and window-level views.
 
 export const navigationCommands: CommandPaletteCommand[] = [
+    defineCommand({
+        id: 'lattice-focus-current', group: 'navigation', scope: 'lattice',
+        title: 'Lattice focus current song', description: 'Center the playing song in the queue collage',
+        keywords: ['lattice', 'lattice focus', 'queue collage', 'recenter', 'now playing', '队列拼贴', '聚焦当前歌曲', '回到当前歌曲'],
+        executeShortcut: 'c',
+        isAvailable: context => !context || context.navigation.canFocusLatticeCurrentSong,
+        execute: (_input, context) => context.navigation.focusLatticeCurrentSong(),
+    }),
     createToggleCommand('navigate-home', 'navigation', 'Go home', 'Return to home view', ['home', '首页', '主页'], context => context.navigation.navigateToHome()),
     createToggleCommand('navigate-player', 'navigation', 'Go player', 'Return to player view', ['player', '播放页', '播放器'], context => context.navigation.navigateToPlayer()),
+    createToggleCommand('navigate-lattice', 'navigation', 'Lattice open', 'Show the play queue as a queue collage', ['lattice', 'queue collage', 'song wall', 'poster wall', '队列拼贴', '歌曲墙', '海报墙'], context => context.navigation.navigateToLattice(),
+        // Already on the wall it is a no-op, and the wall renders the same control slots as the
+        // main bar — a slot bound to it would otherwise sit there offering to go nowhere.
+        { isAvailable: context => !context || context.scope.view !== 'lattice', openHotkey: { key: 'q', ctrl: true }, executeShortcut: 'w' }),
     {
         id: 'browser-fullscreen',
         group: 'navigation',

@@ -3,8 +3,10 @@ import { isSyncConfigured } from '../../../services/sync/syncConfig';
 import { buildObsCustomCss } from '../../../services/obs/obsCustomCss';
 import { hasUploadedObsAsset } from '../../../services/obs/visualSettingsConfig';
 import type { CommandPaletteCommand } from '../types';
-import { createToggleCommand, createAppLanguageCommand, createSettingsCommand } from '../commandFactories';
+import { createToggleCommand, createAppLanguageCommand, createSettingsCommand, defineCommand } from '../commandFactories';
 import { sleepTimerCommand } from './sleepTimerCommand';
+import { Layers3 } from 'lucide-react';
+import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
@@ -334,6 +336,20 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-transparent', 'settings', 'Toggle transparency', 'Toggle transparent player background', ['transparent', 'transparency', '透明', '透明化'], context => context.settings.toggleTransparentBackground()),
     createToggleCommand('settings-toggle-daylight', 'settings', 'Toggle light/dark', 'Toggle theme daylight/midnight mode', ['daylight', 'midnight', 'light', 'dark', '明暗', '切换明暗', '日夜', '日间', '夜间'], context => context.settings.toggleDaylightMode(), { executeShortcut: 'd' }),
     createToggleCommand('settings-toggle-player-back-button', 'settings', 'Always show player back button', 'Toggle whether the player page back button stays visible', ['always show back button', 'player back button', 'back button', '返回按钮', '始终显示返回按钮', '播放页返回按钮', 'fanhui annniu', 'bofangye fanhui annniu', 'fh', 'bfyfh'], context => context.settings.toggleAlwaysShowPlayerBackButton()),
+    createToggleCommand('settings-toggle-lattice-vignette', 'settings', 'Lattice vignette', 'Turn the edge vignette on the queue collage on or off', ['lattice', 'vignette', 'queue collage vignette', 'collage vignette', 'poster wall vignette', '暗角', '边缘暗角', '队列拼贴', '队列拼贴暗角', '拼贴暗角'], context => context.settings.toggleLatticeVignette()),
+    createToggleCommand('settings-toggle-lattice-auto-focus', 'settings', 'Lattice auto-focus', 'Toggle whether the queue collage follows the playing song when tracks change', ['lattice', 'lattice auto focus', 'queue collage', 'follow playing song', 'follow track changes', 'poster wall follow', '队列拼贴', '切歌自动聚焦', '自动聚焦当前歌曲', '海报墙跟随'], context => context.settings.toggleLatticeAutoFocusOnSongChange()),
+    defineCommand({
+        id: 'lattice-poster-tint',
+        group: 'settings',
+        title: 'Lattice poster tint',
+        description: 'Adjust the overlay that quiets posters outside the current queue collage focus',
+        keywords: ['lattice', 'lattice tint', 'poster overlay', 'focus tint', 'queue collage', 'queue collage tint', '队列拼贴', '海报叠色', '聚焦叠层', '队列拼贴叠层'],
+        icon: Layers3,
+        requiresInput: true,
+        surface: latticePosterTintSurface,
+        placeholder: context => context.shared.t('commandPalette.latticePosterTintPlaceholder', 'Adjust the controls below'),
+        execute: () => false,
+    }),
     createToggleCommand('settings-toggle-track-switch-buttons', 'settings', 'Always show track switch arrows', 'Toggle whether the progress bar track switch arrows stay visible beside the title', ['track switch buttons', 'previous next arrows', 'progress bar arrows', 'song switch buttons', '切歌箭头', '切换箭头', '始终显示切歌按钮', '进度条切歌按钮', '上一首下一首按钮', 'jinduting qiege', 'sysqgan'], context => context.settings.toggleAlwaysShowTrackSwitchButtons()),
     createToggleCommand('settings-toggle-main-window-titlebar', 'settings', 'Always show window control buttons', 'Toggle whether the main window control buttons stay visible', ['always show window controls', 'window control buttons', 'always show titlebar', 'main window titlebar', 'titlebar', '标题栏', '控制按钮', '始终显示标题栏', '始终显示控制按钮', '主窗口标题栏', 'kongzhi annniu', 'bt', 'zckbt'], context => context.settings.toggleAlwaysShowMainWindowTitlebar()),
     createToggleCommand('settings-toggle-auto-play-on-launch', 'settings', 'Auto-play on launch', 'Toggle whether opening the app resumes the last session by itself', ['autoplay', 'auto play', 'resume on open', 'play on startup', '自动播放', '启动自动播放', '进入应用自动播放', '续播'], context => context.settings.toggleAutoPlayOnLaunch()),

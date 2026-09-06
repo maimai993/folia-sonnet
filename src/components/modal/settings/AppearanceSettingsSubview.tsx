@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, PanelsTopLeft, Download, Copy, Check, ChevronRight, AlertTriangle, Music2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -20,6 +20,8 @@ import { buildCurrentObsUrl } from '../../../services/obs/currentObsUrl';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../services/obs/webObsTarget';
 import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../services/obs/visualSettingsConfig';
+import LatticeSettingsSection from './LatticeSettingsSection';
+import NowPlayingCardSettingsSection from './NowPlayingCardSettingsSection';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
@@ -809,75 +811,29 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHidePlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
-                        <div className="pt-2 border-t border-white/5 space-y-3">
-                            <div className="space-y-1">
-                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.stageTrackPill')}
-                                </div>
-                                <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.stageTrackPillDesc')}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                                {(['auto', 'always', 'never'] as const).map(pillMode => (
-                                    <button
-                                        key={pillMode}
-                                        onClick={() => onChangeStageTrackPillMode(pillMode)}
-                                        className="px-2 py-1.5 rounded-lg text-xs border transition-all"
-                                        style={getAccentOptionStyle(stageTrackPillMode === pillMode)}
-                                    >
-                                        {t(`options.stageTrackPillMode_${pillMode}`)}
-                                    </button>
-                                ))}
-                            </div>
-                            {stageTrackPillMode === 'auto' && (
-                                <div className="flex items-center justify-between gap-4 pt-1">
-                                    <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.stageTrackPillTimeout')}
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <input
-                                            type="range"
-                                            min={3}
-                                            max={60}
-                                            step={1}
-                                            value={stageTrackPillTimeoutSec}
-                                            onChange={(e) => onChangeStageTrackPillTimeoutSec(Number(e.target.value))}
-                                            className="w-36 accent-current"
-                                        />
-                                        <span className="text-xs font-mono w-12 text-right" style={{ color: 'var(--text-primary)' }}>
-                                            {stageTrackPillTimeoutSec}s
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                            {stageTrackPillMode !== 'never' && (
-                                <div className="flex items-center justify-between gap-4 pt-1">
-                                    <div className="space-y-0.5 min-w-0">
-                                        <div className="text-xs" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.stageTrackPillOnHome')}
-                                        </div>
-                                        <div className="text-xs opacity-50 max-w-[300px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.stageTrackPillOnHomeDesc')}
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => onToggleStageTrackPillOnHome(!stageTrackPillOnHome)}
-                                        className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!stageTrackPillOnHome ? toggleOffBackgroundClass : ''}`}
-                                        style={{ backgroundColor: stageTrackPillOnHome ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-                                        aria-pressed={stageTrackPillOnHome}
-                                        aria-label={t('options.stageTrackPillOnHome')}
-                                    >
-                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${stageTrackPillOnHome ? 'translate-x-6' : 'translate-x-0'}`} />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
             </SettingsAnchor>
 
-            {/* Section 3: Grid card style */}
+            {/* Section 3: Now playing card */}
+            <SettingsAnchor anchorId="stageTrackPill" label={t('options.stageTrackPill')}>
+                <SettingsSectionHeading icon={Music2} label={t('options.stageTrackPill')} />
+                <NowPlayingCardSettingsSection
+                    accentOutlineColor={accentOutlineColor}
+                    isDaylight={isDaylight}
+                    mode={stageTrackPillMode}
+                    timeoutSec={stageTrackPillTimeoutSec}
+                    showOnHome={stageTrackPillOnHome}
+                    settingsCardClass={settingsCardClass}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    theme={theme}
+                    onChangeMode={onChangeStageTrackPillMode}
+                    onChangeTimeoutSec={onChangeStageTrackPillTimeoutSec}
+                    onToggleShowOnHome={onToggleStageTrackPillOnHome}
+                />
+            </SettingsAnchor>
+
+            {/* Section 4: Grid card style */}
             <SettingsAnchor anchorId="grid3dCardStyle" label={t('options.grid3dCardStyle')}>
                 <SettingsSectionHeading icon={LayoutGrid} label={t('options.grid3dCardStyle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
@@ -912,7 +868,18 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 </div>
             </SettingsAnchor>
 
-            {/* Section 4: Configurations Import/Export (New feature) */}
+            {/* Section 5: Queue collage */}
+            <SettingsAnchor anchorId="latticeSettings" label={t('options.latticeSettings')}>
+                <SettingsSectionHeading icon={PanelsTopLeft} label={t('options.latticeSettings')} />
+                <LatticeSettingsSection
+                    settingsCardClass={settingsCardClass}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+            </SettingsAnchor>
+
+            {/* Section 6: Configurations Import/Export (New feature) */}
             <SettingsAnchor anchorId="importExportTitle" label={t('options.importExportTitle')}>
                 <SettingsSectionHeading icon={Settings2} label={t('options.importExportTitle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
