@@ -10,14 +10,14 @@
 | 区域 | 文件数 |
 | --- | --- |
 | components | 565 |
-| test/dev | 414 |
-| services | 121 |
+| test/dev | 423 |
+| services | 125 |
 | utils | 121 |
-| hooks | 65 |
-| backend/electron | 62 |
+| backend/electron | 66 |
+| hooks | 66 |
 | stores | 33 |
-| 其他 | 20 |
-| types | 15 |
+| 其他 | 22 |
+| types | 16 |
 | src (其他) | 13 |
 | i18n | 5 |
 | workers | 3 |
@@ -28,16 +28,16 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 525 | `src/types.ts` |
-| 68 | `src/utils/appPlaybackGuards.ts` |
+| 533 | `src/types.ts` |
+| 72 | `src/utils/appPlaybackGuards.ts` |
 | 61 | `src/types/onlineMusic.ts` |
 | 58 | `src/components/command-palette/types.ts` |
+| 48 | `src/stores/useStatusMessageStore.ts` |
 | 47 | `src/components/visualizer/colorMix.ts` |
-| 47 | `src/stores/useStatusMessageStore.ts` |
 | 42 | `src/services/db.ts` |
 | 37 | `src/components/visualizer/definition.ts` |
 | 37 | `src/services/onlineMusic/songMetadata.ts` |
-| 35 | `src/stores/usePlaybackStore.ts` |
+| 36 | `src/stores/usePlaybackStore.ts` |
 | 32 | `src/utils/lyrics/renderHints.ts` |
 | 30 | `src/utils/lyrics/parserCore.ts` |
 | 29 | `src/stores/useAppViewStore.ts` |
