@@ -82,3 +82,9 @@
 - 本地播放入口按 `song id + size + lastModified` 精确复用表示；Navidrome 按媒体身份、路径、suffix、时长和无凭据流表示精确复用，版本变化会回到原音源并重新确认失败。
 - 提交后最终复验：`npm run typecheck` 通过；CJS `node --check` 通过；全量 Vitest 331 个文件、3089 项通过、1 项按原配置跳过；新增恢复/协议/runner/service/revision 测试均通过。
 - 未执行 Electron 完整打包：仓库验证策略要求 Electron 改动优先静态与最小集成验证，且当前仓库没有随包音频裁剪 FFmpeg 产物。运行时 resolver 已支持 `FOLIA_FFMPEG_PATH`、仓库 `ffmpeg-8.1.2/`、packaged `resources/ffmpeg/` 和系统 PATH；发布前仍需按目标平台放入并验证裁剪二进制。
+
+### 2026-09-06 — manual fallback fixture
+
+- 新增 `test-results/transcode-fallback-sample.wv`，作为 Electron 手工回归用的 WavPack 输入；文件包含 12 秒、48 kHz、单声道的 440 Hz/880 Hz 混合测试音并带首尾淡化。
+- `ffprobe` 校验结果：`wavpack` 音轨、WavPack 容器、时长 12.000 秒、文件大小 1,252,984 bytes；SHA-256 为 `00A27F96F01D3F0CD917A23934A690643151847F64E8CD27C7C56F11F09DA190`。
+- 该格式用于触发 Chromium `<audio>` 不支持输入时的转码恢复路径；将文件导入本地曲库或 Navidrome 后，在 Electron 版本中播放即可验证。
