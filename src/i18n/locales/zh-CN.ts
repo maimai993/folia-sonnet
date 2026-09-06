@@ -966,6 +966,9 @@ export default {
     "selectPlaylist": "选择歌单",
     "clickTapCenter": "点击 / 轻触中间",
     "keyboardShortcuts": "键盘快捷键",
+    "quickActions": "快捷操作",
+    "queueCollage": "队列拼贴",
+    "playQueue": "播放队列",
     "navigatePlaylists": "切换歌单",
     "playPause": "播放 / 暂停",
     "playerControls": "播放页面控制",
@@ -2191,6 +2194,33 @@ export default {
       "launchAutoplay": {
         "title": "可选的启动自动续播",
         "description": "实验室新增开关，可在桌面端和已安装的 PWA 启动后自动续播上次歌曲；普通浏览器标签页仍可能因自动播放策略需要点击一次。"
+      }
+    },
+    "v0_7_4": {
+      "intro": "0.7.4 带来全新的队列拼贴视图、macOS 壁纸模式，以及无法解码音频的自动转换。",
+      "latticeQueueCollage": {
+        "title": "队列拼贴视图",
+        "description": "从命令面板或进度条右侧按钮打开，把整个播放队列铺成一面海报墙：拖动或用方向键浏览，回车展开歌曲再按一次播放，展开的海报上会跟着走字歌词。可开启切歌自动聚焦，并调整边缘暗角与海报叠色。也可用 Ctrl/Cmd+B 直接开关；私人 FM 模式下不可用。"
+      },
+      "macWallpaperMode": {
+        "title": "macOS 壁纸模式",
+        "description": "Mac 现在也能把 Folia 沉到桌面图标下方作为歌词壁纸，无需重启应用即可切换，并可选择壁纸模式期间自动隐藏 Dock 栏。需要在 系统设置 → 隐私与安全性 → 输入监控 中授权 Folia 才能转发鼠标；该模式下键盘不可用。"
+      },
+      "transcodeFallback": {
+        "title": "自动转换无法播放的音频",
+        "description": "桌面端内置 FFmpeg，遇到 Chromium 解码不了的本地或 Navidrome 歌曲时自动转换并原位恢复播放，不改动原文件。转换结果会缓存，可在播放设置中关闭。"
+      },
+      "localFolderAutoScan": {
+        "title": "本地文件夹自动扫描",
+        "description": "开启后会监视已导入的本地文件夹，文件增删改时自动做一次增量扫描，无需手动重新导入。默认关闭，可在存储设置中逐个文件夹查看监视状态；部分环境只能监视文件夹本层。"
+      },
+      "lyricFilterPersistence": {
+        "title": "保留歌词过滤表达式",
+        "description": "关闭逐行歌词过滤不再清空写好的正则表达式，下次开启时仍在原处，方便反复对比开关效果。"
+      },
+      "monetAudioVisibility": {
+        "title": "Monet 可隐藏频谱",
+        "description": "Monet 视觉器新增频谱显示开关，可只保留歌词与封面画面。"
       }
     }
   },

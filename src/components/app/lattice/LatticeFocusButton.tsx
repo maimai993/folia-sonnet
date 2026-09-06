@@ -168,7 +168,7 @@ export default function LatticeFocusButton({ isDaylight }: { isDaylight: boolean
                                             </li>
                                             <li>
                                                 <span>{t('home.latticeHelpOpen')}</span>
-                                                <kbd>{PRIMARY_MODIFIER_LABEL} + Q</kbd>
+                                                <kbd>{PRIMARY_MODIFIER_LABEL} + B</kbd>
                                             </li>
                                         </ul>
                                     </motion.div>

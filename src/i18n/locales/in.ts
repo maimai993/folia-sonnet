@@ -964,6 +964,9 @@ export default {
     "selectPlaylist": "Pilih Playlist",
     "clickTapCenter": "Klik / Ketuk Tengah",
     "keyboardShortcuts": "Pintasan Keyboard",
+    "quickActions": "Aksi cepat",
+    "queueCollage": "Kolase antrean",
+    "playQueue": "Antrean pemutaran",
     "navigatePlaylists": "Navigasi Playlist",
     "playPause": "Putar / Jeda",
     "playerControls": "Kontrol Halaman Pemutar",
@@ -2128,6 +2131,33 @@ export default {
       "launchAutoplay": {
         "title": "Pemutaran Opsional Saat Aplikasi Dibuka",
         "description": "Sakelar Lab baru dapat melanjutkan lagu terakhir secara otomatis di desktop dan PWA terpasang. Tab peramban biasa mungkin tetap memerlukan satu klik karena kebijakan putar otomatis."
+      }
+    },
+    "v0_7_4": {
+      "intro": "Versi 0.7.4 menghadirkan tampilan kolase antrean, mode wallpaper di macOS, dan konversi otomatis untuk audio yang tidak bisa didekode.",
+      "latticeQueueCollage": {
+        "title": "Tampilan Kolase Antrean",
+        "description": "Buka dari panel perintah atau tombol di samping bilah kemajuan untuk membentangkan seluruh antrean pemutaran menjadi dinding poster: geser atau gunakan tombol panah, tekan Enter untuk membuka lagu dan Enter sekali lagi untuk memutarnya, lengkap dengan lirik berjalan pada poster yang terbuka. Fokus otomatis dapat mengembalikan poster yang sedang diputar ke tengah setiap kali lagu berganti, dan vignette serta warna lapisan poster bisa diatur. Ctrl/Cmd+B juga mengalihkannya secara langsung; tidak tersedia dalam mode FM pribadi."
+      },
+      "macWallpaperMode": {
+        "title": "Mode Wallpaper di macOS",
+        "description": "Mac kini dapat menenggelamkan Folia di bawah ikon desktop sebagai wallpaper lirik, beralih langsung tanpa memulai ulang aplikasi, dengan opsi menyembunyikan Dock secara otomatis selama mode aktif. Penerusan mouse membutuhkan Folia dicentang di Pengaturan Sistem → Privasi & Keamanan → Pemantauan Input; papan ketik tetap tidak tersedia dalam mode ini."
+      },
+      "transcodeFallback": {
+        "title": "Audio yang Tak Terdekode Tetap Diputar",
+        "description": "Aplikasi desktop kini menyertakan FFmpeg dan mengonversi lagu lokal atau Navidrome yang tidak bisa didekode Chromium, lalu melanjutkan pemutaran di tempat tanpa mengubah berkas aslinya. Hasil konversi disimpan di cache, dan fitur ini bisa dimatikan di pengaturan pemutaran."
+      },
+      "localFolderAutoScan": {
+        "title": "Folder Impor Memindai Ulang Sendiri",
+        "description": "Setelah diaktifkan, Folia memantau folder lokal yang sudah diimpor dan menjalankan pemindaian bertahap setiap kali berkas ditambah, diubah, atau dihapus — tanpa impor ulang manual. Fitur ini mati secara bawaan, dan pengaturan penyimpanan menampilkan status pemantauan tiap folder; sebagian lingkungan hanya bisa memantau lapisan teratas folder."
+      },
+      "lyricFilterPersistence": {
+        "title": "Pola Filter Lirik Tidak Hilang",
+        "description": "Mematikan filter lirik per baris tidak lagi menghapus pola yang sudah Anda tulis. Pola itu tetap ada saat filter dinyalakan kembali, sehingga mudah membandingkan kedua kondisi."
+      },
+      "monetAudioVisibility": {
+        "title": "Sembunyikan Spektrum Monet",
+        "description": "Visualizer Monet kini dapat menyembunyikan spektrum audionya, menyisakan lirik dan sampul saja."
       }
     }
   },

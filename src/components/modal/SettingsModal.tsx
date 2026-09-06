@@ -43,6 +43,7 @@ import type { SongResult } from '../../types';
 import type { ThemeCacheSongKey } from '../../services/themeCache';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import { isMacPlatform as isMac } from '../../utils/platform';
+import { HELP_TAB_PRIMARY_SHORTCUTS } from './userGuideContent';
 import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
@@ -1318,13 +1319,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <Keyboard size={14} /> {t('help.keyboardShortcuts')}
                                     </h3>
                                     <ul className="space-y-2 text-sm" style={{ color: 'var(--text-primary)' }}>
-                                        <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                            <span>{t('help.navigatePlaylists')}</span>
-                                            <div className="flex gap-1">
-                                                <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
-                                                <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">→</kbd>
-                                            </div>
-                                        </li>
+                                        {HELP_TAB_PRIMARY_SHORTCUTS.map(shortcut => (
+                                            <li key={shortcut.id} className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                                <span>{t(shortcut.titleKey, shortcut.fallback)}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">{isMac ? 'Cmd' : 'Ctrl'}</kbd>
+                                                    <span className="text-xs opacity-50">+</span>
+                                                    <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">{shortcut.key}</kbd>
+                                                </div>
+                                            </li>
+                                        ))}
                                     </ul>
                                 </div>
 

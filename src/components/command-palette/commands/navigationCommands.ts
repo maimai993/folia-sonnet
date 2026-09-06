@@ -18,7 +18,10 @@ export const navigationCommands: CommandPaletteCommand[] = [
     createToggleCommand('navigate-lattice', 'navigation', 'Lattice open', 'Show the play queue as a queue collage', ['lattice', 'queue collage', 'song wall', 'poster wall', '队列拼贴', '歌曲墙', '海报墙'], context => context.navigation.navigateToLattice(),
         // Already on the wall it is a no-op, and the wall renders the same control slots as the
         // main bar — a slot bound to it would otherwise sit there offering to go nowhere.
-        { isAvailable: context => !context || context.scope.view !== 'lattice', openHotkey: { key: 'q', ctrl: true }, executeShortcut: 'w' }),
+        // The stroke stays off the primary modifier keys macOS reserves: `ctrl` here resolves to
+        // Cmd, and Electron's default app menu answers Cmd+Q with Quit before the renderer ever
+        // sees the keydown. Same for W/M/R/H. Lattice.tsx matches this key to close the wall.
+        { isAvailable: context => !context || context.scope.view !== 'lattice', openHotkey: { key: 'b', ctrl: true }, executeShortcut: 'w' }),
     {
         id: 'browser-fullscreen',
         group: 'navigation',

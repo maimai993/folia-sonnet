@@ -967,6 +967,9 @@ export default {
     "selectPlaylist": "Select Playlist",
     "clickTapCenter": "Click / Tap Center",
     "keyboardShortcuts": "Keyboard Shortcuts",
+    "quickActions": "Quick actions",
+    "queueCollage": "Queue collage",
+    "playQueue": "Play queue",
     "navigatePlaylists": "Navigate Playlists",
     "playPause": "Play / Pause",
     "playerControls": "Player Page Controls",
@@ -2192,6 +2195,33 @@ export default {
       "launchAutoplay": {
         "title": "Optional Playback on Launch",
         "description": "A new Lab switch can resume the last song automatically on desktop and installed PWAs. Ordinary browser tabs may still require one click because of autoplay policies."
+      }
+    },
+    "v0_7_4": {
+      "intro": "Version 0.7.4 adds the queue collage view, wallpaper mode on macOS, and automatic conversion of audio your browser cannot decode.",
+      "latticeQueueCollage": {
+        "title": "Queue Collage View",
+        "description": "Open it from the command palette or the button beside the progress bar to spread the whole play queue across a poster wall: pan it or move with the arrow keys, press Enter to expand a song and Enter again to play it, with running lyrics on the expanded poster. Auto-focus can recenter the playing poster on every track change, and the vignette and poster tint are adjustable. Ctrl/Cmd+B toggles it directly; not available in private FM mode."
+      },
+      "macWallpaperMode": {
+        "title": "Wallpaper Mode on macOS",
+        "description": "Mac can now sink Folia below the desktop icons as a lyric wallpaper, switching in place without relaunching, with an option to auto-hide the Dock while it is on. Mouse forwarding needs Folia enabled under System Settings → Privacy & Security → Input Monitoring; the keyboard stays unavailable in this mode."
+      },
+      "transcodeFallback": {
+        "title": "Undecodable Audio Plays Anyway",
+        "description": "The desktop app now ships FFmpeg and converts local or Navidrome tracks Chromium cannot decode, resuming playback in place without touching the original file. Results are cached, and the whole fallback can be turned off in playback settings."
+      },
+      "localFolderAutoScan": {
+        "title": "Imported Folders Rescan Themselves",
+        "description": "Turn it on and Folia watches your imported local folders, running an incremental scan whenever files are added, changed, or removed — no more manual re-import. It is off by default, and storage settings show the watch state per folder; some environments can only watch the top level of a folder."
+      },
+      "lyricFilterPersistence": {
+        "title": "Lyric Filter Patterns Stick Around",
+        "description": "Turning the per-line lyric filter off no longer erases the pattern you wrote. It is still there when you switch the filter back on, so comparing both states is easy."
+      },
+      "monetAudioVisibility": {
+        "title": "Hide the Monet Spectrum",
+        "description": "The Monet visualizer can now hide its audio spectrum, leaving just the lyrics and artwork."
       }
     }
   },

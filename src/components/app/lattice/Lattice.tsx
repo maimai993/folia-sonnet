@@ -68,7 +68,7 @@ export default function Lattice({
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.repeat
-                || event.key.toLowerCase() !== 'q'
+                || event.key.toLowerCase() !== 'b'
                 || !isPrimaryModifierPressed(event)
                 || isSecondaryModifierPressed(event)
                 || event.altKey
