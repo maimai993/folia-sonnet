@@ -102,3 +102,13 @@
 - 使用 `folia-ffmpeg-build` Windows x64 Folia 产物验证真实转码、完整输出解码、WavPack fallback、E-AC-3 (`ec-3`) in `.m4a` 与 96 kHz 保留；产物来源为 `test-results/ffmpeg-windows-x86_64-folia.zip`。
 - 实测 96 kHz PCM 经 runner 输出 96 kHz/双声道 FLAC（114,044 bytes），WAV fallback 输出 96 kHz/双声道 PCM S16LE（384,102 bytes）；E-AC-3 `.m4a` 输出 48 kHz/双声道 FLAC（62,641 bytes），12 秒 WavPack fixture 输出 48 kHz/双声道 FLAC（598,943 bytes），所有输出均通过 runner 的完整二次解码。
 - 最小验证通过：`transcodeRunner.test.ts` 3 项、`node --check electron/transcode/runner.cjs`、`npm run typecheck`。
+
+### 2026-09-07 — packaged FFmpeg release integration
+
+- `folia-ffmpeg-build` 首个正式版本固定为 `v8.1.2-folia.1`；Folia 维护每个平台/架构 release archive 的 SHA-256，不依赖可漂移的 latest URL。
+- 新增无第三方运行时依赖的下载器：按 electron-builder 当前目标选择 Windows x64、Linux x64/arm64、macOS x64/arm64 资产，下载后先校验 SHA-256，再只暂存 `ffmpeg(.exe)` 与 LGPL/MIT/构建元数据。
+- electron-builder `beforePack` hook 为每个目标架构准备 `build/ffmpeg/${os}-${arch}`；`extraResources` 使用 `${os}`/`${arch}` 宏把对应目录复制到 `resources/ffmpeg/`，现有 resolver 无需平台特判即可命中。
+- 正式版、Limo nightly、Cielo canary、RC 和本地 electron-builder 共用同一个 hook，避免某条发布 workflow 漏带运行时；不支持的平台/架构与 checksum 不匹配均直接中止打包。
+- `v8.1.2-folia.1` 已作为非 draft、非 prerelease 的正式 GitHub Release 发布，tag 矩阵五个平台构建与 release job 全绿；资产大小约 4.08–4.21 MB，另附原始 FFmpeg 8.1.2 源码和 `SHA256SUMS`。
+- Windows x64 真实下载及二次缓存运行通过；electron-builder unpacked package 成功在 `resources/ffmpeg/` 放入 3,813,888-byte `ffmpeg.exe`、构建信息与 LGPL/MIT 文本，包内二进制可执行并报告 FFmpeg 8.1.2。
+- 缓存 marker 同时记录 archive 与解包后二进制 SHA-256；二进制被修改或缓存不完整时会重新下载，marker 最后写入以避免接受半成品。

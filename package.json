@@ -49,6 +49,7 @@
     "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder",
     "build:windowtolayer": "node packaging/linux/build-windowtolayer.mjs",
     "build:wallpaper-helper": "node packaging/windows/build-wallpaper-helper.mjs",
+    "build:ffmpeg": "node packaging/ffmpeg/fetch-ffmpeg.mjs",
     "contributors:add": "npx all-contributors-cli add",
     "contributors:generate": "npx all-contributors-cli generate",
     "models:fetch": "node build/fetchModels.mjs",
@@ -57,6 +58,7 @@
   "build": {
     "appId": "top.izuna.foliamajor",
     "productName": "Folia",
+    "beforePack": "build/beforePack.cjs",
     "afterPack": "build/afterPack.cjs",
     "electronLanguages": [
       "en-US",
@@ -87,6 +89,10 @@
       "node_modules/@koromix/koffi-*/**/*.node"
     ],
     "extraResources": [
+      {
+        "from": "build/ffmpeg/${os}-${arch}",
+        "to": "ffmpeg"
+      },
       {
         "from": "build/icon.png",
         "to": "icon.png"
