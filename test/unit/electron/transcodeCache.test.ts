@@ -58,6 +58,27 @@ describe('transcode cache', () => {
         expect(await listTranscodeCacheEntries(root)).toEqual([]);
     });
 
+    it('drops the previous format when a key is republished as the other one', async () => {
+        const cacheKey = buildTranscodeCacheKey(source);
+        const publishOptions = {
+            cacheDirectory: root,
+            cacheKey,
+            temporaryAudioPath,
+            metadata: { songKey: source.songKey, sourceRevision: source.sourceRevision },
+        };
+        const flac = await publishCacheEntry({ ...publishOptions, format: 'flac' });
+        const wav = await publishCacheEntry({ ...publishOptions, format: 'wav' });
+
+        // A leftover audio.flac would be invisible to the inventory and unreclaimable by the prune,
+        // silently carrying the cache past the ceiling the listener set.
+        await expect(fs.promises.stat(flac.audioPath)).rejects.toMatchObject({ code: 'ENOENT' });
+        expect((await fs.promises.stat(wav.audioPath)).size).toBe(256);
+        expect(await listTranscodeCacheEntries(root)).toEqual([
+            expect.objectContaining({ name: cacheKey, size: 256 }),
+        ]);
+        expect((await readValidCacheEntry(root, cacheKey))?.format).toBe('wav');
+    });
+
     it('removes cache directories from obsolete generations', async () => {
         const cacheKey = buildTranscodeCacheKey(source);
         const obsoleteDirectory = path.join(root, cacheKey);

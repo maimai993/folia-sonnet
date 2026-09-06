@@ -217,7 +217,11 @@ const readBytes = async (
     const representation = getPlaybackRepresentation(song);
     if (representation) {
         try {
-            return { bytes: await (await fetch(representation.url)).arrayBuffer(), partial: false };
+            const response = await fetch(representation.url);
+            // An evicted transcode answers 404 with a text body. Decoding that would be stored as a
+            // permanent "unsupported" verdict for a track that is merely no longer cached.
+            if (!response.ok) throw new Error(`representation responded ${response.status}`);
+            return { bytes: await response.arrayBuffer(), partial: false };
         } catch (error) {
             console.warn('[Automix] could not read the playback representation for analysis', error);
             return { skipped: 'the playback representation could not be read' };

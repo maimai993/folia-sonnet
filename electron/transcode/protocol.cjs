@@ -45,7 +45,14 @@ const createProtocolResponse = async (request, resolveEntry) => {
     if (!parsed) return new Response('Not found', { status: 404 });
     const entry = await resolveEntry(parsed.cacheKey, parsed.format);
     if (!entry) return new Response('Not found', { status: 404 });
-    const stat = await fs.promises.stat(entry.audioPath);
+    // A prune or a cache clear can remove the entry between resolution and this read. That is a
+    // 404 for the media element, not a rejected protocol handler.
+    let stat;
+    try {
+        stat = await fs.promises.stat(entry.audioPath);
+    } catch {
+        return new Response('Not found', { status: 404 });
+    }
     const range = parseRangeHeader(request.headers.get('range'), stat.size);
     if (range?.invalid) {
         return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${stat.size}` } });
@@ -60,8 +67,12 @@ const createProtocolResponse = async (request, resolveEntry) => {
     if (range) headers['Content-Range'] = `bytes ${range.start}-${range.end}/${stat.size}`;
     if (request.method === 'HEAD') return new Response(null, { status: range ? 206 : 200, headers });
 
-    const nodeStream = fs.createReadStream(entry.audioPath, range ? { start: range.start, end: range.end } : undefined);
-    return new Response(Readable.toWeb(nodeStream), { status: range ? 206 : 200, headers });
+    try {
+        const nodeStream = fs.createReadStream(entry.audioPath, range ? { start: range.start, end: range.end } : undefined);
+        return new Response(Readable.toWeb(nodeStream), { status: range ? 206 : 200, headers });
+    } catch {
+        return new Response('Not found', { status: 404 });
+    }
 };
 
 const registerTranscodeProtocol = ({ protocol, resolveEntry }) => {

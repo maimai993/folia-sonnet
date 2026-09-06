@@ -22,6 +22,8 @@ const { TRANSCODE_PROTOCOL_SCHEME, registerTranscodeProtocol } = require('./prot
 
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024 * 1024;
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9:_-]{1,160}$/;
+/** Active deck, warm deck, and enough slack for a transition to hold both ends. */
+const MAX_PINNED_CACHE_KEYS = 4;
 
 const safeExtension = fileName => {
     const extension = path.extname(String(fileName || '')).toLowerCase();
@@ -49,9 +51,21 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
     const temporaryRoot = path.join(cacheDirectory, 'tmp');
     const jobs = new Map();
     const requestJobs = new Map();
+    // Keys the renderer is playing from. A fully buffered media element stops reading the file, so
+    // its mtime goes stale and an LRU prune would drop the entry out from under playback.
+    const pinnedCacheKeys = new Set();
     let ffmpegPromise = null;
     const pendingJobs = [];
     let isJobRunning = false;
+
+    const pinCacheKey = cacheKey => {
+        pinnedCacheKeys.delete(cacheKey);
+        pinnedCacheKeys.add(cacheKey);
+        while (pinnedCacheKeys.size > MAX_PINNED_CACHE_KEYS) {
+            pinnedCacheKeys.delete(pinnedCacheKeys.values().next().value);
+        }
+    };
+    const getPinnedCacheKeys = () => [...pinnedCacheKeys];
 
     const log = (level, event, details = {}) => {
         const writer = level === 'warn' ? console.warn : console.info;
@@ -79,24 +93,36 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
         void pumpQueue();
     });
 
+    // The protocol is registered before any filesystem work: cached entries stay servable even when
+    // the scratch directory cannot be prepared, and no failure here can abort the caller's startup.
     const initialize = async () => {
-        await fs.promises.rm(temporaryRoot, { recursive: true, force: true });
-        await fs.promises.mkdir(temporaryRoot, { recursive: true });
-        await removeInvalidTranscodeCacheEntries(cacheDirectory);
         registerTranscodeProtocol({ protocol, resolveEntry });
+        try {
+            await fs.promises.rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+            await fs.promises.mkdir(temporaryRoot, { recursive: true });
+            await removeInvalidTranscodeCacheEntries(cacheDirectory);
+        } catch (error) {
+            log('warn', 'initialize-failed', { code: error?.code || 'UNKNOWN' });
+        }
     };
 
     const listCacheEntries = () => listTranscodeCacheEntries(cacheDirectory);
-    const removeCacheEntry = cacheKey => removeTranscodeCacheEntry(cacheDirectory, cacheKey);
+    const removeCacheEntry = cacheKey => {
+        pinnedCacheKeys.delete(cacheKey);
+        return removeTranscodeCacheEntry(cacheDirectory, cacheKey);
+    };
     const clearCache = async () => {
         log('info', 'cache-clear', { activeJobs: jobs.size });
         jobs.forEach(job => job.controller.abort());
+        pinnedCacheKeys.clear();
         await clearTranscodeCacheEntries(cacheDirectory);
     };
 
     const resolveEntry = async (cacheKey, format) => {
         const entry = await readValidCacheEntry(cacheDirectory, cacheKey);
-        return entry?.format === format ? entry : null;
+        if (entry?.format !== format) return null;
+        pinCacheKey(cacheKey);
+        return entry;
     };
 
     const resolveExecutable = async () => {
@@ -162,6 +188,8 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
         }
         log('info', 'cache-miss', { cacheKey: logId, sourceKind: source.kind });
         const executable = await resolveExecutable();
+        // Recreated per job so a scratch root that initialize could not prepare still self-heals.
+        await fs.promises.mkdir(temporaryRoot, { recursive: true });
         const jobDirectory = await fs.promises.mkdtemp(path.join(temporaryRoot, `${cacheKey.slice(0, 12)}-`));
         const inputPath = path.join(jobDirectory, `input${safeExtension(source.fileName)}`);
         try {
@@ -169,14 +197,15 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
             log('info', 'encode-start', { cacheKey: logId, inputBytes, sourceKind: source.kind });
             let format = 'flac';
             let outputPath = path.join(jobDirectory, 'output.flac');
+            let outputBytes = 0;
             try {
-                await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess });
+                ({ size: outputBytes } = await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess }));
             } catch (error) {
                 if (!shouldUseWavFallback(error)) throw error;
                 log('warn', 'wav-fallback', { cacheKey: logId });
                 format = 'wav';
                 outputPath = path.join(jobDirectory, 'output.wav');
-                await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess });
+                ({ size: outputBytes } = await transcodeAudioFile({ executable, inputPath, outputPath, format, signal: controller.signal, spawnProcess }));
             }
             const entry = await publishCacheEntry({
                 cacheDirectory,
@@ -189,21 +218,25 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
                     createdAt: Date.now(),
                 },
             });
-            const outputStat = await fs.promises.stat(entry.audioPath);
+            // The size comes from the encode rather than a fresh stat of the published file: a
+            // concurrent prune or cache clear would otherwise fail a job that fully succeeded.
             await onCacheWrite?.(limitBytes, {
                 cacheKey,
-                size: outputStat.size,
-                usedAt: outputStat.mtimeMs,
+                size: outputBytes,
+                usedAt: Date.now(),
             });
             log('info', 'complete', {
                 cacheKey: logId,
                 elapsedMs: Date.now() - startedAt,
                 format,
-                outputBytes: outputStat.size,
+                outputBytes,
             });
             return entry;
         } finally {
-            await fs.promises.rm(jobDirectory, { recursive: true, force: true });
+            // Windows releases the FFmpeg handles a beat after kill(), and an EBUSY raised here
+            // would replace the cancellation or timeout this block is unwinding.
+            await fs.promises.rm(jobDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+                .catch(error => log('warn', 'cleanup-failed', { cacheKey: logId, code: error?.code || 'UNKNOWN' }));
         }
     };
 
@@ -240,6 +273,7 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
         requestJobs.set(requestId, job);
         try {
             const entry = await job.promise;
+            pinCacheKey(cacheKey);
             log('info', 'representation-ready', {
                 requestId,
                 cacheKey: logId,
@@ -291,6 +325,7 @@ const createTranscodeService = ({ app, protocol, net, spawnProcess, onCacheWrite
         cancel,
         clearCache,
         dispose,
+        getPinnedCacheKeys,
         initialize,
         listCacheEntries,
         removeCacheEntry,

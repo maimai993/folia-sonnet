@@ -926,6 +926,9 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
 
         song.duration = embeddedMetadata.duration || song.duration || 0;
         song.fileSize = file.size;
+        // Kept in step with fileSize: buildLocalSourceRevision reads both, so refreshing only one
+        // makes every cached playback representation look stale and re-transcode on each play.
+        song.fileLastModified = file.lastModified;
         song.mimeType = file.type;
         song.bitrate = embeddedMetadata.bitrate || song.bitrate || 0;
         const filenameMetadata = extractMetadataFromFilename(file.name);

@@ -3732,12 +3732,17 @@ async function pruneMediaCache(limitBytes, protectedTranscodeEntry = null) {
       ...audioEntries.map(entry => ({ ...entry, name: `audio:${entry.name}` })),
       ...transcodeEntries.map(entry => ({ ...entry, name: `transcode:${entry.name}` })),
     ];
-    let effectiveLimit = resolvedLimit;
-    if (protectedTranscodeEntry) {
-      const protectedName = `transcode:${protectedTranscodeEntry.cacheKey}`;
-      entries = entries.filter(entry => entry.name !== protectedName);
-      effectiveLimit = Math.max(1, resolvedLimit - protectedTranscodeEntry.size);
+    // Entries the renderer is streaming are unevictable but still spend the budget: a fully
+    // buffered media element stops touching its file, so LRU alone would drop it mid-playback.
+    const protectedNames = new Set(transcodeService.getPinnedCacheKeys().map(key => `transcode:${key}`));
+    if (protectedTranscodeEntry) protectedNames.add(`transcode:${protectedTranscodeEntry.cacheKey}`);
+    const protectedEntries = entries.filter(entry => protectedNames.has(entry.name));
+    let protectedBytes = protectedEntries.reduce((total, entry) => total + entry.size, 0);
+    if (protectedTranscodeEntry && !protectedEntries.some(entry => entry.name === `transcode:${protectedTranscodeEntry.cacheKey}`)) {
+      protectedBytes += protectedTranscodeEntry.size;
     }
+    entries = entries.filter(entry => !protectedNames.has(entry.name));
+    const effectiveLimit = protectedBytes > 0 ? Math.max(1, resolvedLimit - protectedBytes) : resolvedLimit;
 
     for (const name of selectEvictions(entries, effectiveLimit)) {
       if (name.startsWith('audio:')) await removeAudioCacheEntry(name.slice('audio:'.length));
@@ -5101,7 +5106,13 @@ app.whenReady().then(async () => {
   setupFileSystemAccessPermissionHandlers();
   setupCorsBypassHandlers();
   localCoverAssetStore.registerProtocolHandler(protocol, electronNet);
-  await transcodeService.initialize();
+  // Transcode fallback is an optional degradation path; a failure preparing it must never keep
+  // the rest of this handler, createWindow() included, from running.
+  try {
+    await transcodeService.initialize();
+  } catch (error) {
+    console.warn('[TranscodeFallback] Initialization failed; playback fallback is unavailable', error);
+  }
 
   session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
     if (details.isDirectory) {

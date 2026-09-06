@@ -8,6 +8,7 @@ const path = require('path');
 
 const CACHE_VERSION = 'audio-v2-source-rate-stereo';
 const CACHE_KEY_PATTERN = /^[a-f0-9]{64}$/;
+const CACHE_FORMATS = ['flac', 'wav'];
 
 const getTranscodeCacheDirectory = userDataDirectory => path.join(userDataDirectory, 'transcode-cache');
 
@@ -31,7 +32,7 @@ const getCacheEntryPaths = (cacheDirectory, cacheKey, format) => {
 };
 
 const readValidCacheEntry = async (cacheDirectory, cacheKey) => {
-    for (const format of ['flac', 'wav']) {
+    for (const format of CACHE_FORMATS) {
         const paths = getCacheEntryPaths(cacheDirectory, cacheKey, format);
         try {
             const [metadataText, stat] = await Promise.all([
@@ -62,7 +63,7 @@ const listTranscodeCacheEntries = async cacheDirectory => {
     const cacheEntries = await Promise.all(entries
         .filter(entry => entry.isDirectory() && CACHE_KEY_PATTERN.test(entry.name))
         .map(async entry => {
-            for (const format of ['flac', 'wav']) {
+            for (const format of CACHE_FORMATS) {
                 const paths = getCacheEntryPaths(cacheDirectory, entry.name, format);
                 try {
                     const [metadataText, stat] = await Promise.all([
@@ -124,8 +125,13 @@ const publishCacheEntry = async ({ cacheDirectory, cacheKey, format, temporaryAu
         cacheVersion: CACHE_VERSION,
         format,
     }, null, 2));
+    // Every format, not only the one being written: a key republished after a flac/wav switch
+    // otherwise keeps the previous audio file, which no listing reports and no prune can reclaim.
     await Promise.all([
-        fs.promises.rm(paths.audioPath, { force: true }),
+        ...CACHE_FORMATS.map(staleFormat => fs.promises.rm(
+            getCacheEntryPaths(cacheDirectory, cacheKey, staleFormat).audioPath,
+            { force: true },
+        )),
         fs.promises.rm(paths.metadataPath, { force: true }),
     ]);
     await fs.promises.rename(stagingAudio, paths.audioPath);
@@ -134,6 +140,7 @@ const publishCacheEntry = async ({ cacheDirectory, cacheKey, format, temporaryAu
 };
 
 module.exports = {
+    CACHE_FORMATS,
     CACHE_VERSION,
     buildTranscodeCacheKey,
     getCacheEntryPaths,

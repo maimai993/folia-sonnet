@@ -14,6 +14,9 @@ import i18n from '../i18n/config';
 
 // Coordinates asynchronous recovery ownership without rebuilding the playback graph or song state.
 
+/** Enough for a long queue of undecodable tracks; the set is cleared wholesale once it is hit. */
+const MAX_REMEMBERED_FAILURES = 64;
+
 type UseTranscodeFallbackParams = {
     audioSrc: string | null;
     localSongs: LocalSong[];
@@ -44,6 +47,10 @@ export function useTranscodeFallback({
     const enabled = useAudioSettingsStore(state => state.enableTranscodeFallback);
     const generationRef = useRef(0);
     const activeRequestsRef = useRef(new Map<string, string>());
+    // Keyed by the song's source revision rather than by the media element: the automix arming
+    // effect re-arms the warm deck with the same URL on every timeupdate, so a track FFmpeg cannot
+    // decode would otherwise respawn a failing job several times a second for the whole arm window.
+    const failedRepresentationsRef = useRef(new Set<string>());
 
     useEffect(() => {
         generationRef.current += 1;
@@ -81,6 +88,19 @@ export function useTranscodeFallback({
 
         const bindingKey = `${target.deck}:${failedSource}`;
         if (activeRequestsRef.current.has(bindingKey)) return true;
+
+        // A remembered failure still owns the error - it clears the warm slot or skips the track,
+        // the same way the first attempt did - it just does not start another transcode or toast.
+        const failureKey = `${getPlaybackSongKey(song)}:${song.playbackSourceRevision ?? ''}:${failedSource}`;
+        if (failedRepresentationsRef.current.has(failureKey)) {
+            if (target.role === 'warm') {
+                clearFailedWarmSource(element, failedSource);
+            } else {
+                abortTransition();
+                skipAfterPlaybackFailure();
+            }
+            return true;
+        }
 
         const generation = generationRef.current;
         const resumeAt = Math.max(0, element.currentTime || currentTime.get());
@@ -129,11 +149,19 @@ export function useTranscodeFallback({
                 setStatusMessage({ type: 'success', text: i18n.t('status.transcodeFallbackReady') });
             } catch (error) {
                 if (generationRef.current !== generation) return;
+                const code = (error as { code?: string }).code || 'TRANSCODE_FAILED';
+                // A cancellation is this hook's own doing, not a verdict on the source.
+                if (code !== 'CANCELLED') {
+                    if (failedRepresentationsRef.current.size >= MAX_REMEMBERED_FAILURES) {
+                        failedRepresentationsRef.current.clear();
+                    }
+                    failedRepresentationsRef.current.add(failureKey);
+                }
                 console.warn('[TranscodeFallback] recovery-failed', {
                     requestId,
                     deck: target.deck,
                     role: target.role,
-                    code: (error as { code?: string }).code || 'TRANSCODE_FAILED',
+                    code,
                 });
                 setStatusMessage({ type: 'error', text: i18n.t('status.transcodeFallbackFailed') });
                 if (target.role === 'warm') clearFailedWarmSource(element, failedSource);

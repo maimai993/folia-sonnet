@@ -405,7 +405,10 @@ const readLocalBytes = async (request: StemRequest): Promise<ArrayBuffer | null>
     const representation = getPlaybackRepresentation(song);
     if (representation) {
         try {
-            return await (await fetch(representation.url)).arrayBuffer();
+            const response = await fetch(representation.url);
+            // An evicted transcode answers 404 with a text body, which must never reach the decoder.
+            if (!response.ok) throw new Error(`representation responded ${response.status}`);
+            return await response.arrayBuffer();
         } catch {
             return null;
         }
