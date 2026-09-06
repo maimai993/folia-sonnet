@@ -3,6 +3,7 @@ import { getPlaybackSongKey, getPlaybackSourceRef } from '../../utils/appPlaybac
 import { onAudioCached } from '../audioCache';
 import { getCachedSongAudioBlob } from '../onlineMusic/resourceCache';
 import { getSongResourceCacheKey } from '../onlineMusic/resourceKeys';
+import { getPlaybackAnalysisKey, getPlaybackRepresentation } from '../playbackRecovery/representationRegistry';
 import { canRunBeatThis } from './beatThis';
 import { modelCanRun, noteModelFailed } from './modelAvailability';
 import { profilesSettled } from './profileService';
@@ -211,7 +212,7 @@ const inFlight = new Set<string>();
  */
 export const MAX_WINDOWS = 4;
 
-const keyOf = (song: SongResult, role: StemRole) => `${getPlaybackSongKey(song)}:${role}`;
+const keyOf = (song: SongResult, role: StemRole) => `${getPlaybackAnalysisKey(song)}:${role}`;
 
 /**
  * Says why a window was not separated, once per window rather than once per render.
@@ -401,6 +402,14 @@ export const getStemsByKey = (key: string | null, role: StemRole): TrackStems | 
  */
 const readLocalBytes = async (request: StemRequest): Promise<ArrayBuffer | null> => {
     const { song, audioUrl } = request;
+    const representation = getPlaybackRepresentation(song);
+    if (representation) {
+        try {
+            return await (await fetch(representation.url)).arrayBuffer();
+        } catch {
+            return null;
+        }
+    }
     const cached = await getCachedSongAudioBlob(song);
     if (cached) return cached.arrayBuffer();
 

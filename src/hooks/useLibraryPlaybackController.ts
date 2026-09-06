@@ -32,6 +32,8 @@ import { omni } from '../services/onlineMusic/omni';
 import { getProviderSongMetadata } from '../services/onlineMusic/songMetadata';
 import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
 import { getSongCacheWithLegacyMigration } from '../services/onlineMusic/resourceCache';
+import { buildLocalSourceRevision, buildNavidromeSourceRevision } from '../services/playbackRecovery/sourceRevision';
+import { getPlaybackRepresentationForRevision } from '../services/playbackRecovery/representationRegistry';
 import { getProviderCacheKey } from '../services/onlineMusic/providerStorage';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import { PlayerState } from '../types';
@@ -569,20 +571,29 @@ export function useLibraryPlaybackController({
 
         const preparedLocalSong = await ensureLocalSongCoverAsset(localSong);
         const initialMeta = await resolveLocalMetadataUI(preparedLocalSong, null);
+        const initialSongKey = getPlaybackSongKey(initialMeta.unifiedSong);
+        const recoveredRepresentation = getPlaybackRepresentationForRevision(
+            initialSongKey,
+            buildLocalSourceRevision(preparedLocalSong),
+        );
+        const playbackUrl = recoveredRepresentation?.url ?? blobUrl;
 
         // Handed over, not revoked here: a blend is still playing the song this replaces on the
         // other deck, and a revoked URL is a deck that can no longer be seeked. See `retireBlobUrl`.
         retireBlobUrl(blobUrlRef.current);
-        blobUrlRef.current = blobUrl;
+        blobUrlRef.current = recoveredRepresentation ? null : blobUrl;
+        if (recoveredRepresentation) {
+            retireBlobUrl(blobUrl);
+            retireBlobUrl(null);
+        }
 
         shouldAutoPlayRef.current = true;
-        const initialSongKey = getPlaybackSongKey(initialMeta.unifiedSong);
         currentSongRef.current = initialSongKey;
         setLyrics(initialMeta.lyrics);
         setCurrentLineIndex(-1);
         currentTime.set(0);
         setCurrentSong(initialMeta.unifiedSong);
-        setAudioSrc(blobUrl);
+        setAudioSrc(playbackUrl);
 
         if (initialMeta.coverUrl) {
             loadCachedOrFetchCover(`cover_local_${preparedLocalSong.id}`, initialMeta.coverUrl).then((resolvedCoverUrl) => {
@@ -851,15 +862,20 @@ export function useLibraryPlaybackController({
                 matchedLyricsSource: mutableSong.matchedLyricsSource || matchData?.matchedLyricsSource,
                 matchedLyricsProviderPlatform: mutableSong.matchedLyricsProviderPlatform || matchData?.matchedLyricsProviderPlatform,
             });
+            const unifiedSongKey = getPlaybackSongKey(unifiedSong);
+            const recoveredRepresentation = getPlaybackRepresentationForRevision(
+                unifiedSongKey,
+                buildNavidromeSourceRevision(unifiedSong, streamUrl),
+            );
 
             shouldAutoPlayRef.current = true;
-            currentSongRef.current = getPlaybackSongKey(unifiedSong);
+            currentSongRef.current = unifiedSongKey;
             setLyrics(nextLyrics);
             setCurrentLineIndex(-1);
             currentTime.set(0);
             setCurrentSong(unifiedSong);
             setManagedCachedCoverUrl(coverUrl ?? null);
-            setAudioSrc(streamUrl);
+            setAudioSrc(recoveredRepresentation?.url ?? streamUrl);
             setIsLyricsLoading(false);
 
             const finalQueue = options.unifiedQueue

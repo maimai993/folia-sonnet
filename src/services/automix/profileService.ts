@@ -4,6 +4,7 @@ import { saveAudioBlob } from '../audioCache';
 import { getFromCache, saveToCache } from '../db';
 import { getCachedSongAudioBlob } from '../onlineMusic/resourceCache';
 import { getSongResourceCacheKey } from '../onlineMusic/resourceKeys';
+import { getPlaybackAnalysisKey, getPlaybackRepresentation } from '../playbackRecovery/representationRegistry';
 import { analyseTrackOffThread, melSpectrogramOffThread } from './analysisOffThread';
 import { analyseBeatGrid, canRunBeatThis } from './beatThis';
 import {
@@ -64,7 +65,7 @@ let wanted: ReadonlySet<string> = new Set();
  * measured on a later pass if it comes back into range.
  */
 export const setAnalysisScope = (songs: readonly SongResult[]): void => {
-    wanted = new Set(songs.map(getPlaybackSongKey));
+    wanted = new Set(songs.map(getPlaybackAnalysisKey));
 };
 
 /**
@@ -112,7 +113,7 @@ export const needsGrid = (request: ProfileRequest, profile: TrackProfile | null 
 
 /** What the planner reads. Synchronous on purpose: a plan cannot wait on a decode. */
 export const getTrackProfile = (song: SongResult | null | undefined): TrackProfile | null => (
-    song ? profiles.get(getPlaybackSongKey(song)) ?? null : null
+    song ? profiles.get(getPlaybackAnalysisKey(song)) ?? null : null
 );
 
 /**
@@ -213,6 +214,15 @@ const readBytes = async (
     /** A head-only profile is already stored, so there is nothing a second range request buys. */
     hasStoredPartial: boolean,
 ): Promise<BytesResult> => {
+    const representation = getPlaybackRepresentation(song);
+    if (representation) {
+        try {
+            return { bytes: await (await fetch(representation.url)).arrayBuffer(), partial: false };
+        } catch (error) {
+            console.warn('[Automix] could not read the playback representation for analysis', error);
+            return { skipped: 'the playback representation could not be read' };
+        }
+    }
     const cached = await getCachedSongAudioBlob(song);
     if (cached) return { bytes: await cached.arrayBuffer(), partial: false };
 
@@ -252,7 +262,7 @@ const readBytes = async (
  * unsupported codec - must not be retried on every pass of the prefetcher.
  */
 export const ensureTrackProfile = async (request: ProfileRequest): Promise<void> => {
-    const songKey = getPlaybackSongKey(request.song);
+    const songKey = getPlaybackAnalysisKey(request.song);
     if (inFlight.has(songKey)) return;
     if (profiles.has(songKey) && !needsGrid(request, profiles.get(songKey))) return;
     inFlight.add(songKey);

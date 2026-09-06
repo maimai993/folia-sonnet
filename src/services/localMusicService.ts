@@ -1535,6 +1535,29 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     return null;
 }
 
+/** Resolves the current File for playback recovery without changing the song or minting a URL. */
+export async function getFileFromLocalSong(song: LocalSong): Promise<File | null> {
+    const fileHandle = await getAccessibleFileHandle(song);
+    if (fileHandle) {
+        try {
+            return await fileHandle.getFile();
+        } catch (error) {
+            console.warn(`[LocalMusic] Failed to read local recovery input for ${song.id}:`, error);
+            fileHandleMap.delete(song.id);
+        }
+    }
+
+    const recoveredHandle = await recoverFileHandleFromPersistedDirectory(song);
+    if (!recoveredHandle) return null;
+    try {
+        return await recoveredHandle.getFile();
+    } catch (error) {
+        console.warn(`[LocalMusic] Failed to read recovered local input for ${song.id}:`, error);
+        fileHandleMap.delete(song.id);
+        return null;
+    }
+}
+
 /**
  * The local file's raw bytes, for callers that need the audio itself rather than a URL to it.
  *

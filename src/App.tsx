@@ -71,6 +71,7 @@ import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlayb
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
+import { useTranscodeFallback } from './hooks/useTranscodeFallback';
 import { useAutomixDecks, type AutomixDeckId } from './services/automix/useAutomixDecks';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
 import { usePersonalFmModeController } from './hooks/usePersonalFmModeController';
@@ -1371,6 +1372,20 @@ export default function App() {
         updateCacheSize,
     });
 
+    const handleTranscodeFallback = useTranscodeFallback({
+        audioSrc,
+        localSongs,
+        currentTime,
+        pendingResumeTimeRef,
+        shouldAutoPlayRef: shouldAutoPlay,
+        getRecoveryTarget: automix.getRecoveryTarget,
+        replaceRecoverySource: automix.replaceRecoverySource,
+        clearFailedWarmSource: automix.clearFailedWarmSource,
+        abortTransition: automix.abortTransition,
+        handleTailEnded: automix.handleTailEnded,
+        skipAfterPlaybackFailure,
+    });
+
     // Now the writer exists, point the automix settle path at it. A track that blends out never fires
     // `ended`, so this is the only place its assets get cached; the cover is derived from the exit
     // song's own metadata inside `cacheSongAssetsFor` rather than from the now-arriving track's view.
@@ -2478,20 +2493,14 @@ export default function App() {
                 currentTime.set(0); // Ensure currentTime is reset when new audio loads
             }}
             onError={(e) => {
-                if (!automix.isActiveDeck(e.currentTarget)) {
-                    automix.handleTailEnded();
-                    return;
-                }
-
-                if (!audioSrc) {
-                    return;
-                }
-
                 const audioElement = e.currentTarget;
+                const isActiveDeck = automix.isActiveDeck(audioElement);
                 const reportedDuration = Number.isFinite(audioElement.duration) && audioElement.duration > 0
                     ? audioElement.duration
                     : duration;
                 const isLocalTailDecodeError = Boolean(
+                    isActiveDeck &&
+                    audioElement.error?.code === MediaError.MEDIA_ERR_DECODE &&
                     isLocalPlaybackSong(currentSong) &&
                     Number.isFinite(reportedDuration) &&
                     reportedDuration > 0 &&
@@ -2516,6 +2525,17 @@ export default function App() {
                     }
 
                     void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+                    return;
+                }
+
+                if (handleTranscodeFallback(audioElement)) return;
+
+                if (!isActiveDeck) {
+                    automix.handleTailEnded();
+                    return;
+                }
+
+                if (!audioSrc) {
                     return;
                 }
 

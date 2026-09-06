@@ -106,6 +106,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setLatticePosterTintIntensity: vi.fn(),
             toggleAlwaysShowTrackSwitchButtons: vi.fn(),
             toggleAutoPlayOnLaunch: vi.fn(),
+            toggleTranscodeFallback: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
             voiceInputPauseSupported: false,
             modSystemEnabled: false,

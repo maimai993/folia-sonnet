@@ -25,6 +25,8 @@ const { createAnalysisHost } = require('./analysis/host.cjs');
 const { createDebugHost } = require('./debug/debugHost.cjs');
 const { createModelStore } = require('./analysis/modelStore.cjs');
 const { resolveLinuxPasswordStore } = require('./linuxPasswordStore.cjs');
+const { createTranscodeService } = require('./transcode/service.cjs');
+const { TRANSCODE_PROTOCOL_SCHEME } = require('./transcode/protocol.cjs');
 const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/themeSanitizer.cjs');
 const {
   buildOpenAICompatibleRequestBody,
@@ -61,6 +63,16 @@ const linuxGraphicsMode =
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'folia-cover',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+  {
+    scheme: TRANSCODE_PROTOCOL_SCHEME,
     privileges: {
       standard: true,
       secure: true,
@@ -156,6 +168,7 @@ if (process.platform === 'darwin' && process.arch === 'x64') {
 }
 
 const store = new Store({ projectName: 'Folia' });
+const transcodeService = createTranscodeService({ app, protocol, net: electronNet });
 // KuGou credentials stay inside the main process and are encrypted lazily after Electron is ready.
 // The bridge refuses Linux's plaintext `basic_text` fallback and degrades to an in-memory session.
 const kugouApiBridge = createKugouApiBridge({ store, safeStorage });
@@ -5074,6 +5087,7 @@ app.whenReady().then(async () => {
   setupFileSystemAccessPermissionHandlers();
   setupCorsBypassHandlers();
   localCoverAssetStore.registerProtocolHandler(protocol, electronNet);
+  await transcodeService.initialize();
 
   session.defaultSession.on('file-system-access-restricted', (event, details, callback) => {
     if (details.isDirectory) {
@@ -5288,6 +5302,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  transcodeService.dispose();
   isAppQuitting = true;
   clearPendingWindowPlaybackHandoffRequests();
   if (modSystem) {
@@ -5751,6 +5766,14 @@ ipcMain.handle('get-audio-cache-stats', async () => {
 ipcMain.handle('clear-audio-cache', async () => {
   await clearAudioCacheDirectory();
   return true;
+});
+
+ipcMain.handle('transcode-fallback-request', async (_event, request) => {
+  return transcodeService.request(request);
+});
+
+ipcMain.handle('transcode-fallback-cancel', (_event, requestId) => {
+  return transcodeService.cancel(requestId);
 });
 
 ipcMain.handle('get-cover-cache', async (event, cacheKey) => {

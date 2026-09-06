@@ -3,7 +3,8 @@ import type { MutableRefObject } from 'react';
 import { PlayerState } from '../../types';
 import type { LyricData, SongResult, StageLoopMode } from '../../types';
 import type { AudioQualityPreference } from '../../types/onlineMusic';
-import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
+import type { PlaybackRecoveryTarget } from '../../types/playbackRecovery';
+import { getPlaybackSongKey, isNavidromePlaybackSong, resolveNavidromePlaybackCarrier } from '../../utils/appPlaybackGuards';
 import { getPrefetchedData } from '../prefetchService';
 import { getTrackProfile, recordPlayedTail } from './profileService';
 import { refreshModelAvailability } from './modelAvailability';
@@ -19,6 +20,8 @@ import { AUTOMIX_MAX_OVERLAP_SEC } from './transitionPlanner';
 import type { TransitionSettings } from './transitionStrategy';
 import { usePlaybackStore, type TransitionDisplay } from '../../stores/usePlaybackStore';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { getPlaybackRepresentation } from '../playbackRecovery/representationRegistry';
+import { buildNavidromeSourceRevision } from '../playbackRecovery/sourceRevision';
 
 export type { TransitionDisplay };
 
@@ -444,6 +447,36 @@ export function useAutomixDecks({
         [audioRef],
     );
 
+    const getRecoveryTarget = useCallback((element: HTMLAudioElement): PlaybackRecoveryTarget | null => {
+        const deck = elementsRef.current.A === element ? 'A' : elementsRef.current.B === element ? 'B' : null;
+        if (!deck) return null;
+        const isActive = deck === session.getActiveDeck();
+        return {
+            deck,
+            role: isActive ? 'active' : session.getPhase() === 'idle' ? 'warm' : 'tail',
+            song: deckSongRef.current[deck],
+            source: element.currentSrc || element.getAttribute('src'),
+        };
+    }, [session]);
+
+    const replaceRecoverySource = useCallback((element: HTMLAudioElement, failedSource: string, nextSource: string) => {
+        const target = getRecoveryTarget(element);
+        if (!target || target.role === 'tail' || target.source !== failedSource) return false;
+        if (target.role === 'active') {
+            usePlaybackStore.getState().setAudioSrc(nextSource);
+            return true;
+        }
+        setWarmSrc(current => current === failedSource ? nextSource : current);
+        return true;
+    }, [getRecoveryTarget]);
+
+    const clearFailedWarmSource = useCallback((element: HTMLAudioElement, failedSource: string) => {
+        const target = getRecoveryTarget(element);
+        if (target?.role !== 'warm' || target.source !== failedSource) return;
+        deckSongRef.current[target.deck] = null;
+        setWarmSrc(current => current === failedSource ? null : current);
+    }, [getRecoveryTarget]);
+
     /**
      * The deck the picture's clock belongs to, or null when the picture is live.
      *
@@ -540,9 +573,24 @@ export function useAutomixDecks({
         // "the bytes are in the media cache", and there is nothing to warm with in that case -
         // playSong mints a fresh blob URL for those, a different string every time, so handing the
         // deck this one would only make it load the track twice. It is also the fast case.
-        setWarmSrc(
-            prefetched?.audioUrl && prefetched.audioUrl !== 'CACHED_IN_DB' ? prefetched.audioUrl : null,
-        );
+        const recoveredRepresentation = getPlaybackRepresentation(nextSong);
+        const navidromeCarrier = isNavidromePlaybackSong(nextSong)
+            ? resolveNavidromePlaybackCarrier(nextSong)
+            : null;
+        const recoveredWarmSrc = recoveredRepresentation
+            && navidromeCarrier
+            && recoveredRepresentation.sourceRevision === buildNavidromeSourceRevision(
+                nextSong,
+                navidromeCarrier.navidromeData.streamUrl,
+            )
+            ? recoveredRepresentation.url
+            : null;
+        const nextWarmSrc = recoveredWarmSrc || (prefetched?.audioUrl && prefetched.audioUrl !== 'CACHED_IN_DB'
+            ? prefetched.audioUrl
+            : null);
+        const idleDeck = activeDeck === 'A' ? 'B' : 'A';
+        deckSongRef.current[idleDeck] = nextWarmSrc ? nextSong : null;
+        setWarmSrc(nextWarmSrc);
 
         const plan = session.requestTransition({
             time,
@@ -569,7 +617,7 @@ export function useAutomixDecks({
         } else if (time >= plan.outStart) {
             report(`${audioSrc}:${modeTag}unwired`, `wanted a ${plan.overlap}s blend but the decks are not on the audio graph`);
         }
-    }, [audioQuality, audioSrc, currentSong, duration, isEnabled, loopMode, lyrics, playQueue, report, session, transition]);
+    }, [activeDeck, audioQuality, audioSrc, currentSong, duration, isEnabled, loopMode, lyrics, playQueue, report, session, transition]);
 
     /**
      * Reads the ref rather than the `currentSong` prop, and that is the whole correctness of it.
@@ -757,6 +805,9 @@ export function useAutomixDecks({
         registerDeckB,
         deckSrc,
         isActiveDeck,
+        getRecoveryTarget,
+        replaceRecoverySource,
+        clearFailedWarmSource,
         getDisplayElement,
         connectDecks,
         getActiveChain,
