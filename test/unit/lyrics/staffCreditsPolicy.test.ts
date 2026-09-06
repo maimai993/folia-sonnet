@@ -77,6 +77,18 @@ describe('lyric staff credit policy', () => {
         expect(texts(applyLyricStaffPolicy(lyrics))).toEqual(['第一句歌词']);
     });
 
+    it('matches bilingual cover and subtitle roles without spaces between languages', () => {
+        const lyrics = parse([
+            '[00:00.00]歌词字幕Subtitles：郭欣翔Hsin-Hsiang Kuo',
+            '[00:00.20]单曲封面及标准字设计Cover&Title Card Designer ：吴建龙FKWU',
+            '[00:00.40]单曲封面摄影Cover Photographer：郭欣翔Hsin-Hsiang Kuo',
+            '[00:03.00]第一句歌词',
+        ].join('\n'));
+
+        expect(buildLyricStaffPreview(lyrics).decision.blockLineCount).toBe(3);
+        expect(texts(applyLyricStaffPolicy(lyrics))).toEqual(['第一句歌词']);
+    });
+
     it('takes the separator lines between credits with the block', () => {
         const lyrics = parse([
             '[00:00.00]作词 Lyricist：A',

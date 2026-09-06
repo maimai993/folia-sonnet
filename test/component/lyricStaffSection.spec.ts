@@ -67,6 +67,22 @@ test.describe('lyric filter modal', () => {
         await page.getByRole('button', { name: 'Always show' }).click();
         await expect(save).toBeEnabled();
     });
+
+    test('keeps both custom expressions when their features are disabled', async ({ mount, page }) => {
+        await mount('lyricFilterModal');
+
+        await page.getByRole('button', { name: 'Enable line filter' }).click();
+        await page.getByPlaceholder('Enter a regular expression').fill('^广告');
+        await page.getByRole('button', { name: 'Enable line filter' }).click();
+        await page.getByPlaceholder('Leave empty to use the built-in dictionary').fill('^作词');
+        await page.getByRole('button', { name: 'Always show' }).click();
+        await page.getByRole('button', { name: 'Save' }).click();
+
+        const saved = page.locator('[data-probe-saved-draft]');
+        await expect(saved).toHaveAttribute('data-probe-saved-draft', /"pattern":"\^广告"/);
+        await expect(saved).toHaveAttribute('data-probe-saved-draft', /"filterEnabled":false/);
+        await expect(saved).toHaveAttribute('data-probe-saved-draft', /"staffPattern":"\^作词"/);
+    });
 });
 
 test.describe('lyric staff segmented pickers', () => {

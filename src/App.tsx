@@ -427,11 +427,13 @@ export default function App() {
     const {
         globalLyricTimelineOffsetMs,
         lyricFilterPattern,
+        lyricFilterEnabled,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
         lyricStaffAbsorbMode,
         lyricStaffPattern,
         handleSetLyricFilterPattern,
+        handleSetLyricFilterEnabled,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffAbsorbMode,
@@ -478,13 +480,13 @@ export default function App() {
     });
 
     const setLyrics = useMemo(
-        () => createLyricsSetter(setLyricsState, lyricFilterPattern, currentSongFullRef, {
+        () => createLyricsSetter(setLyricsState, lyricFilterEnabled ? lyricFilterPattern : '', currentSongFullRef, {
             policy: lyricStaffPolicy,
             minDwellSeconds: lyricStaffMinDwellSeconds,
             absorbMode: lyricStaffAbsorbMode,
             pattern: lyricStaffPattern,
         }),
-        [lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
+        [lyricFilterEnabled, lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
     );
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
@@ -986,8 +988,9 @@ export default function App() {
         [navigateToCollection],
     );
     const handleSaveLyricFilterPattern = useMemo(() => createLyricFilterPatternSaver({
-        currentPattern: lyricFilterPattern,
+        currentEffectivePattern: lyricFilterEnabled ? lyricFilterPattern : '',
         handleSetLyricFilterPattern,
+        handleSetLyricFilterEnabled,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffAbsorbMode,
@@ -996,7 +999,9 @@ export default function App() {
         setLyrics: setLyricsStable,
     }), [
         lyricFilterPattern,
+        lyricFilterEnabled,
         handleSetLyricFilterPattern,
+        handleSetLyricFilterEnabled,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffPattern,
@@ -1750,6 +1755,7 @@ export default function App() {
         toggleDaylightMode,
         cycleLyricStaffPolicy: () => handleSaveLyricFilterPattern({
             pattern: lyricFilterPattern,
+            filterEnabled: lyricFilterEnabled,
             staffPolicy: nextLyricStaffPolicy(lyricStaffPolicy),
             staffMinDwellSeconds: lyricStaffMinDwellSeconds,
             staffAbsorbMode: lyricStaffAbsorbMode,
@@ -1757,6 +1763,7 @@ export default function App() {
         }),
         cycleLyricStaffAbsorbMode: () => handleSaveLyricFilterPattern({
             pattern: lyricFilterPattern,
+            filterEnabled: lyricFilterEnabled,
             staffPolicy: lyricStaffPolicy,
             staffMinDwellSeconds: lyricStaffMinDwellSeconds,
             staffAbsorbMode: nextLyricStaffAbsorbMode(lyricStaffAbsorbMode),

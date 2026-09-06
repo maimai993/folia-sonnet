@@ -10,6 +10,7 @@ import { setCurrentLineIndex } from '../../../stores/usePlaybackStore';
 
 export interface LyricFilterSaveDraft {
     pattern: string;
+    filterEnabled: boolean;
     staffPolicy: LyricStaffPolicy;
     staffMinDwellSeconds: number;
     staffAbsorbMode: LyricStaffAbsorbMode;
@@ -18,8 +19,9 @@ export interface LyricFilterSaveDraft {
 
 type CreateLyricFilterPatternSaverParams = {
     /** 保存前的逐行过滤正则，用来判断要不要动缓存。 */
-    currentPattern: string;
+    currentEffectivePattern: string;
     handleSetLyricFilterPattern: (pattern: string) => void;
+    handleSetLyricFilterEnabled: (enabled: boolean) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
     handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
@@ -30,8 +32,9 @@ type CreateLyricFilterPatternSaverParams = {
 
 // Creates the Home-facing lyric filter save action without keeping the implementation in App.tsx.
 export const createLyricFilterPatternSaver = ({
-    currentPattern,
+    currentEffectivePattern,
     handleSetLyricFilterPattern,
+    handleSetLyricFilterEnabled,
     handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds,
     handleSetLyricStaffAbsorbMode,
@@ -41,6 +44,7 @@ export const createLyricFilterPatternSaver = ({
 }: CreateLyricFilterPatternSaverParams) => {
     return async (draft: LyricFilterSaveDraft) => {
         handleSetLyricFilterPattern(draft.pattern);
+        handleSetLyricFilterEnabled(draft.filterEnabled);
         handleSetLyricStaffPolicy(draft.staffPolicy);
         handleSetLyricStaffMinDwellSeconds(draft.staffMinDwellSeconds);
         handleSetLyricStaffAbsorbMode(draft.staffAbsorbMode);
@@ -49,7 +53,8 @@ export const createLyricFilterPatternSaver = ({
         // 逐行过滤会在解析阶段生效并写进缓存，改了就必须重新取。
         // staff 策略只是显示层变换，缓存里的原始歌词依然有效——清掉反而会让离线时
         // 连当前这首都恢复不出来。
-        if (draft.pattern !== currentPattern) {
+        const nextEffectivePattern = draft.filterEnabled ? draft.pattern : '';
+        if (nextEffectivePattern !== currentEffectivePattern) {
             await clearCacheByCategory('lyrics');
             invalidatePrefetchedLyrics();
         }

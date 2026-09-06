@@ -275,6 +275,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
     const {
         lyricFilterPattern,
+        lyricFilterEnabled,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
         lyricStaffAbsorbMode,
@@ -2024,6 +2025,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isDaylight={isDaylight}
                 currentSongTitle={currentSongTitle}
                 initialPattern={lyricFilterPattern}
+                initialFilterEnabled={lyricFilterEnabled}
                 initialStaffPolicy={lyricStaffPolicy}
                 initialStaffMinDwellSeconds={lyricStaffMinDwellSeconds}
                 initialStaffAbsorbMode={lyricStaffAbsorbMode}

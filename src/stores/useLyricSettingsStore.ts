@@ -66,6 +66,15 @@ const readStoredLyricFilterPattern = (): string => {
     return localStorage.getItem('lyrics_filter_pattern')?.trim() || '';
 };
 
+const readStoredLyricFilterEnabled = (pattern: string): boolean => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    const saved = localStorage.getItem('lyrics_filter_enabled');
+    return saved === null ? Boolean(pattern) : saved === 'true';
+};
+
 const readStoredLyricStaffPolicy = (): LyricStaffPolicy => {
     if (typeof window === 'undefined') {
         return DEFAULT_LYRIC_STAFF_POLICY;
@@ -103,6 +112,7 @@ export type LyricSettingsState = {
     localLyricsPriority: LocalLyricsPriority;
     globalLyricTimelineOffsetMs: number;
     lyricFilterPattern: string;
+    lyricFilterEnabled: boolean;
     // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
     lyricStaffPolicy: LyricStaffPolicy;
     lyricStaffMinDwellSeconds: number;
@@ -113,18 +123,22 @@ export type LyricSettingsState = {
     handleSetLocalLyricsPriority: (priority: LocalLyricsPriority) => void;
     handleSetGlobalLyricTimelineOffsetMs: (offsetMs: number) => void;
     handleSetLyricFilterPattern: (pattern: string) => void;
+    handleSetLyricFilterEnabled: (enabled: boolean) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
     handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
 };
 
+const initialLyricFilterPattern = readStoredLyricFilterPattern();
+
 export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
     autoUseBestLyric: getStoredBoolean('auto_use_best_lyric', true),
     preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
     localLyricsPriority: readStoredLocalLyricsPriority(),
     globalLyricTimelineOffsetMs: readStoredGlobalLyricTimelineOffsetMs(),
-    lyricFilterPattern: readStoredLyricFilterPattern(),
+    lyricFilterPattern: initialLyricFilterPattern,
+    lyricFilterEnabled: readStoredLyricFilterEnabled(initialLyricFilterPattern),
     lyricStaffPolicy: readStoredLyricStaffPolicy(),
     lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
     lyricStaffAbsorbMode: readStoredLyricStaffAbsorbMode(),
@@ -173,6 +187,10 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
         } else {
             localStorage.removeItem('lyrics_filter_pattern');
         }
+    },
+    handleSetLyricFilterEnabled: (enabled) => {
+        setStoredBoolean('lyrics_filter_enabled', enabled);
+        set({ lyricFilterEnabled: enabled });
     },
     handleSetLyricStaffPolicy: (policy) => {
         set({ lyricStaffPolicy: policy });
@@ -228,6 +246,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     localLyricsPriority: state.localLyricsPriority,
     globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
     lyricFilterPattern: state.lyricFilterPattern,
+    lyricFilterEnabled: state.lyricFilterEnabled,
     lyricStaffPolicy: state.lyricStaffPolicy,
     lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
     lyricStaffAbsorbMode: state.lyricStaffAbsorbMode,
@@ -237,10 +256,11 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     handleSetLocalLyricsPriority: state.handleSetLocalLyricsPriority,
     handleSetGlobalLyricTimelineOffsetMs: state.handleSetGlobalLyricTimelineOffsetMs,
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
+    handleSetLyricFilterEnabled: state.handleSetLyricFilterEnabled,
     handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
     handleSetLyricStaffAbsorbMode: state.handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
-    lyricFilterPatternError: getLyricFilterError(state.lyricFilterPattern),
+    lyricFilterPatternError: state.lyricFilterEnabled ? getLyricFilterError(state.lyricFilterPattern) : null,
     lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
 });

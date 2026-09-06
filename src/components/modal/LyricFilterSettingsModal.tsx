@@ -15,6 +15,7 @@ import LyricStaffSection from './lyric-filter/LyricStaffSection';
 
 export interface LyricFilterDraft {
     pattern: string;
+    filterEnabled: boolean;
     staffPolicy: LyricStaffPolicy;
     staffMinDwellSeconds: number;
     staffAbsorbMode: LyricStaffAbsorbMode;
@@ -26,6 +27,7 @@ interface LyricFilterSettingsModalProps {
     isDaylight: boolean;
     currentSongTitle?: string | null;
     initialPattern: string;
+    initialFilterEnabled: boolean;
     initialStaffPolicy: LyricStaffPolicy;
     initialStaffMinDwellSeconds: number;
     initialStaffAbsorbMode: LyricStaffAbsorbMode;
@@ -51,6 +53,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
     isDaylight,
     currentSongTitle,
     initialPattern,
+    initialFilterEnabled,
     initialStaffPolicy,
     initialStaffMinDwellSeconds,
     initialStaffAbsorbMode,
@@ -61,7 +64,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
 }) => {
     const { t } = useTranslation();
     const [draftPattern, setDraftPattern] = useState(initialPattern);
-    const [isFilterEnabled, setIsFilterEnabled] = useState(Boolean(initialPattern.trim()));
+    const [isFilterEnabled, setIsFilterEnabled] = useState(initialFilterEnabled);
     const [draftStaffPolicy, setDraftStaffPolicy] = useState<LyricStaffPolicy>(initialStaffPolicy);
     const [draftStaffMinDwell, setDraftStaffMinDwell] = useState(initialStaffMinDwellSeconds);
     const [draftStaffAbsorbMode, setDraftStaffAbsorbMode] = useState<LyricStaffAbsorbMode>(initialStaffAbsorbMode);
@@ -76,7 +79,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         }
 
         setDraftPattern(initialPattern);
-        setIsFilterEnabled(Boolean(initialPattern.trim()));
+        setIsFilterEnabled(initialFilterEnabled);
         setDraftStaffPolicy(initialStaffPolicy);
         setDraftStaffMinDwell(initialStaffMinDwellSeconds);
         setDraftStaffAbsorbMode(initialStaffAbsorbMode);
@@ -101,6 +104,7 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         };
     }, [
         initialPattern,
+        initialFilterEnabled,
         initialStaffMinDwellSeconds,
         initialStaffAbsorbMode,
         initialStaffPattern,
@@ -137,7 +141,8 @@ const LyricFilterSettingsModal: React.FC<LyricFilterSettingsModalProps> = ({
         setIsSaving(true);
         try {
             await onSave({
-                pattern: isFilterEnabled ? draftPattern.trim() : '',
+                pattern: draftPattern.trim(),
+                filterEnabled: isFilterEnabled,
                 staffPolicy: draftStaffPolicy,
                 staffMinDwellSeconds: draftStaffMinDwell,
                 staffAbsorbMode: draftStaffAbsorbMode,
