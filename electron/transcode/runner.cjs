@@ -57,7 +57,7 @@ const encodeArgs = (inputPath, outputPath, format) => [
     '-hide_banner', '-nostdin', '-v', 'error', '-xerror', '-y',
     '-i', inputPath,
     '-map', '0:a:0', '-vn', '-sn', '-dn', '-map_metadata', '-1',
-    '-ar', '48000', '-ac', '2',
+    '-ac', '2',
     ...(format === 'flac'
         ? ['-c:a', 'flac', '-compression_level', '5', '-f', 'flac']
         : ['-c:a', 'pcm_s16le', '-f', 'wav']),

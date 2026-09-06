@@ -10,11 +10,12 @@ const { encodeArgs, validateArgs } = require('../../../electron/transcode/runner
 };
 
 describe('transcode runner arguments', () => {
-    it('maps one audio stream into 48 kHz stereo FLAC without metadata or shell text', () => {
+    it('maps one audio stream into source-rate stereo FLAC without metadata or shell text', () => {
         const args = encodeArgs('input weird;name.ape', 'output.flac', 'flac');
         expect(args).toContain('input weird;name.ape');
         expect(args).toContain('flac');
-        expect(args).toContain('48000');
+        expect(args).not.toContain('-ar');
+        expect(args).not.toContain('48000');
         expect(args).toContain('2');
         expect(args).toEqual(expect.arrayContaining(['-map', '0:a:0', '-vn', '-sn', '-dn', '-map_metadata', '-1']));
     });

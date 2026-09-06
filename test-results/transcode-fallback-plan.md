@@ -94,3 +94,11 @@
 - 扩展本地目录扫描的音频后缀白名单，新增显式 ALAC（`.alac`）、APE（`.ape`）、WavPack（`.wv`）、TTA（`.tta`）、WMA（`.wma`）、AIFF（`.aif`/`.aiff`）与 CAF（`.caf`），避免 fallback 目标格式在导入快照阶段被过滤；常见的 ALAC `.m4a` 封装仍沿用原有支持。
 - 文件名元数据解析改为复用同一音频后缀正则，新增格式不会把扩展名错误保留在歌曲标题中。
 - 新增本地导入单测，验证上述八种后缀以 `application/octet-stream` MIME 仍会进入音频快照和歌曲导入，同时普通 `.txt` 文件继续被排除。
+
+### 2026-09-07 — source sample-rate preservation and bundled binary validation
+
+- runner 移除固定 `-ar 48000`，继续固定双声道但让 FFmpeg 沿用输入采样率；96 kHz 输入现在输出 96 kHz FLAC/WAV，普通 44.1/48 kHz 输入不发生无意义重采样。
+- runner 参数单测改为锁定不存在 `-ar` 与 `48000`，防止后续重新引入固定采样率。
+- 使用 `folia-ffmpeg-build` Windows x64 Folia 产物验证真实转码、完整输出解码、WavPack fallback、E-AC-3 (`ec-3`) in `.m4a` 与 96 kHz 保留；产物来源为 `test-results/ffmpeg-windows-x86_64-folia.zip`。
+- 实测 96 kHz PCM 经 runner 输出 96 kHz/双声道 FLAC（114,044 bytes），WAV fallback 输出 96 kHz/双声道 PCM S16LE（384,102 bytes）；E-AC-3 `.m4a` 输出 48 kHz/双声道 FLAC（62,641 bytes），12 秒 WavPack fixture 输出 48 kHz/双声道 FLAC（598,943 bytes），所有输出均通过 runner 的完整二次解码。
+- 最小验证通过：`transcodeRunner.test.ts` 3 项、`node --check electron/transcode/runner.cjs`、`npm run typecheck`。
