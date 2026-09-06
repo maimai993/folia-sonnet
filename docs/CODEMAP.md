@@ -9,13 +9,13 @@
 
 | 区域 | 文件数 |
 | --- | --- |
-| components | 524 |
-| test/dev | 405 |
+| components | 565 |
+| test/dev | 414 |
 | services | 121 |
 | utils | 121 |
 | hooks | 65 |
 | backend/electron | 62 |
-| stores | 31 |
+| stores | 33 |
 | 其他 | 20 |
 | types | 15 |
 | src (其他) | 13 |
@@ -28,28 +28,28 @@
 
 | 被依赖数 | 模块 |
 | --- | --- |
-| 507 | `src/types.ts` |
-| 63 | `src/utils/appPlaybackGuards.ts` |
+| 525 | `src/types.ts` |
+| 68 | `src/utils/appPlaybackGuards.ts` |
 | 61 | `src/types/onlineMusic.ts` |
-| 56 | `src/components/command-palette/types.ts` |
-| 46 | `src/components/visualizer/colorMix.ts` |
-| 45 | `src/stores/useStatusMessageStore.ts` |
+| 58 | `src/components/command-palette/types.ts` |
+| 47 | `src/components/visualizer/colorMix.ts` |
+| 47 | `src/stores/useStatusMessageStore.ts` |
 | 42 | `src/services/db.ts` |
-| 36 | `src/components/visualizer/definition.ts` |
-| 36 | `src/services/onlineMusic/songMetadata.ts` |
-| 33 | `src/stores/usePlaybackStore.ts` |
+| 37 | `src/components/visualizer/definition.ts` |
+| 37 | `src/services/onlineMusic/songMetadata.ts` |
+| 35 | `src/stores/usePlaybackStore.ts` |
+| 32 | `src/utils/lyrics/renderHints.ts` |
 | 30 | `src/utils/lyrics/parserCore.ts` |
-| 30 | `src/utils/lyrics/renderHints.ts` |
+| 29 | `src/stores/useAppViewStore.ts` |
 | 28 | `src/components/visualizer/tempera/types.ts` |
 | 28 | `src/types/localLibrary.ts` |
-| 26 | `src/services/onlineMusic/omni.ts` |
 
 ## 动态注册点
 
 这些地方用 `import.meta.glob` 自动发现成员，**清单随目录变化，不要手写**。
 以下是当前的完整展开：
 
-### `dev/probes/registry.ts` (18)
+### `dev/probes/registry.ts` (19)
 
 - `dev/probes/audioEffectGrid.probe.tsx`
 - `dev/probes/automixModelReminder.probe.tsx`
@@ -58,6 +58,7 @@
 - `dev/probes/fmTab.probe.tsx`
 - `dev/probes/globalLyricOffsetRuler.probe.tsx`
 - `dev/probes/gridPanelToggle.probe.tsx`
+- `dev/probes/lattice.probe.tsx`
 - `dev/probes/lyricFilterModal.probe.tsx`
 - `dev/probes/lyricSegmentationSurface.probe.tsx`
 - `dev/probes/lyricStaffSection.probe.tsx`
