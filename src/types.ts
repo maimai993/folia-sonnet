@@ -1231,6 +1231,7 @@ export interface LocalLibrarySnapshotFile {
 
 export interface LocalLibrarySnapshotNode {
   name: string;
+  ignored?: boolean;
   relativePath: string;
   hash: string;
   files: LocalLibrarySnapshotFile[];
@@ -1239,6 +1240,7 @@ export interface LocalLibrarySnapshotNode {
 
 export interface LocalLibrarySnapshot {
   rootFolderName: string;
+  ignoredFolderPaths?: string[];
   scannedAt: number;
   tree: LocalLibrarySnapshotNode;
 }

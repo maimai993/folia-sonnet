@@ -26,6 +26,7 @@ import { hasLocalSongCover } from '../utils/localSongCover';
 import { createFoliaIgnoreMatcher, isIgnoredByFoliaMatchers, type FoliaIgnoreMatcher } from '../utils/foliaIgnore';
 import { getLocalLibraryAvailability } from './localLibraryAvailability';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { isLocalFolderIgnored, normalizeLocalFolderPath, runLocalFolderMutation, setLocalFolderIgnored } from './localLibraryFolderIgnore';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -424,6 +425,7 @@ async function buildSnapshotTree(
     rootFolderName: string,
     inheritedIgnoreMatchers: readonly FoliaIgnoreMatcher[],
     filesByPath = new Map<string, SnapshotTraversalFile>(),
+    ignoredFolderPaths: ReadonlySet<string> = new Set(),
 ): Promise<SnapshotTraversalResult> {
     const files: LocalLibrarySnapshotFile[] = [];
     const children: LocalLibrarySnapshotNode[] = [];
@@ -472,6 +474,10 @@ async function buildSnapshotTree(
         }
 
         const entryPath = `${currentPath}/${entry.name}`;
+        if (entry.kind === 'directory' && ignoredFolderPaths.has(entryPath)) {
+            children.push({ name: entry.name, relativePath: entryPath, ignored: true, hash: '', files: [], children: [] });
+            continue;
+        }
         const importRelativePath = entryPath.startsWith(`${rootFolderName}/`)
             ? entryPath.slice(rootFolderName.length + 1)
             : entryPath;
@@ -489,6 +495,7 @@ async function buildSnapshotTree(
                     rootFolderName,
                     ignoreMatchers,
                     filesByPath,
+                    ignoredFolderPaths,
                 );
                 children.push(childResult.tree);
                 relevantFileCount += childResult.relevantFileCount;
@@ -571,10 +578,12 @@ async function collectImportDiffPlan(
     existingSongs: LocalSong[],
     previousSnapshot: LocalLibrarySnapshot | null
 ): Promise<ImportDiffPlan> {
-    const traversalResult = await buildSnapshotTree(dirHandle, rootFolderName, rootFolderName, []);
+    const ignoredFolderPaths = previousSnapshot?.ignoredFolderPaths || [];
+    const traversalResult = await buildSnapshotTree(dirHandle, rootFolderName, rootFolderName, [], new Map(), new Set(ignoredFolderPaths));
     const snapshot: LocalLibrarySnapshot = {
         rootFolderName,
         scannedAt: Date.now(),
+        ignoredFolderPaths,
         tree: traversalResult.tree
     };
 
@@ -967,7 +976,10 @@ async function hydrateSongMetadata(song: LocalSong): Promise<LocalSong> {
     return song;
 }
 
+const removedRootGenerations = new Map<string, number>();
+
 async function hydrateImportedSongsInBackground(rootFolderName: string, songs: LocalSong[]) {
+    const rootGeneration = removedRootGenerations.get(rootFolderName);
     const hydrationStartedAt = performance.now();
     const pendingBatch: LocalSong[] = [];
     let savedCount = 0;
@@ -991,7 +1003,12 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
         const batch = pendingBatch.splice(0, pendingBatch.length);
         const currentFlush = (async () => {
-            await saveLocalSongs(batch);
+            await runLocalFolderMutation(async () => {
+                if (removedRootGenerations.get(rootFolderName) !== rootGeneration) return;
+                const ignoredPaths = (await getLocalLibrarySnapshot(rootFolderName))?.ignoredFolderPaths || [];
+                const visibleBatch = batch.filter(song => !isLocalFolderIgnored(song.folderName || song.filePath, ignoredPaths));
+                if (visibleBatch.length > 0) await saveLocalSongs(visibleBatch);
+            });
             savedCount += batch.length;
             if (forceNotify || savedCount % HYDRATION_REFRESH_EVERY === 0 || savedCount === songs.length) {
                 notifyLocalMusicUpdated();
@@ -1054,11 +1071,19 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
 // Import folder using File System Access API (if supported)
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
+    // Request access in the user gesture before waiting for other library writes.
     try {
         const dirHandle = await getImportDirectoryHandle(expectedRootName);
-        if (!dirHandle) {
-            return [];
-        }
+        if (!dirHandle) return [];
+        return await runLocalFolderMutation(() => importFolderContents(dirHandle, expectedRootName));
+    } catch (error) {
+        if ((error as Error).name === 'AbortError') return [];
+        throw error;
+    }
+}
+
+async function importFolderContents(dirHandle: FileSystemDirectoryHandle, expectedRootName?: string): Promise<LocalSong[]> {
+    try {
         const importStartedAt = performance.now();
 
         let rootFolderName = expectedRootName || dirHandle.name;
@@ -1501,6 +1526,7 @@ async function getAccessibleFileHandle(song: LocalSong): Promise<FileSystemFileH
 }
 
 async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
+    if ((await getLocalLibrarySnapshot(rootFolderName))?.ignoredFolderPaths?.length) return;
     const allSongs = await getLocalSongs();
     const stillUsed = allSongs.some(song => {
         const songRoot = getRootFolderName(song);
@@ -1684,9 +1710,14 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
 }
 
 // Removes an imported root from the app, including empty roots, without deleting disk files.
-export async function removeImportedRoot(rootFolderName: string): Promise<void> {
-    const normalizedRoot = rootFolderName.split('/')[0]?.trim();
+export function removeImportedRoot(rootFolderName: string): Promise<void> {
+    return runLocalFolderMutation(() => removeImportedRootContents(rootFolderName));
+}
+
+async function removeImportedRootContents(rootFolderName: string): Promise<void> {
+    const normalizedRoot = normalizeLocalFolderPath(rootFolderName).split('/')[0];
     if (!normalizedRoot) return;
+    removedRootGenerations.set(normalizedRoot, (removedRootGenerations.get(normalizedRoot) || 0) + 1);
 
     const allSongs = await getLocalSongs();
     const songIds = allSongs
@@ -1727,10 +1758,11 @@ function getLocalSongRootFolderName(song: LocalSong): string | null {
 // Resyncs all imported local roots once, even when the song list contains nested folders.
 export async function resyncAllFolders(): Promise<LocalSong[] | null> {
     const allSongs = await getLocalSongs();
+    const handles = await getDirHandles();
     const rootFolderNames = Array.from(new Set(
-        allSongs
+        [...Object.keys(handles), ...allSongs
             .map(getLocalSongRootFolderName)
-            .filter((rootFolderName): rootFolderName is string => Boolean(rootFolderName))
+            .filter((rootFolderName): rootFolderName is string => Boolean(rootFolderName))]
     ));
 
     if (rootFolderNames.length === 0) {
@@ -1746,8 +1778,26 @@ export async function resyncAllFolders(): Promise<LocalSong[] | null> {
     return importedSongs;
 }
 
+// Clear the app's ignore flag and rescan immediately; disk ignore rules still apply.
+export async function clearFolderIgnore(folderName: string): Promise<void> {
+    const rootFolderName = normalizeLocalFolderPath(folderName).split('/')[0];
+    const dirHandle = await getImportDirectoryHandle(rootFolderName);
+    if (!dirHandle) return;
+    return runLocalFolderMutation(async () => {
+        await setLocalFolderIgnored(folderName, false);
+        await importFolderContents(dirHandle, rootFolderName);
+    });
+}
+
 // Delete all songs from a specific folder (and its nested children)
-export async function deleteFolderSongs(folderName: string): Promise<void> {
+export function deleteFolderSongs(folderName: string): Promise<void> {
+    return runLocalFolderMutation(() => deleteFolderContents(folderName));
+}
+
+async function deleteFolderContents(folderName: string): Promise<void> {
+    folderName = normalizeLocalFolderPath(folderName);
+    if (!folderName.includes('/')) return removeImportedRootContents(folderName);
+    await setLocalFolderIgnored(folderName, true);
     // Get all local songs
     const allSongs = await getLocalSongs();
 
@@ -1766,9 +1816,6 @@ export async function deleteFolderSongs(folderName: string): Promise<void> {
         ...songIdsToDelete.map(id => removeCachedCover(`cover_local_${id}`)),
     ]);
     await removeDeletedSongIdsFromPlaylists(songIdsToDelete);
-
-    const rootFolderName = folderName.split('/')[0];
-    await cleanupDirHandleIfUnused(rootFolderName);
 
     notifyLocalMusicUpdated();
     console.log(`[LocalMusic] Deleted ${songsToDelete.length} songs from folder tree: ${folderName}`);

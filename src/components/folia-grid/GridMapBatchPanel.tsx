@@ -34,6 +34,7 @@ interface DirectoryRowProps {
     onToggleExpanded: (id: string) => void;
     onSetItemsSelected: GridMapBatchPanelProps['onSetItemsSelected'];
     onRescanRoot?: GridMapBatchConfig['onRescanRoot'];
+    onClearFolderIgnore?: GridMapBatchConfig['onClearFolderIgnore'];
     onRequestRemoveRoot?: (path: string) => void;
 }
 
@@ -49,6 +50,7 @@ const DirectoryRow = ({
     onToggleExpanded,
     onSetItemsSelected,
     onRescanRoot,
+    onClearFolderIgnore,
     onRequestRemoveRoot,
 }: RowComponentProps<DirectoryRowProps>) => {
     const { t } = useTranslation();
@@ -107,9 +109,9 @@ const DirectoryRow = ({
                         {selection.state === 'partial' && <Minus size={12} strokeWidth={3} />}
                     </span>
                     <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold">{node.name}</span>
+                        <span className={`block truncate text-xs font-semibold ${node.ignored ? 'line-through opacity-40' : ''}`}>{node.name}</span>
                         <span className="block truncate text-[10px] opacity-45">
-                            {selection.state === 'direct'
+                            {node.ignored ? t('home.gridFolderIgnored') : selection.state === 'direct'
                                 ? t('home.gridFolderTreeDirectSelection', { count: node.directTrackCount })
                                 : selection.itemIds.length > 0
                                     ? t('home.gridFolderTreeSelectionCount', { selected: selection.selectedCount, total: selection.itemIds.length })
@@ -117,6 +119,18 @@ const DirectoryRow = ({
                         </span>
                     </span>
                 </button>
+                {node.ignored && onClearFolderIgnore && (
+                    <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => void onClearFolderIgnore(node.path)}
+                        className="rounded-lg p-1.5 opacity-55 transition hover:opacity-100 disabled:opacity-20"
+                        title={t('home.gridFolderClearIgnore')}
+                        aria-label={t('home.gridFolderClearIgnore')}
+                    >
+                        <RefreshCw size={13} className={isBusy ? 'animate-spin' : ''} />
+                    </button>
+                )}
                 {isRoot && onRescanRoot && (
                     <button
                         type="button"
@@ -167,7 +181,7 @@ export const GridMapBatchPanel = ({
     );
     const visibleDirectoryTrees = useMemo(
         () => searchQuery.trim()
-            ? filterGridMapDirectoryTreesByItems(config.directoryTrees || [], displayItems)
+            ? filterGridMapDirectoryTreesByItems(config.directoryTrees || [], displayItems, searchQuery)
             : config.directoryTrees || [],
         [config.directoryTrees, displayItems, searchQuery],
     );
@@ -285,6 +299,9 @@ export const GridMapBatchPanel = ({
                                     return next;
                                 }),
                                 onSetItemsSelected,
+                                onClearFolderIgnore: config.onClearFolderIgnore
+                                    ? folderPath => runAction(`root:${folderPath.split('/')[0]}`, () => config.onClearFolderIgnore?.(folderPath))
+                                    : undefined,
                                 onRescanRoot: config.onRescanRoot
                                     ? rootPath => runAction(`root:${rootPath}`, () => config.onRescanRoot?.(rootPath))
                                     : undefined,

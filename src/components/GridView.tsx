@@ -23,6 +23,7 @@ import {
 } from './folia-grid/hexCardTransform';
 import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
 import TextInputDialog from './shared/TextInputDialog';
+import ConfirmDialog from './shared/ConfirmDialog';
 import { SidePanelList, TrackListItem } from './shared/SidePanelList';
 import { GridListSearchButton } from './shared/GridListSearchButton';
 import { LocalTrackSortDirectionButton, LocalTrackSortMenu } from './shared/LocalTrackSortMenu';
@@ -728,6 +729,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const [isSubscribing, setIsSubscribing] = useState(false);
     const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
     const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
+    const [isDeleteFolderOpen, setIsDeleteFolderOpen] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -2002,6 +2004,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     || showCutInPanel
                     || isPlaylistPickerOpen
                     || isCreatePlaylistOpen
+                    || isDeleteFolderOpen
                 ) return;
 
                 const focusedItem = gridItems[focusedIndex];
@@ -2060,6 +2063,7 @@ export const GridView: React.FC<GridViewProps> = ({
         focusedIndex,
         gridItems,
         isCreatePlaylistOpen,
+        isDeleteFolderOpen,
         isEditMode,
         isInteractive,
         isPlaylistPickerOpen,
@@ -2528,7 +2532,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 )}
                                 {(isLocalFolderCollection || isLocalPlaylistCollection || isNavidromePlaylistCollection) && (
                                     <button
-                                        onClick={() => void handleDeleteSourceCollection()}
+                                        onClick={() => isLocalFolderCollection ? setIsDeleteFolderOpen(true) : void handleDeleteSourceCollection()}
                                         disabled={isSourceActionPending}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer bg-red-500/10 text-red-500 border border-red-500/25 hover:bg-red-500/20 disabled:opacity-40"
                                     >
@@ -2565,6 +2569,20 @@ export const GridView: React.FC<GridViewProps> = ({
                 onConfirm={(name) => {
                     void handleCreateNavidromePlaylist(name);
                 }}
+                isDaylight={isDaylight}
+            />
+            <ConfirmDialog
+                isOpen={isDeleteFolderOpen}
+                title={t('localMusic.deleteFolderTitle')}
+                description={t(collection?.name?.replace(/\\/g, '/').includes('/')
+                    ? 'localMusic.deleteSubfolderMessage' : 'localMusic.deleteRootFolderMessage', { folderName: collection?.name })}
+                confirmText={t('localMusic.deleteFromLibrary')}
+                confirmVariant="danger"
+                onConfirm={() => {
+                    setIsDeleteFolderOpen(false);
+                    void handleDeleteSourceCollection();
+                }}
+                onClose={() => setIsDeleteFolderOpen(false)}
                 isDaylight={isDaylight}
             />
 

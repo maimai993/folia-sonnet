@@ -1,6 +1,6 @@
 import type { LocalLibrarySnapshot, LocalLibrarySnapshotNode, LocalSong } from '../types';
 import type { GridMapDirectoryNode } from '../components/folia-grid/gridMapBatch';
-import { getDirHandles, getLocalLibrarySnapshot } from './db';
+import { getDirHandles, getLocalLibrarySnapshot, getLocalSongs } from './db';
 
 // src/services/localLibraryDirectoryTree.ts
 
@@ -26,10 +26,10 @@ export const buildLocalLibraryDirectoryTrees = (
         depth: number,
     ): GridMapDirectoryNode => {
         const path = normalizeLocalPath(node.relativePath || rootPath);
-        const children = node.children
+        const children = (node.ignored ? [] : node.children)
             .map(child => convertNode(child, rootPath, depth + 1))
             .sort((a, b) => a.name.localeCompare(b.name));
-        const directTrackCount = directCounts.get(path) || 0;
+        const directTrackCount = node.ignored ? 0 : directCounts.get(path) || 0;
         const totalTrackCount = directTrackCount + children.reduce((sum, child) => sum + child.totalTrackCount, 0);
 
         return {
@@ -38,6 +38,7 @@ export const buildLocalLibraryDirectoryTrees = (
             path,
             rootPath,
             depth,
+            ignored: node.ignored,
             directTrackCount,
             totalTrackCount,
             children,
@@ -49,11 +50,11 @@ export const buildLocalLibraryDirectoryTrees = (
         .sort((a, b) => a.name.localeCompare(b.name));
 };
 
-export const loadLocalLibraryDirectoryTrees = async (songs: LocalSong[]): Promise<GridMapDirectoryNode[]> => {
+export const loadLocalLibraryDirectoryTrees = async (songs?: LocalSong[]): Promise<GridMapDirectoryNode[]> => {
     const handles = await getDirHandles();
     const snapshots = (await Promise.all(
         Object.keys(handles).map(rootPath => getLocalLibrarySnapshot(rootPath)),
     )).filter((snapshot): snapshot is LocalLibrarySnapshot => Boolean(snapshot));
 
-    return buildLocalLibraryDirectoryTrees(snapshots, songs);
+    return buildLocalLibraryDirectoryTrees(snapshots, songs ?? await getLocalSongs());
 };

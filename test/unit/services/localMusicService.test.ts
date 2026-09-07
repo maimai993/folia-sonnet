@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     deleteFolderSongs,
+    clearFolderIgnore,
     deleteSongsByIds,
     deleteLocalSong as deleteLocalMusicSong,
     extractMetadataFromFilename,
@@ -512,6 +513,49 @@ describe('localMusicService', () => {
         expect(removeCachedCover).toHaveBeenCalledWith('cover_local_song-2');
     });
 
+    it('persists a deleted child as ignored, skips its contents, and restores it after clearing ignore', async () => {
+        let snapshot: LocalLibrarySnapshot | null = null;
+        vi.mocked(getLocalLibrarySnapshot).mockImplementation(async () => snapshot);
+        vi.mocked(saveLocalLibrarySnapshot).mockImplementation(async value => { snapshot = value; });
+        const ignoredChild = new FakeDirectoryHandle('Disc 1', [new FakeFileHandle('Hidden.mp3')]);
+        const traverseChild = vi.spyOn(ignoredChild, 'values');
+        const root = new FakeDirectoryHandle('Music', [ignoredChild]);
+        vi.mocked(getDirHandles).mockResolvedValue({ Music: root as unknown as FileSystemDirectoryHandle });
+
+        await deleteFolderSongs('Music/Disc 1');
+        expect(snapshot!.ignoredFolderPaths).toEqual(['Music/Disc 1']);
+        expect(snapshot!.tree.children[0]).toMatchObject({ ignored: true, files: [], children: [] });
+        expect(deleteDirHandle).not.toHaveBeenCalled();
+
+        expect(await resyncAllFolders()).toEqual([]);
+        expect(traverseChild).not.toHaveBeenCalled();
+        expect(snapshot!.tree.children[0]).toMatchObject({ ignored: true, relativePath: 'Music/Disc 1' });
+
+        await clearFolderIgnore('Music/Disc 1');
+        expect(snapshot!.ignoredFolderPaths).toEqual([]);
+        expect(snapshot!.tree.children[0].ignored).not.toBe(true);
+        expect(traverseChild).toHaveBeenCalled();
+        expect(saveLocalSongs).toHaveBeenCalledWith([
+            expect.objectContaining({ filePath: 'Music/Disc 1/Hidden.mp3' }),
+        ]);
+    });
+
+    it('matches ignored paths literally without excluding similarly named siblings', async () => {
+        let snapshot: LocalLibrarySnapshot | null = null;
+        vi.mocked(getLocalLibrarySnapshot).mockImplementation(async () => snapshot);
+        vi.mocked(saveLocalLibrarySnapshot).mockImplementation(async value => { snapshot = value; });
+        const root = new FakeDirectoryHandle('Music', [
+            new FakeDirectoryHandle('[Live]', [new FakeFileHandle('Hidden.mp3')]),
+            new FakeDirectoryHandle('[Live] 2', [new FakeFileHandle('Keep.mp3')]),
+        ]);
+        vi.mocked(getDirHandles).mockResolvedValue({ Music: root as unknown as FileSystemDirectoryHandle });
+        await deleteFolderSongs('Music/[Live]');
+
+        expect(await resyncFolder('Music')).toEqual([
+            expect.objectContaining({ filePath: 'Music/[Live] 2/Keep.mp3' }),
+        ]);
+    });
+
     it('cleans cover cache when deleting a selected batch by song id', async () => {
         vi.mocked(getLocalSongs).mockResolvedValue([createSong({ id: 'song-1' })]);
 
@@ -529,5 +573,16 @@ describe('localMusicService', () => {
         expect(deleteDirHandle).toHaveBeenCalledWith('EmptyRoot');
         expect(deleteLocalLibrarySnapshot).toHaveBeenCalledWith('EmptyRoot');
         expect(deleteLocalSongs).not.toHaveBeenCalled();
+    });
+
+    it('clears ignored children when deleting their entire root from folder details', async () => {
+        vi.mocked(getLocalLibrarySnapshot).mockResolvedValue({
+            rootFolderName: 'Music', scannedAt: 1, ignoredFolderPaths: ['Music/Hidden'],
+            tree: { name: 'Music', relativePath: 'Music', hash: '', files: [], children: [] },
+        });
+        await deleteFolderSongs('Music');
+        expect(deleteDirHandle).toHaveBeenCalledWith('Music');
+        expect(deleteLocalLibrarySnapshot).toHaveBeenCalledWith('Music');
+        expect(saveLocalLibrarySnapshot).not.toHaveBeenCalled();
     });
 });

@@ -1,4 +1,5 @@
 import type { GridMapItem } from '../GridMap';
+import { matchesGridMapSearch } from './gridMapSearch';
 
 // src/components/folia-grid/gridMapBatch.ts
 
@@ -8,6 +9,7 @@ export interface GridMapDirectoryNode {
     path: string;
     rootPath: string;
     depth: number;
+    ignored?: boolean;
     directTrackCount: number;
     totalTrackCount: number;
     children: GridMapDirectoryNode[];
@@ -27,6 +29,7 @@ export interface GridMapBatchConfig {
     onRemove?: (context: GridMapBatchContext) => Promise<void> | void;
     onRescanRoot?: (rootPath: string) => Promise<void> | void;
     onRemoveRoot?: (rootPath: string) => Promise<void> | void;
+    onClearFolderIgnore?: (folderPath: string) => Promise<void> | void;
 }
 
 export interface GridMapDirectorySelection {
@@ -87,7 +90,7 @@ export const compactGridMapDirectoryTrees = (
         const names = [source.name];
 
         if (!preserveNode) {
-            while (terminal.directTrackCount === 0 && terminal.children.length === 1) {
+            while (!terminal.ignored && terminal.directTrackCount === 0 && terminal.children.length === 1 && !terminal.children[0].ignored) {
                 terminal = terminal.children[0];
                 names.push(terminal.name);
             }
@@ -108,6 +111,7 @@ export const compactGridMapDirectoryTrees = (
 export const filterGridMapDirectoryTreesByItems = (
     roots: GridMapDirectoryNode[],
     items: readonly GridMapItem[],
+    query = '',
 ): GridMapDirectoryNode[] => {
     const itemPaths = items.map(item => (item.path || item.name)
         .replace(/\\/g, '/')
@@ -122,7 +126,8 @@ export const filterGridMapDirectoryTreesByItems = (
         const isContextOrMatch = itemPaths.some(path => (
             path === nodePath || path.startsWith(`${nodePath}/`)
         ));
-        return isContextOrMatch || children.length > 0 ? { ...node, children } : null;
+        const matchesIgnoredFolder = node.ignored && query.trim() && matchesGridMapSearch(node, query);
+        return isContextOrMatch || matchesIgnoredFolder || children.length > 0 ? { ...node, children } : null;
     };
 
     return roots.map(filterNode).filter((root): root is GridMapDirectoryNode => Boolean(root));

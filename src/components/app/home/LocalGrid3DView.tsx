@@ -9,7 +9,7 @@ import { useDebouncedFocusSync } from '../../../hooks/useDebouncedFocusSync';
 import { useLocalLibraryCatalog } from '../../../hooks/useLocalLibraryCatalog';
 import { buildLocalQueue } from '../../../services/playbackAdapters';
 import { createLocalPlaylist } from '../../../services/localPlaylistService';
-import { deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../services/localMusicService';
+import { clearFolderIgnore, deleteFolderSongs, deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../services/localMusicService';
 import { loadLocalLibraryDirectoryTrees } from '../../../services/localLibraryDirectoryTree';
 import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from '../../folia-grid/gridMapBatch';
 import type { SongResult } from '../../../types';
@@ -201,8 +201,21 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
         return {
             ...baseConfig,
             onRemove: async context => {
+                const selectedIds = new Set(context.trackIds);
+                // A direct-only selection must not ignore descendants that the user excluded.
+                const folderPaths = context.items.filter(item => item.id !== 'folder-__all-songs__').map(item => item.path || item.name).filter(path =>
+                    localSongs.every(song => !(song.folderName === path || song.folderName?.startsWith(`${path}/`)) || selectedIds.has(song.id)));
+                for (const path of folderPaths.filter(path => !folderPaths.some(parent => path !== parent && path.startsWith(`${parent}/`)))) {
+                    await deleteFolderSongs(path);
+                }
                 await deleteSongsByIds(context.trackIds);
                 await onRefreshLocalSongs();
+                await refreshDirectoryTrees();
+            },
+            onClearFolderIgnore: async folderPath => {
+                await clearFolderIgnore(folderPath);
+                await onRefreshLocalSongs();
+                setDirectoryTrees(await loadLocalLibraryDirectoryTrees());
             },
             onRescanRoot: async rootPath => {
                 await resyncFolder(rootPath);
@@ -213,7 +226,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 await onRefreshLocalSongs();
             },
         };
-    }, [activeSection.key, catalog, directoryTrees, onAddAllToQueue, onPlayAll, onRefreshLocalSongs, resolveBatchSongs]);
+    }, [activeSection.key, catalog, directoryTrees, localSongs, onAddAllToQueue, onPlayAll, onRefreshLocalSongs, refreshDirectoryTrees, resolveBatchSongs]);
 
     const tabs: DesktopGrid3DAction[] = sections.map(section => ({
         id: section.key,
