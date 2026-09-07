@@ -253,6 +253,14 @@ export function usePlaybackAudioBridge({
             // that gives the deck its real source, and that run is the one meant to start it.
             if (audioRef.current.getAttribute('src') !== audioSrc) return;
 
+            // The deck has already failed on this exact source and something else - the transcode
+            // fallback - is off resolving it. play() on an element in error state cannot start
+            // anything; it rejects with NotSupportedError. Pressing it here only spends the intent,
+            // so when the recovered source lands there is nothing left to start the deck with.
+            // Bail WITHOUT spending it, the same way the autoplay hold below does: replacing the
+            // source runs this effect again, and that run is the one meant to start it.
+            if (audioRef.current.error) return;
+
             if (shouldAutoPlayRef.current && !isLyricsLoading) {
                 // The deck has its source and is buffering, but its blend is not due yet. Bail
                 // WITHOUT spending the intent - this effect runs again when the hold lifts, and

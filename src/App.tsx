@@ -2391,6 +2391,14 @@ export default function App() {
             }}
             onPause={(e) => {
                 if (!automix.isActiveDeck(e.currentTarget)) return;
+                // A deck whose source failed fires `pause` immediately AFTER `error` - Chromium
+                // clears the play state as part of failing the load - and that is not the listener
+                // pausing. Read as one, it dropped the transport to PAUSED and spent the autoplay
+                // intent, and the transcode fallback then read that PAUSED back as "the listener
+                // paused during recovery" and cancelled the resume: the track was transcoded, the
+                // source re-pointed, and the deck left silent until play was pressed by hand.
+                // What happens to a failed source belongs to the error path below.
+                if (e.currentTarget.error) return;
                 shouldAutoPlay.current = false;
                 if (!e.currentTarget.ended) {
                     setPlayerState(PlayerState.PAUSED);
