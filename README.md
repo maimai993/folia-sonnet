@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="/img/head2.png" alt="Folia" width="100%" />
+  <img src="https://github.com/user-attachments/assets/b5d0e863-48be-497b-b0e9-4bd8d8ce9bf0" alt="Folia" width="100%" />
 </p>
 
 <div align="center">
