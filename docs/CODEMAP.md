@@ -5,51 +5,51 @@
 全部内容由 TypeScript 编译器和模块图推导，不是人工维护的清单。
 想知道某个具体符号在哪，用 `node dev/mcp/ts-code-map/cli.mjs search '{"query":"..."}'`。
 
+文件里所有的量都只给**数量级**（向下取整到 2 的幂，写作 `512+`），排序也按量级。
+这是有意的：精确计数会让每个新文件、每条 import 都产生一次同步提交，而那些提交
+没有一条说明结构变了。要精确数字就问 `cli.mjs`，它是按需查询、不进版本库的。
+
 ## 区域分布
 
-| 区域 | 文件数 |
+| 区域 | 文件数量级 |
 | --- | --- |
-| components | 566 |
-| test/dev | 426 |
-| services | 126 |
-| utils | 122 |
-| hooks | 67 |
-| backend/electron | 66 |
-| stores | 34 |
-| 其他 | 22 |
-| types | 17 |
-| src (其他) | 13 |
-| i18n | 5 |
-| workers | 3 |
+| components | 512+ |
+| test/dev | 256+ |
+| backend/electron | 64+ |
+| hooks | 64+ |
+| services | 64+ |
+| utils | 64+ |
+| stores | 32+ |
+| 其他 | 16+ |
+| types | 16+ |
+| src (其他) | 8+ |
+| i18n | 4+ |
+| workers | 2+ |
 
 ## 枢纽模块
 
-被最多模块依赖的文件。改动它们波及面最大，读代码时也最值得先看。
+被 32 个以上模块依赖的文件。改动它们波及面最大，读代码时也最值得先看。
 
-| 被依赖数 | 模块 |
+| 被依赖量级 | 模块 |
 | --- | --- |
-| 534 | `src/types.ts` |
-| 72 | `src/utils/appPlaybackGuards.ts` |
-| 61 | `src/types/onlineMusic.ts` |
-| 58 | `src/components/command-palette/types.ts` |
-| 48 | `src/stores/useStatusMessageStore.ts` |
-| 47 | `src/components/visualizer/colorMix.ts` |
-| 43 | `src/services/db.ts` |
-| 37 | `src/components/visualizer/definition.ts` |
-| 37 | `src/services/onlineMusic/songMetadata.ts` |
-| 36 | `src/stores/usePlaybackStore.ts` |
-| 32 | `src/utils/lyrics/renderHints.ts` |
-| 30 | `src/utils/lyrics/parserCore.ts` |
-| 29 | `src/stores/useAppViewStore.ts` |
-| 28 | `src/components/visualizer/tempera/types.ts` |
-| 28 | `src/types/localLibrary.ts` |
+| 512+ | `src/types.ts` |
+| 64+ | `src/utils/appPlaybackGuards.ts` |
+| 32+ | `src/components/command-palette/types.ts` |
+| 32+ | `src/components/visualizer/colorMix.ts` |
+| 32+ | `src/components/visualizer/definition.ts` |
+| 32+ | `src/services/db.ts` |
+| 32+ | `src/services/onlineMusic/songMetadata.ts` |
+| 32+ | `src/stores/usePlaybackStore.ts` |
+| 32+ | `src/stores/useStatusMessageStore.ts` |
+| 32+ | `src/types/onlineMusic.ts` |
+| 32+ | `src/utils/lyrics/renderHints.ts` |
 
 ## 动态注册点
 
 这些地方用 `import.meta.glob` 自动发现成员，**清单随目录变化，不要手写**。
 以下是当前的完整展开：
 
-### `dev/probes/registry.ts` (19)
+### `dev/probes/registry.ts`
 
 - `dev/probes/audioEffectGrid.probe.tsx`
 - `dev/probes/automixModelReminder.probe.tsx`
@@ -71,7 +71,7 @@
 - `dev/probes/trackTitleNavigator.probe.tsx`
 - `dev/probes/visualizerMemory.probe.tsx`
 
-### `src/components/visualizer/backgrounds/registry.tsx` (6)
+### `src/components/visualizer/backgrounds/registry.tsx`
 
 - `src/components/visualizer/backgrounds/common/entry.tsx`
 - `src/components/visualizer/backgrounds/latent/entry.tsx`
@@ -80,7 +80,7 @@
 - `src/components/visualizer/backgrounds/sora/entry.tsx`
 - `src/components/visualizer/backgrounds/url/entry.tsx`
 
-### `src/components/visualizer/registry.tsx` (13)
+### `src/components/visualizer/registry.tsx`
 
 - `src/components/visualizer/cadenza/entry.tsx`
 - `src/components/visualizer/cappella/entry.tsx`
@@ -96,7 +96,7 @@
 - `src/components/visualizer/tempera/entry.tsx`
 - `src/components/visualizer/tilt/entry.tsx`
 
-### `src/components/visualizer/tuningRegistry.ts` (12)
+### `src/components/visualizer/tuningRegistry.ts`
 
 - `src/components/visualizer/cadenza/tuning.ts`
 - `src/components/visualizer/cappella/tuning.ts`

@@ -14,10 +14,25 @@ import { buildModuleGraph, edgeKey } from './graph/modules.mjs';
  * `codemap-sync` workflow 在 main 上重新生成，有 diff 就提交。
  *
  * 输出必须是确定性的：所有集合都排序，否则每次 push 都会产生一个假的同步提交。
+ *
+ * 光排序还不够——**精确计数本身就是噪声源**。近 60 个 main 提交里有 10 个是同步提交，
+ * 因为任何一个新文件都会动「区域分布」的数字，任何一条 import 都会动「枢纽模块」的数字，
+ * 而 15 名附近的计数密集到 28/28/28/27/26/26/26，随便一改就换位。这些提交没有一条
+ * 传达了「结构变了」，它们只是把计数器往前拨了一格。
+ *
+ * 所以这份文件里所有的量都**向下取整到 2 的幂**（`magnitude`），排序也按量级而不是精确值，
+ * 名次因此不会因为相邻两个数字互换而抖动。要精确数字的场合本来就不该读这份快照，
+ * 该问 `cli.mjs`——它是按需查询的，没有被提交的问题。
  */
 
-const HUB_COUNT = 15;
-const HUB_MIN_DEPS = 8;
+/**
+ * 不超过 n 的最大 2 的幂。数量级是这份地图唯一需要表达的精度：知道 `types.ts` 在 512 这一档、
+ * 而次高的枢纽在 64 这一档，才是"改它波及面最大"的意思；534 和 533 的区别不是。
+ */
+const magnitude = n => (n < 1 ? 0 : 2 ** Math.floor(Math.log2(n)));
+
+/** 枢纽的门槛也取 2 的幂，和展示的档位同一套刻度；当前落在这条线以上的有 11 个模块。 */
+const HUB_MIN_DEPS = 32;
 
 /**
  * 分层边界。左边不该在运行时依赖右边。
@@ -66,11 +81,12 @@ function collect(root) {
     const areas = new Map();
     for (const file of graph.files) areas.set(areaOf(file), (areas.get(areaOf(file)) ?? 0) + 1);
 
+    // 按量级排序、量级内按路径：精确计数只用来选人和分档，不参与排序，否则 37 和 36 互换
+    // 就会重排整张表。也不再切前 N 名——名次在密集区抖得最厉害，门槛是稳定的，名次不是。
     const hubs = [...graph.reverse]
-        .map(([file, deps]) => ({ file, count: deps.size }))
+        .map(([file, deps]) => ({ file, tier: magnitude(deps.size), count: deps.size }))
         .filter(h => h.count >= HUB_MIN_DEPS)
-        .sort((a, b) => b.count - a.count || a.file.localeCompare(b.file))
-        .slice(0, HUB_COUNT);
+        .sort((a, b) => b.tier - a.tier || a.file.localeCompare(b.file));
 
     const SEP = String.fromCharCode(0);
     const registries = new Map();
@@ -109,23 +125,28 @@ function render({ areas, hubs, registries, violations, misplaced }) {
     out.push('全部内容由 TypeScript 编译器和模块图推导，不是人工维护的清单。');
     out.push('想知道某个具体符号在哪，用 `node dev/mcp/ts-code-map/cli.mjs search \'{"query":"..."}\'`。');
     out.push('');
+    out.push('文件里所有的量都只给**数量级**（向下取整到 2 的幂，写作 `512+`），排序也按量级。');
+    out.push('这是有意的：精确计数会让每个新文件、每条 import 都产生一次同步提交，而那些提交');
+    out.push('没有一条说明结构变了。要精确数字就问 `cli.mjs`，它是按需查询、不进版本库的。');
+    out.push('');
 
     out.push('## 区域分布');
     out.push('');
-    out.push('| 区域 | 文件数 |');
+    out.push('| 区域 | 文件数量级 |');
     out.push('| --- | --- |');
-    for (const [area, count] of [...areas].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
-        out.push(`| ${area} | ${count} |`);
+    const areaTiers = [...areas].map(([area, count]) => [area, magnitude(count)]);
+    for (const [area, tier] of areaTiers.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+        out.push(`| ${area} | ${tier}+ |`);
     }
     out.push('');
 
     out.push('## 枢纽模块');
     out.push('');
-    out.push('被最多模块依赖的文件。改动它们波及面最大，读代码时也最值得先看。');
+    out.push(`被 ${HUB_MIN_DEPS} 个以上模块依赖的文件。改动它们波及面最大，读代码时也最值得先看。`);
     out.push('');
-    out.push('| 被依赖数 | 模块 |');
+    out.push('| 被依赖量级 | 模块 |');
     out.push('| --- | --- |');
-    for (const hub of hubs) out.push(`| ${hub.count} | \`${hub.file}\` |`);
+    for (const hub of hubs) out.push(`| ${hub.tier}+ | \`${hub.file}\` |`);
     out.push('');
 
     out.push('## 动态注册点');
@@ -134,7 +155,8 @@ function render({ areas, hubs, registries, violations, misplaced }) {
     out.push('以下是当前的完整展开：');
     out.push('');
     for (const [registry, members] of [...registries].sort((a, b) => a[0].localeCompare(b[0]))) {
-        out.push(`### \`${registry}\` (${members.length})`);
+        // 不写成员数：清单就在下面，数一下就有，而写出来等于每加一个成员都多改一行。
+        out.push(`### \`${registry}\``);
         out.push('');
         for (const member of [...members].sort()) out.push(`- \`${member}\``);
         out.push('');
