@@ -31,6 +31,17 @@ import { buildModuleGraph, edgeKey } from './graph/modules.mjs';
  */
 const magnitude = n => (n < 1 ? 0 : 2 ** Math.floor(Math.log2(n)));
 
+/**
+ * 文本排序，按 UTF-16 码元。**不能用 `localeCompare`**：它的结果取决于运行环境的 ICU
+ * collation，中文区域名和英文区域名的相对顺序在开发机（zh_CN）和 CI（ubuntu 默认）上是
+ * 反的——`其他` / `types` 同档时一台机器排前一台排后，于是每次 push 都被 CI 改回去，
+ * 正好是这次要消掉的那种假同步提交。码元序难看但在哪儿都一样，这里要的就是这个。
+ *
+ * 精确计数时代这个坑碰不到：两个名字只要计数不同就轮不到比字符串。改成按量级分档之后
+ * 平局变成常态，它才浮出来。
+ */
+const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 /** 枢纽的门槛也取 2 的幂，和展示的档位同一套刻度；当前落在这条线以上的有 11 个模块。 */
 const HUB_MIN_DEPS = 32;
 
@@ -86,7 +97,7 @@ function collect(root) {
     const hubs = [...graph.reverse]
         .map(([file, deps]) => ({ file, tier: magnitude(deps.size), count: deps.size }))
         .filter(h => h.count >= HUB_MIN_DEPS)
-        .sort((a, b) => b.tier - a.tier || a.file.localeCompare(b.file));
+        .sort((a, b) => b.tier - a.tier || byText(a.file, b.file));
 
     const SEP = String.fromCharCode(0);
     const registries = new Map();
@@ -109,7 +120,7 @@ function collect(root) {
             (nominal ? misplaced : violations).push({ from, to, why: rule.why });
         }
     }
-    const byPath = (a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to);
+    const byPath = (a, b) => byText(a.from, b.from) || byText(a.to, b.to);
     violations.sort(byPath);
     misplaced.sort(byPath);
 
@@ -135,7 +146,7 @@ function render({ areas, hubs, registries, violations, misplaced }) {
     out.push('| 区域 | 文件数量级 |');
     out.push('| --- | --- |');
     const areaTiers = [...areas].map(([area, count]) => [area, magnitude(count)]);
-    for (const [area, tier] of areaTiers.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    for (const [area, tier] of areaTiers.sort((a, b) => b[1] - a[1] || byText(a[0], b[0]))) {
         out.push(`| ${area} | ${tier}+ |`);
     }
     out.push('');
@@ -154,11 +165,11 @@ function render({ areas, hubs, registries, violations, misplaced }) {
     out.push('这些地方用 `import.meta.glob` 自动发现成员，**清单随目录变化，不要手写**。');
     out.push('以下是当前的完整展开：');
     out.push('');
-    for (const [registry, members] of [...registries].sort((a, b) => a[0].localeCompare(b[0]))) {
+    for (const [registry, members] of [...registries].sort((a, b) => byText(a[0], b[0]))) {
         // 不写成员数：清单就在下面，数一下就有，而写出来等于每加一个成员都多改一行。
         out.push(`### \`${registry}\``);
         out.push('');
-        for (const member of [...members].sort()) out.push(`- \`${member}\``);
+        for (const member of [...members].sort(byText)) out.push(`- \`${member}\``);
         out.push('');
     }
 
