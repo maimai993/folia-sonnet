@@ -237,7 +237,15 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                 transition={{ duration: 1.3, ease: [0.25, 1, 0.5, 1], delay: 0.3 }}
                                 style={{ maxWidth: headerMaxWidth }}
                             >
-                                <div className="mb-6 space-y-1">
+                                {/* Flex column so the title's negative top margin below stays local instead of
+                                    collapsing through this wrapper and shifting the whole centered text column. */}
+                                <div className="mb-6 flex flex-col space-y-1">
+                                    {/* `line-clamp-2` needs `overflow: hidden`, and the poster line-height (1.06) is
+                                        tighter than the em box of most serif faces, so half-leading goes negative and
+                                        the clip box cuts into the glyphs — descenders (g, j, p, y, CJK) at the bottom,
+                                        accented caps at the top. Grow the padding box on both sides to hold them.
+                                        The top is pulled back in full; the bottom only most of the way, so the
+                                        ~0.13em left over keeps a descender from crowding the album line below. */}
                                     <div
                                         className="line-clamp-2 font-semibold leading-[1.06]"
                                         style={{
@@ -245,6 +253,9 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                             fontSize: `clamp(1.45rem, 3.3vw, ${titleMaxRem}rem)`,
                                             letterSpacing: 0,
                                             overflowWrap: 'anywhere',
+                                            paddingBlock: '0.25em',
+                                            marginTop: '-0.25em',
+                                            marginBottom: '-0.12em',
                                             textShadow: `0 14px 36px ${colorWithAlpha(theme.backgroundColor, 0.28)}`,
                                         }}
                                     >
