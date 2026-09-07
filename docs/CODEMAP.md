@@ -20,8 +20,8 @@
 | services | 64+ |
 | utils | 64+ |
 | stores | 32+ |
-| 其他 | 16+ |
 | types | 16+ |
+| 其他 | 16+ |
 | src (其他) | 8+ |
 | i18n | 4+ |
 | workers | 2+ |
