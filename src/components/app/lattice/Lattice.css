@@ -276,7 +276,7 @@
 .lattice-poster.is-expanded .lattice-poster-copy strong {
     max-width: 76%;
     font-size: clamp(48px, 6vw, 82px);
-    line-height: 0.88;
+    line-height: 1.08;
 }
 
 .lattice-poster.is-expanded .lattice-poster-copy small {
@@ -323,13 +323,11 @@
 }
 
 .lattice-poster-copy strong {
+    /* Give mixed-font glyphs room inside each line box. Padding on the clamped element
+       would expose the hidden fourth line. */
     overflow: hidden;
-    /* Tight display line-heights otherwise crop ascenders and descenders at the clamp boundary.
-       Padding expands the paint area; the matching negative margin keeps the copy anchored. */
-    margin-block: -0.14em;
-    padding-block: 0.14em;
     font-size: clamp(22px, 2vw, 36px);
-    line-height: 0.96;
+    line-height: 1.08;
     letter-spacing: -0.045em;
     text-wrap: balance;
     display: -webkit-box;
