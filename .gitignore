@@ -61,8 +61,10 @@ models/
 build/windowtolayer
 build/windowtolayer-COPYING
 build/ffmpeg/
-# Dev-only drop-in slot read by resolveFfmpeg before the packaged runtime; same binary as
-# build/ffmpeg/<os>-<arch>, staged here so `npm run dev:electron` uses it instead of system PATH.
+# The transcode fallback's dev slot: same binary as build/ffmpeg/<os>-<arch>, staged here so
+# `npm run dev:electron` runs the audio-only runtime the release ships instead of system PATH.
+# `ffmpeg-8.1.2/` is the mod exporters' slot and is a full build the developer supplies.
+ffmpeg-audio/
 ffmpeg-8.1.2/
 .windowtolayer-src/
 # Local reference clone of upstream main used for pollution review; never ship.
