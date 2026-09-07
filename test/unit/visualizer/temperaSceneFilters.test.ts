@@ -36,27 +36,39 @@ describe('Tempera scene pass resolution', () => {
         // Pixi's Filter default is a hard 1, so leaving it alone rasterized the whole scene at
         // 1x and stretched it onto a 1.5x canvas - the mode's hatch and type paid for the grain.
         expect(DEFAULT_TEMPERA_TUNING.postProcessTextureCompression).toBe(false);
-        expect(resolveTemperaPassResolution(DEFAULT_TEMPERA_TUNING)).toBe('inherit');
+        expect(resolveTemperaPassResolution(DEFAULT_TEMPERA_TUNING, 1.5)).toBe('inherit');
         // 'inherit' is what keeps the nested inversion aligned: it resolves to the surface the
         // text layer renders into, which is also where its backdrop is copied from.
-        expect(resolveTemperaPassResolution({ ...DEFAULT_TEMPERA_TUNING, textureResolution: 3 }))
-            .toBe('inherit');
+        expect(resolveTemperaPassResolution(DEFAULT_TEMPERA_TUNING, 3)).toBe('inherit');
     });
 
     it('compresses to 1x on request, never above the canvas it stretches onto', () => {
         const compressed = { ...DEFAULT_TEMPERA_TUNING, postProcessTextureCompression: true };
-        expect(resolveTemperaPassResolution(compressed)).toBe(1);
-        expect(resolveTemperaPassResolution({ ...compressed, textureResolution: 0.75 })).toBe(0.75);
+        expect(resolveTemperaPassResolution(compressed, 1.5)).toBe(1);
+        expect(resolveTemperaPassResolution(compressed, 0.75)).toBe(0.75);
+    });
+
+    it('derives the pass from the snapped resolution, not the setting', () => {
+        // The two differ whenever the texture-pool snap took a step down, and a pass pinned to
+        // the setting would then ask the pool for a bigger bucket than the surface it lands on -
+        // exactly the waste the snap exists to remove. The resolvers no longer read
+        // `textureResolution` at all, so the tuning they take cannot even carry it.
+        expect(resolveTemperaTransitionBlurResolution(DEFAULT_TEMPERA_TUNING, 1.2))
+            .toBeCloseTo(0.6, 6);
+        expect(resolveTemperaPassResolution(
+            { postProcessTextureCompression: true },
+            0.75,
+        )).toBe(0.75);
     });
 
     it('keeps the transition blur at half the pass around it', () => {
         // A hard 0.5 would drop a 1.5x scene by three quarters the moment the blur attaches,
         // while its strength is still imperceptible.
-        expect(resolveTemperaTransitionBlurResolution(DEFAULT_TEMPERA_TUNING)).toBeCloseTo(0.75, 6);
+        expect(resolveTemperaTransitionBlurResolution(DEFAULT_TEMPERA_TUNING, 1.5)).toBeCloseTo(0.75, 6);
         expect(resolveTemperaTransitionBlurResolution({
             ...DEFAULT_TEMPERA_TUNING,
             postProcessTextureCompression: true,
-        })).toBeCloseTo(0.5, 6);
+        }, 1.5)).toBeCloseTo(0.5, 6);
     });
 });
 

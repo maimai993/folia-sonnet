@@ -103,6 +103,22 @@
 
 **OBS 源由本地服务器以 `127.0.0.1:PORT` 提供，与主窗口不同源，读不到那个 IndexedDB**——所以图片池和 monet 背景/portrait、cappella 表情包一样，由 `useObsBrowserSourcePublisher` 解析成 data URL 随 SSE config 一起下发（`ObsBrowserSourceConfig.temperaLayerImageAssets`）；收到内联资源时 `VisualizerTempera` 完全不查存储。层次是全局设置：`back` 排在**反色 filter 之下**，立绘于是和色块一样会把歌词切开；`front` 压在歌词之上。纹理在 runtime 创建时一次性建好、由所有段落 scene 共用（scene 会随播放不断重建，逐 scene 加载会抖）；**不能用 `Assets.load`**——它按 URL 后缀选 parser，而 blob URL 没有后缀，会直接拒绝加载。改为把 Blob 交给 runtime 自己 `createImageBitmap`（SVG 回落到 `Image` 元素）再 `Texture.from`，顺带连 object URL 的生命周期都不用管了。
 
+## 渲染分辨率与纹理池
+
+`textureResolution`（默认 1.5）不是直接交给 pixi 的，先过 `../pixiTextureBudget.ts` 的 `snapResolutionToTexturePool`。原因是 pixi 的 `TexturePool.getOptimalTexture` 把每个 render target 逐轴向上取整到 2 的幂（`nextPow2(ceil(frame * resolution - 1e-6))`）并按这对尺寸做池 key，**一个 pass 是按「档位」计费而不是按画幅计费的**：781x850 的视口在 1.5x 下光栅化成 1172x1275，落进 2048x2048 的档，16MB 的纹理里 71% 从来没画过东西。Tempera 同时挂着若干这样的全屏 pass，加上反色 filter 的 backdrop 拷贝，浪费是成倍的。
+
+代价因此是**阶梯式而不是线性的**，这一点最容易估错：Intel 核显实测，窗口从 640x640 放大到 700x700（面积 +18%）会把常驻 GEM 从 628MB 抬到 822MB（+31%），只因为 1.5x700 越过了 1024，所有池化目标同时在两个轴上翻倍——画面本身没有任何变化配得上这个涨幅。
+
+所以吸附**只让出能换到更小档位的那部分分辨率**，而不是全局调低（全局调低哪儿都变糊，还是会落在原来那一档）。同一个 781x850 视口上它返回 1.2047 而不是 1.5：糊 20%，但池化目标从 2048x2048 降到 1024x1024（四分之一的显存），画幅对纹理的填充率从 29% 升到 92%——**每字节换到的清晰度是升的**。实测 tempera 在该视口下 GEM 978 -> 689MB（-30%），且 640/700 两档之间的跳变消失。
+
+三条约束：
+
+- 吸附**每轴只考虑降一档**，且只接受落在 `TEXTURE_POOL_MAX_RESOLUTION_DROP`（25%）以内的候选。边界太远的视口（2000x1200 在 1.5x 下要降到 1.024，砍 32%）保持原样——那种情况下多付一个档位比把整幅画糊掉三分之一划算。
+- 吸附值**随视口变化**，不只随设置变化，所以 `resizeToHost` 每次都要重算并跟着 `renderer.resize(w, h, resolution)` 一起下发；`setTuning` 比的也是吸附后的值，两个相邻滑块位置共用一个档位时不该白白重建 surface。
+- runtime 里那些**写死数值的 filter pass 一律从吸附后的 `renderResolution` 派生，不能读 `tuning.textureResolution`**（`resolveTemperaPassResolution` / `resolveTemperaTransitionBlurResolution` 的第二个参数就是它）。读设置的话，pass 会去要一个比它实际落地的 surface 更大的档位，正好是吸附想消掉的那部分浪费。
+
+吸附出来的画面与「用户手动把滑块拨到同一个值」**逐像素一致**（实测最大差 1/255），所以它不是一种新的渲染模式；`requiresSceneRebuild` 早就把 `textureResolution` 当作改变 scene 内容的字段，构图随分辨率轻微重排是这个模式一直以来的行为。
+
 ## tuning 的下发与重建
 
 tuning 变化通过 `runtime.setTuning()` **就地下发**，不重建 runtime：滑块拖动时每次 pointermove 都会产出新 tuning，而重建意味着重新初始化 WebGL、重新解码所有图片、重新测量所有行。只有真正改变 scene *内容* 的字段（色彩模式、显示开关、后处理、图片增删或层次变化）才清空 scene 缓存；cameraIntensity/glyphMotion 每帧现读，图片的位置/大小/旋转/透明度直接重设到已有 sprite 上。图片 blob 的加载按 **id 集合**（字符串 key）而不是数组引用触发，否则拖一次滑块就会把 IndexedDB 全读一遍。

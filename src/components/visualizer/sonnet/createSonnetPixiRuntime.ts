@@ -26,6 +26,7 @@ import {
 import { buildSonnetScene, type SceneView, type ShotView } from './sonnetSceneBuilder';
 import { isSonnetEmphasisRole } from './sonnetTypographyLayout';
 import { getSonnetTexturePool } from './sonnetTexturePool';
+import { snapResolutionToTexturePool } from '../pixiTextureBudget';
 import {
     destroySonnetContainerChildren,
     unloadSonnetDisplayTree,
@@ -151,7 +152,7 @@ export class SonnetPixiRuntime {
             backgroundAlpha: 0,
             antialias: true,
             autoDensity: true,
-            resolution: options.tuning.textureResolution,
+            resolution: snapResolutionToTexturePool(width, height, options.tuning.textureResolution),
             autoStart: false,
             sharedTicker: false,
             preference: 'webgl',
@@ -197,7 +198,14 @@ export class SonnetPixiRuntime {
         if (width === this.lastWidth && height === this.lastHeight) return false;
         this.lastWidth = width;
         this.lastHeight = height;
-        this.app.renderer.resize(width, height);
+        // The texture-pool snap depends on the viewport, so a resize can move the pooled filter
+        // targets across a bucket boundary even though the setting never changed. Sonnet's own
+        // passes carry fixed resolutions, so only the canvas has to follow.
+        this.app.renderer.resize(
+            width,
+            height,
+            snapResolutionToTexturePool(width, height, this.options.tuning.textureResolution),
+        );
         // Staged against the old viewport, so its layout no longer fits.
         if (this.songSwap?.staged) {
             this.destroyScene(this.songSwap.staged.scene);

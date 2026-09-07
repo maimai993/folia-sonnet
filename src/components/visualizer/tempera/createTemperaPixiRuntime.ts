@@ -4,6 +4,7 @@ import {
     setPixiDisplayTreeVisibility,
     unloadPixiDisplayTree,
 } from '../pixiDisplayResources';
+import { snapResolutionToTexturePool } from '../pixiTextureBudget';
 import type { TemperaProgram } from './types';
 import { findTemperaParagraphIndexAtTime } from './temperaProgram';
 import { hashTemperaSeed } from './temperaRandom';
@@ -181,6 +182,13 @@ export class TemperaPixiRuntime {
     private resizeObserver: ResizeObserver | null = null;
     private lastWidth = 0;
     private lastHeight = 0;
+    /**
+     * What the renderer is actually running at: `textureResolution` after the texture-pool snap.
+     * It depends on the viewport as well as the setting, so it is recomputed on every resize and
+     * every tuning change rather than read off the tuning - and the fixed-resolution filter
+     * passes are derived from this, never from `tuning.textureResolution`.
+     */
+    private renderResolution = 1;
 
     private sceneContainer!: import('pixi.js').Container;
     private creditsContainer!: import('pixi.js').Container;
@@ -216,13 +224,14 @@ export class TemperaPixiRuntime {
         const app = new pixi.Application();
         const width = Math.max(options.host.clientWidth, 320);
         const height = Math.max(options.host.clientHeight, 240);
+        const resolution = snapResolutionToTexturePool(width, height, options.tuning.textureResolution);
         await app.init({
             width,
             height,
             backgroundAlpha: 0,
             antialias: true,
             autoDensity: true,
-            resolution: options.tuning.textureResolution,
+            resolution,
             autoStart: false,
             sharedTicker: false,
             preference: 'webgl',
@@ -232,6 +241,7 @@ export class TemperaPixiRuntime {
             useBackBuffer: true,
         });
         const runtime = new TemperaPixiRuntime(pixi, options, app);
+        runtime.renderResolution = resolution;
         runtime.sceneContainer = new pixi.Container();
         // Paragraph scenes overlap during a boundary, so they must stack by paragraph order.
         runtime.sceneContainer.sortableChildren = true;
@@ -265,6 +275,16 @@ export class TemperaPixiRuntime {
         if (!this.options.paused) this.app.start();
     }
 
+    /**
+     * The resolution to render this viewport at. Falls back to the host's own size so it is
+     * still right if a tuning change arrives before the first resize pass has run.
+     */
+    private resolveRenderResolution(tuning: TemperaTuning) {
+        const width = this.lastWidth || Math.max(this.options.host.clientWidth, 320);
+        const height = this.lastHeight || Math.max(this.options.host.clientHeight, 240);
+        return snapResolutionToTexturePool(width, height, tuning.textureResolution);
+    }
+
     private resizeToHost() {
         if (this.destroyed) return false;
         const width = Math.max(this.options.host.clientWidth, 320);
@@ -272,7 +292,11 @@ export class TemperaPixiRuntime {
         if (width === this.lastWidth && height === this.lastHeight) return false;
         this.lastWidth = width;
         this.lastHeight = height;
-        this.app.renderer.resize(width, height);
+        // The snap is a function of the viewport, not just the setting: a resize can move the
+        // pass across a pool boundary on its own. Passing it to `resize` keeps the surface and
+        // its resolution on one call, and the scenes are dropped below anyway.
+        this.renderResolution = this.resolveRenderResolution(this.options.tuning);
+        this.app.renderer.resize(width, height, this.renderResolution);
         // Staged against the old viewport, so its layout no longer fits.
         if (this.songSwap?.staged) {
             this.discardStaged(this.songSwap.staged);
@@ -477,6 +501,7 @@ export class TemperaPixiRuntime {
             host: this.options.host,
             theme: song.theme,
             tuning: this.options.tuning,
+            renderResolution: this.renderResolution,
             lyricsFontScale: this.options.lyricsFontScale,
             staticMode: this.options.staticMode,
             coverColors: song.coverColors,
@@ -966,11 +991,17 @@ export class TemperaPixiRuntime {
         const previous = this.options.tuning;
         if (previous === tuning) return;
         this.options.tuning = tuning;
-        if (previous.textureResolution !== tuning.textureResolution) {
+        // Compared on the snapped value, not the setting: two nearby slider positions can share
+        // one pool bucket, and re-pointing the surface at the resolution it already has would
+        // reallocate it for nothing. `requiresSceneRebuild` still watches the raw setting, so a
+        // move inside one bucket costs a scene rebuild but not a surface one.
+        const resolution = this.resolveRenderResolution(tuning);
+        if (resolution !== this.renderResolution) {
+            this.renderResolution = resolution;
             // Pixi can resize the backing surface without recreating the WebGL application or
             // decoding the shared image pool again. The scene rebuild below refreshes text and
             // fixed-resolution filters against that new surface.
-            this.app.renderer.resolution = tuning.textureResolution;
+            this.app.renderer.resolution = resolution;
         }
         if (requiresSceneRebuild(previous, tuning)) {
             // Staged against the old tuning, so it can no longer be adopted.

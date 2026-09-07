@@ -96,6 +96,12 @@ export interface TemperaSceneBuildOptions {
     host: HTMLDivElement;
     theme: Theme;
     tuning: TemperaTuning;
+    /**
+     * What the canvas is actually running at, i.e. `tuning.textureResolution` after the
+     * texture-pool snap. Every fixed-resolution pass on this scene is derived from it, so that
+     * a pass never asks the pool for a bigger bucket than the surface it lands on.
+     */
+    renderResolution: number;
     lyricsFontScale: number;
     staticMode: boolean;
     /** Cover-art colours for the gradient colour mode; empty falls back to the theme hues. */
@@ -342,6 +348,7 @@ const applyTemperaScenePostProcess = (
     container: import('pixi.js').Container,
     tuning: TemperaTuning,
     seed: number,
+    renderResolution: number,
 ) => {
     const filters: import('pixi.js').Filter[] = [];
     if (tuning.postProcessLensDistortion > 0) {
@@ -373,7 +380,7 @@ const applyTemperaScenePostProcess = (
     // whole container - and none of the shared sonnet factories set one, so they would each
     // default to a hard 1. See `resolveTemperaPassResolution` for why that softened the scene
     // and why it is safe for the inversion nested below.
-    const resolution = resolveTemperaPassResolution(tuning);
+    const resolution = resolveTemperaPassResolution(tuning, renderResolution);
     filters.forEach(filter => {
         filter.resolution = resolution;
     });
@@ -585,7 +592,7 @@ export const buildTemperaScene = (
 
     const baseFilters: import('pixi.js').Filter[] = [];
     if (tuning.postProcessEnabled && !options.staticMode) {
-        const sceneFilters = applyTemperaScenePostProcess(pixi, container, tuning, sceneSeed);
+        const sceneFilters = applyTemperaScenePostProcess(pixi, container, tuning, sceneSeed, options.renderResolution);
         if (sceneFilters.length > 0) {
             // Keep full-scene shaders in viewport space even when visible bounds are smaller.
             container.filterArea = new pixi.Rectangle(0, 0, width, height);
@@ -599,7 +606,7 @@ export const buildTemperaScene = (
             strength: 0,
             quality: 1,
             kernelSize: 5,
-            resolution: resolveTemperaTransitionBlurResolution(tuning),
+            resolution: resolveTemperaTransitionBlurResolution(tuning, options.renderResolution),
         })
         : null;
     if (transitionBlurFilter) {

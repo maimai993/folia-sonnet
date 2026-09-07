@@ -22,7 +22,7 @@
 
 import type { TemperaTuning } from '../../../types';
 
-type TemperaResolutionTuning = Pick<TemperaTuning, 'postProcessTextureCompression' | 'textureResolution'>;
+type TemperaResolutionTuning = Pick<TemperaTuning, 'postProcessTextureCompression'>;
 
 /**
  * The resolution every filter on the scene container runs at.
@@ -42,15 +42,21 @@ type TemperaResolutionTuning = Pick<TemperaTuning, 'postProcessTextureCompressio
  * therefore keep identical pooled (pow2) sizes and one `vTextureCoord` indexes both. The rule
  * to preserve: never give the text layer's own filter a fixed resolution, and never mix fixed
  * resolutions inside one array expecting them to survive - the minimum wins.
+ *
+ * `renderResolution` is what the canvas is actually running at - `textureResolution` after
+ * `snapResolutionToTexturePool` - and not the setting. The two differ whenever the snap took a
+ * step down, and a pass pinned to the setting would then be asking for a surface *larger* than
+ * the one it is drawn onto, which is the waste the snap exists to remove.
  */
 export const resolveTemperaPassResolution = (
     tuning: TemperaResolutionTuning,
+    renderResolution: number,
 ): number | 'inherit' => (
-    tuning.postProcessTextureCompression ? compressedPassResolution(tuning) : 'inherit'
+    tuning.postProcessTextureCompression ? compressedPassResolution(renderResolution) : 'inherit'
 );
 
 /** Compression never *raises* the pass above the canvas it will be stretched onto. */
-const compressedPassResolution = (tuning: TemperaResolutionTuning) => Math.min(1, tuning.textureResolution);
+const compressedPassResolution = (renderResolution: number) => Math.min(1, renderResolution);
 
 /**
  * The transition blur has always run at half the pass around it - it is blurring anyway, and it
@@ -58,8 +64,11 @@ const compressedPassResolution = (tuning: TemperaResolutionTuning) => Math.min(1
  * no longer pinned to 1: a hard 0.5 would drop a 1.5x scene by three quarters the moment the
  * blur attaches, while its strength is still imperceptible.
  */
-export const resolveTemperaTransitionBlurResolution = (tuning: TemperaResolutionTuning) => (
-    (tuning.postProcessTextureCompression ? compressedPassResolution(tuning) : tuning.textureResolution) * 0.5
+export const resolveTemperaTransitionBlurResolution = (
+    tuning: TemperaResolutionTuning,
+    renderResolution: number,
+) => (
+    (tuning.postProcessTextureCompression ? compressedPassResolution(renderResolution) : renderResolution) * 0.5
 );
 
 export interface TemperaSceneFilterTarget {
