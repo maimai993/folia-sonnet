@@ -1,9 +1,10 @@
-import { motionValue, type MotionValue } from 'framer-motion';
+import { motionValue } from 'framer-motion';
 import { ArrowUpRight, Pause, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ProgressBar from '../../ProgressBar';
-import { PlayerState, type SongResult } from '../../../types';
+import { PlayerState } from '../../../types';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
+import { useLatticeTransport } from './LatticeTransportContext';
 import type { LatticeTile } from './latticeModel';
 import LatticeChromeTime from './LatticeChromeTime';
 import LatticeExtraControls from './LatticeExtraControls';
@@ -14,11 +15,6 @@ import './LatticeChrome.css';
 type LatticePlaybackControlsProps = {
     revealed: boolean;
     tile: LatticeTile;
-    currentSong: SongResult | null;
-    playerState: PlayerState;
-    currentTime: MotionValue<number>;
-    playbackDuration: number;
-    canTogglePlayback: boolean;
     onPlay: (tile: LatticeTile) => void;
     onTogglePlayback: () => void;
     onSeek: (time: number) => void;
@@ -31,17 +27,14 @@ const ignoreSeek = () => { };
 export default function LatticePlaybackControls({
     revealed,
     tile,
-    currentSong,
-    playerState,
-    currentTime,
-    playbackDuration,
-    canTogglePlayback,
     onPlay,
     onTogglePlayback,
     onSeek,
     onOpenPlayer,
 }: LatticePlaybackControlsProps) {
     const { t } = useTranslation();
+    // Subscribed here rather than threaded through every poster: only this card reads transport state.
+    const { currentSong, playerState, currentTime, playbackDuration, canTogglePlayback } = useLatticeTransport();
     const isCurrentSong = Boolean(
         currentSong && getPlaybackSongKey(currentSong) === getPlaybackSongKey(tile.song),
     );

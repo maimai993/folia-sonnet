@@ -1,4 +1,7 @@
+import { useMemo, useState } from 'react';
 import { LatticeTitle } from '../../src/components/app/lattice/LatticeTitle';
+import { TitleFitterContext } from '../../src/hooks/useSettledTitle';
+import { fitTitle } from '../../src/utils/fitSettledTitle';
 import type { ProbeDefinition } from './definition';
 import '../../src/components/app/lattice/Lattice.css';
 import '../../src/components/app/lattice/lyrics/LatticeLyrics.css';
@@ -26,13 +29,28 @@ function Poster({ title, expanded, metadata }: { title: string; expanded: boolea
 // Isolated mixed-font titles at the compact line spacing posters use. The third title of each
 // group runs past the three-line cap, which is where the fourth line used to leak.
 function LatticeTitleProbe() {
-    return <div className="lattice-root" style={{ color: 'white', background: '#243748', padding: 40, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-        {TITLES.map(title => <Poster key={title} title={title} expanded />)}
-        {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} />)}
-        {/* Lyric mode drops the same title to a single truncated line. */}
-        <Poster key="metadata" title={TITLES[2]} expanded metadata />
-        <style>{'.lattice-poster.is-expanded .lattice-poster-copy:not(.lattice-lyric-metadata) strong { font-size: 70.7625px; }'}</style>
-    </div>;
+    // Remounting is how a panned-away poster comes back: its own observers and state are gone, so
+    // only a cache outliving the component can spare the second measurement. The counter wraps the
+    // production fitter rather than replacing it, so what is measured stays unchanged.
+    const [generation, setGeneration] = useState(0);
+    const [fits, setFits] = useState(0);
+    const fitter = useMemo(() => (node: HTMLElement, text: string) => {
+        setFits(value => value + 1);
+        return fitTitle(node, text);
+    }, []);
+    return <TitleFitterContext.Provider value={fitter}>
+        <div className="lattice-root" data-fits={fits} style={{ color: 'white', background: '#243748', padding: 40 }}>
+            <button type="button" onClick={() => setGeneration(value => value + 1)}>Remount titles</button>
+            {/* Keeps the poster grid laid out exactly as before the remount control was added. */}
+            <div key={generation} data-generation={generation} style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                {TITLES.map(title => <Poster key={title} title={title} expanded />)}
+                {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} />)}
+                {/* Lyric mode drops the same title to a single truncated line. */}
+                <Poster key="metadata" title={TITLES[2]} expanded metadata />
+            </div>
+            <style>{'.lattice-poster.is-expanded .lattice-poster-copy:not(.lattice-lyric-metadata) strong { font-size: 70.7625px; }'}</style>
+        </div>
+    </TitleFitterContext.Provider>;
 }
 
 export default {

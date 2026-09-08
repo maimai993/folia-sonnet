@@ -22,7 +22,8 @@ during warmup. It uses the same StrictMode gallery as other probes.
   time-based ±5000 px / ±3500 px trajectory. Real bounds publication, virtualized
   mounting/unmounting, and visibility observers remain active.
 
-Each trial remounts the wall and its title caches, warms up for 2.2 s, runs the chosen
+Each trial gets its own title-fit cache instead of the process-wide one, so a warm cache from an
+earlier trial cannot make a later one look free. Each trial remounts the wall and its title caches, warms up for 2.2 s, runs the chosen
 motion duration, and measures another 1.4 s after motion stops. All six combinations
 run sequentially, and repeats rotate strategy order to blunt warm-cache and thermal
 ordering bias. Use the same queue size, viewport, duration, browser, and device.

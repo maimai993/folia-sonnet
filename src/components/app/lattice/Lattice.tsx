@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { MotionValue } from 'framer-motion';
 import { PlayerState, type SongResult, type LyricData } from '../../../types';
 import LatticePlaybackProvider, { type LatticePlaybackActions } from './LatticePlaybackProvider';
+import { LatticeTransportContext, type LatticeTransport } from './LatticeTransportContext';
 import PosterWall from './PosterWall';
 import LatticeFocusButton from './LatticeFocusButton';
 import { buildLatticeTiles, type LatticeTile } from './latticeModel';
@@ -92,7 +93,15 @@ export default function Lattice({
         onOpenPlayer,
     });
 
+    // Recomputed only when transport state actually moves, so the expanded chrome is the only
+    // subscriber that re-renders on a pause, a resume or a duration update.
+    const transport = useMemo<LatticeTransport>(
+        () => ({ currentSong, playerState, currentTime, playbackDuration, canTogglePlayback }),
+        [canTogglePlayback, currentSong, currentTime, playbackDuration, playerState],
+    );
+
     return (
+        <LatticeTransportContext.Provider value={transport}>
         <LatticePlaybackProvider actions={controls} currentSong={currentSong} queue={queue} lyrics={lyrics}
             currentTime={currentTime} duration={playbackDuration} onSeek={onSeek} isDaylight={isDaylight}>
         <LatticeLyricsProvider source={lyricSource} songKey={currentSong ? getPlaybackSongKey(currentSong) : ''}
@@ -108,10 +117,6 @@ export default function Lattice({
             <PosterWall
                 tiles={tiles}
                 currentSong={currentSong}
-                playerState={playerState}
-                currentTime={currentTime}
-                playbackDuration={playbackDuration}
-                canTogglePlayback={canTogglePlayback}
                 onPlay={wall.onPlay}
                 onTogglePlayback={wall.onTogglePlayback}
                 onSeek={wall.onSeek}
@@ -132,5 +137,6 @@ export default function Lattice({
         </section>
         </LatticeLyricsProvider>
         </LatticePlaybackProvider>
+        </LatticeTransportContext.Provider>
     );
 }

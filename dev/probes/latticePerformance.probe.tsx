@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { TitleFitterContext } from '../../src/hooks/useSettledTitle';
+import { TitleFitCacheContext, TitleFitterContext } from '../../src/hooks/useSettledTitle';
+import { createTitleFitCache } from '../../src/utils/settledTitleCache';
 import { emptyCounters, makeFitter, type Strategy } from './lattice-performance/strategies';
 import { runWorkload, type Job, type Result, type Scenario } from './lattice-performance/run';
 import { Wall } from './lattice-performance/Wall';
@@ -17,6 +18,8 @@ function Trial({ job, done, phase }: { job: Job; done: (result?: Result, error?:
     const host = useRef<HTMLDivElement>(null);
     const counters = useMemo(emptyCounters, []);
     const fitter = useMemo(() => makeFitter(job.strategy, counters), [job.strategy, counters]);
+    // Per-trial, so a warm shared cache cannot make a later trial look free.
+    const cache = useMemo(() => createTitleFitCache(), []);
     useEffect(() => {
         const controller = new AbortController();
         void document.fonts.ready.then(() => {
@@ -28,7 +31,9 @@ function Trial({ job, done, phase }: { job: Job; done: (result?: Result, error?:
         });
         return () => controller.abort();
     }, [job, counters, done, phase]);
-    return <TitleFitterContext.Provider value={fitter}><div className="lattice-perf-host" ref={host}><Wall count={job.count} /></div></TitleFitterContext.Provider>;
+    return <TitleFitterContext.Provider value={fitter}><TitleFitCacheContext.Provider value={cache}>
+        <div className="lattice-perf-host" ref={host}><Wall count={job.count} /></div>
+    </TitleFitCacheContext.Provider></TitleFitterContext.Provider>;
 }
 
 function LatticePerformanceProbe() {

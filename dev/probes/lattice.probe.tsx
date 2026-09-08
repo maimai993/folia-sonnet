@@ -24,6 +24,8 @@ function LatticeProbe() {
     const [toggles, setToggles] = useState(0);
     const [backs, setBacks] = useState(0);
     const [seek, setSeek] = useState(42);
+    const [playerState, setPlayerState] = useState(PlayerState.PLAYING);
+    const [playbackDuration, setPlaybackDuration] = useState(180);
     const isCurrentSongPosterVisible = useLatticeControlsStore(state => state.isCurrentSongPosterVisible);
     return <div style={{ height: '100vh' }} data-loop={loopMode} data-command={command} data-toggles={toggles} data-backs={backs} data-seek={seek}
         data-current-song-poster-visible={isCurrentSongPosterVisible}>
@@ -33,9 +35,9 @@ function LatticeProbe() {
                 toggleLoop: () => setLoopMode(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
                 shuffleQueue: () => setSongs(value => [...value].reverse()), toggleSongLike: () => {}, isSongLiked: false, isFmMode: false },
             invokeCommandById: setCommand, canInvokeCommandById: () => true,
-        }} queue={songs} currentSong={currentSong} playerState={PlayerState.PLAYING}
+        }} queue={songs} currentSong={currentSong} playerState={playerState}
             lyricSource={{ currentTime: time, currentLineIndex: -1, lines: [], theme: DEFAULT_THEME }} lyricKeywordColoringEnabled
-            currentTime={time} playbackDuration={180} canTogglePlayback isDaylight={false}
+            currentTime={time} playbackDuration={playbackDuration} canTogglePlayback isDaylight={false}
             onBack={() => setBacks(value => value + 1)} onOpenPlayer={() => {}} onPlaySong={song => setCurrentSong(song)}
             onTogglePlayback={() => setToggles(value => value + 1)} onSeek={setSeek} />
         <AppOverlays model={{
@@ -70,6 +72,8 @@ function LatticeProbe() {
             <button onClick={() => setSongs(value => value.filter(song => song.id !== '3'))}>Remove poster 3</button>
             <button onClick={() => { setSongs([]); setCurrentSong(null); }}>Clear queue</button>
             <button onClick={() => setSongs(queue)}>Restore queue</button>
+            <button onClick={() => setPlayerState(value => value === PlayerState.PLAYING ? PlayerState.PAUSED : PlayerState.PLAYING)}>Toggle player state</button>
+            <button onClick={() => setPlaybackDuration(value => value + 1)}>Bump duration</button>
         </div>
     </div>;
 }

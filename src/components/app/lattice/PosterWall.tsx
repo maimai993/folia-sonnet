@@ -1,6 +1,6 @@
-import { useReducedMotion, type MotionValue } from 'framer-motion';
+import { useReducedMotion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PlayerState, type SongResult } from '../../../types';
+import type { SongResult } from '../../../types';
 import {
     getLatticeGeometry,
     layoutExpandedBlock,
@@ -28,11 +28,8 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 
 type PosterWallProps = {
     tiles: LatticeTile[];
+    /** Only for playback focus and visibility tracking; the chrome reads transport state from context. */
     currentSong: SongResult | null;
-    playerState: PlayerState;
-    currentTime: MotionValue<number>;
-    playbackDuration: number;
-    canTogglePlayback: boolean;
     onPlay: (tile: LatticeTile) => void;
     onTogglePlayback: () => void;
     onSeek: (time: number) => void;
@@ -65,10 +62,6 @@ const getWorldBounds = (camera: LatticeCamera, viewport: { width: number; height
 export default function PosterWall({
     tiles,
     currentSong,
-    playerState,
-    currentTime,
-    playbackDuration,
-    canTogglePlayback,
     onPlay,
     onTogglePlayback,
     onSeek,
@@ -323,11 +316,6 @@ export default function PosterWall({
                             expanded={expanded}
                             reducedMotion={reducedMotion}
                             didDragRef={didDragRef}
-                            currentSong={currentSong}
-                            playerState={playerState}
-                            currentTime={currentTime}
-                            playbackDuration={playbackDuration}
-                            canTogglePlayback={canTogglePlayback}
                             onExpand={expandPoster}
                             onPlay={onPlay}
                             onTogglePlayback={onTogglePlayback}

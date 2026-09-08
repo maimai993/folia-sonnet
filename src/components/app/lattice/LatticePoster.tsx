@@ -1,9 +1,8 @@
 import { LatticeTitle } from './LatticeTitle';
 import { lazy, memo, Suspense } from 'react';
-import { motion, type MotionValue } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type PointerEvent } from 'react';
-import { PlayerState, type SongResult } from '../../../types';
 import type { ReflowTile } from './layout';
 import type { LatticeTile } from './latticeModel';
 import { useLatticeChromeDisclosure } from './useLatticeChromeDisclosure';
@@ -29,11 +28,6 @@ type LatticePosterProps = {
     expanded: boolean;
     reducedMotion: boolean | null;
     didDragRef: MutableRefObject<boolean>;
-    currentSong: SongResult | null;
-    playerState: PlayerState;
-    currentTime: MotionValue<number>;
-    playbackDuration: number;
-    canTogglePlayback: boolean;
     onExpand: (instanceId: string) => void;
     onPlay: (tile: LatticeTile) => void;
     onTogglePlayback: () => void;
@@ -57,7 +51,9 @@ const ENTRANCE_LIFT = 90;
 
 // `tile` and `rect` are rebuilt by the wall's own memos whenever the queue, the selection or the
 // camera moves, so comparing them by identity would re-render every poster for values that did not
-// change. Every other prop is a scalar, a ref, a MotionValue or a permanently-identified callback.
+// change. Every other prop is a scalar, a ref or a permanently-identified callback. Transport state
+// is deliberately absent: it reaches the expanded chrome through `LatticeTransportContext`, because
+// as a prop it changed on every pause and resume and no comparison here could absorb that.
 const sameRect = (a: LatticePosterProps['rect'], b: LatticePosterProps['rect']) => (
     a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 );
@@ -91,11 +87,6 @@ function LatticePoster({
     expanded,
     reducedMotion,
     didDragRef,
-    currentSong,
-    playerState,
-    currentTime,
-    playbackDuration,
-    canTogglePlayback,
     onExpand,
     onPlay,
     onTogglePlayback,
@@ -237,11 +228,6 @@ function LatticePoster({
                     <LatticePlaybackControls
                         revealed={chrome.revealed}
                         tile={tile}
-                        currentSong={currentSong}
-                        playerState={playerState}
-                        currentTime={currentTime}
-                        playbackDuration={playbackDuration}
-                        canTogglePlayback={canTogglePlayback}
                         onPlay={onPlay}
                         onTogglePlayback={onTogglePlayback}
                         onSeek={onSeek}

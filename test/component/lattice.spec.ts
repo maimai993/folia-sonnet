@@ -475,3 +475,23 @@ test('expanded chrome uses the configured main-bar slot to open volume', async (
     await expect(wall.locator('[data-command]')).toHaveAttribute('data-command', 'playback-volume');
     await expect(wall.locator('.lattice-chrome [data-action=lyrics-timeline]')).toHaveCount(0);
 });
+
+test('pause, resume and duration updates re-render no poster', async ({ mount, page }) => {
+    const wall = await mount('lattice');
+    await settle(page);
+    const transport = wall.locator('.lattice-poster.is-expanded .lattice-transport-button');
+    const playing = await transport.getAttribute('aria-label');
+    await expect(wall.locator('.lattice-poster')).not.toHaveCount(0);
+
+    // Armed after the wall has settled so the opening wave's own renders are not counted.
+    await page.evaluate(() => { (window as unknown as { __renderCounts: Record<string, number> }).__renderCounts = {}; });
+    await wall.getByRole('button', { name: 'Toggle player state' }).click();
+    await wall.getByRole('button', { name: 'Bump duration' }).click();
+
+    // The expanded card's chrome still follows the transport...
+    await expect(transport).not.toHaveAttribute('aria-label', playing!);
+    const counts = () => page.evaluate(() => (window as unknown as { __renderCounts: Record<string, number> }).__renderCounts);
+    // ...and the update reached it through the wall, not around it.
+    expect((await counts()).Lattice ?? 0).toBeGreaterThan(0);
+    expect((await counts()).LatticePoster ?? 0).toBe(0);
+});

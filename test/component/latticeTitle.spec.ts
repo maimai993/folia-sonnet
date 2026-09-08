@@ -46,3 +46,24 @@ test('waits through continuous reflow before fitting again', async ({ mount, pag
     await page.waitForTimeout(250);
     await expect(title).toHaveAttribute('data-title-settled', 'true');
 });
+
+test('a remounted title reuses the earlier measurement instead of fitting again', async ({ mount, page }) => {
+    const component = await mount('latticeTitle');
+    const settled = component.locator('.lattice-poster-copy strong[data-title-settled]');
+    const root = component.locator('.lattice-root');
+    // Only the posters the observer sees ever fit, so the baseline is measured, not assumed.
+    await expect(settled).not.toHaveCount(0);
+    await page.waitForTimeout(400);
+    const before = await settled.count();
+    const fits = await root.getAttribute('data-fits');
+    expect(Number(fits)).toBeGreaterThan(0);
+
+    // Standing in for a poster that panned off screen and came back: the component, its observers
+    // and its state are gone, so only a cache outliving them can spare the second measurement.
+    await component.getByRole('button', { name: 'Remount titles' }).click();
+    await expect(component.locator('[data-generation]')).toHaveAttribute('data-generation', '1');
+    await expect(settled).toHaveCount(before);
+    // Past the 200 ms settle timer, so a late fit cannot slip in behind the assertion.
+    await page.waitForTimeout(400);
+    await expect(root).toHaveAttribute('data-fits', fits!);
+});
