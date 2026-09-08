@@ -2276,6 +2276,33 @@ export default {
         "title": "Monet 可隐藏频谱",
         "description": "Monet 视觉器新增频谱显示开关，可只保留歌词与封面画面。"
       }
+    },
+    "v0_7_5": {
+      "intro": "0.7.5 带来可自选的播放入口、更完整的命令面板操作，以及更可靠的桌面端诊断与更新体验。",
+      "playbackEntryChoice": {
+        "title": "选择播放后进入的视图",
+        "description": "点击播放时可选择进入可视化播放器或 Lattice 队列拼贴。更新说明结束后 Folia 会询问一次，此后仍可在界面设置中修改。由于 Lattice 不支持私人 FM，启动私人 FM 时仍会进入标准播放器。"
+      },
+      "commandPaletteGridActions": {
+        "title": "命令面板接管网格操作",
+        "description": "通过键盘调用当前网格支持的排序、面板开关、重新扫描、歌曲信息整理、歌单导出和编辑操作。设置命令可直达具体小节，网格筛选还支持用 --play 或 --add 播放、追加筛选结果。"
+      },
+      "localFolderRecovery": {
+        "title": "忽略并恢复本地子目录",
+        "description": "从已导入的本地音乐库移除子目录后，后续扫描会继续忽略它，同时保留根目录中的其他内容。目录树会留下可恢复入口，需要时可取消忽略并立即重新扫描。"
+      },
+      "neteaseScrobble": {
+        "title": "可选的网易云听歌打卡",
+        "description": "登录网易云后，可选择在在线网易云歌曲真实播放满 30 秒时上报一次听歌记录。本地文件、云盘歌曲和其他平台一律不上报；这是会写入真实账号的可选功能，默认不会自行开启。"
+      },
+      "desktopReliability": {
+        "title": "更清晰的桌面更新与崩溃报告",
+        "description": "macOS 和 Linux 现在也能检查新版本，并引导下载完整安装包或通过 AUR 升级；Windows 继续支持自动更新。Folia 崩溃时会保存诊断日志并可打开所在目录，Windows 卸载程序也可按需清除用户数据。"
+      },
+      "visualizerRefinements": {
+        "title": "更轻、更清晰的视觉器",
+        "description": "Tempera 与 Sonnet 会根据 GPU 纹理边界动态调整渲染分辨率，减少不必要的显存占用；Monet 与 Lattice 的标题不再容易裁切，底部字幕也可关闭非翻译后续歌词的模糊效果。"
+      }
     }
   },
   "export": {

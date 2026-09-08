@@ -2211,6 +2211,33 @@ export default {
         "title": "Sembunyikan Spektrum Monet",
         "description": "Visualizer Monet kini dapat menyembunyikan spektrum audionya, menyisakan lirik dan sampul saja."
       }
+    },
+    "v0_7_5": {
+      "intro": "Versi 0.7.5 memberi Anda kendali lebih besar atas tampilan tujuan pemutaran, menghadirkan tindakan kisi dan pengaturan ke panel perintah, serta meningkatkan keandalan desktop.",
+      "playbackEntryChoice": {
+        "title": "Pilih Tampilan Tujuan Pemutaran",
+        "description": "Pilih apakah tombol Putar membuka pemutar visualizer atau kolase antrean Lattice. Folia menanyakannya sekali setelah catatan rilis, dan pilihan tetap dapat diubah di pengaturan Antarmuka. Personal FM tetap membuka pemutar standar karena tidak dapat berjalan di Lattice."
+      },
+      "commandPaletteGridActions": {
+        "title": "Tindakan Kisi di Panel Perintah",
+        "description": "Jalankan tindakan yang tersedia pada kisi saat ini—pengurutan, panel, pemindaian ulang, perapian metadata, ekspor playlist, dan pengeditan—dengan papan ketik. Perintah pengaturan kini langsung menuju bagian tertentu, sedangkan --play atau --add dapat menjalankan tindakan pada lagu hasil filter."
+      },
+      "localFolderRecovery": {
+        "title": "Abaikan dan Pulihkan Subfolder Lokal",
+        "description": "Menghapus subfolder dari pustaka lokal yang diimpor kini membuatnya tetap diabaikan pada pemindaian berikutnya tanpa menghapus seluruh folder induk. Pohon folder menyimpan entri yang dapat dipulihkan agar subfolder bisa dikembalikan dan dipindai ulang."
+      },
+      "neteaseScrobble": {
+        "title": "Laporan Pemutaran NetEase Opsional",
+        "description": "Pengguna NetEase yang sudah masuk dapat memilih untuk melaporkan lagu NetEase online setelah benar-benar diputar setidaknya 30 detik. Berkas lokal, lagu cloud drive, dan penyedia lain tidak pernah dilaporkan; fitur yang menulis ke akun ini tetap mati sampai Anda mengaktifkannya."
+      },
+      "desktopReliability": {
+        "title": "Pembaruan dan Laporan Crash yang Lebih Jelas",
+        "description": "Versi macOS dan Linux kini dapat memeriksa rilis baru lalu membuka installer lengkap atau AUR, sedangkan Windows tetap mendukung pembaruan otomatis. Saat Folia crash, log diagnostik disimpan dan foldernya dapat dibuka; uninstaller Windows juga dapat menghapus data pengguna jika diminta."
+      },
+      "visualizerRefinements": {
+        "title": "Visualizer yang Lebih Ringan dan Jelas",
+        "description": "Tempera dan Sonnet kini menyesuaikan resolusi render di sekitar batas tekstur GPU untuk mengurangi penggunaan memori yang tidak perlu. Judul Monet dan Lattice tidak mudah terpotong, dan subtitle bawah dapat menampilkan lirik non-terjemahan berikutnya tanpa efek buram."
+      }
     }
   },
   "export": {

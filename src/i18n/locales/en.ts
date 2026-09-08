@@ -2277,6 +2277,33 @@ export default {
         "title": "Hide the Monet Spectrum",
         "description": "The Monet visualizer can now hide its audio spectrum, leaving just the lyrics and artwork."
       }
+    },
+    "v0_7_5": {
+      "intro": "Version 0.7.5 gives you more control over where playback opens, brings grid and settings actions into the command palette, and improves desktop reliability.",
+      "playbackEntryChoice": {
+        "title": "Choose Where Playback Opens",
+        "description": "Choose whether pressing Play opens the visualizer player or the Lattice queue collage. Folia asks once after the release notes, and the choice remains available in Interface settings. Personal FM still opens the standard player because Lattice cannot host it."
+      },
+      "commandPaletteGridActions": {
+        "title": "Grid Actions in the Command Palette",
+        "description": "Run the actions available on the current grid—sorting, panels, rescans, metadata cleanup, playlist export, and editing—from the keyboard. Settings commands now jump to exact sections, and --play or --add can act on filtered songs."
+      },
+      "localFolderRecovery": {
+        "title": "Ignore and Restore Local Subfolders",
+        "description": "Removing a subfolder from an imported local library now keeps it ignored on later scans without removing the rest of the root folder. The folder tree keeps a recoverable entry so you can restore and rescan it when needed."
+      },
+      "neteaseScrobble": {
+        "title": "Optional NetEase Listening Reports",
+        "description": "Signed-in NetEase users can opt in to report an online NetEase track after at least 30 seconds of real playback. Local files, cloud-drive tracks, and other providers are never reported; this account-writing feature remains off unless you enable it."
+      },
+      "desktopReliability": {
+        "title": "Clearer Desktop Updates and Crash Reports",
+        "description": "macOS and Linux builds can now check for new versions and lead you to a full installer or AUR, while Windows keeps automatic updating. When Folia crashes it saves a diagnostic log and can open its folder; the Windows uninstaller can also remove user data on request."
+      },
+      "visualizerRefinements": {
+        "title": "Lighter, Clearer Visualizers",
+        "description": "Tempera and Sonnet now adjust render resolution around GPU texture boundaries to reduce avoidable memory use. Monet and Lattice titles avoid clipping, and the bottom subtitle can show upcoming non-translation lyrics without blur."
+      }
     }
   },
   "export": {
