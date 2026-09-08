@@ -59,7 +59,9 @@
 - `dev/probes/globalLyricOffsetRuler.probe.tsx`
 - `dev/probes/gridPanelToggle.probe.tsx`
 - `dev/probes/lattice.probe.tsx`
+- `dev/probes/latticePerformance.probe.tsx`
 - `dev/probes/latticeTitle.probe.tsx`
+- `dev/probes/latticeTitleExpansion.probe.tsx`
 - `dev/probes/localFolderIgnore.probe.tsx`
 - `dev/probes/lyricFilterModal.probe.tsx`
 - `dev/probes/lyricSegmentationSurface.probe.tsx`
