@@ -59,8 +59,9 @@ export const matchesCommandPlatform = (platform?: CommandPlatform[]): boolean =>
 
 /**
  * Whether the palette's surroundings are what a command declared it needs: the unified panel only
- * exists on the player, and a filter only exists where something registered one. They grey out
- * elsewhere rather than executing into nothing.
+ * exists on the player, the lattice commands need the lattice on screen, a filter only exists where
+ * something registered one, and the grid actions only exist while a track grid is on screen. They
+ * grey out elsewhere rather than executing into nothing.
  *
  * An absent context means "nobody is asking about a live app" (the registry contract test, the
  * pinned-command picker), and every one of those callers wants the full list — same convention as
@@ -71,8 +72,16 @@ export const matchesCommandScope = (scope: CommandScope | undefined, context?: C
         return true;
     }
 
-    if (scope === 'lattice') return context.scope.view === 'lattice';
-    return scope === 'player-surface'
-        ? context.scope.view === 'player'
-        : context.scope.filter !== null;
+    switch (scope) {
+        case 'player-surface':
+            return context.scope.view === 'player';
+        case 'lattice':
+            return context.scope.view === 'lattice';
+        case 'filtering-surface':
+            return context.scope.filter !== null;
+        case 'grid-surface':
+            return context.scope.grid !== null;
+        default:
+            return true;
+    }
 };

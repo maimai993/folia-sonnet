@@ -149,6 +149,7 @@ export const buildSettingsDialogModel = ({
         initialTab: state.initialTab,
         initialSubview: state.initialSubview ?? null,
         initialVisualizerSection: state.initialVisualizerSection ?? null,
+        initialAnchor: state.initialAnchor ?? null,
         onClose: closeSettings,
         onToggleStageMode: async (enabled) => {
             try {

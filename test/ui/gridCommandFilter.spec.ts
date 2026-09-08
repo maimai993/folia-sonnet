@@ -211,3 +211,120 @@ test('gives the keyboard back when the grid is left', async ({ page }) => {
     // 首页那层没有注册筛选，单字符不该再把框拉起来。
     await expect(filterBox(page)).toBeHidden();
 });
+
+/** 队列与当前歌曲直接读 store：这几条验的是 flag 真的落到了动作上。 */
+const playbackSnapshot = (page: Page) => page.evaluate(async () => {
+    const storeModulePath = '/src/stores/usePlaybackStore.ts';
+    const { usePlaybackStore } = await import(storeModulePath);
+    const state = usePlaybackStore.getState();
+    return { queueLength: state.playQueue.length, currentSongName: state.currentSong?.name ?? null };
+});
+
+test('offers the two flags once -- is typed, and names what each would do', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 'm');
+
+    await filterInput(page).fill('--');
+
+    const hints = page.getByTestId('command-palette-syntax-hints');
+    await expect(hints).toBeVisible();
+    await expect(hints.locator('[data-syntax-flag="play"]')).toBeVisible();
+    await expect(hints.locator('[data-syntax-flag="add"]')).toBeVisible();
+
+    // 药丸里没有预览行也没有匹配列表，所以这一行是「回车会做什么、对几首做」的唯一说明——
+    // 用的就是左侧面板那两个按钮上的原话。
+    await filterInput(page).fill('midnight --play');
+    await expect(page.getByTestId('command-palette-filter-action')).toHaveText('Play 1 songs');
+
+    await filterInput(page).fill('midnight --add');
+    await expect(page.getByTestId('command-palette-filter-action')).toHaveText('Add 1 songs to queue');
+});
+
+test('--add appends the filtered songs and drops the flag, leaving the filter up', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 'm');
+
+    await filterInput(page).fill('midnight --add');
+    await expect(trackCard(page).first()).toBeVisible();
+    await page.keyboard.press('Enter');
+
+    await expect.poll(async () => (await playbackSnapshot(page)).queueLength).toBeGreaterThan(0);
+    // flag 被摘掉，筛选词留下——面板里那两个按钮也不会关掉自己，而 --add 值得再筛一次接着用。
+    await expect(filterInput(page)).toHaveValue('midnight');
+    await expect(filterBox(page)).toBeVisible();
+});
+
+test('--play takes the play path, not the queue path', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 'm');
+
+    await filterInput(page).fill('midnight --play');
+    await expect(trackCard(page).first()).toBeVisible();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+
+    // 固件里的 mp3 是假音频，playSong 取不到可播地址就停在那里——「真的响了」在这个环境里
+    // 观察不到。能观察到、也正是这里要盯的，是它**没有**走成追加：如果 --play 接错到
+    // onAddAllToQueue 上，队列会长出一首来。
+    expect((await playbackSnapshot(page)).queueLength).toBe(0);
+    await expect(filterInput(page)).toHaveValue('midnight');
+});
+
+test('a filter with no flag never reaches the grid with the flag token in it', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 'm');
+
+    // 半截 flag 不是动作，但它也不能被当成筛选词——否则输到一半网格就空了。
+    await filterInput(page).fill('--pl');
+    await expect(trackCard(page).first()).toBeVisible();
+});
+
+/** 根命令列表（遮罩态），与筛选药丸是两个不同的呈现。 */
+const openRootPalette = async (page: Page) => {
+    await expect.poll(async () => {
+        await page.keyboard.press('ControlOrMeta+k');
+        return page.getByTestId('command-palette-panel').count();
+    }).toBeGreaterThan(0);
+};
+
+test('offers the grid commands only where a track grid is on screen', async ({ page }) => {
+    await installBaseState(page, { neteaseMode: 'guest', localImportFixture });
+    await mockNeteaseApi(page, 'guest');
+    await openApp(page);
+
+    await page.getByRole('button', { name: 'Folder' }).last().click();
+    await page.getByRole('button', { name: 'Import Folder' }).last().click();
+    await expect(page.getByText('All Songs').first()).toBeVisible();
+
+    // 合集这一层还没有网格注册自己，排序这类命令连匹配都不该产生。
+    const panel = page.getByTestId('command-palette-panel');
+    await openRootPalette(page);
+    await panel.getByRole('combobox').fill('sort by file name');
+    // 队列在两层都可用，用它当锚：它出现了才说明排序确实按新查询跑过一遍。
+    await expect(panel.getByText('Queue', { exact: true }).first()).toBeVisible();
+    await expect(panel.getByText('Sort by file name', { exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+
+    // 进到曲目网格里，同一条查询就该命中——本地「所有歌曲」是支持排序的分支。
+    await page.getByRole('heading', { name: 'All Songs' }).first().click();
+    await expect(trackCard(page).first()).toBeVisible();
+
+    await openRootPalette(page);
+    await panel.getByRole('combobox').fill('sort by file name');
+    await expect(panel.getByText('Sort by file name', { exact: true }).first()).toBeVisible();
+});
+
+
+test('runs a grid command against the grid it was offered on', async ({ page }) => {
+    await openTrackGrid(page);
+
+    const panel = page.getByTestId('command-palette-panel');
+    await openRootPalette(page);
+    await panel.getByRole('combobox').fill('reverse sort order');
+    await panel.getByText('Reverse sort order', { exact: true }).first().click();
+
+    // 方向存在 localStorage 里，所以命令真的打到网格自己的 setter 上，而不是只关掉了面板。
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('local_track_sort_direction'))).toBe('desc');
+    await expect(panel).toHaveCount(0);
+});

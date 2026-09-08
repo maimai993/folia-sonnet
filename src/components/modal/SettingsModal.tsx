@@ -27,7 +27,7 @@ import { AiHelpPromptModal } from './AiHelpPromptModal';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
-import { type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
+import { type SettingsModalState, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
 import SettingsSidebarChips from './settings/navigation/SettingsSidebarChips';
 import SettingsSidebarWide from './settings/navigation/SettingsSidebarWide';
@@ -35,6 +35,7 @@ import SettingsSectionHeader from './settings/SettingsSectionHeader';
 import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
+import { useSettingsInitialAnchor } from '../../hooks/useSettingsInitialAnchor';
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 import { getWebAiProvider } from '../../services/runtimeConfig';
@@ -67,6 +68,8 @@ interface SettingsModalProps {
     initialTab?: 'help' | 'options';
     initialSubview?: SettingsSubviewId | null;
     initialVisualizerSection?: VisualizerSettingsSection | null;
+    /** A section inside the subview to land on, rather than its top. */
+    initialAnchor?: SettingsModalState['initialAnchor'];
     theme?: Theme;
     bgMode: ThemeMode;
     onApplyDefaultTheme: () => void;
@@ -127,6 +130,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     initialTab = 'help',
     initialSubview = null,
     initialVisualizerSection = null,
+    initialAnchor = null,
     theme,
     bgMode,
     onApplyDefaultTheme,
@@ -1202,6 +1206,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             contentScrollRef.current.scrollTop = 0;
         }
     }, [activeSettingsSection]);
+
+    // A command can ask for one section inside the page, not just the page itself; the scroll waits
+    // for that section to register, which is the only moment it exists to scroll to. It runs after
+    // the reset above on purpose — that reset fires on the same commit the section changes on, and
+    // a scrollTop write would abort the smooth scroll this starts.
+    useSettingsInitialAnchor(initialAnchor, settingsAnchors, scrollToAnchor);
+
 
     return (
         <motion.div

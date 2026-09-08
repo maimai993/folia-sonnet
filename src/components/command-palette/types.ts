@@ -7,7 +7,9 @@ import type { LyricSegmentationRecord, LyricSegmentationSource } from '../../typ
 import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
-import { type SettingsModalInitialTab, type SettingsSubviewId } from '../../stores/useSettingsModalStore';
+import type { GridSurfaceHandle } from '../../types/gridCommandSurface';
+import { type SettingsModalInitialTab, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
+import type { SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
@@ -21,7 +23,7 @@ import type { CommandSyntaxSpec } from './syntax/types';
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
 
-export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel' | 'playback' | 'visualizer';
+export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel' | 'playback' | 'visualizer' | 'grid';
 
 /**
  * What a command needs around it to mean anything.
@@ -32,7 +34,7 @@ export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel'
  * only offer a global shortcut a command that works from anywhere, and anything else that asks
  * "would this be reachable if I were somewhere else".
  */
-export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice';
+export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice' | 'grid-surface';
 
 export type CommandPaletteSearchSource = SearchSource;
 
@@ -182,7 +184,12 @@ export type CommandPalettePanelContext = {
 };
 
 export type CommandPaletteSettingsContext = {
-    openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null) => void;
+    openSettings: (
+        initialTab?: SettingsModalInitialTab,
+        initialSubview?: SettingsSubviewId | null,
+        initialVisualizerSection?: VisualizerSettingsSection | null,
+        initialAnchorId?: SettingsAnchorId | null,
+    ) => void;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     toggleTransparentBackground: () => void;
@@ -308,6 +315,11 @@ export type CommandPaletteScopeContext = {
      * writes through it; every other command ignores it.
      */
     filter: CommandFilterHandle | null;
+    /**
+     * The track grid on screen, if any. Carries what only it knows — its filtered set, its sort
+     * choice, its two panels — plus the collection maintenance its own branch allows.
+     */
+    grid: GridSurfaceHandle | null;
 };
 
 // Namespaces mirror CommandPaletteGroup one-to-one (plus `shared` and `scope`), so a command's

@@ -1,5 +1,4 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +6,7 @@ import type { Theme } from '../../types';
 import type { CommandPaletteContext, CommandPaletteMatch, CommandPaletteCommand } from './types';
 import type { CommandPaletteSurface, CommandSurfaceRenderArgs } from './surfaces/types';
 import CommandPaletteSyntaxHints from './CommandPaletteSyntaxHints';
+import CommandPaletteInlineFrame from './CommandPaletteInlineFrame';
 import { parseCommandQuery } from './syntax/parse';
 import { buildFlagSuggestions, type SyntaxSuggestion } from './syntax/suggest';
 import { getCommandDescription, getCommandTitle } from './commandText';
@@ -15,7 +15,8 @@ import { isTextEntryTarget } from './useCommandPalette';
 import PinnedCommandRow from './PinnedCommandRow';
 import CommandPaletteAllCommandsList from './CommandPaletteAllCommandsList';
 import { setIsCommandFilterOpen } from '../../stores/useAppViewStore';
-import { gridSearchPanelMotion } from '../shared/gridSearchPanelMotion';
+import { isGridFilterSyntaxAvailable, resolveGridFilterAction } from './gridFilterQuery';
+import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -72,6 +73,7 @@ const groupLabelKey: Record<string, string> = {
     panel: 'commandPalette.groupPanel',
     playback: 'commandPalette.groupPlayback',
     visualizer: 'commandPalette.groupVisualizer',
+    grid: 'commandPalette.groupGrid',
 };
 
 const IDLE_PLACEHOLDER_COUNT = 5;
@@ -130,16 +132,29 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
     // Generic `--` completions for any command that declares flags. Built from the live query, not
     // the debounced one: a completion list that lags the caret by 120ms feels broken.
-    const syntaxSuggestions = useMemo<SyntaxSuggestion[]>(() => (
-        activeCommand?.syntax
-            ? buildFlagSuggestions(activeCommand.syntax, parseCommandQuery(activeCommand.syntax, query))
-            : []
-    ), [activeCommand, query]);
+    const syntaxSuggestions = useMemo<SyntaxSuggestion[]>(() => {
+        if (!activeCommand?.syntax) {
+            return [];
+        }
+        // The filter's flags run the track grid's own buttons; the other filtering surfaces have
+        // none. Withheld here rather than in the strip, so the keyboard does not silently complete
+        // a flag that is not on screen.
+        if (activeCommand.id === FILTER_VIEW_COMMAND_ID && !isGridFilterSyntaxAvailable(context)) {
+            return [];
+        }
+        return buildFlagSuggestions(activeCommand.syntax, parseCommandQuery(activeCommand.syntax, query));
+    }, [activeCommand, context, query]);
     const [syntaxIndex, setSyntaxIndex] = useState(0);
     // The list changes as the draft is typed, so the highlight has to come back into range.
     useEffect(() => {
         setSyntaxIndex(index => (index < syntaxSuggestions.length ? index : 0));
     }, [syntaxSuggestions]);
+
+    // What `--play` / `--add` would do, for the inline box that has no preview row to say so.
+    // Null whenever no flag is typed, which is also every command that is not the filter.
+    const inlineAction = useMemo(() => (
+        surface?.presentation === 'inline' ? resolveGridFilterAction(query, context) : null
+    ), [context, query, surface]);
 
     const acceptSyntaxSuggestion = useCallback((suggestion: SyntaxSuggestion) => {
         onQueryCommit(suggestion.replacement);
@@ -337,42 +352,24 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     }, [acceptSyntaxSuggestion, activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onActiveCommandChange, onActiveIndexChange, onClose, onExecuteActive, onQueryChange, query, surface, surfaceArgs, syntaxIndex, syntaxSuggestions]);
 
     if (filterAnchor) {
-        // Portalled into the host's own element, so the box keeps the position that host gave it
-        // rather than a viewport offset guessed here. Same entrance the grids animated with, too.
-        return createPortal(
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        {...gridSearchPanelMotion}
-                        data-folia-keyboard-window="true"
-                        data-testid="command-palette-filter"
-                        className="absolute top-24 left-1/2 z-[85] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 pointer-events-auto"
-                    >
-                        <div className="relative rounded-full border shadow-2xl backdrop-blur-2xl theme-glass-panel">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 w-4 h-4" />
-                            {renderQueryInput('w-full rounded-full bg-transparent py-3 pl-11 pr-11 text-sm font-medium outline-none placeholder:text-current placeholder:opacity-40')}
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    // Clear first, close second — the grids' own button did the
-                                    // same, and it is the only way to undo a filter with the mouse.
-                                    if (query) {
-                                        onQueryCommit('');
-                                        window.requestAnimationFrame(() => inputRef.current?.focus());
-                                        return;
-                                    }
-                                    onClose();
-                                }}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-45 transition-opacity hover:opacity-90 cursor-pointer"
-                                aria-label={query ? t('ui.clear') : t('ui.close')}
-                            >
-                                <X size={15} />
-                            </button>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>,
-            filterAnchor,
+        return (
+            <CommandPaletteInlineFrame
+                anchor={filterAnchor}
+                isOpen={isOpen}
+                query={query}
+                renderInput={renderQueryInput}
+                onQueryCommit={onQueryCommit}
+                onClose={onClose}
+                focusInput={() => inputRef.current?.focus()}
+                suggestions={syntaxSuggestions}
+                syntaxIndex={syntaxIndex}
+                onAcceptSuggestion={acceptSyntaxSuggestion}
+                onHoverSuggestion={setSyntaxIndex}
+                pendingAction={inlineAction}
+                isDaylight={isDaylight}
+                theme={theme}
+                t={t}
+            />
         );
     }
 

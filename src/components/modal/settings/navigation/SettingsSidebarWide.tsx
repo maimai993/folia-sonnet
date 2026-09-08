@@ -43,6 +43,9 @@ export const SettingsSidebarWide: React.FC<SettingsSidebarWideProps> = ({
                         key={anchor.id}
                         type="button"
                         title={anchor.label}
+                        // The highlight is colour and opacity only; assistive tech and tests need
+                        // the state said out loud.
+                        aria-current={isActive ? 'true' : undefined}
                         onClick={() => onSelectAnchor(anchor.id)}
                         className={`relative rounded-lg py-1.5 pl-3 pr-2 text-left text-xs transition-colors ${isActive ? (isDaylight ? 'bg-black/[0.04]' : 'bg-white/[0.06]') : (isDaylight ? 'hover:bg-black/[0.025]' : 'hover:bg-white/[0.035]')}`}
                         style={{ color: 'var(--text-primary)', opacity: isActive ? 0.95 : 0.55 }}

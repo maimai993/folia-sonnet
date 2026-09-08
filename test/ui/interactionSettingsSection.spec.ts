@@ -98,3 +98,35 @@ test('clears the binding', async ({ page }) => {
     await expect(shortcutSlot(page)).toHaveText('Not set');
     expect(await storedShortcut(page)).toBeNull();
 });
+
+test('lands on the section a command names, not the top of its page', async ({ page }) => {
+    await page.addInitScript(([version, guideKey]) => {
+        localStorage.clear();
+        localStorage.setItem('i18nextLng', 'en');
+        localStorage.setItem('static_mode', 'true');
+        localStorage.setItem(guideKey, version);
+    }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY]);
+    await page.route('**/__mock_netease__/**', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/');
+
+    const openAppearance = (anchorId: string | null) => page.evaluate(async (anchor) => {
+        const storeModulePath = '/src/stores/useSettingsModalStore.ts';
+        const { useSettingsModalStore } = await import(storeModulePath);
+        useSettingsModalStore.getState().openSettings('options', 'appearance', null, anchor);
+    }, anchorId);
+
+    const tocEntry = (label: string) => page.getByRole('button', { name: label, exact: true });
+
+    // 外观页足够长，末尾那一组不滚是够不着的——先确认这一点，否则下面那条断言只是在
+    // 陈述页面本来就短。
+    await openAppearance(null);
+    await expect(page.getByRole('heading', { name: 'Theme Presets', exact: true }).first()).toBeVisible();
+    await expect(tocEntry('Backup & Import')).not.toHaveAttribute('aria-current', 'true');
+
+    // 这正是一条锚点级设置命令的调用形状：页 + 页内分组。
+    await openAppearance('importExportTitle');
+    await expect(tocEntry('Backup & Import')).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByRole('heading', { name: 'Backup & Import', exact: true }).first()).toBeInViewport();
+});

@@ -11,6 +11,7 @@ import i18n from '../i18n/config';
 import { normalizePinnedCommandIds, readPinnedCommandIds, writePinnedCommandIds, type PinnedCommandIds } from '../components/command-palette/pinnedCommandPreferences';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
+import type { SettingsAnchorId } from '../components/modal/settings/navigation/settingsAnchorModel';
 
 export type SettingsModalInitialTab = 'help' | 'options';
 
@@ -23,6 +24,12 @@ export type SettingsModalState = {
     initialTab: SettingsModalInitialTab;
     initialSubview?: SettingsSubviewId | null;
     initialVisualizerSection?: VisualizerSettingsSection | null;
+    /**
+     * A section inside the subview to land on, rather than its top. The sidebar table of contents
+     * already knows how to scroll to one; this is the same destination, reachable from outside.
+     * Carries a seq so that asking for the same anchor twice still scrolls the second time.
+     */
+    initialAnchor?: { id: SettingsAnchorId; seq: number } | null;
 };
 
 const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
@@ -37,7 +44,12 @@ export type SettingsModalUiState = {
     setLastSeenGuideVersion: (version: string) => void;
     setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setIsSubSettingsViewOpen: (open: boolean) => void;
-    openSettings: (initialTab?: SettingsModalInitialTab, initialSubview?: SettingsSubviewId | null, initialVisualizerSection?: VisualizerSettingsSection | null) => void;
+    openSettings: (
+        initialTab?: SettingsModalInitialTab,
+        initialSubview?: SettingsSubviewId | null,
+        initialVisualizerSection?: VisualizerSettingsSection | null,
+        initialAnchorId?: SettingsAnchorId | null,
+    ) => void;
     closeSettings: () => void;
     handleSetAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void>;
     setPinnedCommandId: (slotIndex: number, commandId: string | null) => void;
@@ -52,6 +64,7 @@ export const useSettingsModalStore = create<SettingsModalUiState>((set, get) => 
         initialTab: 'help',
         initialSubview: null,
         initialVisualizerSection: null,
+        initialAnchor: null,
     },
     lastSeenGuideVersion: typeof window !== 'undefined' ? localStorage.getItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY) : null,
     isUserGuideModalOpen: false,
@@ -63,12 +76,15 @@ export const useSettingsModalStore = create<SettingsModalUiState>((set, get) => 
     },
     setIsUserGuideModalOpen: (isOpen) => set({ isUserGuideModalOpen: isOpen }),
     setIsSubSettingsViewOpen: (open) => set({ isSubSettingsViewOpen: open }),
-    openSettings: (initialTab = 'help', initialSubview = null, initialVisualizerSection = null) => set({
+    openSettings: (initialTab = 'help', initialSubview = null, initialVisualizerSection = null, initialAnchorId = null) => set({
         settingsModalState: {
             isOpen: true,
             initialTab,
             initialSubview,
             initialVisualizerSection,
+            initialAnchor: initialAnchorId
+                ? { id: initialAnchorId, seq: (get().settingsModalState.initialAnchor?.seq ?? 0) + 1 }
+                : null,
         },
     }),
     closeSettings: () => set(state => ({
@@ -136,5 +152,6 @@ export const openSettings = (
     initialTab?: SettingsModalInitialTab,
     initialSubview?: SettingsSubviewId | null,
     initialVisualizerSection?: VisualizerSettingsSection | null,
-) => useSettingsModalStore.getState().openSettings(initialTab, initialSubview, initialVisualizerSection);
+    initialAnchorId?: SettingsAnchorId | null,
+) => useSettingsModalStore.getState().openSettings(initialTab, initialSubview, initialVisualizerSection, initialAnchorId);
 export const closeSettings = () => useSettingsModalStore.getState().closeSettings();

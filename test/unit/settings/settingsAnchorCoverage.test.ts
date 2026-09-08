@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SETTINGS_ANCHOR_SECTION } from '../../../src/components/modal/settings/navigation/settingsAnchorModel';
 
 // test/unit/settings/settingsAnchorCoverage.test.ts
 // The sidebar table of contents only lists sections wrapped in <SettingsAnchor>. Two of these live
@@ -28,5 +29,18 @@ describe('settings section anchors', () => {
         // stageMode is declared twice on purpose: the Electron and web panels are mutually exclusive.
         const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
         expect(duplicates).toEqual(['stageMode']);
+    });
+
+    // A settings command that names an anchor also names, through this table, the page to open it
+    // on. Both halves are invisible when wrong: the command still runs, it just lands somewhere
+    // else. So the table is held against the anchors actually rendered, in both directions.
+    it('declares a section for exactly the anchors that are rendered', () => {
+        const rendered = new Set(settingsFiles.flatMap(file => (
+            [...fs.readFileSync(file, 'utf8').matchAll(/<SettingsAnchor anchorId="([^"]+)"/g)].map(match => match[1])
+        )));
+        const declared = new Set(Object.keys(SETTINGS_ANCHOR_SECTION));
+
+        expect([...rendered].filter(id => !declared.has(id))).toEqual([]);
+        expect([...declared].filter(id => !rendered.has(id))).toEqual([]);
     });
 });

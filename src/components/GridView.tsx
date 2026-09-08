@@ -40,6 +40,8 @@ import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntra
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
 import { compareLocalFolderSongs, formatLocalAlbumTrackLabel, type LocalAlbumGroupKey, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
+import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from './folia-grid/gridSurfaceHandle';
+import { useGridSurfaceRegistration } from '../hooks/useGridSurfaceRegistration';
 import {
     resolveGridTrackAlbumTargetId,
     resolveGridTrackArtistTargetId,
@@ -1275,6 +1277,16 @@ export const GridView: React.FC<GridViewProps> = ({
         || isNavidromePlaylistCollection
     );
 
+    // An owned online playlist edits in place; a local or Navidrome one commits a rename on the way
+    // out. Shared so the command palette and the panel button cannot end up meaning different things.
+    const handleEditModeToggle = useCallback(() => {
+        if (canEditOwnedPlaylist || canEditProviderPlaylist) {
+            setIsEditMode(prev => !prev);
+            return;
+        }
+        void handleSourceEditToggle();
+    }, [canEditOwnedPlaylist, canEditProviderPlaylist, handleSourceEditToggle]);
+
     const isOnlinePlaylist = collectionSource === 'online' && collection?.type === 'playlist' && !isCloudDrive;
     const isOnlineAlbum = collectionSource === 'online' && collection?.type === 'album' && !isCloudDrive;
     const showSubscribeButton = Boolean(
@@ -2088,6 +2100,52 @@ export const GridView: React.FC<GridViewProps> = ({
     const infoPanelCoverUrl = infoCollection?.coverUrl || '';
     // 只有 tracks 模式下的合集才有切入面板，没有面板时标题不做成可点控件
     const hasCutInPanel = mode === 'tracks' && Boolean(collection);
+
+    // Everything the palette is allowed to do to this grid, and the branch rules that decide which
+    // of it applies. Declared next to the buttons it mirrors so the two cannot disagree; the actual
+    // gating and dispatch live in ./folia-grid/gridSurfaceHandle.
+    const gridSurfaceParams: GridSurfaceParams = {
+        hasInfoPanel: hasCutInPanel,
+        hasTrackList: mode === 'tracks' && displayTracks.length > 0,
+        supportsLocalTrackSorting,
+        canResyncFolder: isLocalFolderCollection && Boolean(sourceActions?.local?.onResyncFolder),
+        canResyncAllFolders: isLocalAllSongsCollection && Boolean(sourceActions?.local?.onResyncAllFolders),
+        canOrganizeSongInfo: isLocalFolderCollection && Boolean(sourceActions?.local?.onOrganizeFolderSongInfo),
+        canExportPlaylist: isLocalCollection
+            && collection?.type === 'playlist'
+            && Boolean(collection.playlistId)
+            && Boolean(sourceActions?.local?.onExportPlaylist),
+        canEditEntity: isLocalEntityCollection && Boolean(sourceActions?.local?.onEditEntity),
+        canEditPlaylist,
+        isSourceActionPending,
+
+        filteredTrackCount: contextActionTracks.length,
+        isFilterActive: hasSearchQuery,
+        sortField: localTrackSortField,
+        sortDirection: localTrackSortDirection,
+        isInfoPanelOpen: showCutInPanel,
+        isTrackListOpen: showSidePanel,
+        isEditMode,
+
+        playFiltered: () => onPlayAll?.(contextActionTracks),
+        enqueueFiltered: () => onAddAllToQueue?.(contextActionTracks),
+        setSortField: handleLocalTrackSortFieldChange,
+        setSortDirection: handleLocalTrackSortDirectionChange,
+        toggleInfoPanel: () => setShowCutInPanel(current => !current),
+        toggleTrackList: () => setShowSidePanel(current => !current),
+        resyncFolder: () => void handleResyncLocalFolder(),
+        resyncAllFolders: () => void handleResyncAllLocalFolders(),
+        organizeSongInfo: () => { if (collection) void sourceActions?.local?.onOrganizeFolderSongInfo?.(collection); },
+        exportPlaylist: () => void handleExportLocalPlaylist(),
+        editEntity: () => { if (collection?.entityId) void sourceActions?.local?.onEditEntity?.(String(collection.entityId)); },
+        toggleEditMode: handleEditModeToggle,
+    };
+    useGridSurfaceRegistration({
+        isInteractive,
+        getState: () => buildGridSurfaceState(gridSurfaceParams),
+        run: (action) => runGridSurfaceAction(action, gridSurfaceParams),
+    });
+
     const albumArtists = Array.isArray(infoCollection?.artists) ? infoCollection.artists : [];
     const albumAlias = infoCollection?.aliases?.[0];
     const albumPublishedAt = infoCollection?.publishedAt;
@@ -2491,13 +2549,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 )}
                                 {canEditPlaylist && (
                                     <button
-                                        onClick={() => {
-                                            if (canEditOwnedPlaylist || canEditProviderPlaylist) {
-                                                setIsEditMode(prev => !prev);
-                                                return;
-                                            }
-                                            void handleSourceEditToggle();
-                                        }}
+                                        onClick={handleEditModeToggle}
                                         disabled={isSourceActionPending}
                                         className={`w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isEditMode ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'}`}
                                     >

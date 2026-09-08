@@ -15,7 +15,7 @@ type CommandPaletteContextOverrides = {
 const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
     const base: CommandPaletteContext = {
         // The palette's original and still most common surface; the home cases say so explicitly.
-        scope: { view: 'player', filter: null },
+        scope: { view: 'player', filter: null, grid: null },
         shared: {
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
@@ -212,7 +212,9 @@ describe('command palette registry', () => {
         expect(match.command.id).toBe('settings-local-lyrics-priority');
         match.command.execute(match.input, context);
 
-        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'playback');
+        // The playback page is not the destination — the lyrics section inside it is, which is what
+        // an anchor-level command exists to reach.
+        expect(context.settings.openSettings).toHaveBeenCalledWith('options', 'playback', null, 'lyrics');
     });
 
     it('switches ReplayGain modes from the command palette', () => {
