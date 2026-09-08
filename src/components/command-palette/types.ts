@@ -227,6 +227,13 @@ export type CommandPaletteSettingsContext = {
      */
     canAutoScanLocalLibrary: () => boolean;
     toggleLocalLibraryAutoScan: () => void;
+    /**
+     * Whether NetEase listening reports can be turned on at all - the provider supports them and the
+     * account is signed in. A getter because signing in and out changes the answer while the palette
+     * is open, and the settings panel gates its toggle on the same predicate.
+     */
+    canReportNeteasePlayback: () => boolean;
+    toggleNeteaseScrobble: () => void;
     voiceInputPauseSupported: boolean;
     /** Lab switch for the experimental mod system; gates the `mods` command. */
     modSystemEnabled: boolean;

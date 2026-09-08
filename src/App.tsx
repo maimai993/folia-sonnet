@@ -83,6 +83,7 @@ import { PERSONAL_FM_MODE_COMMAND_ID } from './components/command-palette/comman
 import { usePlaybackUiEffects } from './hooks/usePlaybackUiEffects';
 import { useLibraryPlaybackController } from './hooks/useLibraryPlaybackController';
 import { useNavidromeScrobbleReporter } from './hooks/useNavidromeScrobbleReporter';
+import { useNeteaseScrobbleReporter } from './hooks/useNeteaseScrobbleReporter';
 import { usePlaybackQueueController } from './hooks/usePlaybackQueueController';
 import { usePlaybackTransportController } from './hooks/usePlaybackTransportController';
 import { useLocalLibraryCatalog } from './hooks/useLocalLibraryCatalog';
@@ -1431,6 +1432,11 @@ export default function App() {
         pauseDuringTransition: handlePauseDuringTransition,
     });
     useNavidromeScrobbleReporter({
+        audioRef,
+        currentSong,
+        activeDeck: automix.activeDeck,
+    });
+    useNeteaseScrobbleReporter({
         audioRef,
         currentSong,
         activeDeck: automix.activeDeck,

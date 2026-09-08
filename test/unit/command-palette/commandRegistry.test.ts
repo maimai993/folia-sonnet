@@ -112,6 +112,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
             canAutoScanLocalLibrary: vi.fn(() => false),
             toggleLocalLibraryAutoScan: vi.fn(),
+            canReportNeteasePlayback: vi.fn(() => false),
+            toggleNeteaseScrobble: vi.fn(),
             voiceInputPauseSupported: false,
             modSystemEnabled: false,
             toggleVoiceInputPause: vi.fn(),

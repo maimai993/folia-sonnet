@@ -1,4 +1,5 @@
 import type { SongResult, UnifiedSong } from '../../types';
+import { OnlineProviderError } from '../../types/onlineMusic';
 import type {
     AudioQualityPreference,
     MediaId,
@@ -30,6 +31,20 @@ const mapQuality = (quality: AudioQualityPreference): string => {
     if (quality === 'high') return 'exhigh';
     return quality;
 };
+
+/**
+ * The `level`/`bitrate` pair the listening report carries, which is NetEase's own client vocabulary
+ * and therefore stays inside this adapter. Defaults match the documented ones for `/scrobble/v1`.
+ */
+const mapScrobbleQuality = (quality?: AudioQualityPreference): { level: string; bitrate: number } => {
+    if (quality === 'standard') return { level: 'standard', bitrate: 128 };
+    if (quality === 'lossless') return { level: 'lossless', bitrate: 999 };
+    if (quality === 'hires') return { level: 'hires', bitrate: 1999 };
+    return { level: 'exhigh', bitrate: 320 };
+};
+
+/** This provider's normalized view of a song, shared by `songMetadata` and the listening report. */
+const getNeteaseSongMetadata = (song: SongResult) => createProviderSongMetadata(normalizeNeteaseSong(song));
 
 const normalizeUser = (raw: any): ProviderUser => ({
     id: raw?.userId ?? raw?.id ?? 0,
@@ -236,14 +251,13 @@ export const neteaseProvider: OnlineMusicProvider = {
         playlistTrackMutations: true,
         likes: true,
         userAlbums: true,
+        playbackReports: true,
     },
     normalizeSong: normalizeNeteaseSong,
     normalizeUser,
     normalizeCollection,
     songMetadata: {
-        getSongMetadata(song) {
-            return createProviderSongMetadata(normalizeNeteaseSong(song));
-        },
+        getSongMetadata: getNeteaseSongMetadata,
     },
     getSongPageUrl(song) {
         return song.id ? `https://music.163.com/#/song?id=${encodeURIComponent(String(song.id))}` : null;
@@ -291,6 +305,35 @@ export const neteaseProvider: OnlineMusicProvider = {
                 song: normalizeNeteaseSong(replacement.replacementSong),
                 label: replacement.typeDesc,
             };
+        },
+    },
+    playbackReports: {
+        async reportPlayback(song, report) {
+            const metadata = getNeteaseSongMetadata(song);
+            const { level, bitrate } = mapScrobbleQuality(report.quality);
+            const response = await neteaseApi.scrobbleV1({
+                id: toNeteaseId(song.id),
+                time: Math.round(report.playedSeconds),
+                name: song.name || undefined,
+                artist: metadata.artists.map(artist => artist.name).filter(Boolean).join(', ') || undefined,
+                level,
+                bitrate,
+                ...(report.totalSeconds ? { total: Math.round(report.totalSeconds) } : {}),
+            });
+            // Absence of a status code is a failure, not a success. `fetchWithCreds` does not check
+            // `res.ok`, so a gateway error page or an API build without this route comes back as
+            // perfectly valid JSON with no `code` at all - and defaulting that to 200 would print
+            // "reported a play" for a play that no server ever accepted.
+            const code = Number(response?.code);
+            if (!Number.isFinite(code)) {
+                throw new OnlineProviderError('unavailable', 'NetEase returned no status code for the listening report', 'netease');
+            }
+            if ([301, 401, 403].includes(code)) {
+                throw new OnlineProviderError('auth-required', 'NetEase rejected the listening report: not signed in', 'netease');
+            }
+            if (code !== 200) {
+                throw new OnlineProviderError('unavailable', `NetEase rejected the listening report: code ${code}`, 'netease');
+            }
         },
     },
     lyrics: { getLyrics, getChorusRanges: getNeteaseChorusRanges },

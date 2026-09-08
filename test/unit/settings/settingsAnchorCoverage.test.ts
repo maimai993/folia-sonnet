@@ -48,6 +48,7 @@ describe('settings section anchors', () => {
         const source = fs.readFileSync(path.join(SETTINGS_DIR, 'PlaybackSettingsSubview.tsx'), 'utf8');
         const renderedOrder = [
             ['queueSettings', 'anchorId="queueSettings"'],
+            ['scrobbleSettings', 'anchorId="scrobbleSettings"'],
             ['transitionSettings', '<TransitionSettingsSection'],
             ['replayGainSettings', 'anchorId="replayGainSettings"'],
             ['lyrics', 'anchorId="lyrics"'],

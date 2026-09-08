@@ -578,6 +578,30 @@ export const neteaseApi = {
     return fetchWithCreds(`/like?id=${id}&like=${like}`);
   },
 
+  /**
+   * 听歌打卡 (NCBL 加密日志版)。写用户账号，只应在真实播放之后调用一次。
+   *
+   * `sourceid` 是可选的，这里刻意不发：应用里没有"这条队列来自哪个歌单"的记录，凑一个来源等于
+   * 上报假数据。`source` 同样留给服务端默认值。
+   */
+  scrobbleV1: async (params: {
+    id: number;
+    time: number;
+    name?: string;
+    artist?: string;
+    level?: string;
+    bitrate?: number;
+    total?: number;
+  }) => {
+    const query = new URLSearchParams({ id: String(params.id), time: String(params.time) });
+    if (params.name) query.set('name', params.name);
+    if (params.artist) query.set('artist', params.artist);
+    if (params.level) query.set('level', params.level);
+    if (params.bitrate) query.set('bitrate', String(params.bitrate));
+    if (params.total) query.set('total', String(params.total));
+    return fetchWithCreds(`/scrobble/v1?${query.toString()}`);
+  },
+
   getLikedSongs: async (uid: number) => {
     return fetchWithCreds(`/likelist?uid=${uid}`);
   },

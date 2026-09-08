@@ -8,6 +8,7 @@ import type {
     OmniHistoryEntry,
     OmniLyricsResult,
     OmniPage,
+    OmniPlaybackReport,
     OmniProviderCapabilities,
     OmniProviderId,
     OmniProviderSummary,
@@ -414,6 +415,19 @@ export const omni = {
         // otherwise: the URL is never fetched again once the bytes are cached.
         if (source?.replayGain) void saveSongReplayGain(song, source.replayGain);
         return source;
+    },
+
+    // Asked once per track, including for local and Navidrome songs, so an unsupported source is a
+    // plain `false` rather than the throw `providerForSong` would raise.
+    canReportPlayback(song: SongResult): boolean {
+        const provider = getOnlineMusicProviderForSong(song);
+        return providerSupports(provider, 'playbackReports') && Boolean(provider?.playbackReports);
+    },
+
+    async reportPlayback(song: SongResult, report: OmniPlaybackReport): Promise<void> {
+        const provider = providerForSong(song);
+        if (!provider.playbackReports) return unsupported(provider.id, 'playbackReports');
+        await provider.playbackReports.reportPlayback(song, report);
     },
 
     async getLyrics(song: SongResult, context?: { userId?: MediaId | null }): Promise<OmniLyricsResult> {

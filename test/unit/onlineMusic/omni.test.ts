@@ -301,4 +301,35 @@ describe('omni routing', () => {
         })).rejects.toMatchObject({ code: 'unsupported' });
         expect(updateTracks).not.toHaveBeenCalled();
     });
+
+    it('routes a listening report to the provider that owns the song', async () => {
+        const reportPlayback = vi.fn(async () => undefined);
+        registerOnlineMusicProvider({
+            ...provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }),
+            capabilities: { ...capabilities, playbackReports: true },
+            playbackReports: { reportPlayback },
+        });
+        registerOnlineMusicProvider(provider(otherProviderId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }));
+        useOnlineProviderAccountStore.getState().setActiveProviderId(otherProviderId);
+
+        const target = song(providerId, '5');
+        expect(omni.canReportPlayback(target)).toBe(true);
+        await omni.reportPlayback(target, { playedSeconds: 45, totalSeconds: 240 });
+
+        expect(reportPlayback).toHaveBeenCalledWith(target, { playedSeconds: 45, totalSeconds: 240 });
+    });
+
+    it('refuses a listening report for a provider that does not declare the capability', async () => {
+        registerOnlineMusicProvider(provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }));
+
+        const target = song(providerId, '5');
+        expect(omni.canReportPlayback(target)).toBe(false);
+        await expect(omni.reportPlayback(target, { playedSeconds: 45 })).rejects.toMatchObject({ code: 'unsupported' });
+    });
+
+    it('answers false rather than throwing for a song no online provider owns', () => {
+        const localSong = { ...song(providerId), sourceRef: { kind: 'local', mediaId: 'local-1' } } as UnifiedSong;
+
+        expect(omni.canReportPlayback(localSong)).toBe(false);
+    });
 });

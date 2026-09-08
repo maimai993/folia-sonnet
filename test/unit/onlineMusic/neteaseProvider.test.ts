@@ -19,6 +19,7 @@ vi.mock('@/services/netease', () => ({
         getArtistAlbums: vi.fn(),
         getPersonalizedPlaylists: vi.fn(),
         checkQr: vi.fn(),
+        scrobbleV1: vi.fn(),
     },
 }));
 
@@ -204,5 +205,72 @@ describe('neteaseProvider', () => {
     ])('maps QR code %s to %s', async (code, state) => {
         vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code } as any);
         await expect(neteaseProvider.auth!.checkQr!('key')).resolves.toMatchObject({ state });
+    });
+});
+
+describe('neteaseProvider listening reports', () => {
+    const reported: UnifiedSong = {
+        ...song,
+        name: '歌名',
+        artists: [{ id: 7, name: '歌手 A' }, { id: 8, name: '歌手 B' }],
+    };
+
+    beforeEach(() => vi.clearAllMocks());
+
+    it('sends the played seconds and never a source id', async () => {
+        vi.mocked(neteaseApi.scrobbleV1).mockResolvedValue({ code: 200 } as any);
+
+        await neteaseProvider.playbackReports!.reportPlayback(reported, {
+            playedSeconds: 45.6,
+            totalSeconds: 240,
+            quality: 'high',
+        });
+
+        const params = vi.mocked(neteaseApi.scrobbleV1).mock.calls[0][0];
+        expect(params).toEqual({
+            id: 42,
+            time: 46,
+            name: '歌名',
+            artist: '歌手 A, 歌手 B',
+            level: 'exhigh',
+            bitrate: 320,
+            total: 240,
+        });
+        expect(params).not.toHaveProperty('sourceid');
+    });
+
+    it.each([
+        ['standard', 'standard', 128],
+        ['high', 'exhigh', 320],
+        ['lossless', 'lossless', 999],
+        ['hires', 'hires', 1999],
+    ] as const)('maps %s quality to level %s', async (quality, level, bitrate) => {
+        vi.mocked(neteaseApi.scrobbleV1).mockResolvedValue({ code: 200 } as any);
+
+        await neteaseProvider.playbackReports!.reportPlayback(reported, { playedSeconds: 45, quality });
+
+        expect(vi.mocked(neteaseApi.scrobbleV1).mock.calls[0][0]).toMatchObject({ level, bitrate });
+    });
+
+    it('rejects a report the account was not signed in for', async () => {
+        vi.mocked(neteaseApi.scrobbleV1).mockResolvedValue({ code: 301 } as any);
+
+        await expect(neteaseProvider.playbackReports!.reportPlayback(reported, { playedSeconds: 45 }))
+            .rejects.toMatchObject({ code: 'auth-required' });
+    });
+
+    it('rejects a response that carries no status code at all', async () => {
+        // A gateway error page, or an API build with no /scrobble/v1 route: valid JSON, no `code`.
+        vi.mocked(neteaseApi.scrobbleV1).mockResolvedValue({ message: 'Not Found' } as any);
+
+        await expect(neteaseProvider.playbackReports!.reportPlayback(reported, { playedSeconds: 45 }))
+            .rejects.toMatchObject({ code: 'unavailable' });
+    });
+
+    it('rejects any other non-success code', async () => {
+        vi.mocked(neteaseApi.scrobbleV1).mockResolvedValue({ code: 500 } as any);
+
+        await expect(neteaseProvider.playbackReports!.reportPlayback(reported, { playedSeconds: 45 }))
+            .rejects.toMatchObject({ code: 'unavailable' });
     });
 });
