@@ -1,16 +1,35 @@
 import type { ProbeDefinition } from './definition';
 import '../../src/components/app/lattice/Lattice.css';
+import '../../src/components/app/lattice/lyrics/LatticeLyrics.css';
 
-// Isolated mixed-font titles at the compact line spacing used by expanded posters.
+const TITLES = [
+    '壤土下的安居 Cozy Home Underground',
+    '锤砧间的音符 Notes From Striking the Anvil',
+    '新月的摇篮曲（其三）：眉间落英 Lullaby of the New Moon',
+];
+
+// The leading only resolves through the poster rules, so the probe mounts real posters
+// instead of a bare copy block.
+function Poster({ title, expanded, metadata }: { title: string; expanded: boolean; metadata?: boolean }) {
+    return <div
+        className={`lattice-poster${expanded ? ' is-expanded' : ''}`}
+        style={{ position: 'relative', width: expanded ? 494 : 300, height: expanded ? 440 : 300, background: '#243748' }}
+    >
+        <span className={`lattice-poster-copy${metadata ? ' lattice-lyric-metadata' : ''}`}>
+            <strong>{title}</strong><small>HOYO-MiX</small>
+        </span>
+    </div>;
+}
+
+// Isolated mixed-font titles at the compact line spacing posters use. The third title of each
+// group runs past the three-line cap, which is where the fourth line used to leak.
 function LatticeTitleProbe() {
-    return <div style={{ color: 'white', background: '#243748', padding: 40 }}>
-        {['壤土下的安居 Cozy Home Underground', '锤砧间的音符 Notes From Striking the Anvil', '新月的摇篮曲（其三）：眉间落英 Lullaby of the New Moon'].map(title => (
-            <div key={title} className="lattice-poster-copy" style={{ position: 'relative', width: 430, inset: 'auto', marginBottom: 60 }}>
-                <strong>{title}</strong>
-                <small>HOYO-MiX</small>
-            </div>
-        ))}
-        <style>{'.lattice-poster-copy strong { font-size: 70.7625px; }'}</style>
+    return <div className="lattice-root" style={{ color: 'white', background: '#243748', padding: 40, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+        {TITLES.map(title => <Poster key={title} title={title} expanded />)}
+        {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} />)}
+        {/* Lyric mode drops the same title to a single truncated line. */}
+        <Poster key="metadata" title={TITLES[2]} expanded metadata />
+        <style>{'.lattice-poster.is-expanded .lattice-poster-copy:not(.lattice-lyric-metadata) strong { font-size: 70.7625px; }'}</style>
     </div>;
 }
 
