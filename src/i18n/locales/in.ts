@@ -434,6 +434,9 @@ export default {
       "settings-grid-action-button": { "title": "Tombol aksi kisi", "description": "Langsung ke pengaturan target geser tombol aksi kisi" },
       "settings-pinned-commands": { "title": "Slot perintah tersemat", "description": "Pilih tiga perintah yang disematkan di panel perintah" },
       "settings-home-tabs": { "title": "Tampilan tab beranda", "description": "Pilih tab mana yang ditampilkan di layar beranda" },
+      "settings-playback-entry-view": { "title": "Tampilan saat diputar", "description": "Langsung ke pengaturan tampilan yang dibuka saat menekan putar" },
+      "playback-entry-view-player": { "title": "Saat diputar: Visualizer", "description": "Menekan putar membuka pemutar dan visualizer-nya" },
+      "playback-entry-view-lattice": { "title": "Saat diputar: Lattice", "description": "Menekan putar membuka kolase antrean" },
       "settings-theme-presets": { "title": "Prasetel tema", "description": "Langsung ke prasetel tema bawaan dan tersimpan" },
       "settings-lyrics-renderer": { "title": "Perender lirik", "description": "Langsung ke pengaturan cara lirik digambar di pemutar" },
       "settings-grid-card-style": { "title": "Gaya kartu kisi", "description": "Langsung ke pengaturan gaya kartu pada kisi beranda" },
@@ -1224,6 +1227,8 @@ export default {
     "appLanguageEnUS": "Inggris",
     "appLanguageInID": "Indonesia",
     "appLanguageSystemHint": "Ikuti bahasa browser atau sistem. Saat ini: {{language}}",
+    "playbackEntryView": "Tampilan yang dibuka Putar",
+    "playbackEntryViewDesc": "Tampilan mana yang dibuka secara default setelah Anda menekan putar.",
     "homeTabsVisibility": "Entri Top Capsule",
     "homeTabsVisibilityDesc": "Sesuaikan entri capsule yang ditampilkan di bagian atas halaman beranda",
     "bottomUiSettings": "Kontrol Bawah",
@@ -2519,6 +2524,20 @@ export default {
   "timeline": {
     "title": "Timeline",
     "noLyrics": "Tidak ada lirik"
+  },
+  "playbackEntryView": {
+    "title": "Ke mana Putar harus membawa Anda?",
+    "description": "Kedua tampilan sama-sama memutar dan menampilkan lirik, hanya penekanannya berbeda. Pilih salah satu sebagai tujuan default saat menekan putar.",
+    "settingsHint": "Anda bisa mengubahnya kapan saja di Opsi \u2192 Antarmuka \u2192 Tampilan yang dibuka Putar.",
+    "confirm": "Pakai ini",
+    "player": {
+      "title": "Visualizer",
+      "description": "Satu lagu sekaligus: sampul besar, lirik, dan visualizer yang bergerak mengikuti audio."
+    },
+    "lattice": {
+      "title": "Lattice (kolase antrean)",
+      "description": "Seluruh antrean putar sebagai dinding poster, dengan lagu yang sedang diputar ditonjolkan."
+    }
   },
   "userGuide": {
     "title": "Selamat datang di Folia",

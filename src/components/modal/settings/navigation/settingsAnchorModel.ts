@@ -21,6 +21,7 @@ export const SETTINGS_ANCHOR_SECTION = {
     // GeneralSettingsSubview (PinnedCommandSettings renders inside it)
     languageSettings: 'general',
     homeTabsVisibility: 'general',
+    playbackEntryView: 'general',
     bottomUiSettings: 'general',
     pinnedCommands: 'general',
 

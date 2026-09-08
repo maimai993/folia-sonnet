@@ -435,6 +435,9 @@ export default {
       "settings-grid-action-button": { "title": "Grid action button", "description": "Jump to what the grid action button slides to" },
       "settings-pinned-commands": { "title": "Pinned command slots", "description": "Choose the three commands pinned in the palette" },
       "settings-home-tabs": { "title": "Home tab visibility", "description": "Choose which tabs the home screen shows" },
+      "settings-playback-entry-view": { "title": "Play opens", "description": "Jump to which view pressing play opens" },
+      "playback-entry-view-player": { "title": "Play opens: Visualizer", "description": "Pressing play opens the player and its visualizer" },
+      "playback-entry-view-lattice": { "title": "Play opens: Lattice", "description": "Pressing play opens the queue collage" },
       "settings-theme-presets": { "title": "Theme presets", "description": "Jump to the built-in and saved theme presets" },
       "settings-lyrics-renderer": { "title": "Lyrics renderer", "description": "Jump to how lyrics are drawn on the player" },
       "settings-grid-card-style": { "title": "Grid card style", "description": "Jump to how the home grid draws its cards" },
@@ -1229,6 +1232,8 @@ export default {
     "appLanguageEnUS": "English",
     "appLanguageInID": "Indonesian",
     "appLanguageSystemHint": "Follow the browser or system language. Current: {{language}}",
+    "playbackEntryView": "View opened by Play",
+    "playbackEntryViewDesc": "Which view opens by default after you press play.",
     "homeTabsVisibility": "Top Capsule Entries",
     "homeTabsVisibilityDesc": "Customize the capsule entries shown at the top of the home page",
     "bottomUiSettings": "Bottom Controls",
@@ -2587,6 +2592,20 @@ export default {
   "timeline": {
     "title": "Timeline",
     "noLyrics": "No lyrics"
+  },
+  "playbackEntryView": {
+    "title": "Where should Play take you?",
+    "description": "Both views play and show lyrics; they just put the emphasis in different places. Pick the one Play should open by default.",
+    "settingsHint": "You can change this any time under Options \u2192 Interface \u2192 View opened by Play.",
+    "confirm": "Use this",
+    "player": {
+      "title": "Visualizer",
+      "description": "One song at a time: big cover art, lyrics, and a visualizer that moves with the audio."
+    },
+    "lattice": {
+      "title": "Lattice (queue collage)",
+      "description": "The whole play queue as a poster wall, with the playing song lifted out of it."
+    }
   },
   "userGuide": {
     "title": "Welcome to Folia",

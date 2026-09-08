@@ -15,6 +15,7 @@ import type { GridViewCollectionDescriptor } from '../components/app/home/gridVi
 import { useAppViewStore } from '../stores/useAppViewStore';
 import type { AppView } from '../stores/useAppViewStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { usePlaybackEntryViewStore } from '../stores/usePlaybackEntryViewStore';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import i18n from '../i18n/config';
 
@@ -259,6 +260,28 @@ export function useAppNavigation() {
         });
     }, [pushNavigationState]);
 
+    /**
+     * Where starting a song lands. Reads the stored preference rather than each caller deciding,
+     * so every "play this" path agrees on one answer.
+     *
+     * Only redirects when the listener is arriving from somewhere else. Player and Lattice are both
+     * playback surfaces, and this also runs on auto-advance — moving someone from the one they are
+     * watching to the other because a track ended would be the setting reaching too far.
+     *
+     * FM falls back to the player silently: Lattice cannot show an FM queue, and the usual
+     * "unavailable in FM" toast would be noise when nobody asked to open it.
+     */
+    const navigateToPlaybackView = useCallback(() => {
+        const view = useAppViewStore.getState().view;
+        if (view === 'lattice') return;
+        const entryView = usePlaybackEntryViewStore.getState().playbackEntryView;
+        if (entryView === 'lattice' && view !== 'player' && !usePlaybackStore.getState().isFmMode) {
+            navigateToLattice();
+            return;
+        }
+        navigateToPlayer();
+    }, [navigateToLattice, navigateToPlayer]);
+
     const navigateBackFromLattice = useCallback(() => {
         const state = window.history.state as NavigationHistoryState | null;
         if (state?.view === 'lattice' && getAppHistoryIndex(state) > 0) {
@@ -383,6 +406,7 @@ export function useAppNavigation() {
         localMusicState,
         setLocalMusicState,
         navigateToPlayer,
+        navigateToPlaybackView,
         navigateToHome,
         navigateToLattice,
         navigateBackFromLattice,

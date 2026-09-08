@@ -32,6 +32,33 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsAnchorCommand('settings-grid-card-style', 'Grid card style', 'Jump to how the home grid draws its cards', ['card style', 'polaroid', 'grid style', '卡片样式'], 'grid3dCardStyle'),
     createSettingsCommand('settings-general', 'General settings', 'Open general app preferences', ['general', 'language settings', 'locale', '通用', '语言'], 'options', 'general'),
     createSettingsAnchorCommand('settings-home-tabs', 'Home tab visibility', 'Choose which tabs the home screen shows', ['hide tabs', 'home tabs', '首页标签'], 'homeTabsVisibility'),
+    createSettingsAnchorCommand('settings-playback-entry-view', 'Play opens', 'Jump to which view pressing play opens', ['entry view', 'open on play', 'default view', '播放进入视图', '默认视图'], 'playbackEntryView'),
+    {
+        id: 'playback-entry-view-player',
+        isAvailable: context => (context ? context.settings.playbackEntryView !== 'player' : true),
+        group: 'settings',
+        title: 'Play opens: Visualizer',
+        description: 'Pressing play opens the player and its visualizer',
+        keywords: ['entry view player', 'open player on play', 'visualizer', '播放进入播放器', '播放进入可视化'],
+        execute: (_input, context) => {
+            if (context.settings.playbackEntryView === 'player') return false;
+            context.settings.setPlaybackEntryView('player');
+            return true;
+        },
+    },
+    {
+        id: 'playback-entry-view-lattice',
+        isAvailable: context => (context ? context.settings.playbackEntryView !== 'lattice' : true),
+        group: 'settings',
+        title: 'Play opens: Lattice',
+        description: 'Pressing play opens the queue collage',
+        keywords: ['entry view lattice', 'open lattice on play', 'queue collage', '播放进入队列拼贴', '播放进入海报墙'],
+        execute: (_input, context) => {
+            if (context.settings.playbackEntryView === 'lattice') return false;
+            context.settings.setPlaybackEntryView('lattice');
+            return true;
+        },
+    },
     createSettingsAnchorCommand('settings-pinned-commands', 'Pinned command slots', 'Choose the three commands pinned in the palette', ['pinned commands', 'quick slots', '固定命令'], 'pinnedCommands'),
     createSettingsCommand('settings-interaction', 'Interaction settings', 'Open keyboard, shortcut and grid interaction settings', ['interaction', 'keyboard', 'hotkey', '交互', '快捷键设置'], 'options', 'interaction'),
     createSettingsAnchorCommand('settings-custom-shortcut', 'Custom shortcuts', 'Jump to the custom keyboard shortcut bindings', ['keybinding', 'rebind', 'hotkey', '自定义快捷键'], 'customShortcut'),

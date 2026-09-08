@@ -21,6 +21,8 @@ import AutomixModelReminder from './components/modal/AutomixModelReminder';
 const AutomixTransitionAnimation = lazy(() => import('./components/app/overlays/AutomixTransitionAnimation'));
 const Lattice = lazy(() => import('./components/app/lattice/Lattice'));
 import { UserGuideModal } from './components/modal/UserGuideModal';
+import { PlaybackEntryViewPrompt } from './components/modal/playback-entry-view/PlaybackEntryViewPrompt';
+import { usePlaybackEntryViewPromptGate } from './hooks/usePlaybackEntryViewPromptGate';
 import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
 import { useAppDialogsModel } from './components/app/dialogs/useAppDialogsModel';
 import { useHomeModel } from './components/app/home/useHomeModel';
@@ -283,6 +285,8 @@ export default function App() {
             setLastSeenGuideVersion(__APP_VERSION__);
         }
     }, [lastSeenGuideVersion, setLastSeenGuideVersion, setIsUserGuideModalOpen]);
+
+    usePlaybackEntryViewPromptGate();
 
     useEffect(() => initializeSyncCoordinator(), []);
 
@@ -656,6 +660,7 @@ export default function App() {
         localMusicState,
         setLocalMusicState,
         navigateToPlayer,
+        navigateToPlaybackView,
         navigateToHome,
         navigateToLattice,
         navigateBackFromLattice,
@@ -962,7 +967,7 @@ export default function App() {
         setLyrics,
         setIsLyricsLoading,
         setLikedSongIds,
-        navigateToPlayer,
+        navigateToPlaybackView,
         persistLastPlaybackCache,
         restoreCachedThemeForSong,
         interruptStagePlaybackForMainTransition,
@@ -1060,7 +1065,7 @@ export default function App() {
         userId: user?.id,
         setLyrics,
         setIsLyricsLoading,
-        navigateToPlayer,
+        navigateToPlaybackView,
         navigateToSearch,
         persistLastPlaybackCache,
         restoreCachedThemeForSong,
@@ -2763,6 +2768,7 @@ export default function App() {
 
             <AppDialogs model={appDialogsModel} />
             <UserGuideModal theme={theme} />
+            <PlaybackEntryViewPrompt theme={theme} />
         </AppShell>
     );
 }

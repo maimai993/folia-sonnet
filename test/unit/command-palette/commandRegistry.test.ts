@@ -91,6 +91,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             subtitleContentMode: 'translation',
             cycleSubtitleContentMode: vi.fn(),
             toggleSubtitleOverlayBackground: vi.fn(),
+            playbackEntryView: 'player' as const,
+            setPlaybackEntryView: vi.fn(),
             startPlayerBottomBarPositioning: vi.fn(),
             canStartPlayerBottomBarPositioning: true,
             toggleAlwaysShowPlayerBackButton: vi.fn(),

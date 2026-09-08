@@ -6,6 +6,7 @@ import type { Theme } from '../../../types';
 import type { AppLanguagePreference } from '../../../i18n/config';
 import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
+import PlaybackEntryViewSection from './PlaybackEntryViewSection';
 import PlayerBottomBarSection from './PlayerBottomBarSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
@@ -180,6 +181,12 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                     </div>
                 </div>
             </SettingsAnchor>
+
+            <PlaybackEntryViewSection
+                isDaylight={isDaylight}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
+            />
 
             <SettingsAnchor anchorId="bottomUiSettings" label={t('options.bottomUiSettings')} className="space-y-4">
                 <SettingsSectionHeading icon={Move} label={t('options.bottomUiSettings')} />

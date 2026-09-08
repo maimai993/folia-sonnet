@@ -8,6 +8,7 @@ import { useLocalLibrarySettingsStore } from '../../../stores/useLocalLibrarySet
 import { isLocalLibraryAutoScanSupported } from '../../../services/localLibraryAutoScan';
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
+import { usePlaybackEntryViewStore } from '../../../stores/usePlaybackEntryViewStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
@@ -54,6 +55,7 @@ export const buildSettingsCommandContext = (
     const modal = useSettingsModalStore.getState();
     const themeQuickEditor = useThemeQuickEditorStore.getState();
     const lattice = useLatticeSettingsStore.getState();
+    const entryView = usePlaybackEntryViewStore.getState();
 
     return {
         openSettings: modal.openSettings,
@@ -71,6 +73,8 @@ export const buildSettingsCommandContext = (
         toggleSubtitleOverlayBackground: () => typography.handleToggleSubtitleOverlayBackground(
             !useTypographySettingsStore.getState().subtitleOverlayBackground,
         ),
+        playbackEntryView: entryView.playbackEntryView,
+        setPlaybackEntryView: entryView.setPlaybackEntryView,
         startPlayerBottomBarPositioning: usePlayerBottomBarLayoutStore.getState().requestPositioning,
         canStartPlayerBottomBarPositioning: Boolean(deps.currentSong) && !chrome.hidePlayerProgressBar,
         toggleAlwaysShowPlayerBackButton: () => chrome.handleToggleAlwaysShowPlayerBackButton(

@@ -71,7 +71,7 @@ type UsePlaybackQueueControllerParams = {
     userId?: MediaId;
     setLyrics: (nextLyrics: any) => void;
     setIsLyricsLoading: SetState<boolean>;
-    navigateToPlayer: () => void;
+    navigateToPlaybackView: () => void;
     navigateToSearch: (args: {
         query: string;
         sourceTab: SearchSource;
@@ -147,7 +147,7 @@ export function usePlaybackQueueController({
     userId,
     setLyrics,
     setIsLyricsLoading,
-    navigateToPlayer,
+    navigateToPlaybackView,
     navigateToSearch,
     persistLastPlaybackCache,
     restoreCachedThemeForSong,
@@ -594,7 +594,7 @@ export function usePlaybackQueueController({
         void persistLastPlaybackCache({ ...resolvedSong, onlineLyricsState: onlineLyricsState ?? undefined }, resolvedQueue);
 
         if (shouldNavigateToPlayer) {
-            navigateToPlayer();
+            navigateToPlaybackView();
         }
         setPlayerState(PlayerState.IDLE);
 
@@ -678,7 +678,7 @@ export function usePlaybackQueueController({
         isFmMode,
         lastAudioRecoverySourceRef,
         localSongs,
-        navigateToPlayer,
+        navigateToPlaybackView,
         onPlayLocalSong,
         onPlayNavidromeSong,
         pendingResumeTimeRef,

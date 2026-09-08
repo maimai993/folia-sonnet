@@ -19,6 +19,7 @@ import type { QueueBatchAction, QueueFacetKind } from './queueQuery';
 import type { CommandPlatform } from './availability';
 import type { CommandPaletteSurface } from './surfaces/types';
 import type { CommandSyntaxSpec } from './syntax/types';
+import type { PlaybackEntryView } from '../../stores/usePlaybackEntryViewStore';
 
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
@@ -198,6 +199,9 @@ export type CommandPaletteSettingsContext = {
     subtitleContentMode: SubtitleContentMode;
     cycleSubtitleContentMode: () => void;
     toggleSubtitleOverlayBackground: () => void;
+    /** Which surface pressing play opens; see usePlaybackEntryViewStore. */
+    playbackEntryView: PlaybackEntryView;
+    setPlaybackEntryView: (view: PlaybackEntryView) => void;
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;

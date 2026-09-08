@@ -435,6 +435,9 @@ export default {
       "settings-grid-action-button": { "title": "海报墙操作按钮", "description": "直接跳到海报墙操作按钮的滑动目标设置" },
       "settings-pinned-commands": { "title": "固定命令槽位", "description": "选择命令面板里固定显示的三条命令" },
       "settings-home-tabs": { "title": "首页标签显示", "description": "选择首页要显示哪些标签" },
+      "settings-playback-entry-view": { "title": "播放后进入的视图", "description": "直接跳到「播放后进入的视图」设置" },
+      "playback-entry-view-player": { "title": "播放后进入：可视化", "description": "点击播放后进入播放器与可视化视图" },
+      "playback-entry-view-lattice": { "title": "播放后进入：Lattice", "description": "点击播放后进入队列拼贴视图" },
       "settings-theme-presets": { "title": "预设配色", "description": "直接跳到内置和已保存的预设配色" },
       "settings-lyrics-renderer": { "title": "歌词渲染方式", "description": "直接跳到播放器歌词的绘制方式设置" },
       "settings-grid-card-style": { "title": "网格卡片样式", "description": "直接跳到首页网格卡片的绘制样式" },
@@ -1228,6 +1231,8 @@ export default {
     "appLanguageEnUS": "English",
     "appLanguageInID": "Indonesian",
     "appLanguageSystemHint": "跟随浏览器或系统语言。当前生效：{{language}}",
+    "playbackEntryView": "播放后进入的视图",
+    "playbackEntryViewDesc": "点击播放后默认打开哪个视图。",
     "homeTabsVisibility": "顶部胶囊入口",
     "homeTabsVisibilityDesc": "自定义首页顶部显示的胶囊选项",
     "bottomUiSettings": "底部界面",
@@ -2586,6 +2591,20 @@ export default {
   "timeline": {
     "title": "时间线",
     "noLyrics": "无歌词"
+  },
+  "playbackEntryView": {
+    "title": "点击播放后进入哪个视图？",
+    "description": "两个视图都能正常播放和显示歌词，只是重点不同。选一个作为点击播放后的默认落点。",
+    "settingsHint": "之后可以在「设置 → 界面设置 → 播放后进入的视图」里随时更改。",
+    "confirm": "就这样",
+    "player": {
+      "title": "可视化",
+      "description": "单曲视图：大封面、歌词，以及随音频起伏的可视化效果。"
+    },
+    "lattice": {
+      "title": "Lattice（队列拼贴）",
+      "description": "整条播放队列铺成海报墙，正在播放的那首会被放大。"
+    }
   },
   "userGuide": {
     "title": "欢迎使用 Folia",
