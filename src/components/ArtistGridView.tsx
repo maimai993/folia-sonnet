@@ -14,6 +14,7 @@ import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { getLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
 import { PolaroidCard } from './folia-grid/PolaroidCard';
 import { HEX_CARD_CENTER_SCALE } from './folia-grid/hexCardTransform';
+import { squareGridCardBox } from './folia-grid/gridCardLayout';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -189,6 +190,69 @@ export const getArtistGridAlbumCoverUrl = (album: any): string | undefined => {
     return typeof coverUrl === 'string' && coverUrl ? toHttps(coverUrl) : undefined;
 };
 
+// Card box, hex spacing and the sizes of the artist wall's own avatar and bio cards, per
+// container-width breakpoint. Lifted out of the component so the memo shows only the choice
+// between the plain box and the squared one.
+const resolveArtistGridCardBox = (width: number) => {
+    if (width < 768) {
+        // Mobile/Narrow
+        return {
+            cardWidth: 180,
+            cardHeight: 280,
+            spacingX: 205,
+            spacingY: 270,
+            maxDistance: 420,
+            lodStart: 280,
+            lodEnd: 320,
+            avatarSize: 200,
+            bioWidth: 360,
+            bioHeight: 200,
+        };
+    } else if (width < 1440) {
+        // Desktop
+        return {
+            cardWidth: 220,
+            cardHeight: 330,
+            spacingX: 250,
+            spacingY: 320,
+            maxDistance: 500,
+            lodStart: 340,
+            lodEnd: 385,
+            avatarSize: 280,
+            bioWidth: 480,
+            bioHeight: 260,
+        };
+    } else if (width < 2000) {
+        // Large Desktop
+        return {
+            cardWidth: 250,
+            cardHeight: 375,
+            spacingX: 285,
+            spacingY: 365,
+            maxDistance: 580,
+            lodStart: 400,
+            lodEnd: 450,
+            avatarSize: 320,
+            bioWidth: 540,
+            bioHeight: 280,
+        };
+    } else {
+        // Ultra Desktop
+        return {
+            cardWidth: 280,
+            cardHeight: 420,
+            spacingX: 320,
+            spacingY: 410,
+            maxDistance: 660,
+            lodStart: 450,
+            lodEnd: 510,
+            avatarSize: 360,
+            bioWidth: 600,
+            bioHeight: 300,
+        };
+    }
+};
+
 const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     collection,
     onBack,
@@ -205,6 +269,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const { t } = useTranslation();
     // The artist wall renders the same cards as GridView, so it follows the same look settings.
     const fullBleedCover = useGridViewSettingsStore(state => state.gridViewFullBleedCover);
+    const squareCards = useGridViewSettingsStore(state => state.gridViewSquareCards) && fullBleedCover;
     const minCardScale = useGridViewSettingsStore(state => state.gridViewMinCardScale);
     const minCardOpacity = useGridViewSettingsStore(state => state.gridViewMinCardOpacity);
     const localLibraryCatalog = useLocalLibraryCatalog(localSongs);
@@ -242,65 +307,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
     // Layout values for different container size breakpoints
     const layoutConfig = useMemo(() => {
-        const width = containerSize.width;
-        if (width < 768) {
-            // Mobile/Narrow
-            return {
-                cardWidth: 180,
-                cardHeight: 280,
-                spacingX: 205,
-                spacingY: 270,
-                maxDistance: 420,
-                lodStart: 280,
-                lodEnd: 320,
-                avatarSize: 200,
-                bioWidth: 360,
-                bioHeight: 200,
-            };
-        } else if (width < 1440) {
-            // Desktop
-            return {
-                cardWidth: 220,
-                cardHeight: 330,
-                spacingX: 250,
-                spacingY: 320,
-                maxDistance: 500,
-                lodStart: 340,
-                lodEnd: 385,
-                avatarSize: 280,
-                bioWidth: 480,
-                bioHeight: 260,
-            };
-        } else if (width < 2000) {
-            // Large Desktop
-            return {
-                cardWidth: 250,
-                cardHeight: 375,
-                spacingX: 285,
-                spacingY: 365,
-                maxDistance: 580,
-                lodStart: 400,
-                lodEnd: 450,
-                avatarSize: 320,
-                bioWidth: 540,
-                bioHeight: 280,
-            };
-        } else {
-            // Ultra Desktop
-            return {
-                cardWidth: 280,
-                cardHeight: 420,
-                spacingX: 320,
-                spacingY: 410,
-                maxDistance: 660,
-                lodStart: 450,
-                lodEnd: 510,
-                avatarSize: 360,
-                bioWidth: 600,
-                bioHeight: 300,
-            };
-        }
-    }, [containerSize.width]);
+        const box = resolveArtistGridCardBox(containerSize.width);
+        return squareCards ? squareGridCardBox(box) : box;
+    }, [containerSize.width, squareCards]);
 
     // Dynamically calculate visible clipping radius centered on (0,0) viewport coordinates
     const clipRadius = useMemo(() => {

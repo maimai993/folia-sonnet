@@ -14,6 +14,7 @@ import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePr
 // comfort knobs, not part of a shared theme.
 
 const GRID_VIEW_FULL_BLEED_COVER_KEY = 'gridview_full_bleed_cover';
+const GRID_VIEW_SQUARE_CARDS_KEY = 'gridview_square_cards';
 const GRID_VIEW_MIN_CARD_SCALE_KEY = 'gridview_min_card_scale';
 const GRID_VIEW_MIN_CARD_OPACITY_KEY = 'gridview_min_card_opacity';
 
@@ -37,9 +38,11 @@ const getStoredNumber = (key: string, fallback: number, clamp: (value: number) =
 
 export type GridViewSettingsState = {
     gridViewFullBleedCover: boolean;
+    gridViewSquareCards: boolean;
     gridViewMinCardScale: number;
     gridViewMinCardOpacity: number;
     handleToggleGridViewFullBleedCover: (enabled: boolean) => void;
+    handleToggleGridViewSquareCards: (enabled: boolean) => void;
     handleSetGridViewMinCardScale: (scale: number) => void;
     handleSetGridViewMinCardOpacity: (opacity: number) => void;
     resetGridViewCardFalloff: () => void;
@@ -51,11 +54,16 @@ const persistNumber = (key: string, value: number) => {
 
 export const useGridViewSettingsStore = create<GridViewSettingsState>(set => ({
     gridViewFullBleedCover: getStoredBoolean(GRID_VIEW_FULL_BLEED_COVER_KEY, false),
+    gridViewSquareCards: getStoredBoolean(GRID_VIEW_SQUARE_CARDS_KEY, false),
     gridViewMinCardScale: getStoredNumber(GRID_VIEW_MIN_CARD_SCALE_KEY, HEX_CARD_MIN_SCALE_DEFAULT, clampGridViewMinCardScale),
     gridViewMinCardOpacity: getStoredNumber(GRID_VIEW_MIN_CARD_OPACITY_KEY, HEX_CARD_MIN_OPACITY_DEFAULT, clampGridViewMinCardOpacity),
     handleToggleGridViewFullBleedCover: (enabled) => {
         set({ gridViewFullBleedCover: enabled });
         setStoredBoolean(GRID_VIEW_FULL_BLEED_COVER_KEY, enabled);
+    },
+    handleToggleGridViewSquareCards: (enabled) => {
+        set({ gridViewSquareCards: enabled });
+        setStoredBoolean(GRID_VIEW_SQUARE_CARDS_KEY, enabled);
     },
     handleSetGridViewMinCardScale: (scale) => {
         const normalized = clampGridViewMinCardScale(scale);

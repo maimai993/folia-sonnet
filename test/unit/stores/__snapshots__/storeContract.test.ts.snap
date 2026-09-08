@@ -42,6 +42,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "gridview_full_bleed_cover",
   "gridview_min_card_opacity",
   "gridview_min_card_scale",
+  "gridview_square_cards",
   "harmony_subtitle_background",
   "hide_taskbar_icon",
   "home_layout_style",

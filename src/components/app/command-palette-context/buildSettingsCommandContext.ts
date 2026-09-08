@@ -85,6 +85,10 @@ export const buildSettingsCommandContext = (
         toggleGridViewFullBleedCover: () => useGridViewSettingsStore.getState().handleToggleGridViewFullBleedCover(
             !useGridViewSettingsStore.getState().gridViewFullBleedCover,
         ),
+        toggleGridViewSquareCards: () => useGridViewSettingsStore.getState().handleToggleGridViewSquareCards(
+            !useGridViewSettingsStore.getState().gridViewSquareCards,
+        ),
+        canUseGridViewSquareCards: () => useGridViewSettingsStore.getState().gridViewFullBleedCover,
         toggleLatticeVignette: () => useLatticeSettingsStore.getState().handleToggleLatticeVignette(
             !useLatticeSettingsStore.getState().latticeVignette,
         ),

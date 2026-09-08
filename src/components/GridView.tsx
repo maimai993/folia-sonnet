@@ -16,6 +16,7 @@ import { getProviderCacheKey, getProviderCacheWithLegacyMigration } from '../ser
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { PolaroidCard, type GridItem } from './folia-grid/PolaroidCard';
+import { squareGridCardBox } from './folia-grid/gridCardLayout';
 import {
     applyHexCardFrameStyles,
     computeHexCardFrame,
@@ -122,6 +123,57 @@ const getStoredLocalTrackSortDirection = (): LocalSongFolderSortDirection => {
     const stored = localStorage.getItem(LOCAL_TRACK_SORT_DIRECTION_STORAGE_KEY);
     return stored === 'desc' ? stored : 'asc';
 };
+// Card box and hex spacing per container-width breakpoint. Module scope so the memo above
+// reads as "pick a breakpoint, then apply the square-card option" rather than hiding the
+// table inside it.
+const resolveGridViewCardBox = (width: number) => {
+    if (width < 768) {
+        // Mobile/Narrow
+        return {
+            cardWidth: 180,
+            cardHeight: 280,
+            spacingX: 205,
+            spacingY: 270,
+            maxDistance: 420,
+            lodStart: 280,
+            lodEnd: 320,
+        };
+    } else if (width < 1440) {
+        // Desktop
+        return {
+            cardWidth: 220,
+            cardHeight: 330,
+            spacingX: 250,
+            spacingY: 320,
+            maxDistance: 500,
+            lodStart: 340,
+            lodEnd: 385,
+        };
+    } else if (width < 2000) {
+        // Large Desktop
+        return {
+            cardWidth: 250,
+            cardHeight: 375,
+            spacingX: 285,
+            spacingY: 365,
+            maxDistance: 580,
+            lodStart: 400,
+            lodEnd: 450,
+        };
+    } else {
+        // Ultra Desktop
+        return {
+            cardWidth: 280,
+            cardHeight: 420,
+            spacingX: 320,
+            spacingY: 410,
+            maxDistance: 660,
+            lodStart: 450,
+            lodEnd: 510,
+        };
+    }
+};
+
 const GRID_VIEW_RENDER_BUFFER_FACTOR = 0.75;
 const GRID_VIEW_CARD_VISIBILITY_BUFFER = 96;
 const GRID_SEARCH_DEBOUNCE_MS = 80;
@@ -194,6 +246,9 @@ export const GridView: React.FC<GridViewProps> = ({
     const { t } = useTranslation();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const fullBleedCover = useGridViewSettingsStore(state => state.gridViewFullBleedCover);
+    // Only the full-bleed layout can be square: the polaroid frame needs the extra height for the
+    // printed label under its artwork.
+    const squareCards = useGridViewSettingsStore(state => state.gridViewSquareCards) && fullBleedCover;
     const minCardScale = useGridViewSettingsStore(state => state.gridViewMinCardScale);
     const minCardOpacity = useGridViewSettingsStore(state => state.gridViewMinCardOpacity);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -249,52 +304,9 @@ export const GridView: React.FC<GridViewProps> = ({
     // Layout values for different container size breakpoints
     const layoutConfig = useMemo(() => {
         const width = containerSize.width;
-        if (width < 768) {
-            // Mobile/Narrow
-            return {
-                cardWidth: 180,
-                cardHeight: 280,
-                spacingX: 205,
-                spacingY: 270,
-                maxDistance: 420,
-                lodStart: 280,
-                lodEnd: 320,
-            };
-        } else if (width < 1440) {
-            // Desktop
-            return {
-                cardWidth: 220,
-                cardHeight: 330,
-                spacingX: 250,
-                spacingY: 320,
-                maxDistance: 500,
-                lodStart: 340,
-                lodEnd: 385,
-            };
-        } else if (width < 2000) {
-            // Large Desktop
-            return {
-                cardWidth: 250,
-                cardHeight: 375,
-                spacingX: 285,
-                spacingY: 365,
-                maxDistance: 580,
-                lodStart: 400,
-                lodEnd: 450,
-            };
-        } else {
-            // Ultra Desktop
-            return {
-                cardWidth: 280,
-                cardHeight: 420,
-                spacingX: 320,
-                spacingY: 410,
-                maxDistance: 660,
-                lodStart: 450,
-                lodEnd: 510,
-            };
-        }
-    }, [containerSize.width]);
+        const box = resolveGridViewCardBox(width);
+        return squareCards ? squareGridCardBox(box) : box;
+    }, [containerSize.width, squareCards]);
 
     // Dynamically calculate visible clipping radius centered on (0,0) viewport coordinates
     const clipRadius = useMemo(() => {

@@ -423,6 +423,17 @@ export const settingsCommands: CommandPaletteCommand[] = [
         execute: () => false,
     }),
     createToggleCommand('settings-toggle-gridview-full-bleed-cover', 'settings', 'Full-bleed grid covers', 'Toggle whether grid card artwork fills the whole card', ['full bleed cover', 'edge to edge cover', 'grid cover art', 'cover fills card', '全画幅封面', '封面铺满', '网格卡片封面'], context => context.settings.toggleGridViewFullBleedCover()),
+    createToggleCommand(
+        'settings-toggle-gridview-square-cards',
+        'settings',
+        'Square grid cards',
+        'Toggle whether full-bleed grid cards are square instead of poster-shaped',
+        ['square cards', 'square grid card', 'uncropped cover', 'card aspect ratio', '正方形卡片', '方形卡片', '卡片比例'],
+        context => context.settings.toggleGridViewSquareCards(),
+        // Same gate the settings panel hides the row behind: squaring the card only means anything
+        // once the artwork owns it. A getter, because the parent toggle flips without a re-render.
+        { isAvailable: context => (context ? context.settings.canUseGridViewSquareCards() : false) },
+    ),
     defineCommand({
         id: 'lattice-poster-tint',
         group: 'settings',
