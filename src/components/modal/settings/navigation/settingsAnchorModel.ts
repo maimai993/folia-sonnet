@@ -14,6 +14,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     stageTrackPill: { section: 'appearance', labelKey: 'options.stageTrackPill' },
     grid3dCardStyle: { section: 'appearance', labelKey: 'options.grid3dCardStyle' },
     latticeSettings: { section: 'appearance', labelKey: 'options.latticeSettings' },
+    gridViewCardSettings: { section: 'appearance', labelKey: 'options.gridViewCardSettings' },
     importExportTitle: { section: 'appearance', labelKey: 'options.importExportTitle' },
 
     // GeneralSettingsSubview (PinnedCommandSettings renders inside it)

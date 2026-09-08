@@ -205,6 +205,7 @@ export type CommandPaletteSettingsContext = {
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;
+    toggleGridViewFullBleedCover: () => void;
     toggleLatticeVignette: () => void;
     toggleLatticeAutoFocusOnSongChange: () => void;
     latticePosterTintEnabled: boolean;

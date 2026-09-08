@@ -3,6 +3,8 @@ import type { CommandPaletteSurface } from './types';
 // Declares the inline Lattice poster-tint editor used by the settings command.
 
 export const latticePosterTintSurface: CommandPaletteSurface = {
+    // Everything these controls change is drawn behind the palette; a blurred backdrop hides it.
+    backdrop: 'clear',
     load: () => import('./LatticePosterTintSurfaceView'),
     mapProps: ({ context, isDaylight, theme }) => ({
         enabled: context.settings.latticePosterTintEnabled,

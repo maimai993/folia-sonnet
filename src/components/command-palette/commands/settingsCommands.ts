@@ -5,8 +5,9 @@ import { hasUploadedObsAsset } from '../../../services/obs/visualSettingsConfig'
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createAppLanguageCommand, createSettingsCommand, createSettingsAnchorCommand, defineCommand } from '../commandFactories';
 import { sleepTimerCommand } from './sleepTimerCommand';
-import { Layers3 } from 'lucide-react';
+import { Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
+import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
@@ -409,6 +410,19 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-player-back-button', 'settings', 'Always show player back button', 'Toggle whether the player page back button stays visible', ['always show back button', 'player back button', 'back button', '返回按钮', '始终显示返回按钮', '播放页返回按钮', 'fanhui annniu', 'bofangye fanhui annniu', 'fh', 'bfyfh'], context => context.settings.toggleAlwaysShowPlayerBackButton()),
     createToggleCommand('settings-toggle-lattice-vignette', 'settings', 'Lattice vignette', 'Turn the edge vignette on the queue collage on or off', ['lattice', 'vignette', 'queue collage vignette', 'collage vignette', 'poster wall vignette', '暗角', '边缘暗角', '队列拼贴', '队列拼贴暗角', '拼贴暗角'], context => context.settings.toggleLatticeVignette()),
     createToggleCommand('settings-toggle-lattice-auto-focus', 'settings', 'Lattice auto-focus', 'Toggle whether the queue collage follows the playing song when tracks change', ['lattice', 'lattice auto focus', 'queue collage', 'follow playing song', 'follow track changes', 'poster wall follow', '队列拼贴', '切歌自动聚焦', '自动聚焦当前歌曲', '海报墙跟随'], context => context.settings.toggleLatticeAutoFocusOnSongChange()),
+    defineCommand({
+        id: 'settings-gridview-cards',
+        group: 'settings',
+        title: 'Grid card look',
+        description: 'Adjust full-bleed covers and how far grid cards shrink and fade with distance',
+        keywords: ['grid cards', 'folia grid', 'card cover', 'card falloff', 'card size', 'card opacity', '网格卡片', '卡片封面', '卡片衰减'],
+        icon: Images,
+        requiresInput: true,
+        surface: gridViewCardsSurface,
+        placeholder: context => context.shared.t('commandPalette.gridViewCardsPlaceholder', 'Adjust the controls below'),
+        execute: () => false,
+    }),
+    createToggleCommand('settings-toggle-gridview-full-bleed-cover', 'settings', 'Full-bleed grid covers', 'Toggle whether grid card artwork fills the whole card', ['full bleed cover', 'edge to edge cover', 'grid cover art', 'cover fills card', '全画幅封面', '封面铺满', '网格卡片封面'], context => context.settings.toggleGridViewFullBleedCover()),
     defineCommand({
         id: 'lattice-poster-tint',
         group: 'settings',

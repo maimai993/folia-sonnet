@@ -112,6 +112,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-toggle-player-back-button",
   "settings-toggle-lattice-vignette",
   "settings-toggle-lattice-auto-focus",
+  "settings-gridview-cards",
+  "settings-toggle-gridview-full-bleed-cover",
   "lattice-poster-tint",
   "settings-toggle-track-switch-buttons",
   "settings-toggle-main-window-titlebar",

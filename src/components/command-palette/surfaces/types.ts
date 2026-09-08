@@ -44,6 +44,15 @@ export type CommandPaletteSurface = {
      */
     presentation?: 'overlay' | 'inline';
     /**
+     * How the overlay treats what is behind it. `blur` is the default frosted scrim.
+     *
+     * `clear` drops the blur and thins the scrim, for a surface whose controls change what is
+     * drawn behind the palette: with the default backdrop the poster wall or the card grid being
+     * tuned is the very thing the palette hides, so every slider is dragged blind. The panel turns
+     * near-opaque in exchange, because it no longer has a blurred plate to sit legibly on.
+     */
+    backdrop?: 'blur' | 'clear';
+    /**
      * Lazily imported so the registry stays a pure-TS module: pulling react-window,
      * react-i18next or the eager visualizer glob into the module graph would break the
      * node-environment registry tests.

@@ -13,6 +13,10 @@ export interface HexCardFrameOptions {
     cardWidth?: number;
     cardHeight?: number;
     visibilityBuffer?: number;
+    /** Scale the furthest still-visible card shrinks to. Defaults to the historical falloff. */
+    minScale?: number;
+    /** Opacity the furthest still-visible card fades to. Defaults to the historical falloff. */
+    minOpacity?: number;
 }
 
 export interface HexCardFrame {
@@ -54,6 +58,15 @@ const formatNumber = (value: number, precision = 4): string => {
 
 const formatOpacity = (value: number): string => formatNumber(Math.max(0, Math.min(1, value)), 3);
 
+// Scale of the card sitting under the viewport centre; the falloff interpolates from here down to
+// `minScale`. Both thresholds are user-tunable, so the defaults below are the shipped falloff and
+// `useGridViewSettingsStore` clamps whatever the user picks back into a sane band.
+export const HEX_CARD_CENTER_SCALE = 1.1;
+export const HEX_CARD_MIN_SCALE_DEFAULT = 0.45;
+export const HEX_CARD_MIN_OPACITY_DEFAULT = 0.4;
+export const HEX_CARD_MIN_SCALE_BOUNDS = { min: 0.2, max: 1.1 } as const;
+export const HEX_CARD_MIN_OPACITY_BOUNDS = { min: 0, max: 1 } as const;
+
 const buildTransform = (coord: HexGridCoord, scale: number): string => (
     `translate3d(${formatNumber(coord.baseX, 3)}px, ${formatNumber(coord.baseY, 3)}px, 0) scale(${formatNumber(scale)})`
 );
@@ -73,6 +86,8 @@ export const computeHexCardFrame = (
         cardWidth = 0,
         cardHeight = 0,
         visibilityBuffer = 0,
+        minScale = HEX_CARD_MIN_SCALE_DEFAULT,
+        minOpacity = HEX_CARD_MIN_OPACITY_DEFAULT,
     }: HexCardFrameOptions
 ): HexCardFrame => {
     const centerX = coord.baseX + dx;
@@ -86,8 +101,8 @@ export const computeHexCardFrame = (
             && Math.abs(centerY) <= viewportHeight / 2 + cardHeight / 2 + visibilityBuffer;
     const visible = visibleInRadius && visibleInViewport;
     const progress = Math.min(distance / Math.max(maxDistance, 1), 1);
-    const scale = 1.1 - 0.65 * progress;
-    const opacity = visible ? 1.0 - 0.60 * progress : 0;
+    const scale = HEX_CARD_CENTER_SCALE - (HEX_CARD_CENTER_SCALE - minScale) * progress;
+    const opacity = visible ? 1.0 - (1.0 - minOpacity) * progress : 0;
     const zIndex = Math.round(50 - 49 * progress);
 
     let queueOpacity = '0';

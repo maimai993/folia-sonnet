@@ -13,6 +13,7 @@ import ThemePark from './ThemePark';
 import LyricFilterSettingsModal from './LyricFilterSettingsModal';
 import type { LyricFilterDraft } from './LyricFilterSettingsModal';
 import GlobalLyricOffsetModal from './settings/GlobalLyricOffsetModal';
+import { settingsCardClassFor, settingsToggleOffClassFor } from './settings/settingsCardClasses';
 import AppearanceSettingsSubview from './settings/AppearanceSettingsSubview';
 import DesktopSettingsSubview from './settings/DesktopSettingsSubview';
 import GeneralSettingsSubview from './settings/GeneralSettingsSubview';
@@ -949,11 +950,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const errorTextColor = isDaylight ? 'text-red-600' : 'text-red-400';
     const errorBgColor = isDaylight ? 'bg-red-500/10' : 'bg-red-500/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
-    const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
+    const toggleOffBackgroundClass = settingsToggleOffClassFor(isDaylight);
     const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
-    const settingsCardClass = isDaylight
-        ? 'bg-black/[0.025] border-black/10'
-        : 'bg-white/5 border-white/5';
+    const settingsCardClass = settingsCardClassFor(isDaylight);
     const settingsCardInteractiveClass = isDaylight
         ? 'bg-black/[0.025] border-black/10 hover:bg-black/[0.055]'
         : 'bg-white/5 border-white/5 hover:bg-white/8';
