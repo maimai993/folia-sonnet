@@ -234,6 +234,8 @@ declare global {
     platform?: string;
     updateCheckEnabled: boolean;
     autoUpdateEnabled: boolean;
+    autoUpdateSupported: boolean;
+    autoUpdateSupportReason?: 'system' | 'channel' | null;
     currentVersion: string;
     availableVersion: string | null;
     updateUrl: string | null;

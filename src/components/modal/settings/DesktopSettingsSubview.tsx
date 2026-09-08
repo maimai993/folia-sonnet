@@ -25,6 +25,8 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 // src/components/modal/settings/DesktopSettingsSubview.tsx
 // Desktop-only tray, update, and AI settings separated from the global settings modal.
 
+const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/folia-major-bin';
+
 type ElectronSettingsState = {
     GEMINI_API_KEY: string;
     OPENAI_API_KEY: string;
@@ -381,18 +383,26 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             </div>
                             <div className="space-y-0.5 text-left">
                                 <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.enableAutoUpdate') || 'Enable Auto Update'}
+                                    {updateStatus?.autoUpdateSupported
+                                        ? t('options.enableAutoUpdate') || 'Enable Auto Update'
+                                        : t('options.autoUpdateUnavailable')}
                                 </h4>
                                 <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.enableAutoUpdateDesc') || 'Automatically download updates after a new version is found.'}
+                                    {updateStatus?.autoUpdateSupported
+                                        ? t('options.enableAutoUpdateDesc') || 'Automatically download updates after a new version is found.'
+                                        : t('options.manualUpdateOnlyDesc')}
                                 </p>
                             </div>
                         </div>
-                        {renderToggle(electronSettings.ENABLE_AUTO_UPDATE, onToggleAutoUpdate, !canEnableAutoUpdate)}
+                        {renderToggle(
+                            electronSettings.ENABLE_AUTO_UPDATE && Boolean(updateStatus?.autoUpdateSupported),
+                            onToggleAutoUpdate,
+                            !canEnableAutoUpdate,
+                        )}
                     </div>
                 </div>
 
-                {updateStatus?.updateCheckSupportReason === 'system' && (
+                {updateStatus?.autoUpdateSupportReason === 'system' && (
                     <div className="px-1 text-xs leading-relaxed text-left text-amber-500">
                         {t('options.updateUnsupportedSystem') || 'Automatic updates are unavailable on the current system.'}
                     </div>
@@ -405,7 +415,9 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                 )}
 
                 <div className="text-[10px] opacity-45 px-1 leading-relaxed text-left" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.autoUpdateGithubNotice') || 'Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled.'}
+                    {updateStatus?.autoUpdateSupported
+                        ? t('options.autoUpdateGithubNotice') || 'Auto update needs access to GitHub; if the network is unstable, keep a system proxy enabled.'
+                        : t('options.updateCheckGithubNotice')}
                 </div>
 
                 {updateStatus?.availableVersion && (
@@ -426,7 +438,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             <div className="text-xs text-left text-amber-400 font-medium opacity-90">
                                 {t('options.linuxManualUpdateNotice')}
                             </div>
-                        ) : !updateStatus.supported ? (
+                        ) : !updateStatus.autoUpdateSupported ? (
                             <div className="text-xs text-left text-amber-400 font-medium opacity-90">
                                 {t('options.manualUpdateNotice')}
                             </div>
@@ -439,7 +451,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         )}
 
                         {/* 下载进度条 */}
-                        {updateStatus.status === 'downloading' && updateStatus.downloadProgress && (
+                        {updateStatus.autoUpdateSupported && updateStatus.status === 'downloading' && updateStatus.downloadProgress && (
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between text-xs font-mono">
                                     <span className="opacity-60 text-left" style={{ color: 'var(--text-secondary)' }}>
@@ -464,7 +476,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         )}
 
                         <div className="flex flex-wrap gap-2">
-                            {!electronSettings.ENABLE_AUTO_UPDATE && (
+                            {updateStatus.autoUpdateSupported && !electronSettings.ENABLE_AUTO_UPDATE && (
                                 <button
                                     type="button"
                                     onClick={onDownloadUpdate}
@@ -476,7 +488,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     {t('options.downloadUpdate') || 'Download Update'}
                                 </button>
                             )}
-                            {updateStatus.status === 'downloaded' && (
+                            {updateStatus.autoUpdateSupported && updateStatus.status === 'downloaded' && (
                                 <button
                                     type="button"
                                     onClick={onInstallUpdate}
@@ -525,8 +537,21 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 style={{ color: 'var(--text-primary)' }}
                             >
                                 <ExternalLink size={12} />
-                                {t('options.githubRelease')}
+                                {updateStatus.autoUpdateSupported
+                                    ? t('options.githubRelease')
+                                    : t('options.fullInstallerGithub')}
                             </button>
+                            {updateStatus.platform === 'linux' && electronSettings.UPDATE_CHANNEL === 'realeco' && (
+                                <button
+                                    type="button"
+                                    onClick={() => window.electron?.openExternalUrl(AUR_PACKAGE_URL)}
+                                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <ExternalLink size={12} />
+                                    {t('options.aurPackage')}
+                                </button>
+                            )}
                         </div>
 
                         {updateStatus.platform !== 'linux' && (

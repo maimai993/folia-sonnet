@@ -59,6 +59,7 @@ import { selectHomeLayoutSettingsSnapshot, useHomeLayoutSettingsStore } from '..
 import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
+const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/folia-major-bin';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
     ? `${__APP_VERSION_LABEL__} v${__APP_VERSION__} · Stack ${__DOCKER_STACK_VERSION__} · ${__COMMIT_HASH__}`
     : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
@@ -630,7 +631,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleToggleAutoUpdate = async () => {
-        if (!window.electron?.saveSettings || !electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.supported) {
+        if (!window.electron?.saveSettings || !electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.autoUpdateSupported) {
             return;
         }
 
@@ -1173,18 +1174,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const updateBadgeIcon = updateStatus?.status === 'checking'
         ? <Loader2 size={13} className="animate-spin" />
         : updateStatus?.availableVersion
-            ? <Download size={13} />
+            ? updateStatus.autoUpdateSupported
+                ? <Download size={13} />
+                : <ExternalLink size={13} />
             : updateStatus?.status === 'error'
                 ? <AlertCircle size={13} />
                 : <Check size={13} />;
     const canDownloadUpdate = Boolean(
         electronSettings.ENABLE_UPDATE_CHECK &&
-        updateStatus?.supported &&
+        updateStatus?.autoUpdateSupported &&
         updateStatus?.availableVersion &&
         updateStatus.status !== 'downloading' &&
         updateStatus.status !== 'downloaded'
     );
-    const canEnableAutoUpdate = Boolean(electronSettings.ENABLE_UPDATE_CHECK && updateStatus?.supported);
+    const canEnableAutoUpdate = Boolean(electronSettings.ENABLE_UPDATE_CHECK && updateStatus?.autoUpdateSupported);
 
     const settingsNavGroups = useMemo(
         () => buildSettingsNavGroups(t, { isElectron }),
@@ -1442,7 +1445,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         {t('options.newVersionFound', { version: updateStatus.availableVersion })}
                                                     </span>
 
-                                                    {updateStatus.status === 'downloaded' ? (
+                                                    {updateStatus.autoUpdateSupported && updateStatus.status === 'downloaded' ? (
                                                         <button
                                                             type="button"
                                                             onClick={handleInstallUpdate}
@@ -1450,12 +1453,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         >
                                                             {t('options.restartToInstallUpdate')}
                                                         </button>
-                                                    ) : updateStatus.status === 'downloading' ? (
+                                                    ) : updateStatus.autoUpdateSupported && updateStatus.status === 'downloading' ? (
                                                         <span className="text-zinc-300 opacity-80">
                                                             {t('options.downloadingProgress', { percent: Math.round(updateStatus.downloadProgress?.percent || 0) })}
                                                         </span>
                                                     ) : (
-                                                        !electronSettings.ENABLE_AUTO_UPDATE && (
+                                                        updateStatus.autoUpdateSupported && !electronSettings.ENABLE_AUTO_UPDATE && (
                                                             <button
                                                                 type="button"
                                                                 onClick={handleDownloadUpdate}
@@ -1506,8 +1509,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                         style={{ color: 'var(--text-secondary)' }}
                                                     >
                                                         <ExternalLink size={11} />
-                                                        {t('options.githubRelease')}
+                                                        {updateStatus.autoUpdateSupported
+                                                            ? t('options.githubRelease')
+                                                            : t('options.fullInstallerGithub')}
                                                     </button>
+                                                    {updateStatus.platform === 'linux' && electronSettings.UPDATE_CHANNEL === 'realeco' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenDownloadUrl(AUR_PACKAGE_URL)}
+                                                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 opacity-65 transition-colors hover:bg-white/10 hover:opacity-100"
+                                                            style={{ color: 'var(--text-secondary)' }}
+                                                        >
+                                                            <ExternalLink size={11} />
+                                                            {t('options.aurPackage')}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </>
                                         )}
@@ -1515,7 +1531,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         {/* 第三行：多平台网络与手动下载提醒小字 */}
                                         {updateStatus?.availableVersion && (
                                             <div className="text-xs opacity-60 mt-0.5 space-y-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                {(updateStatus.platform === 'darwin' || updateStatus.platform === 'linux' || !updateStatus.supported) && (
+                                                {!updateStatus.autoUpdateSupported && (
                                                     <div>
                                                         {updateStatus.platform === 'darwin'
                                                             ? t('options.macManualUpdateNotice')

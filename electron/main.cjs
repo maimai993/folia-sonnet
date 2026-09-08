@@ -19,7 +19,14 @@ const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
 const { createDisplaySleepBlocker } = require('./displaySleepBlocker.cjs');
 const { createLyricApi } = require('./lyricApi.cjs');
 const { createLocalCoverAssetStore, getLocalCoverAssetDirectory } = require('./localCoverAssets.cjs');
-const { getReleaseUrl, getUpdateProviderConfig, resolveReleaseChannel } = require('./updateChannels.cjs');
+const {
+  compareVersions,
+  getReleaseUrl,
+  getUpdateDiscoveryConfig,
+  getUpdateProviderConfig,
+  parseUpdateMetadataVersion,
+  resolveReleaseChannel,
+} = require('./updateChannels.cjs');
 const { resolveCacheLimit, selectEvictions } = require('./audioCachePrune.cjs');
 const { createAnalysisHost } = require('./analysis/host.cjs');
 const { createDebugHost, runtimeLine } = require('./debug/debugHost.cjs');
@@ -3075,9 +3082,6 @@ function normalizeUpdateChannelSelection(value) {
 }
 
 function getUpdateCheckSupportReason() {
-  if (process.platform !== 'win32') {
-    return 'system';
-  }
   return getCurrentReleaseChannel().updateEnabled ? null : 'channel';
 }
 
@@ -3103,11 +3107,23 @@ function getDevUpdatePreviewVersion() {
 
 function isAutoUpdaterSupported() {
   return (
+    process.platform === 'win32' &&
     isUpdateCheckSupported() &&
     app.isPackaged &&
     process.env.ELECTRON_DEV !== 'true' &&
     process.env.NODE_ENV !== 'development'
   );
+}
+
+function getAutoUpdateSupportReason() {
+  if (!getCurrentReleaseChannel().updateEnabled) {
+    return 'channel';
+  }
+  return process.platform === 'win32' ? null : 'system';
+}
+
+function isPackagedUpdateRuntime() {
+  return app.isPackaged && process.env.ELECTRON_DEV !== 'true' && process.env.NODE_ENV !== 'development';
 }
 
 const updateState = {
@@ -3132,6 +3148,8 @@ function getUpdateStatus() {
     platform: process.platform,
     updateCheckEnabled: getUpdateCheckEnabled(),
     autoUpdateEnabled: getAutoUpdateEnabled(),
+    autoUpdateSupported: isDevPreview || isAutoUpdaterSupported(),
+    autoUpdateSupportReason: isDevPreview ? null : getAutoUpdateSupportReason(),
     lastSeenVersion: store.get(LAST_SEEN_UPDATE_VERSION_SETTING_KEY) || null,
     updateSeen: Boolean(
       availableVersion &&
@@ -3321,9 +3339,13 @@ async function checkForUpdates({ manual = false } = {}) {
     return getUpdateStatus();
   }
 
-  if (!isAutoUpdaterSupported()) {
+  if (!isPackagedUpdateRuntime()) {
     setUpdateState({ status: 'idle', error: null, downloadProgress: null });
     return getUpdateStatus();
+  }
+
+  if (!isAutoUpdaterSupported()) {
+    return checkForManualUpdateAvailability();
   }
 
   try {
@@ -3341,6 +3363,66 @@ async function checkForUpdates({ manual = false } = {}) {
       lastCheckedAt: Date.now(),
       downloadProgress: null,
     });
+  }
+
+  return getUpdateStatus();
+}
+
+async function checkForManualUpdateAvailability() {
+  const releaseChannel = getCurrentReleaseChannel();
+  const discovery = getUpdateDiscoveryConfig(releaseChannel, FOLIA_GITHUB_REPOSITORY);
+  if (!discovery) {
+    setUpdateState({ status: 'unsupported', error: null, availableVersion: null, downloadProgress: null });
+    return getUpdateStatus();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  setUpdateState({ status: 'checking', error: null, downloadProgress: null });
+
+  try {
+    // Keep the startup check off the app's default session so refreshing proxy state cannot
+    // interrupt playback, provider requests, or other live connections.
+    const ses = session.fromPartition('folia-update-check');
+    await ses.setProxy({ mode: 'system' });
+    await ses.forceReloadProxyConfig();
+    const response = await ses.fetch(discovery.url, {
+      headers: {
+        Accept: 'text/yaml, text/plain',
+        'User-Agent': `Folia/${app.getVersion()}`,
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Update metadata request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const metadata = await response.text();
+    const latestVersion = parseUpdateMetadataVersion(metadata);
+    if (!latestVersion) {
+      throw new Error('Update metadata did not include a version.');
+    }
+
+    const hasUpdate = compareVersions(latestVersion, app.getVersion()) > 0;
+    setUpdateState({
+      status: hasUpdate ? 'available' : 'latest',
+      availableVersion: hasUpdate ? latestVersion : null,
+      updateUrl: hasUpdate
+        ? getReleaseUrl(releaseChannel.id, latestVersion, FOLIA_RELEASES_URL)
+        : FOLIA_RELEASES_URL,
+      error: null,
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+  } catch (error) {
+    setUpdateState({
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+      lastCheckedAt: Date.now(),
+      downloadProgress: null,
+    });
+  } finally {
+    clearTimeout(timeout);
   }
 
   return getUpdateStatus();
@@ -3392,7 +3474,7 @@ function scheduleStartupUpdateCheck() {
     return;
   }
 
-  if (!isAutoUpdaterSupported()) {
+  if (!isPackagedUpdateRuntime()) {
     setUpdateState({ status: 'idle', error: null });
     return;
   }
@@ -5609,7 +5691,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
       downloadProgress: null,
     });
 
-    if (getUpdateCheckEnabled() && isAutoUpdaterSupported()) {
+    if (getUpdateCheckEnabled() && isPackagedUpdateRuntime() && isUpdateCheckSupported()) {
       checkForUpdates().catch((error) => {
         setUpdateState({
           status: 'error',
