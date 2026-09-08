@@ -75,6 +75,7 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     showSubtitleTranslation: 'visualizer',
     subtitleContentMode: 'visualizer',
     subtitleOverlayBackground: 'visualizer',
+    subtitleUpcomingLyricsBlur: 'visualizer',
     subtitleOverlayOpacity: 'visualizer',
     showHarmonySubtitle: 'visualizer',
     harmonySubtitleBackground: 'visualizer',

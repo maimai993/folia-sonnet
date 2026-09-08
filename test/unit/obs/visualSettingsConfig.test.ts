@@ -123,15 +123,15 @@ describe('buildVisualSettingsConfig', () => {
         expect(lost).toEqual([]);
     });
 
-    // The five fields that were missing. Booleans and a number, so a regression here reads as a real
+    // These scalar fields are booleans and a number, so a regression here reads as a real
     // absence rather than as an empty value the codec is allowed to drop.
-    it('carries the background toggles, static mode and the subtitle overlay opacity', () => {
+    it('carries background toggles, static mode and subtitle overlay treatment', () => {
         useVisualizerSettingsStore.setState({
             disableVisualizerGeometricBackground: true,
             disableVisualizerVignette: true,
         });
         useThemeSettingsStore.setState({ useCoverColorBg: true, staticMode: true });
-        useTypographySettingsStore.setState({ subtitleOverlayOpacity: 0.45 });
+        useTypographySettingsStore.setState({ subtitleOverlayOpacity: 0.45, subtitleUpcomingLyricsBlur: false });
 
         const restored = decompressConfig(extractCfgFromInput(asObsUrl(compressConfig(buildVisualSettingsConfig()))));
         expect(restored).toMatchObject({
@@ -140,6 +140,7 @@ describe('buildVisualSettingsConfig', () => {
             disableVisualizerVignette: true,
             staticMode: true,
             subtitleOverlayOpacity: 0.45,
+            subtitleUpcomingLyricsBlur: false,
         });
     });
 

@@ -1545,6 +1545,7 @@ export default {
     "subtitleOverlayOpacity": "Opasitas Subtitle",
     "subtitleOverlayBackground": "Latar Belakang Subtitle",
     "subtitleOverlayBackgroundDesc": "Tambahkan halo lembut yang peka tema untuk meningkatkan keterbacaan di atas visual yang ramai.",
+    "subtitleUpcomingLyricsBlur": "Buramkan lirik non-terjemahan",
     "showHarmonySubtitle": "Tampilkan Subtitle Harmoni",
     "showHarmonySubtitleDesc": "Tampilkan atau sembunyikan overlay lirik harmoni atas.",
     "harmonySubtitleBackground": "Latar Belakang Subtitle Harmoni",

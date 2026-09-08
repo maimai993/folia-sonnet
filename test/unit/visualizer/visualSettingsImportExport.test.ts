@@ -52,6 +52,7 @@ describe('Visual Settings Import and Export', () => {
         showSubtitleTranslation: false,
         subtitleContentMode: 'romanization' as const,
         subtitleOverlayBackground: true,
+        subtitleUpcomingLyricsBlur: false,
         showHarmonySubtitle: false,
         harmonySubtitleBackground: true,
         lyricsFontStyle: 'sans',
@@ -205,6 +206,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.subtitleUpcomingLyricsBlur).toBe(false);
         expect(decoded.showHarmonySubtitle).toBe(false);
         expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);
@@ -262,6 +264,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
         expect(decoded.subtitleOverlayBackground).toBe(true);
+        expect(decoded.subtitleUpcomingLyricsBlur).toBe(false);
         expect(decoded.showHarmonySubtitle).toBe(false);
         expect(decoded.harmonySubtitleBackground).toBe(true);
         expect(decoded.lyricsFontWeight).toBe(650);

@@ -47,6 +47,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
     subtitleContentMode: storeTypographySettings.subtitleContentMode,
     subtitleOverlayBackground: storeTypographySettings.subtitleOverlayBackground,
+    subtitleUpcomingLyricsBlur: storeTypographySettings.subtitleUpcomingLyricsBlur,
     subtitleOverlayOpacity: storeTypographySettings.subtitleOverlayOpacity,
     showHarmonySubtitle: storeTypographySettings.showHarmonySubtitle,
     harmonySubtitleBackground: storeTypographySettings.harmonySubtitleBackground,

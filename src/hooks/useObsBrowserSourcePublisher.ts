@@ -146,6 +146,7 @@ export const useObsBrowserSourcePublisher = ({
     const subtitleFontScale = useTypographySettingsStore(state => state.subtitleFontScale);
     const subtitleOverlayOpacity = useTypographySettingsStore(state => state.subtitleOverlayOpacity);
     const subtitleOverlayBackground = useTypographySettingsStore(state => state.subtitleOverlayBackground);
+    const subtitleUpcomingLyricsBlur = useTypographySettingsStore(state => state.subtitleUpcomingLyricsBlur);
     const showHarmonySubtitle = useTypographySettingsStore(state => state.showHarmonySubtitle);
     const harmonySubtitleBackground = useTypographySettingsStore(state => state.harmonySubtitleBackground);
     const showSubtitleTranslation = useTypographySettingsStore(state => state.showSubtitleTranslation);
@@ -272,6 +273,7 @@ export const useObsBrowserSourcePublisher = ({
             visualizerOpacity,
             subtitleOverlayOpacity,
             subtitleOverlayBackground,
+            subtitleUpcomingLyricsBlur,
             showHarmonySubtitle,
             harmonySubtitleBackground,
             staticMode,
@@ -303,6 +305,7 @@ export const useObsBrowserSourcePublisher = ({
         staticMode,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
         showHarmonySubtitle,
         harmonySubtitleBackground,
         theme,

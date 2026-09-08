@@ -1551,6 +1551,7 @@ export default {
     "subtitleOverlayOpacity": "Subtitle Opacity",
     "subtitleOverlayBackground": "Subtitle Background",
     "subtitleOverlayBackgroundDesc": "Add a theme-aware, soft diffused halo to improve readability over busy visuals.",
+    "subtitleUpcomingLyricsBlur": "Blur non-translation lyrics",
     "showHarmonySubtitle": "Show Harmony Subtitles",
     "showHarmonySubtitleDesc": "Show or hide the top harmony lyric overlay.",
     "harmonySubtitleBackground": "Harmony Subtitle Background",

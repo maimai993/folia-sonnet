@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { resolveVisualizerSubtitleOverlayContent } from '@/components/visualizer/VisualizerSubtitleOverlay';
+import { getUpcomingLyricsClassName, resolveVisualizerSubtitleOverlayContent } from '@/components/visualizer/VisualizerSubtitleOverlay';
 import type { Line } from '@/types';
 
 // test/unit/visualizer/subtitleOverlay.test.ts
 // Locks the split between hiding the whole subtitle overlay and hiding only translation text.
 
 describe('VisualizerSubtitleOverlay content resolution', () => {
+    it('keeps upcoming lyric blur enabled by default and allows disabling it', () => {
+        expect(getUpcomingLyricsClassName()).toContain('blur-[1px]');
+        expect(getUpcomingLyricsClassName(false)).not.toContain('blur-[1px]');
+    });
+
     const activeLine: Line = {
         startTime: 1,
         endTime: 2,

@@ -56,6 +56,7 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
         settings.subtitleContentMode = value.subtitleContentMode;
     }
     if (typeof value.subtitleOverlayBackground === 'boolean') settings.subtitleOverlayBackground = value.subtitleOverlayBackground;
+    if (typeof value.subtitleUpcomingLyricsBlur === 'boolean') settings.subtitleUpcomingLyricsBlur = value.subtitleUpcomingLyricsBlur;
     if (isFontStyle(value.lyricsFontStyle)) settings.lyricsFontStyle = value.lyricsFontStyle;
     if (isFiniteNumber(value.lyricsFontScale)) settings.lyricsFontScale = value.lyricsFontScale;
     if (value.lyricsFontWeight === null) settings.lyricsFontWeight = null;

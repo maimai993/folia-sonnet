@@ -47,6 +47,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
         subtitleFontScale,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
         background,
         sonnetTuning = DEFAULT_SONNET_TUNING,
     } = props;
@@ -216,6 +217,7 @@ const VisualizerSonnet: React.FC<VisualizerSharedProps> = (props) => {
                 subtitleFontScale={subtitleFontScale}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
                 showSubtitleTranslation={showSubtitleTranslation}

@@ -49,6 +49,7 @@ export interface ObsWebAppearance {
   showSubtitleTranslation?: boolean;
   subtitleContentMode?: SubtitleContentMode;
   subtitleOverlayBackground?: boolean;
+  subtitleUpcomingLyricsBlur?: boolean;
   subtitleOverlayOpacity?: number;
   showHarmonySubtitle?: boolean;
   harmonySubtitleBackground?: boolean;
@@ -165,6 +166,7 @@ export function buildObsAppearanceFromShortcode(
     showSubtitleTranslation: decoded?.showSubtitleTranslation,
     subtitleContentMode: decoded?.subtitleContentMode,
     subtitleOverlayBackground: decoded?.subtitleOverlayBackground,
+    subtitleUpcomingLyricsBlur: decoded?.subtitleUpcomingLyricsBlur,
     subtitleOverlayOpacity: decoded?.subtitleOverlayOpacity,
     showHarmonySubtitle: decoded?.showHarmonySubtitle,
     harmonySubtitleBackground: decoded?.harmonySubtitleBackground,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CaptionsOff, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CaptionsOff, Focus, Monitor, PanelTop, RotateCcw, type LucideIcon } from 'lucide-react';
 import {
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -137,6 +137,8 @@ interface VisPlaygroundSettingsPanelProps {
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     subtitleOverlayBackground: boolean;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
+    subtitleUpcomingLyricsBlur: boolean;
+    onToggleSubtitleUpcomingLyricsBlur?: (enabled: boolean) => void;
     showHarmonySubtitle: boolean;
     onToggleShowHarmonySubtitle?: (enabled: boolean) => void;
     harmonySubtitleBackground: boolean;
@@ -382,6 +384,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSubtitleOverlayOpacityChange,
         subtitleOverlayBackground,
         onToggleSubtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
+        onToggleSubtitleUpcomingLyricsBlur,
         showHarmonySubtitle,
         onToggleShowHarmonySubtitle,
         harmonySubtitleBackground,
@@ -779,6 +783,14 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onChange={onToggleSubtitleOverlayBackground}
                             theme={theme}
                             icon={PanelTop}
+                        />
+
+                        <ToggleRow
+                            label={t('options.subtitleUpcomingLyricsBlur')}
+                            checked={subtitleUpcomingLyricsBlur}
+                            onChange={onToggleSubtitleUpcomingLyricsBlur}
+                            theme={theme}
+                            icon={Focus}
                         />
 
                         <ToggleRow

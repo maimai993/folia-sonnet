@@ -171,6 +171,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
         subtitleOverlayBackground: state.subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur: state.subtitleUpcomingLyricsBlur,
         showHarmonySubtitle: state.showHarmonySubtitle,
         harmonySubtitleBackground: state.harmonySubtitleBackground,
         lyricsFontStyle: state.lyricsFontStyle,
@@ -187,6 +188,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+        handleToggleSubtitleUpcomingLyricsBlur: state.handleToggleSubtitleUpcomingLyricsBlur,
         handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
         handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
         handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
@@ -416,6 +418,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             }
             if (has('subtitleOverlayBackground')) {
                 storeTypographySettings.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+            }
+            if (has('subtitleUpcomingLyricsBlur')) {
+                storeTypographySettings.handleToggleSubtitleUpcomingLyricsBlur(Boolean(config.subtitleUpcomingLyricsBlur));
             }
             if (has('subtitleOverlayOpacity')) {
                 storeTypographySettings.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);

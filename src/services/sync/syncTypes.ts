@@ -35,6 +35,7 @@ export type SyncedVisualSettings = {
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     lyricsFontStyle?: Theme['fontStyle'];
     lyricsFontScale?: number;
     lyricsFontWeight?: number | null;

@@ -58,6 +58,7 @@ export interface VisualizerSharedProps {
     subtitleFontScale?: number;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     showHarmonySubtitle?: boolean;
     harmonySubtitleBackground?: boolean;
     isPlayerChromeHidden?: boolean;

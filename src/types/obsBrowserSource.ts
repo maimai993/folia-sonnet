@@ -77,6 +77,7 @@ export interface ObsBrowserSourceConfig {
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     // Harmony (background-vocal) subtitles default to on in both the store and the overlay, so a
     // config that omits these must read as "on" rather than silently hiding a layer the main window
     // shows.

@@ -73,6 +73,7 @@ interface VisPlaygroundProps {
     subtitleContentMode?: SubtitleContentMode;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     showHarmonySubtitle?: boolean;
     harmonySubtitleBackground?: boolean;
     classicTuning?: ClassicTuning;
@@ -121,6 +122,7 @@ interface VisPlaygroundProps {
     onSubtitleContentModeChange?: (mode: SubtitleContentMode) => void;
     onSubtitleOverlayOpacityChange?: (opacity: number) => void;
     onToggleSubtitleOverlayBackground?: (enabled: boolean) => void;
+    onToggleSubtitleUpcomingLyricsBlur?: (enabled: boolean) => void;
     onToggleShowHarmonySubtitle?: (enabled: boolean) => void;
     onToggleHarmonySubtitleBackground?: (enabled: boolean) => void;
     onClassicTuningChange?: (patch: Partial<ClassicTuning>) => void;
@@ -300,6 +302,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     subtitleContentMode,
     subtitleOverlayOpacity = 0.6,
     subtitleOverlayBackground = true,
+    subtitleUpcomingLyricsBlur = true,
     showHarmonySubtitle = true,
     harmonySubtitleBackground = true,
     classicTuning = DEFAULT_CLASSIC_TUNING,
@@ -348,6 +351,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onSubtitleContentModeChange,
     onSubtitleOverlayOpacityChange,
     onToggleSubtitleOverlayBackground,
+    onToggleSubtitleUpcomingLyricsBlur,
     onToggleShowHarmonySubtitle,
     onToggleHarmonySubtitleBackground,
     onClassicTuningChange,
@@ -1028,6 +1032,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             onToggleShowSubtitleTranslation?.(true);
         }
         onToggleSubtitleOverlayBackground?.(true);
+        onToggleSubtitleUpcomingLyricsBlur?.(true);
         onToggleShowHarmonySubtitle?.(true);
         onToggleHarmonySubtitleBackground?.(true);
         onSubtitleOverlayOpacityChange?.(0.6);
@@ -1183,6 +1188,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                                 subtitleFontScale={normalizedSubtitleFontScale}
                                 subtitleOverlayOpacity={draftSubtitleOverlayOpacity}
                                 subtitleOverlayBackground={subtitleOverlayBackground}
+                                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                                 showHarmonySubtitle={showHarmonySubtitle}
                                 harmonySubtitleBackground={harmonySubtitleBackground}
                                 hideTranslationSubtitle={hideTranslationSubtitle}
@@ -1297,6 +1303,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onSubtitleOverlayOpacityChange={handleSubtitleOverlayOpacityDraft}
                         subtitleOverlayBackground={subtitleOverlayBackground}
                         onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
+                        subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                        onToggleSubtitleUpcomingLyricsBlur={onToggleSubtitleUpcomingLyricsBlur}
                         showHarmonySubtitle={showHarmonySubtitle}
                         onToggleShowHarmonySubtitle={onToggleShowHarmonySubtitle}
                         harmonySubtitleBackground={harmonySubtitleBackground}

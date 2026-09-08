@@ -732,6 +732,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
         subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
         hideTranslationSubtitle,
         showSubtitleTranslation,
         subtitleContentMode,
@@ -1019,6 +1020,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
                     upcomingFontSize="clamp(0.95rem, 1.8vw, 1.2rem)"
                     subtitleOverlayOpacity={subtitleOverlayOpacity}
                     subtitleOverlayBackground={subtitleOverlayBackground}
+                    subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                     subtitleFontScale={subtitleFontScale}
                     hideTranslationSubtitle={hideTranslationSubtitle}
                     showSubtitleTranslation={showSubtitleTranslation}

@@ -13,6 +13,10 @@ import { usePlayerSubtitleBottomPx } from '../../hooks/usePlayerBottomBarBottomP
 // reach the shared bottom subtitle in any visualizer mode.
 const hasReadableText = (text?: string | null): boolean => !!text && /[\p{L}\p{N}]/u.test(text);
 
+export const getUpcomingLyricsClassName = (blur = true): string => (
+    `truncate max-w-2xl mx-auto transition-all duration-500${blur ? ' blur-[1px]' : ''}`
+);
+
 interface VisualizerSubtitleOverlayProps {
     showText: boolean;
     activeLine: Line | null;
@@ -26,6 +30,7 @@ interface VisualizerSubtitleOverlayProps {
     opacity?: number;
     subtitleOverlayOpacity?: number;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     isPlayerChromeHidden?: boolean;
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
@@ -75,6 +80,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
     opacity = 0.6,
     subtitleOverlayOpacity,
     subtitleOverlayBackground = true,
+    subtitleUpcomingLyricsBlur = true,
     isPlayerChromeHidden = false,
     hideTranslationSubtitle = false,
     showSubtitleTranslation = true,
@@ -167,7 +173,7 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                 {upcomingLines.map((line, index) => (
                                     <p
                                         key={index}
-                                        className="truncate max-w-2xl mx-auto transition-all duration-500 blur-[1px]"
+                                        className={getUpcomingLyricsClassName(subtitleUpcomingLyricsBlur)}
                                         style={{
                                             color: theme.secondaryColor,
                                             fontSize: scaleFontSize(upcomingFontSize),

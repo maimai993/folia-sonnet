@@ -250,6 +250,7 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
                 lyricsFontScale={appearance.lyricsFontScale}
                 subtitleFontScale={appearance.subtitleFontScale}
                 subtitleOverlayBackground={appearance.subtitleOverlayBackground}
+                subtitleUpcomingLyricsBlur={appearance.subtitleUpcomingLyricsBlur}
                 subtitleOverlayOpacity={appearance.subtitleOverlayOpacity}
                 showHarmonySubtitle={appearance.showHarmonySubtitle}
                 harmonySubtitleBackground={appearance.harmonySubtitleBackground}

@@ -17,6 +17,8 @@ export const SUBTITLE_OVERLAY_OPACITY_STORAGE_KEY = 'subtitle_overlay_opacity';
 
 export const SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY = 'subtitle_overlay_background';
 
+export const SUBTITLE_UPCOMING_LYRICS_BLUR_STORAGE_KEY = 'subtitle_upcoming_lyrics_blur';
+
 export const SHOW_HARMONY_SUBTITLE_STORAGE_KEY = 'show_harmony_subtitle';
 
 export const HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY = 'harmony_subtitle_background';
@@ -189,6 +191,7 @@ export type TypographySettingsState = {
     subtitleContentMode: SubtitleContentMode;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground: boolean;
+    subtitleUpcomingLyricsBlur: boolean;
     showHarmonySubtitle: boolean;
     harmonySubtitleBackground: boolean;
     lyricsFontStyle: Theme['fontStyle'];
@@ -208,6 +211,7 @@ export type TypographySettingsState = {
     handleSetSubtitleContentMode: (mode: SubtitleContentMode) => void;
     handleSetSubtitleOverlayOpacity: (opacity: number) => void;
     handleToggleSubtitleOverlayBackground: (enabled: boolean) => void;
+    handleToggleSubtitleUpcomingLyricsBlur: (enabled: boolean) => void;
     handleToggleShowHarmonySubtitle: (enabled: boolean) => void;
     handleToggleHarmonySubtitleBackground: (enabled: boolean) => void;
     handleSetLyricsFontStyle: (fontStyle: Theme['fontStyle']) => void;
@@ -230,6 +234,7 @@ export const useTypographySettingsStore = create<TypographySettingsState>((set, 
     subtitleContentMode: readStoredSubtitleContentMode(),
     subtitleOverlayOpacity: readStoredSubtitleOverlayOpacity(),
     subtitleOverlayBackground: getStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, true),
+    subtitleUpcomingLyricsBlur: getStoredBoolean(SUBTITLE_UPCOMING_LYRICS_BLUR_STORAGE_KEY, true),
     showHarmonySubtitle: getStoredBoolean(SHOW_HARMONY_SUBTITLE_STORAGE_KEY, true),
     harmonySubtitleBackground: getStoredBoolean(HARMONY_SUBTITLE_BACKGROUND_STORAGE_KEY, true),
     lyricsFontStyle: readStoredLyricsFontStyle(),
@@ -292,6 +297,10 @@ export const useTypographySettingsStore = create<TypographySettingsState>((set, 
     handleToggleSubtitleOverlayBackground: (enabled) => {
         setStoredBoolean(SUBTITLE_OVERLAY_BACKGROUND_STORAGE_KEY, enabled);
         set({ subtitleOverlayBackground: enabled });
+    },
+    handleToggleSubtitleUpcomingLyricsBlur: (enabled) => {
+        setStoredBoolean(SUBTITLE_UPCOMING_LYRICS_BLUR_STORAGE_KEY, enabled);
+        set({ subtitleUpcomingLyricsBlur: enabled });
     },
     handleToggleShowHarmonySubtitle: (enabled) => {
         setStoredBoolean(SHOW_HARMONY_SUBTITLE_STORAGE_KEY, enabled);
@@ -430,6 +439,7 @@ export const selectTypographySettingsSnapshot = (state: TypographySettingsState)
     subtitleContentMode: state.subtitleContentMode,
     subtitleOverlayOpacity: state.subtitleOverlayOpacity,
     subtitleOverlayBackground: state.subtitleOverlayBackground,
+    subtitleUpcomingLyricsBlur: state.subtitleUpcomingLyricsBlur,
     showHarmonySubtitle: state.showHarmonySubtitle,
     harmonySubtitleBackground: state.harmonySubtitleBackground,
     lyricsFontStyle: state.lyricsFontStyle,
@@ -448,6 +458,7 @@ export const selectTypographySettingsSnapshot = (state: TypographySettingsState)
     handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
     handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
     handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+    handleToggleSubtitleUpcomingLyricsBlur: state.handleToggleSubtitleUpcomingLyricsBlur,
     handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
     handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
     handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
