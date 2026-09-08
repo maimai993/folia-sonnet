@@ -212,6 +212,25 @@ test('gives the keyboard back when the grid is left', async ({ page }) => {
     await expect(filterBox(page)).toBeHidden();
 });
 
+test('takes the filter box down when the view leaves the grid under it', async ({ page }) => {
+    await openTrackGrid(page);
+    await typeUntilFilterOpens(page, 'm');
+    await expect(filterInput(page)).toBeFocused();
+
+    // 直接写 view：真实触发是「筛选框开着时播放一首歌」，但固件里的假音频到不了播放页。
+    // 这条要盯的接缝在视图之后——网格随之注销，面板得自己知道宿主没了。
+    await page.evaluate(async () => {
+        const storeModulePath = '/src/stores/useAppViewStore.ts';
+        const { useAppViewStore } = await import(storeModulePath);
+        useAppViewStore.getState().setView('player');
+    });
+    await expect.poll(() => currentView(page)).toBe('player');
+
+    // 留着它，面板会退回遮罩形态，顶上还挂着一颗指向不存在的网格的「筛选当前视图」药丸。
+    await expect(filterBox(page)).toBeHidden();
+    await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
+});
+
 /** 队列与当前歌曲直接读 store：这几条验的是 flag 真的落到了动作上。 */
 const playbackSnapshot = (page: Page) => page.evaluate(async () => {
     const storeModulePath = '/src/stores/usePlaybackStore.ts';

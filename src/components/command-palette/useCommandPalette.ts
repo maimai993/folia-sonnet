@@ -383,6 +383,20 @@ export const useCommandPalette = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [paletteRequest]);
 
+    // An inline surface is a stand-in for a control that belongs to something else on screen. When
+    // that something goes away — a card played from a grid takes the app to the player, and the grid
+    // unmounts under the box — there is nothing left to filter, and the palette would otherwise fall
+    // back to the full overlay carrying a filter pill that now points at nothing.
+    useEffect(() => {
+        if (!isOpen || context.scope.filter) {
+            return;
+        }
+        if (activeCommand?.surface?.presentation !== 'inline') {
+            return;
+        }
+        close();
+    }, [activeCommand, close, context.scope.filter, isOpen]);
+
     // Execute mode fires as soon as the buffer is unambiguous, so the surface gets a chance to
     // act on every keystroke. The ref keeps one buffer from being judged twice.
     const handledQueryRef = useRef<string | null>(null);
