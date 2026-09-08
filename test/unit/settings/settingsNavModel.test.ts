@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SETTINGS_ANCHOR_DEFINITIONS } from '../../../src/components/modal/settings/navigation/settingsAnchorModel';
 import { SETTINGS_NAV_GROUP_SPECS, buildSettingsNavGroups, findSettingsNavItem, flattenSettingsNavItems, type SettingsSectionId } from '../../../src/components/modal/settings/navigation/settingsNavModel';
 import en from '../../../src/i18n/locales/en';
 import zhCN from '../../../src/i18n/locales/zh-CN';
@@ -47,11 +48,20 @@ describe('settingsNavModel', () => {
         }
     });
 
+    it('expands every declared anchor under its owning section', () => {
+        const items = flattenSettingsNavItems(buildSettingsNavGroups(echo, { isElectron: true }));
+        const rendered = items.flatMap(item => item.anchors.map(anchor => [anchor.id, item.id]));
+        const declared = Object.entries(SETTINGS_ANCHOR_DEFINITIONS).map(([id, definition]) => [id, definition.section]);
+
+        expect(rendered).toEqual(declared);
+    });
+
     it.each([['en', en], ['zh-CN', zhCN], ['in', id]] as const)('has every label and description key in %s', (_name, bundle) => {
         const keys = SETTINGS_NAV_GROUP_SPECS.flatMap(group => [
             group.labelKey,
             ...group.sections.flatMap(section => [section.labelKey, section.descriptionKey]),
         ]);
+        keys.push(...Object.values(SETTINGS_ANCHOR_DEFINITIONS).map(definition => definition.labelKey));
 
         for (const key of keys) {
             expect(typeof lookup(bundle as unknown as Record<string, unknown>, key), `${key} missing`).toBe('string');

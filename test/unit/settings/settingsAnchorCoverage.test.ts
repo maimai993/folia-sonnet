@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SETTINGS_ANCHOR_SECTION } from '../../../src/components/modal/settings/navigation/settingsAnchorModel';
+import { SETTINGS_ANCHOR_DEFINITIONS, SETTINGS_ANCHOR_SECTION } from '../../../src/components/modal/settings/navigation/settingsAnchorModel';
 
 // test/unit/settings/settingsAnchorCoverage.test.ts
 // The sidebar table of contents only lists sections wrapped in <SettingsAnchor>. Two of these live
@@ -42,5 +42,27 @@ describe('settings section anchors', () => {
 
         expect([...rendered].filter(id => !declared.has(id))).toEqual([]);
         expect([...declared].filter(id => !rendered.has(id))).toEqual([]);
+    });
+
+    it('keeps playback navigation in the same order as the rendered settings', () => {
+        const source = fs.readFileSync(path.join(SETTINGS_DIR, 'PlaybackSettingsSubview.tsx'), 'utf8');
+        const renderedOrder = [
+            ['queueSettings', 'anchorId="queueSettings"'],
+            ['transitionSettings', '<TransitionSettingsSection'],
+            ['replayGainSettings', 'anchorId="replayGainSettings"'],
+            ['lyrics', 'anchorId="lyrics"'],
+            ['audioOutputSettings', 'anchorId="audioOutputSettings"'],
+        ]
+            .map(([id, marker]) => {
+                expect(source, `${marker} missing`).toContain(marker);
+                return { id, position: source.indexOf(marker) };
+            })
+            .sort((a, b) => a.position - b.position)
+            .map(entry => entry.id);
+        const navigationOrder = Object.entries(SETTINGS_ANCHOR_DEFINITIONS)
+            .filter(([, definition]) => definition.section === 'playback')
+            .map(([id]) => id);
+
+        expect(renderedOrder).toEqual(navigationOrder);
     });
 });

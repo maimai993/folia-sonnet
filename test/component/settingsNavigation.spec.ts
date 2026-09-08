@@ -32,22 +32,25 @@ test.describe('settings navigation - wide layout', () => {
         }
     });
 
-    test('expands a table of contents for the active section only', async ({ mount, page }) => {
+    test('keeps every section table of contents expanded', async ({ mount, page }) => {
         await mount('settingsNavigation');
 
         await expect(tocItem(page, 'Alpha Section')).toBeVisible();
         await expect(tocItem(page, 'Echo Section')).toBeVisible();
+        await expect(tocItem(page, 'queueSettings')).toBeVisible();
+        await expect(tocItem(page, 'electronSettings')).toBeVisible();
     });
 
     test('slots a late-arriving section into its document position', async ({ mount, page }) => {
         await mount('settingsNavigation');
 
         await expect(tocItem(page, 'Bravo Late Section')).toBeVisible();
+        await expect(page.locator('[data-settings-anchor="importExportTitle"]')).toBeVisible();
 
         const labels = await page.evaluate(() => (
             [...document.querySelectorAll('[data-settings-anchor]')].map(node => node.getAttribute('data-settings-anchor'))
         ));
-        expect(labels).toEqual(['alpha', 'bravo', 'bravoLate', 'charlie', 'delta', 'echo']);
+        expect(labels).toEqual(['lyricsRenderer', 'themePresets', 'importExportTitle', 'stageTrackPill', 'grid3dCardStyle', 'latticeSettings']);
     });
 
     test('scrolls to a section when its table of contents entry is clicked', async ({ mount, page }) => {

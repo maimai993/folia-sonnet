@@ -1,23 +1,17 @@
 import React from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import type { Theme } from '../../../../types';
-import type { SettingsAnchor } from './settingsAnchorStore';
-import type { SettingsNavGroup, SettingsSectionId } from './settingsNavModel';
+import type { SettingsAnchorId } from './settingsAnchorModel';
+import type { SettingsNavAnchor, SettingsNavGroup, SettingsSectionId } from './settingsNavModel';
 // src/components/modal/settings/navigation/SettingsSidebarWide.tsx
-// Wide-layout settings navigation: grouped sections with the active one expanded into a table of
-// contents for its own subsections.
-
-const EXPAND_TRANSITION = { duration: 0.24, ease: 'easeOut' as const };
+// Wide-layout settings navigation: grouped sections with every subsection table of contents open.
 
 type SettingsSidebarWideProps = {
     groups: SettingsNavGroup[];
     activeSectionId: SettingsSectionId;
     onSelectSection: (sectionId: SettingsSectionId) => void;
-    anchors: SettingsAnchor[];
     activeAnchorId: string | null;
-    onSelectAnchor: (anchorId: string) => void;
+    onSelectAnchor: (sectionId: SettingsSectionId, anchorId: SettingsAnchorId) => void;
     isDaylight: boolean;
-    reducedMotion: boolean;
     theme?: Theme;
 };
 
@@ -25,19 +19,17 @@ export const SettingsSidebarWide: React.FC<SettingsSidebarWideProps> = ({
     groups,
     activeSectionId,
     onSelectSection,
-    anchors,
     activeAnchorId,
     onSelectAnchor,
     isDaylight,
-    reducedMotion,
     theme,
 }) => {
     const accentColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
 
-    const renderTableOfContents = () => (
+    const renderTableOfContents = (sectionId: SettingsSectionId, anchors: SettingsNavAnchor[]) => (
         <div className="mt-1 flex flex-col gap-0.5 pl-[26px]">
             {anchors.map((anchor) => {
-                const isActive = activeAnchorId === anchor.id;
+                const isActive = activeSectionId === sectionId && activeAnchorId === anchor.id;
                 return (
                     <button
                         key={anchor.id}
@@ -46,7 +38,7 @@ export const SettingsSidebarWide: React.FC<SettingsSidebarWideProps> = ({
                         // The highlight is colour and opacity only; assistive tech and tests need
                         // the state said out loud.
                         aria-current={isActive ? 'true' : undefined}
-                        onClick={() => onSelectAnchor(anchor.id)}
+                        onClick={() => onSelectAnchor(sectionId, anchor.id)}
                         className={`relative rounded-lg py-1.5 pl-3 pr-2 text-left text-xs transition-colors ${isActive ? (isDaylight ? 'bg-black/[0.04]' : 'bg-white/[0.06]') : (isDaylight ? 'hover:bg-black/[0.025]' : 'hover:bg-white/[0.035]')}`}
                         style={{ color: 'var(--text-primary)', opacity: isActive ? 0.95 : 0.55 }}
                     >
@@ -90,20 +82,7 @@ export const SettingsSidebarWide: React.FC<SettingsSidebarWideProps> = ({
                                         </div>
                                     </div>
                                 </button>
-                                <AnimatePresence initial={false}>
-                                    {isActive && anchors.length > 0 && (
-                                        <motion.div
-                                            key="toc"
-                                            className="overflow-hidden"
-                                            initial={reducedMotion ? false : { height: 0, opacity: 0 }}
-                                            animate={{ height: 'auto', opacity: 1 }}
-                                            exit={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                                            transition={EXPAND_TRANSITION}
-                                        >
-                                            {renderTableOfContents()}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                {section.anchors.length > 0 && renderTableOfContents(section.id, section.anchors)}
                             </div>
                         );
                     })}

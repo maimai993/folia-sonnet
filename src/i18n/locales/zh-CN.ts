@@ -400,7 +400,7 @@ export default {
       "settings-player-bottom-bar-position": { "title": "调整底部控制条位置", "description": "拖动底部控制条、歌曲卡片和面板按钮到新的高度" },
       "settings-player-control-slots": { "title": "进度条按钮槽位", "description": "选择进度条右侧两个按钮对应的功能" },
       "visualizer-toggle-random-per-song": { "title": "每首歌随机歌词动画", "description": "歌曲切换时随机使用一种歌词动画模式" },
-      "settings-visualizer": { "title": "可视化设置", "description": "打开歌词动画实验台" },
+      "settings-visualizer": { "title": "歌词动画样式设置", "description": "打开歌词动画实验台" },
       "settings-theme-park": { "title": "配色", "description": "打开主题编辑器" },
       "settings-global-lyric-offset": { "title": "全局时间偏移", "description": "校准蓝牙等设备造成的音画延迟" },
       "settings-lyric-filter": { "title": "歌词过滤", "description": "打开歌词过滤设置" },

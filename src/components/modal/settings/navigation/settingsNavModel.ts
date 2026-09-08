@@ -1,4 +1,5 @@
 import { Command, Database, FlaskConical, Keyboard, Languages, PlayCircle, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
+import { SETTINGS_ANCHOR_DEFINITIONS, type SettingsAnchorId } from './settingsAnchorModel';
 // src/components/modal/settings/navigation/settingsNavModel.ts
 // Single source of truth for the options-tab sections: sidebar order, grouping, titles and descriptions.
 
@@ -18,6 +19,12 @@ export interface SettingsNavItem {
     icon: LucideIcon;
     label: string;
     description: string;
+    anchors: SettingsNavAnchor[];
+}
+
+export interface SettingsNavAnchor {
+    id: SettingsAnchorId;
+    label: string;
 }
 
 export interface SettingsNavGroup {
@@ -98,6 +105,12 @@ export const buildSettingsNavGroups = (t: Translate, options: { isElectron: bool
                     icon: section.icon,
                     label: t(section.labelKey),
                     description: t(section.descriptionKey),
+                    anchors: (Object.entries(SETTINGS_ANCHOR_DEFINITIONS) as [SettingsAnchorId, typeof SETTINGS_ANCHOR_DEFINITIONS[SettingsAnchorId]][])
+                        .filter(([, definition]) => (
+                            definition.section === section.id
+                            && (!('electronOnly' in definition) || !definition.electronOnly || options.isElectron)
+                        ))
+                        .map(([id, definition]) => ({ id, label: t(definition.labelKey) })),
                 })),
         }))
         .filter(group => group.items.length > 0)

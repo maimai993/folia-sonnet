@@ -1,69 +1,71 @@
 import type { SettingsSubviewId } from '../../../../stores/useSettingsModalStore';
 
 // src/components/modal/settings/navigation/settingsAnchorModel.ts
-// Which options-tab section each <SettingsAnchor> lives in.
-//
-// The sidebar table of contents discovers anchors at render time, which is right for a list that
-// has to follow conditional sections. But a command that wants to *land* on one has to know its
-// section before the panel exists, and that fact cannot be discovered — so it is declared here,
-// once. settingsAnchorCoverage.test.ts holds this table against the anchors actually rendered, so
-// a section that moves cannot leave a command pointing at the wrong page.
+// Which options-tab section each <SettingsAnchor> lives in and which translated label its expanded
+// sidebar entry uses. Commands and inactive sidebar sections both need this information before the
+// destination panel exists, so it is declared once here. settingsAnchorCoverage.test.ts holds the
+// table against the anchors actually rendered, so a section cannot silently drift away from its
+// navigation destination.
 
-export const SETTINGS_ANCHOR_SECTION = {
+export const SETTINGS_ANCHOR_DEFINITIONS = {
     // AppearanceSettingsSubview
-    themePresets: 'appearance',
-    lyricsRenderer: 'appearance',
-    stageTrackPill: 'appearance',
-    grid3dCardStyle: 'appearance',
-    latticeSettings: 'appearance',
-    importExportTitle: 'appearance',
+    lyricsRenderer: { section: 'appearance', labelKey: 'options.lyricsRenderer' },
+    themePresets: { section: 'appearance', labelKey: 'options.themePresets' },
+    stageTrackPill: { section: 'appearance', labelKey: 'options.stageTrackPill' },
+    grid3dCardStyle: { section: 'appearance', labelKey: 'options.grid3dCardStyle' },
+    latticeSettings: { section: 'appearance', labelKey: 'options.latticeSettings' },
+    importExportTitle: { section: 'appearance', labelKey: 'options.importExportTitle' },
 
     // GeneralSettingsSubview (PinnedCommandSettings renders inside it)
-    languageSettings: 'general',
-    homeTabsVisibility: 'general',
-    playbackEntryView: 'general',
-    bottomUiSettings: 'general',
-    pinnedCommands: 'general',
+    languageSettings: { section: 'general', labelKey: 'options.languageSettings' },
+    homeTabsVisibility: { section: 'general', labelKey: 'options.homeTabsVisibility' },
+    playbackEntryView: { section: 'general', labelKey: 'options.playbackEntryView' },
+    bottomUiSettings: { section: 'general', labelKey: 'options.bottomUiSettings' },
+    pinnedCommands: { section: 'general', labelKey: 'options.pinnedCommands' },
 
     // PlaybackSettingsSubview (TransitionSettingsSection renders inside it)
-    queueSettings: 'playback',
-    replayGainSettings: 'playback',
-    lyrics: 'playback',
-    audioOutputSettings: 'playback',
-    transitionSettings: 'playback',
+    queueSettings: { section: 'playback', labelKey: 'options.queueSettings' },
+    transitionSettings: { section: 'playback', labelKey: 'options.transitionSettings' },
+    replayGainSettings: { section: 'playback', labelKey: 'options.replayGainSettings' },
+    lyrics: { section: 'playback', labelKey: 'options.lyrics' },
+    audioOutputSettings: { section: 'playback', labelKey: 'options.audioOutputSettings' },
 
     // InteractionSettingsSubview
-    gridActionButton: 'interaction',
-    gridPaletteHotkey: 'interaction',
-    customShortcut: 'interaction',
+    gridActionButton: { section: 'interaction', labelKey: 'options.gridActionButton' },
+    gridPaletteHotkey: { section: 'interaction', labelKey: 'options.gridPaletteHotkey' },
+    customShortcut: { section: 'interaction', labelKey: 'options.customShortcut' },
 
     // IntegrationSettingsSubview — stageMode is declared twice on purpose, the Electron and web
     // panels being mutually exclusive; it is still one destination.
-    discordRichPresence: 'integration',
-    obsBrowserSource: 'integration',
-    lyricApi: 'integration',
-    stageMode: 'integration',
-    navidrome: 'integration',
+    discordRichPresence: { section: 'integration', labelKey: 'options.discordRichPresence', electronOnly: true },
+    obsBrowserSource: { section: 'integration', labelKey: 'options.obsBrowserSource', electronOnly: true },
+    lyricApi: { section: 'integration', labelKey: 'options.lyricApi', electronOnly: true },
+    stageMode: { section: 'integration', labelKey: 'options.stageMode' },
+    navidrome: { section: 'integration', labelKey: 'navidrome.settings' },
 
     // StorageSettingsSection (LocalLibraryWatchSection renders inside it)
-    cacheDetails: 'storage',
-    r2Sync: 'storage',
-    mediaCache: 'storage',
-    localLibraryWatch: 'storage',
+    cacheDetails: { section: 'storage', labelKey: 'options.cacheDetails' },
+    r2Sync: { section: 'storage', labelKey: 'options.r2Sync' },
+    localLibraryWatch: { section: 'storage', labelKey: 'options.localLibraryWatch' },
+    mediaCache: { section: 'storage', labelKey: 'options.mediaCache' },
 
     // DesktopSettingsSubview
-    desktopTrayBehavior: 'desktop',
-    wallpaperMode: 'desktop',
-    updateCheck: 'desktop',
-    electronSettings: 'desktop',
+    desktopTrayBehavior: { section: 'desktop', labelKey: 'options.desktopTrayBehavior', electronOnly: true },
+    wallpaperMode: { section: 'desktop', labelKey: 'options.wallpaperMode', electronOnly: true },
+    updateCheck: { section: 'desktop', labelKey: 'options.updateCheck', electronOnly: true },
+    electronSettings: { section: 'desktop', labelKey: 'options.electronSettings', electronOnly: true },
 
     // LabSettingsModal
-    labPerformance: 'lab',
-    labPlayerUi: 'lab',
-    labWindowAndTools: 'lab',
-} as const satisfies Record<string, SettingsSubviewId>;
+    labPerformance: { section: 'lab', labelKey: 'options.labPerformanceSection' },
+    labPlayerUi: { section: 'lab', labelKey: 'options.labPlayerUiSection' },
+    labWindowAndTools: { section: 'lab', labelKey: 'options.labWindowAndToolsSection' },
+} as const satisfies Record<string, { section: SettingsSubviewId; labelKey: string; electronOnly?: boolean }>;
 
-export type SettingsAnchorId = keyof typeof SETTINGS_ANCHOR_SECTION;
+export type SettingsAnchorId = keyof typeof SETTINGS_ANCHOR_DEFINITIONS;
+
+export const SETTINGS_ANCHOR_SECTION = Object.fromEntries(
+    Object.entries(SETTINGS_ANCHOR_DEFINITIONS).map(([id, definition]) => [id, definition.section]),
+) as Record<SettingsAnchorId, SettingsSubviewId>;
 
 export const settingsAnchorSubview = (anchorId: SettingsAnchorId): SettingsSubviewId => (
     SETTINGS_ANCHOR_SECTION[anchorId]
