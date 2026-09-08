@@ -452,6 +452,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         STAGE_MODE_SOURCE: 'stage-api',
         DISCORD_RICH_PRESENCE_ENABLED: false,
     });
+    const [electronSettingsLoaded, setElectronSettingsLoaded] = useState(false);
+    const [savedElectronAiCredentials, setSavedElectronAiCredentials] = useState({
+        AI_PROVIDER: 'gemini',
+        GEMINI_API_KEY: '',
+        OPENAI_API_KEY: '',
+    });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
     const [discordPresenceStatus, setDiscordPresenceStatus] = useState<ElectronDiscordPresenceStatus | null>(null);
@@ -460,8 +466,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
     const [stageActionStatus, setStageActionStatus] = useState<'idle' | 'regenerating'>('idle');
     const configuredAiProvider = isElectron ? electronSettings.AI_PROVIDER : getWebAiProvider();
-    const aiServiceLabel = configuredAiProvider === 'openai' ? 'OpenAI Compatible' : 'Google Gemini';
+    const aiServiceLabel = configuredAiProvider === 'openai' ? t('options.otherCompatibleApi') : 'Google Gemini';
+    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
+    const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
+        ? savedElectronAiCredentials.OPENAI_API_KEY
+        : savedElectronAiCredentials.GEMINI_API_KEY;
+    const aiApiKeyStatus: 'loading' | 'configured' | 'missing' = !isElectronRuntime
+        ? 'configured'
+        : !electronSettingsLoaded
+            ? 'loading'
+            : savedAiApiKey.trim()
+                ? 'configured'
+                : 'missing';
     const showQuarkDownload = electronSettings.UPDATE_CHANNEL === 'realeco';
+
+    useEffect(() => {
+        if (aiApiKeyStatus === 'missing' && themeGenerationSource === 'ai') {
+            onChangeThemeGenerationSource('cover');
+        }
+    }, [aiApiKeyStatus, onChangeThemeGenerationSource, themeGenerationSource]);
+
     useEffect(() => {
         if ((window as any).electron) {
             setIsElectron(true);
@@ -472,8 +496,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         ...settings,
                         OPENAI_API_TEMPERATURE: String(settings.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
                     }));
+                    setSavedElectronAiCredentials({
+                        AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                        GEMINI_API_KEY: String(settings.GEMINI_API_KEY ?? ''),
+                        OPENAI_API_KEY: String(settings.OPENAI_API_KEY ?? ''),
+                    });
                 }
-            });
+            }).finally(() => setElectronSettingsLoaded(true));
             (window as any).electron.getCacheDirectory().then((result: ElectronCacheDirectoryResult) => {
                 if (result?.path) {
                     setCacheDirectory(result.path);
@@ -588,6 +617,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
             await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
             await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            setSavedElectronAiCredentials({
+                AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                GEMINI_API_KEY: electronSettings.GEMINI_API_KEY,
+                OPENAI_API_KEY: electronSettings.OPENAI_API_KEY,
+            });
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
         }
@@ -1609,6 +1643,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
                                                 themeGenerationSource={themeGenerationSource}
                                                 onChangeThemeGenerationSource={onChangeThemeGenerationSource}
+                                                aiApiKeyStatus={aiApiKeyStatus}
+                                                onOpenAiSettings={() => useSettingsModalStore.getState().openSettings('options', 'desktop', null, 'electronSettings')}
                                                 onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}
                                                 onToggleAutoHidePlayerChrome={onToggleAutoHidePlayerChrome}
                                                 onSaveCustomTheme={onSaveCustomTheme}

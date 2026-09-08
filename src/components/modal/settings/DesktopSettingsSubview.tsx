@@ -600,7 +600,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 }`}
                                 style={{ color: electronSettings.AI_PROVIDER === 'openai' ? 'var(--text-primary)' : undefined }}
                             >
-                                OpenAI Compatible
+                                {t('options.otherCompatibleApi')}
                             </button>
                         </div>
                     </div>
@@ -720,7 +720,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         <span className="text-[10px] opacity-40 leading-relaxed max-w-[280px] text-left" style={{ color: 'var(--text-secondary)' }}>
                             {electronSettings.AI_PROVIDER !== 'openai'
                                 ? (t('options.geminiApiKeyDesc') || 'Netease API backend runs locally.')
-                                : (t('options.openaiApiUrlDesc') || 'Use other LLM APIs compatible with the OpenAI format.')}
+                                : t('options.openaiApiUrlDesc')}
                         </span>
                         <button
                             type="button"
