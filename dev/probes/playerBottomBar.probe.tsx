@@ -27,6 +27,7 @@ const PlayerBottomBarProbe: React.FC = () => {
     const startPositioning = usePlayerBottomBarLayoutStore(state => state.startPositioning);
     const [committedOffset, setCommittedOffset] = useState(PLAYER_BOTTOM_BAR_BASE_OFFSET_PX);
     const [seekCount, setSeekCount] = useState(0);
+    const [playerNavigations, setPlayerNavigations] = useState(0);
     const [slotHits, setSlotHits] = useState<string[]>([]);
     const [slotPrimary, setSlotPrimary] = useState<PlayerControlSlotActionId>('loop');
     const [slotSecondary, setSlotSecondary] = useState<PlayerControlSlotActionId>('lyrics-timeline');
@@ -49,6 +50,7 @@ const PlayerBottomBarProbe: React.FC = () => {
             data-probe-offset={offsetMirror}
             data-probe-committed={committedOffset}
             data-probe-seeks={seekCount}
+            data-probe-player-navigations={playerNavigations}
             data-probe-slot-hits={slotHits.join(',')}
         >
             <div className="absolute left-4 top-4 z-[80] flex flex-wrap gap-2">
@@ -101,7 +103,7 @@ const PlayerBottomBarProbe: React.FC = () => {
                 onSeek={() => setSeekCount(count => count + 1)}
                 onTogglePlay={() => { }}
                 onToggleLoop={() => setSlotHits(hits => [...hits, 'loop'])}
-                onNavigateToPlayer={() => { }}
+                onNavigateToPlayer={() => setPlayerNavigations(count => count + 1)}
                 isDaylight={false}
                 slotPrimary={slotPrimary}
                 slotSecondary={slotSecondary}

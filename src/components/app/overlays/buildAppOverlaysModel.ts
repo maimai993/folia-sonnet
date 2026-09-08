@@ -97,6 +97,7 @@ export type AppOverlaysDeps = {
     togglePlay: FloatingControlsProps['onTogglePlay'];
     toggleLoop: FloatingControlsProps['onToggleLoop'];
     navigateToPlayer: () => void;
+    navigateFromPlayerCapsule: () => void;
     shouldHidePlayerProgressBar: boolean;
     onSeekMainAudio: (time: number) => void;
     onStagePlayerSeek: () => Promise<unknown>;
@@ -154,6 +155,7 @@ export const buildAppOverlaysModel = ({
     togglePlay,
     toggleLoop,
     navigateToPlayer,
+    navigateFromPlayerCapsule,
     isPlayerChromeHidden,
     shouldHidePlayerProgressBar,
     onSeekMainAudio,
@@ -277,7 +279,7 @@ export const buildAppOverlaysModel = ({
             },
             onTogglePlay: togglePlay,
             onToggleLoop: toggleLoop,
-            onNavigateToPlayer: navigateToPlayer,
+            onNavigateToPlayer: navigateFromPlayerCapsule,
             onFocusLatticeCurrentSong: () => { focusLatticeCurrentSong(); },
             noTrackText,
             primaryColor: 'var(--text-primary)',

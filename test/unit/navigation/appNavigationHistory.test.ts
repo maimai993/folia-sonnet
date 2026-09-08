@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     blockLatticeNavigationInFm,
+    resolvePlayerCapsuleNavigationTarget,
     shouldNavigatePlayerBackThroughHistory,
     shouldReplacePlayerNavigation,
     type NavigationHistoryState,
@@ -67,5 +68,20 @@ describe('Lattice navigation availability', () => {
             type: 'info',
             text: i18n.t('status.latticeUnavailableInFm'),
         });
+    });
+});
+
+describe('player capsule navigation', () => {
+    it('opens Lattice from any non-Lattice page when it is the configured entry view', () => {
+        expect(resolvePlayerCapsuleNavigationTarget('home', 'lattice', false)).toBe('lattice');
+        expect(resolvePlayerCapsuleNavigationTarget('player', 'lattice', false)).toBe('lattice');
+    });
+
+    it('opens the standard player for Personal FM even when Lattice is configured', () => {
+        expect(resolvePlayerCapsuleNavigationTarget('home', 'lattice', true)).toBe('player');
+    });
+
+    it('does not navigate away when the progress bar already belongs to Lattice', () => {
+        expect(resolvePlayerCapsuleNavigationTarget('lattice', 'lattice', false)).toBeNull();
     });
 });

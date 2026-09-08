@@ -177,7 +177,8 @@ export default {
     "confirm": "Konfirmasi",
     "stageWaiting": "Menunggu input Stage eksternal",
     "stageActionUnavailable": "Aksi ini tidak tersedia di mode Stage",
-    "latticeUnavailableInFm": "Kolase antrean tidak tersedia dalam mode Personal FM",
+    "latticeUnavailableInFm": "Lattice tidak mendukung mode Personal FM",
+    "latticeFmOpenedInPlayer": "Lattice tidak mendukung mode Personal FM. Pemutar standar dibuka sebagai gantinya",
     "noPlayableSongs": "Tidak ada lagu yang bisa diputar di daftar ini",
     "songUnavailableTag": "Tidak Tersedia",
     "queueShuffled": "Antrean diacak",
@@ -2540,7 +2541,7 @@ export default {
     "confirm": "Pakai ini",
     "player": {
       "title": "Visualizer",
-      "description": "Satu lagu sekaligus: sampul besar, lirik, dan visualizer yang bergerak mengikuti audio."
+      "description": "Tampilan lirik satu lagu yang dapat disesuaikan dengan beragam animasi lirik dan kombinasi latar belakang."
     },
     "lattice": {
       "title": "Lattice (kolase antrean)",

@@ -178,7 +178,8 @@ export default {
     "confirm": "Confirm",
     "stageWaiting": "Waiting for external Stage input",
     "stageActionUnavailable": "This action is unavailable in Stage mode",
-    "latticeUnavailableInFm": "Queue collage is unavailable in Personal FM mode",
+    "latticeUnavailableInFm": "Lattice does not support Personal FM mode",
+    "latticeFmOpenedInPlayer": "Lattice does not support Personal FM mode. Opened the standard player instead",
     "noPlayableSongs": "No playable songs in this list",
     "songUnavailableTag": "Unavailable",
     "queueShuffled": "Queue shuffled",
@@ -2608,7 +2609,7 @@ export default {
     "confirm": "Use this",
     "player": {
       "title": "Visualizer",
-      "description": "One song at a time: big cover art, lyrics, and a visualizer that moves with the audio."
+      "description": "A customizable single-song lyrics view with multiple lyric animations and background combinations."
     },
     "lattice": {
       "title": "Lattice (queue collage)",

@@ -178,7 +178,8 @@ export default {
     "confirm": "确定",
     "stageWaiting": "等待连接",
     "stageActionUnavailable": "Stage 模式下不支持这个操作",
-    "latticeUnavailableInFm": "队列拼贴在 FM 模式下不可用",
+    "latticeUnavailableInFm": "Lattice 不支持私人 FM 模式",
+    "latticeFmOpenedInPlayer": "Lattice 不支持私人 FM 模式，已使用普通播放器打开",
     "noPlayableSongs": "列表中没有可播放的歌曲",
     "songUnavailableTag": "已下架",
     "queueShuffled": "播放队列已打乱",
@@ -2607,7 +2608,7 @@ export default {
     "confirm": "就这样",
     "player": {
       "title": "可视化",
-      "description": "单曲视图：大封面、歌词，以及随音频起伏的可视化效果。"
+      "description": "单曲视图: 多种歌词动画和背景搭配，自由定制的单曲歌词模式"
     },
     "lattice": {
       "title": "Lattice（队列拼贴）",

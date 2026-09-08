@@ -36,6 +36,7 @@ import { currentTime } from '../stores/motionSignals';
 import { setIsPanelOpen, setPanelTab } from '../stores/useAppViewStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
+import { showLatticeFmNotice, usePlaybackEntryViewStore } from '../stores/usePlaybackEntryViewStore';
 import { useStableActionSurface } from './useStableCallbacks';
 
 // src/hooks/usePlaybackQueueController.ts
@@ -446,10 +447,14 @@ export function usePlaybackQueueController({
         clearPendingUnavailableSkip();
         setStatusMsg(prev => prev?.persistent ? null : prev);
         const shouldNavigateToPlayer = options.shouldNavigateToPlayer ?? true;
+        const wasFmMode = usePlaybackStore.getState().isFmMode;
         setIsFmMode(isFmCall);
-        if (isFmCall && !isFmMode) {
+        if (isFmCall && !wasFmMode) {
             setPanelTab('queue');
             setIsPanelOpen(true);
+            if (usePlaybackEntryViewStore.getState().playbackEntryView === 'lattice') {
+                showLatticeFmNotice();
+            }
         }
 
         const playbackRequestId = ++playbackRequestIdRef.current;

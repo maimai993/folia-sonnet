@@ -23,18 +23,30 @@ export type PlaybackEntryViewState = {
     /** True once the listener has answered the prompt, or changed the setting by hand. */
     hasChosenPlaybackEntryView: boolean;
     isPlaybackEntryViewPromptOpen: boolean;
+    /**
+     * Non-zero while the "Lattice cannot host Personal FM" notice is up, and a different value on
+     * every raise so a repeat restarts its own timer.
+     *
+     * Deliberately not a status toast: starting FM fills that single-slot channel with the song
+     * fetch and the lyric match, either of which would cut this explanation short.
+     */
+    latticeFmNoticeToken: number;
 
     setPlaybackEntryView: (view: PlaybackEntryView) => void;
     /** Opens the prompt, unless it has already been answered. Returns whether it opened. */
     requestPlaybackEntryViewPrompt: () => boolean;
     /** Closes the prompt and records it as answered, so it never opens again. */
     closePlaybackEntryViewPrompt: () => void;
+    /** Raises the FM notice, restarting it if one is already showing. */
+    showLatticeFmNotice: () => void;
+    dismissLatticeFmNotice: () => void;
 };
 
 export const usePlaybackEntryViewStore = create<PlaybackEntryViewState>((set, get) => ({
     playbackEntryView: readEntryView(),
     hasChosenPlaybackEntryView: getStoredBoolean(ENTRY_VIEW_CHOSEN_KEY, false),
     isPlaybackEntryViewPromptOpen: false,
+    latticeFmNoticeToken: 0,
 
     // Picking a view *is* answering the question, wherever it is picked, so this also retires the
     // prompt: someone who set it in the options should not be asked about it again afterwards.
@@ -56,9 +68,18 @@ export const usePlaybackEntryViewStore = create<PlaybackEntryViewState>((set, ge
         setStoredBoolean(ENTRY_VIEW_CHOSEN_KEY, true);
         set({ isPlaybackEntryViewPromptOpen: false, hasChosenPlaybackEntryView: true });
     },
+    // Date.now() rather than a counter so the token also changes when the notice is raised again
+    // while still on screen, which is what restarts the dismissal timer.
+    showLatticeFmNotice: () => set({ latticeFmNoticeToken: Date.now() }),
+    dismissLatticeFmNotice: () => set({ latticeFmNoticeToken: 0 }),
 }));
 
 /** Module-level handle for the assembly layer; it is an action, so it needs no subscription. */
 export const requestPlaybackEntryViewPrompt = () => (
     usePlaybackEntryViewStore.getState().requestPlaybackEntryViewPrompt()
+);
+
+/** Module-level handle for the playback controller, which is not a component. */
+export const showLatticeFmNotice = () => (
+    usePlaybackEntryViewStore.getState().showLatticeFmNotice()
 );

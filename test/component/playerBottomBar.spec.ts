@@ -172,6 +172,26 @@ test.describe('player bottom bar positioning', () => {
     });
 });
 
+test.describe('capsule navigation', () => {
+    test('clicking the seek control does not activate capsule navigation', async ({ page }) => {
+        await page.locator(CAPSULE).first().hover();
+        await page.locator('input[type="range"]').click({ position: { x: 120, y: 3 } });
+
+        expect(Number(await page.locator(ROOT).getAttribute('data-probe-seeks'))).toBeGreaterThan(0);
+        await expect(page.locator(ROOT)).toHaveAttribute('data-probe-player-navigations', '0');
+    });
+
+    test('clicking the capsule hot area activates its configured destination', async ({ page }) => {
+        const capsule = page.locator(CAPSULE).first();
+        await expect(capsule).toBeVisible();
+
+        // Hit the capsule padding rather than the transparent range input.
+        await capsule.click({ position: { x: 20, y: 2 } });
+
+        await expect(page.locator(ROOT)).toHaveAttribute('data-probe-player-navigations', '1');
+    });
+});
+
 test.describe('bottom subtitle', () => {
     const SUBTITLE = '[data-probe-subtitle-host] .absolute.left-0.right-0';
 

@@ -70,6 +70,15 @@ export const shouldReplacePlayerNavigation = (
     state: NavigationHistoryState | null,
 ): boolean => state?.view === 'player';
 
+export const resolvePlayerCapsuleNavigationTarget = (
+    view: ViewState,
+    playbackEntryView: 'player' | 'lattice',
+    isFmMode: boolean,
+): 'player' | 'lattice' | null => {
+    if (view === 'lattice') return null;
+    return playbackEntryView === 'lattice' && !isFmMode ? 'lattice' : 'player';
+};
+
 const getSearchHistorySnapshot = (): NavigationHistoryState['search'] => {
     const searchState = useSearchNavigationStore.getState();
     return searchState.isSearchOpen
@@ -282,6 +291,19 @@ export function useAppNavigation() {
         navigateToPlayer();
     }, [navigateToLattice, navigateToPlayer]);
 
+    const navigateFromPlayerCapsule = useCallback(() => {
+        const target = resolvePlayerCapsuleNavigationTarget(
+            useAppViewStore.getState().view,
+            usePlaybackEntryViewStore.getState().playbackEntryView,
+            usePlaybackStore.getState().isFmMode,
+        );
+        if (target === 'lattice') {
+            navigateToLattice();
+        } else if (target === 'player') {
+            navigateToPlayer();
+        }
+    }, [navigateToLattice, navigateToPlayer]);
+
     const navigateBackFromLattice = useCallback(() => {
         const state = window.history.state as NavigationHistoryState | null;
         if (state?.view === 'lattice' && getAppHistoryIndex(state) > 0) {
@@ -407,6 +429,7 @@ export function useAppNavigation() {
         setLocalMusicState,
         navigateToPlayer,
         navigateToPlaybackView,
+        navigateFromPlayerCapsule,
         navigateToHome,
         navigateToLattice,
         navigateBackFromLattice,
