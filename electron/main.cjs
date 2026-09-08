@@ -22,7 +22,8 @@ const { createLocalCoverAssetStore, getLocalCoverAssetDirectory } = require('./l
 const { getReleaseUrl, getUpdateProviderConfig, resolveReleaseChannel } = require('./updateChannels.cjs');
 const { resolveCacheLimit, selectEvictions } = require('./audioCachePrune.cjs');
 const { createAnalysisHost } = require('./analysis/host.cjs');
-const { createDebugHost } = require('./debug/debugHost.cjs');
+const { createDebugHost, runtimeLine } = require('./debug/debugHost.cjs');
+const { createCrashLog, installCrashHandlers } = require('./debug/crashLog.cjs');
 const { createModelStore } = require('./analysis/modelStore.cjs');
 const { resolveLinuxPasswordStore } = require('./linuxPasswordStore.cjs');
 const { createTranscodeService } = require('./transcode/service.cjs');
@@ -1627,6 +1628,10 @@ const mainLocale = {
     dialogImportMessage: '不能直接导入系统目录或常用用户目录。\n请选择一个专门存放音乐的文件夹。',
     dialogChooseOther: '选择其他文件夹',
     dialogCancel: '取消',
+    crashTitle: 'Folia 遇到了问题',
+    crashMessage: '程序发生了一次崩溃，日志已保存。把它发给开发者能帮助定位问题。',
+    crashOpenFolder: '打开日志所在文件夹',
+    crashClose: '关闭',
   },
   en: {
     trayShowWindow: 'Show Window',
@@ -1644,6 +1649,10 @@ const mainLocale = {
     dialogImportMessage: 'Cannot directly import system or common user directories.\nPlease choose a dedicated music folder.',
     dialogChooseOther: 'Choose Another Folder',
     dialogCancel: 'Cancel',
+    crashTitle: 'Folia ran into a problem',
+    crashMessage: 'The app crashed and a log has been saved. Sending it to the developer helps track the problem down.',
+    crashOpenFolder: 'Open Log Folder',
+    crashClose: 'Close',
   },
   in: {
     trayShowWindow: 'Tampilkan Jendela',
@@ -1661,6 +1670,10 @@ const mainLocale = {
     dialogImportMessage: 'Folder sistem atau folder pengguna umum tidak dapat diimpor langsung.\nPilih folder khusus untuk menyimpan musik.',
     dialogChooseOther: 'Pilih Folder Lain',
     dialogCancel: 'Batal',
+    crashTitle: 'Folia mengalami masalah',
+    crashMessage: 'Aplikasi mengalami crash dan log telah disimpan. Mengirimkannya ke pengembang membantu menemukan masalahnya.',
+    crashOpenFolder: 'Buka Folder Log',
+    crashClose: 'Tutup',
   },
 };
 
@@ -1728,6 +1741,26 @@ function getMainLocaleKey() {
 function getMainLocale() {
   return mainLocale[getMainLocaleKey()];
 }
+
+// Crash reporting. Installed here rather than at the end of the file because everything below it
+// runs before `ready`, and a startup failure is exactly the crash a user cannot diagnose alone.
+// Writes to `logs` beside the executable where that is writable — see resolveCrashLogDir for the
+// platforms where it is not, and where the reports land instead.
+const crashLog = createCrashLog({
+  app,
+  dialog,
+  shell,
+  getLocale: getMainLocale,
+  onLine: runtimeLine,
+});
+installCrashHandlers({
+  app,
+  crashLog,
+  // 壁纸模式对渲染进程崩溃有自己的恢复路径：Linux 的 windowtolayer watchdog 会重启进程回到普通
+  // 窗口，Windows / macOS 就地 reload 页面。两处都只认 reason === 'crashed'，这里跟着它们走。
+  // 崩溃文件照写，只是不弹窗——桌面正在自己恢复，弹出来的框用户除了关掉别无选择。
+  isRendererCrashRecovered: (details) => details?.reason === 'crashed' && isWallpaperModeEnabled(),
+});
 
 
 let mainWindow = null;
