@@ -15,9 +15,9 @@
 | --- | --- |
 | components | 512+ |
 | test/dev | 256+ |
+| services | 128+ |
 | backend/electron | 64+ |
 | hooks | 64+ |
-| services | 64+ |
 | utils | 64+ |
 | stores | 32+ |
 | types | 16+ |
@@ -33,6 +33,7 @@
 | 被依赖量级 | 模块 |
 | --- | --- |
 | 512+ | `src/types.ts` |
+| 64+ | `src/types/onlineMusic.ts` |
 | 64+ | `src/utils/appPlaybackGuards.ts` |
 | 32+ | `src/components/command-palette/types.ts` |
 | 32+ | `src/components/visualizer/colorMix.ts` |
@@ -41,7 +42,6 @@
 | 32+ | `src/services/onlineMusic/songMetadata.ts` |
 | 32+ | `src/stores/usePlaybackStore.ts` |
 | 32+ | `src/stores/useStatusMessageStore.ts` |
-| 32+ | `src/types/onlineMusic.ts` |
 | 32+ | `src/utils/lyrics/renderHints.ts` |
 
 ## 动态注册点
