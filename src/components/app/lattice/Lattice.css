@@ -103,7 +103,6 @@
         0 0 0 4px transparent,
         0 0 0 5px transparent,
         var(--lattice-poster-elevation, 0 12px 32px transparent);
-    filter: saturate(1) brightness(1);
     transition: box-shadow 600ms ease, filter 600ms ease;
     cursor: pointer;
     contain: layout paint;
@@ -255,8 +254,8 @@
 
 .lattice-poster.is-expanded {
     --lattice-poster-elevation: 0 42px 110px var(--lattice-expanded-shadow);
-    /* The identity filter on the base rule still buys a full filter pass every frame, and the Pixi
-       lyric canvas inside this card would have to be re-composited through it. */
+    /* Hover would otherwise hand this card a filter, and the Pixi lyric canvas inside it would be
+       re-composited through that pass every frame. */
     filter: none;
 }
 
@@ -302,14 +301,16 @@
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.12em;
-    background: rgb(var(--lattice-shade-rgb) / 42%);
-    backdrop-filter: blur(10px);
+    /* No backdrop-filter here: one blurred badge per card promoted every poster to its own
+       compositing layer, which is the wall's single largest GPU cost. A denser shade keeps the
+       number legible over bright artwork without the readback. */
+    background: rgb(var(--lattice-shade-rgb) / 62%);
 }
 
 /* The playing poster already wears the accent border; its badge only borrows the colour. */
 .lattice-poster-badge.is-current {
     color: var(--text-accent, var(--text-primary, #fff));
-    background: rgb(var(--lattice-shade-rgb) / 66%);
+    background: rgb(var(--lattice-shade-rgb) / 78%);
 }
 
 .lattice-poster-copy {
