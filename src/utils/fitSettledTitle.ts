@@ -4,14 +4,20 @@ export const TYPOGRAPHY = ['font-family', 'font-size', 'font-weight', 'font-styl
     'font-variation-settings', 'line-height', 'letter-spacing', 'word-spacing', 'text-transform',
     'text-wrap', 'word-break', 'overflow-wrap', 'white-space'] as const;
 
-/** Measure an isolated copy only after settling; binary search never edits the visible card. */
-export function fitTitle(node: HTMLElement, text: string, options?: { onRead?: () => void }) {
+/**
+ * Measure an isolated copy only after settling; binary search never edits the visible card.
+ *
+ * `width` fits against a box the node has not reached yet — an expanding poster knows where it is
+ * headed before it gets there. Only the width may differ: the three-line limit comes from the
+ * line height, which here is set by the viewport rather than by the container.
+ */
+export function fitTitle(node: HTMLElement, text: string, options?: { width?: string; onRead?: () => void }) {
     const style = getComputedStyle(node);
     const probe = document.createElement('div');
     for (const property of TYPOGRAPHY) probe.style.setProperty(property, style.getPropertyValue(property));
     Object.assign(probe.style, {
         position: 'fixed', left: '0', top: '0', visibility: 'hidden', pointerEvents: 'none',
-        width: style.width, padding: '0', margin: '0', border: '0', boxSizing: 'border-box',
+        width: options?.width ?? style.width, padding: '0', margin: '0', border: '0', boxSizing: 'border-box',
     });
     document.body.append(probe);
     const limit = parseFloat(style.lineHeight) * 3 + 1;

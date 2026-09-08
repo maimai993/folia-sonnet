@@ -15,13 +15,13 @@ const TITLES = [
 
 // The leading only resolves through the poster rules, so the probe mounts real posters
 // instead of a bare copy block.
-function Poster({ title, expanded, metadata }: { title: string; expanded: boolean; metadata?: boolean }) {
+function Poster({ title, expanded, metadata, layoutSettled }: { title: string; expanded: boolean; metadata?: boolean; layoutSettled?: boolean }) {
     return <div
         className={`lattice-poster${expanded ? ' is-expanded' : ''}`}
         style={{ position: 'relative', width: expanded ? 494 : 300, height: expanded ? 440 : 300, background: '#243748' }}
     >
         <span className={`lattice-poster-copy${metadata ? ' lattice-lyric-metadata' : ''}`}>
-            {metadata ? <strong>{title}</strong> : <LatticeTitle title={title} expanded={expanded} />}<small>HOYO-MiX</small>
+            {metadata ? <strong>{title}</strong> : <LatticeTitle title={title} expanded={expanded} layoutSettled={layoutSettled} />}<small>HOYO-MiX</small>
         </span>
     </div>;
 }
@@ -34,17 +34,20 @@ function LatticeTitleProbe() {
     // production fitter rather than replacing it, so what is measured stays unchanged.
     const [generation, setGeneration] = useState(0);
     const [fits, setFits] = useState(0);
-    const fitter = useMemo(() => (node: HTMLElement, text: string) => {
+    // Stands in for an expanding poster telling the title its box has stopped growing.
+    const [layoutSettled, setLayoutSettled] = useState(false);
+    const fitter = useMemo(() => (node: HTMLElement, text: string, width?: string) => {
         setFits(value => value + 1);
-        return fitTitle(node, text);
+        return fitTitle(node, text, { width });
     }, []);
     return <TitleFitterContext.Provider value={fitter}>
         <div className="lattice-root" data-fits={fits} style={{ color: 'white', background: '#243748', padding: 40 }}>
             <button type="button" onClick={() => setGeneration(value => value + 1)}>Remount titles</button>
+            <label><input type="checkbox" checked={layoutSettled} onChange={event => setLayoutSettled(event.target.checked)} /> Layout settled</label>
             {/* Keeps the poster grid laid out exactly as before the remount control was added. */}
             <div key={generation} data-generation={generation} style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-                {TITLES.map(title => <Poster key={title} title={title} expanded />)}
-                {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} />)}
+                {TITLES.map(title => <Poster key={title} title={title} expanded layoutSettled={layoutSettled} />)}
+                {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} layoutSettled={layoutSettled} />)}
                 {/* Lyric mode drops the same title to a single truncated line. */}
                 <Poster key="metadata" title={TITLES[2]} expanded metadata />
             </div>
