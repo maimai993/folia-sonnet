@@ -274,9 +274,9 @@
 }
 
 .lattice-poster.is-expanded .lattice-poster-copy strong {
-    --lattice-title-leading: 0.88;
     max-width: 76%;
     font-size: clamp(48px, 6vw, 82px);
+    line-height: 0.95;
 }
 
 .lattice-poster.is-expanded .lattice-poster-copy small {
@@ -323,36 +323,18 @@
 }
 
 .lattice-poster-copy strong {
-    /* Display leading this tight makes each line's glyphs taller than its line box, so the
-       first line's ascenders and the last line's descenders spill past the block edges. The
-       padding takes them back in; the negative margin keeps the copy anchored where it was.
-
-       That padding is only safe because the three-line cap is a column break rather than
-       -webkit-line-clamp: the clamp keeps laying the later lines out directly underneath,
-       so any room made for descenders uncovers the top of the fourth line instead. Filling
-       one auto column up to three lines pushes the remainder sideways into an overflow
-       column, which `overflow: clip` cuts off — nothing is left below the third line to leak.
-       The trade is the clamp's ellipsis; over-long titles now end on a hard cut. */
-    --lattice-title-lines: 3;
-    --lattice-title-leading: 0.96;
-    --lattice-title-bleed: 0.14em;
-    display: block;
-    columns: 1;
-    column-fill: auto;
-    /* Columns only fill sequentially when the block size is definite; under a max-height they
-       balance instead, which hands a four-line title two lines and an empty half. The orphan
-       minimum pins the first column back to the full three. */
-    orphans: var(--lattice-title-lines);
-    /* Border-box sizing, so the bleed counts twice here. The epsilon absorbs sub-pixel
-       rounding, without which the third line gets pushed into the overflow column. */
-    max-height: calc(var(--lattice-title-lines) * var(--lattice-title-leading) * 1em + 2 * var(--lattice-title-bleed) + 1px);
-    overflow: clip;
-    margin-block: calc(-1 * var(--lattice-title-bleed));
-    padding-block: var(--lattice-title-bleed);
+    overflow: hidden;
+    /* Tight display line-heights otherwise crop ascenders and descenders at the clamp boundary.
+       Padding expands the paint area; the matching negative margin keeps the copy anchored. */
+    margin-block: -0.14em;
+    padding-block: 0.14em;
     font-size: clamp(22px, 2vw, 36px);
-    line-height: var(--lattice-title-leading);
+    line-height: 0.96;
     letter-spacing: -0.045em;
     text-wrap: balance;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
 }
 
 .lattice-poster-copy small {
@@ -413,4 +395,10 @@
 @media (max-width: 640px) {
     .lattice-back { top: 14px; left: 16px; }
     .lattice-poster.is-expanded .lattice-poster-copy strong { font-size: 44px; }
+}
+
+/* Settled previews contain at most three lines, so no hidden fourth line can bleed into padding. */
+.lattice-poster-copy strong[data-title-settled] {
+    display: block;
+    -webkit-line-clamp: unset;
 }

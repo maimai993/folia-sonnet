@@ -15,14 +15,10 @@
     right: 100px;
 }
 .lattice-root .lattice-poster.is-expanded .lattice-lyric-metadata strong {
-    /* Beside the lyrics the title is a one-line label at reading leading, so it opts out of
-       the poster's three-line column cap and truncates the plain way, ellipsis included. */
-    --lattice-title-lines: 1;
-    --lattice-title-leading: 1.2;
     max-width: 100%;
     font-size: 22px;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    line-height: 1.2;
+    -webkit-line-clamp: 1;
 }
 .lattice-root .lattice-poster.is-expanded .lattice-lyric-metadata small {
     font-size: 13px;

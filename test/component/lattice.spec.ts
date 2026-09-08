@@ -163,11 +163,11 @@ test('Escape returns only after card focus has been cleared', async ({ mount, pa
     await expect(state).toHaveAttribute('data-backs', '1');
 });
 
-test('primary modifier Q exits Lattice immediately', async ({ mount, page }) => {
+test('primary modifier B exits Lattice immediately', async ({ mount, page }) => {
     const wall = await mount('lattice');
     const state = wall.locator('[data-backs]');
 
-    await page.keyboard.press('Control+q');
+    await page.keyboard.press('Control+b');
 
     await expect(state).toHaveAttribute('data-backs', '1');
 });

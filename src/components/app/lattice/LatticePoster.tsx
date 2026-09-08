@@ -1,3 +1,4 @@
+import { LatticeTitle } from './LatticeTitle';
 import { lazy, memo, Suspense } from 'react';
 import { motion, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -219,11 +220,11 @@ function LatticePoster({
                 {String(tile.queueIndex + 1).padStart(2, '0')}
             </span>
             {expanded && expansionSettled && isCurrent ? (
-                <Suspense fallback={<span className="lattice-poster-copy"><strong>{tile.title}</strong><small>{tile.artist}</small></span>}>
+                <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} /><small>{tile.artist}</small></span>}>
                     <LatticeLyrics key={tile.id} tile={tile} reducedMotion={Boolean(reducedMotion)} />
                 </Suspense>
             ) : <span className="lattice-poster-copy">
-                <strong>{tile.title}</strong>
+                <LatticeTitle title={tile.title} expanded={expanded} />
                 <small>{tile.artist}</small>
             </span>}
             {expanded && (

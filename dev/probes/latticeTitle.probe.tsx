@@ -1,8 +1,10 @@
+import { LatticeTitle } from '../../src/components/app/lattice/LatticeTitle';
 import type { ProbeDefinition } from './definition';
 import '../../src/components/app/lattice/Lattice.css';
 import '../../src/components/app/lattice/lyrics/LatticeLyrics.css';
 
 const TITLES = [
+    'Piano Sonata, Op. 27 No. 2, in C♯ minor, “Moonlight”',
     '壤土下的安居 Cozy Home Underground',
     '锤砧间的音符 Notes From Striking the Anvil',
     '新月的摇篮曲（其三）：眉间落英 Lullaby of the New Moon',
@@ -16,7 +18,7 @@ function Poster({ title, expanded, metadata }: { title: string; expanded: boolea
         style={{ position: 'relative', width: expanded ? 494 : 300, height: expanded ? 440 : 300, background: '#243748' }}
     >
         <span className={`lattice-poster-copy${metadata ? ' lattice-lyric-metadata' : ''}`}>
-            <strong>{title}</strong><small>HOYO-MiX</small>
+            {metadata ? <strong>{title}</strong> : <LatticeTitle title={title} expanded={expanded} />}<small>HOYO-MiX</small>
         </span>
     </div>;
 }
