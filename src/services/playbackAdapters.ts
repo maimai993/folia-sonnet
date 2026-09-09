@@ -163,7 +163,9 @@ export function buildUnifiedLocalSong({
         id: getLocalSongId(localSong),
         name: displayTitle,
         artists: displayArtists,
-        album: displayAlbum ? { id: 0, name: displayAlbum, coverUrl: coverUrl || undefined } : { id: 0, name: '' },
+        // The cover has to survive an empty album tag: a file with artwork but no album name still
+        // needs `album.coverUrl`, which is the only cover channel queue-derived surfaces read.
+        album: { id: 0, name: displayAlbum || '', ...(coverUrl ? { coverUrl } : {}) },
         durationMs: localSong.duration,
         isPureMusic: useMatchedLyrics ? localSong.matchedIsPureMusic : false,
         isLocal: true,
