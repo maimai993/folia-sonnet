@@ -4,6 +4,7 @@ import { LyricProcessingOptions, RawEmbeddedLyric } from '../types';
 import { parseLyricsAsync } from '../workerClient';
 import { detectTimedLyricFormat } from '../formatDetection';
 import { normalizeEmbeddedLrcText, normalizeEmbeddedUsltTags } from '../embeddedLrcNormalization';
+import { extractAwlrcContainer } from '../awlrcContainer';
 
 export class EmbeddedLyricAdapter implements LyricAdapter<RawEmbeddedLyric> {
     async parse(source: RawEmbeddedLyric, options: LyricProcessingOptions = {}): Promise<LyricData | null> {
@@ -21,6 +22,16 @@ export class EmbeddedLyricAdapter implements LyricAdapter<RawEmbeddedLyric> {
         }
 
         if (!mainLrc) return null;
+
+        // LX Music embeds the authoritative word-timed track in an `[awlrc:...]` container;
+        // the repeated LRC body is only a fallback view and must not be parsed as one timeline.
+        const container = extractAwlrcContainer(mainLrc);
+        if (container?.awlrc || container?.lrc) {
+            const translation = transLrc || container.tlrc || '';
+            return container.awlrc
+                ? await parseLyricsAsync('awlrc', container.awlrc, translation, options, container.rlrc || '')
+                : await parseLyricsAsync('lrc', container.lrc!, translation, options, container.rlrc || '');
+        }
 
         return await parseLyricsAsync(detectTimedLyricFormat(mainLrc), mainLrc, transLrc, options);
     }
