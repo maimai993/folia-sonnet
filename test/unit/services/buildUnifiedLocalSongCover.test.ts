@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildUnifiedLocalSong } from '../../../src/services/playbackAdapters';
+import { LIST_ROW_COVER_SIZE, QUEUE_COVER_SIZE, buildLocalQueue, buildUnifiedLocalSong } from '../../../src/services/playbackAdapters';
 import { getSongCoverUrl } from '../../../src/services/onlineMusic/songMetadata';
 import type { LocalSong } from '../../../src/types';
+import { afterEach, beforeEach, vi } from 'vitest';
 
 // test/unit/services/buildUnifiedLocalSongCover.test.ts
 // Verifies an untagged album never drops the resolved cover, which queue-derived surfaces
@@ -60,5 +61,38 @@ describe('buildUnifiedLocalSong cover', () => {
         });
 
         expect(unified.album?.coverUrl).toBeUndefined();
+    });
+});
+
+// The queue and list-row callers must stay in different thumbnail buckets: a shared bucket would
+// make GridView rows decode the full-bleed artwork, and `getSizedCoverUrl` only serves 512 and 1024.
+describe('buildLocalQueue cover size', () => {
+    const assetId = `sha256:${'b'.repeat(64)}`;
+
+    beforeEach(() => vi.stubGlobal('window', { electron: { hasLocalCoverAsset: vi.fn() } }));
+    afterEach(() => vi.unstubAllGlobals());
+
+    const queueOf = (coverSize?: number) => buildLocalQueue(
+        [localSong({ localCoverAssetId: assetId })],
+        undefined,
+        undefined,
+        coverSize,
+    );
+
+    it('defaults to the full-bleed bucket and keeps it on an untagged album', () => {
+        const [track] = queueOf();
+
+        expect(track.album?.name).toBe('');
+        expect(track.album?.coverUrl).toContain(`size=${QUEUE_COVER_SIZE}`);
+    });
+
+    it('serves list rows the small bucket when asked', () => {
+        const [track] = queueOf(LIST_ROW_COVER_SIZE);
+
+        expect(track.album?.coverUrl).toContain(`size=${LIST_ROW_COVER_SIZE}`);
+    });
+
+    it('keeps the two buckets distinct', () => {
+        expect(LIST_ROW_COVER_SIZE).toBeLessThan(QUEUE_COVER_SIZE);
     });
 });

@@ -26,7 +26,6 @@ import { LocalLibraryEntityPanel } from '../../modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../modal/LocalFolderSongInfoPanel';
 import { LocalSongMetadataMatchDialog } from '../../modal/LocalSongMetadataMatchDialog';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
-import { applyLocalSongCoverDisplay } from '../../../services/playbackAdapters';
 import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
@@ -411,23 +410,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             surfaceProps.localSongs,
         ));
 
-        const localSongsById = new Map(surfaceProps.localSongs.map(song => [song.id, song]));
-        const processedTracks = resolvedTracks.map(track => {
-            const localData = track.localRef ? localSongsById.get(track.localRef.songId) : undefined;
-            if (!localData) return track;
-
-            const preferOnlineCover = localData.useOnlineCover === true;
-            if (preferOnlineCover && localData.onlineMetadata?.coverUrl) {
-                return track;
-            }
-
-            const url = getLocalCoverAssetUrl(localData.localCoverAssetId, 512);
-            if (url) return applyLocalSongCoverDisplay(track, url);
-
-            return track;
-        });
-
-        setExternalTracks(processedTracks);
+        setExternalTracks(resolvedTracks);
         setExternalTracksLoading(false);
     }, [
         handleBackCollection,

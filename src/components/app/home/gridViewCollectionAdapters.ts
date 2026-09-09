@@ -1,7 +1,7 @@
 import type React from 'react';
 import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeService';
-import { buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
+import { LIST_ROW_COVER_SIZE, buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
 import { SubsonicSong } from '../../../types/navidrome';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
@@ -257,7 +257,8 @@ export const resolveLocalGridViewTracks = (
         .map(songId => songsById.get(songId))
         .filter((song): song is LocalSong => Boolean(song));
 
-    return buildLocalQueue(orderedSongs, undefined, catalog) as SongResult[];
+    // Row-sized covers: GridView renders these as list thumbnails, never full-bleed.
+    return buildLocalQueue(orderedSongs, undefined, catalog, LIST_ROW_COVER_SIZE) as SongResult[];
 };
 
 const getLocalGridViewCoverSource = (songs: LocalSong[]): string | undefined => {
