@@ -2318,6 +2318,25 @@ export default {
         "title": "Lighter, Clearer Visualizers",
         "description": "Tempera and Sonnet now adjust render resolution around GPU texture boundaries to reduce avoidable memory use. Monet and Lattice titles avoid clipping, and the bottom subtitle can show upcoming non-translation lyrics without blur."
       }
+    },
+    "v0_7_7": {
+      "intro": "Version 0.7.7 restores reliable QQ Music playback, improves embedded local lyrics and covers, and reduces Lattice artwork overhead.",
+      "qqPlaybackReliability": {
+        "title": "More Reliable QQ Music Playback",
+        "description": "QQ Music playback now uses additional CDN selection and a faster fallback path to reduce failures caused by current upstream rate limits."
+      },
+      "localLibraryCovers": {
+        "title": "Local Covers Survive Missing Album Tags",
+        "description": "Embedded artwork now remains available throughout the player and queue even when a local file has no album name. Local list views also request a smaller, appropriate thumbnail."
+      },
+      "embeddedLyricTracks": {
+        "title": "Cleaner Embedded Translation and Romanization",
+        "description": "Embedded bilingual and trilingual lyrics now keep aligned translation and romanization tracks instead of mixing them into the main lyrics or dropping romanization."
+      },
+      "latticeArtworkEfficiency": {
+        "title": "Lighter Lattice Artwork Loading",
+        "description": "Lattice now loads cover sizes suited to each poster and prewarms larger artwork when opening a song, reducing unnecessary image decoding while keeping expansion transitions clear."
+      }
     }
   },
   "export": {

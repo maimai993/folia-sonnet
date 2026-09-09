@@ -2252,6 +2252,25 @@ export default {
         "title": "Visualizer yang Lebih Ringan dan Jelas",
         "description": "Tempera dan Sonnet kini menyesuaikan resolusi render di sekitar batas tekstur GPU untuk mengurangi penggunaan memori yang tidak perlu. Judul Monet dan Lattice tidak mudah terpotong, dan subtitle bawah dapat menampilkan lirik non-terjemahan berikutnya tanpa efek buram."
       }
+    },
+    "v0_7_7": {
+      "intro": "Versi 0.7.7 memulihkan pemutaran QQ Music yang andal, menyempurnakan lirik dan sampul lokal tertanam, serta meringankan pemuatan gambar Lattice.",
+      "qqPlaybackReliability": {
+        "title": "Pemutaran QQ Music Lebih Andal",
+        "description": "Pemutaran QQ Music kini memakai pemilihan CDN tambahan dan jalur cadangan yang lebih cepat untuk mengurangi kegagalan akibat pembatasan upstream saat ini."
+      },
+      "localLibraryCovers": {
+        "title": "Sampul Lokal Tetap Ada Tanpa Tag Album",
+        "description": "Gambar sampul tertanam kini tetap tersedia di pemutar dan antrean meski berkas lokal tidak memiliki nama album. Daftar lokal juga meminta thumbnail yang lebih kecil dan sesuai."
+      },
+      "embeddedLyricTracks": {
+        "title": "Terjemahan dan Romanisasi Tertanam Lebih Rapi",
+        "description": "Lirik dwibahasa dan tribahasa tertanam kini mempertahankan trek terjemahan dan romanisasi yang sejajar, tanpa mencampurnya ke lirik utama atau menghilangkan romanisasi."
+      },
+      "latticeArtworkEfficiency": {
+        "title": "Pemuatan Sampul Lattice Lebih Ringan",
+        "description": "Lattice kini memuat ukuran sampul sesuai tiap poster dan menyiapkan gambar yang lebih besar saat lagu dibuka, sehingga dekode gambar berlebih berkurang tanpa mengorbankan kejernihan transisi."
+      }
     }
   },
   "export": {

@@ -2317,6 +2317,25 @@ export default {
         "title": "更轻、更清晰的视觉器",
         "description": "Tempera 与 Sonnet 会根据 GPU 纹理边界动态调整渲染分辨率，减少不必要的显存占用；Monet 与 Lattice 的标题不再容易裁切，底部字幕也可关闭非翻译后续歌词的模糊效果。"
       }
+    },
+    "v0_7_7": {
+      "intro": "0.7.7 提升 QQ 音乐的播放稳定性，改善本地嵌入歌词与封面处理，并降低 Lattice 封面加载开销。",
+      "qqPlaybackReliability": {
+        "title": "QQ 音乐播放更加稳定",
+        "description": "QQ 音乐播放使用 CDN 选择更快的备用路径，减少当前网络环境下的卡顿和中断。"
+      },
+      "localLibraryCovers": {
+        "title": "无专辑标签也能保留本地封面",
+        "description": "本地文件即使没有专辑名称，内嵌封面也会继续显示在播放器和队列中；本地列表同时改用更合适的小尺寸缩略图。"
+      },
+      "embeddedLyricTracks": {
+        "title": "嵌入歌词译文与罗马音更准确",
+        "description": "嵌入的双语、三语歌词现在会保留对齐的译文和罗马音轨道，不再把它们混入主歌词或丢失罗马音。"
+      },
+      "latticeArtworkEfficiency": {
+        "title": "Lattice 封面加载更轻量",
+        "description": "Lattice 会按海报实际显示尺寸加载封面，并在展开歌曲前预热大图，减少不必要的图片解码，同时保持展开过程清晰流畅。"
+      }
     }
   },
   "export": {
