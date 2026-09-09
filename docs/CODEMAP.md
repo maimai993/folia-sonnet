@@ -55,6 +55,7 @@
 - `dev/probes/automixModelReminder.probe.tsx`
 - `dev/probes/automixModels.probe.tsx`
 - `dev/probes/automixTransitionSwitches.probe.tsx`
+- `dev/probes/coverSizeAudit.probe.tsx`
 - `dev/probes/fmTab.probe.tsx`
 - `dev/probes/globalLyricOffsetRuler.probe.tsx`
 - `dev/probes/gridPanelToggle.probe.tsx`
