@@ -3,6 +3,7 @@ import { MotionValue, useMotionValueEvent } from 'framer-motion';
 import type { ThemeMode, DualTheme, LyricData, LyricAlternateText, LyricBackgroundVocal, LyricSyllable } from '../types';
 import { sonnetDebugState, type SonnetDebugShotInfo } from './visualizer/sonnet/sonnetDebug';
 import ConsoleLogPanel from './shared/ConsoleLogPanel';
+// import CoverSizeAuditPanel from './shared/CoverSizeAuditPanel';
 import DraggableDebugWindow from './shared/DraggableDebugWindow';
 import { isConsoleCaptureEnabled, subscribeToConsoleLog } from '../utils/consoleLogBuffer';
 
@@ -609,7 +610,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
 }) => {
     // Console first: on the desktop build this overlay is the only console there is, so reading it
     // is what the shortcut is pressed for.
-    const [activeTab, setActiveTab] = useState<'console' | 'memory' | 'playback' | 'lyrics' | 'theme' | 'sonnet'>('console');
+    const [activeTab, setActiveTab] = useState<'console' | 'memory' /* | 'covers' */ | 'playback' | 'lyrics' | 'theme' | 'sonnet'>('console');
     // The switch in Settings > Developer governs this whole overlay, not just its Console tab. It
     // is the debug back room's switch: off means the chord opens nothing at all. Hiding one tab and
     // leaving the other five was reading the switch as "the log" when it is named for the room.
@@ -759,6 +760,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
                 <div className="mt-3 flex flex-wrap gap-2">
                     <TabButton label="Console" isActive={activeTab === 'console'} onClick={() => setActiveTab('console')} isDaylight={isDaylight} />
                     <TabButton label="Memory" isActive={activeTab === 'memory'} onClick={() => setActiveTab('memory')} isDaylight={isDaylight} />
+                    {/* <TabButton label="Covers" isActive={activeTab === 'covers'} onClick={() => setActiveTab('covers')} isDaylight={isDaylight} /> */}
                     <TabButton label="Playback" isActive={activeTab === 'playback'} onClick={() => setActiveTab('playback')} isDaylight={isDaylight} />
                     <TabButton label="Lyrics" isActive={activeTab === 'lyrics'} onClick={() => setActiveTab('lyrics')} isDaylight={isDaylight} />
                     <TabButton label="Theme" isActive={activeTab === 'theme'} onClick={() => setActiveTab('theme')} isDaylight={isDaylight} />
@@ -838,6 +840,13 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
 
                     </div>
                 )}
+
+                {/* Cover size audit, switched off - see the note in src/index.tsx.
+                {activeTab === 'covers' && (
+                    <div className="mt-3 grid gap-3">
+                        <CoverSizeAuditPanel isDaylight={isDaylight} panelClass={panelClass} />
+                    </div>
+                )} */}
 
                 {activeTab === 'playback' && (
                     <div className="mt-3 grid gap-3">

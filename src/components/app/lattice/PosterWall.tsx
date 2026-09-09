@@ -23,6 +23,8 @@ import {
 } from './useLatticePlaybackFocus';
 import { setLatticeCurrentSongPosterVisible } from '../../../stores/useLatticeControlsStore';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
+import { useDevicePixelRatio } from '../../../hooks/useMediaQuery';
+import { EXPANSION_SPAN } from './blockTemplates';
 
 // Draggable poster field: one greedily packed block template repeats over the queue.
 
@@ -48,6 +50,8 @@ const ENTRANCE_STAGGER = 0.03;
 const ENTRANCE_MAX_DELAY = 0.34;
 const ENTRANCE_WINDOW = 1100;
 const METRICS: WallMetrics = { cellSize: CELL_SIZE, gap: GAP };
+// Longest edge a card can reach, which is the gear expansion hands it.
+const EXPANDED_SIZE = EXPANSION_SPAN.cols * (CELL_SIZE + GAP) - GAP;
 
 
 const getScale = (width: number) => width < 640 ? 0.52 : width < 1100 ? 0.64 : 0.76;
@@ -84,7 +88,12 @@ export default function PosterWall({
     // viewport would otherwise place the entering wave, and the playing song, off centre.
     const [measured, setMeasured] = useState(false);
     const [entranceDone, setEntranceDone] = useState(false);
+    // Camera scale, mirrored into state only so posters can size their artwork. It follows the
+    // width breakpoints, so this settles after the first measure and then only moves on a resize.
+    const [cameraScale, setCameraScale] = useState(() => cameraRef.current.scale);
     const reducedMotion = useReducedMotion();
+    const devicePixelRatio = useDevicePixelRatio();
+    const pixelScale = cameraScale * devicePixelRatio;
 
     const geometry = useMemo(() => getLatticeGeometry(tiles.length, METRICS), [tiles.length]);
     const [activePoster, setActivePoster] = useLatticePosterSelection(tiles, geometry, METRICS);
@@ -117,7 +126,9 @@ export default function PosterWall({
         if (!container) return;
         const observer = new ResizeObserver(([entry]) => {
             viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
-            applyCamera({ ...cameraRef.current, scale: getScale(entry.contentRect.width) }, true);
+            const scale = getScale(entry.contentRect.width);
+            applyCamera({ ...cameraRef.current, scale }, true);
+            setCameraScale(previous => previous === scale ? previous : scale);
             setMeasured(true);
         });
         observer.observe(container);
@@ -311,6 +322,8 @@ export default function PosterWall({
                             tile={tile}
                             rect={rect}
                             gap={METRICS.gap}
+                            pixelScale={pixelScale}
+                            expandedSize={EXPANDED_SIZE}
                             entranceDelay={getEntranceDelay(rect)}
                             exitDelay={getExitDelay(rect)}
                             expanded={expanded}

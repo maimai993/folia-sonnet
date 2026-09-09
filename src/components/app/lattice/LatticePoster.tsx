@@ -9,6 +9,7 @@ import { useLatticeChromeDisclosure } from './useLatticeChromeDisclosure';
 import LatticePlaybackControls from './LatticePlaybackControls';
 import { useLatticeExpansionSettled } from './useLatticeExpansionSettled';
 import { prewarmLatticeLyrics } from './lyrics/prewarmLatticeLyrics';
+import { prewarmLatticePosterArtwork, useLatticePosterArtwork } from './useLatticePosterArtwork';
 import { countRender } from '../../../dev/renderCount';
 
 // Renders one poster and its expanded Player Chrome controls.
@@ -21,6 +22,10 @@ type LatticePosterProps = {
     rect: Omit<ReflowTile, 'instanceId'>;
     /** Empty world-space distance between neighbouring poster slots. */
     gap: number;
+    /** World units to device pixels: the camera's scale times the display's pixel ratio. */
+    pixelScale: number;
+    /** World-space edge of the gear an expanded card takes, so a press can warm that variant. */
+    expandedSize: number;
     /** Seconds this poster waits before dropping into its slot, or null outside the opening wave. */
     entranceDelay: number | null;
     /** Reverse-wave delay used when the complete wall leaves the viewport. */
@@ -82,6 +87,8 @@ function LatticePoster({
     tile,
     rect,
     gap,
+    pixelScale,
+    expandedSize,
     entranceDelay,
     exitDelay,
     expanded,
@@ -104,9 +111,16 @@ function LatticePoster({
     // The lyric scene is a Pixi renderer whose layout is rebuilt from the card's box, so mounting it
     // mid-expansion would rasterize every line once per animation frame. It waits for the spring.
     const [expansionSettled, onExpansionComplete] = useLatticeExpansionSettled(expanded, Boolean(reducedMotion));
+    // The artwork only has to cover the card's own box, and a square cover is scaled to the longer
+    // edge. Both inputs are discrete - gears are integer spans and the camera only rescales on a
+    // breakpoint - so this is not a per-frame value even while the card animates towards the size.
+    const coverUrl = useLatticePosterArtwork(tile.coverUrl, Math.max(rect.width, rect.height) * pixelScale);
     // Hover and press are the last moments before the open: warming here keeps the lyric chunk,
     // the Pixi module and the first shader compile off the click path.
     const warmLyrics = () => { if (isCurrent) prewarmLatticeLyrics(); };
+    // Deliberately not on hover: a pointer sweeping the wall would pull a full-size cover per card,
+    // which costs more than the swap it saves. A press is already an open in all but name.
+    const warmExpandedArtwork = () => prewarmLatticePosterArtwork(tile.coverUrl, expandedSize * pixelScale);
     // Frozen at mount: the wave's own delay must not follow later camera moves.
     const landingDelay = useRef(entranceDelay).current;
     const landing = entranceDelay === null ? null : landingDelay;
@@ -145,7 +159,7 @@ function LatticePoster({
             ref={chrome.articleRef}
             onPointerEnter={(event: PointerEvent<HTMLElement>) => { warmLyrics(); chrome.onPointerEnter(event); }}
             onPointerLeave={chrome.onPointerLeave}
-            onPointerDownCapture={(event: PointerEvent<HTMLElement>) => { warmLyrics(); chrome.onPointerDownCapture(event); }}
+            onPointerDownCapture={(event: PointerEvent<HTMLElement>) => { warmLyrics(); warmExpandedArtwork(); chrome.onPointerDownCapture(event); }}
             onFocusCapture={chrome.onFocusCapture}
             onBlurCapture={chrome.onBlurCapture}
             key={instanceId}
@@ -192,7 +206,7 @@ function LatticePoster({
                         opacity: { duration: 0.24, delay: landing },
                     }}
             style={{
-                backgroundImage: tile.coverUrl ? `url("${tile.coverUrl}")` : fallbackBackground(tile.id),
+                backgroundImage: coverUrl ? `url("${coverUrl}")` : fallbackBackground(tile.id),
                 zIndex: expanded ? 20 : undefined,
             }}
             onAnimationComplete={onExpansionComplete}

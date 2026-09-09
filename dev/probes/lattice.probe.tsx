@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import Lattice from '../../src/components/app/lattice/Lattice';
 import { PlayerState, type SongResult } from '../../src/types';
@@ -9,16 +9,41 @@ import AppOverlays from '../../src/components/app/overlays/AppOverlays';
 
 // dev/probes/lattice.probe.tsx
 // Real wall and playback controls with local, deterministic queue data.
-const queue: SongResult[] = Array.from({ length: 12 }, (_, index) => ({
+/**
+ * Two cover shapes on one stub host, which a spec or the memory harness routes for itself.
+ *
+ * `stepped` is Navidrome-shaped, so the sizing ladder can rewrite it and each card asks for its own
+ * step. `original` is a plain path no provider rule matches, so `getSizedCoverUrl` hands it back
+ * untouched and every card paints the full-size asset - which is exactly what the wall did before
+ * it sized anything, and is how the memory harness gets a baseline without a production switch.
+ */
+type CoverMode = 'off' | 'stepped' | 'original';
+
+const coverUrlFor = (mode: CoverMode, index: number): string | undefined => {
+    if (mode === 'off') return undefined;
+    return mode === 'original'
+        ? `https://navidrome.test/original/${index}.png`
+        : `https://navidrome.test/rest/getCoverArt.view?id=${index}`;
+};
+
+const buildQueue = (count: number, covers: CoverMode): SongResult[] => Array.from({ length: count }, (_, index) => ({
     id: String(index), name: `Poster ${index}`, artists: [{ id: 1, name: 'Artist' }],
-    album: { id: 1, name: 'Album' }, durationMs: 180000,
+    album: { id: 1, name: 'Album', coverUrl: coverUrlFor(covers, index) }, durationMs: 180000,
     sourceRef: { kind: 'online', providerId: 'netease', mediaId: String(index) },
 }));
 
-function LatticeProbe() {
+const queue: SongResult[] = buildQueue(12, 'off');
+
+// Covers are off and the queue is 12 by default, so the gesture cases keep their fixture and run
+// without a single image request.
+function LatticeProbe({ covers = 'off', queueLength = 12 }: { covers?: CoverMode; queueLength?: number }) {
+    const source = useMemo(
+        () => (covers === 'off' && queueLength === 12 ? queue : buildQueue(queueLength, covers)),
+        [covers, queueLength],
+    );
     const time = useMotionValue(42);
-    const [songs, setSongs] = useState(queue);
-    const [currentSong, setCurrentSong] = useState<SongResult | null>(queue[0]);
+    const [songs, setSongs] = useState(source);
+    const [currentSong, setCurrentSong] = useState<SongResult | null>(source[0]);
     const [loopMode, setLoopMode] = useState<'off' | 'all' | 'one'>('all');
     const [command, setCommand] = useState('');
     const [toggles, setToggles] = useState(0);
@@ -30,8 +55,8 @@ function LatticeProbe() {
     return <div style={{ height: '100vh' }} data-loop={loopMode} data-command={command} data-toggles={toggles} data-backs={backs} data-seek={seek}
         data-current-song-poster-visible={isCurrentSongPosterVisible}>
         <Lattice lyrics={null} controls={{ loopMode,
-            playback: { prev: () => setCurrentSong(queue[Math.max(0, queue.indexOf(currentSong!) - 1)]),
-                next: () => setCurrentSong(queue[(queue.indexOf(currentSong!) + 1) % queue.length]),
+            playback: { prev: () => setCurrentSong(source[Math.max(0, source.indexOf(currentSong!) - 1)]),
+                next: () => setCurrentSong(source[(source.indexOf(currentSong!) + 1) % source.length]),
                 toggleLoop: () => setLoopMode(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
                 shuffleQueue: () => setSongs(value => [...value].reverse()), toggleSongLike: () => {}, isSongLiked: false, isFmMode: false },
             invokeCommandById: setCommand, canInvokeCommandById: () => true,
@@ -67,11 +92,11 @@ function LatticeProbe() {
             } : null,
         }} />
         <div style={{ position: 'fixed', right: 0, top: 0, zIndex: 100 }}>
-            <button onClick={() => setCurrentSong(queue[(queue.indexOf(currentSong!) + 1) % queue.length])}>Next track</button>
+            <button onClick={() => setCurrentSong(source[(source.indexOf(currentSong!) + 1) % source.length])}>Next track</button>
             <button onClick={() => setSongs(value => [...value].reverse())}>Reverse queue</button>
             <button onClick={() => setSongs(value => value.filter(song => song.id !== '3'))}>Remove poster 3</button>
             <button onClick={() => { setSongs([]); setCurrentSong(null); }}>Clear queue</button>
-            <button onClick={() => setSongs(queue)}>Restore queue</button>
+            <button onClick={() => setSongs(source)}>Restore queue</button>
             <button onClick={() => setPlayerState(value => value === PlayerState.PLAYING ? PlayerState.PAUSED : PlayerState.PLAYING)}>Toggle player state</button>
             <button onClick={() => setPlaybackDuration(value => value + 1)}>Bump duration</button>
         </div>
