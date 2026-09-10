@@ -197,6 +197,65 @@ describe('KuGou Web transport', () => {
         expect(kugouRequest).not.toHaveBeenCalled();
     });
 
+    it('builds the legacy mobile playInfo request through the Web lyric proxy', async () => {
+        vi.stubGlobal('window', undefined);
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            status: 1,
+            url: 'https://example.test/song.mp3',
+            backup_url: 'https://example.test/backup.mp3',
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugouLegacyPlayInfo } = await import('@/services/onlineMusic/kugouTransport');
+
+        const body = await requestKugouLegacyPlayInfo('B18B946D9B510FC72AB848FA17D06AFB');
+
+        expect(body).toMatchObject({ status: 1, url: 'https://example.test/song.mp3' });
+        const proxyUrl = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+        const targetUrl = new URL(proxyUrl.searchParams.get('url') || '');
+        expect(targetUrl.hostname).toBe('m.kugou.com');
+        expect(targetUrl.pathname).toBe('/app/i/getSongInfo.php');
+        expect(targetUrl.searchParams.get('cmd')).toBe('playInfo');
+        expect(targetUrl.searchParams.get('hash')).toBe('B18B946D9B510FC72AB848FA17D06AFB');
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
+    });
+
+    it('calls the legacy mobile playInfo directly in Electron', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(Response.json({
+            status: 1,
+            url: 'https://example.test/song.mp3',
+        }));
+        vi.stubGlobal('window', { electron: { kugouRequest: vi.fn() } });
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugouLegacyPlayInfo } = await import('@/services/onlineMusic/kugouTransport');
+
+        await requestKugouLegacyPlayInfo('HASH');
+
+        const targetUrl = new URL(String(fetchMock.mock.calls[0][0]));
+        expect(targetUrl.hostname).toBe('m.kugou.com');
+        expect(targetUrl.searchParams.get('cmd')).toBe('playInfo');
+        expect(targetUrl.searchParams.get('hash')).toBe('HASH');
+    });
+
+    it('uses the Electron main-process proxy when the legacy mobile playInfo is fetched in desktop', async () => {
+        const fetchLyricProxy = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            bodyText: JSON.stringify({ status: 1, url: 'https://example.test/song.mp3' }),
+        });
+        vi.stubGlobal('window', { electron: { kugouRequest: vi.fn(), fetchLyricProxy } });
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugouLegacyPlayInfo } = await import('@/services/onlineMusic/kugouTransport');
+
+        const body = await requestKugouLegacyPlayInfo('HASH');
+
+        expect(body).toMatchObject({ status: 1, url: 'https://example.test/song.mp3' });
+        const targetUrl = new URL(String(fetchLyricProxy.mock.calls[0][0]));
+        expect(targetUrl.hostname).toBe('m.kugou.com');
+        expect(targetUrl.searchParams.get('cmd')).toBe('playInfo');
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('does not fall back to Web after an Electron IPC failure', async () => {
         const ipcError = new Error('ipc failed');
         const kugouRequest = vi.fn().mockRejectedValue(ipcError);

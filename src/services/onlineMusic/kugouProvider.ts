@@ -27,6 +27,7 @@ import {
     hasKugouAuthenticatedSearchSession,
     requestKugouAnonymousSearch,
     requestKugou,
+    requestKugouLegacyPlayInfo,
 } from './kugouTransport';
 
 // src/services/onlineMusic/kugouProvider.ts
@@ -980,6 +981,40 @@ export const kugouProvider: OnlineMusicProvider = {
                     }
                 }
             }
+
+            // KuGou's current /song/url can mark certain hashes as unavailable (status: 3)
+            // even though the same hash is still playable through the old mobile endpoint.
+            // Only use this as a last resort after every quality and hash variant above has failed.
+            if (sourceRef?.variant !== 'cloud') {
+                try {
+                    const legacyResponse = await requestKugouLegacyPlayInfo(hash);
+                    const legacyUrl = audioUrlOf(valueOf(legacyResponse, 'url') ?? valueOf(dataOf(legacyResponse), 'url'))
+                        ?? audioUrlOf(valueOf(legacyResponse, 'backup_url') ?? valueOf(dataOf(legacyResponse), 'backup_url'));
+                    if (legacyUrl) {
+                        console.info('[KuGouProvider] playback:url-resolved-legacy', {
+                            hash,
+                            requestedQuality: quality,
+                        });
+                        return {
+                            url: legacyUrl,
+                            fetchedAt: Date.now(),
+                            quality: 'standard',
+                        };
+                    }
+                    console.warn('[KuGouProvider] playback:no-url-legacy', {
+                        hash,
+                        requestedQuality: quality,
+                        status: valueOf(legacyResponse, 'status') ?? valueOf(dataOf(legacyResponse), 'status'),
+                    });
+                } catch (error) {
+                    console.warn('[KuGouProvider] playback:legacy-failed', {
+                        hash,
+                        requestedQuality: quality,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
+            }
+
             console.warn('[KuGouProvider] playback:unavailable', { hash, requestedQuality: quality, attemptedQualities: qualities });
             return null;
         },

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requestMock = vi.hoisted(() => vi.fn());
 const anonymousSearchMock = vi.hoisted(() => vi.fn());
+const legacyPlayInfoMock = vi.hoisted(() => vi.fn());
 const transportState = vi.hoisted(() => ({ hasAuthenticatedSearchSession: true }));
 
 vi.mock('@/services/onlineMusic/kugouTransport', () => ({
@@ -11,6 +12,7 @@ vi.mock('@/services/onlineMusic/kugouTransport', () => ({
     hasKugouAuthenticatedSearchSession: () => transportState.hasAuthenticatedSearchSession,
     requestKugouAnonymousSearch: anonymousSearchMock,
     requestKugou: requestMock,
+    requestKugouLegacyPlayInfo: legacyPlayInfoMock,
 }));
 
 vi.mock('@/services/onlineMusic/providerStorage', () => ({
@@ -30,6 +32,7 @@ describe('kugouProvider', () => {
         vi.useRealTimers();
         requestMock.mockReset();
         anonymousSearchMock.mockReset();
+        legacyPlayInfoMock.mockReset();
         transportState.hasAuthenticatedSearchSession = true;
     });
 
@@ -536,6 +539,51 @@ describe('kugouProvider', () => {
                 trackPeak: Math.pow(10, -1.1 / 20),
             },
         });
+    });
+
+    it('uses the legacy mobile playInfo URL when all /song/url variants fail', async () => {
+        requestMock.mockResolvedValue({ status: 3 });
+        legacyPlayInfoMock.mockResolvedValue({
+            status: 1,
+            url: 'https://legacy.example.test/song.mp3',
+            backup_url: 'https://legacy.example.test/backup.mp3',
+        });
+        const song = normalizeKugouSong({
+            FileHash: 'hash', SongName: 'Song', AlbumID: 164446399, album_audio_id: 500617606,
+        });
+
+        const source = await kugouProvider.playback?.getAudioSource(song, 'lossless');
+
+        expect(legacyPlayInfoMock).toHaveBeenCalledWith('HASH');
+        expect(source).toMatchObject({
+            url: 'https://legacy.example.test/song.mp3',
+            quality: 'standard',
+        });
+    });
+
+    it('uses the legacy mobile playInfo backup_url when url is absent', async () => {
+        requestMock.mockResolvedValue({ data: {} });
+        legacyPlayInfoMock.mockResolvedValue({
+            status: 1,
+            backup_url: 'https://legacy.example.test/backup.mp3',
+        });
+        const song = normalizeKugouSong({ FileHash: 'hash', SongName: 'Song' });
+
+        const source = await kugouProvider.playback?.getAudioSource(song, 'high');
+
+        expect(legacyPlayInfoMock).toHaveBeenCalledWith('HASH');
+        expect(source?.url).toBe('https://legacy.example.test/backup.mp3');
+    });
+
+    it('still returns null when the legacy mobile playInfo has no playable URL', async () => {
+        requestMock.mockResolvedValue({ status: 3 });
+        legacyPlayInfoMock.mockResolvedValue({ status: 3 });
+        const song = normalizeKugouSong({ FileHash: 'hash', SongName: 'Song' });
+
+        const source = await kugouProvider.playback?.getAudioSource(song, 'standard');
+
+        expect(legacyPlayInfoMock).toHaveBeenCalledWith('HASH');
+        expect(source).toBeNull();
     });
 
     it('hydrates canonical album and artist ids through hash-verified KRM metadata once', async () => {
