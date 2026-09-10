@@ -8,7 +8,7 @@ import CommandPalette from './components/command-palette/CommandPalette';
 import AddToPlaylistHost from './components/app/AddToPlaylistHost';
 import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import { useCommandPaletteContext } from './hooks/useCommandPaletteContext';
-import { useReducedMotionFor, useMotionSurfaceAttributes } from './hooks/useReducedMotionFor';
+import { useReducedMotionFor } from './hooks/useReducedMotionFor';
 import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
@@ -677,7 +677,6 @@ export default function App() {
         backCollection,
     } = useAppNavigation();
     const reduceLatticeMotion = useReducedMotionFor('lattice');
-    useMotionSurfaceAttributes();
     const [hasLatticeExited, setHasLatticeExited] = useState(currentView !== 'lattice');
 
     useEffect(() => {

@@ -51,8 +51,6 @@ const SURFACE_STORAGE_KEYS: Record<MotionSurfaceId, string> = {
     settingsScroll: SETTINGS_SCROLL_KEY,
 };
 
-const surfaceStorageKey = (surface: MotionSurfaceId) => SURFACE_STORAGE_KEYS[surface];
-
 const readSystemPreference = () => (
     typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -61,7 +59,7 @@ const readSystemPreference = () => (
 
 const readStoredSurfaces = (): Record<MotionSurfaceId, boolean> => (
     Object.fromEntries(
-        MOTION_SURFACE_IDS.map(surface => [surface, getStoredBoolean(surfaceStorageKey(surface), false)]),
+        MOTION_SURFACE_IDS.map(surface => [surface, getStoredBoolean(SURFACE_STORAGE_KEYS[surface], false)]),
     ) as Record<MotionSurfaceId, boolean>
 );
 
@@ -75,7 +73,6 @@ export type MotionSettingsState = {
 
     handleToggleReducedMotionSurface: (surface: MotionSurfaceId, enabled: boolean) => void;
     handleToggleFollowSystemReducedMotion: (enabled: boolean) => void;
-    handleSetAllReducedMotionSurfaces: (enabled: boolean) => void;
     setSystemPrefersReducedMotion: (matches: boolean) => void;
 };
 
@@ -86,19 +83,11 @@ export const useMotionSettingsStore = create<MotionSettingsState>(set => ({
 
     handleToggleReducedMotionSurface: (surface, enabled) => {
         set(state => ({ reducedMotionSurfaces: { ...state.reducedMotionSurfaces, [surface]: enabled } }));
-        setStoredBoolean(surfaceStorageKey(surface), enabled);
+        setStoredBoolean(SURFACE_STORAGE_KEYS[surface], enabled);
     },
     handleToggleFollowSystemReducedMotion: (enabled) => {
         set({ followSystemReducedMotion: enabled });
         setStoredBoolean(FOLLOW_SYSTEM_KEY, enabled);
-    },
-    handleSetAllReducedMotionSurfaces: (enabled) => {
-        set({
-            reducedMotionSurfaces: Object.fromEntries(
-                MOTION_SURFACE_IDS.map(surface => [surface, enabled]),
-            ) as Record<MotionSurfaceId, boolean>,
-        });
-        MOTION_SURFACE_IDS.forEach(surface => setStoredBoolean(surfaceStorageKey(surface), enabled));
     },
     setSystemPrefersReducedMotion: (matches) => set({ systemPrefersReducedMotion: matches }),
 }));
@@ -116,6 +105,27 @@ export const resolveReducedMotion = (
     || (state.followSystemReducedMotion && state.systemPrefersReducedMotion)
 );
 
+/** 当前处于降级状态的面，拼成 `data-reduce-motion` 用的空格分隔串。空串表示全部完整播放。 */
+export const selectReducedSurfaceList = (
+    state: Pick<MotionSettingsState, 'reducedMotionSurfaces' | 'followSystemReducedMotion' | 'systemPrefersReducedMotion'>,
+): string => MOTION_SURFACE_IDS.filter(surface => resolveReducedMotion(state, surface)).join(' ');
+
+/**
+ * 把降级状态写到 `<html data-reduce-motion="...">`，供纯 CSS 的动效读取。
+ *
+ * CSS 里原来写的是 `@media (prefers-reduced-motion: reduce)`，媒体查询读不到 store，所以改成
+ * `[data-reduce-motion~="lattice"]` 这类属性选择器 —— `~=` 匹配空格分隔的词，一个属性就能带多个面。
+ */
+const syncMotionSurfaceAttribute = (state: MotionSettingsState): void => {
+    if (typeof document === 'undefined' || !document.documentElement) return;
+    const reducedSurfaces = selectReducedSurfaceList(state);
+    if (reducedSurfaces) {
+        document.documentElement.setAttribute('data-reduce-motion', reducedSurfaces);
+    } else {
+        document.documentElement.removeAttribute('data-reduce-motion');
+    }
+};
+
 /** 非响应式读取，给只在动画启动那一刻取值的命令式代码用。 */
 export const readReducedMotion = (surface: MotionSurfaceId): boolean => (
     resolveReducedMotion(useMotionSettingsStore.getState(), surface)
@@ -129,3 +139,9 @@ if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
         useMotionSettingsStore.getState().setSystemPrefersReducedMotion(event.matches);
     });
 }
+
+// 属性同步同样挂在模块级，而不是某个根组件的 effect 里：bootstrap 按 URL 挂的是主窗口、远程控制窗口
+// 或 OBS 源之一，远程窗口的进度辉光也读这个属性，只在 App 里同步的话它永远拿不到。import 时先写一次，
+// 第一帧就是对的，不会先闪一下完整动效再降级。
+syncMotionSurfaceAttribute(useMotionSettingsStore.getState());
+useMotionSettingsStore.subscribe(syncMotionSurfaceAttribute);

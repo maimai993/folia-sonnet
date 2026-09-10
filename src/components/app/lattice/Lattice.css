@@ -386,7 +386,7 @@
 .lattice-empty strong { font-size: 17px; letter-spacing: 0.16em; }
 .lattice-empty span { font-size: 12px; opacity: 0.5; }
 
-/* 降级状态由 useMotionSurfaceAttributes 写到 <html data-reduce-motion>，不再直接跟随系统偏好；
+/* 降级状态由 useMotionSettingsStore 同步到 <html data-reduce-motion>，不再直接跟随系统偏好；
    `~=` 匹配空格分隔的词，所以一个属性能同时带多个面。见 stores/useMotionSettingsStore.ts。 */
 :root[data-reduce-motion~='lattice'] .lattice-poster,
 :root[data-reduce-motion~='lattice'] .lattice-poster::after,

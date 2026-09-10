@@ -85,8 +85,9 @@ test('playback buttons and seek gestures do not pan; slider arrows keep native b
 });
 
 // 拆成两条、并且改用设置而不是 emulateMedia：动效不再跟随系统偏好（issue #370），
-// emulateMedia 已经影响不了 fling。降级开关由 store 在模块 import 时读取，一次加载内改不了，
-// 所以「降级」和「完整动效」必须是两次挂载。
+// emulateMedia 已经影响不了 fling。这里用 addInitScript 在页面脚本运行前写好 localStorage，
+// store 初始化时读到的就是降级值；运行时切换开关是即时生效的，只是这个测试框架里没有入口去点它，
+// 所以「降级」和「完整动效」各挂一次。
 test('reduced queue collage motion disables fling', async ({ mount, page }) => {
     await page.addInitScript(() => localStorage.setItem('reduce_motion_lattice', 'true'));
     const wall = await mount('lattice');

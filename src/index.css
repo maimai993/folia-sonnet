@@ -154,7 +154,7 @@ html[data-click-through='active'] body .click-through-interactive * {
   animation: remote-progress-transition-glow 2.4s ease-in-out infinite;
 }
 
-/* 降级状态由 useMotionSurfaceAttributes 写到 <html data-reduce-motion>，不再直接跟随系统偏好。
+/* 降级状态由 useMotionSettingsStore 同步到 <html data-reduce-motion>，不再直接跟随系统偏好。
    见 stores/useMotionSettingsStore.ts。 */
 :root[data-reduce-motion~='uiMicroMotion'] .remote-progress-transition-glow {
   animation: none;

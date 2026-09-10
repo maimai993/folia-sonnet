@@ -37,12 +37,29 @@ describe('motion settings store', () => {
         vi.unstubAllGlobals();
     });
 
-    it('defaults every surface to full motion', () => {
-        const state = useMotionSettingsStore.getState();
+    // 这两条要重新 import 一份模块：store 的初始值只在模块加载时从 localStorage 读一次，
+    // 复用上面那份已经加载好的 store 测不到它。
+    it('defaults every surface to full motion when nothing is stored', async () => {
+        vi.resetModules();
+        const fresh = await import('@/stores/useMotionSettingsStore');
+        const state = fresh.useMotionSettingsStore.getState();
+
         expect(state.followSystemReducedMotion).toBe(false);
         MOTION_SURFACE_IDS.forEach(surface => {
-            expect(resolveReducedMotion(state, surface)).toBe(false);
+            expect(fresh.resolveReducedMotion(state, surface)).toBe(false);
         });
+    });
+
+    it('restores the stored choices on load', async () => {
+        values.set('reduce_motion_lattice', 'true');
+        values.set('reduce_motion_follow_system', 'true');
+        vi.resetModules();
+        const fresh = await import('@/stores/useMotionSettingsStore');
+        const state = fresh.useMotionSettingsStore.getState();
+
+        expect(state.reducedMotionSurfaces.lattice).toBe(true);
+        expect(state.reducedMotionSurfaces.monetBackground).toBe(false);
+        expect(state.followSystemReducedMotion).toBe(true);
     });
 
     it('ignores the system preference until the listener opts into following it', () => {
@@ -69,15 +86,6 @@ describe('motion settings store', () => {
         expect(localStorage.getItem('reduce_motion_transitionOverlay')).toBe('false');
     });
 
-    it('writes every surface at once when all of them are set together', () => {
-        useMotionSettingsStore.getState().handleSetAllReducedMotionSurfaces(true);
-
-        MOTION_SURFACE_IDS.forEach(surface => {
-            expect(readReducedMotion(surface)).toBe(true);
-            expect(localStorage.getItem(`reduce_motion_${surface}`)).toBe('true');
-        });
-    });
-
     it('keeps a surface reduced when the system preference is also on', () => {
         useMotionSettingsStore.getState().handleToggleReducedMotionSurface('lattice', true);
         useMotionSettingsStore.setState({ followSystemReducedMotion: true, systemPrefersReducedMotion: true });
@@ -87,5 +95,51 @@ describe('motion settings store', () => {
         useMotionSettingsStore.getState().handleToggleFollowSystemReducedMotion(false);
         expect(readReducedMotion('lattice')).toBe(true);
         expect(readReducedMotion('uiMicroMotion')).toBe(false);
+    });
+
+    // 纯 CSS 的动效读 `<html data-reduce-motion>`。这个属性由 store 自己同步，所以主窗口之外的根
+    // （远程控制窗口、OBS 源）只要 import 了 store 就能拿到，不依赖 App 挂载。
+    describe('the <html> attribute read by CSS-only animations', () => {
+        let attributes: Map<string, string>;
+
+        beforeEach(() => {
+            attributes = new Map();
+            vi.stubGlobal('document', {
+                documentElement: {
+                    setAttribute: (name: string, value: string) => attributes.set(name, value),
+                    removeAttribute: (name: string) => attributes.delete(name),
+                },
+            });
+        });
+
+        it('lists every reduced surface as a space separated word for `~=` selectors', () => {
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('lattice', true);
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('uiMicroMotion', true);
+            expect(attributes.get('data-reduce-motion')).toBe('lattice uiMicroMotion');
+
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('lattice', false);
+            expect(attributes.get('data-reduce-motion')).toBe('uiMicroMotion');
+        });
+
+        it('drops the attribute once everything is back to full motion', () => {
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('settingsScroll', true);
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('settingsScroll', false);
+            expect(attributes.has('data-reduce-motion')).toBe(false);
+        });
+
+        it('follows the system preference only while the listener opts in', () => {
+            useMotionSettingsStore.setState({ systemPrefersReducedMotion: true });
+            expect(attributes.has('data-reduce-motion')).toBe(false);
+
+            useMotionSettingsStore.getState().handleToggleFollowSystemReducedMotion(true);
+            expect(attributes.get('data-reduce-motion')).toBe(MOTION_SURFACE_IDS.join(' '));
+        });
+
+        it('is already written when the module finishes loading', async () => {
+            values.set('reduce_motion_monetBackground', 'true');
+            vi.resetModules();
+            await import('@/stores/useMotionSettingsStore');
+            expect(attributes.get('data-reduce-motion')).toBe('monetBackground');
+        });
     });
 });
