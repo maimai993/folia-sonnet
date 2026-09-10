@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import QuickEffectPicker from '../QuickEffectPicker';
+import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 
 // src/components/panelTab/controls/ModeStepperRow.tsx
 // 「‹ 字形 当前模式 参数 ›」行。箭头直接换到相邻模式，点中间的名称才展开完整列表。
@@ -43,7 +44,7 @@ const ModeStepperRow = <Value extends string>({
 }: ModeStepperRowProps<Value>) => {
     const hoverBg = isDaylight ? 'hover:bg-black/[0.06]' : 'hover:bg-white/[0.08]';
     const canStep = options.length > 1;
-    const prefersReducedMotion = useReducedMotion();
+    const prefersReducedMotion = useReducedMotionFor('uiMicroMotion');
     // 0 表示不是箭头触发的（从列表里选或外部改），此时只淡入不滑动。
     const [stepDirection, setStepDirection] = useState<-1 | 0 | 1>(0);
 

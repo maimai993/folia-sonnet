@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { X, Command, Keyboard, Loader2, Check, AlertCircle, ChevronLeft, Download, ExternalLink, CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +37,7 @@ import SettingsSectionHeader from './settings/SettingsSectionHeader';
 import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
+import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
 import { useSettingsInitialAnchor } from '../../hooks/useSettingsInitialAnchor';
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
@@ -1230,7 +1231,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         [t, isElectron],
     );
     const activeSettingsNavItem = findSettingsNavItem(settingsNavGroups, activeSettingsSection);
-    const prefersReducedMotion = useReducedMotion() ?? false;
+    const prefersReducedMotion = useReducedMotionFor('settingsScroll');
     const { activeAnchorId, scrollToAnchor } = useSettingsScrollSpy({
         containerRef: contentScrollRef,
         anchors: settingsAnchors,

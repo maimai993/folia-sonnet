@@ -4,6 +4,7 @@ import { DEFAULT_MONET_BACKGROUND_TUNING, type MonetBackgroundImage, type MonetB
 import { colorWithAlpha } from '../../colorMix';
 import { getMonetBackgroundCacheKey, resolveMonetBackgroundDataUrl, checkCanvasFilterSupport } from '../../monet/monetBackgroundPipeline';
 import { buildMonetDriftTrack } from './monetBackgroundDrift';
+import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
 
 // src/components/visualizer/backgrounds/monet/MonetBackgroundLayer.tsx
 // Shared shell-level Monet image background with debounced bitmap post-processing.
@@ -21,12 +22,6 @@ const PIPELINE_DEBOUNCE_MS = 180;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-const prefersReducedMotion = () => (
-    typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-);
-
 /**
  * Plays the noise-driven drift track on `ref` for as long as it stays enabled. The keyframes are
  * handed to the Web Animations API rather than written per frame, so playback stays on the
@@ -36,6 +31,7 @@ const useMonetBackgroundDrift = (
     ref: React.RefObject<HTMLDivElement | null>,
     enabled: boolean,
     strength: number,
+    reducedMotion: boolean,
 ) => {
     useEffect(() => {
         const element = ref.current;
@@ -43,33 +39,17 @@ const useMonetBackgroundDrift = (
             return;
         }
 
-        let animation: Animation | null = null;
-        const start = () => {
-            animation?.cancel();
-            animation = prefersReducedMotion()
-                ? null
-                : (() => {
-                    const track = buildMonetDriftTrack(strength);
-                    return element.animate(track.keyframes, {
-                        duration: track.durationMs,
-                        iterations: Infinity,
-                        easing: 'linear',
-                    });
-                })();
-        };
+        if (reducedMotion) return;
 
-        start();
+        const track = buildMonetDriftTrack(strength);
+        const animation = element.animate(track.keyframes, {
+            duration: track.durationMs,
+            iterations: Infinity,
+            easing: 'linear',
+        });
 
-        const motionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-            ? window.matchMedia('(prefers-reduced-motion: reduce)')
-            : null;
-        motionQuery?.addEventListener('change', start);
-
-        return () => {
-            motionQuery?.removeEventListener('change', start);
-            animation?.cancel();
-        };
-    }, [enabled, ref, strength]);
+        return () => animation.cancel();
+    }, [enabled, ref, strength, reducedMotion]);
 };
 
 const resolveSourceUrl = (
@@ -147,7 +127,8 @@ const MonetBackgroundLayer: React.FC<MonetBackgroundLayerProps> = ({
     const driftRef = useRef<HTMLDivElement | null>(null);
     const driftStrength = clamp(tuning.backgroundDriftStrength ?? 0, 0, 1);
     const driftEnabled = Boolean(tuning.backgroundDriftEnabled) && !staticMode && driftStrength > 0;
-    useMonetBackgroundDrift(driftRef, driftEnabled, driftStrength);
+    const reduceBackgroundMotion = useReducedMotionFor('monetBackground');
+    useMonetBackgroundDrift(driftRef, driftEnabled, driftStrength, reduceBackgroundMotion);
     // Only promote the layer while it actually moves; an idle drift wrapper stays a plain div.
     const driftStyle = useMemo<React.CSSProperties | undefined>(
         () => (driftEnabled ? { willChange: 'transform' } : undefined),

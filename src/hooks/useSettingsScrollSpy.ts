@@ -17,7 +17,7 @@ interface ScrollSpyOptions {
     containerRef: React.RefObject<HTMLElement | null>;
     anchors: SettingsAnchor[];
     enabled: boolean;
-    /** Jump instead of animating, for `prefers-reduced-motion`. */
+    /** Jump instead of animating, when the settings-scroll motion surface is reduced. */
     reducedMotion: boolean;
 }
 

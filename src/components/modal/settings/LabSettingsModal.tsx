@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Boxes, Check, ChevronLeft, ChevronsLeftRight, Cpu, GamepadDirectional, Mic, Monitor, Moon, Play, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
+import { Boxes, Check, ChevronLeft, ChevronsLeftRight, Cpu, GamepadDirectional, Gauge, Mic, Monitor, Moon, Play, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -8,6 +8,7 @@ import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
 import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import MotionReductionSettingsSection from './MotionReductionSettingsSection';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
@@ -269,6 +270,15 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     </div>
                                 </div>
 
+                </SettingsAnchor>
+
+                <SettingsAnchor anchorId="labMotion" label={t('options.reduceMotionSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Gauge} label={t('options.reduceMotionSection')} divider />
+                    <MotionReductionSettingsSection
+                        settingsCardClass={settingsCardClass}
+                        toggleOffBackgroundClass={toggleOffBackgroundClass}
+                        theme={theme}
+                    />
                 </SettingsAnchor>
 
                 <SettingsAnchor anchorId="labPlayerUi" label={t('options.labPlayerUiSection')} className="space-y-4">

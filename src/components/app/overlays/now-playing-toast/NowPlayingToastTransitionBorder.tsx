@@ -4,6 +4,7 @@ import PulsingBorderProgress from './PulsingBorderProgress';
 import type { TransitionCue } from '../../../../services/automix/transitionCue';
 import type { Theme } from '../../../../types';
 import { clamp01, hexToHsl, hslToHex, normalizeHue } from '../../../../utils/themeColorMath';
+import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
 
 // src/components/app/overlays/now-playing-toast/NowPlayingToastTransitionBorder.tsx
 // automix 过渡的进度描边，长在 now playing 卡片的边框上。
@@ -119,7 +120,7 @@ const NowPlayingToastTransitionBorder: React.FC<NowPlayingToastTransitionBorderP
 
     const canvasWidth = cardWidth + GLOW_PAD * 2;
     const canvasHeight = cardHeight + GLOW_PAD * 2;
-    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const calm = useReducedMotionFor('transitionOverlay');
 
     // 和全屏圆环取同一个颜色和同一个回退，两种形态说的是同一件事，不该是两个颜色。
     const accent = theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa');

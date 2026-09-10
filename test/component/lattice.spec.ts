@@ -84,8 +84,11 @@ test('playback buttons and seek gestures do not pan; slider arrows keep native b
     expect(await cameraX(wall)).toBeCloseTo(before, 1);
 });
 
-test('reduced motion disables fling and cancellation never starts one', async ({ mount, page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+// 拆成两条、并且改用设置而不是 emulateMedia：动效不再跟随系统偏好（issue #370），
+// emulateMedia 已经影响不了 fling。降级开关由 store 在模块 import 时读取，一次加载内改不了，
+// 所以「降级」和「完整动效」必须是两次挂载。
+test('reduced queue collage motion disables fling', async ({ mount, page }) => {
+    await page.addInitScript(() => localStorage.setItem('reduce_motion_lattice', 'true'));
     const wall = await mount('lattice');
     await settle(page);
     await dragCover(page, wall);
@@ -93,13 +96,29 @@ test('reduced motion disables fling and cancellation never starts one', async ({
     const released = await cameraX(wall);
     await page.waitForTimeout(150);
     expect(await cameraX(wall)).toBeCloseTo(released, 1);
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
+});
+
+test('cancellation never starts a fling', async ({ mount, page }) => {
+    const wall = await mount('lattice');
+    await settle(page);
     await dragCover(page, wall);
     await wall.locator('.lattice-field').dispatchEvent('pointercancel', { pointerId: 1 });
     const cancelled = await cameraX(wall);
     await page.mouse.up();
     await page.waitForTimeout(150);
     expect(await cameraX(wall)).toBeCloseTo(cancelled, 1);
+});
+
+test('the system preference alone no longer reduces motion', async ({ mount, page }) => {
+    // #370 的回归点：系统关掉动画效果时，应用默认仍然播放完整动效。
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const wall = await mount('lattice');
+    await settle(page);
+    await dragCover(page, wall);
+    const dragged = await cameraX(wall);
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    expect(await cameraX(wall)).toBeGreaterThan(dragged + 10);
 });
 
 test('touch swipe coasts and a secondary pointer cannot replace the gesture', async ({ mount, page }) => {

@@ -8,6 +8,7 @@ import {
     type TransitionCue,
 } from '../../../services/automix/transitionCue';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
+import { readReducedMotion } from '../../../stores/useMotionSettingsStore';
 
 // src/components/app/overlays/AutomixTransitionAnimation.tsx
 // What a mix looks like while it is happening: one ring, shared by two tracks.
@@ -183,7 +184,7 @@ const AutomixTransitionAnimation: React.FC<AutomixTransitionAnimationProps> = ({
         const tick = tickRef.current;
         if (!root || !bloom || !pulse || !outgoing || !incoming || !head || !tick) return;
 
-        const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+        const calm = readReducedMotion('transitionOverlay');
         const total = cue.seconds * 1000;
         const swap = total * cue.crossover;
 

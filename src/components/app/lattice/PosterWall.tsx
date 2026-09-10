@@ -1,4 +1,3 @@
-import { useReducedMotion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SongResult } from '../../../types';
 import {
@@ -24,6 +23,7 @@ import {
 import { setLatticeCurrentSongPosterVisible } from '../../../stores/useLatticeControlsStore';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { useDevicePixelRatio } from '../../../hooks/useMediaQuery';
+import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { EXPANSION_SPAN } from './blockTemplates';
 
 // Draggable poster field: one greedily packed block template repeats over the queue.
@@ -91,7 +91,7 @@ export default function PosterWall({
     // Camera scale, mirrored into state only so posters can size their artwork. It follows the
     // width breakpoints, so this settles after the first measure and then only moves on a resize.
     const [cameraScale, setCameraScale] = useState(() => cameraRef.current.scale);
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useReducedMotionFor('lattice');
     const devicePixelRatio = useDevicePixelRatio();
     const pixelScale = cameraScale * devicePixelRatio;
 
