@@ -65,10 +65,10 @@ const getQqSongMid = (song: SongResult): string => {
  * 读一次歌单详情，并把「上游没读到这个歌单」和「歌单确实是空的」分开。
  *
  * 上游这条是匿名 CGI：歌单不公开时它**照样回 `code: 0`**，只是 `cdlist[0]` 退化成一个空壳 ——
- * 没有 `disstid`、没有 `dissname`，songlist 为空数组（实测 `dirShow: 2` 的自建歌单就是这样）。
- * 因此判据是回声的 `disstid` 在不在，而不是 `cdlist` 或 songlist 的长度：真的空歌单会带着
- * 完整的 `disstid` / `dissname` 回来。两者混成同一个空结果，就是用户看到的那个没有报错的
- * 「暂无内容」。
+ * 没有 `dissname`，songlist 为空数组。2026-09-11 用真实账号对一个 `dirShow: 2` 的自建歌单抓到的是
+ * `{ code: 0, disstid: '9777066643', dissname: undefined, songlist: [] }`：`disstid` 照样回声，
+ * 所以判据是 `dissname` 在不在，而不是 `disstid`，也不是 `cdlist` 或 songlist 的长度 —— 真的空歌单
+ * 会带着完整的 `dissname` 回来。两者混成同一个空结果，就是用户看到的那个没有报错的「暂无内容」。
  */
 const loadRawPlaylistTracks = async (
     id: MediaId,
@@ -77,16 +77,16 @@ const loadRawPlaylistTracks = async (
     const response = await requestQq<any>('song_list_detail', { disstid: String(id) });
     const cdlist = response?.response?.cdlist;
     const detail = Array.isArray(cdlist) ? cdlist[0] : undefined;
-    const echoedDisstid = String(detail?.disstid ?? '').trim();
+    const dissname = String(detail?.dissname ?? '').trim();
 
-    if (!detail || typeof detail !== 'object' || !echoedDisstid || echoedDisstid === '0') {
-        // 已知不公开时报 `unsupported` 而不是 `invalid-response`：这不是协议坏了，是这条匿名
-        // 路由没资格读它 —— 后端补上带凭据的歌单路由之后，这个状态就会消失。调用方据此给用户
-        // 一句能看懂的解释，而不是把协议细节甩到界面上。
+    if (!detail || typeof detail !== 'object' || !dissname) {
+        // 已知不公开时报 `not-public` 而不是 `invalid-response`：这不是协议坏了，是这条匿名
+        // 路由没资格读它 —— 后端补上带凭据的歌单路由之后，自建歌单就不会再走到这里。调用方据此
+        // 给用户一句能看懂的解释，而不是把协议细节甩到界面上。
         const dirShow = Number(collection?.providerData?.dirShow);
         const notPublic = Number.isFinite(dirShow) && dirShow !== 1;
         throw new OnlineProviderError(
-            notPublic ? 'unsupported' : 'invalid-response',
+            notPublic ? 'not-public' : 'invalid-response',
             `QQMusicApi song_list_detail could not read playlist ${String(id)}`
             + `${notPublic ? ' (not a public playlist; this anonymous endpoint cannot read it)' : ''}`,
             'qq',
@@ -167,6 +167,7 @@ const getPlaylistTracks = async (
     const safeLimit = Math.max(1, limit);
     const safeOffset = Math.max(0, offset);
     const dirId = Number(collection?.providerData?.dirId);
+    const owned = collection?.providerData?.owned === true;
 
     // 我喜欢留在它自己那条早就可用的路由上：换到新路由只会让一个本来就正常的功能去承担
     // 新后端的风险，而它要解决的问题（读不到不公开的自建歌单）在这里根本不存在。
@@ -182,23 +183,26 @@ const getPlaylistTracks = async (
         };
     }
 
-    // 其余自建歌单（有 dirId 就说明是用户自己的目录）优先走带凭据的路由：只有它读得到
-    // 不公开的歌单，而且支持真正的分页，不必像匿名路径那样每翻一页重拉整张歌单。
-    if (Number.isFinite(dirId) && dirId > 0) {
-        const owned = await loadRawOwnedPlaylistTracks(id, dirId, safeLimit, safeOffset);
-        if (owned) {
-            const items = owned.tracks.map(normalizeQqSong);
+    // 其余自建歌单优先走带凭据的路由：只有它读得到不公开的歌单，而且支持真正的分页，不必像匿名
+    // 路径那样每翻一页重拉整张歌单。判据是 `owned` 而不是 dirId —— 收藏的歌单也带 dirId，而带凭据的
+    // 路由读收藏歌单会少歌：实测一张 37 首的收藏歌单只回 36 首（缺一首付费歌），连 total 也跟着变成 36，
+    // 界面上完全看不出来。收藏歌单留在匿名路由上是完整的。
+    if (owned && Number.isFinite(dirId) && dirId > 0) {
+        const page = await loadRawOwnedPlaylistTracks(id, dirId, safeLimit, safeOffset);
+        if (page) {
+            const items = page.tracks.map(normalizeQqSong);
             const nextOffset = safeOffset + items.length;
             return {
                 items,
-                ...(owned.total === undefined ? {} : { total: owned.total }),
-                hasMore: owned.more || (owned.total !== undefined && nextOffset < owned.total),
+                ...(page.total === undefined ? {} : { total: page.total }),
+                // 空页必须停：上游的 total 可能比实际能读到的多（被过滤的歌），只看 total 会一直翻空页。
+                hasMore: items.length > 0 && (page.more || (page.total !== undefined && nextOffset < page.total)),
                 nextOffset,
             };
         }
     }
 
-    // 收藏的、分享链接进来的歌单没有 dirId，本来就只能走匿名路由；后端太旧时也回落到这里。
+    // 收藏的、分享链接进来的歌单本来就只能走匿名路由；后端太旧时也回落到这里。
     const { tracks, total } = await loadRawPlaylistTracks(id, collection);
     const items = tracks
         .slice(offset, offset + Math.max(0, limit))

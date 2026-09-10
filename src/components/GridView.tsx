@@ -371,7 +371,7 @@ export const GridView: React.FC<GridViewProps> = ({
     // provider 侧的鉴权、协议或网络故障在界面上就完全不可见。
     // 存判别式而不是成品文案：翻译要在渲染时做，切换语言才能跟着变。
     const [loadError, setLoadError] = useState<
-        { kind: 'unsupported' } | { kind: 'generic'; message: string } | null
+        { kind: 'not-public' } | { kind: 'generic'; message: string } | null
     >(null);
     const [hasMore, setHasMore] = useState(true);
     const [offset, setOffset] = useState(0);
@@ -832,8 +832,8 @@ export const GridView: React.FC<GridViewProps> = ({
             }
         } catch (error) {
             console.error("GridView failed to load tracks:", error);
-            setLoadError(error instanceof OmniError && error.code === 'unsupported'
-                ? { kind: 'unsupported' }
+            setLoadError(error instanceof OmniError && error.code === 'not-public'
+                ? { kind: 'not-public' }
                 : { kind: 'generic', message: error instanceof Error ? error.message : String(error) });
         } finally {
             setLoading(false);
@@ -1949,8 +1949,8 @@ export const GridView: React.FC<GridViewProps> = ({
                 ) : gridItems.length === 0 ? (
                     <div className="max-w-md px-6 text-center text-sm font-sans opacity-40">
                         {loadError && !hasSearchQuery
-                            ? (loadError.kind === 'unsupported'
-                                ? t('playlist.loadUnsupported')
+                            ? (loadError.kind === 'not-public'
+                                ? t('playlist.loadNotPublic')
                                 : t('playlist.loadFailed', { error: loadError.message }))
                             : hasSearchQuery ? (t('home.gridSearchNoResults')) : (t('home.loadingLibrary'))}
                     </div>

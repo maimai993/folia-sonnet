@@ -785,7 +785,7 @@ export default {
     "headerTime": "Time",
     "loading": "Loading",
     "loadFailed": "Failed to load: {{error}}",
-    "loadUnsupported": "This playlist is not public, so the current music source cannot read its contents"
+    "loadNotPublic": "This playlist is not public, so the current music source cannot read its contents"
   },
   "search": {
     "placeholder": "Search songs...",

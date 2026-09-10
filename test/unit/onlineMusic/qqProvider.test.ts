@@ -276,7 +276,7 @@ describe('qqProvider', () => {
             type: 'playlist',
             coverUrl: 'https://img.example.test/big.jpg',
             trackCount: 2,
-            providerData: { tid: 7, dirId: 201 },
+            providerData: { tid: 7, dirId: 201, owned: true },
         });
         expect(normalizeQqCollection(normalizeQqCollection(PLAYLIST_ITEM))).toEqual(normalizeQqCollection(PLAYLIST_ITEM));
         expect(normalizeQqCollection({ id: 8, title: '收藏歌单', picurl: 'https://img.example.test/fav.jpg', songnum: 3 })).toEqual({
@@ -556,8 +556,8 @@ describe('qqProvider', () => {
     it('loads regular playlists normally but uses the encrypted-UIN endpoint for liked songs', async () => {
         requestMock
             .mockResolvedValueOnce({
-                // 上游成功时一定回声 `disstid`；不公开歌单给的空壳正是少了它。
-                response: { cdlist: [{ disstid: '7', songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+                // 上游成功时一定带 `dissname`；不公开歌单给的空壳正是少了它（`disstid` 两种情况都会回声）。
+                response: { cdlist: [{ disstid: '7', dissname: '公开歌单', songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
             })
             .mockResolvedValue({ code: 200, songs: [SEARCH_ITEM], total: 1, more: false });
 
@@ -581,7 +581,7 @@ describe('qqProvider', () => {
         ]);
     });
 
-    // 「歌单读不到」和「歌单是空的」必须分开，判据是回声的 `disstid` 在不在。
+    // 「歌单读不到」和「歌单是空的」必须分开，判据是 `dissname` 在不在。
     it('fails loudly when the playlist detail carries no cdlist entry', async () => {
         requestMock.mockResolvedValue({ response: { code: 0, cdlist: [] } });
 
@@ -592,16 +592,17 @@ describe('qqProvider', () => {
     });
 
     // 🔴 旧后端 + 不公开的自建歌单，也就是这个 bug 被报上来时的处境：没有带凭据的路由可用，
-    // 匿名 CGI 回 `code: 0` 加一个没有 disstid 的空壳，按长度判断完全看不出问题。
+    // 匿名 CGI 回 `code: 0` 加一个空壳，按长度判断完全看不出问题。空壳是 2026-09-11 用真实账号抓的：
+    // `disstid` 照样回声，缺的是 `dissname`。
     it('fails loudly on the stub a non-public playlist answers with', async () => {
         requestMock
             .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
-            .mockResolvedValue({ response: { code: 0, cdlist: [{ songlist: [] }] } });
-        const collection = normalizeQqCollection({ tid: 7, dirId: 1, dirName: '私密歌单', dirShow: 2 });
+            .mockResolvedValue({ response: { code: 0, cdlist: [{ disstid: '9777066643', songlist: [] }] } });
+        const collection = normalizeQqCollection({ tid: 9777066643, dirId: 1, dirName: '新建歌单1', songNum: 3, dirShow: 2 });
 
-        // `unsupported` 而不是 `invalid-response`：协议没坏，是这条路由没资格读它。
-        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection)).rejects.toMatchObject({
-            code: 'unsupported',
+        // `not-public` 而不是 `invalid-response`：协议没坏，是这条路由没资格读它。
+        await expect(qqProvider.catalog!.getPlaylistTracks!(9777066643, 50, 0, collection)).rejects.toMatchObject({
+            code: 'not-public',
             message: expect.stringContaining('not a public playlist'),
         });
     });
@@ -640,7 +641,7 @@ describe('qqProvider', () => {
         requestMock
             .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
             .mockResolvedValue({
-                response: { code: 0, cdlist: [{ disstid: '7', total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+                response: { code: 0, cdlist: [{ disstid: '7', dissname: '新建歌单', total_song_num: 1, songlist: [SEARCH_ITEM] }] },
             });
         const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
 
@@ -665,6 +666,46 @@ describe('qqProvider', () => {
         await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection))
             .rejects.toMatchObject({ code: 'network' });
         expect(requestMock.mock.calls.map(call => call[0])).toEqual(['user_playlist_detail']);
+    });
+
+    // 🔴 收藏的他人歌单在 `/user/playlist` 里也带 `dirId`（创建者账号里的目录号），字段形状取自
+    // 2026-09-11 的真实账号。带凭据的路由读它会少歌：37 首只回 36 首，total 也变成 36。
+    it('keeps a favourited playlist on the anonymous route even though it carries a dirId', async () => {
+        requestMock.mockResolvedValue({
+            response: { code: 0, cdlist: [{ disstid: '7009600126', dissname: '毕业季：不为青春画句号', total_song_num: 37, songlist: [SEARCH_ITEM] }] },
+        });
+        const favourite = normalizeQqCollection({
+            tid: 7009600126, dirId: 36, name: '毕业季：不为青春画句号', songnum: 37, dirShow: 1, orderTime: 1789128000, dirType: 0,
+        });
+
+        expect(favourite.providerData).not.toHaveProperty('owned');
+        await qqProvider.catalog!.getPlaylistTracks!(7009600126, 50, 0, favourite);
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['song_list_detail']);
+    });
+
+    it('remembers that a playlist is owned when the cached collection is normalized again', () => {
+        const owned = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单', songNum: 3 });
+        expect(normalizeQqCollection(owned).providerData).toMatchObject({ tid: 7, dirId: 2, owned: true });
+    });
+
+    // 上游的 total 可能比实际读得到的多（被过滤掉的歌）：只看 total 的话会一直翻空页。
+    it('stops paging an owned playlist on an empty page even when the total promises more', async () => {
+        requestMock.mockResolvedValue({ code: 200, songs: [], total: 37, more: false });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 36, collection)).resolves.toMatchObject({
+            items: [],
+            hasMore: false,
+            nextOffset: 36,
+        });
+    });
+
+    // 404 只说明后端没有这条路由，不说明歌单不公开：「不是公开歌单」这句解释只能留给真正的空壳。
+    it('does not blame playlist visibility for a missing anonymous route', async () => {
+        requestMock.mockRejectedValue(new OnlineProviderError('unsupported', 'QQMusicApi has no song_list_detail route', 'qq'));
+        const favourite = normalizeQqCollection({ tid: 7, dirId: 36, name: '收藏', dirShow: 2 });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, favourite)).rejects.toMatchObject({ code: 'unsupported' });
     });
 
     it('normalizes album and artist collections onto mid identity and derives the cover from it', () => {

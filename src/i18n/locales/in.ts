@@ -782,7 +782,7 @@ export default {
     "headerTime": "Waktu",
     "loading": "Memuat",
     "loadFailed": "Gagal memuat: {{error}}",
-    "loadUnsupported": "Daftar putar ini tidak publik, sehingga sumber musik saat ini tidak dapat membaca isinya"
+    "loadNotPublic": "Daftar putar ini tidak publik, sehingga sumber musik saat ini tidak dapat membaca isinya"
   },
   "search": {
     "placeholder": "Cari lagu...",
