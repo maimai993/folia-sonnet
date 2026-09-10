@@ -172,6 +172,51 @@ export const requestKugouAnonymousSearch = async (
     return body;
 };
 
+/**
+ * Legacy mobile play-info fallback used when the current /song/url endpoint refuses a hash.
+ * It is intentionally kept outside the signed Web API transport because it calls KuGou's old
+ * public mobile endpoint and works without the configured VITE_KUGOU_API_BASE.
+ */
+export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => {
+    const targetUrl = new URL('https://m.kugou.com/app/i/getSongInfo.php');
+    targetUrl.searchParams.set('cmd', 'playInfo');
+    targetUrl.searchParams.set('hash', hash);
+    const targetUrlString = targetUrl.toString();
+
+    // In Electron, route through the main-process lyric proxy so CORS cannot block this
+    // last-resort mobile endpoint. The Web build uses the same /api/lyric-proxy helper.
+    if (typeof window !== 'undefined' && window.electron?.fetchLyricProxy) {
+        const response = await window.electron.fetchLyricProxy(targetUrlString, { method: 'GET' });
+        if (!response.ok) {
+            throw new OnlineProviderError(
+                'network',
+                `KuGou legacy playInfo failed: ${response.status}`,
+                'kugou',
+            );
+        }
+        return JSON.parse(response.bodyText) as any;
+    }
+
+    const requestUrl = typeof window !== 'undefined' && window.electron
+        ? targetUrlString
+        : `/api/lyric-proxy?url=${encodeURIComponent(targetUrlString)}`;
+    const response = await fetch(requestUrl, {
+        method: 'GET',
+        credentials: 'omit',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36',
+        },
+    });
+    if (!response.ok) {
+        throw new OnlineProviderError(
+            'network',
+            `KuGou legacy playInfo failed: ${response.status}`,
+            'kugou',
+        );
+    }
+    return response.json();
+};
+
 const clearWebDeviceIdentity = (): void => {
     removeProviderSessionValue('kugou', 'dfid');
     const storedCookie = readProviderSessionValue('kugou', 'cookie');
