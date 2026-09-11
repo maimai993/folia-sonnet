@@ -780,7 +780,9 @@ export default {
     "loadMore": "Muat Lebih Banyak",
     "headerTitle": "Judul",
     "headerTime": "Waktu",
-    "loading": "Memuat"
+    "loading": "Memuat",
+    "loadFailed": "Gagal memuat: {{error}}",
+    "loadUnsupported": "Daftar putar ini tidak publik, sehingga sumber musik saat ini tidak dapat membaca isinya"
   },
   "search": {
     "placeholder": "Cari lagu...",

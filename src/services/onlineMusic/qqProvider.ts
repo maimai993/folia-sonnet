@@ -61,11 +61,41 @@ const getQqSongMid = (song: SongResult): string => {
     return String(song.qqMid || sourceRef?.providerData?.songMid || sourceRef?.mediaId || '').trim();
 };
 
-const loadRawPlaylistTracks = async (id: MediaId): Promise<{ tracks: unknown[]; total?: number }> => {
+/**
+ * 读一次歌单详情，并把「上游没读到这个歌单」和「歌单确实是空的」分开。
+ *
+ * 上游这条是匿名 CGI：歌单不公开时它**照样回 `code: 0`**，只是 `cdlist[0]` 退化成一个空壳 ——
+ * 没有 `disstid`、没有 `dissname`，songlist 为空数组（实测 `dirShow: 2` 的自建歌单就是这样）。
+ * 因此判据是回声的 `disstid` 在不在，而不是 `cdlist` 或 songlist 的长度：真的空歌单会带着
+ * 完整的 `disstid` / `dissname` 回来。两者混成同一个空结果，就是用户看到的那个没有报错的
+ * 「暂无内容」。
+ */
+const loadRawPlaylistTracks = async (
+    id: MediaId,
+    collection?: ProviderCollection,
+): Promise<{ tracks: unknown[]; total?: number }> => {
     const response = await requestQq<any>('song_list_detail', { disstid: String(id) });
-    const detail = Array.isArray(response?.response?.cdlist) ? response.response.cdlist[0] : undefined;
-    const tracks = Array.isArray(detail?.songlist) ? detail.songlist : [];
-    const total = Number(detail?.total_song_num ?? detail?.songnum);
+    const cdlist = response?.response?.cdlist;
+    const detail = Array.isArray(cdlist) ? cdlist[0] : undefined;
+    const echoedDisstid = String(detail?.disstid ?? '').trim();
+
+    if (!detail || typeof detail !== 'object' || !echoedDisstid || echoedDisstid === '0') {
+        // 已知不公开时报 `unsupported` 而不是 `invalid-response`：这不是协议坏了，是这条匿名
+        // 路由没资格读它 —— 后端补上带凭据的歌单路由之后，这个状态就会消失。调用方据此给用户
+        // 一句能看懂的解释，而不是把协议细节甩到界面上。
+        const dirShow = Number(collection?.providerData?.dirShow);
+        const notPublic = Number.isFinite(dirShow) && dirShow !== 1;
+        throw new OnlineProviderError(
+            notPublic ? 'unsupported' : 'invalid-response',
+            `QQMusicApi song_list_detail could not read playlist ${String(id)}`
+            + `${notPublic ? ' (not a public playlist; this anonymous endpoint cannot read it)' : ''}`,
+            'qq',
+            response?.response,
+        );
+    }
+
+    const tracks = Array.isArray(detail.songlist) ? detail.songlist : [];
+    const total = Number(detail.total_song_num ?? detail.songnum);
     return { tracks, ...(Number.isFinite(total) && total >= 0 ? { total } : {}) };
 };
 
@@ -100,7 +130,7 @@ const getPlaylistTracks = async (
             nextOffset,
         };
     }
-    const { tracks, total } = await loadRawPlaylistTracks(id);
+    const { tracks, total } = await loadRawPlaylistTracks(id, collection);
     const items = tracks
         .slice(offset, offset + Math.max(0, limit))
         .map(normalizeQqSong);

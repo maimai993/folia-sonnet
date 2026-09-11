@@ -555,7 +555,8 @@ describe('qqProvider', () => {
     it('loads regular playlists normally but uses the encrypted-UIN endpoint for liked songs', async () => {
         requestMock
             .mockResolvedValueOnce({
-                response: { cdlist: [{ songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+                // 上游成功时一定回声 `disstid`；不公开歌单给的空壳正是少了它。
+                response: { cdlist: [{ disstid: '7', songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
             })
             .mockResolvedValue({ code: 200, songs: [SEARCH_ITEM], total: 1, more: false });
 
@@ -577,6 +578,40 @@ describe('qqProvider', () => {
             ['user_liked_songs', { offset: 0, limit: 100 }],
             ['user_liked_songs', { offset: 0, limit: 50 }],
         ]);
+    });
+
+    // 「歌单读不到」和「歌单是空的」必须分开，判据是回声的 `disstid` 在不在。
+    it('fails loudly when the playlist detail carries no cdlist entry', async () => {
+        requestMock.mockResolvedValue({ response: { code: 0, cdlist: [] } });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0)).rejects.toMatchObject({
+            code: 'invalid-response',
+            message: expect.stringContaining('7'),
+        });
+    });
+
+    // 🔴 不公开的自建歌单：上游回 `code: 0` 加一个没有 disstid 的空壳，长度判断完全看不出问题。
+    it('fails loudly on the stub a non-public playlist answers with', async () => {
+        requestMock.mockResolvedValue({ response: { code: 0, cdlist: [{ songlist: [] }] } });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 1, dirName: '私密歌单', dirShow: 2 });
+
+        // `unsupported` 而不是 `invalid-response`：协议没坏，是这条路由没资格读它。
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection)).rejects.toMatchObject({
+            code: 'unsupported',
+            message: expect.stringContaining('not a public playlist'),
+        });
+    });
+
+    it('still reports a genuinely empty playlist as an empty page', async () => {
+        requestMock.mockResolvedValue({
+            response: { code: 0, cdlist: [{ disstid: '7', dissname: '空歌单', songnum: 0, songlist: [] }] },
+        });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0)).resolves.toMatchObject({
+            items: [],
+            total: 0,
+            hasMore: false,
+        });
     });
 
     it('normalizes album and artist collections onto mid identity and derives the cover from it', () => {

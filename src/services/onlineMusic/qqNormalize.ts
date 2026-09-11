@@ -296,6 +296,9 @@ export const normalizeQqCollection = (raw: unknown, type = 'playlist'): Provider
 
     const tid = pick(item, 'tid') ?? pick(existing, 'tid');
     const dirId = pick(item, 'dirId', 'dirid') ?? pick(existing, 'dirId');
+    // 可见性：1 公开、2 不公开（实测值）。匿名的 `/getSongListDetail` 读不到非公开歌单，
+    // 留着它才能把「歌单是空的」和「这条接口没资格读」分开。
+    const dirShow = pick(item, 'dirShow', 'dir_show') ?? pick(existing, 'dirShow');
     const rawId = pick(item, 'id');
     const dissid = pick(item, 'dissid')
         ?? pick(existing, 'dissid')
@@ -316,6 +319,7 @@ export const normalizeQqCollection = (raw: unknown, type = 'playlist'): Provider
             ['tid', tid],
             ['dirId', dirId],
             ['dissid', dissid],
+            ['dirShow', dirShow],
         ]),
     };
 };

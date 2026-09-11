@@ -782,7 +782,9 @@ export default {
     "loadMore": "加载更多",
     "headerTitle": "标题",
     "headerTime": "时长",
-    "loading": "加载中"
+    "loading": "加载中",
+    "loadFailed": "加载失败：{{error}}",
+    "loadUnsupported": "这个歌单不是公开歌单，当前音源接口读不到它的内容"
   },
   "search": {
     "placeholder": "搜索歌曲...",

@@ -123,6 +123,9 @@ const readJsonBody = async (response: Response): Promise<any> => {
 // 登录与播放路由用的是另一套码值（如 `login_status` 回 200），故不纳入此检查。
 const CATALOG_STATUS_NODES: Partial<Record<QqOperation, string[][]>> = {
     album_info: [['response']],
+    // 歌单详情的上游是匿名 CGI：歌单不存在、不公开或参数不被接受时它照样回 HTTP 200，
+    // 差别只在这个 `code` 上。不登记的话拒绝会一路变成空歌单，UI 只剩「暂无内容」。
+    song_list_detail: [['response']],
     artist_songs: [['response'], ['response', 'singer']],
     artist_albums: [['response'], ['response', 'singer']],
 };
