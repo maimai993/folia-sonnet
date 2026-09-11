@@ -375,6 +375,17 @@ describe('QQ Music Web transport', () => {
         });
     });
 
+    // 旧后端没有新加的路由，回 404。那是「没有声明这个能力」，调用方要能回落而不是报网络错。
+    it('maps a missing route to unsupported rather than a network failure', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'Not Found' }, { status: 404 })));
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('user_playlist_detail', { tid: '7', dirid: 2 })).rejects.toMatchObject({
+            code: 'unsupported',
+            providerId: 'qq',
+        });
+    });
+
     it('maps an unreadable body to invalid-response', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response('<html>bad gateway</html>', { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);

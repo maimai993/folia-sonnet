@@ -293,6 +293,7 @@ GET /api/qq/getSongInfo/0039MnYb0qxYhV
 | Cloudflare 只有微信 | 检查 `QQ_QR_CHANNEL` binding、`QqQrChannel` 类名和 migration |
 | Cloudflare QQ 二维码打不开 | 确认依赖为 3.1.0 或更高版本，并检查 Worker 日志中的 WebSocket 错误 |
 | 正式 `workers.dev` 返回 1042，但 Preview 正常 | 等待新域名传播，不要因为这个现象修改 Static Assets 或 MQTT 代码 |
+| 自建歌单打不开，提示不是公开歌单 | 后端版本过旧，缺少带凭据的 `/user/playlist-detail` 路由；升级 `@yakult-green-tea/qq-music-api` 后即可读取不公开的自建歌单 |
 | 扫码后上游返回 `20279` | 先在 QQ 音乐账号中清理旧登录设备，再重新扫码 |
 | 修改 `VITE_QQ_API_BASE` 后仍请求旧地址 | 该变量在构建时写入前端，必须重新构建；同时检查 `.env.local` 是否覆盖平台配置 |
 | 关闭二维码后仍担心计费 | 查看日志是否出现取消请求，以及 Durable Object 的 `/open`、`/close` 是否成对出现 |

@@ -25,7 +25,7 @@ vi.mock('@/utils/lyrics/providers/qqLyricProvider', () => ({
     fetchQQLyrics: fetchQQLyricsMock,
 }));
 
-import { qqProvider } from '@/services/onlineMusic/qqProvider';
+import { qqProvider, resetQqProviderRuntimeCache } from '@/services/onlineMusic/qqProvider';
 import { normalizeQqCollection, normalizeQqSong, normalizeQqUser } from '@/services/onlineMusic/qqNormalize';
 import { OnlineProviderError } from '@/types/onlineMusic';
 
@@ -162,6 +162,7 @@ describe('qqProvider', () => {
         searchQQLyricsMock.mockReset();
         fetchQQLyricsMock.mockReset();
         transportState.hasSession = true;
+        resetQqProviderRuntimeCache();
     });
 
     it('declares readable library features without exposing unsupported mutations or recommendations', () => {
@@ -590,9 +591,12 @@ describe('qqProvider', () => {
         });
     });
 
-    // 🔴 不公开的自建歌单：上游回 `code: 0` 加一个没有 disstid 的空壳，长度判断完全看不出问题。
+    // 🔴 旧后端 + 不公开的自建歌单，也就是这个 bug 被报上来时的处境：没有带凭据的路由可用，
+    // 匿名 CGI 回 `code: 0` 加一个没有 disstid 的空壳，按长度判断完全看不出问题。
     it('fails loudly on the stub a non-public playlist answers with', async () => {
-        requestMock.mockResolvedValue({ response: { code: 0, cdlist: [{ songlist: [] }] } });
+        requestMock
+            .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
+            .mockResolvedValue({ response: { code: 0, cdlist: [{ songlist: [] }] } });
         const collection = normalizeQqCollection({ tid: 7, dirId: 1, dirName: '私密歌单', dirShow: 2 });
 
         // `unsupported` 而不是 `invalid-response`：协议没坏，是这条路由没资格读它。
@@ -612,6 +616,55 @@ describe('qqProvider', () => {
             total: 0,
             hasMore: false,
         });
+    });
+
+    // 自建歌单只有带凭据的路由读得到（匿名 CGI 对不公开歌单回空壳），且它支持真正的分页。
+    it('reads an owned playlist through the authenticated route and forwards the real page window', async () => {
+        requestMock.mockResolvedValue({ code: 200, songs: [SEARCH_ITEM], total: 8, more: true });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单', dirShow: 2 });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 100, collection)).resolves.toMatchObject({
+            total: 8,
+            hasMore: true,
+            nextOffset: 101,
+            items: [expect.objectContaining({ qqMid: '003rJSwm3TechU' })],
+        });
+        expect(requestMock).toHaveBeenCalledWith(
+            'user_playlist_detail',
+            { tid: '7', dirid: 2, offset: 100, limit: 50 },
+        );
+    });
+
+    // 用户可以自行部署任意版本的后端，新路由在旧后端上必然 404。
+    it('falls back to the anonymous route when the backend has no authenticated playlist route', async () => {
+        requestMock
+            .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
+            .mockResolvedValue({
+                response: { code: 0, cdlist: [{ disstid: '7', total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+            });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection)).resolves.toMatchObject({
+            total: 1,
+            items: [expect.objectContaining({ qqMid: '003rJSwm3TechU' })],
+        });
+        expect(requestMock.mock.calls.map(call => call[0]))
+            .toEqual(['user_playlist_detail', 'song_list_detail']);
+
+        // 探到一次 404 就记住，后续页不再重试新路由。
+        requestMock.mockClear();
+        await qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection);
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['song_list_detail']);
+    });
+
+    // 网络抖动不能被当成「后端不支持」，否则整个会话都会粘在匿名路径上。
+    it('does not treat a transient failure as a missing route', async () => {
+        requestMock.mockRejectedValue(new OnlineProviderError('network', 'QQMusicApi request failed: 502', 'qq'));
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection))
+            .rejects.toMatchObject({ code: 'network' });
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['user_playlist_detail']);
     });
 
     it('normalizes album and artist collections onto mid identity and derives the cover from it', () => {
