@@ -280,6 +280,19 @@ describe('QQ Music Web transport', () => {
         await expect(requestQq('artist_songs', { singermid: '0025NhlN2yWrP4' })).resolves.toEqual(body);
     });
 
+    // 歌单详情的上游是匿名 CGI，被拒收时同样只在响应体里给码；不检查就会退化成一个空歌单。
+    it('surfaces an upstream rejection on the playlist detail route', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json({
+            response: { code: 3, subcode: 3, message: 'no such diss', cdlist: [] },
+        })));
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('song_list_detail', { disstid: '7' })).rejects.toMatchObject({
+            code: 'invalid-response',
+            message: expect.stringContaining('code 3'),
+        });
+    });
+
     // 登录路由用的是另一套码值（`login_status` 正常就回 200），不能被曲库那条规则误伤。
     it('leaves non-catalog operations out of the upstream status check', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 200, data: {} })));
@@ -359,6 +372,17 @@ describe('QQ Music Web transport', () => {
             code: 'network',
             providerId: 'qq',
             cause: { retryAfterMs: 31000 },
+        });
+    });
+
+    // 旧后端没有新加的路由，回 404。那是「没有声明这个能力」，调用方要能回落而不是报网络错。
+    it('maps a missing route to unsupported rather than a network failure', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'Not Found' }, { status: 404 })));
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('user_playlist_detail', { tid: '7', dirid: 2 })).rejects.toMatchObject({
+            code: 'unsupported',
+            providerId: 'qq',
         });
     });
 

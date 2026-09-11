@@ -44,7 +44,7 @@ import { compareLocalFolderSongs, formatLocalAlbumTrackLabel, type LocalAlbumGro
 import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
 import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from './folia-grid/gridSurfaceHandle';
 import { useGridSurfaceRegistration } from '../hooks/useGridSurfaceRegistration';
-import type { MediaId, ProviderCollection } from '../types/onlineMusic';
+import { OmniError, type MediaId, type ProviderCollection } from '../types/onlineMusic';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
 
@@ -367,6 +367,12 @@ export const GridView: React.FC<GridViewProps> = ({
     const [loading, setLoading] = useState(false);
     const [backgroundLoading, setBackgroundLoading] = useState(false);
     const [backgroundLoadFailed, setBackgroundLoadFailed] = useState(false);
+    // 在线集合加载失败必须和「集合确实是空的」分开显示：两者都渲染成空网格的话，
+    // provider 侧的鉴权、协议或网络故障在界面上就完全不可见。
+    // 存判别式而不是成品文案：翻译要在渲染时做，切换语言才能跟着变。
+    const [loadError, setLoadError] = useState<
+        { kind: 'not-public' } | { kind: 'generic'; message: string } | null
+    >(null);
     const [hasMore, setHasMore] = useState(true);
     const [offset, setOffset] = useState(0);
     const [dailyRecommendationHistoryDates, setDailyRecommendationHistoryDates] = useState<string[]>([]);
@@ -729,6 +735,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const loadTracks = async (reset = false) => {
         if (usesExternalTracks || !collection || collection.source !== 'online' || loading || (!hasMore && !reset)) return;
         setLoading(true);
+        if (reset) setLoadError(null);
 
         try {
             const currentOffset = reset ? 0 : offset;
@@ -825,6 +832,9 @@ export const GridView: React.FC<GridViewProps> = ({
             }
         } catch (error) {
             console.error("GridView failed to load tracks:", error);
+            setLoadError(error instanceof OmniError && error.code === 'not-public'
+                ? { kind: 'not-public' }
+                : { kind: 'generic', message: error instanceof Error ? error.message : String(error) });
         } finally {
             setLoading(false);
         }
@@ -1937,8 +1947,12 @@ export const GridView: React.FC<GridViewProps> = ({
                         <span className="text-sm font-semibold font-sans">{t('playlist.loading')}</span>
                     </div>
                 ) : gridItems.length === 0 ? (
-                    <div className="opacity-40 text-sm font-sans">
-                        {hasSearchQuery ? (t('home.gridSearchNoResults')) : (t('home.loadingLibrary'))}
+                    <div className="max-w-md px-6 text-center text-sm font-sans opacity-40">
+                        {loadError && !hasSearchQuery
+                            ? (loadError.kind === 'not-public'
+                                ? t('playlist.loadNotPublic')
+                                : t('playlist.loadFailed', { error: loadError.message }))
+                            : hasSearchQuery ? (t('home.gridSearchNoResults')) : (t('home.loadingLibrary'))}
                     </div>
                 ) : (
                     <motion.div

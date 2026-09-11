@@ -787,7 +787,9 @@ export default {
     "loadMore": "Load More",
     "headerTitle": "Title",
     "headerTime": "Time",
-    "loading": "Loading"
+    "loading": "Loading",
+    "loadFailed": "Failed to load: {{error}}",
+    "loadNotPublic": "This playlist is not public, so the current music source cannot read its contents"
   },
   "search": {
     "placeholder": "Search songs...",

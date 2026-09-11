@@ -61,12 +61,87 @@ const getQqSongMid = (song: SongResult): string => {
     return String(song.qqMid || sourceRef?.providerData?.songMid || sourceRef?.mediaId || '').trim();
 };
 
-const loadRawPlaylistTracks = async (id: MediaId): Promise<{ tracks: unknown[]; total?: number }> => {
+/**
+ * 读一次歌单详情，并把「上游没读到这个歌单」和「歌单确实是空的」分开。
+ *
+ * 上游这条是匿名 CGI：歌单不公开时它**照样回 `code: 0`**，只是 `cdlist[0]` 退化成一个空壳 ——
+ * 没有 `dissname`，songlist 为空数组。2026-09-11 用真实账号对一个 `dirShow: 2` 的自建歌单抓到的是
+ * `{ code: 0, disstid: '9777066643', dissname: undefined, songlist: [] }`：`disstid` 照样回声，
+ * 所以判据是 `dissname` 在不在，而不是 `disstid`，也不是 `cdlist` 或 songlist 的长度 —— 真的空歌单
+ * 会带着完整的 `dissname` 回来。两者混成同一个空结果，就是用户看到的那个没有报错的「暂无内容」。
+ */
+const loadRawPlaylistTracks = async (
+    id: MediaId,
+    collection?: ProviderCollection,
+): Promise<{ tracks: unknown[]; total?: number }> => {
     const response = await requestQq<any>('song_list_detail', { disstid: String(id) });
-    const detail = Array.isArray(response?.response?.cdlist) ? response.response.cdlist[0] : undefined;
-    const tracks = Array.isArray(detail?.songlist) ? detail.songlist : [];
-    const total = Number(detail?.total_song_num ?? detail?.songnum);
+    const cdlist = response?.response?.cdlist;
+    const detail = Array.isArray(cdlist) ? cdlist[0] : undefined;
+    const dissname = String(detail?.dissname ?? '').trim();
+
+    if (!detail || typeof detail !== 'object' || !dissname) {
+        // 已知不公开时报 `not-public` 而不是 `invalid-response`：这不是协议坏了，是这条匿名
+        // 路由没资格读它 —— 后端补上带凭据的歌单路由之后，自建歌单就不会再走到这里。调用方据此
+        // 给用户一句能看懂的解释，而不是把协议细节甩到界面上。
+        const dirShow = Number(collection?.providerData?.dirShow);
+        const notPublic = Number.isFinite(dirShow) && dirShow !== 1;
+        throw new OnlineProviderError(
+            notPublic ? 'not-public' : 'invalid-response',
+            `QQMusicApi song_list_detail could not read playlist ${String(id)}`
+            + `${notPublic ? ' (not a public playlist; this anonymous endpoint cannot read it)' : ''}`,
+            'qq',
+            response?.response,
+        );
+    }
+
+    const tracks = Array.isArray(detail.songlist) ? detail.songlist : [];
+    const total = Number(detail.total_song_num ?? detail.songnum);
     return { tracks, ...(Number.isFinite(total) && total >= 0 ? { total } : {}) };
+};
+
+// 后端有没有 `/user/playlist-detail` 只取决于它的版本，一个会话里不会变，所以探到一次 404
+// 就记下来，不再为每一页重试。刷新页面自然会重新探测。
+let ownedPlaylistRouteMissing = false;
+
+export const resetQqProviderRuntimeCache = (): void => {
+    ownedPlaylistRouteMissing = false;
+};
+
+/**
+ * 带凭据地读用户自己的歌单，响应形状与 `/user/liked-songs` 一致。
+ *
+ * 返回 `null` 表示这个后端没有这条路由（旧版本），调用方据此回落到匿名路径 —— 与
+ * `login_channels` 的处理方式相同：404 是「没有声明这个能力」，不是错误。其余失败照常抛出，
+ * 否则一次网络抖动会被误判成「后端不支持」并在整个会话里粘住。
+ */
+const loadRawOwnedPlaylistTracks = async (
+    tid: MediaId,
+    dirId: number,
+    limit: number,
+    offset: number,
+): Promise<{ tracks: unknown[]; total?: number; more: boolean } | null> => {
+    if (ownedPlaylistRouteMissing) return null;
+    try {
+        const response = await requestQq<any>('user_playlist_detail', {
+            tid: String(tid),
+            dirid: dirId,
+            offset,
+            limit,
+        });
+        const tracks = Array.isArray(response?.songs) ? response.songs : [];
+        const total = Number(response?.total);
+        return {
+            tracks,
+            ...(Number.isFinite(total) && total >= 0 ? { total } : {}),
+            more: response?.more === true,
+        };
+    } catch (error) {
+        if (error instanceof OnlineProviderError && error.code === 'unsupported') {
+            ownedPlaylistRouteMissing = true;
+            return null;
+        }
+        throw error;
+    }
 };
 
 const loadRawLikedTracks = async (
@@ -89,8 +164,15 @@ const getPlaylistTracks = async (
     offset: number,
     collection?: ProviderCollection,
 ): Promise<ProviderPage<ReturnType<typeof normalizeQqSong>>> => {
-    if (Number(collection?.providerData?.dirId) === 201) {
-        const { tracks, total, more } = await loadRawLikedTracks(Math.max(1, limit), Math.max(0, offset));
+    const safeLimit = Math.max(1, limit);
+    const safeOffset = Math.max(0, offset);
+    const dirId = Number(collection?.providerData?.dirId);
+    const owned = collection?.providerData?.owned === true;
+
+    // 我喜欢留在它自己那条早就可用的路由上：换到新路由只会让一个本来就正常的功能去承担
+    // 新后端的风险，而它要解决的问题（读不到不公开的自建歌单）在这里根本不存在。
+    if (dirId === 201) {
+        const { tracks, total, more } = await loadRawLikedTracks(safeLimit, safeOffset);
         const items = tracks.map(normalizeQqSong);
         const nextOffset = offset + items.length;
         return {
@@ -100,7 +182,28 @@ const getPlaylistTracks = async (
             nextOffset,
         };
     }
-    const { tracks, total } = await loadRawPlaylistTracks(id);
+
+    // 其余自建歌单优先走带凭据的路由：只有它读得到不公开的歌单，而且支持真正的分页，不必像匿名
+    // 路径那样每翻一页重拉整张歌单。判据是 `owned` 而不是 dirId —— 收藏的歌单也带 dirId，而带凭据的
+    // 路由读收藏歌单会少歌：实测一张 37 首的收藏歌单只回 36 首（缺一首付费歌），连 total 也跟着变成 36，
+    // 界面上完全看不出来。收藏歌单留在匿名路由上是完整的。
+    if (owned && Number.isFinite(dirId) && dirId > 0) {
+        const page = await loadRawOwnedPlaylistTracks(id, dirId, safeLimit, safeOffset);
+        if (page) {
+            const items = page.tracks.map(normalizeQqSong);
+            const nextOffset = safeOffset + items.length;
+            return {
+                items,
+                ...(page.total === undefined ? {} : { total: page.total }),
+                // 空页必须停：上游的 total 可能比实际能读到的多（被过滤的歌），只看 total 会一直翻空页。
+                hasMore: items.length > 0 && (page.more || (page.total !== undefined && nextOffset < page.total)),
+                nextOffset,
+            };
+        }
+    }
+
+    // 收藏的、分享链接进来的歌单本来就只能走匿名路由；后端太旧时也回落到这里。
+    const { tracks, total } = await loadRawPlaylistTracks(id, collection);
     const items = tracks
         .slice(offset, offset + Math.max(0, limit))
         .map(normalizeQqSong);

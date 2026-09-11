@@ -183,6 +183,9 @@ export type QrLoginState =
 export type ProviderErrorCode =
     | 'auth-required'
     | 'unsupported'
+    // 集合设为不公开，当前这条读取路径没资格读它。与 `unsupported`（这个后端或 provider 没有这项能力）
+    // 分开，界面才能只在这种情况下给出「不是公开歌单」的解释。
+    | 'not-public'
     | 'unavailable'
     | 'not-playable'
     | 'network'

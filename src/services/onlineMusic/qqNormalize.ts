@@ -296,6 +296,14 @@ export const normalizeQqCollection = (raw: unknown, type = 'playlist'): Provider
 
     const tid = pick(item, 'tid') ?? pick(existing, 'tid');
     const dirId = pick(item, 'dirId', 'dirid') ?? pick(existing, 'dirId');
+    // 可见性：1 公开、2 不公开（实测值）。匿名的 `/getSongListDetail` 读不到非公开歌单，
+    // 留着它才能把「歌单是空的」和「这条接口没资格读」分开。
+    const dirShow = pick(item, 'dirShow', 'dir_show') ?? pick(existing, 'dirShow');
+    // 自建还是收藏。`/user/playlist` 把两类合在同一个数组里，而收藏的条目**也带 `dirId`** —— 那是创建者
+    // 账号里的目录号（实测收藏的他人歌单是 `dirId: 36`），所以不能拿 dirId 判断。自建条目来自
+    // GetPlaylistByUin，带 `dirName` / `songNum`；收藏条目是另一套字段（`name` / `songnum` / `orderTime` /
+    // `dirType`）。缓存回灌时沿用已经判过的结果。
+    const owned = pick(item, 'dirName') !== undefined ? true : pick(existing, 'owned');
     const rawId = pick(item, 'id');
     const dissid = pick(item, 'dissid')
         ?? pick(existing, 'dissid')
@@ -316,6 +324,8 @@ export const normalizeQqCollection = (raw: unknown, type = 'playlist'): Provider
             ['tid', tid],
             ['dirId', dirId],
             ['dissid', dissid],
+            ['dirShow', dirShow],
+            ['owned', owned],
         ]),
     };
 };

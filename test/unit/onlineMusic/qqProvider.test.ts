@@ -25,7 +25,7 @@ vi.mock('@/utils/lyrics/providers/qqLyricProvider', () => ({
     fetchQQLyrics: fetchQQLyricsMock,
 }));
 
-import { qqProvider } from '@/services/onlineMusic/qqProvider';
+import { qqProvider, resetQqProviderRuntimeCache } from '@/services/onlineMusic/qqProvider';
 import { normalizeQqCollection, normalizeQqSong, normalizeQqUser } from '@/services/onlineMusic/qqNormalize';
 import { OnlineProviderError } from '@/types/onlineMusic';
 
@@ -162,6 +162,7 @@ describe('qqProvider', () => {
         searchQQLyricsMock.mockReset();
         fetchQQLyricsMock.mockReset();
         transportState.hasSession = true;
+        resetQqProviderRuntimeCache();
     });
 
     it('declares readable library features without exposing unsupported mutations or recommendations', () => {
@@ -275,7 +276,7 @@ describe('qqProvider', () => {
             type: 'playlist',
             coverUrl: 'https://img.example.test/big.jpg',
             trackCount: 2,
-            providerData: { tid: 7, dirId: 201 },
+            providerData: { tid: 7, dirId: 201, owned: true },
         });
         expect(normalizeQqCollection(normalizeQqCollection(PLAYLIST_ITEM))).toEqual(normalizeQqCollection(PLAYLIST_ITEM));
         expect(normalizeQqCollection({ id: 8, title: '收藏歌单', picurl: 'https://img.example.test/fav.jpg', songnum: 3 })).toEqual({
@@ -555,7 +556,8 @@ describe('qqProvider', () => {
     it('loads regular playlists normally but uses the encrypted-UIN endpoint for liked songs', async () => {
         requestMock
             .mockResolvedValueOnce({
-                response: { cdlist: [{ songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+                // 上游成功时一定带 `dissname`；不公开歌单给的空壳正是少了它（`disstid` 两种情况都会回声）。
+                response: { cdlist: [{ disstid: '7', dissname: '公开歌单', songnum: 1, total_song_num: 1, songlist: [SEARCH_ITEM] }] },
             })
             .mockResolvedValue({ code: 200, songs: [SEARCH_ITEM], total: 1, more: false });
 
@@ -577,6 +579,133 @@ describe('qqProvider', () => {
             ['user_liked_songs', { offset: 0, limit: 100 }],
             ['user_liked_songs', { offset: 0, limit: 50 }],
         ]);
+    });
+
+    // 「歌单读不到」和「歌单是空的」必须分开，判据是 `dissname` 在不在。
+    it('fails loudly when the playlist detail carries no cdlist entry', async () => {
+        requestMock.mockResolvedValue({ response: { code: 0, cdlist: [] } });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0)).rejects.toMatchObject({
+            code: 'invalid-response',
+            message: expect.stringContaining('7'),
+        });
+    });
+
+    // 🔴 旧后端 + 不公开的自建歌单，也就是这个 bug 被报上来时的处境：没有带凭据的路由可用，
+    // 匿名 CGI 回 `code: 0` 加一个空壳，按长度判断完全看不出问题。空壳是 2026-09-11 用真实账号抓的：
+    // `disstid` 照样回声，缺的是 `dissname`。
+    it('fails loudly on the stub a non-public playlist answers with', async () => {
+        requestMock
+            .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
+            .mockResolvedValue({ response: { code: 0, cdlist: [{ disstid: '9777066643', songlist: [] }] } });
+        const collection = normalizeQqCollection({ tid: 9777066643, dirId: 1, dirName: '新建歌单1', songNum: 3, dirShow: 2 });
+
+        // `not-public` 而不是 `invalid-response`：协议没坏，是这条路由没资格读它。
+        await expect(qqProvider.catalog!.getPlaylistTracks!(9777066643, 50, 0, collection)).rejects.toMatchObject({
+            code: 'not-public',
+            message: expect.stringContaining('not a public playlist'),
+        });
+    });
+
+    it('still reports a genuinely empty playlist as an empty page', async () => {
+        requestMock.mockResolvedValue({
+            response: { code: 0, cdlist: [{ disstid: '7', dissname: '空歌单', songnum: 0, songlist: [] }] },
+        });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0)).resolves.toMatchObject({
+            items: [],
+            total: 0,
+            hasMore: false,
+        });
+    });
+
+    // 自建歌单只有带凭据的路由读得到（匿名 CGI 对不公开歌单回空壳），且它支持真正的分页。
+    it('reads an owned playlist through the authenticated route and forwards the real page window', async () => {
+        requestMock.mockResolvedValue({ code: 200, songs: [SEARCH_ITEM], total: 8, more: true });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单', dirShow: 2 });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 100, collection)).resolves.toMatchObject({
+            total: 8,
+            hasMore: true,
+            nextOffset: 101,
+            items: [expect.objectContaining({ qqMid: '003rJSwm3TechU' })],
+        });
+        expect(requestMock).toHaveBeenCalledWith(
+            'user_playlist_detail',
+            { tid: '7', dirid: 2, offset: 100, limit: 50 },
+        );
+    });
+
+    // 用户可以自行部署任意版本的后端，新路由在旧后端上必然 404。
+    it('falls back to the anonymous route when the backend has no authenticated playlist route', async () => {
+        requestMock
+            .mockRejectedValueOnce(new OnlineProviderError('unsupported', 'QQMusicApi has no route', 'qq'))
+            .mockResolvedValue({
+                response: { code: 0, cdlist: [{ disstid: '7', dissname: '新建歌单', total_song_num: 1, songlist: [SEARCH_ITEM] }] },
+            });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection)).resolves.toMatchObject({
+            total: 1,
+            items: [expect.objectContaining({ qqMid: '003rJSwm3TechU' })],
+        });
+        expect(requestMock.mock.calls.map(call => call[0]))
+            .toEqual(['user_playlist_detail', 'song_list_detail']);
+
+        // 探到一次 404 就记住，后续页不再重试新路由。
+        requestMock.mockClear();
+        await qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection);
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['song_list_detail']);
+    });
+
+    // 网络抖动不能被当成「后端不支持」，否则整个会话都会粘在匿名路径上。
+    it('does not treat a transient failure as a missing route', async () => {
+        requestMock.mockRejectedValue(new OnlineProviderError('network', 'QQMusicApi request failed: 502', 'qq'));
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, collection))
+            .rejects.toMatchObject({ code: 'network' });
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['user_playlist_detail']);
+    });
+
+    // 🔴 收藏的他人歌单在 `/user/playlist` 里也带 `dirId`（创建者账号里的目录号），字段形状取自
+    // 2026-09-11 的真实账号。带凭据的路由读它会少歌：37 首只回 36 首，total 也变成 36。
+    it('keeps a favourited playlist on the anonymous route even though it carries a dirId', async () => {
+        requestMock.mockResolvedValue({
+            response: { code: 0, cdlist: [{ disstid: '7009600126', dissname: '毕业季：不为青春画句号', total_song_num: 37, songlist: [SEARCH_ITEM] }] },
+        });
+        const favourite = normalizeQqCollection({
+            tid: 7009600126, dirId: 36, name: '毕业季：不为青春画句号', songnum: 37, dirShow: 1, orderTime: 1789128000, dirType: 0,
+        });
+
+        expect(favourite.providerData).not.toHaveProperty('owned');
+        await qqProvider.catalog!.getPlaylistTracks!(7009600126, 50, 0, favourite);
+        expect(requestMock.mock.calls.map(call => call[0])).toEqual(['song_list_detail']);
+    });
+
+    it('remembers that a playlist is owned when the cached collection is normalized again', () => {
+        const owned = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单', songNum: 3 });
+        expect(normalizeQqCollection(owned).providerData).toMatchObject({ tid: 7, dirId: 2, owned: true });
+    });
+
+    // 上游的 total 可能比实际读得到的多（被过滤掉的歌）：只看 total 的话会一直翻空页。
+    it('stops paging an owned playlist on an empty page even when the total promises more', async () => {
+        requestMock.mockResolvedValue({ code: 200, songs: [], total: 37, more: false });
+        const collection = normalizeQqCollection({ tid: 7, dirId: 2, dirName: '新建歌单' });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 36, collection)).resolves.toMatchObject({
+            items: [],
+            hasMore: false,
+            nextOffset: 36,
+        });
+    });
+
+    // 404 只说明后端没有这条路由，不说明歌单不公开：「不是公开歌单」这句解释只能留给真正的空壳。
+    it('does not blame playlist visibility for a missing anonymous route', async () => {
+        requestMock.mockRejectedValue(new OnlineProviderError('unsupported', 'QQMusicApi has no song_list_detail route', 'qq'));
+        const favourite = normalizeQqCollection({ tid: 7, dirId: 36, name: '收藏', dirShow: 2 });
+
+        await expect(qqProvider.catalog!.getPlaylistTracks!(7, 50, 0, favourite)).rejects.toMatchObject({ code: 'unsupported' });
     });
 
     it('normalizes album and artist collections onto mid identity and derives the cover from it', () => {

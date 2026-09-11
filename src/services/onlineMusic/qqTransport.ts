@@ -6,7 +6,8 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 export const QQ_OPERATIONS = [
     'login_qr_key', 'login_qr_create', 'login_qr_check', 'login_qr_cancel', 'login_status', 'logout',
     'login_channels',
-    'user_detail', 'user_playlist', 'user_albums', 'user_liked_songs', 'music_play', 'song_list_detail', 'song_info',
+    'user_detail', 'user_playlist', 'user_albums', 'user_liked_songs', 'user_playlist_detail',
+    'music_play', 'song_list_detail', 'song_info',
     'album_info', 'artist_albums', 'artist_songs',
 ] as const;
 
@@ -26,6 +27,9 @@ const ENDPOINTS: Record<QqOperation, string> = {
     user_playlist: '/user/playlist',
     user_albums: '/user/albums',
     user_liked_songs: '/user/liked-songs',
+    // 带凭据地读登录用户自己的歌单。匿名的 `song_list_detail` 读不了不公开的歌单，这条可以。
+    // 与 `login_channels` 同样的处境：旧后端没有这条路由，回 404，调用方要当成「没有声明」。
+    user_playlist_detail: '/user/playlist-detail',
     music_play: '/getMusicPlay',
     song_list_detail: '/getSongListDetail',
     song_info: '/getSongInfo',
@@ -123,6 +127,9 @@ const readJsonBody = async (response: Response): Promise<any> => {
 // 登录与播放路由用的是另一套码值（如 `login_status` 回 200），故不纳入此检查。
 const CATALOG_STATUS_NODES: Partial<Record<QqOperation, string[][]>> = {
     album_info: [['response']],
+    // 歌单详情的上游是匿名 CGI：歌单不存在、不公开或参数不被接受时它照样回 HTTP 200，
+    // 差别只在这个 `code` 上。不登记的话拒绝会一路变成空歌单，UI 只剩「暂无内容」。
+    song_list_detail: [['response']],
     artist_songs: [['response'], ['response', 'singer']],
     artist_albums: [['response'], ['response', 'singer']],
 };
@@ -230,6 +237,17 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
         if (response.status === 401) {
             clearQqSession();
             throw new OnlineProviderError('auth-required', 'QQMusicApi login required', 'qq', failure);
+        }
+        // 404 是「这个后端没有这条路由」，不是网络故障 —— 用户可以自行部署任意版本的后端，
+        // 新路由在旧后端上必然 404。报成 `unsupported`，调用方才能据此回落到旧路径，
+        // 而不必去解析错误文案里的状态码。
+        if (response.status === 404) {
+            throw new OnlineProviderError(
+                'unsupported',
+                `QQMusicApi has no ${operation} route`,
+                'qq',
+                failure,
+            );
         }
         throw new OnlineProviderError('network', `QQMusicApi request failed: ${response.status}`, 'qq', failure);
     }
