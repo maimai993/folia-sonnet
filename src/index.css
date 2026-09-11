@@ -154,12 +154,12 @@ html[data-click-through='active'] body .click-through-interactive * {
   animation: remote-progress-transition-glow 2.4s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .remote-progress-transition-glow {
-    animation: none;
-    opacity: 0.85;
-    box-shadow: 0 0 6px 0 var(--transition-glow-color);
-  }
+/* 降级状态由 useMotionSettingsStore 同步到 <html data-reduce-motion>，不再直接跟随系统偏好。
+   见 stores/useMotionSettingsStore.ts。 */
+:root[data-reduce-motion~='uiMicroMotion'] .remote-progress-transition-glow {
+  animation: none;
+  opacity: 0.85;
+  box-shadow: 0 0 6px 0 var(--transition-glow-color);
 }
 
 /* Grid 顶部标题的面板开关：用户第一次进入 grid 视图时，让开关自己呼吸几下并把
@@ -203,14 +203,12 @@ html[data-click-through='active'] body .click-through-interactive * {
 }
 
 /* 关掉动画的用户改为静态展示文案，仍然拿得到这条提示。 */
-@media (prefers-reduced-motion: reduce) {
-  .grid-panel-toggle-hint {
-    animation: none;
-  }
+:root[data-reduce-motion~='uiMicroMotion'] .grid-panel-toggle-hint {
+  animation: none;
+}
 
-  .grid-panel-toggle-hint-label {
-    animation: none;
-    max-width: 5rem;
-    opacity: 1;
-  }
+:root[data-reduce-motion~='uiMicroMotion'] .grid-panel-toggle-hint-label {
+  animation: none;
+  max-width: 5rem;
+  opacity: 1;
 }

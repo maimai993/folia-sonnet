@@ -228,6 +228,12 @@ export async function installBaseState(
     localStorage.setItem('i18nextLng', 'en');
     localStorage.setItem('default_theme_daylight', 'true');
     localStorage.setItem('static_mode', 'true');
+    // 动效不再跟随系统偏好（issue #370），所以 emulateMedia({ reducedMotion: 'reduce' }) 自己
+    // 已经冻结不了任何东西了。截图基线要的是静止画面，得把每个动效面显式降级。
+    // 面的清单见 src/stores/useMotionSettingsStore.ts 的 MOTION_SURFACE_IDS。
+    for (const surface of ['lattice', 'transitionOverlay', 'monetBackground', 'uiMicroMotion', 'settingsScroll']) {
+      localStorage.setItem(`reduce_motion_${surface}`, 'true');
+    }
     localStorage.setItem('last_app_view', 'home');
     localStorage.setItem('last_home_view_tab', 'playlist');
     // 必须写当前版本：写死旧版本会让用户指引弹窗自动弹出并盖住整页，后续点击全部被拦截

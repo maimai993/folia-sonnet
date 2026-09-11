@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import { loadCachedOrFetchCover } from './services/coverCache';
@@ -8,6 +8,7 @@ import CommandPalette from './components/command-palette/CommandPalette';
 import AddToPlaylistHost from './components/app/AddToPlaylistHost';
 import { useCommandPalette } from './components/command-palette/useCommandPalette';
 import { useCommandPaletteContext } from './hooks/useCommandPaletteContext';
+import { useReducedMotionFor } from './hooks/useReducedMotionFor';
 import AppShell from './components/app/AppShell';
 import Home from './components/app/Home';
 import PlayerPanel from './components/app/PlayerPanel';
@@ -675,7 +676,7 @@ export default function App() {
         pushCollection,
         backCollection,
     } = useAppNavigation();
-    const reduceLatticeMotion = useReducedMotion();
+    const reduceLatticeMotion = useReducedMotionFor('lattice');
     const [hasLatticeExited, setHasLatticeExited] = useState(currentView !== 'lattice');
 
     useEffect(() => {

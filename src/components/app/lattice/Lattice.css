@@ -386,12 +386,12 @@
 .lattice-empty strong { font-size: 17px; letter-spacing: 0.16em; }
 .lattice-empty span { font-size: 12px; opacity: 0.5; }
 
-@media (prefers-reduced-motion: reduce) {
-    .lattice-poster,
-    .lattice-poster::after,
-    .lattice-poster-tint,
-    .lattice-poster-lights-out { transition: none; }
-}
+/* 降级状态由 useMotionSettingsStore 同步到 <html data-reduce-motion>，不再直接跟随系统偏好；
+   `~=` 匹配空格分隔的词，所以一个属性能同时带多个面。见 stores/useMotionSettingsStore.ts。 */
+:root[data-reduce-motion~='lattice'] .lattice-poster,
+:root[data-reduce-motion~='lattice'] .lattice-poster::after,
+:root[data-reduce-motion~='lattice'] .lattice-poster-tint,
+:root[data-reduce-motion~='lattice'] .lattice-poster-lights-out { transition: none; }
 
 @media (max-width: 640px) {
     .lattice-back { top: 14px; left: 16px; }

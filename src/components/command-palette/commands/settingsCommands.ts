@@ -5,9 +5,10 @@ import { hasUploadedObsAsset } from '../../../services/obs/visualSettingsConfig'
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createAppLanguageCommand, createSettingsCommand, createSettingsAnchorCommand, defineCommand } from '../commandFactories';
 import { sleepTimerCommand } from './sleepTimerCommand';
-import { Images, Layers3 } from 'lucide-react';
+import { Gauge, Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
+import { reduceMotionSurface } from '../surfaces/reduceMotionSurface';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
@@ -446,6 +447,23 @@ export const settingsCommands: CommandPaletteCommand[] = [
         placeholder: context => context.shared.t('commandPalette.latticePosterTintPlaceholder', 'Adjust the controls below'),
         execute: () => false,
     }),
+    defineCommand({
+        id: 'settings-reduce-motion',
+        group: 'settings',
+        title: 'Reduce motion',
+        description: 'Turn down the animation on each surface that has one, or follow the system setting',
+        keywords: ['reduced motion', 'animation', 'disable animation', 'motion', 'accessibility motion',
+            '降低动态效果', '减少动画', '关闭动画', '动效', '动画效果', '动态效果'],
+        icon: Gauge,
+        requiresInput: true,
+        surface: reduceMotionSurface,
+        placeholder: context => context.shared.t('commandPalette.reduceMotionPlaceholder', 'Adjust the controls below'),
+        execute: () => false,
+    }),
+    // The queue collage is the surface #370 was filed about, so it gets a direct toggle as well as
+    // a row on the panel above: the listener who lost its animation should not have to find it.
+    createToggleCommand('settings-toggle-reduce-lattice-motion', 'settings', 'Reduce queue collage motion', 'Turn the queue collage expansion, camera flight and entrance wave down to instant', ['reduce lattice motion', 'lattice animation', 'queue collage animation', 'collage motion', 'poster wall animation', '队列拼贴动画', '拼贴动效', '降低拼贴动态效果', '海报墙动画'], context => context.settings.toggleReduceLatticeMotion()),
+    createToggleCommand('settings-toggle-follow-system-reduced-motion', 'settings', 'Follow system reduced motion', 'Toggle whether the system animation setting is allowed to reduce motion in the app', ['system animation setting', 'os reduced motion', 'system motion preference', '跟随系统动画设置', '跟随系统减少动画', '系统动效偏好'], context => context.settings.toggleFollowSystemReducedMotion()),
     createToggleCommand('settings-toggle-track-switch-buttons', 'settings', 'Always show track switch arrows', 'Toggle whether the progress bar track switch arrows stay visible beside the title', ['track switch buttons', 'previous next arrows', 'progress bar arrows', 'song switch buttons', '切歌箭头', '切换箭头', '始终显示切歌按钮', '进度条切歌按钮', '上一首下一首按钮', 'jinduting qiege', 'sysqgan'], context => context.settings.toggleAlwaysShowTrackSwitchButtons()),
     createToggleCommand('settings-toggle-main-window-titlebar', 'settings', 'Always show window control buttons', 'Toggle whether the main window control buttons stay visible', ['always show window controls', 'window control buttons', 'always show titlebar', 'main window titlebar', 'titlebar', '标题栏', '控制按钮', '始终显示标题栏', '始终显示控制按钮', '主窗口标题栏', 'kongzhi annniu', 'bt', 'zckbt'], context => context.settings.toggleAlwaysShowMainWindowTitlebar()),
     createToggleCommand('settings-toggle-auto-play-on-launch', 'settings', 'Auto-play on launch', 'Toggle whether opening the app resumes the last session by itself', ['autoplay', 'auto play', 'resume on open', 'play on startup', '自动播放', '启动自动播放', '进入应用自动播放', '续播'], context => context.settings.toggleAutoPlayOnLaunch()),

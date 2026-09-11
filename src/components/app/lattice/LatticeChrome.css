@@ -42,9 +42,8 @@
 .lattice-progress > div > div { height: 2px; }
 /* Keep the thin progress line's hit target usable with both fingers and a mouse. */
 .lattice-progress input[type=range] { top: 50%; height: 36px; transform: translateY(-50%); }
-@media (prefers-reduced-motion: reduce) {
-    .lattice-chrome-details, .lattice-chrome-time { transition: none; }
-}
+:root[data-reduce-motion~='lattice'] .lattice-chrome-details,
+:root[data-reduce-motion~='lattice'] .lattice-chrome-time { transition: none; }
 @media (max-width: 640px) {
     /* Compensate for the wall's mobile camera scale so touch targets stay finger-sized. */
     .lattice-chrome { width: min(100%, 640px); padding: 0; gap: 16px; }

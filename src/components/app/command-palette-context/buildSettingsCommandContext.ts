@@ -10,6 +10,7 @@ import { isNeteaseScrobbleReady } from '../../../services/onlineMusic/playbackRe
 import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 import { useGridViewSettingsStore } from '../../../stores/useGridViewSettingsStore';
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
+import { useMotionSettingsStore } from '../../../stores/useMotionSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../stores/usePlaybackEntryViewStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
@@ -92,6 +93,14 @@ export const buildSettingsCommandContext = (
         toggleLatticeVignette: () => useLatticeSettingsStore.getState().handleToggleLatticeVignette(
             !useLatticeSettingsStore.getState().latticeVignette,
         ),
+        toggleReduceLatticeMotion: () => {
+            const motion = useMotionSettingsStore.getState();
+            motion.handleToggleReducedMotionSurface('lattice', !motion.reducedMotionSurfaces.lattice);
+        },
+        toggleFollowSystemReducedMotion: () => {
+            const motion = useMotionSettingsStore.getState();
+            motion.handleToggleFollowSystemReducedMotion(!motion.followSystemReducedMotion);
+        },
         toggleLatticeAutoFocusOnSongChange: () => useLatticeSettingsStore.getState().handleToggleAutoFocusOnSongChange(
             !useLatticeSettingsStore.getState().autoFocusOnSongChange,
         ),

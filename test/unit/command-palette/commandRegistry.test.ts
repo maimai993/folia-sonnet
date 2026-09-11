@@ -101,6 +101,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             canUseGridViewSquareCards: vi.fn(() => true),
             toggleLatticeVignette: vi.fn(),
             toggleLatticeAutoFocusOnSongChange: vi.fn(),
+            toggleReduceLatticeMotion: vi.fn(),
+            toggleFollowSystemReducedMotion: vi.fn(),
             latticePosterTintEnabled: true,
             latticePosterTintUseCustomColor: false,
             latticePosterTintColor: '#161419',
