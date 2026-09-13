@@ -24,6 +24,7 @@ import {
     GRID_CARD_ITEM_ID_ATTR,
 } from './folia-grid/gridMorphContract';
 import ActiveGridMarker from './folia-grid/ActiveGridMarker';
+import { shouldApplyInitialGridFocus } from './folia-grid/gridViewRestore';
 import {
     collectionMorphFlyIn,
     collectionMorphReach,
@@ -310,6 +311,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     );
     const pendingRestoreStateRef = useRef<StoredArtistGridNavigationState | null>(null);
     const hasRestoredNavigationRef = useRef(false);
+    // 初始定位只做一次：专辑列表是分页追加的，只看 items.length 会在数据落地时把相机从用户
+    // 已经移过去的那张卡上拽回介绍卡。判据见 shouldApplyInitialGridFocus。
+    const hasAppliedInitialFocusRef = useRef(false);
 
     useEffect(() => {
         const el = containerRef.current;
@@ -779,11 +783,17 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     };
 
     useEffect(() => {
-        if (gridItems.length > 0) {
-            if (pendingRestoreStateRef.current && !hasRestoredNavigationRef.current) return;
-            // Focus on Bio Card (Index 1) initially to give a balanced newspaper view
-            centerOnIndex(1, false);
+        if (!shouldApplyInitialGridFocus({
+            itemCount: gridItems.length,
+            hasAppliedInitialFocus: hasAppliedInitialFocusRef.current,
+            restoreApplied: hasRestoredNavigationRef.current,
+            restorePending: Boolean(pendingRestoreStateRef.current),
+        })) {
+            return;
         }
+        hasAppliedInitialFocusRef.current = true;
+        // Focus on Bio Card (Index 1) initially to give a balanced newspaper view
+        centerOnIndex(1, false);
     }, [gridItems.length]);
 
     useEffect(() => {

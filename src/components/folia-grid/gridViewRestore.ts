@@ -42,3 +42,29 @@ export const resolveStoredFocusIndex = (
     const clamped = Math.max(0, Math.min(raw, items.length - 1));
     return Number.isFinite(clamped) ? clamped : -1;
 };
+
+/**
+ * 首次定位（把相机放到介绍卡上）只允许发生一次，而且必须没有会话要恢复。
+ *
+ * 为什么需要单独一条判据：触发它的 effect 依赖 `items.length`，而歌手页的专辑列表是
+ * **分页追加**的 —— 用户点开某张卡、相机已经移过去之后，下一页数据落地会改变 length，
+ * effect 再跑一次就把相机瞬移回介绍卡（表现就是「点完卡片过一会自己跳回歌手介绍」）。
+ * 所以这里看的是「定位过没有」，而不是 length 变没变。
+ *
+ * `restoreApplied` 为真时也不该再定位：那一刻相机位置来自 sessionStorage，覆盖它等于把
+ * 用户上次的浏览位置丢掉。
+ */
+export const shouldApplyInitialGridFocus = (state: {
+    itemCount: number;
+    /** 已经做过一次初始定位。 */
+    hasAppliedInitialFocus: boolean;
+    /** 会话恢复已经应用。 */
+    restoreApplied: boolean;
+    /** 有待恢复的会话但还没应用（例如过滤条件还没到位）。 */
+    restorePending: boolean;
+}): boolean => (
+    state.itemCount > 0
+    && !state.hasAppliedInitialFocus
+    && !state.restoreApplied
+    && !state.restorePending
+);
