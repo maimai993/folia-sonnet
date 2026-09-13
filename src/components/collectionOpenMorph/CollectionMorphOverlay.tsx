@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, type Transition } from 'framer-motion';
 import { useCollectionNavigationStore } from '../../stores/useCollectionNavigationStore';
+import MorphExitLayer from './MorphExitLayer';
+import MorphFlightLayer, { CROSSFADE_SECONDS, type MorphFastForwardStart } from './MorphFlightLayer';
+import { reportMorphCapture, useCollectionMorphStore } from './collectionMorphStore';
 import {
     COLLECTION_MORPH_Z_INDEX,
-    probeArtistIntroTargets,
-    probeHeroTargets,
-    useCollectionMorphStore,
+    estimateCenterTarget,
+    toMorphTarget,
+    type CollectionMorphExit,
     type CollectionMorphHeroMeasured,
     type CollectionMorphPending,
-    type CollectionMorphRect,
-    type CollectionMorphSquadGhost,
-} from './collectionMorphStore';
+    type CollectionMorphTarget,
+} from './morphGeometry';
+import { attachMorphCapture, probeArtistIntroTargets, probeHeroTargets } from './morphProbes';
 
 // src/components/collectionOpenMorph/CollectionMorphOverlay.tsx
 // The match-cut both ways of the「移形换影」transition. Rendered via portal:
@@ -27,84 +29,44 @@ import {
 // fades the home surface in underneath. Symmetric easing makes the two halves
 // read as one continuous gesture.
 //
+// This file owns the LIFECYCLE only (stages, timers, polling, store wiring);
+// the two composites live in MorphFlightLayer / MorphExitLayer and the geometry
+// and probes live in morphGeometry.ts / morphProbes.ts.
+//
 // Timing contract (kept snappy and self-terminating): springs fly fast toward
 // live hero measurements polled on a throttled schedule; if the hero never
-// renders the lifecycle still runs to consume, and a hard watchdog guarantees
-// the morph plan can never leave the detail grid stuck with its hero hidden.
+// renders the lifecycle still runs to consume — the poll's deadline always hands
+// over to the fade, so a missing hero can never leave the composite parked over
+// an already-revealed grid — and a hard watchdog guarantees the morph plan can
+// never leave the detail grid stuck with its hero hidden.
 
 type MorphStage = 'idle' | 'flying' | 'settling' | 'fading' | 'exiting';
 
-// Springy-but-controlled: a visible overshoot (~2-4%) on arrival that breathes
-// back flat, without any extra oscillation tail. Stiffer/faster than before:
-// the morph now doubles as a load cover, so the flight must feel snappy.
-const MORPH_SPRING = { type: 'spring', stiffness: 420, damping: 24, mass: 0.85 } as const;
-// Exit springs breathe the same way on the way OUT: a little rebound at launch
-// and a soft settle into the home card.
-const EXIT_SPRING = { type: 'spring', stiffness: 420, damping: 22, mass: 0.8 } as const;
-// Apple-style exit curve for dissolves (opacity/backdrop still breathe on this).
-const EXIT_EASE = [0.32, 0.72, 0, 1] as const;
-const EXIT_DURATION_SECONDS = 0.5;
-const EXIT_BACKDROP_SECONDS = 0.62;
-const FADE_DURATION_SECONDS = 0.18;
-const CROSSFADE_SECONDS = 0.28;
 const SETTLE_AFTER_TARGET_MS = 180;
-// Fast-forwarded flights replay the REMAINING distance on this compressed
-// tween — the user sees the morph visibly rush to its landing instead of an
-// opacity flash. Sequential: flight → quick fade → finish.
-const FAST_FORWARD_TWEEN: Transition = { duration: 0.26, ease: [0.22, 1, 0.36, 1] };
 const FAST_FORWARD_FLIGHT_MS = 260;
-const FAST_FORWARD_FADE_SECONDS = 0.1;
 // …and the whole accelerated lifecycle ends on this hard timer so the input
 // blockade never outlives it.
 const FAST_FORWARD_FINISH_MS = 140;
 const HERO_POLL_INTERVAL_MS = 120;
-// The outgoing grid keeps its cards in the DOM while its AnimatePresence exit
-// plays. Probing before it unmounts measures the OLD grid's hero, so the morph
-// retargets onto the wrong card — only a source card that happened to sit dead
-// centre lined up. Wait out the exit window before the first probe.
+// The probe only ever measures the ACTIVE grid (see morphProbes.activeGridRoot),
+// so the outgoing grid's cards can no longer be mistaken for the hero. This
+// delay now only waits for the incoming grid to have laid its cards out at all
+// before the first measurement; the flight glides toward the estimated centre
+// meanwhile and the spring retargets once the real hero is measured.
 const HERO_POLL_START_DELAY_MS = 420;
 const HERO_POLL_MAX_MS = 2400;
 // Absolute watchdog: beyond this the store is consumed whatever happens.
 const WATCHDOG_MS = 3000;
 
-// First estimated destination while the track list is still loading: the
-// viewport centre sized like the strip's typical centered card.
-const estimateCenterTarget = (): CollectionMorphRect => {
-    const size = Math.min(Math.max(window.innerWidth * 0.18, 160), 280);
-    return {
-        x: window.innerWidth / 2 - size / 2,
-        y: window.innerHeight / 2 - size * 0.58,
-        width: size,
-        height: size * 1.16,
-    };
-};
+interface CollectionMorphOverlayProps {
+    /**
+     * 是否允许播放转场。由宿主读「降低动态效果」的 collectionMorph 面得出，为 false 时
+     * 既不挂捕获监听也不领任何计划 —— 转场是纯装饰，降级时应当完全不出现，而不是缩短。
+     */
+    enabled?: boolean;
+}
 
-// FLIP with a center origin: the element renders at its START rect (static
-// style) and animates a pure translate+scale onto the destination — a
-// compositor-only path, so no frame of the flight forces layout or repaint
-// (animating left/top/width/height re-layouts every frame). Center origin
-// keeps rotation arcs identical to the pre-FLIP version, and expressing the
-// destination as transform VALUES means a mid-flight retarget from the hero
-// poll simply hands the springs new numbers to converge on — same curve,
-// zero discontinuity.
-const flipTo = (start: CollectionMorphRect, target: CollectionMorphRect) => ({
-    x: target.x + target.width / 2 - (start.x + start.width / 2),
-    y: target.y + target.height / 2 - (start.y + start.height / 2),
-    scaleX: start.width > 0 ? target.width / start.width : 1,
-    scaleY: start.height > 0 ? target.height / start.height : 1,
-});
-
-// Transform values that pin an element (rendered at its `base` rect) onto the
-// on-screen `rect` it occupied at fast-forward time — the compressed replay
-// continues from exactly where the spring was, with no rewind to the start.
-const flipFromRect = (rect: CollectionMorphRect, base: CollectionMorphRect) => ({
-    x: rect.x + rect.width / 2 - (base.x + base.width / 2),
-    y: rect.y + rect.height / 2 - (base.y + base.height / 2),
-    scaleX: base.width > 0 ? rect.width / base.width : 1,
-    scaleY: base.height > 0 ? rect.height / base.height : 1,
-});
-
-export const CollectionMorphOverlay: React.FC = () => {
+export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ enabled = true }) => {
     const pending = useCollectionMorphStore((state) => state.pending);
     const ackPending = useCollectionMorphStore((state) => state.ackPending);
     const commitPlan = useCollectionMorphStore((state) => state.commitPlan);
@@ -118,44 +80,35 @@ export const CollectionMorphOverlay: React.FC = () => {
 
     const [stage, setStage] = useState<MorphStage>('idle');
     const [flown, setFlown] = useState<CollectionMorphPending | null>(null);
-    const [targets, setTargets] = useState<{
-        frame: CollectionMorphRect;
-        cover: CollectionMorphRect;
-        coverUrl: string | null;
-        title: CollectionMorphRect;
-        titleText: string;
-    } | null>(null);
-    const [exitPayload, setExitPayload] = useState<ReturnType<typeof useCollectionMorphStore.getState>['exit']>(null);
+    const [targets, setTargets] = useState<CollectionMorphTarget | null>(null);
+    const [exitPayload, setExitPayload] = useState<CollectionMorphExit | null>(null);
     // True once a scroll fast-forwarded the flight: fades snap shut and the
     // lifecycle ends on a hard timer so the input blockade is released fast.
     const [fastForwarding, setFastForwarding] = useState(false);
     // On-screen rects of the three flying elements at fast-forward time — the
     // compressed replay starts from these, continuing mid-flight instead of
     // rewinding or flashing away.
-    const [ffStart, setFfStart] = useState<{
-        frame: CollectionMorphRect;
-        cover: CollectionMorphRect;
-        title: CollectionMorphRect;
-    } | null>(null);
+    const [ffStart, setFfStart] = useState<MorphFastForwardStart | null>(null);
     const frameFlightRef = useRef<HTMLDivElement | null>(null);
     const coverFlightRef = useRef<HTMLDivElement | null>(null);
     const titleFlightRef = useRef<HTMLDivElement | null>(null);
-    // Latches on the first scroll intent so repeated wheel ticks never restart
+    // Latches on the first scroll/click intent so repeated events never restart
     // or extend the accelerated flight; reset when the lifecycle ends.
     const acceleratedRef = useRef(false);
     // Nested-back landing: the remounted previous grid's card this level was
     // pushed from (e.g. the song card that opened the artist page). It cannot
     // be measured at arm time — the previous grid remounts only AFTER back is
     // pressed — so a poll hunts it and the exit springs retarget onto it.
-    const [nestedLanding, setNestedLanding] = useState<CollectionMorphPending | null>(null);
+    const [nestedLanding, setNestedLanding] = useState<CollectionMorphTarget | null>(null);
     const [nestedGaveUp, setNestedGaveUp] = useState(false);
     const nestedPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // When the current flight launched — gates the first hero probe past the
-    // outgoing grid's exit window (see startPolling).
+    const fastForwardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // When the current flight launched — gates the first hero probe so the
+    // incoming grid has laid out before it is measured (see startPolling).
     const flightStartedAtRef = useRef(0);
 
     const stopPolling = useCallback(() => {
@@ -186,11 +139,19 @@ export const CollectionMorphOverlay: React.FC = () => {
         }
     }, []);
 
+    const clearFastForwardTimer = useCallback(() => {
+        if (fastForwardTimerRef.current !== null) {
+            clearTimeout(fastForwardTimerRef.current);
+            fastForwardTimerRef.current = null;
+        }
+    }, []);
+
     const finishLifecycle = useCallback(() => {
         stopPolling();
         stopNestedPoll();
         clearSettleTimer();
         clearWatchdog();
+        clearFastForwardTimer();
         consume();
         setFlown(null);
         setTargets(null);
@@ -201,7 +162,7 @@ export const CollectionMorphOverlay: React.FC = () => {
         setNestedGaveUp(false);
         acceleratedRef.current = false;
         setStage('idle');
-    }, [clearSettleTimer, clearWatchdog, consume, stopNestedPoll, stopPolling]);
+    }, [clearFastForwardTimer, clearSettleTimer, clearWatchdog, consume, stopNestedPoll, stopPolling]);
 
     // Settle → crossfade text/cover → fade, only after targets are known (or
     // the poll gave up and the estimate stands in).
@@ -214,12 +175,10 @@ export const CollectionMorphOverlay: React.FC = () => {
     }, [clearSettleTimer]);
 
     useEffect(() => {
-        if (!targets || (stage !== 'flying' && stage !== 'settling')) {
+        if (!targets || stage !== 'flying') {
             return;
         }
-        if (stage === 'flying') {
-            armSettle();
-        }
+        armSettle();
     }, [targets, stage, armSettle]);
 
     useEffect(() => {
@@ -233,12 +192,27 @@ export const CollectionMorphOverlay: React.FC = () => {
         }, CROSSFADE_SECONDS * 1000 * 1.5);
     }, [stage, clearSettleTimer]);
 
+    // Records which card the user clicked. Attached from an effect (and disposed
+    // with it) rather than as a module side effect, so HMR cannot stack a second
+    // document listener behind the first.
+    useEffect(() => {
+        if (!enabled) {
+            return;
+        }
+        return attachMorphCapture(reportMorphCapture);
+    }, [enabled]);
+
+    // The setting can be flipped while a flight is in the air: finish it on the
+    // store so the grid can never be left with its hero hidden.
+    useEffect(() => {
+        if (enabled || stage === 'idle') {
+            return;
+        }
+        finishLifecycle();
+    }, [enabled, stage, finishLifecycle]);
+
     const startPolling = useCallback(() => {
         stopPolling();
-        // Delay the first probe past the outgoing grid's exit animation: its
-        // cards are still in the DOM until then and would be mistaken for the
-        // new hero. The flight glides toward the estimated centre meanwhile and
-        // the spring retargets once the real hero is measured.
         const deadline = Date.now() + HERO_POLL_START_DELAY_MS + HERO_POLL_MAX_MS;
         pollTimerRef.current = setInterval(() => {
             if (Date.now() - (flightStartedAtRef.current || Date.now()) < HERO_POLL_START_DELAY_MS) {
@@ -266,12 +240,11 @@ export const CollectionMorphOverlay: React.FC = () => {
                 return;
             }
             if (Date.now() > deadline) {
-                // Never hang the lifecycle: fall back to the estimate and let
-                // the animation finish + consume so the grid is always usable.
+                // Never park the composite: handing over to the fade is
+                // unconditional, even when the plan already expired. Otherwise
+                // the flight would freeze over an already-revealed grid until
+                // the watchdog fired.
                 stopPolling();
-                if (!useCollectionMorphStore.getState().plan) {
-                    return;
-                }
                 armSettle();
             }
         }, HERO_POLL_INTERVAL_MS);
@@ -282,6 +255,10 @@ export const CollectionMorphOverlay: React.FC = () => {
         setTargets(null);
         setExitPayload(null);
         clearSettleTimer();
+        clearFastForwardTimer();
+        acceleratedRef.current = false;
+        setFastForwarding(false);
+        setFfStart(null);
         flightStartedAtRef.current = Date.now();
         // Remember the top-level source card: the reverse morph flies back onto
         // exactly this home card when the user backs out later. Nested opens
@@ -296,11 +273,13 @@ export const CollectionMorphOverlay: React.FC = () => {
         } else if (payload.sourceKey) {
             setLastSource(payload, stackDepth);
         }
-        // The hero index in GridView is always the centered first track.
-        commitPlan({ heroIndex: 0 });
+        // The composite covers this grid's hero: hide it and reveal it as the
+        // composite fades. Contrast with 'cascade', which has nothing covering
+        // the hero and must therefore leave it visible.
+        commitPlan({ kind: 'morph' });
         setStage('flying');
         startPolling();
-    }, [clearSettleTimer, commitPlan, setLastHome, setLastSource, startPolling]);
+    }, [clearFastForwardTimer, clearSettleTimer, commitPlan, setLastHome, setLastSource, startPolling]);
 
     // Did the CURRENT navigation state move in the opening direction relative
     // to when the captured click's gesture began? A click that opens a
@@ -321,7 +300,8 @@ export const CollectionMorphOverlay: React.FC = () => {
     // observation window discards them instead of a phantom flight launching.
     useEffect(() => {
         if (
-            navigationOrigin !== 'home'
+            !enabled
+            || navigationOrigin !== 'home'
             || !pending
             || stage !== 'idle'
             || !navOpenedByGesture(pending)
@@ -330,18 +310,18 @@ export const CollectionMorphOverlay: React.FC = () => {
         }
         launchFlight(pending);
         ackPending();
-    }, [ackPending, launchFlight, navOpenedByGesture, navigationOrigin, pending, stage]);
+    }, [ackPending, enabled, launchFlight, navOpenedByGesture, navigationOrigin, pending, stage]);
 
     // A second capture while settling/fading restarts from the new pending
     // (e.g. quick back-out + reopen, or a nested push mid-settle) — but only
     // when that capture's gesture actually deepened the navigation.
     useEffect(() => {
-        if (!pending || !flown || pending === flown || !navOpenedByGesture(pending)) {
+        if (!enabled || !pending || !flown || pending === flown || !navOpenedByGesture(pending)) {
             return;
         }
         launchFlight(pending);
         ackPending();
-    }, [ackPending, flown, launchFlight, navOpenedByGesture, pending]);
+    }, [ackPending, enabled, flown, launchFlight, navOpenedByGesture, pending]);
 
     // Reverse flight: armed by the host right before backing out. It displaces
     // any forward-flight remnant and flies the hero elements back home.
@@ -356,8 +336,12 @@ export const CollectionMorphOverlay: React.FC = () => {
         setNestedGaveUp(false);
         stopNestedPoll();
         clearSettleTimer();
+        clearFastForwardTimer();
+        acceleratedRef.current = false;
+        setFastForwarding(false);
+        setFfStart(null);
         setStage('exiting');
-    }, [exit, clearSettleTimer, stopNestedPoll]);
+    }, [exit, clearFastForwardTimer, clearSettleTimer, stopNestedPoll]);
 
     // Nested-back destination poll: the previous grid remounts underneath
     // only after back is pressed, so the card this level was pushed from
@@ -415,7 +399,7 @@ export const CollectionMorphOverlay: React.FC = () => {
                 return;
             }
             stopNestedPoll();
-            const titleEl = el.querySelector<HTMLElement>('h3, [class*="font-bold"], [class*="title"]');
+            const titleEl = el.querySelector<HTMLElement>('h3, [data-folia-card-title], [class*="font-bold"]');
             const titleRect = titleEl?.getBoundingClientRect() ?? null;
             setNestedLanding({
                 frame: { x: wrapRect.left, y: wrapRect.top, width: wrapRect.width, height: wrapRect.height },
@@ -425,11 +409,8 @@ export const CollectionMorphOverlay: React.FC = () => {
                 coverUrl: coverEl?.src ?? null,
                 title: titleRect
                     ? { x: titleRect.left, y: titleRect.top, width: titleRect.width, height: titleRect.height }
-                    : null,
+                    : { x: wrapRect.left, y: wrapRect.top, width: wrapRect.width, height: wrapRect.height },
                 titleText: titleEl?.textContent?.trim() ?? '',
-                sourceKey: exitPayload.sourceKey,
-                navAtGestureStart: { wasOpen: true, depth: 0 },
-                capturedAt: Date.now(),
             });
         }, HERO_POLL_INTERVAL_MS);
         return stopNestedPoll;
@@ -489,8 +470,9 @@ export const CollectionMorphOverlay: React.FC = () => {
             stopNestedPoll();
             clearSettleTimer();
             clearWatchdog();
+            clearFastForwardTimer();
         };
-    }, [clearSettleTimer, clearWatchdog, stopNestedPoll, stopPolling]);
+    }, [clearFastForwardTimer, clearSettleTimer, clearWatchdog, stopNestedPoll, stopPolling]);
 
     const handleFadeComplete = useCallback(() => {
         if (stage !== 'fading') {
@@ -499,52 +481,52 @@ export const CollectionMorphOverlay: React.FC = () => {
         finishLifecycle();
     }, [finishLifecycle, stage]);
 
-    // Scroll = fast-forward. The morph doubles as a load cover, so when the
-    // user scrolls mid-flight they have already moved on — but the flight
-    // must visibly RUSH to its landing, not flash away mid-air. Each flying
-    // element's current on-screen rect is snapshotted and the remaining
-    // distance replays on a compressed tween (260ms), then a quick fade ends
-    // the lifecycle and releases the input blockade (~400ms total).
+    // Scroll — or a click on the blockade — = fast-forward. The morph doubles as
+    // a load cover, so when the user has already moved on the flight must
+    // visibly RUSH to its landing, not flash away mid-air. Each flying element's
+    // current on-screen rect is snapshotted and the remaining distance replays
+    // on a compressed tween (260ms), then a quick fade ends the lifecycle and
+    // releases the input blockade (~400ms total).
+    const accelerate = useCallback(() => {
+        if (acceleratedRef.current) {
+            return;
+        }
+        acceleratedRef.current = true;
+        if (stage === 'exiting') {
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
+            return;
+        }
+        if (stage === 'fading') {
+            // Already dissolving — just cap the remainder.
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 180);
+            return;
+        }
+        const rectOfFlight = (el: HTMLElement | null) => {
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            if (r.width < 1 || r.height < 1) return null;
+            return { x: r.left, y: r.top, width: r.width, height: r.height };
+        };
+        const frameRect = rectOfFlight(frameFlightRef.current);
+        const coverRect = rectOfFlight(coverFlightRef.current);
+        const titleRect = rectOfFlight(titleFlightRef.current);
+        if (!frameRect || !coverRect || !titleRect) {
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
+            return;
+        }
+        stopPolling();
+        clearSettleTimer();
+        setFfStart({ frame: frameRect, cover: coverRect, title: titleRect });
+        setFastForwarding(true);
+        // The compressed flight lands after FAST_FORWARD_FLIGHT_MS; hand
+        // over to the (already fast) fading stage from there.
+        fastForwardTimerRef.current = setTimeout(() => setStage('fading'), FAST_FORWARD_FLIGHT_MS);
+    }, [stage, finishLifecycle, stopPolling, clearSettleTimer]);
+
     useEffect(() => {
         if (stage === 'idle') {
             return;
         }
-        let finishTimer: ReturnType<typeof setTimeout> | null = null;
-        const accelerate = () => {
-            if (acceleratedRef.current) {
-                return;
-            }
-            acceleratedRef.current = true;
-            if (stage === 'exiting') {
-                finishTimer = setTimeout(() => finishLifecycle(), 120);
-                return;
-            }
-            if (stage === 'fading') {
-                // Already dissolving — just cap the remainder.
-                finishTimer = setTimeout(() => finishLifecycle(), 180);
-                return;
-            }
-            const rectOfFlight = (el: HTMLElement | null): CollectionMorphRect | null => {
-                if (!el) return null;
-                const r = el.getBoundingClientRect();
-                if (r.width < 1 || r.height < 1) return null;
-                return { x: r.left, y: r.top, width: r.width, height: r.height };
-            };
-            const frameRect = rectOfFlight(frameFlightRef.current);
-            const coverRect = rectOfFlight(coverFlightRef.current);
-            const titleRect = rectOfFlight(titleFlightRef.current);
-            if (!frameRect || !coverRect || !titleRect) {
-                finishTimer = setTimeout(() => finishLifecycle(), 120);
-                return;
-            }
-            stopPolling();
-            clearSettleTimer();
-            setFfStart({ frame: frameRect, cover: coverRect, title: titleRect });
-            setFastForwarding(true);
-            // The compressed flight lands after FAST_FORWARD_FLIGHT_MS; hand
-            // over to the (already fast) fading stage from there.
-            finishTimer = setTimeout(() => setStage('fading'), FAST_FORWARD_FLIGHT_MS);
-        };
         let dragStart: { x: number; y: number } | null = null;
         const onPointerDown = (event: PointerEvent) => {
             dragStart = { x: event.clientX, y: event.clientY };
@@ -566,16 +548,13 @@ export const CollectionMorphOverlay: React.FC = () => {
         window.addEventListener('pointermove', onPointerMove, { capture: true, passive: true });
         window.addEventListener('pointerup', onPointerUp, { capture: true, passive: true });
         return () => {
-            if (finishTimer !== null) {
-                clearTimeout(finishTimer);
-            }
             window.removeEventListener('wheel', accelerate, true);
             window.removeEventListener('touchmove', accelerate, true);
             window.removeEventListener('pointerdown', onPointerDown, true);
             window.removeEventListener('pointermove', onPointerMove, true);
             window.removeEventListener('pointerup', onPointerUp, true);
         };
-    }, [stage, finishLifecycle, stopPolling, clearSettleTimer]);
+    }, [stage, accelerate]);
 
     // Fast-forwarded fades end on a hard timer instead of waiting for every
     // spring to settle: the composite is invisible by then, but the input
@@ -588,7 +567,7 @@ export const CollectionMorphOverlay: React.FC = () => {
         return () => clearTimeout(finishTimer);
     }, [stage, fastForwarding, finishLifecycle]);
 
-    if (stage === 'idle') {
+    if (!enabled || stage === 'idle') {
         return null;
     }
 
@@ -603,315 +582,25 @@ export const CollectionMorphOverlay: React.FC = () => {
     // cascade in reverse. All curves share one Apple ease; opacity only
     // dissolves at the very end so the movement itself stays fully visible.
     if (stage === 'exiting' && exitPayload) {
-        const heroRect = exitPayload.from;
         // Nested backs land on the pushed-from card once the remounted grid
         // renders it (nestedLanding, hunted by the poll effect) — until then
         // the hero HOLDS in place over the incoming cascade; if the poll gave
         // up it shrinks away in place as before.
-        const landing = exitPayload.to ?? nestedLanding;
+        const landing = exitPayload.to ? toMorphTarget(exitPayload.to) : nestedLanding;
         const holding = exitPayload.nested
             && Boolean(exitPayload.sourceKey)
             && !landing
             && !nestedGaveUp;
-        const isNested = !landing;
-        // Nested back WITH a landing: fly onto the pushed-from card; top-level
-        // back: fly onto the original home card.
-        const homeRect: CollectionMorphRect = landing?.frame ?? heroRect.frame;
-        const homeCover: CollectionMorphRect = landing?.cover ?? heroRect.cover;
-        const homeTitle: CollectionMorphRect = landing?.title ?? heroRect.title;
-        const key = `exit-${exitPayload.armedAt}`;
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        const reach = Math.hypot(window.innerWidth, window.innerHeight) * 0.62 + 160;
-        const squadMaxDist = Math.max(
-            1,
-            ...exitPayload.squad.map((ghost) => Math.hypot(
-                ghost.rect.x + ghost.rect.width / 2 - cx,
-                ghost.rect.y + ghost.rect.height / 2 - cy,
-            )),
-        );
-        return (
-            portalRoot && createPortal(
-                <>
-                    {/* Same input blockade as the forward flight — the exit is
-                        short, and a stray click mid-flight must not re-trigger
-                        navigation underneath the scattering cards. */}
-                    <div
-                        data-folia-collection-morph="input-blocker"
-                        aria-hidden="true"
-                        className="fixed inset-0"
-                        style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-                    />
-                    <motion.div
-                        key={`${key}-backdrop`}
-                        data-folia-collection-morph="exit-backdrop"
-                        className="fixed inset-0 pointer-events-none"
-                        style={{ zIndex: COLLECTION_MORPH_Z_INDEX - 1, background: 'var(--bg-color)' }}
-                        initial={{ opacity: 1 }}
-                        animate={{ opacity: 0 }}
-                        transition={{ duration: EXIT_BACKDROP_SECONDS, ease: [...EXIT_EASE] }}
-                    />
-                    {/* Surrounding cards scatter outward — the fly-in in reverse,
-                        replayed as their real covers so the exit reads as the
-                        grid itself dissolving instead of empty frames. */}
-                    {exitPayload.squad.map((ghost, index) => {
-                        const rect = ghost.rect;
-                        const dX = rect.x + rect.width / 2 - cx;
-                        const dY = rect.y + rect.height / 2 - cy;
-                        const distance = Math.hypot(dX, dY);
-                        const direction = distance > 1
-                            ? { x: dX / distance, y: dY / distance }
-                            : { x: 0, y: -1 };
-                        // Deterministic jitter from the rect so the scatter
-                        // breathes like the entrance instead of sweeping.
-                        const seed = ((Math.round(rect.x) * 73856093) ^ (Math.round(rect.y) * 19349663)) >>> 0;
-                        const jitter = ((seed % 1000) / 1000 - 0.5) * 0.08;
-                        const normalized = Math.min(distance / squadMaxDist, 1);
-                        // Farther ghosts leave sooner and faster: a depth wave
-                        // rolls outward from the hero instead of a uniform sweep.
-                        const duration = 0.46 + normalized * 0.3;
-                        return (
-                            <motion.div
-                                key={`${key}-squad-${index}`}
-                                data-folia-collection-morph="squad"
-                                className="fixed rounded-xl overflow-hidden pointer-events-none"
-                                style={{
-                                    zIndex: COLLECTION_MORPH_Z_INDEX,
-                                    boxShadow: '0 10px 32px rgba(0,0,0,0.35)',
-                                    borderRadius: 14,
-                                    left: rect.x,
-                                    top: rect.y,
-                                    width: rect.width,
-                                    height: rect.height,
-                                    transformOrigin: '50% 50%',
-                                    willChange: 'transform, opacity',
-                                }}
-                                initial={{
-                                    x: 0,
-                                    y: 0,
-                                    rotate: 0,
-                                    scale: 1,
-                                    opacity: 1,
-                                }}
-                                animate={{
-                                    x: direction.x * reach * 0.5,
-                                    y: direction.y * reach * 0.5,
-                                    rotate: (seed % 2 === 0 ? 1 : -1) * (3.5 + (seed % 3) * 1.6),
-                                    scale: 0.84,
-                                    opacity: [1, 0.72, 0],
-                                }}
-                                transition={{
-                                    duration,
-                                    ease: [0.22, 1, 0.36, 1],
-                                    delay: 0.04 + normalized * 0.26 + jitter,
-                                    opacity: { duration, times: [0, 0.5, 1], ease: 'easeInOut' },
-                                }}
-                            >
-                                {ghost.coverUrl ? (
-                                    <img
-                                        src={ghost.coverUrl}
-                                        alt=""
-                                        className="absolute inset-0 w-full h-full object-cover"
-                                        draggable={false}
-                                    />
-                                ) : (
-                                    <div className="absolute inset-0 bg-zinc-800/40" />
-                                )}
-                                {/* Scrim + title strip keeps the ghost reading as
-                                    the real card it stood in for. */}
-                                <div
-                                    className="absolute inset-0"
-                                    style={{
-                                        background: 'linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,0.62) 100%)',
-                                    }}
-                                />
-                                <div className="absolute inset-0" style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)' }} />
-                                {ghost.titleText ? (
-                                    <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2">
-                                        <div
-                                            className="text-[11px] font-bold text-white truncate"
-                                            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}
-                                        >
-                                            {ghost.titleText}
-                                        </div>
-                                    </div>
-                                ) : null}
-                            </motion.div>
-                        );
-                    })}
-                    {/* Hero frame flies straight back onto the home card. While
-                        a nested back waits for its landing card, it holds in
-                        place (opacity 1) over the incoming cascade instead of
-                        dissolving before the destination exists. */}
-                    <motion.div
-                        key={`${key}-frame`}
-                        data-folia-collection-morph="frame"
-                        className="fixed rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.5)] pointer-events-none overflow-hidden"
-                        style={{
-                            zIndex: COLLECTION_MORPH_Z_INDEX + 1,
-                            background: 'var(--bg-color)',
-                            left: heroRect.frame.x,
-                            top: heroRect.frame.y,
-                            width: heroRect.frame.width,
-                            height: heroRect.frame.height,
-                            willChange: 'transform, opacity',
-                        }}
-                        initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, borderRadius: heroRect.round ? '50%' : undefined }}
-                        animate={holding
-                            ? {
-                                x: 0,
-                                y: 0,
-                                scaleX: 1,
-                                scaleY: 1,
-                                scale: 0.97,
-                                borderRadius: heroRect.round ? '50%' : undefined,
-                                opacity: 1,
-                            }
-                            : {
-                                ...flipTo(heroRect.frame, homeRect),
-                                scale: isNested ? 0.8 : 0.985,
-                                // From the artist's circular avatar: keep the circle
-                                // while shrinking away in place, round back into the
-                                // landing card's corners when flying onto it.
-                                borderRadius: heroRect.round
-                                    ? (isNested ? '50%' : '16px')
-                                    : undefined,
-                                opacity: [1, 1, 0],
-                            }}
-                        transition={{
-                            ...EXIT_SPRING,
-                            opacity: { duration: EXIT_DURATION_SECONDS, times: [0, 0.72, 1], ease: 'easeOut' },
-                        }}
-                        onAnimationComplete={handleExitComplete}
-                    />
-                    {/* Cover crossfades back into the home artwork mid-flight. */}
-                    <motion.div
-                        key={`${key}-cover`}
-                        data-folia-collection-morph="cover"
-                        className="fixed overflow-hidden rounded-xl pointer-events-none"
-                        style={{
-                            zIndex: COLLECTION_MORPH_Z_INDEX + 2,
-                            left: heroRect.cover.x,
-                            top: heroRect.cover.y,
-                            width: heroRect.cover.width,
-                            height: heroRect.cover.height,
-                            willChange: 'transform, opacity, filter',
-                        }}
-                        initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, rotate: 0, filter: 'blur(0px)', opacity: 1, borderRadius: heroRect.round ? '50%' : undefined }}
-                        animate={holding
-                            ? {
-                                x: 0,
-                                y: 0,
-                                scaleX: 1,
-                                scaleY: 1,
-                                scale: 0.96,
-                                rotate: 0,
-                                filter: 'blur(0px)',
-                                borderRadius: heroRect.round ? '50%' : undefined,
-                                opacity: 1,
-                            }
-                            : {
-                                ...flipTo(heroRect.cover, homeCover),
-                                scale: isNested ? 0.78 : 1,
-                                rotate: [0, 5, 1.6],
-                                // Artist avatar exit: the circle un-rounds back into
-                                // the landing card's cover on the way home.
-                                borderRadius: heroRect.round
-                                    ? (isNested ? '50%' : '12px')
-                                    : undefined,
-                                filter: ['blur(0px)', 'blur(1px)', 'blur(8px)'],
-                                opacity: [1, 1, 0],
-                            }}
-                        transition={{
-                            ...EXIT_SPRING,
-                            opacity: { duration: EXIT_DURATION_SECONDS, times: [0, 0.72, 1], ease: 'easeOut' },
-                        }}
-                    >
-                        {heroRect.coverUrl ? (
-                            <img src={heroRect.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-                        ) : (
-                            <div className="absolute inset-0 bg-zinc-800/40" />
-                        )}
-                        {landing?.coverUrl && landing.coverUrl !== heroRect.coverUrl ? (
-                            <motion.img
-                                src={landing.coverUrl}
-                                alt=""
-                                className="absolute inset-0 w-full h-full object-cover"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: EXIT_DURATION_SECONDS * 0.7, ease: 'easeOut' }}
-                                draggable={false}
-                            />
-                        ) : null}
-                    </motion.div>
-                    {/* Title glides home while the song title dissolves into the
-                        playlist title on the same curve. Box animation, not FLIP:
-                        hero and home title rects have different aspect ratios and
-                        non-uniform scale would stretch the glyphs. */}
-                    <motion.div
-                        key={`${key}-title`}
-                        data-folia-collection-morph="title"
-                        className="fixed pointer-events-none"
-                        style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 3, willChange: 'left, top, width, height, opacity, filter' }}
-                        initial={{
-                            left: heroRect.title.x,
-                            top: heroRect.title.y,
-                            width: heroRect.title.width,
-                            height: heroRect.title.height,
-                            filter: 'blur(0px)',
-                            opacity: [1, 1, 0],
-                        }}
-                        animate={holding
-                            ? {
-                                left: heroRect.title.x,
-                                top: heroRect.title.y,
-                                width: heroRect.title.width,
-                                height: heroRect.title.height,
-                                filter: 'blur(0px)',
-                                opacity: 1,
-                            }
-                            : {
-                                left: homeTitle.x,
-                                top: homeTitle.y,
-                                width: homeTitle.width,
-                                height: homeTitle.height,
-                                filter: ['blur(0px)', 'blur(1px)', 'blur(8px)'],
-                                opacity: [1, 1, 0],
-                            }}
-                        transition={{
-                            ...EXIT_SPRING,
-                            opacity: { duration: EXIT_DURATION_SECONDS, times: [0, 0.72, 1], ease: 'easeOut' },
-                        }}
-                    >
-                        <span
-                            className="absolute inset-0 font-bold truncate"
-                            style={{
-                                color: 'var(--text-primary)',
-                                fontSize: 'inherit',
-                                opacity: 1,
-                                transition: 'none',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.55)',
-                            }}
-                        >
-                            {heroRect.titleText || ' '}
-                        </span>
-                        <motion.span
-                            className="absolute inset-0 font-bold truncate"
-                            style={{
-                                color: 'var(--text-primary)',
-                                fontSize: 'inherit',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.55)',
-                            }}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: EXIT_DURATION_SECONDS * 0.7, ease: 'easeOut' }}
-                        >
-                            {landing?.titleText || ' '}
-                        </motion.span>
-                    </motion.div>
-                </>,
-                portalRoot,
-            )
+        return createPortal(
+            <MorphExitLayer
+                exit={exitPayload}
+                landing={landing}
+                holding={holding}
+                isNested={!landing}
+                onSkip={accelerate}
+                onExitComplete={handleExitComplete}
+            />,
+            portalRoot,
         );
     }
 
@@ -920,185 +609,39 @@ export const CollectionMorphOverlay: React.FC = () => {
     }
 
     const start = flown;
-    const target = targets ?? {
-        frame: estimateCenterTarget(),
-        cover: estimateCenterTarget(),
+    const estimated = estimateCenterTarget({ width: window.innerWidth, height: window.innerHeight });
+    const target: CollectionMorphTarget = targets ?? {
+        frame: estimated,
+        cover: estimated,
         coverUrl: null,
-        title: estimateCenterTarget(),
+        title: estimated,
         titleText: '',
     };
     const fading = stage === 'fading';
     // Crossfade the song content in as soon as the springs are settling, not
     // after — keeps the transition feeling like one continuous morph.
     const showHeroContent = stage === 'settling' || fading;
-    // Fast-forwarded flights snap their fades shut instead of dissolving.
-    const fadeSeconds = fastForwarding ? FAST_FORWARD_FADE_SECONDS : FADE_DURATION_SECONDS;
     // Artist destinations land on the circular avatar: the flying frame/cover
     // round themselves into a circle mid-flight instead of staying card-shaped.
     const artistLanding = navSnapshot?.stack[navSnapshot.stack.length - 1]?.type === 'artist';
 
     return createPortal(
-        <>
-            {/* Input blockade for the flight's duration: the morph is a load
-                cover, so interaction waits a beat. Scrolling fast-forwards the
-                flight (see the wheel effect), which releases this within
-                FAST_FORWARD_FINISH_MS — the delay is always short. */}
-            <div
-                data-folia-collection-morph="input-blocker"
-                aria-hidden="true"
-                className="fixed inset-0"
-                style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-            />
-            {/* Card frame: the whole border box glides and resizes onto the hero
-                card, lifting slightly (scale) then settling flat. */}
-            <motion.div
-                key={`morph-frame-${start.capturedAt}${fastForwarding ? '-ff' : ''}`}
-                ref={frameFlightRef}
-                data-folia-collection-morph="frame"
-                className="fixed rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.5)] pointer-events-none overflow-hidden"
-                style={{
-                    zIndex: COLLECTION_MORPH_Z_INDEX,
-                    background: 'var(--bg-color)',
-                    left: start.frame.x,
-                    top: start.frame.y,
-                    width: start.frame.width,
-                    height: start.frame.height,
-                    willChange: 'transform, opacity',
-                }}
-                initial={fastForwarding && ffStart
-                    ? { ...flipFromRect(ffStart.frame, start.frame), scale: 1, opacity: 1 }
-                    : { x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 0.97, opacity: 1 }}
-                animate={{
-                    ...flipTo(start.frame, target.frame),
-                    scale: 1,
-                    borderRadius: artistLanding ? '50%' : undefined,
-                    opacity: fading ? 0 : 1,
-                }}
-                transition={{
-                    ...(fastForwarding ? FAST_FORWARD_TWEEN : MORPH_SPRING),
-                    opacity: { duration: fadeSeconds, ease: 'easeOut' },
-                }}
-                onAnimationComplete={() => {
-                    if (fading) handleFadeComplete();
-                }}
-            />
-            {/* Cover: the same <img> the user clicked gliding onto the hero cover
-                with a whisper of rotation; motion blur sharpens to zero as it
-                lands, then the song artwork crossfades in. */}
-            <motion.div
-                key={`morph-cover-${start.capturedAt}${fastForwarding ? '-ff' : ''}`}
-                ref={coverFlightRef}
-                data-folia-collection-morph="cover"
-                className="fixed overflow-hidden rounded-xl pointer-events-none"
-                style={{
-                    zIndex: COLLECTION_MORPH_Z_INDEX + 1,
-                    left: start.cover.x,
-                    top: start.cover.y,
-                    width: start.cover.width,
-                    height: start.cover.height,
-                    willChange: 'transform, opacity, filter',
-                }}
-                initial={fastForwarding && ffStart
-                    ? { ...flipFromRect(ffStart.cover, start.cover), scale: 1, rotate: 0, filter: 'blur(3px)', opacity: 1 }
-                    : { x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 0.96, rotate: 2.4, filter: 'blur(6px)', opacity: 1 }}
-                animate={{
-                    ...flipTo(start.cover, target.cover),
-                    scale: 1,
-                    rotate: 0,
-                    borderRadius: artistLanding ? '50%' : undefined,
-                    filter: 'blur(0px)',
-                    opacity: fading ? 0 : 1,
-                }}
-                transition={{
-                    ...(fastForwarding ? FAST_FORWARD_TWEEN : MORPH_SPRING),
-                    opacity: { duration: fadeSeconds, ease: 'easeOut' },
-                }}
-            >
-                {start.coverUrl ? (
-                    <img src={start.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-                ) : (
-                    <div className="absolute inset-0 bg-zinc-800/40" />
-                )}
-                {targets?.coverUrl ? (
-                    <img
-                        src={targets.coverUrl}
-                        alt=""
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{ opacity: showHeroContent ? 1 : 0, transition: `opacity ${CROSSFADE_SECONDS}s ease` }}
-                        draggable={false}
-                    />
-                ) : null}
-            </motion.div>
-            {/* Title: label glides to the hero title slot; text swaps to the song
-                title mid-flight via crossfade. Both spans stack on the same spot
-                so the swap is a pure fade, never a layout shift.
-                NOTE: deliberately NOT FLIP — the start (home card title line)
-                and target (hero title slot) rects have different aspect ratios,
-                and non-uniform scaleX/scaleY permanently stretches the glyphs
-                ("一大坨"). Animating the box keeps the font fixed and the
-                landing pixel-exact; a single small text element is cheap. */}
-            <motion.div
-                key={`morph-title-${start.capturedAt}${fastForwarding ? '-ff' : ''}`}
-                ref={titleFlightRef}
-                data-folia-collection-morph="title"
-                className="fixed pointer-events-none"
-                style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 2, willChange: 'left, top, width, height, opacity, filter' }}
-                initial={fastForwarding && ffStart
-                    ? {
-                        left: ffStart.title.x,
-                        top: ffStart.title.y,
-                        width: ffStart.title.width,
-                        height: ffStart.title.height,
-                        filter: 'blur(2px)',
-                        opacity: 1,
-                    }
-                    : {
-                        left: (start.title ?? start.frame).x,
-                        top: (start.title ?? start.frame).y,
-                        width: (start.title ?? start.frame).width,
-                        height: (start.title ?? start.frame).height,
-                        filter: 'blur(5px)',
-                        opacity: 1,
-                    }}
-                animate={{
-                    left: target.title.x,
-                    top: target.title.y,
-                    width: target.title.width,
-                    height: target.title.height,
-                    filter: 'blur(0px)',
-                    opacity: fading ? 0 : 1,
-                }}
-                transition={{
-                    ...(fastForwarding ? FAST_FORWARD_TWEEN : MORPH_SPRING),
-                    opacity: { duration: fadeSeconds, ease: 'easeOut' },
-                }}
-            >
-                <span
-                    className="absolute inset-0 font-bold truncate"
-                    style={{
-                        color: 'var(--text-primary)',
-                        fontSize: 'inherit',
-                        opacity: showHeroContent ? 0 : 1,
-                        transition: `opacity ${CROSSFADE_SECONDS}s ease`,
-                        textShadow: '0 1px 2px rgba(0,0,0,0.55)',
-                    }}
-                >
-                    {start.titleText || ' '}
-                </span>
-                <span
-                    className="absolute inset-0 font-bold truncate"
-                    style={{
-                        color: 'var(--text-primary)',
-                        fontSize: 'inherit',
-                        opacity: showHeroContent ? 1 : 0,
-                        transition: `opacity ${CROSSFADE_SECONDS}s ease`,
-                        textShadow: '0 1px 2px rgba(0,0,0,0.55)',
-                    }}
-                >
-                    {target.titleText || ' '}
-                </span>
-            </motion.div>
-        </>,
+        <MorphFlightLayer
+            start={start}
+            target={target}
+            fastForwarding={fastForwarding}
+            ffStart={ffStart}
+            fading={fading}
+            showHeroContent={showHeroContent}
+            artistLanding={artistLanding}
+            frameRef={frameFlightRef}
+            coverRef={coverFlightRef}
+            titleRef={titleFlightRef}
+            onSkip={accelerate}
+            onFrameAnimationComplete={() => {
+                if (fading) handleFadeComplete();
+            }}
+        />,
         portalRoot,
     );
 };

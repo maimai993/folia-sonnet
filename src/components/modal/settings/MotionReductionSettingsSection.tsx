@@ -23,6 +23,7 @@ type MotionReductionSettingsSectionProps = {
 const SURFACE_LABEL_KEYS: Record<MotionSurfaceId, { label: string; desc: string }> = {
     lattice: { label: 'options.reduceMotionLattice', desc: 'options.reduceMotionLatticeDesc' },
     transitionOverlay: { label: 'options.reduceMotionTransitionOverlay', desc: 'options.reduceMotionTransitionOverlayDesc' },
+    collectionMorph: { label: 'options.reduceMotionCollectionMorph', desc: 'options.reduceMotionCollectionMorphDesc' },
     monetBackground: { label: 'options.reduceMotionMonetBackground', desc: 'options.reduceMotionMonetBackgroundDesc' },
     uiMicroMotion: { label: 'options.reduceMotionUiMicroMotion', desc: 'options.reduceMotionUiMicroMotionDesc' },
     settingsScroll: { label: 'options.reduceMotionSettingsScroll', desc: 'options.reduceMotionSettingsScrollDesc' },

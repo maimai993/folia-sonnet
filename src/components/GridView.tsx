@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls, useIsPresent } from 'framer-motion';
 import { ChevronLeft, Disc, Download, Play, Plus, Loader2, Heart, ListPlus, Pencil, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,20 @@ import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { PolaroidCard, type GridItem } from './folia-grid/PolaroidCard';
 import { squareGridCardBox } from './folia-grid/gridCardLayout';
+import {
+    resolveStoredFocusIndex,
+    type StoredGridViewNavigationState,
+} from './folia-grid/gridViewRestore';
+import {
+    ACTIVE_GRID_ATTR,
+    GRID_CARD_ITEM_ID_ATTR,
+} from './folia-grid/gridMorphContract';
+import {
+    collectionMorphFlyIn,
+    collectionMorphReach,
+    collectionMorphSeed,
+    type CollectionMorphPlan,
+} from './collectionOpenMorph/morphGeometry';
 import {
     applyHexCardFrameStyles,
     computeHexCardFrame,
@@ -100,23 +114,17 @@ interface GridViewProps {
     onStatusMessage?: (message: StatusMessage) => void;
     isInteractive?: boolean;
     /**
-     * Optional shared-element「移形换影」plan: when set, the hero card (the
-     * centered first track) stays static so the collectionOpenMorph overlay can
-     * morph the opened home card's frame/cover/title onto it, while every other
-     * card flies in from outside the viewport toward its grid slot in a distance
-     * sequence. Absent for every existing caller, so behavior is unchanged
-     * unless the collection morph overlay hands it in.
+     * Optional shared-element「移形换影」plan. Either way every non-hero card
+     * flies in from outside the viewport toward its grid slot in a distance
+     * sequence; `kind: 'morph'` additionally means the overlay's composite is
+     * currently covering the hero, so the hero stays hidden and dissolves in as
+     * the composite fades, while `kind: 'cascade'` (a push with no covering
+     * composite) must leave the hero visible — hiding it there would just show
+     * an empty slot for 340ms. Absent for every existing caller, so behavior is
+     * unchanged unless the collection morph hands it in.
      */
-    morphPlan?: { heroIndex: number } | null;
+    morphPlan?: CollectionMorphPlan | null;
 }
-
-type StoredGridViewNavigationState = {
-    focusedIndex: number;
-    focusedTrackId?: string | number;
-    dragX: number;
-    dragY: number;
-    searchQuery: string;
-};
 
 const GRID_VIEW_NAVIGATION_PREFIX = 'folia_gridview_state';
 const GRID_VIEW_LAST_INDEX_PREFIX = 'folia_gridview_last_index';
@@ -254,6 +262,11 @@ export const GridView: React.FC<GridViewProps> = ({
     morphPlan = null,
 }) => {
     const { t } = useTranslation();
+    // Marks this grid as the one on top while it is entering or settled. The
+    // exiting previous grid stays in the DOM during its exit animation with the
+    // same card attributes, so the morph's probes need this to avoid measuring
+    // the wrong grid's hero.
+    const isPresent = useIsPresent();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const fullBleedCover = useGridViewSettingsStore(state => state.gridViewFullBleedCover);
     // Only the full-bleed layout can be square: the polaroid frame needs the extra height for the
@@ -1344,12 +1357,7 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!pendingState || gridItems.length === 0 || baseCoords.length === 0) return;
         if (pendingState.searchQuery && deferredSearchQuery !== pendingState.searchQuery) return;
 
-        const trackIndex = pendingState.focusedTrackId === undefined
-            ? -1
-            : gridItems.findIndex(item => String(item.rawTrack?.id) === String(pendingState.focusedTrackId));
-        const restoredIndex = trackIndex >= 0
-            ? trackIndex
-            : Math.max(0, Math.min(pendingState.focusedIndex, gridItems.length - 1));
+        const restoredIndex = resolveStoredFocusIndex(pendingState, gridItems);
         const restoredCoord = baseCoords[restoredIndex];
         if (!restoredCoord) return;
 
@@ -1464,8 +1472,9 @@ export const GridView: React.FC<GridViewProps> = ({
     // React's focusedIndex is still 0 when the cards first render — radiating
     // the fly-in from index 0 of a grid that immediately restores elsewhere is
     // what left the cascade skewed. Reading the same session state GridView
-    // restores from keeps the origin exact from frame zero; -1 (restored search
-    // filter) skips the morph entrance and uses the plain one.
+    // restores from (through the same resolver the restore effect uses) keeps
+    // the origin exact from frame zero; -1 (restored search filter, whose items
+    // are not filtered yet) skips the morph entrance and uses the plain one.
     const morphHeroIndex = useMemo(() => {
         try {
             if (mode === 'tracks' && navigationStorageKey) {
@@ -1475,19 +1484,18 @@ export const GridView: React.FC<GridViewProps> = ({
                     if (parsed.searchQuery) {
                         return -1;
                     }
-                    const trackIndex = parsed.focusedTrackId === undefined
-                        ? -1
-                        : gridItems.findIndex((item) => String(item.rawTrack?.id) === String(parsed.focusedTrackId));
-                    const idx = trackIndex >= 0
-                        ? trackIndex
-                        : Math.max(0, Math.min(parsed.focusedIndex ?? 0, Math.max(gridItems.length - 1, 0)));
-                    return Number.isFinite(idx) && idx >= 0 && idx < gridItems.length ? idx : -1;
+                    const restored = resolveStoredFocusIndex(parsed, gridItems);
+                    if (restored >= 0) {
+                        return restored;
+                    }
                 }
             }
         } catch {
             // Unreadable session state — fall through to the live focus.
         }
-        return Math.max(0, Math.min(focusedIndex, Math.max(gridItems.length - 1, 0)));
+        return gridItems.length === 0
+            ? -1
+            : Math.max(0, Math.min(focusedIndex, gridItems.length - 1));
     }, [focusedIndex, gridItems, mode, navigationStorageKey]);
 
     const cardFlyInOffset = useMemo(() => {
@@ -1501,20 +1509,10 @@ export const GridView: React.FC<GridViewProps> = ({
         const hero = baseCoords[heroIndex];
         // Push entrance starts beyond the viewport diagonal so cards genuinely
         // arrive from outside the screen.
-        const reach = Math.hypot(containerSize.width, containerSize.height) * 0.62 + 160;
+        const reach = collectionMorphReach(containerSize.width, containerSize.height);
         const spacing = Math.max(layoutConfig.spacingX, layoutConfig.spacingY) || 1;
         return { hero, reach, spacing };
     }, [baseCoords, containerSize.height, containerSize.width, layoutConfig.spacingX, layoutConfig.spacingY, morphHeroIndex, morphPlan]);
-
-    // Deterministic per-item jitter (0..1) so the fly-in sequence feels like a
-    // breathing cascade instead of a mechanical sweep — stable across renders.
-    const morphFlyInJitter = useCallback((key: string): number => {
-        let hash = 0;
-        for (let i = 0; i < key.length; i += 1) {
-            hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
-        }
-        return (hash % 1000) / 1000;
-    }, []);
 
     const memoizedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
@@ -1530,41 +1528,26 @@ export const GridView: React.FC<GridViewProps> = ({
             const trackKey = String(item.id);
             const isRemovingTrack = removingTrackKeys.has(trackKey);
             // 「移形换影」: the hero (the card the viewport restores onto + centres)
-            // stays static for the overlay morph; every other card flies in from
-            // outside the viewport along its radial direction, staggered with an
-            // ease-out distance curve plus a deterministic jitter so the cascade
-            // breathes rather than sweeps.
-            const isMorphHero = Boolean(morphPlan && cardFlyInOffset && idx === morphHeroIndex);
+            // stays static while `kind === 'morph'` (the overlay's composite is
+            // covering it); every other card flies in from outside the viewport
+            // along its radial direction, staggered with an ease-out distance
+            // curve plus a deterministic jitter so the cascade breathes rather
+            // than sweeps.
+            const isMorphHero = Boolean(morphPlan?.kind === 'morph' && cardFlyInOffset && idx === morphHeroIndex);
             const isMorphFlyIn = Boolean(morphPlan && cardFlyInOffset && !isMorphHero);
             const morphFlyIn = isMorphFlyIn
-                ? (() => {
-                    const dxVector = coord.baseX - cardFlyInOffset!.hero.baseX;
-                    const dyVector = coord.baseY - cardFlyInOffset!.hero.baseY;
-                    const distance = Math.hypot(dxVector, dyVector);
-                    const direction = distance > 1
-                        ? { x: dxVector / distance, y: dyVector / distance }
-                        : { x: 0, y: -1 };
-                    // Ease-out stagger: nearest ring starts almost together,
-                    // the far cards trail noticeably; jitter breaks the grid
-                    // rhythm so the arrival reads as organic.
-                    const normalized = Math.min(distance / (cardFlyInOffset!.spacing * 14), 1);
-                    const eased = normalized * normalized * (3 - 2 * normalized);
-                    const seed = morphFlyInJitter(String(item.id));
-                    return {
-                        x: direction.x * cardFlyInOffset!.reach,
-                        y: direction.y * cardFlyInOffset!.reach,
-                        // Per-card tilt in a tight ±3.2° band from the same
-                        // deterministic seed: cards arrive with a slight roll
-                        // and settle flat, without ever reading as crooked.
-                        rotate: (seed - 0.5) * 6.4,
-                        delay: Math.min(0.04 + eased * 0.38 + seed * 0.1, 0.46),
-                    };
-                })()
+                ? collectionMorphFlyIn(
+                    { x: coord.baseX, y: coord.baseY },
+                    { x: cardFlyInOffset!.hero.baseX, y: cardFlyInOffset!.hero.baseY },
+                    cardFlyInOffset!.spacing,
+                    cardFlyInOffset!.reach,
+                    collectionMorphSeed(String(item.id)),
+                )
                 : null;
             return (
                 <div
                     key={`${mode}-${item.id}`}
-                    data-folia-grid-item-id={String(item.id)}
+                    {...{ [GRID_CARD_ITEM_ID_ATTR]: String(item.id) }}
                     ref={(el) => {
                         if (el) {
                             cardWrapperRefs.current[idx] = el;
@@ -1731,6 +1714,7 @@ export const GridView: React.FC<GridViewProps> = ({
         persistNavigationState,
         shouldAnimateItemEntrance,
         cardFlyInOffset,
+        morphHeroIndex,
         morphPlan,
     ]);
 
@@ -1962,6 +1946,7 @@ export const GridView: React.FC<GridViewProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            {...{ [ACTIVE_GRID_ATTR]: isPresent ? '' : undefined }}
             className="fixed inset-0 z-[110] flex flex-col justify-between overflow-hidden select-none"
             style={{
                 backgroundColor: 'var(--bg-color)',

@@ -31,7 +31,9 @@ import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../dev/renderCount';
 import { CollectionMorphOverlay } from '../../collectionOpenMorph/CollectionMorphOverlay';
-import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets, useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
+import { useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
+import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '../../collectionOpenMorph/morphProbes';
+import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -126,6 +128,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const morphPlan = useCollectionMorphStore(state => state.plan);
+    // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
+    // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
+    const morphEnabled = !useReducedMotionFor('collectionMorph');
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
@@ -178,13 +183,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
         // Nested open (album/artist inside a playlist): no home card was clicked,
         // so instead of the hero morph, hand the incoming grid a fly-in plan —
-        // its cards cascade in, matching every other grid entrance.
+        // its cards cascade in, matching every other grid entrance. The overlay
+        // upgrades it to 'morph' if a flight actually launches (origin 'home').
         const snapshot = useCollectionNavigationStore.getState().snapshot;
-        if (snapshot && snapshot.stack.length >= 1) {
-            useCollectionMorphStore.getState().commitPlan({ heroIndex: 0 });
+        if (morphEnabled && snapshot && snapshot.stack.length >= 1) {
+            useCollectionMorphStore.getState().commitPlan({ kind: 'cascade' });
         }
         onPushCollection(col);
-    }, [onPushCollection]);
+    }, [morphEnabled, onPushCollection]);
 
     const handleBackCollection = useCallback(() => {
         // Arm the reverse morph before the view flips. Two distinct gestures:
@@ -199,9 +205,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         const depth = snapshot?.stack.length ?? 0;
         // Artist pages morph from their circular avatar, not a song card.
         const activeType = snapshot?.stack[snapshot.stack.length - 1]?.type;
-        const hero = (activeType === 'artist'
-            ? probeArtistIntroTargets()
-            : probeHeroTargets()) ?? morphStore.hero;
+        const hero = morphEnabled
+            ? ((activeType === 'artist' ? probeArtistIntroTargets() : probeHeroTargets()) ?? morphStore.hero)
+            : null;
         if (hero) {
             const squad = probeGridSquadRects();
             if (depth <= 1 && snapshot?.origin === 'home' && morphStore.lastHome) {
@@ -209,12 +215,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             } else if (depth > 1) {
                 morphStore.armNestedExit(hero, squad);
                 // The previous collection remounts underneath: give it the same
-                // fly-in entrance so the cut reads as scatter-out → cascade-in.
-                morphStore.commitPlan({ heroIndex: 0 });
+                // cascade entrance so the cut reads as scatter-out → cascade-in.
+                // 'cascade', not 'morph': the reverse composite lands on the card
+                // this level was pushed from, which is not the previous grid's
+                // centred hero, so nothing is covering that hero.
+                morphStore.commitPlan({ kind: 'cascade' });
             }
         }
         onBackCollection();
-    }, [onBackCollection]);
+    }, [morphEnabled, onBackCollection]);
 
     useEffect(() => {
         if (
@@ -674,14 +683,21 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                         key="grid-transition-backdrop"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
-                        transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+                        // 时长跟着转场走：移形换影期间背景板要给飞行让出时间，而
+                        // search / player origin 的打开根本没有转场（overlay 只处理
+                        // origin 'home'），那里拖到 0.62s 只会像加载变慢了。
+                        exit={morphEnabled
+                            ? { opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }
+                            : { opacity: 0 }}
+                        transition={morphEnabled
+                            ? { duration: 0.62, ease: [0.22, 1, 0.36, 1] }
+                            : { duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                         className="fixed inset-0 z-[49] pointer-events-none"
                         style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                 )}
             </AnimatePresence>
-            <CollectionMorphOverlay />
+            <CollectionMorphOverlay enabled={morphEnabled} />
             <AnimatePresence initial={false}>
                 {displaySelectedCollection && (
                     displaySelectedCollection.type === 'artist' ? (
@@ -700,7 +716,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             localSongs={surfaceProps.localSongs}
                             onEditEntity={(entityId) => setEditingEntityId(entityId)}
                             isInteractive={isInteractive}
-                            morphPlan={morphPlan}
+                            morphPlan={morphEnabled ? morphPlan : null}
                         />
                     ) : (
                         <GridView
@@ -726,7 +742,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             theme={surfaceProps.theme}
                             isDaylight={isDaylight}
                             isInteractive={isInteractive}
-                            morphPlan={morphPlan}
+                            morphPlan={morphEnabled ? morphPlan : null}
                         />
                     )
                 )}

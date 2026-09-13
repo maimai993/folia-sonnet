@@ -91,6 +91,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "preferred_alternative_lyric_source",
   "prevent_display_sleep_during_playback",
   "queue_add_behavior",
+  "reduce_motion_collectionMorph",
   "reduce_motion_follow_system",
   "reduce_motion_lattice",
   "reduce_motion_monetBackground",

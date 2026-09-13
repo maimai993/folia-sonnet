@@ -20,6 +20,7 @@ import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
 export type MotionSurfaceId =
     | 'lattice'
     | 'transitionOverlay'
+    | 'collectionMorph'
     | 'monetBackground'
     | 'uiMicroMotion'
     | 'settingsScroll';
@@ -27,6 +28,7 @@ export type MotionSurfaceId =
 export const MOTION_SURFACE_IDS = [
     'lattice',
     'transitionOverlay',
+    'collectionMorph',
     'monetBackground',
     'uiMicroMotion',
     'settingsScroll',
@@ -39,6 +41,7 @@ export const SYSTEM_REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 const FOLLOW_SYSTEM_KEY = 'reduce_motion_follow_system';
 const LATTICE_KEY = 'reduce_motion_lattice';
 const TRANSITION_OVERLAY_KEY = 'reduce_motion_transitionOverlay';
+const COLLECTION_MORPH_KEY = 'reduce_motion_collectionMorph';
 const MONET_BACKGROUND_KEY = 'reduce_motion_monetBackground';
 const UI_MICRO_MOTION_KEY = 'reduce_motion_uiMicroMotion';
 const SETTINGS_SCROLL_KEY = 'reduce_motion_settingsScroll';
@@ -46,6 +49,7 @@ const SETTINGS_SCROLL_KEY = 'reduce_motion_settingsScroll';
 const SURFACE_STORAGE_KEYS: Record<MotionSurfaceId, string> = {
     lattice: LATTICE_KEY,
     transitionOverlay: TRANSITION_OVERLAY_KEY,
+    collectionMorph: COLLECTION_MORPH_KEY,
     monetBackground: MONET_BACKGROUND_KEY,
     uiMicroMotion: UI_MICRO_MOTION_KEY,
     settingsScroll: SETTINGS_SCROLL_KEY,

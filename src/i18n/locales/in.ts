@@ -1368,6 +1368,8 @@ export default {
     "reduceMotionLatticeDesc": "Ekspansi poster, penerbangan kamera, gelombang pembuka, inersia seret dan pudar lirik pada kolase antrean.",
     "reduceMotionTransitionOverlay": "Transisi mix",
     "reduceMotionTransitionOverlayDesc": "Cincin progres automix dan garis progres di sekeliling kartu yang sedang diputar.",
+    "reduceMotionCollectionMorph": "Transisi membuka koleksi",
+    "reduceMotionCollectionMorphDesc": "Morphing elemen bersama saat membuka koleksi dari kartu beranda: penerbangan kartu, sampul dan judul yang berubah ke hero detail, serta penyebaran dan penerbangan kembali saat keluar.",
     "reduceMotionMonetBackground": "Hanyutan latar Monet",
     "reduceMotionMonetBackgroundDesc": "Hanyutan lambat pada gambar latar yang berasal dari sampul.",
     "reduceMotionUiMicroMotion": "Mikro-gerakan antarmuka",
