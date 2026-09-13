@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../../helpers/appState';
+import { MOTION_SURFACE_IDS } from '../../../src/stores/useMotionSettingsStore';
 
 // test/ui/helpers/appFixtures.ts
 // The mocked Netease / Navidrome / local-library world the UI specs boot the app into.
@@ -198,6 +199,7 @@ export async function installBaseState(
     localImportFixture?: typeof localImportFixture;
     appVersion: string;
     guideVersionStorageKey: string;
+    motionSurfaces: string[];
   }) => {
     const createMatchMediaResult = (query: string) => ({
       matches: query.includes('light'),
@@ -229,9 +231,9 @@ export async function installBaseState(
     localStorage.setItem('default_theme_daylight', 'true');
     localStorage.setItem('static_mode', 'true');
     // 动效不再跟随系统偏好（issue #370），所以 emulateMedia({ reducedMotion: 'reduce' }) 自己
-    // 已经冻结不了任何东西了。截图基线要的是静止画面，得把每个动效面显式降级。
-    // 面的清单见 src/stores/useMotionSettingsStore.ts 的 MOTION_SURFACE_IDS。
-    for (const surface of ['lattice', 'transitionOverlay', 'monetBackground', 'uiMicroMotion', 'settingsScroll']) {
+    // 已经冻结不了任何东西了。截图基线要的是静止画面，得把每个动效面显式降级 —— 清单直接取自
+    // MOTION_SURFACE_IDS，新增一面（例如歌单展开转场）不必再回来改这里。
+    for (const surface of payload.motionSurfaces) {
       localStorage.setItem(`reduce_motion_${surface}`, 'true');
     }
     localStorage.setItem('last_app_view', 'home');
@@ -407,6 +409,7 @@ export async function installBaseState(
     localImportFixture: options.localImportFixture,
     appVersion: APP_VERSION,
     guideVersionStorageKey: GUIDE_VERSION_STORAGE_KEY,
+    motionSurfaces: [...MOTION_SURFACE_IDS],
   });
 }
 
