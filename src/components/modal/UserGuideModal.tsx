@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { Sparkles, X } from 'lucide-react';
 import { COMMAND_PALETTE_COMMANDS } from '../command-palette/commandRegistry';
 import type { Theme } from '../../types';
 import { UserGuidePageContent } from './UserGuidePageContent';
@@ -83,7 +84,7 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
                         exit={{ scale: 0.95, opacity: 0, y: 10 }}
                         transition={{ type: 'spring', bounce: 0, duration: 0.5 }}
                         onClick={(e) => e.stopPropagation()}
-                        className={`${bgClass} border rounded-[2rem] max-w-lg w-full max-h-[85vh] p-8 shadow-2xl relative overflow-hidden flex flex-col`}
+                        className={`${bgClass} border rounded-[2rem] max-w-lg w-full max-h-[85vh] p-8 max-[400px]:p-5 shadow-2xl relative overflow-hidden flex flex-col`}
                     >
                         <div className="absolute inset-0 pointer-events-none z-0">
                             <div
@@ -96,9 +97,27 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
                             />
                         </div>
 
-                        <div className="relative z-10 flex-1 overflow-y-auto min-h-0 hide-scrollbar">
+                        {page === 1 && (
+                            <div className="relative z-10 flex shrink-0 items-center gap-3 pb-5">
+                                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${isDaylight ? 'bg-blue-50 shadow-inner' : 'bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]'}`}>
+                                    <Sparkles size={24} className={isDaylight ? 'text-blue-500' : 'text-blue-400'} aria-hidden="true" />
+                                </div>
+                                <h2 className={`min-w-0 flex-1 text-xl font-extrabold tracking-tight ${textPrimary}`}>
+                                    {t('userGuide.title', '欢迎使用 Folia')}
+                                </h2>
+                                <button
+                                    type="button"
+                                    aria-label={t('ui.close')}
+                                    onClick={() => setIsUserGuideModalOpen(false)}
+                                    className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${secondaryBtnClass}`}
+                                >
+                                    <X size={18} aria-hidden="true" />
+                                </button>
+                            </div>
+                        )}
+
+                        <div key={`page-${page}`} className="relative z-10 flex-1 overflow-y-auto overscroll-contain min-h-0 hide-scrollbar">
                             <motion.div
-                                key={`page-${page}`}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 transition={{ duration: 0.12 }}
