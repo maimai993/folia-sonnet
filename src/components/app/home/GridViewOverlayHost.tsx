@@ -683,9 +683,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                         key="grid-transition-backdrop"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        // 时长跟着转场走：移形换影期间背景板要给飞行让出时间，而
-                        // search / player origin 的打开根本没有转场（overlay 只处理
-                        // origin 'home'），那里拖到 0.62s 只会像加载变慢了。
+                        // 时长只在降级时回到官方原版的 0.18s：移形换影关闭后不该还留着
+                        // 一段为飞行准备的慢淡入。开着的时候维持作者调的 0.62s / 0.28s。
                         exit={morphEnabled
                             ? { opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }
                             : { opacity: 0 }}

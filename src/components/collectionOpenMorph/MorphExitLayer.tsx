@@ -10,14 +10,19 @@ import {
     collectionMorphReach,
     collectionMorphRectSeed,
     flipTo,
+    MORPH_CARD_COVER_RADIUS,
+    MORPH_CARD_FRAME_RADIUS,
+    MORPH_CIRCLE_RADIUS,
     type CollectionMorphExit,
+    type CollectionMorphGeometry,
     type CollectionMorphRect,
-    type CollectionMorphTarget,
 } from './morphGeometry';
 
-// Exit springs breathe the same way on the way OUT: a little rebound at launch
-// and a soft settle into the home card.
-const EXIT_SPRING = { type: 'spring', stiffness: 420, damping: 22, mass: 0.8 } as const;
+// Exit spring: just past critical (ζ ≈ 0.85) so the launch keeps the small
+// rebound the exit is supposed to have, while the two scale axes still converge
+// together instead of wobbling against each other (they travel different
+// distances, so any real bounce shows up as the box breathing in aspect ratio).
+const EXIT_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.85 } as const;
 // Apple-style exit curve for dissolves (opacity/backdrop still breathe on this).
 const EXIT_EASE = [0.32, 0.72, 0, 1] as const;
 const EXIT_DURATION_SECONDS = 0.5;
@@ -28,9 +33,11 @@ interface MorphExitLayerProps {
     /**
      * Where the hero lands: the original home card, or (nested back) the card
      * this level was pushed from. Null while a nested back still waits for that
-     * card to render, or when no trustworthy source exists.
+     * card to render, or when no trustworthy source exists. Its `title` may be
+     * null (a click capture with no title line): the title layer then holds the
+     * hero's own title rect instead of flying to a box it never occupied.
      */
-    landing: CollectionMorphTarget | null;
+    landing: CollectionMorphGeometry | null;
     /** Nested back that has not found its landing card yet: hold in place. */
     holding: boolean;
     /** No landing at all: the hero shrinks away in place. */
@@ -66,11 +73,15 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
             ghost.rect.y + ghost.rect.height / 2 - cy,
         )),
     );
-    // 圆角一律 px：`50%` 与 `16px` 之间插值不出来。
-    const frameCircle = `${Math.min(heroRect.frame.width, heroRect.frame.height) / 2}px`;
-    const coverCircle = `${Math.min(heroRect.cover.width, heroRect.cover.height) / 2}px`;
-    const frameRadius = heroRect.round ? (isNested ? frameCircle : '16px') : undefined;
-    const coverRadius = heroRect.round ? (isNested ? coverCircle : '12px') : undefined;
+    // 圆角保持百分比写法：圆形落点必须是 `50%`（形变层渲染在 hero 的盒子里、再被非等比
+    // 缩放，百分比跟着缩放走才落在正圆上；换成 px 会变成被拉长的圆角矩形），飞回卡片时才
+    // 换成卡片的角半径。
+    const frameRadius = heroRect.round
+        ? (isNested ? MORPH_CIRCLE_RADIUS : MORPH_CARD_FRAME_RADIUS)
+        : undefined;
+    const coverRadius = heroRect.round
+        ? (isNested ? MORPH_CIRCLE_RADIUS : MORPH_CARD_COVER_RADIUS)
+        : undefined;
 
     return (
         <>
@@ -82,8 +93,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 aria-hidden="true"
                 className="fixed inset-0"
                 style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-                onPointerDownCapture={onSkip}
-            />
+                onClick={onSkip}            />
             <motion.div
                 key={`${key}-backdrop`}
                 data-folia-collection-morph="exit-backdrop"
@@ -201,7 +211,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                     height: heroRect.frame.height,
                     willChange: 'transform, opacity',
                 }}
-                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, borderRadius: heroRect.round ? frameCircle : undefined }}
+                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined }}
                 animate={holding
                     ? {
                         x: 0,
@@ -209,7 +219,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                         scaleX: 1,
                         scaleY: 1,
                         scale: 0.97,
-                        borderRadius: heroRect.round ? frameCircle : undefined,
+                        borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined,
                         opacity: 1,
                     }
                     : {
@@ -241,7 +251,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                     height: heroRect.cover.height,
                     willChange: 'transform, opacity, filter',
                 }}
-                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, rotate: 0, filter: 'blur(0px)', opacity: 1, borderRadius: heroRect.round ? coverCircle : undefined }}
+                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, rotate: 0, filter: 'blur(0px)', opacity: 1, borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined }}
                 animate={holding
                     ? {
                         x: 0,
@@ -251,7 +261,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                         scale: 0.96,
                         rotate: 0,
                         filter: 'blur(0px)',
-                        borderRadius: heroRect.round ? coverCircle : undefined,
+                        borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined,
                         opacity: 1,
                     }
                     : {

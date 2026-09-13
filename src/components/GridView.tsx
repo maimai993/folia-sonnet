@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence, useDragControls, useIsPresent } from 'framer-motion';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc, Download, Play, Plus, Loader2, Heart, ListPlus, Pencil, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +22,6 @@ import {
     type StoredGridViewNavigationState,
 } from './folia-grid/gridViewRestore';
 import {
-    ACTIVE_GRID_ATTR,
     GRID_CARD_ITEM_ID_ATTR,
 } from './folia-grid/gridMorphContract';
 import {
@@ -31,6 +30,7 @@ import {
     collectionMorphSeed,
     type CollectionMorphPlan,
 } from './collectionOpenMorph/morphGeometry';
+import ActiveGridMarker from './folia-grid/ActiveGridMarker';
 import {
     applyHexCardFrameStyles,
     computeHexCardFrame,
@@ -262,11 +262,6 @@ export const GridView: React.FC<GridViewProps> = ({
     morphPlan = null,
 }) => {
     const { t } = useTranslation();
-    // Marks this grid as the one on top while it is entering or settled. The
-    // exiting previous grid stays in the DOM during its exit animation with the
-    // same card attributes, so the morph's probes need this to avoid measuring
-    // the wrong grid's hero.
-    const isPresent = useIsPresent();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const fullBleedCover = useGridViewSettingsStore(state => state.gridViewFullBleedCover);
     // Only the full-bleed layout can be square: the polaroid frame needs the extra height for the
@@ -1946,7 +1941,6 @@ export const GridView: React.FC<GridViewProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            {...{ [ACTIVE_GRID_ATTR]: isPresent ? '' : undefined }}
             className="fixed inset-0 z-[110] flex flex-col justify-between overflow-hidden select-none"
             style={{
                 backgroundColor: 'var(--bg-color)',
@@ -1965,6 +1959,10 @@ export const GridView: React.FC<GridViewProps> = ({
                     />
                 </div>
             )}
+            {/* 把「我是当前这层网格」写在卡片容器上：移形换影的测量只在这个子树里找卡片，
+                否则正在退出的上一层网格会被当成落点。订阅关在子组件里，见 ActiveGridMarker。 */}
+            <ActiveGridMarker target={containerRef} />
+
             {/* Back Button */}
             <button
                 onClick={() => {

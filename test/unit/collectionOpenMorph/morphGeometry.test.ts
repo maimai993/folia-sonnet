@@ -8,7 +8,8 @@ import {
     flipFromRect,
     flipTo,
     isNearViewportCenter,
-    toMorphTarget,
+    isMorphTargetSettled,
+    MORPH_CIRCLE_RADIUS,
     type CollectionMorphRect,
 } from '@/components/collectionOpenMorph/morphGeometry';
 
@@ -163,17 +164,70 @@ describe('collectionMorphReach', () => {
     });
 });
 
-describe('toMorphTarget', () => {
-    it('falls back to the frame when the capture had no title line', () => {
-        const frame = rect(10, 20, 30, 40);
-        const target = toMorphTarget({ frame, cover: frame, coverUrl: null, title: null, titleText: 'Song' });
-        expect(target.title).toBe(frame);
-        expect(target.titleText).toBe('Song');
+describe('isMorphTargetSettled', () => {
+    const candidate = (key: string, frame: CollectionMorphRect, overrides: Partial<{ cover: CollectionMorphRect; title: CollectionMorphRect }> = {}) => ({
+        key,
+        frame,
+        cover: overrides.cover ?? frame,
+        title: overrides.title ?? frame,
     });
 
-    it('keeps a measured title rect as is', () => {
-        const frame = rect(10, 20, 30, 40);
-        const title = rect(12, 50, 26, 8);
-        expect(toMorphTarget({ frame, cover: frame, coverUrl: null, title, titleText: '' }).title).toBe(title);
+    it('needs two consecutive measurements of the same, still card', () => {
+        const first = candidate('a-1', rect(600, 400, 200, 260));
+        expect(isMorphTargetSettled(null, first, 1.5)).toBe(false);
+        expect(isMorphTargetSettled(first, candidate('a-1', rect(600, 400, 200, 260)), 1.5)).toBe(true);
+    });
+
+    it('rejects a different card (the grid is still panning to its restored focus)', () => {
+        const first = candidate('a-1', rect(600, 400, 200, 260));
+        expect(isMorphTargetSettled(first, candidate('a-9', rect(600, 400, 200, 260)), 1.5)).toBe(false);
+    });
+
+    it('falls back to the rectangles when a card carries no identifier', () => {
+        const first = candidate('', rect(600, 400, 200, 260));
+        expect(isMorphTargetSettled(first, candidate('', rect(600, 400, 200, 260)), 1.5)).toBe(true);
+        // 没有标识时仍然靠矩形判定：还在滑的卡片不会被接受。
+        expect(isMorphTargetSettled(first, candidate('', rect(600, 400, 200, 400)), 1.5)).toBe(false);
+    });
+
+    it('rejects a card that is still sliding, on any of the three rects', () => {
+        const first = candidate('a-1', rect(600, 400, 200, 260));
+        expect(isMorphTargetSettled(first, candidate('a-1', rect(608, 400, 200, 260)), 1.5)).toBe(false);
+        expect(isMorphTargetSettled(first, candidate('a-1', rect(600, 400, 200, 260), { cover: rect(610, 410, 190, 250) }), 1.5)).toBe(false);
+        expect(isMorphTargetSettled(first, candidate('a-1', rect(600, 400, 200, 260), { title: rect(600, 700, 200, 24) }), 1.5)).toBe(false);
+    });
+
+    it('accepts sub-pixel jitter from the measurement itself', () => {
+        const first = candidate('a-1', rect(600, 400, 200, 260));
+        expect(isMorphTargetSettled(first, candidate('a-1', rect(601, 400.4, 200.2, 260)), 1.5)).toBe(true);
+    });
+});
+
+// 圆形落点只能靠百分比圆角：形变层渲染在起点的盒子里再被非等比缩放，
+// px 圆角会在横竖两个方向缩出不同的半径，圆就变成圆角方框。
+describe('the circle radius contract', () => {
+    it('stays a percentage so it scales with the transform', () => {
+        expect(MORPH_CIRCLE_RADIUS).toBe('50%');
+    });
+
+    it('gives a non-square start box a real circle on a square target', () => {
+        const start = rect(0, 0, 200, 260);
+        const target = rect(100, 100, 240, 240);
+        const flip = flipTo(start, target);
+        const layoutRadius = (parseFloat(MORPH_CIRCLE_RADIUS) / 100) * start.width;
+        // 横竖两个方向缩放后必须相等，否则落点是个椭圆/圆角矩形。
+        const visualRadiusX = layoutRadius * flip.scaleX;
+        const visualRadiusY = (parseFloat(MORPH_CIRCLE_RADIUS) / 100) * start.height * flip.scaleY;
+        expect(visualRadiusX).toBeCloseTo(target.width / 2, 6);
+        expect(visualRadiusY).toBeCloseTo(target.height / 2, 6);
+        expect(visualRadiusX).toBeCloseTo(visualRadiusY, 6);
+    });
+
+    it('would be an ellipse if it were expressed in px', () => {
+        const start = rect(0, 0, 200, 260);
+        const target = rect(100, 100, 240, 240);
+        const flip = flipTo(start, target);
+        const pxRadius = Math.min(target.width, target.height) / 2;
+        expect(pxRadius * flip.scaleX).not.toBeCloseTo(pxRadius * flip.scaleY, 3);
     });
 });

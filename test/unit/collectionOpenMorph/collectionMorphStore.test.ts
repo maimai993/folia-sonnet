@@ -35,6 +35,7 @@ const hero = (round = false): CollectionMorphHeroMeasured => ({
     coverUrl: 'song.jpg',
     title: rect(620, 700, 200, 24),
     titleText: 'Song',
+    key: 'a-1',
     coverReady: true,
     round,
 });

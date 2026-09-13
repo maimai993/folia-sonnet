@@ -58,6 +58,12 @@ export interface CollectionMorphPending extends CollectionMorphGeometry {
 
 export interface CollectionMorphHeroMeasured extends CollectionMorphTarget {
     /**
+     * 这个测量来自哪个元素（网格卡片的 item id，或歌手页 intro 的固定标记）。
+     * 轮询用它判断「连续两次量到的是同一张卡」—— 网格恢复滚动的那一刻卡片还在滑，
+     * 只按「离中心最近」接受目标会让飞行半路改道到一张正在移动的卡上。
+     */
+    key: string;
+    /**
      * False while the hero's cover <img> is still in flight (network/blob
      * decode). The overlay holds its composite over the hero until the cover
      * finished — loaded OR failed — so the reveal never uncovers an empty
@@ -241,8 +247,48 @@ export const isNearViewportCenter = (
     return dx * dx + dy * dy < SQUAD_HERO_EXCLUSION_RADIUS * SQUAD_HERO_EXCLUSION_RADIUS;
 };
 
-/** 把「可能没有标题行」的采集结果补齐成一个完整的目标集合。 */
-export const toMorphTarget = (geometry: CollectionMorphGeometry): CollectionMorphTarget => ({
-    ...geometry,
-    title: geometry.title ?? geometry.frame,
-});
+/**
+ * 这次量到的落点和上次是不是「同一张卡、同一个位置」。
+ *
+ * 网格恢复滚动/焦点是挂载后若干帧才做的：刚挂上时卡片还在滑，只按「离屏幕中心最近」取目标
+ * 会让飞行半路改道到一张正在移动的卡上（看起来就是飞行中途拐弯）。要求连续两次是同一个
+ * 元素、矩形几乎不动，才允许把它当成落点 —— 用稳定性替代一个拍脑袋的等待毫秒数。
+ */
+export const isMorphTargetSettled = (
+    previous: { key: string; frame: CollectionMorphRect; cover: CollectionMorphRect; title: CollectionMorphRect } | null,
+    next: { key: string; frame: CollectionMorphRect; cover: CollectionMorphRect; title: CollectionMorphRect },
+    tolerancePx: number,
+): boolean => {
+    if (!previous) {
+        return false;
+    }
+    // 读不到标识（卡片没带 data 属性）时不当作致命：矩形稳定本身就是很强的证据，
+    // 两张不同的卡片不可能在同一帧占据同一个矩形。有无标识都不影响判据。
+    if (previous.key && next.key && previous.key !== next.key) {
+        return false;
+    }
+    const near = (a: CollectionMorphRect, b: CollectionMorphRect) => (
+        Math.abs(a.x - b.x) < tolerancePx
+        && Math.abs(a.y - b.y) < tolerancePx
+        && Math.abs(a.width - b.width) < tolerancePx
+        && Math.abs(a.height - b.height) < tolerancePx
+    );
+    return near(previous.frame, next.frame)
+        && near(previous.cover, next.cover)
+        && near(previous.title, next.title);
+};
+
+/**
+ * 圆形落点的圆角必须写成 `50%`，不能换算成 px。
+ *
+ * 形变层渲染在**起点**的盒子里（例如 200×260 的首页卡片），靠 scaleX/scaleY 缩放到目标
+ * （例如 240×240 的歌手头像）。百分比圆角是跟着盒子缩放走的：0.5 × 盒宽 × scaleX 恰好等于
+ * 0.5 × 目标宽，两个方向都等于目标的一半，所以目标方就是正圆。换成 `min(w,h)/2` px 之后，
+ * 圆角作用在起点的盒子上再被非等比缩放，横竖半径变成 (120×1.2, 120×0.923) —— 一个被拉长的
+ * 圆角矩形，也就是「白框变成了圆角方框」。
+ */
+export const MORPH_CIRCLE_RADIUS = '50%';
+
+/** 落回卡片时用的圆角（与 GridView/ArtistGridView 的卡片圆角一致）。 */
+export const MORPH_CARD_FRAME_RADIUS = '16px';
+export const MORPH_CARD_COVER_RADIUS = '12px';

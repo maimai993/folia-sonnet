@@ -64,6 +64,52 @@ test('a click on the blockade skips the flight instead of being swallowed', asyn
     await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'none');
 });
 
+test('an artist landing ends as a real circle, not a rounded square', async ({ mount, page }) => {
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-action="destination"]').click();
+    await expect(root.locator('[data-probe-destination]')).toHaveAttribute('data-probe-destination', 'artist');
+
+    // 起点是 200×260 的首页卡片，落点是 240×240 的歌手头像 —— 两个方向缩放不同。
+    await root.locator('[data-probe-home-card]').click();
+    await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'morph');
+
+    // 圆角必须是百分比：形变层渲染在起点的盒子里、靠 scaleX/scaleY 缩放，只有跟着缩放走的
+    // 百分比圆角才能在方形落点上收成正圆。写成 px（min(w,h)/2）会被非等比缩放拉成圆角方框。
+    const frameRadius = () => page.locator(FRAME).evaluate(el => getComputedStyle(el).borderTopLeftRadius);
+    const coverRadius = () => page.locator(COVER).evaluate(el => getComputedStyle(el).borderTopLeftRadius);
+    await expect.poll(frameRadius).toBe('50%');
+    await expect.poll(coverRadius).toBe('50%');
+
+    // 等弹簧落定再确认一次 —— 落点必须是「方形盒子 + 50%」，而不是飞行途中碰巧是百分比。
+    await expect.poll(async () => {
+        const box = await page.locator(FRAME).boundingBox();
+        return box ? Math.abs(box.width - box.height) : Number.POSITIVE_INFINITY;
+    }).toBeLessThan(2);
+    expect(await frameRadius()).toBe('50%');
+    expect(await coverRadius()).toBe('50%');
+});
+
+test('only the incoming grid carries the active mark while two grids overlap', async ({ mount, page }) => {
+    // 这条盖的是标记组件本身：collectionMorph 探针是手写属性的，测不到 useIsPresent 的翻转。
+    const root = await mount('activeGridMarker');
+    const active = page.locator('[data-folia-active-grid]');
+
+    await expect(active).toHaveCount(1);
+    await expect(active).toHaveAttribute('data-probe-grid', 'grid-0');
+
+    await root.locator('[data-probe-action="push"]').click();
+    await expect(root.locator('[data-probe-level]')).toHaveAttribute('data-probe-level', '1');
+
+    // 退出动画期间两层网格同时在 DOM 里：标记必须只在正在进入的那层上，
+    // 否则移形换影的测量会量到正在消失的上一页。
+    await expect(page.locator('[data-probe-grid]')).toHaveCount(2);
+    await expect(active).toHaveCount(1);
+    await expect(active).toHaveAttribute('data-probe-grid', 'grid-1');
+
+    await expect(page.locator('[data-probe-grid]')).toHaveCount(1);
+    await expect(active).toHaveAttribute('data-probe-grid', 'grid-1');
+});
+
 test('reduced motion never starts the transition', async ({ mount, page }) => {
     // store 在模块 import 时读 localStorage，所以种子必须写在页面脚本之前。
     await page.addInitScript(() => localStorage.setItem('reduce_motion_collectionMorph', 'true'));

@@ -1,7 +1,14 @@
 import React from 'react';
 import { CollectionMorphOverlay } from '../../src/components/collectionOpenMorph/CollectionMorphOverlay';
 import { useCollectionMorphStore } from '../../src/components/collectionOpenMorph/collectionMorphStore';
-import { ACTIVE_GRID_ATTR, CARD_TITLE_ATTR, GRID3D_CARD_INDEX_ATTR, GRID_CARD_ITEM_ID_ATTR } from '../../src/components/folia-grid/gridMorphContract';
+import {
+    ACTIVE_GRID_ATTR,
+    ARTIST_AVATAR_ATTR,
+    ARTIST_BIO_TITLE_ATTR,
+    CARD_TITLE_ATTR,
+    GRID3D_CARD_INDEX_ATTR,
+    GRID_CARD_ITEM_ID_ATTR,
+} from '../../src/components/folia-grid/gridMorphContract';
 import { useReducedMotionFor } from '../../src/hooks/useReducedMotionFor';
 import { useCollectionNavigationStore } from '../../src/stores/useCollectionNavigationStore';
 import { useMotionSettingsStore } from '../../src/stores/useMotionSettingsStore';
@@ -38,19 +45,25 @@ const cover = (label: string, color: string) => `data:image/svg+xml,${encodeURIC
 const HOME_COVER = cover('home', '#3b5bdb');
 const DETAIL_COVER = cover('detail', '#2f9e44');
 const STALE_COVER = cover('stale', '#c92a2a');
+const AVATAR_COVER = cover('avatar', '#7048e8');
 
-const PROBE_COLLECTION = {
+const PROBE_COLLECTION = (type: 'playlist' | 'artist') => ({
     source: 'navidrome',
-    type: 'playlist',
-    id: 'probe-playlist',
-    name: 'Probe Playlist',
-} as unknown as GridViewCollectionDescriptor;
+    type,
+    id: `probe-${type}`,
+    name: type === 'artist' ? 'Probe Artist' : 'Probe Playlist',
+}) as unknown as GridViewCollectionDescriptor;
 
 const cardBox = { position: 'absolute', left: 620, top: 420, width: 200, height: 260 } as React.CSSProperties;
 const coverBox = { width: 200, height: 200, display: 'block' } as React.CSSProperties;
+// 歌手头像：正方形，形变落点必须在这里变成正圆（起点那张首页卡片是 200×260，不是方的）。
+const avatarBox = { position: 'absolute', left: 600, top: 430, width: 240, height: 240 } as React.CSSProperties;
+const avatarCoverBox = { width: 240, height: 240, display: 'block', borderRadius: '50%' } as React.CSSProperties;
 
 const CollectionMorphProbe: React.FC = () => {
     const [open, setOpen] = React.useState(false);
+    // 目标页面：歌单（卡片落点）还是歌手（圆形头像落点）。
+    const [destination, setDestination] = React.useState<'playlist' | 'artist'>('playlist');
     // 「上一页」的网格：退出动画期间它还在 DOM 里，卡片属性一模一样。
     const [withStaleGrid, setWithStaleGrid] = React.useState(true);
     const morphEnabled = !useReducedMotionFor('collectionMorph');
@@ -60,7 +73,7 @@ const CollectionMorphProbe: React.FC = () => {
     // 写导航 store。计划由 overlay 在起飞时自己 commit（top-level 打开时宿主不 commit），
     // 所以这条断言同时验证了「计划的所有者」。
     const openCollection = () => {
-        useCollectionNavigationStore.getState().openRoot(PROBE_COLLECTION, 'home');
+        useCollectionNavigationStore.getState().openRoot(PROBE_COLLECTION(destination), 'home');
         setOpen(true);
     };
 
@@ -81,6 +94,17 @@ const CollectionMorphProbe: React.FC = () => {
                 <button type="button" data-probe-action="close" className={buttonClass} onClick={closeCollection}>
                     返回首页（清空导航与计划）
                 </button>
+                <button
+                    type="button"
+                    data-probe-action="destination"
+                    className={buttonClass}
+                    onClick={() => {
+                        closeCollection();
+                        setDestination(current => (current === 'artist' ? 'playlist' : 'artist'));
+                    }}
+                >
+                    目标：{destination === 'artist' ? '歌手页（圆形头像）' : '歌单（卡片）'}
+                </button>
                 <button type="button" data-probe-action="toggle-stale" className={buttonClass} onClick={() => setWithStaleGrid(v => !v)}>
                     旧网格：{withStaleGrid ? '在 DOM 里' : '已卸载'}
                 </button>
@@ -100,6 +124,7 @@ const CollectionMorphProbe: React.FC = () => {
                 <span data-probe-plan={plan?.kind ?? 'none'}>{plan?.kind ?? 'none'}</span>
                 {' · '}转场启用：<span data-probe-enabled={String(morphEnabled)}>{String(morphEnabled)}</span>
                 {' · '}详情页：<span data-probe-open={String(open)}>{String(open)}</span>
+                {' · '}目标：<span data-probe-destination={destination}>{destination}</span>
             </p>
 
             {/* 首页卡片。真实首页在详情页打开时只是 visibility: hidden（仍然可测量），这里照做。 */}
@@ -135,15 +160,31 @@ const CollectionMorphProbe: React.FC = () => {
                 </div>
             )}
 
-            {/* 活动网格：hero 落在视口正中（1440x1100 时是 720,550）。 */}
+            {/* 活动网格：hero 落在视口正中（1440x1100 时是 720,550）。歌手页用圆形头像 +
+                简介标题作为落点（probeArtistIntroTargets 走的是这两个属性）。 */}
             {open && (
                 <div {...{ [ACTIVE_GRID_ATTR]: '' }} data-probe-detail-grid style={{ position: 'fixed', inset: 0 }}>
-                    <div {...{ [GRID_CARD_ITEM_ID_ATTR]: 'a-1' }} data-probe-detail-card style={cardBox}>
-                        <img src={DETAIL_COVER} alt="" style={coverBox} />
-                        <div {...{ [CARD_TITLE_ATTR]: 'Detail Song' }} style={{ width: 200, height: 24, fontSize: 14 }}>
-                            Detail Song
+                    {destination === 'artist' ? (
+                        <>
+                            <div {...{ [ARTIST_AVATAR_ATTR]: '' }} data-probe-artist-avatar style={avatarBox}>
+                                <img src={AVATAR_COVER} alt="" style={avatarCoverBox} />
+                            </div>
+                            <h1
+                                {...{ [ARTIST_BIO_TITLE_ATTR]: '' }}
+                                data-probe-artist-title
+                                style={{ position: 'absolute', left: 620, top: 700, width: 200, height: 24, fontSize: 14 }}
+                            >
+                                Artist Name
+                            </h1>
+                        </>
+                    ) : (
+                        <div {...{ [GRID_CARD_ITEM_ID_ATTR]: 'a-1' }} data-probe-detail-card style={cardBox}>
+                            <img src={DETAIL_COVER} alt="" style={coverBox} />
+                            <div {...{ [CARD_TITLE_ATTR]: 'Detail Song' }} style={{ width: 200, height: 24, fontSize: 14 }}>
+                                Detail Song
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
@@ -155,7 +196,7 @@ const CollectionMorphProbe: React.FC = () => {
 const definition: ProbeDefinition = {
     id: 'collectionMorph',
     title: '歌单展开的移形换影转场',
-    description: '首页卡片 → 详情 hero 的共享元素形变、反向飞回、活动网格限定、降级与点击跳过。',
+    description: '首页卡片 → 详情 hero 的共享元素形变（含歌手圆形头像落点）、活动网格限定、降级与点击跳过。',
     Component: CollectionMorphProbe,
 };
 

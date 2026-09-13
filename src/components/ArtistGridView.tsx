@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence, useDragControls, useIsPresent } from 'framer-motion';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc, Loader2, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,6 @@ import { PolaroidCard } from './folia-grid/PolaroidCard';
 import { HEX_CARD_CENTER_SCALE } from './folia-grid/hexCardTransform';
 import { squareGridCardBox } from './folia-grid/gridCardLayout';
 import {
-    ACTIVE_GRID_ATTR,
     ARTIST_AVATAR_ATTR,
     ARTIST_BIO_TITLE_ATTR,
     ARTIST_INTRO_ATTR,
@@ -24,6 +23,7 @@ import {
     ARTIST_INTRO_VALUE_BIO,
     GRID_CARD_ITEM_ID_ATTR,
 } from './folia-grid/gridMorphContract';
+import ActiveGridMarker from './folia-grid/ActiveGridMarker';
 import {
     collectionMorphFlyIn,
     collectionMorphReach,
@@ -292,10 +292,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     morphPlan = null,
 }) => {
     const { t } = useTranslation();
-    // Marks this grid as the one on top while it is entering or settled (see
-    // gridMorphContract): the morph's probes must never measure the previous
-    // grid while it is still exiting.
-    const isPresent = useIsPresent();
     // The artist wall renders the same cards as GridView, so it follows the same look settings.
     const fullBleedCover = useGridViewSettingsStore(state => state.gridViewFullBleedCover);
     const squareCards = useGridViewSettingsStore(state => state.gridViewSquareCards) && fullBleedCover;
@@ -1332,10 +1328,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            {...{ [ACTIVE_GRID_ATTR]: isPresent ? '' : undefined }}
             className="fixed inset-0 z-50 flex flex-col font-sans select-none overflow-hidden"
             style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-color)' }}
         >
+            {/* 把「我是当前这层网格」写在根节点上：移形换影的测量只在这个子树里找落点，
+                否则正在退出的上一层网格会被当成目标。订阅关在子组件里，见 ActiveGridMarker。 */}
+            <ActiveGridMarker target={rootRef} />
+
             {backgroundCoverUrl && (
                 <div
                     className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0"

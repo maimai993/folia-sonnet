@@ -12,15 +12,19 @@ import {
     COLLECTION_MORPH_Z_INDEX,
     flipFromRect,
     flipTo,
+    MORPH_CIRCLE_RADIUS,
     type CollectionMorphPending,
     type CollectionMorphRect,
     type CollectionMorphTarget,
 } from './morphGeometry';
 
-// Springy-but-controlled: a visible overshoot (~2-4%) on arrival that breathes
-// back flat, without any extra oscillation tail. Stiffer/faster than before:
-// the morph now doubles as a load cover, so the flight must feel snappy.
-export const MORPH_SPRING = { type: 'spring', stiffness: 420, damping: 24, mass: 0.85 } as const;
+// Springy-but-controlled: it arrives on a near-critical spring so a full-screen
+// box that starts at one aspect ratio and lands at another never overshoots its
+// scaleX/scaleY INDEPENDENTLY — the two axes travel different distances, so any
+// visible bounce shows up as the frame breathing in aspect ratio, which reads as
+// rubber rather than silk. ζ ≈ 1 here; the "life" comes from the lift (scale
+// 0.97 → 1) and the rotation on the cover, not from oscillation.
+const MORPH_SPRING = { type: 'spring', stiffness: 380, damping: 36, mass: 0.85 } as const;
 export const FADE_DURATION_SECONDS = 0.18;
 export const CROSSFADE_SECONDS = 0.28;
 const FAST_FORWARD_TWEEN = { duration: 0.26, ease: [0.22, 1, 0.36, 1] } as const;
@@ -48,7 +52,8 @@ interface MorphFlightLayerProps {
     frameRef: React.Ref<HTMLDivElement>;
     coverRef: React.Ref<HTMLDivElement>;
     titleRef: React.Ref<HTMLDivElement>;
-    /** 点击封锁层 = 跳过转场（不然第一次点击只会被无声吞掉）。 */
+    /** 点击封锁层 = 跳过转场（不然第一次点击只会被无声吞掉）。
+     * 绑的是 click 而不是 pointerdown：触摸/按下就开始的拖动不应该把飞行催成一次急冲。 */
     onSkip: () => void;
     onFrameAnimationComplete: () => void;
 }
@@ -70,9 +75,6 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
     const fadeSeconds = fastForwarding ? FAST_FORWARD_FADE_SECONDS : FADE_DURATION_SECONDS;
     const spring = fastForwarding ? FAST_FORWARD_TWEEN : MORPH_SPRING;
     const suffix = fastForwarding ? '-ff' : '';
-    // 圆角一律用 px：`50%` → `16px` 是混合单位，插值不出来只会跳变。
-    const coverCircle = `${Math.min(target.cover.width, target.cover.height) / 2}px`;
-    const frameCircle = `${Math.min(target.frame.width, target.frame.height) / 2}px`;
 
     return (
         <>
@@ -86,7 +88,7 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 aria-hidden="true"
                 className="fixed inset-0"
                 style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-                onPointerDownCapture={onSkip}
+                onClick={onSkip}
             />
             {/* Card frame: the whole border box glides and resizes onto the hero
                 card, lifting slightly (scale) then settling flat. */}
@@ -111,7 +113,9 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 animate={{
                     ...flipTo(start.frame, target.frame),
                     scale: 1,
-                    borderRadius: artistLanding ? frameCircle : undefined,
+                    // 必须用百分比圆角：形变层渲染在起点的盒子里、靠 scaleX/scaleY 缩放，
+                    // 百分比跟着缩放走才会落在正圆上（见 morphGeometry 的说明）。
+                    borderRadius: artistLanding ? MORPH_CIRCLE_RADIUS : undefined,
                     opacity: fading ? 0 : 1,
                 }}
                 transition={{
@@ -144,7 +148,7 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                     ...flipTo(start.cover, target.cover),
                     scale: 1,
                     rotate: 0,
-                    borderRadius: artistLanding ? coverCircle : undefined,
+                    borderRadius: artistLanding ? MORPH_CIRCLE_RADIUS : undefined,
                     filter: 'blur(0px)',
                     opacity: fading ? 0 : 1,
                 }}

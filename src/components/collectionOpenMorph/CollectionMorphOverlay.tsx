@@ -7,13 +7,14 @@ import { reportMorphCapture, useCollectionMorphStore } from './collectionMorphSt
 import {
     COLLECTION_MORPH_Z_INDEX,
     estimateCenterTarget,
-    toMorphTarget,
+    isMorphTargetSettled,
     type CollectionMorphExit,
+    type CollectionMorphGeometry,
     type CollectionMorphHeroMeasured,
     type CollectionMorphPending,
     type CollectionMorphTarget,
 } from './morphGeometry';
-import { attachMorphCapture, probeArtistIntroTargets, probeHeroTargets } from './morphProbes';
+import { attachMorphCapture, findMorphCard, probeArtistIntroTargets, probeHeroTargets } from './morphProbes';
 
 // src/components/collectionOpenMorph/CollectionMorphOverlay.tsx
 // The match-cut both ways of the「移形换影」transition. Rendered via portal:
@@ -49,12 +50,16 @@ const FAST_FORWARD_FLIGHT_MS = 260;
 const FAST_FORWARD_FINISH_MS = 140;
 const HERO_POLL_INTERVAL_MS = 120;
 // The probe only ever measures the ACTIVE grid (see morphProbes.activeGridRoot),
-// so the outgoing grid's cards can no longer be mistaken for the hero. This
-// delay now only waits for the incoming grid to have laid its cards out at all
-// before the first measurement; the flight glides toward the estimated centre
-// meanwhile and the spring retargets once the real hero is measured.
-const HERO_POLL_START_DELAY_MS = 420;
+// so the outgoing grid's cards can no longer be mistaken for the hero. What is
+// left is the incoming grid's own restore pan: on its first frames the cards are
+// still sliding, so a target is accepted only once two consecutive polls measure
+// the SAME card at (nearly) the same rectangles. That gate — not a fixed delay —
+// is what keeps the flight from retargeting onto a moving card; the warmup below
+// only skips the first tick or two, before the grid has rendered at all.
+const HERO_POLL_WARMUP_MS = 90;
 const HERO_POLL_MAX_MS = 2400;
+// A candidate counts as settled when the same card repeats within this tolerance.
+const HERO_STABLE_TOLERANCE_PX = 1.5;
 // Absolute watchdog: beyond this the store is consumed whatever happens.
 const WATCHDOG_MS = 3000;
 
@@ -107,9 +112,12 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
     const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const watchdogTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fastForwardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    // When the current flight launched — gates the first hero probe so the
-    // incoming grid has laid out before it is measured (see startPolling).
+    // When the current flight launched — gates the warmup of the first hero probe.
     const flightStartedAtRef = useRef(0);
+    // Last polled hero candidate: the stability gate compares against it so a
+    // measurement taken while the incoming grid is still panning cannot become
+    // the flight target.
+    const heroCandidateRef = useRef<CollectionMorphHeroMeasured | null>(null);
 
     const stopPolling = useCallback(() => {
         if (pollTimerRef.current !== null) {
@@ -211,11 +219,16 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         finishLifecycle();
     }, [enabled, stage, finishLifecycle]);
 
+    // Is this candidate the same card, in the same place, as the previous tick?
+    // Only then is it safe to fly to: the incoming grid pans to its restored
+    // focus a few frames after mounting, and retargeting onto a card mid-pan is
+    // what makes the flight change direction in the air.
     const startPolling = useCallback(() => {
         stopPolling();
-        const deadline = Date.now() + HERO_POLL_START_DELAY_MS + HERO_POLL_MAX_MS;
+        heroCandidateRef.current = null;
+        const deadline = Date.now() + HERO_POLL_WARMUP_MS + HERO_POLL_MAX_MS;
         pollTimerRef.current = setInterval(() => {
-            if (Date.now() - (flightStartedAtRef.current || Date.now()) < HERO_POLL_START_DELAY_MS) {
+            if (Date.now() - (flightStartedAtRef.current || Date.now()) < HERO_POLL_WARMUP_MS) {
                 return;
             }
             const found = ((): CollectionMorphHeroMeasured | null => {
@@ -233,11 +246,15 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
             // (or failed): the morph is the load cover, so the reveal must
             // never uncover an empty frame. The deadline below still caps the
             // wait for covers that never resolve.
-            if (found && found.coverReady) {
-                setTargets(found);
-                setHero(found);
-                stopPolling();
-                return;
+            if (found) {
+                const settled = isMorphTargetSettled(heroCandidateRef.current, found, HERO_STABLE_TOLERANCE_PX);
+                heroCandidateRef.current = found;
+                if (settled && found.coverReady) {
+                    setTargets(found);
+                    setHero(found);
+                    stopPolling();
+                    return;
+                }
             }
             if (Date.now() > deadline) {
                 // Never park the composite: handing over to the fade is
@@ -355,19 +372,18 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         if (stage !== 'exiting' || !exitPayload?.nested || !exitPayload.sourceKey) {
             return;
         }
-        const id = exitPayload.sourceKey.startsWith('item:')
-            ? exitPayload.sourceKey.slice('item:'.length)
-            : null;
-        if (!id) {
+        // Only a detail-grid card (`item:`) can reappear inside the remounted
+        // grid; a home-slider handle has nothing to look for here.
+        if (!exitPayload.sourceKey.startsWith('item:')) {
             return;
         }
         const startedAt = Date.now();
         const deadline = startedAt + 1800;
         let lastCoverRect: { left: number; top: number } | null = null;
         nestedPollRef.current = setInterval(() => {
-            const el = document.querySelector<HTMLElement>(
-                `[data-folia-grid-item-id="${CSS.escape(id)}"]`,
-            );
+            // 只在当前这一层网格里找：正在退出的那一页（例如歌手页）可能带着同一个
+            // item id，文档级查询会先命中它，落点就飞到一张正在消失的卡上。
+            const el = findMorphCard(exitPayload.sourceKey, 'active-grid');
             if (!el) {
                 if (Date.now() > deadline) {
                     stopNestedPoll();
@@ -586,7 +602,7 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         // renders it (nestedLanding, hunted by the poll effect) — until then
         // the hero HOLDS in place over the incoming cascade; if the poll gave
         // up it shrinks away in place as before.
-        const landing = exitPayload.to ? toMorphTarget(exitPayload.to) : nestedLanding;
+        const landing: CollectionMorphGeometry | null = exitPayload.to ?? nestedLanding;
         const holding = exitPayload.nested
             && Boolean(exitPayload.sourceKey)
             && !landing

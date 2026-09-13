@@ -63,15 +63,45 @@ const titleOrFrame = (root: Element, fallback: CollectionMorphRect): CollectionM
 /**
  * 当前活动的详情网格根。出栈的旧网格在退出动画期间仍留在 DOM 里，并且带着同样的
  * 卡片属性；不限定范围就会量到旧网格的卡片 —— 那正是「飞行目标偶尔是上一页那张卡」
- * 的来源。GridView / ArtistGridView 用 framer 的 useIsPresent() 写入这个属性，所以
- * 同一时刻只可能有一个。属性缺失时退回整篇文档，保证转场不会因为标记丢失而整个失效。
- * 没有 document（单测、OBS 源的非浏览器上下文）时返回 null，调用方直接放弃测量。
+ * 的来源。GridView / ArtistGridView 里的 ActiveGridMarker 用 framer 的 useIsPresent()
+ * 把这个属性写在卡片容器上，所以同一时刻只可能有一个。属性缺失时退回整篇文档，保证
+ * 转场不会因为标记丢失而整个失效。没有 document（单测、非浏览器上下文）时返回 null。
  */
-const activeGridRoot = (): ParentNode | null => {
+export const activeGridRoot = (): ParentNode | null => {
     if (typeof document === 'undefined') {
         return null;
     }
     return document.querySelector(`[${ACTIVE_GRID_ATTR}]`) ?? document;
+};
+
+const cardSelectorForSourceKey = (sourceKey: string): string | null => {
+    if (sourceKey.startsWith('grid3d:')) {
+        return `[${GRID3D_CARD_INDEX_ATTR}="${CSS.escape(sourceKey.slice('grid3d:'.length))}"]`;
+    }
+    if (sourceKey.startsWith('item:')) {
+        return `[${GRID_CARD_ITEM_ID_ATTR}="${CSS.escape(sourceKey.slice('item:'.length))}"]`;
+    }
+    return null;
+};
+
+/**
+ * 按 sourceKey 找卡片元素。`scope: 'active-grid'` 是嵌套返回用的：被点的那张卡在新挂载的
+ * 上一层网格里，而正在退出的当前页（例如歌手页）可能恰好也有同一个 item id，文档级查询
+ * 会先命中它，落点就会飞到一张正在消失的卡上。
+ */
+export const findMorphCard = (
+    sourceKey: string | null,
+    scope: 'document' | 'active-grid' = 'document',
+): HTMLElement | null => {
+    if (!sourceKey || typeof document === 'undefined') {
+        return null;
+    }
+    const selector = cardSelectorForSourceKey(sourceKey);
+    if (!selector) {
+        return null;
+    }
+    const root = scope === 'active-grid' ? activeGridRoot() : document;
+    return root?.querySelector<HTMLElement>(selector) ?? null;
 };
 
 // Locates the detail grid's hero card — the visible card closest to the
@@ -117,7 +147,15 @@ export const probeHeroTargets = (): CollectionMorphHeroMeasured | null => {
     const titleEl = resolveCardTitleElement(hero);
     const title = titleOrFrame(hero, frame);
     const titleText = (titleEl?.textContent ?? '').trim();
-    return { frame, cover, coverUrl, title, titleText, coverReady: !heroImg || heroImg.complete };
+    return {
+        frame,
+        cover,
+        coverUrl,
+        title,
+        titleText,
+        key: hero.getAttribute(GRID_CARD_ITEM_ID_ATTR) ?? '',
+        coverReady: !heroImg || heroImg.complete,
+    };
 };
 
 // Probes the artist page's intro cluster — the circular avatar (the hero the
@@ -151,6 +189,7 @@ export const probeArtistIntroTargets = (): CollectionMorphHeroMeasured | null =>
         coverUrl,
         title,
         titleText,
+        key: 'artist-intro',
         coverReady: !avatarImg || avatarImg.complete,
         round: true,
     };
@@ -245,19 +284,7 @@ export const captureClickedCard = (target: Element): CollectionMorphCapture | nu
 // scrolled out of the rendered window cannot be measured: the caller keeps the
 // click-time rectangles in that case.
 export const measureCardGeometry = (sourceKey: string | null): CollectionMorphGeometry | null => {
-    if (!sourceKey || typeof document === 'undefined') {
-        return null;
-    }
-    let el: HTMLElement | null = null;
-    if (sourceKey.startsWith('grid3d:')) {
-        el = document.querySelector<HTMLElement>(
-            `[${GRID3D_CARD_INDEX_ATTR}="${CSS.escape(sourceKey.slice('grid3d:'.length))}"]`,
-        );
-    } else if (sourceKey.startsWith('item:')) {
-        el = document.querySelector<HTMLElement>(
-            `[${GRID_CARD_ITEM_ID_ATTR}="${CSS.escape(sourceKey.slice('item:'.length))}"]`,
-        );
-    }
+    const el = findMorphCard(sourceKey, 'document');
     if (!el) {
         return null;
     }
