@@ -60,10 +60,10 @@ function createWindowsWallpaperController(options = {}) {
     // (mode) => void for the desktop architecture reported by `attached` events
     // ('classic' = Win10/early Win11 WorkerW sibling, 'raised' = Win11 24H2+ Progman child).
     onAttachMode,
-    // (event) => void for helper mouse events (mousemove/mousedown/mouseup in 96-DPI
-    // virtualized screen pixels — the helper is DPI-unaware, which matches Electron's DIP
-    // space; see the helper's mouse_forward.rs). The main process injects these into the
-    // renderer via webContents.sendInputEvent — posted WM_MOUSEMOVE cannot be used because
+    // (event) => void for helper mouse events (mousemove/mousedown/mouseup in *physical* screen
+    // pixels — the helper is per-monitor DPI aware; the consumer converts them with
+    // screen.screenToDipPoint, see windowsWallpaperMouse.cjs). The main process injects these into
+    // the renderer via webContents.sendInputEvent — posted WM_MOUSEMOVE cannot be used because
     // Chromium's TrackMouseEvent tears the hover state back down between every forwarded move
     // (the real cursor sits above us on the desktop icon layer).
     onMouseInput,

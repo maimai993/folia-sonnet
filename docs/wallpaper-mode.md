@@ -51,10 +51,12 @@ store 中平台共享的持久化键：
 
 ```
 Electron 主进程 (main.cjs)
+  ├─ windowsWallpaperTarget.cjs          目标显示器判定（主窗口所在屏）
+  ├─ windowsWallpaperMouse.cjs           helper 物理坐标 → Chromium DIP → sendInputEvent
   └─ windowsWallpaperController.cjs      spawn/心跳看门狗/重挂调度/crash-loop breaker
        └─ folia-wallpaper-helper.exe     Rust 常驻进程（packaging/windows/wallpaper-helper/）
-            ├─ attach.rs        WorkerW 双探测（classic + 24H2 raised）→ SetParent
-            ├─ mouse_forward.rs Raw Input → JSONL 鼠标/滚轮事件（前台过滤）
+            ├─ attach.rs        WorkerW 双探测（classic + 24H2 raised）→ SetParent + 目标屏几何
+            ├─ mouse_forward.rs Raw Input → JSONL 鼠标/滚轮事件（物理像素、前台过滤）
             └─ monitor.rs       WinEvent + TaskbarCreated → 自动重挂 / z 序守卫 / 心跳
 ```
 
@@ -62,12 +64,13 @@ Electron 主进程 (main.cjs)
 
 ### 2. helper 协议（`packaging/windows/wallpaper-helper/`）
 
-- CLI：`attach --hwnd <n> [--forward-mouse] [--zguard]`（常驻）、`move --hwnd <n>`、`detach --hwnd <n>`、`refresh`（一次性，重应用当前壁纸）。stdin 收到 `detach`（或 EOF，防孤儿壁纸）先还原窗口再退出。
-- stdout JSONL 事件（主进程 `parseHelperEventLine` 解析）：`attached{mode:"classic"|"raised"}` / `heartbeat`(5s) / `workerw-destroyed` / `explorer-restarted` / `reasserted` / `moved` / `detached` / `error{message, kind?}`。`kind:"window-destroyed"` 是结构化契约（Folia 窗口随 WorkerW 一并销毁、主进程必须重建），`message` 只给人读、主进程不得解析其文本。鼠标事件坐标为 96-DPI 虚拟化屏幕坐标（恰与 Electron DIP 空间一致）：`mousemove{x,y}`（16ms 合并 ~60Hz）/ `mousedown` / `mouseup` / `mousewheel{x,y,deltaX,deltaY}`。
+- CLI：`attach --hwnd <n> [--forward-mouse] [--zguard]`（常驻）、`move --hwnd <n>`、`detach --hwnd <n>`、`refresh`（一次性，重应用当前壁纸）。stdin 收到 `detach`（或 EOF，防孤儿壁纸）先还原窗口再退出。未知选项直接报错退出，避免主进程拼错参数被静默忽略。
+- stdout JSONL 事件（主进程 `parseHelperEventLine` 解析）：`attached{mode:"classic"|"raised"}` / `heartbeat`(5s) / `workerw-destroyed` / `explorer-restarted` / `reasserted` / `moved` / `detached` / `error{message, kind?}`。`kind:"window-destroyed"` 是结构化契约（Folia 窗口随 WorkerW 一并销毁、主进程必须重建），`message` 只给人读、主进程不得解析其文本。鼠标事件坐标为**物理屏幕像素**（helper 进程级 per-monitor DPI 感知，无坐标虚拟化）：`mousemove{x,y}`（16ms 合并 ~60Hz）/ `mousedown` / `mouseup` / `mousewheel{x,y,deltaX,deltaY}`。
 - 实现约束（来自上游踩坑）：
   - **`EnumWindows` 的 windows-rs `Result` 语义是反的**——回调返回 0 提前停止枚举会让 raw API 返回 FALSE、映射为 `Err`；探测结果必须以回调写入的指针为准，不得用 `is_ok()` 判定成败。Win10 classic 路径曾因此永远探测失败，且每次失败多发一次 0x052C，在桌面上堆积废弃 WorkerW。
   - **0x052C 只在 WorkerW 缺失时发送**——对已存在的 raised WorkerW 重发会让 Explorer 重建整个层级并连带销毁已挂入窗口（Seelen UI 陷阱修复）。classic 重探带 10×100ms 重试：WorkerW 创建在 Explorer 侧是异步的，单次立即重探在全新桌面上会竞态失败。
   - **鼠标注入必须走主进程 `sendInputEvent`**（见「交互边界」）；前台过滤（Lively `IsDesktop()`）：仅当 `GetForegroundWindow()` 是 Progman、持有 `SHELLDLL_DefView` 的图标层 WorkerW（classic 桌面点击落点）或壁纸 WorkerW 才上报；按住左键拖拽期间（含补发的 mouseup）豁免，避免渲染端卡在按下状态。
+  - **`SetParent` 不改变子窗口的父客户区坐标**——重挂后窗口的屏幕位置会平移到宿主 WorkerW 的原点，所以「窗口现在在哪块屏」在重挂后失去意义。目标屏必须在 `SetParent` 之前取，宿主也按该屏挑选（见主进程接入节）；这是多屏下壁纸只铺一块屏的根因。
   - **explorer 重启** = `TaskbarCreated` 广播 + `Shell_TrayWnd` PID 变化（DPI 变化也广播该消息，只有 PID 变化才算重启）。
   - **z 序守卫**：WinEvent `EVENT_OBJECT_REORDER` + 10s 低频重申，可关。
   - **滚轮转发为 Folia 自研**——上游三家均未实现（Lively 该路径被注释、electron-as-wallpaper 吞掉 HWHEEL）。delta ±120/notch，垂直轴直传。
@@ -79,13 +82,15 @@ Electron 主进程 (main.cjs)
 - 控制器状态机：spawn → 心跳看门狗（5s/15s 超时）→ 异常退出重挂（2s 退避）→ 连续 3 次失败降级（清 `wallpaper_mode`、原位还原普通窗口，不重启进程）。要点：**主动 detach 后的 helper 退出不得触发重挂**（否则关闭模式后新窗口被僵尸重挂拖回 WorkerW 层）；迟到 exit 事件以 `helperProcess === child` 判定归属（否则 kill+attach 竞态会在同一 hwnd 上挂两个 helper、鼠标双份注入）；`attach()` 在 `wallpaper_mode=false` 时拒绝启动；**从未 attached 的早夭/心跳挂死会话同样计入降级**（否则损坏的 helper 秒退会无限 2s respawn）；失败计数持久化 `wallpaper_windows_failure_count`，健康 60s 清零。
 - `error.kind === "window-destroyed"` → 走窗口重建而非普通重挂；renderer 崩溃 → 原地 reload；窗口随 WorkerW 连带销毁时 `window-all-closed` 同样触发重建（`isAppQuitting` 区分）。helper 的鼠标转发注册失败是致命契约（发 error 后立即退出——其下方图标层使壁纸页收不到任何真实系统输入，无鼠标的壁纸页不可交互），反复失败由降级闩锁关闭壁纸模式。
 - `display-metrics-changed` 按平台（win32）注册、回调内判模式——不能挂在启动时的 `isWindowsWallpaperMode()` 分支：Windows 开关模式不重启进程，运行时开启后监听必须仍在。
-- 几何重申（`move` / attach 后）用 `GetAncestor(GA_PARENT)` 取父窗口（WorkerW）做 `ScreenToClient` 换算 monitor 原点——对 Folia 窗口自身换算只在「窗口位于父客户区 (0,0)」时碰巧正确，多屏虚拟屏原点非 (0,0) 时会挂错显示器。
-- 开关路径：`scheduleWallpaperModeRelaunch`（300ms 合并）→ win32 分支**重建窗口**（含 handoff）；显示器变化 → DIP 重设 + helper `move` 重设物理几何。
-- 壁纸窗口创建约束：主屏 bounds、`thickFrame:false`、`resizable:false`、不可 click-through。
+- **目标显示器（多屏）**：壁纸窗口铺在**主窗口所在的那块屏**上，不再固定主屏。判定顺序（`electron/windowsWallpaperTarget.cjs`，全会话粘性）：① 仍在的普通主窗口所在屏（最权威，且覆盖「窗口最大化在副屏」——最大化不更新 `WINDOW_BOUNDS`）→ ② 本会话已解析的目标屏 → ③ `WINDOW_BOUNDS`（壁纸几何从不写入它，见 `saveWindowState`，即「上次普通窗口位置」）→ ④ 主屏（无可用原点，或窗口几何与任何屏都不相交）。关闭壁纸模式时清空会话目标，下次开启重新按当时主窗口位置推导；目标屏被拔除时会话目标失效，回落主屏并把窗口搬过去。无需新增 store 键：`WINDOW_BOUNDS` 本身就是记忆。
+- **helper 选宿主 WorkerW（多屏关键）**：`SetParent` **保留子窗口的父客户区坐标**，所以窗口一旦被塞进某块屏的 WorkerW，就会视觉跳到那块屏上——之后任何「窗口在哪块屏」的查询都只会回答宿主屏，壁纸于是永远只铺那一块屏（初版单主屏时正好蒙对；24H2+ raised 桌面每块屏一个 WorkerW，选错宿主必然铺错屏）。因此 `attach_window` 在 `SetParent` **之前**取窗口所在显示器作为目标，并优先选择**覆盖该显示器的那个 WorkerW**（`EnumWindows` + Progman 子窗口枚举，排除承载 `SHELLDLL_DefView` 的图标层，按矩形覆盖率 ≥80% 匹配）；找不到匹配候选（例如 classic 桌面只有一个跨虚拟屏的 WorkerW）就回退原有的「classic sibling → raised Progman child」探测，此时一个宿主服务所有屏，几何换算照旧。几何重申一律以该目标屏的 `rcMonitor` 为准（`ScreenToClient(实际父窗口)` 换算）。
+- 几何重申（`move` / attach 后）用 `GetAncestor(GA_PARENT)` 取父窗口（WorkerW）做 `ScreenToClient` 换算 monitor 原点——对 Folia 窗口自身换算只在「窗口位于父客户区 (0,0)」时碰巧正确，多屏虚拟屏原点非 (0,0) 时会挂错显示器。**因此已挂载窗口的几何只由 helper 负责**：显示器变化只 spawn `move`，主进程不再 `setBounds`（对 WorkerW 的子窗口 setBounds 会被 Windows 按父客户区解释，等于把壁纸搬到宿主屏）。
+- 开关路径：`scheduleWallpaperModeRelaunch`（300ms 合并）→ win32 分支**重建窗口**（含 handoff）；显示器变化 → 按目标屏 DIP 重设 + helper `move` 重设物理几何（带同一显示器提示）。
+- 壁纸窗口创建约束：目标屏 bounds（全屏，含任务栏区域）、`thickFrame:false`、`resizable:false`、不可 click-through。
 - 设置键：`wallpaper_mode`、`wallpaper_forward_mouse`（默认开）、`wallpaper_zguard`（默认开）。后两者无 UI，变更会 kill + 重 attach helper（窗口全程不脱层）。
 - **透明背景 × 壁纸模式**：透明窗口（`WS_EX_LAYERED`）只有在 raised（Win11 24H2+）桌面能活过 `SetParent` 持续呈现；classic（Win10/早期 Win11）下重挂即黑屏。主进程持久化 `attached.mode`（`wallpaper_windows_attach_mode`，classic 为默认）：classic 下壁纸窗口一律按不透明构建、`setMainWindowTransparentMode(true)` 直接拒绝（`wallpaper-transparent-refused` 事件 + 渲染端 toast）。
 - **退出清理**：`before-quit` 与窗口重建路径对 helper 走 `detach()` 而非 `killHelper()`——挂载状态下销毁窗口会在桌面残留最后一帧。helper detach 时 `InvalidateRect` WorkerW 兜底，最后一步 `refresh_desktop_wallpaper` 重刷壁纸：classic 的 0x052C WorkerW 层在窗口离开后不再绘制壁纸、只剩灰色空表面，必须显式触发 Explorer 重绘（个别 MSIX 环境可能让 Explorer 重建层级，此时已无挂载窗口、重建无害，故放清理顺序最后）。退出壁纸模式路径等 helper 的 `detached` 事件（500ms 兜底超时）再销毁旧 hwnd。降级闩锁等无优雅 detach 可走的路径由主进程 best-effort spawn 一次性 `refresh` 子命令兜底。
-- 鼠标注入：move/wheel 越界丢弃；mousedown 的 clickCount 由主进程合成；拖拽期间为 move 附加 `leftbuttondown` modifier；滚轮 ~100px/notch，垂直轴直传。DPI：壁纸窗口必须 `thickFrame:false`（WS_THICKFRAME 会把客户区内缩一个边框宽）；helper 整体 DPI 不可感知，但 `reassert_geometry` 用 `SetThreadDpiAwarenessContext` 临时切 per-monitor aware 以物理像素设置窗口矩形。
+- 鼠标注入（`electron/windowsWallpaperMouse.cjs`）：helper 坐标是物理屏幕像素，主进程先用 `screen.screenToDipPoint` 转成 Chromium 的 DIP 空间再减窗口内容原点——两端都出自 Chromium 自己的映射，混合 DPI 下不再依赖「helper 虚拟化空间 == Electron DIP 空间」这个在异缩放多屏下不成立的假设。move/wheel 越界丢弃；mousedown 同样越界丢弃（壁纸只覆盖一块屏，点其它屏的桌面不该注入点击），mouseup 一律放行以免按住态卡死；clickCount 由主进程按 DIP 合成；拖拽期间为 move 附加 `leftbuttondown` modifier；滚轮 ~100px/notch，垂直轴直传。DPI：壁纸窗口必须 `thickFrame:false`（WS_THICKFRAME 会把客户区内缩一个边框宽）；helper 进程级 PMv2（`main.rs`），`reassert_geometry` 另有一次线程级重申。
 
 ### 4. 渲染端 / 构建
 
@@ -97,8 +102,10 @@ Electron 主进程 (main.cjs)
 
 1. 键盘/IME、右/中/侧键不转发。
 2. z 序只能「最后调整者在上」，与 WE 的竞争靠低频守卫兜底。
-3. 单主屏。
-4. 安全桌面/RDP 会话切换期间壁纸不可见属预期。
+3. 只创建一块壁纸窗口：壁纸只铺在目标屏上，其它显示器保持系统壁纸，点它们的桌面不转发给 Folia（属预期）。
+4. 目标屏只在**进入壁纸模式时**确定（壁纸窗口 `movable:false`，不可拖动，也没有运行时迁移入口）：要换屏需先退出壁纸模式、把窗口拖到目标屏再重新开启。设置卡有一行文案说明该行为。
+5. 目标屏判定依赖 Electron 的显示器几何，落地依赖 helper 选中该屏的 WorkerW 宿主；宿主匹配失败时回退到「唯一的 WorkerW + 窗口所在屏」，多屏异缩放布局下可能落到相邻屏（壁纸与窗口实际所在屏一致，属可接受偏差）。
+6. 安全桌面/RDP 会话切换期间壁纸不可见属预期。
 
 ### 6. 参考来源
 

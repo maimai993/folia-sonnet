@@ -11,6 +11,8 @@ const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs'
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
+const { createWindowsWallpaperTargetResolver } = require('./windowsWallpaperTarget.cjs');
+const { createWindowsWallpaperMouseInjector } = require('./windowsWallpaperMouse.cjs');
 const macWallpaperModule = require('./macWallpaperController.cjs');
 const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
 const { createQqAuthSessionRepository } = require('./qqAuthSessionRepository.cjs');
@@ -372,97 +374,38 @@ function getMainWindowNativeHwnd() {
   }
 }
 
+// Target display of the wallpaper session: the monitor the wallpaper window fills. Resolution
+// order (live ordinary window → session target → WINDOW_BOUNDS → primary) lives in
+// electron/windowsWallpaperTarget.cjs.
+const windowsWallpaperTarget = createWindowsWallpaperTargetResolver({
+  screen,
+  getStoredBounds: () => getStoredWindowState().bounds,
+  getMainWindow: () => mainWindow,
+});
+
+// Bounds of the display the wallpaper fills. The primary display is the last resort so a window is
+// never created with an unusable geometry.
+function getWallpaperTargetBounds() {
+  return (windowsWallpaperTarget.resolve() ?? screen.getPrimaryDisplay()).bounds;
+}
+
 // --- Windows wallpaper mode mouse injection (sendInputEvent) ---
-// The helper reports desktop mouse input (move + left button) as JSONL events in 96-DPI
-// virtualized screen pixels (its process is DPI-unaware, which is exactly Electron's DIP
-// space); here they are made window-relative and injected at the Chromium input-pipeline
-// level. Posting WM_MOUSEMOVE/WM_LBUTTONDOWN to the window directly is not an option: Chromium
-// arms TrackMouseEvent on the first processed WM_MOUSEMOVE, but the real cursor physically
-// sits on the desktop icon layer above the wallpaper window, so the system instantly answers
-// WM_MOUSELEAVE and hover is torn down between every forwarded move (measured 300–500
-// enter/leave pairs per second).
-let lastWallpaperMouseDown = { at: 0, x: 0, y: 0 };
-// Tracks the primary button between helper mousedown/mouseup reports: injected mouseMove
-// events carry no button state of their own, and Chromium derives MouseEvent.buttons from the
-// 'leftbuttondown' modifier — without it a drag is torn down by the first forwarded move.
-let wallpaperPrimaryButtonHeld = false;
+// The helper reports desktop mouse input (move + left button) as JSONL events in *physical* screen
+// pixels (it is per-monitor DPI aware, see the helper's main.rs); the injector converts them into
+// Chromium's DIP space with screen.screenToDipPoint, makes them window-relative and injects them at
+// the Chromium input-pipeline level. Posting WM_MOUSEMOVE/WM_LBUTTONDOWN to the window directly is
+// not an option: Chromium arms TrackMouseEvent on the first processed WM_MOUSEMOVE, but the real
+// cursor physically sits on the desktop icon layer above the wallpaper window, so the system
+// instantly answers WM_MOUSELEAVE and hover is torn down between every forwarded move (measured
+// 300–500 enter/leave pairs per second). See electron/windowsWallpaperMouse.cjs.
+const windowsWallpaperMouse = createWindowsWallpaperMouseInjector({
+  screen,
+  getMainWindow: () => mainWindow,
+});
 
 // Injects one helper mouse event into the main window's renderer.
 function forwardWallpaperMouseInput(event) {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return;
-  }
-  // Helper coordinates are already in DIP screen space — only shift by the window origin.
-  const bounds = mainWindow.getContentBounds();
-  const x = event.x - bounds.x;
-  const y = event.y - bounds.y;
-  switch (event.event) {
-    case 'mousemove': {
-      // Outside the window (taskbar, other monitor) there is nothing to hover; button events
-      // still go through so a drag that strays out of bounds cannot stick the pressed state.
-      if (x < 0 || y < 0 || x > bounds.width || y > bounds.height) {
-        return;
-      }
-      const moveEvent = { type: 'mouseMove', x, y };
-      if (wallpaperPrimaryButtonHeld) {
-        moveEvent.modifiers = ['leftbuttondown'];
-      }
-      mainWindow.webContents.sendInputEvent(moveEvent);
-      return;
-    }
-    case 'mousedown': {
-      wallpaperPrimaryButtonHeld = true;
-      // clickCount must be synthesized: injected events bypass the OS multi-click detection.
-      const now = Date.now();
-      const isDoubleClick =
-        now - lastWallpaperMouseDown.at < 500 &&
-        Math.abs(event.x - lastWallpaperMouseDown.x) <= 8 &&
-        Math.abs(event.y - lastWallpaperMouseDown.y) <= 8;
-      lastWallpaperMouseDown = { at: now, x: event.x, y: event.y };
-      mainWindow.webContents.sendInputEvent({
-        type: 'mouseDown',
-        x,
-        y,
-        button: 'left',
-        clickCount: isDoubleClick ? 2 : 1,
-        modifiers: ['leftbuttondown'],
-      });
-      return;
-    }
-    case 'mouseup': {
-      wallpaperPrimaryButtonHeld = false;
-      mainWindow.webContents.sendInputEvent({
-        type: 'mouseUp',
-        x,
-        y,
-        button: 'left',
-        clickCount: 1,
-      });
-      return;
-    }
-    case 'mousewheel': {
-      // Scrollable content only exists inside the window; outside (taskbar, other monitor)
-      // the packet is dropped like a stray mousemove.
-      if (x < 0 || y < 0 || x > bounds.width || y > bounds.height) {
-        return;
-      }
-      // Helper deltas are raw-input notches (multiples of WHEEL_DELTA=120; hi-res wheels send
-      // smaller increments). Chromium's mouseWheel wants CSS pixels: ~100px per notch. The
-      // vertical sign passes through unchanged — sendInputEvent's injected deltaY semantics
-      // are inverted relative to native wheel events (calibrated on the real machine, where
-      // negating the raw delta produced reversed scrolling); horizontal keeps its sign
-      // (positive = scroll right).
-      const notch = (raw) => Math.round(((raw || 0) / 120) * 100);
-      mainWindow.webContents.sendInputEvent({
-        type: 'mouseWheel',
-        x,
-        y,
-        deltaX: notch(event.deltaX),
-        deltaY: notch(event.deltaY),
-      });
-      return;
-    }
-  }
+  windowsWallpaperMouse.forward(event);
 }
 
 // Helper process lifecycle + heartbeat watchdog + crash-loop breaker. The recovery callbacks
@@ -574,6 +517,11 @@ async function relaunchForWallpaperModeChange(nextEnabled, expectedGeneration = 
           done();
         }
       });
+    }
+    if (!nextEnabled) {
+      // The session is over: the next entry re-derives its monitor from wherever the app window
+      // then is, rather than from where this wallpaper session ran.
+      windowsWallpaperTarget.clear();
     }
     recreateMainWindowWithTransparencyMode(isTransparentPlayerBackgroundEnabled(), handoff);
     return;
@@ -4920,8 +4868,8 @@ function createWindow(options = {}) {
   // type option, so this branch is mutually exclusive with the windowtolayer path.
   const useDesktopWindowType = isX11WallpaperMode();
   // Windows wallpaper mode: an ordinary frameless window that the helper parents into the
-  // WorkerW layer right after creation. It shares the fullscreen-primary-display geometry with
-  // the X11 branch, but the window type stays default.
+  // WorkerW layer right after creation. It shares the fullscreen-display geometry with the X11
+  // branch, but the window type stays default.
   const useWindowsWallpaper = isWindowsWallpaperMode();
   const useWallpaperGeometry = useDesktopWindowType || useWindowsWallpaper;
   // On a scaled X11 desktop (KWin display scale > 1) the bounds from the screen module are
@@ -4930,9 +4878,13 @@ function createWindow(options = {}) {
   // the full display, and then shown — a fresh map at the explicit bounds covers the whole screen.
   const deferShowForDesktopSizing = useDesktopWindowType && showImmediately;
   const { bounds: storedBounds, isMaximized: storedMaximized } = getStoredWindowState();
-  const windowBounds = useWallpaperGeometry
-    ? screen.getPrimaryDisplay().bounds
-    : ensureWindowBoundsVisible(storedBounds);
+  // Wallpaper geometry (both branches) covers the *whole* display, not just its work area: the
+  // wallpaper belongs behind the taskbar as well. X11 stays on the primary display; Windows
+  // follows the display the app window is on (see windowsWallpaperTarget.cjs).
+  const wallpaperBounds = useWallpaperGeometry
+    ? (useWindowsWallpaper ? getWallpaperTargetBounds() : screen.getPrimaryDisplay().bounds)
+    : null;
+  const windowBounds = wallpaperBounds || ensureWindowBoundsVisible(storedBounds);
   const isMaximized = useWallpaperGeometry ? false : storedMaximized;
   // Classic-desktop wallpaper windows must be opaque (see the attach-mode note above); the
   // window remembers what it was built as so the reconcile path can detect mismatches.
@@ -5016,7 +4968,7 @@ function createWindow(options = {}) {
   // caller (e.g. recreateMainWindowWithTransparencyMode) owns the show, but the bounds fix still
   // applies so the window is full-size by the time it appears.
   if (useWallpaperGeometry) {
-    win.setBounds(screen.getPrimaryDisplay().bounds);
+    win.setBounds(wallpaperBounds);
   }
   if (deferShowForDesktopSizing) {
     win.show();
@@ -5114,6 +5066,13 @@ function recreateMainWindowWithTransparencyMode(enabled, handoff = null) {
 
   const previousWindow = mainWindow;
   saveWindowState(previousWindow);
+  // Capture the monitor the app window is on *before* it is destroyed: the wallpaper window that
+  // replaces it must land on that display, and a maximized window never updates WINDOW_BOUNDS, so
+  // the stored geometry alone would resolve the wrong monitor. No-op when the outgoing window is
+  // itself a wallpaper window (a rebuild inside an active session keeps the session target).
+  if (reattachWindowsWallpaper) {
+    windowsWallpaperTarget.rememberFromWindow(previousWindow);
+  }
   mainWindow = null;
 
   // Wallpaper mode: windowtolayer only hands the layer surface to a window created while no
@@ -5326,16 +5285,15 @@ app.whenReady().then(async () => {
     // Display changes arrive as event bursts with different shapes: a resolution edit emits
     // display-metrics-changed, but a topology switch (monitor plug/unplug, Win+P, lid) emits
     // only display-removed + display-added — a metrics-changed listener alone misses it and the
-    // wallpaper keeps the dead monitor's size. Coalesce the burst and re-assert the geometry
-    // once it settles: DIP bounds follow getPrimaryDisplay(), physical geometry is delegated to
-    // the helper `move` (MonitorFromWindow also covers the window sitting on a removed display).
+    // wallpaper keeps the dead monitor's size. Coalesce the burst and re-assert the geometry once
+    // it settles. The helper owns the geometry of an attached window: setBounds would be applied
+    // to a *child* of the WorkerW, where Windows interprets the coordinates in the parent's client
+    // space (which is what puts the wallpaper on its host's display), so only the helper re-fills
+    // the monitor the window is on.
     let wallpaperGeometryTimer = null;
     const reassertWallpaperGeometry = () => {
       if (!isWindowsWallpaperMode() || !windowsWallpaper.isAttached()) {
         return;
-      }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setBounds(screen.getPrimaryDisplay().bounds);
       }
       const helperPath = resolveWallpaperHelperPath();
       const hwnd = getMainWindowNativeHwnd();
