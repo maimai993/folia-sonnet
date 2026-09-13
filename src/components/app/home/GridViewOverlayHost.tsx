@@ -12,6 +12,7 @@ import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileSe
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import {
+    collectionKey,
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
     isLocalGridViewCollection,
@@ -140,9 +141,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
     const [organizingFolder, setOrganizingFolder] = useState<LocalGridViewCollectionDescriptor | null>(null);
     const [matchingSongId, setMatchingSongId] = useState<string | null>(null);
-    const selectedCollectionKey = selectedCollection
-        ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
-        : '';
+    const selectedCollectionKey = collectionKey(selectedCollection);
     const liveSelectedCollection = useMemo(() => {
         if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
             if (selectedCollection?.source !== 'online') return selectedCollection;
@@ -253,6 +252,12 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         const source = selectedCollection.source;
         const albumName = album?.name || '';
         const albumCoverUrl = album?.coverUrl;
+        // 点的是当前正在看的这张专辑时直接返回：不必再去解析 catalog（在线路径会发请求，
+        // 解析失败还会弹「目录不可用」，而用户只是点了自己在看的那张专辑）。解析之后再比一次
+        // 由 store 的 push 兜底 —— 那条才是所有分支都绕不过的不变式。
+        if (selectedCollection.type === 'album' && String(selectedCollection.id) === String(albumId)) {
+            return;
+        }
         if (source === 'online') {
             let resolvedAlbumId = albumId;
             if (track) {
@@ -346,6 +351,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
         const source = selectedCollection.source;
         const artistName = artist?.name || String(artistId);
+        // 同上：歌手页的曲目卡片带着同一张歌手的入口，点它不该再压一层同样的歌手页。
+        if (selectedCollection.type === 'artist' && String(selectedCollection.id) === String(artistId)) {
+            return;
+        }
         if (source === 'online') {
             let resolvedArtistId = artistId;
             if (track) {
