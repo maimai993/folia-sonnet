@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { CollectionMorphOverlay } from '../../src/components/collectionOpenMorph/CollectionMorphOverlay';
 import { useCollectionMorphStore } from '../../src/components/collectionOpenMorph/collectionMorphStore';
 import {
@@ -66,6 +67,8 @@ const CollectionMorphProbe: React.FC = () => {
     const [destination, setDestination] = React.useState<'playlist' | 'artist'>('playlist');
     // 「上一页」的网格：退出动画期间它还在 DOM 里，卡片属性一模一样。
     const [withStaleGrid, setWithStaleGrid] = React.useState(true);
+    // 嵌套返回：hero 要落到上一层网格里那张「被点的卡」上，而那张卡自己还在飞入。
+    const [nestedBack, setNestedBack] = React.useState(false);
     const morphEnabled = !useReducedMotionFor('collectionMorph');
     const plan = useCollectionMorphStore(state => state.plan);
 
@@ -81,6 +84,42 @@ const CollectionMorphProbe: React.FC = () => {
         useCollectionMorphStore.getState().clear();
         useCollectionNavigationStore.getState().clear();
         setOpen(false);
+        setNestedBack(false);
+    };
+
+    // 模拟「歌手页返回歌单」：hero 是圆形的歌手头像，落点是上一层网格里被点的那张卡，
+    // 而那张卡的内层还在做飞入。overlay 必须在卡片外框稳定后就起飞，不能等它落定。
+    const startNestedBack = () => {
+        const nav = useCollectionNavigationStore.getState();
+        nav.openRoot(PROBE_COLLECTION('playlist'), 'home');
+        nav.push(PROBE_COLLECTION('artist'));
+        const morph = useCollectionMorphStore.getState();
+        const source = {
+            frame: { x: 40, y: 300, width: 200, height: 260 },
+            cover: { x: 40, y: 300, width: 200, height: 200 },
+            coverUrl: HOME_COVER,
+            title: { x: 40, y: 510, width: 200, height: 24 },
+            titleText: 'Home Playlist',
+            sourceKey: 'item:a-1',
+            navAtGestureStart: { wasOpen: true, depth: 1 },
+            capturedAt: Date.now(),
+        };
+        morph.setLastSource(source, 2);
+        morph.armNestedExit(
+            {
+                frame: { x: 500, y: 300, width: 232, height: 232 },
+                cover: { x: 500, y: 300, width: 232, height: 232 },
+                coverUrl: AVATAR_COVER,
+                title: { x: 520, y: 560, width: 200, height: 24 },
+                titleText: 'Artist Name',
+                key: 'artist-intro',
+                coverReady: true,
+                round: true,
+            },
+            [],
+        );
+        setOpen(true);
+        setNestedBack(true);
     };
 
     const buttonClass = 'rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10';
@@ -107,6 +146,9 @@ const CollectionMorphProbe: React.FC = () => {
                 </button>
                 <button type="button" data-probe-action="toggle-stale" className={buttonClass} onClick={() => setWithStaleGrid(v => !v)}>
                     旧网格：{withStaleGrid ? '在 DOM 里' : '已卸载'}
+                </button>
+                <button type="button" data-probe-action="nested-back" className={buttonClass} onClick={startNestedBack}>
+                    歌手页返回（嵌套返回，落点卡片自己还在飞入）
                 </button>
                 {/* 走设置面板那条路径（store 的 setter），不是只改 localStorage。飞行途中
                     点不到它，所以测试用 .click() 直接触发，绕过封锁层的命中测试。 */}
@@ -185,6 +227,27 @@ const CollectionMorphProbe: React.FC = () => {
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* 嵌套返回的落点：上一层网格里被点的那张卡。外框（下面这个 div）从挂载起就在
+                最终槽位上，内层 motion.div 才是飞入 —— 和真实 GridView 的结构一致，所以
+                overlay 必须靠外框判位置，而不是等内层落定。飞入刻意给到 1.4s：旧实现要等它
+                落定才会起飞，比 overlay 现在用的两拍（约 240ms）慢一个数量级。 */}
+            {nestedBack && (
+                <div {...{ [ACTIVE_GRID_ATTR]: '' }} data-probe-incoming-grid style={{ position: 'fixed', inset: 0 }}>
+                    <div {...{ [GRID_CARD_ITEM_ID_ATTR]: 'a-1' }} data-probe-incoming-card style={cardBox}>
+                        <motion.div
+                            initial={{ x: 620, y: 320, scale: 0.92 }}
+                            animate={{ x: 0, y: 0, scale: 1 }}
+                            transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
+                        >
+                            <img src={DETAIL_COVER} alt="" style={coverBox} />
+                            <div {...{ [CARD_TITLE_ATTR]: 'Landed Song' }} style={{ width: 200, height: 24, fontSize: 14 }}>
+                                Landed Song
+                            </div>
+                        </motion.div>
+                    </div>
                 </div>
             )}
 

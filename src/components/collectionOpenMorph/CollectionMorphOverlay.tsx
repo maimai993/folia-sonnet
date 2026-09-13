@@ -8,13 +8,15 @@ import {
     COLLECTION_MORPH_Z_INDEX,
     estimateCenterTarget,
     isMorphTargetSettled,
+    MORPH_NESTED_LANDING_DETAIL_MS,
     type CollectionMorphExit,
     type CollectionMorphGeometry,
     type CollectionMorphHeroMeasured,
     type CollectionMorphPending,
+    type CollectionMorphRect,
     type CollectionMorphTarget,
 } from './morphGeometry';
-import { attachMorphCapture, findMorphCard, probeArtistIntroTargets, probeHeroTargets } from './morphProbes';
+import { attachMorphCapture, findMorphCard, probeArtistIntroTargets, probeHeroTargets, rectOfElement } from './morphProbes';
 
 // src/components/collectionOpenMorph/CollectionMorphOverlay.tsx
 // The match-cut both ways of the「移形换影」transition. Rendered via portal:
@@ -60,6 +62,9 @@ const HERO_POLL_WARMUP_MS = 90;
 const HERO_POLL_MAX_MS = 2400;
 // A candidate counts as settled when the same card repeats within this tolerance.
 const HERO_STABLE_TOLERANCE_PX = 1.5;
+// 退出的最短寿命。落点会在中途 retarget，framer 对每一段都会报一次「动画完成」，
+// 加上 hold 阶段本身很短，不设这条下限就会在 hero 刚要起飞时把整层收掉。
+const EXIT_MIN_LIFETIME_MS = 420;
 // Absolute watchdog: beyond this the store is consumed whatever happens.
 const WATCHDOG_MS = 3000;
 
@@ -360,14 +365,22 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         setStage('exiting');
     }, [exit, clearFastForwardTimer, clearSettleTimer, stopNestedPoll]);
 
-    // Nested-back destination poll: the previous grid remounts underneath
-    // only after back is pressed, so the card this level was pushed from
-    // (exit.sourceKey) cannot be measured at arm time. The hero HOLDS in place
-    // over the incoming cascade until this poll finds that card — its wrapper
-    // sits at the final grid slot (the fly-in animates the inner motion.div),
-    // and two consecutive identical cover rects confirm it has settled — then
-    // the exit springs retarget onto it. No trustworthy card by the deadline
-    // → give up and fall back to the in-place shrink.
+    // Nested-back destination poll. The previous grid remounts underneath only
+    // after back is pressed, so the card this level was pushed from
+    // (exit.sourceKey) cannot be measured at arm time. Two phases, because the
+    // hero must not sit frozen while that card's own fly-in settles:
+    //
+    // 1. the card's WRAPPER is already at its final slot the moment the grid
+    //    mounts (the fly-in animates the inner motion.div), so once the wrapper
+    //    holds still for two polls the hero is sent to the card's box — the
+    //    frame lands exactly, with no visible wait;
+    // 2. the cover/title insets are only final after that inner animation
+    //    finishes, so the poll keeps refining and updates the landing once they
+    //    hold still — the springs absorb the small retarget instead of the
+    //    whole composite standing still for up to a second.
+    //
+    // No trustworthy card by the deadline → give up and fall back to the
+    // in-place shrink.
     useEffect(() => {
         if (stage !== 'exiting' || !exitPayload?.nested || !exitPayload.sourceKey) {
             return;
@@ -379,55 +392,65 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         }
         const startedAt = Date.now();
         const deadline = startedAt + 1800;
-        let lastCoverRect: { left: number; top: number } | null = null;
+        let lastWrapperRect: CollectionMorphRect | null = null;
+        let lastCoverRect: CollectionMorphRect | null = null;
+        let landedAt: number | null = null;
         nestedPollRef.current = setInterval(() => {
             // 只在当前这一层网格里找：正在退出的那一页（例如歌手页）可能带着同一个
             // item id，文档级查询会先命中它，落点就飞到一张正在消失的卡上。
             const el = findMorphCard(exitPayload.sourceKey, 'active-grid');
-            if (!el) {
+            const wrapRect = el ? rectOfElement(el) : null;
+            if (!el || !wrapRect || wrapRect.width < 1) {
                 if (Date.now() > deadline) {
                     stopNestedPoll();
                     setNestedGaveUp(true);
                 }
                 return;
             }
-            const wrapRect = el.getBoundingClientRect();
-            if (wrapRect.width < 1) {
-                if (Date.now() > deadline) {
-                    stopNestedPoll();
-                    setNestedGaveUp(true);
-                }
-                return;
-            }
+            const now = Date.now();
             const coverEl = el.querySelector<HTMLImageElement>('img');
-            const coverRect = coverEl?.getBoundingClientRect() ?? null;
-            // Wait for the card's own fly-in to settle: two consecutive
-            // identical cover positions mean it has landed at its slot.
-            const settled = lastCoverRect !== null && coverRect !== null
-                && Math.abs(coverRect.left - lastCoverRect.left) < 1
-                && Math.abs(coverRect.top - lastCoverRect.top) < 1;
-            lastCoverRect = coverRect ? { left: coverRect.left, top: coverRect.top } : null;
-            if (!settled) {
-                if (Date.now() > deadline) {
-                    stopNestedPoll();
-                    setNestedGaveUp(true);
+            const coverRect = rectOfElement(coverEl);
+            const titleEl = el.querySelector<HTMLElement>('h3, [data-folia-card-title], [class*="font-bold"]');
+            const titleRect = rectOfElement(titleEl);
+            const wrapperSettled = isMorphTargetSettled(
+                lastWrapperRect && { key: 'wrapper', frame: lastWrapperRect, cover: lastWrapperRect, title: lastWrapperRect },
+                { key: 'wrapper', frame: wrapRect, cover: wrapRect, title: wrapRect },
+                HERO_STABLE_TOLERANCE_PX,
+            );
+            const coverSettled = coverRect && isMorphTargetSettled(
+                lastCoverRect && { key: 'cover', frame: lastCoverRect, cover: lastCoverRect, title: lastCoverRect },
+                { key: 'cover', frame: coverRect, cover: coverRect, title: coverRect },
+                HERO_STABLE_TOLERANCE_PX,
+            );
+            lastWrapperRect = wrapRect;
+            lastCoverRect = coverRect;
+
+            const geometry = (cover: CollectionMorphRect, title: CollectionMorphRect) => ({
+                frame: wrapRect,
+                cover,
+                coverUrl: coverEl?.getAttribute('src') ?? null,
+                title,
+                titleText: (titleEl?.textContent ?? '').trim(),
+            });
+
+            if (landedAt === null) {
+                if (!wrapperSettled) {
+                    return;
                 }
+                // 第一落点只用外框：此刻封面/标题可能还在屏外飞，量到的位置不能当落点。
+                landedAt = now;
+                setNestedLanding(geometry(wrapRect, wrapRect));
                 return;
             }
-            stopNestedPoll();
-            const titleEl = el.querySelector<HTMLElement>('h3, [data-folia-card-title], [class*="font-bold"]');
-            const titleRect = titleEl?.getBoundingClientRect() ?? null;
-            setNestedLanding({
-                frame: { x: wrapRect.left, y: wrapRect.top, width: wrapRect.width, height: wrapRect.height },
-                cover: coverRect
-                    ? { x: coverRect.left, y: coverRect.top, width: coverRect.width, height: coverRect.height }
-                    : { x: wrapRect.left, y: wrapRect.top, width: wrapRect.width, height: wrapRect.height },
-                coverUrl: coverEl?.src ?? null,
-                title: titleRect
-                    ? { x: titleRect.left, y: titleRect.top, width: titleRect.width, height: titleRect.height }
-                    : { x: wrapRect.left, y: wrapRect.top, width: wrapRect.width, height: wrapRect.height },
-                titleText: titleEl?.textContent?.trim() ?? '',
-            });
+            // 细化：内层落定之后再更新一次封面与标题的位置。
+            if (coverSettled) {
+                stopNestedPoll();
+                setNestedLanding(geometry(coverRect ?? wrapRect, titleRect ?? wrapRect));
+                return;
+            }
+            if (now > landedAt + MORPH_NESTED_LANDING_DETAIL_MS) {
+                stopNestedPoll();
+            }
         }, HERO_POLL_INTERVAL_MS);
         return stopNestedPoll;
     }, [stage, exitPayload, stopNestedPoll]);
@@ -460,6 +483,15 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
             && !nestedLanding
             && !nestedGaveUp
         ) {
+            return;
+        }
+        // A landing retargets the springs mid-gesture, and framer reports
+        // completion for EVERY leg — including the short hold before the landing
+        // arrives. Only a completion after the whole exit window counts,
+        // otherwise the composite is torn down right as it starts moving (the
+        // "artist exit does nothing" symptom). The watchdog still bounds the
+        // pathological case.
+        if (exitPayload && Date.now() - exitPayload.armedAt < EXIT_MIN_LIFETIME_MS) {
             return;
         }
         finishLifecycle();
@@ -509,12 +541,12 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         }
         acceleratedRef.current = true;
         if (stage === 'exiting') {
-            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
+            finishLifecycle();
             return;
         }
         if (stage === 'fading') {
             // Already dissolving — just cap the remainder.
-            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 180);
+            finishLifecycle();
             return;
         }
         const rectOfFlight = (el: HTMLElement | null) => {
@@ -527,7 +559,7 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         const coverRect = rectOfFlight(coverFlightRef.current);
         const titleRect = rectOfFlight(titleFlightRef.current);
         if (!frameRect || !coverRect || !titleRect) {
-            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
+            finishLifecycle();
             return;
         }
         stopPolling();

@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+    boxOf,
     collectionMorphFlyIn,
     collectionMorphReach,
     collectionMorphRectSeed,
     collectionMorphSeed,
     estimateCenterTarget,
-    flipFromRect,
-    flipTo,
     isNearViewportCenter,
     isMorphTargetSettled,
+    MORPH_CARD_COVER_RADIUS_PX,
     MORPH_CIRCLE_RADIUS,
+    radiusPercent,
     type CollectionMorphRect,
 } from '@/components/collectionOpenMorph/morphGeometry';
 
@@ -19,48 +20,16 @@ import {
 
 const rect = (x: number, y: number, width: number, height: number): CollectionMorphRect => ({ x, y, width, height });
 
-describe('flipTo', () => {
-    it('moves the centre and scales by the size ratio', () => {
-        const flip = flipTo(rect(0, 0, 100, 100), rect(300, 200, 200, 50));
-        // 中心 (50,50) → (400,225)
-        expect(flip.x).toBe(350);
-        expect(flip.y).toBe(175);
-        expect(flip.scaleX).toBe(2);
-        expect(flip.scaleY).toBe(0.5);
+describe('boxOf', () => {
+    it('maps a rect onto the box properties the layers animate', () => {
+        expect(boxOf(rect(10, 20, 30, 40))).toEqual({ left: 10, top: 20, width: 30, height: 40 });
     });
 
-    it('renders the start rect exactly onto the target rect', () => {
-        const start = rect(20, 40, 120, 90);
-        const target = rect(500, 300, 60, 45);
-        const flip = flipTo(start, target);
-        // 元素渲染在 start，加上 transform 之后的实际盒应该等于 target。
-        const renderedCenterX = start.x + start.width / 2 + flip.x;
-        const renderedCenterY = start.y + start.height / 2 + flip.y;
-        const renderedWidth = start.width * flip.scaleX;
-        const renderedHeight = start.height * flip.scaleY;
-        expect(renderedWidth).toBeCloseTo(target.width, 6);
-        expect(renderedHeight).toBeCloseTo(target.height, 6);
-        expect(renderedCenterX).toBeCloseTo(target.x + target.width / 2, 6);
-        expect(renderedCenterY).toBeCloseTo(target.y + target.height / 2, 6);
-    });
-
-    it('leaves the scale alone for a degenerate start rect', () => {
-        expect(flipTo(rect(0, 0, 0, 0), rect(10, 10, 50, 50))).toMatchObject({ scaleX: 1, scaleY: 1 });
-    });
-});
-
-describe('flipFromRect', () => {
-    // 快进时用 flipFromRect(当前屏幕矩形, 基准矩形) 从半途接着播；它和 flipTo 是同一个映射，
-    // 只是参数顺序相反。两者一旦分叉，快进就会跳一下。
-    it('is flipTo with the arguments swapped', () => {
-        const pairs: Array<[CollectionMorphRect, CollectionMorphRect]> = [
-            [rect(0, 0, 100, 100), rect(300, 200, 200, 50)],
-            [rect(-40, 12, 33, 77), rect(9, 9, 33, 77)],
-            [rect(5, 5, 1, 1), rect(5, 5, 1, 1)],
-        ];
-        for (const [a, b] of pairs) {
-            expect(flipFromRect(b, a)).toEqual(flipTo(a, b));
-        }
+    // 形变动画的是盒子而不是 x/y/scaleX/scaleY：object-cover 按布局盒子裁图，
+    // 非等比 scale 会把封面内容拉变形（歌手页方形头像那一段尤其明显）。
+    it('never produces a scale, so images are never stretched', () => {
+        expect(Object.keys(boxOf(rect(0, 0, 1, 1)))).not.toContain('scaleX');
+        expect(Object.keys(boxOf(rect(0, 0, 1, 1)))).not.toContain('scaleY');
     });
 });
 
@@ -203,31 +172,26 @@ describe('isMorphTargetSettled', () => {
     });
 });
 
-// 圆形落点只能靠百分比圆角：形变层渲染在起点的盒子里再被非等比缩放，
-// px 圆角会在横竖两个方向缩出不同的半径，圆就变成圆角方框。
+// 圆形落点：盒子动画让百分比圆角自动跟着盒子走，所以落点一旦是正方形就是正圆；
+// 两端又都用百分比，framer 才不会在 px 与 % 之间插不出来而在落点跳一下。
 describe('the circle radius contract', () => {
-    it('stays a percentage so it scales with the transform', () => {
+    it('is a percentage, so it tracks the box instead of drifting from it', () => {
         expect(MORPH_CIRCLE_RADIUS).toBe('50%');
     });
 
-    it('gives a non-square start box a real circle on a square target', () => {
-        const start = rect(0, 0, 200, 260);
-        const target = rect(100, 100, 240, 240);
-        const flip = flipTo(start, target);
-        const layoutRadius = (parseFloat(MORPH_CIRCLE_RADIUS) / 100) * start.width;
-        // 横竖两个方向缩放后必须相等，否则落点是个椭圆/圆角矩形。
-        const visualRadiusX = layoutRadius * flip.scaleX;
-        const visualRadiusY = (parseFloat(MORPH_CIRCLE_RADIUS) / 100) * start.height * flip.scaleY;
-        expect(visualRadiusX).toBeCloseTo(target.width / 2, 6);
-        expect(visualRadiusY).toBeCloseTo(target.height / 2, 6);
-        expect(visualRadiusX).toBeCloseTo(visualRadiusY, 6);
+    it('expresses the card corner as a percentage of the same box', () => {
+        // 起点是卡片自己的圆角：12px 的封面角在 200px 宽的盒子上就是 6%。
+        expect(radiusPercent(MORPH_CARD_COVER_RADIUS_PX, 200)).toBe('6%');
+        expect(radiusPercent(16, 200)).toBe('8%');
     });
 
-    it('would be an ellipse if it were expressed in px', () => {
-        const start = rect(0, 0, 200, 260);
-        const target = rect(100, 100, 240, 240);
-        const flip = flipTo(start, target);
-        const pxRadius = Math.min(target.width, target.height) / 2;
-        expect(pxRadius * flip.scaleX).not.toBeCloseTo(pxRadius * flip.scaleY, 3);
+    it('keeps the unit usable for a degenerate box', () => {
+        expect(radiusPercent(12, 0)).toBe('12px');
+    });
+
+    it('keeps both ends of the rounding in the same unit', () => {
+        const start = radiusPercent(MORPH_CARD_COVER_RADIUS_PX, 200);
+        expect(start.endsWith('%')).toBe(true);
+        expect(MORPH_CIRCLE_RADIUS.endsWith('%')).toBe(true);
     });
 });

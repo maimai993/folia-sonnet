@@ -20,6 +20,23 @@ const coverSources = (locator: Locator) => locator.locator('img').evaluateAll(
     (nodes: HTMLImageElement[]) => nodes.map(node => node.getAttribute('src') ?? ''),
 );
 
+/**
+ * 采样某个元素在接下来一段时间里的 transform 矩阵。形变层现在动画的是**盒子**，
+ * 所以 transform 里只应该有等比变换（旋转、均匀缩放）；一旦出现 a ≠ d 的非等比缩放，
+ * object-cover 的图片内容就会被拉变形 —— 那正是「封面比例被压窄」的成因。
+ */
+const sampleTransforms = (locator: Locator, samples: number, gapMs: number) => (
+    locator.evaluate(async (el, [count, gap]) => {
+        const readings: Array<{ a: number; d: number }> = [];
+        for (let i = 0; i < count; i += 1) {
+            const matrix = new DOMMatrix(getComputedStyle(el).transform);
+            readings.push({ a: matrix.a, d: matrix.d });
+            await new Promise(resolve => setTimeout(resolve, gap));
+        }
+        return readings;
+    }, [samples, gapMs] as const)
+);
+
 test('the clicked card morphs onto the active grid hero and the flight ends by itself', async ({ mount, page }) => {
     const root = await mount('collectionMorph');
     await expect(root.locator('[data-probe-enabled]')).toHaveAttribute('data-probe-enabled', 'true');
@@ -87,6 +104,40 @@ test('an artist landing ends as a real circle, not a rounded square', async ({ m
     }).toBeLessThan(2);
     expect(await frameRadius()).toBe('50%');
     expect(await coverRadius()).toBe('50%');
+});
+
+test('the artist flight never squeezes the cover through a non-uniform scale', async ({ mount, page }) => {
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-action="destination"]').click();
+    await root.locator('[data-probe-home-card]').click();
+    await expect(page.locator(COVER)).toHaveCount(1);
+
+    // 起点是 200×260 的封面、落点是 232×232 的圆形头像：只要用 scaleX/scaleY 做形变，
+    // 这两个方向的比例就会不同（1.16 / 0.89），封面内容被拉扁。动画盒子则不会有任何非等比变换。
+    const readings = await sampleTransforms(page.locator(COVER), 12, 60);
+    expect(readings.length).toBeGreaterThan(8);
+    for (const { a, d } of readings) {
+        expect(Math.abs(a - d)).toBeLessThan(0.02);
+    }
+});
+
+test('a nested back flies onto the card while the card is still flying in', async ({ mount, page }) => {
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-action="nested-back"]').click();
+
+    const frame = page.locator(FRAME);
+    await expect(frame).toHaveCount(1);
+
+    // 落点卡片的外框在 (620,420) 尺寸 200×260（中心 720,550），它自己还在做 1.4s 的飞入；
+    // hero 起点是 (500,300) 的 232×232 圆形头像。旧实现要等内层封面落定才肯起飞，hero 会僵在
+    // 原地直到 1.8s 的放弃线 —— 也就是「歌手页退出动画严重滞后」。现在靠外框（挂载即在最终
+    // 槽位）判定，两拍就起飞，位置和比例都在 1.2s 内落到卡片的外框上。
+    await expect.poll(async () => {
+        const box = await frame.boundingBox();
+        if (!box) return false;
+        const centerDistance = Math.hypot(box.x + box.width / 2 - 720, box.y + box.height / 2 - 550);
+        return centerDistance < 8 && Math.abs(box.width / box.height - 200 / 260) < 0.03;
+    }, { timeout: 1200 }).toBe(true);
 });
 
 test('only the incoming grid carries the active mark while two grids overlap', async ({ mount, page }) => {

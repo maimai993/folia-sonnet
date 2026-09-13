@@ -5,25 +5,29 @@ import { motion } from 'framer-motion';
 // 正向飞行的合成层：卡片外框、封面、标题三件套各自从点击时的矩形形变到详情页 hero 的
 // 对应矩形。纯展示组件，不知道生命周期阶段，只接收「现在是否在淡出 / 是否处于快进」。
 //
-// 拆出来的原因只有一个：overlay 原来的生命周期（定时器、轮询、store 读写）和这三层
-// 视觉曾经挤在同一个 1000 行文件里，调时序时必须同时在几百行 JSX 里找坐标。
+// 三层全部动画**盒子**（left/top/width/height），不使用 x/y/scaleX/scaleY 的 FLIP：
+// object-cover 是按布局盒子裁图的，非等比 scale 会把封面内容拉变形（首页满幅卡片飞进
+// 歌手页方形头像时尤其明显）。每一帧换布局盒子则让裁图跟着重算，内容永不变形，百分比
+// 圆角也自动跟着盒子走。旋转和那点"抬起"仍用 transform，但都是等比缩放，不影响比例。
 
 import {
+    boxOf,
     COLLECTION_MORPH_Z_INDEX,
-    flipFromRect,
-    flipTo,
+    MORPH_ANIMATED_BOX_PROPERTIES,
+    MORPH_CARD_COVER_RADIUS_PX,
+    MORPH_CARD_FRAME_RADIUS_PX,
     MORPH_CIRCLE_RADIUS,
+    radiusPercent,
     type CollectionMorphPending,
     type CollectionMorphRect,
     type CollectionMorphTarget,
 } from './morphGeometry';
 
-// Springy-but-controlled: it arrives on a near-critical spring so a full-screen
-// box that starts at one aspect ratio and lands at another never overshoots its
-// scaleX/scaleY INDEPENDENTLY — the two axes travel different distances, so any
-// visible bounce shows up as the frame breathing in aspect ratio, which reads as
-// rubber rather than silk. ζ ≈ 1 here; the "life" comes from the lift (scale
-// 0.97 → 1) and the rotation on the cover, not from oscillation.
+// Springy-but-controlled: it arrives on a near-critical spring so the box never
+// overshoots its width and height independently — the two axes change by
+// different amounts, so any visible bounce shows up as the frame breathing in
+// aspect ratio, which reads as rubber rather than silk. ζ ≈ 1 here; the "life"
+// comes from the lift (scale 0.97 → 1) and the rotation on the cover.
 const MORPH_SPRING = { type: 'spring', stiffness: 380, damping: 36, mass: 0.85 } as const;
 export const FADE_DURATION_SECONDS = 0.18;
 export const CROSSFADE_SECONDS = 0.28;
@@ -75,14 +79,22 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
     const fadeSeconds = fastForwarding ? FAST_FORWARD_FADE_SECONDS : FADE_DURATION_SECONDS;
     const spring = fastForwarding ? FAST_FORWARD_TWEEN : MORPH_SPRING;
     const suffix = fastForwarding ? '-ff' : '';
+    // 收圆的两端都必须用百分比：混用 px 与 % framer 插不出来，落点会跳一下。
+    // 非歌手落点不碰圆角，保持卡片自己的类名圆角。
+    const frameRadius = artistLanding
+        ? { initial: { borderRadius: radiusPercent(MORPH_CARD_FRAME_RADIUS_PX, start.frame.width) }, animate: { borderRadius: MORPH_CIRCLE_RADIUS } }
+        : { initial: {}, animate: {} };
+    const coverRadius = artistLanding
+        ? { initial: { borderRadius: radiusPercent(MORPH_CARD_COVER_RADIUS_PX, start.cover.width) }, animate: { borderRadius: MORPH_CIRCLE_RADIUS } }
+        : { initial: {}, animate: {} };
 
     return (
         <>
             {/* Input blockade for the flight's duration: the morph is a load
-                cover, so interaction waits a beat. Scrolling or clicking
-                fast-forwards the flight (see the overlay's accelerate), which
-                releases this within FAST_FORWARD_FINISH_MS — the delay is
-                always short. Hidden from AT: it carries no content. */}
+                cover, so interaction waits a beat. Clicking it fast-forwards the
+                flight (see the overlay's accelerate), which releases this within
+                FAST_FORWARD_FINISH_MS — the delay is always short. Hidden from
+                AT: it carries no content. */}
             <div
                 data-folia-collection-morph="input-blocker"
                 aria-hidden="true"
@@ -101,21 +113,16 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX,
                     background: 'var(--bg-color)',
-                    left: start.frame.x,
-                    top: start.frame.y,
-                    width: start.frame.width,
-                    height: start.frame.height,
-                    willChange: 'transform, opacity',
+                    ...boxOf(start.frame),
+                    willChange: MORPH_ANIMATED_BOX_PROPERTIES,
                 }}
                 initial={fastForwarding && ffStart
-                    ? { ...flipFromRect(ffStart.frame, start.frame), scale: 1, opacity: 1 }
-                    : { x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 0.97, opacity: 1 }}
+                    ? { ...boxOf(ffStart.frame), scale: 1, opacity: 1, ...frameRadius.initial }
+                    : { ...boxOf(start.frame), scale: 0.97, opacity: 1, ...frameRadius.initial }}
                 animate={{
-                    ...flipTo(start.frame, target.frame),
+                    ...boxOf(target.frame),
                     scale: 1,
-                    // 必须用百分比圆角：形变层渲染在起点的盒子里、靠 scaleX/scaleY 缩放，
-                    // 百分比跟着缩放走才会落在正圆上（见 morphGeometry 的说明）。
-                    borderRadius: artistLanding ? MORPH_CIRCLE_RADIUS : undefined,
+                    ...frameRadius.animate,
                     opacity: fading ? 0 : 1,
                 }}
                 transition={{
@@ -135,20 +142,17 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 className="fixed overflow-hidden rounded-xl pointer-events-none"
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX + 1,
-                    left: start.cover.x,
-                    top: start.cover.y,
-                    width: start.cover.width,
-                    height: start.cover.height,
-                    willChange: 'transform, opacity, filter',
+                    ...boxOf(start.cover),
+                    willChange: `${MORPH_ANIMATED_BOX_PROPERTIES}, rotate, filter`,
                 }}
                 initial={fastForwarding && ffStart
-                    ? { ...flipFromRect(ffStart.cover, start.cover), scale: 1, rotate: 0, filter: 'blur(3px)', opacity: 1 }
-                    : { x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 0.96, rotate: 2.4, filter: 'blur(6px)', opacity: 1 }}
+                    ? { ...boxOf(ffStart.cover), scale: 1, rotate: 0, filter: 'blur(3px)', opacity: 1, ...coverRadius.initial }
+                    : { ...boxOf(start.cover), scale: 0.96, rotate: 2.4, filter: 'blur(6px)', opacity: 1, ...coverRadius.initial }}
                 animate={{
-                    ...flipTo(start.cover, target.cover),
+                    ...boxOf(target.cover),
                     scale: 1,
                     rotate: 0,
-                    borderRadius: artistLanding ? MORPH_CIRCLE_RADIUS : undefined,
+                    ...coverRadius.animate,
                     filter: 'blur(0px)',
                     opacity: fading ? 0 : 1,
                 }}
@@ -175,40 +179,26 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
             {/* Title: label glides to the hero title slot; text swaps to the song
                 title mid-flight via crossfade. Both spans stack on the same spot
                 so the swap is a pure fade, never a layout shift.
-                NOTE: deliberately NOT FLIP — the start (home card title line)
-                and target (hero title slot) rects have different aspect ratios,
-                and non-uniform scaleX/scaleY permanently stretches the glyphs
-                ("一大坨"). Animating the box keeps the font fixed and the
-                landing pixel-exact; a single small text element is cheap. */}
+                NOTE: box animation, not a scaled transform — the start (home card
+                title line) and target (hero title slot) boxes have different
+                aspect ratios, and scaling them would permanently stretch the
+                glyphs ("一大坨"). */}
             <motion.div
                 key={`morph-title-${start.capturedAt}${suffix}`}
                 ref={titleRef}
                 data-folia-collection-morph="title"
                 aria-hidden="true"
                 className="fixed pointer-events-none"
-                style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 2, willChange: 'left, top, width, height, opacity, filter' }}
+                style={{
+                    zIndex: COLLECTION_MORPH_Z_INDEX + 2,
+                    ...boxOf(start.title ?? start.frame),
+                    willChange: `${MORPH_ANIMATED_BOX_PROPERTIES}, filter`,
+                }}
                 initial={fastForwarding && ffStart
-                    ? {
-                        left: ffStart.title.x,
-                        top: ffStart.title.y,
-                        width: ffStart.title.width,
-                        height: ffStart.title.height,
-                        filter: 'blur(2px)',
-                        opacity: 1,
-                    }
-                    : {
-                        left: (start.title ?? start.frame).x,
-                        top: (start.title ?? start.frame).y,
-                        width: (start.title ?? start.frame).width,
-                        height: (start.title ?? start.frame).height,
-                        filter: 'blur(5px)',
-                        opacity: 1,
-                    }}
+                    ? { ...boxOf(ffStart.title), filter: 'blur(2px)', opacity: 1 }
+                    : { ...boxOf(start.title ?? start.frame), filter: 'blur(5px)', opacity: 1 }}
                 animate={{
-                    left: target.title.x,
-                    top: target.title.y,
-                    width: target.title.width,
-                    height: target.title.height,
+                    ...boxOf(target.title),
                     filter: 'blur(0px)',
                     opacity: fading ? 0 : 1,
                 }}

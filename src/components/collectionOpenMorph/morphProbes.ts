@@ -38,7 +38,7 @@ export type MorphCaptureHandler = (capture: CollectionMorphCapture) => void;
 
 const viewportOf = () => ({ width: window.innerWidth, height: window.innerHeight });
 
-const rectOfElement = (el: Element | null): CollectionMorphRect | null => {
+export const rectOfElement = (el: Element | null): CollectionMorphRect | null => {
     if (!el) return null;
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return null;

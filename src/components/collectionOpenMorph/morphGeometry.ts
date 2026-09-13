@@ -200,31 +200,6 @@ export const collectionMorphFlyIn = (
     };
 };
 
-// FLIP with a center origin: the element renders at its START rect (static
-// style) and animates a pure translate+scale onto the destination — a
-// compositor-only path, so no frame of the flight forces layout or repaint
-// (animating left/top/width/height re-layouts every frame). Center origin
-// keeps rotation arcs identical to the pre-FLIP version, and expressing the
-// destination as transform VALUES means a mid-flight retarget from the hero
-// poll simply hands the springs new numbers to converge on — same curve,
-// zero discontinuity.
-export const flipTo = (start: CollectionMorphRect, target: CollectionMorphRect) => ({
-    x: target.x + target.width / 2 - (start.x + start.width / 2),
-    y: target.y + target.height / 2 - (start.y + start.height / 2),
-    scaleX: start.width > 0 ? target.width / start.width : 1,
-    scaleY: start.height > 0 ? target.height / start.height : 1,
-});
-
-// Transform values that pin an element (rendered at its `base` rect) onto the
-// on-screen `rect` it occupied at fast-forward time — the compressed replay
-// continues from exactly where the spring was, with no rewind to the start.
-export const flipFromRect = (rect: CollectionMorphRect, base: CollectionMorphRect) => ({
-    x: rect.x + rect.width / 2 - (base.x + base.width / 2),
-    y: rect.y + rect.height / 2 - (base.y + base.height / 2),
-    scaleX: base.width > 0 ? rect.width / base.width : 1,
-    scaleY: base.height > 0 ? rect.height / base.height : 1,
-});
-
 // First estimated destination while the track list is still loading: the
 // viewport centre sized like the strip's typical centered card.
 export const estimateCenterTarget = (viewport: { width: number; height: number }): CollectionMorphRect => {
@@ -279,16 +254,56 @@ export const isMorphTargetSettled = (
 };
 
 /**
- * 圆形落点的圆角必须写成 `50%`，不能换算成 px。
+ * 嵌套返回（歌手页 → 歌单）的落点分两步，就是为了不让 hero 僵在半空等上一秒：
  *
- * 形变层渲染在**起点**的盒子里（例如 200×260 的首页卡片），靠 scaleX/scaleY 缩放到目标
- * （例如 240×240 的歌手头像）。百分比圆角是跟着盒子缩放走的：0.5 × 盒宽 × scaleX 恰好等于
- * 0.5 × 目标宽，两个方向都等于目标的一半，所以目标方就是正圆。换成 `min(w,h)/2` px 之后，
- * 圆角作用在起点的盒子上再被非等比缩放，横竖半径变成 (120×1.2, 120×0.923) —— 一个被拉长的
- * 圆角矩形，也就是「白框变成了圆角方框」。
+ * 1. **立刻落点**：卡片的外框在挂载时就已经在最终槽位上（飞入动画作用在内层 motion.div），
+ *    所以外框稳定两拍就先把 hero 送过去 —— 这也是这一层唯一精确的部分。
+ * 2. **细化**：内层飞入还在动的时候，封面/标题的即时矩形可能离屏，不能当落点；等它们连续
+ *    两拍不动了再更新一次，让封面和标题收进卡片真正的封面与标题位置。
+ */
+export const MORPH_NESTED_LANDING_DETAIL_MS = 900;
+
+
+/** 把矩形摊成一组盒属性。 */
+export const boxOf = (rect: CollectionMorphRect) => ({
+    left: rect.x,
+    top: rect.y,
+    width: rect.width,
+    height: rect.height,
+});
+
+/**
+ * 形变的每一层都动画**盒子**（left/top/width/height），不是 x/y/scaleX/scaleY。
+ *
+ * 原因不是性能，是正确性：`object-cover` 是按**布局盒子**裁图的，transform 只缩放已经栅格化的
+ * 结果。所以用非等比 scale 做 FLIP 时，起点和终点的宽高比一旦不同，图片内容就会被拉伸 ——
+ * 首页满幅卡片的封面（约 200×260）飞进歌手页 232×232 的圆形头像时，横竖缩放比是 1.16 / 0.89，
+ * 封面会被明显压窄。改成动画盒子之后，每一帧都是新的布局盒子，`object-cover` 重新裁图，
+ * 内容永远不变形；百分比圆角也自动跟着盒子走，圆不会在插值中间变成椭圆。
+ *
+ * 代价是每一帧布局+绘制这几个小元素（fixed 定位，影响范围就是这个元素自己），和标题层
+ * 早就采用的做法一致。
+ */
+export const MORPH_ANIMATED_BOX_PROPERTIES = 'left, top, width, height, opacity';
+
+/**
+ * 把「卡片级的圆角像素值」换算成百分比。
+ *
+ * 圆角在整个飞行里都必须用同一个单位，否则 framer 在 px 与 % 之间无法插值（会在落点跳一下）。
+ * 百分比同时是圆形落点唯一的正确写法：它跟着盒子走，所以目标一旦是正方形就是正圆。
+ */
+export const radiusPercent = (pixels: number, boxWidth: number): string => (
+    boxWidth > 0 ? `${(pixels / boxWidth) * 100}%` : `${pixels}px`
+);
+
+/**
+ * 圆形落点必须写成 `50%`。形变层在自己盒子里被缩放/改尺寸，百分比圆角跟着走：
+ * 目标方就是正圆；换成 `min(w,h)/2` px 再被非等比缩放，横竖半径会变成 (144, 111) ——
+ * 也就是「白框变成了圆角方框」。
  */
 export const MORPH_CIRCLE_RADIUS = '50%';
 
-/** 落回卡片时用的圆角（与 GridView/ArtistGridView 的卡片圆角一致）。 */
-export const MORPH_CARD_FRAME_RADIUS = '16px';
-export const MORPH_CARD_COVER_RADIUS = '12px';
+/** 卡片自身的圆角（与 GridView / ArtistGridView 的 rounded-2xl / rounded-xl 一致），
+ * 用来把「收圆」的起点换算成百分比。 */
+export const MORPH_CARD_FRAME_RADIUS_PX = 16;
+export const MORPH_CARD_COVER_RADIUS_PX = 12;

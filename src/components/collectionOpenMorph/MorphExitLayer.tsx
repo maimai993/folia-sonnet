@@ -4,24 +4,30 @@ import { motion } from 'framer-motion';
 // src/components/collectionOpenMorph/MorphExitLayer.tsx
 // 反向飞行的合成层：hero 的三件套飞回来源卡片，其余卡片作为「幽灵」沿各自径向四散。
 // 纯展示组件 —— 它只知道「飞回哪里」「要不要原地等待落点」，不知道导航和定时器。
+//
+// 和正向飞行一样，三件套动画的是盒子而不是非等比 scale：封面用的是 object-cover，按布局
+// 盒子裁图，scaleX/scaleY 会把内容拉变形（歌手页方形头像飞回纵向卡片时会被压窄）。
+// 幽灵块是等比缩放（scale 0.84），不受这条限制。
 
 import {
+    boxOf,
     COLLECTION_MORPH_Z_INDEX,
     collectionMorphReach,
     collectionMorphRectSeed,
-    flipTo,
-    MORPH_CARD_COVER_RADIUS,
-    MORPH_CARD_FRAME_RADIUS,
+    MORPH_ANIMATED_BOX_PROPERTIES,
+    MORPH_CARD_COVER_RADIUS_PX,
+    MORPH_CARD_FRAME_RADIUS_PX,
     MORPH_CIRCLE_RADIUS,
+    radiusPercent,
     type CollectionMorphExit,
     type CollectionMorphGeometry,
     type CollectionMorphRect,
 } from './morphGeometry';
 
 // Exit spring: just past critical (ζ ≈ 0.85) so the launch keeps the small
-// rebound the exit is supposed to have, while the two scale axes still converge
+// rebound the exit is supposed to have, while width and height still converge
 // together instead of wobbling against each other (they travel different
-// distances, so any real bounce shows up as the box breathing in aspect ratio).
+// distances, so any real bounce reads as the box breathing in aspect ratio).
 const EXIT_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.85 } as const;
 // Apple-style exit curve for dissolves (opacity/backdrop still breathe on this).
 const EXIT_EASE = [0.32, 0.72, 0, 1] as const;
@@ -73,14 +79,15 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
             ghost.rect.y + ghost.rect.height / 2 - cy,
         )),
     );
-    // 圆角保持百分比写法：圆形落点必须是 `50%`（形变层渲染在 hero 的盒子里、再被非等比
-    // 缩放，百分比跟着缩放走才落在正圆上；换成 px 会变成被拉长的圆角矩形），飞回卡片时才
-    // 换成卡片的角半径。
-    const frameRadius = heroRect.round
-        ? (isNested ? MORPH_CIRCLE_RADIUS : MORPH_CARD_FRAME_RADIUS)
+    // 圆角两端都用百分比：起点是圆形头像（`50%` 就在 hero 的方形盒子上），飞回卡片时换成
+    // 卡片角半径的等值百分比 —— 混用 px 与 % framer 插不出来，会跳。
+    const frameStartRadius = heroRect.round ? MORPH_CIRCLE_RADIUS : undefined;
+    const coverStartRadius = heroRect.round ? MORPH_CIRCLE_RADIUS : undefined;
+    const frameEndRadius = heroRect.round
+        ? (isNested ? MORPH_CIRCLE_RADIUS : radiusPercent(MORPH_CARD_FRAME_RADIUS_PX, homeRect.width))
         : undefined;
-    const coverRadius = heroRect.round
-        ? (isNested ? MORPH_CIRCLE_RADIUS : MORPH_CARD_COVER_RADIUS)
+    const coverEndRadius = heroRect.round
+        ? (isNested ? MORPH_CIRCLE_RADIUS : radiusPercent(MORPH_CARD_COVER_RADIUS_PX, homeCover.width))
         : undefined;
 
     return (
@@ -93,7 +100,8 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 aria-hidden="true"
                 className="fixed inset-0"
                 style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-                onClick={onSkip}            />
+                onClick={onSkip}
+            />
             <motion.div
                 key={`${key}-backdrop`}
                 data-folia-collection-morph="exit-backdrop"
@@ -205,30 +213,21 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX + 1,
                     background: 'var(--bg-color)',
-                    left: heroRect.frame.x,
-                    top: heroRect.frame.y,
-                    width: heroRect.frame.width,
-                    height: heroRect.frame.height,
-                    willChange: 'transform, opacity',
+                    ...boxOf(heroRect.frame),
+                    willChange: MORPH_ANIMATED_BOX_PROPERTIES,
                 }}
-                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, opacity: 1, borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined }}
+                initial={{ ...boxOf(heroRect.frame), scale: 1, opacity: 1, borderRadius: frameStartRadius }}
                 animate={holding
                     ? {
-                        x: 0,
-                        y: 0,
-                        scaleX: 1,
-                        scaleY: 1,
+                        ...boxOf(heroRect.frame),
                         scale: 0.97,
-                        borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined,
+                        borderRadius: frameStartRadius,
                         opacity: 1,
                     }
                     : {
-                        ...flipTo(heroRect.frame, homeRect),
+                        ...boxOf(homeRect),
                         scale: isNested ? 0.8 : 0.985,
-                        // From the artist's circular avatar: keep the circle
-                        // while shrinking away in place, round back into the
-                        // landing card's corners when flying onto it.
-                        borderRadius: frameRadius,
+                        borderRadius: frameEndRadius,
                         opacity: [1, 1, 0],
                     }}
                 transition={{
@@ -245,32 +244,24 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 className="fixed overflow-hidden rounded-xl pointer-events-none"
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX + 2,
-                    left: heroRect.cover.x,
-                    top: heroRect.cover.y,
-                    width: heroRect.cover.width,
-                    height: heroRect.cover.height,
-                    willChange: 'transform, opacity, filter',
+                    ...boxOf(heroRect.cover),
+                    willChange: `${MORPH_ANIMATED_BOX_PROPERTIES}, rotate, filter`,
                 }}
-                initial={{ x: 0, y: 0, scaleX: 1, scaleY: 1, scale: 1, rotate: 0, filter: 'blur(0px)', opacity: 1, borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined }}
+                initial={{ ...boxOf(heroRect.cover), scale: 1, rotate: 0, filter: 'blur(0px)', opacity: 1, borderRadius: coverStartRadius }}
                 animate={holding
                     ? {
-                        x: 0,
-                        y: 0,
-                        scaleX: 1,
-                        scaleY: 1,
+                        ...boxOf(heroRect.cover),
                         scale: 0.96,
                         rotate: 0,
                         filter: 'blur(0px)',
-                        borderRadius: heroRect.round ? MORPH_CIRCLE_RADIUS : undefined,
+                        borderRadius: coverStartRadius,
                         opacity: 1,
                     }
                     : {
-                        ...flipTo(heroRect.cover, homeCover),
+                        ...boxOf(homeCover),
                         scale: isNested ? 0.78 : 1,
                         rotate: [0, 5, 1.6],
-                        // Artist avatar exit: the circle un-rounds back into
-                        // the landing card's cover on the way home.
-                        borderRadius: coverRadius,
+                        borderRadius: coverEndRadius,
                         filter: ['blur(0px)', 'blur(1px)', 'blur(8px)'],
                         opacity: [1, 1, 0],
                     }}
@@ -305,29 +296,24 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 data-folia-collection-morph="title"
                 aria-hidden="true"
                 className="fixed pointer-events-none"
-                style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 3, willChange: 'left, top, width, height, opacity, filter' }}
+                style={{
+                    zIndex: COLLECTION_MORPH_Z_INDEX + 3,
+                    ...boxOf(heroRect.title),
+                    willChange: `${MORPH_ANIMATED_BOX_PROPERTIES}, filter`,
+                }}
                 initial={{
-                    left: heroRect.title.x,
-                    top: heroRect.title.y,
-                    width: heroRect.title.width,
-                    height: heroRect.title.height,
+                    ...boxOf(heroRect.title),
                     filter: 'blur(0px)',
                     opacity: [1, 1, 0],
                 }}
                 animate={holding
                     ? {
-                        left: heroRect.title.x,
-                        top: heroRect.title.y,
-                        width: heroRect.title.width,
-                        height: heroRect.title.height,
+                        ...boxOf(heroRect.title),
                         filter: 'blur(0px)',
                         opacity: 1,
                     }
                     : {
-                        left: homeTitle.x,
-                        top: homeTitle.y,
-                        width: homeTitle.width,
-                        height: homeTitle.height,
+                        ...boxOf(homeTitle),
                         filter: ['blur(0px)', 'blur(1px)', 'blur(8px)'],
                         opacity: [1, 1, 0],
                     }}
