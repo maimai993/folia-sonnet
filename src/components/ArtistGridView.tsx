@@ -52,6 +52,14 @@ interface ArtistGridViewProps {
     localSongs?: LocalSong[];
     onEditEntity?: (entityId: string) => void;
     isInteractive?: boolean;
+    /**
+     * Optional「移形换影」plan handed in by the overlay host when the artist
+     * page was pushed from a clicked song/album card: the avatar + bio stay
+     * hidden while the overlay morphs the clicked card onto them, and every
+     * other card flies in from outside the viewport in a distance-staggered
+     * cascade. Absent for every existing caller, so behavior is unchanged.
+     */
+    morphPlan?: { heroIndex: number } | null;
 }
 
 interface GridItem {
@@ -265,6 +273,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     localSongs = [],
     onEditEntity,
     isInteractive = true,
+    morphPlan = null,
 }) => {
     const { t } = useTranslation();
     // The artist wall renders the same cards as GridView, so it follows the same look settings.
@@ -1021,6 +1030,25 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         playableTopSongs,
     ]);
 
+    // 「移形换影」artist-page entrance: when the overlay host hands in a morph
+    // plan, the avatar + bio stay hidden for the overlay's flight onto them
+    // (revealed as it fades out over them), while every song/album card flies
+    // in from outside the viewport along its radial from the avatar — the same
+    // distance-staggered cascade as GridView's morph entrance, so a nested
+    // back into the artist page reads as scatter-out → cascade-in.
+    const morphFlyInReach = useMemo(() => (
+        morphPlan ? Math.hypot(containerSize.width, containerSize.height) * 0.62 + 160 : 0
+    ), [morphPlan, containerSize.width, containerSize.height]);
+    // Deterministic per-item jitter (0..1) so the fly-in sequence feels like a
+    // breathing cascade instead of a mechanical sweep — stable across renders.
+    const morphFlyInJitter = useCallback((key: string): number => {
+        let hash = 0;
+        for (let i = 0; i < key.length; i += 1) {
+            hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+        }
+        return (hash % 1000) / 1000;
+    }, []);
+
     const renderedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
             const item = gridItems[idx];
@@ -1043,6 +1071,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     <div
                         key={`avatar-${idx}`}
                         ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                        data-artist-avatar
                         className="absolute select-none pointer-events-auto"
                         style={{
                             transformOrigin: 'center center',
@@ -1053,22 +1082,30 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             zIndex: initialZ,
                         }}
                     >
-                        <div
-                            className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
-                            style={{
-                                width: layoutConfig.avatarSize || 240,
-                                height: layoutConfig.avatarSize || 240,
-                                backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
-                            }}
+                        {/* Morph target of the song-card flight: hidden while the
+                            overlay morphs onto it, revealed as the overlay fades. */}
+                        <motion.div
+                            initial={morphPlan ? { opacity: 0 } : false}
+                            animate={{ opacity: 1 }}
+                            transition={{ opacity: { delay: 0.34, duration: 0.42, ease: 'easeOut' } }}
                         >
-                            {item.coverUrl ? (
-                                <img src={getSizedCoverUrl(item.coverUrl, 512)} alt="avatar" draggable={false} loading="lazy" decoding="async" className="w-full h-full object-cover select-none" />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-white/5">
-                                    <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '4s' }} />
-                                </div>
-                            )}
-                        </div>
+                            <div
+                                className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
+                                style={{
+                                    width: layoutConfig.avatarSize || 240,
+                                    height: layoutConfig.avatarSize || 240,
+                                    backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
+                                }}
+                            >
+                                {item.coverUrl ? (
+                                    <img src={getSizedCoverUrl(item.coverUrl, 512)} alt="avatar" draggable={false} loading="lazy" decoding="async" className="w-full h-full object-cover select-none" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                        <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '4s' }} />
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
                     </div>
                 );
             }
@@ -1083,6 +1120,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     <div
                         key={`bio-${idx}`}
                         ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                        // Joins the reverse flight's squad scatter on back-out
+                        // (the avatar has its own hero morph instead).
+                        data-folia-grid-item-id="__artist_bio__"
                         className="absolute select-none pointer-events-auto"
                         style={{
                             transformOrigin: 'center center',
@@ -1093,43 +1133,55 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             zIndex: initialZ + 5,
                         }}
                     >
-                        <div
-                            onClick={() => {
-                                if (isDraggingRef.current) return;
-                                if (focusedIndex !== 1) {
-                                    centerOnIndex(1, true);
-                                } else {
-                                    setShowFullBio(true);
-                                }
-                            }}
-                            className={`rounded-3xl p-6 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-shadow cursor-pointer select-none text-left ${cardBg}`}
-                            style={{
-                                width: layoutConfig.bioWidth || 460,
-                                height: layoutConfig.bioHeight || 250,
-                            }}
+                        {/* Hidden while the overlay's title flight morphs onto
+                            the h1, revealed as the overlay fades. */}
+                        <motion.div
+                            initial={morphPlan ? { opacity: 0 } : false}
+                            animate={{ opacity: 1 }}
+                            transition={{ opacity: { delay: 0.34, duration: 0.42, ease: 'easeOut' } }}
                         >
-                            <div className="space-y-2 min-w-0">
-                                <h1 className="text-3xl font-extrabold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
-                                    {item.name}
-                                </h1>
-                                {item.subtitle && (
-                                    <p className="text-xs opacity-50 font-medium truncate">
-                                        {item.subtitle}
+                            <div
+                                onClick={() => {
+                                    if (isDraggingRef.current) return;
+                                    if (focusedIndex !== 1) {
+                                        centerOnIndex(1, true);
+                                    } else {
+                                        setShowFullBio(true);
+                                    }
+                                }}
+                                className={`rounded-3xl p-6 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-shadow cursor-pointer select-none text-left ${cardBg}`}
+                                style={{
+                                    width: layoutConfig.bioWidth || 460,
+                                    height: layoutConfig.bioHeight || 250,
+                                }}
+                            >
+                                <div className="space-y-2 min-w-0">
+                                    <h1
+                                        data-artist-bio-title
+                                        className="text-3xl font-extrabold tracking-tight truncate"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        {item.name}
+                                    </h1>
+                                    {item.subtitle && (
+                                        <p className="text-xs opacity-50 font-medium truncate">
+                                            {item.subtitle}
+                                        </p>
+                                    )}
+                                    <div className="w-12 h-0.5 bg-sky-400 opacity-60 rounded-full mt-1"></div>
+                                </div>
+
+                                <div className="flex-1 overflow-hidden mt-3 mb-2">
+                                    <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap">
+                                        {item.description || t('options.noDescription')}
                                     </p>
-                                )}
-                                <div className="w-12 h-0.5 bg-sky-400 opacity-60 rounded-full mt-1"></div>
-                            </div>
+                                </div>
 
-                            <div className="flex-1 overflow-hidden mt-3 mb-2">
-                                <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap">
-                                    {item.description || t('options.noDescription')}
-                                </p>
+                                <div className="flex items-center border-t border-white/5 pt-3 mt-1 shrink-0">
+                                    <div className="text-[10px] opacity-40 font-semibold">{statsLine}</div>
+                                </div>
                             </div>
-
-                            <div className="flex items-center border-t border-white/5 pt-3 mt-1 shrink-0">
-                                <div className="text-[10px] opacity-40 font-semibold">{statsLine}</div>
-                            </div>
-                        </div>
+                        </motion.div>
                     </div>
                 );
             }
@@ -1138,11 +1190,41 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             const isSongCard = !!item.rawTrack;
             const cardMode = isSongCard ? 'tracks' : 'collection';
             const animateEntrance = shouldAnimateItemEntrance(String(item.id));
+            // 「移形换影」fly-in: every non-intro card arrives from outside the
+            // viewport along its radial from the avatar cluster, staggered with
+            // an ease-out distance curve plus a deterministic jitter.
+            const isMorphFlyIn = Boolean(morphPlan && idx >= 2);
+            const morphFlyIn = isMorphFlyIn
+                ? (() => {
+                    const origin = baseCoords[0];
+                    const dxVector = coord.baseX - origin.baseX;
+                    const dyVector = coord.baseY - origin.baseY;
+                    const distance = Math.hypot(dxVector, dyVector);
+                    const direction = distance > 1
+                        ? { x: dxVector / distance, y: dyVector / distance }
+                        : { x: 0, y: -1 };
+                    const normalized = Math.min(distance / (layoutConfig.spacingX * 14), 1);
+                    const eased = normalized * normalized * (3 - 2 * normalized);
+                    const seed = morphFlyInJitter(String(item.id));
+                    return {
+                        x: direction.x * morphFlyInReach,
+                        y: direction.y * morphFlyInReach,
+                        // Per-card tilt in a tight ±3.2° band from the same
+                        // deterministic seed: cards arrive with a slight roll
+                        // and settle flat, without ever reading as crooked.
+                        rotate: (seed - 0.5) * 6.4,
+                        delay: Math.min(0.04 + eased * 0.38 + seed * 0.1, 0.46),
+                    };
+                })()
+                : null;
 
             return (
                 <div
                     key={`${cardMode}-${idx}-${item.id}`}
                     ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                    // Morph capture source (nested artist/album pushes) and
+                    // squad-scatter member on back-out.
+                    data-folia-grid-item-id={String(item.id)}
                     className="absolute select-none pointer-events-auto"
                     style={{
                         transformOrigin: 'center center',
@@ -1154,9 +1236,25 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     }}
                 >
                     <motion.div
-                        initial={animateEntrance ? { opacity: 0, scale: 0.96 } : false}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                        initial={isMorphFlyIn
+                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.92, rotate: morphFlyIn!.rotate }
+                            : animateEntrance ? { opacity: 0, scale: 0.96 } : false}
+                        animate={{
+                            // Key set identical across branches so a plan
+                            // expiring mid-flight can never freeze a card at
+                            // its crooked in-between angle.
+                            opacity: 1,
+                            x: 0,
+                            y: 0,
+                            scale: 1,
+                            rotate: 0,
+                        }}
+                        transition={isMorphFlyIn
+                            // Spring arrival with a controlled settle: crisp
+                            // overshoot for life, quick decay so the grid never
+                            // lingers misaligned.
+                            ? { type: 'spring', stiffness: 400, damping: 30, mass: 0.65, delay: morphFlyIn!.delay }
+                            : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                     >
                     <PolaroidCard
                         item={item}
@@ -1216,6 +1314,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         onAddTrackToQueue,
         persistNavigationState,
         shouldAnimateItemEntrance,
+        morphPlan,
+        morphFlyInReach,
+        morphFlyInJitter,
     ]);
 
     const progressiveLoading = deriveProgressiveLoadingState(

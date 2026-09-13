@@ -30,6 +30,8 @@ import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../dev/renderCount';
+import { CollectionMorphOverlay } from '../../collectionOpenMorph/CollectionMorphOverlay';
+import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets, useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -123,6 +125,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const morphPlan = useCollectionMorphStore(state => state.plan);
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
@@ -173,10 +176,43 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [onOpenCollection]);
 
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
+        // Nested open (album/artist inside a playlist): no home card was clicked,
+        // so instead of the hero morph, hand the incoming grid a fly-in plan —
+        // its cards cascade in, matching every other grid entrance.
+        const snapshot = useCollectionNavigationStore.getState().snapshot;
+        if (snapshot && snapshot.stack.length >= 1) {
+            useCollectionMorphStore.getState().commitPlan({ heroIndex: 0 });
+        }
         onPushCollection(col);
     }, [onPushCollection]);
 
     const handleBackCollection = useCallback(() => {
+        // Arm the reverse morph before the view flips. Two distinct gestures:
+        // - top-level back (stack depth 1) → hero flies onto the original home
+        //   card while the squad scatters;
+        // - nested back (album → playlist) → no home card exists, so the hero
+        //   shrinks away in place with the squad scattering, and the previous
+        //   grid underneath is revealed by the backdrop crossfade.
+        const morphStore = useCollectionMorphStore.getState();
+        const navState = useCollectionNavigationStore.getState();
+        const snapshot = navState.snapshot;
+        const depth = snapshot?.stack.length ?? 0;
+        // Artist pages morph from their circular avatar, not a song card.
+        const activeType = snapshot?.stack[snapshot.stack.length - 1]?.type;
+        const hero = (activeType === 'artist'
+            ? probeArtistIntroTargets()
+            : probeHeroTargets()) ?? morphStore.hero;
+        if (hero) {
+            const squad = probeGridSquadRects();
+            if (depth <= 1 && snapshot?.origin === 'home' && morphStore.lastHome) {
+                morphStore.armExit(hero, squad);
+            } else if (depth > 1) {
+                morphStore.armNestedExit(hero, squad);
+                // The previous collection remounts underneath: give it the same
+                // fly-in entrance so the cut reads as scatter-out → cascade-in.
+                morphStore.commitPlan({ heroIndex: 0 });
+            }
+        }
         onBackCollection();
     }, [onBackCollection]);
 
@@ -638,13 +674,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                         key="grid-transition-backdrop"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        exit={{ opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
+                        transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
                         className="fixed inset-0 z-[49] pointer-events-none"
                         style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                 )}
             </AnimatePresence>
+            <CollectionMorphOverlay />
             <AnimatePresence initial={false}>
                 {displaySelectedCollection && (
                     displaySelectedCollection.type === 'artist' ? (
@@ -663,6 +700,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             localSongs={surfaceProps.localSongs}
                             onEditEntity={(entityId) => setEditingEntityId(entityId)}
                             isInteractive={isInteractive}
+                            morphPlan={morphPlan}
                         />
                     ) : (
                         <GridView
@@ -688,6 +726,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             theme={surfaceProps.theme}
                             isDaylight={isDaylight}
                             isInteractive={isInteractive}
+                            morphPlan={morphPlan}
                         />
                     )
                 )}
