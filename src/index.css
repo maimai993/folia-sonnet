@@ -24,6 +24,14 @@ body {
   overflow: hidden;
 }
 
+/* 播放页空闲时隐藏鼠标指针。后代选择器只是为了压过 Tailwind 的 cursor-* 工具类，
+   两者同为一个 class + 一个元素时靠 (0,1,1) > (0,1,0) 取胜，不需要 !important。
+   挂点在播放页的视觉层容器上，弹窗和浮动控件都在它外面，不会被波及。 */
+.cursor-auto-hidden,
+.cursor-auto-hidden * {
+  cursor: none;
+}
+
 :root {
   --scrollbar-track: #18181b;
   --scrollbar-thumb: #3f3f46;

@@ -58,6 +58,7 @@ type AppearanceSettingsSubviewProps = {
     onOpenAiSettings: () => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => void;
     onToggleAutoHidePlayerChrome: (enabled: boolean) => void;
+    onToggleAutoHideCursorWithPlayerChrome: (enabled: boolean) => void;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
     settingsCardClass: string;
     songThemeAutoSwitchEnabled: boolean;
@@ -67,6 +68,7 @@ type AppearanceSettingsSubviewProps = {
     toggleOffBackgroundClass: string;
     transparentPlayerBackground: boolean;
     autoHidePlayerChrome: boolean;
+    autoHideCursorWithPlayerChrome: boolean;
     stageTrackPillMode: 'auto' | 'always' | 'never';
     stageTrackPillTimeoutSec: number;
     stageTrackPillOnHome: boolean;
@@ -105,6 +107,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     onOpenAiSettings,
     onToggleTransparentPlayerBackground,
     onToggleAutoHidePlayerChrome,
+    onToggleAutoHideCursorWithPlayerChrome,
     onSaveCustomTheme,
     settingsCardClass,
     songThemeAutoSwitchEnabled,
@@ -114,6 +117,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     toggleOffBackgroundClass,
     transparentPlayerBackground,
     autoHidePlayerChrome,
+    autoHideCursorWithPlayerChrome,
     stageTrackPillMode,
     stageTrackPillTimeoutSec,
     onChangeStageTrackPillMode,
@@ -661,6 +665,25 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 style={{ backgroundColor: autoHidePlayerChrome ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
                             >
                                 <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHidePlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+                        {/* 指针隐藏是控制栏自动隐藏的附加项：上面那个开关关着时它无事可做，
+                            所以整行淡出，但仍可点击——先设好偏好再开自动隐藏也是合理的顺序。 */}
+                        <div className={`pl-4 border-l-2 border-white/10 flex items-center justify-between gap-4 transition-opacity ${autoHidePlayerChrome ? '' : 'opacity-40'}`}>
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.autoHideCursorWithPlayerChrome')}
+                                </div>
+                                <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.autoHideCursorWithPlayerChromeDesc')}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onToggleAutoHideCursorWithPlayerChrome(!autoHideCursorWithPlayerChrome)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!autoHideCursorWithPlayerChrome ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: autoHideCursorWithPlayerChrome ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHideCursorWithPlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
                     </div>
