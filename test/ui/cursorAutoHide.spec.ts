@@ -68,6 +68,20 @@ test('hides the cursor with the player chrome and brings it back on mouse move',
     ).filter(node => getComputedStyle(node).cursor !== 'none').length);
     expect(visibleCursors).toBe(0);
 
+    // 压制靠的是那条规则不在任何 @layer 里，而不是特异性——作用域内真实存在 disabled:
+    // cursor-not-allowed 这类特异性更高的工具类（visualizer 下 18 处），只是这个夹具页面上
+    // 没有处于 disabled 态的。临时塞一个进去，把「别把规则挪进 @layer」这条约束钉住。
+    const injectedCursor = await surface(page).evaluate(element => {
+        const probe = document.createElement('button');
+        probe.className = 'cursor-pointer disabled:cursor-not-allowed';
+        probe.disabled = true;
+        element.appendChild(probe);
+        const cursor = getComputedStyle(probe).cursor;
+        probe.remove();
+        return cursor;
+    });
+    expect(injectedCursor).toBe('none');
+
     await page.mouse.move(720, 560);
     await expect.poll(async () => readCursor(page, surface(page))).not.toBe('none');
 });
@@ -95,13 +109,10 @@ test('auto-hides the chrome without the cursor when the add-on is off', async ({
     // 控制栏照常收起，指针不受影响：这就是这个附加开关存在的理由。
     await expect.poll(async () => page.evaluate(async () => {
         const chromeStorePath = '/src/stores/useAppChromeStore.ts';
-        const module = await import(chromeStorePath) as Record<string, unknown>;
-        const store = Object.values(module).find(
-            (value): value is { getState: () => Record<string, unknown> } => (
-                typeof (value as { getState?: unknown })?.getState === 'function'
-            ),
-        );
-        return store?.getState().isPlayerChromeHidden;
+        const { useAppChromeStore } = await import(chromeStorePath) as {
+            useAppChromeStore: { getState: () => Record<string, unknown> };
+        };
+        return useAppChromeStore.getState().isPlayerChromeHidden;
     }), { timeout: 10_000 }).toBe(true);
 
     expect(await readCursor(page, surface(page))).not.toBe('none');
