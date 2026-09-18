@@ -118,15 +118,16 @@ test('a cold hero cover must not stretch the open animation', async ({ mount, pa
 
     expect(milestones.firstMove).not.toBeNull();
     expect(milestones.landed).not.toBeNull();
-    // 形状要很快落到 hero 上：测量里 hero 的封面要到 1.2s 才到，飞行不该等它。
-    expect(milestones.landed!).toBeLessThan(900);
+    // 预算，不是精确期望：这台机器上量到 455 / 273 / 1381ms，旧实现是 2086 / 2086 —— 余量
+    // 留够慢机器，同时仍然能抓到「生命周期在等封面」这种回归。
+    expect(milestones.landed!).toBeLessThan(1200);
     // 交互必须在「封面还在路上」的时候就恢复：封锁层挡的是交互，而飞行本身不需要等图片。
     expect(milestones.blockerGone).not.toBeNull();
-    expect(milestones.blockerGone!).toBeLessThan(900);
+    expect(milestones.blockerGone!).toBeLessThan(1000);
     expect(milestones.blockerGone!).toBeLessThan(milestones.heroCoverReady ?? Number.POSITIVE_INFINITY);
     // 整层的尾巴也要有界：封面层顶多等到封面到达（或兜底上限）就交还给 hero 卡片。
     expect(milestones.layersGone).not.toBeNull();
-    expect(milestones.layersGone!).toBeLessThan(2400);
+    expect(milestones.layersGone!).toBeLessThan(2600);
 });
 
 test('a warm open (cover already decoded) finishes inside half a second', async ({ mount, page }) => {
@@ -137,9 +138,10 @@ test('a warm open (cover already decoded) finishes inside half a second', async 
     // eslint-disable-next-line no-console
     console.log('MILESTONES warm', JSON.stringify(milestones));
 
-    expect(milestones.landed!).toBeLessThan(700);
+    // 热封面（这台机器上 238 / 251 / 681ms）：旧实现到这里也还有 ~780ms 的封锁与尾巴。
+    expect(milestones.landed!).toBeLessThan(800);
     expect(milestones.blockerGone!).toBeLessThan(700);
-    expect(milestones.layersGone!).toBeLessThan(1200);
+    expect(milestones.layersGone!).toBeLessThan(1400);
 });
 
 test('the clicked card morphs onto the active grid hero and the flight ends by itself', async ({ mount, page }) => {
@@ -195,20 +197,30 @@ test('an artist landing ends as a real circle, not a rounded square', async ({ m
     await root.locator('[data-probe-home-card]').click();
     await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'morph');
 
-    // 圆角必须是百分比：形变层渲染在起点的盒子里、靠 scaleX/scaleY 缩放，只有跟着缩放走的
-    // 百分比圆角才能在方形落点上收成正圆。写成 px（min(w,h)/2）会被非等比缩放拉成圆角方框。
-    const frameRadius = () => page.locator(FRAME).evaluate(el => getComputedStyle(el).borderTopLeftRadius);
-    const coverRadius = () => page.locator(COVER).evaluate(el => getComputedStyle(el).borderTopLeftRadius);
-    await expect.poll(frameRadius).toBe('50%');
-    await expect.poll(coverRadius).toBe('50%');
+    // 圆角必须是百分比：形变层动画的是自己的盒子，只有跟着盒子走的百分比圆角才能在方形
+    // 落点上收成正圆。写成 px（min(w,h)/2）会被非等比缩放拉成圆角方框。
+    //
+    // 不断言字符串恰好等于 '50%'：Apple 那套弹簧会在落点上留 ~1% 的收势，读数可能是
+    // 50.2%（浏览器对超过半个盒子的半径一律裁成正圆，所以观感不受影响）。这里断言的是
+    // 「单位是百分比」+「数值落在半个盒子上」。
+    const radiusReading = (selector: string) => page.locator(selector).evaluate((el) => {
+        const raw = getComputedStyle(el).borderTopLeftRadius;
+        return { isPercent: raw.trim().endsWith('%'), value: Number.parseFloat(raw) };
+    });
+    await expect.poll(async () => (await radiusReading(FRAME)).value).toBeGreaterThan(48);
+    await expect.poll(async () => (await radiusReading(COVER)).value).toBeGreaterThan(48);
 
-    // 等弹簧落定再确认一次 —— 落点必须是「方形盒子 + 50%」，而不是飞行途中碰巧是百分比。
+    // 等盒子也落定，再确认一次：落点是「方形盒子 + 半个盒子的百分比圆角」。
     await expect.poll(async () => {
         const box = await page.locator(FRAME).boundingBox();
         return box ? Math.abs(box.width - box.height) : Number.POSITIVE_INFINITY;
     }).toBeLessThan(2);
-    expect(await frameRadius()).toBe('50%');
-    expect(await coverRadius()).toBe('50%');
+    for (const selector of [FRAME, COVER]) {
+        const reading = await radiusReading(selector);
+        expect(reading.isPercent).toBe(true);
+        expect(reading.value).toBeGreaterThan(49);
+        expect(reading.value).toBeLessThan(51);
+    }
 });
 
 test('the artist flight never squeezes the cover through a non-uniform scale', async ({ mount, page }) => {

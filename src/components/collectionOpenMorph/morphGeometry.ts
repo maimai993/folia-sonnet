@@ -174,8 +174,11 @@ export const collectionMorphRectSeed = (rect: CollectionMorphRect): number => (
 /**
  * 一张卡片从屏外径向飞入到网格槽位所需的 transform 与错峰。
  *
- * 距离越远启动越晚（ease-out 归一化），再叠加一点确定性抖动，让入场读起来像一次呼吸
- * 的级联而不是机械横扫。`rotate` 限制在 ±3.2°：会歪，但不会看起来是坏的。
+ * 距离越远启动越晚（ease-out 归一化），让入场读起来像一次呼吸的级联而不是机械横扫。
+ *
+ * 倾斜与抖动的幅度是刻意收小的（Apple 的网格入场不会让每一格各自歪一个角度：那读起来是
+ * 「随机」而不是「被安排好的」）。现在倾斜只在 ±1.1°，延迟抖动也只占 0.04s —— 仍然有呼吸感，
+ * 但整片网格的到达看起来是有秩序的。
  */
 export const collectionMorphFlyIn = (
     card: { x: number; y: number },
@@ -195,8 +198,8 @@ export const collectionMorphFlyIn = (
     return {
         x: direction.x * reach,
         y: direction.y * reach,
-        rotate: (seed - 0.5) * 6.4,
-        delay: Math.min(0.04 + eased * 0.38 + seed * 0.1, 0.46),
+        rotate: (seed - 0.5) * 2.2,
+        delay: Math.min(0.04 + eased * 0.38 + seed * 0.04, 0.46),
     };
 };
 

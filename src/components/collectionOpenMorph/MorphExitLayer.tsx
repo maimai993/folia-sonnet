@@ -24,11 +24,9 @@ import {
     type CollectionMorphRect,
 } from './morphGeometry';
 
-// Exit spring: just past critical (ζ ≈ 0.85) so the launch keeps the small
-// rebound the exit is supposed to have, while width and height still converge
-// together instead of wobbling against each other (they travel different
-// distances, so any real bounce reads as the box breathing in aspect ratio).
-const EXIT_SPRING = { type: 'spring', stiffness: 380, damping: 30, mass: 0.85 } as const;
+// Exit 弹簧同样用 Apple 的签名，但稍微「有生气」一点（bounce 0.2）：返回的落点是用户刚刚
+// 离开的那张卡，多一点点收势能让人看出「它回到原位了」。宽高同参数，过冲成比例。
+const EXIT_SPRING = { type: 'spring', visualDuration: 0.36, bounce: 0.2 } as const;
 // Apple-style exit curve for dissolves (opacity/backdrop still breathe on this).
 const EXIT_EASE = [0.32, 0.72, 0, 1] as const;
 const EXIT_DURATION_SECONDS = 0.5;
@@ -158,8 +156,8 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                         animate={{
                             x: direction.x * reach * 0.5,
                             y: direction.y * reach * 0.5,
-                            rotate: (seed % 2 === 0 ? 1 : -1) * (3.5 + (seed % 3) * 1.6),
-                            scale: 0.84,
+                            rotate: (seed % 2 === 0 ? 1 : -1) * (1.8 + (seed % 3) * 0.8),
+                            scale: 0.9,
                             opacity: [1, 0.72, 0],
                         }}
                         transition={{

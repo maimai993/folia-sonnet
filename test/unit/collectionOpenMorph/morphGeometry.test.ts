@@ -106,11 +106,13 @@ describe('collectionMorphFlyIn', () => {
         expect(result.y).toBe(-900);
     });
 
-    it('keeps the tilt inside ±3.2° and the delay inside its window', () => {
+    it('keeps the tilt inside ±1.1° and the delay inside its window', () => {
         for (let x = -3; x <= 3; x += 1) {
             for (let y = -3; y <= 3; y += 1) {
                 const result = flyIn({ x: x * 300, y: y * 300 });
-                expect(Math.abs(result.rotate)).toBeLessThanOrEqual(3.2 + 1e-9);
+                // 倾斜刻意收小：Apple 的网格入场不会让每一格各自歪一个角度（那读起来是
+                // 「随机」而不是「被安排好的」）。这条上界就是那条契约。
+                expect(Math.abs(result.rotate)).toBeLessThanOrEqual(1.1 + 1e-9);
                 expect(result.delay).toBeGreaterThanOrEqual(0.04);
                 expect(result.delay).toBeLessThanOrEqual(0.46);
             }

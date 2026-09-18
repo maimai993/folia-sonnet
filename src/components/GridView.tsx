@@ -1574,9 +1574,11 @@ export const GridView: React.FC<GridViewProps> = ({
                 >
                     <motion.div
                         initial={isMorphHero
-                            ? { opacity: 0 }
+                            // 揭晓时带一丝等比放大（0.985 → 1）：纯透明度会读成「闪一下」，
+                            // 一点点尺度收势才是 Apple 那种「内容落定」的手感。
+                            ? { opacity: 0, scale: 0.985 }
                             : isMorphFlyIn
-                                ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.92, rotate: morphFlyIn!.rotate }
+                                ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.95, rotate: morphFlyIn!.rotate }
                                 : animateEntrance
                                     ? { opacity: 0, scale: 0.98, rotateY: -90 }
                                     : false}
@@ -1608,7 +1610,13 @@ export const GridView: React.FC<GridViewProps> = ({
                                 // dissolves in rather than popping in. 这个延迟只要不晚于
                                 // 合成层自己的淡出起点即可；转场提速后原来那 0.34s 会留下
                                 // 「两边都看不见」的空档。
-                                ? { opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' }, x: { duration: 0 }, y: { duration: 0 } }
+                                ? {
+                                    opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' },
+                                    // 尺度收势比透明度稍长，走 Apple 那条 ease：落定时「稳」下来。
+                                    scale: { delay: 0.12, duration: 0.42, ease: [0.32, 0.72, 0, 1] },
+                                    x: { duration: 0 },
+                                    y: { duration: 0 },
+                                }
                                 : isMorphFlyIn
                                     // Spring arrival with a controlled settle:
                                     // crisp overshoot for life, quick decay so

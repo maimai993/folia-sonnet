@@ -1105,9 +1105,14 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         {/* Morph target of the song-card flight: hidden while the
                             overlay morphs onto it, revealed as the overlay fades. */}
                         <motion.div
-                            initial={morphCoversIntro ? { opacity: 0 } : false}
-                            animate={{ opacity: 1 }}
-                            transition={{ opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' } }}
+                            initial={morphCoversIntro ? { opacity: 0, scale: 0.985 } : false}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{
+                                opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' },
+                                // 尺度收势走 Apple 惯用的那条 ease，比透明度稍长一点，
+                                // 落定时才「稳」下来。
+                                scale: { delay: 0.12, duration: 0.42, ease: [0.32, 0.72, 0, 1] },
+                            }}
                         >
                             <div
                                 className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
@@ -1158,9 +1163,14 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         {/* Hidden while the overlay's title flight morphs onto
                             the h1, revealed as the overlay fades. */}
                         <motion.div
-                            initial={morphCoversIntro ? { opacity: 0 } : false}
-                            animate={{ opacity: 1 }}
-                            transition={{ opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' } }}
+                            initial={morphCoversIntro ? { opacity: 0, scale: 0.985 } : false}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{
+                                opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' },
+                                // 尺度收势走 Apple 惯用的那条 ease，比透明度稍长一点，
+                                // 落定时才「稳」下来。
+                                scale: { delay: 0.12, duration: 0.42, ease: [0.32, 0.72, 0, 1] },
+                            }}
                         >
                             <div
                                 onClick={() => {
@@ -1245,7 +1255,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 >
                     <motion.div
                         initial={isMorphFlyIn
-                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.92, rotate: morphFlyIn!.rotate }
+                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.95, rotate: morphFlyIn!.rotate }
                             : animateEntrance ? { opacity: 0, scale: 0.96 } : false}
                         animate={{
                             // Key set identical across branches so a plan

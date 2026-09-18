@@ -23,12 +23,11 @@ import {
     type CollectionMorphTarget,
 } from './morphGeometry';
 
-// Springy-but-controlled: it arrives on a near-critical spring so the box never
-// overshoots its width and height independently — the two axes change by
-// different amounts, so any visible bounce shows up as the frame breathing in
-// aspect ratio, which reads as rubber rather than silk. ζ ≈ 1 here; the "life"
-// comes from the lift (scale 0.97 → 1) and the rotation on the cover.
-const MORPH_SPRING = { type: 'spring', stiffness: 380, damping: 36, mass: 0.85 } as const;
+// 用 Apple（SwiftUI）那套弹簧签名写，而不是手算 stiffness/damping/mass：
+// `visualDuration` 就是 response（视觉上「到」目标所需的时间），`bounce` 就是 1 - dampingFraction。
+// ζ ≈ 0.84 只留 ~0.8% 的收势 —— 肉眼读作「落定」而不是「停住」，也不会变成橡皮。
+// 上下两条弹簧同参数，所以宽高的过冲成比例，不会出现「呼吸」式的比例抖动。
+const MORPH_SPRING = { type: 'spring', visualDuration: 0.34, bounce: 0.16 } as const;
 export const FADE_DURATION_SECONDS = 0.18;
 export const CROSSFADE_SECONDS = 0.28;
 const FAST_FORWARD_TWEEN = { duration: 0.26, ease: [0.22, 1, 0.36, 1] } as const;
@@ -222,7 +221,7 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 }}
                 initial={fastForwarding && ffStart
                     ? { ...boxOf(ffStart.title), filter: 'blur(2px)', opacity: 1 }
-                    : { ...boxOf(start.title ?? start.frame), filter: 'blur(5px)', opacity: 1 }}
+                    : { ...boxOf(start.title ?? start.frame), filter: 'blur(3.5px)', opacity: 1 }}
                 animate={{
                     ...boxOf(target.title),
                     filter: 'blur(0px)',
