@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Disc, Download, Play, Plus, Loader2, Heart, ListPlus, Pencil, RefreshCw, Trash2, Star, Tags } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
@@ -25,8 +25,8 @@ import {
     GRID_CARD_ITEM_ID_ATTR,
 } from './folia-grid/gridMorphContract';
 import {
+    collectionMorphEntranceTravel,
     collectionMorphFlyIn,
-    collectionMorphReach,
     collectionMorphSeed,
     type CollectionMorphPlan,
 } from './collectionOpenMorph/morphGeometry';
@@ -738,8 +738,11 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!pendingTracks) return;
 
         pendingBackgroundTracksRef.current = null;
-        setTracks(pendingTracks);
-        setOffset(pendingBackgroundOffsetRef.current);
+        // 见 loadTracks 里的说明：分页到达的整表更新走 transition，别把动画和交互堵住。
+        startTransition(() => {
+            setTracks(pendingTracks);
+            setOffset(pendingBackgroundOffsetRef.current);
+        });
     }, []);
 
     // Resolves paged online collection tracks through the active provider boundary.
@@ -818,9 +821,15 @@ export const GridView: React.FC<GridViewProps> = ({
                 }
 
                 if (responseTracks.length > 0) {
-                    setTracks(responseTracks);
-                    setOffset(responseTracks.length);
-                    setHasMore(hasMoreSync);
+                    // 大歌单的整表更新一律走 transition：这首歌单可能有几千首，分页每 100ms 回来一次，
+                    // 每次都要重算 gridItems（O(N)）并重渲染整个渲染环。用户点开的同时合成层还在飞 ——
+                    // 把它降级成可打断的渲染，React 会在切片之间让浏览器提交帧，动画继续跑、交互不被堵，
+                    // 观感是「列表在后面慢慢补齐」而不是「打开时卡一下」。
+                    startTransition(() => {
+                        setTracks(responseTracks);
+                        setOffset(responseTracks.length);
+                        setHasMore(hasMoreSync);
+                    });
 
                     saveToCache(CACHE_KEY, { tracks: responseTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
 
@@ -894,8 +903,11 @@ export const GridView: React.FC<GridViewProps> = ({
                         pendingBackgroundTracksRef.current = nextTracks;
                         pendingBackgroundOffsetRef.current = currentOffset;
                     } else {
-                        setTracks(nextTracks);
-                        setOffset(currentOffset);
+                        // 分页到达：见上面的说明，整表更新走 transition。
+                        startTransition(() => {
+                            setTracks(nextTracks);
+                            setOffset(currentOffset);
+                        });
                     }
                     saveToCache(CACHE_KEY, { tracks: currentTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
 
@@ -1502,12 +1514,11 @@ export const GridView: React.FC<GridViewProps> = ({
             return null;
         }
         const hero = baseCoords[heroIndex];
-        // Push entrance starts beyond the viewport diagonal so cards genuinely
-        // arrive from outside the screen.
-        const reach = collectionMorphReach(containerSize.width, containerSize.height);
+        // 入场的推进距离是短距离的「就位」，不是从屏幕外飞进来（见 morphGeometry 的说明）。
+        const reach = collectionMorphEntranceTravel(containerSize);
         const spacing = Math.max(layoutConfig.spacingX, layoutConfig.spacingY) || 1;
         return { hero, reach, spacing };
-    }, [baseCoords, containerSize.height, containerSize.width, layoutConfig.spacingX, layoutConfig.spacingY, morphHeroIndex, morphPlan]);
+    }, [baseCoords, containerSize, layoutConfig.spacingX, layoutConfig.spacingY, morphHeroIndex, morphPlan]);
 
     const memoizedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
@@ -1524,12 +1535,14 @@ export const GridView: React.FC<GridViewProps> = ({
             const isRemovingTrack = removingTrackKeys.has(trackKey);
             // 「移形换影」: the hero (the card the viewport restores onto + centres)
             // stays static while `kind === 'morph'` (the overlay's composite is
-            // covering it); every other card flies in from outside the viewport
-            // along its radial direction, staggered with an ease-out distance
-            // curve plus a deterministic jitter so the cascade breathes rather
-            // than sweeps.
+            // covering it); every other card that is actually on screen settles
+            // into its slot from a short radial push, staggered by distance.
+            //
+            // 屏外的卡不参与：渲染环本身带 200px 缓冲，那些卡用户根本看不见，却要付一次
+            // 动画（大歌单打开时正是这些并发的动画和首帧的挂载一起把主线程压住）。
+            const cardOnScreen = initialFrame.display !== 'none' && Number.parseFloat(initialFrame.opacity) > 0.05;
             const isMorphHero = Boolean(morphPlan?.kind === 'morph' && cardFlyInOffset && idx === morphHeroIndex);
-            const isMorphFlyIn = Boolean(morphPlan && cardFlyInOffset && !isMorphHero);
+            const isMorphFlyIn = Boolean(morphPlan && cardFlyInOffset && cardOnScreen && !isMorphHero);
             const morphFlyIn = isMorphFlyIn
                 ? collectionMorphFlyIn(
                     { x: coord.baseX, y: coord.baseY },
@@ -1578,7 +1591,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             // 一点点尺度收势才是 Apple 那种「内容落定」的手感。
                             ? { opacity: 0, scale: 0.985 }
                             : isMorphFlyIn
-                                ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.95, rotate: morphFlyIn!.rotate }
+                                ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.94 }
                                 : animateEntrance
                                     ? { opacity: 0, scale: 0.98, rotateY: -90 }
                                     : false}
@@ -1618,10 +1631,11 @@ export const GridView: React.FC<GridViewProps> = ({
                                     y: { duration: 0 },
                                 }
                                 : isMorphFlyIn
-                                    // Spring arrival with a controlled settle:
-                                    // crisp overshoot for life, quick decay so
-                                    // the grid never lingers misaligned.
-                                    ? { type: 'spring', stiffness: 400, damping: 30, mass: 0.65, delay: morphFlyIn!.delay }
+                                    // 一条 Apple 的 ease 补间，而不是每张卡一条 spring：
+                                    // 观感上整片网格是「一起落定」的（不会各自过冲），
+                                    // 成本上每帧只做插值，不跑弹簧积分 —— 大歌单打开时
+                                    // 这里同时有几十条动画在跑。
+                                    ? { duration: 0.5, ease: [0.32, 0.72, 0, 1], delay: morphFlyIn!.delay }
                                     : morphPlan
                                         ? { duration: 0.01 }
                                         : { duration: 0.42, ease: [0.22, 1, 0.36, 1] }}

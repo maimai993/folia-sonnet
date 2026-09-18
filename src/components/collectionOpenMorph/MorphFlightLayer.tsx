@@ -127,7 +127,7 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                 ref={frameRef}
                 data-folia-collection-morph="frame"
                 aria-hidden="true"
-                className="fixed rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.5)] pointer-events-none overflow-hidden"
+                className="fixed rounded-2xl border shadow-[0_10px_28px_rgba(0,0,0,0.3)] pointer-events-none overflow-hidden"
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX,
                     background: 'var(--bg-color)',

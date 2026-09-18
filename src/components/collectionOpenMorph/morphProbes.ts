@@ -108,39 +108,38 @@ export const findMorphCard = (
 // viewport centre, which GridView puts at focusedIndex on open — and measures
 // its cover image and title line, the counterparts the home card morphs into.
 // Shared by the overlay (flight target) and the host (reverse-flight source).
+//
+// 每张卡的矩形只读一次：这个函数在飞行期间每 70ms 跑一次，而大歌单的渲染环里有几十张卡，
+// 多读一遍就是每帧多几十次强制布局。选中的那张复用已经读到的矩形，不再重读。
 export const probeHeroTargets = (): CollectionMorphHeroMeasured | null => {
     const root = activeGridRoot();
     if (!root) {
-        return null;
-    }
-    const wrappers = Array.from(
-        root.querySelectorAll<HTMLElement>(`[${GRID_CARD_ITEM_ID_ATTR}]`),
-    ).filter((el) => el.getBoundingClientRect().width > 1);
-    if (wrappers.length === 0) {
         return null;
     }
     const viewport = viewportOf();
     const cx = viewport.width / 2;
     const cy = viewport.height / 2;
     let hero: HTMLElement | null = null;
+    let heroFrame: CollectionMorphRect | null = null;
     let bestDistSq = Infinity;
-    for (const el of wrappers) {
-        const r = el.getBoundingClientRect();
-        const dX = r.left + r.width / 2 - cx;
-        const dY = r.top + r.height / 2 - cy;
+    for (const el of root.querySelectorAll<HTMLElement>(`[${GRID_CARD_ITEM_ID_ATTR}]`)) {
+        const rect = rectOfElement(el);
+        if (!rect) {
+            continue;
+        }
+        const dX = rect.x + rect.width / 2 - cx;
+        const dY = rect.y + rect.height / 2 - cy;
         const distSq = dX * dX + dY * dY;
         if (distSq < bestDistSq) {
             bestDistSq = distSq;
             hero = el;
+            heroFrame = rect;
         }
     }
-    if (!hero) {
+    if (!hero || !heroFrame) {
         return null;
     }
-    const frame = rectOfElement(hero);
-    if (!frame) {
-        return null;
-    }
+    const frame = heroFrame;
     const heroImg = hero.querySelector<HTMLImageElement>('img');
     const cover = rectOfElement(heroImg) ?? frame;
     const coverUrl = heroImg?.getAttribute('src') ?? null;

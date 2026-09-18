@@ -12,7 +12,7 @@ import { motion } from 'framer-motion';
 import {
     boxOf,
     COLLECTION_MORPH_Z_INDEX,
-    collectionMorphReach,
+    collectionMorphScatterTravel,
     collectionMorphRectSeed,
     MORPH_ANIMATED_BOX_PROPERTIES,
     MORPH_CARD_COVER_RADIUS_PX,
@@ -69,7 +69,9 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
     const key = `exit-${exit.armedAt}`;
     const cx = window.innerWidth / 2;
     const cy = window.innerHeight / 2;
-    const reach = collectionMorphReach(window.innerWidth, window.innerHeight);
+    // 四散的距离刻意比原来的「飞到屏幕外」短得多：读作「散开并淡出」，而不是炸出去；
+    // 顺带少掉一大截位移，返回时同时要喂的动画也轻。
+    const reach = collectionMorphScatterTravel({ width: window.innerWidth, height: window.innerHeight });
     const squadMaxDist = Math.max(
         1,
         ...exit.squad.map((ghost) => Math.hypot(
@@ -137,7 +139,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                         className="fixed rounded-xl overflow-hidden pointer-events-none"
                         style={{
                             zIndex: COLLECTION_MORPH_Z_INDEX,
-                            boxShadow: '0 10px 32px rgba(0,0,0,0.35)',
+                            boxShadow: '0 6px 18px rgba(0,0,0,0.28)',
                             borderRadius: 14,
                             left: rect.x,
                             top: rect.y,
@@ -154,8 +156,8 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                             opacity: 1,
                         }}
                         animate={{
-                            x: direction.x * reach * 0.5,
-                            y: direction.y * reach * 0.5,
+                            x: direction.x * reach,
+                            y: direction.y * reach,
                             rotate: (seed % 2 === 0 ? 1 : -1) * (1.8 + (seed % 3) * 0.8),
                             scale: 0.9,
                             opacity: [1, 0.72, 0],
@@ -207,7 +209,7 @@ const MorphExitLayer: React.FC<MorphExitLayerProps> = ({
                 key={`${key}-frame`}
                 data-folia-collection-morph="frame"
                 aria-hidden="true"
-                className="fixed rounded-2xl border shadow-[0_24px_80px_rgba(0,0,0,0.5)] pointer-events-none overflow-hidden"
+                className="fixed rounded-2xl border shadow-[0_10px_28px_rgba(0,0,0,0.3)] pointer-events-none overflow-hidden"
                 style={{
                     zIndex: COLLECTION_MORPH_Z_INDEX + 1,
                     background: 'var(--bg-color)',

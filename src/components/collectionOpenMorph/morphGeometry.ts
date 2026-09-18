@@ -152,9 +152,20 @@ export const COLLECTION_MORPH_PLAN_TTL_MS = 2400;
 /** Card frames closer than this to the viewport centre count as the hero. */
 const SQUAD_HERO_EXCLUSION_RADIUS = 100;
 
-/** 视口对角线派生出的飞行距离：保证入场从屏幕外开始。 */
-export const collectionMorphReach = (width: number, height: number): number => (
-    Math.hypot(width, height) * 0.62 + 160
+/**
+ * 级联入场的推进距离。**刻意比视口对角线短得多。**
+ *
+ * Apple 的网格入场是「就位」，不是「从屏幕外飞进来」：短距离 + 轻微缩放 + 紧错峰，读起来是
+ * 被安排好的；把几十张卡从屏幕外甩进来则是爆炸感，而且要同时喂饱几十条长距离运动。上限 260px
+ * 同时压掉两件事：观感（不再是爆炸）和单帧成本（并发的动画量与总时长都下来了）。
+ */
+export const collectionMorphEntranceTravel = (viewport: { width: number; height: number }): number => (
+    Math.min(Math.min(viewport.width, viewport.height) * 0.32, 260)
+);
+
+/** 反向四散的推进距离：比入场略短，读作「散开并淡出」，而不是「炸出去」。 */
+export const collectionMorphScatterTravel = (viewport: { width: number; height: number }): number => (
+    Math.min(Math.min(viewport.width, viewport.height) * 0.3, 220)
 );
 
 /** 确定性的字符串种子（0..1），跨 render 稳定，所以卡片不会每次重渲染都换一个歪角。 */
@@ -172,13 +183,12 @@ export const collectionMorphRectSeed = (rect: CollectionMorphRect): number => (
 );
 
 /**
- * 一张卡片从屏外径向飞入到网格槽位所需的 transform 与错峰。
+ * 一张卡片推进到网格槽位所需的 transform 与错峰。
  *
- * 距离越远启动越晚（ease-out 归一化），让入场读起来像一次呼吸的级联而不是机械横扫。
- *
- * 倾斜与抖动的幅度是刻意收小的（Apple 的网格入场不会让每一格各自歪一个角度：那读起来是
- * 「随机」而不是「被安排好的」）。现在倾斜只在 ±1.1°，延迟抖动也只占 0.04s —— 仍然有呼吸感，
- * 但整片网格的到达看起来是有秩序的。
+ * 三条都是 Apple 那套「就位」的语言：
+ * - **不倾斜**：网格入场让每一格各自歪一个角度，读起来是「随机」而不是「被安排好的」；
+ * - 距离越远启动越晚（ease-out 归一化），但错峰上限收在 0.32s 内，整片网格是一起到达的；
+ * - 只留 0.04s 的确定性抖动做呼吸感，不给「机械横扫」留余地。
  */
 export const collectionMorphFlyIn = (
     card: { x: number; y: number },
@@ -198,8 +208,8 @@ export const collectionMorphFlyIn = (
     return {
         x: direction.x * reach,
         y: direction.y * reach,
-        rotate: (seed - 0.5) * 2.2,
-        delay: Math.min(0.04 + eased * 0.38 + seed * 0.04, 0.46),
+        rotate: 0,
+        delay: Math.min(0.04 + eased * 0.34 + seed * 0.04, 0.32),
     };
 };
 

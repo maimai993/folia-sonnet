@@ -26,8 +26,8 @@ import {
 import ActiveGridMarker from './folia-grid/ActiveGridMarker';
 import { shouldApplyInitialGridFocus } from './folia-grid/gridViewRestore';
 import {
+    collectionMorphEntranceTravel,
     collectionMorphFlyIn,
-    collectionMorphReach,
     collectionMorphSeed,
     type CollectionMorphPlan,
 } from './collectionOpenMorph/morphGeometry';
@@ -1066,8 +1066,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     // hiding it there is a 340ms empty slot with no composite to justify it.
     const morphCoversIntro = morphPlan?.kind === 'morph';
     const morphFlyInReach = useMemo(() => (
-        morphPlan ? collectionMorphReach(containerSize.width, containerSize.height) : 0
-    ), [morphPlan, containerSize.width, containerSize.height]);
+        morphPlan ? collectionMorphEntranceTravel(containerSize) : 0
+    ), [morphPlan, containerSize]);
 
     const renderedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
@@ -1225,7 +1225,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             // 「移形换影」fly-in: every non-intro card arrives from outside the
             // viewport along its radial from the avatar cluster, staggered with
             // an ease-out distance curve plus a deterministic jitter.
-            const isMorphFlyIn = Boolean(morphPlan && idx >= 2);
+            // 屏外的卡不参与入场：渲染环带缓冲，那些卡看不见，却要各付一次动画。
+            const cardOnScreen = initialDist <= clipRadius;
+            const isMorphFlyIn = Boolean(morphPlan && idx >= 2 && cardOnScreen);
             const morphFlyIn = isMorphFlyIn
                 ? collectionMorphFlyIn(
                     { x: coord.baseX, y: coord.baseY },
@@ -1255,7 +1257,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 >
                     <motion.div
                         initial={isMorphFlyIn
-                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.95, rotate: morphFlyIn!.rotate }
+                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.94 }
                             : animateEntrance ? { opacity: 0, scale: 0.96 } : false}
                         animate={{
                             // Key set identical across branches so a plan
@@ -1268,10 +1270,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             rotate: 0,
                         }}
                         transition={isMorphFlyIn
-                            // Spring arrival with a controlled settle: crisp
-                            // overshoot for life, quick decay so the grid never
-                            // lingers misaligned.
-                            ? { type: 'spring', stiffness: 400, damping: 30, mass: 0.65, delay: morphFlyIn!.delay }
+                            // 一条 Apple 的 ease 补间而不是每张卡一条 spring：观感上整片网格
+                            // 一起落定，成本上每帧只做插值（大页面同时有几十条动画在跑）。
+                            ? { duration: 0.5, ease: [0.32, 0.72, 0, 1], delay: morphFlyIn!.delay }
                             : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                     >
                     <PolaroidCard

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
     boxOf,
+    collectionMorphEntranceTravel,
     collectionMorphFlyIn,
-    collectionMorphReach,
     collectionMorphRectSeed,
+    collectionMorphScatterTravel,
     collectionMorphSeed,
     estimateCenterTarget,
     isNearViewportCenter,
@@ -106,15 +107,15 @@ describe('collectionMorphFlyIn', () => {
         expect(result.y).toBe(-900);
     });
 
-    it('keeps the tilt inside ±1.1° and the delay inside its window', () => {
+    it('never tilts a card, and keeps the stagger inside its window', () => {
         for (let x = -3; x <= 3; x += 1) {
             for (let y = -3; y <= 3; y += 1) {
                 const result = flyIn({ x: x * 300, y: y * 300 });
-                // 倾斜刻意收小：Apple 的网格入场不会让每一格各自歪一个角度（那读起来是
-                // 「随机」而不是「被安排好的」）。这条上界就是那条契约。
-                expect(Math.abs(result.rotate)).toBeLessThanOrEqual(1.1 + 1e-9);
+                // 不倾斜是契约：网格入场让每一格各自歪一个角度，读起来是「随机」而不是
+                // 「被安排好的」——Apple 的网格入场是有秩序的。
+                expect(result.rotate).toBe(0);
                 expect(result.delay).toBeGreaterThanOrEqual(0.04);
-                expect(result.delay).toBeLessThanOrEqual(0.46);
+                expect(result.delay).toBeLessThanOrEqual(0.32);
             }
         }
     });
@@ -126,12 +127,21 @@ describe('collectionMorphFlyIn', () => {
     });
 });
 
-describe('collectionMorphReach', () => {
-    it('scales with the viewport and stays beyond the diagonal', () => {
-        const small = collectionMorphReach(800, 600);
-        const large = collectionMorphReach(1920, 1080);
-        expect(small).toBeGreaterThan(Math.hypot(800, 600) * 0.62);
-        expect(large).toBeGreaterThan(small);
+describe('travel distances', () => {
+    // 入场是「就位」，不是「从屏幕外飞进来」：短距离是 Apple 网格入场的语言，顺带把
+    // 每张卡要走的距离（也就是单帧要喂的动画量）压下来。
+    it('keeps the entrance a short push instead of a flight from off-screen', () => {
+        const desktop = collectionMorphEntranceTravel({ width: 1440, height: 1100 });
+        const small = collectionMorphEntranceTravel({ width: 800, height: 600 });
+        expect(desktop).toBeLessThanOrEqual(260);
+        expect(small).toBeLessThan(desktop);
+        expect(small).toBeGreaterThan(100);
+    });
+
+    it('scatters shorter than it would take to leave the screen', () => {
+        const viewport = { width: 1440, height: 1100 };
+        expect(collectionMorphScatterTravel(viewport)).toBeLessThanOrEqual(220);
+        expect(collectionMorphScatterTravel(viewport)).toBeLessThan(Math.hypot(viewport.width, viewport.height) * 0.2);
     });
 });
 
