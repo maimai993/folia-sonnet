@@ -12,13 +12,7 @@ import { expect, test } from './fixtures';
 const MORPH_LAYER = '[data-folia-collection-morph]';
 const FRAME = '[data-folia-collection-morph="frame"]';
 const COVER = '[data-folia-collection-morph="cover"]';
-const TITLE = '[data-folia-collection-morph="title"]';
 const BLOCKER = '[data-folia-collection-morph="input-blocker"]';
-
-/** 探针里的三张封面是 data URI，SVG 里带着各自的标签，用编码后的片段区分来源。 */
-const coverSources = (locator: Locator) => locator.locator('img').evaluateAll(
-    (nodes: HTMLImageElement[]) => nodes.map(node => node.getAttribute('src') ?? ''),
-);
 
 /**
  * 采样某个元素在接下来一段时间里的 transform 矩阵。形变层现在动画的是**盒子**，
@@ -35,6 +29,126 @@ const sampleTransforms = (locator: Locator, samples: number, gapMs: number) => (
         }
         return readings;
     }, [samples, gapMs] as const)
+);
+
+/**
+ * 形变层在飞行期间的状态快照，由页内观察器累积。
+ */
+type FlightRecord = {
+    /** 每一层在飞行期间出现过的最大数量（出现即记，之后消失也不回退）。 */
+    frame: number;
+    cover: number;
+    title: number;
+    blocker: number;
+    layer: number;
+    /**
+     * 合成层里出现过的所有封面 src（去重累积）。不能只记「第一眼看到的」：源封面先挂上，
+     * 交叉淡化的目标封面晚一拍才挂，只看第一眼拿到的是首页那张图。
+     */
+    coverSources: string[];
+    /** 合成层里出现过的所有标题文本（去重累积），同理：先是源标题，后面接上目标标题。 */
+    titleTexts: string[];
+    /** 飞行期间出现过的计划种类。 */
+    plans: string[];
+};
+
+/**
+ * 把记录器装进页面，**必须在点击之前**调用。
+ *
+ * 三件套与封锁层只活几百毫秒，而这个进程里一次往返（尤其 CI 上同时跑几个 worker 时）就可能
+ * 上百毫秒 —— 用 `expect(locator).toHaveCount(1)` 逐个确认必然漏窗口：查封锁层时它已经收掉了
+ * （真实发生过）。更糟的是漏掉之后 `locator.evaluate` 会开始等这个元素重新出现，于是超时。
+ * 观察器在页内按突变实时记录，测试事后读一次快照，就不依赖往返速度了。
+ */
+const recordFlight = async (page: Page): Promise<void> => {
+    await page.evaluate(() => {
+        const count = (selector: string) => document.querySelectorAll(selector).length;
+        const push = (list: string[], values: string[]) => {
+            for (const value of values) {
+                if (value && !list.includes(value)) list.push(value);
+            }
+        };
+        const record = {
+            frame: 0, cover: 0, title: 0, blocker: 0, layer: 0,
+            coverSources: [] as string[], titleTexts: [] as string[], plans: [] as string[],
+        };
+        const capture = () => {
+            record.frame = Math.max(record.frame, count('[data-folia-collection-morph="frame"]'));
+            record.cover = Math.max(record.cover, count('[data-folia-collection-morph="cover"]'));
+            record.title = Math.max(record.title, count('[data-folia-collection-morph="title"]'));
+            record.blocker = Math.max(record.blocker, count('[data-folia-collection-morph="input-blocker"]'));
+            record.layer = Math.max(record.layer, count('[data-folia-collection-morph]'));
+            push(record.coverSources, Array.from(document.querySelectorAll<HTMLImageElement>('[data-folia-collection-morph="cover"] img'))
+                .map(image => image.getAttribute('src') ?? ''));
+            push(record.titleTexts, [document.querySelector('[data-folia-collection-morph="title"]')?.textContent?.trim() ?? '']);
+            const plan = document.querySelector('[data-probe-plan]')?.textContent?.trim() ?? '';
+            if (plan && plan !== 'none') push(record.plans, [plan]);
+        };
+        capture();
+        const observer = new MutationObserver(capture);
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src'] });
+        (window as unknown as { __flightRecord?: typeof record }).__flightRecord = record;
+    });
+};
+
+const readFlightRecord = (page: Page) => (
+    page.evaluate(() => (window as unknown as { __flightRecord: FlightRecord }).__flightRecord)
+);
+
+type RadiusReading = { isPercent: boolean; value: number; width: number; height: number };
+type CircleLandingSample = { frame: RadiusReading; cover: RadiusReading | null };
+
+/**
+ * 页内 rAF 采样：形变层落到歌手头像那个槽位上的每一帧，记下形变层与封面层的圆角。
+ *
+ * 同样不能在测试进程里读一次 —— 读完第一处、再去读第二处的时候层可能已经卸载。
+ * 判据：落点必须和头像一样是 240×240，且两层的 border-radius 都是**百分比**、数值约等于
+ * 半个盒子（弹簧收势会落在 50.2%，浏览器对超过半个盒子的半径一律裁成正圆，观感不受影响）。
+ * 写成 px（min(w,h)/2）时，这个方形落点会被非等比缩放拉成圆角方框 —— 那正是回归点。
+ */
+const measureCircleLanding = async (page: Page, timeoutMs = 6000) => (
+    page.evaluate(async (limit: number) => {
+        const read = (selector: string): RadiusReading | null => {
+            const element = document.querySelector(selector);
+            if (!element) return null;
+            const raw = getComputedStyle(element).borderTopLeftRadius;
+            const box = element.getBoundingClientRect();
+            return {
+                isPercent: raw.trim().endsWith('%'),
+                value: Number.parseFloat(raw),
+                width: box.width,
+                height: box.height,
+            };
+        };
+        const target = { width: 0, height: 0, known: false };
+        const samples: CircleLandingSample[] = [];
+        const start = performance.now();
+        let sawLayer = false;
+        while (performance.now() - start < limit) {
+            // 头像在点击之后才挂载，所以落点尺寸得在循环里补认，不能一开始就查。
+            if (!target.known) {
+                const avatar = document.querySelector('[data-probe-artist-avatar]')?.getBoundingClientRect();
+                if (avatar) {
+                    target.width = avatar.width;
+                    target.height = avatar.height;
+                    target.known = true;
+                }
+            }
+            const frame = read('[data-folia-collection-morph="frame"]');
+            if (frame) {
+                sawLayer = true;
+                if (target.known
+                    && Math.abs(frame.width - target.width) <= 2
+                    && Math.abs(frame.height - target.height) <= 2) {
+                    samples.push({ frame, cover: read('[data-folia-collection-morph="cover"]') });
+                }
+            } else if (sawLayer) {
+                break;
+            }
+            await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+        }
+        return samples;
+    }, timeoutMs)
 );
 
 /**
@@ -147,30 +261,32 @@ test('a warm open (cover already decoded) finishes inside half a second', async 
 test('the clicked card morphs onto the active grid hero and the flight ends by itself', async ({ mount, page }) => {
     const root = await mount('collectionMorph');
     await expect(root.locator('[data-probe-enabled]')).toHaveAttribute('data-probe-enabled', 'true');
+    await recordFlight(page);
 
     await root.locator('[data-probe-home-card]').click();
     await expect(root.locator('[data-probe-open]')).toHaveAttribute('data-probe-open', 'true');
 
-    // 三件套 + 封锁层都在，计划是 'morph'（有合成层盖着 hero）。
-    await expect(page.locator(FRAME)).toHaveCount(1);
-    await expect(page.locator(COVER)).toHaveCount(1);
-    await expect(page.locator(TITLE)).toHaveCount(1);
-    await expect(page.locator(BLOCKER)).toHaveCount(1);
-    await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'morph');
-
-    // 飞行目标必须是**活动**网格那张卡：同一个位置上还压着「正在退出的旧网格」的卡片，
-    // 而且它排在前面（距离相同时 probeHeroTargets 取文档顺序里的第一个）。
-    await expect.poll(() => coverSources(page.locator(COVER))).toEqual(
-        expect.arrayContaining([expect.stringContaining('detail')]),
-    );
-    expect((await coverSources(page.locator(COVER))).some(src => src.includes('stale'))).toBe(false);
-    await expect(page.locator(TITLE)).toContainText('Detail Song');
-    await expect(page.locator(TITLE)).not.toContainText('Stale Song');
-
-    // 生命周期自己结束：不能等用户操作才收掉封锁层。
+    // 生命周期自己结束：不能等用户操作才收掉封锁层（封锁层消失、合成层消失、计划归还）。
     await expect(page.locator(BLOCKER)).toHaveCount(0, { timeout: 8000 });
     await expect(page.locator(MORPH_LAYER)).toHaveCount(0);
     await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'none');
+
+    // 飞过的那一段从页内记录器核对：三件套 + 封锁层同在过，计划是 'morph'（有合成层盖着 hero）。
+    const record = await readFlightRecord(page);
+    expect(record.frame).toBeGreaterThanOrEqual(1);
+    expect(record.cover).toBeGreaterThanOrEqual(1);
+    expect(record.title).toBeGreaterThanOrEqual(1);
+    expect(record.blocker).toBeGreaterThanOrEqual(1);
+    expect(record.layer).toBeGreaterThanOrEqual(4);
+    expect(record.plans).toEqual(['morph']);
+
+    // 飞行目标必须是**活动**网格那张卡：同一个位置上还压着「正在退出的旧网格」的卡片，
+    // 而且它排在前面（距离相同时 probeHeroTargets 取文档顺序里的第一个）。
+    // 合成层里出现过目标封面/目标标题，且从没出现过旧网格那张卡的封面/标题。
+    expect(record.coverSources.some(src => src.includes('detail'))).toBe(true);
+    expect(record.coverSources.some(src => src.includes('stale'))).toBe(false);
+    expect(record.titleTexts.some(text => text.includes('Detail Song'))).toBe(true);
+    expect(record.titleTexts.some(text => text.includes('Stale Song'))).toBe(false);
 });
 
 test('a click on the blockade skips the flight instead of being swallowed', async ({ mount, page }) => {
@@ -194,32 +310,20 @@ test('an artist landing ends as a real circle, not a rounded square', async ({ m
     await expect(root.locator('[data-probe-destination]')).toHaveAttribute('data-probe-destination', 'artist');
 
     // 起点是 200×260 的首页卡片，落点是 240×240 的歌手头像 —— 两个方向缩放不同。
+    // 采样先起，再点卡片：飞行只有几百毫秒，等点完再开始采样就已经错过了。
+    const landing = measureCircleLanding(page);
     await root.locator('[data-probe-home-card]').click();
-    await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'morph');
+    const samples = await landing;
 
-    // 圆角必须是百分比：形变层动画的是自己的盒子，只有跟着盒子走的百分比圆角才能在方形
-    // 落点上收成正圆。写成 px（min(w,h)/2）会被非等比缩放拉成圆角方框。
-    //
-    // 不断言字符串恰好等于 '50%'：Apple 那套弹簧会在落点上留 ~1% 的收势，读数可能是
-    // 50.2%（浏览器对超过半个盒子的半径一律裁成正圆，所以观感不受影响）。这里断言的是
-    // 「单位是百分比」+「数值落在半个盒子上」。
-    const radiusReading = (selector: string) => page.locator(selector).evaluate((el) => {
-        const raw = getComputedStyle(el).borderTopLeftRadius;
-        return { isPercent: raw.trim().endsWith('%'), value: Number.parseFloat(raw) };
-    });
-    await expect.poll(async () => (await radiusReading(FRAME)).value).toBeGreaterThan(48);
-    await expect.poll(async () => (await radiusReading(COVER)).value).toBeGreaterThan(48);
-
-    // 等盒子也落定，再确认一次：落点是「方形盒子 + 半个盒子的百分比圆角」。
-    await expect.poll(async () => {
-        const box = await page.locator(FRAME).boundingBox();
-        return box ? Math.abs(box.width - box.height) : Number.POSITIVE_INFINITY;
-    }).toBeLessThan(2);
-    for (const selector of [FRAME, COVER]) {
-        const reading = await radiusReading(selector);
-        expect(reading.isPercent).toBe(true);
-        expect(reading.value).toBeGreaterThan(49);
-        expect(reading.value).toBeLessThan(51);
+    // 至少采到落点：盒子真的落在了头像那个方形槽位上。
+    expect(samples.length).toBeGreaterThan(0);
+    for (const sample of samples) {
+        expect(sample.cover).not.toBeNull();
+        for (const reading of [sample.frame, sample.cover!]) {
+            expect(reading.isPercent).toBe(true);
+            expect(reading.value).toBeGreaterThan(49);
+            expect(reading.value).toBeLessThan(51);
+        }
     }
 });
 

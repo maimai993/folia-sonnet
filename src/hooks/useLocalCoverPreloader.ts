@@ -60,25 +60,26 @@ const preloadImageBytes = (url: string): Promise<void> => {
 };
 
 export const useLocalCoverPreloader = (
-  coverUrls: Array<string | undefined>,
+  coverCount: number,
+  getCoverUrl: (index: number) => string | undefined,
   renderedIndexes: number[],
 ): void => {
   const candidates = useMemo(() => {
     const indexes = new Set<number>();
     if (renderedIndexes.length === 0) {
-      for (let index = 0; index < Math.min(INITIAL_INDEX_COUNT, coverUrls.length); index += 1) indexes.add(index);
+      for (let index = 0; index < Math.min(INITIAL_INDEX_COUNT, coverCount); index += 1) indexes.add(index);
     } else {
       renderedIndexes.forEach(index => {
         const start = Math.max(0, index - NEIGHBOR_INDEX_RADIUS);
-        const end = Math.min(coverUrls.length - 1, index + NEIGHBOR_INDEX_RADIUS);
+        const end = Math.min(coverCount - 1, index + NEIGHBOR_INDEX_RADIUS);
         for (let candidate = start; candidate <= end; candidate += 1) indexes.add(candidate);
       });
     }
     return Array.from(indexes)
       .sort((left, right) => left - right)
-      .map(index => getSizedCoverUrl(coverUrls[index], 512))
+      .map(index => getSizedCoverUrl(getCoverUrl(index), 512))
       .filter(isLocalCoverAssetUrl);
-  }, [coverUrls, renderedIndexes]);
+  }, [coverCount, getCoverUrl, renderedIndexes]);
 
   useEffect(() => {
     if (typeof fetch === 'undefined') return;

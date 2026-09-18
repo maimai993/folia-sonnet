@@ -32,6 +32,11 @@ import {
 } from './collectionOpenMorph/morphGeometry';
 import ActiveGridMarker from './folia-grid/ActiveGridMarker';
 import {
+    buildDuplicateOccurrences,
+    createLazyGridItems,
+    type DuplicateOccurrenceCache,
+} from './folia-grid/lazyGridItems';
+import {
     applyHexCardFrameStyles,
     computeHexCardFrame,
     createHexCardFrameStyleCache,
@@ -1173,32 +1178,16 @@ export const GridView: React.FC<GridViewProps> = ({
         tracks,
     ]);
 
-    // Build the grid spiral coordinates mapping using responsive spacing
+    // 网格项**惰性**塑形（见 lazyGridItems.ts）：length 立刻可用，真对象只在被读到下标时才塑形。
+    // 原来整表 map 一遍，5000 首实测 120ms，而分页每来一页都要重算 —— 大歌单打开时卡在这里。
+    const duplicateOccurrencesRef = useRef<DuplicateOccurrenceCache | null>(null);
     const allGridItems = useMemo((): GridItem[] => {
         if (mode === 'collection') {
             return items || [];
         }
-        const trackIdOccurrences = new Map<string, number>();
-        return displayTracks.map((track, idx) => {
-            const trackKey = getPlaybackSongKey(track);
-            const occurrence = trackIdOccurrences.get(trackKey) ?? 0;
-            trackIdOccurrences.set(trackKey, occurrence + 1);
-
-            return {
-                id: `${trackKey}-${occurrence}`,
-                name: formatSongName(track),
-                searchText: [
-                    track.name,
-                    track.aliases?.join(' '),
-                    track.translatedNames?.join(' '),
-                ].filter(Boolean).join(' '),
-                coverUrl: getSongCoverUrl(track),
-                subtitle: String(idx + 1).padStart(2, '0'),
-                description: track.artists?.map(a => a.name).join(', '),
-                rawTrack: track,
-                rawTrackIndex: idx,
-            };
-        });
+        const { seen, occurrences } = buildDuplicateOccurrences(displayTracks, duplicateOccurrencesRef.current);
+        duplicateOccurrencesRef.current = { source: displayTracks, seen, occurrences };
+        return createLazyGridItems(displayTracks, occurrences);
     }, [mode, items, displayTracks]);
 
     const gridItems = useMemo(() => {
@@ -1277,8 +1266,13 @@ export const GridView: React.FC<GridViewProps> = ({
         renderRing,
         fallbackIndexRef: focusedIndexRef,
     });
-    const gridCoverUrls = useMemo(() => gridItems.map(item => item.coverUrl), [gridItems]);
-    useLocalCoverPreloader(gridCoverUrls, renderedIndexes);
+    // 封面按需取：预加载只需要「视口附近那几个下标」的封面，不必先把整张歌单的 URL 映成数组
+    // （5000 首那种列表里，这个数组以前每页都要重建一次）。
+    const getItemCoverUrl = useCallback(
+        (index: number) => gridItems[index]?.coverUrl,
+        [gridItems],
+    );
+    useLocalCoverPreloader(gridItems.length, getItemCoverUrl, renderedIndexes);
 
     const dragBounds = useMemo(() => {
         if (baseCoords.length === 0) return { left: 0, right: 0, top: 0, bottom: 0 };
