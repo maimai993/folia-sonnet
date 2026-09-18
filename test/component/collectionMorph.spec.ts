@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 // test/component/collectionMorph.spec.ts
@@ -36,6 +36,111 @@ const sampleTransforms = (locator: Locator, samples: number, gapMs: number) => (
         return readings;
     }, [samples, gapMs] as const)
 );
+
+/**
+ * 从点击那一刻起在页面里采样 DOM，返回四个里程碑（毫秒，相对采样开始）：
+ * 三件套首次移动 / 三件套落到 hero / 输入封锁层消失 / 所有合成层消失。
+ *
+ * 「首次打开」的真实代价就在这里：hero 的封面是冷的，而打开动画的时长不该由一张网络图片
+ * 决定。用页面内的 performance.now() 采样，避免 Playwright 往返把测量值撑大。
+ */
+const measureOpenMilestones = async (page: Page, timeoutMs = 6000) => (
+    page.evaluate(async (limit: number) => {
+        const start = performance.now();
+        const readBox = () => {
+            const el = document.querySelector('[data-folia-collection-morph="frame"]');
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+        };
+        const marker = document.querySelector('[data-probe-detail-card]');
+        const targetRect = marker ? marker.getBoundingClientRect() : null;
+
+        let startBox: { x: number; y: number; w: number; h: number } | null = null;
+        let firstMove: number | null = null;
+        let landed: number | null = null;
+        let blockerGone: number | null = null;
+        let layersGone: number | null = null;
+        let heroCoverReady: number | null = null;
+
+        while (performance.now() - start < limit) {
+            const box = readBox();
+            if (box && !startBox) startBox = box;
+            const elapsed = performance.now() - start;
+            if (box && startBox && firstMove === null
+                && Math.hypot(box.x - startBox.x, box.y - startBox.y) > 5) {
+                firstMove = elapsed;
+            }
+            if (box && targetRect && landed === null
+                && Math.hypot(box.x - targetRect.x, box.y - targetRect.y) < 8
+                && Math.abs(box.w - targetRect.width) < 8
+                && Math.abs(box.h - targetRect.height) < 8) {
+                landed = elapsed;
+            }
+            // 封锁层可能在采样开始前就挂上了，所以要求合成层先出现过再消失。
+            if (blockerGone === null && startBox
+                && !document.querySelector('[data-folia-collection-morph="input-blocker"]')) {
+                blockerGone = elapsed;
+            }
+            if (layersGone === null && startBox && !document.querySelector('[data-folia-collection-morph]')) {
+                layersGone = elapsed;
+            }
+            const heroCover = document.querySelector<HTMLImageElement>('[data-probe-detail-cover]');
+            if (heroCoverReady === null && heroCover?.complete && heroCover.naturalWidth > 0) {
+                heroCoverReady = elapsed;
+            }
+            if (layersGone !== null) break;
+            await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+        }
+        return { firstMove, landed, blockerGone, layersGone, heroCoverReady };
+    }, timeoutMs)
+);
+
+test('a cold hero cover must not stretch the open animation', async ({ mount, page }) => {
+    // hero 封面延迟 1.2s 才到达 —— 就是「首次打开」时那张还没解码的封面。
+    await page.route('**/slow-cover.png', async (route) => {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        await route.fulfill({
+            status: 200,
+            contentType: 'image/svg+xml',
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#2f9e44"/></svg>',
+        });
+    });
+
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-action="cold-cover"]').click();
+    await expect(root.locator('[data-probe-detail-cover]')).toHaveCount(0);
+    await root.locator('[data-probe-home-card]').click();
+
+    const milestones = await measureOpenMilestones(page);
+    // eslint-disable-next-line no-console
+    console.log('MILESTONES cold', JSON.stringify(milestones));
+
+    expect(milestones.firstMove).not.toBeNull();
+    expect(milestones.landed).not.toBeNull();
+    // 形状要很快落到 hero 上：测量里 hero 的封面要到 1.2s 才到，飞行不该等它。
+    expect(milestones.landed!).toBeLessThan(900);
+    // 交互必须在「封面还在路上」的时候就恢复：封锁层挡的是交互，而飞行本身不需要等图片。
+    expect(milestones.blockerGone).not.toBeNull();
+    expect(milestones.blockerGone!).toBeLessThan(900);
+    expect(milestones.blockerGone!).toBeLessThan(milestones.heroCoverReady ?? Number.POSITIVE_INFINITY);
+    // 整层的尾巴也要有界：封面层顶多等到封面到达（或兜底上限）就交还给 hero 卡片。
+    expect(milestones.layersGone).not.toBeNull();
+    expect(milestones.layersGone!).toBeLessThan(2400);
+});
+
+test('a warm open (cover already decoded) finishes inside half a second', async ({ mount, page }) => {
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-home-card]').click();
+
+    const milestones = await measureOpenMilestones(page);
+    // eslint-disable-next-line no-console
+    console.log('MILESTONES warm', JSON.stringify(milestones));
+
+    expect(milestones.landed!).toBeLessThan(700);
+    expect(milestones.blockerGone!).toBeLessThan(700);
+    expect(milestones.layersGone!).toBeLessThan(1200);
+});
 
 test('the clicked card morphs onto the active grid hero and the flight ends by itself', async ({ mount, page }) => {
     const root = await mount('collectionMorph');

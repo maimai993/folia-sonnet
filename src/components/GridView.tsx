@@ -1605,8 +1605,10 @@ export const GridView: React.FC<GridViewProps> = ({
                             : isMorphHero
                                 // Reveal while the overlay is still fading out so
                                 // the hero (cover, title, heart/queue buttons)
-                                // dissolves in rather than popping in.
-                                ? { opacity: { delay: 0.34, duration: 0.42, ease: 'easeOut' }, x: { duration: 0 }, y: { duration: 0 } }
+                                // dissolves in rather than popping in. 这个延迟只要不晚于
+                                // 合成层自己的淡出起点即可；转场提速后原来那 0.34s 会留下
+                                // 「两边都看不见」的空档。
+                                ? { opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' }, x: { duration: 0 }, y: { duration: 0 } }
                                 : isMorphFlyIn
                                     // Spring arrival with a controlled settle:
                                     // crisp overshoot for life, quick decay so

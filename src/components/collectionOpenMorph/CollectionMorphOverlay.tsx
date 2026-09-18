@@ -45,23 +45,41 @@ import { attachMorphCapture, findMorphCard, probeArtistIntroTargets, probeHeroTa
 
 type MorphStage = 'idle' | 'flying' | 'settling' | 'fading' | 'exiting';
 
-const SETTLE_AFTER_TARGET_MS = 180;
+// 时间线（首次打开，冷封面）：
+//   0        点击 → 合成层起飞，朝 hero 的估算位滑过去
+//   ~200ms   连续两拍量到同一张卡（含 hero 落在最终位置）→ 锁定真实落点
+//   +140ms   形状到位 → settling（封面/标题开始交叉淡化），**输入封锁在这一刻解除**
+//   +240ms   fading：外框与标题淡出，形状变化到此结束
+//   之后     封面层单独留到 hero 自己的封面解码完（或兜底上限）再淡出
+//
+// 关键取舍：**飞行与淡入淡出不再等封面**。之前 requirable 的 coverReady 让整段动画的长度
+// 由一张 512px 缩略图的网络请求决定（首次打开它是冷的），实测把 2s 的封锁层和 2s 的合成层
+// 都拖在那里。现在封面层是唯一等待方，而且它只是静静停在 hero 的封面上 —— 不会露出 hero
+// 自己的加载占位（灰底转圈），也不需要挡住任何交互。
+const SETTLE_AFTER_TARGET_MS = 140;
 const FAST_FORWARD_FLIGHT_MS = 260;
 // …and the whole accelerated lifecycle ends on this hard timer so the input
 // blockade never outlives it.
 const FAST_FORWARD_FINISH_MS = 140;
-const HERO_POLL_INTERVAL_MS = 120;
+// 探针每 70ms 一次：连续两拍确认（见下）决定了锁定落点的最早时刻，所以这个间隔直接是
+// 动画前段的延迟。测量本身只是几个 getBoundingClientRect，加密到这里仍然可以忽略。
+const HERO_POLL_INTERVAL_MS = 70;
 // The probe only ever measures the ACTIVE grid (see morphProbes.activeGridRoot),
 // so the outgoing grid's cards can no longer be mistaken for the hero. What is
 // left is the incoming grid's own restore pan: on its first frames the cards are
 // still sliding, so a target is accepted only once two consecutive polls measure
 // the SAME card at (nearly) the same rectangles. That gate — not a fixed delay —
 // is what keeps the flight from retargeting onto a moving card; the warmup below
-// only skips the first tick or two, before the grid has rendered at all.
-const HERO_POLL_WARMUP_MS = 90;
+// only skips the first tick, before the grid has rendered at all.
+const HERO_POLL_WARMUP_MS = 60;
 const HERO_POLL_MAX_MS = 2400;
 // A candidate counts as settled when the same card repeats within this tolerance.
 const HERO_STABLE_TOLERANCE_PX = 1.5;
+// settling → fading 之间的停留：交叉淡化（0.28s）走完就够，不需要再多等。
+const CROSSFADE_HOLD_MS = 240;
+// 封面层最多多留这么久等 hero 自己的封面解码；超过就淡掉，宁可闪一下占位也不把合成层
+// 无限期挂在屏幕上。
+const COVER_HOLD_MAX_MS = 1400;
 // 退出的最短寿命。落点会在中途 retarget，framer 对每一段都会报一次「动画完成」，
 // 加上 hold 阶段本身很短，不设这条下限就会在 hero 刚要起飞时把整层收掉。
 const EXIT_MIN_LIFETIME_MS = 420;
@@ -90,11 +108,20 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
 
     const [stage, setStage] = useState<MorphStage>('idle');
     const [flown, setFlown] = useState<CollectionMorphPending | null>(null);
-    const [targets, setTargets] = useState<CollectionMorphTarget | null>(null);
+    // 目标是探针量出来的完整落点：除了几何，还带着 key（稳定性判据）和 coverReady
+    // （封面层要不要多顶一会儿）。层只需要几何，但生命周期要读 coverReady。
+    const [targets, setTargets] = useState<CollectionMorphHeroMeasured | null>(null);
     const [exitPayload, setExitPayload] = useState<CollectionMorphExit | null>(null);
     // True once a scroll fast-forwarded the flight: fades snap shut and the
     // lifecycle ends on a hard timer so the input blockade is released fast.
     const [fastForwarding, setFastForwarding] = useState(false);
+    // 输入封锁在「飞行停下来」的那一刻就解除，而不是等封面解码、等淡出结束。合成层本身是
+    // pointer-events: none，停在 hero 上不挡任何点击；真正挡交互的只有封锁层。
+    const [blockerReleased, setBlockerReleased] = useState(false);
+    // hero 自己的封面还没解码时，封面层单独多留一会儿（不然会露出灰底转圈占位）。
+    // 它一旦解码（交叉淡化那张 img 的 load/error）就立刻放手，超过上限也放手。
+    const [coverHoldExpired, setCoverHoldExpired] = useState(false);
+    const [heroCoverArrived, setHeroCoverArrived] = useState(false);
     // On-screen rects of the three flying elements at fast-forward time — the
     // compressed replay starts from these, continuing mid-flight instead of
     // rewinding or flashing away.
@@ -123,6 +150,18 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
     // measurement taken while the incoming grid is still panning cannot become
     // the flight target.
     const heroCandidateRef = useRef<CollectionMorphHeroMeasured | null>(null);
+
+    // 这两个派生值要在回调里用到（handleFadeComplete 判断能不能收尾），所以放在回调之前。
+    const fading = stage === 'fading';
+    // 封面层是否要压在 hero 上多留一会儿：hero 的封面还没解码完（否则会露出灰底转圈），
+    // 而且兜底时间还没到、它也没有自己到达。只有这一层等封面，外框/标题/封锁层都不等。
+    const coverHolding = Boolean(
+        fading
+        && !heroCoverArrived
+        && !coverHoldExpired
+        && targets
+        && !targets.coverReady,
+    );
 
     const stopPolling = useCallback(() => {
         if (pollTimerRef.current !== null) {
@@ -173,6 +212,9 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         setFfStart(null);
         setNestedLanding(null);
         setNestedGaveUp(false);
+        setBlockerReleased(false);
+        setCoverHoldExpired(false);
+        setHeroCoverArrived(false);
         acceleratedRef.current = false;
         setStage('idle');
     }, [clearFastForwardTimer, clearSettleTimer, clearWatchdog, consume, stopNestedPoll, stopPolling]);
@@ -186,6 +228,20 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
             setStage('settling');
         }, SETTLE_AFTER_TARGET_MS);
     }, [clearSettleTimer]);
+
+    // 飞行停下来（framer 报这一层动画完成）就解除封锁：此刻合成层已经停在落点上，
+    // 它自己不挡点击，用户等的是「能操作」，不是「封面解码完」。
+    const handleFlightSettled = useCallback(() => {
+        setBlockerReleased(true);
+    }, []);
+
+    // 封锁层只为转场的开场一拍存在。两条触发：framer 报外框动画完成（精确）、
+    // 或者已经进入 settling/fading（结算计时器先到，比弹簧的尾巴早一点）。
+    useEffect(() => {
+        if (stage === 'settling' || stage === 'fading') {
+            setBlockerReleased(true);
+        }
+    }, [stage]);
 
     useEffect(() => {
         if (!targets || stage !== 'flying') {
@@ -202,8 +258,18 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         settleTimerRef.current = setTimeout(() => {
             settleTimerRef.current = null;
             setStage('fading');
-        }, CROSSFADE_SECONDS * 1000 * 1.5);
+        }, CROSSFADE_HOLD_MS);
     }, [stage, clearSettleTimer]);
+
+    // fading 开始时 hero 的封面可能还在路上：封面层单独留一会儿（形状与标题照常按时淡出），
+    // 但不会无限期等 —— COVER_HOLD_MAX_MS 之后照淡，宁可闪一下占位。
+    useEffect(() => {
+        if (stage !== 'fading' || !targets || targets.coverReady) {
+            return;
+        }
+        const timer = setTimeout(() => setCoverHoldExpired(true), COVER_HOLD_MAX_MS);
+        return () => clearTimeout(timer);
+    }, [stage, targets]);
 
     // Records which card the user clicked. Attached from an effect (and disposed
     // with it) rather than as a module side effect, so HMR cannot stack a second
@@ -247,14 +313,12 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
                     ? probeArtistIntroTargets()
                     : probeHeroTargets();
             })();
-            // Hold the flight over the hero until its cover finished loading
-            // (or failed): the morph is the load cover, so the reveal must
-            // never uncover an empty frame. The deadline below still caps the
-            // wait for covers that never resolve.
+            // 目标只要求几何稳定 —— **不等封面**。封面是否解码完只影响「封面层什么时候淡出」，
+            // 不该决定飞行和封锁层的长度：那会让整段转场的时长由一张缩略图的网络请求决定。
             if (found) {
                 const settled = isMorphTargetSettled(heroCandidateRef.current, found, HERO_STABLE_TOLERANCE_PX);
                 heroCandidateRef.current = found;
-                if (settled && found.coverReady) {
+                if (settled) {
                     setTargets(found);
                     setHero(found);
                     stopPolling();
@@ -526,8 +590,25 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         if (stage !== 'fading') {
             return;
         }
+        // 封面层还在替 hero 顶着（它的封面没解码完）：外框淡完不等于整层收完，
+        // 等封面层自己的完成回调。
+        if (coverHolding) {
+            return;
+        }
         finishLifecycle();
-    }, [finishLifecycle, stage]);
+    }, [coverHolding, finishLifecycle, stage]);
+
+    const handleCoverFadeComplete = useCallback(() => {
+        if (stage !== 'fading') {
+            return;
+        }
+        // 这个回调不只属于「淡出」：封面层落点那一次弹簧到位也会报它，而后者常常落在
+        // fading 之后 —— 直接收尾就会把还在替 hero 顶着的封面切掉（等于露出灰底转圈）。
+        if (coverHolding) {
+            return;
+        }
+        finishLifecycle();
+    }, [coverHolding, finishLifecycle, stage]);
 
     // Scroll — or a click on the blockade — = fast-forward. The morph doubles as
     // a load cover, so when the user has already moved on the flight must
@@ -541,12 +622,13 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         }
         acceleratedRef.current = true;
         if (stage === 'exiting') {
-            finishLifecycle();
+            // 退出本来就短：给它一点点时间收势，别一按就凭空消失。
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
             return;
         }
         if (stage === 'fading') {
             // Already dissolving — just cap the remainder.
-            finishLifecycle();
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 180);
             return;
         }
         const rectOfFlight = (el: HTMLElement | null) => {
@@ -559,7 +641,7 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         const coverRect = rectOfFlight(coverFlightRef.current);
         const titleRect = rectOfFlight(titleFlightRef.current);
         if (!frameRect || !coverRect || !titleRect) {
-            finishLifecycle();
+            fastForwardTimerRef.current = setTimeout(() => finishLifecycle(), 120);
             return;
         }
         stopPolling();
@@ -665,11 +747,9 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
         title: estimated,
         titleText: '',
     };
-    const fading = stage === 'fading';
     // Crossfade the song content in as soon as the springs are settling, not
     // after — keeps the transition feeling like one continuous morph.
-    const showHeroContent = stage === 'settling' || fading;
-    // Artist destinations land on the circular avatar: the flying frame/cover
+    const showHeroContent = stage === 'settling' || fading;    // Artist destinations land on the circular avatar: the flying frame/cover
     // round themselves into a circle mid-flight instead of staying card-shaped.
     const artistLanding = navSnapshot?.stack[navSnapshot.stack.length - 1]?.type === 'artist';
 
@@ -680,14 +760,23 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
             fastForwarding={fastForwarding}
             ffStart={ffStart}
             fading={fading}
+            blockerReleased={blockerReleased}
+            coverHolding={coverHolding}
             showHeroContent={showHeroContent}
             artistLanding={artistLanding}
             frameRef={frameFlightRef}
             coverRef={coverFlightRef}
             titleRef={titleFlightRef}
             onSkip={accelerate}
+            onHeroCoverSettled={() => setHeroCoverArrived(true)}
+            onCoverAnimationComplete={handleCoverFadeComplete}
             onFrameAnimationComplete={() => {
-                if (fading) handleFadeComplete();
+                if (fading) {
+                    handleFadeComplete();
+                } else {
+                    // 外框停了 = 形状到位：这时解除输入封锁，用户不必等封面和淡出。
+                    handleFlightSettled();
+                }
             }}
         />,
         portalRoot,

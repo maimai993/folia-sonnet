@@ -87,6 +87,10 @@ const CollectionMorphProbe: React.FC = () => {
         setNestedBack(false);
     };
 
+    // 「首次打开」的真相：hero 的封面是冷的（还没解码完）。真实场景里这是网络 + 解码，
+    // 速度完全不受 UI 控制；探针里用一个被 spec 延迟响应的 URL 复现它。
+    const [coldCover, setColdCover] = React.useState(false);
+
     // 模拟「歌手页返回歌单」：hero 是圆形的歌手头像，落点是上一层网格里被点的那张卡，
     // 而那张卡的内层还在做飞入。overlay 必须在卡片外框稳定后就起飞，不能等它落定。
     const startNestedBack = () => {
@@ -143,6 +147,17 @@ const CollectionMorphProbe: React.FC = () => {
                     }}
                 >
                     目标：{destination === 'artist' ? '歌手页（圆形头像）' : '歌单（卡片）'}
+                </button>
+                <button
+                    type="button"
+                    data-probe-action="cold-cover"
+                    className={buttonClass}
+                    onClick={() => {
+                        closeCollection();
+                        setColdCover(current => !current);
+                    }}
+                >
+                    hero 封面：{coldCover ? '冷（延迟 1.2s）' : '热（data URI）'}
                 </button>
                 <button type="button" data-probe-action="toggle-stale" className={buttonClass} onClick={() => setWithStaleGrid(v => !v)}>
                     旧网格：{withStaleGrid ? '在 DOM 里' : '已卸载'}
@@ -221,7 +236,12 @@ const CollectionMorphProbe: React.FC = () => {
                         </>
                     ) : (
                         <div {...{ [GRID_CARD_ITEM_ID_ATTR]: 'a-1' }} data-probe-detail-card style={cardBox}>
-                            <img src={DETAIL_COVER} alt="" style={coverBox} />
+                            <img
+                                src={coldCover ? '/slow-cover.png' : DETAIL_COVER}
+                                alt=""
+                                style={coverBox}
+                                data-probe-detail-cover
+                            />
                             <div {...{ [CARD_TITLE_ATTR]: 'Detail Song' }} style={{ width: 200, height: 24, fontSize: 14 }}>
                                 Detail Song
                             </div>

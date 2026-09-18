@@ -47,6 +47,15 @@ interface MorphFlightLayerProps {
     fastForwarding: boolean;
     /** On-screen rects at fast-forward time; the replay continues from these. */
     ffStart: MorphFastForwardStart | null;
+    /** True once the flight stopped moving: the input blockade is released then. */
+    blockerReleased: boolean;
+    /**
+     * True while the hero's own cover is still decoding: this layer keeps its
+     * (already decoded) artwork parked exactly over the hero's cover slot, so the
+     * handoff never uncovers the card's grey spinner plate. Only this layer
+     * waits — the frame, the title and the blockade are already done.
+     */
+    coverHolding: boolean;
     /** True while the flight is dissolving (stage 'fading'). */
     fading: boolean;
     /** True once the hero content should replace the card content. */
@@ -59,6 +68,9 @@ interface MorphFlightLayerProps {
     /** 点击封锁层 = 跳过转场（不然第一次点击只会被无声吞掉）。
      * 绑的是 click 而不是 pointerdown：触摸/按下就开始的拖动不应该把飞行催成一次急冲。 */
     onSkip: () => void;
+    /** hero 那张封面解码完成（或失败）：封面层可以放手了。 */
+    onHeroCoverSettled: () => void;
+    onCoverAnimationComplete: () => void;
     onFrameAnimationComplete: () => void;
 }
 
@@ -67,6 +79,8 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
     target,
     fastForwarding,
     ffStart,
+    blockerReleased,
+    coverHolding,
     fading,
     showHeroContent,
     artistLanding,
@@ -74,6 +88,8 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
     coverRef,
     titleRef,
     onSkip,
+    onHeroCoverSettled,
+    onCoverAnimationComplete,
     onFrameAnimationComplete,
 }) => {
     const fadeSeconds = fastForwarding ? FAST_FORWARD_FADE_SECONDS : FADE_DURATION_SECONDS;
@@ -90,18 +106,21 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
 
     return (
         <>
-            {/* Input blockade for the flight's duration: the morph is a load
-                cover, so interaction waits a beat. Clicking it fast-forwards the
-                flight (see the overlay's accelerate), which releases this within
-                FAST_FORWARD_FINISH_MS — the delay is always short. Hidden from
+            {/* Input blockade: it exists for the flight's opening beat, not for
+                the whole lifecycle — it is dropped the moment the composite stops
+                moving (see the overlay's handleFlightSettled), so the detail view
+                is interactive while a cold cover is still loading. Clicking it
+                fast-forwards the flight (the overlay's accelerate). Hidden from
                 AT: it carries no content. */}
-            <div
-                data-folia-collection-morph="input-blocker"
-                aria-hidden="true"
-                className="fixed inset-0"
-                style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
-                onClick={onSkip}
-            />
+            {blockerReleased ? null : (
+                <div
+                    data-folia-collection-morph="input-blocker"
+                    aria-hidden="true"
+                    className="fixed inset-0"
+                    style={{ zIndex: COLLECTION_MORPH_Z_INDEX + 10, pointerEvents: 'auto' }}
+                    onClick={onSkip}
+                />
+            )}
             {/* Card frame: the whole border box glides and resizes onto the hero
                 card, lifting slightly (scale) then settling flat. */}
             <motion.div
@@ -154,12 +173,15 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                     rotate: 0,
                     ...coverRadius.animate,
                     filter: 'blur(0px)',
-                    opacity: fading ? 0 : 1,
+                    // 封面层是唯一会为了 hero 的封面多留一会儿的一层：它顶着的那张图
+                    // 已经解码好了，露出来的和 hero 待会儿自己画的完全是同一张画。
+                    opacity: fading && !coverHolding ? 0 : 1,
                 }}
                 transition={{
                     ...spring,
                     opacity: { duration: fadeSeconds, ease: 'easeOut' },
                 }}
+                onAnimationComplete={onCoverAnimationComplete}
             >
                 {start.coverUrl ? (
                     <img src={start.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
@@ -173,6 +195,10 @@ const MorphFlightLayer: React.FC<MorphFlightLayerProps> = ({
                         className="absolute inset-0 w-full h-full object-cover"
                         style={{ opacity: showHeroContent ? 1 : 0, transition: `opacity ${CROSSFADE_SECONDS}s ease` }}
                         draggable={false}
+                        // 这张就是 hero 自己的封面：它解码完成（或失败）意味着可以把画面交还给
+                        // hero 卡片，封面层不必再顶着了。
+                        onLoad={onHeroCoverSettled}
+                        onError={onHeroCoverSettled}
                     />
                 ) : null}
             </motion.div>

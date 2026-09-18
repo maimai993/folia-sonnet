@@ -1107,7 +1107,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         <motion.div
                             initial={morphCoversIntro ? { opacity: 0 } : false}
                             animate={{ opacity: 1 }}
-                            transition={{ opacity: { delay: 0.34, duration: 0.42, ease: 'easeOut' } }}
+                            transition={{ opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' } }}
                         >
                             <div
                                 className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
@@ -1160,7 +1160,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         <motion.div
                             initial={morphCoversIntro ? { opacity: 0 } : false}
                             animate={{ opacity: 1 }}
-                            transition={{ opacity: { delay: 0.34, duration: 0.42, ease: 'easeOut' } }}
+                            transition={{ opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' } }}
                         >
                             <div
                                 onClick={() => {
