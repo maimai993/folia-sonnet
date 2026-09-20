@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
 import { resolveSongLiked } from '../../../utils/resolveSongLiked';
+import { getOnlineProviderIdForSong } from '../../../utils/appPlaybackGuards';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
@@ -75,20 +76,19 @@ export const usePlayerPanelModel = ({
     const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
     const displayLyrics = usePlaybackStore(selectDisplayLyrics);
 
-    // `omni.isSongLiked` reads the provider account store, but this memo only re-runs when its
-    // dependencies change. Subscribe to the playing provider's liked set so a successful
-    // favorite/unfavorite immediately recomputes the heart icon for every online provider.
-    const currentSongProviderId = currentSong?.sourceRef?.kind === 'online'
-        ? currentSong.sourceRef.providerId
-        : undefined;
-    const providerLikedSongIds = useOnlineProviderAccountStore(state => (
+    // 冗余但保留的订阅：`omni.isSongLiked` 走 getState 读账号 store，读不到变化。今天 App 已经
+    // 通过 useOnlineProviderPlatform 订阅了整张 accounts 表，所以这里其实总会被重渲染带到；
+    // 万一哪天那条链断了，这一行仍能保证收藏成功后心形当场更新。取值没有用处。
+    const currentSongProviderId = getOnlineProviderIdForSong(currentSong);
+    useOnlineProviderAccountStore(state => (
         currentSongProviderId ? state.accounts[currentSongProviderId]?.likedSongIds : undefined
     ));
 
-    const isLiked = useMemo(
-        () => resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
-        [currentSong, isLocalSongLiked, likedSongIds, starredNavidromeSongIds, providerLikedSongIds],
-    );
+    // Recomputed every render, never memoised. `isLocalSongLiked` arrives through
+    // useStableActionSurface, so its identity is permanent (see the warning in
+    // useStableCallbacks.ts) and a memo keyed on it answers with the first render's value forever:
+    // favouriting a local song left this heart dark while the bottom bar's inline copy updated.
+    const isLiked = resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
 
     const collectionEntries = useMemo(() => createPlayerPanelCollectionEntries({
         currentSong,

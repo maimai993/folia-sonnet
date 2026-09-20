@@ -15,8 +15,10 @@ vi.mock('@/services/onlineMusic/kugouTransport', () => ({
     requestKugouLegacyPlayInfo: legacyPlayInfoMock,
 }));
 
+const sessionState = vi.hoisted(() => ({ userId: 'web-session-user' }));
+
 vi.mock('@/services/onlineMusic/providerStorage', () => ({
-    readProviderSessionValue: () => 'web-session-user',
+    readProviderSessionValue: () => sessionState.userId,
     removeProviderSessionValue: vi.fn(),
 }));
 
@@ -28,7 +30,14 @@ import {
 import { resolveSongCatalogRef } from '@/services/onlineMusic/catalogRefs';
 
 describe('kugouProvider', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+        // provider 里的"我喜欢"歌单引用和行号缓存是模块级的，按会话生命周期清理；用例之间必须先登出，
+        // 否则上一条用例写进去的引用会让下一条跳过 user_playlist 请求。
+        requestMock.mockReset();
+        requestMock.mockResolvedValue(undefined);
+        await kugouProvider.auth?.logout?.();
+
+        sessionState.userId = 'web-session-user';
         vi.useRealTimers();
         requestMock.mockReset();
         anonymousSearchMock.mockReset();
@@ -1325,7 +1334,7 @@ describe('kugouProvider', () => {
         expect(requestMock).not.toHaveBeenCalledWith('playlist_track_all', expect.anything());
     });
 
-    it('rejects unlike when the liked playlist scan does not contain the song', async () => {
+    it('treats an unlike as done when the liked playlist does not contain the song', async () => {
         requestMock
             .mockResolvedValueOnce({
                 data: {
@@ -1356,10 +1365,11 @@ describe('kugouProvider', () => {
             mixsongid: 34,
         });
 
-        await expect(kugouProvider.mutations?.likeSong?.(song, false)).rejects.toMatchObject({
-            code: 'unavailable',
-        });
+        // 服务端本来就没有这首歌，目标状态已经达成：不发删除请求，也不能抛错把心形卡在点亮状态。
+        await expect(kugouProvider.mutations?.likeSong?.(song, false)).resolves.toBeUndefined();
         expect(requestMock).not.toHaveBeenCalledWith('playlist_tracks_del', expect.anything());
+        // 下结论之前必须绕过 10 秒缓存重扫一次。
+        expect(requestMock.mock.calls.filter(([endpoint]) => endpoint === 'playlist_track_all')).toHaveLength(2);
     });
 
     it('rejects unlike when the liked playlist has no global collection id', async () => {
@@ -1580,5 +1590,135 @@ describe('kugouProvider', () => {
             userid: 'web-session-user', page: 1, pagesize: 100,
         });
         expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_del', { listid: '9' });
+    });
+
+    it('fails instead of silently saving a truncated liked playlist', async () => {
+        const fullPage = Array.from({ length: 100 }, (_, index) => ({ hash: `guard-${index}`, name: `Song ${index}` }));
+        requestMock.mockImplementation(async (endpoint: string) => (
+            endpoint === 'user_playlist'
+                ? { data: { info: [{ type: 0, source: 1, listid: 2, name: '我喜欢', global_collection_id: 'collection_3_guard' }] } }
+                : { data: { count: 10_000_000, songs: fullPage } }
+        ));
+
+        await expect(kugouProvider.library?.getLikedSongs?.('user')).rejects.toMatchObject({
+            code: 'invalid-response',
+        });
+    });
+
+    it('stops reusing the liked playlist reference after a logout', async () => {
+        const song = normalizeKugouSong({ hash: 'abc123', name: 'Song 1', album_id: 12, mixsongid: 34 });
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 2, name: '我喜欢', global_collection_id: 'collection_3_logout' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 987 });
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', expect.anything());
+
+        // 第二次取消收藏直接吃缓存，不再拉歌单列表——先证明缓存确实在用。
+        requestMock.mockReset();
+        requestMock.mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 987 });
+        expect(requestMock).toHaveBeenCalledTimes(1);
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'playlist_tracks_del', expect.anything());
+
+        requestMock.mockReset();
+        requestMock.mockResolvedValue(undefined);
+        await kugouProvider.auth?.logout?.();
+
+        requestMock.mockReset();
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 9, name: '我喜欢', global_collection_id: 'collection_3_after_logout' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 654 });
+
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', expect.anything());
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_tracks_del', { listid: '9', fileids: '654' });
+    });
+
+    it('stops reusing the liked playlist reference when the session user changes', async () => {
+        const song = normalizeKugouSong({ hash: 'abc123', name: 'Song 1', album_id: 12, mixsongid: 34 });
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 2, name: '我喜欢', global_collection_id: 'collection_3_user_a' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 987 });
+
+        requestMock.mockReset();
+        requestMock.mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 987 });
+        expect(requestMock).toHaveBeenCalledTimes(1);
+
+        sessionState.userId = 'second-session-user';
+        requestMock.mockReset();
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 7, name: '我喜欢', global_collection_id: 'collection_3_user_b' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 321 });
+
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', {
+            userid: 'second-session-user', page: 1, pagesize: 100,
+        });
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_tracks_del', { listid: '7', fileids: '321' });
+    });
+
+    it('fails the liked-songs read instead of reporting an empty library', async () => {
+        requestMock.mockResolvedValueOnce({
+            data: { info: [{ type: 0, source: 1, listid: 2, name: '我的歌单' }] },
+        });
+
+        await expect(kugouProvider.library?.getLikedSongs?.('user')).rejects.toMatchObject({
+            code: 'invalid-response',
+        });
+    });
+
+    it('does not cache a liked playlist reference that has no global collection id', async () => {
+        const song = normalizeKugouSong({ hash: 'abc123', name: 'Song 1', album_id: 12, mixsongid: 34 });
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 2, name: '我喜欢' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, true);
+
+        // 残缺引用要是被缓存下来，下一次取消收藏就会跳过 user_playlist 直接失败，一直粘到登出。
+        requestMock.mockReset();
+        requestMock
+            .mockResolvedValueOnce({
+                data: { info: [{ type: 0, source: 1, listid: 2, name: '我喜欢', global_collection_id: 'collection_3_recovered' }] },
+            })
+            .mockResolvedValueOnce({});
+        await kugouProvider.mutations?.likeSong?.(song, false, { likedFileId: 987 });
+
+        expect(requestMock).toHaveBeenNthCalledWith(1, 'user_playlist', expect.anything());
+        expect(requestMock).toHaveBeenNthCalledWith(2, 'playlist_tracks_del', { listid: '2', fileids: '987' });
+    });
+
+    it('reports an auth error instead of a silent success when the session has no user id', async () => {
+        sessionState.userId = '';
+        const song = normalizeKugouSong({ hash: 'abc123', name: 'Song 1', album_id: 12, mixsongid: 34 });
+
+        // 静默 return 会被 omni 当成 mutation 成功，心形照样翻转。
+        await expect(kugouProvider.mutations?.likeSong?.(song, true)).rejects.toMatchObject({
+            code: 'auth-required',
+        });
+        expect(requestMock).not.toHaveBeenCalled();
+    });
+
+    it('reports an invalid response instead of a silent success when the liked playlist has no listid', async () => {
+        const song = normalizeKugouSong({ hash: 'abc123', name: 'Song 1', album_id: 12, mixsongid: 34 });
+        requestMock.mockResolvedValueOnce({
+            data: { info: [{ type: 0, source: 1, name: '我的歌单' }] },
+        });
+
+        await expect(kugouProvider.mutations?.likeSong?.(song, true)).rejects.toMatchObject({
+            code: 'invalid-response',
+        });
+        expect(requestMock).not.toHaveBeenCalledWith('playlist_tracks_add', expect.anything());
     });
 });
