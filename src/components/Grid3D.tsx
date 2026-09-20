@@ -874,6 +874,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     />
                 ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
+                        focusMemoryScope={JSON.stringify(['online', activeProviderId, activeUser?.id ?? null, homeViewTab])}
                         title={
                             homeViewTab === 'playlist'
                                 ? t('home.playlists')

@@ -188,6 +188,7 @@ export async function installBaseState(
     neteaseMode?: MockNeteaseMode;
     navidromeEnabled?: boolean;
     localImportFixture?: typeof localImportFixture;
+    preserveNativeMediaQueries?: boolean;
   } = {},
 ) {
   await page.addInitScript((payload: {
@@ -198,6 +199,7 @@ export async function installBaseState(
     localImportFixture?: typeof localImportFixture;
     appVersion: string;
     guideVersionStorageKey: string;
+    preserveNativeMediaQueries: boolean;
   }) => {
     const createMatchMediaResult = (query: string) => ({
       matches: query.includes('light'),
@@ -210,10 +212,12 @@ export async function installBaseState(
       dispatchEvent: () => false,
     });
 
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: (query: string) => createMatchMediaResult(query),
-    });
+    if (!payload.preserveNativeMediaQueries) {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => createMatchMediaResult(query),
+      });
+    }
 
     Object.defineProperty(navigator, 'language', {
       configurable: true,
@@ -407,6 +411,7 @@ export async function installBaseState(
     localImportFixture: options.localImportFixture,
     appVersion: APP_VERSION,
     guideVersionStorageKey: GUIDE_VERSION_STORAGE_KEY,
+    preserveNativeMediaQueries: options.preserveNativeMediaQueries ?? false,
   });
 }
 

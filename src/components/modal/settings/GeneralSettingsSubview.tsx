@@ -8,6 +8,7 @@ import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
 import PlaybackEntryViewSection from './PlaybackEntryViewSection';
 import PlayerBottomBarSection from './PlayerBottomBarSection';
+import HomeCardPositionSection from './HomeCardPositionSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
@@ -181,6 +182,8 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                     </div>
                 </div>
             </SettingsAnchor>
+
+            <HomeCardPositionSection isDaylight={isDaylight} settingsCardClass={settingsCardClass} theme={theme} />
 
             <PlaybackEntryViewSection
                 isDaylight={isDaylight}

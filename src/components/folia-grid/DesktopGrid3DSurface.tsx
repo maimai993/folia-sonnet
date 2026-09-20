@@ -7,6 +7,7 @@ import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
 import { ChevronDown } from 'lucide-react';
 import type { GridMapBatchConfig } from './gridMapBatch';
 import { isHideableGridItem } from './gridItemVisibility';
+import { useHomeCardPosition } from '../../hooks/useHomeCardPosition';
 
 // src/components/folia-grid/DesktopGrid3DSurface.tsx
 // Shared desktop home surface that keeps Grid3D slider and GridMap controls visually consistent.
@@ -43,6 +44,7 @@ const readHiddenGridPlaylists = (): Record<string, string[]> => {
 };
 
 interface DesktopGrid3DSurfaceProps {
+    focusMemoryScope?: string;
     title: string;
     mapButtonLabel: string;
     items: Grid3DSliderItem[];
@@ -62,11 +64,12 @@ interface DesktopGrid3DSurfaceProps {
 }
 
 export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
+    focusMemoryScope,
     title,
     mapButtonLabel,
     items,
-    focusedIndex,
-    onFocusedIndexChange,
+    focusedIndex: legacyFocusedIndex,
+    onFocusedIndexChange: onLegacyFocusedIndexChange,
     onSelect,
     tabs = [],
     actions = [],
@@ -82,6 +85,9 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     const [showGridMap, setShowGridMap] = useState(false);
     const [tabsExpanded, setTabsExpanded] = useState(false);
     const [hiddenPlaylistsByScope, setHiddenPlaylistsByScope] = useState(readHiddenGridPlaylists);
+    const { focusedIndex, onFocusedIndexChange } = useHomeCardPosition(
+        focusMemoryScope, items, legacyFocusedIndex, onLegacyFocusedIndexChange, isLoading,
+    );
 
     const activeTab = tabs.find(tab => tab.active) || tabs[0];
     const hiddenPlaylistIds = useMemo(
@@ -105,6 +111,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
 
     const handleVisibleSelect = (item: Grid3DSliderItem, index: number) => {
         const sourceIndex = items.indexOf(item);
+        if (sourceIndex >= 0) onFocusedIndexChange(sourceIndex);
         onSelect(item, sourceIndex >= 0 ? sourceIndex : index);
     };
 
@@ -240,6 +247,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
             )}
 
             <Grid3DSlider
+                key={focusMemoryScope}
                 items={visibleItems}
                 focusedIndex={visibleFocusedIndex}
                 onFocusedIndexChange={handleVisibleFocusedIndexChange}

@@ -56,6 +56,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-grid-card-style",
   "settings-general",
   "settings-home-tabs",
+  "home-card-position-toggle",
   "settings-playback-entry-view",
   "playback-entry-view-player",
   "playback-entry-view-lattice",

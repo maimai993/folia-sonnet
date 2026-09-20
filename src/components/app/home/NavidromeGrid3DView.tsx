@@ -280,6 +280,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
 
     return (
         <DesktopGrid3DSurface
+            focusMemoryScope={JSON.stringify(['navidrome', config?.serverUrl, config?.username, section])}
             title={section === 'albums'
                 ? t('navidrome.albums')
                 : section === 'recently-added'

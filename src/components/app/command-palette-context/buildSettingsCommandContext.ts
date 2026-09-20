@@ -12,6 +12,7 @@ import { useGridViewSettingsStore } from '../../../stores/useGridViewSettingsSto
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
 import { useMotionSettingsStore } from '../../../stores/useMotionSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../stores/usePlaybackEntryViewStore';
+import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
@@ -78,6 +79,10 @@ export const buildSettingsCommandContext = (
         ),
         playbackEntryView: entryView.playbackEntryView,
         setPlaybackEntryView: entryView.setPlaybackEntryView,
+        toggleRememberHomeCardPosition: () => {
+            const home = useHomeLayoutSettingsStore.getState();
+            home.handleToggleRememberHomeCardPosition(!home.rememberHomeCardPosition);
+        },
         startPlayerBottomBarPositioning: usePlayerBottomBarLayoutStore.getState().requestPositioning,
         canStartPlayerBottomBarPositioning: Boolean(deps.currentSong) && !chrome.hidePlayerProgressBar,
         toggleAlwaysShowPlayerBackButton: () => chrome.handleToggleAlwaysShowPlayerBackButton(

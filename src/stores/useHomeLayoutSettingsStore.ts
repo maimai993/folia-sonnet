@@ -5,7 +5,8 @@
 
 import { create } from 'zustand';
 import i18n from '../i18n/config';
-import { getStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { useHomeCardPositionStore } from './useHomeCardPositionStore';
 import { setStatusMessage } from './useStatusMessageStore';
 
 const readStoredHomeLayoutStyle = (): 'carousel' | 'grid' => {
@@ -30,6 +31,8 @@ const readStoredGrid3dCardStyle = (): 'image' | 'card' => {
 };
 
 export type HomeLayoutSettingsState = {
+    rememberHomeCardPosition: boolean;
+    handleToggleRememberHomeCardPosition: (remember: boolean) => void;
     grid3dCardStyle: 'image' | 'card';
     handleSetGrid3dCardStyle: (style: 'image' | 'card') => void;
     homeLayoutStyle: 'carousel' | 'grid';
@@ -45,6 +48,12 @@ export type HomeLayoutSettingsState = {
 };
 
 export const useHomeLayoutSettingsStore = create<HomeLayoutSettingsState>((set, get) => ({
+    rememberHomeCardPosition: getStoredBoolean('remember_home_card_position', true),
+    handleToggleRememberHomeCardPosition: (remember) => {
+        set({ rememberHomeCardPosition: remember });
+        setStoredBoolean('remember_home_card_position', remember);
+        if (!remember) useHomeCardPositionStore.getState().clear();
+    },
     grid3dCardStyle: readStoredGrid3dCardStyle(),
     handleSetGrid3dCardStyle: (style) => {
         set({ grid3dCardStyle: style });
@@ -92,6 +101,8 @@ export const useHomeLayoutSettingsStore = create<HomeLayoutSettingsState>((set, 
  * legitimately edit this whole domain at once. Ordinary consumers select one field instead.
  */
 export const selectHomeLayoutSettingsSnapshot = (state: HomeLayoutSettingsState) => ({
+    rememberHomeCardPosition: state.rememberHomeCardPosition,
+    handleToggleRememberHomeCardPosition: state.handleToggleRememberHomeCardPosition,
     grid3dCardStyle: state.grid3dCardStyle,
     handleSetGrid3dCardStyle: state.handleSetGrid3dCardStyle,
     homeLayoutStyle: state.homeLayoutStyle,
