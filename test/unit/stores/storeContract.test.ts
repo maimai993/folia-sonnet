@@ -81,6 +81,10 @@ describe('store contract', () => {
             // Clearing a monet/cappella asset has to fall its tuning back, so the settings store
             // drives the asset store. The reverse edge is deliberately absent: it would close a cycle.
             useVisualizerSettingsStore: ['useVisualizerAssetStore'],
+            // Turning off "remember home card position" has to drop the positions already kept,
+            // so the settings store drives the position store. Same shape as the edge above, and
+            // the reverse edge is likewise absent: the position store imports no store at all.
+            useHomeLayoutSettingsStore: ['useHomeCardPositionStore'],
         };
         const INFRASTRUCTURE = new Set([
             'storagePrimitives', 'useStatusMessageStore', 'visualizerSettingsPersistence', 'motionSignals',
