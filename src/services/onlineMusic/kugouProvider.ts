@@ -1,15 +1,16 @@
 import type { SongResult, UnifiedSong } from '../../types';
-import type {
-    AudioQualityPreference,
-    ChorusRange,
-    JsonValue,
-    MediaId,
-    OnlineMusicProvider,
-    ProviderCatalogRef,
-    ProviderCollection,
-    ProviderHistoryEntry,
-    ProviderPage,
-    ProviderUser,
+import {
+    OnlineProviderError,
+    type AudioQualityPreference,
+    type ChorusRange,
+    type JsonValue,
+    type MediaId,
+    type OnlineMusicProvider,
+    type ProviderCatalogRef,
+    type ProviderCollection,
+    type ProviderHistoryEntry,
+    type ProviderPage,
+    type ProviderUser,
 } from '../../types/onlineMusic';
 import { getSizedCoverUrl } from '../../utils/coverUrl';
 import { parseLyricsByFormat } from '../../utils/lyrics/parserCore';
@@ -781,10 +782,53 @@ const isKugouLikedPlaylist = (raw: any): boolean => {
     return name === '我喜欢' || name === '我喜欢的音乐' || valueOf(raw, 'listid', 'list_id') === 2;
 };
 
+type KugouLikedPlaylistRef = { listId: MediaId; globalCollectionId?: MediaId };
+
+const kugouLikedPlaylistRefCache = new Map<string, KugouLikedPlaylistRef>();
+
+let lastSeenKugouUserId: string | null = null;
+
+// 登出、切号和会话失效都要清：歌单引用和行号都只对写下它们的那个账号有效。
+const clearKugouLikedCaches = (): void => {
+    kugouLikedPlaylistRefCache.clear();
+    kugouLikedTrackCache.clear();
+};
+
+// 收藏相关入口在动缓存之前先对一次账号，换号就把上一个账号的引用和行号丢掉。
+const syncKugouSessionUser = (): void => {
+    const userId = getKugouUserId();
+    if (lastSeenKugouUserId === userId) return;
+    lastSeenKugouUserId = userId;
+    clearKugouLikedCaches();
+};
+
+// 只缓存完整的引用：缺 global_collection_id 的残缺状态会一直粘到登出，取消收藏从此必失败。
+const rememberKugouLikedPlaylistRef = (userId: MediaId, ref: KugouLikedPlaylistRef): void => {
+    if (!ref.globalCollectionId) return;
+    kugouLikedPlaylistRefCache.set(String(userId), ref);
+};
+
 // Finds KuGou's built-in "我喜欢" playlist, which is the provider's song-like collection.
 const getKugouLikedPlaylist = async (userId: MediaId): Promise<any | null> => {
     const items = await getKugouUserPlaylistItems(userId);
     return items.find(isKugouLikedPlaylist) ?? null;
+};
+
+// 解析失败一律抛错：返回空数组会被上层写成"这个账号一首收藏都没有"，连快照一起清掉。
+const getKugouLikedPlaylistTracks = async (userId: MediaId): Promise<UnifiedSong[]> => {
+    syncKugouSessionUser();
+    const playlist = await getKugouLikedPlaylist(userId);
+    const listId = valueOf(playlist, 'listid', 'list_id');
+    const globalCollectionId = valueOf(playlist, 'global_collection_id', 'globalCollectionId');
+    if (listId === undefined || listId === null || !globalCollectionId) {
+        throw new OnlineProviderError(
+            'invalid-response',
+            'KuGou liked playlist could not be resolved',
+            'kugou',
+        );
+    }
+    rememberKugouLikedPlaylistRef(userId, { listId, globalCollectionId });
+    return getKugouPlaylistTrackSongs(String(globalCollectionId));
 };
 
 // Uses the newest song's observed cover when KuGou leaves a user playlist cover empty.
@@ -803,12 +847,18 @@ const getKugouPlaylistFallbackCover = async (rawPlaylist: any): Promise<string |
         .find((cover): cover is string => Boolean(cover));
 };
 
+const getKugouTrackHash = (track: MediaId | SongResult): string => {
+    if (typeof track !== 'object') return String(track).toUpperCase();
+    const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
+    return String(sourceData?.hash || track.kgHash || track.id).toUpperCase();
+};
+
 const getKugouTrackAddData = (track: MediaId | SongResult): string => {
     if (typeof track !== 'object') return `|${String(track).toUpperCase()}|0|0`;
     const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
     return [
         track.name,
-        String(sourceData?.hash || track.kgHash || track.id).toUpperCase(),
+        getKugouTrackHash(track),
         String(sourceData?.albumId || track.album?.id || 0),
         String(sourceData?.mixSongId || 0),
     ].join('|');
@@ -818,6 +868,67 @@ const getKugouTrackFileId = (track: MediaId | SongResult): string => {
     if (typeof track !== 'object') return String(track);
     const sourceData = track.sourceRef?.kind === 'online' ? track.sourceRef.providerData : undefined;
     return String(sourceData?.fileId || track.id);
+};
+
+// 20000 首是保护上限，不是业务上限：到顶还有下一页就报错，不能把截断结果当成完整收藏列表存下去。
+const KUGOU_LIKED_TRACK_MAX_PAGES = 200;
+const KUGOU_LIKED_TRACK_CACHE_TTL_MS = 10_000;
+const kugouLikedTrackCache = new Map<string, { fetchedAt: number; songs: UnifiedSong[] }>();
+
+// KuGou's playlist entry `fileid` is local to one playlist, unlike the global audio hash. The
+// liked-song mutations must therefore look up the row id inside the liked playlist itself.
+const getKugouPlaylistTrackSongs = async (
+    globalCollectionId: string,
+    options: { forceRefresh?: boolean } = {},
+): Promise<UnifiedSong[]> => {
+    const cached = kugouLikedTrackCache.get(globalCollectionId);
+    if (!options.forceRefresh && cached && Date.now() - cached.fetchedAt < KUGOU_LIKED_TRACK_CACHE_TTL_MS) {
+        return cached.songs;
+    }
+
+    const songs: UnifiedSong[] = [];
+    let completed = false;
+    for (let page = 1; page <= KUGOU_LIKED_TRACK_MAX_PAGES; page += 1) {
+        const response = await requestKugou('playlist_track_all', {
+            id: globalCollectionId,
+            page,
+            pagesize: KUGOU_MAX_PAGE_SIZE,
+        });
+        const rawItems = listOf(response);
+        songs.push(...rawItems.map(normalizeKugouSong));
+        if (rawItems.length === 0 || rawItems.length < KUGOU_MAX_PAGE_SIZE) {
+            completed = true;
+            break;
+        }
+        // 字段顺序和 pageOf 保持一致。只有明显大于一页时才当总数用：有的响应里 count 是本页条数，
+        // 拿它当总数会在第一页就判定读完，又变回只读 100 首的老问题。
+        const total = Number(valueOf(dataOf(response), 'total', 'total_count', 'count') ?? Number.NaN);
+        if (Number.isFinite(total) && total > KUGOU_MAX_PAGE_SIZE && songs.length >= total) {
+            completed = true;
+            break;
+        }
+    }
+
+    if (!completed) {
+        throw new OnlineProviderError(
+            'invalid-response',
+            `KuGou playlist ${globalCollectionId} exceeded ${KUGOU_LIKED_TRACK_MAX_PAGES} pages`,
+            'kugou',
+        );
+    }
+
+    kugouLikedTrackCache.set(globalCollectionId, { fetchedAt: Date.now(), songs });
+    return songs;
+};
+
+const removeKugouPlaylistTrackCacheEntry = (globalCollectionId: string, hash: string): void => {
+    const cached = kugouLikedTrackCache.get(globalCollectionId);
+    if (!cached) return;
+    kugouLikedTrackCache.set(globalCollectionId, {
+        // 保留原时间戳：每删一首就续命 10 秒的话，连续操作能让这份缓存永不过期。
+        fetchedAt: cached.fetchedAt,
+        songs: cached.songs.filter(song => getKugouTrackHash(song) !== hash),
+    });
 };
 
 const kugouHistoryNameByDate = new Map<string, string>();
@@ -1070,6 +1181,8 @@ export const kugouProvider: OnlineMusicProvider = {
         async logout() {
             await requestKugou('logout').catch(() => undefined);
             ['cookie', 'token', 'userid', 'dfid'].forEach(key => removeProviderSessionValue('kugou', key));
+            clearKugouLikedCaches();
+            lastSeenKugouUserId = null;
         },
         async getQrKey() {
             const response = await requestKugou('login_qr_key');
@@ -1119,18 +1232,11 @@ export const kugouProvider: OnlineMusicProvider = {
             return pageOfWithRawItemCount(items, response, requestLimit, offset, rawItems.length);
         },
         async getLikedSongIds(userId) {
-            const playlist = await getKugouLikedPlaylist(userId);
-            const globalCollectionId = valueOf(playlist, 'global_collection_id', 'globalCollectionId');
-            if (!globalCollectionId) return [];
-            const response = await requestKugou('playlist_track_all', {
-                id: String(globalCollectionId),
-                page: 1,
-                pagesize: KUGOU_MAX_PAGE_SIZE,
-            });
-            return listOf(response)
-                .map(normalizeKugouSong)
-                .map(song => song.id)
-                .filter(Boolean);
+            const songs = await getKugouLikedPlaylistTracks(userId);
+            return songs.map(song => song.id).filter(Boolean);
+        },
+        async getLikedSongs(userId) {
+            return getKugouLikedPlaylistTracks(userId);
         },
     },
     catalog: {
@@ -1316,23 +1422,90 @@ export const kugouProvider: OnlineMusicProvider = {
     },
     mutations: {
         canAddToPlaylist: canAddToKugouPlaylist,
-        async likeSong(song, liked) {
+        async likeSong(song, liked, context) {
+            syncKugouSessionUser();
             const userId = getKugouUserId();
-            if (!userId) return;
-            const playlist = await getKugouLikedPlaylist(userId);
-            const listId = valueOf(playlist, 'listid', 'list_id');
-            if (listId === undefined || listId === null) return;
+            // 这里静默 return 的话，omni 会把它当成 mutation 成功并翻转 likedSongIds，心形跟着变。
+            if (!userId) {
+                throw new OnlineProviderError('auth-required', 'KuGou session has no user id', 'kugou');
+            }
+            const userIdKey = String(userId);
+            let likedPlaylistRef = kugouLikedPlaylistRefCache.get(userIdKey);
+            if (!likedPlaylistRef) {
+                const playlist = await getKugouLikedPlaylist(userId);
+                const listId = valueOf(playlist, 'listid', 'list_id');
+                if (listId === undefined || listId === null) {
+                    throw new OnlineProviderError(
+                        'invalid-response',
+                        'KuGou liked playlist has no listid',
+                        'kugou',
+                    );
+                }
+                likedPlaylistRef = {
+                    listId,
+                    globalCollectionId: valueOf(playlist, 'global_collection_id', 'globalCollectionId'),
+                };
+                // 库刷新会写这份缓存，mutation 先到的时候也要写，否则每次收藏都要重新拉一次歌单列表。
+                rememberKugouLikedPlaylistRef(userIdKey, likedPlaylistRef);
+            }
+            const { listId, globalCollectionId } = likedPlaylistRef;
             if (liked) {
                 await requestKugou('playlist_tracks_add', {
                     listid: String(listId),
                     data: getKugouTrackAddData(song),
                 });
+                if (globalCollectionId) kugouLikedTrackCache.delete(String(globalCollectionId));
                 return;
             }
+
+            const targetHash = getKugouTrackHash(song);
+            const cachedLikedFileId = context?.likedFileId;
+            if (cachedLikedFileId !== undefined && String(cachedLikedFileId) !== '') {
+                await requestKugou('playlist_tracks_del', {
+                    listid: String(listId),
+                    fileids: String(cachedLikedFileId),
+                });
+                if (globalCollectionId) removeKugouPlaylistTrackCacheEntry(String(globalCollectionId), targetHash);
+                return;
+            }
+
+            if (!globalCollectionId) {
+                throw new OnlineProviderError(
+                    'invalid-response',
+                    'KuGou liked playlist is missing global_collection_id',
+                    'kugou',
+                );
+            }
+
+            // The song's providerData.fileId belongs to the playlist it was played from. Looking it
+            // up in the liked playlist by hash is required; sending another playlist's row id deletes
+            // whichever liked song happens to share that id.
+            const likedCollectionId = String(globalCollectionId);
+            const findLikedFileId = async (forceRefresh: boolean): Promise<MediaId | undefined> => {
+                const likedTracks = await getKugouPlaylistTrackSongs(likedCollectionId, { forceRefresh });
+                const likedTrack = likedTracks.find(track => getKugouTrackHash(track) === targetHash);
+                const fileId = likedTrack?.sourceRef?.kind === 'online'
+                    ? likedTrack.sourceRef.providerData?.fileId
+                    : undefined;
+                if (typeof fileId !== 'string' && typeof fileId !== 'number') return undefined;
+                return String(fileId) === '' ? undefined : fileId;
+            };
+
+            // 缓存里没有就强制重拉一次再下结论，避免 10 秒窗口内的旧快照误判。
+            const likedFileId = await findLikedFileId(false) ?? await findLikedFileId(true);
+            if (likedFileId === undefined) {
+                // 服务端的收藏歌单里本来就没有这首歌，目标状态已经达成。抛错只会让心形永远亮着、
+                // 每点一次报一次错；直接返回，让上层把本地的陈旧点赞状态清掉。
+                console.info('[KugouProvider] unlike:already-absent', { hash: targetHash });
+                removeKugouPlaylistTrackCacheEntry(likedCollectionId, targetHash);
+                return;
+            }
+
             await requestKugou('playlist_tracks_del', {
                 listid: String(listId),
-                fileids: getKugouTrackFileId(song),
+                fileids: String(likedFileId),
             });
+            removeKugouPlaylistTrackCacheEntry(likedCollectionId, targetHash);
         },
         async updatePlaylistTracks(operation, playlist, tracks) {
             const collection = typeof playlist === 'object' ? playlist : null;
@@ -1342,6 +1515,8 @@ export const kugouProvider: OnlineMusicProvider = {
                 await requestKugou('playlist_tracks_add', { listid: listId, data });
                 return;
             }
+            // fileid 是歌单内的行号：只有当 tracks 就是从这个歌单的详情里取出来的时，它才是对的。
+            // 传别的歌单里的同一首歌会删掉这个歌单里碰巧同号的另一首（"我喜欢"就踩过，见 likeSong）。
             const fileids = tracks.map(getKugouTrackFileId).join(',');
             await requestKugou('playlist_tracks_del', { listid: listId, fileids });
         },
