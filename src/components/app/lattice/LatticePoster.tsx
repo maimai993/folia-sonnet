@@ -235,13 +235,13 @@ function LatticePoster({
                 {String(tile.queueIndex + 1).padStart(2, '0')}
             </span>
             {expanded && expansionSettled && isCurrent ? (
-                <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} layoutSettled={expansionSettled} targetPosterWidth={rect.width} /><small>{tile.artist}</small></span>}>
+                <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} targetPosterWidth={rect.width} /><small>{tile.artist}</small></span>}>
                     <LatticeLyrics key={tile.id} tile={tile} reducedMotion={Boolean(reducedMotion)} />
                 </Suspense>
             ) : <span className="lattice-poster-copy">
-                {/* The expansion gate doubles as "this box has stopped growing", which is exactly when
-                    the title can be fitted without waiting out the debounce a second time. */}
-                <LatticeTitle title={tile.title} expanded={expanded} layoutSettled={expansionSettled} targetPosterWidth={rect.width} />
+                {/* `rect` is the slot the card is heading for, in world units, so the title is fitted
+                    against its final column before the spring has moved it there. */}
+                <LatticeTitle title={tile.title} expanded={expanded} targetPosterWidth={rect.width} />
                 <small>{tile.artist}</small>
             </span>}
             {expanded && (
