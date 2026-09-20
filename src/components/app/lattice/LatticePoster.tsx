@@ -1,6 +1,6 @@
 import { LatticeTitle } from './LatticeTitle';
 import { lazy, memo, Suspense } from 'react';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type PointerEvent } from 'react';
 import type { ReflowTile } from './layout';
@@ -28,8 +28,13 @@ type LatticePosterProps = {
     expandedSize: number;
     /** Seconds this poster waits before dropping into its slot, or null outside the opening wave. */
     entranceDelay: number | null;
-    /** Reverse-wave delay used when the complete wall leaves the viewport. */
-    exitDelay: number;
+    /**
+     * Reverse-wave delay for the moment the complete wall leaves the viewport. A function, not a
+     * number, because it measures from a corner that moves with the camera: a card is not
+     * re-rendered before it leaves, and a number handed down per render would either go stale or
+     * re-render every mounted card on each re-cull. Identity must stay stable.
+     */
+    getExitDelay: (rect: { x: number; y: number }) => number;
     expanded: boolean;
     reducedMotion: boolean | null;
     didDragRef: MutableRefObject<boolean>;
@@ -42,6 +47,15 @@ type LatticePosterProps = {
 
 // How far above its slot a landing tile starts, in world units.
 const ENTRANCE_LIFT = 90;
+
+// Resolved at exit time from the card's own `custom`, so the leaving wave reads the live camera.
+const LEAVING: Variants = {
+    leaving: (resolve: () => { y: number; delay: number }) => {
+        const { y, delay } = resolve();
+        return { y, opacity: 0, scale: 0.88, scaleX: 1, scaleY: 1,
+            transition: { duration: 0.28, delay, ease: [0.4, 0, 1, 1] } };
+    },
+};
 
 // Lift for the card under the pointer or the wall's keyboard cursor. It scales the whole article,
 // which is why it has to run through Framer Motion - Framer owns the inline transform, so CSS
@@ -90,7 +104,7 @@ function LatticePoster({
     pixelScale,
     expandedSize,
     entranceDelay,
-    exitDelay,
+    getExitDelay,
     expanded,
     reducedMotion,
     didDragRef,
@@ -182,16 +196,12 @@ function LatticePoster({
                 scaleX: popScaleX,
                 scaleY: popScaleY,
             }}
-            exit={reducedMotion
-                ? { opacity: 0, transition: { duration: 0 } }
-                : {
-                    y: rect.y - ENTRANCE_LIFT,
-                    opacity: 0,
-                    scale: 0.88,
-                    scaleX: 1,
-                    scaleY: 1,
-                    transition: { duration: 0.28, delay: exitDelay, ease: [0.4, 0, 1, 1] },
-                }}
+            // A dynamic variant rather than a target object: Framer resolves it when the exit
+            // actually runs, which is the only moment the wave's delay can be read from the camera
+            // where it stands. Nothing else here is a variant, so no label reaches the children.
+            variants={LEAVING}
+            custom={() => ({ y: rect.y - ENTRANCE_LIFT, delay: getExitDelay(rect) })}
+            exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : 'leaving'}
             transition={reducedMotion
                 ? { duration: 0 }
                 : landing === null
@@ -225,13 +235,13 @@ function LatticePoster({
                 {String(tile.queueIndex + 1).padStart(2, '0')}
             </span>
             {expanded && expansionSettled && isCurrent ? (
-                <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} layoutSettled={expansionSettled} targetPosterWidth={rect.width} /><small>{tile.artist}</small></span>}>
+                <Suspense fallback={<span className="lattice-poster-copy"><LatticeTitle title={tile.title} expanded={expanded} targetPosterWidth={rect.width} /><small>{tile.artist}</small></span>}>
                     <LatticeLyrics key={tile.id} tile={tile} reducedMotion={Boolean(reducedMotion)} />
                 </Suspense>
             ) : <span className="lattice-poster-copy">
-                {/* The expansion gate doubles as "this box has stopped growing", which is exactly when
-                    the title can be fitted without waiting out the debounce a second time. */}
-                <LatticeTitle title={tile.title} expanded={expanded} layoutSettled={expansionSettled} targetPosterWidth={rect.width} />
+                {/* `rect` is the slot the card is heading for, in world units, so the title is fitted
+                    against its final column before the spring has moved it there. */}
+                <LatticeTitle title={tile.title} expanded={expanded} targetPosterWidth={rect.width} />
                 <small>{tile.artist}</small>
             </span>}
             {expanded && (

@@ -52,6 +52,7 @@ function attachRuntime(pixi: typeof import('pixi.js'), app: import('pixi.js').Ap
     initial: LatticeLyricInput, onError: (error: unknown) => void): LatticeLyricRuntime {
     const raster = createLatticeRaster(pixi);
     let input = initial, width = 1, height = 1, destroyed = false;
+    let reportError = onError;
     let typography = resolveLatticeTypography(input, width, height, raster.measure);
     const stage = new pixi.Container(); stage.sortableChildren = true; app.stage.addChild(stage);
     const edge = createLatticeEdgeFilter(pixi); stage.filters = [edge.filter];
@@ -123,11 +124,15 @@ function attachRuntime(pixi: typeof import('pixi.js'), app: import('pixi.js').Ap
             }
             app.render();
             return moving;
-        } catch (error) { onError(error); return false; }
+        } catch (error) { reportError(error); return false; }
     };
     const loop = createLatticeLyricFrameLoop(draw);
     let unsubscribe = input.currentTime.on('change', loop.wake);
     const runtime: LatticeLyricRuntime = {
+        attach(nextHost) {
+            if (!destroyed && app.canvas.parentElement !== nextHost) nextHost.appendChild(app.canvas);
+        },
+        setErrorHandler(handler) { reportError = handler; },
         update(next) {
             if (destroyed) return;
             const rebuild = next.songKey !== input.songKey || next.lines !== input.lines || next.theme !== input.theme

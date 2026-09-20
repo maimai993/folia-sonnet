@@ -9,9 +9,9 @@ import '../../src/components/app/lattice/Lattice.css';
 import './lattice-performance/probe.css';
 
 // dev/probes/latticePerformance.probe.tsx — sequential, repeatable comparisons on the production Lattice wall.
-const STRATEGIES: Strategy[] = ['original', 'current'];
+const STRATEGIES: Strategy[] = ['original', 'current', 'dom'];
 const SCENARIOS: Scenario[] = ['scale', 'reflow', 'pan'];
-const labels = { original: '原版 CSS', current: '当前 DOM',
+const labels = { original: '原版 CSS', current: '目标宽度预测', dom: '旧的 DOM 测量',
     scale: '局部连续缩放', reflow: '宽度 reflow', pan: '大范围移动' };
 
 function Trial({ job, done, phase }: { job: Job; done: (result?: Result, error?: string) => void; phase: (value: string) => void }) {
@@ -90,7 +90,7 @@ function LatticePerformanceProbe() {
                 <label>队列 <select value={count} onChange={event => setCount(Number(event.target.value))}>{[100, 300, 1000].map(value => <option key={value}>{value}</option>)}</select></label>
                 <label>运动秒数 <select value={seconds} onChange={event => setSeconds(Number(event.target.value))}>{[3, 6, 12].map(value => <option key={value}>{value}</option>)}</select></label>
                 <label>重复 <select value={repeats} onChange={event => setRepeats(Number(event.target.value))}>{[1, 3, 5].map(value => <option key={value}>{value}</option>)}</select></label>
-                <button onClick={() => start(false)}>运行所选</button><button onClick={() => start(true)}>运行全部 6 组</button>
+                <button onClick={() => start(false)}>运行所选</button><button onClick={() => start(true)}>运行全部 9 组</button>
             </fieldset>
             <button disabled={!job} onClick={() => { setJobs([]); setPhase('idle'); }}>停止</button>
             <button disabled={!results.length} onClick={download}>导出 JSON</button>

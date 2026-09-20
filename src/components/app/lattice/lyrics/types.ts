@@ -14,6 +14,8 @@ export type LatticeLyricInput = LatticeLyricSource & {
 };
 
 export interface LatticeLyricRuntime {
+    attach(host: HTMLElement): void;
+    setErrorHandler(handler: (error: unknown) => void): void;
     update(input: LatticeLyricInput): void;
     resize(width: number, height: number): void;
     setVisible(visible: boolean): void;

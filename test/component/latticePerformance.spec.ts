@@ -23,3 +23,14 @@ test('stopping unmounts the workload and does not record an incomplete round', a
     await expect(component.locator('.lattice-field')).toHaveCount(0);
     await expect(component.locator('tbody tr')).toHaveCount(0);
 });
+
+test('reuses the lyric WebGL canvas across an auto-focused track change', async ({ mount }) => {
+    const component = await mount('lattice', { withLyrics: true });
+    const canvas = component.locator('.lattice-lyrics-canvas canvas');
+    await expect(canvas).toBeVisible({ timeout: 10000 });
+    await canvas.evaluate(node => { (window as unknown as { __latticeCanvas: Element }).__latticeCanvas = node; });
+    await component.getByRole('button', { name: 'Next track', exact: true }).click();
+    await expect(component.locator('.lattice-poster.is-expanded')).toHaveAttribute('aria-label', 'Poster 1 · Artist');
+    await expect(canvas).toBeVisible({ timeout: 10000 });
+    expect(await canvas.evaluate(node => node === (window as unknown as { __latticeCanvas: Element }).__latticeCanvas)).toBe(true);
+});

@@ -4,7 +4,8 @@ import { startLatticeLyricSession } from '../../../src/components/app/lattice/ly
 import type { LatticeLyricRuntime } from '../../../src/components/app/lattice/lyrics/types';
 
 // test/unit/lattice/latticeLyricLifecycle.test.ts
-const runtime = (): LatticeLyricRuntime => ({ update: vi.fn(), resize: vi.fn(), setVisible: vi.fn(), destroy: vi.fn() });
+const runtime = (): LatticeLyricRuntime => ({ attach: vi.fn(), setErrorHandler: vi.fn(), update: vi.fn(),
+    resize: vi.fn(), setVisible: vi.fn(), destroy: vi.fn() });
 
 describe('demand-driven card rendering', () => {
     it('coalesces clock writes and stops after paused animation settles', () => {
@@ -47,6 +48,18 @@ describe('asynchronous WebGL lifetime', () => {
         await b.completion;
         expect(old.destroy).toHaveBeenCalledOnce(); expect(next.destroy).not.toHaveBeenCalled();
         expect(ready).toHaveBeenCalledWith(next); b.destroy(); expect(next.destroy).toHaveBeenCalledOnce();
+    });
+    it('releases only a runtime that reached ready', async () => {
+        let resolve!: (value: LatticeLyricRuntime) => void;
+        const late = runtime(), live = runtime();
+        const canceled = startLatticeLyricSession(() => new Promise(r => { resolve = r; }), vi.fn(), vi.fn());
+        expect(canceled.release()).toBeNull(); resolve(late); await canceled.completion;
+        expect(late.destroy).toHaveBeenCalledOnce();
+
+        const mounted = startLatticeLyricSession(async () => live, vi.fn(), vi.fn());
+        await mounted.completion;
+        expect(mounted.release()).toBe(live); expect(mounted.release()).toBeNull();
+        expect(live.destroy).not.toHaveBeenCalled();
     });
     it('reports initialization failure but suppresses a canceled failure', async () => {
         const error = new Error('WebGL unavailable'), failed = vi.fn();

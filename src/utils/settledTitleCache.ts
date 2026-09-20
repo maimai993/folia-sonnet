@@ -1,4 +1,4 @@
-import { TYPOGRAPHY } from './fitSettledTitle';
+import type { TitleMetrics } from './fitSettledTitle';
 
 // src/utils/settledTitleCache.ts — wall-level reuse of settled title measurements.
 
@@ -51,10 +51,14 @@ if (typeof document !== 'undefined' && document.fonts) {
 }
 
 /**
- * Identifies a fitted result across posters: same text, laid-out width, typography and font
- * generation means the same measurement, whichever card asks for it. The text goes last so a title
- * containing the separator cannot shift the fixed-arity prefix.
+ * Identifies a fitted result across posters: same text, same column and same measured typography
+ * means the same answer, whichever card asks for it.
+ *
+ * The metrics are what the fit is computed from, so they are the whole key - the earlier version
+ * listed fourteen computed properties because it fitted by laying text out in the document, where
+ * anything in the cascade could move the result. The text goes last so a title containing the
+ * separator cannot shift the fixed-arity prefix.
  */
-export function titleFitCacheKey(text: string, style: CSSStyleDeclaration): string {
-    return [fontsEpoch, style.width, ...TYPOGRAPHY.map(property => style.getPropertyValue(property)), text].join('|');
+export function titleFitCacheKey(text: string, metrics: TitleMetrics): string {
+    return [fontsEpoch, metrics.width, metrics.lineHeight, metrics.letterSpacing, metrics.font, text].join('|');
 }

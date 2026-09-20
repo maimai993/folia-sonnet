@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import Lattice from '../../src/components/app/lattice/Lattice';
-import { PlayerState, type SongResult } from '../../src/types';
+import { PlayerState, type Line, type SongResult } from '../../src/types';
 import type { ProbeDefinition } from './definition';
 import { DEFAULT_THEME } from '../../src/services/baseThemes';
 import { useLatticeControlsStore } from '../../src/stores/useLatticeControlsStore';
@@ -33,10 +33,21 @@ const buildQueue = (count: number, covers: CoverMode): SongResult[] => Array.fro
 }));
 
 const queue: SongResult[] = buildQueue(12, 'off');
+const lyricLines: Line[] = [
+    { startTime: 0, endTime: 8, fullText: '壤土下的安居 Cozy Home Underground', words: [
+        { text: '壤土下的安居', startTime: 0, endTime: 4 },
+        { text: ' Cozy Home Underground', startTime: 4, endTime: 8 },
+    ] },
+    { startTime: 8, endTime: 16, fullText: '锤砧间的音符 Notes From Striking the Anvil', words: [
+        { text: '锤砧间的音符', startTime: 8, endTime: 12 },
+        { text: ' Notes From Striking the Anvil', startTime: 12, endTime: 16 },
+    ] },
+];
 
 // Covers are off and the queue is 12 by default, so the gesture cases keep their fixture and run
 // without a single image request.
-function LatticeProbe({ covers = 'off', queueLength = 12 }: { covers?: CoverMode; queueLength?: number }) {
+function LatticeProbe({ covers = 'off', queueLength = 12, withLyrics = false }:
+    { covers?: CoverMode; queueLength?: number; withLyrics?: boolean }) {
     const source = useMemo(
         () => (covers === 'off' && queueLength === 12 ? queue : buildQueue(queueLength, covers)),
         [covers, queueLength],
@@ -54,14 +65,15 @@ function LatticeProbe({ covers = 'off', queueLength = 12 }: { covers?: CoverMode
     const isCurrentSongPosterVisible = useLatticeControlsStore(state => state.isCurrentSongPosterVisible);
     return <div style={{ height: '100vh' }} data-loop={loopMode} data-command={command} data-toggles={toggles} data-backs={backs} data-seek={seek}
         data-current-song-poster-visible={isCurrentSongPosterVisible}>
-        <Lattice lyrics={null} controls={{ loopMode,
+        <Lattice lyrics={withLyrics ? { lines: lyricLines } : null} controls={{ loopMode,
             playback: { prev: () => setCurrentSong(source[Math.max(0, source.indexOf(currentSong!) - 1)]),
                 next: () => setCurrentSong(source[(source.indexOf(currentSong!) + 1) % source.length]),
                 toggleLoop: () => setLoopMode(value => value === 'off' ? 'all' : value === 'all' ? 'one' : 'off'),
                 shuffleQueue: () => setSongs(value => [...value].reverse()), toggleSongLike: () => {}, isSongLiked: false, isFmMode: false },
             invokeCommandById: setCommand, canInvokeCommandById: () => true,
         }} queue={songs} currentSong={currentSong} playerState={playerState}
-            lyricSource={{ currentTime: time, currentLineIndex: -1, lines: [], theme: DEFAULT_THEME }} lyricKeywordColoringEnabled
+            lyricSource={{ currentTime: time, currentLineIndex: withLyrics ? 0 : -1,
+                lines: withLyrics ? lyricLines : [], theme: DEFAULT_THEME }} lyricKeywordColoringEnabled
             currentTime={time} playbackDuration={playbackDuration} canTogglePlayback isDaylight={false}
             onBack={() => setBacks(value => value + 1)} onOpenPlayer={() => {}} onPlaySong={song => setCurrentSong(song)}
             onTogglePlayback={() => setToggles(value => value + 1)} onSeek={setSeek} />
