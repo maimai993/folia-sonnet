@@ -35,15 +35,16 @@ const LyricTimelineOffsetControl: React.FC<LyricTimelineOffsetControlProps> = ({
                 <label className="text-[11px] font-semibold opacity-50 uppercase tracking-wider">
                     {t('localMusic.lyricTimelineOffset')}
                 </label>
-                <button
-                    type="button"
-                    onClick={() => setLocalOffsetMs(0)}
-                    className={`rounded-md p-1 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'} ${localOffsetMs === 0 ? 'opacity-30' : 'opacity-80'}`}
-                    title={t('localMusic.resetLyricTimelineOffset')}
-                    disabled={localOffsetMs === 0}
-                >
-                    <RotateCcw size={12} />
-                </button>
+                {localOffsetMs !== 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setLocalOffsetMs(0)}
+                        className={`rounded-md p-1 opacity-80 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
+                        title={t('localMusic.resetLyricTimelineOffset')}
+                    >
+                        <RotateCcw size={12} />
+                    </button>
+                )}
             </div>
             <div className="flex items-center">
                 <button

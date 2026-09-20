@@ -187,7 +187,7 @@ test('keeps the lyric offset reset clear of the open-panel close button', async 
 
     await resetButton.click();
     await expect(offsetInput).toHaveValue('0');
-    await expect(resetButton).toBeDisabled();
+    await expect(resetButton).toBeHidden();
 });
 
 test('keeps the configured bottom baseline after navigating to another page', async ({ page }) => {
