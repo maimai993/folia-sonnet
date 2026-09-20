@@ -22,17 +22,21 @@ pub enum Event {
     Detached { hwnd: isize },
     /// Desktop wallpaper re-applied (`refresh` subcommand or after a detach).
     Refreshed,
-    /// Desktop mouse position update in 96-DPI virtualized screen pixels (the helper is
-    /// DPI-unaware, which is exactly Electron's DIP space), coalesced to ~60 Hz and gated by
-    /// the desktop-foreground filter (see mouse_forward.rs for why injection happens in the
-    /// main process rather than via posted messages).
+    /// Desktop mouse position update in *physical* screen pixels (the helper is per-monitor DPI
+    /// aware, so no Windows coordinate virtualization is involved; the main process converts them
+    /// into Chromium's DIP space with screen.screenToDipPoint), coalesced to ~60 Hz and gated by
+    /// the desktop-foreground filter (see mouse_forward.rs for why injection happens in the main
+    /// process rather than via posted messages).
     MouseMove { x: i32, y: i32 },
-    /// Primary (left) button press at the given position. Sent immediately, not coalesced.
+    /// Primary (left) button press at the given position (physical screen pixels). Sent
+    /// immediately, not coalesced.
     MouseButtonDown { x: i32, y: i32 },
-    /// Primary button release. Sent even when the desktop is no longer foreground while the
-    /// button is tracked as held, so the renderer can never keep a stuck pressed state.
+    /// Primary button release (physical screen pixels). Sent even when the desktop is no longer
+    /// foreground while the button is tracked as held, so the renderer can never keep a stuck
+    /// pressed state.
     MouseButtonUp { x: i32, y: i32 },
-    /// Wheel rotation at the given position while the desktop is the foreground window.
+    /// Wheel rotation at the given position (physical screen pixels) while the desktop is the
+    /// foreground window.
     /// Deltas are raw-input notches in multiples of WHEEL_DELTA (120; hi-res wheels send
     /// smaller per-packet increments) — positive vertical means rolled up/away from the user,
     /// positive horizontal means rolled right. Exactly one axis is non-zero per packet.

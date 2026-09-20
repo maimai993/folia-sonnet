@@ -7,6 +7,32 @@ import { resolveThemeFontStack, resolveThemeTranslationFontStack, resolveThemeFo
 // src/components/app/lattice/lyrics/useLatticeLyricCanvas.ts
 // How long the content box must hold still before the renderer is rebuilt at the new size.
 const RESIZE_SETTLE_MS = 120;
+const RUNTIME_REUSE_MS = 2000;
+type ParkedRuntime = { runtime: LatticeLyricRuntime; timer: ReturnType<typeof setTimeout> };
+const parkedRuntimes = new WeakMap<object, ParkedRuntime>();
+
+/** Keeps one stopped runtime per playback clock so a song change can move it to the next card. */
+const parkRuntime = (clock: object, runtime: LatticeLyricRuntime) => {
+    runtime.setVisible(false);
+    const previous = parkedRuntimes.get(clock);
+    if (previous) {
+        clearTimeout(previous.timer);
+        previous.runtime.destroy();
+    }
+    const parked: ParkedRuntime = { runtime, timer: setTimeout(() => {
+        if (parkedRuntimes.get(clock) === parked) parkedRuntimes.delete(clock);
+        runtime.destroy();
+    }, RUNTIME_REUSE_MS) };
+    parkedRuntimes.set(clock, parked);
+};
+
+const takeParkedRuntime = (clock: object) => {
+    const parked = parkedRuntimes.get(clock);
+    if (!parked) return null;
+    clearTimeout(parked.timer);
+    parkedRuntimes.delete(clock);
+    return parked.runtime;
+};
 
 /** Observes the local content box (not transformed screen bounds) and owns all external subscriptions. */
 export function useLatticeLyricCanvas(hostRef: RefObject<HTMLDivElement | null>, input: LatticeLyricInput | null) {
@@ -31,8 +57,13 @@ export function useLatticeLyricCanvas(hostRef: RefObject<HTMLDivElement | null>,
             runtimeRef.current?.destroy(); runtimeRef.current = null;
             setReady(false); setFailedKey(initial.songKey);
         };
-        const session = startLatticeLyricSession(signal => createLatticeLyricRuntime(host, initial, signal, onFailure), runtime => {
+        const session = startLatticeLyricSession(signal => {
+            const parked = takeParkedRuntime(initial.currentTime);
+            return parked ?? createLatticeLyricRuntime(host, initial, signal, onFailure);
+        }, runtime => {
             runtimeRef.current = runtime;
+            runtime.attach(host);
+            runtime.setErrorHandler(onFailure);
             if (latest.current) runtime.update(latest.current);
             runtime.setVisible(visible()); runtime.resize(width, height);
             setReady(true);
@@ -64,7 +95,10 @@ export function useLatticeLyricCanvas(hostRef: RefObject<HTMLDivElement | null>,
             if (pendingResize !== null) clearTimeout(pendingResize);
             document.removeEventListener('visibilitychange', onVisibility);
             host.removeEventListener('webglcontextlost', onContextLost, true);
-            session.destroy(); runtimeRef.current = null;
+            const released = session.release();
+            if (released && runtimeRef.current === released) parkRuntime(initial.currentTime, released);
+            else released?.destroy();
+            runtimeRef.current = null;
         };
     }, [hostRef, songKey, enabled]);
 

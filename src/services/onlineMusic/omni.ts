@@ -59,6 +59,35 @@ const unsupported = (providerId: OmniProviderId, capability: string): never => {
 
 const emptyPage = <T>(offset: number): OmniPage<T> => ({ items: [], hasMore: false, nextOffset: offset });
 
+// 点赞状态改完要落盘：只更内存的话，重启后靠快照 hydration 的那一帧会恢复旧心形，
+// 后台刷新再失败就一直是旧的。行号是会话级的，不进快照。
+const persistProviderLikedSongIds = async (providerId: OmniProviderId): Promise<void> => {
+    const account = useOnlineProviderAccountStore.getState().accounts[providerId];
+    if (!account?.user) return;
+    try {
+        await saveProviderAccountSnapshot(providerId, {
+            user: account.user,
+            collections: account.collections || [],
+            likedSongIds: account.likedSongIds || [],
+        });
+    } catch (error) {
+        // 落盘失败不能把一次成功的 mutation 变成失败，下一次刷新会补上。
+        console.warn('[Omni] Failed to persist liked songs after a like mutation', {
+            providerId,
+            name: error instanceof Error ? error.name : 'Error',
+        });
+    }
+};
+
+// 歌单内的行号（KuGou fileid）只在解析它的那一刻有效，失败后必须丢掉，下次重新解析。
+const dropProviderLikedFileId = (providerId: OmniProviderId, songKey: string): void => {
+    const account = useOnlineProviderAccountStore.getState().accounts[providerId];
+    if (!account?.likedSongFileIds || account.likedSongFileIds[songKey] === undefined) return;
+    const likedSongFileIds = { ...account.likedSongFileIds };
+    delete likedSongFileIds[songKey];
+    useOnlineProviderAccountStore.getState().updateAccount(providerId, { likedSongFileIds });
+};
+
 let activeRequestGeneration = 0;
 
 // Rejects late active-provider responses after an account switch transaction begins.
@@ -114,21 +143,18 @@ export const omni = {
         const likedSongIds = source.providerId === 'netease' && fallbackLikedSongIds
             ? fallbackLikedSongIds
             : accountLikedSongIds || [];
-        return Array.from(likedSongIds).some(id => String(id) === String(source.mediaId));
+        const songKey = String(source.mediaId);
+        for (const id of likedSongIds) {
+            if (String(id) === songKey) return true;
+        }
+        return false;
     },
 
-    // Toggles a song through its source provider and keeps the provider account cache in sync.
+    // Toggles a song through its source provider. `likeSong` is what keeps the account cache in
+    // sync, so every entry point - this one, the liked grid, a command - lands in the same state.
     async toggleSongLike(song: SongResult, fallbackLikedSongIds?: Iterable<MediaId>): Promise<boolean> {
-        const source = getPlaybackSourceRef(song);
         const nextLiked = !this.isSongLiked(song, fallbackLikedSongIds);
         await this.likeSong(song, nextLiked);
-        if (source.kind !== 'online') return nextLiked;
-
-        const account = useOnlineProviderAccountStore.getState().accounts[source.providerId];
-        const likedSongIds = (account?.likedSongIds || []).filter(id => String(id) !== String(source.mediaId));
-        useOnlineProviderAccountStore.getState().updateAccount(source.providerId, {
-            likedSongIds: nextLiked ? [...likedSongIds, source.mediaId] : likedSongIds,
-        });
         return nextLiked;
     },
 
@@ -347,6 +373,12 @@ export const omni = {
         return requireOnlineMusicProvider(providerId).library?.getLikedSongIds?.(userId) ?? [];
     },
 
+    async getProviderLikedSongs(providerId: OmniProviderId, userId: MediaId): Promise<UnifiedSong[]> {
+        const library = requireOnlineMusicProvider(providerId).library;
+        if (library?.getLikedSongs) return library.getLikedSongs(userId);
+        return [];
+    },
+
     async getCloudCollection(user?: OmniUser): Promise<OmniCollection | null> {
         return withActiveProvider(async provider => provider.library?.getCloudCollection?.(user) ?? null);
     },
@@ -548,7 +580,44 @@ export const omni = {
     async likeSong(song: SongResult, liked: boolean): Promise<void> {
         const provider = providerForSong(song);
         if (!this.canLikeSong(song) || !provider.mutations?.likeSong) return unsupported(provider.id, 'likes');
-        return provider.mutations.likeSong(song, liked);
+
+        // canLikeSong 已经保证了这一点，这里只是把类型收窄；真走到就说明上面的判断被绕过了。
+        const source = getPlaybackSourceRef(song);
+        if (source.kind !== 'online') return unsupported(provider.id, 'likes');
+
+        const songKey = String(source.mediaId);
+        const account = useOnlineProviderAccountStore.getState().accounts[source.providerId];
+        const cachedFileId = account?.likedSongFileIds?.[songKey];
+
+        try {
+            if (cachedFileId === undefined) {
+                await provider.mutations.likeSong(song, liked);
+            } else {
+                await provider.mutations.likeSong(song, liked, { likedFileId: cachedFileId });
+            }
+        } catch (error) {
+            // 失败时只丢掉可能已经失效的 fileId，点赞状态保持原样——调用方会把错误往上抛。
+            dropProviderLikedFileId(source.providerId, songKey);
+            throw error;
+        }
+
+        // 成功之后 likedSongIds 和 likedSongFileIds 一次提交：直接调 likeSong 的入口（例如"我喜欢"
+        // 网格里删歌）也必须让账号缓存跟着走，否则和 toggleSongLike 两个入口语义不同。
+        // 加收藏拿不到新的 fileId，取消收藏让旧的失效，两种情况都得把这一行删掉，下次取消时重新解析。
+        //
+        // @note 网易云是例外：它的点赞集合由 useNeteaseLibrary 的本地 state 当家，再单向镜像到这个
+        // store（见 useNeteaseLibrary 里的 updateProviderAccount effect），而 isSongLiked 对网易云
+        // 优先读调用方传进来的那一份。所以从 GridView 直接调用这里，网易云的播放器心形不会跟着变，
+        // 要等下一次账号刷新。真要统一得把那份 state 挪进 store，不在这次改动范围内。
+        const latest = useOnlineProviderAccountStore.getState().accounts[source.providerId];
+        const likedSongIds = (latest?.likedSongIds || []).filter(id => String(id) !== songKey);
+        const likedSongFileIds = { ...(latest?.likedSongFileIds || {}) };
+        delete likedSongFileIds[songKey];
+        useOnlineProviderAccountStore.getState().updateAccount(source.providerId, {
+            likedSongIds: liked ? [...likedSongIds, source.mediaId] : likedSongIds,
+            likedSongFileIds,
+        });
+        await persistProviderLikedSongIds(source.providerId);
     },
 
     async dislikeSong(song: SongResult): Promise<{ replacement?: UnifiedSong; limitReached?: boolean }> {

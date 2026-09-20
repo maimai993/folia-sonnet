@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { LatticeTitle } from '../../src/components/app/lattice/LatticeTitle';
 import { TitleFitterContext } from '../../src/hooks/useSettledTitle';
-import { fitTitle } from '../../src/utils/fitSettledTitle';
+import type { TitleMetrics } from '../../src/utils/fitSettledTitle';
+import { fitTitleToWidth } from '../../src/utils/fitSettledTitle';
 import type { ProbeDefinition } from './definition';
 import '../../src/components/app/lattice/Lattice.css';
 import '../../src/components/app/lattice/lyrics/LatticeLyrics.css';
@@ -15,13 +16,13 @@ const TITLES = [
 
 // The leading only resolves through the poster rules, so the probe mounts real posters
 // instead of a bare copy block.
-function Poster({ title, expanded, metadata, layoutSettled }: { title: string; expanded: boolean; metadata?: boolean; layoutSettled?: boolean }) {
+function Poster({ title, expanded, metadata, width }: { title: string; expanded: boolean; metadata?: boolean; width: number }) {
     return <div
         className={`lattice-poster${expanded ? ' is-expanded' : ''}`}
-        style={{ position: 'relative', width: expanded ? 494 : 300, height: expanded ? 440 : 300, background: '#243748' }}
+        style={{ position: 'relative', width, height: expanded ? 440 : 300, background: '#243748' }}
     >
         <span className={`lattice-poster-copy${metadata ? ' lattice-lyric-metadata' : ''}`}>
-            {metadata ? <strong>{title}</strong> : <LatticeTitle title={title} expanded={expanded} layoutSettled={layoutSettled} />}<small>HOYO-MiX</small>
+            {metadata ? <strong>{title}</strong> : <LatticeTitle title={title} expanded={expanded} targetPosterWidth={width} />}<small>HOYO-MiX</small>
         </span>
     </div>;
 }
@@ -34,22 +35,23 @@ function LatticeTitleProbe() {
     // production fitter rather than replacing it, so what is measured stays unchanged.
     const [generation, setGeneration] = useState(0);
     const [fits, setFits] = useState(0);
-    // Stands in for an expanding poster telling the title its box has stopped growing.
-    const [layoutSettled, setLayoutSettled] = useState(false);
-    const fitter = useMemo(() => (node: HTMLElement, text: string, width?: string) => {
+    // Stands in for the wall handing each card the slot it is heading for.
+    const [expandedWidth, setExpandedWidth] = useState(494);
+    const fitter = useMemo(() => (_node: HTMLElement, text: string, metrics: TitleMetrics) => {
         setFits(value => value + 1);
-        return fitTitle(node, text, { width });
+        return fitTitleToWidth(text, metrics);
     }, []);
     return <TitleFitterContext.Provider value={fitter}>
         <div className="lattice-root" data-fits={fits} style={{ color: 'white', background: '#243748', padding: 40 }}>
             <button type="button" onClick={() => setGeneration(value => value + 1)}>Remount titles</button>
-            <label><input type="checkbox" checked={layoutSettled} onChange={event => setLayoutSettled(event.target.checked)} /> Layout settled</label>
+            <label>Expanded poster width <input type="number" step={1} value={expandedWidth}
+                onChange={event => setExpandedWidth(Number(event.target.value) || 0)} /></label>
             {/* Keeps the poster grid laid out exactly as before the remount control was added. */}
             <div key={generation} data-generation={generation} style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-                {TITLES.map(title => <Poster key={title} title={title} expanded layoutSettled={layoutSettled} />)}
-                {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} layoutSettled={layoutSettled} />)}
+                {TITLES.map(title => <Poster key={title} title={title} expanded width={expandedWidth} />)}
+                {TITLES.map(title => <Poster key={`compact-${title}`} title={title} expanded={false} width={300} />)}
                 {/* Lyric mode drops the same title to a single truncated line. */}
-                <Poster key="metadata" title={TITLES[2]} expanded metadata />
+                <Poster key="metadata" title={TITLES[2]} expanded metadata width={expandedWidth} />
             </div>
             <style>{'.lattice-poster.is-expanded .lattice-poster-copy:not(.lattice-lyric-metadata) strong { font-size: 70.7625px; }'}</style>
         </div>

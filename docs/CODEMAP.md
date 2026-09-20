@@ -60,6 +60,7 @@
 - `dev/probes/globalLyricOffsetRuler.probe.tsx`
 - `dev/probes/gridPanelToggle.probe.tsx`
 - `dev/probes/lattice.probe.tsx`
+- `dev/probes/latticeExit.probe.tsx`
 - `dev/probes/latticePerformance.probe.tsx`
 - `dev/probes/latticeTitle.probe.tsx`
 - `dev/probes/latticeTitleExpansion.probe.tsx`

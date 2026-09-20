@@ -185,12 +185,21 @@ export default function PosterWall({
 
     // The entry wave reaches the top-left first; leaving reverses that order while cards retrace
     // their upward flight, so the wall empties back toward the corner it entered from.
+    //
+    // Permanently identified, and reading the corner it measures from through a ref, because the
+    // posters hold this across camera moves. A delay computed per render would have to be handed
+    // down as a changing number, and the corner moves with every pan - which defeated
+    // LatticePoster's memo and re-rendered every mounted card on each re-cull. The card calls this
+    // when it actually leaves, so the wave is still measured against the corner of the moment.
+    const exitWaveRef = useRef({ bounds, reducedMotion });
+    exitWaveRef.current = { bounds, reducedMotion };
     const getExitDelay = useCallback((rect: { x: number; y: number }) => {
-        if (reducedMotion) return 0;
-        const steps = Math.max(0, rect.x - bounds.left) + Math.max(0, rect.y - bounds.top);
+        const { bounds: corner, reducedMotion: reduced } = exitWaveRef.current;
+        if (reduced) return 0;
+        const steps = Math.max(0, rect.x - corner.left) + Math.max(0, rect.y - corner.top);
         const entranceDelay = Math.min(ENTRANCE_MAX_DELAY, (steps / (CELL_SIZE + GAP)) * ENTRANCE_STAGGER);
         return ENTRANCE_MAX_DELAY - entranceDelay;
-    }, [bounds.left, bounds.top, reducedMotion]);
+    }, []);
 
     const instances = useMemo(() => {
         if (!measured) return [];
@@ -325,7 +334,7 @@ export default function PosterWall({
                             pixelScale={pixelScale}
                             expandedSize={EXPANDED_SIZE}
                             entranceDelay={getEntranceDelay(rect)}
-                            exitDelay={getExitDelay(rect)}
+                            getExitDelay={getExitDelay}
                             expanded={expanded}
                             reducedMotion={reducedMotion}
                             didDragRef={didDragRef}

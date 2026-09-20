@@ -202,6 +202,7 @@ export type CommandPaletteSettingsContext = {
     /** Which surface pressing play opens; see usePlaybackEntryViewStore. */
     playbackEntryView: PlaybackEntryView;
     setPlaybackEntryView: (view: PlaybackEntryView) => void;
+    toggleRememberHomeCardPosition: () => void;
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;
     toggleAlwaysShowPlayerBackButton: () => void;

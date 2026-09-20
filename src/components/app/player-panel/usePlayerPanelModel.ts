@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
 import { resolveSongLiked } from '../../../utils/resolveSongLiked';
+import { getOnlineProviderIdForSong } from '../../../utils/appPlaybackGuards';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
@@ -9,6 +10,7 @@ import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { selectDisplayCoverUrl, selectDisplayLyrics, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import type { LocalSong, SongResult } from '../../../types';
 import type { LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
@@ -74,10 +76,19 @@ export const usePlayerPanelModel = ({
     const displayCoverUrl = usePlaybackStore(selectDisplayCoverUrl);
     const displayLyrics = usePlaybackStore(selectDisplayLyrics);
 
-    const isLiked = useMemo(
-        () => resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
-        [currentSong, isLocalSongLiked, likedSongIds, starredNavidromeSongIds],
-    );
+    // 冗余但保留的订阅：`omni.isSongLiked` 走 getState 读账号 store，读不到变化。今天 App 已经
+    // 通过 useOnlineProviderPlatform 订阅了整张 accounts 表，所以这里其实总会被重渲染带到；
+    // 万一哪天那条链断了，这一行仍能保证收藏成功后心形当场更新。取值没有用处。
+    const currentSongProviderId = getOnlineProviderIdForSong(currentSong);
+    useOnlineProviderAccountStore(state => (
+        currentSongProviderId ? state.accounts[currentSongProviderId]?.likedSongIds : undefined
+    ));
+
+    // Recomputed every render, never memoised. `isLocalSongLiked` arrives through
+    // useStableActionSurface, so its identity is permanent (see the warning in
+    // useStableCallbacks.ts) and a memo keyed on it answers with the first render's value forever:
+    // favouriting a local song left this heart dark while the bottom bar's inline copy updated.
+    const isLiked = resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
 
     const collectionEntries = useMemo(() => createPlayerPanelCollectionEntries({
         currentSong,

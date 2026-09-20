@@ -5,7 +5,7 @@ import { LyricParserFactory } from '../utils/lyrics/LyricParserFactory';
 import { getFromCacheWithMigration, getLocalSongs, removeFromCache, saveLocalSong, saveToCache } from '../services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from '../services/coverCache';
 import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../services/localMusicService';
-import { addSongsToLocalPlaylist, createLocalPlaylist, getLocalPlaylists, setLocalSongFavorite } from '../services/localPlaylistService';
+import { addSongsToLocalPlaylist, buildCanonicalLocalSongIdIndex, createLocalPlaylist, getLocalPlaylists, setLocalSongFavorite } from '../services/localPlaylistService';
 import { applyLocalLibraryEntityDisplay, buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong, resolveLocalSongMetadata } from '../services/playbackAdapters';
 import { getPrefetchedData } from '../services/prefetchService';
 import { retireBlobUrl } from '../services/playbackBlobUrls';
@@ -249,13 +249,17 @@ export function useLibraryPlaybackController({
         };
     }, [loadBaseOnlineLyrics, lyrics]);
 
+    // 同一文件被导入两次时，歌单里留下的是 canonical 那一份的 id，而播放中的可能是另一份副本。
+    const canonicalLocalSongIds = useMemo(() => buildCanonicalLocalSongIdIndex(localSongs), [localSongs]);
+
     const isLocalSongLiked = useCallback((song: SongResult | null) => {
         if (!song || !isLocalPlaybackSong(song) || !getFavoriteLocalPlaylist) {
             return false;
         }
 
-        return getFavoriteLocalPlaylist.songIds.includes(song.localRef.songId);
-    }, [getFavoriteLocalPlaylist]);
+        const songId = song.localRef.songId;
+        return getFavoriteLocalPlaylist.songIds.includes(canonicalLocalSongIds.get(songId) ?? songId);
+    }, [canonicalLocalSongIds, getFavoriteLocalPlaylist]);
 
     const saveCurrentQueueAsLocalPlaylist = useCallback(async (name: string) => {
         const trimmedName = name.trim();

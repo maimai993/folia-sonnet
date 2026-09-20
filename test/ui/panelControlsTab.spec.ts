@@ -44,6 +44,33 @@ const openControlsTab = async (page: import('@playwright/test').Page) => {
     await page.waitForTimeout(600);
 };
 
+const openOnlineLyricsTab = async (page: import('@playwright/test').Page) => {
+    await openPlayerPage(page);
+    await page.evaluate(async () => {
+        const i18nModulePath = '/src/i18n/config.ts';
+        const storeModulePath = '/src/stores/usePlaybackStore.ts';
+        const { default: i18n } = await import(i18nModulePath);
+        const { usePlaybackStore } = await import(storeModulePath);
+        await i18n.changeLanguage('en');
+        const song = {
+            id: 397,
+            name: 'Timeline Offset Fixture',
+            artists: [{ id: 10, name: 'Alpha' }],
+            album: { id: 20, name: 'Shared Album' },
+            durationMs: 180_000,
+            sourceRef: { kind: 'online', providerId: 'netease', mediaId: '397' },
+        };
+        usePlaybackStore.getState().setCurrentSong(song);
+        usePlaybackStore.getState().setPlayQueue([song]);
+    });
+
+    const panelToggleButton = page.getByTestId('panel-toggle').getByRole('button');
+    await expect(panelToggleButton).toBeVisible();
+    await panelToggleButton.click();
+    await page.getByTitle('Lyrics', { exact: true }).click();
+    await expect(page.getByRole('spinbutton', { name: 'Timeline Offset' })).toBeVisible();
+};
+
 const openQueueWithFixture = async (page: import('@playwright/test').Page) => {
     await openPlayerPage(page);
     const queue = [
@@ -138,6 +165,29 @@ test('lifts the open right panel with the configured bottom bar baseline', async
     expect(viewport!.height - box!.y - box!.height).toBeCloseTo(bottomBarOffset + 8, 0);
     // 抬高时同步收缩滚动面板，不能把顶部推出视口。
     expect(box!.y).toBeGreaterThanOrEqual(48);
+});
+
+test('keeps the lyric offset reset clear of the open-panel close button', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openOnlineLyricsTab(page);
+
+    const offsetInput = page.getByRole('spinbutton', { name: 'Timeline Offset' });
+    const resetButton = page.getByRole('button', { name: 'Reset timeline offset' });
+    const panelToggleButton = page.getByTestId('panel-toggle').getByRole('button');
+
+    await offsetInput.fill('250');
+    await expect(resetButton).toBeEnabled();
+    const [resetBox, toggleBox] = await Promise.all([
+        resetButton.boundingBox(),
+        panelToggleButton.boundingBox(),
+    ]);
+    expect(resetBox).not.toBeNull();
+    expect(toggleBox).not.toBeNull();
+    expect(resetBox!.x + resetBox!.width).toBeLessThanOrEqual(toggleBox!.x);
+
+    await resetButton.click();
+    await expect(offsetInput).toHaveValue('0');
+    await expect(resetButton).toBeHidden();
 });
 
 test('keeps the configured bottom baseline after navigating to another page', async ({ page }) => {

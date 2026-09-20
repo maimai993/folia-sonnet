@@ -34,6 +34,14 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsAnchorCommand('settings-grid-card-style', 'Grid card style', 'Jump to how the home grid draws its cards', ['card style', 'polaroid', 'grid style', '卡片样式'], 'grid3dCardStyle'),
     createSettingsCommand('settings-general', 'General settings', 'Open general app preferences', ['general', 'language settings', 'locale', '通用', '语言'], 'options', 'general'),
     createSettingsAnchorCommand('settings-home-tabs', 'Home tab visibility', 'Choose which tabs the home screen shows', ['hide tabs', 'home tabs', '首页标签'], 'homeTabsVisibility'),
+    createToggleCommand(
+        'home-card-position-toggle',
+        'settings',
+        'Remember home card position',
+        'Toggle restoring each home section to its last card',
+        ['restore card', 'tab position', '卡片定位', '返回首页'],
+        context => context.settings.toggleRememberHomeCardPosition(),
+    ),
     createSettingsAnchorCommand('settings-playback-entry-view', 'Play opens', 'Jump to which view pressing play opens', ['entry view', 'open on play', 'default view', '播放进入视图', '默认视图'], 'playbackEntryView'),
     {
         id: 'playback-entry-view-player',

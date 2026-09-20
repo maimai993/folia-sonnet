@@ -33,6 +33,37 @@ describe('provider account snapshot cache', () => {
         );
     });
 
+    it('drops playlist-local file ids stored by an older build', async () => {
+        vi.mocked(getFromCache).mockResolvedValue({
+            version: 1,
+            savedAt: 1,
+            user: { id: 'user', nickname: 'Listener' },
+            collections: [],
+            likedSongIds: ['song'],
+            likedSongFileIds: { song: 987 },
+        });
+
+        const snapshot = await loadProviderAccountSnapshot('kugou');
+
+        expect(snapshot).not.toBeNull();
+        expect(snapshot).not.toHaveProperty('likedSongFileIds');
+    });
+
+    it('drops unusable liked ids without throwing away the rest of the snapshot', async () => {
+        vi.mocked(getFromCache).mockResolvedValue({
+            version: 1,
+            savedAt: 1,
+            user: { id: 'user', nickname: 'Listener' },
+            collections: [{ providerId: 'kugou', id: 'list', name: 'Playlist', type: 'playlist' }],
+            likedSongIds: ['song', '', { id: 'broken' }, 12],
+        });
+
+        const snapshot = await loadProviderAccountSnapshot('kugou');
+
+        expect(snapshot?.likedSongIds).toEqual(['song', 12]);
+        expect(snapshot?.collections).toHaveLength(1);
+    });
+
     it('rejects incomplete snapshots instead of hydrating a partial home page', async () => {
         vi.mocked(getFromCache).mockResolvedValue({ version: 1, user: { id: 'user' } });
         await expect(loadProviderAccountSnapshot('kugou')).resolves.toBeNull();

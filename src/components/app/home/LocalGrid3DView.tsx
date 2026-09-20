@@ -294,6 +294,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 }}
             />
             <DesktopGrid3DSurface
+                focusMemoryScope={JSON.stringify(['local', activeSection.key])}
                 title={String(activeSection.label)}
                 mapButtonLabel={t('home.allAlbums')}
                 items={activeSection.items.map((item: any) => ({

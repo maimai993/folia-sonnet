@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLocalPlaylists } from '@/services/localPlaylistService';
+import {
+    buildCanonicalLocalSongIdIndex,
+    getLocalPlaylists,
+    setLocalSongFavorite,
+} from '@/services/localPlaylistService';
 import { getFromCache, getLocalSongs, saveToCache } from '@/services/db';
 import type { LocalPlaylist, LocalSong } from '@/types';
 
@@ -103,5 +107,66 @@ describe('localPlaylistService', () => {
         expect(saveToCache).toHaveBeenCalledWith('local_playlists', expect.arrayContaining([
             expect.objectContaining({ id: 'playlist', songIds: ['original'] }),
         ]));
+    });
+
+    it('favorites and unfavorites a repeated import through the canonical song id', async () => {
+        const originalSong = createSong({
+            id: 'original',
+            filePath: 'Library/Disc 1/Track 01.mp3',
+            folderName: 'Library/Disc 1',
+            addedAt: 100,
+        });
+        const duplicatedSong = createSong({
+            id: 'duplicate',
+            filePath: 'Library (2)/Disc 1/Track 01.mp3',
+            folderName: 'Library (2)/Disc 1',
+            addedAt: 200,
+        });
+        const cacheState = new Map<string, unknown>([['local_playlists', [{
+            id: 'favorite',
+            name: 'Liked Songs',
+            songIds: [],
+            createdAt: 1,
+            updatedAt: 1,
+            isFavorite: true,
+        }]]]);
+        vi.mocked(getFromCache).mockImplementation(async key => (cacheState.get(key) ?? null) as never);
+        vi.mocked(saveToCache).mockImplementation(async (key, data) => { cacheState.set(key, data); });
+        vi.mocked(getLocalSongs).mockResolvedValue([originalSong, duplicatedSong]);
+
+        // 播放中的是第二次导入的副本，但歌单里只会留下 canonical 那一份的 id。
+        await setLocalSongFavorite(duplicatedSong, true);
+        const afterFavorite = await getLocalPlaylists();
+        expect(afterFavorite.find(playlist => playlist.isFavorite)?.songIds).toEqual(['original']);
+
+        await setLocalSongFavorite(duplicatedSong, false);
+        const afterUnfavorite = await getLocalPlaylists();
+        expect(afterUnfavorite.find(playlist => playlist.isFavorite)?.songIds).toEqual([]);
+    });
+
+    it('indexes only the repeated imports that resolve to another song id', () => {
+        const originalSong = createSong({
+            id: 'original',
+            filePath: 'Library/Disc 1/Track 01.mp3',
+            folderName: 'Library/Disc 1',
+            addedAt: 100,
+        });
+        const duplicatedSong = createSong({
+            id: 'duplicate',
+            filePath: 'Library (2)/Disc 1/Track 01.mp3',
+            folderName: 'Library (2)/Disc 1',
+            addedAt: 200,
+        });
+        const soleSong = createSong({
+            id: 'sole',
+            filePath: 'Other/Track 09.mp3',
+            folderName: 'Other',
+        });
+
+        const index = buildCanonicalLocalSongIdIndex([originalSong, duplicatedSong, soleSong]);
+
+        expect(index.get('duplicate')).toBe('original');
+        expect(index.has('original')).toBe(false);
+        expect(index.has('sole')).toBe(false);
     });
 });
