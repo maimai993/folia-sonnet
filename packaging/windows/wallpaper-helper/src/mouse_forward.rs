@@ -103,6 +103,7 @@ unsafe fn find_progman_hwnd() -> Option<HWND> {
 /// Registers raw input on the message window (RIDEV_INPUTSINK keeps the helper background
 /// while receiving WM_INPUT) and starts the move-coalescing timer (~60 Hz).
 pub unsafe fn register(worker_w: HWND) -> Result<(), String> {
+    super::attach::ensure_thread_dpi_awareness();
     WORKERW_HWND.store(worker_w.0 as isize, Ordering::Relaxed);
     ICON_WORKERW_HWND.store(
         find_icon_worker_w().map_or(0, |hwnd| hwnd.0 as isize),

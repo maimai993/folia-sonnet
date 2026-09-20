@@ -26,10 +26,10 @@ fn main() {
     match cli::parse(&args) {
         Ok(command) => run(command),
         Err(message) => {
-        eprintln!("usage: folia-wallpaper-helper attach --hwnd <n> [--forward-mouse] [--zguard]");
-        eprintln!("       folia-wallpaper-helper move --hwnd <n>");
-        eprintln!("       folia-wallpaper-helper detach --hwnd <n>");
-        eprintln!("       folia-wallpaper-helper refresh");
+            eprintln!("usage: folia-wallpaper-helper attach --hwnd <n> [--forward-mouse] [--zguard]");
+            eprintln!("       folia-wallpaper-helper move --hwnd <n>");
+            eprintln!("       folia-wallpaper-helper detach --hwnd <n>");
+            eprintln!("       folia-wallpaper-helper refresh");
             eprintln!("error: {message}");
             std::process::exit(2);
         }
@@ -59,8 +59,17 @@ use windows::Win32::Foundation::HWND;
 pub(crate) static DETACH_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(windows)]
+unsafe fn set_process_dpi_awareness() {
+    use windows::Win32::UI::HiDpi::{
+        SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    };
+    let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+}
+
+#[cfg(windows)]
 fn run_windows(command: Command) {
     unsafe {
+        set_process_dpi_awareness();
         match command {
             Command::Move { hwnd } => {
                 attach::reassert_geometry(HWND(hwnd as _));
