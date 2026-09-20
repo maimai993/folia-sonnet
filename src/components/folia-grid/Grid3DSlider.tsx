@@ -440,7 +440,7 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
     }, [centerIndex, isInteractive, reportFocusedIndex, stopKineticScroll]);
 
     useEffect(() => {
-        if (items.length === 0) return;
+        if (isLoading || items.length === 0) return;
         const nextIndex = clampFocusedIndex(focusedIndex, items.length);
 
         if (nextIndex !== focusedIndex) {
@@ -450,15 +450,16 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
 
         if (lastInternalFocusRef.current === nextIndex) {
             lastInternalFocusRef.current = null;
-            requestAnimationFrame(() => updateCardTransforms());
-            return;
+            const frameId = requestAnimationFrame(() => updateCardTransforms());
+            return () => cancelAnimationFrame(frameId);
         }
 
-        requestAnimationFrame(() => {
+        const frameId = requestAnimationFrame(() => {
             centerIndex(nextIndex, 'auto');
             updateCardTransforms();
         });
-    }, [centerIndex, focusedIndex, items.length, itemsSignature, updateCardTransforms]);
+        return () => cancelAnimationFrame(frameId);
+    }, [centerIndex, focusedIndex, isLoading, items.length, itemsSignature, updateCardTransforms]);
 
     const handleScroll = useCallback(() => {
         if (!isInteractive) {

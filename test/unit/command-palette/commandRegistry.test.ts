@@ -78,6 +78,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setIsPanelOpen: vi.fn(),
         },
         settings: {
+            toggleRememberHomeCardPosition: vi.fn(),
             openSettings: vi.fn(),
             lyricStaffPolicy: 'smart' as const,
             cycleLyricStaffPolicy: vi.fn(),

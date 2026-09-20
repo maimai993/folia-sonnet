@@ -20,6 +20,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // GeneralSettingsSubview (PinnedCommandSettings renders inside it)
     languageSettings: { section: 'general', labelKey: 'options.languageSettings' },
     homeTabsVisibility: { section: 'general', labelKey: 'options.homeTabsVisibility' },
+    rememberHomeCardPosition: { section: 'general', labelKey: 'options.rememberHomeCardPosition' },
     playbackEntryView: { section: 'general', labelKey: 'options.playbackEntryView' },
     bottomUiSettings: { section: 'general', labelKey: 'options.bottomUiSettings' },
     pinnedCommands: { section: 'general', labelKey: 'options.pinnedCommands' },
