@@ -30,7 +30,7 @@ const LyricTimelineOffsetControl: React.FC<LyricTimelineOffsetControlProps> = ({
     const buttonHover = isDaylight ? 'hover:bg-black/10 active:bg-black/15' : 'hover:bg-white/10 active:bg-white/15';
 
     return (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between md:pr-8">
             <label className="text-[11px] font-semibold opacity-50 uppercase tracking-wider shrink-0 mr-3">
                 {t('localMusic.lyricTimelineOffset')}
             </label>
@@ -44,7 +44,7 @@ const LyricTimelineOffsetControl: React.FC<LyricTimelineOffsetControlProps> = ({
                     <ChevronLeft size={14} />
                 </button>
 
-                <div className="w-16 flex items-center justify-center bg-transparent mx-0.5">
+                <div className="w-14 flex items-center justify-center bg-transparent mx-0.5">
                     <input
                         type="number"
                         step={STEP_MS}
