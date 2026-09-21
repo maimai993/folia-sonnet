@@ -86,6 +86,24 @@ test('hides the cursor with the player chrome and brings it back on mouse move',
     await expect.poll(async () => readCursor(page, surface(page))).not.toBe('none');
 });
 
+test('reveals both the player chrome and cursor on pointer interaction', async ({ page }) => {
+    await openPlayerPage(page, true);
+    await expectCursorHidden(page);
+
+    // Dispatch directly so this assertion cannot pass because Playwright moved the mouse first.
+    await surface(page).dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'mouse', buttons: 1 });
+    await expect.poll(async () => page.evaluate(async () => {
+        const chromeStorePath = '/src/stores/useAppChromeStore.ts';
+        const { useAppChromeStore } = await import(chromeStorePath) as {
+            useAppChromeStore: { getState: () => { isPlayerChromeHidden: boolean } };
+        };
+        return useAppChromeStore.getState().isPlayerChromeHidden;
+    })).toBe(false);
+    expect(await readCursor(page, surface(page))).not.toBe('none');
+
+    await surface(page).dispatchEvent('pointerup', { pointerId: 1, pointerType: 'mouse', buttons: 0 });
+});
+
 test('keeps the cursor on the command palette while the player surface hides it', async ({ page }) => {
     await openPlayerPage(page, true);
     await expectCursorHidden(page);
