@@ -1829,6 +1829,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     return (
         <motion.div
+            data-ponder-page-scope="grid-view-page"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

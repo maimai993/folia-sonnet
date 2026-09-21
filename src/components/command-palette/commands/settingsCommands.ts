@@ -9,7 +9,7 @@ import { Gauge, Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
 import { reduceMotionSurface } from '../surfaces/reduceMotionSurface';
-import { openCurrentPagePonder } from '../../../utils/ponder/pagePonderTarget';
+import { openCurrentPagePonder } from '../../../services/ponder/pagePonderTarget';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.

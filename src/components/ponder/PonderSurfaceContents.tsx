@@ -13,6 +13,10 @@ type PonderSurfaceContentsProps = {
     outline: string;
 };
 
+type PonderPageSurfaceKind = Extract<PonderSurfaceKind, `${string}-page`>;
+
+const isPageSurfaceKind = (kind: PonderSurfaceKind): kind is PonderPageSurfaceKind => kind.endsWith('-page');
+
 const PaletteHeader: React.FC<{ line: string; outline: string }> = ({ line, outline }) => (
     <div data-ponder-palette-header className="flex h-[22%] items-center gap-2 border-b px-[4%]" style={{ borderColor: outline }}>
         <Search className="h-[34%] w-auto opacity-50" />
@@ -103,7 +107,7 @@ const VolumeContents: React.FC<{ line: string; outline: string; accent: string }
 );
 
 const PageContents: React.FC<{
-    kind: 'grid-page' | 'player-page' | 'lattice-page';
+    kind: PonderPageSurfaceKind;
     line: string;
     outline: string;
     accent: string;
@@ -122,14 +126,49 @@ const PageContents: React.FC<{
         );
     }
 
-    const tileCount = kind === 'lattice-page' ? 12 : 8;
+    if (kind === 'settings-page') {
+        return (
+            <div className="absolute inset-0 flex p-[4%]">
+                <div className="flex w-[27%] flex-col gap-[5%] border-r pr-[4%]" style={{ borderColor: outline }}>
+                    {[56, 82, 68, 74, 60].map((width, index) => (
+                        <span key={width} className="h-[8%] rounded-full" style={{ width: `${width}%`, backgroundColor: index === 1 ? accent : line, opacity: index === 1 ? 0.55 : 1 }} />
+                    ))}
+                </div>
+                <div className="grid flex-1 grid-cols-2 gap-[5%] pl-[5%]">
+                    {[0, 1, 2, 3].map(index => (
+                        <span key={index} className="rounded-[8%] border" style={{ borderColor: outline, backgroundColor: line, opacity: 0.75 }} />
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    if (kind === 'help-page') {
+        return (
+            <div className="absolute inset-0 flex flex-col gap-[7%] p-[6%]">
+                <div className="h-[8%] w-[24%] rounded-full" style={{ backgroundColor: line }} />
+                <div className="grid h-[34%] grid-cols-2 gap-[5%]">
+                    {[0, 1].map(index => (
+                        <span key={index} className="rounded-[10%] border" style={{ borderColor: outline, backgroundColor: index === 1 ? accent : line, opacity: index === 1 ? 0.45 : 0.75 }} />
+                    ))}
+                </div>
+                <div className="flex flex-1 flex-col justify-evenly">
+                    {[72, 88, 62].map(width => (
+                        <span key={width} className="h-[10%] rounded-full" style={{ width: `${width}%`, backgroundColor: line }} />
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    const tileCount = kind === 'lattice-page' ? 12 : kind === 'grid-view-page' ? 10 : 8;
     return (
         <div className="absolute inset-0 flex flex-col gap-[5%] p-[5%]">
             <div className="flex h-[9%] items-center gap-[3%]">
                 <Search className="h-full w-auto opacity-45" />
                 <span className="h-[55%] w-[38%] rounded-full" style={{ backgroundColor: line }} />
             </div>
-            <div className={`grid min-h-0 flex-1 gap-[3%] ${kind === 'lattice-page' ? 'grid-cols-4 grid-rows-3' : 'grid-cols-4 grid-rows-2'}`}>
+            <div className={`grid min-h-0 flex-1 gap-[3%] ${kind === 'lattice-page' ? 'grid-cols-4 grid-rows-3' : kind === 'grid-view-page' ? 'grid-cols-5 grid-rows-2' : 'grid-cols-4 grid-rows-2'}`}>
                 {Array.from({ length: tileCount }, (_, index) => (
                     <span
                         key={index}
@@ -144,7 +183,7 @@ const PageContents: React.FC<{
 
 const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline }) => {
     const resolvedKind = kind ?? 'palette';
-    const contents = resolvedKind === 'grid-page' || resolvedKind === 'player-page' || resolvedKind === 'lattice-page'
+    const contents = isPageSurfaceKind(resolvedKind)
         ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} />
         : resolvedKind === 'picker'
         ? <PickerContents line={line} outline={outline} accent={accent} />

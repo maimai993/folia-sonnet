@@ -20,8 +20,11 @@ export type PonderTargetId =
     | 'panel-slide'
     | 'player-bar'
     | 'grid-page'
+    | 'grid-view-page'
     | 'player-page'
-    | 'lattice-page';
+    | 'lattice-page'
+    | 'help-page'
+    | 'settings-page';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -88,7 +91,17 @@ export type PonderAnchorRole =
     | 'marker';
 
 /** surface 骨架里面的界面类型；只画结构，不复制真实界面的业务状态。 */
-export type PonderSurfaceKind = 'palette' | 'picker' | 'queue' | 'volume' | 'grid-page' | 'player-page' | 'lattice-page';
+export type PonderSurfaceKind =
+    | 'palette'
+    | 'picker'
+    | 'queue'
+    | 'volume'
+    | 'grid-page'
+    | 'grid-view-page'
+    | 'player-page'
+    | 'lattice-page'
+    | 'help-page'
+    | 'settings-page';
 
 type PonderAnchorCommon = {
     /** 骨架上给这个框标的名字。不给就不标。 */

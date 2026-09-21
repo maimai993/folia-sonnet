@@ -1044,6 +1044,10 @@ export default {
     "browserFullscreen": "Fullscreen",
     "madeBy": "Project:",
     "joinDiscord": "Join our Discord",
+    "releaseNotes": "What's new",
+    "releaseNotesDescription": "Review the changes in this version",
+    "ponder": "Ponder Help",
+    "ponderDescription": "Learn Folia's basic controls and operating model",
     "version": "version"
   },
   "lyricProvider": {
@@ -2891,8 +2895,12 @@ export default {
     "anchors": {
       "pages": {
         "grid": "Poster grid",
+        "gridView": "Collection grid",
         "player": "Player",
-        "lattice": "Lattice"
+        "lattice": "Lattice",
+        "help": "Help",
+        "settings": "Options",
+        "commandPalette": "Command palette"
       },
       "playerBar": {
         "bar": "Bottom control bar",
@@ -2915,13 +2923,24 @@ export default {
       "playerBar": "Bottom control bar",
       "panelSlide": "Side panel toggle",
       "gridPage": "Poster grid page",
+      "gridViewPage": "Collection grid page",
       "playerPage": "Player page",
-      "latticePage": "Lattice page"
+      "latticePage": "Lattice page",
+      "helpPage": "Help page",
+      "settingsPage": "Options page"
     },
     "scenes": {
       "gridPageOverview": "How this grid is organized",
+      "gridPageNavigation": "Move, open, and search",
+      "gridViewPageOverview": "Inside a collection",
+      "gridViewPageActions": "Work with a song card",
       "playerPageOverview": "How the player is organized",
       "latticePageOverview": "How Lattice is organized",
+      "helpPageOverview": "The basic operating model",
+      "helpPageCommands": "Commands are the universal entry point",
+      "helpPageOperatingModel": "Browsing and playback are separate",
+      "settingsPageOverview": "Settings are grouped by purpose",
+      "settingsPageDirectNavigation": "Jump directly from commands",
       "playerBarHeight": "Its height can be changed",
       "playerBarSlots": "The two slots can be swapped",
       "playerBarShuffle": "Shuffle deals once",
@@ -2933,8 +2952,17 @@ export default {
     "captions": {
       "pages": {
         "grid": "This is the browsing grid: search and collection navigation live above the cards, while selecting a card opens its songs.",
+        "gridNavigation": "Move across cards with scrolling, swiping, or arrow keys, then select the focused card to open it.",
+        "gridSearch": "Start typing while a grid is active to filter what is on this page. Escape closes the filter.",
+        "gridView": "A collection grid contains the songs, albums, or artists inside the card you opened. Back returns to the parent grid without losing your place.",
+        "gridViewActions": "Select a card to play or open it. The page actions also expose play-all, queue, editing, and collection-specific tools when available.",
         "player": "This page keeps the current song in the center. Playback controls stay along the bottom, and the side handle opens the command palette or player panel.",
-        "lattice": "Lattice lays the play queue out as one poster field. Move through the field to inspect the queue, and select a poster to act on that song."
+        "lattice": "Lattice lays the play queue out as one poster field. Move through the field to inspect the queue, and select a poster to act on that song.",
+        "help": "Folia separates browsing, playback, commands, and options. Ctrl+G explains the page currently in front of you; component guides appear separately when that component has special behavior.",
+        "helpCommands": "Press S to search every command and setting. Commands are also the quickest way to reach a deeply nested option without remembering where it lives.",
+        "helpOperatingModel": "Choose music in a grid, then playback continues independently in Player or Lattice. The bottom bar controls transport everywhere; Help and Options are overlays above the current page.",
+        "settings": "The left side groups options by appearance, interface, playback, interaction, integrations, storage, desktop, and labs. The right side contains the settings in the selected group.",
+        "settingsDirectNavigation": "You rarely need to browse every category: search the setting name in the command palette and Folia opens the exact section and anchor."
       },
       "playerBar": {
         "heightIntro": "How far this bar sits from the bottom of the screen can be changed, and song cards and side panels follow it on every page.",

@@ -1043,6 +1043,10 @@ export default {
     "browserFullscreen": "全屏",
     "madeBy": "Project:",
     "joinDiscord": "加入 Discord 社区",
+    "releaseNotes": "版本更新",
+    "releaseNotesDescription": "查看这个版本带来的变化",
+    "ponder": "思索帮助页",
+    "ponderDescription": "了解 Folia 的基本操作与运行逻辑",
     "version": "版本"
   },
   "lyricProvider": {
@@ -2890,8 +2894,12 @@ export default {
     "anchors": {
       "pages": {
         "grid": "海报墙",
+        "gridView": "集合网格",
         "player": "播放器",
-        "lattice": "Lattice"
+        "lattice": "Lattice",
+        "help": "帮助",
+        "settings": "设置",
+        "commandPalette": "命令面板"
       },
       "playerBar": {
         "bar": "底部控制条",
@@ -2914,13 +2922,24 @@ export default {
       "playerBar": "底部控制条",
       "panelSlide": "侧边面板开关",
       "gridPage": "海报墙页面",
+      "gridViewPage": "集合网格页面",
       "playerPage": "播放器页面",
-      "latticePage": "Lattice 页面"
+      "latticePage": "Lattice 页面",
+      "helpPage": "帮助页面",
+      "settingsPage": "设置页面"
     },
     "scenes": {
       "gridPageOverview": "海报墙如何组织",
+      "gridPageNavigation": "移动、打开与搜索",
+      "gridViewPageOverview": "进入一个集合以后",
+      "gridViewPageActions": "操作歌曲卡片",
       "playerPageOverview": "播放器如何组织",
       "latticePageOverview": "Lattice 如何组织",
+      "helpPageOverview": "Folia 的基本运行逻辑",
+      "helpPageCommands": "命令是通用入口",
+      "helpPageOperatingModel": "浏览与播放彼此独立",
+      "settingsPageOverview": "设置按用途分组",
+      "settingsPageDirectNavigation": "从命令直接跳转",
       "playerBarHeight": "整条的高度可以改",
       "playerBarSlots": "右边两个位置可以换",
       "playerBarShuffle": "随机只洗一次牌",
@@ -2932,8 +2951,17 @@ export default {
     "captions": {
       "pages": {
         "grid": "这是浏览用的海报墙：搜索和歌单导航在卡片上方，选中一张卡片就会进入它的歌曲列表。",
+        "gridNavigation": "滚动、滑动或用方向键在卡片间移动，然后选中当前卡片进入其中。",
+        "gridSearch": "网格处于当前页面时直接输入文字即可筛选本页内容；按 Esc 关闭筛选。",
+        "gridView": "集合网格展示刚才打开的卡片所包含的歌曲、专辑或艺人。返回时会回到上一级，并保留原来的位置。",
+        "gridViewActions": "选中卡片可以播放或继续进入。页面操作区还会按集合能力提供全部播放、加入队列、编辑等动作。",
         "player": "这个页面把当前歌曲放在中央；播放控制留在底部，侧边手柄则可以打开命令面板或播放器面板。",
-        "lattice": "Lattice 把整条播放队列铺成一面海报墙。你可以在墙上移动查看队列，并选中海报来操作那首歌。"
+        "lattice": "Lattice 把整条播放队列铺成一面海报墙。你可以在墙上移动查看队列，并选中海报来操作那首歌。",
+        "help": "Folia 把浏览、播放、命令和设置分开。Ctrl+G 会解释当前最上层的页面；某个组件有特殊操作时，它还会提供独立的思索教程。",
+        "helpCommands": "按 S 可以搜索全部命令和设置。对于藏得较深的选项，直接搜索名称通常比记住它在哪一级更快。",
+        "helpOperatingModel": "在网格里选择音乐，播放则独立持续在 Player 或 Lattice 中。底部控制条在各页负责播放控制，帮助和设置是覆盖在当前页面之上的窗口。",
+        "settings": "左侧按外观、界面、播放、交互、集成、存储、桌面和实验室分组；右侧显示当前分组里的具体设置。",
+        "settingsDirectNavigation": "不必逐层翻找：在命令面板搜索设置名称，Folia 会直接打开对应分组并滚到准确位置。"
       },
       "playerBar": {
         "heightIntro": "这条控制条离屏幕底边有多远是可以改的，各页面的歌曲卡片和侧边面板会跟着一起动。",

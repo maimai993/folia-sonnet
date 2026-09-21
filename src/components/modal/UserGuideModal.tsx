@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
-import { openCurrentPagePonder } from '../../utils/ponder/pagePonderTarget';
+import { openCurrentPagePonder } from '../../services/ponder/pagePonderTarget';
 import type { Theme } from '../../types';
 
 // src/components/modal/UserGuideModal.tsx

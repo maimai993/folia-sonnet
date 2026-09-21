@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
-import { openCurrentPagePonder } from '../../utils/ponder/pagePonderTarget';
+import { openCurrentPagePonder } from '../../services/ponder/pagePonderTarget';
 
 // src/components/ponder/PagePonderTouchButton.tsx
 

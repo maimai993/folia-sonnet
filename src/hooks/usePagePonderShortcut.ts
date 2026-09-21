@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { usePonderStore } from '../stores/usePonderStore';
-import { openCurrentPagePonder } from '../utils/ponder/pagePonderTarget';
+import { openCurrentPagePonder } from '../services/ponder/pagePonderTarget';
 
 // src/hooks/usePagePonderShortcut.ts
 

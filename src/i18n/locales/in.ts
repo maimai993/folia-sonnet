@@ -1039,6 +1039,10 @@ export default {
     "browserFullscreen": "Layar penuh",
     "madeBy": "Proyek:",
     "joinDiscord": "Gabung Discord kami",
+    "releaseNotes": "Yang baru",
+    "releaseNotesDescription": "Lihat perubahan pada versi ini",
+    "ponder": "Ponder Bantuan",
+    "ponderDescription": "Pelajari kontrol dasar dan cara kerja Folia",
     "version": "versi"
   },
   "lyricProvider": {
@@ -2823,8 +2827,12 @@ export default {
     "anchors": {
       "pages": {
         "grid": "Kisi poster",
+        "gridView": "Kisi koleksi",
         "player": "Pemutar",
-        "lattice": "Lattice"
+        "lattice": "Lattice",
+        "help": "Bantuan",
+        "settings": "Opsi",
+        "commandPalette": "Palette perintah"
       },
       "playerBar": {
         "bar": "Bilah kontrol bawah",
@@ -2847,13 +2855,24 @@ export default {
       "playerBar": "Bilah kontrol bawah",
       "panelSlide": "Tombol panel samping",
       "gridPage": "Halaman kisi poster",
+      "gridViewPage": "Halaman kisi koleksi",
       "playerPage": "Halaman pemutar",
-      "latticePage": "Halaman Lattice"
+      "latticePage": "Halaman Lattice",
+      "helpPage": "Halaman Bantuan",
+      "settingsPage": "Halaman Opsi"
     },
     "scenes": {
       "gridPageOverview": "Susunan kisi ini",
+      "gridPageNavigation": "Bergerak, membuka, dan mencari",
+      "gridViewPageOverview": "Di dalam koleksi",
+      "gridViewPageActions": "Bekerja dengan kartu lagu",
       "playerPageOverview": "Susunan pemutar",
       "latticePageOverview": "Susunan Lattice",
+      "helpPageOverview": "Cara kerja dasar Folia",
+      "helpPageCommands": "Perintah adalah pintu masuk universal",
+      "helpPageOperatingModel": "Penelusuran dan pemutaran terpisah",
+      "settingsPageOverview": "Pengaturan dikelompokkan berdasarkan fungsi",
+      "settingsPageDirectNavigation": "Lompat langsung dari perintah",
       "playerBarHeight": "Tingginya bisa diubah",
       "playerBarSlots": "Dua slot kanan bisa diganti",
       "playerBarShuffle": "Acak hanya sekali kocok",
@@ -2865,8 +2884,17 @@ export default {
     "captions": {
       "pages": {
         "grid": "Ini adalah kisi penelusuran: pencarian dan navigasi koleksi berada di atas kartu, sedangkan memilih kartu membuka daftar lagunya.",
+        "gridNavigation": "Bergerak antar kartu dengan menggulir, menggeser, atau tombol panah, lalu pilih kartu yang difokuskan untuk membukanya.",
+        "gridSearch": "Mulai mengetik saat kisi aktif untuk memfilter isi halaman ini. Escape menutup filter.",
+        "gridView": "Kisi koleksi berisi lagu, album, atau artis dari kartu yang Anda buka. Kembali membawa Anda ke kisi induk tanpa kehilangan posisi.",
+        "gridViewActions": "Pilih kartu untuk memutar atau membukanya. Tindakan halaman juga menyediakan putar semua, antrean, penyuntingan, dan alat khusus koleksi bila tersedia.",
         "player": "Halaman ini menempatkan lagu saat ini di tengah. Kontrol pemutaran berada di bawah, dan pegangan samping membuka command palette atau panel pemutar.",
-        "lattice": "Lattice menyusun seluruh antrean putar sebagai satu bidang poster. Bergeraklah di bidang itu untuk melihat antrean dan pilih poster untuk bertindak pada lagu tersebut."
+        "lattice": "Lattice menyusun seluruh antrean putar sebagai satu bidang poster. Bergeraklah di bidang itu untuk melihat antrean dan pilih poster untuk bertindak pada lagu tersebut.",
+        "help": "Folia memisahkan penelusuran, pemutaran, perintah, dan opsi. Ctrl+G menjelaskan halaman terdepan; panduan komponen tersedia terpisah saat suatu komponen memiliki perilaku khusus.",
+        "helpCommands": "Tekan S untuk mencari semua perintah dan pengaturan. Perintah juga merupakan cara tercepat menuju opsi yang tersembunyi jauh.",
+        "helpOperatingModel": "Pilih musik di kisi, lalu pemutaran berlanjut secara mandiri di Player atau Lattice. Bilah bawah mengontrol pemutaran di semua halaman; Bantuan dan Opsi adalah lapisan di atas halaman saat ini.",
+        "settings": "Sisi kiri mengelompokkan opsi berdasarkan tampilan, antarmuka, pemutaran, interaksi, integrasi, penyimpanan, desktop, dan lab. Sisi kanan berisi pengaturan grup terpilih.",
+        "settingsDirectNavigation": "Anda tidak perlu menelusuri setiap kategori: cari nama pengaturan di palette perintah dan Folia membuka bagian serta jangkar yang tepat."
       },
       "playerBar": {
         "heightIntro": "Jarak bilah ini dari tepi bawah layar bisa diubah, dan kartu lagu serta panel samping ikut menyesuaikan di semua halaman.",

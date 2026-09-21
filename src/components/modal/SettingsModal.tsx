@@ -25,6 +25,8 @@ import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
 import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
+import SettingsHelpActions from './SettingsHelpActions';
+import ReleaseNotesDialog from './ReleaseNotesDialog';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
@@ -48,6 +50,7 @@ import type { ThemeCacheSongKey } from '../../services/themeCache';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import { isMacPlatform as isMac } from '../../utils/platform';
 import { HELP_TAB_PRIMARY_SHORTCUTS } from './userGuideContent';
+import { openCurrentPagePonder } from '../../services/ponder/pagePonderTarget';
 import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
 import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
@@ -395,6 +398,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [showLyricFilterSettings, setShowLyricFilterSettings] = useState(false);
     const [showGlobalLyricOffset, setShowGlobalLyricOffset] = useState(false);
     const [showAiHelpPrompt, setShowAiHelpPrompt] = useState(false);
+    const [showReleaseNotes, setShowReleaseNotes] = useState(false);
     const [versionCopied, setVersionCopied] = useState(false);
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
@@ -1029,7 +1033,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         || showThemePark
         || showLyricFilterSettings
         || showGlobalLyricOffset
-        || showAiHelpPrompt;
+        || showAiHelpPrompt
+        || showReleaseNotes;
 
     const closeAllSubviews = () => {
         if (shouldCloseModalOnSubviewBack) {
@@ -1041,6 +1046,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowLyricFilterSettings(false);
         setShowGlobalLyricOffset(false);
         setShowAiHelpPrompt(false);
+        setShowReleaseNotes(false);
     };
 
     useEffect(() => {
@@ -1260,6 +1266,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
+            data-ponder-page-scope={activeTab === 'help' ? 'help-page' : 'settings-page'}
             className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-8 sm:px-5 sm:py-12"
             style={{ backgroundColor: overlayBackground }}
             onMouseDown={handleOverlayMouseDown}
@@ -1342,6 +1349,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 transition={shellTransition}
                                 className="space-y-6 select-none h-full overflow-y-auto custom-scrollbar pr-2 pb-4"
                             >
+                                <SettingsHelpActions
+                                    onOpenReleaseNotes={() => setShowReleaseNotes(true)}
+                                    onOpenPonder={openCurrentPagePonder}
+                                />
+
                                 {/* Navigation - REMOVED requested items */}
                                 {/* 
                                 Removed:
@@ -2111,6 +2123,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 theme={theme}
                 onClose={() => setShowAiHelpPrompt(false)}
                 onCopyText={copyText}
+            />
+            <ReleaseNotesDialog
+                isOpen={showReleaseNotes}
+                isDaylight={isDaylight}
+                theme={theme}
+                onClose={() => setShowReleaseNotes(false)}
             />
         </motion.div>
     );

@@ -656,7 +656,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     };
 
     return (
-        <div ref={gridRootRef} className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}>
+        <div
+            ref={gridRootRef}
+            data-ponder-page-scope="grid-page"
+            className={`relative w-full h-full flex flex-col font-sans overflow-hidden ${mainBg} pointer-events-auto backdrop-blur-sm ${bottomPadding}`}
+        >
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
             <div className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
