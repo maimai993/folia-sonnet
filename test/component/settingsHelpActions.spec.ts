@@ -19,8 +19,62 @@ test('Help Ponder 按钮直接打开 help-page，而不是底下的 Grid 页面'
     await expect(page.getByRole('dialog', { name: 'Help page' })).toBeVisible();
 });
 
-test('Ctrl+G 在 Help 覆盖层中打开同一个 help-page', async ({ page }) => {
-    await page.keyboard.press('Control+KeyG');
-    await expect(page.getByTestId('ponder-stage')).toBeVisible();
+test('长按 Ctrl+G 在 Help 覆盖层中打开同一个 help-page', async ({ page }) => {
+    // Ctrl+G 和悬停长按 G 一样要按满 400ms，press() 那种按下即松会被当成放弃。
+    await page.keyboard.down('Control');
+    await page.keyboard.down('KeyG');
+    await expect(page.getByTestId('ponder-stage')).toBeVisible({ timeout: 2000 });
+    await page.keyboard.up('KeyG');
+    await page.keyboard.up('Control');
     await expect(page.getByRole('dialog', { name: 'Help page' })).toBeVisible();
+});
+
+test('Ctrl+G 按不满就松手，只留下擦除过的胶囊，不进教程', async ({ page }) => {
+    await page.keyboard.down('Control');
+    await page.keyboard.down('KeyG');
+    await expect(page.getByTestId('ponder-hint-capsule')).toHaveAttribute('data-ponder-hint-placement', 'page');
+    await page.keyboard.up('KeyG');
+    await page.keyboard.up('Control');
+
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId('ponder-stage')).toHaveCount(0);
+    await expect(page.getByTestId('ponder-hint-capsule')).toHaveCount(0);
+});
+
+/**
+ * 覆盖层的退场靠 AnimatePresence 撑住那不到 300ms。
+ *
+ * 「条件为假就 return null」那种写法一关就整棵树消失，退场动画没有机会播 —— 从截图上看不出
+ * 区别，只有「关掉之后它还在不在 DOM 里」这一条能把它钉住。
+ */
+const expectAnimatedExit = async (page: import('@playwright/test').Page, testId: string) => {
+    await expect(page.getByTestId(testId)).toBeAttached();
+    await page.waitForTimeout(80);
+    await expect(page.getByTestId(testId), `${testId} 关掉后立刻就没了，等于没有退场动画`).toBeAttached();
+    await expect(page.getByTestId(testId)).toHaveCount(0, { timeout: 2000 });
+};
+
+test('新版本功能页面有进出场过渡，不是直接出现和直接消失', async ({ page }) => {
+    await page.getByTestId('help-release-notes').click();
+    const dialog = page.getByTestId('release-notes-dialog');
+    await expect(dialog).toBeAttached();
+    // 入场：第一帧还没到终态。
+    const enteringOpacity = await dialog.evaluate(node => Number(getComputedStyle(node).opacity));
+    expect(enteringOpacity).toBeLessThan(1);
+
+    await expect(dialog).toHaveCSS('opacity', '1', { timeout: 2000 });
+    await page.getByTestId('release-notes-close').click();
+    await expectAnimatedExit(page, 'release-notes-dialog');
+});
+
+test('思索教程层有进出场过渡，关掉时先播完退场', async ({ page }) => {
+    await page.keyboard.down('Control');
+    await page.keyboard.down('KeyG');
+    await expect(page.getByTestId('ponder-stage')).toBeVisible({ timeout: 2000 });
+    await page.keyboard.up('KeyG');
+    await page.keyboard.up('Control');
+
+    await expect(page.getByTestId('ponder-stage')).toHaveCSS('opacity', '1', { timeout: 2000 });
+    await page.keyboard.press('Escape');
+    await expectAnimatedExit(page, 'ponder-stage');
 });

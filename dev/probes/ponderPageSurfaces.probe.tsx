@@ -16,6 +16,10 @@ const ENTRIES: Array<{ id: string; target: PonderTargetId; scene: number }> = [
     { id: 'grid-view-info', target: 'grid-view-page', scene: 2 },
     { id: 'lattice-poster', target: 'lattice-page', scene: 2 },
     { id: 'lattice-tools', target: 'lattice-page', scene: 3 },
+    { id: 'player-bar-basics', target: 'player-bar', scene: 0 },
+    { id: 'player-bar-height', target: 'player-bar', scene: 1 },
+    { id: 'player-bar-shuffle', target: 'player-bar', scene: 3 },
+    { id: 'player-bar-volume', target: 'player-bar', scene: 4 },
 ];
 
 const ProbeBody: React.FC = () => (

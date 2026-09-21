@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { usePonderStore } from '../../stores/usePonderStore';
+import { resolveReducedMotion, useMotionSettingsStore } from '../../stores/useMotionSettingsStore';
+import { OVERLAY_CALM_TRANSITION, OVERLAY_TRANSITION, overlayBackdropMotion, overlayPanelMotionFor } from '../shared/overlayEntranceMotion';
 import { usePonderSessionKeys } from '../../hooks/usePonderSessionKeys';
 import { compilePonderScene, sceneAnchorNames } from '../../utils/ponder/compilePonderTimeline';
 import { keyframeTicks } from '../../utils/ponder/ponderKeyframes';
@@ -25,6 +28,10 @@ import type { Theme } from '../../types';
 //
 // 矩形在进入瞬间采一次就定住，不订阅任何东西：底栏基线是 React 之外的 MotionValue、
 // Lattice 相机也绕过 React，订阅既拿不到正确值也违反 guardrails。窗口尺寸变了才重采一次。
+//
+// 退场那 240ms 里 store 的 session 已经是 null 了，这一层却还要留在屏幕上。所以这里存一份
+// 最后的 session 快照，整棵树在退场期间继续按它渲染 —— 少了这一步，关闭时会先整屏闪成空白
+// 再淡出，等于没有退场动画。
 
 /** resize 后等这么久再重采，避免拖动窗口时连续重建时间线。 */
 const RESAMPLE_DEBOUNCE_MS = 250;
@@ -62,11 +69,20 @@ const readRect = (selector: string): PonderRect | null => {
 
 const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     const { t } = useTranslation();
-    const session = usePonderStore(state => state.session);
+    const calm = useMotionSettingsStore(state => resolveReducedMotion(state, 'uiMicroMotion'));
+    const liveSession = usePonderStore(state => state.session);
     const isPaused = usePonderStore(state => state.isPaused);
     const closePonder = usePonderStore(state => state.closePonder);
     const stepScene = usePonderStore(state => state.stepScene);
     const setPaused = usePonderStore(state => state.setPaused);
+
+    // 退场期间 liveSession 已经是 null，但这一层还要按最后那次会话继续渲染完这 240ms。
+    const lastSessionRef = useRef(liveSession);
+    if (liveSession) {
+        lastSessionRef.current = liveSession;
+    }
+    const session = liveSession ?? lastSessionRef.current;
+    const isLeaving = liveSession === null;
 
     const target = session ? findPonderTarget(session.targetId) : null;
 
@@ -176,7 +192,8 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     });
 
     usePonderSessionKeys({
-        isActive: Boolean(session),
+        // 退场那几帧按 liveSession 判：会话已经关了，键盘就该立刻还给底下的界面。
+        isActive: Boolean(liveSession),
         sceneCount: scenes.length,
         controlsRef,
     });
@@ -186,83 +203,89 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     }
 
     return (
-        <div
+        <motion.div
+            {...overlayBackdropMotion}
+            transition={calm ? OVERLAY_CALM_TRANSITION : OVERLAY_TRANSITION}
             // 接管键盘：底下那些全局热键靠这个属性让路，这也是 G 不会在教程里再次触发的原因。
-            data-folia-keyboard-window="true"
+            // 退场期间就该摘掉 —— 教程已经关了，底下的热键不必再等这 280ms。
+            data-folia-keyboard-window={isLeaving ? undefined : 'true'}
             data-testid="ponder-stage"
             // z-[220]：压过状态 toast（210），教程是全屏接管，不该被任何东西盖住。
             // backdrop-blur 让底下的真实界面退成一团轮廓而不是仍然可读的文字：
             // 保留「这是同一个地方」的空间感，又不至于和骨架抢注意力。
-            className="fixed inset-0 z-[220] overflow-hidden backdrop-blur-md"
+            className={`fixed inset-0 z-[220] overflow-hidden backdrop-blur-md ${isLeaving ? 'pointer-events-none' : ''}`}
             style={{ backgroundColor: isDaylight ? 'rgba(250, 250, 250, 0.94)' : 'rgba(9, 9, 11, 0.94)' }}
             role="dialog"
             aria-modal="true"
             aria-label={t(target.titleKey)}
         >
-            <PonderSkeletonLayer
-                rects={rects}
-                anchors={scene.anchors}
-                activeAnchors={activeAnchors}
-                nodes={nodesRef.current}
-                theme={theme}
-                isDaylight={isDaylight}
-            />
-            <PonderActors plan={plan} rects={rects} nodes={nodesRef.current} theme={theme} isDaylight={isDaylight} />
-            <PonderChrome
-                title={t(target.titleKey)}
-                sceneTitle={t(scene.titleKey)}
-                sceneIndex={session.sceneIndex}
-                sceneCount={scenes.length}
-                isPaused={isPaused}
-                ticks={ticks}
-                nodes={nodesRef.current}
-                onPrevScene={() => stepScene(-1, scenes.length)}
-                onNextScene={() => stepScene(1, scenes.length)}
-                onTogglePlay={() => {
-                    const controls = controlsRef.current;
-                    if (controls) setPaused(controls.toggle());
-                }}
-                onRestart={() => controlsRef.current?.restart()}
-                onSeekToTick={index => controlsRef.current?.seekToTick(index)}
-                actionLabel={scene.action ? t(scene.action.labelKey) : null}
-                onRunAction={() => {
-                    if (!scene.action) return;
-                    // 先退出教程再开设置：教程层是 z-[220]、还接管着键盘，
-                    // 留着它会把刚打开的设置面板整个盖住。
-                    const anchorId = scene.action.anchorId as SettingsAnchorId;
-                    closePonder();
-                    openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
-                }}
-                theme={theme}
-                isDaylight={isDaylight}
-            />
-            <PonderRelatedTargets
-                target={target}
-                accent={theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa')}
-                isDaylight={isDaylight}
-            />
-            {isFinished && (
-                <PonderNextChapterCue
-                    nextSceneTitle={scenes[session.sceneIndex + 1]
-                        ? t(scenes[session.sceneIndex + 1].titleKey)
-                        : null}
-                    onNextScene={() => stepScene(1, scenes.length)}
+            {/* 缩放挂在内层：底衬要一直铺满，跟着缩会在四边露出没盖住的真实界面。 */}
+            <motion.div {...overlayPanelMotionFor(calm)} data-ponder-stage-content className="absolute inset-0">
+                <PonderSkeletonLayer
+                    rects={rects}
+                    anchors={scene.anchors}
+                    activeAnchors={activeAnchors}
+                    nodes={nodesRef.current}
                     theme={theme}
                     isDaylight={isDaylight}
                 />
-            )}
+                <PonderActors plan={plan} rects={rects} nodes={nodesRef.current} theme={theme} isDaylight={isDaylight} />
+                <PonderChrome
+                    title={t(target.titleKey)}
+                    sceneTitle={t(scene.titleKey)}
+                    sceneIndex={session.sceneIndex}
+                    sceneCount={scenes.length}
+                    isPaused={isPaused}
+                    ticks={ticks}
+                    nodes={nodesRef.current}
+                    onPrevScene={() => stepScene(-1, scenes.length)}
+                    onNextScene={() => stepScene(1, scenes.length)}
+                    onTogglePlay={() => {
+                        const controls = controlsRef.current;
+                        if (controls) setPaused(controls.toggle());
+                    }}
+                    onRestart={() => controlsRef.current?.restart()}
+                    onSeekToTick={index => controlsRef.current?.seekToTick(index)}
+                    actionLabel={scene.action ? t(scene.action.labelKey) : null}
+                    onRunAction={() => {
+                        if (!scene.action) return;
+                        // 先退出教程再开设置：教程层是 z-[220]、还接管着键盘，
+                        // 留着它会把刚打开的设置面板整个盖住。
+                        const anchorId = scene.action.anchorId as SettingsAnchorId;
+                        closePonder();
+                        openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
+                    }}
+                    theme={theme}
+                    isDaylight={isDaylight}
+                />
+                <PonderRelatedTargets
+                    target={target}
+                    accent={theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa')}
+                    isDaylight={isDaylight}
+                />
+                {isFinished && (
+                    <PonderNextChapterCue
+                        nextSceneTitle={scenes[session.sceneIndex + 1]
+                            ? t(scenes[session.sceneIndex + 1].titleKey)
+                            : null}
+                        onNextScene={() => stepScene(1, scenes.length)}
+                        theme={theme}
+                        isDaylight={isDaylight}
+                    />
+                )}
 
-            <button
-                type="button"
-                onClick={closePonder}
-                className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs transition-colors ${
-                    isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'
-                }`}
-                style={{ color: isDaylight ? 'rgba(24, 24, 27, 0.55)' : 'rgba(255, 255, 255, 0.55)' }}
-            >
-                {t('ponder.exit')}
-            </button>
-        </div>
+                <button
+                    type="button"
+                    onClick={closePonder}
+                    className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs transition-colors ${
+                        isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'
+                    }`}
+                    style={{ color: isDaylight ? 'rgba(24, 24, 27, 0.55)' : 'rgba(255, 255, 255, 0.55)' }}
+                >
+                    {t('ponder.exit')}
+                </button>
+            </motion.div>
+        </motion.div>
     );
 };
 

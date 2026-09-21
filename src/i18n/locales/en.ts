@@ -2869,9 +2869,9 @@ export default {
     "noComponentsOnPage": "No separate component guides on this page yet.",
     "onboarding": {
       "title": "Meet Ponder",
-      "description": "Press Ctrl + G now to open the guide for the page you are on.",
+      "description": "Hold Ctrl + G now until the capsule fills, and the guide for the page you are on opens.",
       "touchDescription": "Tap the button below now to open the guide for this page.",
-      "shortcut": "Ctrl + G",
+      "shortcut": "Hold Ctrl + G",
       "required": "Try the page Ponder once to continue."
     },
     "sceneLabel": "Chapter",
@@ -2879,6 +2879,7 @@ export default {
     "nextChapter": "Next chapter",
     "title": "Ponder",
     "hintCapsule": "Hold G to ponder",
+    "hintCapsulePage": "Ponder this page",
     "hintCapsuleHold": "Entering ponder",
     "sceneCounter": "{{current}} / {{total}}",
     "prevScene": "Previous scene",
@@ -2903,11 +2904,14 @@ export default {
         "commandPalette": "Command palette"
       },
       "playerBar": {
+        "play": "Play / pause",
+        "title": "Track title",
+        "progress": "Progress bar",
+        "primarySlot": "First slot",
+        "secondarySlot": "Second slot",
         "bar": "Bottom control bar",
         "slots": "Two slots",
-        "shuffleSlot": "Shuffle button",
-        "volumeSlot": "Volume button",
-        "palette": "Command palette",
+        "bottomUiSettings": "Settings · Bottom UI",
         "picker": "Picker in settings",
         "queue": "Play queue",
         "volumeSurface": "Volume surface"
@@ -2984,6 +2988,7 @@ export default {
       "helpPageOperatingModel": "Browsing and playback are separate",
       "settingsPageOverview": "Settings are grouped by purpose",
       "settingsPageDirectNavigation": "Jump directly from commands",
+      "playerBarBasics": "What lives on the capsule",
       "playerBarHeight": "Its height can be changed",
       "playerBarSlots": "The two slots can be swapped",
       "playerBarShuffle": "Shuffle deals once",
@@ -3038,9 +3043,15 @@ export default {
         "settingsDirectNavigation": "You rarely need to browse every category: search the setting name in the command palette and Folia opens the exact section and anchor."
       },
       "playerBar": {
+        "basicsIntro": "Folia's playback controls are this one capsule. The permanent row other players put along the bottom — previous, next, shuffle, repeat, volume — has no fixed place here at all.",
+        "basicsPlay": "The only button that is always present is play / pause. It sits at the far left and never moves.",
+        "basicsTitle": "Changing tracks goes through the title, not a button. Hover it and arrows appear on both sides, previewing the previous and next track names — you pick where to go by reading it, not by pressing blind.",
+        "basicsProgress": "Drag or click the progress bar to seek. Clicking anywhere else on the capsule does not pause: it opens the player page, or on Lattice pulls the view back to the current song.",
+        "basicsSlots": "Everything else lives in these two places on the right. You pick two of ten actions to put there; the rest stay off the bar — that is why there is no fixed row of buttons.",
+        "basicsCollapsed": "Move the pointer away and the capsule folds back into a single progress bar. That is the shape you normally see; approach it and it expands again.",
         "heightIntro": "How far this bar sits from the bottom of the screen can be changed, and song cards and side panels follow it on every page.",
-        "heightCommand": "Dragging it straight away does nothing. Run \"Reposition on player page\" from the command palette first, and only then does it become a thing you can drag.",
-        "heightDrag": "Then press anywhere on it and drag up or down. Let go and it takes effect, and it is remembered.",
+        "heightSettings": "It lives in Settings \u2192 Bottom UI: a slider sets the number directly, and \u201cReposition on the player page\u201d next to it turns the capsule into something you can drag. Searching the same command in the palette does the same thing. The button below takes you straight there.",
+        "heightDrag": "Once repositioning is on, hold the capsule anywhere and drag it up or down. Letting go applies it, and it is remembered.",
         "slotsIntro": "These two buttons to the right of the progress bar are not fixed, and each slot is independent.",
         "slotsWhere": "Choose in settings: loop, shuffle, like, queue, volume, sleep timer and four more, applied the moment you pick.",
         "shuffleIntro": "This shuffle is not what it is elsewhere - it is not a mode that stays on.",

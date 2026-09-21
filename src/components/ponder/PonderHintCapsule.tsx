@@ -20,6 +20,12 @@ const VIEWPORT_MARGIN_PX = 8;
 
 type PonderHintCapsuleProps = {
     label: string;
+    /**
+     * 'cursor' 跟着指针走，给悬停某个组件那条路；
+     * 'page' 钉在屏幕底部中间 —— Ctrl+G 是纯键盘触发，指针可能从没动过，
+     * 跟随会把胶囊丢在视口左上角。
+     */
+    placement?: 'cursor' | 'page';
     theme?: Theme;
     isDaylight: boolean;
     wipeRef: React.RefObject<HTMLDivElement | null>;
@@ -29,6 +35,7 @@ type PonderHintCapsuleProps = {
 
 const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
     label,
+    placement = 'cursor',
     theme,
     isDaylight,
     wipeRef,
@@ -64,18 +71,23 @@ const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
     const border = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.14)';
     const text = isDaylight ? '#27272a' : '#fafafa';
 
+    const isPinned = placement === 'page';
+
     return (
         <motion.div
             ref={rootRef}
-            style={{ x, y }}
+            style={isPinned ? undefined : { x, y }}
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
             // z-[180]：压过 automix 过渡环（170），因为这是对用户此刻正在做的悬停的回应；
             // 低于 ThemedDialog（200），真正的对话框优先级更高。
-            className="pointer-events-none fixed left-0 top-0 z-[180] select-none"
+            className={`pointer-events-none fixed z-[180] select-none ${
+                isPinned ? 'bottom-24 left-1/2 -translate-x-1/2' : 'left-0 top-0'
+            }`}
             data-testid="ponder-hint-capsule"
+            data-ponder-hint-placement={placement}
             aria-hidden="true"
         >
             <div

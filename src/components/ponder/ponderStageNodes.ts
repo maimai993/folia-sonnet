@@ -17,6 +17,8 @@ export type PonderStageNodes = {
     keyChips: Map<string, HTMLElement>;
     /** 字幕的指向线，与对应字幕同生同灭，按 step.id 索引。 */
     pointers: Map<string, SVGGElement>;
+    /** 骨架框本身，按锚点名索引。startsHidden 的框由 reveal 步骤对着它写 opacity。 */
+    boxes: Map<string, HTMLElement>;
     /** 骨架框的高亮填充，按锚点名索引。 */
     highlights: Map<string, HTMLElement>;
     /**
@@ -43,6 +45,7 @@ export const createPonderStageNodes = (): PonderStageNodes => ({
     captions: new Map(),
     keyChips: new Map(),
     pointers: new Map(),
+    boxes: new Map(),
     highlights: new Map(),
     labels: new Map(),
     surfaceStates: new Map(),

@@ -42,6 +42,20 @@ test('Lattice 是不规则海报墙，并演示海报展开后的播放控制', 
  * 两边各写一份百分比时它们会差上几个百分点 —— 高亮落在元素旁边、指向线指偏，
  * 正是「骨架和真实元素错位」。ponderSurfaceGeometry 是这条约束的唯一来源。
  */
+/**
+ * 进场期间整层带着缩放、每个框还各自错开落位，这时量到的两个盒子缩放进度不同，差值没有意义。
+ * 等整层和所有落位动画都停下来再量。
+ */
+const settled = async (stage: any) => {
+    await expect(stage).toHaveCSS('opacity', '1', { timeout: 3000 });
+    await expect(stage.locator('[data-ponder-stage-content]'))
+        .toHaveCSS('transform', 'none', { timeout: 3000 });
+    await stage.page().waitForFunction(() => !document.getAnimations().some(animation => (
+        animation.playState === 'running'
+        && String((animation as unknown as { animationName?: string }).animationName ?? '').startsWith('ponder-skeleton')
+    )), undefined, { timeout: 3000 });
+};
+
 const expectAligned = async (stage: any, anchor: string, element: string) => {
     const anchorBox = await stage.locator(`[data-ponder-anchor="${anchor}"]`).boundingBox();
     const elementBox = await stage.locator(element).first().boundingBox();
@@ -56,6 +70,7 @@ test('页面锚点和合成界面里的真实元素严丝合缝', async ({ page 
     await page.locator('[data-probe-open="lattice-poster"]').click();
     let stage = page.locator('[data-testid="ponder-stage"]');
     await expect(stage).toBeVisible();
+    await settled(stage);
     await expectAligned(stage, 'wall', '[data-ponder-lattice-wall]');
     await expectAligned(stage, 'poster', '[data-ponder-lattice-poster][data-focused]');
     await expectAligned(stage, 'back', '[data-ponder-lattice-back]');
@@ -65,6 +80,7 @@ test('页面锚点和合成界面里的真实元素严丝合缝', async ({ page 
     await page.locator('[data-probe-open="grid-card-result"]').click();
     stage = page.locator('[data-testid="ponder-stage"]');
     await expect(stage).toBeVisible();
+    await settled(stage);
     await expectAligned(stage, 'focusedCard', '[data-ponder-grid-card][data-focused]');
     await expectAligned(stage, 'tabs', '[data-ponder-grid-tabs]');
     await expectAligned(stage, 'search', '[data-ponder-grid-search]');
@@ -74,6 +90,7 @@ test('页面锚点和合成界面里的真实元素严丝合缝', async ({ page 
     await page.locator('[data-probe-open="grid-view-info"]').click();
     stage = page.locator('[data-testid="ponder-stage"]');
     await expect(stage).toBeVisible();
+    await settled(stage);
     await expectAligned(stage, 'cards', '[data-ponder-grid-view-cards]');
     await expectAligned(stage, 'card', '[data-ponder-grid-view-card][data-focused]');
     await expectAligned(stage, 'back', '[data-ponder-grid-view-back]');
@@ -100,4 +117,66 @@ test('整屏替换的结果层会把它顶掉的那一层淡出，屏幕上不�
     const panned = stage.locator('[data-ponder-surface-state="wall-panned"]');
     await expect(panned).toHaveCSS('opacity', '1', { timeout: 6000 });
     await expect(base).toHaveCSS('opacity', '0');
+});
+
+test('底部控制条画的是完整尺寸的合成胶囊，锚点和上面的控件对齐', async ({ page }) => {
+    await page.locator('[data-probe-open="player-bar-basics"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+
+    await expectAligned(stage, 'play', '[data-ponder-bar-play]');
+    await expectAligned(stage, 'title', '[data-ponder-bar-title]');
+    await expectAligned(stage, 'progress', '[data-ponder-bar-progress]');
+    await expectAligned(stage, 'primarySlot', '[data-ponder-bar-slot="primary"]');
+    await expectAligned(stage, 'secondarySlot', '[data-ponder-bar-slot="secondary"]');
+
+    // 真实那条会收起来也会被缩放，所以这里量的必须是合成胶囊，不是页面上的控制条。
+    const bar = stage.locator('[data-ponder-anchor="bar"]');
+    const box = await bar.boundingBox();
+    expect(box!.width).toBeGreaterThan(600);
+    await expect(bar).toHaveCSS('border-radius', /9999px/);
+});
+
+test('随机和音量两章不依赖槽位里此刻放着什么', async ({ page }) => {
+    for (const [probe, state] of [['player-bar-shuffle', 'slots-shuffle'], ['player-bar-volume', 'slots-volume']] as const) {
+        await page.locator(`[data-probe-open="${probe}"]`).click();
+        const stage = page.locator('[data-testid="ponder-stage"]');
+        await expect(stage).toBeVisible();
+        // 合成界面把第一个槽位换成这一章要讲的那个按钮，默认槽位层同时退场。
+        await expect(stage.locator(`[data-ponder-surface-state="${state}"]`)).toHaveCSS('opacity', '1', { timeout: 6000 });
+        await expect(stage.locator('[data-ponder-surface-state="slots"]')).toHaveCSS('opacity', '0');
+        await page.keyboard.press('Escape');
+    }
+});
+
+test('动作的结果等到那一步才出现，不是一进场就摆在屏幕上', async ({ page }) => {
+    await page.locator('[data-probe-open="player-bar-height"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    // 「设置 · 底部界面」是这一章要讲的那次操作的结果，开场时不该在场。
+    const settings = stage.locator('[data-ponder-anchor="settings"]');
+    await expect(settings).toHaveAttribute('data-ponder-anchor-hidden', 'true');
+    await expect(settings).toHaveCSS('opacity', '0');
+    // 胶囊本身是一直在的，不跟着藏。
+    await expect(stage.locator('[data-ponder-anchor="bar"]')).toHaveCSS('opacity', '1');
+
+    await expect(settings).toHaveCSS('opacity', '1', { timeout: 6000 });
+    // 画的是滑杆加「在播放页拖动调整」，字幕说的就是这两样。
+    await expect(stage.locator('[data-ponder-bottom-ui-offset-track]')).toBeVisible();
+    await expect(stage.locator('[data-ponder-bottom-ui-reposition]')).toBeVisible();
+    // 章节底下那个快速入口按钮去的正是同一处设置。
+    await expect(stage.getByRole('button', { name: /bottom ui settings/i })).toBeVisible();
+});
+
+test('骨架框逐个落位，而不是整幅图一次性出现', async ({ page }) => {
+    await page.locator('[data-probe-open="grid-card-result"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    const delays = await stage.locator('[data-ponder-anchor]:not([data-ponder-anchor-hidden])')
+        .evaluateAll(nodes => nodes.map(node => getComputedStyle(node).animationDelay));
+    expect(delays.length).toBeGreaterThan(2);
+    expect(new Set(delays).size, '所有框用同一个延迟就等于没有错开').toBeGreaterThan(1);
 });

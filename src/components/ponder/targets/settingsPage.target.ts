@@ -38,11 +38,13 @@ export default {
                     role: 'surface',
                     surfaceKind: 'palette',
                     labelKey: 'ponder.anchors.pages.commandPalette',
+                    // 按下 S 才打开，不是一进场就摆在那里。
+                    startsHidden: true,
                 },
             },
             steps: [
                 { kind: 'keypress', id: 'openPalette', keys: ['S'], at: 'bottom', durationMs: 1200, keyframe: true },
-                { kind: 'highlight', id: 'showPalette', anchor: 'palette', intensity: [0, 0.75], durationMs: 520 },
+                { kind: 'reveal', id: 'showPalette', anchor: 'palette', transition: 'zoom', durationMs: 520 },
                 { kind: 'caption', id: 'directNavigation', at: 'bottom', textKey: 'ponder.captions.pages.settingsDirectNavigation', pointTo: { anchor: 'palette', y: 1 }, durationMs: 4300, withPrevious: true },
                 { kind: 'pause', id: 'readDirectNavigation' },
             ],

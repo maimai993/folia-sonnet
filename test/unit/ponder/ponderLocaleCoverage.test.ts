@@ -24,7 +24,7 @@ const allKeys = (): string[] => {
     const keys = new Set<string>();
     // 外框和胶囊自己用的固定 key，和场景文案一起校验。
     [
-        'ponder.title', 'ponder.hintCapsule', 'ponder.hintCapsuleHold', 'ponder.sceneCounter',
+        'ponder.title', 'ponder.hintCapsule', 'ponder.hintCapsulePage', 'ponder.hintCapsuleHold', 'ponder.sceneCounter',
         'ponder.prevScene', 'ponder.nextScene', 'ponder.playPause', 'ponder.replay',
         'ponder.exit', 'ponder.keyLegend', 'ponder.seekKeyframe',
         'options.ponderHints', 'options.ponderHintsDesc',

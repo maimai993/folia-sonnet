@@ -2,13 +2,15 @@ import type { PonderTargetDefinition, PonderSurfaceKind } from '../../../types/p
 
 // src/components/ponder/targets/helpPage.target.ts
 
-const surface = (labelKey: string, surfaceKind: PonderSurfaceKind) => ({
+/** startsHidden 给那些「按了键才出现」的面：一进场就摆着的话，字幕在讲一件已经发生的事。 */
+const surface = (labelKey: string, surfaceKind: PonderSurfaceKind, startsHidden = false) => ({
     page: {
         kind: 'synthetic' as const,
         rect: { left: 0.5, top: 0.15, width: 0.56, height: 0.5, anchorX: 'center' as const },
         role: 'surface' as const,
         surfaceKind,
         labelKey,
+        startsHidden,
     },
 });
 
@@ -31,10 +33,10 @@ export default {
         {
             id: 'help-page-command-palette',
             titleKey: 'ponder.scenes.helpPageCommands',
-            anchors: surface('ponder.anchors.pages.commandPalette', 'palette'),
+            anchors: surface('ponder.anchors.pages.commandPalette', 'palette', true),
             steps: [
                 { kind: 'keypress', id: 'openPalette', keys: ['S'], at: 'bottom', durationMs: 1200, keyframe: true },
-                { kind: 'highlight', id: 'showPalette', anchor: 'page', intensity: [0, 0.75], durationMs: 520 },
+                { kind: 'reveal', id: 'showPalette', anchor: 'page', transition: 'zoom', durationMs: 520 },
                 { kind: 'caption', id: 'commands', at: 'bottom', textKey: 'ponder.captions.pages.helpCommands', pointTo: { anchor: 'page', y: 1 }, durationMs: 4300, withPrevious: true },
                 { kind: 'pause', id: 'readCommands' },
             ],

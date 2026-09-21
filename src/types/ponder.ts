@@ -24,7 +24,9 @@ export type PonderTargetId =
     | 'player-page'
     | 'lattice-page'
     | 'help-page'
-    | 'settings-page';
+    | 'settings-page'
+    | 'player-bar'
+    | 'bottom-ui-settings';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -109,7 +111,9 @@ export type PonderSurfaceKind =
     | 'player-page'
     | 'lattice-page'
     | 'help-page'
-    | 'settings-page';
+    | 'settings-page'
+    | 'player-bar'
+    | 'bottom-ui-settings';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。
@@ -142,6 +146,20 @@ type PonderAnchorCommon = {
     labelPlacement?: 'above' | 'below' | 'inside';
     /** role=surface 时用更接近真实 DOM 的骨架，避免所有面板都长成同一块占位文本。 */
     surfaceKind?: PonderSurfaceKind;
+    /**
+     * 这个框一开始不在场，要等一个 reveal 步骤把它放出来。
+     *
+     * 命令面板、设置里的选择器、音量面板这些都是某个动作的**结果**：一进场就摆在屏幕上，
+     * 字幕再说「按 S 打开命令面板」就成了旁白，演的和说的对不上。
+     */
+    startsHidden?: boolean;
+    /**
+     * 骨架框的圆角，原样交给 CSS。
+     *
+     * dom 锚点是从真实元素上量的，synthetic 锚点没有可量的对象 —— 底部控制条是一条胶囊，
+     * 不写出来就会被画成一个圆角矩形。
+     */
+    radius?: string;
 };
 
 export type PonderAnchorSource = PonderAnchorCommon & (
@@ -203,6 +221,18 @@ export type PonderStep =
     | (PonderStepBase & { kind: 'drag'; from: PonderAnchorPoint; to: PonderAnchorPoint; durationMs: number; ease?: string })
     | (PonderStepBase & { kind: 'keypress'; keys: string[]; at: PonderAnchorPoint | 'bottom'; durationMs: number })
     | (PonderStepBase & { kind: 'highlight'; anchor: string; intensity?: [number, number]; durationMs: number })
+    /**
+     * 把一个 startsHidden 的框放出来。
+     *
+     * 和 surfaceState 是一对：surfaceState 换的是某个 surface **内部**的那一屏，
+     * reveal 管的是这个框本身在不在场。按下 S 之后命令面板才长出来，靠的是它。
+     */
+    | (PonderStepBase & {
+          kind: 'reveal';
+          anchor: string;
+          durationMs: number;
+          transition?: 'fade' | 'slide-up' | 'zoom';
+      })
     /**
      * 把 synthetic surface 切到一次操作之后的结果层。
      *

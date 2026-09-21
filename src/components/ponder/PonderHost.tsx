@@ -37,18 +37,21 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
 
     const hoveredElementRef = usePonderHoverProbe();
     usePonderHoldToEnter({ hoveredElementRef, wipeRef, labelRef, holdLabelRef });
-    usePagePonderShortcut();
+    // 页面级 Ctrl+G 也是长按，共用下面这一个胶囊和同一组擦除动画。
+    const { isHolding: isPageHolding } = usePagePonderShortcut({ wipeRef, labelRef, holdLabelRef });
 
     const target = hoveredTargetId ? findPonderTarget(hoveredTargetId) : null;
 
     return (
         <>
             <AnimatePresence>
-                {/* 教程开着时不再显示胶囊 —— 它已经被 openPonder 清掉了，这里是第二道保险。 */}
-                {target && !hasSession && (
+                {/* 教程开着时不再显示胶囊 —— 它已经被 openPonder 清掉了，这里是第二道保险。
+                    页面级长按压过悬停：Ctrl+G 讲的是整页，这时再标某个组件的名字是错的。 */}
+                {(isPageHolding || target) && !hasSession && (
                     <PonderHintCapsule
-                        key={target.id}
-                        label={t('ponder.hintCapsule')}
+                        key={isPageHolding ? 'page' : target!.id}
+                        label={isPageHolding ? t('ponder.hintCapsulePage') : t('ponder.hintCapsule')}
+                        placement={isPageHolding ? 'page' : 'cursor'}
                         theme={theme}
                         isDaylight={isDaylight}
                         wipeRef={wipeRef}
@@ -63,11 +66,14 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
                 isDaylight={isDaylight}
             />
 
-            {hasSession && (
-                <Suspense fallback={null}>
-                    <PonderStage theme={theme} isDaylight={isDaylight} />
-                </Suspense>
-            )}
+            {/* 教程层自己带进出场，AnimatePresence 负责在 session 清掉之后留住它把退场播完。 */}
+            <AnimatePresence>
+                {hasSession && (
+                    <Suspense key="ponder-stage" fallback={null}>
+                        <PonderStage theme={theme} isDaylight={isDaylight} />
+                    </Suspense>
+                )}
+            </AnimatePresence>
         </>
     );
 };

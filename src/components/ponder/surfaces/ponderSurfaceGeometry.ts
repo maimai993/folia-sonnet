@@ -141,3 +141,18 @@ export const GRID_VIEW_GEOMETRY = {
     info: { left: 0.04, top: 0.16, bottom: 0.07, width: 0.34 },
     filter: { left: 0.22, right: 0.22, top: 0.08, height: 0.11 },
 } satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 底部控制条，坐标系是 bar 本身。
+ *
+ * 这条在真实界面里会随悬停展开/收起、还会被缩放，量当下的 DOM 得到的经常是一根收起来的
+ * 进度条，甚至什么都量不到。所以教程里画的是一条完整尺寸的合成胶囊，几何固定在这里。
+ */
+export const PLAYER_BAR_GEOMETRY = {
+    play: { left: 0.035, top: 0.24, width: 0.065, square: true },
+    title: { left: 0.14, top: 0.13, width: 0.58, height: 0.30 },
+    progress: { left: 0.14, top: 0.56, width: 0.58, height: 0.28 },
+    slots: { left: 0.856, top: 0.30, right: 0.04, height: 0.40 },
+    primarySlot: { left: 0.856, top: 0.30, width: 0.046, square: true },
+    secondarySlot: { left: 0.914, top: 0.30, width: 0.046, square: true },
+} satisfies Record<string, PonderRelativeRect>;

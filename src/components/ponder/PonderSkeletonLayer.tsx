@@ -12,6 +12,10 @@ import PonderSurfaceContents from './PonderSurfaceContents';
 //
 // 按角色分别画，而不是清一色的圆角矩形：一块纯色方块读起来是「一块色」，
 // 而带标题栏和几行占位内容的面才读得出是「一个面板」。这是骨架能不能替代真实界面的关键。
+//
+// 入场按声明顺序错开落位（CSS 里的 ponder-skeleton-in）。声明 startsHidden 的框不参与 ——
+// 它们是某个动作的结果，要等时间线的 reveal 步骤才出现，一进场就摆着的话，
+// 「按 S 打开命令面板」就成了旁白。
 
 type PonderSkeletonLayerProps = {
     rects: Record<string, PonderRect>;
@@ -71,19 +75,27 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
 
     return (
         <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-            {Object.entries(rects).map(([name, rect]) => {
+            {Object.entries(rects).map(([name, rect], index) => {
                 const source = anchors[name];
                 const role: PonderAnchorRole = source?.role ?? 'control';
                 const shape = shapeFor(role);
                 // 量到了真实圆角就照搬，角色自带的那套圆角只是没量到时的兜底。
                 const radiusStyle = rect.radius ? { borderRadius: rect.radius } : {};
+                const startsHidden = Boolean(source?.startsHidden);
+                // 错开的上限压在 0.32s：锚点多的页面不该让最后一个框姗姗来迟。
+                const entranceDelay = `${Math.min(index * 45, 320)}ms`;
 
                 return (
                     <div key={name}>
                         <div
+                            ref={node => {
+                                if (node) nodes.boxes.set(name, node);
+                                else nodes.boxes.delete(name);
+                            }}
                             data-ponder-anchor={name}
                             data-ponder-anchor-role={role}
-                            className={shape.className}
+                            data-ponder-anchor-hidden={startsHidden || undefined}
+                            className={`${shape.className}${startsHidden ? '' : ' ponder-skeleton-in'}`}
                             style={{
                                 ...shape.style,
                                 ...radiusStyle,
@@ -91,6 +103,7 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                                 top: rect.top,
                                 width: rect.width,
                                 height: rect.height,
+                                ...(startsHidden ? { opacity: 0 } : { animationDelay: entranceDelay }),
                             }}
                         >
                             {role === 'surface' && (
@@ -135,15 +148,23 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                             const top = placement === 'below' ? rect.top + rect.height + 6
                                 : placement === 'inside' ? rect.top - 20
                                 : rect.top - 18;
-                            const isTimed = role === 'region';
+                            // region 的名字跟着讲到它的那段字幕走；startsHidden 的跟着它自己那次 reveal 走。
+                            const isTimed = role === 'region' || startsHidden;
                             return (
                                 <div
                                     ref={isTimed ? (node => {
                                         if (node) nodes.labels.set(name, node);
                                         else nodes.labels.delete(name);
                                     }) : undefined}
-                                    className="absolute whitespace-nowrap text-[11px] tracking-wide"
-                                    style={{ left: rect.left, top, color: labelColor, ...(isTimed ? { opacity: 0 } : {}) }}
+                                    className={`absolute whitespace-nowrap text-[11px] tracking-wide${
+                                        isTimed ? '' : ' ponder-skeleton-label-in'
+                                    }`}
+                                    style={{
+                                        left: rect.left,
+                                        top,
+                                        color: labelColor,
+                                        ...(isTimed ? { opacity: 0 } : { animationDelay: entranceDelay }),
+                                    }}
                                 >
                                     {t(source.labelKey)}
                                 </div>

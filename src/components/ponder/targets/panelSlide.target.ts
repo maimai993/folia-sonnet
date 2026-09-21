@@ -60,6 +60,8 @@ const SLIDE_ANCHORS = {
         role: 'surface',
         surfaceKind: 'palette',
         labelKey: 'ponder.anchors.panelSlide.palette',
+        // 面板是滑动越线或按 S 之后才打开的，一进场就摆着的话字幕在讲一件已经发生的事。
+        startsHidden: true,
     },
 } satisfies PonderSceneScript['anchors'];
 
@@ -112,7 +114,7 @@ const slideToPalette: PonderSceneScript = {
         { kind: 'pause', id: 'atThreshold', dwellMs: 1600 },
 
         { kind: 'cursor', id: 'release', to: { anchor: 'toggle', offset: { x: -PANEL_SLIDE_CLAMP_PX } }, press: 'up', durationMs: 200 },
-        { kind: 'highlight', id: 'paletteOpens', anchor: 'palette', intensity: [0, 0.8], durationMs: 460, keyframe: true },
+        { kind: 'reveal', id: 'paletteOpens', anchor: 'palette', transition: 'zoom', durationMs: 460, keyframe: true },
         {
             kind: 'caption',
             id: 'outcome',
@@ -163,7 +165,7 @@ const keyboardShortcut: PonderSceneScript = {
         { kind: 'caption', id: 'intro', at: 'bottom', textKey: 'ponder.captions.panelSlide.keyboardIntro', durationMs: 2400 },
         { kind: 'pause', id: 'readIntro' },
         { kind: 'keypress', id: 'pressS', keys: ['S'], at: 'bottom', durationMs: 1400, keyframe: true },
-        { kind: 'highlight', id: 'paletteOpens', anchor: 'palette', intensity: [0, 0.8], durationMs: 460 },
+        { kind: 'reveal', id: 'paletteOpens', anchor: 'palette', transition: 'zoom', durationMs: 460 },
         {
             kind: 'caption',
             id: 'outcome',

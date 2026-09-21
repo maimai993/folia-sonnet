@@ -76,6 +76,28 @@ describe('PonderSurfaceContents', () => {
         });
     });
 
+    it('底部界面设置画的是滑杆加「在播放页拖动调整」，不是泛化的下拉框', () => {
+        const markup = renderSurface('bottom-ui-settings');
+        expect(markup).toContain('data-ponder-bottom-ui-settings');
+        expect(markup).toContain('data-ponder-bottom-ui-offset-track');
+        expect(markup).toContain('data-ponder-bottom-ui-reposition');
+        expect(markup).not.toContain('data-ponder-picker-field');
+    });
+
+    it('底部控制条是完整尺寸的合成胶囊，播放键、标题、进度条和两个槽位都在', () => {
+        const markup = renderSurface('player-bar');
+        expect(markup).toContain('data-ponder-player-bar-structure');
+        ['play', 'title', 'progress'].forEach(part => {
+            expect(markup).toContain(`data-ponder-bar-${part}`);
+        });
+        // 槽位层、随机层、音量层各画一对，所以是 6 个；同一时刻只有一层是可见的。
+        expect(markup.match(/data-ponder-bar-slot=/g)).toHaveLength(6);
+        // 随机和音量不按槽位里此刻放着什么筛，两层都必须预渲染在场。
+        ['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+    });
+
     it('GridView surface 使用蜂窝卡片，并包含信息与筛选结果', () => {
         const markup = renderSurface('grid-view-page');
         expect(markup).toContain('data-ponder-grid-view-page-structure');

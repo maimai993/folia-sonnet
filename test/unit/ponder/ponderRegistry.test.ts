@@ -26,6 +26,8 @@ const referencedAnchors = (step: PonderStep): string[] => {
             return [step.anchor];
         case 'surfaceState':
             return [step.anchor];
+        case 'reveal':
+            return [step.anchor];
         default:
             return [];
     }
@@ -136,6 +138,7 @@ describe('ponder registry', () => {
             'grid-page': new Set(['tab-switched', 'collection-open', 'map-open', 'search-open', 'command-open']),
             'grid-view-page': new Set(['card-focused', 'info-open', 'filter-open']),
             'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
+            'player-bar': new Set(['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

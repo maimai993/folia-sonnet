@@ -2868,9 +2868,9 @@ export default {
     "noComponentsOnPage": "本页暂时没有单独的组件教程。",
     "onboarding": {
       "title": "认识思索模式",
-      "description": "现在按 Ctrl + G，打开当前页面的介绍。",
+      "description": "现在按住 Ctrl + G 不放，等胶囊里的进度走满，当前页面的介绍就会打开。",
       "touchDescription": "现在点下面的按钮，打开当前页面的介绍。",
-      "shortcut": "Ctrl + G",
+      "shortcut": "按住 Ctrl + G",
       "required": "完成一次页面思索后才能继续。"
     },
     "sceneLabel": "章节",
@@ -2878,6 +2878,7 @@ export default {
     "nextChapter": "下一章",
     "title": "思索",
     "hintCapsule": "按 G 思索",
+    "hintCapsulePage": "思索本页",
     "hintCapsuleHold": "进入思索",
     "sceneCounter": "{{current}} / {{total}}",
     "prevScene": "上一场景",
@@ -2902,11 +2903,14 @@ export default {
         "commandPalette": "命令面板"
       },
       "playerBar": {
+        "play": "播放 / 暂停",
+        "title": "曲目标题",
+        "progress": "进度条",
+        "primarySlot": "第一个槽位",
+        "secondarySlot": "第二个槽位",
         "bar": "底部控制条",
         "slots": "两个槽位",
-        "shuffleSlot": "随机按钮",
-        "volumeSlot": "音量按钮",
-        "palette": "命令面板",
+        "bottomUiSettings": "设置 · 底部界面",
         "picker": "设置里的选择器",
         "queue": "播放队列",
         "volumeSurface": "音量面板"
@@ -2983,6 +2987,7 @@ export default {
       "helpPageOperatingModel": "浏览与播放彼此独立",
       "settingsPageOverview": "设置按用途分组",
       "settingsPageDirectNavigation": "从命令直接跳转",
+      "playerBarBasics": "这条胶囊上有什么",
       "playerBarHeight": "整条的高度可以改",
       "playerBarSlots": "右边两个位置可以换",
       "playerBarShuffle": "随机只洗一次牌",
@@ -3037,9 +3042,15 @@ export default {
         "settingsDirectNavigation": "不必逐层翻找：在命令面板搜索设置名称，Folia 会直接打开对应分组并滚到准确位置。"
       },
       "playerBar": {
+        "basicsIntro": "Folia 的播放控制只有这一条胶囊。别的播放器摆在底部的那一排常驻按钮 —— 上一首、下一首、随机、循环、音量 —— 这里一个都没有固定占位。",
+        "basicsPlay": "整条上唯一永远在的按钮是播放 / 暂停。它在最左边，位置不会变。",
+        "basicsTitle": "切歌不靠按钮，靠歌名。指针移到标题上，两侧浮出箭头并半透明预览上一首和下一首的名字 —— 你是看着要去哪首才切的，不是盲按。",
+        "basicsProgress": "进度条就地拖动或点击跳转。点胶囊其他任何地方不是暂停，而是进入播放页；在 Lattice 上则是把视野拉回当前这首。",
+        "basicsSlots": "剩下的功能都归右边这两个位置。十个动作里你挑两个放上去，别的一律不在条上 —— 这就是这里没有一排固定按钮的原因。",
+        "basicsCollapsed": "移开指针，整条收回成一根进度条。你平时看到的是这个形态，需要控制时靠近它就会展开。",
         "heightIntro": "这条控制条离屏幕底边有多远是可以改的，各页面的歌曲卡片和侧边面板会跟着一起动。",
-        "heightCommand": "但直接拖是拖不动的。先在命令面板里执行「在播放页拖动调整」，它才会变成一个可以拖的东西。",
-        "heightDrag": "然后按住它任意位置上下拖。松手即生效，而且会被记住。",
+        "heightSettings": "入口在设置 → 底部界面设置：一根滑杆直接给数值，旁边的「在播放页拖动调整」把胶囊变成一个可以拖的东西。命令面板里搜同一条命令是等价的。下面那个按钮直接带你过去。",
+        "heightDrag": "进了拖动调整之后，按住胶囊任意位置上下拖。松手即生效，而且会被记住。",
         "slotsIntro": "进度条右边这两个按钮不是固定的，两个位置各自独立。",
         "slotsWhere": "在设置里挑：循环、随机、喜爱、队列、音量、睡眠定时等十个动作里任选，选完立刻生效。",
         "shuffleIntro": "这个随机和别处的不一样 —— 它不是一个开着就一直生效的模式。",

@@ -230,3 +230,33 @@ html[data-click-through='active'] body .click-through-interactive * {
 :root[data-reduce-motion~='uiMicroMotion'] .ponder-next-cue-arrow {
     animation: none;
 }
+
+/* 思索：骨架框逐个落位。
+
+   一进场整幅骨架整齐地出现在那里，读起来像一张静态插图；让它们按声明顺序错开几十毫秒
+   落位，眼睛才会跟着「先是这一页，再是页里的这几块」走一遍，和字幕的讲述顺序对上。
+
+   幅度压得很小：它是入场，不是表演，落位之后紧接着就是真正要看的那段演示。 */
+@keyframes ponder-skeleton-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.ponder-skeleton-in {
+    animation: ponder-skeleton-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 标签跟着自己那个框来，不自带缩放 —— 它贴在框外沿，缩放会让它先歪一下。 */
+@keyframes ponder-skeleton-label-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.ponder-skeleton-label-in {
+    animation: ponder-skeleton-label-in 280ms ease-out both;
+}
+
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-skeleton-in,
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-skeleton-label-in {
+    animation: none;
+}

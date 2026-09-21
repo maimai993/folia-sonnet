@@ -1,9 +1,10 @@
 import React from 'react';
-import { ChevronDown, Command, GripVertical, ListMusic, Search, Volume2 } from 'lucide-react';
+import { ChevronDown, Command, GripVertical, ListMusic, Move, RotateCcw, Search, Volume2 } from 'lucide-react';
 import type { PonderSurfaceKind } from '../../types/ponder';
 import PonderGridPageSurface from './surfaces/PonderGridPageSurface';
 import PonderGridViewPageSurface from './surfaces/PonderGridViewPageSurface';
 import PonderLatticePageSurface from './surfaces/PonderLatticePageSurface';
+import PonderPlayerBarSurface from './surfaces/PonderPlayerBarSurface';
 import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
@@ -68,6 +69,42 @@ const PickerContents: React.FC<{ line: string; outline: string; accent: string }
                     </div>
                 </div>
             ))}
+        </div>
+    </div>
+);
+
+/**
+ * 设置里的「底部界面」那一组：一根决定离底边多远的滑杆，下面是「在播放页拖动调整」和「重置」。
+ *
+ * 用 picker 那块泛化的下拉框讲不清这一章 —— 字幕说的是滑杆和一个把胶囊变成可拖物体的按钮，
+ * 画面上就得真的有这两样。
+ */
+const BottomUiSettingsContents: React.FC<{ line: string; outline: string; accent: string }> = ({ line, outline, accent }) => (
+    <div data-ponder-bottom-ui-settings className="absolute inset-0 flex flex-col justify-center gap-[9%] px-[7%]">
+        <div className="flex flex-col gap-2">
+            <span className="h-2 w-[38%] rounded-full" style={{ backgroundColor: line }} />
+            <span className="h-1.5 w-[62%] rounded-full opacity-60" style={{ backgroundColor: line }} />
+        </div>
+        <div data-ponder-bottom-ui-offset-track className="relative h-2 rounded-full" style={{ backgroundColor: line }}>
+            <span className="absolute inset-y-0 left-0 w-[46%] rounded-full" style={{ backgroundColor: accent, opacity: 0.6 }} />
+            <span
+                className="absolute left-[46%] top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border"
+                style={{ borderColor: outline, backgroundColor: accent }}
+            />
+        </div>
+        <div className="flex items-center gap-[4%]">
+            <span
+                data-ponder-bottom-ui-reposition
+                className="flex h-9 flex-1 items-center justify-center gap-2 rounded-full border"
+                style={{ borderColor: accent, color: accent }}
+            >
+                <Move className="h-3.5 w-3.5" />
+                <span className="h-1.5 w-[42%] rounded-full" style={{ backgroundColor: accent, opacity: 0.55 }} />
+            </span>
+            <span className="flex h-9 w-[32%] items-center justify-center gap-2 rounded-full border" style={{ borderColor: outline }}>
+                <RotateCcw className="h-3.5 w-3.5 opacity-55" />
+                <span className="h-1.5 w-[38%] rounded-full" style={{ backgroundColor: line }} />
+            </span>
         </div>
     </div>
 );
@@ -200,8 +237,12 @@ const PageContents: React.FC<{
 
 const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline, registerStateNode }) => {
     const resolvedKind = kind ?? 'palette';
-    const contents = isPageSurfaceKind(resolvedKind)
+    const contents = resolvedKind === 'player-bar'
+        ? <PonderPlayerBarSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : isPageSurfaceKind(resolvedKind)
         ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} registerStateNode={registerStateNode} />
+        : resolvedKind === 'bottom-ui-settings'
+        ? <BottomUiSettingsContents line={line} outline={outline} accent={accent} />
         : resolvedKind === 'picker'
         ? <PickerContents line={line} outline={outline} accent={accent} />
         : resolvedKind === 'queue'

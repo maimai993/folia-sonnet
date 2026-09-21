@@ -147,6 +147,27 @@ export const usePonderTimeline = ({
                     opacity: [from * PONDER_HIGHLIGHT_MAX_OPACITY, to * PONDER_HIGHLIGHT_MAX_OPACITY],
                     duration: durationMs,
                 }, atMs);
+            } else if (step.kind === 'reveal') {
+                // 这个框此前根本不在场。名字和框一起出现 —— 先有名字后有框读起来是错的。
+                const box = nodes.boxes.get(step.anchor);
+                if (!box) continue;
+                const animation = {
+                    opacity: [0, 1],
+                    duration: calm ? 1 : durationMs,
+                    ease: calm ? 'linear' : 'outCubic',
+                };
+                if (step.transition === 'slide-up') {
+                    timeline.add(box, { ...animation, y: [14, 0] }, atMs);
+                } else if (step.transition === 'zoom' || step.transition === undefined) {
+                    timeline.add(box, { ...animation, scale: [0.92, 1] }, atMs);
+                } else {
+                    timeline.add(box, animation, atMs);
+                }
+
+                const label = nodes.labels.get(step.anchor);
+                if (label) {
+                    timeline.add(label, { opacity: [0, 1], duration: calm ? 1 : durationMs }, atMs);
+                }
             } else if (step.kind === 'surfaceState') {
                 const layers = nodes.surfaceStates.get(step.anchor);
                 const entry = layers?.get(step.state);

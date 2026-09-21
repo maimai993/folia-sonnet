@@ -143,7 +143,8 @@ export const resolvePonderAnchors = (
 
         visiting.delete(name);
         if (rect) {
-            resolved[name] = rect;
+            // 声明的圆角优先于量到的：synthetic 锚点没有可量的对象，胶囊得自己说自己是胶囊。
+            resolved[name] = source.radius ? { ...rect, radius: source.radius } : rect;
         }
         return rect;
     };

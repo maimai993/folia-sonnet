@@ -95,7 +95,9 @@ test.describe('思索 · 真实 DOM 里的选择器', () => {
         expect(belongsToBar, '槽位按钮应当落在控制条这个目标内部').toBe(true);
     });
 
-    test('槽位里没放随机时，随机那一章的锚点也不存在', async ({ page }) => {
+    // 随机那一章不再按槽位筛（合成胶囊里直接把按钮换成随机），但 data-ponder-slot 的值
+    // 仍然是槽位配置的唯一真源，改名了这里就该红。
+    test('槽位按钮的 data-ponder-slot 跟着配置走', async ({ page }) => {
         await openPlayerPage(page, { primary: 'loop', secondary: 'like' });
         await showPlayerControls(page);
 

@@ -1,12 +1,32 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePonderStore } from '../stores/usePonderStore';
 import { openCurrentPagePonder } from '../services/ponder/pagePonderTarget';
+import { PONDER_HOLD_DURATION_MS, startPonderHoldProgress, type PonderHoldProgressRefs } from './ponderHoldProgress';
 
 // src/hooks/usePagePonderShortcut.ts
+// 页面级入口：长按 Ctrl+G。
+//
+// 和组件级那条（悬停后长按 G）走同一组进度动画。之前这里是按下即开，于是同一个功能有两种
+// 触发感受 —— 一边要按住看擦除走满，一边一按就进。统一成长按之后，用户学会的是一件事。
+//
+// @note Ctrl+G 是页面级的，输入框（含命令面板搜索框）里也照常生效，所以不做文本目标判断。
 
-/** Ctrl+G is page-scoped, so it remains safe while an input (including the command palette) is focused. */
-export const usePagePonderShortcut = (): void => {
+export type PagePonderShortcutState = {
+    /** 正在按住 Ctrl+G。提示胶囊靠它决定要不要出现。 */
+    isHolding: boolean;
+};
+
+export const usePagePonderShortcut = (refs: PonderHoldProgressRefs): PagePonderShortcutState => {
+    const [isHolding, setIsHolding] = useState(false);
+    const { wipeRef, labelRef, holdLabelRef } = refs;
+    const heldRef = useRef(false);
+
     useEffect(() => {
+        const stopHold = () => {
+            heldRef.current = false;
+            setIsHolding(false);
+        };
+
         const handleKeyDown = (event: KeyboardEvent) => {
             if (
                 event.code !== 'KeyG'
@@ -14,21 +34,70 @@ export const usePagePonderShortcut = (): void => {
                 || event.altKey
                 || event.metaKey
                 || event.shiftKey
-                || event.repeat
                 || event.isComposing
                 || usePonderStore.getState().session
             ) {
                 return;
             }
 
+            // 自动重复的 keydown 也要吃掉：按住的这 400ms 里它一旦开始，
+            // 一串 g 就会落进底下的输入框。
             event.preventDefault();
             event.stopPropagation();
-            openCurrentPagePonder();
+
+            if (event.repeat || heldRef.current) {
+                return;
+            }
+            heldRef.current = true;
+            // 提示一出现就把教程层那个 chunk 预热，400ms 按满时通常已经就绪。
+            void import('../components/ponder/PonderStage');
+            setIsHolding(true);
+        };
+
+        const handleKeyUp = (event: KeyboardEvent) => {
+            // 松开 G 或松开 Ctrl 都算放弃 —— 按住 G 再松 Ctrl 之后擦除还在走会很怪。
+            if (event.code === 'KeyG' || event.key === 'Control') {
+                stopHold();
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) stopHold();
         };
 
         window.addEventListener('keydown', handleKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('keyup', handleKeyUp, { capture: true });
+        window.addEventListener('blur', stopHold);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            window.removeEventListener('keyup', handleKeyUp, { capture: true });
+            window.removeEventListener('blur', stopHold);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
+
+    // 动画和计时都挂在这里而不是 keydown 里：胶囊是 isHolding 变 true 之后才渲染的，
+    // 在 keydown 当场去拿那几个 ref 只会拿到 null。
+    useLayoutEffect(() => {
+        if (!isHolding) {
+            return;
+        }
+        const animations = startPonderHoldProgress({ wipeRef, labelRef, holdLabelRef });
+        const timer = window.setTimeout(() => {
+            heldRef.current = false;
+            setIsHolding(false);
+            openCurrentPagePonder();
+        }, PONDER_HOLD_DURATION_MS);
+
+        return () => {
+            animations.forEach(animation => animation.cancel());
+            window.clearTimeout(timer);
+        };
+    }, [isHolding, wipeRef, labelRef, holdLabelRef]);
+
+    return { isHolding };
 };
 
 export default usePagePonderShortcut;

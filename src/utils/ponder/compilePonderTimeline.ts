@@ -75,7 +75,7 @@ export const sceneAnchorNames = (scene: PonderSceneScript): Set<string> => {
     };
 
     for (const step of scene.steps) {
-        if (step.kind === 'highlight' || step.kind === 'surfaceState') {
+        if (step.kind === 'highlight' || step.kind === 'surfaceState' || step.kind === 'reveal') {
             names.add(step.anchor);
         } else if (step.kind === 'caption') {
             addPoint(step.at);
