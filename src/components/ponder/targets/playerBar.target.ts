@@ -1,6 +1,6 @@
 import { usePlayerBottomBarLayoutStore } from '../../../stores/usePlayerBottomBarLayoutStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
-import type { PonderSceneScript, PonderTargetDefinition } from '../../../types/ponder';
+import type { PonderSceneScript, PonderSurfaceKind, PonderTargetDefinition } from '../../../types/ponder';
 
 // src/components/ponder/targets/playerBar.target.ts
 // 底部控制条整条，作为一个目标。
@@ -61,11 +61,18 @@ const REAL_ANCHORS = {
 } satisfies PonderSceneScript['anchors'];
 
 /** 一块居中的合成面板，四章各自取自己那一块。 */
-const centeredSurface = (labelKey: string, width: number, height: number, top: number) => ({
+const centeredSurface = (
+    labelKey: string,
+    width: number,
+    height: number,
+    top: number,
+    surfaceKind: PonderSurfaceKind,
+) => ({
     kind: 'synthetic' as const,
     rect: { left: 0.5, top, width, height, anchorX: 'center' as const },
     role: 'surface' as const,
     labelKey,
+    surfaceKind,
 });
 
 /** 第一章：整条可以拖着改高度，但要先进定位模式。 */
@@ -87,7 +94,7 @@ const adjustHeight: PonderSceneScript = {
             size: { width: 360, height: 56 },
             role: 'rail',
         },
-        palette: centeredSurface('ponder.anchors.playerBar.palette', 0.44, 0.28, 0.18),
+        palette: centeredSurface('ponder.anchors.playerBar.palette', 0.44, 0.28, 0.18, 'palette'),
     },
     steps: [
         { kind: 'highlight', id: 'showBar', anchor: 'bar', intensity: [0, 0.6], durationMs: 460 },
@@ -142,7 +149,7 @@ const swappableSlots: PonderSceneScript = {
     },
     anchors: {
         ...REAL_ANCHORS,
-        picker: centeredSurface('ponder.anchors.playerBar.picker', 0.3, 0.34, 0.24),
+        picker: centeredSurface('ponder.anchors.playerBar.picker', 0.3, 0.34, 0.24, 'picker'),
     },
     steps: [
         { kind: 'highlight', id: 'showSlots', anchor: 'slots', intensity: [0, 0.6], durationMs: 460 },
@@ -179,7 +186,7 @@ const shuffleIsOneShot: PonderSceneScript = {
     titleKey: 'ponder.scenes.playerBarShuffle',
     anchors: {
         ...REAL_ANCHORS,
-        queue: centeredSurface('ponder.anchors.playerBar.queue', 0.34, 0.4, 0.2),
+        queue: centeredSurface('ponder.anchors.playerBar.queue', 0.34, 0.4, 0.2, 'queue'),
     },
     isAvailable: () => hasSlot('shuffle'),
     steps: [
@@ -216,7 +223,7 @@ const volumeInPalette: PonderSceneScript = {
     titleKey: 'ponder.scenes.playerBarVolume',
     anchors: {
         ...REAL_ANCHORS,
-        volumeSurface: centeredSurface('ponder.anchors.playerBar.volumeSurface', 0.4, 0.24, 0.24),
+        volumeSurface: centeredSurface('ponder.anchors.playerBar.volumeSurface', 0.4, 0.24, 0.24, 'volume'),
     },
     isAvailable: () => hasSlot('volume'),
     steps: [

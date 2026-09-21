@@ -84,6 +84,9 @@ export type PonderAnchorRole =
     /** 一条判定线/刻度，画成一根竖线，不画框。 */
     | 'marker';
 
+/** surface 骨架里面的界面类型；只画结构，不复制真实界面的业务状态。 */
+export type PonderSurfaceKind = 'palette' | 'picker' | 'queue' | 'volume';
+
 type PonderAnchorCommon = {
     /** 骨架上给这个框标的名字。不给就不标。 */
     labelKey?: string;
@@ -94,6 +97,8 @@ type PonderAnchorCommon = {
      * 互相嵌套的框（按钮和包着它的滑轨）必须显式错开，否则两个标签会叠在一起。
      */
     labelPlacement?: 'above' | 'below' | 'inside';
+    /** role=surface 时用更接近真实 DOM 的骨架，避免所有面板都长成同一块占位文本。 */
+    surfaceKind?: PonderSurfaceKind;
 };
 
 export type PonderAnchorSource = PonderAnchorCommon & (

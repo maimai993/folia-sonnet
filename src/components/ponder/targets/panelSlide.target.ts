@@ -58,6 +58,7 @@ const SLIDE_ANCHORS = {
         kind: 'synthetic',
         rect: { left: 0.5, top: 0.2, width: 0.44, height: 0.3, anchorX: 'center' },
         role: 'surface',
+        surfaceKind: 'palette',
         labelKey: 'ponder.anchors.panelSlide.palette',
     },
 } satisfies PonderSceneScript['anchors'];

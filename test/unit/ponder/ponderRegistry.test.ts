@@ -109,6 +109,20 @@ describe('ponder registry', () => {
         });
     });
 
+    it('surface 锚点都声明自己的界面形状', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                Object.entries(scene.anchors).forEach(([name, source]) => {
+                    if (source.role !== 'surface') return;
+                    expect(
+                        source.surfaceKind,
+                        `${target.id}/${scene.id} 的 surface 锚点 "${name}" 没有 surfaceKind`,
+                    ).toBeDefined();
+                });
+            });
+        });
+    });
+
     // action.anchorId 在 DSL 里只是个 string（types 层不该反向依赖 settings 的锚点表），
     // 所以写错了只有在这里才发现得了 —— 运行时的表现是跳到设置面板的某个不存在的位置。
     it('章节里「直接去那儿」的锚点都真实存在', () => {

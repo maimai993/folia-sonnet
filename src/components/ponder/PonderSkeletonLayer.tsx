@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PonderAnchorRole, PonderAnchorSource, PonderRect } from '../../types/ponder';
 import type { PonderStageNodes } from './ponderStageNodes';
+import PonderSurfaceContents from './PonderSurfaceContents';
 
 // src/components/ponder/PonderSkeletonLayer.tsx
 // 骨架：每个解析出来的锚点画一个框。
@@ -19,18 +20,6 @@ type PonderSkeletonLayerProps = {
     theme?: { accentColor?: string };
     isDaylight: boolean;
 };
-
-/** 面板内部那几条占位内容线，让空面板看起来像界面而不是色块。 */
-const SurfaceContents: React.FC<{ line: string }> = ({ line }) => (
-    <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col gap-2 p-3">
-        <div className="h-5 rounded" style={{ backgroundColor: line, width: '42%' }} />
-        <div className="mt-1 flex flex-col gap-1.5">
-            {[88, 74, 81, 62].map((width, index) => (
-                <div key={index} className="h-2.5 rounded" style={{ backgroundColor: line, width: `${width}%` }} />
-            ))}
-        </div>
-    </div>
-);
 
 const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
     rects,
@@ -84,7 +73,14 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                                 height: rect.height,
                             }}
                         >
-                            {role === 'surface' && <SurfaceContents line={line} />}
+                            {role === 'surface' && (
+                                <PonderSurfaceContents
+                                    kind={source?.surfaceKind}
+                                    accent={accent}
+                                    line={line}
+                                    outline={outline}
+                                />
+                            )}
                             <div
                                 ref={node => {
                                     if (node) {
