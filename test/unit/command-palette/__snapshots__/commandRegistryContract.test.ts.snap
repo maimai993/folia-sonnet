@@ -122,6 +122,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-toggle-follow-system-reduced-motion",
   "settings-toggle-track-switch-buttons",
   "settings-toggle-main-window-titlebar",
+  "settings-toggle-native-mac-fullscreen-button",
   "settings-toggle-auto-play-on-launch",
   "settings-toggle-transcode-fallback",
   "settings-toggle-bottom-subtitle-overlay",
