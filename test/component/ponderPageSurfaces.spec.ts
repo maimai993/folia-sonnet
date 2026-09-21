@@ -319,3 +319,52 @@ test('设置里的歌词动画与配色两组各自能单独思索', async ({ pa
     await expectAligned(stage, 'source', '[data-ponder-theme-source]');
     await expect(stage.locator('[data-ponder-theme-park-open]')).toHaveCount(1);
 });
+
+test('字幕底色不透明，且压在外框和浮层卡之上', async ({ page }) => {
+    await page.locator('[data-probe-open="lattice-chrome-slots"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    const caption = stage.locator('div.rounded-lg.px-3\\.5').first();
+    await expect(caption).toBeAttached();
+    const look = await caption.evaluate(node => {
+        const style = getComputedStyle(node);
+        const layer = node.closest('[aria-hidden="true"]') as HTMLElement;
+        return { background: style.backgroundColor, layerZ: layer ? getComputedStyle(layer).zIndex : null };
+    });
+    // 半透明会让压在底下的标题栏文字透上来，两段字叠成一团。
+    expect(look.background).not.toMatch(/rgba\([^)]*,\s*0?\.\d+\s*\)/);
+    // 外框和浮层卡都在它下面；字幕层自己 pointer-events-none，不挡点击。
+    expect(Number(look.layerZ)).toBeGreaterThan(20);
+    await expect(stage.getByTestId('ponder-related-targets')).toHaveCSS('z-index', '20');
+});
+
+test('字幕不落在上下两条外框上', async ({ page }) => {
+    // 摆位算法把外框算成 reserved，但那是加权评分不是硬禁止 —— 权重给小了，
+    // 「少盖住一点骨架」就会把字幕留在标题栏上，正是这条要挡住的。
+    for (const probe of ['lattice-chrome-slots', 'player-page-layout', 'side-panel-queue']) {
+        await page.locator(`[data-probe-open="${probe}"]`).click();
+        const stage = page.locator('[data-testid="ponder-stage"]');
+        await expect(stage).toBeVisible();
+
+        for (let tick = 0; tick < 3; tick += 1) {
+            await page.waitForTimeout(2200);
+            const clashes = await page.evaluate(() => {
+                const out: string[] = [];
+                document.querySelectorAll('[data-testid="ponder-stage"] div').forEach(node => {
+                    const el = node as HTMLElement;
+                    if (!el.className.includes('rounded-lg') || !el.className.includes('px-3.5')) return;
+                    if (Number(getComputedStyle(el).opacity) < 0.4) return;
+                    const box = el.getBoundingClientRect();
+                    const onTop = Math.max(0, Math.min(box.bottom, 84) - box.top);
+                    const onBottom = Math.max(0, box.bottom - Math.max(box.top, innerHeight - 156));
+                    if (onTop > 0 || onBottom > 0) out.push(el.innerText.slice(0, 16));
+                });
+                return out;
+            });
+            expect(clashes, `${probe} 的字幕压到了外框上`).toEqual([]);
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(400);
+    }
+});

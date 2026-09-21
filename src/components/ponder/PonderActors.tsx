@@ -34,8 +34,8 @@ type PonderActorsProps = {
  * 目标太靠下就改放上方，免得被进度条和图例压住。
  */
 const CAPTION_MAX_WIDTH_PX = 384;
-/** 两行中文的高度，故意往大了估：估小了字幕会贴上骨架框。 */
-const CAPTION_EST_HEIGHT_PX = 84;
+/** 三行中文的高度，故意往大了估：估小了字幕会贴上骨架框，或者探进上下两条外框里。 */
+const CAPTION_EST_HEIGHT_PX = 104;
 
 /** 上下外框占掉的横条。字幕压上去会挡住进度条和章节按钮。 */
 const TOP_CHROME_PX = 84;
@@ -46,7 +46,9 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, reserve
     const accent = theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa');
     const chipSurface = isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(39, 39, 42, 0.96)';
     const chipText = isDaylight ? '#27272a' : '#fafafa';
-    const captionSurface = isDaylight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(24, 24, 27, 0.94)';
+    // 不透明。半透明底色会让压在下面的标题栏文字透上来，两段字叠成一团。
+    const captionSurface = isDaylight ? '#ffffff' : '#18181b';
+    const captionBorder = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.14)';
 
     // 摆位要用到视口尺寸。进入时采一次就定死，和骨架矩形同一个口径。
     const viewport = {
@@ -71,7 +73,10 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, reserve
     }, [plan, rects, nodes]);
 
     return (
-        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        // z-40：压过外框（标题栏、进度条）和「本页可单独思索的组件」那张卡。
+        // 摆位已经在躲它们了，这一层是最后一道保险 —— 万一还是叠上了，至少是字幕盖住它们，
+        // 而不是两段文字互相透出来糊成一团。整层 pointer-events-none，不挡任何点击。
+        <div className="pointer-events-none absolute inset-0 z-40" aria-hidden="true">
             <PonderCaptionPointers
                 plan={plan}
                 rects={rects}
@@ -107,8 +112,8 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, reserve
                             else nodes.captions.delete(step.id);
                         }}
                         className={spot
-                            ? 'absolute rounded-lg px-3.5 py-2 text-sm shadow-lg'
-                            : 'absolute bottom-32 left-1/2 max-w-xl -translate-x-1/2 rounded-lg px-4 py-2 text-center text-sm shadow-md'}
+                            ? 'absolute rounded-lg border px-3.5 py-2 text-sm shadow-xl'
+                            : 'absolute bottom-32 left-1/2 max-w-xl -translate-x-1/2 rounded-lg border px-4 py-2 text-center text-sm shadow-xl'}
                         style={spot
                             ? {
                                 left: spot.left,
@@ -116,9 +121,10 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, reserve
                                 width: captionWidth,
                                 opacity: 0,
                                 backgroundColor: captionSurface,
+                                borderColor: captionBorder,
                                 color: chipText,
                             }
-                            : { opacity: 0, backgroundColor: captionSurface, color: chipText }}
+                            : { opacity: 0, backgroundColor: captionSurface, borderColor: captionBorder, color: chipText }}
                     >
                         {t(step.textKey, { mod: ponderModifierLabel })}
                     </div>

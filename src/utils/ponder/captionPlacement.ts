@@ -17,6 +17,14 @@ const GAP_PX = 28;
 /** 贴视口边缘时的余量。 */
 const MARGIN_PX = 16;
 
+/**
+ * 外框和浮层卡的重叠在评分里放大多少倍。
+ *
+ * 骨架框是画出来的示意图，被压住一角还读得懂；标题栏、进度条和「可单独思索的组件」那张卡
+ * 上面是另一段文字，字幕压上去就是两段字叠在一起。两者不该同权。
+ */
+const RESERVED_PENALTY = 40;
+
 /** 判定重叠时把障碍物向外放一圈，免得字幕和骨架框贴边贴到一起。 */
 const OBSTACLE_PADDING_X_PX = 12;
 
@@ -98,7 +106,7 @@ export const pickCaptionSpot = ({
 
     const maxLeft = Math.max(MARGIN_PX, viewport.width - width - MARGIN_PX);
     const maxTop = Math.max(MARGIN_PX, viewport.height - height - MARGIN_PX);
-    const blockers = [...obstacles.map(inflate), ...reserved];
+    const inflated = obstacles.map(inflate);
 
     let best: { left: number; top: number } | null = null;
     let bestScore = Number.POSITIVE_INFINITY;
@@ -111,7 +119,11 @@ export const pickCaptionSpot = ({
             width,
             height,
         };
-        const score = blockers.reduce((total, blocker) => total + overlapArea(box, blocker), 0);
+        const onSkeleton = inflated.reduce((total, blocker) => total + overlapArea(box, blocker), 0);
+        const onReserved = reserved.reduce((total, blocker) => total + overlapArea(box, blocker), 0);
+        // 压住骨架框只是挡住一幅示意图，压住外框和浮层卡却是压在另一段文字上 ——
+        // 后者要重得多，否则「少盖住一点骨架」会把字幕留在标题栏上。
+        const score = onSkeleton + onReserved * RESERVED_PENALTY;
         if (score === 0) {
             return { left: box.left, top: box.top };
         }
