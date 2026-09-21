@@ -183,6 +183,27 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     }, [session?.targetId, session?.sceneIndex]);
     const handleComplete = useCallback(() => setIsFinished(true), []);
 
+    // 「本页可单独思索的组件」那张卡浮在骨架之上，字幕得绕开它。
+    // 高度随列出的组件条数变，所以量一次而不是写死一个框 —— 播放页列四条，比只列一条高出一倍。
+    const [relatedRects, setRelatedRects] = useState<PonderRect[]>([]);
+    useLayoutEffect(() => {
+        const element = document.querySelector('[data-testid="ponder-related-targets"]');
+        const measured = element?.getBoundingClientRect();
+        const next: PonderRect[] = measured
+            ? [{ left: measured.left, top: measured.top, width: measured.width, height: measured.height }]
+            : [];
+        // 量到的值每次都是新对象，不比一下会自己把自己再渲染一遍。
+        setRelatedRects(previous => (
+            previous.length === next.length
+            && previous.every((rect, index) => (
+                rect.left === next[index].left && rect.top === next[index].top
+                && rect.width === next[index].width && rect.height === next[index].height
+            ))
+                ? previous
+                : next
+        ));
+    }, [target, scene, rects]);
+
     const emptyPlan = useMemo(() => ({ totalMs: 0, entries: [], keyframes: [] }), []);
     const controlsRef = usePonderTimeline({
         plan: plan ?? emptyPlan,
@@ -229,7 +250,7 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                     theme={theme}
                     isDaylight={isDaylight}
                 />
-                <PonderActors plan={plan} rects={rects} nodes={nodesRef.current} theme={theme} isDaylight={isDaylight} />
+                <PonderActors plan={plan} rects={rects} nodes={nodesRef.current} reserved={relatedRects} theme={theme} isDaylight={isDaylight} />
                 <PonderChrome
                     title={t(target.titleKey)}
                     sceneTitle={t(scene.titleKey)}

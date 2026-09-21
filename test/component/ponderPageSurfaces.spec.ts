@@ -221,3 +221,33 @@ test('快捷键图例是一排键帽，不是挤成一行的文字', async ({ pa
     await expect(caps.first()).toHaveText('←');
     await expect(stage.locator('[data-ponder-key-combo]')).toHaveCount(4);
 });
+
+test('字幕会避开「本页可单独思索的组件」那张浮层卡', async ({ page }) => {
+    // 卡是浮在骨架之上的，不在 rects 里；不显式交给摆位算法，字幕会被它盖掉半句。
+    for (const probe of ['lattice-poster', 'player-page-layout']) {
+        await page.locator(`[data-probe-open="${probe}"]`).click();
+        const stage = page.locator('[data-testid="ponder-stage"]');
+        await expect(stage).toBeVisible();
+        await expect(stage.getByTestId('ponder-related-targets')).toBeVisible();
+
+        for (let tick = 0; tick < 4; tick += 1) {
+            await page.waitForTimeout(2200);
+            const worst = await page.evaluate(() => {
+                const card = document.querySelector('[data-testid="ponder-related-targets"]')?.getBoundingClientRect();
+                if (!card) return 0;
+                return Array.from(document.querySelectorAll('[data-testid="ponder-stage"] div'))
+                    .filter(node => Number(getComputedStyle(node).opacity) > 0.4
+                        && (node as HTMLElement).className.includes('rounded-lg px-3.5'))
+                    .reduce((max, node) => {
+                        const box = node.getBoundingClientRect();
+                        const x = Math.max(0, Math.min(box.right, card.right) - Math.max(box.left, card.left));
+                        const y = Math.max(0, Math.min(box.bottom, card.bottom) - Math.max(box.top, card.top));
+                        return Math.max(max, x * y);
+                    }, 0);
+            });
+            expect(worst, `${probe} 的字幕压到了浮层卡上`).toBe(0);
+        }
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
+    }
+});

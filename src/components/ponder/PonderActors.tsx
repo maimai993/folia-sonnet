@@ -17,6 +17,11 @@ type PonderActorsProps = {
     plan: PonderTimelinePlan;
     rects: Record<string, PonderRect>;
     nodes: PonderStageNodes;
+    /**
+     * 教程层上那些浮在骨架之上、字幕不能压过去的东西 —— 目前是「本页可单独思索的组件」那张卡。
+     * 它不是骨架的一部分，不在 rects 里，不显式交进来的话字幕会被它盖掉半句。
+     */
+    reserved?: PonderRect[];
     theme?: { accentColor?: string };
     isDaylight: boolean;
 };
@@ -36,7 +41,7 @@ const CAPTION_EST_HEIGHT_PX = 84;
 const TOP_CHROME_PX = 84;
 const BOTTOM_CHROME_PX = 156;
 
-const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, isDaylight }) => {
+const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, reserved = [], theme, isDaylight }) => {
     const { t } = useTranslation();
     const accent = theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa');
     const chipSurface = isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(39, 39, 42, 0.96)';
@@ -90,6 +95,7 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
                         reserved: [
                             { left: 0, top: 0, width: viewport.width, height: TOP_CHROME_PX },
                             { left: 0, top: viewport.height - BOTTOM_CHROME_PX, width: viewport.width, height: BOTTOM_CHROME_PX },
+                            ...reserved,
                         ],
                     })
                     : null;
