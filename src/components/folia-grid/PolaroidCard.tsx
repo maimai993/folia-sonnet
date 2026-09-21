@@ -4,6 +4,7 @@ import type { SongResult, Theme, UnifiedSong } from '../../types';
 import { getSongUnavailableLabel, isSongUnavailable } from '../../services/onlineMusic/songAvailability';
 import { canResolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
 import { resolveGridTrackAlbumTargetId } from './gridTrackNavigation';
+import { CARD_TITLE_ATTR } from './gridMorphContract';
 import {
     formatCardDuration,
     PolaroidCardActions,
@@ -187,7 +188,10 @@ export const PolaroidCard = React.memo<PolaroidCardProps>(
 
                     <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-1 p-3 text-left">
                         <div className="group/song-title relative max-w-full">
-                            <div className="text-sm font-bold tracking-tight leading-snug line-clamp-3 whitespace-normal break-words">
+                            <div
+                                {...{ [CARD_TITLE_ATTR]: item.name }}
+                                className="text-sm font-bold tracking-tight leading-snug line-clamp-3 whitespace-normal break-words"
+                            >
                                 {item.name}
                             </div>
                             {editMetadataButton}
@@ -267,7 +271,10 @@ export const PolaroidCard = React.memo<PolaroidCardProps>(
                     <div className="space-y-1 mb-2">
                         {/* Title */}
                         <div className="group/song-title relative max-w-full">
-                            <div className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-4 whitespace-normal break-words">
+                            <div
+                                {...{ [CARD_TITLE_ATTR]: item.name }}
+                                className="text-s font-bold tracking-tight opacity-90 max-w-full line-clamp-4 whitespace-normal break-words"
+                            >
                                 {item.name}
                             </div>
                             {editMetadataButton}

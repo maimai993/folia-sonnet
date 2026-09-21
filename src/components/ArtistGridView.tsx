@@ -15,6 +15,22 @@ import { getLocalCoverAssetUrl } from '../services/localCoverAssetUrl';
 import { PolaroidCard } from './folia-grid/PolaroidCard';
 import { HEX_CARD_CENTER_SCALE } from './folia-grid/hexCardTransform';
 import { squareGridCardBox } from './folia-grid/gridCardLayout';
+import {
+    ARTIST_AVATAR_ATTR,
+    ARTIST_BIO_TITLE_ATTR,
+    ARTIST_INTRO_ATTR,
+    ARTIST_INTRO_VALUE_AVATAR,
+    ARTIST_INTRO_VALUE_BIO,
+    GRID_CARD_ITEM_ID_ATTR,
+} from './folia-grid/gridMorphContract';
+import ActiveGridMarker from './folia-grid/ActiveGridMarker';
+import { shouldApplyInitialGridFocus } from './folia-grid/gridViewRestore';
+import {
+    collectionMorphEntranceTravel,
+    collectionMorphFlyIn,
+    collectionMorphSeed,
+    type CollectionMorphPlan,
+} from './collectionOpenMorph/morphGeometry';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
 import { HexGridCoord, CubeCoord, getHexCubicSpiral } from './folia-grid/hexViewport';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
@@ -52,6 +68,15 @@ interface ArtistGridViewProps {
     localSongs?: LocalSong[];
     onEditEntity?: (entityId: string) => void;
     isInteractive?: boolean;
+    /**
+     * Optional「移形换影」plan handed in by the overlay host: every song/album
+     * card flies in from outside the viewport in a distance-staggered cascade,
+     * and `kind: 'morph'` additionally means the overlay's composite currently
+     * covers the avatar + bio, so they stay hidden until it fades (a plain
+     * 'cascade' has nothing covering them and must leave them visible). Absent
+     * for every existing caller, so behavior is unchanged.
+     */
+    morphPlan?: CollectionMorphPlan | null;
 }
 
 interface GridItem {
@@ -265,6 +290,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     localSongs = [],
     onEditEntity,
     isInteractive = true,
+    morphPlan = null,
 }) => {
     const { t } = useTranslation();
     // The artist wall renders the same cards as GridView, so it follows the same look settings.
@@ -285,6 +311,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     );
     const pendingRestoreStateRef = useRef<StoredArtistGridNavigationState | null>(null);
     const hasRestoredNavigationRef = useRef(false);
+    // 初始定位只做一次：专辑列表是分页追加的，只看 items.length 会在数据落地时把相机从用户
+    // 已经移过去的那张卡上拽回介绍卡。判据见 shouldApplyInitialGridFocus。
+    const hasAppliedInitialFocusRef = useRef(false);
 
     useEffect(() => {
         const el = containerRef.current;
@@ -754,11 +783,17 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     };
 
     useEffect(() => {
-        if (gridItems.length > 0) {
-            if (pendingRestoreStateRef.current && !hasRestoredNavigationRef.current) return;
-            // Focus on Bio Card (Index 1) initially to give a balanced newspaper view
-            centerOnIndex(1, false);
+        if (!shouldApplyInitialGridFocus({
+            itemCount: gridItems.length,
+            hasAppliedInitialFocus: hasAppliedInitialFocusRef.current,
+            restoreApplied: hasRestoredNavigationRef.current,
+            restorePending: Boolean(pendingRestoreStateRef.current),
+        })) {
+            return;
         }
+        hasAppliedInitialFocusRef.current = true;
+        // Focus on Bio Card (Index 1) initially to give a balanced newspaper view
+        centerOnIndex(1, false);
     }, [gridItems.length]);
 
     useEffect(() => {
@@ -1021,6 +1056,19 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         playableTopSongs,
     ]);
 
+    // 「移形换影」artist-page entrance: with a morph plan the avatar + bio stay
+    // hidden ONLY while the overlay's composite actually covers them
+    // (kind 'morph'), revealed as it fades out; every song/album card flies in
+    // from outside the viewport along its radial from the avatar — the same
+    // distance-staggered cascade as GridView's morph entrance, so a nested back
+    // into the artist page reads as scatter-out → cascade-in. A plain 'cascade'
+    // plan (a push with nothing covering the page) must leave the intro visible:
+    // hiding it there is a 340ms empty slot with no composite to justify it.
+    const morphCoversIntro = morphPlan?.kind === 'morph';
+    const morphFlyInReach = useMemo(() => (
+        morphPlan ? collectionMorphEntranceTravel(containerSize) : 0
+    ), [morphPlan, containerSize]);
+
     const renderedCards = useMemo(() => {
         return renderedIndexes.map((idx) => {
             const item = gridItems[idx];
@@ -1043,6 +1091,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     <div
                         key={`avatar-${idx}`}
                         ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                        {...{ [ARTIST_AVATAR_ATTR]: '', [ARTIST_INTRO_ATTR]: ARTIST_INTRO_VALUE_AVATAR }}
                         className="absolute select-none pointer-events-auto"
                         style={{
                             transformOrigin: 'center center',
@@ -1053,22 +1102,35 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             zIndex: initialZ,
                         }}
                     >
-                        <div
-                            className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
-                            style={{
-                                width: layoutConfig.avatarSize || 240,
-                                height: layoutConfig.avatarSize || 240,
-                                backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
+                        {/* Morph target of the song-card flight: hidden while the
+                            overlay morphs onto it, revealed as the overlay fades. */}
+                        <motion.div
+                            initial={morphCoversIntro ? { opacity: 0, scale: 0.985 } : false}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{
+                                opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' },
+                                // 尺度收势走 Apple 惯用的那条 ease，比透明度稍长一点，
+                                // 落定时才「稳」下来。
+                                scale: { delay: 0.12, duration: 0.42, ease: [0.32, 0.72, 0, 1] },
                             }}
                         >
-                            {item.coverUrl ? (
-                                <img src={getSizedCoverUrl(item.coverUrl, 512)} alt="avatar" draggable={false} loading="lazy" decoding="async" className="w-full h-full object-cover select-none" />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-white/5">
-                                    <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '4s' }} />
-                                </div>
-                            )}
-                        </div>
+                            <div
+                                className="rounded-full overflow-hidden shadow-2xl border-4 border-white/10 relative flex items-center justify-center shrink-0"
+                                style={{
+                                    width: layoutConfig.avatarSize || 240,
+                                    height: layoutConfig.avatarSize || 240,
+                                    backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
+                                }}
+                            >
+                                {item.coverUrl ? (
+                                    <img src={getSizedCoverUrl(item.coverUrl, 512)} alt="avatar" draggable={false} loading="lazy" decoding="async" className="w-full h-full object-cover select-none" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                        <Disc size={48} className="opacity-20 animate-spin" style={{ animationDuration: '4s' }} />
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
                     </div>
                 );
             }
@@ -1083,6 +1145,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     <div
                         key={`bio-${idx}`}
                         ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                        // Part of the intro cluster, not a morphable card: it has
+                        // no cover and no card title, so it is excluded from both
+                        // the capture source and the reverse flight's scatter
+                        // (it used to fly out as a blank frame).
+                        {...{ [ARTIST_INTRO_ATTR]: ARTIST_INTRO_VALUE_BIO }}
                         className="absolute select-none pointer-events-auto"
                         style={{
                             transformOrigin: 'center center',
@@ -1093,43 +1160,60 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             zIndex: initialZ + 5,
                         }}
                     >
-                        <div
-                            onClick={() => {
-                                if (isDraggingRef.current) return;
-                                if (focusedIndex !== 1) {
-                                    centerOnIndex(1, true);
-                                } else {
-                                    setShowFullBio(true);
-                                }
-                            }}
-                            className={`rounded-3xl p-6 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-shadow cursor-pointer select-none text-left ${cardBg}`}
-                            style={{
-                                width: layoutConfig.bioWidth || 460,
-                                height: layoutConfig.bioHeight || 250,
+                        {/* Hidden while the overlay's title flight morphs onto
+                            the h1, revealed as the overlay fades. */}
+                        <motion.div
+                            initial={morphCoversIntro ? { opacity: 0, scale: 0.985 } : false}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{
+                                opacity: { delay: 0.12, duration: 0.3, ease: 'easeOut' },
+                                // 尺度收势走 Apple 惯用的那条 ease，比透明度稍长一点，
+                                // 落定时才「稳」下来。
+                                scale: { delay: 0.12, duration: 0.42, ease: [0.32, 0.72, 0, 1] },
                             }}
                         >
-                            <div className="space-y-2 min-w-0">
-                                <h1 className="text-3xl font-extrabold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
-                                    {item.name}
-                                </h1>
-                                {item.subtitle && (
-                                    <p className="text-xs opacity-50 font-medium truncate">
-                                        {item.subtitle}
+                            <div
+                                onClick={() => {
+                                    if (isDraggingRef.current) return;
+                                    if (focusedIndex !== 1) {
+                                        centerOnIndex(1, true);
+                                    } else {
+                                        setShowFullBio(true);
+                                    }
+                                }}
+                                className={`rounded-3xl p-6 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-shadow cursor-pointer select-none text-left ${cardBg}`}
+                                style={{
+                                    width: layoutConfig.bioWidth || 460,
+                                    height: layoutConfig.bioHeight || 250,
+                                }}
+                            >
+                                <div className="space-y-2 min-w-0">
+                                    <h1
+                                        {...{ [ARTIST_BIO_TITLE_ATTR]: '' }}
+                                        className="text-3xl font-extrabold tracking-tight truncate"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        {item.name}
+                                    </h1>
+                                    {item.subtitle && (
+                                        <p className="text-xs opacity-50 font-medium truncate">
+                                            {item.subtitle}
+                                        </p>
+                                    )}
+                                    <div className="w-12 h-0.5 bg-sky-400 opacity-60 rounded-full mt-1"></div>
+                                </div>
+
+                                <div className="flex-1 overflow-hidden mt-3 mb-2">
+                                    <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap">
+                                        {item.description || t('options.noDescription')}
                                     </p>
-                                )}
-                                <div className="w-12 h-0.5 bg-sky-400 opacity-60 rounded-full mt-1"></div>
-                            </div>
+                                </div>
 
-                            <div className="flex-1 overflow-hidden mt-3 mb-2">
-                                <p className="text-xs opacity-65 leading-relaxed break-words whitespace-pre-wrap">
-                                    {item.description || t('options.noDescription')}
-                                </p>
+                                <div className="flex items-center border-t border-white/5 pt-3 mt-1 shrink-0">
+                                    <div className="text-[10px] opacity-40 font-semibold">{statsLine}</div>
+                                </div>
                             </div>
-
-                            <div className="flex items-center border-t border-white/5 pt-3 mt-1 shrink-0">
-                                <div className="text-[10px] opacity-40 font-semibold">{statsLine}</div>
-                            </div>
-                        </div>
+                        </motion.div>
                     </div>
                 );
             }
@@ -1138,11 +1222,29 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             const isSongCard = !!item.rawTrack;
             const cardMode = isSongCard ? 'tracks' : 'collection';
             const animateEntrance = shouldAnimateItemEntrance(String(item.id));
+            // 「移形换影」fly-in: every non-intro card arrives from outside the
+            // viewport along its radial from the avatar cluster, staggered with
+            // an ease-out distance curve plus a deterministic jitter.
+            // 屏外的卡不参与入场：渲染环带缓冲，那些卡看不见，却要各付一次动画。
+            const cardOnScreen = initialDist <= clipRadius;
+            const isMorphFlyIn = Boolean(morphPlan && idx >= 2 && cardOnScreen);
+            const morphFlyIn = isMorphFlyIn
+                ? collectionMorphFlyIn(
+                    { x: coord.baseX, y: coord.baseY },
+                    { x: baseCoords[0].baseX, y: baseCoords[0].baseY },
+                    layoutConfig.spacingX || 1,
+                    morphFlyInReach,
+                    collectionMorphSeed(String(item.id)),
+                )
+                : null;
 
             return (
                 <div
                     key={`${cardMode}-${idx}-${item.id}`}
                     ref={(el) => { cardWrapperRefs.current[idx] = el; }}
+                    // Morph capture source (nested artist/album pushes) and
+                    // squad-scatter member on back-out.
+                    {...{ [GRID_CARD_ITEM_ID_ATTR]: String(item.id) }}
                     className="absolute select-none pointer-events-auto"
                     style={{
                         transformOrigin: 'center center',
@@ -1154,9 +1256,24 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     }}
                 >
                     <motion.div
-                        initial={animateEntrance ? { opacity: 0, scale: 0.96 } : false}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                        initial={isMorphFlyIn
+                            ? { opacity: 0, x: morphFlyIn!.x, y: morphFlyIn!.y, scale: 0.94 }
+                            : animateEntrance ? { opacity: 0, scale: 0.96 } : false}
+                        animate={{
+                            // Key set identical across branches so a plan
+                            // expiring mid-flight can never freeze a card at
+                            // its crooked in-between angle.
+                            opacity: 1,
+                            x: 0,
+                            y: 0,
+                            scale: 1,
+                            rotate: 0,
+                        }}
+                        transition={isMorphFlyIn
+                            // 一条 Apple 的 ease 补间而不是每张卡一条 spring：观感上整片网格
+                            // 一起落定，成本上每帧只做插值（大页面同时有几十条动画在跑）。
+                            ? { duration: 0.5, ease: [0.32, 0.72, 0, 1], delay: morphFlyIn!.delay }
+                            : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                     >
                     <PolaroidCard
                         item={item}
@@ -1216,6 +1333,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         onAddTrackToQueue,
         persistNavigationState,
         shouldAnimateItemEntrance,
+        morphPlan,
+        morphFlyInReach,
     ]);
 
     const progressiveLoading = deriveProgressiveLoadingState(
@@ -1233,6 +1352,10 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             className="fixed inset-0 z-50 flex flex-col font-sans select-none overflow-hidden"
             style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-color)' }}
         >
+            {/* 把「我是当前这层网格」写在根节点上：移形换影的测量只在这个子树里找落点，
+                否则正在退出的上一层网格会被当成目标。订阅关在子组件里，见 ActiveGridMarker。 */}
+            <ActiveGridMarker target={rootRef} />
+
             {backgroundCoverUrl && (
                 <div
                     className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0"

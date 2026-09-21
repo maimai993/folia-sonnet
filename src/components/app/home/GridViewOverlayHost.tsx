@@ -12,6 +12,7 @@ import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileSe
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import {
+    collectionKey,
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
     isLocalGridViewCollection,
@@ -30,6 +31,10 @@ import { resolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../dev/renderCount';
+import { CollectionMorphOverlay } from '../../collectionOpenMorph/CollectionMorphOverlay';
+import { useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
+import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '../../collectionOpenMorph/morphProbes';
+import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
@@ -123,6 +128,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const morphPlan = useCollectionMorphStore(state => state.plan);
+    // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
+    // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
+    const morphEnabled = !useReducedMotionFor('collectionMorph');
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
@@ -132,9 +141,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
     const [organizingFolder, setOrganizingFolder] = useState<LocalGridViewCollectionDescriptor | null>(null);
     const [matchingSongId, setMatchingSongId] = useState<string | null>(null);
-    const selectedCollectionKey = selectedCollection
-        ? `${selectedCollection.source}:${selectedCollection.type}:${String(selectedCollection.id)}`
-        : '';
+    const selectedCollectionKey = collectionKey(selectedCollection);
     const liveSelectedCollection = useMemo(() => {
         if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
             if (selectedCollection?.source !== 'online') return selectedCollection;
@@ -173,12 +180,49 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [onOpenCollection]);
 
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
+        // Nested open (album/artist inside a playlist): no home card was clicked,
+        // so instead of the hero morph, hand the incoming grid a fly-in plan —
+        // its cards cascade in, matching every other grid entrance. The overlay
+        // upgrades it to 'morph' if a flight actually launches (origin 'home').
+        const snapshot = useCollectionNavigationStore.getState().snapshot;
+        if (morphEnabled && snapshot && snapshot.stack.length >= 1) {
+            useCollectionMorphStore.getState().commitPlan({ kind: 'cascade' });
+        }
         onPushCollection(col);
-    }, [onPushCollection]);
+    }, [morphEnabled, onPushCollection]);
 
     const handleBackCollection = useCallback(() => {
+        // Arm the reverse morph before the view flips. Two distinct gestures:
+        // - top-level back (stack depth 1) → hero flies onto the original home
+        //   card while the squad scatters;
+        // - nested back (album → playlist) → no home card exists, so the hero
+        //   shrinks away in place with the squad scattering, and the previous
+        //   grid underneath is revealed by the backdrop crossfade.
+        const morphStore = useCollectionMorphStore.getState();
+        const navState = useCollectionNavigationStore.getState();
+        const snapshot = navState.snapshot;
+        const depth = snapshot?.stack.length ?? 0;
+        // Artist pages morph from their circular avatar, not a song card.
+        const activeType = snapshot?.stack[snapshot.stack.length - 1]?.type;
+        const hero = morphEnabled
+            ? ((activeType === 'artist' ? probeArtistIntroTargets() : probeHeroTargets()) ?? morphStore.hero)
+            : null;
+        if (hero) {
+            const squad = probeGridSquadRects();
+            if (depth <= 1 && snapshot?.origin === 'home' && morphStore.lastHome) {
+                morphStore.armExit(hero, squad);
+            } else if (depth > 1) {
+                morphStore.armNestedExit(hero, squad);
+                // The previous collection remounts underneath: give it the same
+                // cascade entrance so the cut reads as scatter-out → cascade-in.
+                // 'cascade', not 'morph': the reverse composite lands on the card
+                // this level was pushed from, which is not the previous grid's
+                // centred hero, so nothing is covering that hero.
+                morphStore.commitPlan({ kind: 'cascade' });
+            }
+        }
         onBackCollection();
-    }, [onBackCollection]);
+    }, [morphEnabled, onBackCollection]);
 
     useEffect(() => {
         if (
@@ -208,6 +252,12 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         const source = selectedCollection.source;
         const albumName = album?.name || '';
         const albumCoverUrl = album?.coverUrl;
+        // 点的是当前正在看的这张专辑时直接返回：不必再去解析 catalog（在线路径会发请求，
+        // 解析失败还会弹「目录不可用」，而用户只是点了自己在看的那张专辑）。解析之后再比一次
+        // 由 store 的 push 兜底 —— 那条才是所有分支都绕不过的不变式。
+        if (selectedCollection.type === 'album' && String(selectedCollection.id) === String(albumId)) {
+            return;
+        }
         if (source === 'online') {
             let resolvedAlbumId = albumId;
             if (track) {
@@ -301,6 +351,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
         const source = selectedCollection.source;
         const artistName = artist?.name || String(artistId);
+        // 同上：歌手页的曲目卡片带着同一张歌手的入口，点它不该再压一层同样的歌手页。
+        if (selectedCollection.type === 'artist' && String(selectedCollection.id) === String(artistId)) {
+            return;
+        }
         if (source === 'online') {
             let resolvedArtistId = artistId;
             if (track) {
@@ -638,13 +692,20 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                         key="grid-transition-backdrop"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        // 时长只在降级时回到官方原版的 0.18s：移形换影关闭后不该还留着
+                        // 一段为飞行准备的慢淡入。开着的时候维持作者调的 0.62s / 0.28s。
+                        exit={morphEnabled
+                            ? { opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }
+                            : { opacity: 0 }}
+                        transition={morphEnabled
+                            ? { duration: 0.62, ease: [0.22, 1, 0.36, 1] }
+                            : { duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
                         className="fixed inset-0 z-[49] pointer-events-none"
                         style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                 )}
             </AnimatePresence>
+            <CollectionMorphOverlay enabled={morphEnabled} />
             <AnimatePresence initial={false}>
                 {displaySelectedCollection && (
                     displaySelectedCollection.type === 'artist' ? (
@@ -663,6 +724,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             localSongs={surfaceProps.localSongs}
                             onEditEntity={(entityId) => setEditingEntityId(entityId)}
                             isInteractive={isInteractive}
+                            morphPlan={morphEnabled ? morphPlan : null}
                         />
                     ) : (
                         <GridView
@@ -688,6 +750,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             theme={surfaceProps.theme}
                             isDaylight={isDaylight}
                             isInteractive={isInteractive}
+                            morphPlan={morphEnabled ? morphPlan : null}
                         />
                     )
                 )}

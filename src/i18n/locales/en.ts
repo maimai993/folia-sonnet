@@ -1385,6 +1385,8 @@ export default {
     "reduceMotionLatticeDesc": "Poster expansion, camera flight, the opening wave, drag inertia and lyric fades on the queue collage.",
     "reduceMotionTransitionOverlay": "Mix transition",
     "reduceMotionTransitionOverlayDesc": "The automix progress ring and the progress border drawn around the now playing card.",
+    "reduceMotionCollectionMorph": "Collection open transition",
+    "reduceMotionCollectionMorphDesc": "The shared-element morph that opens a collection from a home card: the card's flight, its cover and title deforming onto the detail hero, and the scatter and flight back on the way out.",
     "reduceMotionMonetBackground": "Monet background drift",
     "reduceMotionMonetBackgroundDesc": "The slow drift of the cover-derived background image.",
     "reduceMotionUiMicroMotion": "Interface micro-motion",

@@ -1384,6 +1384,8 @@ export default {
     "reduceMotionLatticeDesc": "队列拼贴的海报展开、相机飞行、入场波、拖拽惯性与歌词淡入淡出。",
     "reduceMotionTransitionOverlay": "混音过渡",
     "reduceMotionTransitionOverlayDesc": "Automix 的进度圆环，以及画在当前播放卡片边框上的进度描边。",
+    "reduceMotionCollectionMorph": "歌单展开转场",
+    "reduceMotionCollectionMorphDesc": "从首页卡片展开成歌单详情时的移形换影：卡片飞入、封面与标题形变，以及返回时的四散与飞回。",
     "reduceMotionMonetBackground": "Monet 背景漂移",
     "reduceMotionMonetBackgroundDesc": "由封面生成的背景图那层缓慢漂移。",
     "reduceMotionUiMicroMotion": "界面微动效",
