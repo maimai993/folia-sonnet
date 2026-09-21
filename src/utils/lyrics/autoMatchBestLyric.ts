@@ -10,9 +10,10 @@ import { calculateMatchScoreDetails } from './matchScore';
 import { buildLyricSearchQuery } from './searchQuery';
 import { buildLyricSourceOrder } from './sourcePriority';
 import { resolveProviderLyricsChorus } from './chorusResolver';
+import { hasRenderableLyrics } from './validity';
 
 // src/utils/lyrics/autoMatchBestLyric.ts
-// Utility module for automatically matching the best word-by-word lyrics across multiple sources.
+// Utility module for preferring word-by-word lyrics while retaining a usable line-by-line fallback.
 
 const PROVIDER_SEARCH_TIMEOUT_MS = 3500;
 const PROVIDER_LYRIC_TIMEOUT_MS = 5000;
@@ -157,10 +158,10 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 }
 
 /**
- * Searches and matches the best word-by-word lyric across NetEase, QQ Music, and Kugou Music.
- * Priority: NetEase > QQ Music > Kugou Music.
+ * Searches and matches the best lyric across NetEase, AMLLDB, QQ Music, and Kugou Music.
+ * Source priority follows the configured preference, while word-by-word lyrics outrank line-by-line lyrics.
  * A match is considered perfect if duration difference is <= 3s and title is matched.
- * Returns the parsed lyrics and matching details, or null if no perfect match is found.
+ * Returns the parsed lyrics and matching details, or null if no reliable match is found.
  */
 export async function autoMatchBestLyric(
     title: string,
@@ -193,6 +194,7 @@ export async function autoMatchBestLyric(
     let neteaseCandidateSongs: SongResult[] | null = null;
     let qqBestCandidate: SongResult | null | undefined;
     let kugouBestCandidate: SongResult | null | undefined;
+    let lineByLineFallback: AutoMatchBestLyricMatch | null = null;
 
     const searchOrder = options.exactMatchOnly && options.metadataCandidate
         ? [options.metadataCandidate.source]
@@ -366,12 +368,8 @@ export async function autoMatchBestLyric(
             `AMLLDB lyric fetch for ${platform}/${song.id}`,
             null
         );
-        if (!lyrics) {
+        if (!hasRenderableLyrics(lyrics)) {
             console.log(`[autoMatchBestLyric] AMLLDB ${platform}/${song.id} returned no TTML lyrics. Continuing with the next source.`);
-            return null;
-        }
-        if (!lyrics.isWordByWord) {
-            console.log(`[autoMatchBestLyric] AMLLDB ${platform}/${song.id} returned lyrics but they are not word-by-word. Continuing with the next source.`);
             return null;
         }
         const chorusRanges = !hasChorusMarkers(lyrics)
@@ -387,7 +385,7 @@ export async function autoMatchBestLyric(
             ? applyNeteaseChorusByTime(lyrics, chorusRanges)
             : lyrics;
 
-        console.log(`[autoMatchBestLyric] Found AMLLDB word-by-word lyric match from ${platform}!`);
+        console.log(`[autoMatchBestLyric] Found AMLLDB ${lyrics.isWordByWord ? 'word-by-word' : 'line-by-line'} lyric match from ${platform}!`);
         return {
             lyrics: decoratedLyrics,
             source: 'amll',
@@ -423,14 +421,19 @@ export async function autoMatchBestLyric(
 
                     const acceptsExactNonWordByWord = options.exactMatchOnly
                         && isSelectedMetadataCandidate('netease', song, options.metadataCandidate);
-                    if (processed.lyrics && (processed.lyrics.isWordByWord || acceptsExactNonWordByWord)) {
-                        console.log(`[autoMatchBestLyric] Found accepted NetEase lyric match!`);
-                        return {
+                    if (hasRenderableLyrics(processed.lyrics)) {
+                        const match: AutoMatchBestLyricMatch = {
                             lyrics: await resolveMatchedLyrics(processed.lyrics, processed, 'netease', song),
                             source: 'netease',
                             id: song.id,
                             song,
                         };
+                        if (processed.lyrics.isWordByWord || acceptsExactNonWordByWord) {
+                            console.log(`[autoMatchBestLyric] Found accepted NetEase lyric match!`);
+                            return match;
+                        }
+                        lineByLineFallback ??= match;
+                        console.log(`[autoMatchBestLyric] Keeping NetEase line-by-line lyrics as fallback while checking for word-by-word lyrics.`);
                     }
                 }
             } catch (error) {
@@ -443,7 +446,10 @@ export async function autoMatchBestLyric(
                     if (qqCandidate && isSelectedMetadataCandidate('qq', qqCandidate, options.metadataCandidate)) {
                         const result = await tryAmllDbCandidate('qq', qqCandidate);
                         if (result) {
-                            return result;
+                            if (result.lyrics.isWordByWord) {
+                                return result;
+                            }
+                            lineByLineFallback ??= result;
                         }
                     }
                 }
@@ -457,7 +463,10 @@ export async function autoMatchBestLyric(
                 for (const song of neteaseCandidates) {
                     const result = await tryAmllDbCandidate('ncm', song);
                     if (result) {
-                        return result;
+                        if (result.lyrics.isWordByWord) {
+                            return result;
+                        }
+                        lineByLineFallback ??= result;
                     }
                 }
                 console.log('[autoMatchBestLyric] AMLLDB auto probe finished after NCM miss; QQ AMLLDB probing is reserved for manual matching.');
@@ -479,15 +488,20 @@ export async function autoMatchBestLyric(
                     const parsedLyrics = processed?.lyrics ?? null;
                     const acceptsExactNonWordByWord = options.exactMatchOnly
                         && isSelectedMetadataCandidate('qq', song, options.metadataCandidate);
-                    if (parsedLyrics && (parsedLyrics.isWordByWord || acceptsExactNonWordByWord)) {
-                        console.log(`[autoMatchBestLyric] Found accepted QQ lyric match!`);
-                        return {
+                    if (hasRenderableLyrics(parsedLyrics)) {
+                        const match: AutoMatchBestLyricMatch = {
                             lyrics: parsedLyrics,
                             source: 'qq',
                             id: song.id,
                             qqMid: song.qqMid,
                             song,
                         };
+                        if (parsedLyrics.isWordByWord || acceptsExactNonWordByWord) {
+                            console.log(`[autoMatchBestLyric] Found accepted QQ lyric match!`);
+                            return match;
+                        }
+                        lineByLineFallback ??= match;
+                        console.log(`[autoMatchBestLyric] Keeping QQ line-by-line lyrics as fallback while checking for word-by-word lyrics.`);
                     }
                 }
             } catch (error) {
@@ -507,15 +521,20 @@ export async function autoMatchBestLyric(
                     }
                     const acceptsExactNonWordByWord = options.exactMatchOnly
                         && isSelectedMetadataCandidate('kugou', song, options.metadataCandidate);
-                    if (processed?.lyrics && (processed.lyrics.isWordByWord || acceptsExactNonWordByWord)) {
-                        console.log(`[autoMatchBestLyric] Found perfect Kugou word-by-word lyric match!`);
-                        return {
+                    if (hasRenderableLyrics(processed?.lyrics)) {
+                        const match: AutoMatchBestLyricMatch = {
                             lyrics: await resolveMatchedLyrics(processed.lyrics, processed, 'kugou', song),
                             source: 'kugou',
                             id: song.id,
                             kgHash: song.kgHash,
                             song,
                         };
+                        if (processed.lyrics.isWordByWord || acceptsExactNonWordByWord) {
+                            console.log(`[autoMatchBestLyric] Found accepted Kugou lyric match!`);
+                            return match;
+                        }
+                        lineByLineFallback ??= match;
+                        console.log(`[autoMatchBestLyric] Keeping Kugou line-by-line lyrics as fallback while checking for word-by-word lyrics.`);
                     }
                 }
             } catch (error) {
@@ -524,6 +543,11 @@ export async function autoMatchBestLyric(
         }
     }
 
-    console.log(`[autoMatchBestLyric] No perfect word-by-word lyric match found across any source.`);
+    if (lineByLineFallback) {
+        console.log(`[autoMatchBestLyric] No word-by-word lyric match found; using ${lineByLineFallback.source} line-by-line fallback.`);
+        return lineByLineFallback;
+    }
+
+    console.log(`[autoMatchBestLyric] No reliable lyric match found across any source.`);
     return null;
 }

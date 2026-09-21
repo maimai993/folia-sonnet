@@ -5,6 +5,8 @@ import { detectTimedLyricFormat } from './lyrics/formatDetection';
 import { getLineRenderHints } from './lyrics/renderHints';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from './appPlaybackGuards';
 
+export { hasRenderableLyrics } from './lyrics/validity';
+
 // Pure helpers for playback state, debug snapshots, and lyric timing.
 export const clampMediaVolume = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -37,16 +39,6 @@ export const formatTime = (time: number) => {
 };
 
 export const getReplayGainModeLabel = (mode: ReplayGainMode): string => i18n.t(`replayGain.${mode}`);
-
-export const hasRenderableLyrics = (lyricData: LyricData | null | undefined): lyricData is LyricData => {
-    if (!lyricData?.lines?.length) {
-        return false;
-    }
-
-    return lyricData.lines.some(line =>
-        line.fullText.trim().length > 0 || (line.translation?.trim().length ?? 0) > 0
-    );
-};
 
 export const getAudioSrcKind = (audioSrc: string | null): 'empty' | 'blob' | 'http' | 'other' => {
     if (!audioSrc) {

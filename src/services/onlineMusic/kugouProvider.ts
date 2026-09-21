@@ -15,6 +15,7 @@ import {
 import { getSizedCoverUrl } from '../../utils/coverUrl';
 import { parseLyricsByFormat } from '../../utils/lyrics/parserCore';
 import { isPureMusicLyricText } from '../../utils/lyrics/pureMusic';
+import { hasRenderableLyrics } from '../../utils/lyrics/validity';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { decibelsToLinearPeak, toFiniteNumber } from '../../utils/replayGain';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
@@ -744,7 +745,7 @@ const getKugouLyrics = async (song: SongResult) => {
         return { lyrics: null, mainText: lyricText, wordByWordText: lyricText, isPureMusic: true, chorusRanges: [] };
     }
     const parsed = lyricText ? parseLyricsByFormat('krc', lyricText, '') : null;
-    if (!parsed) {
+    if (!hasRenderableLyrics(parsed)) {
         return { lyrics: null, mainText: lyricText || null, wordByWordText: lyricText || null, isPureMusic: false, chorusRanges: [] };
     }
     parsed.isWordByWord = true;

@@ -212,6 +212,29 @@ describe('kugouProvider', () => {
         expect(song.album.coverUrl).toBe('https://imge.kugou.com/stdmusic/1024/cover.jpg');
     });
 
+    it('rejects non-empty KRC payloads that contain no lyric lines', async () => {
+        requestMock.mockImplementation(async (operation: string) => {
+            if (operation === 'search_lyric') {
+                return { candidates: [{ id: 'metadata-only', accesskey: 'observed-access-key' }] };
+            }
+            if (operation === 'lyric') {
+                return { decodeContent: '[id:metadata-only]\n[ar:Artist]\n[ti:Song]' };
+            }
+            return {};
+        });
+        const song = normalizeKugouSong({
+            FileHash: 'empty-lyric-hash',
+            FileName: 'Artist - Song',
+            Duration: 180,
+        });
+
+        const result = await kugouProvider.lyrics?.getLyrics(song);
+
+        expect(result?.lyrics).toBeNull();
+        expect(result?.isPureMusic).toBe(false);
+        expect(requestMock).not.toHaveBeenCalledWith('song_climax', expect.anything());
+    });
+
     it('reads canonical song metadata without normalizing it a second time', () => {
         const song = normalizeKugouSong({
             FileHash: 'ab12cd',

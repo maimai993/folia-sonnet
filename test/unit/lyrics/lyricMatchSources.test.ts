@@ -38,6 +38,16 @@ vi.mock('@/utils/lyrics/chorusEffects', () => ({
     applyNeteaseChorusByTime: vi.fn((lyrics) => lyrics),
 }));
 
+const createWordByWordLyrics = () => ({
+    lines: [{
+        fullText: 'Test lyric',
+        startTime: 0,
+        endTime: 1,
+        words: [],
+    }],
+    isWordByWord: true as const,
+});
+
 describe('lyricMatchSources', () => {
     const cloudSearchMock = vi.mocked(neteaseApi.cloudSearch);
     const searchQQLyricsMock = vi.mocked(searchQQLyrics);
@@ -49,7 +59,7 @@ describe('lyricMatchSources', () => {
 
     it('probes AMLLDB candidates concurrently', async () => {
         const deferred: Array<{
-            resolve: (value: { lines: []; isWordByWord: true } | null) => void;
+            resolve: (value: ReturnType<typeof createWordByWordLyrics> | null) => void;
         }> = [];
 
         cloudSearchMock.mockResolvedValue({
@@ -62,8 +72,8 @@ describe('lyricMatchSources', () => {
         });
         searchQQLyricsMock.mockResolvedValue([]);
         fetchAmllDbLyricsMock.mockImplementation(() => {
-            let resolve!: (value: { lines: []; isWordByWord: true } | null) => void;
-            const promise = new Promise<{ lines: []; isWordByWord: true } | null>((res) => {
+            let resolve!: (value: ReturnType<typeof createWordByWordLyrics> | null) => void;
+            const promise = new Promise<ReturnType<typeof createWordByWordLyrics> | null>((res) => {
                 resolve = res;
             });
             deferred.push({ resolve });
@@ -80,7 +90,7 @@ describe('lyricMatchSources', () => {
         expect(fetchAmllDbLyricsMock).toHaveBeenCalledTimes(2);
 
         deferred[0].resolve(null);
-        deferred[1].resolve({ lines: [], isWordByWord: true });
+        deferred[1].resolve(createWordByWordLyrics());
         const results = await searchPromise;
 
         expect(results.map(result => result.id)).toEqual([102]);
