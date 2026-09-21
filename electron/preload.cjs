@@ -147,6 +147,12 @@ contextBridge.exposeInMainWorld('electron', {
     closeWindow: () => ipcRenderer.invoke('window-close'),
     quitApp: () => ipcRenderer.invoke('app-quit'),
     isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+    isWindowFullscreen: () => ipcRenderer.invoke('window-is-fullscreen'),
+    onWindowFullscreenChanged: (callback) => {
+        const listener = (_event, fullscreen) => callback(fullscreen);
+        ipcRenderer.on('window-fullscreen-changed', listener);
+        return () => ipcRenderer.removeListener('window-fullscreen-changed', listener);
+    },
     getWindowTransparentMode: () => ipcRenderer.invoke('window-get-transparent-mode'),
     setWindowTransparentMode: (enabled, handoff) => ipcRenderer.invoke('window-set-transparent-mode', enabled, handoff),
     consumeWindowPlaybackHandoff: () => ipcRenderer.invoke('window-playback-handoff-consume'),

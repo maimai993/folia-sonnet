@@ -5000,6 +5000,14 @@ function createWindow(options = {}) {
   win.on('move', () => {
     saveWindowState(win, { deferred: true });
   });
+  // macOS completes fullscreen asynchronously; notify after the native transition, including
+  // transitions initiated by the system menu or keyboard instead of the titlebar button.
+  win.on('enter-full-screen', () => {
+    win.webContents.send('window-fullscreen-changed', true);
+  });
+  win.on('leave-full-screen', () => {
+    win.webContents.send('window-fullscreen-changed', false);
+  });
   win.on('maximize', () => {
     saveWindowState(win);
   });
@@ -6015,6 +6023,13 @@ ipcMain.handle('window-is-maximized', () => {
   }
 
   return mainWindow.isMaximized();
+});
+
+ipcMain.handle('window-is-fullscreen', (event) => {
+  if (!isTrustedMainWindowContents(event.sender) || !mainWindow || mainWindow.isDestroyed()) {
+    return false;
+  }
+  return mainWindow.isFullScreen();
 });
 
 ipcMain.handle('window-get-transparent-mode', (event) => {
