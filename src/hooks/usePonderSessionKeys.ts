@@ -5,9 +5,16 @@ import type { PonderTimelineControls } from '../components/ponder/usePonderTimel
 // src/hooks/usePonderSessionKeys.ts
 // 教程开着时的键盘：Esc 退出、←/→ 跳关键帧、[ ] 换场景、空格暂停。
 //
-// 用 capture 阶段并对处理掉的键 stopImmediatePropagation，是为了不依赖 effect 注册顺序。
-// 底下那些全局热键本来也会因为教程层挂了 data-folia-keyboard-window 而让路，这里是第二道保险。
-// 没处理的键一律放过 —— 没必要连开发者工具的快捷键一起吃掉。
+// capture 阶段接管，并且**吃掉所有不带修饰键的按键**，不只是自己用到的那几个。
+//
+// 原本只拦自己处理的键，理由是「底下那些全局热键会因为教程层挂了
+// data-folia-keyboard-window 而自动让路」。这个前提只对一部分成立：
+// usePlaybackInteractionBridge 和 usePlayerPanelTabShortcut 确实查那个属性，
+// 但命令面板的裸键处理走的是 App 传进去的 isBlocked prop，根本不读 DOM。
+// 于是教程开着时按 S，命令面板会在教程层底下打开 —— e2e 抓到的就是这个。
+//
+// 全屏接管的教程层就该独占键盘。带 ctrl/alt/meta 的放过，浏览器和开发者工具的
+// 快捷键不受影响；Tab 也放过，键盘焦点仍然走得动。
 
 type UsePonderSessionKeysParams = {
     isActive: boolean;
@@ -22,7 +29,8 @@ export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef }: UseP
         }
 
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.ctrlKey || event.altKey || event.metaKey) {
+            // 浏览器/系统级组合键放过，Tab 放过：接管键盘不等于把无障碍焦点也锁死。
+            if (event.ctrlKey || event.altKey || event.metaKey || event.code === 'Tab') {
                 return;
             }
 
@@ -51,6 +59,9 @@ export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef }: UseP
                     }
                     break;
                 default:
+                    // 自己不认的键也要吃掉，别让它落到教程层底下的应用上。
+                    // 不 preventDefault：这里没有任何要抑制的浏览器默认行为。
+                    event.stopImmediatePropagation();
                     return;
             }
 
