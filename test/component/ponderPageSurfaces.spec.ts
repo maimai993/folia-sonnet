@@ -180,3 +180,44 @@ test('骨架框逐个落位，而不是整幅图一次性出现', async ({ page 
     expect(delays.length).toBeGreaterThan(2);
     expect(new Set(delays).size, '所有框用同一个延迟就等于没有错开').toBeGreaterThan(1);
 });
+
+test('播放页画的是整屏形态，四个可单独思索的组件都列出来', async ({ page }) => {
+    await page.locator('[data-probe-open="player-page-layout"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+
+    await expectAligned(stage, 'lyrics', '[data-ponder-player-lyrics]');
+    await expectAligned(stage, 'bar', '[data-ponder-player-bar]');
+    await expectAligned(stage, 'toggle', '[data-ponder-player-toggle]');
+    await expectAligned(stage, 'track', '[data-ponder-player-track]');
+
+    const related = stage.getByTestId('ponder-related-targets');
+    for (const name of ['Bottom control bar', 'Command window', 'Side panel toggle', 'Side control panel']) {
+        await expect(related.getByRole('button', { name })).toBeVisible();
+    }
+});
+
+test('执行模式只从冒号进，键位一个键一条命令', async ({ page }) => {
+    await page.locator('[data-probe-open="player-page-commands"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    // 先是普通的命令窗口，输入冒号之后才换成执行模式那一屏。
+    await expect(stage.locator('[data-ponder-surface-state="palette-open"]')).toHaveCSS('opacity', '1', { timeout: 6000 });
+    await expect(stage.locator('[data-ponder-player-execute-mode]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-surface-state="execute-mode"]')).toHaveCSS('opacity', '1', { timeout: 15000 });
+    await expect(stage.locator('[data-ponder-player-execute-key]')).toHaveCount(3);
+});
+
+test('快捷键图例是一排键帽，不是挤成一行的文字', async ({ page }) => {
+    await page.locator('[data-probe-open="player-page-layout"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    const caps = stage.locator('[data-ponder-key-cap]');
+    // ← → [ ] Space Esc 六个键帽，各自带说明。
+    await expect(caps).toHaveCount(6);
+    await expect(caps.first()).toHaveText('←');
+    await expect(stage.locator('[data-ponder-key-combo]')).toHaveCount(4);
+});

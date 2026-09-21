@@ -164,7 +164,7 @@ const keyboardShortcut: PonderSceneScript = {
     steps: [
         { kind: 'caption', id: 'intro', at: 'bottom', textKey: 'ponder.captions.panelSlide.keyboardIntro', durationMs: 2400 },
         { kind: 'pause', id: 'readIntro' },
-        { kind: 'keypress', id: 'pressS', keys: ['S'], at: 'bottom', durationMs: 1400, keyframe: true },
+        { kind: 'keypress', id: 'pressS', keys: ['Mod K'], at: 'bottom', durationMs: 1400, keyframe: true },
         { kind: 'reveal', id: 'paletteOpens', anchor: 'palette', transition: 'zoom', durationMs: 460 },
         {
             kind: 'caption',

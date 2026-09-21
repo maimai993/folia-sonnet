@@ -879,7 +879,7 @@ export default {
     "welcome": "欢迎使用 Folia",
     "lattice": "队列拼贴",
     "latticeLabel": "队列拼贴",
-    "latticeBack": "返回",
+    "latticeBack": "左上角返回上一页。{{mod}} + B 也会关闭 Lattice；Esc 会先取消海报展开或键盘焦点，再在第二次返回。",
     "latticePlay": "播放",
     "latticeFocusCurrent": "聚焦当前歌曲",
     "latticeAutoFocusOnSongChange": "切歌时自动聚焦",
@@ -2887,7 +2887,12 @@ export default {
     "replay": "从头重播",
     "exit": "Esc 退出",
     "seekKeyframe": "跳到第 {{index}} 个关键帧",
-    "keyLegend": "\u2190 \u2192 关键帧  \u00b7  [ ] 章节  \u00b7  空格 暂停  \u00b7  Esc 退出",
+    "legend": {
+      "keyframe": "关键帧",
+      "chapter": "章节",
+      "pause": "暂停",
+      "exit": "退出"
+    },
     "actions": {
       "openBottomUiSettings": "打开底部界面设置",
       "openSlotPicker": "去挑按钮"
@@ -2901,6 +2906,26 @@ export default {
         "help": "帮助",
         "settings": "设置",
         "commandPalette": "命令面板"
+      },
+      "playerPage": {
+        "lyrics": "歌词与可视化",
+        "bar": "底部控制条",
+        "toggle": "侧边手柄",
+        "track": "隐藏的滑轨",
+        "panel": "控制面板",
+        "palette": "命令窗口"
+      },
+      "commandPalette": {
+        "input": "输入行",
+        "results": "结果列表",
+        "firstResult": "当前结果"
+      },
+      "sidePanel": {
+        "panel": "控制面板",
+        "cover": "当前封面",
+        "meta": "曲目信息",
+        "tabs": "标签页",
+        "body": "当前标签页内容"
       },
       "playerBar": {
         "play": "播放 / 暂停",
@@ -2955,6 +2980,8 @@ export default {
       "gridPage": "海报墙页面",
       "gridViewPage": "集合网格页面",
       "playerPage": "播放器页面",
+      "commandPalette": "命令窗口",
+      "sidePanel": "右侧控制面板",
       "latticePage": "Lattice 页面",
       "helpPage": "帮助页面",
       "settingsPage": "设置页面"
@@ -2975,7 +3002,15 @@ export default {
       "gridViewPageInfo": "集合信息和批量操作",
       "gridViewPageFilter": "筛选当前集合",
       "gridViewPageActivate": "打开或播放卡片",
-      "playerPageOverview": "播放器如何组织",
+      "playerPageLayout": "页面上有什么、各在哪",
+      "playerPageOpenPalette": "叫出命令窗口",
+      "playerPageRunCommands": "在命令窗口里执行",
+      "playerPageShuffle": "常见问题：怎么随机播放",
+      "commandPaletteSearch": "搜出来，回车执行",
+      "commandPaletteArgument": "给命令带参数",
+      "commandPaletteExecuteMode": "冒号进执行模式",
+      "sidePanelStructure": "面板里有什么",
+      "sidePanelTabs": "换标签页",
       "latticePageOverview": "Lattice 如何组织",
       "latticePageStructure": "队列墙、返回与工具",
       "latticePageNavigation": "在无限墙上移动焦点",
@@ -3008,10 +3043,10 @@ export default {
         "gridSourceActions": "这一组只在当前来源需要时出现，例如本地库的导入、刷新和播放列表导入，或服务器库的重新加载。",
         "gridCardMove": "拖动、滚轮或左右方向键移动轨道。点非中央海报只会把它移到中央，不会立刻打开。",
         "gridCardOpen": "再次点击中央海报，或按 Enter，才进入集合 GridView；底部文字始终描述当前中央海报。",
-        "gridMap": "顶部“全部”按钮打开 GridMap，一屏总览所有集合。单击选择，激活后进入集合；GridMap 中 Ctrl+F 或直接输入才是筛选集合。",
+        "gridMap": "顶部“全部”按钮打开 GridMap，一屏总览所有集合。单击选择，激活后进入集合；GridMap 中 {{mod}} + F 或直接输入才是筛选集合。",
         "gridSearchResult": "提交右上角搜索后会打开独立搜索工作台，结果按歌曲列出，可播放、打开艺人/专辑或加入队列。",
         "gridCardKeys": "← / → 切换中央海报，Enter 打开当前集合；滚轮和水平拖动执行同样的焦点移动。",
-        "gridPageKeys": "S 打开命令面板，Ctrl/Cmd+K 也可打开；Ctrl/Cmd+B 进入 Lattice（有队列时），Ctrl/Cmd+G 打开本页 Ponder。",
+        "gridPageKeys": "{{mod}} + K 打开命令窗口，{{mod}} + B 进入 Lattice（有队列时），Ctrl + G 打开本页 Ponder。",
         "gridView": "集合网格展示刚才打开的卡片所包含的歌曲、专辑或艺人。返回时会回到上一级，并保留原来的位置。",
         "gridViewActions": "选中卡片可以播放或继续进入。页面操作区还会按集合能力提供全部播放、加入队列、编辑等动作。",
         "gridViewBack": "左上角返回按钮退出当前集合，并清理这次进入使用的导航记录。Esc 在没有更内层状态时也会返回。",
@@ -3020,10 +3055,23 @@ export default {
         "gridViewPan": "在空白处拖动整片蜂窝网格；触摸屏同样可拖。卡片内的按钮和艺人/专辑链接不会误触发平移。",
         "gridViewFocus": "方向键按空间方向寻找相邻卡片并把它带入焦点；当前焦点也会被记住，返回后不会跳回开头。",
         "gridViewInfo": "点击标题打开信息面板：封面、创建者和说明在上方，全部播放、加入队列以及编辑、重扫、导出等来源专属动作在下方。",
-        "gridViewFilter": "Ctrl/Cmd+F 或直接输入打开本页筛选。输入 --play 可播放筛选结果，--add 可把筛选结果加入队列；Esc 清空并关闭。",
+        "gridViewFilter": "{{mod}} + F 或直接输入打开本页筛选。输入 --play 可播放筛选结果，--add 可把筛选结果加入队列；Esc 清空并关闭。",
         "gridViewActivate": "点击歌曲卡片会播放它；艺人和专辑文字是独立入口。编辑模式下，卡片操作会改成选择或移除等管理动作。",
         "gridViewKeys": "Enter 激活当前卡片；Esc 依次关闭内层状态、清除焦点，最后返回上一级。",
-        "player": "这个页面把当前歌曲放在中央；播放控制留在底部，侧边手柄则可以打开命令面板或播放器面板。",
+        "playerLayout": "播放页是整屏的：歌词和可视化铺满背景，能按的东西只有三处 —— 底部正中的控制条、右缘的侧边手柄，以及手柄展开后的控制面板。",
+        "playerLyrics": "中间这块是歌词与可视化。它不是控件：点它等于点背景，只切换控制条的显隐，不会暂停。",
+        "playerBarWhere": "控制条浮在屏幕底部正中，不贴边。左端是播放/暂停，中间是歌名和进度条，右端两个位置放什么由你决定。",
+        "playerToggleWhere": "侧边手柄贴在屏幕右缘，底边和控制条对齐。它是一颗圆按钮，按一下展开右侧控制面板。",
+        "playerPanelWhere": "面板从手柄上方展开，宽度固定、贴着右缘。最上面是封面，下面是曲目信息和一排标签页 —— 封面、控制、队列、账号是同一块地方的几副面孔。",
+        "playerPaletteSlide": "手柄背后还藏着一条向左的滑轨。按住手柄往左拖，越过判定线再松手，打开的是命令窗口，不是面板。",
+        "playerPaletteOpened": "命令窗口从屏幕上方落下，水平居中。Folia 把「找功能」这件事全部收在这里。",
+        "playerPaletteOtherWays": "不想拖也行：{{mod}} + K 在任何地方都能打开同一个窗口；触屏则先在右缘附近点一下，把手柄叫出来。",
+        "playerCommandFilter": "窗口开着就直接打字，它按名字、别名和关键词一起筛。↑↓ 选，Enter 执行 —— 不必先想清楚这条命令归在哪一类。",
+        "playerCommandArgument": "需要参数的命令不会立刻跑。打完命令名按空格，它收成输入行里的一枚标签，光标留在后面等你补参数，补完再 Enter。",
+        "playerExecuteMode": "只有输入一个冒号才进执行模式，没有别的入口。进去之后一个键跑一条命令：r 打乱队列、v 音量、o 设置、h 帮助。",
+        "playerShuffleNoSwitch": "Folia 没有「随机播放」这个开关。控制条上找不到它，是因为它不是一个常开的模式，而是一次动作：把当前队列原地洗一次牌。",
+        "playerShuffleHow": "最快的做法是 {{mod}} + K 打开命令窗口，输入一个冒号进执行模式，再按 r。洗完顺序就定下来了，想换个顺序就再来一次。",
+        "playerShuffleSlot": "如果你常用它，把「随机队列」放进控制条右边那两个位置之一，以后按一下就行。",
         "lattice": "Lattice 把整条播放队列铺成一面海报墙。你可以在墙上移动查看队列，并选中海报来操作那首歌。",
         "latticeWall": "Lattice 将播放队列循环铺成不规则海报墙；同一首歌可在墙的不同位置重复出现，以便连续平移。当前歌曲有编号和状态标记。",
         "latticeBack": "左上角返回上一页。Ctrl/Cmd+B 也会关闭 Lattice；Esc 会先取消海报展开或键盘焦点，再在第二次返回。",
@@ -3034,9 +3082,9 @@ export default {
         "latticeTools": "右下角工具依次提供：聚焦当前歌曲、切歌时自动跟随、打开队列命令、灯光开关与快捷键说明；向左滑这个按钮会打开命令面板。",
         "latticeLights": "灯光关闭后海报退暗，只保留必要层次；这是显示设置，不会暂停播放或修改队列。",
         "latticePosterKeys": "海报未展开时 Enter/Space 都会展开；展开后 Enter 播放或暂停，Space 显隐控制，Esc 先收起并清除焦点。",
-        "latticePageKeys": "Shift+;+C 聚焦当前歌曲，Ctrl/Cmd+P 打开队列，Ctrl/Cmd+B 返回，S 打开命令面板；方向键负责海报焦点。",
+        "latticePageKeys": "Shift+;+C 聚焦当前歌曲，{{mod}} + P 打开队列，{{mod}} + B 返回，{{mod}} + K 打开命令窗口；方向键负责海报焦点。",
         "help": "Folia 把浏览、播放、命令和设置分开。Ctrl+G 会解释当前最上层的页面；某个组件有特殊操作时，它还会提供独立的思索教程。",
-        "helpCommands": "按 S 可以搜索全部命令和设置。对于藏得较深的选项，直接搜索名称通常比记住它在哪一级更快。",
+        "helpCommands": "{{mod}} + K 可以搜索全部命令和设置。对于藏得较深的选项，直接搜名称通常比记住它在哪一级更快。",
         "helpOperatingModel": "在网格里选择音乐，播放则独立持续在 Player 或 Lattice 中。底部控制条在各页负责播放控制，帮助和设置是覆盖在当前页面之上的窗口。",
         "settings": "左侧按外观、界面、播放、交互、集成、存储、桌面和实验室分组；右侧显示当前分组里的具体设置。",
         "settingsDirectNavigation": "不必逐层翻找：在命令面板搜索设置名称，Folia 会直接打开对应分组并滚到准确位置。"
@@ -3058,6 +3106,20 @@ export default {
         "volumeIntro": "Folia 没有常驻的音量滑块。",
         "volumeOpens": "按这里打开的是命令面板里的音量面板，不是就地弹一个小滑块。"
       },
+      "commandPalette": {
+        "type": "命令是搜出来的，不是翻出来的。窗口一开就打字，它按名字、别名和关键词一起筛；记不住全名，记得一半也找得到。",
+        "run": "↑↓ 在结果里移动，Enter 执行当前这条。最近用过的会排在前面，常用的那几条越用越靠上。",
+        "pill": "有些命令需要一个参数。打完命令名按空格，它收成输入行里的一枚标签，窗口留在原地继续等参数 —— 你不会被弹到另一个界面去。",
+        "flags": "带标志的命令在你输入 -- 时会把自己的选项列出来。不必记有哪些标志，输入两个减号就是在问它。",
+        "executeEnter": "输入一个冒号进执行模式。只有这一条路能进去 —— 没有按钮，也没有别的快捷键。",
+        "executeKeys": "进去之后一个键就是一条命令：r 打乱队列、v 音量、o 设置、h 帮助。这些键互不构成前缀，所以按完立即执行。"
+      },
+      "sidePanel": {
+        "cover": "面板最上面是当前歌曲的封面，指针悬上去会浮出针对这首歌的操作。",
+        "tabs": "封面下面这一排是标签页：封面、控制、队列、账号；来源不同还会多出本地、Navidrome 或歌词页。它们是同一块地方的几副面孔，换页不会挪走面板。",
+        "queue": "队列页列出当前播放队列，可以拖动排序、移除，或直接跳到某一首。",
+        "controls": "控制页放的是需要边听边调的东西：均衡器、音量增益、歌词时间轴偏移。"
+      },
       "panelSlide": {
         "grabbed": "按住这个按钮不放，它背后的滑轨就亮起来了。",
         "intro": "这个按钮底下藏着一条滑轨。按住它，滑轨就会显出来。",
@@ -3066,7 +3128,7 @@ export default {
         "hotspotIntro": "触屏上没有悬停这回事，所以屏幕边缘本身就是入口。",
         "hotspotRevealed": "在右边缘附近点一下，手柄会自己出来。",
         "keyboardIntro": "也可以完全不用指针。",
-        "keyboardOutcome": "直接按 S，打开的是同一个面板。"
+        "keyboardOutcome": "直接按 {{mod}} + K，打开的是同一个窗口。"
       }
     }
   }

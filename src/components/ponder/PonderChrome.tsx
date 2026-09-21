@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { PonderKeyCombo } from './PonderKeyCap';
 import type { PonderStageNodes } from './ponderStageNodes';
 
 // src/components/ponder/PonderChrome.tsx
@@ -33,6 +34,18 @@ type PonderChromeProps = {
     isDaylight: boolean;
 };
 
+/**
+ * 外框底下那行图例。键和它的说明成对出现，顺序按「播放时最先要用到的」排。
+ *
+ * 写在组件外面是因为它是一张固定的表，不随任何 props 变；也免得每次渲染重建一遍数组。
+ */
+const LEGEND = [
+    { combo: '← →', labelKey: 'ponder.legend.keyframe' },
+    { combo: '[ ]', labelKey: 'ponder.legend.chapter' },
+    { combo: 'Space', labelKey: 'ponder.legend.pause' },
+    { combo: 'Esc', labelKey: 'ponder.legend.exit' },
+];
+
 const PonderChrome: React.FC<PonderChromeProps> = ({
     title,
     sceneTitle,
@@ -56,6 +69,7 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
     const text = isDaylight ? '#27272a' : '#fafafa';
     const muted = isDaylight ? 'rgba(24, 24, 27, 0.55)' : 'rgba(255, 255, 255, 0.55)';
     const track = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.14)';
+    const capSurface = isDaylight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.08)';
     const hover = isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10';
 
     const iconButton = `rounded-full p-2 transition-colors ${hover}`;
@@ -170,8 +184,15 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
                         </div>
                     </div>
 
-                    <div className="text-center text-[11px]" style={{ color: muted }}>
-                        {t('ponder.keyLegend')}
+                    {/* 图例：键画成键帽，说明是说明。以前是一整行用「·」挤在一起的纯文字，
+                        读者得自己分辨哪几个字是键、哪几个字是在讲它干什么。 */}
+                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px]">
+                        {LEGEND.map(entry => (
+                            <span key={entry.labelKey} className="inline-flex items-center gap-1.5">
+                                <PonderKeyCombo combo={entry.combo} accent={track} surface={capSurface} text={text} />
+                                <span style={{ color: muted }}>{t(entry.labelKey)}</span>
+                            </span>
+                        ))}
                     </div>
                 </div>
             </div>

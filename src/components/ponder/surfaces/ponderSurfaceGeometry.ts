@@ -156,3 +156,31 @@ export const PLAYER_BAR_GEOMETRY = {
     primarySlot: { left: 0.856, top: 0.30, width: 0.046, square: true },
     secondarySlot: { left: 0.914, top: 0.30, width: 0.046, square: true },
 } satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 播放页，坐标系是 page。
+ *
+ * 真实的播放页是整屏：可视化和歌词铺满，控制条浮在底部中间，侧边手柄贴右缘且和控制条同高。
+ * 这里照这个关系摆，位置才讲得出「在哪」。
+ */
+export const PLAYER_PAGE_GEOMETRY = {
+    lyrics: { left: 0.10, right: 0.34, top: 0.16, bottom: 0.30 },
+    // 收窄到 60%，和真实那条一样：再宽就会压到右缘手柄背后那条滑轨上。
+    bar: { left: 0.20, right: 0.20, bottom: 0.06, height: 0.14 },
+    /** 侧边手柄贴右缘，底边和控制条对齐。 */
+    toggle: { right: 0.03, bottom: 0.065, width: 0.058, square: true },
+    /** 手柄背后向左伸出的滑轨，长度是手柄的两倍。 */
+    track: { right: 0.03, bottom: 0.065, width: 0.116, height: 0.125 },
+    /** 手柄上方展开的控制面板。 */
+    panel: { right: 0.03, bottom: 0.225, width: 0.25, height: 0.60 },
+    /** 命令窗口：水平居中，顶在 18vh 上。 */
+    palette: { left: 0.19, right: 0.19, top: 0.14, height: 0.46 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 右侧展开的控制面板，坐标系是面板自身。 */
+export const SIDE_PANEL_GEOMETRY = {
+    cover: { left: 0.08, right: 0.08, top: 0.05, square: true },
+    meta: { left: 0.08, right: 0.08, top: 0.60, height: 0.09 },
+    tabs: { left: 0.08, right: 0.08, top: 0.73, height: 0.09 },
+    body: { left: 0.08, right: 0.08, top: 0.85, bottom: 0.05 },
+} satisfies Record<string, PonderRelativeRect>;

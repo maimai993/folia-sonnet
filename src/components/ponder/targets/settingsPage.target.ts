@@ -43,7 +43,7 @@ export default {
                 },
             },
             steps: [
-                { kind: 'keypress', id: 'openPalette', keys: ['S'], at: 'bottom', durationMs: 1200, keyframe: true },
+                { kind: 'keypress', id: 'openPalette', keys: ['Mod K'], at: 'bottom', durationMs: 1200, keyframe: true },
                 { kind: 'reveal', id: 'showPalette', anchor: 'palette', transition: 'zoom', durationMs: 520 },
                 { kind: 'caption', id: 'directNavigation', at: 'bottom', textKey: 'ponder.captions.pages.settingsDirectNavigation', pointTo: { anchor: 'palette', y: 1 }, durationMs: 4300, withPrevious: true },
                 { kind: 'pause', id: 'readDirectNavigation' },

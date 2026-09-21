@@ -25,8 +25,8 @@ export type PonderTargetId =
     | 'lattice-page'
     | 'help-page'
     | 'settings-page'
-    | 'player-bar'
-    | 'bottom-ui-settings';
+    | 'command-palette'
+    | 'side-panel';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -113,7 +113,8 @@ export type PonderSurfaceKind =
     | 'help-page'
     | 'settings-page'
     | 'player-bar'
-    | 'bottom-ui-settings';
+    | 'bottom-ui-settings'
+    | 'side-panel';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

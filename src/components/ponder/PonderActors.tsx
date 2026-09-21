@@ -5,6 +5,7 @@ import { pickCaptionSpot } from '../../utils/ponder/captionPlacement';
 import type { PonderRect, PonderTimelinePlan } from '../../types/ponder';
 import type { PonderStageNodes } from './ponderStageNodes';
 import PonderCaptionPointers from './PonderCaptionPointers';
+import { PonderKeyCombo, ponderModifierLabel } from './PonderKeyCap';
 
 // src/components/ponder/PonderActors.tsx
 // 会动的那几个：光标、按下时的扩散圈、字幕、按键胶片。
@@ -113,7 +114,7 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
                             }
                             : { opacity: 0, backgroundColor: captionSurface, color: chipText }}
                     >
-                        {t(step.textKey)}
+                        {t(step.textKey, { mod: ponderModifierLabel })}
                     </div>
                 );
             })}
@@ -134,13 +135,7 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
                         style={point ? { left: point.x, top: point.y, opacity: 0 } : { opacity: 0 }}
                     >
                         {step.keys.map(key => (
-                            <kbd
-                                key={key}
-                                className="rounded-md border px-2 py-1 text-xs font-medium shadow-sm"
-                                style={{ backgroundColor: chipSurface, color: chipText, borderColor: accent }}
-                            >
-                                {key}
-                            </kbd>
+                            <PonderKeyCombo key={key} combo={key} accent={accent} surface={chipSurface} text={chipText} />
                         ))}
                     </div>
                 );

@@ -73,7 +73,7 @@ export default {
         {
             id: 'grid-view-page-filter', titleKey: 'ponder.scenes.gridViewPageFilter', anchors,
             steps: [
-                { kind: 'keypress', id: 'filterKey', keys: ['Ctrl F'], at: { anchor: 'filter', y: 1, offset: { y: 8 } }, durationMs: 850, keyframe: true },
+                { kind: 'keypress', id: 'filterKey', keys: ['Mod F'], at: { anchor: 'filter', y: 1, offset: { y: 8 } }, durationMs: 850, keyframe: true },
                 { kind: 'surfaceState', id: 'filterResult', anchor: 'page', state: 'filter-open', transition: 'slide-up', durationMs: 560 },
                 { kind: 'caption', id: 'filterCaption', at: 'bottom', textKey: 'ponder.captions.pages.gridViewFilter', pointTo: { anchor: 'filter' }, durationMs: 4700, withPrevious: true },
                 { kind: 'pause', id: 'filterRead' },

@@ -5,6 +5,8 @@ import PonderGridPageSurface from './surfaces/PonderGridPageSurface';
 import PonderGridViewPageSurface from './surfaces/PonderGridViewPageSurface';
 import PonderLatticePageSurface from './surfaces/PonderLatticePageSurface';
 import PonderPlayerBarSurface from './surfaces/PonderPlayerBarSurface';
+import PonderPlayerPageSurface from './surfaces/PonderPlayerPageSurface';
+import PonderSidePanelSurface from './surfaces/PonderSidePanelSurface';
 import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
@@ -168,17 +170,7 @@ const PageContents: React.FC<{
     }
 
     if (kind === 'player-page') {
-        return (
-            <div className="absolute inset-0 flex flex-col items-center justify-between p-[5%]">
-                <div className="h-[8%] w-[28%] rounded-full" style={{ backgroundColor: line }} />
-                <div className="aspect-square h-[52%] rounded-[12%] border" style={{ borderColor: outline, backgroundColor: accent, opacity: 0.45 }} />
-                <div className="flex h-[13%] w-full items-center gap-[4%] rounded-full border px-[5%]" style={{ borderColor: outline }}>
-                    <span className="h-[28%] flex-1 rounded-full" style={{ backgroundColor: line }} />
-                    <span className="aspect-square h-[58%] rounded-full" style={{ backgroundColor: line }} />
-                    <span className="aspect-square h-[58%] rounded-full" style={{ backgroundColor: line }} />
-                </div>
-            </div>
-        );
+        return <PonderPlayerPageSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />;
     }
 
     if (kind === 'settings-page') {
@@ -241,6 +233,8 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderPlayerBarSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : isPageSurfaceKind(resolvedKind)
         ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} registerStateNode={registerStateNode} />
+        : resolvedKind === 'side-panel'
+        ? <PonderSidePanelSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'bottom-ui-settings'
         ? <BottomUiSettingsContents line={line} outline={outline} accent={accent} />
         : resolvedKind === 'picker'

@@ -26,7 +26,8 @@ const allKeys = (): string[] => {
     [
         'ponder.title', 'ponder.hintCapsule', 'ponder.hintCapsulePage', 'ponder.hintCapsuleHold', 'ponder.sceneCounter',
         'ponder.prevScene', 'ponder.nextScene', 'ponder.playPause', 'ponder.replay',
-        'ponder.exit', 'ponder.keyLegend', 'ponder.seekKeyframe',
+        'ponder.exit', 'ponder.seekKeyframe',
+        'ponder.legend.keyframe', 'ponder.legend.chapter', 'ponder.legend.pause', 'ponder.legend.exit',
         'options.ponderHints', 'options.ponderHintsDesc',
         'options.ponderHintsAlways', 'options.ponderHintsUnseen', 'options.ponderHintsOff',
     ].forEach(key => keys.add(key));

@@ -35,7 +35,7 @@ export default {
             titleKey: 'ponder.scenes.helpPageCommands',
             anchors: surface('ponder.anchors.pages.commandPalette', 'palette', true),
             steps: [
-                { kind: 'keypress', id: 'openPalette', keys: ['S'], at: 'bottom', durationMs: 1200, keyframe: true },
+                { kind: 'keypress', id: 'openPalette', keys: ['Mod K'], at: 'bottom', durationMs: 1200, keyframe: true },
                 { kind: 'reveal', id: 'showPalette', anchor: 'page', transition: 'zoom', durationMs: 520 },
                 { kind: 'caption', id: 'commands', at: 'bottom', textKey: 'ponder.captions.pages.helpCommands', pointTo: { anchor: 'page', y: 1 }, durationMs: 4300, withPrevious: true },
                 { kind: 'pause', id: 'readCommands' },

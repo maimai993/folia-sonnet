@@ -2888,7 +2888,12 @@ export default {
     "replay": "Replay from the start",
     "exit": "Esc to exit",
     "seekKeyframe": "Jump to keyframe {{index}}",
-    "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] chapter  \u00b7  Space pause  \u00b7  Esc exit",
+    "legend": {
+      "keyframe": "Keyframe",
+      "chapter": "Chapter",
+      "pause": "Pause",
+      "exit": "Exit"
+    },
     "actions": {
       "openBottomUiSettings": "Open bottom UI settings",
       "openSlotPicker": "Go pick the buttons"
@@ -2902,6 +2907,26 @@ export default {
         "help": "Help",
         "settings": "Options",
         "commandPalette": "Command palette"
+      },
+      "playerPage": {
+        "lyrics": "Lyrics and visualizer",
+        "bar": "Bottom control bar",
+        "toggle": "Side handle",
+        "track": "Hidden slide track",
+        "panel": "Control panel",
+        "palette": "Command window"
+      },
+      "commandPalette": {
+        "input": "Input line",
+        "results": "Result list",
+        "firstResult": "Current result"
+      },
+      "sidePanel": {
+        "panel": "Control panel",
+        "cover": "Current artwork",
+        "meta": "Track info",
+        "tabs": "Tabs",
+        "body": "Current tab"
       },
       "playerBar": {
         "play": "Play / pause",
@@ -2956,6 +2981,8 @@ export default {
       "gridPage": "Poster grid page",
       "gridViewPage": "Collection grid page",
       "playerPage": "Player page",
+      "commandPalette": "Command window",
+      "sidePanel": "Side control panel",
       "latticePage": "Lattice page",
       "helpPage": "Help page",
       "settingsPage": "Options page"
@@ -2976,7 +3003,15 @@ export default {
       "gridViewPageInfo": "Collection info and batch actions",
       "gridViewPageFilter": "Filter the current collection",
       "gridViewPageActivate": "Open or play a card",
-      "playerPageOverview": "How the player is organized",
+      "playerPageLayout": "What is on the page, and where",
+      "playerPageOpenPalette": "Summon the command window",
+      "playerPageRunCommands": "Running a command",
+      "playerPageShuffle": "FAQ: how to shuffle",
+      "commandPaletteSearch": "Search it, press Enter",
+      "commandPaletteArgument": "Giving a command an argument",
+      "commandPaletteExecuteMode": "Colon enters execute mode",
+      "sidePanelStructure": "What is in the panel",
+      "sidePanelTabs": "Switching tabs",
       "latticePageOverview": "How Lattice is organized",
       "latticePageStructure": "Queue wall, back, and tools",
       "latticePageNavigation": "Move focus across the endless wall",
@@ -3012,7 +3047,7 @@ export default {
         "gridMap": "The All button opens GridMap for a dense overview. Click to select and activate to enter; Ctrl/Cmd+F or typing in GridMap filters collections.",
         "gridSearchResult": "Submitting the header search opens a separate song workspace. Results can be played, opened by artist or album, or added to the queue.",
         "gridCardKeys": "Left and Right change the centered poster; Enter opens it. Wheel and horizontal drag perform the same focus movement.",
-        "gridPageKeys": "S opens the command palette, as does Ctrl/Cmd+K. Ctrl/Cmd+B enters Lattice when a queue exists; Ctrl/Cmd+G opens this page Ponder.",
+        "gridPageKeys": "{{mod}} + K opens the command window, {{mod}} + B enters Lattice when a queue exists, and Ctrl + G opens Ponder for this page.",
         "gridView": "A collection grid contains the songs, albums, or artists inside the card you opened. Back returns to the parent grid without losing your place.",
         "gridViewActions": "Select a card to play or open it. The page actions also expose play-all, queue, editing, and collection-specific tools when available.",
         "gridViewBack": "The top-left button leaves this collection and clears its transient navigation record. Escape also returns when no inner state remains.",
@@ -3024,7 +3059,20 @@ export default {
         "gridViewFilter": "Ctrl/Cmd+F or typing opens this collection's filter. Add --play to play matches or --add to enqueue them; Escape clears and closes it.",
         "gridViewActivate": "Pressing a song card plays it; artist and album text are separate links. In edit mode, card actions become selection or removal tools.",
         "gridViewKeys": "Enter activates the focused card. Escape closes inner state, then clears focus, then returns one level.",
-        "player": "This page keeps the current song in the center. Playback controls stay along the bottom, and the side handle opens the command palette or player panel.",
+        "playerLayout": "The player page is full screen: lyrics and the visualizer fill the background, and only three things are pressable \u2014 the control bar at the bottom centre, the handle on the right edge, and the panel that handle opens.",
+        "playerLyrics": "The middle is lyrics and the visualizer. It is not a control: clicking it is clicking the background, which only shows or hides the control bar. It does not pause.",
+        "playerBarWhere": "The control bar floats at the bottom centre, not flush with the edge. Play/pause is at its left end, the title and progress bar in the middle, and the two places on the right hold whatever you choose.",
+        "playerToggleWhere": "The side handle sits against the right edge of the screen, its bottom aligned with the control bar. It is a round button; press it and the side control panel opens.",
+        "playerPanelWhere": "The panel grows upward from the handle, at a fixed width against the right edge. Artwork on top, then track info and a row of tabs \u2014 artwork, controls, queue and account are several faces of one place.",
+        "playerPaletteSlide": "There is also a track hidden behind the handle. Hold the handle, drag it left past the trigger line and let go: that opens the command window, not the panel.",
+        "playerPaletteOpened": "The command window drops in from the top, horizontally centred. Everything to do with finding a feature lives in here.",
+        "playerPaletteOtherWays": "You do not have to drag: {{mod}} + K opens the same window from anywhere, and on a touch screen a tap near the right edge brings the handle out first.",
+        "playerCommandFilter": "With the window open, just type. It filters on names, aliases and keywords together. \u2191\u2193 to move, Enter to run \u2014 you never have to work out which category a command belongs to.",
+        "playerCommandArgument": "A command that needs an argument does not run immediately. Type its name, press space, and it folds into a pill in the input line with the cursor waiting behind it. Fill in the argument, then Enter.",
+        "playerExecuteMode": "Typing a colon is the only way into execute mode. Once in, one key runs one command: r shuffles the queue, v volume, o settings, h help.",
+        "playerShuffleNoSwitch": "Folia has no shuffle switch. You cannot find one on the control bar because shuffle is not a mode that stays on \u2014 it is a single action: deal the current queue again, in place.",
+        "playerShuffleHow": "The quickest route is {{mod}} + K for the command window, a colon for execute mode, then r. The new order then stands; run it again for another one.",
+        "playerShuffleSlot": "If you use it often, put \u201cShuffle queue\u201d in one of the two places on the right of the control bar and it becomes one press.",
         "lattice": "Lattice lays the play queue out as one poster field. Move through the field to inspect the queue, and select a poster to act on that song.",
         "latticeWall": "Lattice repeats the play queue across an irregular poster wall so it can pan continuously. The current song carries its queue number and a now-playing mark.",
         "latticeBack": "The top-left button returns. Ctrl/Cmd+B also closes Lattice; Escape first collapses a poster or clears keyboard focus, then returns on the next press.",
@@ -3035,9 +3083,9 @@ export default {
         "latticeTools": "The bottom-right tools focus the current song, follow track changes, open the queue command, switch lights, and show key help. Sliding the button left opens commands.",
         "latticeLights": "Lights Off dims the wall while retaining its structure. It is only a display setting: playback and queue order are unchanged.",
         "latticePosterKeys": "Enter or Space expands a closed poster. Once open, Enter plays or pauses, Space toggles controls, and Escape collapses and clears focus first.",
-        "latticePageKeys": "Shift+;+C focuses the current song, Ctrl/Cmd+P opens the queue, Ctrl/Cmd+B returns, and S opens commands. Arrow keys move poster focus.",
+        "latticePageKeys": "Shift+;+C focuses the current song, {{mod}} + P opens the queue, {{mod}} + B goes back, {{mod}} + K opens the command window; arrow keys move poster focus.",
         "help": "Folia separates browsing, playback, commands, and options. Ctrl+G explains the page currently in front of you; component guides appear separately when that component has special behavior.",
-        "helpCommands": "Press S to search every command and setting. Commands are also the quickest way to reach a deeply nested option without remembering where it lives.",
+        "helpCommands": "{{mod}} + K searches every command and setting. For options buried deep, searching the name is usually faster than remembering which level it sits on.",
         "helpOperatingModel": "Choose music in a grid, then playback continues independently in Player or Lattice. The bottom bar controls transport everywhere; Help and Options are overlays above the current page.",
         "settings": "The left side groups options by appearance, interface, playback, interaction, integrations, storage, desktop, and labs. The right side contains the settings in the selected group.",
         "settingsDirectNavigation": "You rarely need to browse every category: search the setting name in the command palette and Folia opens the exact section and anchor."
@@ -3059,6 +3107,20 @@ export default {
         "volumeIntro": "Folia has no permanent volume slider.",
         "volumeOpens": "Pressing here opens the volume surface inside the command palette, rather than a little slider in place."
       },
+      "commandPalette": {
+        "type": "Commands are searched for, not browsed to. Type as soon as the window opens and it filters on names, aliases and keywords together; half a name is usually enough.",
+        "run": "\u2191\u2193 moves through the results, Enter runs the current one. Recently used commands sort to the top, so the handful you actually use keeps rising.",
+        "pill": "Some commands take an argument. Type the name, press space, and it folds into a pill in the input line while the window stays put waiting for the rest \u2014 you are never thrown into another screen.",
+        "flags": "A command with flags lists its own options the moment you type --. You do not have to remember which flags exist; two dashes is how you ask.",
+        "executeEnter": "Type a colon to enter execute mode. That is the only way in \u2014 there is no button and no other shortcut.",
+        "executeKeys": "Inside, one key is one command: r shuffles the queue, v volume, o settings, h help. No key is a prefix of another, so a press runs straight away."
+      },
+      "sidePanel": {
+        "cover": "The artwork for the current song sits at the top of the panel; hover it and the actions for that song appear.",
+        "tabs": "Below the artwork is the tab row: artwork, controls, queue, account \u2014 plus local, Navidrome or lyrics depending on the source. They are faces of one place; switching does not move the panel.",
+        "queue": "The queue tab lists the current play queue. Drag to reorder, remove, or jump straight to a song.",
+        "controls": "The controls tab holds what you adjust while listening: equalizer, gain, lyric timeline offset."
+      },
       "panelSlide": {
         "grabbed": "Press and hold the button. The track behind it lights up.",
         "intro": "This button hides a track. Press and hold it, and the track appears.",
@@ -3067,7 +3129,7 @@ export default {
         "hotspotIntro": "On a touch screen there is nothing to hover, so the edge itself is the affordance.",
         "hotspotRevealed": "Tap near the right edge and the handle comes out on its own.",
         "keyboardIntro": "No pointer needed either.",
-        "keyboardOutcome": "A bare S opens the same palette."
+        "keyboardOutcome": "Press {{mod}} + K and the same window opens."
       }
     }
   }

@@ -99,7 +99,7 @@ export default {
                 { kind: 'keypress', id: 'cardKeys', keys: ['←', '→', 'Enter'], at: { anchor: 'shelf', y: 0.12 }, durationMs: 1200, keyframe: true },
                 { kind: 'caption', id: 'cardKeysCaption', at: 'bottom', textKey: 'ponder.captions.pages.gridCardKeys', pointTo: { anchor: 'shelf', y: 0.2 }, durationMs: 3900, withPrevious: true },
                 { kind: 'pause', id: 'cardKeysRead' },
-                { kind: 'keypress', id: 'pageKeys', keys: ['S', 'Ctrl K', 'Ctrl B', 'Ctrl G'], at: 'bottom', durationMs: 1300, keyframe: true },
+                { kind: 'keypress', id: 'pageKeys', keys: ['Mod K', 'Mod B', 'Ctrl G'], at: 'bottom', durationMs: 1300, keyframe: true },
                 { kind: 'surfaceState', id: 'commandResult', anchor: 'page', state: 'command-open', transition: 'zoom', durationMs: 520, withPrevious: true },
                 { kind: 'caption', id: 'pageKeysCaption', at: 'bottom', textKey: 'ponder.captions.pages.gridPageKeys', pointTo: { anchor: 'page', x: 0.5, y: 0.42 }, durationMs: 4700, withPrevious: true },
                 { kind: 'pause', id: 'pageKeysRead' },

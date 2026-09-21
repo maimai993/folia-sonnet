@@ -877,7 +877,7 @@ export default {
     "welcome": "Selamat datang di Folia",
     "lattice": "Kolase antrean",
     "latticeLabel": "Kolase antrean",
-    "latticeBack": "Kembali",
+    "latticeBack": "Tombol kiri atas kembali. {{mod}} + B juga menutup Lattice; Escape lebih dulu menutup poster atau fokus, lalu kembali pada tekanan berikutnya.",
     "latticePlay": "PUTAR",
     "latticeFocusCurrent": "Fokus lagu saat ini",
     "latticeAutoFocusOnSongChange": "Fokus otomatis saat lagu berganti",
@@ -2820,7 +2820,12 @@ export default {
     "replay": "Ulang dari awal",
     "exit": "Esc untuk keluar",
     "seekKeyframe": "Lompat ke keyframe {{index}}",
-    "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] bab  \u00b7  Spasi jeda  \u00b7  Esc keluar",
+    "legend": {
+      "keyframe": "Keyframe",
+      "chapter": "Bab",
+      "pause": "Jeda",
+      "exit": "Keluar"
+    },
     "actions": {
       "openBottomUiSettings": "Buka pengaturan UI bawah",
       "openSlotPicker": "Pilih tombolnya"
@@ -2834,6 +2839,26 @@ export default {
         "help": "Bantuan",
         "settings": "Opsi",
         "commandPalette": "Palette perintah"
+      },
+      "playerPage": {
+        "lyrics": "Lirik dan visualizer",
+        "bar": "Bilah kontrol bawah",
+        "toggle": "Pegangan samping",
+        "track": "Rel tersembunyi",
+        "panel": "Panel kontrol",
+        "palette": "Jendela perintah"
+      },
+      "commandPalette": {
+        "input": "Baris masukan",
+        "results": "Daftar hasil",
+        "firstResult": "Hasil aktif"
+      },
+      "sidePanel": {
+        "panel": "Panel kontrol",
+        "cover": "Sampul saat ini",
+        "meta": "Info lagu",
+        "tabs": "Tab",
+        "body": "Isi tab aktif"
       },
       "playerBar": {
         "play": "Putar / jeda",
@@ -2888,6 +2913,8 @@ export default {
       "gridPage": "Halaman kisi poster",
       "gridViewPage": "Halaman kisi koleksi",
       "playerPage": "Halaman pemutar",
+      "commandPalette": "Jendela perintah",
+      "sidePanel": "Panel kontrol kanan",
       "latticePage": "Halaman Lattice",
       "helpPage": "Halaman Bantuan",
       "settingsPage": "Halaman Opsi"
@@ -2908,7 +2935,15 @@ export default {
       "gridViewPageInfo": "Info koleksi dan tindakan massal",
       "gridViewPageFilter": "Filter koleksi saat ini",
       "gridViewPageActivate": "Buka atau putar kartu",
-      "playerPageOverview": "Susunan pemutar",
+      "playerPageLayout": "Apa saja di halaman ini, dan di mana",
+      "playerPageOpenPalette": "Memanggil jendela perintah",
+      "playerPageRunCommands": "Menjalankan sebuah perintah",
+      "playerPageShuffle": "FAQ: cara mengacak",
+      "commandPaletteSearch": "Cari, lalu Enter",
+      "commandPaletteArgument": "Memberi perintah sebuah argumen",
+      "commandPaletteExecuteMode": "Titik dua masuk mode eksekusi",
+      "sidePanelStructure": "Isi panel",
+      "sidePanelTabs": "Berganti tab",
       "latticePageOverview": "Susunan Lattice",
       "latticePageStructure": "Dinding antrean, kembali, dan alat",
       "latticePageNavigation": "Pindahkan fokus di dinding tanpa akhir",
@@ -2941,10 +2976,10 @@ export default {
         "gridSourceActions": "Kontrol ini hanya muncul bila diperlukan sumber, seperti impor dan segarkan lokal, impor berkas daftar putar, atau muat ulang server.",
         "gridCardMove": "Seret, gulir, atau gunakan Kiri dan Kanan. Mengeklik poster di luar tengah hanya memusatkannya dan belum membukanya.",
         "gridCardOpen": "Klik poster tengah lagi atau tekan Enter untuk membuka GridView. Teks bawah selalu menjelaskan poster di tengah.",
-        "gridMap": "Tombol Semua membuka GridMap untuk ringkasan padat. Klik untuk memilih dan aktifkan untuk masuk; Ctrl/Cmd+F atau mengetik di GridMap memfilter koleksi.",
+        "gridMap": "Tombol Semua membuka GridMap untuk ringkasan padat. Klik untuk memilih dan aktifkan untuk masuk; {{mod}} + F atau mengetik di GridMap memfilter koleksi.",
         "gridSearchResult": "Mengirim pencarian header membuka ruang kerja lagu terpisah. Hasil dapat diputar, dibuka lewat artis atau album, atau ditambahkan ke antrean.",
         "gridCardKeys": "Kiri dan Kanan mengganti poster tengah; Enter membukanya. Gulir dan seret horizontal melakukan perpindahan fokus yang sama.",
-        "gridPageKeys": "S membuka palette perintah, begitu juga Ctrl/Cmd+K. Ctrl/Cmd+B masuk Lattice saat ada antrean; Ctrl/Cmd+G membuka Ponder halaman ini.",
+        "gridPageKeys": "{{mod}} + K membuka jendela perintah, {{mod}} + B masuk Lattice saat ada antrean, dan Ctrl + G membuka Ponder halaman ini.",
         "gridView": "Kisi koleksi berisi lagu, album, atau artis dari kartu yang Anda buka. Kembali membawa Anda ke kisi induk tanpa kehilangan posisi.",
         "gridViewActions": "Pilih kartu untuk memutar atau membukanya. Tindakan halaman juga menyediakan putar semua, antrean, penyuntingan, dan alat khusus koleksi bila tersedia.",
         "gridViewBack": "Tombol kiri atas meninggalkan koleksi dan membersihkan catatan navigasi sementara. Escape juga kembali bila tidak ada keadaan dalam.",
@@ -2953,10 +2988,23 @@ export default {
         "gridViewPan": "Seret ruang kosong untuk memindahkan kisi; sentuhan bekerja sama. Tombol dan tautan artis atau album di kartu tidak memicu geser.",
         "gridViewFocus": "Tombol panah mencari kartu terdekat dalam arah ruang dan memfokuskannya. Fokus diingat agar kembali tidak melompat ke awal.",
         "gridViewInfo": "Tekan judul untuk gambar, pembuat, dan deskripsi, lalu Putar Semua, Tambah ke Antrean, serta tindakan edit, pindai ulang, atau ekspor.",
-        "gridViewFilter": "Ctrl/Cmd+F atau mengetik membuka filter koleksi. Tambahkan --play untuk memutar hasil atau --add untuk mengantrekannya; Escape membersihkan dan menutup.",
+        "gridViewFilter": "{{mod}} + F atau mengetik membuka filter koleksi. Tambahkan --play untuk memutar hasil atau --add untuk mengantrekannya; Escape membersihkan dan menutup.",
         "gridViewActivate": "Menekan kartu lagu memutarnya; teks artis dan album adalah tautan terpisah. Dalam mode edit, tindakan kartu menjadi pilih atau hapus.",
         "gridViewKeys": "Enter mengaktifkan kartu terfokus. Escape menutup keadaan dalam, lalu membersihkan fokus, lalu kembali satu tingkat.",
-        "player": "Halaman ini menempatkan lagu saat ini di tengah. Kontrol pemutaran berada di bawah, dan pegangan samping membuka command palette atau panel pemutar.",
+        "playerLayout": "Halaman pemutar memenuhi layar: lirik dan visualizer mengisi latar, dan hanya tiga hal yang bisa ditekan \u2014 bilah kontrol di tengah bawah, pegangan di tepi kanan, dan panel yang dibuka pegangan itu.",
+        "playerLyrics": "Bagian tengah adalah lirik dan visualizer. Itu bukan kontrol: mengkliknya sama dengan mengklik latar, hanya menampilkan atau menyembunyikan bilah kontrol, bukan menjeda.",
+        "playerBarWhere": "Bilah kontrol melayang di tengah bawah, tidak menempel tepi. Putar/jeda di ujung kiri, judul dan bilah kemajuan di tengah, dan dua posisi kanan berisi apa pun pilihanmu.",
+        "playerToggleWhere": "Pegangan samping menempel di tepi kanan layar, dasarnya sejajar dengan bilah kontrol. Bentuknya bulat; tekan sekali dan panel kontrol kanan terbuka.",
+        "playerPanelWhere": "Panel tumbuh ke atas dari pegangan, lebarnya tetap dan menempel tepi kanan. Sampul di atas, lalu info lagu dan sebaris tab \u2014 sampul, kontrol, antrean, akun adalah beberapa wajah dari satu tempat.",
+        "playerPaletteSlide": "Ada juga rel yang tersembunyi di belakang pegangan. Tahan pegangan, seret ke kiri melewati garis pemicu, lalu lepaskan: itu membuka jendela perintah, bukan panel.",
+        "playerPaletteOpened": "Jendela perintah turun dari atas layar, rata tengah. Semua urusan \u201cmencari fitur\u201d ada di sini.",
+        "playerPaletteOtherWays": "Tidak perlu menyeret: {{mod}} + K membuka jendela yang sama dari mana saja; di layar sentuh, ketuk dekat tepi kanan untuk memunculkan pegangannya lebih dulu.",
+        "playerCommandFilter": "Begitu jendela terbuka, langsung ketik. Ia menyaring berdasarkan nama, alias dan kata kunci sekaligus. \u2191\u2193 memilih, Enter menjalankan \u2014 kamu tidak perlu tahu perintah itu masuk kategori apa.",
+        "playerCommandArgument": "Perintah yang butuh argumen tidak langsung jalan. Ketik namanya, tekan spasi, dan ia melipat jadi satu label di baris masukan sementara kursor menunggu di belakangnya. Isi argumennya, lalu Enter.",
+        "playerExecuteMode": "Mengetik titik dua adalah satu-satunya jalan masuk ke mode eksekusi. Di dalamnya satu tombol menjalankan satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan.",
+        "playerShuffleNoSwitch": "Folia tidak punya sakelar acak. Kamu tidak menemukannya di bilah kontrol karena acak bukan mode yang menyala terus \u2014 ia satu tindakan: mengocok ulang antrean saat ini di tempat.",
+        "playerShuffleHow": "Cara tercepat: {{mod}} + K untuk jendela perintah, titik dua untuk mode eksekusi, lalu r. Urutan barunya langsung berlaku; jalankan lagi untuk urutan lain.",
+        "playerShuffleSlot": "Kalau sering dipakai, taruh \u201cAcak antrean\u201d di salah satu dari dua posisi kanan bilah kontrol, dan ia jadi satu tekanan saja.",
         "lattice": "Lattice menyusun seluruh antrean putar sebagai satu bidang poster. Bergeraklah di bidang itu untuk melihat antrean dan pilih poster untuk bertindak pada lagu tersebut.",
         "latticeWall": "Lattice mengulang antrean di dinding poster tak beraturan agar dapat digeser terus. Lagu aktif membawa nomor antrean dan tanda sedang diputar.",
         "latticeBack": "Tombol kiri atas kembali. Ctrl/Cmd+B juga menutup Lattice; Escape lebih dulu menutup poster atau fokus, lalu kembali pada tekanan berikutnya.",
@@ -2967,9 +3015,9 @@ export default {
         "latticeTools": "Alat kanan bawah memfokuskan lagu aktif, mengikuti pergantian lagu, membuka antrean, mengatur lampu, dan menampilkan bantuan tombol. Geser ke kiri membuka perintah.",
         "latticeLights": "Lampu mati meredupkan dinding namun mempertahankan strukturnya. Ini hanya tampilan; pemutaran dan urutan antrean tidak berubah.",
         "latticePosterKeys": "Enter atau Spasi memperluas poster tertutup. Setelah terbuka, Enter memutar atau menjeda, Spasi mengubah kontrol, dan Escape menutup serta membersihkan fokus.",
-        "latticePageKeys": "Shift+;+C memfokuskan lagu aktif, Ctrl/Cmd+P membuka antrean, Ctrl/Cmd+B kembali, dan S membuka perintah. Tombol panah memindahkan fokus poster.",
+        "latticePageKeys": "Shift+;+C memfokuskan lagu aktif, {{mod}} + P membuka antrean, {{mod}} + B kembali, {{mod}} + K membuka jendela perintah; tombol panah memindahkan fokus poster.",
         "help": "Folia memisahkan penelusuran, pemutaran, perintah, dan opsi. Ctrl+G menjelaskan halaman terdepan; panduan komponen tersedia terpisah saat suatu komponen memiliki perilaku khusus.",
-        "helpCommands": "Tekan S untuk mencari semua perintah dan pengaturan. Perintah juga merupakan cara tercepat menuju opsi yang tersembunyi jauh.",
+        "helpCommands": "{{mod}} + K mencari semua perintah dan pengaturan. Untuk opsi yang tersembunyi jauh, mencari namanya biasanya lebih cepat daripada mengingat letaknya.",
         "helpOperatingModel": "Pilih musik di kisi, lalu pemutaran berlanjut secara mandiri di Player atau Lattice. Bilah bawah mengontrol pemutaran di semua halaman; Bantuan dan Opsi adalah lapisan di atas halaman saat ini.",
         "settings": "Sisi kiri mengelompokkan opsi berdasarkan tampilan, antarmuka, pemutaran, interaksi, integrasi, penyimpanan, desktop, dan lab. Sisi kanan berisi pengaturan grup terpilih.",
         "settingsDirectNavigation": "Anda tidak perlu menelusuri setiap kategori: cari nama pengaturan di palette perintah dan Folia membuka bagian serta jangkar yang tepat."
@@ -2991,6 +3039,20 @@ export default {
         "volumeIntro": "Folia tidak punya penggeser volume permanen.",
         "volumeOpens": "Menekan di sini membuka panel volume di dalam command palette, bukan penggeser kecil di tempat."
       },
+      "commandPalette": {
+        "type": "Perintah dicari, bukan ditelusuri. Ketik begitu jendela terbuka dan ia menyaring nama, alias dan kata kunci sekaligus; separuh nama biasanya sudah cukup.",
+        "run": "\u2191\u2193 berpindah di hasil, Enter menjalankan yang aktif. Perintah yang baru dipakai naik ke atas, jadi segelintir yang benar-benar kamu pakai makin mudah dijangkau.",
+        "pill": "Sebagian perintah butuh argumen. Ketik namanya, tekan spasi, dan ia melipat jadi label di baris masukan sementara jendelanya tetap di tempat menunggu sisanya \u2014 kamu tidak dilempar ke layar lain.",
+        "flags": "Perintah yang punya flag akan menampilkan opsinya sendiri begitu kamu mengetik --. Tidak perlu menghafal flag apa saja yang ada; dua tanda minus adalah cara bertanya.",
+        "executeEnter": "Ketik titik dua untuk masuk mode eksekusi. Hanya itu jalan masuknya \u2014 tidak ada tombol dan tidak ada pintasan lain.",
+        "executeKeys": "Di dalamnya satu tombol adalah satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan. Tidak ada tombol yang jadi awalan tombol lain, jadi sekali tekan langsung jalan."
+      },
+      "sidePanel": {
+        "cover": "Sampul lagu saat ini ada di bagian atas panel; arahkan penunjuk ke sana dan aksi untuk lagu itu muncul.",
+        "tabs": "Di bawah sampul ada barisan tab: sampul, kontrol, antrean, akun \u2014 ditambah lokal, Navidrome atau lirik tergantung sumbernya. Semuanya wajah dari satu tempat; berganti tab tidak memindahkan panel.",
+        "queue": "Tab antrean menampilkan antrean putar saat ini. Seret untuk menyusun ulang, hapus, atau langsung lompat ke satu lagu.",
+        "controls": "Tab kontrol berisi apa yang kamu atur sambil mendengarkan: equalizer, gain, offset linimasa lirik."
+      },
       "panelSlide": {
         "grabbed": "Tekan dan tahan tombolnya. Lintasan di belakangnya menyala.",
         "intro": "Tombol ini menyembunyikan sebuah lintasan. Tekan dan tahan, lintasannya muncul.",
@@ -2999,7 +3061,7 @@ export default {
         "hotspotIntro": "Di layar sentuh tidak ada hover, jadi tepi layar itu sendiri yang menjadi petunjuknya.",
         "hotspotRevealed": "Ketuk dekat tepi kanan dan pegangannya keluar sendiri.",
         "keyboardIntro": "Tanpa penunjuk pun bisa.",
-        "keyboardOutcome": "Cukup tekan S, palette yang sama akan terbuka."
+        "keyboardOutcome": "Tekan {{mod}} + K dan jendela yang sama terbuka."
       }
     }
   }
