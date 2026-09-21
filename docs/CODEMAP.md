@@ -51,13 +51,16 @@
 
 ### `dev/probes/registry.ts`
 
+- `dev/probes/activeGridMarker.probe.tsx`
 - `dev/probes/audioEffectGrid.probe.tsx`
 - `dev/probes/automixModelReminder.probe.tsx`
 - `dev/probes/automixModels.probe.tsx`
 - `dev/probes/automixTransitionSwitches.probe.tsx`
+- `dev/probes/collectionMorph.probe.tsx`
 - `dev/probes/coverSizeAudit.probe.tsx`
 - `dev/probes/fmTab.probe.tsx`
 - `dev/probes/globalLyricOffsetRuler.probe.tsx`
+- `dev/probes/gridEntrancePerf.probe.tsx`
 - `dev/probes/gridPanelToggle.probe.tsx`
 - `dev/probes/lattice.probe.tsx`
 - `dev/probes/latticeExit.probe.tsx`
@@ -133,6 +136,7 @@
 
 - `src/services/obs/visualSettingsConfig.ts` → `src/components/visualizer/tuningRegistry.ts`
 - `src/services/sync/settingsSnapshot.ts` → `src/components/visualizer/tuningRegistry.ts`
+- `src/stores/useCollectionNavigationStore.ts` → `src/components/app/home/gridViewCollectionAdapters.ts`
 - `src/stores/usePlaybackStore.ts` → `src/components/app/playback/createCoverUrlResolver.ts`
 - `src/stores/useSettingsModalStore.ts` → `src/components/command-palette/pinnedCommandPreferences.ts`
 - `src/stores/visualizerSettingsPersistence.ts` → `src/components/visualizer/diorama/dioramaMoteField.ts`
