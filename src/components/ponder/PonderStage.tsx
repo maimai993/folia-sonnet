@@ -6,6 +6,7 @@ import { compilePonderScene } from '../../utils/ponder/compilePonderTimeline';
 import { keyframeTicks } from '../../utils/ponder/ponderKeyframes';
 import { resolvePonderAnchors } from '../../utils/ponder/resolvePonderAnchors';
 import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
+import { refreshPonderDomRectSnapshot, type PonderDomRectSnapshot } from '../../utils/ponder/ponderDomRectSnapshot';
 import { findPonderTarget } from './ponderRegistry';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import { openSettings } from '../../stores/useSettingsModalStore';
@@ -77,6 +78,9 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     const nodesRef = useRef(createPonderStageNodes());
     const [rects, setRects] = useState<Record<string, PonderRect>>({});
     const [sampleToken, setSampleToken] = useState(0);
+    const domRectSnapshotRef = useRef<PonderDomRectSnapshot>({});
+    const snapshotTargetIdRef = useRef<string | null>(null);
+    const sampledTokenRef = useRef(-1);
 
     // 换场景或换目标时，节点表必须先清空 —— 上一场景的字幕节点已经卸载，留着会让
     // 时间线对着 detached 节点写属性。
@@ -85,19 +89,39 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     }, [session?.targetId, session?.sceneIndex]);
 
     useLayoutEffect(() => {
-        if (!scene) {
+        if (!scene || !target || !session) {
             return;
         }
         const viewport = { width: window.innerWidth, height: window.innerHeight };
+        const targetChanged = snapshotTargetIdRef.current !== session.targetId;
+        if (targetChanged) {
+            // A different target has unrelated selectors and geometry; never mix both snapshots.
+            domRectSnapshotRef.current = {};
+            snapshotTargetIdRef.current = session.targetId;
+            sampledTokenRef.current = -1;
+        }
+        if (sampledTokenRef.current !== sampleToken) {
+            // Capture every chapter now, while hover-only controls are still mounted. On resize,
+            // update what is measurable and retain the last good rect for anything now collapsed.
+            domRectSnapshotRef.current = refreshPonderDomRectSnapshot(
+                target.scenes,
+                readRect,
+                domRectSnapshotRef.current,
+            );
+            sampledTokenRef.current = sampleToken;
+        }
         // 先按真实位置解析，再把整幅图等比装进教程外框之间那条带子。
         // 必须在这里一次性做完：骨架、字幕、指向线、光标全都消费这同一份 rects，
         // 任何一处单独变换都会让它们互相错位。
         setRects(fitRectsToStage({
-            rects: resolvePonderAnchors(scene.anchors, { readRect, viewport }),
+            rects: resolvePonderAnchors(scene.anchors, {
+                readRect: selector => domRectSnapshotRef.current[selector] ?? null,
+                viewport,
+            }),
             viewport,
             chrome: CHROME_BANDS,
         }));
-    }, [scene, sampleToken]);
+    }, [scene, sampleToken, session, target]);
 
     useEffect(() => {
         if (!scene) {
