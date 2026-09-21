@@ -40,4 +40,10 @@ describe('PonderSurfaceContents', () => {
         expect(markup).toContain('data-ponder-palette-header');
         expect(markup).toContain('data-ponder-volume-track');
     });
+
+    it.each(['grid-page', 'player-page', 'lattice-page'] as const)('%s 有自己的页面轮廓', kind => {
+        const markup = renderSurface(kind);
+        expect(markup).toContain(`data-ponder-surface-kind="${kind}"`);
+        expect(markup).not.toContain('data-ponder-palette-header');
+    });
 });

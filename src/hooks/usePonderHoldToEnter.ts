@@ -9,9 +9,8 @@ import { hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
 // 等于把那个 ~38KB 的 chunk 塞回 bootstrap，正是 App.tsx:20-22 那条注释在防的事。
 // element.animate 本来也是这个仓库做这类释放反馈的手法（UnifiedPanel 的滑动回弹）。
 //
-// @note 这里有整套方案里唯一一处改变既有输入行为的地方：判定启动时会 preventDefault，
-// 所以光标停在可教学区域上时 `g` 这个字符打不出来。命令面板的输入框一直持有焦点，
-// 不这么做的话按 G 会直接在搜索框里打出一个 g。600ms 的提示胶囊是这件事的预告。
+// @note 长按 G 只属于非文本控件。输入框（包括命令面板搜索框）必须继续正常输入 g；
+// 页面级入口由 Ctrl+G 承担，因此这里不需要再从文本输入中抢走可打印字符。
 
 const HOLD_DURATION_MS = 400;
 
@@ -102,8 +101,11 @@ export const usePonderHoldToEnter = ({
 
             // 可教学性看「悬停到的元素」，是否在打字看「焦点元素」—— 两者必须分开判断，
             // 否则命令面板那种输入框长期持有焦点的情况永远进不来。
+            if (isTextEntryTarget(event.target)) {
+                return;
+            }
             const insideBlocking = Boolean(hoveredElementRef.current?.closest(BLOCKING_WINDOW_SELECTOR));
-            if (!insideBlocking && (isTextEntryTarget(event.target) || hasBlockingWindow())) {
+            if (!insideBlocking && hasBlockingWindow()) {
                 return;
             }
 

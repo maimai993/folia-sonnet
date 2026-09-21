@@ -102,9 +102,51 @@ const VolumeContents: React.FC<{ line: string; outline: string; accent: string }
     </div>
 );
 
+const PageContents: React.FC<{
+    kind: 'grid-page' | 'player-page' | 'lattice-page';
+    line: string;
+    outline: string;
+    accent: string;
+}> = ({ kind, line, outline, accent }) => {
+    if (kind === 'player-page') {
+        return (
+            <div className="absolute inset-0 flex flex-col items-center justify-between p-[5%]">
+                <div className="h-[8%] w-[28%] rounded-full" style={{ backgroundColor: line }} />
+                <div className="aspect-square h-[52%] rounded-[12%] border" style={{ borderColor: outline, backgroundColor: accent, opacity: 0.45 }} />
+                <div className="flex h-[13%] w-full items-center gap-[4%] rounded-full border px-[5%]" style={{ borderColor: outline }}>
+                    <span className="h-[28%] flex-1 rounded-full" style={{ backgroundColor: line }} />
+                    <span className="aspect-square h-[58%] rounded-full" style={{ backgroundColor: line }} />
+                    <span className="aspect-square h-[58%] rounded-full" style={{ backgroundColor: line }} />
+                </div>
+            </div>
+        );
+    }
+
+    const tileCount = kind === 'lattice-page' ? 12 : 8;
+    return (
+        <div className="absolute inset-0 flex flex-col gap-[5%] p-[5%]">
+            <div className="flex h-[9%] items-center gap-[3%]">
+                <Search className="h-full w-auto opacity-45" />
+                <span className="h-[55%] w-[38%] rounded-full" style={{ backgroundColor: line }} />
+            </div>
+            <div className={`grid min-h-0 flex-1 gap-[3%] ${kind === 'lattice-page' ? 'grid-cols-4 grid-rows-3' : 'grid-cols-4 grid-rows-2'}`}>
+                {Array.from({ length: tileCount }, (_, index) => (
+                    <span
+                        key={index}
+                        className="rounded-[10%] border"
+                        style={{ borderColor: outline, backgroundColor: index === 1 ? accent : line, opacity: index === 1 ? 0.5 : 0.8 }}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline }) => {
     const resolvedKind = kind ?? 'palette';
-    const contents = resolvedKind === 'picker'
+    const contents = resolvedKind === 'grid-page' || resolvedKind === 'player-page' || resolvedKind === 'lattice-page'
+        ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} />
+        : resolvedKind === 'picker'
         ? <PickerContents line={line} outline={outline} accent={accent} />
         : resolvedKind === 'queue'
             ? <QueueContents line={line} outline={outline} accent={accent} />

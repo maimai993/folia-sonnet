@@ -65,7 +65,6 @@ export const buildSettingsCommandContext = (
 
     return {
         openSettings: modal.openSettings,
-        setIsUserGuideModalOpen: modal.setIsUserGuideModalOpen,
         setAppLanguagePreference: modal.handleSetAppLanguagePreference,
         toggleTransparentBackground: deps.toggleTransparentBackground,
         toggleDaylightMode: deps.toggleDaylightMode,

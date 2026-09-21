@@ -192,7 +192,6 @@ export type CommandPaletteSettingsContext = {
         initialVisualizerSection?: VisualizerSettingsSection | null,
         initialAnchorId?: SettingsAnchorId | null,
     ) => void;
-    setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     toggleTransparentBackground: () => void;
     toggleDaylightMode: () => void;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
-import { X, Command, Keyboard, Loader2, Check, AlertCircle, ChevronLeft, Download, ExternalLink, CircleHelp } from 'lucide-react';
+import { X, Keyboard, Loader2, Check, AlertCircle, ChevronLeft, Download, ExternalLink, CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type ReplayGainMode, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
@@ -377,7 +377,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } = useVisualizerAssetStore(useShallow(selectVisualizerAssetSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
     const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
-    const setIsUserGuideModalOpen = useSettingsModalStore(state => state.setIsUserGuideModalOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [tabDirection, setTabDirection] = useState<'left' | 'right'>('right');
     const handleTabChange = (tab: 'help' | 'options') => {
@@ -1411,17 +1410,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                                 {/* User Guide Button */}
                                 <div className="mt-6 flex flex-wrap justify-center gap-3">
-                                    <button
-                                        onClick={() => {
-                                            setIsUserGuideModalOpen(true);
-                                            onClose();
-                                        }}
-                                        className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
-                                        style={{ color: 'var(--text-primary)' }}
-                                    >
-                                        <Command size={16} />
-                                        {t('userGuide.showGuide', 'Show User Guide')}
-                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowAiHelpPrompt(true)}

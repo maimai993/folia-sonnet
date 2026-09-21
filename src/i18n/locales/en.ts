@@ -365,7 +365,7 @@ export default {
       "playback-volume": { "title": "Volume", "description": "Adjust playback volume" },
       "playback-fm-mode": { "title": "Personal FM mode", "description": "Switch the Personal FM mode or scene" },
       "settings-help": { "title": "Open Help", "description": "Open help and shortcuts" },
-      "show-user-guide": { "title": "Show User Guide", "description": "Open the user guide tutorial" },
+      "ponder-current-page": { "title": "Ponder this page", "description": "Open the interactive guide for the current page" },
       "settings-options": { "title": "Open Options", "description": "Open the options center" },
       "settings-appearance": { "title": "Appearance settings", "description": "Open visual and appearance settings" },
       "settings-general": { "title": "General settings", "description": "Open general app preferences" },
@@ -2860,6 +2860,16 @@ export default {
     "prompt": "I am using the folia-major music player on GitHub and need help with a problem.\n\nFolia Guide: {{guideUrl}}\nFolia repository: {{repoUrl}}\n\nPlease use these references as context, then help me understand and solve the problem I describe next. If any information is missing, ask what I should provide before making uncertain assumptions."
   },
   "ponder": {
+    "openPage": "Ponder this page",
+    "componentsOnPage": "Components with their own Ponder",
+    "noComponentsOnPage": "No separate component guides on this page yet.",
+    "onboarding": {
+      "title": "Meet Ponder",
+      "description": "Press Ctrl + G now to open the guide for the page you are on.",
+      "touchDescription": "Tap the button below now to open the guide for this page.",
+      "shortcut": "Ctrl + G",
+      "required": "Try the page Ponder once to continue."
+    },
     "sceneLabel": "Chapter",
     "allChaptersDone": "That is all of them.",
     "nextChapter": "Next chapter",
@@ -2879,6 +2889,11 @@ export default {
       "openSlotPicker": "Go pick the buttons"
     },
     "anchors": {
+      "pages": {
+        "grid": "Poster grid",
+        "player": "Player",
+        "lattice": "Lattice"
+      },
       "playerBar": {
         "bar": "Bottom control bar",
         "slots": "Two slots",
@@ -2898,9 +2913,15 @@ export default {
     },
     "targets": {
       "playerBar": "Bottom control bar",
-      "panelSlide": "Side panel toggle"
+      "panelSlide": "Side panel toggle",
+      "gridPage": "Poster grid page",
+      "playerPage": "Player page",
+      "latticePage": "Lattice page"
     },
     "scenes": {
+      "gridPageOverview": "How this grid is organized",
+      "playerPageOverview": "How the player is organized",
+      "latticePageOverview": "How Lattice is organized",
       "playerBarHeight": "Its height can be changed",
       "playerBarSlots": "The two slots can be swapped",
       "playerBarShuffle": "Shuffle deals once",
@@ -2910,6 +2931,11 @@ export default {
       "panelSlideKeyboard": "Open it from the keyboard"
     },
     "captions": {
+      "pages": {
+        "grid": "This is the browsing grid: search and collection navigation live above the cards, while selecting a card opens its songs.",
+        "player": "This page keeps the current song in the center. Playback controls stay along the bottom, and the side handle opens the command palette or player panel.",
+        "lattice": "Lattice lays the play queue out as one poster field. Move through the field to inspect the queue, and select a poster to act on that song."
+      },
       "playerBar": {
         "heightIntro": "How far this bar sits from the bottom of the screen can be changed, and song cards and side panels follow it on every page.",
         "heightCommand": "Dragging it straight away does nothing. Run \"Reposition on player page\" from the command palette first, and only then does it become a thing you can drag.",

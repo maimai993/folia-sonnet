@@ -5,8 +5,10 @@ import { countRender } from '../../dev/renderCount';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { usePonderHoverProbe } from '../../hooks/usePonderHoverProbe';
 import { usePonderHoldToEnter } from '../../hooks/usePonderHoldToEnter';
+import { usePagePonderShortcut } from '../../hooks/usePagePonderShortcut';
 import { findPonderTarget } from './ponderRegistry';
 import PonderHintCapsule from './PonderHintCapsule';
+import PagePonderTouchButton from './PagePonderTouchButton';
 import type { Theme } from '../../types';
 
 // src/components/ponder/PonderHost.tsx
@@ -35,6 +37,7 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
 
     const hoveredElementRef = usePonderHoverProbe();
     usePonderHoldToEnter({ hoveredElementRef, wipeRef, labelRef, holdLabelRef });
+    usePagePonderShortcut();
 
     const target = hoveredTargetId ? findPonderTarget(hoveredTargetId) : null;
 
@@ -54,6 +57,11 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
                     />
                 )}
             </AnimatePresence>
+
+            <PagePonderTouchButton
+                accent={theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa')}
+                isDaylight={isDaylight}
+            />
 
             {hasSession && (
                 <Suspense fallback={null}>

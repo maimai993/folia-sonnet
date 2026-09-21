@@ -18,7 +18,10 @@
  */
 export type PonderTargetId =
     | 'panel-slide'
-    | 'player-bar';
+    | 'player-bar'
+    | 'grid-page'
+    | 'player-page'
+    | 'lattice-page';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -85,7 +88,7 @@ export type PonderAnchorRole =
     | 'marker';
 
 /** surface 骨架里面的界面类型；只画结构，不复制真实界面的业务状态。 */
-export type PonderSurfaceKind = 'palette' | 'picker' | 'queue' | 'volume';
+export type PonderSurfaceKind = 'palette' | 'picker' | 'queue' | 'volume' | 'grid-page' | 'player-page' | 'lattice-page';
 
 type PonderAnchorCommon = {
     /** 骨架上给这个框标的名字。不给就不标。 */
@@ -227,6 +230,8 @@ export type PonderTargetDefinition = {
      * Folia 里是另一回事」。默认 0。
      */
     priority?: number;
+    /** 页面教程可以列出本页仍有独立教程的组件，并让用户直接进入。 */
+    relatedTargetIds?: PonderTargetId[];
     scenes: PonderSceneScript[];
 };
 

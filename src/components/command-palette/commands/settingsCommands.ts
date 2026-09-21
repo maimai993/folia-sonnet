@@ -9,24 +9,25 @@ import { Gauge, Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
 import { reduceMotionSurface } from '../surfaces/reduceMotionSurface';
+import { openCurrentPagePonder } from '../../../utils/ponder/pagePonderTarget';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
 
 export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助'], 'help', null, { executeShortcut: 'h' }),
-    sleepTimerCommand,
     {
-        id: 'show-user-guide',
+        id: 'ponder-current-page',
         group: 'settings',
-        title: 'Show User Guide',
-        description: 'Open the user guide tutorial',
-        keywords: ['guide', 'help', 'tutorial', '用户指引', '指南', '帮助'],
-        execute: (_input, context) => {
-            context.settings.setIsUserGuideModalOpen(true);
+        title: 'Ponder this page',
+        description: 'Open the interactive guide for the current page',
+        keywords: ['ponder', 'guide', 'tutorial', '思索', '页面教程'],
+        execute: () => {
+            openCurrentPagePonder();
             return true;
         },
     },
+    sleepTimerCommand,
     createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项'], 'options', null, { executeShortcut: 'o' }),
     createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings', '外观', '视觉'], 'options', 'appearance'),
     createSettingsAnchorCommand('settings-theme-presets', 'Theme presets', 'Jump to the built-in and saved theme presets', ['preset theme', 'color preset', '预设主题'], 'themePresets'),

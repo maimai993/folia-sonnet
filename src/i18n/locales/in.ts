@@ -364,7 +364,7 @@ export default {
       "playback-volume": { "title": "Volume", "description": "Atur volume pemutaran" },
       "playback-fm-mode": { "title": "Mode FM Pribadi", "description": "Ganti mode atau suasana FM Pribadi" },
       "settings-help": { "title": "Buka Bantuan", "description": "Buka panduan dan pintasan" },
-      "show-user-guide": { "title": "Tampilkan Panduan Pengguna", "description": "Buka tutorial panduan pengguna" },
+      "ponder-current-page": { "title": "Ponder halaman ini", "description": "Buka panduan interaktif untuk halaman saat ini" },
       "settings-options": { "title": "Buka Opsi", "description": "Buka pusat opsi" },
       "settings-appearance": { "title": "Pengaturan tampilan", "description": "Buka pengaturan visual dan tampilan" },
       "settings-general": { "title": "Pengaturan umum", "description": "Buka preferensi aplikasi umum" },
@@ -2792,6 +2792,16 @@ export default {
     "prompt": "Saya menggunakan pemutar musik folia-major di GitHub dan perlu bantuan untuk masalah.\n\nPanduan Folia: {{guideUrl}}\nRepositori Folia: {{repoUrl}}\n\nHarap gunakan referensi ini sebagai konteks, lalu bantu saya memahami dan menyelesaikan masalah yang saya jelaskan berikutnya. Jika ada informasi yang kurang, tanyakan apa yang harus saya berikan sebelum membuat asumsi yang tidak pasti."
   },
   "ponder": {
+    "openPage": "Ponder halaman ini",
+    "componentsOnPage": "Komponen dengan Ponder sendiri",
+    "noComponentsOnPage": "Belum ada panduan komponen terpisah di halaman ini.",
+    "onboarding": {
+      "title": "Kenali mode Ponder",
+      "description": "Tekan Ctrl + G sekarang untuk membuka panduan halaman ini.",
+      "touchDescription": "Ketuk tombol di bawah untuk membuka panduan halaman ini.",
+      "shortcut": "Ctrl + G",
+      "required": "Coba Ponder halaman sekali untuk melanjutkan."
+    },
     "sceneLabel": "Bab",
     "allChaptersDone": "Semuanya sudah selesai.",
     "nextChapter": "Bab berikutnya",
@@ -2811,6 +2821,11 @@ export default {
       "openSlotPicker": "Pilih tombolnya"
     },
     "anchors": {
+      "pages": {
+        "grid": "Kisi poster",
+        "player": "Pemutar",
+        "lattice": "Lattice"
+      },
       "playerBar": {
         "bar": "Bilah kontrol bawah",
         "slots": "Dua slot",
@@ -2830,9 +2845,15 @@ export default {
     },
     "targets": {
       "playerBar": "Bilah kontrol bawah",
-      "panelSlide": "Tombol panel samping"
+      "panelSlide": "Tombol panel samping",
+      "gridPage": "Halaman kisi poster",
+      "playerPage": "Halaman pemutar",
+      "latticePage": "Halaman Lattice"
     },
     "scenes": {
+      "gridPageOverview": "Susunan kisi ini",
+      "playerPageOverview": "Susunan pemutar",
+      "latticePageOverview": "Susunan Lattice",
       "playerBarHeight": "Tingginya bisa diubah",
       "playerBarSlots": "Dua slot kanan bisa diganti",
       "playerBarShuffle": "Acak hanya sekali kocok",
@@ -2842,6 +2863,11 @@ export default {
       "panelSlideKeyboard": "Buka dari papan tombol"
     },
     "captions": {
+      "pages": {
+        "grid": "Ini adalah kisi penelusuran: pencarian dan navigasi koleksi berada di atas kartu, sedangkan memilih kartu membuka daftar lagunya.",
+        "player": "Halaman ini menempatkan lagu saat ini di tengah. Kontrol pemutaran berada di bawah, dan pegangan samping membuka command palette atau panel pemutar.",
+        "lattice": "Lattice menyusun seluruh antrean putar sebagai satu bidang poster. Bergeraklah di bidang itu untuk melihat antrean dan pilih poster untuk bertindak pada lagu tersebut."
+      },
       "playerBar": {
         "heightIntro": "Jarak bilah ini dari tepi bawah layar bisa diubah, dan kartu lagu serta panel samping ikut menyesuaikan di semua halaman.",
         "heightCommand": "Menggesernya langsung tidak berhasil. Jalankan \"Atur posisi di halaman pemutar\" dari command palette dulu, barulah ia bisa digeser.",

@@ -16,6 +16,7 @@ import PonderActors from './PonderActors';
 import PonderChrome from './PonderChrome';
 import PonderSkeletonLayer from './PonderSkeletonLayer';
 import PonderNextChapterCue from './PonderNextChapterCue';
+import PonderRelatedTargets from './PonderRelatedTargets';
 import type { PonderRect } from '../../types/ponder';
 import type { Theme } from '../../types';
 
@@ -218,6 +219,11 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                     openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
                 }}
                 theme={theme}
+                isDaylight={isDaylight}
+            />
+            <PonderRelatedTargets
+                target={target}
+                accent={theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa')}
                 isDaylight={isDaylight}
             />
             {isFinished && (

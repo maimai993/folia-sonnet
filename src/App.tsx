@@ -249,12 +249,10 @@ export default function App() {
     const {
         settingsModalState,
         lastSeenGuideVersion,
-        setLastSeenGuideVersion,
         setIsUserGuideModalOpen,
     } = useSettingsModalStore(useShallow(state => ({
         settingsModalState: state.settingsModalState,
         lastSeenGuideVersion: state.lastSeenGuideVersion,
-        setLastSeenGuideVersion: state.setLastSeenGuideVersion,
         setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     })));
     const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
@@ -286,9 +284,8 @@ export default function App() {
             lastSeenGuideVersion !== __APP_VERSION__
         ) {
             setIsUserGuideModalOpen(true);
-            setLastSeenGuideVersion(__APP_VERSION__);
         }
-    }, [lastSeenGuideVersion, setLastSeenGuideVersion, setIsUserGuideModalOpen]);
+    }, [lastSeenGuideVersion, setIsUserGuideModalOpen]);
 
     usePlaybackEntryViewPromptGate();
 

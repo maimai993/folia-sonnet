@@ -365,7 +365,7 @@ export default {
       "playback-volume": { "title": "音量条", "description": "调整播放音量" },
       "playback-fm-mode": { "title": "私人 FM 模式", "description": "切换私人 FM 的模式或场景" },
       "settings-help": { "title": "打开帮助", "description": "打开帮助和快捷键" },
-      "show-user-guide": { "title": "打开用户指引", "description": "查看应用使用指南" },
+      "ponder-current-page": { "title": "思索当前页面", "description": "打开当前页面的交互式介绍" },
       "settings-options": { "title": "打开选项", "description": "打开设置中心" },
       "settings-appearance": { "title": "外观设置", "description": "打开视觉和外观设置" },
       "settings-general": { "title": "界面设置", "description": "打开全局应用偏好" },
@@ -2859,6 +2859,16 @@ export default {
     "prompt": "我正在使用 GitHub 上的 folia-major 音乐播放器，遇到了一个问题，需要你协助排查。\n\nFolia 使用指南：{{guideUrl}}\nFolia 源码仓库：{{repoUrl}}\n\n请把这些资料作为上下文，结合我接下来描述的问题，帮我判断可能原因并给出处理步骤。如果信息不足，请先询问我需要补充什么，不要直接做不确定的假设。"
   },
   "ponder": {
+    "openPage": "思索当前页面",
+    "componentsOnPage": "本页可单独思索的组件",
+    "noComponentsOnPage": "本页暂时没有单独的组件教程。",
+    "onboarding": {
+      "title": "认识思索模式",
+      "description": "现在按 Ctrl + G，打开当前页面的介绍。",
+      "touchDescription": "现在点下面的按钮，打开当前页面的介绍。",
+      "shortcut": "Ctrl + G",
+      "required": "完成一次页面思索后才能继续。"
+    },
     "sceneLabel": "章节",
     "allChaptersDone": "全部章节都看完了。",
     "nextChapter": "下一章",
@@ -2878,6 +2888,11 @@ export default {
       "openSlotPicker": "去挑按钮"
     },
     "anchors": {
+      "pages": {
+        "grid": "海报墙",
+        "player": "播放器",
+        "lattice": "Lattice"
+      },
       "playerBar": {
         "bar": "底部控制条",
         "slots": "两个槽位",
@@ -2897,9 +2912,15 @@ export default {
     },
     "targets": {
       "playerBar": "底部控制条",
-      "panelSlide": "侧边面板开关"
+      "panelSlide": "侧边面板开关",
+      "gridPage": "海报墙页面",
+      "playerPage": "播放器页面",
+      "latticePage": "Lattice 页面"
     },
     "scenes": {
+      "gridPageOverview": "海报墙如何组织",
+      "playerPageOverview": "播放器如何组织",
+      "latticePageOverview": "Lattice 如何组织",
       "playerBarHeight": "整条的高度可以改",
       "playerBarSlots": "右边两个位置可以换",
       "playerBarShuffle": "随机只洗一次牌",
@@ -2909,6 +2930,11 @@ export default {
       "panelSlideKeyboard": "用键盘打开"
     },
     "captions": {
+      "pages": {
+        "grid": "这是浏览用的海报墙：搜索和歌单导航在卡片上方，选中一张卡片就会进入它的歌曲列表。",
+        "player": "这个页面把当前歌曲放在中央；播放控制留在底部，侧边手柄则可以打开命令面板或播放器面板。",
+        "lattice": "Lattice 把整条播放队列铺成一面海报墙。你可以在墙上移动查看队列，并选中海报来操作那首歌。"
+      },
       "playerBar": {
         "heightIntro": "这条控制条离屏幕底边有多远是可以改的，各页面的歌曲卡片和侧边面板会跟着一起动。",
         "heightCommand": "但直接拖是拖不动的。先在命令面板里执行「在播放页拖动调整」，它才会变成一个可以拖的东西。",

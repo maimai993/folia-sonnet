@@ -32,7 +32,8 @@ export type SettingsModalState = {
     initialAnchor?: { id: SettingsAnchorId; seq: number } | null;
 };
 
-const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
+// Separate from the retired guide key so people who saw the old carousel still receive the Ponder lesson.
+const LAST_SEEN_GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_ponder_onboarding_version';
 
 export type SettingsModalUiState = {
     appLanguagePreference: AppLanguagePreference;
