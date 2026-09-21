@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PONDER_TARGET_LIST, findPonderTarget } from '@/components/ponder/ponderRegistry';
 import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
 import { SETTINGS_ANCHOR_DEFINITIONS } from '@/components/modal/settings/navigation/settingsAnchorModel';
-import type { PonderAnchorPoint, PonderStep } from '@/types/ponder';
+import type { PonderAnchorPoint, PonderStep, PonderSurfaceKind } from '@/types/ponder';
 
 // test/unit/ponder/ponderRegistry.test.ts
 // 场景脚本是纯声明数据，写错了不会有任何类型错误 —— 引用一个不存在的锚点只会让骨架
@@ -23,6 +23,8 @@ const referencedAnchors = (step: PonderStep): string[] => {
         case 'keypress':
             return fromPoint(step.at);
         case 'highlight':
+            return [step.anchor];
+        case 'surfaceState':
             return [step.anchor];
         default:
             return [];
@@ -79,7 +81,7 @@ describe('ponder registry', () => {
         PONDER_TARGET_LIST.forEach(target => {
             target.scenes.forEach(scene => {
                 Object.entries(scene.anchors).forEach(([name, source]) => {
-                    if (source.kind !== 'derived') return;
+                    if (source.kind !== 'derived' && source.kind !== 'relative') return;
                     expect(
                         Object.keys(scene.anchors).includes(source.from),
                         `${target.id}/${scene.id} 的锚点 "${name}" 引用了未声明的 from "${source.from}"`,
@@ -121,6 +123,32 @@ describe('ponder registry', () => {
                 });
             });
         });
+    });
+
+    it('页面教程覆盖完整页面区域，而不是只有一段泛化概述', () => {
+        expect(findPonderTarget('grid-page')?.scenes.length).toBeGreaterThanOrEqual(6);
+        expect(findPonderTarget('grid-view-page')?.scenes.length).toBeGreaterThanOrEqual(5);
+        expect(findPonderTarget('lattice-page')?.scenes.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it('surfaceState 引用的结果层都由对应 surface 实现', () => {
+        const states: Partial<Record<PonderSurfaceKind, Set<string>>> = {
+            'grid-page': new Set(['tab-switched', 'collection-open', 'map-open', 'search-open', 'command-open']),
+            'grid-view-page': new Set(['card-focused', 'info-open', 'filter-open']),
+            'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
+        };
+
+        PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {
+            scene.steps.forEach(step => {
+                if (step.kind !== 'surfaceState') return;
+                const surfaceKind = scene.anchors[step.anchor]?.surfaceKind;
+                expect(surfaceKind, `${target.id}/${scene.id}/${step.id} 没有指向 surface`).toBeDefined();
+                expect(
+                    surfaceKind && states[surfaceKind]?.has(step.state),
+                    `${target.id}/${scene.id}/${step.id} 引用了未实现的结果层 "${step.state}"`,
+                ).toBe(true);
+            });
+        }));
     });
 
     // action.anchorId 在 DSL 里只是个 string（types 层不该反向依赖 settings 的锚点表），

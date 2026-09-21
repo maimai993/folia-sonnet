@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { useTranslation } from 'react-i18next';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { usePonderSessionKeys } from '../../hooks/usePonderSessionKeys';
-import { compilePonderScene } from '../../utils/ponder/compilePonderTimeline';
+import { compilePonderScene, sceneAnchorNames } from '../../utils/ponder/compilePonderTimeline';
 import { keyframeTicks } from '../../utils/ponder/ponderKeyframes';
 import { resolvePonderAnchors } from '../../utils/ponder/resolvePonderAnchors';
 import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
@@ -31,6 +31,9 @@ const RESAMPLE_DEBOUNCE_MS = 250;
 
 /** 上下外框占掉的高度，骨架要整体装进它们之间。与 PonderActors 里字幕避让用的是同一组数。 */
 const CHROME_BANDS = { top: 84, bottom: 156 };
+
+/** 「本页可单独思索的组件」那张浮层卡占掉的右侧宽度（卡宽 224 + 右边距）。 */
+const RELATED_PANEL_GUTTER_PX = 248;
 
 type PonderStageProps = {
     theme?: Theme;
@@ -120,7 +123,8 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                 viewport,
             }),
             viewport,
-            chrome: CHROME_BANDS,
+            // 列了相关组件就要给那张浮层卡让开右边一条，否则它正压在页面右上角的控件上。
+            chrome: { ...CHROME_BANDS, right: target.relatedTargetIds ? RELATED_PANEL_GUTTER_PX : 0 },
         }));
     }, [scene, sampleToken, session, target]);
 
@@ -144,6 +148,16 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     }, [scene]);
 
     const plan = useMemo(() => (scene ? compilePonderScene(scene) : null), [scene]);
+    // 骨架层只给本章讲到的锚点标名字；surface 始终留着，它的名字就是「你正看着哪一页」。
+    const activeAnchors = useMemo(() => {
+        const names = scene ? sceneAnchorNames(scene) : new Set<string>();
+        if (scene) {
+            Object.entries(scene.anchors).forEach(([name, source]) => {
+                if (source.role === 'surface') names.add(name);
+            });
+        }
+        return names;
+    }, [scene]);
     const ticks = useMemo(() => (plan ? keyframeTicks(plan) : []), [plan]);
 
     // 一章播完停下，由卡片接手。isFinished 是离散事实，可以进 state。
@@ -188,6 +202,7 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
             <PonderSkeletonLayer
                 rects={rects}
                 anchors={scene.anchors}
+                activeAnchors={activeAnchors}
                 nodes={nodesRef.current}
                 theme={theme}
                 isDaylight={isDaylight}

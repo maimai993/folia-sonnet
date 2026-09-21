@@ -4,7 +4,8 @@ import { readReducedMotion } from '../../stores/useMotionSettingsStore';
 import { anchorPointToPx } from '../../utils/ponder/resolvePonderAnchors';
 import { keyframeIndexAt, nextKeyframeAt, prevKeyframeAt } from '../../utils/ponder/ponderKeyframes';
 import { PONDER_HIGHLIGHT_MAX_OPACITY, type PonderRect, type PonderTimelinePlan } from '../../types/ponder';
-import type { PonderStageNodes } from './ponderStageNodes';
+import { PONDER_SURFACE_BASE_STATE } from './surfaces/PonderSurfaceStateLayer';
+import type { PonderStageNodes, PonderSurfaceStateNode } from './ponderStageNodes';
 
 // src/components/ponder/usePonderTimeline.ts
 // 把编译好的 plan 翻译成 anime.js v4 的 timeline，并提供播放控制。
@@ -72,20 +73,43 @@ export const usePonderTimeline = ({
             }
         }
 
+        // 每段字幕的起点，升序。下一段一开口，上一段就得收声。
+        const captionStarts = plan.entries
+            .filter(entry => entry.step.kind === 'caption')
+            .map(entry => entry.atMs)
+            .sort((a, b) => a - b);
+
+        // 每个「锚点 + 被替换的层」槽位上，当前露在最上面的是谁。叠加层（工具面板、命令面板）
+        // 不进这张表，因为它们不该把底下那屏带走。
+        const visibleLayers = new Map<string, PonderSurfaceStateNode>();
+
         for (const { step, atMs, durationMs } of plan.entries) {
             if (step.kind === 'caption') {
                 const node = nodes.captions.get(step.id);
                 if (!node) continue;
+                // 一段字幕最迟在下一段开口时收声。字幕都画在同一条底边上，两段并存就是
+                // 两行字叠在一起，谁也读不出来 —— 这比截掉尾巴那点阅读时间糟得多。
+                const nextCaptionAtMs = captionStarts.find(start => start > atMs);
+                const endMs = Math.min(atMs + durationMs, nextCaptionAtMs ?? Infinity);
+                const fadeOutAtMs = Math.max(atMs, endMs - 200);
+
                 timeline.add(node, calm
                     ? { opacity: [0, 1], duration: 240 }
                     : { opacity: [0, 1], y: [8, 0], duration: 240 }, atMs);
-                timeline.add(node, { opacity: 0, duration: 200 }, atMs + Math.max(durationMs - 200, 0));
+                timeline.add(node, { opacity: 0, duration: 200 }, fadeOutAtMs);
 
                 // 指向线挂在同一段时间上：文字在讲谁，线就指着谁，两者不能错开。
                 const pointer = nodes.pointers.get(step.id);
                 if (pointer) {
                     timeline.add(pointer, { opacity: [0, 1], duration: 300 }, atMs);
-                    timeline.add(pointer, { opacity: 0, duration: 200 }, atMs + Math.max(durationMs - 200, 0));
+                    timeline.add(pointer, { opacity: 0, duration: 200 }, fadeOutAtMs);
+                }
+
+                // 被指着的那个区域，这段时间里把名字标出来；讲完就收，不留在后面的浮层上。
+                const label = step.pointTo ? nodes.labels.get(step.pointTo.anchor) : undefined;
+                if (label) {
+                    timeline.add(label, { opacity: [0, 1], duration: 300 }, atMs);
+                    timeline.add(label, { opacity: 0, duration: 200 }, fadeOutAtMs);
                 }
             } else if (step.kind === 'cursor' || step.kind === 'drag') {
                 if (!nodes.cursor) continue;
@@ -123,6 +147,41 @@ export const usePonderTimeline = ({
                     opacity: [from * PONDER_HIGHLIGHT_MAX_OPACITY, to * PONDER_HIGHLIGHT_MAX_OPACITY],
                     duration: durationMs,
                 }, atMs);
+            } else if (step.kind === 'surfaceState') {
+                const layers = nodes.surfaceStates.get(step.anchor);
+                const entry = layers?.get(step.state);
+                if (!layers || !entry) continue;
+                const animation = {
+                    opacity: [0, 1],
+                    duration: calm ? 1 : durationMs,
+                    ease: calm ? 'linear' : 'outCubic',
+                };
+                if (step.transition === 'slide-up') {
+                    timeline.add(entry.node, { ...animation, y: [18, 0] }, atMs);
+                } else if (step.transition === 'zoom') {
+                    timeline.add(entry.node, { ...animation, scale: [0.88, 1] }, atMs);
+                } else {
+                    timeline.add(entry.node, animation, atMs);
+                }
+
+                // 替换型的结果层要把它顶掉的那一层同时淡出。少了这一步，重画一遍的海报墙
+                // 和底下那面原墙会同时在屏幕上，差着一点位移 —— 看起来就是骨架和界面对不上。
+                if (entry.replaces) {
+                    const replacedState = typeof entry.replaces === 'string'
+                        ? entry.replaces
+                        : PONDER_SURFACE_BASE_STATE;
+                    // 同一个槽位可以被接连替换（平移之后再聚焦），所以记住的是「这个槽位现在是谁」。
+                    const slot = `${step.anchor}:${replacedState}`;
+                    const covered = visibleLayers.get(slot) ?? layers.get(replacedState);
+                    if (covered && covered.node !== entry.node) {
+                        timeline.add(covered.node, {
+                            opacity: [1, 0],
+                            duration: calm ? 1 : durationMs,
+                            ease: calm ? 'linear' : 'outCubic',
+                        }, atMs);
+                    }
+                    visibleLayers.set(slot, entry);
+                }
             } else {
                 // pausePoint：时间线上的一段空隙。用裸 timer 占位，不动任何节点。
                 timeline.add({ duration: durationMs }, atMs);

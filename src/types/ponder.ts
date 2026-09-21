@@ -88,7 +88,15 @@ export type PonderAnchorRole =
     /** 一条轨道/滑槽，画成细长的胶囊。 */
     | 'rail'
     /** 一条判定线/刻度，画成一根竖线，不画框。 */
-    | 'marker';
+    | 'marker'
+    /**
+     * 只有几何、不画任何东西的区域。
+     *
+     * synthetic surface 已经把真实界面的轮廓画出来了，再给里面每个区域套一个描边框，
+     * 就是把同一个东西画两遍 —— 框和标签互相压着，反而看不出界面长什么样。
+     * region 只提供高亮填充和指向线的落点，框本身不可见。
+     */
+    | 'region';
 
 /** surface 骨架里面的界面类型；只画结构，不复制真实界面的业务状态。 */
 export type PonderSurfaceKind =
@@ -102,6 +110,25 @@ export type PonderSurfaceKind =
     | 'lattice-page'
     | 'help-page'
     | 'settings-page';
+
+/**
+ * 以来源矩形为 0..1 坐标系的相对矩形。
+ *
+ * 语义刻意和 CSS 的 inset + aspect-square 对齐：合成界面用 relativeRectStyle 把同一条记录
+ * 翻成定位样式，target 用它声明锚点。两边各写一遍百分比必然走散，高亮就会落在真实元素旁边。
+ *
+ * 水平方向给 left/right/width 中的两个，垂直方向给 top/bottom/height 中的两个；
+ * square 表示高度按宽度推成像素意义上的正方形，对应 CSS `aspect-square`。
+ */
+export type PonderRelativeRect = {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+    width?: number;
+    height?: number;
+    square?: boolean;
+};
 
 type PonderAnchorCommon = {
     /** 骨架上给这个框标的名字。不给就不标。 */
@@ -120,6 +147,12 @@ type PonderAnchorCommon = {
 export type PonderAnchorSource = PonderAnchorCommon & (
     | { kind: 'dom'; selector: string; fallback?: PonderViewportRect }
     | { kind: 'synthetic'; rect: PonderViewportRect }
+    | {
+          kind: 'relative';
+          from: string;
+          /** 以来源矩形为 0..1 坐标系；页面 surface 内的真实区域都用它标注。 */
+          rect: PonderRelativeRect;
+      }
     | {
           kind: 'derived';
           from: string;
@@ -170,6 +203,19 @@ export type PonderStep =
     | (PonderStepBase & { kind: 'drag'; from: PonderAnchorPoint; to: PonderAnchorPoint; durationMs: number; ease?: string })
     | (PonderStepBase & { kind: 'keypress'; keys: string[]; at: PonderAnchorPoint | 'bottom'; durationMs: number })
     | (PonderStepBase & { kind: 'highlight'; anchor: string; intensity?: [number, number]; durationMs: number })
+    /**
+     * 把 synthetic surface 切到一次操作之后的结果层。
+     *
+     * 页面教程不能只演「光标按了哪里」；打开集合、展开海报、唤出工具面板这些结果
+     * 才是操作的含义。结果层预先渲染，时间线只写 opacity/transform，不触发 React render。
+     */
+    | (PonderStepBase & {
+          kind: 'surfaceState';
+          anchor: string;
+          state: string;
+          durationMs: number;
+          transition?: 'fade' | 'slide-up' | 'zoom';
+      })
     /** pausePoint：短暂停留后自动继续。必然是关键帧，不需要显式写 keyframe。 */
     | (PonderStepBase & { kind: 'pause'; dwellMs?: number });
 

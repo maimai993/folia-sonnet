@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
+import { compilePonderScene, sceneAnchorNames } from '@/utils/ponder/compilePonderTimeline';
 import { PONDER_DEFAULT_DWELL_MS, type PonderSceneScript, type PonderStep } from '@/types/ponder';
 
 // test/unit/ponder/compilePonderTimeline.test.ts
@@ -89,5 +89,41 @@ describe('compilePonderScene', () => {
     it('空场景不炸', () => {
         const plan = compilePonderScene(scene([]));
         expect(plan).toEqual({ totalMs: 0, entries: [], keyframes: [] });
+    });
+
+    it('surfaceState 像其他动画步骤一样占用时间线', () => {
+        const plan = compilePonderScene(scene([
+            { kind: 'surfaceState', id: 'open', anchor: 'page', state: 'open', durationMs: 360 },
+            { kind: 'pause', id: 'result', dwellMs: 140 },
+        ]));
+
+        expect(at(plan, 'open')).toBe(0);
+        expect(at(plan, 'result')).toBe(360);
+        expect(plan.totalMs).toBe(500);
+    });
+});
+
+describe('sceneAnchorNames', () => {
+    it('把各类步骤点到名的锚点都收进来，不认识的 at: bottom 不算', () => {
+        const names = sceneAnchorNames(scene([
+            { kind: 'highlight', id: 'h', anchor: 'wall', durationMs: 100 },
+            { kind: 'surfaceState', id: 's', anchor: 'page', state: 'open', durationMs: 100 },
+            { kind: 'caption', id: 'c', at: 'bottom', textKey: 'k', pointTo: { anchor: 'poster' }, durationMs: 100 },
+            { kind: 'cursor', id: 'u', from: { anchor: 'tools' }, to: { anchor: 'toolsPanel' }, durationMs: 100 },
+            { kind: 'drag', id: 'd', from: { anchor: 'shelf' }, to: { anchor: 'shelf' }, durationMs: 100 },
+            { kind: 'keypress', id: 'k', keys: ['A'], at: { anchor: 'back' }, durationMs: 100 },
+            { kind: 'pause', id: 'p' },
+        ]));
+
+        expect([...names].sort()).toEqual(['back', 'page', 'poster', 'shelf', 'tools', 'toolsPanel', 'wall']);
+    });
+
+    it('没讲到的锚点不进来 —— 骨架层据此决定标哪些名字', () => {
+        const names = sceneAnchorNames(scene([
+            { kind: 'highlight', id: 'h', anchor: 'wall', durationMs: 100 },
+        ]));
+
+        expect(names.has('wall')).toBe(true);
+        expect(names.has('poster')).toBe(false);
     });
 });

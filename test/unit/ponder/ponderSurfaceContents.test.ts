@@ -53,4 +53,35 @@ describe('PonderSurfaceContents', () => {
         expect(markup).toContain(`data-ponder-surface-kind="${kind}"`);
         expect(markup).not.toContain('data-ponder-palette-header');
     });
+
+    it('Grid3D surface 按真实页头、3D 轨道和操作结果分层', () => {
+        const markup = renderSurface('grid-page');
+        expect(markup).toContain('data-ponder-grid-page-structure');
+        expect(markup).toContain('data-ponder-grid-tabs');
+        expect(markup).toContain('data-ponder-grid-search');
+        expect(markup).toContain('data-ponder-grid-shelf');
+        expect(markup.match(/data-ponder-grid-card/g)).toHaveLength(5);
+        ['tab-switched', 'collection-open', 'map-open', 'search-open', 'command-open'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+    });
+
+    it('Lattice surface 是不规则海报墙，并包含展开、工具和灯光结果', () => {
+        const markup = renderSurface('lattice-page');
+        expect(markup).toContain('data-ponder-lattice-page-structure');
+        expect(markup).toContain('data-ponder-lattice-wall');
+        expect(markup.match(/data-ponder-lattice-poster/g)?.length ?? 0).toBeGreaterThanOrEqual(12);
+        ['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+    });
+
+    it('GridView surface 使用蜂窝卡片，并包含信息与筛选结果', () => {
+        const markup = renderSurface('grid-view-page');
+        expect(markup).toContain('data-ponder-grid-view-page-structure');
+        expect(markup).toContain('data-ponder-grid-view-cards');
+        ['card-focused', 'info-open', 'filter-open'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+    });
 });

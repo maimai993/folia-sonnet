@@ -1,4 +1,4 @@
-import type { PonderAnchorPoint, PonderAnchorSource, PonderRect, PonderViewportRect } from '../../types/ponder';
+import type { PonderAnchorPoint, PonderAnchorSource, PonderRect, PonderRelativeRect, PonderViewportRect } from '../../types/ponder';
 
 // src/utils/ponder/resolvePonderAnchors.ts
 // 把场景声明的锚点解析成视口坐标的矩形集。
@@ -30,6 +30,29 @@ const viewportRectToPx = (rect: PonderViewportRect, viewport: ResolveContext['vi
         : rect.anchorY === 'bottom' ? anchoredTop - height
         : anchoredTop;
 
+    return { left, top, width, height };
+};
+
+/**
+ * 相对矩形 → px 矩形。
+ *
+ * 水平和垂直各自从 left/right/width、top/bottom/height 里取到两个约束，缺的那个推出来；
+ * square 先定宽再把宽度原样当高度用。这三种写法和 CSS 的 inset / aspect-square 一一对应，
+ * 所以合成界面和锚点可以直接共用同一条记录。
+ */
+export const relativeRectToPx = (base: PonderRect, rect: PonderRelativeRect): PonderRect => {
+    const width = rect.width !== undefined
+        ? base.width * rect.width
+        : base.width * (1 - (rect.left ?? 0) - (rect.right ?? 0));
+    const height = rect.square ? width
+        : rect.height !== undefined ? base.height * rect.height
+        : base.height * (1 - (rect.top ?? 0) - (rect.bottom ?? 0));
+    const left = rect.left !== undefined
+        ? base.left + base.width * rect.left
+        : base.left + base.width * (1 - (rect.right ?? 0)) - width;
+    const top = rect.top !== undefined
+        ? base.top + base.height * rect.top
+        : base.top + base.height * (1 - (rect.bottom ?? 0)) - height;
     return { left, top, width, height };
 };
 
@@ -82,6 +105,11 @@ export const resolvePonderAnchors = (
                 ?? (source.fallback ? viewportRectToPx(source.fallback, viewport) : null);
         } else if (source.kind === 'synthetic') {
             rect = viewportRectToPx(source.rect, viewport);
+        } else if (source.kind === 'relative') {
+            const base = resolveOne(source.from);
+            if (base) {
+                rect = relativeRectToPx(base, source.rect);
+            }
         } else {
             const base = resolveOne(source.from);
             if (base) {

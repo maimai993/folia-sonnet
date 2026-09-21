@@ -128,6 +128,56 @@ describe('resolvePonderAnchors — derived', () => {
     });
 });
 
+describe('resolvePonderAnchors — relative', () => {
+    it('在来源 surface 内按比例定位页面区域', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0.1, top: 0.2, width: 0.8, height: 0.5 } },
+            header: { kind: 'relative', from: 'page', rect: { left: 0.05, top: 0.04, width: 0.9, height: 0.12 } },
+        });
+
+        expect(out.header).toEqual({ left: 140, top: 176, width: 720, height: 48 });
+    });
+
+    // 下面三条对应合成界面里的 inset / aspect-square 写法：两边算得不一样，
+    // 高亮就会落在真实元素旁边，这正是 relativeRectStyle 要避免的。
+    it('right / bottom 从反方向贴边，和 CSS inset 同义', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },
+            corner: { kind: 'relative', from: 'page', rect: { right: 0.1, bottom: 0.2, width: 0.25, height: 0.3 } },
+        });
+
+        expect(out.corner).toEqual({ left: 650, top: 400, width: 250, height: 240 });
+    });
+
+    it('只给 left+right / top+bottom 时宽高由四边推出来', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },
+            inset: { kind: 'relative', from: 'page', rect: { left: 0.1, right: 0.1, top: 0.25, bottom: 0.25 } },
+        });
+
+        expect(out.inset).toEqual({ left: 100, top: 200, width: 800, height: 400 });
+    });
+
+    it('square 把宽度原样当高度，拿到的是像素意义上的正方形', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },
+            button: { kind: 'relative', from: 'page', rect: { left: 0.05, top: 0.05, width: 0.1, square: true } },
+        });
+
+        expect(out.button).toEqual({ left: 50, top: 40, width: 100, height: 100 });
+    });
+
+    it('相对锚点可以再挂在相对锚点上', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },
+            wall: { kind: 'relative', from: 'page', rect: { left: 0.1, top: 0.1, width: 0.8, height: 0.8 } },
+            poster: { kind: 'relative', from: 'wall', rect: { left: 0.25, top: 0.5, width: 0.2, height: 0.25 } },
+        });
+
+        expect(out.poster).toEqual({ left: 300, top: 400, width: 160, height: 160 });
+    });
+});
+
 describe('anchorPointToPx', () => {
     it('默认取中心', () => {
         expect(anchorPointToPx({ anchor: 't' }, { t: toggle })).toEqual({ x: 224, y: 324 });

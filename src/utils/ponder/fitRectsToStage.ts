@@ -14,8 +14,11 @@ import type { PonderRect } from '../../types/ponder';
 type FitInput = {
     rects: Record<string, PonderRect>;
     viewport: { width: number; height: number };
-    /** 上下外框各自占掉的高度。 */
-    chrome: { top: number; bottom: number };
+    /**
+     * 外框占掉的边。上下是标题栏和进度条；right 给「本页可单独思索的组件」那张浮层卡 ——
+     * 它压在骨架右上角时，页面右侧的控件就被盖住了。
+     */
+    chrome: { top: number; bottom: number; left?: number; right?: number };
     /** 骨架与外框之间至少留的空隙。 */
     gap?: number;
 };
@@ -33,6 +36,8 @@ const boundsOf = (rects: Record<string, PonderRect>) => {
     return {
         top: Math.min(...list.map(r => r.top)),
         bottom: Math.max(...list.map(r => r.top + r.height)),
+        left: Math.min(...list.map(r => r.left)),
+        right: Math.max(...list.map(r => r.left + r.width)),
     };
 };
 
@@ -59,9 +64,15 @@ export const fitRectsToStage = ({
         return rects;
     }
 
-    const scale = Math.max(MIN_SCALE, Math.min(1, availableHeight / contentHeight));
+    const availableLeft = (chrome.left ?? 0) + gap;
+    const availableRight = viewport.width - (chrome.right ?? 0) - gap;
+    const availableWidth = availableRight - availableLeft;
+    const contentWidth = bounds.right - bounds.left;
+    const widthScale = availableWidth > 0 && contentWidth > 0 ? availableWidth / contentWidth : 1;
+
+    const scale = Math.max(MIN_SCALE, Math.min(1, availableHeight / contentHeight, widthScale));
     const availableBottom = availableTop + availableHeight;
-    const centerX = viewport.width / 2;
+    const centerX = (availableLeft + availableRight) / 2;
 
     // 不用缩的时候尽量别动：位置和真实界面一一对应是骨架最值钱的地方，
     // 居中会平白把这份对应关系推掉。所以只做把它推进可用带所需的最小平移。
@@ -71,13 +82,21 @@ export const fitRectsToStage = ({
         ? availableTop + Math.max(0, (availableHeight - scaledHeight) / 2)
         : Math.min(Math.max(bounds.top, availableTop), Math.max(availableTop, availableBottom - contentHeight));
 
-    if (scale === 1 && Math.abs(targetTop - bounds.top) < 0.5) {
+    // 横向同样只做「推进可用带」所需的最小平移：右侧让开浮层卡之后，
+    // 整幅图该往左挪多少就挪多少，不额外居中，免得推掉和真实界面的左右对应。
+    const scaledLeft = centerX + (bounds.left - centerX) * scale;
+    const scaledRight = scaledLeft + contentWidth * scale;
+    const shiftX = scaledLeft < availableLeft ? availableLeft - scaledLeft
+        : scaledRight > availableRight ? availableRight - scaledRight
+        : 0;
+
+    if (scale === 1 && Math.abs(targetTop - bounds.top) < 0.5 && Math.abs(shiftX) < 0.5) {
         return rects;
     }
 
     return Object.fromEntries(Object.entries(rects).map(([name, rect]) => [name, {
         ...rect,
-        left: centerX + (rect.left - centerX) * scale,
+        left: centerX + (rect.left - centerX) * scale + shiftX,
         top: targetTop + (rect.top - bounds.top) * scale,
         width: rect.width * scale,
         height: rect.height * scale,

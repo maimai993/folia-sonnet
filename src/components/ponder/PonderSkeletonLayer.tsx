@@ -16,6 +16,13 @@ import PonderSurfaceContents from './PonderSurfaceContents';
 type PonderSkeletonLayerProps = {
     rects: Record<string, PonderRect>;
     anchors: Record<string, PonderAnchorSource>;
+    /**
+     * 本章真正讲到的锚点。
+     *
+     * anchors 是整个目标共用的一张表，一章只用得上其中两三个。不筛就会把全表的标签
+     * 一次性糊在页面上 —— 七个名字互相压着，反而读不出界面长什么样。
+     */
+    activeAnchors: ReadonlySet<string>;
     nodes: PonderStageNodes;
     theme?: { accentColor?: string };
     isDaylight: boolean;
@@ -24,6 +31,7 @@ type PonderSkeletonLayerProps = {
 const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
     rects,
     anchors,
+    activeAnchors,
     nodes,
     theme,
     isDaylight,
@@ -36,6 +44,11 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
     const labelColor = isDaylight ? 'rgba(24, 24, 27, 0.5)' : 'rgba(255, 255, 255, 0.5)';
 
     const shapeFor = (role: PonderAnchorRole) => {
+        // region 只是一块几何：它身处的 synthetic surface 已经把真实控件画出来了，
+        // 再套一层描边就是同一个东西画两遍，两层边框互相压着。
+        if (role === 'region') {
+            return { className: 'absolute overflow-hidden rounded-lg', style: {} as React.CSSProperties };
+        }
         if (role === 'marker') {
             return { className: 'absolute', style: { backgroundColor: accent, opacity: 0.35 } };
         }
@@ -46,7 +59,12 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
             };
         }
         if (role === 'surface') {
-            return { className: 'absolute overflow-hidden rounded-xl border', style: { borderColor: outline, backgroundColor: face } };
+            // 描边走 inset box-shadow 而不是 border：surface 里的合成界面全按百分比定位，
+            // 1px 的 border 会把内容盒缩掉 1px，里面每个元素都和自己的锚点差这 1px。
+            return {
+                className: 'absolute overflow-hidden rounded-xl',
+                style: { boxShadow: `inset 0 0 0 1px ${outline}`, backgroundColor: face },
+            };
         }
         return { className: 'absolute overflow-hidden rounded-lg border', style: { borderColor: outline, backgroundColor: face } };
     };
@@ -63,6 +81,8 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                 return (
                     <div key={name}>
                         <div
+                            data-ponder-anchor={name}
+                            data-ponder-anchor-role={role}
                             className={shape.className}
                             style={{
                                 ...shape.style,
@@ -79,6 +99,15 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                                     accent={accent}
                                     line={line}
                                     outline={outline}
+                                    registerStateNode={(state, node, options) => {
+                                        let stateNodes = nodes.surfaceStates.get(name);
+                                        if (!stateNodes) {
+                                            stateNodes = new Map();
+                                            nodes.surfaceStates.set(name, stateNodes);
+                                        }
+                                        if (node) stateNodes.set(state, { node, replaces: options?.replaces ?? false });
+                                        else stateNodes.delete(state);
+                                    }}
                                 />
                             )}
                             <div
@@ -95,17 +124,26 @@ const PonderSkeletonLayer: React.FC<PonderSkeletonLayerProps> = ({
                         </div>
 
                         {/* 标签画在框外，不进 overflow-hidden 的框里，短框也不会被裁掉。
-                            嵌套的框要靠 labelPlacement 显式错开，否则两个标签会叠成一团。 */}
-                        {source?.labelKey && (() => {
+                            嵌套的框要靠 labelPlacement 显式错开，否则两个标签会叠成一团。
+
+                            region 的标签由时间线控制显隐，只在讲到它的那段字幕期间露出来 ——
+                            整章挂着的话，命令面板这类整页浮层上会留一串讲底下那屏的名字。
+                            其余角色的骨架框本身就是插图，标签是常驻图例，按本章讲没讲到来筛。 */}
+                        {source?.labelKey && (role === 'region' || activeAnchors.has(name)) && (() => {
                             const placement = source.labelPlacement
                                 ?? (role === 'surface' ? 'inside' : 'above');
                             const top = placement === 'below' ? rect.top + rect.height + 6
                                 : placement === 'inside' ? rect.top - 20
                                 : rect.top - 18;
+                            const isTimed = role === 'region';
                             return (
                                 <div
+                                    ref={isTimed ? (node => {
+                                        if (node) nodes.labels.set(name, node);
+                                        else nodes.labels.delete(name);
+                                    }) : undefined}
                                     className="absolute whitespace-nowrap text-[11px] tracking-wide"
-                                    style={{ left: rect.left, top, color: labelColor }}
+                                    style={{ left: rect.left, top, color: labelColor, ...(isTimed ? { opacity: 0 } : {}) }}
                                 >
                                     {t(source.labelKey)}
                                 </div>

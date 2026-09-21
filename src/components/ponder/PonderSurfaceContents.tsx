@@ -1,6 +1,10 @@
 import React from 'react';
 import { ChevronDown, Command, GripVertical, ListMusic, Search, Volume2 } from 'lucide-react';
 import type { PonderSurfaceKind } from '../../types/ponder';
+import PonderGridPageSurface from './surfaces/PonderGridPageSurface';
+import PonderGridViewPageSurface from './surfaces/PonderGridViewPageSurface';
+import PonderLatticePageSurface from './surfaces/PonderLatticePageSurface';
+import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
 // Synthetic surfaces imitate the silhouette of the real UI without mounting live settings or
@@ -11,6 +15,7 @@ type PonderSurfaceContentsProps = {
     accent: string;
     line: string;
     outline: string;
+    registerStateNode?: PonderSurfaceStateRegistrar;
 };
 
 type PonderPageSurfaceKind = Extract<PonderSurfaceKind, `${string}-page`>;
@@ -111,7 +116,20 @@ const PageContents: React.FC<{
     line: string;
     outline: string;
     accent: string;
-}> = ({ kind, line, outline, accent }) => {
+    registerStateNode?: PonderSurfaceStateRegistrar;
+}> = ({ kind, line, outline, accent, registerStateNode }) => {
+    if (kind === 'grid-page') {
+        return <PonderGridPageSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />;
+    }
+
+    if (kind === 'grid-view-page') {
+        return <PonderGridViewPageSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />;
+    }
+
+    if (kind === 'lattice-page') {
+        return <PonderLatticePageSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />;
+    }
+
     if (kind === 'player-page') {
         return (
             <div className="absolute inset-0 flex flex-col items-center justify-between p-[5%]">
@@ -161,15 +179,14 @@ const PageContents: React.FC<{
         );
     }
 
-    const tileCount = kind === 'lattice-page' ? 12 : kind === 'grid-view-page' ? 10 : 8;
     return (
         <div className="absolute inset-0 flex flex-col gap-[5%] p-[5%]">
             <div className="flex h-[9%] items-center gap-[3%]">
                 <Search className="h-full w-auto opacity-45" />
                 <span className="h-[55%] w-[38%] rounded-full" style={{ backgroundColor: line }} />
             </div>
-            <div className={`grid min-h-0 flex-1 gap-[3%] ${kind === 'lattice-page' ? 'grid-cols-4 grid-rows-3' : kind === 'grid-view-page' ? 'grid-cols-5 grid-rows-2' : 'grid-cols-4 grid-rows-2'}`}>
-                {Array.from({ length: tileCount }, (_, index) => (
+            <div className="grid min-h-0 flex-1 grid-cols-4 grid-rows-2 gap-[3%]">
+                {Array.from({ length: 8 }, (_, index) => (
                     <span
                         key={index}
                         className="rounded-[10%] border"
@@ -181,10 +198,10 @@ const PageContents: React.FC<{
     );
 };
 
-const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline }) => {
+const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline, registerStateNode }) => {
     const resolvedKind = kind ?? 'palette';
     const contents = isPageSurfaceKind(resolvedKind)
-        ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} />
+        ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} registerStateNode={registerStateNode} />
         : resolvedKind === 'picker'
         ? <PickerContents line={line} outline={outline} accent={accent} />
         : resolvedKind === 'queue'
