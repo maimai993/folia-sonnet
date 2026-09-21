@@ -177,12 +177,31 @@ export const PLAYER_PAGE_GEOMETRY = {
     palette: { left: 0.19, right: 0.19, top: 0.14, height: 0.46 },
 } satisfies Record<string, PonderRelativeRect>;
 
-/** 右侧展开的控制面板，坐标系是面板自身。 */
+/**
+ * 右侧展开的控制面板，坐标系是面板自身。
+ *
+ * 真实面板是 `w-80` 加 `p-5`，从上到下只有三段：一张正方形封面、紧挨着的一排标签页、
+ * 再下面是当前标签页的内容。封面和标签排之间没有第四段 —— 歌名、歌手、专辑是封面页
+ * *里面*的内容，不是面板结构的一层，所以这里不留曲目信息带。
+ */
 export const SIDE_PANEL_GEOMETRY = {
-    cover: { left: 0.08, right: 0.08, top: 0.04, square: true },
-    meta: { left: 0.08, right: 0.08, top: 0.50, height: 0.07 },
-    tabs: { left: 0.08, right: 0.08, top: 0.60, height: 0.07 },
-    body: { left: 0.08, right: 0.08, top: 0.70, bottom: 0.04 },
+    cover: { left: 0.06, right: 0.06, top: 0.04, square: true },
+    tabs: { left: 0.06, right: 0.06, top: 0.57, height: 0.09 },
+    body: { left: 0.06, right: 0.06, top: 0.68, bottom: 0.04 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 封面四角那四颗按钮，坐标系是封面自身。
+ *
+ * 它们平时不在屏幕上：`opacity-0 group-hover:opacity-100`，指针移上封面才浮出来。
+ * 四个角各是一个独立动作，所以各自一个锚点 —— 笼统框住整张封面讲不出「右上角那颗
+ * 是播放页透明背景」。真实尺寸是 44px 按钮、离边 12px，相对 280px 的封面就是这组数。
+ */
+export const SIDE_PANEL_COVER_ACTIONS = {
+    settings: { left: 0.043, top: 0.043, width: 0.157, square: true },
+    transparent: { right: 0.043, top: 0.043, width: 0.157, square: true },
+    home: { left: 0.043, bottom: 0.043, width: 0.157, square: true },
+    addToPlaylist: { right: 0.043, bottom: 0.043, width: 0.157, square: true },
 } satisfies Record<string, PonderRelativeRect>;
 
 /** 标签页的条数，和真实面板常驻的那四页一致。 */
@@ -212,17 +231,46 @@ export const LATTICE_CHROME_GEOMETRY = {
     chrome: { left: 0.04, right: 0.04, bottom: 0.06, height: 0.34 },
 } satisfies Record<string, PonderRelativeRect>;
 
-/** 设置里「歌词动画」那一组，坐标系是那块面板。 */
+/**
+ * 设置里「歌词动画」那一组，坐标系是那块面板。
+ *
+ * 真实那一组是：分组标题、一个通往动画调参台的大按钮，再下面**一张**卡片，卡片里
+ * 两个开关用一条分隔线隔开。两个开关不是两张卡 —— 画成两张卡就把「它们同属一张卡」
+ * 这件事讲错了，高亮也会落在不存在的边框上。
+ */
 export const LYRICS_ANIMATION_SETTINGS_GEOMETRY = {
-    entry: { left: 0.05, right: 0.05, top: 0.12, height: 0.28 },
-    transparent: { left: 0.05, right: 0.05, top: 0.48, height: 0.2 },
-    autoHide: { left: 0.05, right: 0.05, top: 0.72, height: 0.2 },
+    heading: { left: 0.04, top: 0.02, width: 0.30, height: 0.10 },
+    entry: { left: 0.04, right: 0.04, top: 0.16, height: 0.27 },
+    card: { left: 0.04, right: 0.04, top: 0.48, bottom: 0.03 },
+    /** 卡片里上下两行，中间那条分隔线是卡片自己画的。 */
+    transparent: { left: 0.07, right: 0.07, top: 0.52, height: 0.20 },
+    autoHide: { left: 0.07, right: 0.07, top: 0.76, height: 0.20 },
 } satisfies Record<string, PonderRelativeRect>;
 
-/** 设置里「配色主题预设」那一组，坐标系是那块面板。 */
+/**
+ * 设置里「配色主题预设」那一组，坐标系是那块面板。
+ *
+ * 整组装在一张卡里：标题行右端一颗圆形的 Theme Park 按钮（36px 图标按钮，不是带文字的
+ * 大胶囊），两张并排的预设按钮，一块「主题生成来源」子卡，再下面三个开关行。
+ * 那三个开关占了这一组一半的高度，漏掉它们的骨架和真实界面对不上。
+ */
 export const THEME_SETTINGS_GEOMETRY = {
-    themePark: { right: 0.05, top: 0.06, width: 0.26, height: 0.12 },
-    presetDefault: { left: 0.05, top: 0.26, width: 0.42, height: 0.26 },
-    presetCustom: { left: 0.53, top: 0.26, width: 0.42, height: 0.26 },
-    source: { left: 0.05, right: 0.05, top: 0.60, height: 0.32 },
+    heading: { left: 0.04, top: 0.01, width: 0.30, height: 0.07 },
+    card: { left: 0.03, right: 0.03, top: 0.10, bottom: 0.01 },
+    titleRow: { left: 0.06, right: 0.06, top: 0.13, height: 0.08 },
+    /** 标题行右端那颗圆按钮。 */
+    themePark: { right: 0.06, top: 0.125, width: 0.062, square: true },
+    presetDefault: { left: 0.06, top: 0.24, width: 0.43, height: 0.16 },
+    presetCustom: { right: 0.06, top: 0.24, width: 0.43, height: 0.16 },
+    source: { left: 0.06, right: 0.06, top: 0.43, height: 0.23 },
+    followSystem: { left: 0.06, right: 0.06, top: 0.69, height: 0.085 },
+    preferCustom: { left: 0.06, right: 0.06, top: 0.79, height: 0.085 },
+    autoSwitch: { left: 0.06, right: 0.06, top: 0.89, height: 0.085 },
 } satisfies Record<string, PonderRelativeRect>;
+
+/** 上面那三个开关在骨架里从上到下的顺序，以及各自的标记属性。surface 和 target 共用。 */
+export const THEME_SETTINGS_TOGGLES = [
+    { name: 'followSystem', marker: 'data-ponder-theme-follow-system' },
+    { name: 'preferCustom', marker: 'data-ponder-theme-prefer-custom' },
+    { name: 'autoSwitch', marker: 'data-ponder-theme-auto-switch' },
+] as const;

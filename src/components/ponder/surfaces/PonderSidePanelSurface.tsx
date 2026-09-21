@@ -1,13 +1,42 @@
 import React from 'react';
-import { Disc, ExternalLink, HardDrive, ListMusic, SlidersHorizontal, User } from 'lucide-react';
+import {
+    ChevronLeft,
+    ChevronRight,
+    Disc,
+    Heart,
+    Home,
+    ListMusic,
+    ListEnd,
+    ListPlus,
+    LogOut,
+    MirrorRectangular,
+    PanelsTopLeft,
+    RefreshCw,
+    Repeat,
+    Settings,
+    Shuffle,
+    SlidersHorizontal,
+    Sparkle,
+    Star,
+    Trash2,
+    User,
+    Volume2,
+} from 'lucide-react';
 import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegistrar } from './PonderSurfaceStateLayer';
-import { SIDE_PANEL_GEOMETRY as G, relativeRectStyle } from './ponderSurfaceGeometry';
+import {
+    SIDE_PANEL_COVER_ACTIONS as A,
+    SIDE_PANEL_GEOMETRY as G,
+    relativeRectStyle,
+} from './ponderSurfaceGeometry';
 
 // src/components/ponder/surfaces/PonderSidePanelSurface.tsx
-// 右侧展开的控制面板：一张方封面压在最上面，下面是曲目信息、一排标签页，再下面是当前标签页的内容。
+// 右侧展开的控制面板：一张方封面压在最上面，紧接着一排标签页，再下面是当前标签页的内容。
 //
-// 标签页那一排是这块面板的全部意义 —— 封面、控制、队列、账号是同一块地方的四副面孔，
-// 画成四个并排的小格子而不是一堆行，才读得出「这里可以换页」。
+// 封面和标签排之间没有第三段。歌名、歌手、专辑是**封面页的内容**，跟着标签一起换，
+// 画成面板结构里的一条常驻信息带就把这件事讲反了。
+//
+// 标签页那一排是这块面板的全部意义 —— 封面、控制、队列、账号是同一块地方的几副面孔，
+// 画成几个并排的小格子而不是一堆行，才读得出「这里可以换页」。
 //
 // 标签排和它下面那块内容同属一层：换页时高亮要跟着挪到新的那一格上，
 // 只换下半截的话，画面会停在「还选着上一页」的状态。
@@ -22,10 +51,18 @@ type PonderSidePanelSurfaceProps = {
     registerStateNode?: PonderSurfaceStateRegistrar;
 };
 
-/** 常驻那四页；来源不同还会多出本地、Navidrome 或歌词页，那几页不是每次都在。 */
+type PageProps = { accent: string; line: string; outline: string };
+
+/** 常驻那四页；来源不同还会在封面页后面插入本地、Navidrome 或歌词页，那一格不是每次都在。 */
 const TABS = [Disc, SlidersHorizontal, ListMusic, User];
 
-/** 标签排加它下面那块内容。换页时整块一起换，高亮才会落在新的那一格上。 */
+/**
+ * 标签排加它下面那块内容。换页时整块一起换，高亮才会落在新的那一格上。
+ *
+ * 真实那一排是 `rounded-xl` 的浅色槽加四个 `rounded-lg` 的格子：选中的那格换底色、
+ * 没选中的降到 40% 不透明度，图标始终在。把选中格画成一块纯色会把图标盖掉，
+ * 屏幕上就只剩三个图标加一个色块。
+ */
 const TabPage: React.FC<{
     active: number;
     accent: string;
@@ -36,7 +73,7 @@ const TabPage: React.FC<{
     <>
         <div
             data-ponder-panel-tabs
-            className="flex items-center gap-[3%] rounded-full p-[1.5%]"
+            className="flex items-center gap-[1%] rounded-xl p-[1.5%]"
             style={{ ...relativeRectStyle(G.tabs), backgroundColor: line }}
         >
             {TABS.map((Icon, index) => (
@@ -44,87 +81,199 @@ const TabPage: React.FC<{
                     key={index}
                     data-ponder-panel-tab
                     data-active={index === active || undefined}
-                    className="flex h-full flex-1 items-center justify-center rounded-full"
+                    className="flex h-full flex-1 items-center justify-center rounded-lg"
                     style={{
-                        backgroundColor: index === active ? accent : undefined,
-                        opacity: index === active ? 0.6 : 1,
-                        color: index === active ? accent : undefined,
+                        backgroundColor: index === active ? `${accent}33` : undefined,
+                        opacity: index === active ? 1 : 0.4,
                     }}
                 >
-                    <Icon className="h-[52%] w-auto opacity-75" />
+                    <Icon className="h-[46%] w-auto" style={{ color: index === active ? accent : undefined }} />
                 </span>
             ))}
         </div>
         {children}
         <span
             data-ponder-panel-tab-marker
-            className="absolute rounded-full"
+            className="absolute rounded-xl"
             style={{ ...relativeRectStyle(G.tabs), border: `1px solid ${outline}`, opacity: 0 }}
         />
     </>
 );
 
-/** 封面那一页：一张大图加歌手、专辑、来源页这些跳转。 */
-const CoverRows: React.FC<{ accent: string; line: string; outline: string }> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-cover-page className="flex flex-col justify-evenly" style={relativeRectStyle(G.body)}>
-        {[0, 1, 2].map(index => (
-            <div key={index} className="flex items-center gap-2">
-                <span className="h-1.5 flex-1 rounded-full" style={{ width: `${72 - index * 10}%`, backgroundColor: line }} />
-                <ExternalLink className="h-3 w-3 shrink-0" style={{ color: index === 0 ? accent : undefined, opacity: index === 0 ? 1 : 0.4 }} />
+/**
+ * 封面页：居中的大歌名，下面是歌手和专辑。
+ *
+ * 这一页没有第二张封面 —— 封面本来就常驻在面板顶上。歌手和专辑是可点的链接，
+ * 歌名点一下是复制信息，所以三行都按「文字」画，不画跳转图标。
+ */
+const CoverPage: React.FC<PageProps> = ({ accent, line }) => (
+    <div data-ponder-panel-cover-page className="flex flex-col items-center gap-[7%] pt-[6%]" style={relativeRectStyle(G.body)}>
+        <span className="h-[14%] w-[72%] rounded-full" style={{ backgroundColor: line, opacity: 0.95 }} />
+        <span className="h-[9%] w-[46%] rounded-full" style={{ backgroundColor: accent, opacity: 0.55 }} />
+        <span className="h-[8%] w-[34%] rounded-full opacity-45" style={{ backgroundColor: line }} />
+    </div>
+);
+
+/**
+ * 控制页：三颗大按钮、一行音量、两行模式取景器。
+ *
+ * 顶上那排三颗是循环 / 喜欢 / 生成主题，是整块面板里唯一一排大触控目标；
+ * 下面才是边听边调的那些参数。画成三条滑杆会把这一页认错成均衡器。
+ */
+const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-controls className="flex flex-col gap-[6%]" style={relativeRectStyle(G.body)}>
+        <div className="grid h-[26%] shrink-0 grid-cols-3 gap-[4%]">
+            {[Repeat, Heart, Sparkle].map((Icon, index) => (
+                <span
+                    key={index}
+                    data-ponder-panel-song-action
+                    className="flex items-center justify-center rounded-xl"
+                    style={{ backgroundColor: line }}
+                >
+                    <Icon className="h-[38%] w-auto opacity-70" />
+                </span>
+            ))}
+        </div>
+
+        <div
+            data-ponder-panel-volume
+            className="flex h-[16%] shrink-0 items-center gap-[4%] rounded-xl px-[4%]"
+            style={{ backgroundColor: line }}
+        >
+            <Volume2 className="h-[42%] w-auto shrink-0 opacity-45" />
+            <span className="relative h-[8%] min-w-0 flex-1 rounded-full" style={{ backgroundColor: outline }}>
+                <span className="absolute inset-y-0 left-0 w-[64%] rounded-full" style={{ backgroundColor: accent, opacity: 0.8 }} />
+            </span>
+            <SlidersHorizontal className="h-[36%] w-auto shrink-0 opacity-45" />
+        </div>
+
+        {[0, 1].map(index => (
+            <div key={index} className="flex h-[16%] shrink-0 items-center gap-[3%] px-[1%]">
+                <ChevronLeft className="h-[40%] w-auto shrink-0 opacity-35" />
+                <span className="aspect-square h-[62%] shrink-0 rounded-md border" style={{ borderColor: outline }} />
+                <span className="h-[12%] flex-1 rounded-full opacity-70" style={{ backgroundColor: line }} />
+                <span
+                    className="h-[62%] w-[22%] shrink-0 rounded-full border"
+                    style={{ borderColor: outline, backgroundColor: index === 0 ? `${accent}22` : undefined }}
+                />
+                <ChevronRight className="h-[40%] w-auto shrink-0 opacity-35" />
             </div>
         ))}
     </div>
 );
 
-/** 账号那一页：当前来源的账号、音质、占用与清理。 */
-const AccountRows: React.FC<{ accent: string; line: string; outline: string }> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-account className="flex flex-col justify-evenly" style={relativeRectStyle(G.body)}>
-        <div className="flex items-center gap-2">
-            <span className="aspect-square h-4 rounded-full" style={{ backgroundColor: accent, opacity: 0.5 }} />
-            <span className="h-1.5 w-[46%] rounded-full" style={{ backgroundColor: line }} />
+/**
+ * 队列页：顶上一行标题与三颗小按钮，下面一行一首歌。
+ *
+ * 行里没有缩略图 —— 真实那一行左端只有一根标记条（当前这首才亮），然后是歌名和歌手，
+ * 指针悬上去右端才浮出「下一首播放 / 移到队尾 / 移除」。
+ */
+const QueuePage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-queue className="flex flex-col gap-[4%]" style={relativeRectStyle(G.body)}>
+        <div className="flex h-[12%] shrink-0 items-center gap-[3%] px-[2%]">
+            <span className="h-[22%] w-[34%] rounded-full opacity-60" style={{ backgroundColor: line }} />
+            <span className="flex-1" />
+            <PanelsTopLeft className="h-[52%] w-auto opacity-45" />
+            <Shuffle className="h-[52%] w-auto opacity-45" />
         </div>
-        <div className="flex items-center gap-2">
-            <HardDrive className="h-3 w-3 opacity-45" />
-            <span className="h-1.5 w-[62%] rounded-full opacity-70" style={{ backgroundColor: line }} />
+        {[0, 1, 2, 3].map(index => (
+            <div
+                key={index}
+                data-ponder-panel-queue-row
+                className="flex min-h-0 flex-1 items-center gap-[3%] rounded-lg px-[2%]"
+                style={{ backgroundColor: index === 0 ? outline : undefined }}
+            >
+                <span
+                    className="h-[46%] w-[2%] shrink-0 rounded-full"
+                    style={{ backgroundColor: index === 0 ? accent : 'transparent' }}
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-[14%]">
+                    <span className="h-1.5 rounded-full" style={{ width: `${78 - index * 9}%`, backgroundColor: line }} />
+                    <span className="h-1 rounded-full opacity-45" style={{ width: `${46 + index * 5}%`, backgroundColor: line }} />
+                </span>
+                {index === 0 ? (
+                    <span className="flex shrink-0 items-center gap-[2px] opacity-60">
+                        <ListPlus className="h-3 w-3" />
+                        <ListEnd className="h-3 w-3" />
+                        <Trash2 className="h-3 w-3" />
+                    </span>
+                ) : null}
+            </div>
+        ))}
+    </div>
+);
+
+/**
+ * 账号页：来源账号卡、音质四选一、同步按钮。
+ *
+ * 缓存占用和清理那一块在真实界面里是注释掉的，画出来等于教一个屏幕上不存在的东西。
+ */
+const AccountPage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-account className="flex flex-col gap-[6%]" style={relativeRectStyle(G.body)}>
+        <div
+            data-ponder-panel-account-card
+            className="flex h-[30%] shrink-0 items-center gap-[4%] rounded-xl px-[4%]"
+            style={{ backgroundColor: line }}
+        >
+            <span className="aspect-square h-[58%] shrink-0 rounded-full" style={{ backgroundColor: accent, opacity: 0.5 }} />
+            <span className="flex flex-1 flex-col gap-1">
+                <span className="h-1.5 w-[52%] rounded-full" style={{ backgroundColor: outline }} />
+                <span className="h-1 w-[34%] rounded-full opacity-60" style={{ backgroundColor: outline }} />
+            </span>
+            <LogOut className="h-3.5 w-3.5 shrink-0 opacity-55" />
         </div>
-        <span className="flex h-6 items-center justify-center rounded-full border" style={{ borderColor: outline }}>
-            <span className="h-1 w-[34%] rounded-full" style={{ backgroundColor: line }} />
+
+        <div
+            data-ponder-panel-account-quality
+            className="flex flex-1 flex-col gap-[8%] rounded-xl p-[4%]"
+            style={{ backgroundColor: line }}
+        >
+            <span className="flex shrink-0 items-center gap-[3%]">
+                <SlidersHorizontal className="h-2.5 w-2.5 opacity-50" />
+                <span className="h-1 w-[32%] rounded-full opacity-60" style={{ backgroundColor: outline }} />
+            </span>
+            <span className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-[5%]">
+                {[0, 1, 2, 3].map(index => (
+                    <span
+                        key={index}
+                        className="flex items-center justify-center rounded-lg"
+                        style={{ backgroundColor: index === 1 ? `${accent}33` : outline, opacity: index === 1 ? 1 : 0.5 }}
+                    >
+                        <span className="h-1 w-[46%] rounded-full" style={{ backgroundColor: index === 1 ? accent : outline }} />
+                    </span>
+                ))}
+            </span>
+        </div>
+
+        <span
+            data-ponder-panel-account-sync
+            className="flex h-[16%] shrink-0 items-center justify-center gap-[3%] rounded-lg"
+            style={{ backgroundColor: line }}
+        >
+            <RefreshCw className="h-3 w-3 opacity-60" />
+            <span className="h-1 w-[26%] rounded-full opacity-60" style={{ backgroundColor: outline }} />
         </span>
     </div>
 );
 
-/** 队列那一页：一行一首歌，当前这首带标记。 */
-const QueueRows: React.FC<{ accent: string; line: string; outline: string }> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-queue className="flex flex-col gap-[6%]" style={relativeRectStyle(G.body)}>
-        {[0, 1, 2, 3].map(index => (
-            <div key={index} className="flex min-h-0 flex-1 items-center gap-2 border-b" style={{ borderColor: outline }}>
-                <span
-                    className="aspect-square h-[62%] rounded-[16%]"
-                    style={{ backgroundColor: index === 0 ? accent : line, opacity: index === 0 ? 0.55 : 1 }}
-                />
-                <span className="flex flex-1 flex-col gap-1">
-                    <span className="h-1.5 rounded-full" style={{ width: `${78 - index * 9}%`, backgroundColor: line }} />
-                    <span className="h-1 rounded-full opacity-60" style={{ width: `${46 + index * 5}%`, backgroundColor: line }} />
-                </span>
-            </div>
-        ))}
-    </div>
-);
-
-/** 控制那一页：几条滑杆和开关。 */
-const ControlRows: React.FC<{ accent: string; line: string; outline: string }> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-controls className="flex flex-col justify-evenly" style={relativeRectStyle(G.body)}>
-        {[0.62, 0.34, 0.78].map((fill, index) => (
-            <div key={index} className="flex items-center gap-2">
-                <span className="h-1.5 w-[22%] rounded-full opacity-70" style={{ backgroundColor: line }} />
-                <span className="relative h-1.5 flex-1 rounded-full" style={{ backgroundColor: line }}>
-                    <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${fill * 100}%`, backgroundColor: accent, opacity: 0.6 }} />
-                    <span
-                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-                        style={{ left: `${fill * 100}%`, borderColor: outline, backgroundColor: accent }}
-                    />
-                </span>
-            </div>
+/** 封面四角那四颗按钮。平时是透明的，指针移上封面才浮出来。 */
+const CoverActions: React.FC<{ accent: string; outline: string }> = ({ accent, outline }) => (
+    <div data-ponder-panel-cover-actions className="overflow-hidden rounded-[6%]" style={relativeRectStyle(G.cover)}>
+        <span className="absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
+        {([
+            ['data-ponder-panel-cover-settings', A.settings, Settings],
+            ['data-ponder-panel-cover-transparent', A.transparent, MirrorRectangular],
+            ['data-ponder-panel-cover-home', A.home, Home],
+            ['data-ponder-panel-cover-playlist', A.addToPlaylist, Star],
+        ] as const).map(([marker, rect, Icon]) => (
+            <span
+                key={marker}
+                {...{ [marker]: true }}
+                className="flex items-center justify-center rounded-full border"
+                style={{ ...relativeRectStyle(rect), borderColor: outline, backgroundColor: 'rgba(9,9,11,0.55)', color: accent }}
+            >
+                <Icon className="h-[46%] w-auto" />
+            </span>
         ))}
     </div>
 );
@@ -145,40 +294,40 @@ const PonderSidePanelSurface: React.FC<PonderSidePanelSurfaceProps> = ({
                 <Disc className="h-[28%] w-[28%] opacity-45" />
             </span>
 
-            <div data-ponder-panel-meta className="flex flex-col justify-center gap-2" style={relativeRectStyle(G.meta)}>
-                <span className="h-2 w-[64%] rounded-full" style={{ backgroundColor: line }} />
-                <span className="h-1.5 w-[40%] rounded-full opacity-60" style={{ backgroundColor: line }} />
-            </div>
-
             <PonderSurfaceStateLayer state={SIDE_PANEL_BODY_STATE} registerStateNode={registerStateNode} visible>
                 <TabPage active={0} accent={accent} line={line} outline={outline}>
-                    <CoverRows accent={accent} line={line} outline={outline} />
+                    <CoverPage accent={accent} line={line} outline={outline} />
                 </TabPage>
             </PonderSurfaceStateLayer>
         </PonderSurfaceBase>
 
+        {/* 指针移上封面，四个角浮出来。纯叠加：底下那张封面要留着。 */}
+        <PonderSurfaceStateLayer state="cover-actions" registerStateNode={registerStateNode}>
+            <CoverActions accent={accent} outline={outline} />
+        </PonderSurfaceStateLayer>
+
         {/* 换标签页替换的是「标签排 + 内容」这一整层，高亮才会跟着挪到新的那一格上。 */}
         <PonderSurfaceStateLayer state="cover-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={0} accent={accent} line={line} outline={outline}>
-                <CoverRows accent={accent} line={line} outline={outline} />
+                <CoverPage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
 
         <PonderSurfaceStateLayer state="controls-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={1} accent={accent} line={line} outline={outline}>
-                <ControlRows accent={accent} line={line} outline={outline} />
+                <ControlsPage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
 
         <PonderSurfaceStateLayer state="queue-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={2} accent={accent} line={line} outline={outline}>
-                <QueueRows accent={accent} line={line} outline={outline} />
+                <QueuePage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
 
         <PonderSurfaceStateLayer state="account-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={3} accent={accent} line={line} outline={outline}>
-                <AccountRows accent={accent} line={line} outline={outline} />
+                <AccountPage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
     </div>

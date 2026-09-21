@@ -2871,6 +2871,7 @@ export default {
       "lyricsAnimation": {
         "panel": "Pengaturan \u00b7 Animasi lirik",
         "entry": "Gaya animasi lirik",
+        "card": "Kartu berisi kedua sakelar",
         "transparent": "Latar pemutar transparan",
         "autoHide": "Sembunyikan bilah kontrol otomatis"
       },
@@ -2879,14 +2880,20 @@ export default {
         "themePark": "Theme Park",
         "presetDefault": "Preset bawaan",
         "presetCustom": "Warna kustom",
-        "source": "Sumber pembuatan tema"
+        "source": "Sumber pembuatan tema",
+        "followSystem": "Ikuti terang/gelap sistem",
+        "preferCustom": "Utamakan tema kustom",
+        "autoSwitch": "Ganti tema otomatis"
       },
       "sidePanel": {
         "panel": "Panel kontrol",
         "cover": "Sampul saat ini",
-        "meta": "Info lagu",
         "tabs": "Tab",
-        "body": "Isi tab aktif"
+        "body": "Isi tab aktif",
+        "coverSettings": "Buka pengaturan",
+        "coverTransparent": "Latar pemutar transparan",
+        "coverHome": "Kembali ke beranda",
+        "coverPlaylist": "Tambahkan ke playlist"
       },
       "playerBar": {
         "play": "Putar / jeda",
@@ -2946,6 +2953,11 @@ export default {
       "lyricsAnimationSettings": "Pengaturan animasi lirik",
       "themeSettings": "Pengaturan warna tema",
       "sidePanel": "Panel kontrol kanan",
+      "panelCoverActions": "Empat tombol di atas sampul",
+      "panelCoverTab": "Panel \u00b7 Tab sampul",
+      "panelControlsTab": "Panel \u00b7 Tab kontrol",
+      "panelQueueTab": "Panel \u00b7 Tab antrean",
+      "panelAccountTab": "Panel \u00b7 Tab akun",
       "latticePage": "Halaman Lattice",
       "helpPage": "Halaman Bantuan",
       "settingsPage": "Halaman Opsi"
@@ -2984,6 +2996,9 @@ export default {
       "lyricsAnimationToggles": "Dua sakelar yang mengubah tampilan",
       "themeSettingsPresets": "Preset dan kustom",
       "themeSettingsSource": "Dari mana warnanya",
+      "themeSettingsAuto": "Kapan paletnya berubah sendiri",
+      "panelCoverActionsReveal": "Empat tombol yang hanya muncul saat disentuh penunjuk",
+      "panelCoverActionsRight": "Dua yang di kanan",
       "sidePanelStructure": "Isi panel",
       "sidePanelTabs": "Berganti tab",
       "latticePageOverview": "Susunan Lattice",
@@ -3037,7 +3052,7 @@ export default {
         "playerLyrics": "Bagian tengah adalah lirik dan visualizer. Itu bukan kontrol: mengkliknya sama dengan mengklik latar, hanya menampilkan atau menyembunyikan bilah kontrol, bukan menjeda.",
         "playerBarWhere": "Bilah kontrol melayang di tengah bawah, tidak menempel tepi. Putar/jeda di ujung kiri, judul dan bilah kemajuan di tengah, dan dua posisi kanan berisi apa pun pilihanmu.",
         "playerToggleWhere": "Pegangan samping menempel di tepi kanan layar, dasarnya sejajar dengan bilah kontrol. Bentuknya bulat; tekan sekali dan panel kontrol kanan terbuka.",
-        "playerPanelWhere": "Panel tumbuh ke atas dari pegangan, lebarnya tetap dan menempel tepi kanan. Sampul di atas, lalu info lagu dan sebaris tab \u2014 sampul, kontrol, antrean, akun adalah beberapa wajah dari satu tempat.",
+        "playerPanelWhere": "Panel tumbuh ke atas dari pegangan, lebarnya tetap dan menempel tepi kanan. Satu sampul persegi di atas, lalu langsung sebaris tab: sampul, kontrol, antrean, akun. Judul dan artis milik tab sampul, bukan struktur panel.",
         "playerPaletteSlide": "Ada juga rel yang tersembunyi di belakang pegangan. Tahan pegangan, seret ke kiri melewati garis pemicu, lalu lepaskan: itu membuka jendela perintah, bukan panel.",
         "playerPaletteOpened": "Jendela perintah turun dari atas layar, rata tengah. Semua urusan \u201cmencari fitur\u201d ada di sini.",
         "playerPaletteOtherWays": "Tidak perlu menyeret: {{mod}} + K membuka jendela yang sama dari mana saja; di layar sentuh, ketuk dekat tepi kanan untuk memunculkan pegangannya lebih dulu.",
@@ -3100,30 +3115,45 @@ export default {
         "barShows": "Di situlah bilah kontrol bawah menggantikan: begitu poster lagu yang diputar keluar dari tampilan, ia muncul; dan melipat lagi setelah poster itu terlihat kembali. Kontrol pemutaran tidak pernah benar-benar hilang."
       },
       "sidePanel": {
-        "cover": "Sampul lagu saat ini ada di bagian atas panel; arahkan penunjuk ke sana dan aksi untuk lagu itu muncul.",
-        "tabs": "Di bawah sampul ada barisan tab: sampul, kontrol, antrean, akun \u2014 ditambah lokal, Navidrome atau lirik tergantung sumbernya. Semuanya wajah dari satu tempat; berganti tab tidak memindahkan panel.",
+        "cover": "Sampul lagu saat ini ada di bagian paling atas panel, satu blok persegi selebar panel. Ia bukan milik tab mana pun \u2014 berganti tab tidak memindahkannya. Arahkan penunjuk ke sana dan satu tombol muncul di tiap sudutnya.",
+        "tabs": "Tepat di bawah sampul ada barisan tab: sampul, kontrol, antrean, akun. Saat lagu aktif berasal dari lokal, Navidrome atau daring, satu kotak lagi disisipkan setelah tab sampul. Semuanya wajah dari satu tempat; berganti tab tidak memindahkan panel.",
+        "body": "Semua yang di bawah barisan tab adalah isi tab aktif. Strukturnya hanya itu: satu sampul, lalu sebaris tab dan isinya \u2014 tidak ada pita informasi ketiga yang menetap di antaranya.",
         "cycle": "Kamu tidak perlu mengklik barisan kotak kecil itu. Saat panel terbuka, Tab memindahkan satu tab ke depan.",
         "cycleReverse": "Shift + Tab mundur satu. Siklusnya hanya melewati tab yang memang ada saat ini \u2014 sumber berbeda membawa tab berbeda.",
-        "coverTab": "Tab sampul tentang lagu saat ini: sampul besar, dengan judul, artis dan album di bawahnya.",
-        "coverTabDetail": "Artis dan album keduanya tautan ke koleksinya; kamu juga bisa melompat ke halaman lagu ini di platform sumbernya, atau menyalin metadatanya.",
-        "controlsTab": "Tab kontrol berisi parameter yang kamu atur sambil mendengarkan.",
-        "controlsTabDetail": "Equalizer, gain dan offset linimasa lirik ada di sini, bersama sakelar terang/gelap dan edit cepat palet aktif \u2014 perubahannya langsung terdengar tanpa bolak-balik ke panel pengaturan.",
-        "queueTab": "Tab antrean adalah daftar lengkap antrean putar saat ini.",
-        "queueTabDetail": "Seret untuk menyusun ulang, atau untuk lagu mana pun: putar berikutnya, pindah ke akhir, hapus. Bagian atasnya bisa mengacak seluruh antrean, mengosongkannya, atau membentangkannya sebagai dinding poster Lattice.",
+        "coverTab": "Tab sampul berisi teks lagu saat ini: judul, artis dan album, tersusun rata tengah. Sampul besarnya bukan bagian tab ini \u2014 ia selalu ada di atas panel.",
+        "coverTabDetail": "Artis dan album keduanya tautan ke koleksinya. Mengklik judul menyalin \u201cjudul - artis - album\u201d beserta tautan halaman sumbernya; Ctrl+klik malah membuka halaman lagu ini di platform sumbernya.",
+        "controlsTab": "Bagian atas tab kontrol adalah tiga tombol besar: mode ulang, suka, dan buat tema. Itu satu-satunya deretan target sentuh besar di seluruh panel.",
+        "controlsTabDetail": "Di bawahnya: satu baris volume dengan equalizer dan automix di ujung kanannya, dua baris \u201c\u2039 mode \u203a\u201d untuk animasi lirik dan latar, lalu sumber palet dan edit cepat tema aktif. Gain dan offset lirik ada di tab sumber, bukan di sini.",
+        "queueTab": "Tab antrean adalah daftar lengkap antrean putar saat ini, dengan jumlah lagunya di baris kepala.",
+        "queueTabDetail": "Klik satu baris untuk memutar dari lagu itu; arahkan penunjuk ke baris dan putar berikutnya, pindah ke akhir serta hapus muncul di kanannya. Dua tombol di kepala membentangkan antrean sebagai dinding Lattice dan mengacaknya. Barisnya tidak bisa diseret.",
         "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
-        "accountTabDetail": "Status masuk, tingkat kualitas audio, ukuran cache lokal dan pembersihannya, serta sinkronisasi data ke awan. Ia mengikuti sumber aktif: ganti sumber, isinya berbeda."
+        "accountTabDetail": "Di atas ada status masuk sumber itu: avatar, nama, nama sumber dan ID, dengan keluar di sebelah kanan. Di bawahnya tingkat kualitas audio \u2014 standar, tinggi, lossless, hi-res \u2014 dan paling bawah sinkronisasi data ke awan. Ganti sumber, isinya berbeda."
+      },
+      "panelCoverActions": {
+        "appear": "Sampulnya kosong saat diam. Arahkan penunjuk ke sana dan satu tombol muncul di tiap sudut \u2014 empat hal yang tidak saling berhubungan, bukan satu set \u201caksi untuk lagu ini\u201d.",
+        "settings": "Yang di kiri atas membuka pengaturan. Menekannya melipat panel dulu, lalu membentangkan jendela pengaturan di atas halaman.",
+        "home": "Yang di kiri bawah kembali ke dinding poster di beranda, juga melipat panel lebih dulu. Pemutaran tidak terputus.",
+        "transparent": "Yang di kanan atas adalah \u201clatar pemutar transparan\u201d, paling mudah tertekan tanpa sengaja: ia mengubah seluruh jendela jadi transparan, untuk browser source OBS atau overlay keying, dan hanya berlaku di halaman pemutar.",
+        "addToPlaylist": "Yang di kanan bawah menambahkan lagu aktif ke playlist. Ia hanya ada bila sumber saat ini punya playlist; saat lagunya tidak bisa ditambahkan tombolnya redup dan alasannya muncul saat disentuh penunjuk.",
+        "touch": "Di layar sentuh tidak ada hover: ketuk sampulnya dan keempat tombol muncul, ketuk di luarnya dan mereka melipat kembali."
       },
       "lyricsAnimation": {
         "where": "Animasi lirik tidak diganti di halaman pemutar. Tempatnya di Pengaturan \u00b7 Tampilan pada grup \u201cAnimasi lirik\u201d, dan baris paling atas ini adalah pintu masuknya.",
-        "playground": "Yang terbuka adalah meja kerja animasi: kolom mode yang tersedia di kiri, pratinjau langsung di kanan. Apa pun yang kamu pilih itulah yang dipakai halaman pemutar.",
-        "transparent": "\u201cLatar pemutar transparan\u201d menaruh lirik langsung di atas visualizer tanpa lapisan warna. Nyalakan kalau kamu ingin latarnya terlihat.",
-        "autoHide": "\u201cSembunyikan bilah kontrol otomatis\u201d melipat bilah bawah saat penunjuk diam, menyisakan lirik saja. Dekati dan ia kembali."
+        "playground": "Yang terbuka adalah meja kerja animasi satu layar penuh. Blok besar di kiri adalah pratinjau langsung dari apa yang benar-benar akan dirender halaman pemutar; kolom sempit di kanan barulah pengaturannya.",
+        "playgroundSections": "Kolom kanan itu terbagi jadi Umum, Latar, Animasi dan Subtitel. Mode animasi lirik dipilih di halaman Animasi \u2014 apa pun yang kamu pilih itulah yang dipakai halaman pemutar \u2014 dan parameter khusus mode itu menyusul di bawahnya.",
+        "card": "Satu kartu di bawah pintu masuk memuat kedua sakelar. Keduanya paruh atas dan bawah dari kartu yang sama, dipisahkan satu garis \u2014 bukan dua kartu berdampingan.",
+        "transparent": "Baris atas, \u201clatar pemutar transparan\u201d, hanya berlaku di halaman pemutar: ia mengganti jendela ke mode transparan, untuk browser source OBS atau overlay keying. Ini sakelar yang sama dengan tombol di sudut kanan atas sampul.",
+        "autoHide": "Baris bawah, \u201csembunyikan bilah kontrol otomatis\u201d, melipat bilah kemajuan dan tombol samping halaman pemutar saat penunjuk diam, menyisakan lirik saja. Dekati dan keduanya kembali."
       },
       "themeSettings": {
-        "presetDefault": "Kartu di kiri adalah preset bawaan: tinta untuk gelap, putih polos untuk terang, berganti mengikuti mode terang/gelap.",
-        "presetCustom": "Kartu di kanan adalah palet kustommu. Pilih itu dan halaman pemutar, kartu dan panel semuanya pindah ke warna tersebut.",
-        "source": "Palet kustom tidak diracik manual \u2014 di sini kamu memilih asalnya: diambil dari sampul saat ini, atau disimpulkan AI. Opsi AI butuh API key penyedia lebih dulu.",
-        "themePark": "Theme Park di kanan atas adalah pustaka palet lengkap dalam satu layar. Melihat semua pilihan sekaligus jauh lebih cepat daripada bolak-balik di antara dua kartu kecil ini."
+        "presetDefault": "Yang di kiri adalah preset bawaan, Tinta / Polos: satu titik gradien kecil di atas label, berganti antara gelap dan terang mengikuti mode terang/gelap.",
+        "presetCustom": "Yang di kanan adalah palet kustommu. Ia redup dan tidak bisa ditekan sebelum ada tema kustom; begitu ada, memilihnya memindahkan halaman pemutar, kartu dan panel ke warna tersebut.",
+        "source": "Palet kustom tidak diracik manual \u2014 di sini asalnya dipilih, dan pilihannya tepat dua: diambil dari sampul saat ini, atau disimpulkan AI dari liriknya. Opsi AI nonaktif sampai API key penyedia dikonfigurasi.",
+        "themePark": "Tombol palet bundar di kanan judul membuka Theme Park. Ia bukan pustaka palet \u2014 ia editor palet satu layar penuh: visualizer sungguhan mempratinjau rancanganmu secara langsung di kiri, jadi perubahan warna terlihat seketika.",
+        "themeParkTabs": "Kolom di kanan terbagi jadi Warna, Info, Konten dan AI: halaman Warna memilih tiap warna dan menyimpan set terang serta gelap terpisah; halaman AI menyuruh model membuat satu palet utuh. Yang kamu simpan menjadi entri \u201ckustom\u201d di atas.",
+        "followSystem": "Paruh bawah grup ini adalah tiga sakelar. \u201cIkuti terang/gelap sistem\u201d mengikuti pengaturan sistem \u2014 dan mematikan dirinya sendiri begitu kamu mengganti terang/gelap secara manual.",
+        "preferCustom": "Menyalakan \u201cutamakan tema kustom\u201d mematikan pergantian tema otomatis: keduanya saling meniadakan. Itulah sebabnya warnanya berhenti berubah antar lagu begitu ini aktif.",
+        "autoSwitch": "\u201cGanti tema otomatis\u201d kebalikannya: pindah ke lagu yang pernah dibuatkan tema dan palet itu diterapkan lagi. Menyalakannya menambah satu baris lagi di bawah, yang membuat palet di tempat untuk lagu yang belum punya cache."
       },
       "panelSlide": {
         "grabbed": "Tekan dan tahan tombolnya. Lintasan di belakangnya menyala.",

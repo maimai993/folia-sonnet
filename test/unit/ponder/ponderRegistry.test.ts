@@ -140,7 +140,7 @@ describe('ponder registry', () => {
             'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
             'player-bar': new Set(['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed']),
             'player-page': new Set(['palette-open', 'execute-mode', 'panel-open']),
-            'side-panel': new Set(['cover-tab', 'controls-tab', 'queue-tab', 'account-tab']),
+            'side-panel': new Set(['cover-actions', 'cover-tab', 'controls-tab', 'queue-tab', 'account-tab']),
             'lattice-chrome': new Set(['slots-swapped', 'bottom-bar-shown']),
             'lyrics-animation-settings': new Set(['playground-open']),
             'theme-settings': new Set(['theme-park-open']),

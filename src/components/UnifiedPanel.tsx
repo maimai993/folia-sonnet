@@ -620,8 +620,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         >
                             <div className="p-5 flex flex-col">
                                 {/* Top: Cover Art */}
+                                {/* 四个角上的按钮平时完全看不见，所以整块封面是思索的落点：
+                                    指针停在封面上，讲的就是「这上面还藏着什么」。 */}
                                 <div
                                     ref={coverAreaRef}
+                                    data-ponder-panel-artwork
                                     onClick={(event) => {
                                         event.stopPropagation();
                                         if (!supportsHover) {
@@ -743,6 +746,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             key={tab.id}
                                             onClick={() => onTabChange(tab.id)}
                                             aria-pressed={currentTab === tab.id}
+                                            // 每一格各自是一个思索目标：停在哪一格，讲的就是那一页。
+                                            data-ponder-panel-tab-button={tab.id}
                                             className={`flex-1 py-2 flex items-center justify-center transition-all rounded-lg
                                                 ${currentTab === tab.id ? `${activeTabBg} shadow-sm` : 'opacity-40 hover:opacity-100'}`}
                                             title={tab.label}

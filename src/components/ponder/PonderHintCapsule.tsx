@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { motion, useTransform } from 'framer-motion';
-import { Keyboard } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ponderPointerX, ponderPointerY } from '../../stores/motionSignals';
 import type { Theme } from '../../types';
@@ -21,6 +21,13 @@ const VIEWPORT_MARGIN_PX = 8;
 type PonderHintCapsuleProps = {
     label: string;
     /**
+     * 长按之后会打开的是哪个目标。
+     *
+     * 只写「按 G 思索」的话，用户在屏幕上同时压着好几个目标时（封面在面板里、标签页在
+     * 标签排里）没法知道松手会讲哪一个 —— 而这正是按组件划分目标之后最容易踩空的地方。
+     */
+    targetName?: string;
+    /**
      * 'cursor' 跟着指针走，给悬停某个组件那条路；
      * 'page' 钉在屏幕底部中间 —— Ctrl+G 是纯键盘触发，指针可能从没动过，
      * 跟随会把胶囊丢在视口左上角。
@@ -35,6 +42,7 @@ type PonderHintCapsuleProps = {
 
 const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
     label,
+    targetName,
     placement = 'cursor',
     theme,
     isDaylight,
@@ -55,7 +63,7 @@ const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
         if (rect.width > 0) {
             sizeRef.current = { width: rect.width, height: rect.height };
         }
-    }, [label]);
+    }, [label, targetName]);
 
     const x = useTransform(ponderPointerX, value => {
         const max = window.innerWidth - sizeRef.current.width - VIEWPORT_MARGIN_PX;
@@ -100,17 +108,26 @@ const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
                     className="absolute inset-0 origin-left"
                     style={{ transform: 'scaleX(0)', backgroundColor: accent, opacity: 0.22 }}
                 />
-                <Keyboard size={12} className="relative shrink-0" style={{ color: accent }} />
-                <span className="relative whitespace-nowrap">
-                    <span ref={labelRef}>{label}</span>
-                    {/* 压在同一处淡入，两段文案不会互相推挤布局。 */}
-                    <span
-                        ref={holdLabelRef}
-                        className="absolute inset-0 whitespace-nowrap"
-                        style={{ opacity: 0 }}
-                    >
-                        {t('ponder.hintCapsuleHold')}
+                <Lightbulb size={12} className="relative shrink-0" style={{ color: accent }} />
+                <span className="relative flex flex-col items-start leading-tight">
+                    <span className="relative whitespace-nowrap">
+                        <span ref={labelRef}>{label}</span>
+                        {/* 压在同一处淡入，两段文案不会互相推挤布局。 */}
+                        <span
+                            ref={holdLabelRef}
+                            className="absolute inset-0 whitespace-nowrap"
+                            style={{ opacity: 0 }}
+                        >
+                            {t('ponder.hintCapsuleHold')}
+                        </span>
                     </span>
+                    {/* 目标名留在第二行，不跟着擦除淡出 —— 按住的全程都要看得见讲的是哪一个。
+                        靠强调色和字重区分，不加括号：名字本身已经够短，括号只是多两个字符的噪声。 */}
+                    {targetName ? (
+                        <span className="whitespace-nowrap font-medium" style={{ color: accent }}>
+                            {targetName}
+                        </span>
+                    ) : null}
                 </span>
             </div>
         </motion.div>

@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useAppViewStore } from '../stores/useAppViewStore';
 import { usePonderStore } from '../stores/usePonderStore';
-import { openCurrentPagePonder } from '../services/ponder/pagePonderTarget';
+import { openCurrentPagePonder, readVisiblePagePonderScope, resolvePagePonderTarget } from '../services/ponder/pagePonderTarget';
+import type { PonderTargetId } from '../types/ponder';
 import { PONDER_HOLD_DURATION_MS, startPonderHoldProgress, type PonderHoldProgressRefs } from './ponderHoldProgress';
 
 // src/hooks/usePagePonderShortcut.ts
@@ -14,10 +16,18 @@ import { PONDER_HOLD_DURATION_MS, startPonderHoldProgress, type PonderHoldProgre
 export type PagePonderShortcutState = {
     /** 正在按住 Ctrl+G。提示胶囊靠它决定要不要出现。 */
     isHolding: boolean;
+    /**
+     * 松手会打开哪个页面教程。胶囊把它的名字写出来，用户按住的时候就知道讲的是哪一页。
+     *
+     * 在 keydown 当场解析一次：readVisiblePagePonderScope 要读 DOM，放进 render 里
+     * 等于每次重渲染都强制一次重排，而它只在按下那一刻会变。
+     */
+    targetId: PonderTargetId | null;
 };
 
 export const usePagePonderShortcut = (refs: PonderHoldProgressRefs): PagePonderShortcutState => {
     const [isHolding, setIsHolding] = useState(false);
+    const [targetId, setTargetId] = useState<PonderTargetId | null>(null);
     const { wipeRef, labelRef, holdLabelRef } = refs;
     const heldRef = useRef(false);
 
@@ -51,6 +61,10 @@ export const usePagePonderShortcut = (refs: PonderHoldProgressRefs): PagePonderS
             heldRef.current = true;
             // 提示一出现就把教程层那个 chunk 预热，400ms 按满时通常已经就绪。
             void import('../components/ponder/PonderStage');
+            setTargetId(resolvePagePonderTarget(
+                useAppViewStore.getState().view,
+                readVisiblePagePonderScope(),
+            ));
             setIsHolding(true);
         };
 
@@ -97,7 +111,7 @@ export const usePagePonderShortcut = (refs: PonderHoldProgressRefs): PagePonderS
         };
     }, [isHolding, wipeRef, labelRef, holdLabelRef]);
 
-    return { isHolding };
+    return { isHolding, targetId };
 };
 
 export default usePagePonderShortcut;

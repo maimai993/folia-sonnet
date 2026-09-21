@@ -38,9 +38,14 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
     const hoveredElementRef = usePonderHoverProbe();
     usePonderHoldToEnter({ hoveredElementRef, wipeRef, labelRef, holdLabelRef });
     // 页面级 Ctrl+G 也是长按，共用下面这一个胶囊和同一组擦除动画。
-    const { isHolding: isPageHolding } = usePagePonderShortcut({ wipeRef, labelRef, holdLabelRef });
+    const { isHolding: isPageHolding, targetId: pageTargetId } = usePagePonderShortcut({ wipeRef, labelRef, holdLabelRef });
 
     const target = hoveredTargetId ? findPonderTarget(hoveredTargetId) : null;
+    // 胶囊第二行写的是「松手会讲哪一个」。屏幕上常常同时压着好几个目标
+    // （封面在面板里、标签页在标签排里），不写出来就只能靠猜。
+    const namedTarget = isPageHolding
+        ? (pageTargetId ? findPonderTarget(pageTargetId) : null)
+        : target;
 
     return (
         <>
@@ -51,6 +56,7 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
                     <PonderHintCapsule
                         key={isPageHolding ? 'page' : target!.id}
                         label={isPageHolding ? t('ponder.hintCapsulePage') : t('ponder.hintCapsule')}
+                        targetName={namedTarget ? t(namedTarget.titleKey) : undefined}
                         placement={isPageHolding ? 'page' : 'cursor'}
                         theme={theme}
                         isDaylight={isDaylight}

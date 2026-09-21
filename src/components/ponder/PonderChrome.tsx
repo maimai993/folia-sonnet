@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lightbulb, Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PonderKeyCombo } from './PonderKeyCap';
 import type { PonderStageNodes } from './ponderStageNodes';
@@ -79,7 +79,7 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
             <div className="pointer-events-none absolute left-0 right-0 top-0 flex items-center justify-between px-6 py-5">
                 <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2 text-sm font-medium" style={{ color: text }}>
-                        <Keyboard size={15} style={{ color: accent }} />
+                        <Lightbulb size={15} style={{ color: accent }} />
                         <span style={{ color: muted }}>{t('ponder.title')}</span>
                         <span style={{ color: muted }}>·</span>
                         <span>{title}</span>

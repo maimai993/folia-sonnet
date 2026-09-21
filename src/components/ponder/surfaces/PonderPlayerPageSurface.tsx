@@ -148,20 +148,20 @@ const PonderPlayerPageSurface: React.FC<PonderPlayerPageSurfaceProps> = ({
                 style={{ ...relativeRectStyle(G.panel), borderColor: outline }}
             >
                 <span className="aspect-square w-full shrink-0 rounded-[7%]" style={{ backgroundColor: accent, opacity: 0.4 }} />
-                <span className="h-2 w-[64%] rounded-full" style={{ backgroundColor: line }} />
-                <div className="flex h-[9%] shrink-0 items-center gap-[4%] rounded-full p-[1.5%]" style={{ backgroundColor: line }}>
+                {/* 封面紧挨着标签排：真实面板里歌名歌手属于封面页的内容，不是面板结构的一层。 */}
+                <div className="flex h-[9%] shrink-0 items-center gap-[2%] rounded-xl p-[1.5%]" style={{ backgroundColor: line }}>
                     {[0, 1, 2, 3].map(index => (
                         <span
                             key={index}
-                            className="h-full flex-1 rounded-full"
+                            className="h-full flex-1 rounded-lg"
                             style={{ backgroundColor: index === 0 ? accent : 'transparent', opacity: index === 0 ? 0.55 : 1 }}
                         />
                     ))}
                 </div>
-                <div className="flex flex-1 flex-col justify-evenly">
-                    {[84, 60, 72].map(width => (
-                        <span key={width} className="h-1.5 rounded-full" style={{ width: `${width}%`, backgroundColor: line }} />
-                    ))}
+                <div className="flex flex-1 flex-col items-center gap-[8%] pt-[4%]">
+                    <span className="h-2 w-[72%] rounded-full" style={{ backgroundColor: line }} />
+                    <span className="h-1.5 w-[46%] rounded-full" style={{ backgroundColor: accent, opacity: 0.55 }} />
+                    <span className="h-1.5 w-[34%] rounded-full opacity-45" style={{ backgroundColor: line }} />
                 </div>
             </div>
         </PonderSurfaceStateLayer>

@@ -10,11 +10,16 @@
 
 /** 可教学区域。新增一个 target 要同时在这里登记 id，注册表才认。 */
 /**
- * 可教学区域，按**组件整体**划分，不按单个按钮。
+ * 可教学区域，按**用户会单独指着问的那个东西**划分。
  *
- * 用户是对着一个看得见的组件大致比划着按 G 的，指望他先精确命中某个小按钮再按，
- * 等于这条教程没人看得到。所以底部控制条是一个目标、里面分章节，
- * 而不是「高度」「槽位」「随机」「音量」四个各自为政的目标。
+ * 大多数时候那就是一个组件整体：用户对着看得见的一整条控制条大致比划着按 G，
+ * 指望他先精确命中右边某个 20px 的槽位再按，等于这条教程没人看得到 ——
+ * 所以底部控制条是一个目标、里面分章节，而不是「高度」「槽位」「随机」「音量」四个。
+ *
+ * 但组件本身就是一排选项卡、或者角上摆着几颗互不相干的按钮时，那一格、那一颗才是
+ * 被指的东西。控制面板的四个标签页和封面四角那四颗隐藏按钮属于这一类：合进 side-panel
+ * 的话，想问「队列页是什么」得先看完从封面讲起的六章。判据是「指针停在那儿时，
+ * 用户想知道的是什么」，不是 DOM 的粗细。
  */
 export type PonderTargetId =
     | 'panel-slide'
@@ -27,6 +32,14 @@ export type PonderTargetId =
     | 'settings-page'
     | 'command-palette'
     | 'side-panel'
+    // 控制面板里各自成立的那几处：封面四角那四颗隐藏按钮，以及四个标签页。
+    // 它们是「按组件划分」的下一层 —— 一格标签、一颗角上的按钮本身就是用户会单独
+    // 指着问的那个东西，合进 side-panel 的话，问一页要先看完六章。
+    | 'panel-cover-actions'
+    | 'panel-cover-tab'
+    | 'panel-controls-tab'
+    | 'panel-queue-tab'
+    | 'panel-account-tab'
     | 'lattice-chrome'
     | 'lyrics-animation-settings'
     | 'theme-settings';
@@ -307,7 +320,7 @@ export type PonderSceneScript = {
 
 export type PonderTargetDefinition = {
     id: PonderTargetId;
-    /** i18n key，标题栏「⌨ 思索 · <名称>」和命令面板列表共用。 */
+    /** i18n key，标题栏「💡 思索 · <名称>」和命令面板列表共用。 */
     titleKey: string;
     /**
      * 悬停命中用的选择器。`null` 表示这个目标在真实 DOM 里没有稳定落点，

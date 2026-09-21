@@ -95,6 +95,32 @@ test.describe('思索 · 真实 DOM 里的选择器', () => {
         expect(belongsToBar, '槽位按钮应当落在控制条这个目标内部').toBe(true);
     });
 
+    test('面板展开后，封面和四格标签各自的选择器都命中真实元素', async ({ page }) => {
+        await openPlayerPage(page);
+
+        await page.getByTestId('panel-toggle').click();
+        await expect(page.locator('[data-testid="unified-panel-surface"]')).toHaveCount(1, { timeout: 5000 });
+
+        const targets = await hoverSelectors(page);
+        // 封面四颗按钮和四个标签页各是一个目标，整块面板的选择器命中不了它们。
+        const insidePanel = [
+            'panel-cover-actions',
+            'panel-cover-tab',
+            'panel-controls-tab',
+            'panel-queue-tab',
+            'panel-account-tab',
+        ];
+
+        for (const id of insidePanel) {
+            const target = targets.find(entry => entry.id === id);
+            expect(target, `注册表里没有 ${id}`).toBeTruthy();
+            await expect(
+                page.locator(target!.selector!),
+                `${id} 的选择器 ${target!.selector} 在展开的面板里没有命中任何元素`,
+            ).toHaveCount(1, { timeout: 5000 });
+        }
+    });
+
     // 随机那一章不再按槽位筛（合成胶囊里直接把按钮换成随机），但 data-ponder-slot 的值
     // 仍然是槽位配置的唯一真源，改名了这里就该红。
     test('槽位按钮的 data-ponder-slot 跟着配置走', async ({ page }) => {

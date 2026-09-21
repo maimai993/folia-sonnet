@@ -2939,6 +2939,7 @@ export default {
       "lyricsAnimation": {
         "panel": "Settings \u00b7 Lyric animation",
         "entry": "Lyric animation style",
+        "card": "The card holding both switches",
         "transparent": "Transparent player background",
         "autoHide": "Auto-hide the control bar"
       },
@@ -2947,14 +2948,20 @@ export default {
         "themePark": "Theme Park",
         "presetDefault": "Built-in preset",
         "presetCustom": "Custom colours",
-        "source": "Theme generation source"
+        "source": "Theme generation source",
+        "followSystem": "Follow system light/dark",
+        "preferCustom": "Prefer the custom theme",
+        "autoSwitch": "Switch theme automatically"
       },
       "sidePanel": {
         "panel": "Control panel",
         "cover": "Current artwork",
-        "meta": "Track info",
         "tabs": "Tabs",
-        "body": "Current tab"
+        "body": "Current tab",
+        "coverSettings": "Open settings",
+        "coverTransparent": "Transparent player background",
+        "coverHome": "Back home",
+        "coverPlaylist": "Add to playlist"
       },
       "playerBar": {
         "play": "Play / pause",
@@ -3014,6 +3021,11 @@ export default {
       "lyricsAnimationSettings": "Lyric animation settings",
       "themeSettings": "Theme colour settings",
       "sidePanel": "Side control panel",
+      "panelCoverActions": "The four buttons on the artwork",
+      "panelCoverTab": "Panel \u00b7 Artwork tab",
+      "panelControlsTab": "Panel \u00b7 Controls tab",
+      "panelQueueTab": "Panel \u00b7 Queue tab",
+      "panelAccountTab": "Panel \u00b7 Account tab",
       "latticePage": "Lattice page",
       "helpPage": "Help page",
       "settingsPage": "Options page"
@@ -3052,6 +3064,9 @@ export default {
       "lyricsAnimationToggles": "Two switches that change the look",
       "themeSettingsPresets": "Presets and custom",
       "themeSettingsSource": "Where the colours come from",
+      "themeSettingsAuto": "When the palette changes by itself",
+      "panelCoverActionsReveal": "Four buttons that only appear on hover",
+      "panelCoverActionsRight": "The two on the right",
       "sidePanelStructure": "What is in the panel",
       "sidePanelTabs": "Switching tabs",
       "latticePageOverview": "How Lattice is organized",
@@ -3105,7 +3120,7 @@ export default {
         "playerLyrics": "The middle is lyrics and the visualizer. It is not a control: clicking it is clicking the background, which only shows or hides the control bar. It does not pause.",
         "playerBarWhere": "The control bar floats at the bottom centre, not flush with the edge. Play/pause is at its left end, the title and progress bar in the middle, and the two places on the right hold whatever you choose.",
         "playerToggleWhere": "The side handle sits against the right edge of the screen, its bottom aligned with the control bar. It is a round button; press it and the side control panel opens.",
-        "playerPanelWhere": "The panel grows upward from the handle, at a fixed width against the right edge. Artwork on top, then track info and a row of tabs \u2014 artwork, controls, queue and account are several faces of one place.",
+        "playerPanelWhere": "The panel grows upward from the handle, at a fixed width against the right edge. One square piece of artwork on top, then straight into a row of tabs: artwork, controls, queue, account. Title and artist belong to the artwork tab, not to the panel itself.",
         "playerPaletteSlide": "There is also a track hidden behind the handle. Hold the handle, drag it left past the trigger line and let go: that opens the command window, not the panel.",
         "playerPaletteOpened": "The command window drops in from the top, horizontally centred. Everything to do with finding a feature lives in here.",
         "playerPaletteOtherWays": "You do not have to drag: {{mod}} + K opens the same window from anywhere, and on a touch screen a tap near the right edge brings the handle out first.",
@@ -3168,30 +3183,45 @@ export default {
         "barShows": "That is when the bottom control bar steps in: the moment the playing song's poster leaves the viewport it appears, and it folds away again once that poster is back in view. Playback control never actually disappears."
       },
       "sidePanel": {
-        "cover": "The artwork for the current song sits at the top of the panel; hover it and the actions for that song appear.",
-        "tabs": "Below the artwork is the tab row: artwork, controls, queue, account \u2014 plus local, Navidrome or lyrics depending on the source. They are faces of one place; switching does not move the panel.",
+        "cover": "The artwork for the current song sits at the top of the panel, one square block spanning its full width. It belongs to no tab \u2014 switching tabs leaves it in place. Hover it and a button appears in each of its four corners.",
+        "tabs": "Directly below the artwork is the tab row: artwork, controls, queue, account. When the current song is local, from Navidrome or online, one more cell is inserted after the artwork tab. They are faces of one place; switching does not move the panel.",
+        "body": "Everything below the tab row is the current tab's content. That is the whole structure: one piece of artwork, then a row of tabs and what sits under it \u2014 there is no permanent third band in between.",
         "cycle": "You do not have to click that row of little cells. With the panel open, Tab moves one tab forward.",
         "cycleReverse": "Shift + Tab moves one back. The cycle only visits the tabs that actually exist right now \u2014 different sources bring different ones.",
-        "coverTab": "The artwork tab is about the current song: a large cover, with title, artist and album underneath.",
-        "coverTabDetail": "Artist and album are both links into their collections; you can also jump to this song's page on its source platform, or copy its metadata out.",
-        "controlsTab": "The controls tab holds the parameters you adjust while listening.",
-        "controlsTabDetail": "Equalizer, gain and lyric timeline offset live here, along with the light/dark switch and a quick edit for the current palette \u2014 you hear the change immediately instead of walking to the settings panel and back.",
-        "queueTab": "The queue tab is the full list of the current play queue.",
-        "queueTabDetail": "Drag to reorder, or on any song: play next, move to the end, remove. The header can shuffle the whole queue, clear it, or lay it out as the Lattice poster wall.",
+        "coverTab": "The artwork tab holds the current song's text: title, artist and album, centred in a column. The large cover is not part of this tab \u2014 it is always up at the top of the panel.",
+        "coverTabDetail": "Artist and album are both links into their collections. Clicking the title copies \u201ctitle - artist - album\u201d together with the source page link; Ctrl-click opens this song's page on its source platform instead.",
+        "controlsTab": "The top of the controls tab is three large buttons: loop mode, like, and generate a theme. They are the only row of large touch targets in the whole panel.",
+        "controlsTabDetail": "Below them: a volume row with equalizer and automix at its right end, two \u201c\u2039 mode \u203a\u201d rows for the lyric animation and the background, then the palette source and a quick theme edit. Gain and lyric offset live in the source tab, not here.",
+        "queueTab": "The queue tab is the full list of the current play queue, with the song count in its header row.",
+        "queueTabDetail": "Click a row to play from that song; hover one and play next, move to the end and remove appear at its right. The header buttons lay the queue out as the Lattice wall and shuffle it. Rows cannot be dragged to reorder.",
         "accountTab": "The account tab covers whatever the current music source owns.",
-        "accountTabDetail": "Sign-in state, audio quality tier, local cache size and clearing, and syncing your data to the cloud. It follows the current source: switch source and you see a different set."
+        "accountTabDetail": "At the top is that source's sign-in state: avatar, nickname, source name and ID, with sign-out at the right. Below it, the audio quality tier \u2014 standard, high, lossless, hi-res \u2014 and at the bottom, syncing your data to the cloud. Switch source and you see a different set."
+      },
+      "panelCoverActions": {
+        "appear": "The artwork shows nothing at rest. Hover it and a button appears in each corner \u2014 four unrelated things, not one set of \u201cactions for this song\u201d.",
+        "settings": "The top-left one opens settings. Pressing it folds the panel away first, then lays the settings window over the page.",
+        "home": "The bottom-left one goes back to the poster wall on the home page, also folding the panel away first. Playback is not interrupted.",
+        "transparent": "The top-right one is \u201ctransparent player background\u201d, the easiest of the four to press by mistake: it switches the whole window into transparent mode, for an OBS browser source or a keying overlay, and only affects the player page.",
+        "addToPlaylist": "The bottom-right one adds the current song to a playlist. It is only there when the current source has playlists; when the song cannot be added it is dimmed and hovering says why.",
+        "touch": "There is no hover on a touch screen: tap the artwork and the four buttons appear, tap outside it and they fold away."
       },
       "lyricsAnimation": {
         "where": "Lyric animation is not changed on the player page. It lives in Settings \u00b7 Appearance under \u201cLyric animation\u201d, and this top row is the way in.",
-        "playground": "It opens the animation workbench: a column of available modes on the left, a live preview on the right. Whichever you select is what the player page uses.",
-        "transparent": "\u201cTransparent player background\u201d lays the lyrics straight over the visualizer with no backing wash. Turn it on when you want to see the background.",
-        "autoHide": "\u201cAuto-hide the control bar\u201d folds the bottom bar away while the pointer is still, leaving only lyrics. Approach it and it comes back."
+        "playground": "It opens the full-screen animation workbench. The large block on the left is a live preview of exactly what the player page will render; the narrow column on the right is the settings.",
+        "playgroundSections": "That right column is split into General, Background, Animation and Subtitle. The lyric animation mode is picked on the Animation page \u2014 whichever you select is what the player page uses \u2014 and that mode's own parameters follow underneath it.",
+        "card": "One card below the entry holds both switches. They are the top and bottom halves of the same card, separated by a single line \u2014 not two cards side by side.",
+        "transparent": "The upper row, \u201ctransparent player background\u201d, only affects the player page: it switches the window into transparent mode, for an OBS browser source or a keying overlay. It is the same switch as the button in the artwork's top-right corner.",
+        "autoHide": "The lower row, \u201cauto-hide the control bar\u201d, folds the player page's progress bar and side button away while the pointer is still, leaving only lyrics. Approach them and they come back."
       },
       "themeSettings": {
-        "presetDefault": "The card on the left is the built-in preset: ink for dark, plain white for light, switching with the light/dark mode.",
-        "presetCustom": "The card on the right is your custom palette. Select it and the player page, cards and panels all move to those colours.",
-        "source": "A custom palette is not hand-mixed \u2014 this is where you choose where it comes from: sampled from the current artwork, or inferred by AI. The AI option needs a provider API key first.",
-        "themePark": "Theme Park in the top right is the full palette library laid out on one screen. Seeing every option at once beats flipping between these two small cards."
+        "presetDefault": "The one on the left is the built-in preset, Ink / Plain: a small gradient dot over a label, switching between dark and light with the light/dark mode.",
+        "presetCustom": "The one on the right is your custom palette. It is dimmed and unpressable until a custom theme exists; once it does, selecting it moves the player page, cards and panels to those colours.",
+        "source": "A custom palette is not hand-mixed \u2014 this is where it comes from, and there are exactly two options: sampled from the current artwork, or inferred by AI from the lyrics. The AI one stays disabled until a provider API key is configured.",
+        "themePark": "The round palette button at the right of the heading opens Theme Park. It is not a palette library \u2014 it is a full-screen palette editor: the real visualizer previews your draft live on the left, so a colour change shows immediately.",
+        "themeParkTabs": "The column on the right is split into Colours, Details, Content and AI: the Colours page picks each colour, keeping a separate light and dark set; the AI page has a model generate a whole palette. What you save is the \u201ccustom\u201d entry above.",
+        "followSystem": "The lower half of this group is three switches. \u201cFollow system light/dark\u201d tracks the system setting \u2014 and turns itself off the first time you switch light/dark by hand.",
+        "preferCustom": "Turning on \u201cprefer the custom theme\u201d turns automatic theme switching off: the two are mutually exclusive. That is why the colours stop changing between songs once it is on.",
+        "autoSwitch": "\u201cSwitch theme automatically\u201d is the opposite: move to a song that once had a theme generated for it and that palette is applied again. Turning it on adds one more row below, which generates a palette on the spot for songs that have none cached."
       },
       "panelSlide": {
         "grabbed": "Press and hold the button. The track behind it lights up.",

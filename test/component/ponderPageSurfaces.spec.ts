@@ -280,11 +280,10 @@ test('卡片滚出视口，底栏顶上来并把卡片带走', async ({ page }) 
     await expect(stage.locator('[data-ponder-surface-state="base"]')).toHaveCSS('opacity', '0');
 });
 
-test('右侧面板：Tab 循环换页，四页各有一章', async ({ page }) => {
+test('右侧面板：Tab 循环换页，四页各是一个独立目标', async ({ page }) => {
     await page.locator('[data-probe-open="side-panel-tabs"]').click();
     const stage = page.locator('[data-testid="ponder-stage"]');
     await expect(stage).toBeVisible();
-    await expect(stage.getByText('6', { exact: false }).first()).toBeVisible();
 
     // Tab 往后一格：高亮从封面挪到控制。
     await expect(stage.locator('[data-ponder-surface-state="controls-tab"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
@@ -292,9 +291,26 @@ test('右侧面板：Tab 循环换页，四页各有一章', async ({ page }) =>
         .evaluateAll(nodes => nodes.findIndex(node => node.hasAttribute('data-active')));
     expect(activeIndex).toBe(1);
 
-    // 四页各自预渲染在场，一页一章。
-    for (const state of ['cover-tab', 'controls-tab', 'queue-tab', 'account-tab']) {
+    // 四页各自预渲染在场。
+    for (const state of ['cover-actions', 'cover-tab', 'controls-tab', 'queue-tab', 'account-tab']) {
         await expect(stage.locator(`[data-ponder-surface-state="${state}"]`)).toHaveCount(1);
+    }
+
+    // 四页不再是 side-panel 的章节，而是四个能单独悬停进入的目标 —— 整块面板的教程
+    // 把它们连同封面四颗按钮和侧边开关一起列在「本页可单独思索的组件」里。
+    // 断言条数而不是文案：探针跑在英文下，写死中文名会把这条测试绑死在某一份 locale 上。
+    await expect(stage.getByTestId('ponder-related-targets').locator('button')).toHaveCount(6);
+});
+
+test('封面四角那四颗按钮各有自己的一段说明', async ({ page }) => {
+    await page.locator('[data-probe-open="panel-cover-actions"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    // 悬停结果层里四个角各画一颗，且都落在封面框内。
+    await expect(stage.locator('[data-ponder-surface-state="cover-actions"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    for (const marker of ['settings', 'transparent', 'home', 'playlist']) {
+        await expect(stage.locator(`[data-ponder-panel-cover-${marker}]`)).toHaveCount(1);
     }
 });
 
@@ -342,7 +358,7 @@ test('字幕底色不透明，且压在外框和浮层卡之上', async ({ page 
 test('字幕不落在上下两条外框上', async ({ page }) => {
     // 摆位算法把外框算成 reserved，但那是加权评分不是硬禁止 —— 权重给小了，
     // 「少盖住一点骨架」就会把字幕留在标题栏上，正是这条要挡住的。
-    for (const probe of ['lattice-chrome-slots', 'player-page-layout', 'side-panel-queue']) {
+    for (const probe of ['lattice-chrome-slots', 'player-page-layout', 'panel-queue-tab']) {
         await page.locator(`[data-probe-open="${probe}"]`).click();
         const stage = page.locator('[data-testid="ponder-stage"]');
         await expect(stage).toBeVisible();
