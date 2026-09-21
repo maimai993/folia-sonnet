@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Minus, Radio, Square, X } from 'lucide-react';
+import { Copy, Maximize, Minimize, Minus, Radio, Square, X } from 'lucide-react';
 
 export default function WindowControls({
     revealed,
@@ -12,16 +12,30 @@ export default function WindowControls({
     isMainWindowClickThroughEnabled?: boolean;
 }) {
     const { t } = useTranslation();
-    const [isMaximized, setIsMaximized] = useState(false);
-    const electron = (window as any).electron;
+    const [isExpanded, setIsExpanded] = useState(false);
+    const electron = window.electron;
+    const isMac = electron?.platform === 'darwin';
 
     useEffect(() => {
         if (!electron) return;
-        const checkMaximize = async () => setIsMaximized(await electron.isWindowMaximized());
-        checkMaximize();
-        window.addEventListener('resize', checkMaximize);
-        return () => window.removeEventListener('resize', checkMaximize);
-    }, [electron]);
+        let active = true;
+        let nativeStateReceived = false;
+        const unsubscribe = isMac ? electron.onWindowFullscreenChanged(fullscreen => {
+            nativeStateReceived = true;
+            if (active) setIsExpanded(fullscreen);
+        }) : undefined;
+        const checkExpanded = async () => {
+            const expanded = await (isMac ? electron.isWindowFullscreen() : electron.isWindowMaximized());
+            if (active && !nativeStateReceived) setIsExpanded(expanded);
+        };
+        void checkExpanded();
+        if (!isMac) window.addEventListener('resize', checkExpanded);
+        return () => {
+            active = false;
+            unsubscribe?.();
+            window.removeEventListener('resize', checkExpanded);
+        };
+    }, [electron, isMac]);
 
     if (!electron) return null;
 
@@ -75,12 +89,24 @@ export default function WindowControls({
             <button
                 className={btnClass}
                 tabIndex={standardControlsVisible ? 0 : -1}
+                title={t(isMac
+                    ? isExpanded ? 'ui.exitFullscreen' : 'ui.enterFullscreen'
+                    : isExpanded ? 'ui.restoreWindow' : 'ui.maximizeWindow')}
+                aria-label={t(isMac
+                    ? isExpanded ? 'ui.exitFullscreen' : 'ui.enterFullscreen'
+                    : isExpanded ? 'ui.restoreWindow' : 'ui.maximizeWindow')}
                 onClick={async () => {
-                    await electron.toggleMaximizeWindow();
-                    setIsMaximized(await electron.isWindowMaximized());
+                    if (isMac) {
+                        await electron.toggleFullscreenWindow();
+                    } else {
+                        await electron.toggleMaximizeWindow();
+                        setIsExpanded(await electron.isWindowMaximized());
+                    }
                 }}
             >
-                {isMaximized ? <Copy size={13} /> : <Square size={13} />}
+                {isMac
+                    ? isExpanded ? <Minimize size={13} /> : <Maximize size={13} />
+                    : isExpanded ? <Copy size={13} /> : <Square size={13} />}
             </button>
             <button
                 className={closeBtnClass}
