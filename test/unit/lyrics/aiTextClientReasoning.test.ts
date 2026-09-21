@@ -25,13 +25,7 @@ const makeFetch = (reply: (body: Record<string, unknown>, attempt: number) => {
         const body = JSON.parse(init.body);
         attempts.push({ body });
         const { status = 200, payload } = reply(body, attempts.length - 1);
-        return {
-            ok: status >= 200 && status < 300,
-            status,
-            statusText: 'x',
-            json: async () => payload,
-            text: async () => JSON.stringify(payload),
-        };
+        return Response.json(payload, { status });
     };
     return { attempts, fetchImpl };
 };
@@ -128,11 +122,12 @@ describe('reasoning suppression ladder', () => {
     it('sends nothing extra when the caller has not asked to disable reasoning', async () => {
         const { attempts, fetchImpl } = makeFetch(() => answered('{}'));
         await client.runAiJsonCompletion({
-            store: { get: (k: string) => ({ AI_PROVIDER: 'openai', OPENAI_API_KEY: 'k', OPENAI_API_URL: 'http://g.test/v1' }[k]) },
+            store: { get: (k: string) => ({ AI_PROVIDER: 'openai', OPENAI_API_KEY: 'k', OPENAI_API_URL: 'https://api.deepseek.com/v1' }[k]) },
             systemPrompt: 'sys', sourcePrompt: 'src', customFetch: fetchImpl, maxTokens: 4096,
         });
 
         expect(attempts).toHaveLength(1);
+        expect(attempts[0].body.thinking).toBeUndefined();
         expect(attempts[0].body.reasoning_effort).toBeUndefined();
         expect(attempts[0].body.chat_template_kwargs).toBeUndefined();
     });
@@ -162,5 +157,19 @@ describe('request body', () => {
             response_format: { type: 'json_object' },
         });
         expect(body.messages).toHaveLength(2);
+    });
+
+    it('uses the official OpenAI token field only for the official hostname', async () => {
+        const official = client.buildOpenAICompatibleRequestBody(
+            'gpt-5-mini', 'openai', 'sys', 'user', 0.7, null, null, 4096, {},
+        );
+        const compatible = client.buildOpenAICompatibleRequestBody(
+            'gpt-5-mini', 'generic', 'sys', 'user', 0.7, null, null, 4096, {},
+        );
+
+        expect(official.max_completion_tokens).toBe(4096);
+        expect(official.max_tokens).toBeUndefined();
+        expect(compatible.max_tokens).toBe(4096);
+        expect(compatible.max_completion_tokens).toBeUndefined();
     });
 });

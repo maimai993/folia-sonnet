@@ -90,12 +90,7 @@ function resolveOpenAICompatibleModel(apiUrl, configuredModel) {
   return DEFAULT_OPENAI_MODEL;
 }
 
-function detectOpenAICompatibleProvider(apiUrl, model) {
-  const normalizedModel = model.trim().toLowerCase();
-  if (normalizedModel.startsWith('deepseek-')) {
-    return 'deepseek';
-  }
-
+function detectOpenAICompatibleProvider(apiUrl) {
   try {
     const hostname = new URL(apiUrl).hostname.toLowerCase();
     if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
@@ -107,11 +102,6 @@ function detectOpenAICompatibleProvider(apiUrl, model) {
   } catch {
     // Fall through to generic provider handling.
   }
-
-  if (/^(gpt|o[1-9]|o[1-9]-|chatgpt-)/.test(normalizedModel)) {
-    return 'openai';
-  }
-
   return 'generic';
 }
 
@@ -125,12 +115,6 @@ function providerSupportsStructuredOutputs(provider) {
  * can serve models with completely different capabilities.
  */
 const reasoningAttemptCache = new Map();
-
-/** True when a 400 is the server rejecting the parameter we just added, not a real failure. */
-const rejectsParameters = (errorText, params) => {
-  const message = String(errorText).toLowerCase();
-  return Object.keys(params).some(key => message.includes(key.toLowerCase()));
-};
 
 /**
  * True when the model answered nothing because reasoning consumed the whole budget. This is the
@@ -257,7 +241,9 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
   // unbounded body read, which presents as a request that never finishes. A caller that knows how
   // big its answer should be passes a ceiling; truncation then fails as a JSON parse error with
   // the raw response logged, which is diagnosable, unlike a hang.
-  const limit = maxTokens ? { max_tokens: maxTokens } : {};
+  const limit = maxTokens
+    ? { [provider === 'openai' ? 'max_completion_tokens' : 'max_tokens']: maxTokens }
+    : {};
   const reasoning = extraParams || {};
 
   if (schema && schemaName && providerSupportsStructuredOutputs(provider)) {
@@ -288,14 +274,20 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
 async function sendOpenAICompatible({ apiUrl, apiKey, body, customFetch, timeoutMs }) {
   let response;
   try {
-    response = await customFetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    const { sendOpenAICompatibleRequest } = await import('../shared/openAICompatibleRequest.mjs');
+    response = await sendOpenAICompatibleRequest({
+      apiUrl,
+      provider: detectOpenAICompatibleProvider(apiUrl),
+      body,
+      init: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: timeoutSignal(timeoutMs),
       },
-      body: JSON.stringify(body),
-      signal: timeoutSignal(timeoutMs),
+      fetchImpl: customFetch,
     });
   } catch (error) {
     throw describeFetchFailure(error, timeoutMs, `Request to ${apiUrl}`);
@@ -334,12 +326,14 @@ async function runOpenAICompatibleCompletion({ store, systemPrompt, sourcePrompt
   const apiUrl = normalizeOpenAIChatCompletionsUrl(store.get('OPENAI_API_URL'));
   const model = resolveOpenAICompatibleModel(apiUrl, store.get('OPENAI_API_MODEL'));
   const temperature = resolveOpenAICompatibleTemperature(store.get('OPENAI_API_TEMPERATURE'));
-  const provider = detectOpenAICompatibleProvider(apiUrl, model);
+  const provider = detectOpenAICompatibleProvider(apiUrl);
 
   const attempts = disableReasoning ? REASONING_SUPPRESSION_ATTEMPTS : [{ params: {} }];
   const cacheKey = `${apiUrl}|${model}`;
   const learned = disableReasoning ? reasoningAttemptCache.get(cacheKey) : 0;
   const firstIndex = typeof learned === 'number' ? learned : 0;
+
+  const { rejectsOpenAICompatibleParameter } = await import('../shared/openAICompatibleRequest.mjs');
 
   let lastEmpty = null;
   for (let index = firstIndex; index < attempts.length; index += 1) {
@@ -348,8 +342,11 @@ async function runOpenAICompatibleCompletion({ store, systemPrompt, sourcePrompt
     // The final rung is for models whose reasoning cannot be turned off, so it needs room for the
     // reasoning AND the answer; the earlier rungs expect no reasoning at all.
     const budget = isLastAttempt && disableReasoning && maxTokens ? maxTokens * 4 : maxTokens;
+    const reasoningParams = disableReasoning && provider === 'deepseek'
+      ? { thinking: { type: 'disabled' }, ...params }
+      : params;
     const body = buildOpenAICompatibleRequestBody(
-      model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, budget, params,
+      model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, budget, reasoningParams,
     );
 
     const described = Object.keys(params).length ? Object.keys(params).join('+') : 'plain';
@@ -360,7 +357,8 @@ async function runOpenAICompatibleCompletion({ store, systemPrompt, sourcePrompt
     if (!result.ok) {
       // A rejected parameter is information, not a failure: this endpoint does not speak that
       // dialect, so move down the ladder. Everything else is the user's problem to see.
-      if (!isLastAttempt && (result.status === 400 || result.status === 422) && rejectsParameters(result.errorText, params)) {
+      if (!isLastAttempt
+        && Object.keys(params).some((key) => rejectsOpenAICompatibleParameter(result.status, result.errorText, key))) {
         console.log(`[ai] ${described} rejected by the endpoint, trying the next option`);
         continue;
       }
