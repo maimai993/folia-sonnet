@@ -36,6 +36,10 @@ const allKeys = (): string[] => {
         target.scenes.forEach(scene => {
             keys.add(scene.titleKey);
             scene.steps.forEach(step => stepTextKeys(step).forEach(key => keys.add(key)));
+            // 锚点标签同样是画在屏幕上的文案，缺了就会把 key 本身渲染到骨架旁边。
+            Object.values(scene.anchors).forEach(source => {
+                if (source.labelKey) keys.add(source.labelKey);
+            });
         });
     });
     return [...keys];

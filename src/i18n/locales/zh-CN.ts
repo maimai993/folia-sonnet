@@ -2874,6 +2874,27 @@ export default {
     "seekKeyframe": "跳到第 {{index}} 个关键帧",
     "keyLegend": "\u2190 \u2192 关键帧  \u00b7  [ ] 章节  \u00b7  空格 暂停  \u00b7  Esc 退出",
     "anchors": {
+      "bottomBarOffset": {
+        "bar": "底部控制条",
+        "palette": "命令面板"
+      },
+      "commandPaletteHelp": {
+        "button": "问号按钮",
+        "panel": "命令面板"
+      },
+      "controlSlots": {
+        "slots": "两个槽位",
+        "primary": "第一个位置",
+        "picker": "设置里的选择器"
+      },
+      "shuffle": {
+        "button": "随机按钮",
+        "queue": "播放队列"
+      },
+      "volume": {
+        "button": "音量按钮",
+        "surface": "音量面板"
+      },
       "panelSlide": {
         "toggle": "面板开关",
         "track": "隐藏的滑轨",
@@ -2882,14 +2903,50 @@ export default {
       }
     },
     "targets": {
+      "bottomBarOffset": "底部控制条高度",
+      "commandPaletteHelp": "命令面板的问号按钮",
+      "controlSlots": "进度条右侧的两个槽位",
+      "shuffle": "随机播放",
+      "volume": "音量",
       "panelSlide": "侧边面板开关"
     },
     "scenes": {
+      "bottomBarEnterPositioning": "先进入定位模式",
+      "bottomBarDrag": "上下拖，改高度",
+      "commandPaletteHelpList": "展开全部命令",
+      "controlSlotsCustomizable": "这两个位置可以换",
+      "shuffleOneShot": "洗一次牌，不是一个模式",
+      "volumeInPalette": "音量在命令面板里",
       "panelSlideToPalette": "滑动打开命令面板",
       "panelSlideEdgeHotspot": "从边缘唤出手柄",
       "panelSlideKeyboard": "用键盘打开"
     },
     "captions": {
+      "bottomBarOffset": {
+        "intro": "底部这条控制条的高度是可以改的，各页面的歌曲卡片和侧边面板会跟着一起动。",
+        "command": "但直接拖是拖不动的。先在命令面板里执行「在播放页拖动调整」，它才会变成一个可以拖的东西。",
+        "armed": "进了定位模式，整条胶囊就不再是控件 —— 这时按住它任意位置都能拖。",
+        "drag": "上下拖。往上拖得越多，控制条离屏幕底边越远。",
+        "commit": "松手即生效，而且会被记住，下次打开还是这个高度。"
+      },
+      "commandPaletteHelp": {
+        "intro": "输入框右边这个问号，多数人不会去点它。",
+        "list": "点一下，面板里列出来的就是全部命令 —— 不必先知道名字才搜得到。"
+      },
+      "controlSlots": {
+        "intro": "进度条右边这两个按钮不是固定的。",
+        "two": "两个位置各自独立，循环、随机、喜爱、队列、音量、睡眠定时等十个动作里任挑。",
+        "where": "在设置里挑：一个位置一个下拉，选完立刻生效。"
+      },
+      "shuffle": {
+        "intro": "这是当前的播放队列。",
+        "once": "按一下随机，Folia 把队列原地洗一次牌 —— 洗完这个顺序就定下来了。",
+        "notAMode": "所以它不是一个开着就一直生效的模式。想再换个顺序，就再按一次。"
+      },
+      "volume": {
+        "intro": "Folia 没有常驻的音量滑块。音量是这个位置上的一个动作。",
+        "opens": "按下去打开的是命令面板里的音量面板，不是就地弹一个小滑块。"
+      },
       "panelSlide": {
         "grabbed": "按住这个按钮不放，它背后的滑轨就亮起来了。",
         "intro": "这个按钮底下藏着一条滑轨。按住它，滑轨就会显出来。",

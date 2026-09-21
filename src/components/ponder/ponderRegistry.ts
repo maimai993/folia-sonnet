@@ -37,8 +37,8 @@ export const findPonderTarget = (id: PonderTargetId): PonderTargetDefinition | n
 /**
  * 指针底下那个元素属于哪个可教学目标。
  *
- * 一个元素可能同时落在多个目标的选择器里（槽位按钮既在控制条内、又是自己的目标），
- * 取命中最深的那个 —— 最具体的目标才是用户此刻真正指着的东西。
+ * 一个元素常常同时落在多个目标的选择器里 —— 槽位按钮既在整条控制条内、又是自己的目标。
+ * 先比命中深度（最具体的那个才是用户真正指着的东西），深度相同再比 priority。
  */
 export const resolveHoveredPonderTarget = (element: Element | null): PonderTargetDefinition | null => {
     if (!element) {
@@ -47,6 +47,7 @@ export const resolveHoveredPonderTarget = (element: Element | null): PonderTarge
 
     let best: PonderTargetDefinition | null = null;
     let bestDepth = -1;
+    let bestPriority = -Infinity;
 
     for (const target of PONDER_TARGET_LIST) {
         if (!target.hoverSelector) {
@@ -60,9 +61,11 @@ export const resolveHoveredPonderTarget = (element: Element | null): PonderTarge
         for (let node: Element | null = matched; node; node = node.parentElement) {
             depth += 1;
         }
-        if (depth > bestDepth) {
+        const priority = target.priority ?? 0;
+        if (depth > bestDepth || (depth === bestDepth && priority > bestPriority)) {
             best = target;
             bestDepth = depth;
+            bestPriority = priority;
         }
     }
 

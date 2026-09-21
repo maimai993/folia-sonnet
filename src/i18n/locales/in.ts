@@ -2807,6 +2807,27 @@ export default {
     "seekKeyframe": "Lompat ke keyframe {{index}}",
     "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] bab  \u00b7  Spasi jeda  \u00b7  Esc keluar",
     "anchors": {
+      "bottomBarOffset": {
+        "bar": "Bilah kontrol bawah",
+        "palette": "Command palette"
+      },
+      "commandPaletteHelp": {
+        "button": "Tombol bantuan",
+        "panel": "Command palette"
+      },
+      "controlSlots": {
+        "slots": "Dua slot",
+        "primary": "Slot pertama",
+        "picker": "Pemilih di pengaturan"
+      },
+      "shuffle": {
+        "button": "Tombol acak",
+        "queue": "Antrean putar"
+      },
+      "volume": {
+        "button": "Tombol volume",
+        "surface": "Panel volume"
+      },
       "panelSlide": {
         "toggle": "Tombol panel",
         "track": "Lintasan tersembunyi",
@@ -2815,14 +2836,50 @@ export default {
       }
     },
     "targets": {
+      "bottomBarOffset": "Ketinggian bilah bawah",
+      "commandPaletteHelp": "Tombol bantuan command palette",
+      "controlSlots": "Dua slot di samping bilah progres",
+      "shuffle": "Acak",
+      "volume": "Volume",
       "panelSlide": "Tombol panel samping"
     },
     "scenes": {
+      "bottomBarEnterPositioning": "Aktifkan mode pengaturan posisi dulu",
+      "bottomBarDrag": "Geser naik atau turun untuk mengubah tinggi",
+      "commandPaletteHelpList": "Tampilkan semua perintah",
+      "controlSlotsCustomizable": "Keduanya bisa diganti",
+      "shuffleOneShot": "Sekali acak, bukan sebuah mode",
+      "volumeInPalette": "Volume ada di command palette",
       "panelSlideToPalette": "Geser untuk membuka command palette",
       "panelSlideEdgeHotspot": "Panggil pegangan dari tepi",
       "panelSlideKeyboard": "Buka dari papan tombol"
     },
     "captions": {
+      "bottomBarOffset": {
+        "intro": "Tinggi bilah kontrol bawah ini bisa diubah, dan kartu lagu serta panel samping ikut menyesuaikan di semua halaman.",
+        "command": "Menggesernya langsung tidak akan berhasil. Jalankan \"Atur posisi di halaman pemutar\" dari command palette dulu, barulah ia bisa digeser.",
+        "armed": "Setelah mode itu aktif, seluruh kapsul berhenti menjadi kontrol - tekan di mana saja lalu geser.",
+        "drag": "Geser naik atau turun. Makin jauh ke atas, makin jauh bilah dari tepi bawah layar.",
+        "commit": "Lepaskan dan langsung berlaku, lalu diingat untuk lain kali."
+      },
+      "commandPaletteHelp": {
+        "intro": "Kebanyakan orang tidak pernah menekan tanda tanya di sebelah kanan kolom masukan ini.",
+        "list": "Tekan, dan panel akan menampilkan semua perintah yang ada - tidak perlu tahu namanya lebih dulu."
+      },
+      "controlSlots": {
+        "intro": "Dua tombol di kanan bilah progres ini tidak tetap.",
+        "two": "Tiap slot berdiri sendiri: ulang, acak, suka, antrean, volume, pengatur waktu tidur, dan empat lainnya.",
+        "where": "Pilih di pengaturan: satu dropdown per slot, langsung berlaku begitu dipilih."
+      },
+      "shuffle": {
+        "intro": "Ini antrean putar yang sedang berjalan.",
+        "once": "Tekan acak dan Folia mengacak antrean di tempat, sekali - urutan itulah yang berlaku.",
+        "notAMode": "Jadi ini bukan mode yang terus menyala. Ingin urutan lain? Tekan lagi."
+      },
+      "volume": {
+        "intro": "Folia tidak punya penggeser volume permanen. Volume adalah salah satu aksi yang bisa ditaruh di slot ini.",
+        "opens": "Menekannya membuka panel volume di dalam command palette, bukan penggeser kecil di tempat."
+      },
       "panelSlide": {
         "grabbed": "Tekan dan tahan tombolnya. Lintasan di belakangnya menyala.",
         "intro": "Tombol ini menyembunyikan sebuah lintasan. Tekan dan tahan, lintasannya muncul.",

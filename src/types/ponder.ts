@@ -185,6 +185,13 @@ export type PonderTargetDefinition = {
      * 否则会出现「面板已展开、滑动手势本身是关的，却还在提示教它」。
      */
     isAvailable?: () => boolean;
+    /**
+     * 同一个元素被多个目标的选择器同时命中、且命中深度一样时，取 priority 大的。
+     *
+     * 槽位按钮就是这种情况：它既属于「这两个位置的按钮可以换」，也属于「随机播放在
+     * Folia 里是另一回事」。默认 0。
+     */
+    priority?: number;
     scenes: PonderSceneScript[];
 };
 

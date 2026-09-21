@@ -452,6 +452,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             {renderQueryInput('min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50')}
                             <button
                                 type="button"
+                                data-ponder="command-palette-help"
                                 onClick={() => setIsShowingAllCommands(current => !current)}
                                 className={`rounded-full p-2 transition-colors ${isShowingAllCommands ? itemActiveBg : (isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10')}`}
                                 aria-label={t('commandPalette.showAllCommands') || 'Show all commands'}
