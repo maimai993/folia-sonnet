@@ -2828,6 +2828,8 @@ export default {
     },
     "actions": {
       "openBottomUiSettings": "Buka pengaturan UI bawah",
+      "openLyricsAnimation": "Buka pengaturan animasi lirik",
+      "openThemePresets": "Buka pengaturan tema",
       "openSlotPicker": "Pilih tombolnya"
     },
     "anchors": {
@@ -2852,6 +2854,32 @@ export default {
         "input": "Baris masukan",
         "results": "Daftar hasil",
         "firstResult": "Hasil aktif"
+      },
+      "latticeChrome": {
+        "card": "Poster terbuka",
+        "chrome": "Kontrol pemutaran",
+        "play": "Putar / jeda",
+        "prev": "Sebelumnya",
+        "slotPrimary": "Slot pertama",
+        "slotSecondary": "Slot kedua",
+        "next": "Berikutnya",
+        "time": "Waktu",
+        "openPlayer": "Kembali ke pemutar",
+        "progress": "Bilah kemajuan",
+        "bottomBar": "Bilah kontrol bawah"
+      },
+      "lyricsAnimation": {
+        "panel": "Pengaturan \u00b7 Animasi lirik",
+        "entry": "Gaya animasi lirik",
+        "transparent": "Latar pemutar transparan",
+        "autoHide": "Sembunyikan bilah kontrol otomatis"
+      },
+      "themeSettings": {
+        "panel": "Pengaturan \u00b7 Preset tema",
+        "themePark": "Theme Park",
+        "presetDefault": "Preset bawaan",
+        "presetCustom": "Warna kustom",
+        "source": "Sumber pembuatan tema"
       },
       "sidePanel": {
         "panel": "Panel kontrol",
@@ -2914,6 +2942,9 @@ export default {
       "gridViewPage": "Halaman kisi koleksi",
       "playerPage": "Halaman pemutar",
       "commandPalette": "Jendela perintah",
+      "latticeChrome": "Kontrol pemutaran poster terbuka",
+      "lyricsAnimationSettings": "Pengaturan animasi lirik",
+      "themeSettings": "Pengaturan warna tema",
       "sidePanel": "Panel kontrol kanan",
       "latticePage": "Halaman Lattice",
       "helpPage": "Halaman Bantuan",
@@ -2942,6 +2973,17 @@ export default {
       "commandPaletteSearch": "Cari, lalu Enter",
       "commandPaletteArgument": "Memberi perintah sebuah argumen",
       "commandPaletteExecuteMode": "Titik dua masuk mode eksekusi",
+      "latticeChromeLayout": "Isi bilah kontrol ini",
+      "latticeChromeSharedSlots": "Dua tombol tengah sama dengan bilah bawah",
+      "latticeChromeBottomBar": "Bilah bawah menggantikan",
+      "sidePanelCoverTab": "Tab sampul",
+      "sidePanelControlsTab": "Tab kontrol",
+      "sidePanelQueueTab": "Tab antrean",
+      "sidePanelAccountTab": "Tab akun",
+      "lyricsAnimationEntry": "Tempat mengganti animasi lirik",
+      "lyricsAnimationToggles": "Dua sakelar yang mengubah tampilan",
+      "themeSettingsPresets": "Preset dan kustom",
+      "themeSettingsSource": "Dari mana warnanya",
       "sidePanelStructure": "Isi panel",
       "sidePanelTabs": "Berganti tab",
       "latticePageOverview": "Susunan Lattice",
@@ -3047,11 +3089,41 @@ export default {
         "executeEnter": "Ketik titik dua untuk masuk mode eksekusi. Hanya itu jalan masuknya \u2014 tidak ada tombol dan tidak ada pintasan lain.",
         "executeKeys": "Di dalamnya satu tombol adalah satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan. Tidak ada tombol yang jadi awalan tombol lain, jadi sekali tekan langsung jalan."
       },
+      "latticeChrome": {
+        "intro": "Buka satu poster di dinding dan sebuah bilah pemutaran tumbuh di bagian bawahnya. Bilah itu milik kartu yang terbuka saja; tutup kartunya, bilahnya hilang.",
+        "playAndSeek": "Putar/jeda ada di ujung kiri: kalau kartu ini bukan lagu yang sedang diputar, menekannya memulai dari lagu ini. Bilah di bawahnya bisa diseret untuk melompat.",
+        "openPlayer": "Panah miring di kanan kembali ke halaman pemutar. Bagian poster yang lain memilih dan membuka; hanya ini yang meninggalkan Lattice.",
+        "ends": "Dari empat tombol tengah, dua di ujung selalu sebelumnya dan berikutnya \u2014 posisi itu tidak bisa diatur.",
+        "sharedSlots": "Dua di dalamnya bukan set tombol kedua. Itu dua slot yang sama dengan di kanan bilah kontrol bawah: aksi sama, ikon sama, ketersediaan sama.",
+        "swap": "Jadi mengganti slot bilah bawah di pengaturan juga mengubah yang ini \u2014 tidak ada tempat kedua untuk mengaturnya, dan memang tidak perlu.",
+        "onlyWhenVisible": "Bilah ini hanya ada pada poster yang terbuka. Kalau tidak ada yang terbuka, atau yang terbuka tergulir keluar layar, ia tidak ada di layar.",
+        "barShows": "Di situlah bilah kontrol bawah menggantikan: begitu poster lagu yang diputar keluar dari tampilan, ia muncul; dan melipat lagi setelah poster itu terlihat kembali. Kontrol pemutaran tidak pernah benar-benar hilang."
+      },
       "sidePanel": {
         "cover": "Sampul lagu saat ini ada di bagian atas panel; arahkan penunjuk ke sana dan aksi untuk lagu itu muncul.",
         "tabs": "Di bawah sampul ada barisan tab: sampul, kontrol, antrean, akun \u2014 ditambah lokal, Navidrome atau lirik tergantung sumbernya. Semuanya wajah dari satu tempat; berganti tab tidak memindahkan panel.",
-        "queue": "Tab antrean menampilkan antrean putar saat ini. Seret untuk menyusun ulang, hapus, atau langsung lompat ke satu lagu.",
-        "controls": "Tab kontrol berisi apa yang kamu atur sambil mendengarkan: equalizer, gain, offset linimasa lirik."
+        "cycle": "Kamu tidak perlu mengklik barisan kotak kecil itu. Saat panel terbuka, Tab memindahkan satu tab ke depan.",
+        "cycleReverse": "Shift + Tab mundur satu. Siklusnya hanya melewati tab yang memang ada saat ini \u2014 sumber berbeda membawa tab berbeda.",
+        "coverTab": "Tab sampul tentang lagu saat ini: sampul besar, dengan judul, artis dan album di bawahnya.",
+        "coverTabDetail": "Artis dan album keduanya tautan ke koleksinya; kamu juga bisa melompat ke halaman lagu ini di platform sumbernya, atau menyalin metadatanya.",
+        "controlsTab": "Tab kontrol berisi parameter yang kamu atur sambil mendengarkan.",
+        "controlsTabDetail": "Equalizer, gain dan offset linimasa lirik ada di sini, bersama sakelar terang/gelap dan edit cepat palet aktif \u2014 perubahannya langsung terdengar tanpa bolak-balik ke panel pengaturan.",
+        "queueTab": "Tab antrean adalah daftar lengkap antrean putar saat ini.",
+        "queueTabDetail": "Seret untuk menyusun ulang, atau untuk lagu mana pun: putar berikutnya, pindah ke akhir, hapus. Bagian atasnya bisa mengacak seluruh antrean, mengosongkannya, atau membentangkannya sebagai dinding poster Lattice.",
+        "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
+        "accountTabDetail": "Status masuk, tingkat kualitas audio, ukuran cache lokal dan pembersihannya, serta sinkronisasi data ke awan. Ia mengikuti sumber aktif: ganti sumber, isinya berbeda."
+      },
+      "lyricsAnimation": {
+        "where": "Animasi lirik tidak diganti di halaman pemutar. Tempatnya di Pengaturan \u00b7 Tampilan pada grup \u201cAnimasi lirik\u201d, dan baris paling atas ini adalah pintu masuknya.",
+        "playground": "Yang terbuka adalah meja kerja animasi: kolom mode yang tersedia di kiri, pratinjau langsung di kanan. Apa pun yang kamu pilih itulah yang dipakai halaman pemutar.",
+        "transparent": "\u201cLatar pemutar transparan\u201d menaruh lirik langsung di atas visualizer tanpa lapisan warna. Nyalakan kalau kamu ingin latarnya terlihat.",
+        "autoHide": "\u201cSembunyikan bilah kontrol otomatis\u201d melipat bilah bawah saat penunjuk diam, menyisakan lirik saja. Dekati dan ia kembali."
+      },
+      "themeSettings": {
+        "presetDefault": "Kartu di kiri adalah preset bawaan: tinta untuk gelap, putih polos untuk terang, berganti mengikuti mode terang/gelap.",
+        "presetCustom": "Kartu di kanan adalah palet kustommu. Pilih itu dan halaman pemutar, kartu dan panel semuanya pindah ke warna tersebut.",
+        "source": "Palet kustom tidak diracik manual \u2014 di sini kamu memilih asalnya: diambil dari sampul saat ini, atau disimpulkan AI. Opsi AI butuh API key penyedia lebih dulu.",
+        "themePark": "Theme Park di kanan atas adalah pustaka palet lengkap dalam satu layar. Melihat semua pilihan sekaligus jauh lebih cepat daripada bolak-balik di antara dua kartu kecil ini."
       },
       "panelSlide": {
         "grabbed": "Tekan dan tahan tombolnya. Lintasan di belakangnya menyala.",

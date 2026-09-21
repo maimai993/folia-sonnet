@@ -7,6 +7,11 @@ import PonderLatticePageSurface from './surfaces/PonderLatticePageSurface';
 import PonderPlayerBarSurface from './surfaces/PonderPlayerBarSurface';
 import PonderPlayerPageSurface from './surfaces/PonderPlayerPageSurface';
 import PonderSidePanelSurface from './surfaces/PonderSidePanelSurface';
+import PonderLatticeChromeSurface from './surfaces/PonderLatticeChromeSurface';
+import {
+    PonderLyricsAnimationSettingsSurface,
+    PonderThemeSettingsSurface,
+} from './surfaces/PonderSettingsSectionSurfaces';
 import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
@@ -233,6 +238,12 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderPlayerBarSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : isPageSurfaceKind(resolvedKind)
         ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} registerStateNode={registerStateNode} />
+        : resolvedKind === 'lattice-chrome'
+        ? <PonderLatticeChromeSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'lyrics-animation-settings'
+        ? <PonderLyricsAnimationSettingsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'theme-settings'
+        ? <PonderThemeSettingsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'side-panel'
         ? <PonderSidePanelSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'bottom-ui-settings'

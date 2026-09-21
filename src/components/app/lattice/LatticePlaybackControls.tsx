@@ -45,7 +45,13 @@ export default function LatticePlaybackControls({
         : Math.max(0, tile.song.durationMs / 1000);
 
     return (
-        <div className={`lattice-chrome ${revealed ? 'is-revealed' : ''}`} role="group" aria-label={t('home.latticePlaybackControls')}>
+        <div
+            // 思索靠这个属性认出整条控制条。类名会随样式重构改名，属性不会 —— 见 ponderSelectorContract。
+            data-ponder="lattice-chrome"
+            className={`lattice-chrome ${revealed ? 'is-revealed' : ''}`}
+            role="group"
+            aria-label={t('home.latticePlaybackControls')}
+        >
             <div className="lattice-chrome-transport">
                 <button
                     type="button"

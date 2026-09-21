@@ -179,8 +179,50 @@ export const PLAYER_PAGE_GEOMETRY = {
 
 /** 右侧展开的控制面板，坐标系是面板自身。 */
 export const SIDE_PANEL_GEOMETRY = {
-    cover: { left: 0.08, right: 0.08, top: 0.05, square: true },
-    meta: { left: 0.08, right: 0.08, top: 0.60, height: 0.09 },
-    tabs: { left: 0.08, right: 0.08, top: 0.73, height: 0.09 },
-    body: { left: 0.08, right: 0.08, top: 0.85, bottom: 0.05 },
+    cover: { left: 0.08, right: 0.08, top: 0.04, square: true },
+    meta: { left: 0.08, right: 0.08, top: 0.50, height: 0.07 },
+    tabs: { left: 0.08, right: 0.08, top: 0.60, height: 0.07 },
+    body: { left: 0.08, right: 0.08, top: 0.70, bottom: 0.04 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 标签页的条数，和真实面板常驻的那四页一致。 */
+export const SIDE_PANEL_TABS = ['cover', 'controls', 'queue', 'account'] as const;
+
+export type SidePanelTabId = (typeof SIDE_PANEL_TABS)[number];
+
+/**
+ * Lattice 里展开海报底部那条播放控制，坐标系是展开的卡片。
+ *
+ * 四个额外按钮里，两端是上一首/下一首，中间两个就是底栏那两个可配置槽位 —— 这一章的全部重点
+ * 在这里，所以它们各自是一个锚点，而不是笼统的一块「按钮区」。
+ */
+export const LATTICE_CHROME_GEOMETRY = {
+    card: { left: 0.06, right: 0.06, top: 0.05, bottom: 0.06 },
+    /** 以下都相对 chrome。 */
+    play: { left: 0.03, top: 0.12, width: 0.10, square: true },
+    prev: { left: 0.20, top: 0.16, width: 0.085, square: true },
+    slotPrimary: { left: 0.315, top: 0.16, width: 0.085, square: true },
+    slotSecondary: { left: 0.43, top: 0.16, width: 0.085, square: true },
+    next: { left: 0.545, top: 0.16, width: 0.085, square: true },
+    time: { left: 0.67, top: 0.26, width: 0.16, height: 0.2 },
+    openPlayer: { right: 0.03, top: 0.16, width: 0.085, square: true },
+    progress: { left: 0.03, right: 0.03, bottom: 0.14, height: 0.12 },
+    /** 卡片之外：海报滚出视口时自动出现的那条底栏。相对 page。 */
+    bottomBar: { left: 0.22, right: 0.22, bottom: 0.03, height: 0.13 },
+    chrome: { left: 0.04, right: 0.04, bottom: 0.06, height: 0.34 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 设置里「歌词动画」那一组，坐标系是那块面板。 */
+export const LYRICS_ANIMATION_SETTINGS_GEOMETRY = {
+    entry: { left: 0.05, right: 0.05, top: 0.12, height: 0.28 },
+    transparent: { left: 0.05, right: 0.05, top: 0.48, height: 0.2 },
+    autoHide: { left: 0.05, right: 0.05, top: 0.72, height: 0.2 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 设置里「配色主题预设」那一组，坐标系是那块面板。 */
+export const THEME_SETTINGS_GEOMETRY = {
+    themePark: { right: 0.05, top: 0.06, width: 0.26, height: 0.12 },
+    presetDefault: { left: 0.05, top: 0.26, width: 0.42, height: 0.26 },
+    presetCustom: { left: 0.53, top: 0.26, width: 0.42, height: 0.26 },
+    source: { left: 0.05, right: 0.05, top: 0.60, height: 0.32 },
 } satisfies Record<string, PonderRelativeRect>;

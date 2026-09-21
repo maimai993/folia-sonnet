@@ -26,7 +26,10 @@ export type PonderTargetId =
     | 'help-page'
     | 'settings-page'
     | 'command-palette'
-    | 'side-panel';
+    | 'side-panel'
+    | 'lattice-chrome'
+    | 'lyrics-animation-settings'
+    | 'theme-settings';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -114,7 +117,10 @@ export type PonderSurfaceKind =
     | 'settings-page'
     | 'player-bar'
     | 'bottom-ui-settings'
-    | 'side-panel';
+    | 'side-panel'
+    | 'lattice-chrome'
+    | 'lyrics-animation-settings'
+    | 'theme-settings';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

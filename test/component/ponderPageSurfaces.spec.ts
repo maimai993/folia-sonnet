@@ -251,3 +251,71 @@ test('字幕会避开「本页可单独思索的组件」那张浮层卡', async
         await page.waitForTimeout(500);
     }
 });
+
+test('Lattice 展开卡片的控制条：中间两个就是底栏那两个槽位', async ({ page }) => {
+    await page.locator('[data-probe-open="lattice-chrome-slots"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+
+    // 两端固定是上一首/下一首，中间两个才是可配置的那一对。
+    await expectAligned(stage, 'prev', '[data-ponder-chrome-prev]');
+    await expectAligned(stage, 'slotPrimary', '[data-ponder-chrome-slot-primary]');
+    await expectAligned(stage, 'slotSecondary', '[data-ponder-chrome-slot-secondary]');
+    await expectAligned(stage, 'next', '[data-ponder-chrome-next]');
+
+    // 换掉底栏槽位之后，卡片里那一个跟着换 —— 替换层落在同一个位置上。
+    await expect(stage.locator('[data-ponder-surface-state="slots-swapped"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    await expectAligned(stage, 'slotPrimary', '[data-ponder-chrome-slot-primary-swapped]');
+});
+
+test('卡片滚出视口，底栏顶上来并把卡片带走', async ({ page }) => {
+    await page.locator('[data-probe-open="lattice-chrome-bar"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    await expect(stage.locator('[data-ponder-chrome-bottom-bar]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-surface-state="bottom-bar-shown"]')).toHaveCSS('opacity', '1', { timeout: 10000 });
+    // 真实行为里这两者不会同框：海报离开视口，底栏才出现。
+    await expect(stage.locator('[data-ponder-surface-state="base"]')).toHaveCSS('opacity', '0');
+});
+
+test('右侧面板：Tab 循环换页，四页各有一章', async ({ page }) => {
+    await page.locator('[data-probe-open="side-panel-tabs"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await expect(stage.getByText('6', { exact: false }).first()).toBeVisible();
+
+    // Tab 往后一格：高亮从封面挪到控制。
+    await expect(stage.locator('[data-ponder-surface-state="controls-tab"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    const activeIndex = await stage.locator('[data-ponder-surface-state="controls-tab"] [data-ponder-panel-tab]')
+        .evaluateAll(nodes => nodes.findIndex(node => node.hasAttribute('data-active')));
+    expect(activeIndex).toBe(1);
+
+    // 四页各自预渲染在场，一页一章。
+    for (const state of ['cover-tab', 'controls-tab', 'queue-tab', 'account-tab']) {
+        await expect(stage.locator(`[data-ponder-surface-state="${state}"]`)).toHaveCount(1);
+    }
+});
+
+test('设置里的歌词动画与配色两组各自能单独思索', async ({ page }) => {
+    await page.locator('[data-probe-open="lyrics-animation"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'entry', '[data-ponder-lyrics-animation-entry]');
+    await expectAligned(stage, 'autoHide', '[data-ponder-lyrics-auto-hide]');
+    // 点那一条打开的是调参台，不是又一屏设置。
+    await expect(stage.locator('[data-ponder-lyrics-playground]')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="theme-settings"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'presetDefault', '[data-ponder-theme-default]');
+    await expectAligned(stage, 'presetCustom', '[data-ponder-theme-custom]');
+    await expectAligned(stage, 'source', '[data-ponder-theme-source]');
+    await expect(stage.locator('[data-ponder-theme-park-open]')).toHaveCount(1);
+});

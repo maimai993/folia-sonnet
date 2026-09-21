@@ -2895,6 +2895,8 @@ export default {
     },
     "actions": {
       "openBottomUiSettings": "打开底部界面设置",
+      "openLyricsAnimation": "打开歌词动画设置",
+      "openThemePresets": "打开配色主题设置",
       "openSlotPicker": "去挑按钮"
     },
     "anchors": {
@@ -2919,6 +2921,32 @@ export default {
         "input": "输入行",
         "results": "结果列表",
         "firstResult": "当前结果"
+      },
+      "latticeChrome": {
+        "card": "展开的海报",
+        "chrome": "播放控制条",
+        "play": "播放 / 暂停",
+        "prev": "上一首",
+        "slotPrimary": "第一个槽位",
+        "slotSecondary": "第二个槽位",
+        "next": "下一首",
+        "time": "时间",
+        "openPlayer": "回到播放页",
+        "progress": "进度条",
+        "bottomBar": "底部控制条"
+      },
+      "lyricsAnimation": {
+        "panel": "设置 · 歌词动画",
+        "entry": "歌词动画样式",
+        "transparent": "播放页透明背景",
+        "autoHide": "自动隐藏控制栏"
+      },
+      "themeSettings": {
+        "panel": "设置 · 配色主题预设",
+        "themePark": "Theme Park",
+        "presetDefault": "内置预设",
+        "presetCustom": "自定义配色",
+        "source": "主题生成来源"
       },
       "sidePanel": {
         "panel": "控制面板",
@@ -2981,6 +3009,9 @@ export default {
       "gridViewPage": "集合网格页面",
       "playerPage": "播放器页面",
       "commandPalette": "命令窗口",
+      "latticeChrome": "展开海报的播放控制",
+      "lyricsAnimationSettings": "歌词动画设置",
+      "themeSettings": "配色主题设置",
       "sidePanel": "右侧控制面板",
       "latticePage": "Lattice 页面",
       "helpPage": "帮助页面",
@@ -3009,6 +3040,17 @@ export default {
       "commandPaletteSearch": "搜出来，回车执行",
       "commandPaletteArgument": "给命令带参数",
       "commandPaletteExecuteMode": "冒号进执行模式",
+      "latticeChromeLayout": "这条控制条上有什么",
+      "latticeChromeSharedSlots": "中间两个和底栏是同一份",
+      "latticeChromeBottomBar": "卡片看不见时底栏顶上来",
+      "sidePanelCoverTab": "封面页",
+      "sidePanelControlsTab": "控制页",
+      "sidePanelQueueTab": "队列页",
+      "sidePanelAccountTab": "账号页",
+      "lyricsAnimationEntry": "换歌词动画在哪儿换",
+      "lyricsAnimationToggles": "两个影响观感的开关",
+      "themeSettingsPresets": "预设与自定义",
+      "themeSettingsSource": "配色从哪来",
       "sidePanelStructure": "面板里有什么",
       "sidePanelTabs": "换标签页",
       "latticePageOverview": "Lattice 如何组织",
@@ -3114,11 +3156,41 @@ export default {
         "executeEnter": "输入一个冒号进执行模式。只有这一条路能进去 —— 没有按钮，也没有别的快捷键。",
         "executeKeys": "进去之后一个键就是一条命令：r 打乱队列、v 音量、o 设置、h 帮助。这些键互不构成前缀，所以按完立即执行。"
       },
+      "latticeChrome": {
+        "intro": "在墙上展开一张海报，它底部会长出一条播放控制。这条只属于展开的那张卡，收起来就没有了。",
+        "playAndSeek": "最左边是播放 / 暂停：这张卡不是当前歌曲时，按它是从这首开始播。底下那条进度条可以直接拖动跳转。",
+        "openPlayer": "右端那个斜箭头回到播放页。海报上的其它位置是选中和展开，只有这里会离开 Lattice。",
+        "ends": "中间四个按钮，两端固定是上一首和下一首 —— 这两个位置不可配置。",
+        "sharedSlots": "中间那两个不是另一套按钮，就是底部控制条右边那两个槽位的同一份：同一个动作、同一个图标、同一套可用性判断。",
+        "swap": "所以在设置里把底栏的槽位换掉，这里也跟着变 —— 不需要、也没有第二个地方再配一遍。",
+        "onlyWhenVisible": "这条控制条只在展开的海报上。海报没展开，或者展开的那张被滚出了视口，它就不在屏幕上。",
+        "barShows": "这时候底部控制条会自己顶上来：正在播的那首海报一离开视口，它就出现；滚回去看得见了，它又收起。播放控制不会真的消失。"
+      },
       "sidePanel": {
         "cover": "面板最上面是当前歌曲的封面，指针悬上去会浮出针对这首歌的操作。",
         "tabs": "封面下面这一排是标签页：封面、控制、队列、账号；来源不同还会多出本地、Navidrome 或歌词页。它们是同一块地方的几副面孔，换页不会挪走面板。",
-        "queue": "队列页列出当前播放队列，可以拖动排序、移除，或直接跳到某一首。",
-        "controls": "控制页放的是需要边听边调的东西：均衡器、音量增益、歌词时间轴偏移。"
+        "cycle": "不必去点那一排小格子。面板开着时按 Tab，就在标签页之间往后循环一格。",
+        "cycleReverse": "Shift + Tab 往回一格。循环只在当前真的有的那几页之间走 —— 来源不同，页数也不同。",
+        "coverTab": "封面页放当前这首歌：一张大封面，下面是歌名、歌手和专辑。",
+        "coverTabDetail": "歌手和专辑都是可以点的，点进去是对应的集合；还能跳到这首歌在来源平台的页面，或者把它的信息复制出来。",
+        "controlsTab": "控制页放的是需要边听边调的参数。",
+        "controlsTabDetail": "均衡器、音量增益、歌词时间轴偏移都在这里，还有明暗切换和当前配色的快速编辑入口 —— 调完立刻听得到，不用去设置面板来回跑。",
+        "queueTab": "队列页是当前播放队列的完整列表。",
+        "queueTabDetail": "拖动排序，或对某一首做「下一首播放」「移到队尾」「移除」；顶上还能打乱整条队列、清空，或把它铺成 Lattice 海报墙。",
+        "accountTab": "账号页管的是当前音乐来源那一侧的事。",
+        "accountTabDetail": "登录状态、音质档位、本地缓存占用与清理，以及把数据同步到云端。它跟着当前来源走，换一个来源看到的是另一套。"
+      },
+      "lyricsAnimation": {
+        "where": "换歌词动画不在播放页上换，在设置 · 外观的「歌词动画」这一组里。最上面这一条就是入口。",
+        "playground": "点开是动画调参台：左边一列是可选的动画模式，右边实时预览。选中哪个，播放页就用哪个。",
+        "transparent": "「播放页透明背景」让歌词直接压在可视化背景上，不再垫一层底色。想要背景看得清就开它。",
+        "autoHide": "「自动隐藏控制栏」在你不动指针时把底部控制条收起来，只留歌词。需要控制时靠近它就会回来。"
+      },
+      "themeSettings": {
+        "presetDefault": "左边这张是内置预设：墨染配深色、素白配浅色，跟着明暗模式自动切换。",
+        "presetCustom": "右边这张是自定义配色。选中它之后，播放页、卡片和面板都会换成这套颜色。",
+        "source": "自定义配色不是手调出来的 —— 这里选它从哪来：跟着当前封面取色，或者交给 AI 推断。AI 那一项需要先配好服务商的 API Key。",
+        "themePark": "右上角的 Theme Park 是整屏铺开的配色库，一眼看完所有可选配色再挑，比在这两张小卡片之间来回切快得多。"
       },
       "panelSlide": {
         "grabbed": "按住这个按钮不放，它背后的滑轨就亮起来了。",

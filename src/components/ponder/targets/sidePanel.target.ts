@@ -11,7 +11,7 @@ import type { PonderAnchorSource, PonderRelativeRect, PonderSceneScript, PonderT
 
 const panel = {
     kind: 'synthetic',
-    rect: { left: 0.5, top: 0.08, width: 0.26, height: 0.66, anchorX: 'center' },
+    rect: { left: 0.5, top: 0.07, width: 0.22, height: 0.74, anchorX: 'center' },
     role: 'surface',
     surfaceKind: 'side-panel',
     labelKey: 'ponder.anchors.sidePanel.panel',
@@ -53,36 +53,85 @@ const structure: PonderSceneScript = {
     ],
 };
 
-/** 第二章：换标签页换的只是下面那块内容。 */
-const switchTabs: PonderSceneScript = {
+/** 第二章：Tab 键在标签页之间循环，不必去点那一排小格子。 */
+const cycleTabs: PonderSceneScript = {
     id: 'side-panel-tabs',
     titleKey: 'ponder.scenes.sidePanelTabs',
     anchors,
     steps: [
-        { kind: 'cursor', id: 'pickQueue', to: { anchor: 'tabs', x: 0.5 }, press: 'tap', durationMs: 680, keyframe: true },
-        { kind: 'surfaceState', id: 'queueTab', anchor: 'panel', state: 'queue-tab', durationMs: 520 },
+        { kind: 'highlight', id: 'markTabs', anchor: 'tabs', intensity: [0, 0.8], durationMs: 420, keyframe: true },
+        { kind: 'keypress', id: 'tabKey', keys: ['Tab'], at: { anchor: 'tabs', y: 0, offset: { y: -16 } }, durationMs: 900, withPrevious: true },
+        { kind: 'surfaceState', id: 'toControls', anchor: 'panel', state: 'controls-tab', durationMs: 460 },
         {
-            kind: 'caption', id: 'queue', at: 'bottom',
-            textKey: 'ponder.captions.sidePanel.queue',
-            pointTo: { anchor: 'body' }, durationMs: 5200, withPrevious: true,
+            kind: 'caption', id: 'cycle', at: 'bottom',
+            textKey: 'ponder.captions.sidePanel.cycle',
+            pointTo: { anchor: 'tabs' }, durationMs: 5600, withPrevious: true,
         },
-        { kind: 'pause', id: 'readQueue' },
+        { kind: 'pause', id: 'readCycle' },
 
-        { kind: 'cursor', id: 'pickControls', to: { anchor: 'tabs', x: 0.3 }, press: 'tap', durationMs: 620, keyframe: true },
-        { kind: 'surfaceState', id: 'controlsTab', anchor: 'panel', state: 'controls-tab', durationMs: 520 },
+        { kind: 'keypress', id: 'shiftTabKey', keys: ['Shift Tab'], at: { anchor: 'tabs', y: 0, offset: { y: -16 } }, durationMs: 1000, keyframe: true },
+        { kind: 'surfaceState', id: 'backToCover', anchor: 'panel', state: 'cover-tab', durationMs: 460 },
         {
-            kind: 'caption', id: 'controls', at: 'bottom',
-            textKey: 'ponder.captions.sidePanel.controls',
-            pointTo: { anchor: 'body' }, durationMs: 5200, withPrevious: true,
+            kind: 'caption', id: 'reverse', at: 'bottom',
+            textKey: 'ponder.captions.sidePanel.cycleReverse',
+            pointTo: { anchor: 'tabs' }, durationMs: 5400, withPrevious: true,
         },
-        { kind: 'pause', id: 'readControls' },
+        { kind: 'pause', id: 'readReverse' },
     ],
 };
+
+/**
+ * 每个标签页各自一章。
+ *
+ * 合成一章讲不完 —— 四页各是一整套设置，挤在一句字幕里只会变成罗列名词。
+ * 一页一章，切到那一页再讲那一页，读者手上也正好停在那儿。
+ */
+const tabScene = (
+    id: string,
+    titleKey: string,
+    state: string,
+    tabX: number,
+    captionKeys: [string, string],
+): PonderSceneScript => ({
+    id,
+    titleKey,
+    anchors,
+    steps: [
+        { kind: 'cursor', id: 'pickTab', to: { anchor: 'tabs', x: tabX }, press: 'tap', durationMs: 660, keyframe: true },
+        { kind: 'surfaceState', id: 'openTab', anchor: 'panel', state, durationMs: 500 },
+        {
+            kind: 'caption', id: 'what', at: 'bottom',
+            textKey: captionKeys[0],
+            pointTo: { anchor: 'body' }, durationMs: 5600, withPrevious: true,
+        },
+        { kind: 'pause', id: 'readWhat' },
+
+        { kind: 'highlight', id: 'markBody', anchor: 'body', intensity: [0, 0.6], durationMs: 420, keyframe: true },
+        {
+            kind: 'caption', id: 'detail', at: 'bottom',
+            textKey: captionKeys[1],
+            pointTo: { anchor: 'body', y: 0.8 }, durationMs: 6000, withPrevious: true,
+        },
+        { kind: 'pause', id: 'readDetail' },
+    ],
+});
 
 export default {
     id: 'side-panel',
     titleKey: 'ponder.targets.sidePanel',
     hoverSelector: '[data-testid="unified-panel-surface"]',
     relatedTargetIds: ['panel-slide', 'player-bar'],
-    scenes: [structure, switchTabs],
+    scenes: [
+        structure,
+        cycleTabs,
+        // 四格标签排，x 取每一格的中心。
+        tabScene('side-panel-cover-tab', 'ponder.scenes.sidePanelCoverTab', 'cover-tab', 0.125,
+            ['ponder.captions.sidePanel.coverTab', 'ponder.captions.sidePanel.coverTabDetail']),
+        tabScene('side-panel-controls-tab', 'ponder.scenes.sidePanelControlsTab', 'controls-tab', 0.375,
+            ['ponder.captions.sidePanel.controlsTab', 'ponder.captions.sidePanel.controlsTabDetail']),
+        tabScene('side-panel-queue-tab', 'ponder.scenes.sidePanelQueueTab', 'queue-tab', 0.625,
+            ['ponder.captions.sidePanel.queueTab', 'ponder.captions.sidePanel.queueTabDetail']),
+        tabScene('side-panel-account-tab', 'ponder.scenes.sidePanelAccountTab', 'account-tab', 0.875,
+            ['ponder.captions.sidePanel.accountTab', 'ponder.captions.sidePanel.accountTabDetail']),
+    ],
 } satisfies PonderTargetDefinition;

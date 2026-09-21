@@ -2896,6 +2896,8 @@ export default {
     },
     "actions": {
       "openBottomUiSettings": "Open bottom UI settings",
+      "openLyricsAnimation": "Open lyric animation settings",
+      "openThemePresets": "Open theme settings",
       "openSlotPicker": "Go pick the buttons"
     },
     "anchors": {
@@ -2920,6 +2922,32 @@ export default {
         "input": "Input line",
         "results": "Result list",
         "firstResult": "Current result"
+      },
+      "latticeChrome": {
+        "card": "Expanded poster",
+        "chrome": "Playback controls",
+        "play": "Play / pause",
+        "prev": "Previous",
+        "slotPrimary": "First slot",
+        "slotSecondary": "Second slot",
+        "next": "Next",
+        "time": "Time",
+        "openPlayer": "Back to player",
+        "progress": "Progress bar",
+        "bottomBar": "Bottom control bar"
+      },
+      "lyricsAnimation": {
+        "panel": "Settings \u00b7 Lyric animation",
+        "entry": "Lyric animation style",
+        "transparent": "Transparent player background",
+        "autoHide": "Auto-hide the control bar"
+      },
+      "themeSettings": {
+        "panel": "Settings \u00b7 Theme presets",
+        "themePark": "Theme Park",
+        "presetDefault": "Built-in preset",
+        "presetCustom": "Custom colours",
+        "source": "Theme generation source"
       },
       "sidePanel": {
         "panel": "Control panel",
@@ -2982,6 +3010,9 @@ export default {
       "gridViewPage": "Collection grid page",
       "playerPage": "Player page",
       "commandPalette": "Command window",
+      "latticeChrome": "Expanded poster playback controls",
+      "lyricsAnimationSettings": "Lyric animation settings",
+      "themeSettings": "Theme colour settings",
       "sidePanel": "Side control panel",
       "latticePage": "Lattice page",
       "helpPage": "Help page",
@@ -3010,6 +3041,17 @@ export default {
       "commandPaletteSearch": "Search it, press Enter",
       "commandPaletteArgument": "Giving a command an argument",
       "commandPaletteExecuteMode": "Colon enters execute mode",
+      "latticeChromeLayout": "What is on this control bar",
+      "latticeChromeSharedSlots": "The middle two mirror the bottom bar",
+      "latticeChromeBottomBar": "The bottom bar steps in",
+      "sidePanelCoverTab": "Artwork tab",
+      "sidePanelControlsTab": "Controls tab",
+      "sidePanelQueueTab": "Queue tab",
+      "sidePanelAccountTab": "Account tab",
+      "lyricsAnimationEntry": "Where lyric animation is chosen",
+      "lyricsAnimationToggles": "Two switches that change the look",
+      "themeSettingsPresets": "Presets and custom",
+      "themeSettingsSource": "Where the colours come from",
       "sidePanelStructure": "What is in the panel",
       "sidePanelTabs": "Switching tabs",
       "latticePageOverview": "How Lattice is organized",
@@ -3115,11 +3157,41 @@ export default {
         "executeEnter": "Type a colon to enter execute mode. That is the only way in \u2014 there is no button and no other shortcut.",
         "executeKeys": "Inside, one key is one command: r shuffles the queue, v volume, o settings, h help. No key is a prefix of another, so a press runs straight away."
       },
+      "latticeChrome": {
+        "intro": "Expand a poster on the wall and a playback bar grows along its bottom. It belongs to that expanded card alone; collapse the card and it is gone.",
+        "playAndSeek": "Play/pause is at the far left: when the card is not the current song, pressing it starts from this one. The bar underneath seeks by dragging.",
+        "openPlayer": "The diagonal arrow on the right returns to the player page. Everywhere else on the poster selects and expands; only this leaves Lattice.",
+        "ends": "Of the four middle buttons, the outer two are always previous and next \u2014 those positions are not configurable.",
+        "sharedSlots": "The inner two are not a second set of buttons. They are the same two slots as on the right of the bottom control bar: same action, same icon, same availability.",
+        "swap": "So swapping a bottom-bar slot in settings changes this too \u2014 there is no second place to configure, and no need for one.",
+        "onlyWhenVisible": "This bar exists only on an expanded poster. With nothing expanded, or the expanded one scrolled out of view, it is not on screen.",
+        "barShows": "That is when the bottom control bar steps in: the moment the playing song's poster leaves the viewport it appears, and it folds away again once that poster is back in view. Playback control never actually disappears."
+      },
       "sidePanel": {
         "cover": "The artwork for the current song sits at the top of the panel; hover it and the actions for that song appear.",
         "tabs": "Below the artwork is the tab row: artwork, controls, queue, account \u2014 plus local, Navidrome or lyrics depending on the source. They are faces of one place; switching does not move the panel.",
-        "queue": "The queue tab lists the current play queue. Drag to reorder, remove, or jump straight to a song.",
-        "controls": "The controls tab holds what you adjust while listening: equalizer, gain, lyric timeline offset."
+        "cycle": "You do not have to click that row of little cells. With the panel open, Tab moves one tab forward.",
+        "cycleReverse": "Shift + Tab moves one back. The cycle only visits the tabs that actually exist right now \u2014 different sources bring different ones.",
+        "coverTab": "The artwork tab is about the current song: a large cover, with title, artist and album underneath.",
+        "coverTabDetail": "Artist and album are both links into their collections; you can also jump to this song's page on its source platform, or copy its metadata out.",
+        "controlsTab": "The controls tab holds the parameters you adjust while listening.",
+        "controlsTabDetail": "Equalizer, gain and lyric timeline offset live here, along with the light/dark switch and a quick edit for the current palette \u2014 you hear the change immediately instead of walking to the settings panel and back.",
+        "queueTab": "The queue tab is the full list of the current play queue.",
+        "queueTabDetail": "Drag to reorder, or on any song: play next, move to the end, remove. The header can shuffle the whole queue, clear it, or lay it out as the Lattice poster wall.",
+        "accountTab": "The account tab covers whatever the current music source owns.",
+        "accountTabDetail": "Sign-in state, audio quality tier, local cache size and clearing, and syncing your data to the cloud. It follows the current source: switch source and you see a different set."
+      },
+      "lyricsAnimation": {
+        "where": "Lyric animation is not changed on the player page. It lives in Settings \u00b7 Appearance under \u201cLyric animation\u201d, and this top row is the way in.",
+        "playground": "It opens the animation workbench: a column of available modes on the left, a live preview on the right. Whichever you select is what the player page uses.",
+        "transparent": "\u201cTransparent player background\u201d lays the lyrics straight over the visualizer with no backing wash. Turn it on when you want to see the background.",
+        "autoHide": "\u201cAuto-hide the control bar\u201d folds the bottom bar away while the pointer is still, leaving only lyrics. Approach it and it comes back."
+      },
+      "themeSettings": {
+        "presetDefault": "The card on the left is the built-in preset: ink for dark, plain white for light, switching with the light/dark mode.",
+        "presetCustom": "The card on the right is your custom palette. Select it and the player page, cards and panels all move to those colours.",
+        "source": "A custom palette is not hand-mixed \u2014 this is where you choose where it comes from: sampled from the current artwork, or inferred by AI. The AI option needs a provider API key first.",
+        "themePark": "Theme Park in the top right is the full palette library laid out on one screen. Seeing every option at once beats flipping between these two small cards."
       },
       "panelSlide": {
         "grabbed": "Press and hold the button. The track behind it lights up.",
