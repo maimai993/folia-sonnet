@@ -292,14 +292,14 @@ test('右侧面板：Tab 循环换页，四页各是一个独立目标', async (
     expect(activeIndex).toBe(1);
 
     // 四页各自预渲染在场。
-    for (const state of ['cover-actions', 'cover-tab', 'controls-tab', 'queue-tab', 'account-tab']) {
+    for (const state of ['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab']) {
         await expect(stage.locator(`[data-ponder-surface-state="${state}"]`)).toHaveCount(1);
     }
 
     // 四页不再是 side-panel 的章节，而是四个能单独悬停进入的目标 —— 整块面板的教程
     // 把它们连同封面四颗按钮和侧边开关一起列在「本页可单独思索的组件」里。
     // 断言条数而不是文案：探针跑在英文下，写死中文名会把这条测试绑死在某一份 locale 上。
-    await expect(stage.getByTestId('ponder-related-targets').locator('button')).toHaveCount(6);
+    await expect(stage.getByTestId('ponder-related-targets').locator('button')).toHaveCount(7);
 });
 
 test('封面四角那四颗按钮各有自己的一段说明', async ({ page }) => {

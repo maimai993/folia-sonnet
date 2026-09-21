@@ -81,6 +81,7 @@ export default {
     relatedTargetIds: [
         'panel-cover-actions',
         'panel-cover-tab',
+        'panel-source-tab',
         'panel-controls-tab',
         'panel-queue-tab',
         'panel-account-tab',

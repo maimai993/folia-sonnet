@@ -37,6 +37,7 @@ export type PonderTargetId =
     // 指着问的那个东西，合进 side-panel 的话，问一页要先看完六章。
     | 'panel-cover-actions'
     | 'panel-cover-tab'
+    | 'panel-source-tab'
     | 'panel-controls-tab'
     | 'panel-queue-tab'
     | 'panel-account-tab'

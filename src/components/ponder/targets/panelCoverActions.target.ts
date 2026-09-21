@@ -36,7 +36,8 @@ const reveal: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readSettings' },
 
-        { kind: 'highlight', id: 'markHome', anchor: 'coverHome', intensity: [0, 0.9], durationMs: 420, keyframe: true },
+        { kind: 'highlight', id: 'dimSettings', anchor: 'coverSettings', intensity: [0.9, 0], durationMs: 400, keyframe: true },
+        { kind: 'highlight', id: 'markHome', anchor: 'coverHome', intensity: [0, 0.9], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'home', at: 'bottom',
             textKey: 'ponder.captions.panelCoverActions.home',
@@ -61,7 +62,8 @@ const rightCorners: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readTransparent' },
 
-        { kind: 'highlight', id: 'markPlaylist', anchor: 'coverPlaylist', intensity: [0, 0.9], durationMs: 420, keyframe: true },
+        { kind: 'highlight', id: 'dimTransparent', anchor: 'coverTransparent', intensity: [0.9, 0], durationMs: 400, keyframe: true },
+        { kind: 'highlight', id: 'markPlaylist', anchor: 'coverPlaylist', intensity: [0, 0.9], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'playlist', at: 'bottom',
             textKey: 'ponder.captions.panelCoverActions.addToPlaylist',

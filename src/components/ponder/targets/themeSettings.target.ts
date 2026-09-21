@@ -115,7 +115,8 @@ const autoSwitching: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readFollow' },
 
-        { kind: 'highlight', id: 'markPrefer', anchor: 'preferCustom', intensity: [0, 0.85], durationMs: 420, keyframe: true },
+        { kind: 'highlight', id: 'dimFollow', anchor: 'followSystem', intensity: [0.85, 0], durationMs: 400, keyframe: true },
+        { kind: 'highlight', id: 'markPrefer', anchor: 'preferCustom', intensity: [0, 0.85], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'prefer', at: 'bottom',
             textKey: 'ponder.captions.themeSettings.preferCustom',
@@ -123,7 +124,8 @@ const autoSwitching: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readPrefer' },
 
-        { kind: 'highlight', id: 'markAuto', anchor: 'autoSwitch', intensity: [0, 0.85], durationMs: 420, keyframe: true },
+        { kind: 'highlight', id: 'dimPrefer', anchor: 'preferCustom', intensity: [0.85, 0], durationMs: 400, keyframe: true },
+        { kind: 'highlight', id: 'markAuto', anchor: 'autoSwitch', intensity: [0, 0.85], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'auto', at: 'bottom',
             textKey: 'ponder.captions.themeSettings.autoSwitch',

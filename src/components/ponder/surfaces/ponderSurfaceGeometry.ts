@@ -191,6 +191,19 @@ export const SIDE_PANEL_GEOMETRY = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 来源那一格里的几块，坐标系是当前标签页内容区（body）。
+ *
+ * 本地、Navidrome、在线歌词三页共用这一组：三页的骨架是同一个形状 ——
+ * 来源信息、音频增益、歌词管理、时间轴偏移，差别只在最上面那块写什么。
+ */
+export const SIDE_PANEL_SOURCE_PAGE = {
+    info: { left: 0, right: 0, top: 0, height: 0.22 },
+    gain: { left: 0, right: 0, top: 0.28, height: 0.22 },
+    lyrics: { left: 0, right: 0, top: 0.56, height: 0.28 },
+    offset: { left: 0, right: 0, top: 0.89, height: 0.11 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 封面四角那四颗按钮，坐标系是封面自身。
  *
  * 它们平时不在屏幕上：`opacity-0 group-hover:opacity-100`，指针移上封面才浮出来。

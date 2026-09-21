@@ -110,6 +110,8 @@ test.describe('思索 · 真实 DOM 里的选择器', () => {
             'panel-queue-tab',
             'panel-account-tab',
         ];
+        // 来源那一格只在当前这首有来源信息时才渲染，播放页这条 mock 歌曲没有，
+        // 所以它的选择器不在上面这组里 —— 那一格的存在性本身就是它那章要讲的事。
 
         for (const id of insidePanel) {
             const target = targets.find(entry => entry.id === id);

@@ -26,6 +26,8 @@ const ENTRIES: Array<{ id: string; target: PonderTargetId; scene: number }> = [
     { id: 'panel-cover-actions', target: 'panel-cover-actions', scene: 0 },
     { id: 'panel-cover-actions-right', target: 'panel-cover-actions', scene: 1 },
     { id: 'panel-cover-tab', target: 'panel-cover-tab', scene: 0 },
+    { id: 'panel-source-tab', target: 'panel-source-tab', scene: 0 },
+    { id: 'panel-source-contents', target: 'panel-source-tab', scene: 1 },
     { id: 'panel-controls-tab', target: 'panel-controls-tab', scene: 0 },
     { id: 'panel-queue-tab', target: 'panel-queue-tab', scene: 0 },
     { id: 'panel-account-tab', target: 'panel-account-tab', scene: 0 },

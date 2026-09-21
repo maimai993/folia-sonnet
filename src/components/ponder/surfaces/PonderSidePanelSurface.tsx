@@ -5,6 +5,7 @@ import {
     Disc,
     Heart,
     Home,
+    FileText,
     ListMusic,
     ListEnd,
     ListPlus,
@@ -16,9 +17,11 @@ import {
     Settings,
     Shuffle,
     SlidersHorizontal,
+    Search,
     Sparkle,
     Star,
     Trash2,
+    Upload,
     User,
     Volume2,
 } from 'lucide-react';
@@ -26,6 +29,7 @@ import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegi
 import {
     SIDE_PANEL_COVER_ACTIONS as A,
     SIDE_PANEL_GEOMETRY as G,
+    SIDE_PANEL_SOURCE_PAGE as S,
     relativeRectStyle,
 } from './ponderSurfaceGeometry';
 
@@ -53,8 +57,15 @@ type PonderSidePanelSurfaceProps = {
 
 type PageProps = { accent: string; line: string; outline: string };
 
-/** 常驻那四页；来源不同还会在封面页后面插入本地、Navidrome 或歌词页，那一格不是每次都在。 */
+/** 常驻那四页。 */
 const TABS = [Disc, SlidersHorizontal, ListMusic, User];
+
+/**
+ * 当前这首来自本地、Navidrome 或在线来源时的那一排：来源那一格插在封面页后面，共五格。
+ *
+ * 不是给常驻那排加一个图标 —— 这一格真的时有时无，画成五格才说得清「它插进来了」。
+ */
+const SOURCE_TABS = [Disc, FileText, SlidersHorizontal, ListMusic, User];
 
 /**
  * 标签排加它下面那块内容。换页时整块一起换，高亮才会落在新的那一格上。
@@ -68,15 +79,17 @@ const TabPage: React.FC<{
     accent: string;
     line: string;
     outline: string;
+    /** 默认是常驻那四格；来源那一格在场时传五格的那一排。 */
+    tabs?: typeof TABS;
     children: React.ReactNode;
-}> = ({ active, accent, line, outline, children }) => (
+}> = ({ active, accent, line, outline, tabs = TABS, children }) => (
     <>
         <div
             data-ponder-panel-tabs
             className="flex items-center gap-[1%] rounded-xl p-[1.5%]"
             style={{ ...relativeRectStyle(G.tabs), backgroundColor: line }}
         >
-            {TABS.map((Icon, index) => (
+            {tabs.map((Icon, index) => (
                 <span
                     key={index}
                     data-ponder-panel-tab
@@ -256,6 +269,83 @@ const AccountPage: React.FC<PageProps> = ({ accent, line, outline }) => (
     </div>
 );
 
+/**
+ * 来源那一格：来源信息、音频增益、歌词管理、时间轴偏移。
+ *
+ * 本地 / Navidrome / 在线歌词三页画同一个形状 —— 它们本来就是同一块地方，
+ * 后三段完全一样，只有最上面那块写的东西不同。
+ */
+const SourcePage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-source className="relative" style={relativeRectStyle(G.body)}>
+        {/* 来源信息：几行「字段 → 值」。在线来源没有这一块。 */}
+        <div
+            data-ponder-panel-source-info
+            className="flex flex-col justify-evenly rounded-xl px-[5%]"
+            style={{ ...relativeRectStyle(S.info), backgroundColor: line }}
+        >
+            {[0, 1, 2].map(index => (
+                <span key={index} className="flex items-center gap-2">
+                    <span className="h-1 w-[26%] rounded-full opacity-55" style={{ backgroundColor: outline }} />
+                    <span className="flex-1" />
+                    <span className="h-1 rounded-full opacity-75" style={{ width: `${34 - index * 6}%`, backgroundColor: outline }} />
+                </span>
+            ))}
+        </div>
+
+        {/* 音频增益：标题行右端写着这首歌自带的 dB 值，下面三选一。 */}
+        <div data-ponder-panel-source-gain className="flex flex-col justify-between" style={relativeRectStyle(S.gain)}>
+            <span className="flex items-center gap-2">
+                <span className="h-1.5 w-[30%] rounded-full opacity-55" style={{ backgroundColor: line }} />
+                <span className="flex-1" />
+                <span className="h-1 w-[24%] rounded-full opacity-45" style={{ backgroundColor: line }} />
+            </span>
+            <span className="flex gap-[3%]">
+                {[0, 1, 2].map(index => (
+                    <span
+                        key={index}
+                        data-ponder-panel-gain-mode
+                        className="flex h-5 flex-1 items-center justify-center rounded-md"
+                        style={{ backgroundColor: index === 1 ? `${accent}33` : line }}
+                    >
+                        <span
+                            className="h-1 w-[46%] rounded-full"
+                            style={{ backgroundColor: index === 1 ? accent : outline, opacity: index === 1 ? 1 : 0.7 }}
+                        />
+                    </span>
+                ))}
+            </span>
+        </div>
+
+        {/* 歌词：标题行右端两颗图标（导入文件、在线匹配），下面一条写着当前用的是哪一份。 */}
+        <div data-ponder-panel-source-lyrics className="flex flex-col justify-between" style={relativeRectStyle(S.lyrics)}>
+            <span className="flex items-center gap-2">
+                <span className="h-1.5 w-[22%] rounded-full opacity-55" style={{ backgroundColor: line }} />
+                <span className="flex-1" />
+                <Upload className="h-3 w-3 opacity-50" />
+                <Search className="h-3 w-3 opacity-50" />
+            </span>
+            <span
+                className="flex items-center justify-between rounded-lg px-[4%] py-[2%]"
+                style={{ backgroundColor: line }}
+            >
+                <span className="h-1 w-[32%] rounded-full opacity-55" style={{ backgroundColor: outline }} />
+                <span className="flex h-4 w-[30%] items-center justify-center rounded-full" style={{ backgroundColor: `${accent}33` }}>
+                    <span className="h-1 w-[54%] rounded-full" style={{ backgroundColor: accent }} />
+                </span>
+            </span>
+        </div>
+
+        {/* 时间轴偏移：左边标题，右边 ‹ 数字 ms ›。 */}
+        <div data-ponder-panel-source-offset className="flex items-center gap-2" style={relativeRectStyle(S.offset)}>
+            <span className="h-1 w-[34%] rounded-full opacity-55" style={{ backgroundColor: line }} />
+            <span className="flex-1" />
+            <ChevronLeft className="h-3 w-3 opacity-55" />
+            <span className="h-1.5 w-[16%] rounded-full" style={{ backgroundColor: line }} />
+            <ChevronRight className="h-3 w-3 opacity-55" />
+        </div>
+    </div>
+);
+
 /** 封面四角那四颗按钮。平时是透明的，指针移上封面才浮出来。 */
 const CoverActions: React.FC<{ accent: string; outline: string }> = ({ accent, outline }) => (
     <div data-ponder-panel-cover-actions className="overflow-hidden rounded-[6%]" style={relativeRectStyle(G.cover)}>
@@ -310,6 +400,13 @@ const PonderSidePanelSurface: React.FC<PonderSidePanelSurfaceProps> = ({
         <PonderSurfaceStateLayer state="cover-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={0} accent={accent} line={line} outline={outline}>
                 <CoverPage accent={accent} line={line} outline={outline} />
+            </TabPage>
+        </PonderSurfaceStateLayer>
+
+        {/* 来源那一格在场时，标签排是五格 —— 它插在封面页后面，不是替掉某一格。 */}
+        <PonderSurfaceStateLayer state="source-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
+            <TabPage active={1} tabs={SOURCE_TABS} accent={accent} line={line} outline={outline}>
+                <SourcePage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
 

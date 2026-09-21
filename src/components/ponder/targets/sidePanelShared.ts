@@ -1,6 +1,7 @@
 import {
     SIDE_PANEL_COVER_ACTIONS as A,
     SIDE_PANEL_GEOMETRY as G,
+    SIDE_PANEL_SOURCE_PAGE as S,
 } from '../surfaces/ponderSurfaceGeometry';
 import type { PonderAnchorSource, PonderRelativeRect, PonderSceneScript, PonderTargetId } from '../../../types/ponder';
 
@@ -47,6 +48,18 @@ export const SIDE_PANEL_COVER_ANCHORS = {
 /** 四格标签排里每一格的中心，按顺序：封面、控制、队列、账号。 */
 export const SIDE_PANEL_TAB_CENTER_X = [0.125, 0.375, 0.625, 0.875] as const;
 
+/** 来源那一格在场时是五格，中心跟着挪。第 1 格就是来源那一格。 */
+export const SIDE_PANEL_SOURCE_TAB_CENTER_X = 0.3;
+
+/** 来源页里的四块，坐标系是 body。 */
+export const SIDE_PANEL_SOURCE_ANCHORS = {
+    ...SIDE_PANEL_ANCHORS,
+    sourceInfo: region('body', S.info, 'ponder.anchors.sidePanel.sourceInfo'),
+    sourceGain: region('body', S.gain, 'ponder.anchors.sidePanel.sourceGain'),
+    sourceLyrics: region('body', S.lyrics, 'ponder.anchors.sidePanel.sourceLyrics'),
+    sourceOffset: region('body', S.offset, 'ponder.anchors.sidePanel.sourceOffset'),
+} satisfies Record<string, PonderAnchorSource>;
+
 /**
  * 一个标签页的教程：点到那一格、换过去，然后讲这一页是什么、里面有什么。
  *
@@ -88,6 +101,7 @@ export const sidePanelTabRelatedIds = (self: PonderTargetId): PonderTargetId[] =
     ([
         'side-panel',
         'panel-cover-tab',
+        'panel-source-tab',
         'panel-controls-tab',
         'panel-queue-tab',
         'panel-account-tab',

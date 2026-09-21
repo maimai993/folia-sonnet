@@ -92,7 +92,8 @@ const toggles: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readTransparent' },
 
-        { kind: 'highlight', id: 'markAutoHide', anchor: 'autoHide', intensity: [0, 0.85], durationMs: 420, keyframe: true },
+        { kind: 'highlight', id: 'dimTransparent', anchor: 'transparent', intensity: [0.85, 0], durationMs: 400, keyframe: true },
+        { kind: 'highlight', id: 'markAutoHide', anchor: 'autoHide', intensity: [0, 0.85], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'autoHide', at: 'bottom',
             textKey: 'ponder.captions.lyricsAnimation.autoHide',
