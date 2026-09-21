@@ -47,15 +47,18 @@ const emptyState = {
     lastHome: null,
     lastSource: null,
     lastSourceDepth: 0,
+    lastSourceNavigation: null,
     exit: null,
 };
 
-/** 只需要 origin 与 stack.length 参与判断，所以这里只造出这两项。 */
+/** 使用不同集合构造导航栈，允许测试通过真实 push 模拟后续导航。 */
 const openAtDepth = (depth: number) => {
     useCollectionNavigationStore.setState({
         snapshot: {
             origin: 'home',
-            stack: Array.from({ length: depth }, () => ({} as GridViewCollectionDescriptor)),
+            stack: Array.from({ length: depth }, (_, index) => ({
+                source: 'online', type: 'playlist', id: String(index), name: `Collection ${index}`,
+            } as GridViewCollectionDescriptor)),
         },
     });
 };
@@ -161,6 +164,47 @@ describe('collection morph store', () => {
 
             expect(useCollectionMorphStore.getState().exit?.sourceKey).toBe('item:7');
             expect(useCollectionMorphStore.getState().exit?.nested).toBe(true);
+        });
+
+        it.each([false, true])('rejects a later push at the same depth (same collection: %s)', (sameCollection) => {
+            openAtDepth(2);
+            const previous = useCollectionNavigationStore.getState().snapshot!;
+            const store = useCollectionMorphStore.getState();
+            store.setLastSource(
+                { ...capture('item:7'), navAtGestureStart: { wasOpen: true, depth: 1 }, capturedAt: 1 },
+                2,
+            );
+            store.consume();
+            // Browser back bypasses armNestedExit. Even reopening the same collection
+            // must not inherit the previous navigation's source after capture expiry.
+            useCollectionNavigationStore.getState().restore({ ...previous, stack: previous.stack.slice(0, 1) });
+            reportMorphCapture(capture('item:8'));
+            vi.advanceTimersByTime(COLLECTION_MORPH_OBSERVATION_WINDOW_MS);
+            useCollectionNavigationStore.getState().push(
+                sameCollection ? previous.stack[1] : { ...previous.stack[1], id: 'other' },
+            );
+
+            store.armNestedExit(hero(), []);
+
+            expect(useCollectionMorphStore.getState().exit?.sourceKey).toBeNull();
+        });
+
+        it('releases the source after a nested exit finishes', () => {
+            openAtDepth(2);
+            const store = useCollectionMorphStore.getState();
+            store.setLastSource(
+                { ...capture('item:7'), navAtGestureStart: { wasOpen: true, depth: 1 }, capturedAt: 1 },
+                2,
+            );
+            store.consume();
+            store.armNestedExit(hero(), []);
+            expect(useCollectionMorphStore.getState().exit?.sourceKey).toBe('item:7');
+
+            store.consume();
+
+            expect(useCollectionMorphStore.getState()).toMatchObject({
+                lastSource: null, lastSourceDepth: 0, lastSourceNavigation: null,
+            });
         });
 
         it('refuses a source captured at another depth (async push whose capture expired)', () => {

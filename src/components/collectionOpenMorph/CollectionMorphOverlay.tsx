@@ -524,13 +524,13 @@ export const CollectionMorphOverlay: React.FC<CollectionMorphOverlayProps> = ({ 
     // plan immediately rather than waiting for the watchdog.
     useEffect(() => {
         if (
-            navigationOrigin === null
+            !navSnapshot
             && !exit
             && (stage === 'flying' || stage === 'settling' || stage === 'fading')
         ) {
             finishLifecycle();
         }
-    }, [navigationOrigin, exit, stage, finishLifecycle]);
+    }, [navSnapshot, exit, stage, finishLifecycle]);
 
     // Exit lifecycle: a single continuous gesture — fly home, crossfade back to the
     // home artwork and title, motion-blur out and fade away, all on the same curve.

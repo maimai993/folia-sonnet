@@ -134,6 +134,13 @@ const CollectionMorphProbe: React.FC = () => {
             style={{ ['--bg-color' as string]: '#18181b', ['--text-primary' as string]: '#fafafa' }}
         >
             <div className="flex flex-wrap gap-2">
+                <button type="button" data-probe-action="close-navigation" className={buttonClass} onClick={() => {
+                    // 模拟历史返回：只关闭导航，转场必须自行清理。
+                    useCollectionNavigationStore.getState().clear();
+                    setOpen(false);
+                }}>
+                    通过历史返回关闭
+                </button>
                 <button type="button" data-probe-action="close" className={buttonClass} onClick={closeCollection}>
                     返回首页（清空导航与计划）
                 </button>

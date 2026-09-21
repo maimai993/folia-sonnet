@@ -412,3 +412,17 @@ test('turning the surface off mid-flight finishes the lifecycle instead of stran
     await expect(page.locator(MORPH_LAYER)).toHaveCount(0, { timeout: 4000 });
     await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'none');
 });
+
+
+test('closing navigation mid-flight removes the composite and input blockade immediately', async ({ mount, page }) => {
+    const root = await mount('collectionMorph');
+    await root.locator('[data-probe-home-card]').click();
+    await expect(page.locator(FRAME)).toHaveCount(1);
+
+    // 历史返回不经过宿主的 armExit，也不会主动清空 morph store。
+    await root.locator('[data-probe-action="close-navigation"]').evaluate((node) => (node as HTMLButtonElement).click());
+
+    await expect(root.locator('[data-probe-open]')).toHaveAttribute('data-probe-open', 'false');
+    await expect(page.locator(MORPH_LAYER)).toHaveCount(0, { timeout: 100 });
+    await expect(root.locator('[data-probe-plan]')).toHaveAttribute('data-probe-plan', 'none');
+});

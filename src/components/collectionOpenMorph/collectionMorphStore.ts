@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useCollectionNavigationStore } from '../../stores/useCollectionNavigationStore';
+import { useCollectionNavigationStore, type CollectionNavigationSnapshot } from '../../stores/useCollectionNavigationStore';
 import { measureCardGeometry, type CollectionMorphCapture } from './morphProbes';
 import {
     COLLECTION_MORPH_OBSERVATION_WINDOW_MS,
@@ -37,10 +37,11 @@ interface CollectionMorphState {
     lastHome: CollectionMorphPending | null;
     /** The card the CURRENT nesting level was pushed from (e.g. the song card
      * whose click opened the artist page); the nested back's destination.
-     * lastSourceDepth records the stack depth it was captured at so a stale
-     * source (async push whose capture was discarded) can never be chased. */
+     * Depth and snapshot identity bind it to this navigation, not a later
+     * async push at the same depth whose capture has already expired. */
     lastSource: CollectionMorphPending | null;
     lastSourceDepth: number;
+    lastSourceNavigation: CollectionNavigationSnapshot | null;
     /** Armed by the host right before leaving a collection. */
     exit: CollectionMorphExit | null;
     capture: (payload: CollectionMorphPending) => void;
@@ -88,6 +89,7 @@ export const useCollectionMorphStore = create<CollectionMorphState>((set, get) =
     lastHome: null,
     lastSource: null,
     lastSourceDepth: 0,
+    lastSourceNavigation: null,
     exit: null,
     capture: (payload) => set({ pending: payload, plan: null, exit: null }),
     // ackPending only ever runs when a flight actually launched, so it also
@@ -109,7 +111,11 @@ export const useCollectionMorphStore = create<CollectionMorphState>((set, get) =
     },
     setHero: (hero) => set({ hero }),
     setLastHome: (home) => set({ lastHome: home }),
-    setLastSource: (source, depth) => set({ lastSource: source, lastSourceDepth: depth }),
+    setLastSource: (source, depth) => set({
+        lastSource: source,
+        lastSourceDepth: depth,
+        lastSourceNavigation: useCollectionNavigationStore.getState().snapshot,
+    }),
     armExit: (from, squad) => {
         const stored = get().lastHome;
         if (!stored) {
@@ -127,12 +133,14 @@ export const useCollectionMorphStore = create<CollectionMorphState>((set, get) =
     },
     armNestedExit: (from, squad) => {
         cancelPlanTtl();
-        const depth = useCollectionNavigationStore.getState().snapshot?.stack.length ?? 0;
-        const { lastSource, lastSourceDepth } = get();
+        const navigation = useCollectionNavigationStore.getState().snapshot;
+        const depth = navigation?.stack.length ?? 0;
+        const { lastSource, lastSourceDepth, lastSourceNavigation } = get();
         // Only a source captured for THIS nesting level may be landed on —
         // an async push whose capture was discarded must fall back to the
         // in-place shrink instead of chasing a stale card.
         const sourceKey = lastSource && lastSourceDepth === depth && depth > 1
+            && lastSourceNavigation === navigation
             ? lastSource.sourceKey
             : null;
         set({ exit: { from, to: null, squad, nested: true, sourceKey, armedAt: Date.now() }, hero: null, plan: null });
@@ -148,11 +156,15 @@ export const useCollectionMorphStore = create<CollectionMorphState>((set, get) =
         const keepPending = pending && exit && pending.capturedAt > exit.armedAt
             ? pending
             : null;
-        set({ pending: keepPending, plan: null, hero: null, exit: null });
+        set({
+            pending: keepPending, plan: null, hero: null, exit: null,
+            // Keep the source during forward-flight completion, release it after back.
+            ...(exit ? { lastSource: null, lastSourceDepth: 0, lastSourceNavigation: null } : {}),
+        });
     },
     clear: () => {
         cancelDiscard();
-        set({ pending: null, plan: null, hero: null, lastHome: null, lastSource: null, lastSourceDepth: 0, exit: null });
+        set({ pending: null, plan: null, hero: null, lastHome: null, lastSource: null, lastSourceDepth: 0, lastSourceNavigation: null, exit: null });
     },
 }));
 
