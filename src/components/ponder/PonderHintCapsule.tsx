@@ -1,0 +1,108 @@
+import React, { useLayoutEffect, useRef } from 'react';
+import { motion, useTransform } from 'framer-motion';
+import { Keyboard } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ponderPointerX, ponderPointerY } from '../../stores/motionSignals';
+import type { Theme } from '../../types';
+
+// src/components/ponder/PonderHintCapsule.tsx
+// 跟随光标的「按 G 思索」提示。不可点击，不参与布局。
+//
+// 位置全程走 MotionValue → useTransform，一次 React 重渲染都不产生：光标坐标是每帧值，
+// 写进 state 就等于让整棵树按指针频率重渲染（见 skills/frontend-runtime-guardrails）。
+// 擦除进度由 usePonderHoldToEnter 用 WAAPI 直接驱动下面这几个 ref，同样不经过 React。
+
+/** 胶囊相对光标的偏移，px。 */
+const CURSOR_OFFSET_PX = 12;
+
+/** 贴边时留的余量，px。 */
+const VIEWPORT_MARGIN_PX = 8;
+
+type PonderHintCapsuleProps = {
+    label: string;
+    theme?: Theme;
+    isDaylight: boolean;
+    wipeRef: React.RefObject<HTMLDivElement | null>;
+    labelRef: React.RefObject<HTMLSpanElement | null>;
+    holdLabelRef: React.RefObject<HTMLSpanElement | null>;
+};
+
+const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
+    label,
+    theme,
+    isDaylight,
+    wipeRef,
+    labelRef,
+    holdLabelRef,
+}) => {
+    const { t } = useTranslation();
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    // 自身尺寸量一次存 ref。贴边钳位每帧都要用它，但它只在挂载和语言切换时变 ——
+    // 每帧去量会是一次强制重排。
+    const sizeRef = useRef({ width: 128, height: 28 });
+
+    useLayoutEffect(() => {
+        const node = rootRef.current;
+        if (!node) return;
+        const rect = node.getBoundingClientRect();
+        if (rect.width > 0) {
+            sizeRef.current = { width: rect.width, height: rect.height };
+        }
+    }, [label]);
+
+    const x = useTransform(ponderPointerX, value => {
+        const max = window.innerWidth - sizeRef.current.width - VIEWPORT_MARGIN_PX;
+        return Math.max(VIEWPORT_MARGIN_PX, Math.min(max, value + CURSOR_OFFSET_PX));
+    });
+    const y = useTransform(ponderPointerY, value => {
+        const max = window.innerHeight - sizeRef.current.height - VIEWPORT_MARGIN_PX;
+        return Math.max(VIEWPORT_MARGIN_PX, Math.min(max, value + CURSOR_OFFSET_PX));
+    });
+
+    const accent = theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa');
+    const surface = isDaylight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(24, 24, 27, 0.92)';
+    const border = isDaylight ? 'rgba(24, 24, 27, 0.12)' : 'rgba(255, 255, 255, 0.14)';
+    const text = isDaylight ? '#27272a' : '#fafafa';
+
+    return (
+        <motion.div
+            ref={rootRef}
+            style={{ x, y }}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            // z-[180]：压过 automix 过渡环（170），因为这是对用户此刻正在做的悬停的回应；
+            // 低于 ThemedDialog（200），真正的对话框优先级更高。
+            className="pointer-events-none fixed left-0 top-0 z-[180] select-none"
+            data-testid="ponder-hint-capsule"
+            aria-hidden="true"
+        >
+            <div
+                className="relative flex items-center gap-1.5 overflow-hidden rounded-full border px-2.5 py-1 text-xs shadow-lg backdrop-blur-sm"
+                style={{ backgroundColor: surface, borderColor: border, color: text }}
+            >
+                {/* 长按进度：由 WAAPI 把 scaleX 从 0 推到 1，不是 React 状态。 */}
+                <div
+                    ref={wipeRef}
+                    className="absolute inset-0 origin-left"
+                    style={{ transform: 'scaleX(0)', backgroundColor: accent, opacity: 0.22 }}
+                />
+                <Keyboard size={12} className="relative shrink-0" style={{ color: accent }} />
+                <span className="relative whitespace-nowrap">
+                    <span ref={labelRef}>{label}</span>
+                    {/* 压在同一处淡入，两段文案不会互相推挤布局。 */}
+                    <span
+                        ref={holdLabelRef}
+                        className="absolute inset-0 whitespace-nowrap"
+                        style={{ opacity: 0 }}
+                    >
+                        {t('ponder.hintCapsuleHold')}
+                    </span>
+                </span>
+            </div>
+        </motion.div>
+    );
+};
+
+export default PonderHintCapsule;

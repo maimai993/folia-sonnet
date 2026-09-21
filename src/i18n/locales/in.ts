@@ -352,6 +352,10 @@ export default {
       }
     },
     "commands": {
+      "settings-ponder-hints": { "title": "Petunjuk tutorial Ponder", "description": "Atur kapan petunjuk tahan G muncul" },
+      "ponder-hints-always": { "title": "Petunjuk Ponder: selalu tampilkan", "description": "Tampilkan petunjuk tahan G pada setiap kontrol yang bisa dipelajari" },
+      "ponder-hints-unseen": { "title": "Petunjuk Ponder: hanya yang belum dilihat", "description": "Berhenti memberi petunjuk setelah tutorialnya ditonton" },
+      "ponder-hints-off": { "title": "Petunjuk Ponder: nonaktif", "description": "Jangan pernah tampilkan petunjuk tahan G" },
       "search-current": { "title": "Cari lagu", "description": "Cari lagu di sumber saat ini" },
       "search-local": { "title": "Cari lagu lokal", "description": "Cari di perpustakaan lokal" },
       "search-navidrome": { "title": "Cari lagu Navidrome", "description": "Cari di perpustakaan Navidrome" },
@@ -1116,6 +1120,11 @@ export default {
     "lyricMatchPriorityDesc": "Saat beberapa sumber lirik memiliki kecocokan berkualitas tinggi, utamakan sumber ini terlebih dahulu."
   },
   "options": {
+    "ponderHints": "Petunjuk tutorial Ponder",
+    "ponderHintsDesc": "Mengarahkan kursor ke kontrol yang bisa dipelajari akan memunculkan petunjuk untuk menahan G, yang membuka panduan animasi gerakan tersebut.",
+    "ponderHintsAlways": "Selalu tampilkan",
+    "ponderHintsUnseen": "Hanya yang belum pernah dilihat",
+    "ponderHintsOff": "Nonaktif",
     "refresh": "Segarkan",
     "cacheDetails": "Detail Cache",
     "settingsGroupAppearance": "Tampilan",
@@ -2781,5 +2790,52 @@ export default {
     "copyPromptDesc": "Salin prompt dan tempelkan ke model AI apa pun untuk menghasilkan tema Anda.",
     "importJsonTitle": "2. Tempel Hasil JSON",
     "prompt": "Saya menggunakan pemutar musik folia-major di GitHub dan perlu bantuan untuk masalah.\n\nPanduan Folia: {{guideUrl}}\nRepositori Folia: {{repoUrl}}\n\nHarap gunakan referensi ini sebagai konteks, lalu bantu saya memahami dan menyelesaikan masalah yang saya jelaskan berikutnya. Jika ada informasi yang kurang, tanyakan apa yang harus saya berikan sebelum membuat asumsi yang tidak pasti."
+  },
+  "ponder": {
+    "sceneLabel": "Bab",
+    "chapterDone": "Sekian bab ini.",
+    "allChaptersDone": "Semuanya sudah selesai.",
+    "nextChapter": "Bab berikutnya",
+    "lastChapterHint": "Semua bab untuk kontrol ini sudah dilihat.",
+    "replayChapter": "Ulang bab ini",
+    "title": "Ponder",
+    "hintCapsule": "Tahan G untuk ponder",
+    "hintCapsuleHold": "Masuk ponder",
+    "sceneCounter": "{{current}} / {{total}}",
+    "prevScene": "Adegan sebelumnya",
+    "nextScene": "Adegan berikutnya",
+    "playPause": "Putar atau jeda",
+    "replay": "Ulang dari awal",
+    "exit": "Esc untuk keluar",
+    "seekKeyframe": "Lompat ke keyframe {{index}}",
+    "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] bab  \u00b7  Spasi jeda  \u00b7  Esc keluar",
+    "anchors": {
+      "panelSlide": {
+        "toggle": "Tombol panel",
+        "track": "Lintasan tersembunyi",
+        "threshold": "Garis pemicu",
+        "palette": "Command palette"
+      }
+    },
+    "targets": {
+      "panelSlide": "Tombol panel samping"
+    },
+    "scenes": {
+      "panelSlideToPalette": "Geser untuk membuka command palette",
+      "panelSlideEdgeHotspot": "Panggil pegangan dari tepi",
+      "panelSlideKeyboard": "Buka dari papan tombol"
+    },
+    "captions": {
+      "panelSlide": {
+        "grabbed": "Tekan dan tahan tombolnya. Lintasan di belakangnya menyala.",
+        "intro": "Tombol ini menyembunyikan sebuah lintasan. Tekan dan tahan, lintasannya muncul.",
+        "threshold": "Geser ke kiri. 36 piksel sudah cukup \u2014 tombol berhenti mengikuti di 44.",
+        "outcome": "Lepaskan setelah melewati titik itu dan command palette terbuka.",
+        "hotspotIntro": "Di layar sentuh tidak ada hover, jadi tepi layar itu sendiri yang menjadi petunjuknya.",
+        "hotspotRevealed": "Ketuk dekat tepi kanan dan pegangannya keluar sendiri.",
+        "keyboardIntro": "Tanpa penunjuk pun bisa.",
+        "keyboardOutcome": "Cukup tekan S, palette yang sama akan terbuka."
+      }
+    }
   }
 } as const;

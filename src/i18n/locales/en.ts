@@ -353,6 +353,10 @@ export default {
       }
     },
     "commands": {
+      "settings-ponder-hints": { "title": "Ponder tutorial hints", "description": "Choose when the hold-G tutorial hint appears" },
+      "ponder-hints-always": { "title": "Ponder hints: always show", "description": "Show the hold-G hint on every teachable control" },
+      "ponder-hints-unseen": { "title": "Ponder hints: only where I have not looked", "description": "Stop hinting a control once its tutorial has been watched" },
+      "ponder-hints-off": { "title": "Ponder hints: off", "description": "Never show the hold-G hint" },
       "search-current": { "title": "Search songs", "description": "Search songs in the current source" },
       "search-local": { "title": "Search local songs", "description": "Search local library" },
       "search-navidrome": { "title": "Search Navidrome songs", "description": "Search Navidrome library" },
@@ -1121,6 +1125,11 @@ export default {
     "lyricMatchPriorityDesc": "When multiple lyric sources have high-confidence matches, prefer this source first."
   },
   "options": {
+    "ponderHints": "Ponder tutorial hints",
+    "ponderHintsDesc": "Hovering a teachable control shows a hint to hold G, which opens an animated walkthrough of that gesture.",
+    "ponderHintsAlways": "Always show",
+    "ponderHintsUnseen": "Only where I have not looked yet",
+    "ponderHintsOff": "Off",
     "refresh": "Refresh",
     "cacheDetails": "Cache Details",
     "settingsGroupAppearance": "Appearance",
@@ -2849,5 +2858,52 @@ export default {
     "copyPromptDesc": "Copy the prompt and paste it into any AI model to generate your theme.",
     "importJsonTitle": "2. Paste JSON Result",
     "prompt": "I am using the folia-major music player on GitHub and need help with a problem.\n\nFolia Guide: {{guideUrl}}\nFolia repository: {{repoUrl}}\n\nPlease use these references as context, then help me understand and solve the problem I describe next. If any information is missing, ask what I should provide before making uncertain assumptions."
+  },
+  "ponder": {
+    "sceneLabel": "Chapter",
+    "chapterDone": "That is this chapter.",
+    "allChaptersDone": "That is all of them.",
+    "nextChapter": "Next chapter",
+    "lastChapterHint": "You have seen every chapter for this control.",
+    "replayChapter": "Replay this chapter",
+    "title": "Ponder",
+    "hintCapsule": "Hold G to ponder",
+    "hintCapsuleHold": "Entering ponder",
+    "sceneCounter": "{{current}} / {{total}}",
+    "prevScene": "Previous scene",
+    "nextScene": "Next scene",
+    "playPause": "Play or pause",
+    "replay": "Replay from the start",
+    "exit": "Esc to exit",
+    "seekKeyframe": "Jump to keyframe {{index}}",
+    "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] chapter  \u00b7  Space pause  \u00b7  Esc exit",
+    "anchors": {
+      "panelSlide": {
+        "toggle": "Panel toggle",
+        "track": "Hidden track",
+        "threshold": "Trigger line",
+        "palette": "Command palette"
+      }
+    },
+    "targets": {
+      "panelSlide": "Side panel toggle"
+    },
+    "scenes": {
+      "panelSlideToPalette": "Slide to open the command palette",
+      "panelSlideEdgeHotspot": "Summon the handle from the edge",
+      "panelSlideKeyboard": "Open it from the keyboard"
+    },
+    "captions": {
+      "panelSlide": {
+        "grabbed": "Press and hold the button. The track behind it lights up.",
+        "intro": "This button hides a track. Press and hold it, and the track appears.",
+        "threshold": "Drag left. 36 pixels is enough \u2014 the button stops following at 44.",
+        "outcome": "Let go past that point and the command palette opens.",
+        "hotspotIntro": "On a touch screen there is nothing to hover, so the edge itself is the affordance.",
+        "hotspotRevealed": "Tap near the right edge and the handle comes out on its own.",
+        "keyboardIntro": "No pointer needed either.",
+        "keyboardOutcome": "A bare S opens the same palette."
+      }
+    }
   }
 } as const;

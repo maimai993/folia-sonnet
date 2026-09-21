@@ -353,6 +353,10 @@ export default {
       }
     },
     "commands": {
+      "settings-ponder-hints": { "title": "思索教程提示", "description": "设置长按 G 的提示什么时候出现" },
+      "ponder-hints-always": { "title": "思索提示：始终显示", "description": "所有可教学的控件都提示长按 G" },
+      "ponder-hints-unseen": { "title": "思索提示：仅未看过的区域", "description": "某个控件的教程看过之后就不再提示它" },
+      "ponder-hints-off": { "title": "思索提示：关闭", "description": "不再显示长按 G 的提示" },
       "search-current": { "title": "搜索歌曲", "description": "在当前来源搜索歌曲" },
       "search-local": { "title": "搜索本地歌曲", "description": "搜索本地音乐库" },
       "search-navidrome": { "title": "搜索 Navidrome", "description": "搜索 Navidrome 音乐库" },
@@ -1120,6 +1124,11 @@ export default {
     "lyricMatchPriorityDesc": "在多个歌词源都存在高置信度匹配时，优先选择该歌词源的结果。"
   },
   "options": {
+    "ponderHints": "思索教程提示",
+    "ponderHintsDesc": "把指针停在可教学的控件上会提示长按 G，松手后打开一段演示该手势的动画教程。",
+    "ponderHintsAlways": "始终显示",
+    "ponderHintsUnseen": "仅未看过的区域",
+    "ponderHintsOff": "关闭",
     "refresh": "刷新",
     "cacheDetails": "缓存详情",
     "settingsGroupAppearance": "外观",
@@ -2848,5 +2857,52 @@ export default {
     "copyPromptDesc": "将提示词复制并粘贴到任意大模型对话中，生成主题 JSON 数据。",
     "importJsonTitle": "2. 粘贴并导入 JSON",
     "prompt": "我正在使用 GitHub 上的 folia-major 音乐播放器，遇到了一个问题，需要你协助排查。\n\nFolia 使用指南：{{guideUrl}}\nFolia 源码仓库：{{repoUrl}}\n\n请把这些资料作为上下文，结合我接下来描述的问题，帮我判断可能原因并给出处理步骤。如果信息不足，请先询问我需要补充什么，不要直接做不确定的假设。"
+  },
+  "ponder": {
+    "sceneLabel": "章节",
+    "chapterDone": "这一章就到这里。",
+    "allChaptersDone": "全部章节都看完了。",
+    "nextChapter": "下一章",
+    "lastChapterHint": "这个控件的章节已经全部看过。",
+    "replayChapter": "重播这一章",
+    "title": "思索",
+    "hintCapsule": "按 G 思索",
+    "hintCapsuleHold": "进入思索",
+    "sceneCounter": "{{current}} / {{total}}",
+    "prevScene": "上一场景",
+    "nextScene": "下一场景",
+    "playPause": "播放或暂停",
+    "replay": "从头重播",
+    "exit": "Esc 退出",
+    "seekKeyframe": "跳到第 {{index}} 个关键帧",
+    "keyLegend": "\u2190 \u2192 关键帧  \u00b7  [ ] 章节  \u00b7  空格 暂停  \u00b7  Esc 退出",
+    "anchors": {
+      "panelSlide": {
+        "toggle": "面板开关",
+        "track": "隐藏的滑轨",
+        "threshold": "触发线",
+        "palette": "命令面板"
+      }
+    },
+    "targets": {
+      "panelSlide": "侧边面板开关"
+    },
+    "scenes": {
+      "panelSlideToPalette": "滑动打开命令面板",
+      "panelSlideEdgeHotspot": "从边缘唤出手柄",
+      "panelSlideKeyboard": "用键盘打开"
+    },
+    "captions": {
+      "panelSlide": {
+        "grabbed": "按住这个按钮不放，它背后的滑轨就亮起来了。",
+        "intro": "这个按钮底下藏着一条滑轨。按住它，滑轨就会显出来。",
+        "threshold": "往左拖。36 像素就够了 —— 到 44 像素按钮便不再跟手。",
+        "outcome": "越过那条线松手，命令面板就打开了。",
+        "hotspotIntro": "触屏上没有悬停这回事，所以屏幕边缘本身就是入口。",
+        "hotspotRevealed": "在右边缘附近点一下，手柄会自己出来。",
+        "keyboardIntro": "也可以完全不用指针。",
+        "keyboardOutcome": "直接按 S，打开的是同一个面板。"
+      }
+    }
   }
 } as const;

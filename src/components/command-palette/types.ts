@@ -20,6 +20,7 @@ import type { CommandPlatform } from './availability';
 import type { CommandPaletteSurface } from './surfaces/types';
 import type { CommandSyntaxSpec } from './syntax/types';
 import type { PlaybackEntryView } from '../../stores/usePlaybackEntryViewStore';
+import type { PonderHintVisibility } from '../../types/ponder';
 
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
@@ -202,6 +203,8 @@ export type CommandPaletteSettingsContext = {
     /** Which surface pressing play opens; see usePlaybackEntryViewStore. */
     playbackEntryView: PlaybackEntryView;
     setPlaybackEntryView: (view: PlaybackEntryView) => void;
+    ponderHintVisibility: PonderHintVisibility;
+    setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
     toggleRememberHomeCardPosition: () => void;
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;

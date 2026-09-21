@@ -15,19 +15,13 @@ import { useInteractionSettingsStore } from '../../stores/useInteractionSettings
 import { resolveCustomShortcutCommand } from './customShortcut';
 
 // src/components/command-palette/useCommandPalette.ts
+import { isTextEntryTarget } from '../../utils/keyboardTargets';
+
 // Manages palette state, keyboard opening, and selected autocomplete item.
 
-export const isTextEntryTarget = (target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement)) {
-        return false;
-    }
-
-    const tagName = target.tagName.toLowerCase();
-    return tagName === 'input'
-        || tagName === 'textarea'
-        || tagName === 'select'
-        || target.isContentEditable;
-};
+// 实现已移到 src/utils/keyboardTargets.ts（hooks 层也要用，不能让它依赖命令面板模块）。
+// 这里保留再导出，原有的 import 点不必改。
+export { isTextEntryTarget };
 
 type UseCommandPaletteParams = {
     isBlocked: boolean;

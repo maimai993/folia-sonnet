@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { PanelTab } from '../components/UnifiedPanel';
+import { hasBlockingWindow } from '../utils/keyboardTargets';
 
 // src/hooks/usePlayerPanelTabShortcut.ts
 // Cycles through the tabs that are currently available in the open player panel.
@@ -46,7 +47,7 @@ export const usePlayerPanelTabShortcut = ({
                 || event.altKey
                 || event.metaKey
                 || event.repeat
-                || document.querySelector('[data-folia-keyboard-window="true"]')
+                || hasBlockingWindow()
             ) {
                 return;
             }

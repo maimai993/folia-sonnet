@@ -1,0 +1,110 @@
+import { describe, expect, it } from 'vitest';
+import { PONDER_TARGET_LIST, findPonderTarget } from '@/components/ponder/ponderRegistry';
+import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
+import type { PonderAnchorPoint, PonderStep } from '@/types/ponder';
+
+// test/unit/ponder/ponderRegistry.test.ts
+// 场景脚本是纯声明数据，写错了不会有任何类型错误 —— 引用一个不存在的锚点只会让骨架
+// 少画一个框、光标飞到左上角，而且要等到有人真的长按 G 才看得见。这组断言是唯一的防线。
+
+/** 一个步骤引用到的所有锚点名。 */
+const referencedAnchors = (step: PonderStep): string[] => {
+    const fromPoint = (point: PonderAnchorPoint | 'bottom' | undefined): string[] =>
+        point && point !== 'bottom' ? [point.anchor] : [];
+
+    switch (step.kind) {
+        case 'caption':
+            return fromPoint(step.at);
+        case 'cursor':
+            return [...fromPoint(step.to), ...fromPoint(step.from)];
+        case 'drag':
+            return [...fromPoint(step.from), ...fromPoint(step.to)];
+        case 'keypress':
+            return fromPoint(step.at);
+        case 'highlight':
+            return [step.anchor];
+        default:
+            return [];
+    }
+};
+
+describe('ponder registry', () => {
+    it('至少注册了一个目标', () => {
+        expect(PONDER_TARGET_LIST.length).toBeGreaterThan(0);
+    });
+
+    it('每个目标都能按 id 取回自己', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            expect(findPonderTarget(target.id)).toBe(target);
+        });
+    });
+
+    it('每个目标至少有一个场景', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            expect(target.scenes.length, `${target.id} 没有场景`).toBeGreaterThan(0);
+        });
+    });
+
+    it('场景 id 在同一目标内唯一', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            const ids = target.scenes.map(scene => scene.id);
+            expect(new Set(ids).size, `${target.id} 场景 id 重复`).toBe(ids.length);
+        });
+    });
+
+    it('步骤 id 在同一场景内唯一', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                const ids = scene.steps.map(step => step.id);
+                expect(new Set(ids).size, `${target.id}/${scene.id} 步骤 id 重复`).toBe(ids.length);
+            });
+        });
+    });
+
+    it('每个步骤引用的锚点都在该场景的 anchors 里声明过', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                const declared = new Set(Object.keys(scene.anchors));
+                scene.steps.forEach(step => {
+                    referencedAnchors(step).forEach(anchor => {
+                        expect(declared.has(anchor), `${target.id}/${scene.id}/${step.id} 引用了未声明的锚点 "${anchor}"`).toBe(true);
+                    });
+                });
+            });
+        });
+    });
+
+    it('derived 锚点的 from 都指向同场景内已声明的锚点', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                Object.entries(scene.anchors).forEach(([name, source]) => {
+                    if (source.kind !== 'derived') return;
+                    expect(
+                        Object.keys(scene.anchors).includes(source.from),
+                        `${target.id}/${scene.id} 的锚点 "${name}" 引用了未声明的 from "${source.from}"`,
+                    ).toBe(true);
+                });
+            });
+        });
+    });
+
+    it('每个场景都能编译出非零时长的时间线', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                const plan = compilePonderScene(scene);
+                expect(plan.totalMs, `${target.id}/${scene.id} 时长为 0`).toBeGreaterThan(0);
+                expect(plan.keyframes.length, `${target.id}/${scene.id} 没有关键帧`).toBeGreaterThan(0);
+            });
+        });
+    });
+
+    // 选择器能不能真的命中元素，要有 DOM 才测得了，那属于 test/component 下的 probe。
+    // 这里只挡住空串和纯空白这种一定错的形状。
+    it('hoverSelector 要么是 null，要么是非空选择器', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            if (target.hoverSelector === null) return;
+            expect(typeof target.hoverSelector).toBe('string');
+            expect(target.hoverSelector.trim(), `${target.id} 的 hoverSelector 是空串`).not.toBe('');
+        });
+    });
+});

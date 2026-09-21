@@ -94,6 +94,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleSubtitleOverlayBackground: vi.fn(),
             playbackEntryView: 'player' as const,
             setPlaybackEntryView: vi.fn(),
+            ponderHintVisibility: 'always' as const,
+            setPonderHintVisibility: vi.fn(),
             startPlayerBottomBarPositioning: vi.fn(),
             canStartPlayerBottomBarPositioning: true,
             toggleAlwaysShowPlayerBackButton: vi.fn(),

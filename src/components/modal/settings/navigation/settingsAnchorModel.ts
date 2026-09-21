@@ -62,6 +62,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     labPerformance: { section: 'lab', labelKey: 'options.labPerformanceSection' },
     labMotion: { section: 'lab', labelKey: 'options.reduceMotionSection' },
     labPlayerUi: { section: 'lab', labelKey: 'options.labPlayerUiSection' },
+    labPonder: { section: 'lab', labelKey: 'options.ponderHints' },
     labWindowAndTools: { section: 'lab', labelKey: 'options.labWindowAndToolsSection' },
 } as const satisfies Record<string, { section: SettingsSubviewId; labelKey: string; electronOnly?: boolean }>;
 

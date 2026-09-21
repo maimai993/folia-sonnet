@@ -9,6 +9,7 @@ import ThemedDialog from '../../shared/ThemedDialog';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import MotionReductionSettingsSection from './MotionReductionSettingsSection';
+import PonderHintSettingsSection from './PonderHintSettingsSection';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
@@ -376,6 +377,12 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                 </div>
 
                 </SettingsAnchor>
+
+                <PonderHintSettingsSection
+                    settingsCardClass={settingsCardClass}
+                    isDaylight={isDaylight}
+                    accentColor={theme?.accentColor}
+                />
 
                 <SettingsAnchor anchorId="labWindowAndTools" label={t('options.labWindowAndToolsSection')} className="space-y-4">
                     <SettingsSectionHeading icon={Boxes} label={t('options.labWindowAndToolsSection')} divider />
