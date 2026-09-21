@@ -9,13 +9,16 @@
 // 依赖这份合同的纯函数必须能在没有 window 的情况下被单测。
 
 /** 可教学区域。新增一个 target 要同时在这里登记 id，注册表才认。 */
+/**
+ * 可教学区域，按**组件整体**划分，不按单个按钮。
+ *
+ * 用户是对着一个看得见的组件大致比划着按 G 的，指望他先精确命中某个小按钮再按，
+ * 等于这条教程没人看得到。所以底部控制条是一个目标、里面分章节，
+ * 而不是「高度」「槽位」「随机」「音量」四个各自为政的目标。
+ */
 export type PonderTargetId =
     | 'panel-slide'
-    | 'command-palette-help'
-    | 'bottom-bar-offset'
-    | 'control-slots'
-    | 'shuffle'
-    | 'volume';
+    | 'player-bar';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -169,6 +172,15 @@ export type PonderSceneScript = {
     anchors: Record<string, PonderAnchorSource>;
     steps: PonderStep[];
     loopDelayMs?: number;
+    /**
+     * 这一章此刻讲不讲得通。
+     *
+     * 目标是按组件划分的，一个组件里却不是每件事都始终存在：进度条右边那两个槽位
+     * 可以放十个动作中的任意两个，「随机其实是洗一次牌」这一章只有在真的放着随机时
+     * 才该出现 —— 否则是在讲一个屏幕上根本没有的按钮。
+     * 不给就是始终适用。进入教程时求值一次。
+     */
+    isAvailable?: () => boolean;
 };
 
 export type PonderTargetDefinition = {

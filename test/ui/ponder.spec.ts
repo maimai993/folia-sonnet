@@ -46,7 +46,7 @@ const showPlayerControls = async (page: Page) => {
             id: 'ponder-e2e', name: '思索验证曲', artist: '测试', album: '测试', duration: 210,
         });
     });
-    const bar = page.locator('[data-ponder="bottom-bar-offset"]');
+    const bar = page.locator('[data-ponder="player-bar"]');
     await expect(bar).toHaveCount(1, { timeout: 5000 });
     // 悬停让胶囊展开，槽位才会出现。用户要悬停某个槽位，本来也必须先经过这一步。
     const box = (await bar.boundingBox())!;
@@ -69,7 +69,7 @@ test.describe('思索 · 真实 DOM 里的选择器', () => {
         await showPlayerControls(page);
 
         const targets = await hoverSelectors(page);
-        const onPlayerPage = ['panel-slide', 'bottom-bar-offset', 'control-slots', 'shuffle', 'volume'];
+        const onPlayerPage = ['panel-slide', 'player-bar'];
 
         for (const id of onPlayerPage) {
             const target = targets.find(entry => entry.id === id);
@@ -81,20 +81,26 @@ test.describe('思索 · 真实 DOM 里的选择器', () => {
         }
     });
 
-    test('槽位目标跟着槽位配置走：没配 shuffle 就没有 shuffle 目标', async ({ page }) => {
+    test('整条控制条都能命中，不必对准某个小按钮', async ({ page }) => {
+        await openPlayerPage(page, { primary: 'shuffle', secondary: 'volume' });
+        await showPlayerControls(page);
+
+        // 这才是这个目标按组件划分的意义：随便指向条上哪里都算数。
+        const bar = page.locator('[data-ponder="player-bar"]');
+        await expect(bar).toHaveCount(1);
+        await expect(page.locator('[data-ponder-slot]')).toHaveCount(2);
+
+        const slot = page.locator('[data-ponder-slot]').first();
+        const belongsToBar = await slot.evaluate(node => Boolean(node.closest('[data-ponder="player-bar"]')));
+        expect(belongsToBar, '槽位按钮应当落在控制条这个目标内部').toBe(true);
+    });
+
+    test('槽位里没放随机时，随机那一章的锚点也不存在', async ({ page }) => {
         await openPlayerPage(page, { primary: 'loop', secondary: 'like' });
         await showPlayerControls(page);
 
         await expect(page.locator('[data-ponder-slot="shuffle"]')).toHaveCount(0);
-        // 但兜底的 control-slots 仍然命中这两个按钮。
         await expect(page.locator('[data-ponder-slot]')).toHaveCount(2);
-    });
-
-    test('命令面板的问号按钮带着思索标记', async ({ page }) => {
-        await openPlayerPage(page);
-        await page.keyboard.press('s');
-        await expect(page.locator('[data-testid="command-palette-panel"]')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('[data-ponder="command-palette-help"]')).toHaveCount(1);
     });
 });
 

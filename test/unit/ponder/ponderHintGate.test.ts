@@ -28,7 +28,7 @@ describe('shouldOfferPonderHint', () => {
     });
 
     it('unseen：别的 target 看过不影响这个', () => {
-        expect(gate({ visibility: 'unseen', seenIds: new Set(['volume']) })).toBe(true);
+        expect(gate({ visibility: 'unseen', seenIds: new Set(['player-bar']) })).toBe(true);
     });
 
     it('off：任何情况都不提示', () => {
@@ -48,7 +48,7 @@ describe('shouldOfferPonderHint', () => {
 
     it('但 target 就在那个模态内部时放行（命令面板的问号按钮）', () => {
         expect(gate({
-            targetId: 'command-palette-help',
+            targetId: 'player-bar',
             hasBlockingWindow: true,
             isInsideBlockingWindow: true,
         })).toBe(true);
@@ -58,8 +58,8 @@ describe('shouldOfferPonderHint', () => {
         expect(gate({ visibility: 'off', hasBlockingWindow: true, isInsideBlockingWindow: true })).toBe(false);
         expect(gate({
             visibility: 'unseen',
-            targetId: 'command-palette-help',
-            seenIds: new Set(['command-palette-help']),
+            targetId: 'player-bar',
+            seenIds: new Set(['player-bar']),
             hasBlockingWindow: true,
             isInsideBlockingWindow: true,
         })).toBe(false);

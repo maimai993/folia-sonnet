@@ -68,8 +68,8 @@ describe('ponder store', () => {
 
     it('开启教程会清掉悬停态，避免胶囊留在教程层底下', async () => {
         const store = await load();
-        store.getState().setHoveredTargetId('volume');
-        store.getState().openPonder('volume');
+        store.getState().setHoveredTargetId('player-bar');
+        store.getState().openPonder('player-bar');
 
         expect(store.getState().hoveredTargetId).toBeNull();
     });
@@ -99,7 +99,7 @@ describe('ponder store', () => {
 
     it('closePonder 清掉会话和暂停态', async () => {
         const store = await load();
-        store.getState().openPonder('shuffle');
+        store.getState().openPonder('player-bar');
         store.getState().setPaused(true);
         store.getState().closePonder();
 
@@ -108,12 +108,11 @@ describe('ponder store', () => {
     });
 
     it('已看过记录跨会话保留', async () => {
-        values.set('folia_ponder_seen', 'volume,shuffle');
+        values.set('folia_ponder_seen', 'player-bar');
         installStorage();
         const store = await load();
 
-        expect(store.getState().seenTargetIds.has('volume')).toBe(true);
-        expect(store.getState().seenTargetIds.has('shuffle')).toBe(true);
+        expect(store.getState().seenTargetIds.has('player-bar')).toBe(true);
         expect(store.getState().seenTargetIds.has('panel-slide')).toBe(false);
     });
 
@@ -128,18 +127,18 @@ describe('ponder store', () => {
         installStorage(false, true);
         const store = await load();
 
-        expect(() => store.getState().openPonder('volume')).not.toThrow();
-        expect(store.getState().seenTargetIds.has('volume')).toBe(true);
+        expect(() => store.getState().openPonder('player-bar')).not.toThrow();
+        expect(store.getState().seenTargetIds.has('player-bar')).toBe(true);
     });
 
     it('重复标记已看过不重复写盘', async () => {
         const store = await load();
-        store.getState().markPonderSeen('volume');
+        store.getState().markPonderSeen('player-bar');
         const first = values.get('folia_ponder_seen');
         values.delete('folia_ponder_seen');
-        store.getState().markPonderSeen('volume');
+        store.getState().markPonderSeen('player-bar');
 
-        expect(first).toBe('volume');
+        expect(first).toBe('player-bar');
         expect(values.has('folia_ponder_seen')).toBe(false);
     });
 });

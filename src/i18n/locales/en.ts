@@ -2875,26 +2875,15 @@ export default {
     "seekKeyframe": "Jump to keyframe {{index}}",
     "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] chapter  \u00b7  Space pause  \u00b7  Esc exit",
     "anchors": {
-      "bottomBarOffset": {
+      "playerBar": {
         "bar": "Bottom control bar",
-        "palette": "Command palette"
-      },
-      "commandPaletteHelp": {
-        "button": "Help button",
-        "panel": "Command palette"
-      },
-      "controlSlots": {
         "slots": "Two slots",
-        "primary": "First slot",
-        "picker": "Picker in settings"
-      },
-      "shuffle": {
-        "button": "Shuffle button",
-        "queue": "Play queue"
-      },
-      "volume": {
-        "button": "Volume button",
-        "surface": "Volume surface"
+        "shuffleSlot": "Shuffle button",
+        "volumeSlot": "Volume button",
+        "palette": "Command palette",
+        "picker": "Picker in settings",
+        "queue": "Play queue",
+        "volumeSurface": "Volume surface"
       },
       "panelSlide": {
         "toggle": "Panel toggle",
@@ -2904,49 +2893,29 @@ export default {
       }
     },
     "targets": {
-      "bottomBarOffset": "Bottom bar height",
-      "commandPaletteHelp": "Command palette help button",
-      "controlSlots": "The two slots beside the progress bar",
-      "shuffle": "Shuffle",
-      "volume": "Volume",
+      "playerBar": "Bottom control bar",
       "panelSlide": "Side panel toggle"
     },
     "scenes": {
-      "bottomBarEnterPositioning": "Arm positioning first",
-      "bottomBarDrag": "Drag up or down to resize",
-      "commandPaletteHelpList": "Show every command",
-      "controlSlotsCustomizable": "These two can be swapped",
-      "shuffleOneShot": "One shuffle, not a mode",
-      "volumeInPalette": "Volume lives in the palette",
+      "playerBarHeight": "Its height can be changed",
+      "playerBarSlots": "The two slots can be swapped",
+      "playerBarShuffle": "Shuffle deals once",
+      "playerBarVolume": "Volume lives in the palette",
       "panelSlideToPalette": "Slide to open the command palette",
       "panelSlideEdgeHotspot": "Summon the handle from the edge",
       "panelSlideKeyboard": "Open it from the keyboard"
     },
     "captions": {
-      "bottomBarOffset": {
-        "intro": "The height of this bottom bar can be changed, and song cards and side panels follow it on every page.",
-        "command": "Dragging it straight away does nothing. Run \"Reposition on player page\" from the command palette first, and only then does it become a thing you can drag.",
-        "armed": "Once positioning is armed the whole capsule stops being a control - press anywhere on it and drag.",
-        "drag": "Drag up or down. The further up you drag, the further the bar sits from the bottom of the screen.",
-        "commit": "Let go and it takes effect, and it is remembered for next time."
-      },
-      "commandPaletteHelp": {
-        "intro": "Most people never press this question mark to the right of the input.",
-        "list": "Press it and the panel lists every command there is - no need to know a name before you can find it."
-      },
-      "controlSlots": {
-        "intro": "These two buttons to the right of the progress bar are not fixed.",
-        "two": "Each slot is independent: loop, shuffle, like, queue, volume, sleep timer and four more to choose from.",
-        "where": "Choose in settings: one dropdown per slot, applied the moment you pick."
-      },
-      "shuffle": {
-        "intro": "This is the current play queue.",
-        "once": "Press shuffle and Folia shuffles the queue in place, once - that order then stands.",
-        "notAMode": "So it is not a mode that stays on. Want a different order? Press it again."
-      },
-      "volume": {
-        "intro": "Folia has no permanent volume slider. Volume is one of the actions this slot can hold.",
-        "opens": "Pressing it opens the volume surface inside the command palette, rather than a little slider in place."
+      "playerBar": {
+        "heightIntro": "How far this bar sits from the bottom of the screen can be changed, and song cards and side panels follow it on every page.",
+        "heightCommand": "Dragging it straight away does nothing. Run \"Reposition on player page\" from the command palette first, and only then does it become a thing you can drag.",
+        "heightDrag": "Then press anywhere on it and drag up or down. Let go and it takes effect, and it is remembered.",
+        "slotsIntro": "These two buttons to the right of the progress bar are not fixed, and each slot is independent.",
+        "slotsWhere": "Choose in settings: loop, shuffle, like, queue, volume, sleep timer and four more, applied the moment you pick.",
+        "shuffleIntro": "This shuffle is not what it is elsewhere - it is not a mode that stays on.",
+        "shuffleOnce": "Press it and Folia shuffles the current queue in place, once; that order then stands. Want another? Press again.",
+        "volumeIntro": "Folia has no permanent volume slider.",
+        "volumeOpens": "Pressing here opens the volume surface inside the command palette, rather than a little slider in place."
       },
       "panelSlide": {
         "grabbed": "Press and hold the button. The track behind it lights up.",

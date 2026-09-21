@@ -5,6 +5,7 @@ import { usePonderSessionKeys } from '../../hooks/usePonderSessionKeys';
 import { compilePonderScene } from '../../utils/ponder/compilePonderTimeline';
 import { keyframeTicks } from '../../utils/ponder/ponderKeyframes';
 import { resolvePonderAnchors } from '../../utils/ponder/resolvePonderAnchors';
+import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
 import { findPonderTarget } from './ponderRegistry';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline } from './usePonderTimeline';
@@ -23,6 +24,9 @@ import type { Theme } from '../../types';
 
 /** resize 后等这么久再重采，避免拖动窗口时连续重建时间线。 */
 const RESAMPLE_DEBOUNCE_MS = 250;
+
+/** 上下外框占掉的高度，骨架要整体装进它们之间。与 PonderActors 里字幕避让用的是同一组数。 */
+const CHROME_BANDS = { top: 84, bottom: 156 };
 
 type PonderStageProps = {
     theme?: Theme;
@@ -58,7 +62,15 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     const setPaused = usePonderStore(state => state.setPaused);
 
     const target = session ? findPonderTarget(session.targetId) : null;
-    const scene = target?.scenes[session?.sceneIndex ?? 0] ?? null;
+
+    // 章节按「此刻讲不讲得通」过滤：目标是按组件划分的，一个组件里却不是每件事都始终存在 ——
+    // 两个槽位可以放十个动作中的任意两个，没放随机时就不该有「随机其实是洗一次牌」这一章。
+    // 只在进入或换目标时求值一次，教程跑着的时候章节数不会变。
+    const scenes = useMemo(
+        () => (target ? target.scenes.filter(candidate => candidate.isAvailable?.() !== false) : []),
+        [target],
+    );
+    const scene = scenes[session?.sceneIndex ?? 0] ?? null;
 
     const nodesRef = useRef(createPonderStageNodes());
     const [rects, setRects] = useState<Record<string, PonderRect>>({});
@@ -74,9 +86,14 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
         if (!scene) {
             return;
         }
-        setRects(resolvePonderAnchors(scene.anchors, {
-            readRect,
-            viewport: { width: window.innerWidth, height: window.innerHeight },
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        // 先按真实位置解析，再把整幅图等比装进教程外框之间那条带子。
+        // 必须在这里一次性做完：骨架、字幕、指向线、光标全都消费这同一份 rects，
+        // 任何一处单独变换都会让它们互相错位。
+        setRects(fitRectsToStage({
+            rects: resolvePonderAnchors(scene.anchors, { readRect, viewport }),
+            viewport,
+            chrome: CHROME_BANDS,
         }));
     }, [scene, sampleToken]);
 
@@ -119,7 +136,7 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
 
     usePonderSessionKeys({
         isActive: Boolean(session),
-        sceneCount: target?.scenes.length ?? 0,
+        sceneCount: scenes.length,
         controlsRef,
     });
 
@@ -153,12 +170,12 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                 title={t(target.titleKey)}
                 sceneTitle={t(scene.titleKey)}
                 sceneIndex={session.sceneIndex}
-                sceneCount={target.scenes.length}
+                sceneCount={scenes.length}
                 isPaused={isPaused}
                 ticks={ticks}
                 nodes={nodesRef.current}
-                onPrevScene={() => stepScene(-1, target.scenes.length)}
-                onNextScene={() => stepScene(1, target.scenes.length)}
+                onPrevScene={() => stepScene(-1, scenes.length)}
+                onNextScene={() => stepScene(1, scenes.length)}
                 onTogglePlay={() => {
                     const controls = controlsRef.current;
                     if (controls) setPaused(controls.toggle());
@@ -170,10 +187,10 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
             />
             {isFinished && (
                 <PonderNextChapterCue
-                    nextSceneTitle={target.scenes[session.sceneIndex + 1]
-                        ? t(target.scenes[session.sceneIndex + 1].titleKey)
+                    nextSceneTitle={scenes[session.sceneIndex + 1]
+                        ? t(scenes[session.sceneIndex + 1].titleKey)
                         : null}
-                    onNextScene={() => stepScene(1, target.scenes.length)}
+                    onNextScene={() => stepScene(1, scenes.length)}
                     theme={theme}
                     isDaylight={isDaylight}
                 />

@@ -12,11 +12,11 @@ describe('parsePonderSeen', () => {
     });
 
     it('忽略空白项与多余分隔符', () => {
-        expect([...parsePonderSeen(' volume , ,shuffle,')]).toEqual(['volume', 'shuffle']);
+        expect([...parsePonderSeen(' panel-slide , ,player-bar,')]).toEqual(['panel-slide', 'player-bar']);
     });
 
     it('去重', () => {
-        expect(parsePonderSeen('volume,volume').size).toBe(1);
+        expect(parsePonderSeen('player-bar,player-bar').size).toBe(1);
     });
 
     it('截断异常长的输入', () => {
@@ -27,7 +27,7 @@ describe('parsePonderSeen', () => {
 
 describe('serializePonderSeen', () => {
     it('与解析互为逆运算', () => {
-        const seen = parsePonderSeen('volume,shuffle');
+        const seen = parsePonderSeen('panel-slide,player-bar');
         expect(parsePonderSeen(serializePonderSeen(seen))).toEqual(seen);
     });
 
@@ -38,11 +38,11 @@ describe('serializePonderSeen', () => {
 
 describe('withPonderSeen', () => {
     it('新增时返回新集合', () => {
-        const next = withPonderSeen(new Set(['volume']), 'shuffle');
-        expect(next && [...next]).toEqual(['volume', 'shuffle']);
+        const next = withPonderSeen(new Set(['panel-slide']), 'player-bar');
+        expect(next && [...next]).toEqual(['panel-slide', 'player-bar']);
     });
 
     it('已存在时返回 null，好让调用方跳过写盘', () => {
-        expect(withPonderSeen(new Set(['volume']), 'volume')).toBeNull();
+        expect(withPonderSeen(new Set(['player-bar']), 'player-bar')).toBeNull();
     });
 });
