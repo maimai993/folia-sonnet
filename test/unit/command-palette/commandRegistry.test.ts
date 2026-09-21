@@ -372,7 +372,9 @@ describe('command palette registry', () => {
         );
         expect(playerControlSlotsCommand).toBeDefined();
         playerControlSlotsCommand!.execute('', context);
-        expect(context.settings.openSettings).toHaveBeenLastCalledWith('options', 'general');
+        // 必须带上锚点：槽位选择器在「通用」页底部的底部界面那一节里，
+        // 只传页面的话打开的是这一页的顶部，等于没跳过去。
+        expect(context.settings.openSettings).toHaveBeenLastCalledWith('options', 'general', null, 'bottomUiSettings');
 
         const [systemLanguageMatch] = getCommandPaletteMatches('跟随系统');
         expect(systemLanguageMatch.command.id).toBe('settings-language-system');

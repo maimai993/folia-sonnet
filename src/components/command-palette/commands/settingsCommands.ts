@@ -363,7 +363,9 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
-    createSettingsCommand(
+    // 用 anchor 版而不是 createSettingsCommand：后者只认页面，落在「通用」页顶部，
+    // 而槽位选择器在这一页的底部界面那一节里，跳过去等于没跳。
+    createSettingsAnchorCommand(
         'settings-player-control-slots',
         'Player button slots',
         'Choose which actions the two buttons beside the progress bar run',
@@ -371,8 +373,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             'progress bar buttons', 'customize player buttons',
             '进度条按钮', '播放按钮自定义', '按钮槽位',
         ],
-        'options',
-        'general',
+        'bottomUiSettings',
     ),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer workbench', '可视化', '歌词动画', 'donghua'], 'options', 'visualizer'),
     createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['theme park', 'theme', '配色', '主题', '主题公园'], 'options', 'themePark', { executeShortcut: 't' }),

@@ -72,6 +72,11 @@ const centeredSurface = (labelKey: string, width: number, height: number, top: n
 const adjustHeight: PonderSceneScript = {
     id: 'player-bar-height',
     titleKey: 'ponder.scenes.playerBarHeight',
+    action: {
+        kind: 'openSettings',
+        anchorId: 'bottomUiSettings',
+        labelKey: 'ponder.actions.openBottomUiSettings',
+    },
     anchors: {
         ...REAL_ANCHORS,
         /** 抬高之后它会在的位置，由当前位置向上推导。 */
@@ -130,6 +135,11 @@ const adjustHeight: PonderSceneScript = {
 const swappableSlots: PonderSceneScript = {
     id: 'player-bar-slots',
     titleKey: 'ponder.scenes.playerBarSlots',
+    action: {
+        kind: 'openSettings',
+        anchorId: 'bottomUiSettings',
+        labelKey: 'ponder.actions.openSlotPicker',
+    },
     anchors: {
         ...REAL_ANCHORS,
         picker: centeredSurface('ponder.anchors.playerBar.picker', 0.3, 0.34, 0.24),

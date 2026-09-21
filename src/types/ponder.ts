@@ -166,9 +166,27 @@ export const PONDER_DEFAULT_LOOP_DELAY_MS = 600;
  */
 export const PONDER_HIGHLIGHT_MAX_OPACITY = 0.3;
 
+/**
+ * 一章可以附带的「直接去那儿」入口。
+ *
+ * 教程讲完某个设置藏在哪之后，让人自己再翻一遍设置面板是没必要的损耗 ——
+ * 尤其这些设置本来就以难找著称，正是它们被收进教程的原因。
+ *
+ * anchorId 故意只声明成 string：types 层不该反向依赖 components 层的
+ * settingsAnchorModel。写错了由 ponderSceneAction 的单测挡住，它会去核对
+ * SETTINGS_ANCHOR_DEFINITIONS 里确实有这个锚点。
+ */
+export type PonderSceneAction = {
+    kind: 'openSettings';
+    anchorId: string;
+    labelKey: string;
+};
+
 export type PonderSceneScript = {
     id: string;
     titleKey: string;
+    /** 这一章讲的那个设置在哪儿，给一个直接跳过去的入口。 */
+    action?: PonderSceneAction;
     anchors: Record<string, PonderAnchorSource>;
     steps: PonderStep[];
     loopDelayMs?: number;

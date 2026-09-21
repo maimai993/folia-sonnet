@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PONDER_TARGET_LIST, findPonderTarget } from '@/components/ponder/ponderRegistry';
 import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
+import { SETTINGS_ANCHOR_DEFINITIONS } from '@/components/modal/settings/navigation/settingsAnchorModel';
 import type { PonderAnchorPoint, PonderStep } from '@/types/ponder';
 
 // test/unit/ponder/ponderRegistry.test.ts
@@ -105,6 +106,22 @@ describe('ponder registry', () => {
             if (target.hoverSelector === null) return;
             expect(typeof target.hoverSelector).toBe('string');
             expect(target.hoverSelector.trim(), `${target.id} 的 hoverSelector 是空串`).not.toBe('');
+        });
+    });
+
+    // action.anchorId 在 DSL 里只是个 string（types 层不该反向依赖 settings 的锚点表），
+    // 所以写错了只有在这里才发现得了 —— 运行时的表现是跳到设置面板的某个不存在的位置。
+    it('章节里「直接去那儿」的锚点都真实存在', () => {
+        const declared = new Set(Object.keys(SETTINGS_ANCHOR_DEFINITIONS));
+
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                if (!scene.action) return;
+                expect(
+                    declared.has(scene.action.anchorId),
+                    `${target.id}/${scene.id} 指向了不存在的设置锚点 "${scene.action.anchorId}"`,
+                ).toBe(true);
+            });
         });
     });
 });

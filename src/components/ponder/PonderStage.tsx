@@ -7,6 +7,8 @@ import { keyframeTicks } from '../../utils/ponder/ponderKeyframes';
 import { resolvePonderAnchors } from '../../utils/ponder/resolvePonderAnchors';
 import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
 import { findPonderTarget } from './ponderRegistry';
+import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
+import { openSettings } from '../../stores/useSettingsModalStore';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline } from './usePonderTimeline';
 import PonderActors from './PonderActors';
@@ -182,6 +184,15 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                 }}
                 onRestart={() => controlsRef.current?.restart()}
                 onSeekToTick={index => controlsRef.current?.seekToTick(index)}
+                actionLabel={scene.action ? t(scene.action.labelKey) : null}
+                onRunAction={() => {
+                    if (!scene.action) return;
+                    // 先退出教程再开设置：教程层是 z-[220]、还接管着键盘，
+                    // 留着它会把刚打开的设置面板整个盖住。
+                    const anchorId = scene.action.anchorId as SettingsAnchorId;
+                    closePonder();
+                    openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
+                }}
                 theme={theme}
                 isDaylight={isDaylight}
             />

@@ -2873,6 +2873,10 @@ export default {
     "exit": "Esc 退出",
     "seekKeyframe": "跳到第 {{index}} 个关键帧",
     "keyLegend": "\u2190 \u2192 关键帧  \u00b7  [ ] 章节  \u00b7  空格 暂停  \u00b7  Esc 退出",
+    "actions": {
+      "openBottomUiSettings": "打开底部界面设置",
+      "openSlotPicker": "去挑按钮"
+    },
     "anchors": {
       "playerBar": {
         "bar": "底部控制条",

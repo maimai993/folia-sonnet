@@ -2806,6 +2806,10 @@ export default {
     "exit": "Esc untuk keluar",
     "seekKeyframe": "Lompat ke keyframe {{index}}",
     "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] bab  \u00b7  Spasi jeda  \u00b7  Esc keluar",
+    "actions": {
+      "openBottomUiSettings": "Buka pengaturan UI bawah",
+      "openSlotPicker": "Pilih tombolnya"
+    },
     "anchors": {
       "playerBar": {
         "bar": "Bilah kontrol bawah",

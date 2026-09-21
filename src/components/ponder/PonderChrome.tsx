@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Keyboard, Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PonderStageNodes } from './ponderStageNodes';
 
@@ -26,6 +26,9 @@ type PonderChromeProps = {
     onTogglePlay: () => void;
     onRestart: () => void;
     onSeekToTick: (index: number) => void;
+    /** 当前这一章有没有「直接去那儿」的入口；没有就不渲染。 */
+    actionLabel: string | null;
+    onRunAction: () => void;
     theme?: { accentColor?: string };
     isDaylight: boolean;
 };
@@ -43,6 +46,8 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
     onTogglePlay,
     onRestart,
     onSeekToTick,
+    actionLabel,
+    onRunAction,
     theme,
     isDaylight,
 }) => {
@@ -129,7 +134,21 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2">
+                            {/* 讲完某个设置藏在哪，就给一条直接过去的路 ——
+                                这些设置本来就以难找著称，那正是它们被收进教程的原因。 */}
+                            {actionLabel && (
+                                <button
+                                    type="button"
+                                    data-testid="ponder-scene-action"
+                                    onClick={onRunAction}
+                                    className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                                    style={{ borderColor: accent, color: accent }}
+                                >
+                                    <SlidersHorizontal size={13} />
+                                    {actionLabel}
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={onTogglePlay}

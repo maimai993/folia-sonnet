@@ -2874,6 +2874,10 @@ export default {
     "exit": "Esc to exit",
     "seekKeyframe": "Jump to keyframe {{index}}",
     "keyLegend": "\u2190 \u2192 keyframe  \u00b7  [ ] chapter  \u00b7  Space pause  \u00b7  Esc exit",
+    "actions": {
+      "openBottomUiSettings": "Open bottom UI settings",
+      "openSlotPicker": "Go pick the buttons"
+    },
     "anchors": {
       "playerBar": {
         "bar": "Bottom control bar",
