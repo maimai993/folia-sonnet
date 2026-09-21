@@ -132,19 +132,30 @@ export const usePonderTimeline = ({
         // 进度条与当前关键帧：每帧直接写 DOM。keyframeIndexRef 也是 ←/→ 读的那个值，
         // 所以「现在在第几帧」从头到尾不需要是 React 状态。
         const keyframeIndexRef = { current: -1 };
-        timeline.onUpdate = (self: Timeline) => {
-            const fill = nodesRef.current?.progressFill;
-            if (fill) {
-                fill.style.transform = `scaleX(${self.iterationProgress})`;
+
+        /**
+         * 把当前进度刷到 DOM 上。
+         *
+         * 单独抽出来是因为 seek 必须显式调它：seek 的第二个参数 muteCallbacks 连 onUpdate
+         * 一起静音了（这正是我们要的 —— 卷过 marker 不该触发它），于是暂停状态下按 ←/→
+         * 时间线确实跳了，进度条却停在原处。
+         */
+        const paintProgress = () => {
+            const nodes = nodesRef.current;
+            if (!nodes) return;
+            if (nodes.progressFill) {
+                nodes.progressFill.style.transform = `scaleX(${timeline.iterationProgress})`;
             }
-            const index = keyframeIndexAt(plan, self.iterationCurrentTime);
+            const index = keyframeIndexAt(plan, timeline.iterationCurrentTime);
             if (index !== keyframeIndexRef.current) {
                 keyframeIndexRef.current = index;
-                nodesRef.current?.ticks.forEach((tick, i) => {
+                nodes.ticks.forEach((tick, i) => {
                     if (tick) tick.toggleAttribute('data-active', i === index);
                 });
             }
         };
+
+        timeline.onUpdate = paintProgress;
 
         timeline.onComplete = () => onComplete();
 
@@ -155,23 +166,29 @@ export const usePonderTimeline = ({
                     return false;
                 }
                 timeline.pause();
+                paintProgress();
                 return true;
             },
             restart: () => {
                 timeline.restart();
+                paintProgress();
             },
             isCompleted: () => timeline.completed,
             // muteCallbacks，理由和 AutomixTransitionAnimation 里那次 seek 一样：
             // 卷过一个 marker 不该把它触发一遍。
             seekPrevKeyframe: () => {
                 timeline.seek(prevKeyframeAt(plan, timeline.iterationCurrentTime), true);
+                paintProgress();
             },
             seekNextKeyframe: () => {
                 timeline.seek(nextKeyframeAt(plan, timeline.iterationCurrentTime), true);
+                paintProgress();
             },
             seekToTick: index => {
                 const keyframe = plan.keyframes[index];
-                if (keyframe) timeline.seek(keyframe.atMs, true);
+                if (!keyframe) return;
+                timeline.seek(keyframe.atMs, true);
+                paintProgress();
             },
         };
 

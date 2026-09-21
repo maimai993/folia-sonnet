@@ -212,3 +212,21 @@ html[data-click-through='active'] body .click-through-interactive * {
   max-width: 5rem;
   opacity: 1;
 }
+
+/* 思索：一章播完后右边缘那个「下一章」提示里，箭头的横向呼吸。
+   方向就是它要去的方向，幅度压得很小 —— 它是提示，不是要抢走刚演完那幅画面的注意力。
+
+   动的是箭头图标而不是整个按钮：会动的点击目标本来就难点中，
+   而且按钮自身不停移动时 Playwright 会判定元素不稳定、永远点不下去。 */
+@keyframes ponder-next-cue-breathe {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(4px); }
+}
+
+.ponder-next-cue-arrow {
+    animation: ponder-next-cue-breathe 1.8s ease-in-out infinite;
+}
+
+:root[data-reduce-motion~='uiMicroMotion'] .ponder-next-cue-arrow {
+    animation: none;
+}

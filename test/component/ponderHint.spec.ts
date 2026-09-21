@@ -165,22 +165,21 @@ test.describe('章节', () => {
         await expect(page.locator(STAGE).getByText('3 / 3').first()).toBeVisible();
     });
 
-    test('一章播完出「下一章」卡片，点它进入下一章', async ({ page }) => {
+    test('一章播完出「下一章」箭头，点它进入下一章', async ({ page }) => {
         await openStage(page);
         // 切到最短的那一章（键盘那章）再等它播完，省去第一章的十几秒。
         await page.keyboard.press(']');
         await page.keyboard.press(']');
         await expect(page.locator(STAGE).getByText('3 / 3').first()).toBeVisible();
 
-        // 末章不该有「下一章」按钮，只有看完的提示。
-        // 断言用英文：test/component/fixtures.ts 把 i18nextLng 种成 'en'。
-        const done = page.getByText('That is all of them.');
-        await expect(done).toBeVisible({ timeout: 30000 });
+        // 末章不该有「下一章」箭头，只有一行静默提示。
+        await expect(page.locator('[data-testid="ponder-chapters-done"]')).toBeVisible({ timeout: 30000 });
+        await expect(page.locator('[data-testid="ponder-next-chapter"]')).toHaveCount(0);
 
         // 回到第一章，播完应当给出指向第二章的按钮。
         await page.keyboard.press(']');
         await expect(page.locator(STAGE).getByText('1 / 3').first()).toBeVisible();
-        const next = page.getByRole('button', { name: /Next chapter/ });
+        const next = page.locator('[data-testid="ponder-next-chapter"]');
         await expect(next).toBeVisible({ timeout: 40000 });
         await next.click();
         await expect(page.locator(STAGE).getByText('2 / 3').first()).toBeVisible();

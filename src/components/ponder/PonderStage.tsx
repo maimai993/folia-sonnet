@@ -11,7 +11,7 @@ import { usePonderTimeline } from './usePonderTimeline';
 import PonderActors from './PonderActors';
 import PonderChrome from './PonderChrome';
 import PonderSkeletonLayer from './PonderSkeletonLayer';
-import PonderSceneEndCard from './PonderSceneEndCard';
+import PonderNextChapterCue from './PonderNextChapterCue';
 import type { PonderRect } from '../../types/ponder';
 import type { Theme } from '../../types';
 
@@ -169,18 +169,11 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                 isDaylight={isDaylight}
             />
             {isFinished && (
-                <PonderSceneEndCard
-                    sceneIndex={session.sceneIndex}
-                    sceneCount={target.scenes.length}
+                <PonderNextChapterCue
                     nextSceneTitle={target.scenes[session.sceneIndex + 1]
                         ? t(target.scenes[session.sceneIndex + 1].titleKey)
                         : null}
                     onNextScene={() => stepScene(1, target.scenes.length)}
-                    onReplay={() => {
-                        setIsFinished(false);
-                        controlsRef.current?.restart();
-                    }}
-                    onExit={closePonder}
                     theme={theme}
                     isDaylight={isDaylight}
                 />

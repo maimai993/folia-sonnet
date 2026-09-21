@@ -2861,11 +2861,8 @@ export default {
   },
   "ponder": {
     "sceneLabel": "Chapter",
-    "chapterDone": "That is this chapter.",
     "allChaptersDone": "That is all of them.",
     "nextChapter": "Next chapter",
-    "lastChapterHint": "You have seen every chapter for this control.",
-    "replayChapter": "Replay this chapter",
     "title": "Ponder",
     "hintCapsule": "Hold G to ponder",
     "hintCapsuleHold": "Entering ponder",

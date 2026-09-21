@@ -2860,11 +2860,8 @@ export default {
   },
   "ponder": {
     "sceneLabel": "章节",
-    "chapterDone": "这一章就到这里。",
     "allChaptersDone": "全部章节都看完了。",
     "nextChapter": "下一章",
-    "lastChapterHint": "这个控件的章节已经全部看过。",
-    "replayChapter": "重播这一章",
     "title": "思索",
     "hintCapsule": "按 G 思索",
     "hintCapsuleHold": "进入思索",

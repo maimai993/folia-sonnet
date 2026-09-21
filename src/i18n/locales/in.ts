@@ -2793,11 +2793,8 @@ export default {
   },
   "ponder": {
     "sceneLabel": "Bab",
-    "chapterDone": "Sekian bab ini.",
     "allChaptersDone": "Semuanya sudah selesai.",
     "nextChapter": "Bab berikutnya",
-    "lastChapterHint": "Semua bab untuk kontrol ini sudah dilihat.",
-    "replayChapter": "Ulang bab ini",
     "title": "Ponder",
     "hintCapsule": "Tahan G untuk ponder",
     "hintCapsuleHold": "Masuk ponder",

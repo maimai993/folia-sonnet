@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { anchorPointToPx } from '../../utils/ponder/resolvePonderAnchors';
+import { pickCaptionSpot } from '../../utils/ponder/captionPlacement';
 import type { PonderRect, PonderTimelinePlan } from '../../types/ponder';
 import type { PonderStageNodes } from './ponderStageNodes';
 import PonderCaptionPointers from './PonderCaptionPointers';
@@ -27,28 +28,12 @@ type PonderActorsProps = {
  * 目标太靠下就改放上方，免得被进度条和图例压住。
  */
 const CAPTION_MAX_WIDTH_PX = 384;
-const CAPTION_MARGIN_PX = 16;
+/** 两行中文的高度，故意往大了估：估小了字幕会贴上骨架框。 */
+const CAPTION_EST_HEIGHT_PX = 84;
 
-const captionSpotFor = (target: { x: number; y: number }) => {
-    const width = typeof window === 'undefined' ? 1440 : window.innerWidth;
-    const height = typeof window === 'undefined' ? 900 : window.innerHeight;
-    const below = target.y < height * 0.62;
-
-    // 贴边钳位。目标靠近屏幕边缘时，以它为中心的字幕会有一半跑到屏幕外去；
-    // 按 max-w-sm 的一半留出余量。字幕被推开之后指向线仍然对得上 ——
-    // 线是按量出来的字幕盒真实位置画的，不是按这里算的理想位置。
-    const half = CAPTION_MAX_WIDTH_PX / 2;
-    const min = half + CAPTION_MARGIN_PX;
-    const max = width - half - CAPTION_MARGIN_PX;
-    const left = max > min ? Math.min(Math.max(target.x, min), max) : width / 2;
-
-    return {
-        left,
-        // 56 而不是紧贴：骨架框的名字标签就画在框的上下沿，贴太近会压住它。
-        top: below ? target.y + 56 : target.y - 56,
-        translate: below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
-    };
-};
+/** 上下外框占掉的横条。字幕压上去会挡住进度条和章节按钮。 */
+const TOP_CHROME_PX = 84;
+const BOTTOM_CHROME_PX = 156;
 
 const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, isDaylight }) => {
     const { t } = useTranslation();
@@ -56,6 +41,13 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
     const chipSurface = isDaylight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(39, 39, 42, 0.96)';
     const chipText = isDaylight ? '#27272a' : '#fafafa';
     const captionSurface = isDaylight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(24, 24, 27, 0.94)';
+
+    // 摆位要用到视口尺寸。进入时采一次就定死，和骨架矩形同一个口径。
+    const viewport = {
+        width: typeof window === 'undefined' ? 1440 : window.innerWidth,
+        height: typeof window === 'undefined' ? 900 : window.innerHeight,
+    };
+    const captionWidth = Math.min(CAPTION_MAX_WIDTH_PX, viewport.width - 32);
 
     const captionSteps = plan.entries.filter(entry => entry.step.kind === 'caption');
     const keypressSteps = plan.entries.filter(entry => entry.step.kind === 'keypress');
@@ -84,12 +76,22 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
 
             {captionSteps.map(({ step }) => {
                 if (step.kind !== 'caption') return null;
-                // 显式给了 at 就按 at 放；只给了 pointTo 就贴着目标放；都没有才落到底部。
+                // 显式给了 at 就按 at 放；只给了 pointTo 就在目标周围挑一处空地；都没有才落到底部。
                 const explicit = step.at === 'bottom' ? null : anchorPointToPx(step.at, rects);
                 const pointed = !explicit && step.pointTo ? anchorPointToPx(step.pointTo, rects) : null;
-                const spot = explicit
-                    ? { left: explicit.x, top: explicit.y + 40, translate: 'translate(-50%, 0)' }
-                    : pointed ? captionSpotFor(pointed) : null;
+                const anchored = pointed ?? explicit;
+                const spot = anchored
+                    ? pickCaptionSpot({
+                        target: anchored,
+                        size: { width: captionWidth, height: CAPTION_EST_HEIGHT_PX },
+                        obstacles: Object.values(rects),
+                        viewport,
+                        reserved: [
+                            { left: 0, top: 0, width: viewport.width, height: TOP_CHROME_PX },
+                            { left: 0, top: viewport.height - BOTTOM_CHROME_PX, width: viewport.width, height: BOTTOM_CHROME_PX },
+                        ],
+                    })
+                    : null;
                 return (
                     <div
                         key={step.id}
@@ -98,13 +100,13 @@ const PonderActors: React.FC<PonderActorsProps> = ({ plan, rects, nodes, theme, 
                             else nodes.captions.delete(step.id);
                         }}
                         className={spot
-                            ? 'absolute max-w-sm rounded-lg px-3.5 py-2 text-sm shadow-lg'
+                            ? 'absolute rounded-lg px-3.5 py-2 text-sm shadow-lg'
                             : 'absolute bottom-32 left-1/2 max-w-xl -translate-x-1/2 rounded-lg px-4 py-2 text-center text-sm shadow-md'}
                         style={spot
                             ? {
                                 left: spot.left,
                                 top: spot.top,
-                                transform: spot.translate,
+                                width: captionWidth,
                                 opacity: 0,
                                 backgroundColor: captionSurface,
                                 color: chipText,
