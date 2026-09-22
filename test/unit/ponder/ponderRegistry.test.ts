@@ -146,6 +146,10 @@ describe('ponder registry', () => {
             'theme-settings': new Set(['theme-park-open']),
             'grid-view-card-settings': new Set(['full-bleed-on']),
             'lattice-style-settings': new Set(['tint-on', 'custom-color-on']),
+            'grid-action-button': new Set(['list-open', 'slide-target-open']),
+            'grid-view-cards': new Set(['metadata-pencil', 'edit-mode']),
+            'local-folder-actions': new Set(['delete-confirm']),
+            'local-track-list': new Set(['sort-menu-open']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

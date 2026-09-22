@@ -46,6 +46,16 @@
 - [x] `help-page` 重写成入门教程，帮助页那颗灯泡按钮直接开它
 - [x] 五章：你已经在思索里了 / 不用切回来也能控制播放 / 四个常用快捷键 / 去文档 / 看够了把提示关掉
 
+### 集合页与本地曲库
+
+- [x] `pages.gridViewActivate` 文案修正 —— 点卡片只把它移到中央，播放靠卡片上那颗独立的播放键；
+      编辑模式下那两颗按钮直接消失，只剩一个移除用的叉
+- [x] `grid-action-button` — 右下角那颗按钮：点击开列表、向左滑是第二个动作、滑到哪由设置决定
+- [x] `grid-view-edit-mode` — 编辑模式：卡片按钮整排换掉；本地与 Navidrome 歌单改名退出时才提交
+- [x] `local-folder-actions` — 信息面板底部那一列：这一列有什么取决于集合类型；重扫是增量；红的那颗会删记录
+- [x] `local-metadata-match` — 三重条件才出现的那颗铅笔
+- [x] `local-track-sorting` — 只有本地文件夹能排序，选择存 localStorage 跨会话保留
+
 ### 文案事实性错误
 
 - [x] `pages.playerShuffleHow`、`pages.playerExecuteMode`、`commandPalette.executeEnter` —— 冒号是**窗口关着时**按的，`{{mod}}+K` 之后再按只会打进输入框
@@ -58,32 +68,13 @@
 
 ## 待办
 
-### 第一批 · 文案修正（不新增目标）
-
-- [ ] `pages.gridViewActivate` —— 「点击歌曲卡片会播放它」是错的：GridView 没传
-      `openWhenFocusedOnCardClick`，点卡片只把它移到中央，播放靠卡片上那颗 Play 按钮；
-      「编辑模式下改成选择或移除」也是错的，编辑模式下 Play 和加入队列两颗直接消失，只剩一个 X
-
-### 第二批 · GridView 与本地曲库（会动用户数据，优先）
-
-- [ ] `grid-action-button` — 海报墙右下角那颗按钮：点击开列表、**向左滑**是第二个动作，
-      滑到哪由设置决定。落点 `[data-testid="grid-list-search-button"]` 已存在。
-      它和播放页手柄是同一个手势，现有 `panel-slide` 只教了播放页那一个
-- [ ] `grid-view-edit-mode` — 编辑模式：卡片上的播放/加队列消失换成 X；本地和 Navidrome 歌单
-      在编辑模式里标题变输入框、**退出时才提交改名**；在线自有歌单走的是另一条路。需新增 data 属性
-- [ ] `local-folder-actions` — 本地文件夹三颗按钮：重新导入是增量重扫、「整理歌曲信息」是批量改 tag、
-      红色那颗删除对根文件夹和子文件夹影响范围不同。需新增 data 属性
-- [ ] `local-metadata-match` — 手动匹配歌曲信息：只在**当前聚焦**的卡上、只对本地歌曲、
-      还要悬停歌名才浮到 65% 不透明度。需新增 data 属性
-- [ ] `local-track-sorting` — 本地曲目排序：只对本地文件夹存在，三种字段 + 方向，存 localStorage
-
-### 第三批 · 命令面板
+### 第一批 · 命令面板
 
 - [ ] `queue-command-surface` — 队列命令窗口：`@artist:` / `@album:` facet 语法是全仓唯一一处
       没有按钮能替代的语法；`--remove` 作用于**筛选结果**而不是选中项，误按能一次清掉几十首。
       落点 `[data-testid="command-palette-queue-view"]` 已存在
 
-### 第四批 · 设置（零新增 DOM，锚点都已存在）
+### 第二批 · 设置（零新增 DOM，锚点都已存在）
 
 - [ ] `transition-settings` — 渐变与自动混音：选了 automix 可能悄悄回落到 crossfade，
       唯一提示是一枚 `FELL BACK` 徽章；开关还镜像在控制页那颗 14px 的 Blend 图标上
@@ -99,13 +90,13 @@
 - [ ] `replay-gain-settings` — 和来源标签页里那个三选一是同一个值
 - [ ] `import-export-settings` — 「备份与导入」只导配色主题和歌词动画设置，不是全量备份
 
-### 第五批 · 需要先加 data 属性
+### 第三批 · 需要先加 data 属性
 
 - [ ] `audio-equalizer` — 拖任何一根推子会**静默**把你转到自定义槽 1 并写进去
 - [ ] `vis-playground` — 预览上有三块零像素的点击热区，不悬停永远发现不了
 - [ ] `theme-park` — 整屏的配色编辑器，值得单独演一遍
 
-### 第六批 · 补现有目标的缺章
+### 第四批 · 补现有目标的缺章
 
 - [ ] `panel-queue-tab` 加一章：FM 模式下这一格变成电台面板
 - [ ] `panel-controls-tab` 加一章：两行取景器的中间名称可点开完整列表

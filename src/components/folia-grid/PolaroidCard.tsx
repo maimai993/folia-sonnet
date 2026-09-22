@@ -145,6 +145,8 @@ export const PolaroidCard = React.memo<PolaroidCardProps>(
         const editMetadataButton = isFocused && onEditLocalMetadata ? (
             <button
                 type="button"
+                // 三重条件才出现（聚焦 + 本地歌曲 + 悬停歌名），思索认它靠这个属性。
+                data-ponder="local-metadata-match"
                 onClick={(event) => {
                     event.stopPropagation();
                     onEditLocalMetadata();

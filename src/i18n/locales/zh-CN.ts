@@ -2901,6 +2901,7 @@ export default {
       "openSlotPicker": "去挑按钮",
       "openDocs": "打开文档",
       "openPonderHints": "去设置里调",
+      "openGridActionButton": "去改滑动目标",
       "openGrid3dCardStyle": "打开首页卡片样式",
       "openGridViewCard": "打开网格卡片设置",
       "openLatticeSettings": "打开队列拼贴设置"
@@ -2940,6 +2941,35 @@ export default {
         "openPlayer": "回到播放页",
         "progress": "进度条",
         "bottomBar": "底部控制条"
+      },
+      "gridActionButton": {
+        "page": "集合页",
+        "button": "右下角那颗按钮",
+        "track": "隐藏的滑轨",
+        "list": "曲目列表",
+        "slideTarget": "本页筛选"
+      },
+      "gridViewCards": {
+        "page": "集合页网格",
+        "cards": "歌曲卡片",
+        "card": "当前卡片",
+        "title": "歌名",
+        "pencil": "手动匹配",
+        "actions": "播放与加入队列",
+        "remove": "移除"
+      },
+      "localFolderActions": {
+        "panel": "来源专属动作",
+        "playAll": "全部播放",
+        "reimport": "重新导入",
+        "organize": "整理歌曲信息",
+        "remove": "从曲库移除"
+      },
+      "localTrackList": {
+        "panel": "曲目列表",
+        "direction": "升序 / 降序",
+        "sortMenu": "排序方式",
+        "menu": "排序菜单"
       },
       "grid3dCardStyle": {
         "panel": "设置 · 首页卡片样式",
@@ -3051,6 +3081,11 @@ export default {
       "lyricsAnimationSettings": "歌词动画设置",
       "themeSettings": "配色主题设置",
       "sidePanel": "右侧控制面板",
+      "gridActionButton": "海报墙操作按钮",
+      "gridViewEditMode": "集合页编辑模式",
+      "localFolderActions": "本地集合的操作",
+      "localMetadataMatch": "手动匹配歌曲信息",
+      "localTrackSorting": "本地曲目排序",
       "grid3dCardStyle": "首页卡片样式",
       "gridViewCardSettings": "网格卡片设置",
       "latticeStyleSettings": "队列拼贴样式",
@@ -3099,6 +3134,15 @@ export default {
       "themeSettingsPresets": "预设与自定义",
       "themeSettingsSource": "配色从哪来",
       "themeSettingsAuto": "配色什么时候自己变",
+      "gridActionButtonList": "点一下开曲目列表",
+      "gridActionButtonSlide": "往左滑是第二个动作",
+      "gridViewEditModeCards": "进去之后卡片变成什么样",
+      "gridViewEditModeRename": "改名什么时候才算数",
+      "localFolderActionsList": "这一列有什么取决于你打开的是什么",
+      "localFolderActionsMaintenance": "重扫与整理歌曲信息",
+      "localFolderActionsDelete": "红色那颗会删东西",
+      "localMetadataMatchReveal": "三重条件才出现的一颗铅笔",
+      "localTrackSortingFields": "只有本地文件夹能排序",
       "grid3dCardStyleOptions": "两种卡片长什么样",
       "gridViewCardCover": "封面怎么占这张卡",
       "gridViewCardFalloff": "离中心越远，衰减到多少",
@@ -3170,7 +3214,7 @@ export default {
         "gridViewFocus": "方向键按空间方向寻找相邻卡片并把它带入焦点；当前焦点也会被记住，返回后不会跳回开头。",
         "gridViewInfo": "点击标题打开信息面板：封面、创建者和说明在上方，全部播放、加入队列以及编辑、重扫、导出等来源专属动作在下方。",
         "gridViewFilter": "{{mod}} + F 或直接输入打开本页筛选。输入 --play 可播放筛选结果，--add 可把筛选结果加入队列；Esc 清空并关闭。",
-        "gridViewActivate": "点击歌曲卡片会播放它；艺人和专辑文字是独立入口。编辑模式下，卡片操作会改成选择或移除等管理动作。",
+        "gridViewActivate": "点卡片本身不播放，只是把它移到视口中央；播放靠卡片上那颗单独的播放键，旁边还有一颗加入队列。艺人和专辑文字是各自独立的入口。编辑模式下这两颗按钮直接消失，换成右上角一个移除用的叉。",
         "gridViewKeys": "Enter 激活当前卡片；Esc 依次关闭内层状态、清除焦点，最后返回上一级。",
         "playerLayout": "播放页是整屏的：歌词和可视化铺满背景，能按的东西只有三处 —— 底部正中的控制条、右缘的侧边手柄，以及手柄展开后的控制面板。",
         "playerLyrics": "中间这块是歌词与可视化。它不是控件：点它等于点背景，只切换控制条的显隐，不会暂停。",
@@ -3257,6 +3301,35 @@ export default {
         "queueTabDetail": "点一行就从那首开始播；指针停在行上，右端才浮出「下一首播放」「移到队尾」「移除」。顶上两颗小按钮把队列铺成 Lattice 海报墙、或打乱整条队列。这里不能拖动排序。",
         "accountTab": "账号页管的是当前音乐来源那一侧的事。",
         "accountTabDetail": "上面是这个来源的登录状态：头像、昵称、来源名和 ID，右端退出登录。下面是音质档位四选一 —— 标准、极高、无损、Hi-Res；最底下是把数据同步到云端。换一个来源，看到的是另一套。"
+      },
+      "gridActionButton": {
+        "tap": "集合页和海报墙右下角都有这颗按钮。点一下，曲目列表从右边切进来 —— 这是它的第一个动作。",
+        "list": "列表里一行一首，点哪首播哪首。本地文件夹的列表顶上还多两颗排序控件。",
+        "track": "它背后还藏着一条向左的滑轨，平时看不见 —— 和播放页右缘那颗手柄是同一个手势。按住按钮往左拖。",
+        "slideTarget": "松手打开的是本页筛选：就地筛这一页的歌，不跳走。滑到哪是可配置的 —— 在设置 · 交互的「海报墙操作按钮」里可以换成命令窗口，轨道尽头那枚图标会跟着变。"
+      },
+      "gridViewEdit": {
+        "normalCard": "常态下卡片底部有两颗：左边圆的是播放，右边那颗是把这首加进队列。点卡片本身不播放，只是把它移到中央。",
+        "editCard": "进了编辑模式，这两颗会直接消失，右上角换成一个红色的叉。按它立刻把这首从歌单里移除，没有确认框 —— 这是编辑模式里唯一一个不可逆的动作。",
+        "rename": "本地歌单和 Navidrome 歌单还有第二件事：信息面板里的标题变成一个输入框。改完的名字要退出编辑模式时才提交 —— 中途按 Esc 或者直接关掉这一页，改动就丢了。",
+        "onlinePlaylist": "在线的自有歌单走的是另一条路：它是就地编辑，改一下算一下，没有「退出时提交」这个步骤。同一颗按钮，两种来源两种行为。"
+      },
+      "localFolderActions": {
+        "conditional": "信息面板底部这一列是跟着集合类型变的：本地文件夹有重扫和整理歌曲信息，本地歌单有导出，本地专辑和艺人有编辑实体信息，Navidrome 歌单有加到歌单。在线歌单这一列几乎是空的 —— 不是坏了，是那个来源没有这些动作。",
+        "playAll": "最上面两颗任何集合都有：全部播放和加入队列。页面上开着筛选时，它们作用于筛出来的那些，按钮文字会写出条数。",
+        "reimport": "「重新导入」不是把文件重新加一遍，是对这个文件夹做一次增量重扫：新增的收进来、改过的更新、没了的标出来。曲库里已有的记录不会被清空重建。",
+        "organize": "「整理歌曲信息」打开的是这个文件夹的批量改 tag 面板 —— 一次处理整个文件夹，不是一首一首改。",
+        "remove": "最下面这颗红的把这个文件夹从曲库里移除。它不删磁盘上的文件，但曲库里这些歌的记录、以及它们在歌单里的位置都会跟着没。",
+        "confirm": "所以它会先问一次，而且问法分两种：删根文件夹和删它下面的子文件夹影响范围不一样，确认框里写的就是这个差别 —— 值得读一眼再按。"
+      },
+      "localMetadata": {
+        "conditions": "本地歌曲的元数据对不上时，可以手动匹配。入口是一颗铅笔，但它要三个条件同时成立才在屏幕上：这张卡是当前聚焦的那张、这首歌是本地的、指针还停在歌名那一块上。",
+        "pencil": "满足之后它浮在歌名右端，只有 65% 不透明度。点开是手动匹配面板，重新给这首歌挑一份正确的标题、歌手和专辑。"
+      },
+      "localTrackSorting": {
+        "whereOnly": "曲目列表顶上这两颗排序控件只对「本地文件夹」出现。在线歌单、专辑、Navidrome 的列表里没有它们 —— 不是藏起来了，是那些来源的顺序由来源自己定。",
+        "fields": "排序方式三选一：文件名、文件修改时间、专辑内音轨号。选好之后存在本地，换一个文件夹进去还是这个排法。",
+        "direction": "左边那颗切升序和降序，和排序方式各自独立。"
       },
       "gridStyle": {
         "grid3dImage": "「纯图片封面」是首页海报墙的默认样子：整张卡就是一张封面，歌单名压在封面底部的渐变里。",

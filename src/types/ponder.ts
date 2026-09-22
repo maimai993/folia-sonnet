@@ -46,7 +46,12 @@ export type PonderTargetId =
     | 'theme-settings'
     | 'grid3d-card-style'
     | 'grid-view-card-settings'
-    | 'lattice-style-settings';
+    | 'lattice-style-settings'
+    | 'grid-action-button'
+    | 'grid-view-edit-mode'
+    | 'local-folder-actions'
+    | 'local-metadata-match'
+    | 'local-track-sorting';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -140,7 +145,11 @@ export type PonderSurfaceKind =
     | 'theme-settings'
     | 'grid3d-card-style'
     | 'grid-view-card-settings'
-    | 'lattice-style-settings';
+    | 'lattice-style-settings'
+    | 'grid-action-button'
+    | 'grid-view-cards'
+    | 'local-folder-actions'
+    | 'local-track-list';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

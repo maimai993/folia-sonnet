@@ -2834,6 +2834,7 @@ export default {
       "openSlotPicker": "Pilih tombolnya",
       "openDocs": "Buka dokumentasi",
       "openPonderHints": "Ubah di pengaturan",
+      "openGridActionButton": "Ubah target gesernya",
       "openGrid3dCardStyle": "Buka gaya kartu beranda",
       "openGridViewCard": "Buka pengaturan kartu kisi",
       "openLatticeSettings": "Buka pengaturan kolase antrean"
@@ -2873,6 +2874,35 @@ export default {
         "openPlayer": "Kembali ke pemutar",
         "progress": "Bilah kemajuan",
         "bottomBar": "Bilah kontrol bawah"
+      },
+      "gridActionButton": {
+        "page": "Halaman koleksi",
+        "button": "Tombol di kanan bawah",
+        "track": "Rel tersembunyi",
+        "list": "Daftar lagu",
+        "slideTarget": "Saring halaman ini"
+      },
+      "gridViewCards": {
+        "page": "Kisi koleksi",
+        "cards": "Kartu lagu",
+        "card": "Kartu aktif",
+        "title": "Judul lagu",
+        "pencil": "Cocokkan manual",
+        "actions": "Putar dan tambah ke antrean",
+        "remove": "Hapus"
+      },
+      "localFolderActions": {
+        "panel": "Aksi khusus sumber",
+        "playAll": "Putar semua",
+        "reimport": "Impor ulang",
+        "organize": "Atur info lagu",
+        "remove": "Hapus dari pustaka"
+      },
+      "localTrackList": {
+        "panel": "Daftar lagu",
+        "direction": "Naik / turun",
+        "sortMenu": "Urutkan menurut",
+        "menu": "Menu urutan"
       },
       "grid3dCardStyle": {
         "panel": "Pengaturan \u00b7 Gaya kartu beranda",
@@ -2984,6 +3014,11 @@ export default {
       "lyricsAnimationSettings": "Pengaturan animasi lirik",
       "themeSettings": "Pengaturan warna tema",
       "sidePanel": "Panel kontrol kanan",
+      "gridActionButton": "Tombol aksi dinding poster",
+      "gridViewEditMode": "Mode edit halaman koleksi",
+      "localFolderActions": "Aksi pada koleksi lokal",
+      "localMetadataMatch": "Cocokkan info lagu manual",
+      "localTrackSorting": "Mengurutkan lagu lokal",
       "grid3dCardStyle": "Gaya kartu beranda",
       "gridViewCardSettings": "Pengaturan kartu kisi",
       "latticeStyleSettings": "Gaya kolase antrean",
@@ -3032,6 +3067,15 @@ export default {
       "themeSettingsPresets": "Preset dan kustom",
       "themeSettingsSource": "Dari mana warnanya",
       "themeSettingsAuto": "Kapan paletnya berubah sendiri",
+      "gridActionButtonList": "Satu ketukan membuka daftar lagu",
+      "gridActionButtonSlide": "Menggeser ke kiri adalah aksi kedua",
+      "gridViewEditModeCards": "Apa yang terjadi pada kartunya",
+      "gridViewEditModeRename": "Kapan penggantian nama benar-benar tersimpan",
+      "localFolderActionsList": "Isi kolom ini bergantung pada apa yang kamu buka",
+      "localFolderActionsMaintenance": "Pemindaian ulang dan perapian tag",
+      "localFolderActionsDelete": "Yang merah menghapus sesuatu",
+      "localMetadataMatchReveal": "Satu pensil di balik tiga syarat",
+      "localTrackSortingFields": "Hanya folder lokal yang bisa diurutkan",
       "grid3dCardStyleOptions": "Seperti apa kedua gaya kartu itu",
       "gridViewCardCover": "Bagaimana sampul mengisi kartu",
       "gridViewCardFalloff": "Seberapa jauh memudar ke tepi",
@@ -3103,7 +3147,7 @@ export default {
         "gridViewFocus": "Tombol panah mencari kartu terdekat dalam arah ruang dan memfokuskannya. Fokus diingat agar kembali tidak melompat ke awal.",
         "gridViewInfo": "Tekan judul untuk gambar, pembuat, dan deskripsi, lalu Putar Semua, Tambah ke Antrean, serta tindakan edit, pindai ulang, atau ekspor.",
         "gridViewFilter": "{{mod}} + F atau mengetik membuka filter koleksi. Tambahkan --play untuk memutar hasil atau --add untuk mengantrekannya; Escape membersihkan dan menutup.",
-        "gridViewActivate": "Menekan kartu lagu memutarnya; teks artis dan album adalah tautan terpisah. Dalam mode edit, tindakan kartu menjadi pilih atau hapus.",
+        "gridViewActivate": "Mengklik kartunya sendiri tidak memutar \u2014 ia membawa kartu itu ke tengah viewport. Yang memutar adalah tombol putar tersendiri di kartu, dengan tambah-ke-antrean di sebelahnya. Teks artis dan album masing-masing tautan sendiri. Dalam mode edit kedua tombol itu hilang dan digantikan tanda silang untuk menghapus.",
         "gridViewKeys": "Enter mengaktifkan kartu terfokus. Escape menutup keadaan dalam, lalu membersihkan fokus, lalu kembali satu tingkat.",
         "playerLayout": "Halaman pemutar memenuhi layar: lirik dan visualizer mengisi latar, dan hanya tiga hal yang bisa ditekan \u2014 bilah kontrol di tengah bawah, pegangan di tepi kanan, dan panel yang dibuka pegangan itu.",
         "playerLyrics": "Bagian tengah adalah lirik dan visualizer. Itu bukan kontrol: mengkliknya sama dengan mengklik latar, hanya menampilkan atau menyembunyikan bilah kontrol, bukan menjeda.",
@@ -3190,6 +3234,35 @@ export default {
         "queueTabDetail": "Klik satu baris untuk memutar dari lagu itu; arahkan penunjuk ke baris dan putar berikutnya, pindah ke akhir serta hapus muncul di kanannya. Dua tombol di kepala membentangkan antrean sebagai dinding Lattice dan mengacaknya. Barisnya tidak bisa diseret.",
         "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
         "accountTabDetail": "Di atas ada status masuk sumber itu: avatar, nama, nama sumber dan ID, dengan keluar di sebelah kanan. Di bawahnya tingkat kualitas audio \u2014 standar, tinggi, lossless, hi-res \u2014 dan paling bawah sinkronisasi data ke awan. Ganti sumber, isinya berbeda."
+      },
+      "gridActionButton": {
+        "tap": "Halaman koleksi dan dinding poster sama-sama punya tombol ini di sudut kanan bawah. Ketuk dan daftar lagu masuk dari kanan \u2014 itu aksi pertamanya.",
+        "list": "Satu baris per lagu; klik sebuah baris untuk memutar dari situ. Di dalam folder lokal, daftarnya juga membawa dua kontrol urutan di kepalanya.",
+        "track": "Ada juga rel tersembunyi yang memanjang ke kiri darinya \u2014 gerakan yang sama dengan pegangan di tepi kanan halaman pemutar. Tahan tombolnya dan seret ke kiri.",
+        "slideTarget": "Melepaskannya membuka penyaring halaman ini: mempersempit lagu di tempat tanpa berpindah halaman. Tujuan geserannya bisa diatur \u2014 Pengaturan \u00b7 Interaksi, \u201ctombol aksi dinding poster\u201d, bisa mengarahkannya ke jendela perintah, dan ikon di ujung rel ikut berubah."
+      },
+      "gridViewEdit": {
+        "normalCard": "Saat diam, kartu membawa dua tombol di kakinya: yang bundar memutar, satunya menambahkan lagu ke antrean. Mengklik kartunya sendiri tidak memutar \u2014 ia hanya membawa kartu itu ke tengah.",
+        "editCard": "Dalam mode edit keduanya menghilang dan tanda silang merah mengambil sudut kanan atas. Menekannya langsung menghapus lagu itu dari playlist, tanpa konfirmasi \u2014 satu-satunya aksi tak terbalikkan dalam mode edit.",
+        "rename": "Playlist lokal dan Navidrome dapat satu hal lagi: judul di panel info berubah jadi kotak isian. Nama barunya baru tersimpan saat kamu keluar dari mode edit \u2014 tekan Escape atau tutup halamannya di tengah jalan, perubahannya hilang.",
+        "onlinePlaylist": "Playlist daring milikmu sendiri menempuh jalur lain: ia diedit di tempat, tiap perubahan langsung terhitung, tanpa langkah simpan-saat-keluar. Satu tombol, dua perilaku tergantung sumbernya."
+      },
+      "localFolderActions": {
+        "conditional": "Kolom di kaki panel info ini mengikuti jenis koleksinya: folder lokal mendapat impor ulang dan atur info lagu, playlist lokal mendapat ekspor, album atau artis lokal mendapat edit entitas, playlist Navidrome mendapat tambah-ke-playlist. Untuk playlist daring kolom ini nyaris kosong \u2014 tidak ada yang rusak, sumber itu memang tidak punya aksi semacam itu.",
+        "playAll": "Dua yang teratas ada di setiap koleksi: putar semua dan tambah ke antrean. Saat penyaring aktif di halaman, keduanya bekerja pada lagu yang tersaring, dan teks tombolnya menyebut jumlahnya.",
+        "reimport": "\u201cImpor ulang\u201d bukan menambahkan berkasnya lagi. Ia menjalankan pemindaian ulang inkremental untuk satu folder ini: berkas baru masuk, yang berubah diperbarui, yang hilang ditandai. Catatan pustaka yang sudah ada tidak dihapus dan dibangun ulang.",
+        "organize": "\u201cAtur info lagu\u201d membuka penyunting tag massal untuk folder ini \u2014 seluruh folder sekaligus, bukan lagu per lagu.",
+        "remove": "Yang merah di paling bawah menghapus folder ini dari pustaka. Ia tidak menghapus berkas di diska, tetapi catatan pustaka lagu-lagu ini, dan tempatnya di playlist, ikut hilang.",
+        "confirm": "Karena itu ia bertanya dulu, dan bertanya dengan dua cara berbeda: menghapus folder akar dan menghapus subfolder di bawahnya tidak menjangkau sejauh yang sama, dan kotak konfirmasinya menyebut mana yang sedang kamu lakukan. Layak dibaca sebelum ditekan."
+      },
+      "localMetadata": {
+        "conditions": "Ketika metadata lagu lokal salah, kamu bisa mencocokkannya sendiri. Pintunya sebuah pensil, tetapi tiga hal harus benar sekaligus agar ia ada di layar: kartunya sedang terfokus, lagunya lokal, dan penunjuk sedang berada di blok judul.",
+        "pencil": "Dengan ketiganya, ia mengambang di ujung kanan judul pada opasitas 65%. Ia membuka panel pencocokan manual, tempat kamu memilih judul, artis dan album yang benar untuk lagu ini."
+      },
+      "localTrackSorting": {
+        "whereOnly": "Dua kontrol urutan di atas daftar lagu ini hanya muncul untuk folder lokal. Playlist daring, album dan daftar Navidrome tidak punya \u2014 bukan disembunyikan, sumber-sumber itu menentukan urutannya sendiri.",
+        "fields": "Tiga bidang untuk mengurutkan: nama berkas, waktu ubah berkas, dan nomor trek di dalam album. Pilihannya disimpan lokal, jadi folder berikutnya yang kamu buka tetap terurut seperti ini.",
+        "direction": "Tombol di kiri membalik naik dan turun, terpisah dari bidangnya."
       },
       "gridStyle": {
         "grid3dImage": "\u201cSampul penuh\u201d adalah tampilan bawaan dinding poster: seluruh kartu adalah satu gambar sampul, dengan nama koleksi berada di gradien di kakinya.",

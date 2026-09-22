@@ -2902,6 +2902,7 @@ export default {
       "openSlotPicker": "Go pick the buttons",
       "openDocs": "Open the docs",
       "openPonderHints": "Go change it",
+      "openGridActionButton": "Go change the slide target",
       "openGrid3dCardStyle": "Open home card style",
       "openGridViewCard": "Open grid card settings",
       "openLatticeSettings": "Open queue collage settings"
@@ -2941,6 +2942,35 @@ export default {
         "openPlayer": "Back to player",
         "progress": "Progress bar",
         "bottomBar": "Bottom control bar"
+      },
+      "gridActionButton": {
+        "page": "Collection page",
+        "button": "The bottom-right button",
+        "track": "Hidden track",
+        "list": "Track list",
+        "slideTarget": "Filter this page"
+      },
+      "gridViewCards": {
+        "page": "Collection grid",
+        "cards": "Song cards",
+        "card": "Current card",
+        "title": "Song title",
+        "pencil": "Match manually",
+        "actions": "Play and add to queue",
+        "remove": "Remove"
+      },
+      "localFolderActions": {
+        "panel": "Source actions",
+        "playAll": "Play all",
+        "reimport": "Re-import",
+        "organize": "Organize song info",
+        "remove": "Remove from library"
+      },
+      "localTrackList": {
+        "panel": "Track list",
+        "direction": "Ascending / descending",
+        "sortMenu": "Sort by",
+        "menu": "Sort menu"
       },
       "grid3dCardStyle": {
         "panel": "Settings \u00b7 Home card style",
@@ -3052,6 +3082,11 @@ export default {
       "lyricsAnimationSettings": "Lyric animation settings",
       "themeSettings": "Theme colour settings",
       "sidePanel": "Side control panel",
+      "gridActionButton": "The poster wall action button",
+      "gridViewEditMode": "Collection edit mode",
+      "localFolderActions": "Actions on a local collection",
+      "localMetadataMatch": "Match song info manually",
+      "localTrackSorting": "Sorting local tracks",
       "grid3dCardStyle": "Home card style",
       "gridViewCardSettings": "Grid card settings",
       "latticeStyleSettings": "Queue collage style",
@@ -3100,6 +3135,15 @@ export default {
       "themeSettingsPresets": "Presets and custom",
       "themeSettingsSource": "Where the colours come from",
       "themeSettingsAuto": "When the palette changes by itself",
+      "gridActionButtonList": "One tap opens the track list",
+      "gridActionButtonSlide": "Sliding left is the second action",
+      "gridViewEditModeCards": "What happens to the cards",
+      "gridViewEditModeRename": "When a rename actually counts",
+      "localFolderActionsList": "What is here depends on what you opened",
+      "localFolderActionsMaintenance": "Re-scanning and tidying up tags",
+      "localFolderActionsDelete": "The red one deletes things",
+      "localMetadataMatchReveal": "A pencil behind three conditions",
+      "localTrackSortingFields": "Only local folders can be sorted",
       "grid3dCardStyleOptions": "What the two card styles look like",
       "gridViewCardCover": "How the cover fills the card",
       "gridViewCardFalloff": "How far things fade toward the edges",
@@ -3171,7 +3215,7 @@ export default {
         "gridViewFocus": "Arrow keys find the nearest card in that spatial direction and bring it into focus. Focus is remembered so returning does not jump to the start.",
         "gridViewInfo": "Press the title for artwork, creator, and description, followed by Play All, Add to Queue, and source-specific edit, rescan, or export actions.",
         "gridViewFilter": "{{mod}} + F or typing opens this collection's filter. Add --play to play matches or --add to enqueue them; Escape clears and closes it.",
-        "gridViewActivate": "Pressing a song card plays it; artist and album text are separate links. In edit mode, card actions become selection or removal tools.",
+        "gridViewActivate": "Clicking the card itself does not play \u2014 it brings the card to the centre of the viewport. Playing is the separate play button on the card, with add-to-queue next to it. Artist and album text are each their own link. In edit mode those two buttons disappear and a remove cross takes their place.",
         "gridViewKeys": "Enter activates the focused card. Escape closes inner state, then clears focus, then returns one level.",
         "playerLayout": "The player page is full screen: lyrics and the visualizer fill the background, and only three things are pressable \u2014 the control bar at the bottom centre, the handle on the right edge, and the panel that handle opens.",
         "playerLyrics": "The middle is lyrics and the visualizer. It is not a control: clicking it is clicking the background, which only shows or hides the control bar. It does not pause.",
@@ -3258,6 +3302,35 @@ export default {
         "queueTabDetail": "Click a row to play from that song; hover one and play next, move to the end and remove appear at its right. The header buttons lay the queue out as the Lattice wall and shuffle it. Rows cannot be dragged to reorder.",
         "accountTab": "The account tab covers whatever the current music source owns.",
         "accountTabDetail": "At the top is that source's sign-in state: avatar, nickname, source name and ID, with sign-out at the right. Below it, the audio quality tier \u2014 standard, high, lossless, hi-res \u2014 and at the bottom, syncing your data to the cloud. Switch source and you see a different set."
+      },
+      "gridActionButton": {
+        "tap": "Both the collection page and the poster wall have this button in the bottom-right corner. Tap it and the track list slides in from the right \u2014 that is its first action.",
+        "list": "One row per song; click a row to play from it. Inside a local folder the list also carries two sort controls in its header.",
+        "track": "There is also a hidden track running left from it \u2014 the same gesture as the handle at the right edge of the player page. Hold the button and drag it left.",
+        "slideTarget": "Letting go opens this page\u2019s filter: it narrows the songs in place without navigating away. Where the slide lands is configurable \u2014 Settings \u00b7 Interaction, \u201cposter wall action button\u201d, lets you point it at the command window instead, and the icon at the end of the track follows."
+      },
+      "gridViewEdit": {
+        "normalCard": "At rest a card carries two buttons at its foot: the round one plays, the other adds the song to the queue. Clicking the card itself does not play \u2014 it only brings the card to the centre.",
+        "editCard": "In edit mode those two disappear and a red cross takes the top-right corner. Pressing it removes the song from the playlist immediately, with no confirmation \u2014 the one irreversible action in edit mode.",
+        "rename": "Local and Navidrome playlists get a second thing: the title in the info panel turns into an input. The new name is only committed when you leave edit mode \u2014 press Escape or close the page halfway and the change is gone.",
+        "onlinePlaylist": "An online playlist you own takes the other path: it edits in place, each change counting as it happens, with no commit-on-exit step. One button, two behaviours depending on the source."
+      },
+      "localFolderActions": {
+        "conditional": "This column at the foot of the info panel follows the collection type: a local folder gets re-import and organize song info, a local playlist gets export, a local album or artist gets edit entity, a Navidrome playlist gets add-to-playlist. For an online playlist it is nearly empty \u2014 nothing is broken, that source simply has no such actions.",
+        "playAll": "The top two are on every collection: play all and add to queue. With a filter active on the page they act on the filtered songs, and the button text says how many.",
+        "reimport": "\u201cRe-import\u201d does not add the files again. It runs an incremental re-scan of this one folder: new files come in, changed ones update, missing ones are flagged. Existing library records are not wiped and rebuilt.",
+        "organize": "\u201cOrganize song info\u201d opens the bulk tag editor for this folder \u2014 the whole folder at once, not song by song.",
+        "remove": "The red one at the bottom removes this folder from the library. It does not delete the files on disk, but the library records for these songs, and their places in playlists, go with it.",
+        "confirm": "So it asks first, and it asks in two different ways: removing a root folder and removing a subfolder under it do not reach the same distance, and the confirmation spells out which one you are about to do. Worth a read before you press."
+      },
+      "localMetadata": {
+        "conditions": "When a local song\u2019s metadata is wrong you can match it by hand. The way in is a pencil, but three things have to be true at once for it to be on screen: the card is the focused one, the song is local, and the pointer is resting on the title block.",
+        "pencil": "With all three it floats at the right end of the title at 65% opacity. It opens the manual match panel, where you pick the correct title, artist and album for this song."
+      },
+      "localTrackSorting": {
+        "whereOnly": "These two sort controls at the top of the track list appear for local folders only. Online playlists, albums and Navidrome lists do not have them \u2014 they are not hidden, those sources decide their own order.",
+        "fields": "Three fields to sort by: file name, file modification time, and track number within the album. The choice is stored locally, so the next folder you open is still sorted this way.",
+        "direction": "The button on the left flips ascending and descending, independently of the field."
       },
       "gridStyle": {
         "grid3dImage": "\u201cCover only\u201d is the poster wall\u2019s default: the whole card is one piece of artwork, with the collection name sitting in the gradient at its foot.",

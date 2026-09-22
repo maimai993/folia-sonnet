@@ -13,6 +13,12 @@ import {
     PonderThemeSettingsSurface,
 } from './surfaces/PonderSettingsSectionSurfaces';
 import {
+    PonderGridActionButtonSurface,
+    PonderGridViewCardsSurface,
+    PonderLocalFolderActionsSurface,
+    PonderLocalTrackListSurface,
+} from './surfaces/PonderGridViewSurfaces';
+import {
     PonderGrid3dCardStyleSurface,
     PonderGridViewCardSurface,
     PonderLatticeStyleSurface,
@@ -255,6 +261,14 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderGridViewCardSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'lattice-style-settings'
         ? <PonderLatticeStyleSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'grid-action-button'
+        ? <PonderGridActionButtonSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'grid-view-cards'
+        ? <PonderGridViewCardsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'local-folder-actions'
+        ? <PonderLocalFolderActionsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'local-track-list'
+        ? <PonderLocalTrackListSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'side-panel'
         ? <PonderSidePanelSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'bottom-ui-settings'
