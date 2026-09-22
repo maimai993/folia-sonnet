@@ -1956,6 +1956,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     return (
         <motion.div
+            data-ponder-page-scope="grid-view-page"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2287,6 +2288,9 @@ export const GridView: React.FC<GridViewProps> = ({
 
                             {/* Buttons Area */}
                             <div
+                                // 这一排里有重扫、整理 tag 和删除，删除是不可逆的 ——
+                                // 思索把整块认成一个目标，指着哪一颗都讲得到。
+                                data-ponder={isLocalCollection ? 'local-folder-actions' : 'online-collection-actions'}
                                 className="space-y-2 mt-4 pt-4 border-t shrink-0"
                                 style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
                             >
@@ -2362,6 +2366,8 @@ export const GridView: React.FC<GridViewProps> = ({
                                     <button
                                         onClick={handleEditModeToggle}
                                         disabled={isSourceActionPending}
+                                        // 思索靠这个属性认出它。类名会改，属性不会。
+                                        data-ponder="grid-view-edit-mode"
                                         className={`w-full py-2.5 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isEditMode ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'}`}
                                     >
                                         {isSourceActionPending ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}

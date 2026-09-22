@@ -357,6 +357,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                         // 用原生 pointer 事件而不是 framer-motion 的 drag：位移已经由 playerBottomBarLiveOffset
                         // 经外层 lift 表达，再让 drag 往这个节点写一份 y 会叠加成两倍位移；
                         // 而且 dragConstraints 依赖的起始值放在 ref 里不会触发重渲染，读到的会是上一帧的。
+                        data-ponder="player-bar"
                         onPointerDown={handlePositionDragStart}
                         onPointerMove={handlePositionDragMove}
                         onPointerUp={handlePositionDragEnd}
@@ -533,7 +534,10 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
             </button>
 
             {/* 两个可自定义槽位。默认仍是循环模式 + 歌词时间轴，和改动前一致。 */}
-            <div className="contents sm:col-start-3 sm:row-start-1 sm:row-span-2 sm:flex sm:items-center sm:gap-1">
+            <div
+                data-ponder-slots
+                className="contents sm:col-start-3 sm:row-start-1 sm:row-span-2 sm:flex sm:items-center sm:gap-1"
+            >
                 <PlayerControlSlotButton
                     actionId={slotPrimary}
                     context={slotContext}

@@ -48,3 +48,13 @@ export const audioBands: AudioBandSignals = { bass, lowMid, mid, vocal, treble, 
 
 /** Global bottom baseline offset in px; positioning writes it at pointer-move frequency. */
 export const playerBottomBarLiveOffset = motionValue(PLAYER_BOTTOM_BAR_BASE_OFFSET_PX);
+
+/**
+ * 思索提示胶囊跟随的光标位置，px。
+ *
+ * 悬停在可教学区域期间由 pointermove 写入，频率与指针事件同步。放在这里而不是
+ * usePonderStore，理由和上面那条底部基线一样：它是每帧值，进 React state 就等于
+ * 让整棵树按指针移动频率重渲染。store 那边只留「悬停的是哪个目标」这个离散事实。
+ */
+export const ponderPointerX = motionValue(0);
+export const ponderPointerY = motionValue(0);

@@ -36,7 +36,7 @@ export const LocalTrackSortMenu: React.FC<LocalTrackSortMenuProps> = ({ field, o
     }, []);
 
     return (
-        <div ref={containerRef} className="relative shrink-0">
+        <div ref={containerRef} data-ponder="local-track-sorting" className="relative shrink-0">
             <button
                 type="button"
                 onClick={() => setIsOpen(current => !current)}

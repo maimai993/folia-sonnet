@@ -222,6 +222,7 @@ const ThemePark: React.FC<ThemeParkProps> = ({
                 exit={{ opacity: 0, y: 18, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 onClick={(event) => event.stopPropagation()}
+                data-ponder="theme-park"
                 className={`mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
             >
                 <ThemeParkHeader

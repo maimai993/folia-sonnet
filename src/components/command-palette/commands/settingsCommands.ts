@@ -9,24 +9,25 @@ import { Gauge, Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
 import { reduceMotionSurface } from '../surfaces/reduceMotionSurface';
+import { openCurrentPagePonder } from '../../../services/ponder/pagePonderTarget';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
 
 export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-help', 'Open Help', 'Open help and shortcuts', ['help', '帮助'], 'help', null, { executeShortcut: 'h' }),
-    sleepTimerCommand,
     {
-        id: 'show-user-guide',
+        id: 'ponder-current-page',
         group: 'settings',
-        title: 'Show User Guide',
-        description: 'Open the user guide tutorial',
-        keywords: ['guide', 'help', 'tutorial', '用户指引', '指南', '帮助'],
-        execute: (_input, context) => {
-            context.settings.setIsUserGuideModalOpen(true);
+        title: 'Ponder this page',
+        description: 'Open the interactive guide for the current page',
+        keywords: ['ponder', 'guide', 'tutorial', '思索', '页面教程'],
+        execute: () => {
+            openCurrentPagePonder();
             return true;
         },
     },
+    sleepTimerCommand,
     createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项'], 'options', null, { executeShortcut: 'o' }),
     createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings', '外观', '视觉'], 'options', 'appearance'),
     createSettingsAnchorCommand('settings-theme-presets', 'Theme presets', 'Jump to the built-in and saved theme presets', ['preset theme', 'color preset', '预设主题'], 'themePresets'),
@@ -300,6 +301,62 @@ export const settingsCommands: CommandPaletteCommand[] = [
         },
     },
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),
+    createSettingsAnchorCommand(
+        'settings-ponder-hints',
+        'Ponder tutorial hints',
+        'Choose when the hold-G tutorial hint appears',
+        ['ponder', 'tutorial hint', '思索', '教程提示'],
+        'labPonder',
+    ),
+    // 三档设置照 playback-entry-view-* 的先例：一值一条命令，isAvailable 把当前值那条藏掉。
+    // createToggleCommand 只能表达两态，套不上。
+    defineCommand({
+        id: 'ponder-hints-always',
+        group: 'settings',
+        title: 'Ponder hints: always show',
+        description: 'Show the hold-G hint on every teachable control',
+        keywords: ['ponder hints always', '思索提示 始终显示'],
+        isAvailable: context => (context ? context.settings.ponderHintVisibility !== 'always' : true),
+        execute: (_input, context) => {
+            if (context.settings.ponderHintVisibility === 'always') return false;
+            context.settings.setPonderHintVisibility('always');
+            return true;
+        },
+    }),
+    defineCommand({
+        id: 'ponder-hints-unseen',
+        group: 'settings',
+        title: 'Ponder hints: only where I have not looked',
+        description: 'Stop hinting a control once its tutorial has been watched',
+        keywords: ['ponder hints unseen', '思索提示 仅未看过'],
+        isAvailable: context => (context ? context.settings.ponderHintVisibility !== 'unseen' : true),
+        execute: (_input, context) => {
+            if (context.settings.ponderHintVisibility === 'unseen') return false;
+            context.settings.setPonderHintVisibility('unseen');
+            return true;
+        },
+    }),
+    createToggleCommand(
+        'ponder-touch-button-toggle',
+        'settings',
+        'Ponder button on touch',
+        'Show or hide the lightbulb in the top-right corner on touch devices',
+        ['ponder touch button', 'lightbulb', '触屏思索按钮', '灯泡按钮'],
+        context => context.settings.togglePonderTouchButton(),
+    ),
+    defineCommand({
+        id: 'ponder-hints-off',
+        group: 'settings',
+        title: 'Ponder hints: off',
+        description: 'Never show the hold-G hint',
+        keywords: ['ponder hints off', '思索提示 关闭'],
+        isAvailable: context => (context ? context.settings.ponderHintVisibility !== 'off' : true),
+        execute: (_input, context) => {
+            if (context.settings.ponderHintVisibility === 'off') return false;
+            context.settings.setPonderHintVisibility('off');
+            return true;
+        },
+    }),
     {
         id: 'settings-player-bottom-bar-position',
         group: 'settings',
@@ -315,7 +372,9 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
-    createSettingsCommand(
+    // 用 anchor 版而不是 createSettingsCommand：后者只认页面，落在「通用」页顶部，
+    // 而槽位选择器在这一页的底部界面那一节里，跳过去等于没跳。
+    createSettingsAnchorCommand(
         'settings-player-control-slots',
         'Player button slots',
         'Choose which actions the two buttons beside the progress bar run',
@@ -323,8 +382,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             'progress bar buttons', 'customize player buttons',
             '进度条按钮', '播放按钮自定义', '按钮槽位',
         ],
-        'options',
-        'general',
+        'bottomUiSettings',
     ),
     createSettingsCommand('settings-visualizer', 'Visualizer settings', 'Open lyrics animation workbench', ['visualizer workbench', '可视化', '歌词动画', 'donghua'], 'options', 'visualizer'),
     createSettingsCommand('settings-theme-park', 'Color', 'Open theme editor', ['theme park', 'theme', '配色', '主题', '主题公园'], 'options', 'themePark', { executeShortcut: 't' }),

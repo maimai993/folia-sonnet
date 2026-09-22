@@ -12,6 +12,7 @@ import { useGridViewSettingsStore } from '../../../stores/useGridViewSettingsSto
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
 import { useMotionSettingsStore } from '../../../stores/useMotionSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../stores/usePlaybackEntryViewStore';
+import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
@@ -60,10 +61,10 @@ export const buildSettingsCommandContext = (
     const themeQuickEditor = useThemeQuickEditorStore.getState();
     const lattice = useLatticeSettingsStore.getState();
     const entryView = usePlaybackEntryViewStore.getState();
+    const ponder = usePonderStore.getState();
 
     return {
         openSettings: modal.openSettings,
-        setIsUserGuideModalOpen: modal.setIsUserGuideModalOpen,
         setAppLanguagePreference: modal.handleSetAppLanguagePreference,
         toggleTransparentBackground: deps.toggleTransparentBackground,
         toggleDaylightMode: deps.toggleDaylightMode,
@@ -79,6 +80,12 @@ export const buildSettingsCommandContext = (
         ),
         playbackEntryView: entryView.playbackEntryView,
         setPlaybackEntryView: entryView.setPlaybackEntryView,
+        ponderHintVisibility: ponder.ponderHintVisibility,
+        setPonderHintVisibility: ponder.setPonderHintVisibility,
+        togglePonderTouchButton: () => {
+            const state = usePonderStore.getState();
+            state.setShowPonderTouchButton(!state.showPonderTouchButton);
+        },
         toggleRememberHomeCardPosition: () => {
             const home = useHomeLayoutSettingsStore.getState();
             home.handleToggleRememberHomeCardPosition(!home.rememberHomeCardPosition);

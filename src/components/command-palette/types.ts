@@ -20,6 +20,7 @@ import type { CommandPlatform } from './availability';
 import type { CommandPaletteSurface } from './surfaces/types';
 import type { CommandSyntaxSpec } from './syntax/types';
 import type { PlaybackEntryView } from '../../stores/usePlaybackEntryViewStore';
+import type { PonderHintVisibility } from '../../types/ponder';
 
 // src/components/command-palette/types.ts
 // Shared command palette contracts used by the registry, hook, and UI shell.
@@ -191,7 +192,6 @@ export type CommandPaletteSettingsContext = {
         initialVisualizerSection?: VisualizerSettingsSection | null,
         initialAnchorId?: SettingsAnchorId | null,
     ) => void;
-    setIsUserGuideModalOpen: (isOpen: boolean) => void;
     setAppLanguagePreference: (preference: AppLanguagePreference) => Promise<void> | void;
     toggleTransparentBackground: () => void;
     toggleDaylightMode: () => void;
@@ -202,6 +202,10 @@ export type CommandPaletteSettingsContext = {
     /** Which surface pressing play opens; see usePlaybackEntryViewStore. */
     playbackEntryView: PlaybackEntryView;
     setPlaybackEntryView: (view: PlaybackEntryView) => void;
+    ponderHintVisibility: PonderHintVisibility;
+    setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
+    /** 触屏上那颗思索按钮显不显示。它是触屏唯一的入口，所以关掉是一个明确的选择。 */
+    togglePonderTouchButton: () => void;
     toggleRememberHomeCardPosition: () => void;
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;

@@ -84,7 +84,6 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             cycleLyricStaffPolicy: vi.fn(),
             lyricStaffAbsorbMode: 'off' as const,
             cycleLyricStaffAbsorbMode: vi.fn(),
-            setIsUserGuideModalOpen: vi.fn(),
             setAppLanguagePreference: vi.fn(async () => undefined),
             toggleTransparentBackground: vi.fn(),
             toggleDaylightMode: vi.fn(),
@@ -94,6 +93,9 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleSubtitleOverlayBackground: vi.fn(),
             playbackEntryView: 'player' as const,
             setPlaybackEntryView: vi.fn(),
+            ponderHintVisibility: 'always' as const,
+            setPonderHintVisibility: vi.fn(),
+            togglePonderTouchButton: vi.fn(),
             startPlayerBottomBarPositioning: vi.fn(),
             canStartPlayerBottomBarPositioning: true,
             toggleAlwaysShowPlayerBackButton: vi.fn(),
@@ -371,7 +373,9 @@ describe('command palette registry', () => {
         );
         expect(playerControlSlotsCommand).toBeDefined();
         playerControlSlotsCommand!.execute('', context);
-        expect(context.settings.openSettings).toHaveBeenLastCalledWith('options', 'general');
+        // 必须带上锚点：槽位选择器在「通用」页底部的底部界面那一节里，
+        // 只传页面的话打开的是这一页的顶部，等于没跳过去。
+        expect(context.settings.openSettings).toHaveBeenLastCalledWith('options', 'general', null, 'bottomUiSettings');
 
         const [systemLanguageMatch] = getCommandPaletteMatches('跟随系统');
         expect(systemLanguageMatch.command.id).toBe('settings-language-system');

@@ -12,7 +12,7 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
         localStorage.setItem('i18nextLng', 'en');
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
-        localStorage.setItem('folia_last_seen_guide_version', version);
+        localStorage.setItem('folia_last_seen_ponder_onboarding_version', version);
     }, APP_VERSION);
     await page.route('**/__mock_netease__/**', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });

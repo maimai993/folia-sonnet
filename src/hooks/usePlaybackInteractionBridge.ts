@@ -6,6 +6,7 @@ import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
 import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
 import { isMacPlatform as isMac } from '../utils/platform';
+import { hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setReplayGainMode } from '../stores/usePlaybackStore';
 import { useStableActionSurface } from './useStableCallbacks';
@@ -196,17 +197,9 @@ export function usePlaybackInteractionBridge({
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (
-                event.target instanceof HTMLInputElement
-                || event.target instanceof HTMLTextAreaElement
-                || (event.target instanceof HTMLElement && event.target.isContentEditable)
-            ) {
+            if (isTextEntryTarget(event.target)) {
                 return;
             }
-
-            const hasBlockingWindow = () => Boolean(
-                document.querySelector('[data-folia-keyboard-window="true"]')
-            );
 
             // Both chords below open their window by toggling a boolean, so both have to refuse a
             // held key: auto-repeat fires around thirty times a second, and a toggle driven by that

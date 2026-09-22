@@ -17,15 +17,16 @@ import AppDialogs from './components/app/dialogs/AppDialogs';
 import { useSettingsDialogModel } from './components/app/dialogs/useSettingsDialogModel';
 import AppOverlays from './components/app/overlays/AppOverlays';
 import AutomixModelReminder from './components/modal/AutomixModelReminder';
+import PonderHost from './components/ponder/PonderHost';
 // Lazy so animejs (~38KB gz) stays out of the bootstrap chunk: this overlay only ever draws when the
 // animation switch is on AND the mode is automix, both off by default, so it is mounted only then.
 const AutomixTransitionAnimation = lazy(() => import('./components/app/overlays/AutomixTransitionAnimation'));
 const Lattice = lazy(() => import('./components/app/lattice/Lattice'));
 import { UserGuideModal } from './components/modal/UserGuideModal';
+import ReleaseNotesDialog from './components/modal/ReleaseNotesDialog';
 import { PlaybackEntryViewPrompt } from './components/modal/playback-entry-view/PlaybackEntryViewPrompt';
 import { LatticeFmNotice } from './components/modal/playback-entry-view/LatticeFmNotice';
-import { usePlaybackEntryViewPromptGate } from './hooks/usePlaybackEntryViewPromptGate';
-import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
+import { useStartupExperienceGate } from './hooks/useStartupExperienceGate';
 import { useAppDialogsModel } from './components/app/dialogs/useAppDialogsModel';
 import { useHomeModel } from './components/app/home/useHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
@@ -245,16 +246,8 @@ export default function App() {
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
-    const {
-        settingsModalState,
-        lastSeenGuideVersion,
-        setLastSeenGuideVersion,
-        setIsUserGuideModalOpen,
-    } = useSettingsModalStore(useShallow(state => ({
+    const { settingsModalState } = useSettingsModalStore(useShallow(state => ({
         settingsModalState: state.settingsModalState,
-        lastSeenGuideVersion: state.lastSeenGuideVersion,
-        setLastSeenGuideVersion: state.setLastSeenGuideVersion,
-        setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     })));
     const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
     const transitionMode = useAutomixSettingsStore(state => state.transitionMode);
@@ -278,18 +271,7 @@ export default function App() {
         [transitionMode, crossfadeMaxSec, transitionPerformance],
     );
 
-    useEffect(() => {
-        if (
-            typeof __APP_VERSION__ !== 'undefined' &&
-            USER_GUIDE_AUTO_OPEN_VERSION === __APP_VERSION__ &&
-            lastSeenGuideVersion !== __APP_VERSION__
-        ) {
-            setIsUserGuideModalOpen(true);
-            setLastSeenGuideVersion(__APP_VERSION__);
-        }
-    }, [lastSeenGuideVersion, setLastSeenGuideVersion, setIsUserGuideModalOpen]);
-
-    usePlaybackEntryViewPromptGate();
+    const startupExperience = useStartupExperienceGate();
 
     useEffect(() => initializeSyncCoordinator(), []);
 
@@ -2742,6 +2724,10 @@ export default function App() {
                 switches that can open it, so that both reach the same one. */}
             <AutomixModelReminder isDaylight={isDaylight} />
 
+            {/* 思索教程。常驻的只有悬停探测和提示胶囊；教程层自己走 React.lazy，
+                animejs 不进 bootstrap chunk。 */}
+            <PonderHost theme={theme} isDaylight={isDaylight} />
+
             {currentView === 'player' && !showLyricMatchModal && (
                 <PlayerPanel model={playerPanelModel} />
             )}
@@ -2791,6 +2777,12 @@ export default function App() {
             />
 
             <AppDialogs model={appDialogsModel} />
+            <ReleaseNotesDialog
+                isOpen={startupExperience.isReleaseNotesOpen}
+                isDaylight={isDaylight}
+                theme={theme}
+                onClose={startupExperience.closeReleaseNotes}
+            />
             <UserGuideModal theme={theme} />
             <PlaybackEntryViewPrompt theme={theme} />
             <LatticeFmNotice />
