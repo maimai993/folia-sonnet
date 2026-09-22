@@ -65,6 +65,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Rust toolchain
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .windowtolayer-src
+
+      - name: Cache wallpaper-helper Cargo build
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packaging/windows/wallpaper-helper
+
+      - name: Build wallpaper helper (Windows only)
+        if: runner.os == 'Windows'
+        run: npm run build:wallpaper-helper
+
+      - name: Build windowtolayer (Linux only)
+        if: runner.os == 'Linux'
+        run: npm run build:windowtolayer
+
       - name: Stamp Limo package metadata
         shell: bash
         env:
