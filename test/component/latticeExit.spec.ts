@@ -23,12 +23,18 @@ test('the wall empties back toward the corner it entered from', async ({ mount, 
     expect(Math.min(...resting.map(poster => poster.opacity))).toBe(1);
 
     await component.getByRole('button', { name: '离开' }).click();
-    // Long enough for the near corner to be well into its fade, short enough that the far corner,
-    // held back by the reversed wave, has not started.
-    await page.waitForTimeout(200);
-    const leaving = await sample(page);
+    // Sample once the near corner is well into its fade, while the far corner, held back ~340ms by
+    // the reversed wave, has not started. Waiting on that condition instead of a fixed 200ms: under
+    // a parallel run the exit's first frames arrive late, and a fixed sample could land before the
+    // near corner had moved. Both fades run on the same clock, so the order still shows.
+    const nearCorner = (posters: Awaited<ReturnType<typeof sample>>) => posters.reduce((a, b) => (a.corner > b.corner ? a : b));
+    let leaving = await sample(page);
+    await expect.poll(async () => {
+        leaving = await sample(page);
+        return nearCorner(leaving).opacity;
+    }, { intervals: [16], timeout: 3000 }).toBeLessThan(0.75);
     expect(leaving.length).toBeGreaterThan(8);
-    const first = leaving.reduce((a, b) => (a.corner > b.corner ? a : b));
+    const first = nearCorner(leaving);
     const last = leaving.reduce((a, b) => (a.corner < b.corner ? a : b));
     expect(first.opacity).toBeLessThan(0.9);
     expect(last.opacity).toBeGreaterThan(first.opacity + 0.2);
