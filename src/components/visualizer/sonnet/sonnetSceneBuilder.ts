@@ -218,6 +218,13 @@ export const buildSonnetScene = (
         );
         const guideLayer = new Container();
         const textLayer = new Container();
+        // Every glyph's screen-blended aberration copies share this one layer instead of sitting in
+        // the glyph wrapper. Interleaved screen/normal children break Pixi's batch on each switch,
+        // turning a shot into ~2 draws per glyph; an Intel iGPU has hung on exactly that stream and
+        // the failed engine reset took the compositor down with it. Added first, so the bg shapes
+        // and frame decor later inserted at index 0 still sit below the aberration.
+        const caLayer = new Container();
+        textLayer.addChild(caLayer);
         guideLayer.visible = showGuide;
         haloLayer.visible = !showOnlyText;
         shotContainer.addChild(guideLayer, haloLayer, textLayer);
@@ -249,6 +256,7 @@ export const buildSonnetScene = (
                     guideLayer,
                     haloLayer,
                     textLayer,
+                    caLayer,
                 },
             ));
         });
