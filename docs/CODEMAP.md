@@ -114,6 +114,7 @@
 - `src/components/ponder/targets/localLibraryWatch.target.ts`
 - `src/components/ponder/targets/localMetadataMatch.target.ts`
 - `src/components/ponder/targets/localTrackSorting.target.ts`
+- `src/components/ponder/targets/lyricStyle.target.ts`
 - `src/components/ponder/targets/lyricsAnimationSettings.target.ts`
 - `src/components/ponder/targets/lyricsSettings.target.ts`
 - `src/components/ponder/targets/onlineCollectionActions.target.ts`
