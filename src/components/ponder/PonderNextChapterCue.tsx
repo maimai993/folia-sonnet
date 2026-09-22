@@ -11,11 +11,17 @@ import { useTranslation } from 'react-i18next';
 //
 // 箭头横向轻微呼吸，方向就是它要去的方向；这条动效走 CSS 类，reduced motion 下自动停。
 // 只有图标在动、按钮框不动：会动的点击目标难点中。
+//
+// 按钮底下还有一条读条：不点它，条走完也会进下一章。指针一碰到这颗按钮就取消 ——
+// 把指针移过来的人要么正要点它，要么是想停下来把字幕读完，两种意图都不该被推走。
 
 type PonderNextChapterCueProps = {
     /** 下一章的标题；已经是最后一章时为 null。 */
     nextSceneTitle: string | null;
     onNextScene: () => void;
+    /** 读条时长；null 表示这次不自动续播（暂停了，或者已经被取消）。 */
+    autoAdvanceMs: number | null;
+    onCancelAutoAdvance: () => void;
     theme?: { accentColor?: string };
     isDaylight: boolean;
 };
@@ -23,6 +29,8 @@ type PonderNextChapterCueProps = {
 const PonderNextChapterCue: React.FC<PonderNextChapterCueProps> = ({
     nextSceneTitle,
     onNextScene,
+    autoAdvanceMs,
+    onCancelAutoAdvance,
     theme,
     isDaylight,
 }) => {
@@ -50,13 +58,23 @@ const PonderNextChapterCue: React.FC<PonderNextChapterCueProps> = ({
             type="button"
             data-testid="ponder-next-chapter"
             onClick={onNextScene}
+            onPointerEnter={onCancelAutoAdvance}
+            onFocus={onCancelAutoAdvance}
             aria-label={`${t('ponder.nextChapter')}: ${nextSceneTitle}`}
-            className="pointer-events-auto absolute right-6 top-1/2 flex -translate-y-1/2 items-center gap-2.5 rounded-full border py-2 pl-4 pr-3 text-left shadow-lg backdrop-blur-sm transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            className="pointer-events-auto absolute right-6 top-1/2 flex -translate-y-1/2 items-center gap-2.5 overflow-hidden rounded-full border py-2 pl-4 pr-3 text-left shadow-lg backdrop-blur-sm transition-transform hover:scale-[1.03] active:scale-[0.98]"
             style={{ backgroundColor: surface, borderColor: border }}
         >
+            {autoAdvanceMs !== null && (
+                <span
+                    data-testid="ponder-next-chapter-countdown"
+                    aria-hidden="true"
+                    className="ponder-next-cue-countdown absolute inset-x-0 bottom-0 h-0.5"
+                    style={{ backgroundColor: accent, animationDuration: `${autoAdvanceMs}ms` }}
+                />
+            )}
             <span className="min-w-0 max-w-[12rem]">
                 <span className="block text-[10px] leading-tight" style={{ color: muted }}>
-                    {t('ponder.nextChapter')}
+                    {autoAdvanceMs !== null ? t('ponder.nextChapterAuto') : t('ponder.nextChapter')}
                 </span>
                 <span className="block truncate text-xs font-medium" style={{ color: accent }}>
                     {nextSceneTitle}

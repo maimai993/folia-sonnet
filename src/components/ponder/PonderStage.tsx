@@ -13,6 +13,7 @@ import { refreshPonderDomRectSnapshot, type PonderDomRectSnapshot } from '../../
 import { findPonderTarget } from './ponderRegistry';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import { openSettings } from '../../stores/useSettingsModalStore';
+import { openPonderActionUrl } from '../../services/ponder/ponderActionUrl';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline } from './usePonderTimeline';
 import PonderActors from './PonderActors';
@@ -20,7 +21,7 @@ import PonderChrome from './PonderChrome';
 import PonderSkeletonLayer from './PonderSkeletonLayer';
 import PonderNextChapterCue from './PonderNextChapterCue';
 import PonderRelatedTargets from './PonderRelatedTargets';
-import type { PonderRect } from '../../types/ponder';
+import { PONDER_AUTO_ADVANCE_MS, type PonderRect } from '../../types/ponder';
 import type { Theme } from '../../types';
 
 // src/components/ponder/PonderStage.tsx
@@ -178,10 +179,34 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
 
     // 一章播完停下，由卡片接手。isFinished 是离散事实，可以进 state。
     const [isFinished, setIsFinished] = useState(false);
+    // 读条被取消过没有。取消是单向的：这一章里一旦取消，就不再自己往下走。
+    const [autoAdvanceCancelled, setAutoAdvanceCancelled] = useState(false);
     useLayoutEffect(() => {
         setIsFinished(false);
+        setAutoAdvanceCancelled(false);
     }, [session?.targetId, session?.sceneIndex]);
     const handleComplete = useCallback(() => setIsFinished(true), []);
+
+    const hasNextScene = Boolean(scenes[(session?.sceneIndex ?? 0) + 1]);
+    const isAutoAdvancing = isFinished && hasNextScene && !isPaused && !autoAdvanceCancelled && !isLeaving;
+
+    /**
+     * 读条走完就进下一章。
+     *
+     * 暂停、把指针移到「下一章」上、或者在读条期间按任意键都会取消它 —— 这三件事
+     * 都说明用户此刻在看这一屏，而不是在等下一章。
+     */
+    useEffect(() => {
+        if (!isAutoAdvancing) {
+            return;
+        }
+        const timer = window.setTimeout(() => stepScene(1, scenes.length), PONDER_AUTO_ADVANCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [isAutoAdvancing, stepScene, scenes.length]);
+
+    // 按键的取消由 usePonderSessionKeys 转发进来：它在 capture 阶段把认不出的键
+    // stopImmediatePropagation 掉，在外面再挂一个 keydown 监听是收不到的。
+    const cancelAutoAdvance = useCallback(() => setAutoAdvanceCancelled(true), []);
 
     // 「本页可单独思索的组件」那张卡浮在骨架之上，字幕得绕开它。
     // 高度随列出的组件条数变，所以量一次而不是写死一个框 —— 播放页列四条，比只列一条高出一倍。
@@ -217,6 +242,7 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
         isActive: Boolean(liveSession),
         sceneCount: scenes.length,
         controlsRef,
+        onAnyKey: cancelAutoAdvance,
     });
 
     if (!session || !target || !scene || !plan) {
@@ -270,6 +296,11 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                     actionLabel={scene.action ? t(scene.action.labelKey) : null}
                     onRunAction={() => {
                         if (!scene.action) return;
+                        // 外链不关教程：看完文档回来还想接着看这一章。
+                        if (scene.action.kind === 'openUrl') {
+                            openPonderActionUrl(scene.action.url);
+                            return;
+                        }
                         // 先退出教程再开设置：教程层是 z-[220]、还接管着键盘，
                         // 留着它会把刚打开的设置面板整个盖住。
                         const anchorId = scene.action.anchorId as SettingsAnchorId;
@@ -290,6 +321,8 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                             ? t(scenes[session.sceneIndex + 1].titleKey)
                             : null}
                         onNextScene={() => stepScene(1, scenes.length)}
+                        autoAdvanceMs={isAutoAdvancing ? PONDER_AUTO_ADVANCE_MS : null}
+                        onCancelAutoAdvance={cancelAutoAdvance}
                         theme={theme}
                         isDaylight={isDaylight}
                     />

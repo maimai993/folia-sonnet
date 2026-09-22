@@ -89,13 +89,20 @@ const argumentMode: PonderSceneScript = {
     ],
 };
 
-/** 第三章：`:` 进执行模式，一个键跑完一条命令。 */
+/**
+ * 第三章：`:` 进执行模式，一个键跑完一条命令。
+ *
+ * `:` 是**窗口关着时**按的：它在 executeModeCommand 里声明成不带修饰键的 openHotkey，
+ * 而 useCommandPalette 会把这类裸键在焦点落在输入框时全部让路（isTextEntryTarget）。
+ * 所以 keypress 不能落在输入行上 —— 画在那儿读起来就是「在这个框里打一个冒号」，
+ * 而那样做只会往查询里插一个冒号。
+ */
 const executeMode: PonderSceneScript = {
     id: 'command-palette-execute-mode',
     titleKey: 'ponder.scenes.commandPaletteExecuteMode',
     anchors,
     steps: [
-        { kind: 'keypress', id: 'colon', keys: [':'], at: { anchor: 'input', y: 1, offset: { y: 16 } }, durationMs: 1000, keyframe: true },
+        { kind: 'keypress', id: 'colon', keys: [':'], at: { anchor: 'palette', y: 0, offset: { y: -28 } }, durationMs: 1000, keyframe: true },
         { kind: 'highlight', id: 'markResults', anchor: 'results', intensity: [0, 0.6], durationMs: 420, withPrevious: true },
         {
             kind: 'caption', id: 'enter', at: 'bottom',

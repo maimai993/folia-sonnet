@@ -302,6 +302,40 @@ test('右侧面板：Tab 循环换页，四页各是一个独立目标', async (
     await expect(stage.getByTestId('ponder-related-targets').locator('button')).toHaveCount(7);
 });
 
+test('末章播完不读条，只给一行「看完了」', async ({ page }) => {
+    // 自动续播只在后面还有章时发生。绕回第一章重播一遍不是「继续」，是把人困住。
+    await page.locator('[data-probe-open="grid3d-card-style"]').click();
+    await expect(page.locator('[data-testid="ponder-stage"]')).toBeVisible();
+
+    await expect(page.locator('[data-testid="ponder-chapters-done"]')).toBeVisible({ timeout: 60000 });
+    await expect(page.locator('[data-testid="ponder-next-chapter-countdown"]')).toHaveCount(0);
+});
+
+test('一章播完读条自动进下一章', async ({ page }) => {
+    await page.locator('[data-probe-open="lattice-style-tint"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await expect(stage.getByText('1 / 2').first()).toBeVisible();
+
+    await expect(page.locator('[data-testid="ponder-next-chapter-countdown"]')).toBeVisible({ timeout: 70000 });
+    await expect(stage.getByText('2 / 2').first()).toBeVisible({ timeout: 15000 });
+});
+
+test('读条期间按任意键就取消，画面停在这一章', async ({ page }) => {
+    await page.locator('[data-probe-open="lattice-style-tint"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    const countdown = page.locator('[data-testid="ponder-next-chapter-countdown"]');
+    await expect(countdown).toBeVisible({ timeout: 70000 });
+    // 正在读字幕的人按一下任何键，都不该被推到下一章去。
+    await page.keyboard.press('KeyQ');
+    await expect(countdown).toHaveCount(0);
+
+    await page.waitForTimeout(7000);
+    await expect(stage.getByText('1 / 2').first()).toBeVisible();
+});
+
 test('封面四角那四颗按钮各有自己的一段说明', async ({ page }) => {
     await page.locator('[data-probe-open="panel-cover-actions"]').click();
     const stage = page.locator('[data-testid="ponder-stage"]');

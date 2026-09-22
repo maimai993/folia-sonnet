@@ -245,6 +245,52 @@ export const LATTICE_CHROME_GEOMETRY = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 设置 · 外观里「首页卡片样式」那一组，坐标系是那块面板。
+ *
+ * 真实那一组只有三行：分组标题、一行说明、两张并排的选项。它矮，所以面板也要摆得矮 ——
+ * 拉成一块方方正正的面会让骨架看起来像另一个更复杂的设置区。
+ */
+export const GRID3D_CARD_STYLE_GEOMETRY = {
+    heading: { left: 0.04, top: 0.04, width: 0.30, height: 0.14 },
+    card: { left: 0.03, right: 0.03, top: 0.26, bottom: 0.04 },
+    copy: { left: 0.06, right: 0.06, top: 0.34, height: 0.20 },
+    optionImage: { left: 0.06, top: 0.62, width: 0.43, height: 0.28 },
+    optionCard: { right: 0.06, top: 0.62, width: 0.43, height: 0.28 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 设置 · 外观里「网格卡片」那一组，坐标系是那块面板。
+ *
+ * 「正方形卡片」那一行只在「全画幅封面」打开之后才存在，所以它在骨架里也要等一层
+ * 结果层才出现 —— 一进场就摆着的话，字幕说「开了才有」就和画面对不上。
+ */
+export const GRID_VIEW_CARD_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.30, height: 0.07 },
+    card: { left: 0.03, right: 0.03, top: 0.13, bottom: 0.02 },
+    fullBleed: { left: 0.06, right: 0.06, top: 0.17, height: 0.13 },
+    square: { left: 0.06, right: 0.06, top: 0.34, height: 0.13 },
+    minScale: { left: 0.06, right: 0.06, top: 0.51, height: 0.14 },
+    minOpacity: { left: 0.06, right: 0.06, top: 0.68, height: 0.14 },
+    reset: { right: 0.06, top: 0.86, width: 0.28, height: 0.09 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 设置 · 外观里「队列拼贴」那一组，坐标系是那块面板。
+ *
+ * 叠色是层层嵌套的：开了叠色才有「自定义颜色」和强度，开了自定义颜色才有取色器。
+ * 骨架照这个嵌套分两层结果层画，读者才看得出为什么自己那屏上没有取色器。
+ */
+export const LATTICE_STYLE_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.30, height: 0.06 },
+    card: { left: 0.03, right: 0.03, top: 0.11, bottom: 0.02 },
+    vignette: { left: 0.06, right: 0.06, top: 0.15, height: 0.11 },
+    tint: { left: 0.06, right: 0.06, top: 0.30, height: 0.11 },
+    customColor: { left: 0.06, right: 0.06, top: 0.45, height: 0.11 },
+    picker: { left: 0.06, right: 0.06, top: 0.59, height: 0.20 },
+    intensity: { left: 0.06, right: 0.06, top: 0.83, height: 0.11 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 设置里「歌词动画」那一组，坐标系是那块面板。
  *
  * 真实那一组是：分组标题、一个通往动画调参台的大按钮，再下面**一张**卡片，卡片里

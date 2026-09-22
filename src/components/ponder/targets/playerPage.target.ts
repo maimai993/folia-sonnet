@@ -172,7 +172,9 @@ const howToShuffle: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readNoSwitch' },
 
-        { kind: 'keypress', id: 'colonR', keys: ['Mod K', ':', 'r'], at: { anchor: 'bar', y: 0, offset: { y: -18 } }, durationMs: 1400, keyframe: true },
+        // 不是 Mod+K 之后再按冒号 —— 窗口一开焦点就在输入框里，那时的冒号只会被打进查询。
+        // 冒号本身就是打开执行模式的那一下，见 executeModeCommand 的 openHotkey。
+        { kind: 'keypress', id: 'colonR', keys: [':', 'r'], at: { anchor: 'bar', y: 0, offset: { y: -18 } }, durationMs: 1400, keyframe: true },
         { kind: 'surfaceState', id: 'executeMode', anchor: 'page', state: 'execute-mode', durationMs: 460, withPrevious: true },
         {
             kind: 'caption', id: 'howTo', at: 'bottom',

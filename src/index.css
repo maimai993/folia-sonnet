@@ -231,6 +231,21 @@ html[data-click-through='active'] body .click-through-interactive * {
     animation: none;
 }
 
+/* 自动进入下一章的读条。走 CSS 而不是 React state：它每帧都在变，
+   进 state 等于让整个教程层按帧重渲染，正是 frontend-runtime-guardrails 要挡的形状。
+   时长由内联的 animation-duration 给，因为它是 DSL 里的一个常量。 */
+@keyframes ponder-next-cue-countdown {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+.ponder-next-cue-countdown {
+    animation-name: ponder-next-cue-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    transform-origin: left center;
+}
+
 /* 思索：骨架框逐个落位。
 
    一进场整幅骨架整齐地出现在那里，读起来像一张静态插图；让它们按声明顺序错开几十毫秒

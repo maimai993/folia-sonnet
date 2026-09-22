@@ -144,6 +144,8 @@ describe('ponder registry', () => {
             'lattice-chrome': new Set(['slots-swapped', 'bottom-bar-shown']),
             'lyrics-animation-settings': new Set(['playground-open']),
             'theme-settings': new Set(['theme-park-open']),
+            'grid-view-card-settings': new Set(['full-bleed-on']),
+            'lattice-style-settings': new Set(['tint-on', 'custom-color-on']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {
@@ -159,6 +161,18 @@ describe('ponder registry', () => {
         }));
     });
 
+    it('章节里的外链都是 https 绝对地址', () => {
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                if (scene.action?.kind !== 'openUrl') return;
+                expect(
+                    scene.action.url.startsWith('https://'),
+                    `${target.id}/${scene.id} 的外链不是 https 绝对地址：${scene.action.url}`,
+                ).toBe(true);
+            });
+        });
+    });
+
     // action.anchorId 在 DSL 里只是个 string（types 层不该反向依赖 settings 的锚点表），
     // 所以写错了只有在这里才发现得了 —— 运行时的表现是跳到设置面板的某个不存在的位置。
     it('章节里「直接去那儿」的锚点都真实存在', () => {
@@ -166,7 +180,7 @@ describe('ponder registry', () => {
 
         PONDER_TARGET_LIST.forEach(target => {
             target.scenes.forEach(scene => {
-                if (!scene.action) return;
+                if (scene.action?.kind !== 'openSettings') return;
                 expect(
                     declared.has(scene.action.anchorId),
                     `${target.id}/${scene.id} 指向了不存在的设置锚点 "${scene.action.anchorId}"`,

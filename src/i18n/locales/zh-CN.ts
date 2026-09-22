@@ -2876,6 +2876,7 @@ export default {
     "sceneLabel": "章节",
     "allChaptersDone": "全部章节都看完了。",
     "nextChapter": "下一章",
+    "nextChapterAuto": "即将进入下一章",
     "title": "思索",
     "hintCapsule": "按 G 思索",
     "hintCapsulePage": "思索本页",
@@ -2897,7 +2898,12 @@ export default {
       "openBottomUiSettings": "打开底部界面设置",
       "openLyricsAnimation": "打开歌词动画设置",
       "openThemePresets": "打开配色主题设置",
-      "openSlotPicker": "去挑按钮"
+      "openSlotPicker": "去挑按钮",
+      "openDocs": "打开文档",
+      "openPonderHints": "去设置里调",
+      "openGrid3dCardStyle": "打开首页卡片样式",
+      "openGridViewCard": "打开网格卡片设置",
+      "openLatticeSettings": "打开队列拼贴设置"
     },
     "anchors": {
       "pages": {
@@ -2934,6 +2940,27 @@ export default {
         "openPlayer": "回到播放页",
         "progress": "进度条",
         "bottomBar": "底部控制条"
+      },
+      "grid3dCardStyle": {
+        "panel": "设置 · 首页卡片样式",
+        "image": "纯图片封面",
+        "card": "拍立得卡片"
+      },
+      "gridViewCard": {
+        "panel": "设置 · 网格卡片",
+        "fullBleed": "全画幅封面",
+        "square": "正方形卡片",
+        "minScale": "卡片最小尺寸",
+        "minOpacity": "卡片最小透明度",
+        "reset": "恢复默认衰减"
+      },
+      "latticeStyle": {
+        "panel": "设置 · 队列拼贴",
+        "vignette": "暗角",
+        "tint": "海报叠色",
+        "customColor": "使用固定颜色",
+        "picker": "取色器",
+        "intensity": "叠色强度"
       },
       "lyricsAnimation": {
         "panel": "设置 · 歌词动画",
@@ -3024,6 +3051,9 @@ export default {
       "lyricsAnimationSettings": "歌词动画设置",
       "themeSettings": "配色主题设置",
       "sidePanel": "右侧控制面板",
+      "grid3dCardStyle": "首页卡片样式",
+      "gridViewCardSettings": "网格卡片设置",
+      "latticeStyleSettings": "队列拼贴样式",
       "panelCoverActions": "封面上的四颗按钮",
       "panelCoverTab": "面板 · 封面页",
       "panelSourceTab": "面板 · 来源页",
@@ -3031,7 +3061,7 @@ export default {
       "panelQueueTab": "面板 · 队列页",
       "panelAccountTab": "面板 · 账号页",
       "latticePage": "Lattice 页面",
-      "helpPage": "帮助页面",
+      "helpPage": "认识 Folia",
       "settingsPage": "设置页面"
     },
     "scenes": {
@@ -3069,6 +3099,11 @@ export default {
       "themeSettingsPresets": "预设与自定义",
       "themeSettingsSource": "配色从哪来",
       "themeSettingsAuto": "配色什么时候自己变",
+      "grid3dCardStyleOptions": "两种卡片长什么样",
+      "gridViewCardCover": "封面怎么占这张卡",
+      "gridViewCardFalloff": "离中心越远，衰减到多少",
+      "latticeStyleTint": "暗角与海报叠色",
+      "latticeStyleCustomColor": "换成一个固定颜色",
       "panelSourceTabWhere": "这一格什么时候才在",
       "panelSourceTabContents": "增益、歌词与时间轴",
       "panelCoverActionsReveal": "悬停才出现的四颗按钮",
@@ -3081,9 +3116,11 @@ export default {
       "latticePagePoster": "展开海报并控制播放",
       "latticePageTools": "聚焦、跟随、队列与灯光",
       "latticePageKeyboard": "Lattice 的完整键盘操作",
-      "helpPageOverview": "Folia 的基本运行逻辑",
-      "helpPageCommands": "命令是通用入口",
-      "helpPageOperatingModel": "浏览与播放彼此独立",
+      "helpPagePonder": "你已经在思索里了",
+      "helpPageTransport": "不用切回来也能控制播放",
+      "helpPageShortcuts": "四个最常用的快捷键",
+      "helpPageDocs": "还想知道更多",
+      "helpPageHintSettings": "看够了就把提示关掉",
       "settingsPageOverview": "设置按用途分组",
       "settingsPageDirectNavigation": "从命令直接跳转",
       "playerBarBasics": "这条胶囊上有什么",
@@ -3096,6 +3133,19 @@ export default {
       "panelSlideKeyboard": "用键盘打开"
     },
     "captions": {
+      "onboarding": {
+        "here": "你已经打开了一个思索教程 —— 就是现在这一屏。它不是一段视频：底下的进度条可以拖，左右方向键在关键帧之间跳，Space 暂停，Esc 随时退出。",
+        "hover": "指针在那些不太直观的按钮和组件上停一会儿，旁边会浮出一枚提示，上面写着按下去会讲哪一个。按住 G 不放，等擦除走满，那个组件的教程就开了。",
+        "wholePage": "不想找组件也行：在任意页面上按住 Ctrl + G，打开的是整页的教程 —— 这一页上有什么、各在哪、能怎么操作。触屏上则是右下角那颗灯泡。",
+        "mediaKeys": "播放控制走系统的媒体会话（Windows 上是 SMTC，Linux 上是 MPRIS）。也就是说键盘上那排播放 / 上一首 / 下一首直接就能用，在别的窗口里干活时不必切回 Folia。系统的媒体浮窗里也能看到当前这首。",
+        "inAppTransport": "在应用里：Space 播放 / 暂停，{{mod}} + ← / → 上一首 / 下一首。在播放页上，不带修饰键的左右方向键是快退 / 快进 5 秒。更多动作去命令窗口，或者按一下冒号进执行模式。",
+        "shortcutK": "{{mod}} + K 打开命令窗口。Folia 把「找功能」这件事全部收在这里 —— 命令和设置都能直接搜名字，不用记它归在哪一级。",
+        "shortcutP": "{{mod}} + P 打开播放队列。它也是个命令窗口，输入行就是队列的搜索框，还能用 @artist: 之类把范围收窄再批量操作。",
+        "shortcutB": "{{mod}} + B 进 Lattice —— 把整条播放队列铺成一面海报墙。已经在 Lattice 里时按它是返回。",
+        "shortcutG": "Ctrl + G 就是刚才那一下：打开当前页面的思索教程。任何时候迷路了，先按它。",
+        "hintSettings": "已经完全了解 Folia 的操作了？可以前往设置中关闭思索提示，或仅显示尚未看过的 —— 开关在设置 · 实验室的「思索教程提示」里，三档：始终显示、仅未看过的区域、关闭。下面那颗按钮直接带你过去。",
+        "docs": "这四章只是开个头。命令、快捷键、在线来源、本地曲库、可视化和主题都还有更细的说明，在文档站上 —— 下面那颗按钮直接打开它。"
+      },
       "pages": {
         "grid": "这是浏览用的海报墙：搜索和歌单导航在卡片上方，选中一张卡片就会进入它的歌曲列表。",
         "gridNavigation": "滚动、滑动或用方向键在卡片间移动，然后选中当前卡片进入其中。",
@@ -3129,16 +3179,16 @@ export default {
         "playerPanelWhere": "面板从手柄上方展开，宽度固定、贴着右缘。最上面是一整块正方形封面，紧接着就是一排标签页：封面、控制、队列、账号。歌名和歌手属于封面那一页，不是面板结构的一层。",
         "playerPaletteSlide": "手柄背后还藏着一条向左的滑轨。按住手柄往左拖，越过判定线再松手，打开的是命令窗口，不是面板。",
         "playerPaletteOpened": "命令窗口从屏幕上方落下，水平居中。Folia 把「找功能」这件事全部收在这里。",
-        "playerPaletteOtherWays": "不想拖也行：{{mod}} + K 在任何地方都能打开同一个窗口；触屏则先在右缘附近点一下，把手柄叫出来。",
+        "playerPaletteOtherWays": "不想拖也行：{{mod}} + K 在任何地方都能打开同一个窗口；在播放页上焦点没落在输入框时，直接按 S 也一样。触屏则先在右缘附近点一下，把手柄叫出来。",
         "playerCommandFilter": "窗口开着就直接打字，它按名字、别名和关键词一起筛。↑↓ 选，Enter 执行 —— 不必先想清楚这条命令归在哪一类。",
         "playerCommandArgument": "需要参数的命令不会立刻跑。打完命令名按空格，它收成输入行里的一枚标签，光标留在后面等你补参数，补完再 Enter。",
-        "playerExecuteMode": "只有输入一个冒号才进执行模式，没有别的入口。进去之后一个键跑一条命令：r 打乱队列、v 音量、o 设置、h 帮助。",
+        "playerExecuteMode": "执行模式是另开的一条路：窗口还关着的时候按一下冒号键，开出来的就直接是它。窗口已经开着时再按，冒号只会落进输入行。进去之后一个键跑一条命令：r 打乱队列、v 音量、o 设置、h 帮助。",
         "playerShuffleNoSwitch": "Folia 没有「随机播放」这个开关。控制条上找不到它，是因为它不是一个常开的模式，而是一次动作：把当前队列原地洗一次牌。",
-        "playerShuffleHow": "最快的做法是 {{mod}} + K 打开命令窗口，输入一个冒号进执行模式，再按 r。洗完顺序就定下来了，想换个顺序就再来一次。",
+        "playerShuffleHow": "最快的做法是在播放页上什么都不开、直接按一下冒号键 —— 窗口会开在执行模式 —— 再按 r。洗完顺序就定下来了，想换个顺序就再来一次。",
         "playerShuffleSlot": "如果你常用它，把「随机队列」放进控制条右边那两个位置之一，以后按一下就行。",
         "lattice": "Lattice 把整条播放队列铺成一面海报墙。你可以在墙上移动查看队列，并选中海报来操作那首歌。",
         "latticeWall": "Lattice 将播放队列循环铺成不规则海报墙；同一首歌可在墙的不同位置重复出现，以便连续平移。当前歌曲有编号和状态标记。",
-        "latticeBack": "左上角返回上一页。Ctrl/Cmd+B 也会关闭 Lattice；Esc 会先取消海报展开或键盘焦点，再在第二次返回。",
+        "latticeBack": "左上角返回上一页。{{mod}} + B 也会关闭 Lattice；Esc 是逐层退的 —— 先收起展开的海报、或清掉键盘焦点，再按一次才真的返回。",
         "latticePan": "在墙面拖动或滚轮平移相机，海报会随视口动态出现；拖动结束后的惯性不会改变播放队列顺序。",
         "latticeFocusKeys": "方向键从视口中央选择最近海报，再按空间方向移动焦点，并自动平移相机让目标可见。",
         "latticePosterOpen": "点击或按 Enter 展开海报。当前歌曲展开后显示同步歌词；其他歌曲展开后显示标题与播放入口，队列本身不会被重排。",
@@ -3155,7 +3205,7 @@ export default {
       },
       "playerBar": {
         "basicsIntro": "Folia 的播放控制只有这一条胶囊。别的播放器摆在底部的那一排常驻按钮 —— 上一首、下一首、随机、循环、音量 —— 这里一个都没有固定占位。",
-        "basicsPlay": "整条上唯一永远在的按钮是播放 / 暂停。它在最左边，位置不会变。",
+        "basicsPlay": "整条上唯一永远在的按钮是播放 / 暂停。宽屏时它在最左端；窄到一行放不下时，它落到第二行正中，两个槽位分列两侧。",
         "basicsTitle": "切歌不靠按钮，靠歌名。指针移到标题上，两侧浮出箭头并半透明预览上一首和下一首的名字 —— 你是看着要去哪首才切的，不是盲按。",
         "basicsProgress": "进度条就地拖动或点击跳转。点胶囊其他任何地方不是暂停，而是进入播放页；在 Lattice 上则是把视野拉回当前这首。",
         "basicsSlots": "剩下的功能都归右边这两个位置。十个动作里你挑两个放上去，别的一律不在条上 —— 这就是这里没有一排固定按钮的原因。",
@@ -3167,7 +3217,7 @@ export default {
         "slotsWhere": "在设置里挑：循环、随机、喜爱、队列、音量、睡眠定时等十个动作里任选，选完立刻生效。",
         "shuffleIntro": "这个随机和别处的不一样 —— 它不是一个开着就一直生效的模式。",
         "shuffleOnce": "按一下，Folia 把当前队列原地洗一次牌，洗完这个顺序就定下来了。想换个顺序就再按一次。",
-        "volumeIntro": "Folia 没有常驻的音量滑块。",
+        "volumeIntro": "底部控制条上没有常驻的音量滑块。",
         "volumeOpens": "按这里打开的是命令面板里的音量面板，不是就地弹一个小滑块。"
       },
       "commandPalette": {
@@ -3175,7 +3225,7 @@ export default {
         "run": "↑↓ 在结果里移动，Enter 执行当前这条。最近用过的会排在前面，常用的那几条越用越靠上。",
         "pill": "有些命令需要一个参数。打完命令名按空格，它收成输入行里的一枚标签，窗口留在原地继续等参数 —— 你不会被弹到另一个界面去。",
         "flags": "带标志的命令在你输入 -- 时会把自己的选项列出来。不必记有哪些标志，输入两个减号就是在问它。",
-        "executeEnter": "输入一个冒号进执行模式。只有这一条路能进去 —— 没有按钮，也没有别的快捷键。",
+        "executeEnter": "执行模式只有一个入口：窗口关着、焦点不在任何输入框里时，按一下冒号键。没有按钮，也没有别的快捷键 —— 而窗口已经开着时按它，冒号只是被打进查询里。",
         "executeKeys": "进去之后一个键就是一条命令：r 打乱队列、v 音量、o 设置、h 帮助。这些键互不构成前缀，所以按完立即执行。"
       },
       "latticeChrome": {
@@ -3207,6 +3257,20 @@ export default {
         "queueTabDetail": "点一行就从那首开始播；指针停在行上，右端才浮出「下一首播放」「移到队尾」「移除」。顶上两颗小按钮把队列铺成 Lattice 海报墙、或打乱整条队列。这里不能拖动排序。",
         "accountTab": "账号页管的是当前音乐来源那一侧的事。",
         "accountTabDetail": "上面是这个来源的登录状态：头像、昵称、来源名和 ID，右端退出登录。下面是音质档位四选一 —— 标准、极高、无损、Hi-Res；最底下是把数据同步到云端。换一个来源，看到的是另一套。"
+      },
+      "gridStyle": {
+        "grid3dImage": "「纯图片封面」是首页海报墙的默认样子：整张卡就是一张封面，歌单名压在封面底部的渐变里。",
+        "grid3dCard": "「拍立得卡片」把封面缩进卡片上半截，下面留一条白边写名字 —— 就是一张拍立得。封面不会被裁，代价是同样的屏幕宽度里装下的卡更少。",
+        "fullBleed": "「全画幅封面」管的是集合页那片蜂窝网格：开了之后封面铺满整张卡，歌名和歌手改成叠在封面上的渐变遮罩里，和队列拼贴的做法一致。",
+        "squareCard": "开了全画幅封面，下面才会长出「正方形卡片」这一行 —— 关着的时候它根本不在屏幕上。打开它卡片变成高宽相等，方形封面不再被上下裁掉；卡片面积不变，所以变矮的同时会变宽，网格间距跟着调。",
+        "minScale": "这条滑杆调的不是卡片大小，是「衰减的下限」：离视口中心越远的卡越小，这里给的是「最多小到多少」。调高外围更好辨认，调低纵深感更强。",
+        "minOpacity": "同理，这条是「最多淡到多少」。两条一起决定了这片网格看起来是平铺的还是有纵深的。",
+        "falloffReset": "调乱了按这颗恢复默认衰减。它只复位上面这两条滑杆，封面形状那两个开关不受影响。",
+        "latticeVignette": "「暗角」在队列拼贴页面四周压一层淡淡的暗，把视线收到中间的海报上。它只是显示效果，不影响队列本身。",
+        "latticeTint": "「海报叠色」给普通海报盖一层颜色，好让正在播放、聚焦和悬停的那几张跳出来。它是整组里的总开关 —— 关着的时候下面的强度和固定颜色都不在屏幕上，这就是「叠色强度在哪调」找不到的原因。",
+        "latticeIntensity": "打开之后下面才有「叠色强度」。它是百分比：调到 0 等于没叠色，调高普通海报越暗、正在播的那张越突出。",
+        "latticeCustomColor": "默认的叠色是从当前主题算出来的渐变，会跟着换主题一起变。打开「使用固定颜色」就把它钉死成一个颜色，主题怎么换都不动。",
+        "latticePicker": "开了固定颜色，下面才出现取色器。拖动时海报墙实时跟着变，松手才真正存下来。"
       },
       "panelCoverActions": {
         "appear": "封面上平时什么都没有。指针移上去，四个角各浮出一颗按钮 —— 它们是四件互不相干的事，不是同一组「这首歌的操作」。",

@@ -12,6 +12,11 @@ import {
     PonderLyricsAnimationSettingsSurface,
     PonderThemeSettingsSurface,
 } from './surfaces/PonderSettingsSectionSurfaces';
+import {
+    PonderGrid3dCardStyleSurface,
+    PonderGridViewCardSurface,
+    PonderLatticeStyleSurface,
+} from './surfaces/PonderAppearanceSettingsSurfaces';
 import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
@@ -244,6 +249,12 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderLyricsAnimationSettingsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'theme-settings'
         ? <PonderThemeSettingsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'grid3d-card-style'
+        ? <PonderGrid3dCardStyleSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'grid-view-card-settings'
+        ? <PonderGridViewCardSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'lattice-style-settings'
+        ? <PonderLatticeStyleSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'side-panel'
         ? <PonderSidePanelSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'bottom-ui-settings'

@@ -51,6 +51,17 @@ export const readVisiblePagePonderScope = (): PonderTargetId | null => {
     return null;
 };
 
+/**
+ * 入门教程。帮助页那颗灯泡按钮开的是它，第一次打开应用时那道门也指向它。
+ *
+ * 不走 openCurrentPagePonder：那个解析的是「此刻最上层的页面」，而从帮助页按下去时
+ * 最上层是设置窗口 —— 用户要的是「Folia 怎么用」，不是「设置页有什么」。
+ */
+export const openOnboardingPonder = (): void => {
+    useSettingsModalStore.getState().closeSettings();
+    usePonderStore.getState().openPonder('help-page');
+};
+
 /** Opens Ponder for the foremost page and completes the non-dismissible shortcut lesson if present. */
 export const openCurrentPagePonder = (): PonderTargetId => {
     const targetId = resolvePagePonderTarget(

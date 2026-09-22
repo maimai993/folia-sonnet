@@ -2809,6 +2809,7 @@ export default {
     "sceneLabel": "Bab",
     "allChaptersDone": "Semuanya sudah selesai.",
     "nextChapter": "Bab berikutnya",
+    "nextChapterAuto": "Berikutnya",
     "title": "Ponder",
     "hintCapsule": "Tahan G untuk ponder",
     "hintCapsulePage": "Pelajari halaman ini",
@@ -2830,7 +2831,12 @@ export default {
       "openBottomUiSettings": "Buka pengaturan UI bawah",
       "openLyricsAnimation": "Buka pengaturan animasi lirik",
       "openThemePresets": "Buka pengaturan tema",
-      "openSlotPicker": "Pilih tombolnya"
+      "openSlotPicker": "Pilih tombolnya",
+      "openDocs": "Buka dokumentasi",
+      "openPonderHints": "Ubah di pengaturan",
+      "openGrid3dCardStyle": "Buka gaya kartu beranda",
+      "openGridViewCard": "Buka pengaturan kartu kisi",
+      "openLatticeSettings": "Buka pengaturan kolase antrean"
     },
     "anchors": {
       "pages": {
@@ -2867,6 +2873,27 @@ export default {
         "openPlayer": "Kembali ke pemutar",
         "progress": "Bilah kemajuan",
         "bottomBar": "Bilah kontrol bawah"
+      },
+      "grid3dCardStyle": {
+        "panel": "Pengaturan \u00b7 Gaya kartu beranda",
+        "image": "Sampul penuh",
+        "card": "Kartu polaroid"
+      },
+      "gridViewCard": {
+        "panel": "Pengaturan \u00b7 Kartu kisi",
+        "fullBleed": "Sampul penuh bidang",
+        "square": "Kartu persegi",
+        "minScale": "Ukuran kartu minimum",
+        "minOpacity": "Opasitas kartu minimum",
+        "reset": "Kembalikan peluruhan"
+      },
+      "latticeStyle": {
+        "panel": "Pengaturan \u00b7 Kolase antrean",
+        "vignette": "Vignette",
+        "tint": "Lapisan warna poster",
+        "customColor": "Warna tetap",
+        "picker": "Pemilih warna",
+        "intensity": "Kekuatan lapisan"
       },
       "lyricsAnimation": {
         "panel": "Pengaturan \u00b7 Animasi lirik",
@@ -2957,6 +2984,9 @@ export default {
       "lyricsAnimationSettings": "Pengaturan animasi lirik",
       "themeSettings": "Pengaturan warna tema",
       "sidePanel": "Panel kontrol kanan",
+      "grid3dCardStyle": "Gaya kartu beranda",
+      "gridViewCardSettings": "Pengaturan kartu kisi",
+      "latticeStyleSettings": "Gaya kolase antrean",
       "panelCoverActions": "Empat tombol di atas sampul",
       "panelCoverTab": "Panel \u00b7 Tab sampul",
       "panelSourceTab": "Panel \u00b7 Tab sumber",
@@ -2964,7 +2994,7 @@ export default {
       "panelQueueTab": "Panel \u00b7 Tab antrean",
       "panelAccountTab": "Panel \u00b7 Tab akun",
       "latticePage": "Halaman Lattice",
-      "helpPage": "Halaman Bantuan",
+      "helpPage": "Mengenal Folia",
       "settingsPage": "Halaman Opsi"
     },
     "scenes": {
@@ -3002,6 +3032,11 @@ export default {
       "themeSettingsPresets": "Preset dan kustom",
       "themeSettingsSource": "Dari mana warnanya",
       "themeSettingsAuto": "Kapan paletnya berubah sendiri",
+      "grid3dCardStyleOptions": "Seperti apa kedua gaya kartu itu",
+      "gridViewCardCover": "Bagaimana sampul mengisi kartu",
+      "gridViewCardFalloff": "Seberapa jauh memudar ke tepi",
+      "latticeStyleTint": "Vignette dan lapisan warna poster",
+      "latticeStyleCustomColor": "Kunci ke satu warna tetap",
       "panelSourceTabWhere": "Kapan kotak ini ada",
       "panelSourceTabContents": "Gain, lirik dan linimasa",
       "panelCoverActionsReveal": "Empat tombol yang hanya muncul saat disentuh penunjuk",
@@ -3014,9 +3049,11 @@ export default {
       "latticePagePoster": "Perluas poster dan kontrol pemutaran",
       "latticePageTools": "Fokus, ikuti, antrean, dan lampu",
       "latticePageKeyboard": "Kontrol papan tombol Lattice lengkap",
-      "helpPageOverview": "Cara kerja dasar Folia",
-      "helpPageCommands": "Perintah adalah pintu masuk universal",
-      "helpPageOperatingModel": "Penelusuran dan pemutaran terpisah",
+      "helpPagePonder": "Kamu sudah berada di dalam Ponder",
+      "helpPageTransport": "Kendalikan pemutaran tanpa kembali",
+      "helpPageShortcuts": "Empat pintasan yang paling sering dipakai",
+      "helpPageDocs": "Di mana membaca lebih lanjut",
+      "helpPageHintSettings": "Matikan petunjuknya kalau sudah cukup",
       "settingsPageOverview": "Pengaturan dikelompokkan berdasarkan fungsi",
       "settingsPageDirectNavigation": "Lompat langsung dari perintah",
       "playerBarBasics": "Isi kapsul kontrol",
@@ -3029,6 +3066,19 @@ export default {
       "panelSlideKeyboard": "Buka dari papan tombol"
     },
     "captions": {
+      "onboarding": {
+        "here": "Satu tutorial Ponder sedang terbuka \u2014 layar ini. Ia bukan video: bilah kemajuan di bawah bisa diseret, tombol panah melompat antar keyframe, Space menjeda, Escape keluar kapan saja.",
+        "hover": "Diamkan penunjuk di salah satu tombol atau komponen yang kurang jelas, dan sebuah lencana kecil muncul di sebelahnya, menyebut tutorial mana yang akan dibuka. Tahan G sampai sapuannya penuh dan tutorial komponen itu dimulai.",
+        "wholePage": "Kamu tidak harus mencari komponen: tahan Ctrl + G di mana saja dan kamu dapat seluruh halaman \u2014 apa yang ada di sana, letak tiap bagian, dan apa yang bisa dilakukan. Di layar sentuh, itu tombol bohlam di sudut kanan bawah.",
+        "mediaKeys": "Pemutaran melewati sesi media sistem \u2014 SMTC di Windows, MPRIS di Linux. Artinya tombol putar / sebelumnya / berikutnya di keyboardmu langsung berfungsi, jadi kamu tak perlu kembali ke Folia saat sedang bekerja di jendela lain. Popup media sistem juga menampilkan lagu yang sedang diputar.",
+        "inAppTransport": "Di dalam aplikasi: Space memutar dan menjeda, {{mod}} + \u2190 / \u2192 berpindah lagu. Di halaman pemutar, tombol panah polos memindai lima detik. Selebihnya ada di jendela perintah, atau satu titik dua menuju mode eksekusi.",
+        "shortcutK": "{{mod}} + K membuka jendela perintah. Folia menaruh seluruh urusan \u201cmencari fitur\u201d di sini \u2014 perintah dan pengaturan sama-sama bisa dicari lewat nama, jadi kamu tak perlu ingat sesuatu diarsipkan di level mana.",
+        "shortcutP": "{{mod}} + P membuka antrean putar. Ia juga jendela perintah: baris masukannya adalah kotak pencarian antrean, dan hal seperti @artist: mempersempitnya sebelum aksi massal.",
+        "shortcutB": "{{mod}} + B menuju Lattice, yang membentangkan seluruh antrean putar sebagai dinding poster. Tekan di dalam Lattice dan ia kembali.",
+        "shortcutG": "Ctrl + G adalah yang baru saja kamu lakukan: membuka tutorial untuk halaman saat ini. Kapan pun kamu tersesat, tekan ini dulu.",
+        "hintSettings": "Sudah paham betul cara pakai Folia? Kamu bisa mematikan petunjuk Ponder di pengaturan, atau menyisakannya hanya di tempat yang belum kamu lihat \u2014 sakelarnya ada di Pengaturan \u00b7 Lab, \u201cPetunjuk tutorial Ponder\u201d, dengan tiga posisi: selalu tampil, hanya yang belum dilihat, dan mati. Tombol di bawah membawamu langsung ke sana.",
+        "docs": "Empat bab ini baru pembuka. Perintah, pintasan, sumber daring, pustaka lokal, visualizer dan tema semuanya punya penjelasan lebih lengkap di situs dokumentasi \u2014 tombol di bawah membukanya."
+      },
       "pages": {
         "grid": "Ini adalah kisi penelusuran: pencarian dan navigasi koleksi berada di atas kartu, sedangkan memilih kartu membuka daftar lagunya.",
         "gridNavigation": "Bergerak antar kartu dengan menggulir, menggeser, atau tombol panah, lalu pilih kartu yang difokuskan untuk membukanya.",
@@ -3062,16 +3112,16 @@ export default {
         "playerPanelWhere": "Panel tumbuh ke atas dari pegangan, lebarnya tetap dan menempel tepi kanan. Satu sampul persegi di atas, lalu langsung sebaris tab: sampul, kontrol, antrean, akun. Judul dan artis milik tab sampul, bukan struktur panel.",
         "playerPaletteSlide": "Ada juga rel yang tersembunyi di belakang pegangan. Tahan pegangan, seret ke kiri melewati garis pemicu, lalu lepaskan: itu membuka jendela perintah, bukan panel.",
         "playerPaletteOpened": "Jendela perintah turun dari atas layar, rata tengah. Semua urusan \u201cmencari fitur\u201d ada di sini.",
-        "playerPaletteOtherWays": "Tidak perlu menyeret: {{mod}} + K membuka jendela yang sama dari mana saja; di layar sentuh, ketuk dekat tepi kanan untuk memunculkan pegangannya lebih dulu.",
+        "playerPaletteOtherWays": "Tidak perlu menyeret: {{mod}} + K membuka jendela yang sama dari mana saja, dan di halaman pemutar tombol S polos melakukan hal yang sama selama fokus tidak berada di kotak teks. Di layar sentuh, ketuk dekat tepi kanan untuk memunculkan pegangannya lebih dulu.",
         "playerCommandFilter": "Begitu jendela terbuka, langsung ketik. Ia menyaring berdasarkan nama, alias dan kata kunci sekaligus. \u2191\u2193 memilih, Enter menjalankan \u2014 kamu tidak perlu tahu perintah itu masuk kategori apa.",
         "playerCommandArgument": "Perintah yang butuh argumen tidak langsung jalan. Ketik namanya, tekan spasi, dan ia melipat jadi satu label di baris masukan sementara kursor menunggu di belakangnya. Isi argumennya, lalu Enter.",
-        "playerExecuteMode": "Mengetik titik dua adalah satu-satunya jalan masuk ke mode eksekusi. Di dalamnya satu tombol menjalankan satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan.",
+        "playerExecuteMode": "Mode eksekusi adalah jalan masuk tersendiri: tekan tombol titik dua saat jendelanya masih tertutup, dan ia langsung terbuka di mode itu. Menekannya saat jendela sudah terbuka hanya menaruh titik dua di baris masukan. Di dalamnya satu tombol menjalankan satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan.",
         "playerShuffleNoSwitch": "Folia tidak punya sakelar acak. Kamu tidak menemukannya di bilah kontrol karena acak bukan mode yang menyala terus \u2014 ia satu tindakan: mengocok ulang antrean saat ini di tempat.",
-        "playerShuffleHow": "Cara tercepat: {{mod}} + K untuk jendela perintah, titik dua untuk mode eksekusi, lalu r. Urutan barunya langsung berlaku; jalankan lagi untuk urutan lain.",
+        "playerShuffleHow": "Cara tercepat justru tanpa membuka apa pun: tekan tombol titik dua di halaman pemutar \u2014 jendelanya terbuka di mode eksekusi \u2014 lalu tekan r. Urutan barunya langsung berlaku; jalankan lagi untuk urutan lain.",
         "playerShuffleSlot": "Kalau sering dipakai, taruh \u201cAcak antrean\u201d di salah satu dari dua posisi kanan bilah kontrol, dan ia jadi satu tekanan saja.",
         "lattice": "Lattice menyusun seluruh antrean putar sebagai satu bidang poster. Bergeraklah di bidang itu untuk melihat antrean dan pilih poster untuk bertindak pada lagu tersebut.",
         "latticeWall": "Lattice mengulang antrean di dinding poster tak beraturan agar dapat digeser terus. Lagu aktif membawa nomor antrean dan tanda sedang diputar.",
-        "latticeBack": "Tombol kiri atas kembali. Ctrl/Cmd+B juga menutup Lattice; Escape lebih dulu menutup poster atau fokus, lalu kembali pada tekanan berikutnya.",
+        "latticeBack": "Tombol kiri atas kembali. {{mod}} + B juga menutup Lattice; Escape membongkar satu lapis demi satu \u2014 ia menutup poster yang terbuka atau membersihkan fokus keyboard dulu, dan baru tekanan berikutnya benar-benar kembali.",
         "latticePan": "Seret bidang atau gunakan roda untuk menggeser kamera. Poster muncul mengikuti viewport dan momentum tidak mengubah urutan antrean.",
         "latticeFocusKeys": "Tombol panah mula-mula memilih poster terdekat dari pusat viewport, lalu bergerak secara spasial sambil menjaga target terlihat.",
         "latticePosterOpen": "Klik atau tekan Enter untuk memperluas poster. Lagu aktif menampilkan lirik sinkron; lagu lain menampilkan judul dan tombol putar tanpa mengubah antrean.",
@@ -3088,7 +3138,7 @@ export default {
       },
       "playerBar": {
         "basicsIntro": "Kontrol pemutaran Folia hanya kapsul ini. Deretan tombol permanen yang dipasang pemutar lain di bawah — sebelumnya, berikutnya, acak, ulang, volume — tidak punya tempat tetap di sini.",
-        "basicsPlay": "Satu-satunya tombol yang selalu ada adalah putar / jeda. Letaknya paling kiri dan tidak pernah berpindah.",
+        "basicsPlay": "Satu-satunya tombol yang selalu ada adalah putar / jeda. Pada jendela lebar ia di paling kiri; saat barisnya terlalu sempit untuk satu baris, ia pindah ke tengah baris kedua, dengan dua slot di kedua sisinya.",
         "basicsTitle": "Ganti lagu lewat judul, bukan tombol. Arahkan penunjuk ke judul, panah muncul di kedua sisi dan mempratinjau nama lagu sebelumnya dan berikutnya — kamu memilih sambil membaca, bukan menekan buta.",
         "basicsProgress": "Seret atau klik bilah kemajuan untuk melompat. Mengklik bagian kapsul yang lain bukan jeda: itu membuka halaman pemutar, atau di Lattice menarik tampilan kembali ke lagu saat ini.",
         "basicsSlots": "Sisanya ditaruh di dua posisi kanan ini. Kamu memilih dua dari sepuluh aksi; selebihnya tidak ada di bilah — itulah sebabnya di sini tidak ada deretan tombol tetap.",
@@ -3100,7 +3150,7 @@ export default {
         "slotsWhere": "Pilih di pengaturan: ulang, acak, suka, antrean, volume, pengatur waktu tidur, dan empat lainnya; langsung berlaku.",
         "shuffleIntro": "Acak di sini tidak seperti di tempat lain - ia bukan mode yang terus menyala.",
         "shuffleOnce": "Tekan dan Folia mengacak antrean saat ini di tempat, sekali; urutan itulah yang berlaku. Ingin lain? Tekan lagi.",
-        "volumeIntro": "Folia tidak punya penggeser volume permanen.",
+        "volumeIntro": "Bilah kontrol bawah tidak punya penggeser volume permanen.",
         "volumeOpens": "Menekan di sini membuka panel volume di dalam command palette, bukan penggeser kecil di tempat."
       },
       "commandPalette": {
@@ -3108,7 +3158,7 @@ export default {
         "run": "\u2191\u2193 berpindah di hasil, Enter menjalankan yang aktif. Perintah yang baru dipakai naik ke atas, jadi segelintir yang benar-benar kamu pakai makin mudah dijangkau.",
         "pill": "Sebagian perintah butuh argumen. Ketik namanya, tekan spasi, dan ia melipat jadi label di baris masukan sementara jendelanya tetap di tempat menunggu sisanya \u2014 kamu tidak dilempar ke layar lain.",
         "flags": "Perintah yang punya flag akan menampilkan opsinya sendiri begitu kamu mengetik --. Tidak perlu menghafal flag apa saja yang ada; dua tanda minus adalah cara bertanya.",
-        "executeEnter": "Ketik titik dua untuk masuk mode eksekusi. Hanya itu jalan masuknya \u2014 tidak ada tombol dan tidak ada pintasan lain.",
+        "executeEnter": "Mode eksekusi punya tepat satu pintu masuk: saat jendelanya tertutup dan fokus tidak di kotak teks mana pun, tekan tombol titik dua. Tidak ada tombol dan tidak ada pintasan lain \u2014 dan menekannya saat jendela sudah terbuka hanya mengetik titik dua ke dalam kueri.",
         "executeKeys": "Di dalamnya satu tombol adalah satu perintah: r mengacak antrean, v volume, o pengaturan, h bantuan. Tidak ada tombol yang jadi awalan tombol lain, jadi sekali tekan langsung jalan."
       },
       "latticeChrome": {
@@ -3140,6 +3190,20 @@ export default {
         "queueTabDetail": "Klik satu baris untuk memutar dari lagu itu; arahkan penunjuk ke baris dan putar berikutnya, pindah ke akhir serta hapus muncul di kanannya. Dua tombol di kepala membentangkan antrean sebagai dinding Lattice dan mengacaknya. Barisnya tidak bisa diseret.",
         "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
         "accountTabDetail": "Di atas ada status masuk sumber itu: avatar, nama, nama sumber dan ID, dengan keluar di sebelah kanan. Di bawahnya tingkat kualitas audio \u2014 standar, tinggi, lossless, hi-res \u2014 dan paling bawah sinkronisasi data ke awan. Ganti sumber, isinya berbeda."
+      },
+      "gridStyle": {
+        "grid3dImage": "\u201cSampul penuh\u201d adalah tampilan bawaan dinding poster: seluruh kartu adalah satu gambar sampul, dengan nama koleksi berada di gradien di kakinya.",
+        "grid3dCard": "\u201cKartu polaroid\u201d menarik sampul ke paruh atas dan menyisakan bidang putih di bawahnya untuk namanya \u2014 persis polaroid. Tidak ada yang terpotong; harganya, lebih sedikit kartu yang muat di lebar layar yang sama.",
+        "fullBleed": "\u201cSampul penuh bidang\u201d mengatur kisi sarang lebah di dalam sebuah koleksi: nyalakan dan sampulnya memenuhi seluruh kartu, dengan judul dan artis pindah ke gradien yang menutupinya, sama seperti kolase antrean.",
+        "squareCard": "\u201cKartu persegi\u201d baru muncul setelah sampul penuh bidang menyala \u2014 saat mati, barisnya sama sekali tidak ada di layar. Menyalakannya membuat kartu setinggi lebarnya, sehingga sampul persegi tidak lagi terpotong atas-bawah. Luas kartunya tetap, jadi yang hilang di tinggi didapat di lebar, dan jarak kisinya mengikuti.",
+        "minScale": "Penggeser ini bukan mengatur ukuran kartu. Ia mengatur batas bawah peluruhan: kartu yang lebih jauh dari pusat viewport mengecil, dan ini sekecil apa mereka boleh jadi. Lebih tinggi membuat tepinya lebih mudah dibaca, lebih rendah membuat kedalamannya lebih kuat.",
+        "minOpacity": "Begitu pula, yang ini adalah sepudar apa mereka boleh jadi. Bersama-sama keduanya menentukan apakah kisi ini terbaca datar atau berkedalaman.",
+        "falloffReset": "Tekan ini untuk mengembalikan peluruhan ke bawaan. Ia hanya mereset kedua penggeser itu \u2014 dua sakelar bentuk sampul tidak tersentuh.",
+        "latticeVignette": "\u201cVignette\u201d sedikit menggelapkan tepi kolase antrean, menarik pandangan ke poster di tengah. Ia hanya tampilan dan tidak menyentuh antreannya.",
+        "latticeTint": "\u201cLapisan warna poster\u201d menaruh warna di atas poster biasa agar yang sedang diputar, terfokus dan disentuh penunjuk menonjol. Ia sakelar utama grup ini \u2014 saat mati, kekuatan dan warna tetapnya sama sekali tidak ada di layar, itulah sebabnya \u201cdi mana mengatur kekuatan lapisan\u201d tidak punya jawaban sampai kamu menemukannya.",
+        "latticeIntensity": "\u201cKekuatan lapisan\u201d baru ada setelah lapisannya menyala. Ia persentase: di 0 tidak ada lapisan; makin tinggi, poster biasa makin gelap dan yang sedang diputar makin menonjol.",
+        "latticeCustomColor": "Secara bawaan lapisannya adalah gradien yang diturunkan dari tema aktif, jadi ia ikut berubah saat temanya berubah. Menyalakan \u201cwarna tetap\u201d menguncinya ke satu warna yang tak akan digeser pergantian tema.",
+        "latticePicker": "Pemilih warnanya baru muncul setelah warna tetap menyala. Dindingnya mengikuti secara langsung saat kamu menyeret; nilainya baru disimpan ketika kamu melepas."
       },
       "panelCoverActions": {
         "appear": "Sampulnya kosong saat diam. Arahkan penunjuk ke sana dan satu tombol muncul di tiap sudut \u2014 empat hal yang tidak saling berhubungan, bukan satu set \u201caksi untuk lagu ini\u201d.",

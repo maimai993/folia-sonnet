@@ -43,7 +43,10 @@ export type PonderTargetId =
     | 'panel-account-tab'
     | 'lattice-chrome'
     | 'lyrics-animation-settings'
-    | 'theme-settings';
+    | 'theme-settings'
+    | 'grid3d-card-style'
+    | 'grid-view-card-settings'
+    | 'lattice-style-settings';
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -134,7 +137,10 @@ export type PonderSurfaceKind =
     | 'side-panel'
     | 'lattice-chrome'
     | 'lyrics-animation-settings'
-    | 'theme-settings';
+    | 'theme-settings'
+    | 'grid3d-card-style'
+    | 'grid-view-card-settings'
+    | 'lattice-style-settings';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。
@@ -277,6 +283,15 @@ export const PONDER_DEFAULT_DWELL_MS = 1400;
 export const PONDER_DEFAULT_LOOP_DELAY_MS = 600;
 
 /**
+ * 一章播完之后自动进入下一章的读条时长。
+ *
+ * 教程是连着看的，每章结束都要伸手点一下「下一章」，连贯感就断在每一章的末尾。
+ * 读条是明示的：条走完之前暂停、把指针移到那颗按钮上、或者按任意键，都会把它取消，
+ * 所以「自动」不会把正在读字幕的人推走。
+ */
+export const PONDER_AUTO_ADVANCE_MS = 5200;
+
+/**
  * 高亮填充的最大不透明度。
  *
  * DSL 里的 intensity 是 0..1 的「有多亮」，落到画面上要乘这个系数：直接用 1.0 画主题色
@@ -294,11 +309,23 @@ export const PONDER_HIGHLIGHT_MAX_OPACITY = 0.3;
  * settingsAnchorModel。写错了由 ponderSceneAction 的单测挡住，它会去核对
  * SETTINGS_ANCHOR_DEFINITIONS 里确实有这个锚点。
  */
-export type PonderSceneAction = {
-    kind: 'openSettings';
-    anchorId: string;
-    labelKey: string;
-};
+export type PonderSceneAction =
+    | {
+          kind: 'openSettings';
+          anchorId: string;
+          labelKey: string;
+      }
+    /**
+     * 在外部浏览器里打开一个地址。
+     *
+     * 给「更多说明看文档」这类出口：教程讲得完的东西讲完了，讲不完的该把人送到文档去，
+     * 而不是在字幕里念一串网址让人手抄。
+     */
+    | {
+          kind: 'openUrl';
+          url: string;
+          labelKey: string;
+      };
 
 export type PonderSceneScript = {
     id: string;

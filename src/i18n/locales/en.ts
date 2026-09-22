@@ -2877,6 +2877,7 @@ export default {
     "sceneLabel": "Chapter",
     "allChaptersDone": "That is all of them.",
     "nextChapter": "Next chapter",
+    "nextChapterAuto": "Up next",
     "title": "Ponder",
     "hintCapsule": "Hold G to ponder",
     "hintCapsulePage": "Ponder this page",
@@ -2898,7 +2899,12 @@ export default {
       "openBottomUiSettings": "Open bottom UI settings",
       "openLyricsAnimation": "Open lyric animation settings",
       "openThemePresets": "Open theme settings",
-      "openSlotPicker": "Go pick the buttons"
+      "openSlotPicker": "Go pick the buttons",
+      "openDocs": "Open the docs",
+      "openPonderHints": "Go change it",
+      "openGrid3dCardStyle": "Open home card style",
+      "openGridViewCard": "Open grid card settings",
+      "openLatticeSettings": "Open queue collage settings"
     },
     "anchors": {
       "pages": {
@@ -2935,6 +2941,27 @@ export default {
         "openPlayer": "Back to player",
         "progress": "Progress bar",
         "bottomBar": "Bottom control bar"
+      },
+      "grid3dCardStyle": {
+        "panel": "Settings \u00b7 Home card style",
+        "image": "Cover only",
+        "card": "Polaroid card"
+      },
+      "gridViewCard": {
+        "panel": "Settings \u00b7 Grid cards",
+        "fullBleed": "Full-bleed cover",
+        "square": "Square cards",
+        "minScale": "Minimum card size",
+        "minOpacity": "Minimum card opacity",
+        "reset": "Reset falloff"
+      },
+      "latticeStyle": {
+        "panel": "Settings \u00b7 Queue collage",
+        "vignette": "Vignette",
+        "tint": "Poster tint",
+        "customColor": "Fixed colour",
+        "picker": "Colour picker",
+        "intensity": "Tint strength"
       },
       "lyricsAnimation": {
         "panel": "Settings \u00b7 Lyric animation",
@@ -3025,6 +3052,9 @@ export default {
       "lyricsAnimationSettings": "Lyric animation settings",
       "themeSettings": "Theme colour settings",
       "sidePanel": "Side control panel",
+      "grid3dCardStyle": "Home card style",
+      "gridViewCardSettings": "Grid card settings",
+      "latticeStyleSettings": "Queue collage style",
       "panelCoverActions": "The four buttons on the artwork",
       "panelCoverTab": "Panel \u00b7 Artwork tab",
       "panelSourceTab": "Panel \u00b7 Source tab",
@@ -3032,7 +3062,7 @@ export default {
       "panelQueueTab": "Panel \u00b7 Queue tab",
       "panelAccountTab": "Panel \u00b7 Account tab",
       "latticePage": "Lattice page",
-      "helpPage": "Help page",
+      "helpPage": "Getting to know Folia",
       "settingsPage": "Options page"
     },
     "scenes": {
@@ -3070,6 +3100,11 @@ export default {
       "themeSettingsPresets": "Presets and custom",
       "themeSettingsSource": "Where the colours come from",
       "themeSettingsAuto": "When the palette changes by itself",
+      "grid3dCardStyleOptions": "What the two card styles look like",
+      "gridViewCardCover": "How the cover fills the card",
+      "gridViewCardFalloff": "How far things fade toward the edges",
+      "latticeStyleTint": "Vignette and poster tint",
+      "latticeStyleCustomColor": "Pin it to one fixed colour",
       "panelSourceTabWhere": "When this cell is there at all",
       "panelSourceTabContents": "Gain, lyrics and timeline",
       "panelCoverActionsReveal": "Four buttons that only appear on hover",
@@ -3082,9 +3117,11 @@ export default {
       "latticePagePoster": "Expand a poster and control playback",
       "latticePageTools": "Focus, follow, queue, and lights",
       "latticePageKeyboard": "Complete Lattice keyboard control",
-      "helpPageOverview": "The basic operating model",
-      "helpPageCommands": "Commands are the universal entry point",
-      "helpPageOperatingModel": "Browsing and playback are separate",
+      "helpPagePonder": "You are already inside Ponder",
+      "helpPageTransport": "Control playback without coming back",
+      "helpPageShortcuts": "The four shortcuts you will use most",
+      "helpPageDocs": "Where to read more",
+      "helpPageHintSettings": "Turn the hints off once you are done",
       "settingsPageOverview": "Settings are grouped by purpose",
       "settingsPageDirectNavigation": "Jump directly from commands",
       "playerBarBasics": "What lives on the capsule",
@@ -3097,6 +3134,19 @@ export default {
       "panelSlideKeyboard": "Open it from the keyboard"
     },
     "captions": {
+      "onboarding": {
+        "here": "You have a Ponder tutorial open \u2014 this screen. It is not a video: drag the progress bar below, jump between keyframes with the arrow keys, Space pauses, Escape leaves at any time.",
+        "hover": "Rest the pointer on one of the less obvious buttons or components and a small badge appears beside it, naming the tutorial it would open. Hold G until the wipe fills and that component\u2019s tutorial starts.",
+        "wholePage": "You do not have to find a component: hold Ctrl + G anywhere and you get the whole page \u2014 what is on it, where each thing sits, what you can do with it. On a touch screen it is the lightbulb in the bottom-right corner.",
+        "mediaKeys": "Playback goes through the system media session \u2014 SMTC on Windows, MPRIS on Linux. That means the play / previous / next keys on your keyboard work directly, so you never have to switch back to Folia while you are working in another window. The system media popup shows the current track too.",
+        "inAppTransport": "Inside the app: Space plays and pauses, {{mod}} + \u2190 / \u2192 move between tracks. On the player page the bare arrow keys seek five seconds. Everything else lives in the command window, or a colon away in execute mode.",
+        "shortcutK": "{{mod}} + K opens the command window. Folia keeps the whole of \u201cfinding a feature\u201d in here \u2014 commands and settings are both searchable by name, so you never have to remember which level something is filed under.",
+        "shortcutP": "{{mod}} + P opens the play queue. It is a command window too: the input line is the queue\u2019s search box, and things like @artist: narrow it down before a bulk action.",
+        "shortcutB": "{{mod}} + B goes to Lattice, which lays the whole play queue out as a poster wall. Press it inside Lattice and it goes back.",
+        "shortcutG": "Ctrl + G is what you just did: it opens the tutorial for the current page. Whenever you are lost, press it first.",
+        "hintSettings": "Know your way around Folia already? You can turn the Ponder hints off in settings, or keep them only where you have not looked yet \u2014 the switch is under Settings \u00b7 Lab, \u201cPonder tutorial hints\u201d, with three positions: always show, only where you have not looked yet, and off. The button below takes you straight there.",
+        "docs": "These four chapters are only the opening. Commands, shortcuts, online sources, the local library, visualizers and themes all have fuller write-ups on the docs site \u2014 the button below opens it."
+      },
       "pages": {
         "grid": "This is the browsing grid: search and collection navigation live above the cards, while selecting a card opens its songs.",
         "gridNavigation": "Move across cards with scrolling, swiping, or arrow keys, then select the focused card to open it.",
@@ -3130,16 +3180,16 @@ export default {
         "playerPanelWhere": "The panel grows upward from the handle, at a fixed width against the right edge. One square piece of artwork on top, then straight into a row of tabs: artwork, controls, queue, account. Title and artist belong to the artwork tab, not to the panel itself.",
         "playerPaletteSlide": "There is also a track hidden behind the handle. Hold the handle, drag it left past the trigger line and let go: that opens the command window, not the panel.",
         "playerPaletteOpened": "The command window drops in from the top, horizontally centred. Everything to do with finding a feature lives in here.",
-        "playerPaletteOtherWays": "You do not have to drag: {{mod}} + K opens the same window from anywhere, and on a touch screen a tap near the right edge brings the handle out first.",
+        "playerPaletteOtherWays": "You do not have to drag: {{mod}} + K opens the same window from anywhere, and on the player page a bare S does the same whenever focus is not in a text box. On a touch screen, a tap near the right edge brings the handle out first.",
         "playerCommandFilter": "With the window open, just type. It filters on names, aliases and keywords together. \u2191\u2193 to move, Enter to run \u2014 you never have to work out which category a command belongs to.",
         "playerCommandArgument": "A command that needs an argument does not run immediately. Type its name, press space, and it folds into a pill in the input line with the cursor waiting behind it. Fill in the argument, then Enter.",
-        "playerExecuteMode": "Typing a colon is the only way into execute mode. Once in, one key runs one command: r shuffles the queue, v volume, o settings, h help.",
+        "playerExecuteMode": "Execute mode is a separate way in: press the colon key while the window is still closed and it opens straight into it. Press it once the window is already open and the colon just lands in the input line. Inside, one key runs one command: r shuffles the queue, v volume, o settings, h help.",
         "playerShuffleNoSwitch": "Folia has no shuffle switch. You cannot find one on the control bar because shuffle is not a mode that stays on \u2014 it is a single action: deal the current queue again, in place.",
-        "playerShuffleHow": "The quickest route is {{mod}} + K for the command window, a colon for execute mode, then r. The new order then stands; run it again for another one.",
+        "playerShuffleHow": "The quickest route is to open nothing at all: press the colon key on the player page \u2014 the window opens in execute mode \u2014 then press r. The new order then stands; run it again for another one.",
         "playerShuffleSlot": "If you use it often, put \u201cShuffle queue\u201d in one of the two places on the right of the control bar and it becomes one press.",
         "lattice": "Lattice lays the play queue out as one poster field. Move through the field to inspect the queue, and select a poster to act on that song.",
         "latticeWall": "Lattice repeats the play queue across an irregular poster wall so it can pan continuously. The current song carries its queue number and a now-playing mark.",
-        "latticeBack": "The top-left button returns. Ctrl/Cmd+B also closes Lattice; Escape first collapses a poster or clears keyboard focus, then returns on the next press.",
+        "latticeBack": "The top-left button returns. {{mod}} + B also closes Lattice; Escape unwinds one layer at a time \u2014 it collapses an expanded poster or clears keyboard focus first, and only the next press actually goes back.",
         "latticePan": "Drag the field or use the wheel to pan the camera. Posters enter as the viewport moves, and momentum never changes queue order.",
         "latticeFocusKeys": "Arrow keys first adopt the nearest poster to the viewport center, then move spatially and pan the camera to keep the next target visible.",
         "latticePosterOpen": "Click or press Enter to expand a poster. The current song shows synchronized lyrics; another song shows its title and play entry without reordering the queue.",
@@ -3156,7 +3206,7 @@ export default {
       },
       "playerBar": {
         "basicsIntro": "Folia's playback controls are this one capsule. The permanent row other players put along the bottom — previous, next, shuffle, repeat, volume — has no fixed place here at all.",
-        "basicsPlay": "The only button that is always present is play / pause. It sits at the far left and never moves.",
+        "basicsPlay": "The only button that is always present is play / pause. On a wide window it sits at the far left; when the row is too narrow for one line it moves to the middle of a second row, with the two slots on either side.",
         "basicsTitle": "Changing tracks goes through the title, not a button. Hover it and arrows appear on both sides, previewing the previous and next track names — you pick where to go by reading it, not by pressing blind.",
         "basicsProgress": "Drag or click the progress bar to seek. Clicking anywhere else on the capsule does not pause: it opens the player page, or on Lattice pulls the view back to the current song.",
         "basicsSlots": "Everything else lives in these two places on the right. You pick two of ten actions to put there; the rest stay off the bar — that is why there is no fixed row of buttons.",
@@ -3168,7 +3218,7 @@ export default {
         "slotsWhere": "Choose in settings: loop, shuffle, like, queue, volume, sleep timer and four more, applied the moment you pick.",
         "shuffleIntro": "This shuffle is not what it is elsewhere - it is not a mode that stays on.",
         "shuffleOnce": "Press it and Folia shuffles the current queue in place, once; that order then stands. Want another? Press again.",
-        "volumeIntro": "Folia has no permanent volume slider.",
+        "volumeIntro": "The bottom control bar has no permanent volume slider.",
         "volumeOpens": "Pressing here opens the volume surface inside the command palette, rather than a little slider in place."
       },
       "commandPalette": {
@@ -3176,7 +3226,7 @@ export default {
         "run": "\u2191\u2193 moves through the results, Enter runs the current one. Recently used commands sort to the top, so the handful you actually use keeps rising.",
         "pill": "Some commands take an argument. Type the name, press space, and it folds into a pill in the input line while the window stays put waiting for the rest \u2014 you are never thrown into another screen.",
         "flags": "A command with flags lists its own options the moment you type --. You do not have to remember which flags exist; two dashes is how you ask.",
-        "executeEnter": "Type a colon to enter execute mode. That is the only way in \u2014 there is no button and no other shortcut.",
+        "executeEnter": "Execute mode has exactly one entrance: with the window closed and focus outside any text box, press the colon key. There is no button and no other shortcut \u2014 and pressing it while the window is already open simply types a colon into the query.",
         "executeKeys": "Inside, one key is one command: r shuffles the queue, v volume, o settings, h help. No key is a prefix of another, so a press runs straight away."
       },
       "latticeChrome": {
@@ -3208,6 +3258,20 @@ export default {
         "queueTabDetail": "Click a row to play from that song; hover one and play next, move to the end and remove appear at its right. The header buttons lay the queue out as the Lattice wall and shuffle it. Rows cannot be dragged to reorder.",
         "accountTab": "The account tab covers whatever the current music source owns.",
         "accountTabDetail": "At the top is that source's sign-in state: avatar, nickname, source name and ID, with sign-out at the right. Below it, the audio quality tier \u2014 standard, high, lossless, hi-res \u2014 and at the bottom, syncing your data to the cloud. Switch source and you see a different set."
+      },
+      "gridStyle": {
+        "grid3dImage": "\u201cCover only\u201d is the poster wall\u2019s default: the whole card is one piece of artwork, with the collection name sitting in the gradient at its foot.",
+        "grid3dCard": "\u201cPolaroid card\u201d pulls the artwork into the top half and leaves a white strip below it for the name \u2014 a polaroid. Nothing is cropped; the cost is that fewer cards fit across the same screen.",
+        "fullBleed": "\u201cFull-bleed cover\u201d governs the honeycomb grid inside a collection: turn it on and the artwork fills the whole card, with title and artist moving into a gradient scrim laid over it, the way the queue collage does it.",
+        "squareCard": "\u201cSquare cards\u201d only appears once full-bleed is on \u2014 with it off, the row is not on screen at all. Turning it on makes cards as tall as they are wide, so square artwork stops being cropped top and bottom. The card area stays the same, so what it loses in height it gains in width, and the grid spacing follows.",
+        "minScale": "This slider does not set the card size. It sets the floor of the falloff: cards further from the centre of the viewport get smaller, and this is how small they are allowed to get. Higher makes the edges easier to read, lower makes the depth stronger.",
+        "minOpacity": "Likewise, this one is how faint they are allowed to get. Together the two decide whether the grid reads as flat or as having depth.",
+        "falloffReset": "Press this to put the falloff back to default. It only resets those two sliders \u2014 the two cover-shape switches are left alone.",
+        "latticeVignette": "\u201cVignette\u201d darkens the edges of the queue collage slightly, pulling the eye to the posters in the middle. It is display only and does not touch the queue.",
+        "latticeTint": "\u201cPoster tint\u201d lays a colour over ordinary posters so the playing, focused and hovered ones stand out. It is the master switch for this group \u2014 with it off, the strength and the fixed colour are not on screen at all, which is why \u201cwhere do I set the tint strength\u201d has no answer until you find it.",
+        "latticeIntensity": "\u201cTint strength\u201d only exists once the tint is on. It is a percentage: at 0 there is no tint; higher makes ordinary posters darker and the playing one stand out more.",
+        "latticeCustomColor": "By default the tint is a gradient derived from the current theme, so it moves whenever the theme does. Turning on \u201cfixed colour\u201d pins it to one colour that no theme change will move.",
+        "latticePicker": "The picker only appears once the fixed colour is on. The wall follows it live while you drag; the value is only stored when you let go."
       },
       "panelCoverActions": {
         "appear": "The artwork shows nothing at rest. Hover it and a button appears in each corner \u2014 four unrelated things, not one set of \u201cactions for this song\u201d.",

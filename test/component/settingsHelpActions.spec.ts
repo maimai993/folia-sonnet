@@ -13,10 +13,10 @@ test('版本更新按钮打开当前 release notes，并可关闭返回 Help', a
     await expect(page.getByTestId('release-notes-dialog')).toHaveCount(0);
 });
 
-test('Help Ponder 按钮直接打开 help-page，而不是底下的 Grid 页面', async ({ page }) => {
+test('Help Ponder 按钮打开的是入门教程，而不是底下那一页的教程', async ({ page }) => {
     await page.getByTestId('help-page-ponder').click();
     await expect(page.getByTestId('ponder-stage')).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'Help page' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Getting to know Folia' })).toBeVisible();
 });
 
 test('长按 Ctrl+G 在 Help 覆盖层中打开同一个 help-page', async ({ page }) => {
@@ -26,7 +26,7 @@ test('长按 Ctrl+G 在 Help 覆盖层中打开同一个 help-page', async ({ pa
     await expect(page.getByTestId('ponder-stage')).toBeVisible({ timeout: 2000 });
     await page.keyboard.up('KeyG');
     await page.keyboard.up('Control');
-    await expect(page.getByRole('dialog', { name: 'Help page' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Getting to know Folia' })).toBeVisible();
 });
 
 test('Ctrl+G 按不满就松手，只留下擦除过的胶囊，不进教程', async ({ page }) => {

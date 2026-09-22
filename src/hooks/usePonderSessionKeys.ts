@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { usePonderStore } from '../stores/usePonderStore';
 import type { PonderTimelineControls } from '../components/ponder/usePonderTimeline';
 
@@ -20,9 +20,15 @@ type UsePonderSessionKeysParams = {
     isActive: boolean;
     sceneCount: number;
     controlsRef: RefObject<PonderTimelineControls | null>;
+    /** 任意一次会话内按键。自动续播的读条用它取消。 */
+    onAnyKey?: () => void;
 };
 
-export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef }: UsePonderSessionKeysParams) => {
+export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef, onAnyKey }: UsePonderSessionKeysParams) => {
+    // 走 ref 而不是进依赖数组：回调每次渲染都是新函数，进去会让这个监听反复解绑重绑。
+    const onAnyKeyRef = useRef(onAnyKey);
+    onAnyKeyRef.current = onAnyKey;
+
     useEffect(() => {
         if (!isActive || typeof window === 'undefined') {
             return;
@@ -33,6 +39,10 @@ export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef }: UseP
             if (event.ctrlKey || event.altKey || event.metaKey || event.code === 'Tab') {
                 return;
             }
+
+            // 「按了键」这件事要在分发之前先报出去。自动续播的读条靠它取消，而下面
+            // 认不出的键会被 stopImmediatePropagation 吃掉 —— 在外面再挂一个监听是收不到的。
+            onAnyKeyRef.current?.();
 
             const controls = controlsRef.current;
             const store = usePonderStore.getState();
