@@ -136,10 +136,13 @@ describe('ponder registry', () => {
         expect(missing, `这些目标不会出现在思索导航页上：${missing.join(', ')}`).toEqual([]);
     });
 
-    it('入门总览刻意只有一章', () => {
-        // 它是第一次打开应用时唯一被强制看完的那一段。长了就没人看，
-        // 细节该去导航页上各自的那一条里。
-        expect(findPonderTarget('help-page')?.scenes.length).toBe(1);
+    it('「认识 Folia」的四项内容各自成章', () => {
+        expect(findPonderTarget('help-page')?.scenes.map(scene => scene.id)).toEqual([
+            'help-page-overview',
+            'help-page-command-palette',
+            'help-page-command-examples',
+            'help-page-docs',
+        ]);
     });
 
     it('页面教程覆盖完整页面区域，而不是只有一段泛化概述', () => {

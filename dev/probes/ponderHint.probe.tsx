@@ -31,6 +31,7 @@ const PROBE_THEME = { accentColor: '#f43f5e' } as Theme;
 const ProbeBody: React.FC = () => {
     const visibility = usePonderStore(state => state.ponderHintVisibility);
     const setVisibility = usePonderStore(state => state.setPonderHintVisibility);
+    const openNavigation = usePonderStore(state => state.openNavigation);
     const hoveredTargetId = usePonderStore(state => state.hoveredTargetId);
     const hasSession = usePonderStore(state => state.session !== null);
     const [clicks, setClicks] = useState(0);
@@ -69,6 +70,14 @@ const ProbeBody: React.FC = () => {
                     className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10"
                 >
                     清掉已看过并重载
+                </button>
+                <button
+                    type="button"
+                    data-probe-open-navigation
+                    onClick={openNavigation}
+                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-white/10"
+                >
+                    打开帮助导航页
                 </button>
             </div>
 

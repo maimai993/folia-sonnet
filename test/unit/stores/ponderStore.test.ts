@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // test/unit/stores/ponderStore.test.ts
-// 思索的会话状态与持久化。要紧的是两条容错方向：读坏的可见性退回 always，
+// 思索的会话状态与持久化。要紧的是两条容错方向：读坏的可见性退回 unseen，
 // 读不到的「已看过」当作没看过 —— 宁可多提示，也不能让功能对某个用户彻底消失。
 
 describe('ponder store', () => {
@@ -35,16 +35,16 @@ describe('ponder store', () => {
 
     const load = async () => (await import('@/stores/usePonderStore')).usePonderStore;
 
-    it('可见性默认为 always', async () => {
+    it('可见性默认为 unseen', async () => {
         const store = await load();
-        expect(store.getState().ponderHintVisibility).toBe('always');
+        expect(store.getState().ponderHintVisibility).toBe('unseen');
     });
 
-    it('读到非法可见性值时退回 always', async () => {
+    it('读到非法可见性值时退回 unseen', async () => {
         values.set('ponder_hint_visibility', 'sometimes');
         installStorage();
         const store = await load();
-        expect(store.getState().ponderHintVisibility).toBe('always');
+        expect(store.getState().ponderHintVisibility).toBe('unseen');
     });
 
     it('可见性设置落盘并回读', async () => {

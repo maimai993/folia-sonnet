@@ -317,8 +317,27 @@ test('一章播完读条自动进下一章', async ({ page }) => {
     await expect(stage).toBeVisible();
     await expect(stage.getByText('1 / 2').first()).toBeVisible();
 
-    await expect(page.locator('[data-testid="ponder-next-chapter-countdown"]')).toBeVisible({ timeout: 70000 });
-    await expect(stage.getByText('2 / 2').first()).toBeVisible({ timeout: 15000 });
+    const countdown = page.locator('[data-testid="ponder-next-chapter-countdown"]');
+    await expect(countdown).toBeVisible({ timeout: 70000 });
+    await expect(countdown).toHaveCSS('animation-duration', '2s');
+    await expect(stage.getByText('2 / 2').first()).toBeVisible({ timeout: 5000 });
+});
+
+test('「常用操作示例」复用三个已有命令骨架', async ({ page }) => {
+    await page.locator('[data-probe-open="onboarding-command-examples"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+
+    await expect(stage.locator('[data-ponder-surface-kind="volume"]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-surface-kind="queue-command"]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-surface-kind="grid-view-page"]')).toHaveCount(1);
+
+    // 第三个示例要真的进入现有 filter-view 命令对应的结果层，
+    // 只把 grid-view 底图摆在这里不算「二次检索」骨架。
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('ArrowRight');
+    await expect(stage.locator('[data-ponder-surface-state="filter-open"]')).toHaveCSS('opacity', '1', { timeout: 3000 });
 });
 
 test('读条期间按任意键就取消，画面停在这一章', async ({ page }) => {

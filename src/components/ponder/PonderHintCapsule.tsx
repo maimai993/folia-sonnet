@@ -89,9 +89,9 @@ const PonderHintCapsule: React.FC<PonderHintCapsuleProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
-            // z-[180]：压过 automix 过渡环（170），因为这是对用户此刻正在做的悬停的回应；
-            // 低于 ThemedDialog（200），真正的对话框优先级更高。
-            className={`pointer-events-none fixed z-[180] select-none ${
+            // z-[205]：要压过思索导航页（195）和帮助对话框（200），否则在这些页面内
+            // 悬停目标时，已经命中的「按 G 思索」会被页面本身遮住。它仍低于教程层（220）。
+            className={`pointer-events-none fixed z-[205] select-none ${
                 isPinned ? 'bottom-24 left-1/2 -translate-x-1/2' : 'left-0 top-0'
             }`}
             data-testid="ponder-hint-capsule"

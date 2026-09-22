@@ -51,6 +51,7 @@ const ENTRIES: Array<{ id: string; target: PonderTargetId; scene: number }> = [
     { id: 'lattice-style-tint', target: 'lattice-style-settings', scene: 0 },
     { id: 'lattice-style-color', target: 'lattice-style-settings', scene: 1 },
     { id: 'onboarding-overview', target: 'help-page', scene: 0 },
+    { id: 'onboarding-command-examples', target: 'help-page', scene: 2 },
     { id: 'ponder-basics', target: 'ponder-basics', scene: 0 },
     { id: 'desktop-wallpaper', target: 'folia-desktop', scene: 0 },
     { id: 'desktop-tray', target: 'folia-desktop', scene: 1 },

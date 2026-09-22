@@ -46,7 +46,7 @@ test('导航页上悬停一张卡，长按 G 进的是那一条', async ({ page 
     await expect(page.getByRole('dialog', { name: 'Bottom control bar' })).toBeVisible();
 });
 
-test('导航页上按 Ctrl+G 进的是总览，而且总览只有一章', async ({ page }) => {
+test('导航页上按 Ctrl+G 进的是四章「认识 Folia」', async ({ page }) => {
     await page.getByTestId('help-page-ponder').click();
     await expect(page.getByTestId('ponder-navigation')).toBeVisible();
 
@@ -57,7 +57,7 @@ test('导航页上按 Ctrl+G 进的是总览，而且总览只有一章', async 
     await page.keyboard.up('Control');
 
     await expect(page.getByRole('dialog', { name: 'Getting to know Folia' })).toBeVisible();
-    await expect(page.getByTestId('ponder-stage').getByText('1 / 1').first()).toBeVisible();
+    await expect(page.getByTestId('ponder-stage').getByText('1 / 4').first()).toBeVisible();
 });
 
 test('长按 Ctrl+G 在 Help 覆盖层中打开同一个 help-page', async ({ page }) => {

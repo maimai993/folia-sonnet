@@ -69,6 +69,22 @@ test.describe('悬停提示', () => {
         await expect(page.locator(CAPSULE)).toHaveCount(0);
         expect(await hoveredOf(page)).toBe('');
     });
+
+    test('帮助导航页内的悬停提示不被页面遮住', async ({ page }) => {
+        await page.locator('[data-probe-open-navigation]').click();
+
+        const navigation = page.locator('[data-testid="ponder-navigation"]');
+        await expect(navigation).toBeVisible();
+        await page.locator('[data-ponder-nav-target="panel-slide"]').hover();
+        const capsule = page.locator(CAPSULE);
+        await expect(capsule).toBeVisible({ timeout: 2000 });
+
+        const layers = await Promise.all([
+            navigation.evaluate(element => Number(getComputedStyle(element).zIndex)),
+            capsule.evaluate(element => Number(getComputedStyle(element).zIndex)),
+        ]);
+        expect(layers[1]).toBeGreaterThan(layers[0]);
+    });
 });
 
 test.describe('长按 G', () => {

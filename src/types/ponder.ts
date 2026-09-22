@@ -52,7 +52,7 @@ export type PonderTargetId =
     | 'local-folder-actions'
     | 'local-metadata-match'
     | 'local-track-sorting'
-    // 从 help-page 拆出来的那几章：入门页只留一段总览，细节各自成目标。
+    // 从 help-page 拆出来的详细教程：入门页只留四章概览，细节各自成目标。
     | 'ponder-basics'
     | 'folia-transport'
     | 'folia-shortcuts'
@@ -350,7 +350,7 @@ export const PONDER_DEFAULT_LOOP_DELAY_MS = 600;
  * 读条是明示的：条走完之前暂停、把指针移到那颗按钮上、或者按任意键，都会把它取消，
  * 所以「自动」不会把正在读字幕的人推走。
  */
-export const PONDER_AUTO_ADVANCE_MS = 5200;
+export const PONDER_AUTO_ADVANCE_MS = 2000;
 
 /**
  * 高亮填充的最大不透明度。

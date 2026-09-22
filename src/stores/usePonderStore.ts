@@ -16,12 +16,12 @@ const PONDER_SEEN_STORAGE_KEY = 'folia_ponder_seen';
 
 const readStoredVisibility = (): PonderHintVisibility => {
     try {
-        const saved = getStoredString(PONDER_HINT_VISIBILITY_STORAGE_KEY, 'always');
-        return isPonderHintVisibility(saved) ? saved : 'always';
+        const saved = getStoredString(PONDER_HINT_VISIBILITY_STORAGE_KEY, 'unseen');
+        return isPonderHintVisibility(saved) ? saved : 'unseen';
     } catch {
         // getStoredString 只挡 SSR，不挡隐私模式下 getItem 直接抛。
         // 这里必须自己兜住：读设置失败不该让整个 store 模块导入失败。
-        return 'always';
+        return 'unseen';
     }
 };
 

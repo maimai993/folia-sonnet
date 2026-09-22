@@ -4,7 +4,7 @@ import type { PonderSceneScript, PonderTargetDefinition } from '../../../types/p
 // src/components/ponder/targets/ponderBasics.target.ts
 // 思索自己怎么用。
 //
-// 从 help-page 拆出来：入门页只留一段总览，「悬停出提示、长按 G、整页 Ctrl+G、
+// 从 help-page 拆出来的详细说明：入门页只概述思索能做什么，「悬停出提示、长按 G、整页 Ctrl+G、
 // 触屏那颗灯泡、看够了怎么关」这些都是具体操作，属于导航页上的一条，不属于总览。
 
 const illustration = ONBOARDING_ILLUSTRATION;
