@@ -11,8 +11,8 @@ import { resolvePonderAnchors } from '../../utils/ponder/resolvePonderAnchors';
 import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
 import { refreshPonderDomRectSnapshot, type PonderDomRectSnapshot } from '../../utils/ponder/ponderDomRectSnapshot';
 import { findPonderTarget } from './ponderRegistry';
-import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
-import { openSettings } from '../../stores/useSettingsModalStore';
+import { type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
+import { openSettingsFromPonder } from '../../services/ponder/pagePonderTarget';
 import { openPonderActionUrl } from '../../services/ponder/ponderActionUrl';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline } from './usePonderTimeline';
@@ -301,11 +301,9 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                             openPonderActionUrl(scene.action.url);
                             return;
                         }
-                        // 先退出教程再开设置：教程层是 z-[220]、还接管着键盘，
-                        // 留着它会把刚打开的设置面板整个盖住。
-                        const anchorId = scene.action.anchorId as SettingsAnchorId;
-                        closePonder();
-                        openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
+                        // 顺序和「还要收掉哪几层」都在 openSettingsFromPonder 里 ——
+                        // 设置窗口是整个应用里最低的浮层，漏关一层就会把它盖住。
+                        openSettingsFromPonder(scene.action.anchorId as SettingsAnchorId);
                     }}
                     theme={theme}
                     isDaylight={isDaylight}
