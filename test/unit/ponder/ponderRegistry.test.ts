@@ -158,7 +158,7 @@ describe('ponder registry', () => {
             'grid-view-page': new Set(['card-focused', 'info-open', 'filter-open']),
             'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
             'player-bar': new Set(['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed']),
-            'player-page': new Set(['palette-open', 'execute-mode', 'panel-open']),
+            'player-page': new Set(['palette-open', 'palette-closed', 'execute-mode', 'panel-open']),
             'side-panel': new Set(['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab', 'controls-mode-list', 'fm-tab']),
             'lattice-chrome': new Set(['slots-swapped', 'bottom-bar-shown']),
             'lyrics-animation-settings': new Set(['playground-open']),

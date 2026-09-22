@@ -191,6 +191,13 @@ test('播放页画的是整屏形态，四个可单独思索的组件都列出�
     await expectAligned(stage, 'bar', '[data-ponder-player-bar]');
     await expectAligned(stage, 'toggle', '[data-ponder-player-toggle]');
     await expectAligned(stage, 'track', '[data-ponder-player-track]');
+    // 手柄贴在滑轨右端、和滑轨同高。只比各自的锚点抓不到这个：两者都和自己的锚点对齐，
+    // 却可以一个按页面宽度、一个按页面高度定高，手柄就缩到滑轨右下角去了。
+    const toggleBox = (await stage.locator('[data-ponder-player-toggle]').boundingBox())!;
+    const trackBox = (await stage.locator('[data-ponder-player-track]').boundingBox())!;
+    expect(Math.abs(toggleBox.height - trackBox.height)).toBeLessThan(1.5);
+    expect(Math.abs(toggleBox.y - trackBox.y)).toBeLessThan(1.5);
+    expect(Math.abs(toggleBox.x + toggleBox.width - (trackBox.x + trackBox.width))).toBeLessThan(1.5);
 
     const related = stage.getByTestId('ponder-related-targets');
     for (const name of ['Bottom control bar', 'Command window', 'Side panel toggle', 'Side control panel']) {
@@ -203,9 +210,12 @@ test('执行模式只从冒号进，键位一个键一条命令', async ({ page 
     const stage = page.locator('[data-testid="ponder-stage"]');
     await expect(stage).toBeVisible();
 
-    // 先是普通的命令窗口，输入冒号之后才换成执行模式那一屏。
+    // 先是普通的命令窗口；它要先关掉，冒号才按下去。窗口开着时按冒号只会打进输入框，
+    // 骨架若在开着的窗口下演冒号，讲的就是那种错误用法。
     await expect(stage.locator('[data-ponder-surface-state="palette-open"]')).toHaveCSS('opacity', '1', { timeout: 6000 });
     await expect(stage.locator('[data-ponder-player-execute-mode]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-surface-state="palette-open"]')).toHaveCSS('opacity', '0', { timeout: 12000 });
+    await expect(stage.locator('[data-ponder-surface-state="execute-mode"]')).toHaveCSS('opacity', '0');
     await expect(stage.locator('[data-ponder-surface-state="execute-mode"]')).toHaveCSS('opacity', '1', { timeout: 15000 });
     await expect(stage.locator('[data-ponder-player-execute-key]')).toHaveCount(3);
 });

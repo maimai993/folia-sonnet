@@ -236,6 +236,11 @@ export type PonderRelativeRect = {
     width?: number;
     height?: number;
     square?: boolean;
+    /**
+     * 高度 = 像素宽度 × aspect，对应 CSS `aspect-ratio: 1 / aspect`。square 是 aspect 为 1 的特例。
+     * 和一个 square 元素同高时用它：height 是按来源矩形的高度算的，宽高比一变两者就对不齐。
+     */
+    aspect?: number;
 };
 
 type PonderAnchorCommon = {

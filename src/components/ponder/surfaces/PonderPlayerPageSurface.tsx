@@ -119,6 +119,12 @@ const PonderPlayerPageSurface: React.FC<PonderPlayerPageSurfaceProps> = ({
             </PaletteFrame>
         </PonderSurfaceStateLayer>
 
+        {/* 按 Esc 关掉命令窗口：一块空层顶掉 palette-open。结果层只能淡入、不能退回 base，
+            要让窗口「关上」只能用替换。执行模式必须从这一屏进入 —— 窗口开着时按冒号只会打进输入框。 */}
+        <PonderSurfaceStateLayer state="palette-closed" registerStateNode={registerStateNode} replaces="palette-open">
+            {null}
+        </PonderSurfaceStateLayer>
+
         {/* 执行模式：输入行变成一个冒号提示，下面列的是「一个键一条命令」。 */}
         <PonderSurfaceStateLayer state="execute-mode" registerStateNode={registerStateNode} replaces="palette-open" className="bg-zinc-950/55">
             <PaletteFrame line={line} outline={outline}>

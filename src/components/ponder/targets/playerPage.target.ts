@@ -125,7 +125,12 @@ const openPalette: PonderSceneScript = {
     ],
 };
 
-/** 第三章：窗口开着之后怎么真的执行一条命令。 */
+/**
+ * 第三章：窗口开着之后怎么真的执行一条命令，以及执行模式这条另外的入口。
+ *
+ * 执行模式必须先把窗口关掉再演：窗口开着时按冒号只会把冒号打进输入框。冒号若是在开着的
+ * 窗口下面按的，画面讲的就是「在窗口里输入冒号」，正好是错的那种用法。
+ */
 const runCommands: PonderSceneScript = {
     id: 'player-page-run-commands',
     titleKey: 'ponder.scenes.playerPageRunCommands',
@@ -147,8 +152,18 @@ const runCommands: PonderSceneScript = {
         },
         { kind: 'pause', id: 'readArgument' },
 
-        { kind: 'keypress', id: 'colon', keys: [':'], at: { anchor: 'palette', y: 1, offset: { y: 16 } }, durationMs: 900, keyframe: true },
-        { kind: 'surfaceState', id: 'executeMode', anchor: 'page', state: 'execute-mode', durationMs: 460 },
+        { kind: 'keypress', id: 'escClose', keys: ['Esc'], at: { anchor: 'palette', y: 1, offset: { y: 16 } }, durationMs: 900, keyframe: true },
+        { kind: 'surfaceState', id: 'paletteCloses', anchor: 'page', state: 'palette-closed', durationMs: 420 },
+        {
+            kind: 'caption', id: 'closeFirst', at: 'bottom',
+            textKey: 'ponder.captions.pages.playerExecuteCloseFirst',
+            pointTo: { anchor: 'bar', y: 0 }, durationMs: 5600, withPrevious: true,
+        },
+        { kind: 'pause', id: 'readCloseFirst' },
+
+        // 冒号挂在控制条上方，和第四章同一个位置：这一下按在播放页上，不是按在窗口里。
+        { kind: 'keypress', id: 'colon', keys: [':'], at: { anchor: 'bar', y: 0, offset: { y: -18 } }, durationMs: 900, keyframe: true },
+        { kind: 'surfaceState', id: 'executeMode', anchor: 'page', state: 'execute-mode', transition: 'zoom', durationMs: 460 },
         {
             kind: 'caption', id: 'execute', at: 'bottom',
             textKey: 'ponder.captions.pages.playerExecuteMode',

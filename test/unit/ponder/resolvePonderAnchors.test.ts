@@ -167,6 +167,17 @@ describe('resolvePonderAnchors — relative', () => {
         expect(out.button).toEqual({ left: 50, top: 40, width: 100, height: 100 });
     });
 
+    it('aspect 按像素宽度推高度，和同宽比例的 square 同高', () => {
+        const out = resolve({
+            page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },
+            button: { kind: 'relative', from: 'page', rect: { right: 0.03, bottom: 0.05, width: 0.1, square: true } },
+            track: { kind: 'relative', from: 'page', rect: { right: 0.03, bottom: 0.05, width: 0.2, aspect: 0.5 } },
+        });
+
+        expect(out.track.height).toBe(out.button.height);
+        expect(out.track.top).toBe(out.button.top);
+    });
+
     it('相对锚点可以再挂在相对锚点上', () => {
         const out = resolve({
             page: { kind: 'synthetic', rect: { left: 0, top: 0, width: 1, height: 1 } },

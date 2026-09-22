@@ -22,6 +22,7 @@ export const relativeRectStyle = (rect: PonderRelativeRect): CSSProperties => {
         ...(rect.width !== undefined ? { width: pct(rect.width) } : {}),
         ...(rect.square
             ? { aspectRatio: '1 / 1' }
+            : rect.aspect !== undefined ? { aspectRatio: `1 / ${rect.aspect}` }
             : rect.height !== undefined ? { height: pct(rect.height) } : {}),
     };
 };
@@ -215,8 +216,12 @@ export const PLAYER_PAGE_GEOMETRY = {
     bar: { left: 0.20, right: 0.20, bottom: 0.06, height: 0.14 },
     /** 侧边手柄贴右缘，底边和控制条对齐。 */
     toggle: { right: 0.03, bottom: 0.065, width: 0.058, square: true },
-    /** 手柄背后向左伸出的滑轨，长度是手柄的两倍。 */
-    track: { right: 0.03, bottom: 0.065, width: 0.116, height: 0.125 },
+    /**
+     * 手柄背后向左伸出的滑轨，长度是手柄的两倍、高度和手柄相同。
+     * 高度必须按宽度推（aspect），不能写 height：手柄是 square，高度跟着页面宽度走，
+     * 写死 height 就跟着页面高度走，宽高比一变手柄就缩到滑轨右下角去了。
+     */
+    track: { right: 0.03, bottom: 0.065, width: 0.116, aspect: 0.5 },
     /** 手柄上方展开的控制面板。 */
     panel: { right: 0.03, bottom: 0.225, width: 0.25, height: 0.60 },
     /** 命令窗口：水平居中，顶在 18vh 上。 */
