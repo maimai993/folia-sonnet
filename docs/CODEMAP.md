@@ -16,9 +16,9 @@
 | components | 512+ |
 | test/dev | 256+ |
 | services | 128+ |
+| utils | 128+ |
 | backend/electron | 64+ |
 | hooks | 64+ |
-| utils | 64+ |
 | stores | 32+ |
 | types | 16+ |
 | 其他 | 16+ |
@@ -34,12 +34,16 @@
 | --- | --- |
 | 512+ | `src/types.ts` |
 | 64+ | `src/types/onlineMusic.ts` |
+| 64+ | `src/types/ponder.ts` |
 | 64+ | `src/utils/appPlaybackGuards.ts` |
+| 32+ | `dev/probes/definition.ts` |
 | 32+ | `src/components/command-palette/types.ts` |
+| 32+ | `src/components/ponder/surfaces/ponderSurfaceGeometry.ts` |
 | 32+ | `src/components/visualizer/colorMix.ts` |
 | 32+ | `src/components/visualizer/definition.ts` |
 | 32+ | `src/services/db.ts` |
 | 32+ | `src/services/onlineMusic/songMetadata.ts` |
+| 32+ | `src/stores/useAppViewStore.ts` |
 | 32+ | `src/stores/usePlaybackStore.ts` |
 | 32+ | `src/stores/useStatusMessageStore.ts` |
 | 32+ | `src/utils/lyrics/renderHints.ts` |
@@ -75,10 +79,64 @@
 - `dev/probes/nowPlayingToastTransitionBorder.probe.tsx`
 - `dev/probes/playbackLyricsSettings.probe.tsx`
 - `dev/probes/playerBottomBar.probe.tsx`
+- `dev/probes/ponderHint.probe.tsx`
+- `dev/probes/ponderPageSurfaces.probe.tsx`
+- `dev/probes/settingsHelpActions.probe.tsx`
 - `dev/probes/settingsNavigation.probe.tsx`
 - `dev/probes/themePark.probe.tsx`
 - `dev/probes/trackTitleNavigator.probe.tsx`
 - `dev/probes/visualizerMemory.probe.tsx`
+
+### `src/components/ponder/ponderRegistry.ts`
+
+- `src/components/ponder/targets/audioEqualizer.target.ts`
+- `src/components/ponder/targets/commandPalette.target.ts`
+- `src/components/ponder/targets/customShortcutSettings.target.ts`
+- `src/components/ponder/targets/foliaDesktop.target.ts`
+- `src/components/ponder/targets/foliaShortcuts.target.ts`
+- `src/components/ponder/targets/foliaTransport.target.ts`
+- `src/components/ponder/targets/grid3dCardStyle.target.ts`
+- `src/components/ponder/targets/gridActionButton.target.ts`
+- `src/components/ponder/targets/gridPage.target.ts`
+- `src/components/ponder/targets/gridPaletteHotkey.target.ts`
+- `src/components/ponder/targets/gridViewCardSettings.target.ts`
+- `src/components/ponder/targets/gridViewEditMode.target.ts`
+- `src/components/ponder/targets/gridViewPage.target.ts`
+- `src/components/ponder/targets/helpPage.target.ts`
+- `src/components/ponder/targets/importExportSettings.target.ts`
+- `src/components/ponder/targets/latticeChrome.target.ts`
+- `src/components/ponder/targets/latticePage.target.ts`
+- `src/components/ponder/targets/latticeStyleSettings.target.ts`
+- `src/components/ponder/targets/localFolderActions.target.ts`
+- `src/components/ponder/targets/localGridControls.target.ts`
+- `src/components/ponder/targets/localGridMapDirectoryTree.target.ts`
+- `src/components/ponder/targets/localGridMapPage.target.ts`
+- `src/components/ponder/targets/localLibraryWatch.target.ts`
+- `src/components/ponder/targets/localMetadataMatch.target.ts`
+- `src/components/ponder/targets/localTrackSorting.target.ts`
+- `src/components/ponder/targets/lyricsAnimationSettings.target.ts`
+- `src/components/ponder/targets/lyricsSettings.target.ts`
+- `src/components/ponder/targets/onlineCollectionActions.target.ts`
+- `src/components/ponder/targets/panelAccountTab.target.ts`
+- `src/components/ponder/targets/panelControlsTab.target.ts`
+- `src/components/ponder/targets/panelCoverActions.target.ts`
+- `src/components/ponder/targets/panelCoverTab.target.ts`
+- `src/components/ponder/targets/panelQueueTab.target.ts`
+- `src/components/ponder/targets/panelSlide.target.ts`
+- `src/components/ponder/targets/panelSourceTab.target.ts`
+- `src/components/ponder/targets/pinnedCommands.target.ts`
+- `src/components/ponder/targets/playerBar.target.ts`
+- `src/components/ponder/targets/playerPage.target.ts`
+- `src/components/ponder/targets/ponderBasics.target.ts`
+- `src/components/ponder/targets/queueCommandSurface.target.ts`
+- `src/components/ponder/targets/queueSettings.target.ts`
+- `src/components/ponder/targets/replayGainSettings.target.ts`
+- `src/components/ponder/targets/settingsPage.target.ts`
+- `src/components/ponder/targets/sidePanel.target.ts`
+- `src/components/ponder/targets/themePark.target.ts`
+- `src/components/ponder/targets/themeSettings.target.ts`
+- `src/components/ponder/targets/transitionSettings.target.ts`
+- `src/components/ponder/targets/visPlayground.target.ts`
 
 ### `src/components/visualizer/backgrounds/registry.tsx`
 
@@ -135,6 +193,7 @@
 依赖方向没问题，是文件住在了 `src/components/` 下面。修法是移动文件，不是改依赖。
 
 - `src/services/obs/visualSettingsConfig.ts` → `src/components/visualizer/tuningRegistry.ts`
+- `src/services/ponder/pagePonderTarget.ts` → `src/components/modal/settings/navigation/settingsAnchorModel.ts`
 - `src/services/sync/settingsSnapshot.ts` → `src/components/visualizer/tuningRegistry.ts`
 - `src/stores/useCollectionNavigationStore.ts` → `src/components/app/home/gridViewCollectionAdapters.ts`
 - `src/stores/usePlaybackStore.ts` → `src/components/app/playback/createCoverUrlResolver.ts`
