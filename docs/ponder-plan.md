@@ -41,8 +41,15 @@
 - [x] `grid-view-card-settings` — 网格卡片（全画幅封面解锁正方形卡片；两条滑杆调的是衰减下限）
 - [x] `lattice-style-settings` — 队列拼贴（暗角 + 层层嵌套的海报叠色）
 
-### 入门
+### 入门与导航
 
+- [x] 思索导航页：帮助页那颗按钮开的是它，一屏按分类列完所有能单独讲的东西。
+      每张卡挂 `data-ponder-nav-target`，悬停长按 G 和触屏点击走同一条路
+- [x] `category` 进 `PonderTargetDefinition`，导航页从注册表算分组 —— 手写的表和注册表必然走散
+- [x] 总览压到**一章**：细节拆成 `ponder-basics` / `folia-transport` / `folia-shortcuts` / `folia-desktop`
+- [x] `folia-desktop` — 壁纸模式、系统托盘、遥控窗口。画的是一整块桌面，
+      因为这三样讲的都是 Folia 和操作系统之间的关系
+- [x] 第一次那道门开的是总览，不再是底下那一页的海报墙教程
 - [x] `help-page` 重写成入门教程，帮助页那颗灯泡按钮直接开它
 - [x] 六章：你已经在思索里了 / 整页教程与触屏那颗灯泡 / 不用切回来也能控制播放 /
       四个常用快捷键 / 去文档 / 看够了把提示关掉

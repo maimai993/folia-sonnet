@@ -10,6 +10,8 @@ import type { PonderTargetDefinition } from '../../../types/ponder';
 export default {
     id: 'panel-queue-tab',
     titleKey: 'ponder.targets.panelQueueTab',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_queue_tab',
     hoverSelector: '[data-ponder-panel-tab-button="queue"]',
     priority: 1,
     relatedTargetIds: sidePanelTabRelatedIds('panel-queue-tab'),

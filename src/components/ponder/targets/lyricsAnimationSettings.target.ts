@@ -106,6 +106,8 @@ const toggles: PonderSceneScript = {
 export default {
     id: 'lyrics-animation-settings',
     titleKey: 'ponder.targets.lyricsAnimationSettings',
+    category: 'appearance',
+    summaryKey: 'ponder.summaries.lyrics_animation_settings',
     hoverSelector: '[data-settings-anchor="lyricsRenderer"]',
     relatedTargetIds: ['settings-page', 'theme-settings'],
     scenes: [entryPoint, toggles],

@@ -62,6 +62,8 @@ type PonderState = {
     seenTargetIds: ReadonlySet<string>;
     ponderHintVisibility: PonderHintVisibility;
     showPonderTouchButton: boolean;
+    /** 思索导航页开着没有。帮助页那颗按钮开的就是它。 */
+    isNavigationOpen: boolean;
 
     setHoveredTargetId: (targetId: PonderTargetId | null) => void;
     openPonder: (targetId: PonderTargetId, sceneIndex?: number) => void;
@@ -72,6 +74,8 @@ type PonderState = {
     markPonderSeen: (targetId: PonderTargetId) => void;
     setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
     setShowPonderTouchButton: (show: boolean) => void;
+    openNavigation: () => void;
+    closeNavigation: () => void;
 };
 
 export const usePonderStore = create<PonderState>((set, get) => ({
@@ -81,6 +85,7 @@ export const usePonderStore = create<PonderState>((set, get) => ({
     seenTargetIds: readStoredSeen(),
     ponderHintVisibility: readStoredVisibility(),
     showPonderTouchButton: readStoredTouchButton(),
+    isNavigationOpen: false,
 
     setHoveredTargetId: targetId => {
         if (get().hoveredTargetId === targetId) {
@@ -128,6 +133,10 @@ export const usePonderStore = create<PonderState>((set, get) => ({
             // 同上：设置不落盘也不该让当前会话失效。
         }
     },
+
+    openNavigation: () => set({ isNavigationOpen: true }),
+
+    closeNavigation: () => set({ isNavigationOpen: false }),
 
     setShowPonderTouchButton: show => {
         set({ showPonderTouchButton: show });

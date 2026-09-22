@@ -95,6 +95,8 @@ const slideOpensTarget: PonderSceneScript = {
 export default {
     id: 'grid-action-button',
     titleKey: 'ponder.targets.gridActionButton',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.grid_action_button',
     hoverSelector: '[data-testid="grid-list-search-button"]',
     relatedTargetIds: ['panel-slide', 'grid-view-page', 'local-track-sorting'],
     scenes: [tapOpensList, slideOpensTarget],

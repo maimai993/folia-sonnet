@@ -195,6 +195,8 @@ const howToShuffle: PonderSceneScript = {
 export default {
     id: 'player-page',
     titleKey: 'ponder.targets.playerPage',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.player_page',
     hoverSelector: null,
     relatedTargetIds: ['player-bar', 'command-palette', 'panel-slide', 'side-panel'],
     scenes: [layout, openPalette, runCommands, howToShuffle],

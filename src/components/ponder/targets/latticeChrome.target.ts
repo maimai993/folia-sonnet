@@ -133,6 +133,8 @@ const bottomBarFallback: PonderSceneScript = {
 export default {
     id: 'lattice-chrome',
     titleKey: 'ponder.targets.latticeChrome',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.lattice_chrome',
     hoverSelector: '[data-ponder="lattice-chrome"]',
     relatedTargetIds: ['lattice-page', 'player-bar'],
     scenes: [layout, sharedSlots, bottomBarFallback],

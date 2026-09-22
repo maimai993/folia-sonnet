@@ -9,6 +9,7 @@ import { usePagePonderShortcut } from '../../hooks/usePagePonderShortcut';
 import { findPonderTarget } from './ponderRegistry';
 import PonderHintCapsule from './PonderHintCapsule';
 import PagePonderTouchButton from './PagePonderTouchButton';
+import PonderNavigationPage from './PonderNavigationPage';
 import type { Theme } from '../../types';
 
 // src/components/ponder/PonderHost.tsx
@@ -66,6 +67,8 @@ const PonderHost: React.FC<PonderHostProps> = ({ theme, isDaylight }) => {
                     />
                 )}
             </AnimatePresence>
+
+            <PonderNavigationPage theme={theme} isDaylight={isDaylight} />
 
             <PagePonderTouchButton
                 accent={theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa')}

@@ -57,6 +57,8 @@ const styles: PonderSceneScript = {
 export default {
     id: 'grid3d-card-style',
     titleKey: 'ponder.targets.grid3dCardStyle',
+    category: 'appearance',
+    summaryKey: 'ponder.summaries.grid3d_card_style',
     hoverSelector: '[data-settings-anchor="grid3dCardStyle"]',
     relatedTargetIds: ['grid-view-card-settings', 'lattice-style-settings', 'settings-page'],
     scenes: [styles],

@@ -10,6 +10,8 @@ import type { PonderTargetDefinition } from '../../../types/ponder';
 export default {
     id: 'panel-account-tab',
     titleKey: 'ponder.targets.panelAccountTab',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_account_tab',
     hoverSelector: '[data-ponder-panel-tab-button="account"]',
     priority: 1,
     relatedTargetIds: sidePanelTabRelatedIds('panel-account-tab'),

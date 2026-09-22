@@ -83,6 +83,8 @@ const rightCorners: PonderSceneScript = {
 export default {
     id: 'panel-cover-actions',
     titleKey: 'ponder.targets.panelCoverActions',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_cover_actions',
     hoverSelector: '[data-ponder-panel-artwork]',
     // 封面整块都在面板选择器里，深度相同的情况不会出现；priority 用来保证嵌套关系稳定。
     priority: 1,

@@ -32,6 +32,8 @@ const anchors = {
 export default {
     id: 'grid-view-page',
     titleKey: 'ponder.targets.gridViewPage',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.grid_view_page',
     hoverSelector: null,
     relatedTargetIds: ['player-bar', 'panel-slide'],
     scenes: [

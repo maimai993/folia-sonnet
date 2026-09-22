@@ -26,7 +26,7 @@ import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import SettingsHelpActions from './SettingsHelpActions';
-import { openOnboardingPonder } from '../../services/ponder/pagePonderTarget';
+import { openPonderNavigation } from '../../services/ponder/pagePonderTarget';
 import ReleaseNotesDialog from './ReleaseNotesDialog';
 import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
@@ -1352,7 +1352,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             >
                                 <SettingsHelpActions
                                     onOpenReleaseNotes={() => setShowReleaseNotes(true)}
-                                    onOpenPonder={openOnboardingPonder}
+                                    onOpenPonder={openPonderNavigation}
                                 />
 
                                 {/* Navigation - REMOVED requested items */}

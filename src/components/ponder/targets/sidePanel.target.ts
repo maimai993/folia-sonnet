@@ -77,6 +77,8 @@ const cycleTabs: PonderSceneScript = {
 export default {
     id: 'side-panel',
     titleKey: 'ponder.targets.sidePanel',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.side_panel',
     hoverSelector: '[data-testid="unified-panel-surface"]',
     relatedTargetIds: [
         'panel-cover-actions',

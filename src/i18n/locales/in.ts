@@ -2801,6 +2801,52 @@ export default {
   "ponder": {
     "openPage": "Ponder halaman ini",
     "componentsOnPage": "Komponen dengan Ponder sendiri",
+    "navigation": {
+      "title": "Ponder \u00b7 Semua tutorial",
+      "hint": "Diamkan penunjuk di sebuah entri dan tahan G untuk membukanya, atau klik saja. Untuk versi singkatnya, tahan Ctrl + G di layar ini.",
+      "touchHint": "Ketuk sebuah entri untuk membukanya. Untuk versi singkatnya, ketuk bohlam di sudut kanan atas.",
+      "seen": "Sudah ditonton"
+    },
+    "summaries": {
+      "command_palette": "Cari, beri argumen, titik dua untuk mode eksekusi.",
+      "folia_desktop": "Mode wallpaper, system tray dan jendela remote — tak satu pun di dalam aplikasi.",
+      "folia_shortcuts": "Ke mana K, P, B dan G masing-masing membawamu.",
+      "folia_transport": "Tombol media sistem berfungsi dari mana saja; di dalam, Space dan {{mod}}+←/→.",
+      "grid3d_card_style": "Sampul penuh atau kartu polaroid di dinding poster beranda.",
+      "grid_action_button": "Tombol kanan bawah: ketuk membuka daftar, geser kiri adalah aksi kedua.",
+      "grid_page": "Bagaimana dinding poster tersusun, dan cara bergerak, membuka serta mencari.",
+      "grid_view_card_settings": "Bentuk sampul kartu kisi, dan seberapa jauh memudar ke tepi.",
+      "grid_view_edit_mode": "Apa yang terjadi pada kartunya, dan kapan penggantian nama tersimpan.",
+      "grid_view_page": "Halaman koleksi: struktur, seret, gerak keyboard, penyaringan.",
+      "help_page": "Versi singkat: bagaimana Folia disusun, dan ke mana melihat selanjutnya.",
+      "lattice_chrome": "Kontrol di bawah poster yang terbuka; dua di tengah adalah slot bilah bawah.",
+      "lattice_page": "Seluruh antrean putar dibentangkan sebagai dinding poster.",
+      "lattice_style_settings": "Vignette, dan lapisan warna poster yang terbuka selapis demi selapis.",
+      "local_folder_actions": "Pindai ulang, rapikan tag, dan tombol merah yang menghapus.",
+      "local_metadata_match": "Pensil di balik tiga syarat.",
+      "local_track_sorting": "Hanya folder lokal yang bisa diurutkan, dan pilihannya bertahan antar sesi.",
+      "lyrics_animation_settings": "Di mana animasi lirik diganti, plus dua sakelar yang memengaruhi tampilan.",
+      "panel_account_tab": "Masuk, kualitas audio dan sinkronisasi untuk sumber aktif.",
+      "panel_controls_tab": "Tiga tombol besar, volume, dan dua baris pembidik mode.",
+      "panel_cover_actions": "Empat tombol yang hanya muncul saat kamu mengarahkan penunjuk ke sampul.",
+      "panel_cover_tab": "Judul, artis dan album lagu saat ini, dan apa yang terjadi saat diklik.",
+      "panel_queue_tab": "Daftar antrean: aksi per baris, acak, bentangkan jadi dinding.",
+      "panel_slide": "Tombol itu juga bisa digeser ke kiri, dan itu membuka jendela perintah.",
+      "panel_source_tab": "Kotak khusus sumber: gain audio, sumber lirik, offset linimasa.",
+      "player_bar": "Apa yang ada di kapsul, dan dua slot yang kamu pilih sendiri.",
+      "player_page": "Apa yang ada di halaman pemutar, letak tiap bagian, dan cara mengacak.",
+      "ponder_basics": "Petunjuk hover, tahan G, Ctrl+G seluruh halaman, dan cara mematikannya.",
+      "settings_page": "Bagaimana pengaturan dikelompokkan, dan melompat ke sana dari jendela perintah.",
+      "side_panel": "Bagaimana panel disusun dan cara berganti tab.",
+      "theme_settings": "Preset, asal palet kustom, dan kapan ia berubah sendiri."
+    },
+    "categories": {
+      "basics": "Memulai",
+      "playback": "Pemutaran dan kontrol",
+      "browsing": "Penelusuran dan pustaka",
+      "appearance": "Tampilan",
+      "desktop": "Desktop"
+    },
     "noComponentsOnPage": "Belum ada panduan komponen terpisah di halaman ini.",
     "onboarding": {
       "title": "Kenali mode Ponder",
@@ -2837,6 +2883,8 @@ export default {
       "openSlotPicker": "Pilih tombolnya",
       "openDocs": "Buka dokumentasi",
       "openPonderHints": "Ubah di pengaturan",
+      "openWallpaperMode": "Buka pengaturan wallpaper",
+      "openTraySettings": "Buka perilaku jendela desktop",
       "openGridActionButton": "Ubah target gesernya",
       "openGrid3dCardStyle": "Buka gaya kartu beranda",
       "openGridViewCard": "Buka pengaturan kartu kisi",
@@ -2877,6 +2925,13 @@ export default {
         "openPlayer": "Kembali ke pemutar",
         "progress": "Bilah kemajuan",
         "bottomBar": "Bilah kontrol bawah"
+      },
+      "desktop": {
+        "page": "Desktop",
+        "mainWindow": "Jendela utama",
+        "trayIcon": "Ikon tray",
+        "trayMenu": "Menu tray",
+        "remoteWindow": "Jendela remote"
       },
       "onboarding": {
         "page": "Satu halaman aplikasi",
@@ -3039,6 +3094,10 @@ export default {
       "panelAccountTab": "Panel \u00b7 Tab akun",
       "latticePage": "Halaman Lattice",
       "helpPage": "Mengenal Folia",
+      "ponderBasics": "Cara kerja Ponder",
+      "foliaTransport": "Pemutaran dan tombol media",
+      "foliaShortcuts": "Pintasan yang akan kamu pakai",
+      "foliaDesktop": "Fitur khusus desktop",
       "settingsPage": "Halaman Opsi"
     },
     "scenes": {
@@ -3102,6 +3161,10 @@ export default {
       "latticePagePoster": "Perluas poster dan kontrol pemutaran",
       "latticePageTools": "Fokus, ikuti, antrean, dan lampu",
       "latticePageKeyboard": "Kontrol papan tombol Lattice lengkap",
+      "helpPageOverview": "Bagaimana Folia disusun",
+      "foliaDesktopWallpaper": "Mode wallpaper",
+      "foliaDesktopTray": "System tray",
+      "foliaDesktopRemote": "Jendela remote",
       "helpPagePonder": "Kamu sudah berada di dalam Ponder",
       "helpPageWholePage": "Seluruh halaman, dan apa gantinya di layar sentuh",
       "helpPageTransport": "Kendalikan pemutaran tanpa kembali",
@@ -3121,6 +3184,9 @@ export default {
     },
     "captions": {
       "onboarding": {
+        "overviewShape": "Folia memisahkan empat hal: memilih musik di kisi, mendengarkan di halaman pemutar atau di Lattice, mencari fitur lewat jendela perintah, dan mengatur di pengaturan. Bilah di bawah mengikutimu di semua halaman; bantuan dan pengaturan adalah jendela yang menutupi halaman mana pun yang sedang kamu buka.",
+        "overviewAsk": "Sisanya tidak perlu dihafal. Diamkan penunjuk di apa pun yang kurang jelas dan petunjuk muncul di sebelahnya; tahan G dan itulah yang dijelaskan. Hanya satu hal ini yang perlu diingat.",
+        "overviewNext": "Untuk menelusurinya dengan rapi, pilih satu entri di layar navigasi tadi \u2014 pemutaran, penelusuran, tampilan, desktop; masing-masing tutorial tersendiri. Tombol di bawah membuka dokumentasi lengkap.",
         "here": "Satu tutorial Ponder sedang terbuka \u2014 layar ini. Ia bukan video: bilah kemajuan di bawah bisa diseret, tombol panah melompat antar keyframe, Space menjeda, Escape keluar kapan saja.",
         "hover": "Diamkan penunjuk di salah satu tombol atau komponen yang kurang jelas, dan sebuah lencana kecil muncul di sebelahnya, menyebut tutorial mana yang akan dibuka. Tahan G sampai sapuannya penuh dan tutorial komponen itu dimulai.",
         "hold": "Tetap tahan dan sapuannya memenuhi kapsul dari kiri ke kanan; begitu sampai ujung kamu sudah berada di dalam tutorial komponen itu \u2014 satu layar penuh seperti ini. Lepas terlalu cepat dan ia batal tanpa terjadi apa-apa.",
@@ -3246,6 +3312,15 @@ export default {
         "queueTabDetail": "Klik satu baris untuk memutar dari lagu itu; arahkan penunjuk ke baris dan putar berikutnya, pindah ke akhir serta hapus muncul di kanannya. Dua tombol di kepala membentangkan antrean sebagai dinding Lattice dan mengacaknya. Barisnya tidak bisa diseret.",
         "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
         "accountTabDetail": "Di atas ada status masuk sumber itu: avatar, nama, nama sumber dan ID, dengan keluar di sebelah kanan. Di bawahnya tingkat kualitas audio \u2014 standar, tinggi, lossless, hi-res \u2014 dan paling bawah sinkronisasi data ke awan. Ganti sumber, isinya berbeda."
+      },
+      "desktop": {
+        "windowNormal": "Perbedaan terbesar antara versi desktop dan peramban ada pada tiga hal ini, dan tak satu pun berada di dalam aplikasi: satu mengubah posisi jendela di desktop, satu tinggal di system tray, satu lagi jendela kedua. Mulai dari jendela utama biasa ini.",
+        "wallpaper": "Mode wallpaper menenggelamkannya ke dasar desktop: bingkai dan bilah judul hilang, lirik terhampar langsung di desktop, dengan ikon dan jendela lain menumpuk di atasnya seperti biasa. Harganya tertulis di pengaturan \u2014 keyboard tidak lagi menjangkaunya dalam mode ini.",
+        "wallpaperExit": "Artinya kamu tidak bisa keluar dari mode wallpaper dengan mengklik jendelanya. Gunakan \u201cMode Wallpaper\u201d di menu tray, atau cari perintah yang sama di jendela perintah.",
+        "trayIcon": "Yang di sudut bilah tugas ini adalah ikon tray Folia. Pengaturan \u00b7 Desktop bisa membuat minimize langsung masuk ke tray \u2014 jendela utamanya meninggalkan bilah tugas, tetapi pemutaran tidak berhenti dan tombol media sistem tetap bekerja.",
+        "trayMenu": "Mengklik ikon tray membuka kolom ini: semua yang bisa dilakukan tanpa membuka jendela utama \u2014 tampilkan/sembunyikan jendela, buka jendela remote, latar transparan, klik tembus, selalu di atas, sembunyikan ikon bilah tugas, lirik desktop, mode wallpaper, reset jendela, keluar. Dalam mode wallpaper, inilah satu-satunya jalan keluar.",
+        "remote": "Jendela remote adalah jendela kecil kedua; cari \u201cjendela remote\u201d di jendela perintah untuk membukanya, atau lewat menu tray. Ia tetap di atas bahkan saat jendela utama diminimalkan, atau tenggelam jadi wallpaper.",
+        "remoteChrome": "Ia membawa set sakelar jendelanya sendiri: selalu di atas, latar transparan, klik tembus (tetikus menembus langsung ke apa pun di bawahnya), sembunyikan ikon bilah tugas, dan UI yang menyembunyikan diri. Dibuat sebagai jendela terpisah alih-alih sudut jendela utama justru supaya sakelar-sakelar itu bisa berdiri sendiri."
       },
       "gridActionButton": {
         "tap": "Halaman koleksi dan dinding poster sama-sama punya tombol ini di sudut kanan bawah. Ketuk dan daftar lagu masuk dari kanan \u2014 itu aksi pertamanya.",

@@ -15,6 +15,8 @@ const settingsAnchor = {
 export default {
     id: 'settings-page',
     titleKey: 'ponder.targets.settingsPage',
+    category: 'basics',
+    summaryKey: 'ponder.summaries.settings_page',
     hoverSelector: null,
     relatedTargetIds: [],
     scenes: [

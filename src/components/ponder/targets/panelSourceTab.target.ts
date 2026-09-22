@@ -81,6 +81,8 @@ const contents: PonderSceneScript = {
 export default {
     id: 'panel-source-tab',
     titleKey: 'ponder.targets.panelSourceTab',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_source_tab',
     // 三种来源占的是同一格，选择器也就写成一组：谁在场就命中谁。
     hoverSelector: '[data-ponder-panel-tab-button="local"], [data-ponder-panel-tab-button="navi"], [data-ponder-panel-tab-button="onlineLyrics"]',
     priority: 1,

@@ -52,23 +52,27 @@ export const readVisiblePagePonderScope = (): PonderTargetId | null => {
 };
 
 /**
- * 入门教程。帮助页那颗灯泡按钮开的是它，第一次打开应用时那道门也指向它。
+ * 思索导航页。帮助页那颗灯泡按钮开的是它。
  *
- * 不走 openCurrentPagePonder：那个解析的是「此刻最上层的页面」，而从帮助页按下去时
- * 最上层是设置窗口 —— 用户要的是「Folia 怎么用」，不是「设置页有什么」。
+ * 不直接开教程：总览只有一章，剩下的几十条各自独立，用户要的是「挑一条」而不是
+ * 「从头看一遍」。导航页上按 Ctrl+G 才是总览 —— 那一屏声明了 help-page 作为页面 scope。
  */
-export const openOnboardingPonder = (): void => {
+export const openPonderNavigation = (): void => {
     useSettingsModalStore.getState().closeSettings();
-    usePonderStore.getState().openPonder('help-page');
+    usePonderStore.getState().openNavigation();
 };
 
 /** Opens Ponder for the foremost page and completes the non-dismissible shortcut lesson if present. */
 export const openCurrentPagePonder = (): PonderTargetId => {
-    const targetId = resolvePagePonderTarget(
-        useAppViewStore.getState().view,
-        readVisiblePagePonderScope(),
-    );
     const modal = useSettingsModalStore.getState();
+    // 第一次那道门是压在首页上的，按页面 scope 解析出来的是海报墙 —— 而它要教的是
+    // 「Folia 大致怎么转」。这一条比页面 scope 优先。
+    const targetId = modal.isUserGuideModalOpen
+        ? 'help-page'
+        : resolvePagePonderTarget(
+            useAppViewStore.getState().view,
+            readVisiblePagePonderScope(),
+        );
 
     if (modal.isUserGuideModalOpen) {
         if (typeof __APP_VERSION__ !== 'undefined') {

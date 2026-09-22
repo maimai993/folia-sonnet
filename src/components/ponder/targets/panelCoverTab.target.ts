@@ -10,6 +10,8 @@ import type { PonderTargetDefinition } from '../../../types/ponder';
 export default {
     id: 'panel-cover-tab',
     titleKey: 'ponder.targets.panelCoverTab',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_cover_tab',
     hoverSelector: '[data-ponder-panel-tab-button="cover"]',
     priority: 1,
     relatedTargetIds: sidePanelTabRelatedIds('panel-cover-tab'),

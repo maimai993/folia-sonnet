@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import SettingsHelpActions from '../../src/components/modal/SettingsHelpActions';
 import ReleaseNotesDialog from '../../src/components/modal/ReleaseNotesDialog';
 import PonderHost from '../../src/components/ponder/PonderHost';
-import { openOnboardingPonder } from '../../src/services/ponder/pagePonderTarget';
+import { openPonderNavigation } from '../../src/services/ponder/pagePonderTarget';
 import { DEFAULT_THEME } from '../../src/services/baseThemes';
 import type { ProbeDefinition } from './definition';
 
@@ -19,7 +19,7 @@ const ProbeBody: React.FC = () => {
         >
             <SettingsHelpActions
                 onOpenReleaseNotes={() => setShowReleaseNotes(true)}
-                onOpenPonder={openOnboardingPonder}
+                onOpenPonder={openPonderNavigation}
             />
             <ReleaseNotesDialog
                 isOpen={showReleaseNotes}

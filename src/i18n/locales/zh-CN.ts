@@ -2868,6 +2868,52 @@ export default {
   "ponder": {
     "openPage": "思索当前页面",
     "componentsOnPage": "本页可单独思索的组件",
+    "navigation": {
+      "title": "思索 · 全部教程",
+      "hint": "把指针停在一条上，按住 G 打开它；也可以直接点。想先看个大概，在这一屏上按住 Ctrl + G。",
+      "touchHint": "点一条打开它。想先看个大概，点右上角那颗灯泡。",
+      "seen": "已看过"
+    },
+    "summaries": {
+      "command_palette": "搜出来、带参数、冒号进执行模式。",
+      "folia_desktop": "壁纸模式、系统托盘、遥控窗口 —— 三样都不在应用界面里。",
+      "folia_shortcuts": "K、P、B、G 四个组合分别通往哪。",
+      "folia_transport": "系统媒体键在后台直接可用，应用里还有 Space 和 {{mod}}+←/→。",
+      "grid3d_card_style": "首页海报墙用纯图片封面还是拍立得卡片。",
+      "grid_action_button": "右下角那颗按钮：点开列表，往左滑是第二个动作。",
+      "grid_page": "海报墙怎么组织，怎么移动、打开和搜索。",
+      "grid_view_card_settings": "网格卡片的封面形状，以及离中心越远衰减多少。",
+      "grid_view_edit_mode": "进去之后卡片会变，以及改名什么时候才算数。",
+      "grid_view_page": "集合页的结构、拖动与键盘移动、筛选。",
+      "help_page": "一段总览：Folia 大致怎么转，接下来往哪看。",
+      "lattice_chrome": "展开的海报底下那条控制，中间两颗和底栏共用。",
+      "lattice_page": "把整条播放队列铺成一面海报墙。",
+      "lattice_style_settings": "暗角，以及层层解锁的海报叠色。",
+      "local_folder_actions": "重扫、整理歌曲信息，以及那颗会删东西的红按钮。",
+      "local_metadata_match": "三重条件才出现的那颗铅笔。",
+      "local_track_sorting": "只有本地文件夹能排序，选择跨会话保留。",
+      "lyrics_animation_settings": "换歌词动画在哪儿换，加上两个影响观感的开关。",
+      "panel_account_tab": "当前来源的登录、音质档位和同步。",
+      "panel_controls_tab": "三颗大按钮、音量，以及两行模式取景器。",
+      "panel_cover_actions": "封面四角那四颗悬停才出现的按钮。",
+      "panel_cover_tab": "当前这首歌的歌名、歌手、专辑，点一下能做什么。",
+      "panel_queue_tab": "队列列表：行内动作、打乱、铺成海报墙。",
+      "panel_slide": "那颗按钮还能往左滑，打开的是命令窗口。",
+      "panel_source_tab": "跟着来源走的那一格：音频增益、歌词来源、时间轴偏移。",
+      "player_bar": "整条胶囊上有什么，以及右边那两个可换的位置。",
+      "player_page": "播放页上有什么、各在哪，以及随机播放怎么做。",
+      "ponder_basics": "悬停出提示、长按 G、整页 Ctrl+G，以及怎么把提示关掉。",
+      "settings_page": "设置怎么分组，以及从命令窗口直接跳过去。",
+      "side_panel": "面板分几段、怎么换页。",
+      "theme_settings": "预设、自定义配色从哪来，以及配色什么时候自己变。"
+    },
+    "categories": {
+      "basics": "上手",
+      "playback": "播放与控制",
+      "browsing": "浏览与曲库",
+      "appearance": "外观与样式",
+      "desktop": "桌面端"
+    },
     "noComponentsOnPage": "本页暂时没有单独的组件教程。",
     "onboarding": {
       "title": "认识思索模式",
@@ -2904,6 +2950,8 @@ export default {
       "openSlotPicker": "去挑按钮",
       "openDocs": "打开文档",
       "openPonderHints": "去设置里调",
+      "openWallpaperMode": "打开壁纸模式设置",
+      "openTraySettings": "打开桌面窗口行为",
       "openGridActionButton": "去改滑动目标",
       "openGrid3dCardStyle": "打开首页卡片样式",
       "openGridViewCard": "打开网格卡片设置",
@@ -2944,6 +2992,13 @@ export default {
         "openPlayer": "回到播放页",
         "progress": "进度条",
         "bottomBar": "底部控制条"
+      },
+      "desktop": {
+        "page": "桌面",
+        "mainWindow": "主窗口",
+        "trayIcon": "托盘图标",
+        "trayMenu": "托盘菜单",
+        "remoteWindow": "遥控窗口"
       },
       "onboarding": {
         "page": "一页界面",
@@ -3106,6 +3161,10 @@ export default {
       "panelAccountTab": "面板 · 账号页",
       "latticePage": "Lattice 页面",
       "helpPage": "认识 Folia",
+      "ponderBasics": "思索怎么用",
+      "foliaTransport": "播放控制与媒体键",
+      "foliaShortcuts": "常用快捷键",
+      "foliaDesktop": "桌面端独有功能",
       "settingsPage": "设置页面"
     },
     "scenes": {
@@ -3169,6 +3228,10 @@ export default {
       "latticePagePoster": "展开海报并控制播放",
       "latticePageTools": "聚焦、跟随、队列与灯光",
       "latticePageKeyboard": "Lattice 的完整键盘操作",
+      "helpPageOverview": "Folia 大致怎么转",
+      "foliaDesktopWallpaper": "壁纸模式",
+      "foliaDesktopTray": "系统托盘",
+      "foliaDesktopRemote": "遥控窗口",
       "helpPagePonder": "你已经在思索里了",
       "helpPageWholePage": "整页的教程，以及触屏怎么办",
       "helpPageTransport": "不用切回来也能控制播放",
@@ -3188,6 +3251,9 @@ export default {
     },
     "captions": {
       "onboarding": {
+        "overviewShape": "Folia 把四件事分开：在网格里挑音乐、在播放页或 Lattice 里听、用命令窗口找功能、在设置里调。底部那条控制条跟着你走遍所有页面，帮助和设置是盖在当前页面上的窗口。",
+        "overviewAsk": "剩下的不用背。指针停在任何一个不太直观的东西上，旁边会浮出提示；按住 G，讲的就是它。这是 Folia 里唯一需要记住的一条。",
+        "overviewNext": "想系统地看一遍，回到刚才那张导航页挑一条 —— 播放、浏览、外观、桌面端，每一条都是一段独立的教程。下面那颗按钮通往完整文档。",
         "here": "你已经打开了一个思索教程 —— 就是现在这一屏。它不是一段视频：底下的进度条可以拖，左右方向键在关键帧之间跳，Space 暂停，Esc 随时退出。",
         "hover": "指针在那些不太直观的按钮和组件上停一会儿，旁边会浮出一枚提示，上面写着按下去会讲哪一个。按住 G 不放，等擦除走满，那个组件的教程就开了。",
         "hold": "按住不放，胶囊里的擦除从左往右铺满，到头就进了那个组件的教程 —— 也就是你现在看到的这种一整屏。松手太早会取消，什么都不会发生。",
@@ -3313,6 +3379,15 @@ export default {
         "queueTabDetail": "点一行就从那首开始播；指针停在行上，右端才浮出「下一首播放」「移到队尾」「移除」。顶上两颗小按钮把队列铺成 Lattice 海报墙、或打乱整条队列。这里不能拖动排序。",
         "accountTab": "账号页管的是当前音乐来源那一侧的事。",
         "accountTabDetail": "上面是这个来源的登录状态：头像、昵称、来源名和 ID，右端退出登录。下面是音质档位四选一 —— 标准、极高、无损、Hi-Res；最底下是把数据同步到云端。换一个来源，看到的是另一套。"
+      },
+      "desktop": {
+        "windowNormal": "桌面版和浏览器版最大的差别在这三样东西上，它们都不在应用界面里 —— 一个改的是窗口在桌面上的层级，一个住在系统托盘，一个是另开的窗口。先看这扇普通的主窗口。",
+        "wallpaper": "壁纸模式把它整个沉到桌面最底层：边框、标题栏都没了，歌词直接铺在桌面上，图标和其它窗口照常压在它上面。代价写在设置里那一句上 —— 这个模式下键盘对它不再生效。",
+        "wallpaperExit": "所以退出壁纸模式不能靠点窗口。走托盘菜单里的「壁纸模式」，或者在命令窗口里搜同一条命令。",
+        "trayIcon": "任务栏角落这颗就是 Folia 的托盘图标。设置 · 桌面里可以让最小化直接收进托盘 —— 收进去之后主窗口不在任务栏上，但播放没有停，系统媒体键照常管用。",
+        "trayMenu": "点托盘图标弹出的这一列，是不打开主窗口也能做的事：显示 / 隐藏窗口、开遥控窗口、透明背景、点击穿透、窗口置顶、隐藏任务栏图标、桌面歌词、壁纸模式、重置窗口、退出。壁纸模式下这里是唯一的出口。",
+        "remote": "遥控窗口是另开的一个小窗口，从命令窗口搜「遥控窗口」打开，托盘菜单里也有。主窗口最小化、甚至沉成壁纸的时候，它还浮在上面。",
+        "remoteChrome": "它自己带一套窗口开关：置顶、透明背景、点击穿透（鼠标直接穿过去点到底下的东西）、隐藏任务栏图标，还有 UI 自动隐藏。做成另一个窗口而不是主窗口的一块，就是为了这些开关能和主窗口各管各的。"
       },
       "gridActionButton": {
         "tap": "集合页和海报墙右下角都有这颗按钮。点一下，曲目列表从右边切进来 —— 这是它的第一个动作。",

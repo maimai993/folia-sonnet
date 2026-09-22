@@ -51,7 +51,25 @@ export type PonderTargetId =
     | 'grid-view-edit-mode'
     | 'local-folder-actions'
     | 'local-metadata-match'
-    | 'local-track-sorting';
+    | 'local-track-sorting'
+    // 从 help-page 拆出来的那几章：入门页只留一段总览，细节各自成目标。
+    | 'ponder-basics'
+    | 'folia-transport'
+    | 'folia-shortcuts'
+    | 'folia-desktop';
+
+/**
+ * 导航页把目标按这个分组。
+ *
+ * 存在的理由是入门教程不能无限长：总览只说一段，剩下的靠导航页把人送到具体那一条。
+ * 分组写在目标自己身上而不是导航页里维护一张表 —— 表和注册表必然走散，
+ * 新加的目标会静悄悄地不出现在导航页上。
+ */
+export type PonderTargetCategory = 'basics' | 'playback' | 'browsing' | 'appearance' | 'desktop';
+
+export const PONDER_TARGET_CATEGORIES: readonly PonderTargetCategory[] = [
+    'basics', 'playback', 'browsing', 'appearance', 'desktop',
+];
 
 /** 悬停提示的三档可见性。 */
 export type PonderHintVisibility = 'always' | 'unseen' | 'off';
@@ -150,7 +168,8 @@ export type PonderSurfaceKind =
     | 'grid-action-button'
     | 'grid-view-cards'
     | 'local-folder-actions'
-    | 'local-track-list';
+    | 'local-track-list'
+    | 'desktop-features';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。
@@ -360,6 +379,10 @@ export type PonderTargetDefinition = {
     id: PonderTargetId;
     /** i18n key，标题栏「💡 思索 · <名称>」和命令面板列表共用。 */
     titleKey: string;
+    /** 导航页把它排在哪一组。必填 —— 漏了就等于这个目标在导航页上不存在。 */
+    category: PonderTargetCategory;
+    /** 导航页卡片上的一句话。不给就只显示标题。 */
+    summaryKey?: string;
     /**
      * 悬停命中用的选择器。`null` 表示这个目标在真实 DOM 里没有稳定落点，
      * 只能从命令面板的思索列表进入。

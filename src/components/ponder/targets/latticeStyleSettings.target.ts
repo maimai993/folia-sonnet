@@ -99,6 +99,8 @@ const customColor: PonderSceneScript = {
 export default {
     id: 'lattice-style-settings',
     titleKey: 'ponder.targets.latticeStyleSettings',
+    category: 'appearance',
+    summaryKey: 'ponder.summaries.lattice_style_settings',
     hoverSelector: '[data-settings-anchor="latticeSettings"]',
     relatedTargetIds: ['lattice-page', 'grid3d-card-style', 'grid-view-card-settings'],
     scenes: [tintBasics, customColor],

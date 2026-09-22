@@ -97,6 +97,8 @@ const falloff: PonderSceneScript = {
 export default {
     id: 'grid-view-card-settings',
     titleKey: 'ponder.targets.gridViewCardSettings',
+    category: 'appearance',
+    summaryKey: 'ponder.summaries.grid_view_card_settings',
     hoverSelector: '[data-settings-anchor="gridViewCardSettings"]',
     relatedTargetIds: ['grid3d-card-style', 'lattice-style-settings', 'grid-view-page'],
     scenes: [coverShape, falloff],

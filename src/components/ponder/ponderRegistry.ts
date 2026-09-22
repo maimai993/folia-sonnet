@@ -1,4 +1,4 @@
-import type { PonderTargetDefinition, PonderTargetId } from '../../types/ponder';
+import { PONDER_TARGET_CATEGORIES, type PonderTargetCategory, type PonderTargetDefinition, type PonderTargetId } from '../../types/ponder';
 
 // src/components/ponder/ponderRegistry.ts
 // 可教学目标的注册表。照 dev/probes/registry.ts 和 visualizer registry 的做法：
@@ -35,6 +35,21 @@ export const findPonderTarget = (id: PonderTargetId): PonderTargetDefinition | n
     PONDER_TARGETS[id] ?? null;
 
 /**
+ * 按分类分好组的全部目标。导航页照这个顺序渲染。
+ *
+ * 从注册表算出来而不是手写一张表：手写的表和注册表必然走散，新加的目标会静悄悄地
+ * 不出现在导航页上 —— 而「找不到某个组件的教程」这件事本来就没有任何东西会报警。
+ */
+export const ponderTargetsByCategory = (): { category: PonderTargetCategory; targets: PonderTargetDefinition[] }[] => (
+    PONDER_TARGET_CATEGORIES
+        .map(category => ({
+            category,
+            targets: PONDER_TARGET_LIST.filter(target => target.category === category),
+        }))
+        .filter(group => group.targets.length > 0)
+);
+
+/**
  * 指针底下那个元素属于哪个可教学目标。
  *
  * 一个元素常常同时落在多个目标的选择器里 —— 槽位按钮既在整条控制条内、又是自己的目标。
@@ -43,6 +58,16 @@ export const findPonderTarget = (id: PonderTargetId): PonderTargetDefinition | n
 export const resolveHoveredPonderTarget = (element: Element | null): PonderTargetDefinition | null => {
     if (!element) {
         return null;
+    }
+
+    // 导航页上的卡片直接声明自己教的是哪个目标。
+    //
+    // 不走 hoverSelector：那样每个目标的选择器都要额外写一条指向导航页的分支，
+    // 二十多个目标就是二十多处耦合，新加一个目标还会忘。这里反过来 —— 元素说自己是谁。
+    const declared = element.closest('[data-ponder-nav-target]');
+    if (declared) {
+        const id = declared.getAttribute('data-ponder-nav-target');
+        return id ? findPonderTarget(id as PonderTargetId) : null;
     }
 
     let best: PonderTargetDefinition | null = null;

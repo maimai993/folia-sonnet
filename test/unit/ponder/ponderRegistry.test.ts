@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PONDER_TARGET_LIST, findPonderTarget } from '@/components/ponder/ponderRegistry';
 import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
 import { SETTINGS_ANCHOR_DEFINITIONS } from '@/components/modal/settings/navigation/settingsAnchorModel';
+import { PONDER_TARGET_CATEGORIES } from '@/types/ponder';
 import type { PonderAnchorPoint, PonderStep, PonderSurfaceKind } from '@/types/ponder';
 
 // test/unit/ponder/ponderRegistry.test.ts
@@ -127,6 +128,20 @@ describe('ponder registry', () => {
         });
     });
 
+    it('每个目标都声明了导航页上的分类', () => {
+        const missing = PONDER_TARGET_LIST
+            .filter(target => !PONDER_TARGET_CATEGORIES.includes(target.category))
+            .map(target => target.id);
+
+        expect(missing, `这些目标不会出现在思索导航页上：${missing.join(', ')}`).toEqual([]);
+    });
+
+    it('入门总览刻意只有一章', () => {
+        // 它是第一次打开应用时唯一被强制看完的那一段。长了就没人看，
+        // 细节该去导航页上各自的那一条里。
+        expect(findPonderTarget('help-page')?.scenes.length).toBe(1);
+    });
+
     it('页面教程覆盖完整页面区域，而不是只有一段泛化概述', () => {
         expect(findPonderTarget('grid-page')?.scenes.length).toBeGreaterThanOrEqual(6);
         expect(findPonderTarget('grid-view-page')?.scenes.length).toBeGreaterThanOrEqual(5);
@@ -151,6 +166,7 @@ describe('ponder registry', () => {
             'local-folder-actions': new Set(['delete-confirm']),
             'local-track-list': new Set(['sort-menu-open']),
             'ponder-onboarding': new Set(['hint-shown', 'hint-holding', 'ponder-open']),
+            'desktop-features': new Set(['wallpaper-on', 'tray-menu', 'remote-open']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

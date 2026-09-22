@@ -2869,6 +2869,52 @@ export default {
   "ponder": {
     "openPage": "Ponder this page",
     "componentsOnPage": "Components with their own Ponder",
+    "navigation": {
+      "title": "Ponder \u00b7 All tutorials",
+      "hint": "Rest the pointer on an entry and hold G to open it, or just click. For the short version, hold Ctrl + G on this screen.",
+      "touchHint": "Tap an entry to open it. For the short version, tap the lightbulb in the top-right corner.",
+      "seen": "Already watched"
+    },
+    "summaries": {
+      "command_palette": "Search it out, pass an argument, colon for execute mode.",
+      "folia_desktop": "Wallpaper mode, system tray and the remote window — none of them inside the app.",
+      "folia_shortcuts": "Where K, P, B and G each take you.",
+      "folia_transport": "System media keys work from anywhere; inside, Space and {{mod}}+←/→.",
+      "grid3d_card_style": "Cover-only or polaroid cards on the home poster wall.",
+      "grid_action_button": "The bottom-right button: a tap opens the list, a left slide is the second action.",
+      "grid_page": "How the poster wall is organised, and how to move, open and search.",
+      "grid_view_card_settings": "The cover shape of grid cards, and how far they fade toward the edges.",
+      "grid_view_edit_mode": "What happens to the cards, and when a rename actually counts.",
+      "grid_view_page": "The collection page: structure, dragging, keyboard movement, filtering.",
+      "help_page": "The short version: how Folia is put together, and where to look next.",
+      "lattice_chrome": "The controls under an expanded poster; the middle two are the bottom bar’s slots.",
+      "lattice_page": "The whole play queue laid out as a poster wall.",
+      "lattice_style_settings": "The vignette, and the poster tint that unlocks one layer at a time.",
+      "local_folder_actions": "Re-scan, tidy up tags, and the red button that deletes things.",
+      "local_metadata_match": "The pencil behind three conditions.",
+      "local_track_sorting": "Only local folders sort, and the choice sticks across sessions.",
+      "lyrics_animation_settings": "Where the lyric animation is changed, plus two switches that affect the look.",
+      "panel_account_tab": "Sign-in, audio quality and syncing for the current source.",
+      "panel_controls_tab": "Three large buttons, volume, and two mode viewfinder rows.",
+      "panel_cover_actions": "The four buttons that only appear when you hover the artwork.",
+      "panel_cover_tab": "Title, artist and album for the current song, and what clicking them does.",
+      "panel_queue_tab": "The queue list: per-row actions, shuffle, lay it out as a wall.",
+      "panel_slide": "That button also slides left, and it opens the command window.",
+      "panel_source_tab": "The source-specific cell: audio gain, lyric source, timeline offset.",
+      "player_bar": "What is on the capsule, and the two slots you choose yourself.",
+      "player_page": "What is on the player page, where each thing sits, and how to shuffle.",
+      "ponder_basics": "Hover hints, hold G, whole-page Ctrl+G, and how to turn the hints off.",
+      "settings_page": "How settings are grouped, and jumping straight there from the command window.",
+      "side_panel": "How the panel is built and how to switch tabs.",
+      "theme_settings": "Presets, where a custom palette comes from, and when it changes by itself."
+    },
+    "categories": {
+      "basics": "Getting started",
+      "playback": "Playback and controls",
+      "browsing": "Browsing and library",
+      "appearance": "Appearance",
+      "desktop": "Desktop"
+    },
     "noComponentsOnPage": "No separate component guides on this page yet.",
     "onboarding": {
       "title": "Meet Ponder",
@@ -2905,6 +2951,8 @@ export default {
       "openSlotPicker": "Go pick the buttons",
       "openDocs": "Open the docs",
       "openPonderHints": "Go change it",
+      "openWallpaperMode": "Open wallpaper settings",
+      "openTraySettings": "Open desktop window behaviour",
       "openGridActionButton": "Go change the slide target",
       "openGrid3dCardStyle": "Open home card style",
       "openGridViewCard": "Open grid card settings",
@@ -2945,6 +2993,13 @@ export default {
         "openPlayer": "Back to player",
         "progress": "Progress bar",
         "bottomBar": "Bottom control bar"
+      },
+      "desktop": {
+        "page": "The desktop",
+        "mainWindow": "Main window",
+        "trayIcon": "Tray icon",
+        "trayMenu": "Tray menu",
+        "remoteWindow": "Remote window"
       },
       "onboarding": {
         "page": "A page of the app",
@@ -3107,6 +3162,10 @@ export default {
       "panelAccountTab": "Panel \u00b7 Account tab",
       "latticePage": "Lattice page",
       "helpPage": "Getting to know Folia",
+      "ponderBasics": "How Ponder works",
+      "foliaTransport": "Playback and media keys",
+      "foliaShortcuts": "The shortcuts you will use",
+      "foliaDesktop": "Desktop-only features",
       "settingsPage": "Options page"
     },
     "scenes": {
@@ -3170,6 +3229,10 @@ export default {
       "latticePagePoster": "Expand a poster and control playback",
       "latticePageTools": "Focus, follow, queue, and lights",
       "latticePageKeyboard": "Complete Lattice keyboard control",
+      "helpPageOverview": "How Folia is put together",
+      "foliaDesktopWallpaper": "Wallpaper mode",
+      "foliaDesktopTray": "System tray",
+      "foliaDesktopRemote": "Remote window",
       "helpPagePonder": "You are already inside Ponder",
       "helpPageWholePage": "The whole page, and what touch does instead",
       "helpPageTransport": "Control playback without coming back",
@@ -3189,6 +3252,9 @@ export default {
     },
     "captions": {
       "onboarding": {
+        "overviewShape": "Folia keeps four things apart: picking music in the grids, listening on the player page or in Lattice, finding features through the command window, and adjusting things in settings. The bar at the bottom follows you across every page; help and settings are windows laid over whatever page you are on.",
+        "overviewAsk": "You do not have to memorise the rest. Rest the pointer on anything that is not obvious and a hint appears beside it; hold G and that is what gets explained. It is the one thing worth remembering.",
+        "overviewNext": "To go through it properly, pick an entry back on that navigation screen \u2014 playback, browsing, appearance, desktop; each one is its own tutorial. The button below opens the full docs.",
         "here": "You have a Ponder tutorial open \u2014 this screen. It is not a video: drag the progress bar below, jump between keyframes with the arrow keys, Space pauses, Escape leaves at any time.",
         "hover": "Rest the pointer on one of the less obvious buttons or components and a small badge appears beside it, naming the tutorial it would open. Hold G until the wipe fills and that component\u2019s tutorial starts.",
         "hold": "Keep holding and the wipe fills the capsule from left to right; when it reaches the end you are inside that component\u2019s tutorial \u2014 a full screen like this one. Let go too early and it cancels with nothing happening.",
@@ -3314,6 +3380,15 @@ export default {
         "queueTabDetail": "Click a row to play from that song; hover one and play next, move to the end and remove appear at its right. The header buttons lay the queue out as the Lattice wall and shuffle it. Rows cannot be dragged to reorder.",
         "accountTab": "The account tab covers whatever the current music source owns.",
         "accountTabDetail": "At the top is that source's sign-in state: avatar, nickname, source name and ID, with sign-out at the right. Below it, the audio quality tier \u2014 standard, high, lossless, hi-res \u2014 and at the bottom, syncing your data to the cloud. Switch source and you see a different set."
+      },
+      "desktop": {
+        "windowNormal": "The biggest difference between the desktop build and the browser is these three, and none of them live inside the app: one changes where the window sits on the desktop, one lives in the system tray, and one is a second window. Start from this ordinary main window.",
+        "wallpaper": "Wallpaper mode sinks it to the very bottom of the desktop: border and title bar gone, lyrics laid straight onto the desktop, with icons and other windows stacking over them as usual. The cost is the line in settings \u2014 the keyboard no longer reaches it in this mode.",
+        "wallpaperExit": "Which means you cannot leave wallpaper mode by clicking the window. Use \u201cWallpaper Mode\u201d in the tray menu, or search the same command in the command window.",
+        "trayIcon": "This one in the corner of the taskbar is Folia\u2019s tray icon. Settings \u00b7 Desktop can make minimising go straight to the tray \u2014 the main window leaves the taskbar, but playback does not stop and the system media keys keep working.",
+        "trayMenu": "Clicking the tray icon opens this column: everything you can do without opening the main window \u2014 show/hide window, open the remote window, transparent background, click-through, always on top, hide the taskbar icon, desktop lyrics, wallpaper mode, reset window, quit. In wallpaper mode it is the only way out.",
+        "remote": "The remote window is a second small window; search \u201cremote window\u201d in the command window to open it, or use the tray menu. It stays on top even while the main window is minimised, or sunk into the wallpaper.",
+        "remoteChrome": "It carries its own set of window switches: always on top, transparent background, click-through (the mouse passes straight through to whatever is underneath), hide the taskbar icon, and auto-hiding UI. Being a separate window rather than a corner of the main one is exactly what lets those switches be independent."
       },
       "gridActionButton": {
         "tap": "Both the collection page and the poster wall have this button in the bottom-right corner. Tap it and the track list slides in from the right \u2014 that is its first action.",

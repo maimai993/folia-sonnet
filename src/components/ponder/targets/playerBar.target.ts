@@ -350,6 +350,8 @@ const volumeInPalette: PonderSceneScript = {
 export default {
     id: 'player-bar',
     titleKey: 'ponder.targets.playerBar',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.player_bar',
     hoverSelector: '[data-ponder="player-bar"]',
     // 已经在定位模式里了就不必教了，那时整条胶囊本来就是个被拖的物体。
     isAvailable: () => !usePlayerBottomBarLayoutStore.getState().isPositioning,

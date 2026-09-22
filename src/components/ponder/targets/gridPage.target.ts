@@ -33,6 +33,8 @@ const gridAnchors = {
 export default {
     id: 'grid-page',
     titleKey: 'ponder.targets.gridPage',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.grid_page',
     hoverSelector: null,
     relatedTargetIds: ['player-bar', 'panel-slide'],
     scenes: [

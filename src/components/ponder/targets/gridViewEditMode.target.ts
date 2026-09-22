@@ -93,6 +93,8 @@ const renameCommit: PonderSceneScript = {
 export default {
     id: 'grid-view-edit-mode',
     titleKey: 'ponder.targets.gridViewEditMode',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.grid_view_edit_mode',
     hoverSelector: '[data-ponder="grid-view-edit-mode"]',
     relatedTargetIds: ['local-folder-actions', 'grid-view-page'],
     scenes: [whatChanges, renameCommit],

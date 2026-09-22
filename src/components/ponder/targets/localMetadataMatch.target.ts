@@ -52,6 +52,8 @@ const reveal: PonderSceneScript = {
 export default {
     id: 'local-metadata-match',
     titleKey: 'ponder.targets.localMetadataMatch',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.local_metadata_match',
     hoverSelector: '[data-ponder="local-metadata-match"]',
     relatedTargetIds: ['local-folder-actions', 'grid-view-edit-mode'],
     scenes: [reveal],

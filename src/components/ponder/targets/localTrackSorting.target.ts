@@ -63,6 +63,8 @@ const sorting: PonderSceneScript = {
 export default {
     id: 'local-track-sorting',
     titleKey: 'ponder.targets.localTrackSorting',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.local_track_sorting',
     hoverSelector: '[data-ponder="local-track-sorting"]',
     relatedTargetIds: ['grid-action-button', 'local-folder-actions'],
     scenes: [sorting],

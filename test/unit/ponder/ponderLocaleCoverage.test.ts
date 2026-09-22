@@ -28,12 +28,17 @@ const allKeys = (): string[] => {
         'ponder.prevScene', 'ponder.nextScene', 'ponder.playPause', 'ponder.replay',
         'ponder.exit', 'ponder.seekKeyframe',
         'ponder.legend.keyframe', 'ponder.legend.chapter', 'ponder.legend.pause', 'ponder.legend.exit',
+        'ponder.navigation.title', 'ponder.navigation.hint', 'ponder.navigation.touchHint', 'ponder.navigation.seen',
+        'ponder.categories.basics', 'ponder.categories.playback', 'ponder.categories.browsing',
+        'ponder.categories.appearance', 'ponder.categories.desktop',
         'options.ponderHints', 'options.ponderHintsDesc',
         'options.ponderHintsAlways', 'options.ponderHintsUnseen', 'options.ponderHintsOff',
     ].forEach(key => keys.add(key));
 
     PONDER_TARGET_LIST.forEach(target => {
         keys.add(target.titleKey);
+        // 导航页卡片上那一行。缺了就把 key 本身画在卡上，而这一屏是新用户最先看到的地方。
+        if (target.summaryKey) keys.add(target.summaryKey);
         target.scenes.forEach(scene => {
             keys.add(scene.titleKey);
             if (scene.action) keys.add(scene.action.labelKey);

@@ -8,6 +8,7 @@ import PonderPlayerBarSurface from './surfaces/PonderPlayerBarSurface';
 import PonderPlayerPageSurface from './surfaces/PonderPlayerPageSurface';
 import PonderSidePanelSurface from './surfaces/PonderSidePanelSurface';
 import PonderOnboardingSurface from './surfaces/PonderOnboardingSurface';
+import PonderDesktopFeaturesSurface from './surfaces/PonderDesktopFeaturesSurface';
 import PonderLatticeChromeSurface from './surfaces/PonderLatticeChromeSurface';
 import {
     PonderLyricsAnimationSettingsSurface,
@@ -244,6 +245,8 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderGridViewCardSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'lattice-style-settings'
         ? <PonderLatticeStyleSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'desktop-features'
+        ? <PonderDesktopFeaturesSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'ponder-onboarding'
         ? <PonderOnboardingSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'grid-action-button'

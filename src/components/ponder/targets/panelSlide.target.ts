@@ -182,6 +182,8 @@ const keyboardShortcut: PonderSceneScript = {
 export default {
     id: 'panel-slide',
     titleKey: 'ponder.targets.panelSlide',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.panel_slide',
     hoverSelector: '[data-testid="panel-toggle"]',
     // canSlideOpenCommandPalette = !isOpen && ...（UnifiedPanel.tsx:300）。
     // 面板展开时这条手势本身是关的，此时教它等于教一个按不动的东西。

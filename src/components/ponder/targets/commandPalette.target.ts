@@ -124,6 +124,8 @@ const executeMode: PonderSceneScript = {
 export default {
     id: 'command-palette',
     titleKey: 'ponder.targets.commandPalette',
+    category: 'basics',
+    summaryKey: 'ponder.summaries.command_palette',
     // 窗口开着的时候才指得到它；关着时从别处的「本页可单独思索的组件」进来。
     hoverSelector: '[data-testid="command-palette-panel"]',
     relatedTargetIds: ['panel-slide'],

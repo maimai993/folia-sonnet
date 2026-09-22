@@ -36,6 +36,8 @@ const anchors = {
 export default {
     id: 'lattice-page',
     titleKey: 'ponder.targets.latticePage',
+    category: 'playback',
+    summaryKey: 'ponder.summaries.lattice_page',
     hoverSelector: null,
     relatedTargetIds: ['player-bar'],
     scenes: [

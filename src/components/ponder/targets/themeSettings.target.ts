@@ -138,6 +138,8 @@ const autoSwitching: PonderSceneScript = {
 export default {
     id: 'theme-settings',
     titleKey: 'ponder.targets.themeSettings',
+    category: 'appearance',
+    summaryKey: 'ponder.summaries.theme_settings',
     hoverSelector: '[data-settings-anchor="themePresets"]',
     relatedTargetIds: ['settings-page', 'lyrics-animation-settings'],
     scenes: [presets, sourceAndPark, autoSwitching],

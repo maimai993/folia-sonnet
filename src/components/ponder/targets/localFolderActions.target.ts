@@ -109,6 +109,8 @@ const deletion: PonderSceneScript = {
 export default {
     id: 'local-folder-actions',
     titleKey: 'ponder.targets.localFolderActions',
+    category: 'browsing',
+    summaryKey: 'ponder.summaries.local_folder_actions',
     hoverSelector: '[data-ponder="grid-view-source-actions"]',
     relatedTargetIds: ['grid-view-edit-mode', 'local-metadata-match', 'local-track-sorting'],
     scenes: [whatIsHere, maintenance, deletion],
