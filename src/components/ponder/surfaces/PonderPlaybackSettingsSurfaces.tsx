@@ -1,91 +1,28 @@
 import React from 'react';
-import { AlertTriangle, Blend, Command, Eye, FolderSearch, ListPlus, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
-import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegistrar } from './PonderSurfaceStateLayer';
-import type { PonderRelativeRect } from '../../../types/ponder';
+import { AlertTriangle, AudioLines, Blend, Command, Eye, FolderSearch, ListPlus, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
+import PonderSurfaceStateLayer, { PonderSurfaceBase } from './PonderSurfaceStateLayer';
+import {
+    SettingsChoiceCard as ChoiceCard,
+    SettingsHeading as Heading,
+    SettingsToggleRow as ToggleRow,
+    type PonderSettingsSurfaceProps as SurfaceProps,
+} from './ponderSettingsParts';
 import {
     GRID_HOTKEY_GEOMETRY as H,
     LIBRARY_WATCH_GEOMETRY as W,
     LYRICS_SOURCE_GEOMETRY as L,
     QUEUE_SETTINGS_GEOMETRY as Q,
+    REPLAY_GAIN_GEOMETRY as R,
     TRANSITION_SETTINGS_GEOMETRY as T,
     relativeRectStyle,
 } from './ponderSurfaceGeometry';
 
 // src/components/ponder/surfaces/PonderPlaybackSettingsSurfaces.tsx
 // 播放与交互那几组设置：过渡与自动混音、本地文件夹监视、加入队列的默认行为、
-// 歌词来源、网格上的 S 归谁。
+// 歌词来源、网格上的 S 归谁、音频增益。
 //
-// 五组放一个文件，因为它们是同一类形状 —— 分组标题加一张卡，卡里几行开关和并排选项。
-// 共用下面那几个小件；各拆一个文件只会多出五个几十行的模块。
-
-type SurfaceProps = {
-    accent: string;
-    line: string;
-    outline: string;
-    registerStateNode?: PonderSurfaceStateRegistrar;
-};
-
-type Rect = PonderRelativeRect;
-
-/** 分组标题：小图标加一条标题文字。 */
-const Heading: React.FC<{ rect: Rect; line: string; icon: typeof Blend }> = ({ rect, line, icon: Icon }) => (
-    <span className="flex items-center gap-[5%]" style={relativeRectStyle(rect)}>
-        <Icon className="h-[58%] w-auto opacity-55" />
-        <span className="h-[24%] flex-1 rounded-full opacity-70" style={{ backgroundColor: line }} />
-    </span>
-);
-
-/** 一行开关：左边标题（可带说明），右边 48×24 的滑块。 */
-const ToggleRow: React.FC<{
-    rect: Rect;
-    line: string;
-    accent: string;
-    on?: boolean;
-    withDesc?: boolean;
-    marker: string;
-}> = ({ rect, line, accent, on, withDesc = true, marker }) => (
-    <div {...{ [marker]: true }} className="flex items-center gap-[4%]" style={relativeRectStyle(rect)}>
-        <span className="flex flex-1 flex-col gap-1.5">
-            <span className="h-1.5 w-[40%] rounded-full" style={{ backgroundColor: line }} />
-            {withDesc && <span className="h-1 w-[74%] rounded-full opacity-45" style={{ backgroundColor: line }} />}
-        </span>
-        <span
-            className="relative h-4 w-8 shrink-0 rounded-full"
-            style={{ backgroundColor: on ? accent : line, opacity: on ? 0.75 : 1 }}
-        >
-            <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white ${on ? 'right-0.5' : 'left-0.5'}`} />
-        </span>
-    </div>
-);
-
-/** 一张并排的选项卡：图标、标题、一行说明，选中时描边换成强调色。 */
-const ChoiceCard: React.FC<{
-    rect: Rect;
-    line: string;
-    accent: string;
-    outline: string;
-    selected?: boolean;
-    icon?: typeof Blend;
-    marker: string;
-    children?: React.ReactNode;
-}> = ({ rect, line, accent, outline, selected, icon: Icon, marker, children }) => (
-    <div
-        {...{ [marker]: true }}
-        className="flex flex-col justify-center gap-[10%] rounded-xl border px-[6%]"
-        style={{
-            ...relativeRectStyle(rect),
-            borderColor: selected ? accent : outline,
-            backgroundColor: selected ? `${accent}14` : undefined,
-        }}
-    >
-        <span className="flex items-center gap-[6%]">
-            {Icon && <Icon className="h-3 w-3 shrink-0 opacity-65" />}
-            <span className="h-1.5 w-[44%] rounded-full" style={{ backgroundColor: selected ? accent : line }} />
-            {children}
-        </span>
-        <span className="h-1 w-[76%] rounded-full opacity-45" style={{ backgroundColor: line }} />
-    </div>
-);
+// 放一个文件，因为它们是同一类形状 —— 分组标题加一张卡，卡里几行开关和并排选项。
+// 形状本身来自 ponderSettingsParts；各拆一个文件只会多出五个几十行的模块。
 
 /**
  * 过渡与自动混音。
@@ -242,6 +179,72 @@ export const PonderGridHotkeySurface: React.FC<SurfaceProps> = ({ accent, line, 
         {/* 打开之后 S 改归命令窗口；其余字符还是进筛选框。 */}
         <PonderSurfaceStateLayer state="hotkey-on" registerStateNode={registerStateNode}>
             <ToggleRow marker="data-ponder-grid-hotkey-toggle-on" rect={H.toggle} line={line} accent={accent} on />
+        </PonderSurfaceStateLayer>
+    </div>
+);
+
+/**
+ * 音频增益（ReplayGain）：一句说明加三颗并排的模式按钮。
+ *
+ * 结果层画的是控制面板来源页上那一小块同名控件 —— 同一个值的另一处开关。两处摆在
+ * 同一张图上才说得清「改一处两处都变」；各画一张图就又成了两个互不相干的设置。
+ */
+export const PonderReplayGainSurface: React.FC<SurfaceProps> = ({ accent, line, outline, registerStateNode }) => (
+    <div className="absolute inset-0 overflow-hidden" data-ponder-replay-gain-structure>
+        <PonderSurfaceBase registerStateNode={registerStateNode}>
+            <Heading rect={R.heading} line={line} icon={AudioLines} />
+            <div className="rounded-xl border" style={{ ...relativeRectStyle(R.card), borderColor: outline }} />
+            <div className="flex flex-col justify-center gap-[18%]" style={relativeRectStyle(R.copy)}>
+                <span className="h-1.5 w-[32%] rounded-full" style={{ backgroundColor: line }} />
+                <span className="h-1 w-[64%] rounded-full opacity-45" style={{ backgroundColor: line }} />
+            </div>
+            {([
+                ['data-ponder-replay-gain-off', R.modeOff, false],
+                ['data-ponder-replay-gain-track', R.modeTrack, true],
+                ['data-ponder-replay-gain-album', R.modeAlbum, false],
+            ] as const).map(([marker, rect, selected]) => (
+                <span
+                    key={marker}
+                    {...{ [marker]: true }}
+                    className="flex items-center justify-center rounded-xl border"
+                    style={{
+                        ...relativeRectStyle(rect),
+                        borderColor: selected ? accent : outline,
+                        backgroundColor: selected ? `${accent}14` : undefined,
+                    }}
+                >
+                    <span className="h-1.5 w-[44%] rounded-full" style={{ backgroundColor: selected ? accent : line }} />
+                </span>
+            ))}
+        </PonderSurfaceBase>
+
+        {/* 控制面板来源页上那一小块：同样三选一，外加这首歌自己那串 T / A 分贝。 */}
+        <PonderSurfaceStateLayer state="panel-mirror" registerStateNode={registerStateNode} replaces>
+            <div
+                data-ponder-replay-gain-panel
+                className="rounded-2xl border"
+                style={{ ...relativeRectStyle(R.panelTab), borderColor: outline, backgroundColor: 'rgba(0,0,0,0.35)' }}
+            >
+                <span className="absolute left-[5%] top-[12%] h-[14%] w-[34%] rounded-full opacity-50" style={{ backgroundColor: line }} />
+            </div>
+            <span
+                data-ponder-replay-gain-summary
+                className="flex items-center justify-end"
+                style={relativeRectStyle(R.panelSummary)}
+            >
+                <span className="h-1 w-[78%] rounded-full opacity-65" style={{ backgroundColor: line }} />
+            </span>
+            <div data-ponder-replay-gain-panel-modes className="grid grid-cols-3 gap-[3%]" style={relativeRectStyle(R.panelModes)}>
+                {[0, 1, 2].map(index => (
+                    <span
+                        key={index}
+                        className="flex items-center justify-center rounded-md"
+                        style={{ backgroundColor: index === 1 ? `${accent}33` : 'rgba(255,255,255,0.06)' }}
+                    >
+                        <span className="h-1 w-[52%] rounded-full" style={{ backgroundColor: index === 1 ? accent : line }} />
+                    </span>
+                ))}
+            </div>
         </PonderSurfaceStateLayer>
     </div>
 );

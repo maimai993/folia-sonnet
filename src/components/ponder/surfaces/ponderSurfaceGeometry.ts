@@ -204,6 +204,38 @@ export const SIDE_PANEL_SOURCE_PAGE = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 控制页里那几块，坐标系是当前标签页内容区（body）。
+ *
+ * 两行取景器的中间那块要单独量：真实界面里它是一颗按钮 —— 点下去展开完整模式列表，
+ * 而两端那对箭头只换到相邻的一个。屏幕上没有任何东西说中间可以点，所以骨架里它必须
+ * 是一块能被指住的区域，而不是一行里随便一条占位文字。
+ */
+export const SIDE_PANEL_CONTROLS_PAGE = {
+    songActions: { left: 0, right: 0, top: 0, height: 0.26 },
+    volume: { left: 0, right: 0, top: 0.32, height: 0.16 },
+    modeRowVisualizer: { left: 0, right: 0, top: 0.54, height: 0.16 },
+    modeRowBackground: { left: 0, right: 0, top: 0.76, height: 0.16 },
+    /** 中间那块名称的点击范围：左边让开箭头和字形，右边让开参数槽和另一个箭头。 */
+    modeName: { left: 0.20, right: 0.32, top: 0.54, height: 0.16 },
+    modeNameBackground: { left: 0.20, right: 0.32, top: 0.76, height: 0.16 },
+    /** 点开之后压下来的完整列表，底部还有一条通往完整设置的出口。 */
+    modeList: { left: 0.04, right: 0.04, top: 0.26, bottom: 0.02 },
+    modeListFooter: { left: 0.04, right: 0.04, bottom: 0.02, height: 0.11 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 电台页里那几块，坐标系是 body。
+ *
+ * 私人 FM 打开时，队列那一格整格换成它 —— 同一个位置、同一格标签，内容却从一份可以
+ * 拖动排序的清单变成了三颗传送按钮加一对喜欢/扔掉。没有队列，也就没有「接下来是什么」。
+ */
+export const SIDE_PANEL_FM_PAGE = {
+    modeChip: { left: 0.26, right: 0.26, top: 0.03, height: 0.12 },
+    transport: { left: 0.06, right: 0.06, top: 0.26, height: 0.30 },
+    actions: { left: 0.16, right: 0.16, top: 0.68, height: 0.26 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 封面四角那四颗按钮，坐标系是封面自身。
  *
  * 它们平时不在屏幕上：`opacity-0 group-hover:opacity-100`，指针移上封面才浮出来。
@@ -503,3 +535,170 @@ export const THEME_SETTINGS_TOGGLES = [
     { name: 'preferCustom', marker: 'data-ponder-theme-prefer-custom' },
     { name: 'autoSwitch', marker: 'data-ponder-theme-auto-switch' },
 ] as const;
+
+/**
+ * 设置 · 交互里「自定义快捷键」那一组，坐标系是那块面板。
+ *
+ * 真实那一组是一行两半：左边一对键帽（Alt 已经按下、旁边是待录的那一颗），右边一个
+ * 命令下拉。Alt 画成常按下的样子而不是可编辑的一段，因为它在界面上就是不可改的 ——
+ * 画成可录的话，这一章讲的那件事（录不出组合键）在图上就不成立。
+ */
+export const CUSTOM_SHORTCUT_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.34, height: 0.08 },
+    card: { left: 0.03, right: 0.03, top: 0.14, bottom: 0.02 },
+    copy: { left: 0.06, right: 0.06, top: 0.19, height: 0.18 },
+    /** 左半边那对键帽，以及录到之后才出现的那颗清除叉。 */
+    capAlt: { left: 0.07, top: 0.46, width: 0.10, height: 0.18 },
+    capKey: { left: 0.205, top: 0.46, width: 0.10, height: 0.18 },
+    clear: { left: 0.335, top: 0.505, width: 0.05, square: true },
+    /** 右半边那个命令下拉，和展开之后压在它下面的那张列表。 */
+    command: { right: 0.07, top: 0.46, width: 0.40, height: 0.18 },
+    commandList: { right: 0.07, top: 0.66, width: 0.40, height: 0.30 },
+    /** 按到一颗已经被占掉的字母时，红字长在键帽下面。 */
+    rejection: { left: 0.07, top: 0.68, width: 0.42, height: 0.07 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 设置 · 通用里「固定命令」那一组，坐标系是那块面板。
+ *
+ * 三个槽位并排，各是一个下拉。结果层画的是命令窗口本身 —— 这一组配的东西不长在
+ * 设置里，而是长在窗口下面那一排，不画出来就只是三个不知道通向哪儿的下拉框。
+ */
+export const PINNED_COMMANDS_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.32, height: 0.08 },
+    card: { left: 0.03, right: 0.03, top: 0.14, bottom: 0.02 },
+    copy: { left: 0.06, right: 0.06, top: 0.19, height: 0.18 },
+    slotFirst: { left: 0.06, top: 0.46, width: 0.28, height: 0.22 },
+    slotSecond: { left: 0.36, top: 0.46, width: 0.28, height: 0.22 },
+    slotThird: { right: 0.06, top: 0.46, width: 0.28, height: 0.22 },
+    /** 以下属于结果层：命令窗口，以及贴在它下面那一排三颗。 */
+    palette: { left: 0.08, right: 0.08, top: 0.05, height: 0.60 },
+    /** 相对 palette：会随使用次序自己重排的那份列表。 */
+    paletteList: { left: 0.05, right: 0.05, top: 0.28, bottom: 0.06 },
+    pinnedRow: { left: 0.08, right: 0.08, top: 0.70, height: 0.11 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 设置 · 播放里「音频增益」那一组，坐标系是那块面板。
+ *
+ * 结果层画的是控制面板来源页上那一小块同名控件：同一个值的另一处开关。两处并排画出来
+ * 才看得出「改一处两处都变」，分别画在两张图上就又成了两个设置。
+ */
+export const REPLAY_GAIN_GEOMETRY = {
+    heading: { left: 0.04, top: 0.03, width: 0.32, height: 0.10 },
+    card: { left: 0.03, right: 0.03, top: 0.22, bottom: 0.04 },
+    copy: { left: 0.06, right: 0.06, top: 0.30, height: 0.20 },
+    modeOff: { left: 0.06, top: 0.58, width: 0.28, height: 0.28 },
+    modeTrack: { left: 0.36, top: 0.58, width: 0.28, height: 0.28 },
+    modeAlbum: { right: 0.06, top: 0.58, width: 0.28, height: 0.28 },
+    /** 以下属于结果层：来源页上那一小块。标题行右端那串就是这首歌的 T/A 分贝。 */
+    panelTab: { left: 0.18, right: 0.18, top: 0.22, height: 0.44 },
+    /** 相对 panelTab。 */
+    panelSummary: { right: 0.05, top: 0.12, width: 0.42, height: 0.16 },
+    panelModes: { left: 0.05, right: 0.05, bottom: 0.14, height: 0.26 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 设置 · 外观里「备份与导入」那一组，坐标系是那块面板。
+ *
+ * 一排选「带哪个主题」的小胶囊、一块粘贴用的文本框、底下一排按钮（导出、复制 JSON，
+ * 右端单独一颗导入）。导入那颗和别的按钮隔开，因为它是唯一会改动本机设置的那颗。
+ */
+export const IMPORT_EXPORT_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.34, height: 0.07 },
+    card: { left: 0.03, right: 0.03, top: 0.12, bottom: 0.02 },
+    copy: { left: 0.06, right: 0.06, top: 0.16, height: 0.13 },
+    themeChips: { left: 0.06, right: 0.06, top: 0.34, height: 0.10 },
+    textarea: { left: 0.06, right: 0.06, top: 0.49, height: 0.26 },
+    exportButtons: { left: 0.06, top: 0.80, width: 0.40, height: 0.11 },
+    importButton: { right: 0.06, top: 0.80, width: 0.20, height: 0.11 },
+    /** 以下属于结果层：按下导入之后先弹的那个逐项对照框。 */
+    dialog: { left: 0.10, right: 0.10, top: 0.07, bottom: 0.07 },
+    /** 相对 dialog：分组标题、可逐条勾选的改动行、以及总是摊开的衍生改动。 */
+    dialogGroups: { left: 0.06, right: 0.06, top: 0.16, height: 0.44 },
+    dialogDerived: { left: 0.06, right: 0.06, top: 0.64, height: 0.18 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 音频效果对话框（十段均衡加效果链），坐标系是那扇对话框。
+ *
+ * 推子那一排要能指着其中一根讲：拖任何一根都会把当前预设**静默**换成自定义槽 1
+ * 并把值写进去，而这件事只有对着一根推子和预设排同时说才成立。
+ */
+export const AUDIO_EQUALIZER_GEOMETRY = {
+    enable: { left: 0.04, top: 0.04, width: 0.20, height: 0.08 },
+    /** 六颗内置预设。 */
+    presets: { left: 0.28, top: 0.04, width: 0.37, height: 0.08 },
+    /** 排尾那两颗自定义槽，和它们右边那颗复位。 */
+    customSlots: { left: 0.66, top: 0.04, width: 0.22, height: 0.08 },
+    reset: { right: 0.04, top: 0.04, width: 0.06, square: true },
+    bands: { left: 0.04, right: 0.04, top: 0.17, height: 0.44 },
+    /**
+     * 相对 bands：第四根推子，教程拖的就是它。
+     *
+     * 十根等宽、九道 1.5% 的缝，所以每根 8.65%、第四根从 3×(8.65+1.5)=30.45% 起。
+     * 这组数是从排布算出来的，不是量出来的 —— 改了根数或缝宽，这里要跟着算。
+     */
+    bandFader: { left: 0.3045, top: 0, width: 0.0865, height: 1 },
+    effects: { left: 0.04, right: 0.04, top: 0.65, bottom: 0.04 },
+    /** 相对 effects：会加噪那几项标题旁边那枚小徽章。 */
+    noiseBadge: { left: 0.22, top: 0.16, width: 0.10, height: 0.10 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 歌词动画调参台，坐标系是整屏。
+ *
+ * 预览上那三块热区是这一屏最藏的东西：它们平时完全透明、没有描边也没有底色，
+ * 指针压上去才显形。所以骨架里它们必须是三块独立的区域，而不是预览里一块笼统的高亮。
+ */
+export const VIS_PLAYGROUND_GEOMETRY = {
+    header: { left: 0.03, right: 0.03, top: 0.03, height: 0.10 },
+    preview: { left: 0.03, right: 0.30, top: 0.16, bottom: 0.04 },
+    /** 以下三块相对 preview：顶上一条是背景，中间一大块是可视化，底下一条是字幕。 */
+    hotspotBackground: { left: 0.03, right: 0.03, top: 0.03, height: 0.20 },
+    hotspotVisualizer: { left: 0.10, right: 0.10, top: 0.28, height: 0.48 },
+    hotspotSubtitle: { left: 0.03, right: 0.03, bottom: 0.06, height: 0.18 },
+    /** 相对 preview：右下角那颗暂停，按住它预览就停在当前这一帧。 */
+    pause: { right: 0.03, bottom: 0.04, width: 0.08, square: true },
+    panel: { right: 0.03, top: 0.16, width: 0.25, bottom: 0.04 },
+    /** 以下相对 panel。「通用」那一页没有对应热区，只能从这排标签进。 */
+    tabs: { left: 0.05, right: 0.05, top: 0.02, height: 0.06 },
+    tabCommon: { left: 0.06, top: 0.027, width: 0.21, height: 0.046 },
+    /**
+     * 一页的内容：标题行加五行控件。四页共用这组槽位，各自往里填自己的行 ——
+     * 真实那四页行数不同，但都是「标题 + 一颗本页复位 + 若干行」这个形状，
+     * 各量一套只会让四页在骨架上长得像四个不相干的界面。
+     */
+    panelTitle: { left: 0.06, top: 0.115, width: 0.44, height: 0.05 },
+    panelReset: { right: 0.06, top: 0.115, width: 0.22, height: 0.05 },
+    rows: { left: 0.06, right: 0.06, top: 0.20, bottom: 0.145 },
+    rowOne: { left: 0.06, right: 0.06, top: 0.20, height: 0.115 },
+    rowTwo: { left: 0.06, right: 0.06, top: 0.335, height: 0.115 },
+    rowThree: { left: 0.06, right: 0.06, top: 0.47, height: 0.115 },
+    rowFour: { left: 0.06, right: 0.06, top: 0.605, height: 0.115 },
+    rowFive: { left: 0.06, right: 0.06, top: 0.74, height: 0.115 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * Theme Park，坐标系是整屏。
+ *
+ * 和调参台同一个布局（左预览右设置栏），但要讲的东西全在顶栏和右栏上：
+ * 在编辑哪一份主题、亮暗是两份独立配色、以及保存为什么灰着 —— 名字在另一页上。
+ */
+export const THEME_PARK_GEOMETRY = {
+    header: { left: 0.03, right: 0.03, top: 0.03, height: 0.11 },
+    /** 以下三块相对 header：编辑目标、重置、保存。 */
+    targetToggle: { left: 0.52, top: 0.22, width: 0.20, height: 0.56 },
+    reset: { left: 0.74, top: 0.22, width: 0.11, height: 0.56 },
+    save: { left: 0.865, top: 0.22, width: 0.125, height: 0.56 },
+    preview: { left: 0.03, right: 0.30, top: 0.17, bottom: 0.04 },
+    panel: { right: 0.03, top: 0.17, width: 0.25, bottom: 0.04 },
+    /** 以下相对 panel：四页标签、亮暗切换、四行颜色、取色器、HEX、推荐色。 */
+    tabs: { left: 0.05, right: 0.05, top: 0.02, height: 0.055 },
+    tabDetails: { left: 0.285, top: 0.026, width: 0.22, height: 0.047 },
+    modeToggle: { left: 0.05, right: 0.05, top: 0.10, height: 0.05 },
+    colorRows: { left: 0.05, right: 0.05, top: 0.18, height: 0.30 },
+    picker: { left: 0.05, right: 0.05, top: 0.51, height: 0.24 },
+    hex: { left: 0.08, right: 0.08, top: 0.77, height: 0.05 },
+    recommended: { left: 0.05, right: 0.05, top: 0.855, height: 0.11 },
+} satisfies Record<string, PonderRelativeRect>;

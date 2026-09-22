@@ -2876,6 +2876,13 @@ export default {
       "seen": "Already watched"
     },
     "summaries": {
+      "audio_equalizer": "Ten bands and an effect chain \u2014 and one drag rewrites a custom slot.",
+      "vis_playground": "Three invisible click regions sit on the preview.",
+      "theme_park": "The full colour editor: which theme, which side, and why save is greyed out.",
+      "custom_shortcut_settings": "Alt plus one letter, and why its command list is shorter than the palette\u2019s.",
+      "pinned_commands": "Three fixed slots under the command window \u2014 not the same thing as \u201crecent first\u201d.",
+      "replay_gain_settings": "The same value as the three-way on the source tab.",
+      "import_export_settings": "It carries the look, not your library \u2014 and import asks first.",
       "command_palette": "Search it out, pass an argument, colon for execute mode.",
       "folia_desktop": "Wallpaper mode, system tray and the remote window — none of them inside the app.",
       "folia_shortcuts": "Where K, P, B and G each take you.",
@@ -2951,6 +2958,11 @@ export default {
       "exit": "Exit"
     },
     "actions": {
+      "openAudioEqualizer": "Open audio effects",
+      "openCustomShortcut": "Open shortcut settings",
+      "openPinnedCommands": "Open pinned commands",
+      "openReplayGain": "Open audio gain",
+      "openImportExport": "Open backup and import",
       "openBottomUiSettings": "Open bottom UI settings",
       "openLyricsAnimation": "Open lyric animation settings",
       "openThemePresets": "Open theme settings",
@@ -2970,6 +2982,90 @@ export default {
       "openLatticeSettings": "Open queue collage settings"
     },
     "anchors": {
+      "audioEqualizer": {
+        "panel": "Audio effects",
+        "enable": "On / off",
+        "presets": "Built-in presets",
+        "customSlots": "Custom 1 / Custom 2",
+        "reset": "Clear this slot",
+        "bands": "Ten bands",
+        "bandFader": "One fader",
+        "effects": "Effect chain",
+        "noiseBadge": "Adds noise"
+      },
+      "visPlayground": {
+        "sectionReset": "Reset this page",
+        "rows": "This page\u2019s controls",
+        "rowOne": "First row",
+        "rowTwo": "Second row",
+        "rowThree": "Third row",
+        "rowFour": "Fourth row",
+        "rowFive": "Fifth row",
+        "panel": "Lyric animation workbench",
+        "header": "Title bar",
+        "preview": "Live preview",
+        "hotspotBackground": "Background region",
+        "hotspotVisualizer": "Animation region",
+        "hotspotSubtitle": "Subtitle region",
+        "pause": "Pause the preview",
+        "settingsPanel": "Settings column",
+        "tabs": "Four pages",
+        "tabCommon": "General"
+      },
+      "themePark": {
+        "panel": "Theme Park",
+        "header": "Title bar",
+        "targetToggle": "Which theme to edit",
+        "reset": "Reset",
+        "save": "Save",
+        "preview": "Live preview",
+        "editorPanel": "Editor column",
+        "tabs": "Four pages",
+        "tabDetails": "Details page",
+        "modeToggle": "Light / dark",
+        "colorRows": "The four colours",
+        "picker": "Colour picker",
+        "hex": "HEX",
+        "recommended": "Suggested colours"
+      },
+      "customShortcut": {
+        "panel": "Settings \u00b7 Your own shortcut",
+        "capAlt": "Alt (fixed)",
+        "capKey": "The letter you press",
+        "clear": "Clear",
+        "command": "Command to run",
+        "commandList": "Commands that work anywhere",
+        "rejection": "Why it was refused"
+      },
+      "pinnedCommands": {
+        "panel": "Settings \u00b7 Pinned commands",
+        "slotFirst": "Slot 1",
+        "slotSecond": "Slot 2",
+        "slotThird": "Slot 3",
+        "palette": "Command window",
+        "paletteList": "The list, ordered by use",
+        "pinnedRow": "The three pinned buttons"
+      },
+      "replayGain": {
+        "panel": "Settings \u00b7 Audio gain",
+        "modeOff": "Off",
+        "modeTrack": "Per track",
+        "modeAlbum": "Per album",
+        "panelTab": "Panel \u00b7 Source tab",
+        "panelSummary": "This song\u2019s gain tags",
+        "panelModes": "The same three modes"
+      },
+      "importExport": {
+        "panel": "Settings \u00b7 Backup and import",
+        "copy": "What this section does",
+        "themeChips": "Which theme to include",
+        "textarea": "The config text",
+        "exportButtons": "Copy it out",
+        "importButton": "Import",
+        "dialog": "Confirm import",
+        "dialogGroups": "Changes, by group",
+        "dialogDerived": "Changes you did not ask for"
+      },
       "pages": {
         "grid": "Poster grid",
         "gridView": "Collection grid",
@@ -3124,6 +3220,13 @@ export default {
         "autoSwitch": "Switch theme automatically"
       },
       "sidePanel": {
+        "modeRow": "Mode viewfinder row",
+        "modeName": "The name in the middle",
+        "modeList": "Every mode",
+        "modeListFooter": "Full settings",
+        "fmMode": "Radio mode",
+        "fmTransport": "Previous / play / next",
+        "fmActions": "Discard and like",
         "panel": "Control panel",
         "cover": "Current artwork",
         "tabs": "Tabs",
@@ -3185,6 +3288,13 @@ export default {
       }
     },
     "targets": {
+      "audioEqualizer": "Audio effects dialog",
+      "visPlayground": "Lyric animation workbench",
+      "themePark": "Theme Park",
+      "customShortcutSettings": "Your own shortcut",
+      "pinnedCommands": "Pinned commands",
+      "replayGainSettings": "Audio gain (ReplayGain)",
+      "importExportSettings": "Backup and import",
       "playerBar": "Bottom control bar",
       "panelSlide": "Side panel toggle",
       "gridPage": "Poster grid page",
@@ -3224,6 +3334,29 @@ export default {
       "settingsPage": "Options page"
     },
     "scenes": {
+      "visPlaygroundCommon": "The four pages, and what \u201cgeneral\u201d holds",
+      "visPlaygroundVisuals": "Animation and background",
+      "visPlaygroundSubtitle": "Subtitles",
+      "sidePanelControlsModeList": "The full mode list is behind the name",
+      "sidePanelQueueRadio": "On Personal FM this cell is the radio",
+      "audioEqualizerPresets": "The switch, the presets, and your two slots",
+      "audioEqualizerSilentWrite": "One drag rewrites a slot",
+      "audioEqualizerEffects": "The effect chain below",
+      "visPlaygroundLayout": "Live preview on the left",
+      "visPlaygroundHotspots": "Three regions you cannot see",
+      "visPlaygroundSections": "The four pages on the right",
+      "themeParkTarget": "Which theme you are editing",
+      "themeParkColors": "Light and dark are two palettes",
+      "themeParkSaving": "Why save is greyed out",
+      "customShortcutKey": "Alt is fixed; you pick the letter",
+      "customShortcutCommand": "Why this list is shorter",
+      "pinnedCommandsSlots": "Three slots",
+      "pinnedCommandsVsRecent": "Pinned is not \u201crecently used\u201d",
+      "replayGainModes": "The three modes",
+      "replayGainMirrored": "One value, two places",
+      "importExportScope": "What it actually carries",
+      "importExportExport": "Exporting",
+      "importExportConfirm": "Import asks first",
       "gridPageOverview": "How this grid is organized",
       "gridPageNavigation": "Move, open, and search",
       "gridPageStructure": "Every entry in the header",
@@ -3315,6 +3448,74 @@ export default {
       "panelSlideKeyboard": "Open it from the keyboard"
     },
     "captions": {
+      "audioEqualizer": {
+        "enable": "The dialog behind the fader icon at the right of the volume row. The switch top-left turns the whole chain on or off; with it off, everything below still holds its values but nothing is applied.",
+        "presets": "Six built-in presets across the top. Each one carries both an EQ curve and a full effect chain, so picking one replaces both at once. They cannot be edited.",
+        "slots": "The last two are yours: Custom 1 and Custom 2, each holding a curve and a chain you saved.",
+        "bands": "Ten vertical faders, 31 Hz on the left to 16 kHz on the right, \u00b112 dB each.",
+        "silent": "Here is the part nothing on screen tells you: dragging any fader while a built-in preset is selected silently moves you to Custom 1 and writes the value there. No prompt, no confirmation \u2014 and whatever Custom 1 held before is gone. If you keep a setup in Custom 1, switch to Custom 2 before you start nudging a built-in preset.",
+        "reset": "The round button at the end clears the custom slot that is active, back to flat with a neutral chain. It only ever touches that one slot, and it is greyed out on a built-in preset \u2014 there is nothing to undo on one you cannot edit.",
+        "effects": "Below the bands is the rest of the chain: high and low cutoffs, saturation, bit crush, wow, noise, stereo width, space and punch. They are written into the same custom slot, by the same silent rule.",
+        "noise": "The small badge beside some of these names means the effect adds noise of its own. It is shown whether or not the slider is up, so the question \u201cwhere is that hiss coming from\u201d has an answer before you turn one on rather than after."
+      },
+      "visPlayground": {
+        "preview": "The workbench opens full screen: a live preview on the left, a narrow settings column on the right. The preview is really running \u2014 the animation, the background and the subtitles are the actual renderers, not a still picture, so every change shows immediately.",
+        "pause": "The button at the bottom-right of the preview freezes it on the current frame. Useful when you are tuning something that only lasts a moment, and it also stops the preview from eating cycles while you read.",
+        "invisible": "There is something on this preview that most people never find: three click regions lying over it. They have no border, no background, no label \u2014 nothing marks them at all.",
+        "three": "Move the pointer across and they show themselves: a strip along the top for the background, a large area in the middle for the animation, a strip along the bottom for the subtitles.",
+        "jumps": "Click one and the settings column jumps to that section. It is the fastest way around this screen \u2014 point at the part of the picture you want to change instead of reading the tab names.",
+        "four": "The column has four pages: general, background, animation, subtitles. They are the same four sections the regions point at, so the tabs and the picture are two ways into one list.",
+        "common": "With one exception: \u201cgeneral\u201d has no region of its own, because it is not a part of the picture \u2014 it holds what applies to the whole screen. That page can only be reached from these tabs.",
+        "fonts": "Most of \u201cgeneral\u201d is the lyric type: the family, the size, and the weight \u2014 with the weight on automatic unless you take it off, because a good default depends on the family you just picked.",
+        "previewText": "The first row picks what the preview sings. Swap it for a longer line, or one in another script, when you want to see how the type holds up before a real song lands on it.",
+        "sectionReset": "Each page has its own reset at the top right, and it only undoes that page. It is not a reset for the whole workbench \u2014 tuning you did on another page survives it.",
+        "animation": "The animation page starts with the mode itself. There are more of them than fit here and they are worth looking through on your own, so this chapter stops at what the page is rather than listing them.",
+        "perMode": "What follows the mode is the mode\u2019s own tuning. It is not a fixed set of rows: change the mode and these change with it, which is why a slider you remember can be missing \u2014 it belonged to the one you left.",
+        "background": "The background page works the same way: pick the background, then tune that background. It is a separate layer from the animation, so the two are chosen independently and any pair is allowed.",
+        "subtitleContent": "Subtitles are the second line under the lyric, and the first row decides what goes in it: nothing, the translation, or the romanization. It is one choice, not three toggles \u2014 translation and romanization cannot both be on.",
+        "subtitleLegibility": "The rows under it are about reading them over a moving picture: a backing behind the text, how opaque it is, and a blur on the lines not yet sung so the current one stands out.",
+        "subtitleFont": "The last row is the subtitle\u2019s type, and it follows the lyric font by default. Turn that off and its own family, size and weight appear below \u2014 they simply are not there while it is on, which is why the subtitle font settings can look missing."
+      },
+      "themePark": {
+        "which": "The pair at the top right decides which theme this session is editing: the current song\u2019s AI theme, or the custom theme you saved. Both drafts stay alive while the editor is open, so switching back and forth loses nothing \u2014 but the save button only ever writes the one selected here, and its label changes with it.",
+        "reset": "Reset throws away what you changed in this session and puts the draft back to where it started. It does not touch the theme already saved.",
+        "twoSides": "Light and dark are two separate palettes, not one palette with a preview switch. This pair decides which of the two you are editing right now, and everything below it \u2014 the four colours, the picker, the HEX box \u2014 follows that choice.",
+        "fourColors": "Four colours per side: background, primary, accent and secondary. Click a row to bring it into the picker below; the small line under each name says where that colour actually lands in the app.",
+        "recommended": "The swatches at the bottom are worked out from the current cover art. Clicking one drops it straight into whichever colour row is selected \u2014 the quickest way to a palette that matches the album.",
+        "blocked": "Save can be greyed out, and the screen does not say why on the page you are looking at. The reason is that a theme needs a name, on both sides, before it can be saved.",
+        "nameLivesHere": "And the name box is not on this page. It lives under \u201cdetails\u201d, along with the description \u2014 so the button that will not press and the field that would fix it are on two different tabs. If save is dead, go there first.",
+        "applies": "One more thing about save: saving to the custom theme also switches the app over to it. It is not a quiet write to a slot you can go and pick later \u2014 the colours you just built are what you will be looking at."
+      },
+      "customShortcut": {
+        "alt": "The left half of this row is two key caps, and only the second one is yours. Alt is drawn already pressed because it cannot be changed: this shortcut is always Alt plus one letter, so there is no way to record Ctrl+Shift+X or any other chord here.",
+        "capture": "Click the second cap and it starts listening; the next key you press becomes the letter. Modifiers held on the way there are ignored, and Esc backs out without recording anything.",
+        "taken": "A letter that already opens something is refused on the spot, with the reason in red under the caps. S and Ctrl+K belong to the command window itself, and every hotkey in the registry reserves its own \u2014 so the list of taken letters grows on its own as Folia gains shortcuts.",
+        "clear": "Once a letter is recorded, a small \u2715 appears beside the caps. It clears the binding, and the shortcut then runs nothing until you record another one.",
+        "filtered": "The select on the right does not list every command. A shortcut fires from anywhere, so only commands that work anywhere may be bound to one \u2014 anything that needs a particular page or panel is left out. That is why a command you can find in the command window may simply not be here, and nothing on screen explains the gap.",
+        "goesQuiet": "The same check runs when the key is pressed, not only when you pick. If a command later grows a requirement, or the registry claims your letter, the binding goes quiet rather than doing something else \u2014 so a shortcut that stopped working is worth re-picking here."
+      },
+      "pinnedCommands": {
+        "slots": "Three slots, each one select. Whatever you put in them shows up as a button under the command window, in this order \u2014 slot 1 on the left. Out of the box they hold previous track, next track and the queue panel.",
+        "unique": "A command can only hold one slot: once it is picked, the other two selects stop offering it. Leave a slot on \u201cnone\u201d and its place stays empty; leave all three empty and the whole row disappears from the window.",
+        "where": "This is what those three selects actually produce: a row of three fixed buttons under the command window, always in the same place. One click runs the command, with no typing and no searching.",
+        "recent": "The list above them is the other mechanism, and it is a separate one. It reorders itself: commands you ran recently float to the top, and often-used ones get a small nudge on top of that. The pinned row takes no part in it \u2014 it is stored separately and never moves. \u201cI pinned it and it still moves\u201d is these two being read as one thing.",
+        "empty": "So the two are worth using for different things: the list handles whatever you happen to need, the three buttons handle what you want in the same place every time."
+      },
+      "replayGain": {
+        "off": "ReplayGain is a loudness tag written into the file itself. With this off, Folia ignores it and plays every song at whatever level it was mastered at \u2014 which is why one album can be far louder than the next.",
+        "trackAlbum": "\u201cPer track\u201d levels every song against every other song, so a shuffled queue stays even. \u201cPer album\u201d applies one figure to the whole album, keeping the quiet track quiet and the loud one loud the way the record was mixed. Neither re-encodes anything \u2014 it is playback volume only.",
+        "sameValue": "The control panel\u2019s source tab carries the same three buttons, and they are not a second setting: both read and write one value, so changing it in either place changes it everywhere. Neither place says so.",
+        "summary": "What the source tab has in addition is this line: the current song\u2019s own tags, as T and A in dB, or \u201cunavailable\u201d when the file carries none. When a mode is selected but nothing sounds different, this is where you find out why \u2014 no tag, nothing to apply."
+      },
+      "importExport": {
+        "scope": "This section carries the way Folia looks: the colour theme, the lyric animation and every renderer\u2019s tuning, subtitles and fonts, the background, and the track card. That is the whole list.",
+        "notBackup": "So despite the name, it is not a backup of Folia. Playlists, the local library, playback settings, shortcuts and accounts are all outside it \u2014 restoring from one of these and expecting your music back is the mistake the name invites.",
+        "themeChoice": "Before exporting, pick which theme rides along: the AI one, the one you built yourself, or none at all. \u201cNone\u201d still carries the visual settings and leaves your colours out, which is what you want when sharing a lyric animation setup rather than a palette.",
+        "clipboard": "The buttons copy rather than save a file: one gives a short code, the other the same thing as readable JSON. Paste it anywhere \u2014 a message, a note \u2014 and that is the whole config.",
+        "paste": "Importing goes the other way through the same box: paste someone\u2019s code here and the import button on the right lights up.",
+        "plan": "Import does not take it all on faith. It first works out what would change and shows you, grouped, with your current value beside the incoming one \u2014 and each row has its own checkbox, so taking a background without taking the fonts is a normal thing to do.",
+        "derived": "The rows at the bottom are why this dialog exists: changes the config never asked for, but that follow from the ones you did take. Accepting someone\u2019s colours switches the app to the custom theme; accepting a system font deletes the font file you uploaded. They cannot be unchecked on their own \u2014 decline what causes them instead."
+      },
       "onboarding": {
         "overviewShape": "Folia keeps four things apart: picking music in the grids, listening on the player page or in Lattice, finding features through the command window, and adjusting things in settings. The bar at the bottom follows you across every page; help and settings are windows laid over whatever page you are on.",
         "overviewAsk": "You do not have to memorise the rest. Rest the pointer on anything that is not obvious and a hint appears beside it; hold G and that is what gets explained. It is the one thing worth remembering.",
@@ -3391,6 +3592,7 @@ export default {
         "settingsDirectNavigation": "You rarely need to browse every category: search the setting name in the command palette and Folia opens the exact section and anchor."
       },
       "playerBar": {
+        "basicsAutoExpand": "It is not only hover that opens it. Whenever playback is paused and you are somewhere other than the home screen, the capsule stays expanded on its own \u2014 the moment you are most likely to want the controls is the moment it stops hiding them. Start playing again, or go back home, and it slims down.",
         "basicsIntro": "Folia's playback controls are this one capsule. The permanent row other players put along the bottom — previous, next, shuffle, repeat, volume — has no fixed place here at all.",
         "basicsPlay": "The only button that is always present is play / pause. On a wide window it sits at the far left; when the row is too narrow for one line it moves to the middle of a second row, with the two slots on either side.",
         "basicsTitle": "Changing tracks goes through the title, not a button. Hover it and arrows appear on both sides, previewing the previous and next track names — you pick where to go by reading it, not by pressing blind.",
@@ -3426,6 +3628,12 @@ export default {
         "barShows": "That is when the bottom control bar steps in: the moment the playing song's poster leaves the viewport it appears, and it folds away again once that poster is back in view. Playback control never actually disappears."
       },
       "sidePanel": {
+        "controlsSteppers": "The two viewfinder rows pick the lyric animation and the background. The arrows at each end step to the neighbouring mode, one at a time \u2014 with a dozen animations that is a long way round.",
+        "controlsModeList": "The name in the middle is a button, and nothing on screen says so. Click it and the whole list drops down, so you can jump straight to the one you want instead of stepping past everything in between.",
+        "controlsModeListFooter": "The entry at the foot of that list is not another mode \u2014 it opens the full settings for this row, where the tuning lives.",
+        "queueRadio": "With Personal FM playing, this cell is not the queue. The same tab turns into the radio panel \u2014 the icon changes, the name changes, and the list of what is coming up is gone, because a radio does not have one.",
+        "queueRadioMode": "The chip at the top names the radio mode you are on; tapping it opens the command window\u2019s mode picker, the same one the palette offers.",
+        "queueRadioActions": "The pair at the bottom is discard and like. Discard is not \u201cremove this row\u201d \u2014 there is no row: it tells the service not to play this song for you again, and the radio moves on.",
         "cover": "The artwork for the current song sits at the top of the panel, one square block spanning its full width. It belongs to no tab \u2014 switching tabs leaves it in place. Hover it and a button appears in each of its four corners.",
         "tabs": "Directly below the artwork is the tab row: artwork, controls, queue, account. When the current song is local, from Navidrome or online, one more source cell is inserted after the artwork tab. They are faces of one place; switching does not move the panel.",
         "body": "Everything below the tab row is the current tab's content. That is the whole structure: one piece of artwork, then a row of tabs and what sits under it \u2014 there is no permanent third band in between.",

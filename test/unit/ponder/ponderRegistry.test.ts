@@ -155,7 +155,7 @@ describe('ponder registry', () => {
             'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
             'player-bar': new Set(['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed']),
             'player-page': new Set(['palette-open', 'execute-mode', 'panel-open']),
-            'side-panel': new Set(['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab']),
+            'side-panel': new Set(['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab', 'controls-mode-list', 'fm-tab']),
             'lattice-chrome': new Set(['slots-swapped', 'bottom-bar-shown']),
             'lyrics-animation-settings': new Set(['playground-open']),
             'theme-settings': new Set(['theme-park-open']),
@@ -170,6 +170,13 @@ describe('ponder registry', () => {
             'queue-command': new Set(['facet-suggestions', 'facet-narrowed', 'batch-preview']),
             'library-watch-settings': new Set(['watch-on']),
             'grid-hotkey-settings': new Set(['hotkey-on']),
+            'custom-shortcut-settings': new Set(['key-refused', 'command-list']),
+            'pinned-commands-settings': new Set(['palette-preview']),
+            'replay-gain-settings': new Set(['panel-mirror']),
+            'import-export-settings': new Set(['import-plan']),
+            'audio-equalizer': new Set(['custom-written']),
+            'vis-playground': new Set(['hotspots-visible', 'section-background', 'section-visualizer', 'section-subtitle']),
+            'theme-park': new Set(['save-blocked']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

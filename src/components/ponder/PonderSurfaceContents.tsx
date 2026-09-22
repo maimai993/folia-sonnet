@@ -15,8 +15,19 @@ import {
     PonderLibraryWatchSurface,
     PonderLyricsSourceSurface,
     PonderQueueSettingsSurface,
+    PonderReplayGainSurface,
     PonderTransitionSettingsSurface,
 } from './surfaces/PonderPlaybackSettingsSurfaces';
+import {
+    PonderCustomShortcutSurface,
+    PonderPinnedCommandsSurface,
+} from './surfaces/PonderCommandSettingsSurfaces';
+import PonderImportExportSurface from './surfaces/PonderImportExportSurface';
+import PonderAudioEqualizerSurface from './surfaces/PonderAudioEqualizerSurface';
+import {
+    PonderThemeParkSurface,
+    PonderVisPlaygroundSurface,
+} from './surfaces/PonderFullEditorSurfaces';
 import PonderLatticeChromeSurface from './surfaces/PonderLatticeChromeSurface';
 import {
     PonderLyricsAnimationSettingsSurface,
@@ -263,6 +274,20 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderLyricsSourceSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'grid-hotkey-settings'
         ? <PonderGridHotkeySurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'replay-gain-settings'
+        ? <PonderReplayGainSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'custom-shortcut-settings'
+        ? <PonderCustomShortcutSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'pinned-commands-settings'
+        ? <PonderPinnedCommandsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'import-export-settings'
+        ? <PonderImportExportSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'audio-equalizer'
+        ? <PonderAudioEqualizerSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'vis-playground'
+        ? <PonderVisPlaygroundSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'theme-park'
+        ? <PonderThemeParkSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'queue-command'
         ? <PonderQueueCommandSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'desktop-features'

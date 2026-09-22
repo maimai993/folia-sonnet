@@ -370,6 +370,167 @@ test('设置里的歌词动画与配色两组各自能单独思索', async ({ pa
     await expect(stage.locator('[data-ponder-theme-park-open]')).toHaveCount(1);
 });
 
+test('设置里剩下那四组：骨架锚点和合成界面里的真实元素对齐', async ({ page }) => {
+    // 这四组共同点是「屏幕上没写出来的那件事」，而那件事全靠指着某个具体元素讲 ——
+    // 锚点错位就等于指着旁边的空白说话。
+    await page.locator('[data-probe-open="custom-shortcut-key"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'capAlt', '[data-ponder-shortcut-alt]');
+    await expectAligned(stage, 'capKey', '[data-ponder-shortcut-key]');
+    await expectAligned(stage, 'command', '[data-ponder-shortcut-command]');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="pinned-commands-slots"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'slotFirst', '[data-ponder-pinned-slot-first]');
+    await expectAligned(stage, 'slotThird', '[data-ponder-pinned-slot-third]');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="replay-gain-modes"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'modeOff', '[data-ponder-replay-gain-off]');
+    await expectAligned(stage, 'modeAlbum', '[data-ponder-replay-gain-album]');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="import-export-scope"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'textarea', '[data-ponder-import-textarea]');
+    await expectAligned(stage, 'importButton', '[data-ponder-import-button]');
+});
+
+test('那四组各自的结果层真的演出来了', async ({ page }) => {
+    // 「自定义快捷键的命令列表更短」「固定命令长在窗口下面」「增益在来源页有第二处」
+    // 「导入会先弹对照框」—— 这四句都只在结果层上成立，结果层不起来就成了纯旁白。
+    await page.locator('[data-probe-open="custom-shortcut-command"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="command-list"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    await expect(stage.locator('[data-ponder-shortcut-command-row]')).toHaveCount(4);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="pinned-commands-palette"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="palette-preview"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    await expect(stage.locator('[data-ponder-pinned-chip]')).toHaveCount(3);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="replay-gain-mirror"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="panel-mirror"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    await expect(stage.locator('[data-ponder-replay-gain-summary]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="import-export-confirm"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="import-plan"]')).toHaveCSS('opacity', '1', { timeout: 8000 });
+    await expect(stage.locator('[data-ponder-import-derived-block]')).toBeVisible();
+});
+
+test('对话框与两块整屏编辑器：锚点落在合成界面的真实元素上', async ({ page }) => {
+    await page.locator('[data-probe-open="audio-equalizer-presets"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'presets', '[data-ponder-eq-presets]');
+    await expectAligned(stage, 'customSlots', '[data-ponder-eq-custom-slots]');
+    // 拖的是这一根，锚点必须正好压在它身上 —— 差一根就等于指着旁边那根说话。
+    await expectAligned(stage, 'bandFader', '[data-ponder-eq-band-target]');
+    await expectAligned(stage, 'noiseBadge', '[data-ponder-eq-noise-badge]');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="vis-playground-layout"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'preview', '[data-ponder-playground-preview]');
+    await expectAligned(stage, 'hotspotVisualizer', '[data-ponder-playground-hotspot-visualizer]');
+    await expectAligned(stage, 'pause', '[data-ponder-playground-pause]');
+    await expectAligned(stage, 'rows', '[data-ponder-playground-rows]');
+    await expectAligned(stage, 'sectionReset', '[data-ponder-playground-section-reset]');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="theme-park-target"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'targetToggle', '[data-ponder-park-target]');
+    await expectAligned(stage, 'save', '[data-ponder-park-save]');
+    await expectAligned(stage, 'colorRows', '[data-ponder-park-colors]');
+    await expectAligned(stage, 'modeToggle', '[data-ponder-park-mode]');
+});
+
+test('那三处的结果层真的换上来了', async ({ page }) => {
+    // 「拖一根就换槽」「热区悬停才显形」「保存灰着、名字在另一页」——
+    // 三句话都只在结果层上成立。
+    await page.locator('[data-probe-open="audio-equalizer-write"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="custom-written"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    // 换槽的证据：选中态从内置那排挪到了自定义那两颗上。
+    await expect(stage.locator('[data-ponder-eq-custom-slots-after] [data-ponder-eq-chip-selected]')).toHaveCount(1);
+    await expect(stage.locator('[data-ponder-eq-presets-after] [data-ponder-eq-chip-selected]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="vis-playground-hotspots"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="hotspots-visible"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    await expect(stage.locator('[data-ponder-playground-hotspot-shown]')).toHaveCount(3);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    // 换页换的是整块右栏：标签高亮不跟着挪的话，画面会停在「还选着上一页」。
+    await page.locator('[data-probe-open="vis-playground-subtitle"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="section-subtitle"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    const subtitleTab = await stage.locator('[data-ponder-surface-state="section-subtitle"] [data-ponder-editor-tab]')
+        .evaluateAll(nodes => nodes.findIndex(node => node.hasAttribute('data-ponder-editor-tab-active')));
+    expect(subtitleTab).toBe(3);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="theme-park-saving"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="save-blocked"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    await expect(stage.locator('[data-ponder-park-tab-details]')).toBeVisible();
+});
+
+test('控制面板那两章：模式列表压下来，FM 下这一格换成电台', async ({ page }) => {
+    await page.locator('[data-probe-open="panel-controls-mode-list"]').click();
+    let stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    // 「点中间那块名称」这句话只有在锚点正好压在那块上时才成立。
+    await expectAligned(stage, 'modeName', '[data-ponder-panel-mode-name]');
+    await expect(stage.locator('[data-ponder-surface-state="controls-mode-list"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    await expect(stage.locator('[data-ponder-panel-mode-list-footer]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    await page.locator('[data-probe-open="panel-queue-radio"]').click();
+    stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage.locator('[data-ponder-surface-state="fm-tab"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    // 换的是同一格标签，所以高亮仍然落在第三格上。
+    const activeIndex = await stage.locator('[data-ponder-surface-state="fm-tab"] [data-ponder-panel-tab]')
+        .evaluateAll(nodes => nodes.findIndex(node => node.hasAttribute('data-active')));
+    expect(activeIndex).toBe(2);
+    await expect(stage.locator('[data-ponder-panel-fm-mode]')).toBeVisible();
+});
+
 test('字幕底色不透明，且压在外框和浮层卡之上', async ({ page }) => {
     await page.locator('[data-probe-open="lattice-chrome-slots"]').click();
     const stage = page.locator('[data-testid="ponder-stage"]');

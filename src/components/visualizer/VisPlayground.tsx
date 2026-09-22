@@ -1136,6 +1136,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                 exit={{ opacity: 0, y: 18, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
                 onClick={(event) => event.stopPropagation()}
+                data-ponder="vis-playground"
                 className={`mx-auto flex h-full max-w-[1600px] flex-col overflow-hidden rounded-[32px] border ${borderColor} ${glassBg} shadow-[0_24px_80px_rgba(0,0,0,0.28)]`}
             >
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-6">

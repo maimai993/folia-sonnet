@@ -62,7 +62,20 @@ export type PonderTargetId =
     | 'local-library-watch'
     | 'queue-settings'
     | 'lyrics-settings'
-    | 'grid-palette-hotkey';
+    | 'grid-palette-hotkey'
+    // 设置里剩下那几处「界面上没写、但改错了会一直别扭」的：修饰键固定成 Alt 的自定义
+    // 快捷键、和最近用过分属两套机制的固定命令、与来源页同一个值的音频增益，以及
+    // 只备份视觉那一套、却叫「备份与导入」的那一组。
+    //
+    // 后面三个是藏在对话框和整屏编辑器里的：均衡器拖一根推子就会静默换槽并覆写、
+    // 调参台预览上那三块看不见的热区、以及 Theme Park 整屏编辑器本身。
+    | 'custom-shortcut-settings'
+    | 'pinned-commands'
+    | 'replay-gain-settings'
+    | 'import-export-settings'
+    | 'audio-equalizer'
+    | 'vis-playground'
+    | 'theme-park';
 
 /**
  * 导航页把目标按这个分组。
@@ -181,7 +194,14 @@ export type PonderSurfaceKind =
     | 'library-watch-settings'
     | 'queue-settings'
     | 'lyrics-source-settings'
-    | 'grid-hotkey-settings';
+    | 'grid-hotkey-settings'
+    | 'custom-shortcut-settings'
+    | 'pinned-commands-settings'
+    | 'replay-gain-settings'
+    | 'import-export-settings'
+    | 'audio-equalizer'
+    | 'vis-playground'
+    | 'theme-park';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

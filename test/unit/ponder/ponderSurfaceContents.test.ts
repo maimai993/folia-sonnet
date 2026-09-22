@@ -109,6 +109,113 @@ describe('PonderSurfaceContents', () => {
         });
     });
 
+    it('自定义快捷键画的是两颗键帽加一个下拉，Alt 那颗是印死的', () => {
+        const markup = renderSurface('custom-shortcut-settings');
+        expect(markup).toContain('data-ponder-custom-shortcut-structure');
+        expect(markup).toContain('data-ponder-shortcut-alt');
+        expect(markup).toContain('data-ponder-shortcut-key');
+        expect(markup).toContain('data-ponder-shortcut-command');
+        // 被退回的那颗字母、以及筛过的命令列表，是这一组仅有的两件界面上没写的事。
+        ['key-refused', 'command-list'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+    });
+
+    it('固定命令的结果层画的是命令窗口本身，列表和那一排分属两块', () => {
+        const markup = renderSurface('pinned-commands-settings');
+        expect(markup).toContain('data-ponder-pinned-commands-structure');
+        expect(markup.match(/data-ponder-pinned-slot-/g)).toHaveLength(3);
+        expect(markup).toContain('data-ponder-pinned-palette-list');
+        expect(markup.match(/data-ponder-pinned-chip/g)).toHaveLength(3);
+        expect(markup).toContain('data-ponder-surface-state="palette-preview"');
+    });
+
+    it('音频增益的结果层是来源页上那一小块，带分贝那一行', () => {
+        const markup = renderSurface('replay-gain-settings');
+        expect(markup).toContain('data-ponder-replay-gain-structure');
+        ['off', 'track', 'album'].forEach(mode => {
+            expect(markup).toContain(`data-ponder-replay-gain-${mode}`);
+        });
+        // 没有这一行就讲不出「模式选了却没生效，是这首歌没带标签」。
+        expect(markup).toContain('data-ponder-replay-gain-summary');
+        expect(markup).toContain('data-ponder-surface-state="panel-mirror"');
+    });
+
+    it('备份与导入带一个逐项对照框，衍生改动单独一块', () => {
+        const markup = renderSurface('import-export-settings');
+        expect(markup).toContain('data-ponder-import-export-structure');
+        expect(markup).toContain('data-ponder-import-textarea');
+        expect(markup).toContain('data-ponder-import-button');
+        expect(markup).toContain('data-ponder-import-dialog');
+        // 勾不掉的那几条是这个确认框存在的理由，所以它们得自成一块。
+        expect(markup).toContain('data-ponder-import-derived-block');
+        expect(markup.match(/data-ponder-import-derived="true"/g)).toHaveLength(2);
+        expect(markup).toContain('data-ponder-surface-state="import-plan"');
+    });
+
+    it('均衡器把预设排和推子排画在同一张图上，换槽是一整层结果', () => {
+        const markup = renderSurface('audio-equalizer');
+        expect(markup).toContain('data-ponder-audio-equalizer-structure');
+        expect(markup).toContain('data-ponder-eq-presets');
+        expect(markup).toContain('data-ponder-eq-custom-slots');
+        // 两排各十根：拖之前一层、拖之后一层，同一时刻只有一层看得见。
+        expect(markup.match(/data-ponder-eq-band(?![-a-z])/g)).toHaveLength(20);
+        expect(markup).toContain('data-ponder-surface-state="custom-written"');
+    });
+
+    it('调参台的热区平时不画边框，只有结果层才把它们亮出来', () => {
+        const markup = renderSurface('vis-playground');
+        expect(markup).toContain('data-ponder-vis-playground-structure');
+        ['background', 'visualizer', 'subtitle'].forEach(region => {
+            expect(markup).toContain(`data-ponder-playground-hotspot-${region}`);
+        });
+        // 三块显形的边框只在那一层里；基础层画出来就等于把这一章讲反了。
+        expect(markup.match(/data-ponder-playground-hotspot-shown/g)).toHaveLength(3);
+        expect(markup).toContain('data-ponder-surface-state="hotspots-visible"');
+
+        // 右栏四页各是一层，而且每层都带一颗只管本页的复位。
+        ['section-background', 'section-visualizer', 'section-subtitle'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
+        expect(markup.match(/data-ponder-playground-section-reset/g)).toHaveLength(4);
+        // 基础层停在「通用」：示例文本和歌词字体两行是这一页独有的。
+        expect(markup).toContain('data-ponder-playground-preview-text');
+        expect(markup).toContain('data-ponder-playground-font');
+        // 字幕页的内容三选一，和那颗决定字体跟不跟歌词走的开关。
+        expect(markup).toContain('data-ponder-playground-subtitle-content');
+        expect(markup).toContain('data-ponder-playground-subtitle-font');
+    });
+
+    it('Theme Park 顶栏三件齐全，保存灰掉那层同时亮出「信息」那一格', () => {
+        const markup = renderSurface('theme-park');
+        expect(markup).toContain('data-ponder-theme-park-structure');
+        ['target', 'reset', 'save'].forEach(part => {
+            expect(markup).toContain(`data-ponder-park-${part}`);
+        });
+        expect(markup).toContain('data-ponder-park-mode');
+        expect(markup.match(/data-ponder-park-color-row/g)).toHaveLength(4);
+        // 按不动的那颗和能解决它的那一格必须在同一层里，否则连不成一句话。
+        expect(markup).toContain('data-ponder-park-save-blocked');
+        expect(markup).toContain('data-ponder-park-tab-details');
+        expect(markup).toContain('data-ponder-surface-state="save-blocked"');
+    });
+
+    it('控制面板多出两副面孔：展开的模式列表，和 FM 下的电台页', () => {
+        const markup = renderSurface('side-panel');
+        // 取景器中间那块名称是一颗按钮，它得是一块独立元素才指得住。
+        expect(markup).toContain('data-ponder-panel-mode-name');
+        expect(markup.match(/data-ponder-panel-mode-option/g)).toHaveLength(6);
+        // 列表底下那一条是「去完整设置」，不是第七个模式。
+        expect(markup).toContain('data-ponder-panel-mode-list-footer');
+        expect(markup).toContain('data-ponder-surface-state="controls-mode-list"');
+
+        // 电台页没有队列行，只有一枚模式胶囊、三颗传送和一对喜欢/扔掉。
+        expect(markup).toContain('data-ponder-panel-fm-mode');
+        expect(markup).toContain('data-ponder-panel-fm-transport');
+        expect(markup.match(/data-ponder-panel-fm-action(?![-a-z])/g)).toHaveLength(2);
+        expect(markup).toContain('data-ponder-surface-state="fm-tab"');
+    });
+
     it('GridView surface 使用蜂窝卡片，并包含信息与筛选结果', () => {
         const markup = renderSurface('grid-view-page');
         expect(markup).toContain('data-ponder-grid-view-page-structure');

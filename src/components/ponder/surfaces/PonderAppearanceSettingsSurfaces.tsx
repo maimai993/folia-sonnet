@@ -1,6 +1,11 @@
 import React from 'react';
 import { Images, LayoutGrid, PanelsTopLeft, RotateCcw } from 'lucide-react';
-import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegistrar } from './PonderSurfaceStateLayer';
+import PonderSurfaceStateLayer, { PonderSurfaceBase } from './PonderSurfaceStateLayer';
+import {
+    SettingsHeading as Heading,
+    SettingsToggleRow as ToggleRow,
+    type PonderSettingsSurfaceProps as SurfaceProps,
+} from './ponderSettingsParts';
 import type { PonderRelativeRect } from '../../../types/ponder';
 import {
     GRID3D_CARD_STYLE_GEOMETRY as C,
@@ -14,44 +19,7 @@ import {
 //
 // 和 PonderSettingsSectionSurfaces 分开一个文件，不是因为它们是另一类东西，而是因为
 // 那个文件已经装着歌词动画和配色主题两组加一个整屏编辑器；再塞三组进去，改其中一组
-// 就要在四百行里找位置。三组都只有开关、滑杆和并排选项，共用下面这几个小件。
-
-type SurfaceProps = {
-    accent: string;
-    line: string;
-    outline: string;
-    registerStateNode?: PonderSurfaceStateRegistrar;
-};
-
-/** 分组标题：小图标加一条标题文字。 */
-const Heading: React.FC<{ rect: PonderRelativeRect; line: string; icon: typeof Images }> = ({ rect, line, icon: Icon }) => (
-    <span className="flex items-center gap-[5%]" style={relativeRectStyle(rect)}>
-        <Icon className="h-[62%] w-auto opacity-55" />
-        <span className="h-[26%] flex-1 rounded-full opacity-70" style={{ backgroundColor: line }} />
-    </span>
-);
-
-/** 一行开关：左边标题加说明，右边 48×24 的滑块。 */
-const ToggleRow: React.FC<{
-    rect: PonderRelativeRect;
-    line: string;
-    accent: string;
-    on?: boolean;
-    marker: string;
-}> = ({ rect, line, accent, on, marker }) => (
-    <div {...{ [marker]: true }} className="flex items-center gap-[4%]" style={relativeRectStyle(rect)}>
-        <span className="flex flex-1 flex-col gap-1.5">
-            <span className="h-1.5 w-[42%] rounded-full" style={{ backgroundColor: line }} />
-            <span className="h-1 w-[72%] rounded-full opacity-45" style={{ backgroundColor: line }} />
-        </span>
-        <span
-            className="relative h-4 w-8 shrink-0 rounded-full"
-            style={{ backgroundColor: on ? accent : line, opacity: on ? 0.75 : 1 }}
-        >
-            <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white ${on ? 'right-0.5' : 'left-0.5'}`} />
-        </span>
-    </div>
-);
+// 就要在四百行里找位置。三组都只有开关、滑杆和并排选项，形状来自 ponderSettingsParts。
 
 /** 一条带标题和百分比的滑杆。 */
 const SliderRow: React.FC<{

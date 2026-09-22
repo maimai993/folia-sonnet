@@ -97,6 +97,7 @@ const VolumeRow: React.FC<VolumeRowProps> = ({
 
             <button
                 type="button"
+                data-ponder="audio-equalizer"
                 onClick={openAudioEqualizer}
                 className={`shrink-0 rounded-md transition-opacity hover:opacity-100 ${audioEqualizerSettings.enabled ? 'opacity-100' : 'opacity-40'}`}
                 style={audioEqualizerSettings.enabled ? { color: theme.accentColor } : undefined}

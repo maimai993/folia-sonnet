@@ -159,6 +159,19 @@ const barBasics: PonderSceneScript = {
             durationMs: 4400,
             withPrevious: true,
         },
+        { kind: 'pause', id: 'readCollapsed' },
+
+        // 「只有悬停才展开」是错的：暂停且不在首页时它自己就展开着。少了这一句，
+        // 暂停时看到一条完整胶囊的人会以为是别的什么把它撑开了。
+        {
+            kind: 'caption',
+            id: 'autoExpand',
+            at: 'bottom',
+            textKey: 'ponder.captions.playerBar.basicsAutoExpand',
+            pointTo: { anchor: 'bar' },
+            durationMs: 6200,
+            keyframe: true,
+        },
         { kind: 'pause', id: 'settle' },
     ],
 };

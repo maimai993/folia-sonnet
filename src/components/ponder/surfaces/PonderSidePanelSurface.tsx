@@ -3,6 +3,10 @@ import {
     ChevronLeft,
     ChevronRight,
     Disc,
+    Play,
+    Radio,
+    SkipBack,
+    SkipForward,
     Heart,
     Home,
     FileText,
@@ -27,7 +31,9 @@ import {
 } from 'lucide-react';
 import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegistrar } from './PonderSurfaceStateLayer';
 import {
+    SIDE_PANEL_CONTROLS_PAGE as C,
     SIDE_PANEL_COVER_ACTIONS as A,
+    SIDE_PANEL_FM_PAGE as F,
     SIDE_PANEL_GEOMETRY as G,
     SIDE_PANEL_SOURCE_PAGE as S,
     relativeRectStyle,
@@ -66,6 +72,9 @@ const TABS = [Disc, SlidersHorizontal, ListMusic, User];
  * 不是给常驻那排加一个图标 —— 这一格真的时有时无，画成五格才说得清「它插进来了」。
  */
 const SOURCE_TABS = [Disc, FileText, SlidersHorizontal, ListMusic, User];
+
+/** 私人 FM 打开时的那一排：第三格从清单图标变成电台图标，位置不动。 */
+const FM_TABS = [Disc, SlidersHorizontal, Radio, User];
 
 /**
  * 标签排加它下面那块内容。换页时整块一起换，高亮才会落在新的那一格上。
@@ -134,8 +143,8 @@ const CoverPage: React.FC<PageProps> = ({ accent, line }) => (
  * 下面才是边听边调的那些参数。画成三条滑杆会把这一页认错成均衡器。
  */
 const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-controls className="flex flex-col gap-[6%]" style={relativeRectStyle(G.body)}>
-        <div className="grid h-[26%] shrink-0 grid-cols-3 gap-[4%]">
+    <div data-ponder-panel-controls style={relativeRectStyle(G.body)}>
+        <div className="grid grid-cols-3 gap-[4%]" style={relativeRectStyle(C.songActions)}>
             {[Repeat, Heart, Sparkle].map((Icon, index) => (
                 <span
                     key={index}
@@ -150,8 +159,8 @@ const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
 
         <div
             data-ponder-panel-volume
-            className="flex h-[16%] shrink-0 items-center gap-[4%] rounded-xl px-[4%]"
-            style={{ backgroundColor: line }}
+            className="flex items-center gap-[4%] rounded-xl px-[4%]"
+            style={{ ...relativeRectStyle(C.volume), backgroundColor: line }}
         >
             <Volume2 className="h-[42%] w-auto shrink-0 opacity-45" />
             <span className="relative h-[8%] min-w-0 flex-1 rounded-full" style={{ backgroundColor: outline }}>
@@ -160,18 +169,109 @@ const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
             <SlidersHorizontal className="h-[36%] w-auto shrink-0 opacity-45" />
         </div>
 
-        {[0, 1].map(index => (
-            <div key={index} className="flex h-[16%] shrink-0 items-center gap-[3%] px-[1%]">
-                <ChevronLeft className="h-[40%] w-auto shrink-0 opacity-35" />
-                <span className="aspect-square h-[62%] shrink-0 rounded-md border" style={{ borderColor: outline }} />
-                <span className="h-[12%] flex-1 rounded-full opacity-70" style={{ backgroundColor: line }} />
+        {/* 两行取景器。中间那块名称按几何表单独摆，不走 flex —— 它是一颗可点的按钮，
+            要能被锚点指住，而 flex 里的一条占位文字量不出稳定的位置。 */}
+        {([
+            [C.modeRowVisualizer, C.modeName, true],
+            [C.modeRowBackground, C.modeNameBackground, false],
+        ] as const).map(([rowRect, nameRect, isFirst]) => (
+            <React.Fragment key={isFirst ? 'visualizer' : 'background'}>
+                <div data-ponder-panel-mode-row className="flex items-center gap-[3%] px-[1%]" style={relativeRectStyle(rowRect)}>
+                    <ChevronLeft className="h-[40%] w-auto shrink-0 opacity-35" />
+                    <span className="aspect-square h-[62%] shrink-0 rounded-md border" style={{ borderColor: outline }} />
+                    <span className="min-w-0 flex-1" />
+                    <span
+                        className="h-[62%] w-[22%] shrink-0 rounded-full border"
+                        style={{ borderColor: outline, backgroundColor: isFirst ? `${accent}22` : undefined }}
+                    />
+                    <ChevronRight className="h-[40%] w-auto shrink-0 opacity-35" />
+                </div>
                 <span
-                    className="h-[62%] w-[22%] shrink-0 rounded-full border"
-                    style={{ borderColor: outline, backgroundColor: index === 0 ? `${accent}22` : undefined }}
-                />
-                <ChevronRight className="h-[40%] w-auto shrink-0 opacity-35" />
-            </div>
+                    {...(isFirst ? { 'data-ponder-panel-mode-name': true } : {})}
+                    className="flex items-center"
+                    style={relativeRectStyle(nameRect)}
+                >
+                    <span className="h-[18%] w-full rounded-full opacity-70" style={{ backgroundColor: line }} />
+                </span>
+            </React.Fragment>
         ))}
+    </div>
+);
+
+/** 点中间那块名称展开的完整模式列表，最底下一条是通往完整设置的出口。 */
+const ModeListPage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-mode-list-page style={relativeRectStyle(G.body)}>
+        <span
+            data-ponder-panel-mode-name-open
+            className="flex items-center"
+            style={relativeRectStyle(C.modeName)}
+        >
+            <span className="h-[18%] w-full rounded-full" style={{ backgroundColor: accent }} />
+        </span>
+        <div
+            data-ponder-panel-mode-list
+            className="flex flex-col justify-evenly rounded-xl px-[5%]"
+            style={{ ...relativeRectStyle(C.modeList), backgroundColor: 'rgba(0,0,0,0.55)', boxShadow: `inset 0 0 0 1px ${outline}` }}
+        >
+            {[0, 1, 2, 3, 4, 5].map(index => (
+                <span key={index} data-ponder-panel-mode-option className="flex items-center gap-[4%]">
+                    <span className="aspect-square h-[9%] shrink-0 rounded-sm border" style={{ borderColor: outline }} />
+                    <span
+                        className="h-[5%] rounded-full"
+                        style={{ width: `${54 + (index % 3) * 12}%`, backgroundColor: index === 1 ? accent : line }}
+                    />
+                </span>
+            ))}
+        </div>
+        {/* 列表底下那一条：它不是第七个模式，是「去完整设置」。 */}
+        <span
+            data-ponder-panel-mode-list-footer
+            className="flex items-center gap-[4%] rounded-lg px-[5%]"
+            style={{ ...relativeRectStyle(C.modeListFooter), backgroundColor: 'rgba(255,255,255,0.06)' }}
+        >
+            <Settings className="h-[46%] w-auto shrink-0 opacity-55" />
+            <span className="h-[16%] w-[46%] rounded-full opacity-55" style={{ backgroundColor: line }} />
+        </span>
+    </div>
+);
+
+/**
+ * 电台页：私人 FM 打开时，队列那一格整格换成它。
+ *
+ * 顶上那枚胶囊开的是命令窗口里的电台模式选择器；下面三颗是传送；最底下一对是
+ * 扔掉和喜欢 —— 扔掉会告诉服务别再放这首，不是从一份清单里移掉一行。
+ */
+const FmPage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-fm style={relativeRectStyle(G.body)}>
+        <span
+            data-ponder-panel-fm-mode
+            className="flex items-center justify-center gap-[8%] rounded-full"
+            style={{ ...relativeRectStyle(F.modeChip), backgroundColor: line }}
+        >
+            <Radio className="h-[52%] w-auto opacity-70" />
+            <span className="h-[18%] w-[44%] rounded-full opacity-60" style={{ backgroundColor: outline }} />
+        </span>
+
+        <div data-ponder-panel-fm-transport className="flex items-center justify-center gap-[10%]" style={relativeRectStyle(F.transport)}>
+            <SkipBack className="h-[38%] w-auto opacity-45" />
+            <span className="flex aspect-square h-full items-center justify-center rounded-full" style={{ backgroundColor: accent, opacity: 0.85 }}>
+                <Play className="h-[44%] w-auto" />
+            </span>
+            <SkipForward className="h-[38%] w-auto opacity-45" />
+        </div>
+
+        <div data-ponder-panel-fm-actions className="flex items-center justify-between" style={relativeRectStyle(F.actions)}>
+            {[Trash2, Heart].map((Icon, index) => (
+                <span
+                    key={index}
+                    data-ponder-panel-fm-action
+                    className="flex aspect-square h-full items-center justify-center rounded-full"
+                    style={{ backgroundColor: line }}
+                >
+                    <Icon className="h-[40%] w-auto opacity-70" />
+                </span>
+            ))}
+        </div>
     </div>
 );
 
@@ -419,6 +519,20 @@ const PonderSidePanelSurface: React.FC<PonderSidePanelSurfaceProps> = ({
         <PonderSurfaceStateLayer state="queue-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={2} accent={accent} line={line} outline={outline}>
                 <QueuePage accent={accent} line={line} outline={outline} />
+            </TabPage>
+        </PonderSurfaceStateLayer>
+
+        {/* 点中间那块名称：完整列表压下来，底下还有一条去完整设置的出口。 */}
+        <PonderSurfaceStateLayer state="controls-mode-list" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
+            <TabPage active={1} accent={accent} line={line} outline={outline}>
+                <ModeListPage accent={accent} line={line} outline={outline} />
+            </TabPage>
+        </PonderSurfaceStateLayer>
+
+        {/* 私人 FM 打开时，队列那一格整格换成电台面板 —— 同一格标签，另一套内容。 */}
+        <PonderSurfaceStateLayer state="fm-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
+            <TabPage active={2} tabs={FM_TABS} accent={accent} line={line} outline={outline}>
+                <FmPage accent={accent} line={line} outline={outline} />
             </TabPage>
         </PonderSurfaceStateLayer>
 

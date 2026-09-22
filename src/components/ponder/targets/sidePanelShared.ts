@@ -1,5 +1,7 @@
 import {
+    SIDE_PANEL_CONTROLS_PAGE as C,
     SIDE_PANEL_COVER_ACTIONS as A,
+    SIDE_PANEL_FM_PAGE as F,
     SIDE_PANEL_GEOMETRY as G,
     SIDE_PANEL_SOURCE_PAGE as S,
 } from '../surfaces/ponderSurfaceGeometry';
@@ -58,6 +60,23 @@ export const SIDE_PANEL_SOURCE_ANCHORS = {
     sourceGain: region('body', S.gain, 'ponder.anchors.sidePanel.sourceGain'),
     sourceLyrics: region('body', S.lyrics, 'ponder.anchors.sidePanel.sourceLyrics'),
     sourceOffset: region('body', S.offset, 'ponder.anchors.sidePanel.sourceOffset'),
+} satisfies Record<string, PonderAnchorSource>;
+
+/** 控制页里那两行取景器，以及点开之后压下来的完整列表。 */
+export const SIDE_PANEL_CONTROLS_ANCHORS = {
+    ...SIDE_PANEL_ANCHORS,
+    modeRow: region('body', C.modeRowVisualizer, 'ponder.anchors.sidePanel.modeRow'),
+    modeName: region('body', C.modeName, 'ponder.anchors.sidePanel.modeName'),
+    modeList: region('body', C.modeList, 'ponder.anchors.sidePanel.modeList'),
+    modeListFooter: region('body', C.modeListFooter, 'ponder.anchors.sidePanel.modeListFooter'),
+} satisfies Record<string, PonderAnchorSource>;
+
+/** 电台页里那三块。私人 FM 打开时，队列那一格整格换成它。 */
+export const SIDE_PANEL_FM_ANCHORS = {
+    ...SIDE_PANEL_ANCHORS,
+    fmMode: region('body', F.modeChip, 'ponder.anchors.sidePanel.fmMode'),
+    fmTransport: region('body', F.transport, 'ponder.anchors.sidePanel.fmTransport'),
+    fmActions: region('body', F.actions, 'ponder.anchors.sidePanel.fmActions'),
 } satisfies Record<string, PonderAnchorSource>;
 
 /**
