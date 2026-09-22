@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type React from 'react';
-import { PlayerState, type LyricData, type PlaybackContext, type ReplayGainMode, type SongResult } from '../types';
+import { PlayerState, type ActiveLocalLyricsSource, type LyricData, type PlaybackContext, type ReplayGainMode, type SongResult } from '../types';
 import { createCoverUrlResolver } from '../components/app/playback/createCoverUrlResolver';
 
 /** The now-playing picture, frozen for as long as a transition is running. */
@@ -37,6 +37,7 @@ type PlaybackStoreState = {
     currentSong: SongResult | null;
     audioSrc: string | null;
     lyrics: LyricData | null;
+    activeLocalLyricsSource: ActiveLocalLyricsSource | null;
     cachedCoverUrl: string | null;
     duration: number;
     playerState: PlayerState;
@@ -58,6 +59,7 @@ type PlaybackStoreState = {
     setCurrentSong: SetState<SongResult | null>;
     setAudioSrc: SetState<string | null>;
     setLyricsState: SetState<LyricData | null>;
+    setActiveLocalLyricsSource: SetState<ActiveLocalLyricsSource | null>;
     setCachedCoverUrl: SetState<string | null>;
     setDuration: SetState<number>;
     setPlayerState: SetState<PlayerState>;
@@ -84,6 +86,7 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
     currentSong: null,
     audioSrc: null,
     lyrics: null,
+    activeLocalLyricsSource: null,
     cachedCoverUrl: null,
     duration: 0,
     playerState: PlayerState.IDLE,
@@ -98,6 +101,7 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
     setCurrentSong: (next) => set({ currentSong: resolve(next, get().currentSong) }),
     setAudioSrc: (next) => set({ audioSrc: resolve(next, get().audioSrc) }),
     setLyricsState: (next) => set({ lyrics: resolve(next, get().lyrics) }),
+    setActiveLocalLyricsSource: (next) => set({ activeLocalLyricsSource: resolve(next, get().activeLocalLyricsSource) }),
     setCachedCoverUrl: (next) => set({ cachedCoverUrl: resolve(next, get().cachedCoverUrl) }),
     setDuration: (next) => set({ duration: resolve(next, get().duration) }),
     setPlayerState: (next) => set({ playerState: resolve(next, get().playerState) }),
@@ -119,6 +123,7 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
 export const setCurrentSong: SetState<SongResult | null> = (next) => usePlaybackStore.getState().setCurrentSong(next);
 export const setAudioSrc: SetState<string | null> = (next) => usePlaybackStore.getState().setAudioSrc(next);
 export const setLyricsState: SetState<LyricData | null> = (next) => usePlaybackStore.getState().setLyricsState(next);
+export const setActiveLocalLyricsSource: SetState<ActiveLocalLyricsSource | null> = (next) => usePlaybackStore.getState().setActiveLocalLyricsSource(next);
 export const setCachedCoverUrl: SetState<string | null> = (next) => usePlaybackStore.getState().setCachedCoverUrl(next);
 export const setDuration: SetState<number> = (next) => usePlaybackStore.getState().setDuration(next);
 export const setPlayerState: SetState<PlayerState> = (next) => usePlaybackStore.getState().setPlayerState(next);

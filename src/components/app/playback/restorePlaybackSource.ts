@@ -20,9 +20,9 @@ import {
     replacePlaybackSongInQueue,
 } from '../../../utils/appPlaybackGuards';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
-import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
+import { resolveLocalSongLyrics } from '../../../utils/lyrics/localSongLyrics';
 import { loadOnlineLyricsState, resolveOnlineLyrics } from '../../../utils/onlineLyricsState';
 import type { AudioQualityPreference, MediaId } from '../../../types/onlineMusic';
 import { omni } from '../../../services/onlineMusic/omni';
@@ -30,7 +30,8 @@ import { getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../..
 import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
-import { setAudioSrc, setCachedCoverUrl, setCurrentSong } from '../../../stores/usePlaybackStore';
+import { setActiveLocalLyricsSource, setAudioSrc, setCachedCoverUrl, setCurrentSong } from '../../../stores/usePlaybackStore';
+import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -180,31 +181,12 @@ export const restorePlaybackSourceForSong = async (
         currentOnlineAudioUrlFetchedAtRef.current = null;
         setAudioSrc(blobUrl);
 
-        const source = songToRestore.lyricsSource;
-        if (source === 'online' && songToRestore.matchedLyrics) {
-            setLyrics(songToRestore.matchedLyrics);
-        } else if (source === 'embedded' && songToRestore.embeddedLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'embedded',
-                textContent: songToRestore.embeddedLyricsContent,
-                translationContent: songToRestore.embeddedTranslationLyricsContent,
-            }));
-        } else if ((source === 'local' || songToRestore.hasLocalLyrics) && songToRestore.localLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'local',
-                lrcContent: songToRestore.localLyricsContent,
-                tLrcContent: songToRestore.localTranslationLyricsContent,
-                formatHint: songToRestore.localLyricsFormat,
-            }));
-        } else if (songToRestore.hasEmbeddedLyrics && songToRestore.embeddedLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'embedded',
-                textContent: songToRestore.embeddedLyricsContent,
-                translationContent: songToRestore.embeddedTranslationLyricsContent,
-            }));
-        } else if (songToRestore.matchedLyrics) {
-            setLyrics(songToRestore.matchedLyrics);
-        }
+        const resolvedLyrics = await resolveLocalSongLyrics(
+            songToRestore,
+            useLyricSettingsStore.getState().localLyricsPriority,
+        );
+        setLyrics(resolvedLyrics.lyrics);
+        setActiveLocalLyricsSource(resolvedLyrics.source);
 
         const cacheKey = `cover_local_${songToRestore.id}`;
         const cachedCoverUrl = songToRestore.useOnlineCover

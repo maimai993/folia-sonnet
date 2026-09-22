@@ -9,6 +9,7 @@ import { getLocalSongs } from '../../services/db';
 import type { LocalSong } from '../../types';
 import { isLocalPlaybackSong } from '../../utils/appPlaybackGuards';
 import ReplayGainControl from './ReplayGainControl';
+import { usePlaybackStore } from '../../stores/usePlaybackStore';
 
 interface LocalTabProps {
     currentSong: UnifiedSong;
@@ -43,6 +44,7 @@ const LocalTab: React.FC<LocalTabProps> = ({
 }) => {
     const { t } = useTranslation();
     const lrcInputRef = useRef<HTMLInputElement>(null);
+    const activeSource = usePlaybackStore(state => state.activeLocalLyricsSource);
 
     const [loadedLocalData, setLoadedLocalData] = useState<{
         songId: string;
@@ -105,17 +107,6 @@ const LocalTab: React.FC<LocalTabProps> = ({
         }
         return sources;
     }, [localData, t]);
-
-    // Determine currently active source
-    const activeSource = useMemo(() => {
-        if (!localData) return null;
-        if (localData.lyricsSource) return localData.lyricsSource;
-        // Default priority: local > embedded > online
-        if (localData.hasLocalLyrics) return 'local';
-        if (localData.hasEmbeddedLyrics) return 'embedded';
-        if ((localData.matchedLyrics?.lines?.length ?? 0) > 0) return 'online';
-        return null;
-    }, [localData]);
 
     const tabActiveBg = isDaylight ? 'bg-blue-500/15 text-blue-600' : 'bg-blue-500/20 text-blue-300';
     const tabInactiveBg = isDaylight ? 'bg-black/5 text-zinc-500 hover:bg-black/10' : 'bg-white/5 text-zinc-400 hover:bg-white/10';
