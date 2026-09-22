@@ -3573,7 +3573,11 @@ export default {
         "derived": "The rows at the bottom are why this dialog exists: changes the config never asked for, but that follow from the ones you did take. Accepting someone\u2019s colours switches the app to the custom theme; accepting a system font deletes the font file you uploaded. They cannot be unchecked on their own \u2014 decline what causes them instead."
       },
       "onboarding": {
-        "overviewPonder": "For complex controls and components, Folia provides both hover-based Ponder and whole-page Ponder. You can turn them off in Settings.",
+        "overviewCtrlG": "Step 1: On any page, press Ctrl + G to open Ponder for that page.",
+        "overviewWholePage": "Ponder walks through the current page step by step: what is on it, where each part is, and what you can do. What you are watching now is a Ponder.",
+        "overviewHover": "Step 2: Some buttons and components are more complex. Rest the pointer on one and a Ponder hint appears beside it.",
+        "overviewHold": "Step 3: When the hint appears, hold G. When the wipe fills, that component’s Ponder opens; let go early to cancel.",
+        "overviewSettings": "If you do not need these hints, turn them off in Settings. The button below opens Settings directly.",
         "overviewCommandPalette": "Press Ctrl + K from any screen to open the command palette. The command palette is the primary way to operate the app, and lets you adjust common features from any page.",
         "overviewExampleVolume": "For example, adjust the volume from anywhere.",
         "overviewExampleQueue": "Or bring up queue search.",

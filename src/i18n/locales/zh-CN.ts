@@ -3572,7 +3572,11 @@ export default {
         "derived": "有些改动不会写在配置里，但会随导入发生：例如切到自定义主题、删除已上传字体。它们不能单独取消，只能取消对应的主改动。"
       },
       "onboarding": {
-        "overviewPonder": "Folia 中，针对复杂的操作和组件，会提供悬停思索，以及整页思索功能。可以在设置中关闭。",
+        "overviewCtrlG": "第一步：在任何页面按下 Ctrl + G，就能打开这一页的思索。",
+        "overviewWholePage": "思索会一步一步讲解当前页面：上面有什么，各在哪里，可以怎么操作。你现在看的就是一段思索。",
+        "overviewHover": "第二步：有些按钮和组件比较复杂。把指针停在上面，旁边会出现思索提示。",
+        "overviewHold": "第三步：看到提示后，按住 G 不放。进度走满后，会打开这个组件的思索；提前松手则取消。",
+        "overviewSettings": "不需要这些提示时，可以在设置中关闭。点下方按钮可直接打开设置。",
         "overviewCommandPalette": "在任何界面，按 Ctrl + K 呼出命令面板。命令面板是应用的主要操作方式。使用命令面板可以在任何页面进行常用功能调整。",
         "overviewExampleVolume": "例如在任何地方调节音量。",
         "overviewExampleQueue": "或者拉起队列搜索。",

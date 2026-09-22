@@ -3505,7 +3505,11 @@ export default {
         "derived": "Baris di bagian bawah itulah alasan dialog ini ada: perubahan yang tidak diminta konfigurasi, tapi mengikuti dari yang kamu ambil. Menerima warna orang lain membuat aplikasi beralih ke tema kustom; menerima fon sistem menghapus berkas fon yang kamu unggah. Keduanya tidak bisa dibatalkan centangnya sendiri \u2014 tolak saja penyebabnya."
       },
       "onboarding": {
-        "overviewPonder": "Untuk operasi dan komponen yang rumit, Folia menyediakan Ponder saat penunjuk diarahkan serta Ponder untuk seluruh halaman. Keduanya dapat dimatikan di Pengaturan.",
+        "overviewCtrlG": "Langkah 1: Di halaman mana pun, tekan Ctrl + G untuk membuka Ponder halaman itu.",
+        "overviewWholePage": "Ponder menjelaskan halaman saat ini langkah demi langkah: apa isinya, di mana letak tiap bagian, dan apa yang bisa kamu lakukan. Yang sedang kamu tonton ini adalah Ponder.",
+        "overviewHover": "Langkah 2: Beberapa tombol dan komponen cukup rumit. Diamkan penunjuk di atasnya, dan petunjuk Ponder muncul di sebelahnya.",
+        "overviewHold": "Langkah 3: Saat petunjuk muncul, tahan G. Begitu sapuannya penuh, Ponder komponen itu terbuka; lepas lebih awal untuk membatalkan.",
+        "overviewSettings": "Jika tidak memerlukan petunjuk ini, matikan di Pengaturan. Tombol di bawah langsung membuka Pengaturan.",
         "overviewCommandPalette": "Tekan Ctrl + K dari layar mana pun untuk membuka palet perintah. Palet perintah adalah cara utama mengoperasikan aplikasi dan memungkinkanmu menyesuaikan fungsi umum dari halaman mana pun.",
         "overviewExampleVolume": "Misalnya, atur volume dari mana saja.",
         "overviewExampleQueue": "Atau buka pencarian antrean.",

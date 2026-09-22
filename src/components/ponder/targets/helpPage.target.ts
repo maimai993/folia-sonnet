@@ -47,7 +47,13 @@ const commandExampleAnchors = {
     },
 } satisfies PonderSceneScript['anchors'];
 
-/** 第一章：两种思索入口，以及不需要时可以关闭。 */
+/**
+ * 第一章：两种思索入口，以及不需要时可以关闭。
+ *
+ * 先讲 Ctrl+G：它不依赖任何组件，在哪一页都能用，是最先该记住的那一下。
+ * 然后才是悬停提示和长按 G。每一步单独一段字幕，停留比默认长，不把两件事塞进一句。
+ * 结果层只能淡入、不能退回 base，所以 ponder-open 必须放在最后。
+ */
 const ponderOverview: PonderSceneScript = {
     id: 'help-page-overview',
     titleKey: 'ponder.scenes.helpPageOverview',
@@ -58,14 +64,48 @@ const ponderOverview: PonderSceneScript = {
     },
     anchors: ONBOARDING_ILLUSTRATION,
     steps: [
-        { kind: 'surfaceState', id: 'showHint', anchor: 'page', state: 'hint-shown', durationMs: 420, keyframe: true },
-        { kind: 'keypress', id: 'wholePage', keys: ['Ctrl G'], at: { anchor: 'page', y: 1, offset: { y: 20 } }, durationMs: 1000, withPrevious: true },
+        { kind: 'keypress', id: 'pressCtrlG', keys: ['Ctrl G'], at: { anchor: 'page', y: 1, offset: { y: 20 } }, durationMs: 1400, keyframe: true },
+        { kind: 'highlight', id: 'markPage', anchor: 'page', intensity: [0, 0.35], durationMs: 520, withPrevious: true },
         {
-            kind: 'caption', id: 'ponder', at: 'bottom',
-            textKey: 'ponder.captions.onboarding.overviewPonder',
-            pointTo: { anchor: 'capsule' }, durationMs: 6800, withPrevious: true,
+            kind: 'caption', id: 'ctrlG', at: 'bottom',
+            textKey: 'ponder.captions.onboarding.overviewCtrlG',
+            pointTo: { anchor: 'page', y: 0.5 }, durationMs: 6000, withPrevious: true,
         },
-        { kind: 'pause', id: 'readPonder' },
+        { kind: 'pause', id: 'readCtrlG', dwellMs: 2200 },
+
+        {
+            kind: 'caption', id: 'wholePage', at: 'bottom',
+            textKey: 'ponder.captions.onboarding.overviewWholePage',
+            pointTo: { anchor: 'page', y: 0.5 }, durationMs: 6400, keyframe: true,
+        },
+        { kind: 'pause', id: 'readWholePage', dwellMs: 2200 },
+
+        { kind: 'highlight', id: 'dimPage', anchor: 'page', intensity: [0.35, 0], durationMs: 480, keyframe: true },
+        { kind: 'cursor', id: 'hoverComponent', to: { anchor: 'component' }, durationMs: 1000, withPrevious: true },
+        { kind: 'surfaceState', id: 'showHint', anchor: 'page', state: 'hint-shown', durationMs: 520 },
+        {
+            kind: 'caption', id: 'hover', at: 'bottom',
+            textKey: 'ponder.captions.onboarding.overviewHover',
+            pointTo: { anchor: 'capsule' }, durationMs: 6400, withPrevious: true,
+        },
+        { kind: 'pause', id: 'readHover', dwellMs: 2200 },
+
+        { kind: 'keypress', id: 'holdG', keys: ['G'], at: { anchor: 'capsule', y: 1, offset: { y: 20 } }, durationMs: 1400, keyframe: true },
+        { kind: 'surfaceState', id: 'holding', anchor: 'page', state: 'hint-holding', durationMs: 900, withPrevious: true },
+        { kind: 'surfaceState', id: 'opened', anchor: 'page', state: 'ponder-open', transition: 'zoom', durationMs: 640 },
+        {
+            kind: 'caption', id: 'hold', at: 'bottom',
+            textKey: 'ponder.captions.onboarding.overviewHold',
+            pointTo: { anchor: 'page', y: 0.5 }, durationMs: 6400, withPrevious: true,
+        },
+        { kind: 'pause', id: 'readHold', dwellMs: 2200 },
+
+        {
+            kind: 'caption', id: 'settings', at: 'bottom',
+            textKey: 'ponder.captions.onboarding.overviewSettings',
+            pointTo: { anchor: 'page', y: 0.5 }, durationMs: 6000, keyframe: true,
+        },
+        { kind: 'pause', id: 'readSettings', dwellMs: 2200 },
     ],
 };
 
