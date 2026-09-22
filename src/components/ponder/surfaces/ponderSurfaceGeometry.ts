@@ -245,6 +245,75 @@ export const LATTICE_CHROME_GEOMETRY = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 播放与交互那几组设置的几何，坐标系都是各自那块面板。
+ *
+ * 分开量而不是共用一套：这几组行数不同，套同一组坐标会让高亮框落在别的行上 ——
+ * 而「指着说这一行」正是这些教程唯一在做的事。
+ */
+export const TRANSITION_SETTINGS_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.30, height: 0.07 },
+    card: { left: 0.03, right: 0.03, top: 0.12, bottom: 0.02 },
+    enable: { left: 0.06, right: 0.06, top: 0.16, height: 0.11 },
+    modeCrossfade: { left: 0.06, top: 0.36, width: 0.43, height: 0.22 },
+    modeAutomix: { right: 0.06, top: 0.36, width: 0.43, height: 0.22 },
+    /** 选中那张卡右上角那枚「使用中 / 已退回淡化」的小徽章。 */
+    badge: { right: 0.09, top: 0.39, width: 0.16, height: 0.055 },
+    detail: { left: 0.06, right: 0.06, top: 0.64, height: 0.14 },
+    notice: { left: 0.06, right: 0.06, top: 0.82, height: 0.13 },
+} satisfies Record<string, PonderRelativeRect>;
+
+export const LIBRARY_WATCH_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.34, height: 0.08 },
+    card: { left: 0.03, right: 0.03, top: 0.14, bottom: 0.02 },
+    enable: { left: 0.06, right: 0.06, top: 0.19, height: 0.14 },
+    roots: { left: 0.06, right: 0.06, top: 0.40, height: 0.32 },
+    status: { left: 0.06, right: 0.35, top: 0.78, height: 0.08 },
+    recheck: { right: 0.06, top: 0.76, width: 0.24, height: 0.12 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 「加入队列」的默认行为：一句说明加两张并排的选项。 */
+export const QUEUE_SETTINGS_GEOMETRY = {
+    heading: { left: 0.04, top: 0.04, width: 0.30, height: 0.13 },
+    card: { left: 0.03, right: 0.03, top: 0.25, bottom: 0.04 },
+    copy: { left: 0.06, right: 0.06, top: 0.33, height: 0.18 },
+    optionAppend: { left: 0.06, top: 0.58, width: 0.43, height: 0.3 },
+    optionNext: { right: 0.06, top: 0.58, width: 0.43, height: 0.3 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 歌词来源那一组：自动择优开关、本地/在线优先、以及全局时间轴偏移。 */
+export const LYRICS_SOURCE_GEOMETRY = {
+    heading: { left: 0.04, top: 0.02, width: 0.28, height: 0.07 },
+    card: { left: 0.03, right: 0.03, top: 0.12, bottom: 0.02 },
+    autoBest: { left: 0.06, right: 0.06, top: 0.16, height: 0.13 },
+    priorityLocal: { left: 0.06, top: 0.40, width: 0.43, height: 0.2 },
+    priorityOnline: { right: 0.06, top: 0.40, width: 0.43, height: 0.2 },
+    globalOffset: { left: 0.06, right: 0.06, top: 0.70, height: 0.15 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/** 网格上的 S 归谁：整组只有一行开关。 */
+export const GRID_HOTKEY_GEOMETRY = {
+    heading: { left: 0.04, top: 0.06, width: 0.32, height: 0.18 },
+    card: { left: 0.03, right: 0.03, top: 0.34, bottom: 0.06 },
+    toggle: { left: 0.06, right: 0.06, top: 0.42, height: 0.44 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 队列命令窗口，坐标系是那扇窗口。
+ *
+ * 它长得像命令窗口，做的事却是筛队列：输入行是队列的搜索框，`@` 收窄范围，
+ * `--` 对筛出来的那些整批下手。三件事各占一块，所以分开量。
+ */
+export const QUEUE_COMMAND_GEOMETRY = {
+    input: { left: 0.04, right: 0.04, top: 0.04, height: 0.13 },
+    chips: { left: 0.04, right: 0.04, top: 0.21, height: 0.09 },
+    suggestions: { left: 0.04, right: 0.04, top: 0.21, height: 0.32 },
+    rows: { left: 0.04, right: 0.04, top: 0.34, bottom: 0.05 },
+    /** 收窄之后行变少，底下腾出来给批量预览。 */
+    narrowedRows: { left: 0.04, right: 0.04, top: 0.34, bottom: 0.24 },
+    preview: { left: 0.04, right: 0.04, bottom: 0.05, height: 0.16 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 桌面端那三样东西的示意图，坐标系是 page。
  *
  * 画的是一整块桌面：主窗口摆在中间，任务栏贴底、托盘图标在它右端，遥控窗口是一张

@@ -2831,6 +2831,12 @@ export default {
       "panel_cover_actions": "Empat tombol yang hanya muncul saat kamu mengarahkan penunjuk ke sampul.",
       "panel_cover_tab": "Judul, artis dan album lagu saat ini, dan apa yang terjadi saat diklik.",
       "panel_queue_tab": "Daftar antrean: aksi per baris, acak, bentangkan jadi dinding.",
+      "queue_command_surface": "@ mempersempit rentang, -- bekerja pada semua yang cocok.",
+      "transition_settings": "Crossfade atau automix, dan mengapa pilihanmu mungkin tidak berjalan.",
+      "local_library_watch": "Apa arti ikon peringatan di daftar pantauan.",
+      "queue_settings": "Ke mana \u201ctambah ke antrean\u201d sebenarnya menaruh lagu, di semua tempat sekaligus.",
+      "lyrics_settings": "Pilih-otomatis menimpa sumber manualmu, dan dua offset dijumlahkan.",
+      "grid_palette_hotkey": "Di halaman kisi, S membuka jendela perintah atau penyaring.",
       "panel_slide": "Tombol itu juga bisa digeser ke kiri, dan itu membuka jendela perintah.",
       "panel_source_tab": "Kotak khusus sumber: gain audio, sumber lirik, offset linimasa.",
       "player_bar": "Apa yang ada di kapsul, dan dua slot yang kamu pilih sendiri.",
@@ -2885,6 +2891,11 @@ export default {
       "openPonderHints": "Ubah di pengaturan",
       "openWallpaperMode": "Buka pengaturan wallpaper",
       "openTraySettings": "Buka perilaku jendela desktop",
+      "openTransitionSettings": "Buka pengaturan transisi",
+      "openLibraryWatch": "Buka pantau folder",
+      "openQueueSettings": "Buka pengaturan antrean",
+      "openLyricsSettings": "Buka pengaturan lirik",
+      "openGridPaletteHotkey": "Ubah sakelar ini",
       "openGridActionButton": "Ubah target gesernya",
       "openGrid3dCardStyle": "Buka gaya kartu beranda",
       "openGridViewCard": "Buka pengaturan kartu kisi",
@@ -2925,6 +2936,44 @@ export default {
         "openPlayer": "Kembali ke pemutar",
         "progress": "Bilah kemajuan",
         "bottomBar": "Bilah kontrol bawah"
+      },
+      "transition": {
+        "panel": "Pengaturan \u00b7 Transisi",
+        "enable": "Sakelar transisi",
+        "crossfade": "Crossfade",
+        "automix": "Automix",
+        "badge": "Aktif / kembali",
+        "detail": "Pengaturan mode ini",
+        "notice": "Pemberitahuan syarat tak terpenuhi"
+      },
+      "libraryWatch": {
+        "panel": "Pengaturan \u00b7 Pantau folder lokal",
+        "enable": "Pindai otomatis",
+        "roots": "Folder yang dipantau",
+        "recheck": "Periksa ulang"
+      },
+      "queueSettings": {
+        "panel": "Pengaturan \u00b7 Antrean putar",
+        "append": "Tambah ke akhir",
+        "next": "Tambah setelah lagu ini"
+      },
+      "lyricsSource": {
+        "panel": "Pengaturan \u00b7 Lirik",
+        "autoBest": "Pilih yang terbaik otomatis",
+        "priorityLocal": "Lokal dulu",
+        "priorityOnline": "Daring dulu",
+        "globalOffset": "Offset linimasa global"
+      },
+      "gridHotkey": {
+        "panel": "Pengaturan \u00b7 S di kisi",
+        "toggle": "S membuka jendela perintah"
+      },
+      "queueCommand": {
+        "panel": "Jendela antrean",
+        "input": "Baris masukan",
+        "suggestions": "Saran artis / album",
+        "rows": "Lagu yang cocok",
+        "preview": "Pratinjau aksi massal"
       },
       "desktop": {
         "page": "Desktop",
@@ -3098,6 +3147,12 @@ export default {
       "foliaTransport": "Pemutaran dan tombol media",
       "foliaShortcuts": "Pintasan yang akan kamu pakai",
       "foliaDesktop": "Fitur khusus desktop",
+      "queueCommandSurface": "Jendela antrean",
+      "transitionSettings": "Transisi dan automix",
+      "localLibraryWatch": "Pantau folder lokal",
+      "queueSettings": "Apa yang dilakukan \u201ctambah ke antrean\u201d",
+      "lyricsSettings": "Sumber lirik dan offset",
+      "gridPaletteHotkey": "S di kisi",
       "settingsPage": "Halaman Opsi"
     },
     "scenes": {
@@ -3165,6 +3220,15 @@ export default {
       "foliaDesktopWallpaper": "Mode wallpaper",
       "foliaDesktopTray": "System tray",
       "foliaDesktopRemote": "Jendela remote",
+      "transitionSettingsEnable": "Sakelar dan dua modenya",
+      "transitionSettingsFallback": "Terpilih bukan berarti berjalan",
+      "localLibraryWatchRoots": "Daftar pantauan dan baris yang berhenti bekerja",
+      "queueSettingsBehavior": "Ke akhir, atau tepat setelah yang ini",
+      "lyricsSettingsSource": "Dari mana liriknya",
+      "lyricsSettingsOffset": "Dua offset dengan nama sama",
+      "gridPaletteHotkeyOwner": "Siapa pemilik S di kisi",
+      "queueCommandFacets": "@ mempersempitnya",
+      "queueCommandBatch": "-- bekerja pada semua yang tersaring",
       "helpPagePonder": "Kamu sudah berada di dalam Ponder",
       "helpPageWholePage": "Seluruh halaman, dan apa gantinya di layar sentuh",
       "helpPageTransport": "Kendalikan pemutaran tanpa kembali",
@@ -3312,6 +3376,40 @@ export default {
         "queueTabDetail": "Klik satu baris untuk memutar dari lagu itu; arahkan penunjuk ke baris dan putar berikutnya, pindah ke akhir serta hapus muncul di kanannya. Dua tombol di kepala membentangkan antrean sebagai dinding Lattice dan mengacaknya. Barisnya tidak bisa diseret.",
         "accountTab": "Tab akun mengurus apa pun yang dimiliki sumber musik saat ini.",
         "accountTabDetail": "Di atas ada status masuk sumber itu: avatar, nama, nama sumber dan ID, dengan keluar di sebelah kanan. Di bawahnya tingkat kualitas audio \u2014 standar, tinggi, lossless, hi-res \u2014 dan paling bawah sinkronisasi data ke awan. Ganti sumber, isinya berbeda."
+      },
+      "transition": {
+        "enable": "Grup ini tentang bagaimana satu lagu menyambung ke lagu berikutnya. Sakelar di atas adalah nilai yang sama dengan ikon kecil di ujung kanan baris volume pada tab kontrol \u2014 dua tempat, satu pengaturan.",
+        "modes": "Dengan itu menyala, barulah modenya berarti: crossfade meredupkan lagu yang keluar dan menaikkan yang masuk; automix menganalisis keduanya lalu memilih titik sambung, terdengar lebih alami tetapi butuh membaca audionya.",
+        "badge": "Inilah yang paling mudah terlewat: label kecil di sudut kartu yang terpilih. \u201cAktif\u201d berarti ia benar-benar berjalan; \u201ckembali ke crossfade\u201d berarti syaratnya tidak terpenuhi dan ia diam-diam beralih kembali \u2014 beberapa karakter itu satu-satunya pemberitahuan yang kamu dapat.",
+        "notice": "Penyebab biasanya cache media yang dibutuhkan automix sedang mati. Strip kuning ini menyebut persis itu, dan teks bergaris bawah di dalamnya menyalakan cache di tempat, tanpa pergi ke pengaturan penyimpanan."
+      },
+      "libraryWatch": {
+        "enable": "Dengan ini menyala, Folia mengawasi folder lokal yang kamu impor dan menjalankan pemindaian inkremental setiap kali berkasnya berubah \u2014 tak perlu kembali memindai manual setiap menambah musik.",
+        "roots": "Daftarnya baru terbuka di bawah sakelar, satu baris per folder akar yang dipantau, dengan jalur aslinya di baris kecil di bawahnya.",
+        "warning": "Perhatikan ikon di kiri tiap baris: mata berarti sedang mengawasi; segitiga kuning berarti pantauan folder itu sudah berhenti bekerja \u2014 jalur yang hilang, izin yang berubah. Setelah itu pemindaiannya sekadar berhenti terjadi, dan ikon ini satu-satunya tanda.",
+        "recheck": "Saat kamu melihat segitiga, tekan \u201cperiksa ulang\u201d di kanan; ia memasang ulang ke semua folder yang diimpor. Baris kecil di sebelahnya adalah kapan pemindaian otomatis terakhir berjalan."
+      },
+      "queueSettings": {
+        "append": "Dua kartu ini menentukan ke mana \u201ctambah ke antrean\u201d sebenarnya menaruh lagu. Bawaannya adalah akhir antrean, jadi apa pun yang sudah berbaris diputar lebih dulu.",
+        "next": "Ubah ke \u201csetelah lagu yang diputar\u201d dan yang kamu tambahkan menyelip tepat di belakang lagu yang sedang berjalan, jadi ia berikutnya. Ini mengubah semua pintu tambah-ke-antrean di aplikasi \u2014 tombol di kartu, yang muncul di baris antrean, perintah di palette."
+      },
+      "lyricsSource": {
+        "autoBest": "Dengan \u201cpilih yang terbaik otomatis\u201d menyala, Folia mencari lagu ini di NetEase, AMLLDB, QQ dan KuGou lalu mengambil versi per-kata yang cocok sempurna bila ada. Harganya, ia menimpa sumber yang kamu pilih manual di tab sumber \u2014 kalau pilihan manualmu tidak bertahan, biasanya inilah sebabnya.",
+        "priority": "Dua kartu di bawah menentukan lirik lokal atau daring yang menang. Saat berkas lokal membawa lirik dan hasil daring juga ada, inilah yang memutuskan.",
+        "globalOffset": "\u201cOffset linimasa global\u201d membuka penggaris satu layar penuh yang menggeser lirik semua lagu lebih awal atau lebih lambat \u2014 biasanya untuk mengimbangi keterlambatan tetap kartu suara atau Bluetooth.",
+        "offsetSum": "Ia bernama sama dengan offset \u00b1250ms di tab sumber tetapi bukan hal yang sama: yang itu hanya untuk lagu saat ini dan hilang saat kamu berganti lagu, yang ini global dan bertahan. Keduanya dijumlahkan, jadi ketika satu lagu meleset jauh, periksa keduanya."
+      },
+      "gridHotkey": {
+        "off": "Di dinding poster dan halaman koleksi, huruf apa pun yang kamu tekan menyaring halaman itu \u2014 tanpa perlu mengklik kotak pencarian lebih dulu. Secara bawaan itu termasuk S, jadi menekan S di halaman kisi membuka penyaring, bukan jendela perintah.",
+        "on": "Nyalakan ini dan S justru menuju jendela perintah, sementara karakter lain tetap masuk ke penyaring. Keduanya masuk akal tergantung mana yang lebih sering kamu lakukan di halaman kisi \u2014 dan tidak ada apa pun di layar yang menyebutkan mana yang berlaku, jadi hanya di sini kamu bisa memilih."
+      },
+      "queueCommand": {
+        "whatItIs": "Jendela yang dibuka {{mod}} + P tampak seperti jendela perintah tetapi melakukan hal lain: baris masukannya adalah kotak pencarian antrean. Ketik untuk menyaring, \u2191\u2193 untuk berpindah, Enter untuk mulai memutar dari lagu itu.",
+        "atSign": "Ketik @ dan ia mendaftar artis serta album yang ada di antrean, masing-masing dengan berapa lagu yang diwakilinya \u2014 @ sendirian mendaftar artis dan album lagu yang sedang diputar.",
+        "narrowed": "Pilih satu dan ia melipat jadi chip di baris masukan, menyisakan hanya lagu dari entri itu. Inilah satu-satunya tempat di aplikasi yang bisa berkata \u201chanya lagu artis ini\u201d \u2014 tidak ada tombol yang menggantikannya.",
+        "flags": "Setelah rentangnya ditentukan, ketik dua tanda hubung dan ia mendaftar aksi massal yang tersedia: --remove mengeluarkannya dari antrean, --next memindahkannya ke putar berikutnya, --end memindahkannya ke akhir. Tidak perlu dihafal; mengetik -- berarti bertanya.",
+        "scope": "Satu hal yang harus jelas: ia tidak bekerja pada baris yang tersorot, melainkan pada semua yang cocok. Karena itu strip di bawah menyebut berapa lagu yang akan terpengaruh \u2014 baca angka itu sebelum menekan.",
+        "guards": "Dua pengaman: tanpa teks pencarian dan tanpa saringan @ ia menolak berjalan sama sekali, jadi kamu tidak bisa mengosongkan seluruh antrean dalam satu ketukan; dan lagu yang sedang diputar dikecualikan, yang juga disebut di pratinjau."
       },
       "desktop": {
         "windowNormal": "Perbedaan terbesar antara versi desktop dan peramban ada pada tiga hal ini, dan tak satu pun berada di dalam aplikasi: satu mengubah posisi jendela di desktop, satu tinggal di system tray, satu lagi jendela kedua. Mulai dari jendela utama biasa ini.",

@@ -167,6 +167,9 @@ describe('ponder registry', () => {
             'local-track-list': new Set(['sort-menu-open']),
             'ponder-onboarding': new Set(['hint-shown', 'hint-holding', 'ponder-open']),
             'desktop-features': new Set(['wallpaper-on', 'tray-menu', 'remote-open']),
+            'queue-command': new Set(['facet-suggestions', 'facet-narrowed', 'batch-preview']),
+            'library-watch-settings': new Set(['watch-on']),
+            'grid-hotkey-settings': new Set(['hotkey-on']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

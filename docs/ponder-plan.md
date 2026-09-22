@@ -72,6 +72,16 @@
 - [x] `local-metadata-match` — 三重条件才出现的那颗铅笔
 - [x] `local-track-sorting` — 只有本地文件夹能排序，选择存 localStorage 跨会话保留
 
+### 命令面板与设置
+
+- [x] `queue-command-surface` — 队列窗口：`@artist:` / `@album:` 是全仓唯一没有按钮能替代的语法；
+      `--remove` 作用于筛选结果而不是选中行，两道保险（没筛选拒绝执行、排除当前歌）也讲了
+- [x] `transition-settings` — 选了 automix 不等于在跑，那枚「已退回淡化」的小徽章是唯一提示
+- [x] `local-library-watch` — 监视列表里眼睛和黄三角两种状态，后者意味着监视已失效
+- [x] `queue-settings` — 「加入队列」加到哪儿，改的是全应用所有入口
+- [x] `lyrics-settings` — 自动择优会盖掉手动选的来源；两个同名偏移量会相加
+- [x] `grid-palette-hotkey` — 网格页上 S 归命令窗口还是归筛选框
+
 ### 文案事实性错误
 
 - [x] `pages.playerShuffleHow`、`pages.playerExecuteMode`、`commandPalette.executeEnter` —— 冒号是**窗口关着时**按的，`{{mod}}+K` 之后再按只会打进输入框
@@ -84,35 +94,21 @@
 
 ## 待办
 
-### 第一批 · 命令面板
+### 第一批 · 设置里剩下的四条
 
-- [ ] `queue-command-surface` — 队列命令窗口：`@artist:` / `@album:` facet 语法是全仓唯一一处
-      没有按钮能替代的语法；`--remove` 作用于**筛选结果**而不是选中项，误按能一次清掉几十首。
-      落点 `[data-testid="command-palette-queue-view"]` 已存在
-
-### 第二批 · 设置（零新增 DOM，锚点都已存在）
-
-- [ ] `transition-settings` — 渐变与自动混音：选了 automix 可能悄悄回落到 crossfade，
-      唯一提示是一枚 `FELL BACK` 徽章；开关还镜像在控制页那颗 14px 的 Blend 图标上
-- [ ] `local-library-watch` — 本地文件夹监视：监视列表里 `Eye` / `AlertTriangle` 两种状态，
-      警告态意味着这个文件夹的监视已经失效
-- [ ] `queue-settings` — 加入队列的默认行为：改的是全应用所有「加入队列」的语义
-- [ ] `lyrics-settings` — 歌词来源与时间轴：「自动择优」会覆盖手动选的来源；
-      全局偏移和来源页那个单曲偏移同名、不同作用域、会相加
-- [ ] `interaction-settings-palette-hotkey` — 网格上的 S 归命令窗口还是归筛选
 - [ ] `custom-shortcut-settings` — 自定义快捷键：修饰键固定 Alt，命令列表被
       `isScopeIndependentCommand` 过滤过，两件事界面上都没写
 - [ ] `pinned-commands` — 固定命令：和「最近用过的排前面」是两套机制
 - [ ] `replay-gain-settings` — 和来源标签页里那个三选一是同一个值
 - [ ] `import-export-settings` — 「备份与导入」只导配色主题和歌词动画设置，不是全量备份
 
-### 第三批 · 需要先加 data 属性
+### 第二批 · 需要先加 data 属性
 
 - [ ] `audio-equalizer` — 拖任何一根推子会**静默**把你转到自定义槽 1 并写进去
 - [ ] `vis-playground` — 预览上有三块零像素的点击热区，不悬停永远发现不了
 - [ ] `theme-park` — 整屏的配色编辑器，值得单独演一遍
 
-### 第四批 · 补现有目标的缺章
+### 第三批 · 补现有目标的缺章
 
 - [ ] `panel-queue-tab` 加一章：FM 模式下这一格变成电台面板
 - [ ] `panel-controls-tab` 加一章：两行取景器的中间名称可点开完整列表

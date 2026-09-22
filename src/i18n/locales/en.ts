@@ -2899,6 +2899,12 @@ export default {
       "panel_cover_actions": "The four buttons that only appear when you hover the artwork.",
       "panel_cover_tab": "Title, artist and album for the current song, and what clicking them does.",
       "panel_queue_tab": "The queue list: per-row actions, shuffle, lay it out as a wall.",
+      "queue_command_surface": "@ narrows the range, -- acts on everything that matched.",
+      "transition_settings": "Crossfade or automix, and why your choice may not be running.",
+      "local_library_watch": "What that warning icon in the watch list means.",
+      "queue_settings": "Where \u201cadd to queue\u201d actually puts things, everywhere at once.",
+      "lyrics_settings": "Auto-pick overrides your manual source, and two offsets add up.",
+      "grid_palette_hotkey": "On a grid page, does S open the command window or the filter.",
       "panel_slide": "That button also slides left, and it opens the command window.",
       "panel_source_tab": "The source-specific cell: audio gain, lyric source, timeline offset.",
       "player_bar": "What is on the capsule, and the two slots you choose yourself.",
@@ -2953,6 +2959,11 @@ export default {
       "openPonderHints": "Go change it",
       "openWallpaperMode": "Open wallpaper settings",
       "openTraySettings": "Open desktop window behaviour",
+      "openTransitionSettings": "Open transition settings",
+      "openLibraryWatch": "Open folder watch",
+      "openQueueSettings": "Open queue settings",
+      "openLyricsSettings": "Open lyric settings",
+      "openGridPaletteHotkey": "Go change this switch",
       "openGridActionButton": "Go change the slide target",
       "openGrid3dCardStyle": "Open home card style",
       "openGridViewCard": "Open grid card settings",
@@ -2993,6 +3004,44 @@ export default {
         "openPlayer": "Back to player",
         "progress": "Progress bar",
         "bottomBar": "Bottom control bar"
+      },
+      "transition": {
+        "panel": "Settings \u00b7 Transitions",
+        "enable": "Transition switch",
+        "crossfade": "Crossfade",
+        "automix": "Automix",
+        "badge": "Active / fell back",
+        "detail": "Settings for this mode",
+        "notice": "Unmet-requirement notice"
+      },
+      "libraryWatch": {
+        "panel": "Settings \u00b7 Local folder watch",
+        "enable": "Auto scan",
+        "roots": "Watched folders",
+        "recheck": "Re-check"
+      },
+      "queueSettings": {
+        "panel": "Settings \u00b7 Play queue",
+        "append": "Add to the end",
+        "next": "Add after the current song"
+      },
+      "lyricsSource": {
+        "panel": "Settings \u00b7 Lyrics",
+        "autoBest": "Pick the best automatically",
+        "priorityLocal": "Local first",
+        "priorityOnline": "Online first",
+        "globalOffset": "Global timeline offset"
+      },
+      "gridHotkey": {
+        "panel": "Settings \u00b7 S on the grids",
+        "toggle": "S opens the command window"
+      },
+      "queueCommand": {
+        "panel": "Queue window",
+        "input": "Input line",
+        "suggestions": "Artist / album suggestions",
+        "rows": "Matching songs",
+        "preview": "Bulk action preview"
       },
       "desktop": {
         "page": "The desktop",
@@ -3166,6 +3215,12 @@ export default {
       "foliaTransport": "Playback and media keys",
       "foliaShortcuts": "The shortcuts you will use",
       "foliaDesktop": "Desktop-only features",
+      "queueCommandSurface": "The queue window",
+      "transitionSettings": "Transitions and automix",
+      "localLibraryWatch": "Local folder watch",
+      "queueSettings": "What \u201cadd to queue\u201d does",
+      "lyricsSettings": "Lyric sources and offsets",
+      "gridPaletteHotkey": "S on the grids",
       "settingsPage": "Options page"
     },
     "scenes": {
@@ -3233,6 +3288,15 @@ export default {
       "foliaDesktopWallpaper": "Wallpaper mode",
       "foliaDesktopTray": "System tray",
       "foliaDesktopRemote": "Remote window",
+      "transitionSettingsEnable": "The switch and the two modes",
+      "transitionSettingsFallback": "Selected is not the same as running",
+      "localLibraryWatchRoots": "The watch list and the row that stopped working",
+      "queueSettingsBehavior": "To the end, or right after this one",
+      "lyricsSettingsSource": "Where the lyrics come from",
+      "lyricsSettingsOffset": "Two offsets with the same name",
+      "gridPaletteHotkeyOwner": "Who owns S on the grids",
+      "queueCommandFacets": "@ narrows it down",
+      "queueCommandBatch": "-- acts on everything you filtered",
       "helpPagePonder": "You are already inside Ponder",
       "helpPageWholePage": "The whole page, and what touch does instead",
       "helpPageTransport": "Control playback without coming back",
@@ -3380,6 +3444,40 @@ export default {
         "queueTabDetail": "Click a row to play from that song; hover one and play next, move to the end and remove appear at its right. The header buttons lay the queue out as the Lattice wall and shuffle it. Rows cannot be dragged to reorder.",
         "accountTab": "The account tab covers whatever the current music source owns.",
         "accountTabDetail": "At the top is that source's sign-in state: avatar, nickname, source name and ID, with sign-out at the right. Below it, the audio quality tier \u2014 standard, high, lossless, hi-res \u2014 and at the bottom, syncing your data to the cloud. Switch source and you see a different set."
+      },
+      "transition": {
+        "enable": "This group is about how one song joins the next. The switch at the top is the same value as the small icon at the right end of the volume row in the controls tab \u2014 two places, one setting.",
+        "modes": "With it on, the modes matter: crossfade fades the outgoing song down and the incoming one up; automix analyses both and picks a join, which sounds more natural but needs to read the audio to do it.",
+        "badge": "Here is the easiest thing to miss: the small label in the corner of the selected card. \u201cActive\u201d means it really is running; \u201cfell back to crossfade\u201d means the requirements were not met and it quietly switched back \u2014 those few characters are the only notice you get.",
+        "notice": "The usual reason is that the media cache automix needs is off. This amber strip says exactly that, and the underlined text inside it turns the cache on right there, without going to storage settings."
+      },
+      "libraryWatch": {
+        "enable": "With this on, Folia keeps an eye on the local folders you imported and runs an incremental scan whenever their files change \u2014 no going back to re-scan by hand every time you add music.",
+        "roots": "The list only unfolds below the switch, one row per watched root folder, with its real path in the small line underneath.",
+        "warning": "Look at the icon on the left of each row: an eye means it is watching; an amber triangle means the watch on that folder has stopped working \u2014 a path that went away, permissions that changed. After that the scans simply stop happening, and this icon is the only sign.",
+        "recheck": "When you see a triangle, press \u201cre-check\u201d on the right; it re-attaches to every imported folder. The small line beside it is when the last automatic scan ran."
+      },
+      "queueSettings": {
+        "append": "These two cards decide where \u201cadd to queue\u201d actually puts a song. The default is the end of the queue, so whatever is already lined up plays first.",
+        "next": "Switch to \u201cafter the current song\u201d and what you add slots in right behind whatever is playing, so it is up next. This changes every add-to-queue entry point in the app \u2014 the button on a card, the one that appears on a queue row, the command in the palette."
+      },
+      "lyricsSource": {
+        "autoBest": "With \u201cpick the best automatically\u201d on, Folia searches NetEase, AMLLDB, QQ and KuGou for this song and takes a perfectly matched word-by-word version when one exists. The cost is that it overrides the source you picked by hand on the source tab \u2014 if a manual pick did not stick, this is usually why.",
+        "priority": "The two cards below decide whether local or online lyrics win. When a local file carries lyrics and an online match also exists, this is what settles it.",
+        "globalOffset": "\u201cGlobal timeline offset\u201d opens a full-screen ruler that shifts every song\u2019s lyrics earlier or later \u2014 usually to compensate for a fixed sound-card or Bluetooth delay.",
+        "offsetSum": "It shares a name with the \u00b1250ms offset on the source tab but is not the same thing: that one is for the current song only and is gone when you change tracks, this one is global and lasting. The two add up, so when one song is badly out, check both."
+      },
+      "gridHotkey": {
+        "off": "On the poster wall and collection pages, any letter you press filters the page \u2014 no clicking into a search box first. By default that includes S, so pressing S on a grid page opens the filter, not the command window.",
+        "on": "Turn this on and S goes to the command window instead, while every other character still goes into the filter. Both are reasonable depending on which you do more often on a grid page \u2014 and nothing on screen says which is which, so this is the only place to choose."
+      },
+      "queueCommand": {
+        "whatItIs": "The window {{mod}} + P opens looks like the command window but does something else: its input line is the queue\u2019s search box. Type to filter, \u2191\u2193 to move, Enter to start playing from that song.",
+        "atSign": "Type an @ and it lists the artists and albums that are in the queue, each with how many songs it accounts for \u2014 an @ on its own lists the artist and album of the song playing right now.",
+        "narrowed": "Pick one and it folds into a chip in the input line, leaving only that entry\u2019s songs. This is the only place in the app that can say \u201cjust this artist\u2019s songs\u201d \u2014 no button replaces it.",
+        "flags": "With the range set, type two dashes and it lists the bulk actions it has: --remove takes them out of the queue, --next moves them to play next, --end moves them to the end. You do not have to remember them; typing -- is how you ask.",
+        "scope": "One thing to be clear about: it does not act on the highlighted row, it acts on everything that matched. That is why the strip below says how many songs will be affected \u2014 read that number before pressing.",
+        "guards": "Two guards: with no search text and no @ filter it refuses to run at all, so you cannot empty the whole queue in one keystroke; and the song playing right now is left out, which the preview says too."
       },
       "desktop": {
         "windowNormal": "The biggest difference between the desktop build and the browser is these three, and none of them live inside the app: one changes where the window sits on the desktop, one lives in the system tray, and one is a second window. Start from this ordinary main window.",

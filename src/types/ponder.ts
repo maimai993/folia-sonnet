@@ -56,7 +56,13 @@ export type PonderTargetId =
     | 'ponder-basics'
     | 'folia-transport'
     | 'folia-shortcuts'
-    | 'folia-desktop';
+    | 'folia-desktop'
+    | 'queue-command-surface'
+    | 'transition-settings'
+    | 'local-library-watch'
+    | 'queue-settings'
+    | 'lyrics-settings'
+    | 'grid-palette-hotkey';
 
 /**
  * 导航页把目标按这个分组。
@@ -169,7 +175,13 @@ export type PonderSurfaceKind =
     | 'grid-view-cards'
     | 'local-folder-actions'
     | 'local-track-list'
-    | 'desktop-features';
+    | 'desktop-features'
+    | 'queue-command'
+    | 'transition-settings'
+    | 'library-watch-settings'
+    | 'queue-settings'
+    | 'lyrics-source-settings'
+    | 'grid-hotkey-settings';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

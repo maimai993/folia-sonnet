@@ -2898,6 +2898,12 @@ export default {
       "panel_cover_actions": "封面四角那四颗悬停才出现的按钮。",
       "panel_cover_tab": "当前这首歌的歌名、歌手、专辑，点一下能做什么。",
       "panel_queue_tab": "队列列表：行内动作、打乱、铺成海报墙。",
+      "queue_command_surface": "@ 收窄范围，-- 对筛出来的那些整批下手。",
+      "transition_settings": "淡化还是自动混音，以及为什么选了可能没生效。",
+      "local_library_watch": "监视列表里那个警告图标意味着什么。",
+      "queue_settings": "「加入队列」到底加到哪儿，全应用一起变。",
+      "lyrics_settings": "自动择优会盖掉手动选的来源，两个偏移量会相加。",
+      "grid_palette_hotkey": "网格页上按 S 是打开命令窗口还是进筛选框。",
       "panel_slide": "那颗按钮还能往左滑，打开的是命令窗口。",
       "panel_source_tab": "跟着来源走的那一格：音频增益、歌词来源、时间轴偏移。",
       "player_bar": "整条胶囊上有什么，以及右边那两个可换的位置。",
@@ -2952,6 +2958,11 @@ export default {
       "openPonderHints": "去设置里调",
       "openWallpaperMode": "打开壁纸模式设置",
       "openTraySettings": "打开桌面窗口行为",
+      "openTransitionSettings": "打开过渡设置",
+      "openLibraryWatch": "打开文件夹监视",
+      "openQueueSettings": "打开播放队列设置",
+      "openLyricsSettings": "打开歌词设置",
+      "openGridPaletteHotkey": "去改这个开关",
       "openGridActionButton": "去改滑动目标",
       "openGrid3dCardStyle": "打开首页卡片样式",
       "openGridViewCard": "打开网格卡片设置",
@@ -2992,6 +3003,44 @@ export default {
         "openPlayer": "回到播放页",
         "progress": "进度条",
         "bottomBar": "底部控制条"
+      },
+      "transition": {
+        "panel": "设置 · 过渡",
+        "enable": "过渡总开关",
+        "crossfade": "淡化",
+        "automix": "自动混音",
+        "badge": "使用中 / 已退回",
+        "detail": "当前模式的参数",
+        "notice": "缺条件时的提示"
+      },
+      "libraryWatch": {
+        "panel": "设置 · 本地文件夹监视",
+        "enable": "自动扫描",
+        "roots": "监视中的文件夹",
+        "recheck": "重新检查"
+      },
+      "queueSettings": {
+        "panel": "设置 · 播放队列",
+        "append": "加到末尾",
+        "next": "加到当前之后"
+      },
+      "lyricsSource": {
+        "panel": "设置 · 歌词",
+        "autoBest": "自动择优",
+        "priorityLocal": "本地优先",
+        "priorityOnline": "在线优先",
+        "globalOffset": "全局时间轴偏移"
+      },
+      "gridHotkey": {
+        "panel": "设置 · 网格上的 S 键",
+        "toggle": "S 归命令窗口"
+      },
+      "queueCommand": {
+        "panel": "队列窗口",
+        "input": "输入行",
+        "suggestions": "歌手 / 专辑建议",
+        "rows": "匹配到的歌曲",
+        "preview": "批量操作预览"
       },
       "desktop": {
         "page": "桌面",
@@ -3165,6 +3214,12 @@ export default {
       "foliaTransport": "播放控制与媒体键",
       "foliaShortcuts": "常用快捷键",
       "foliaDesktop": "桌面端独有功能",
+      "queueCommandSurface": "队列窗口",
+      "transitionSettings": "过渡与自动混音",
+      "localLibraryWatch": "本地文件夹监视",
+      "queueSettings": "加入队列的默认行为",
+      "lyricsSettings": "歌词来源与偏移",
+      "gridPaletteHotkey": "网格上的 S 键",
       "settingsPage": "设置页面"
     },
     "scenes": {
@@ -3232,6 +3287,15 @@ export default {
       "foliaDesktopWallpaper": "壁纸模式",
       "foliaDesktopTray": "系统托盘",
       "foliaDesktopRemote": "遥控窗口",
+      "transitionSettingsEnable": "总开关与两种模式",
+      "transitionSettingsFallback": "选了不等于在跑",
+      "localLibraryWatchRoots": "监视列表与失效的那一行",
+      "queueSettingsBehavior": "加到末尾还是加到下一首",
+      "lyricsSettingsSource": "歌词从哪来",
+      "lyricsSettingsOffset": "两个同名的偏移量",
+      "gridPaletteHotkeyOwner": "网格上的 S 归谁",
+      "queueCommandFacets": "@ 把范围收窄",
+      "queueCommandBatch": "-- 对筛出来的全部下手",
       "helpPagePonder": "你已经在思索里了",
       "helpPageWholePage": "整页的教程，以及触屏怎么办",
       "helpPageTransport": "不用切回来也能控制播放",
@@ -3379,6 +3443,40 @@ export default {
         "queueTabDetail": "点一行就从那首开始播；指针停在行上，右端才浮出「下一首播放」「移到队尾」「移除」。顶上两颗小按钮把队列铺成 Lattice 海报墙、或打乱整条队列。这里不能拖动排序。",
         "accountTab": "账号页管的是当前音乐来源那一侧的事。",
         "accountTabDetail": "上面是这个来源的登录状态：头像、昵称、来源名和 ID，右端退出登录。下面是音质档位四选一 —— 标准、极高、无损、Hi-Res；最底下是把数据同步到云端。换一个来源，看到的是另一套。"
+      },
+      "transition": {
+        "enable": "这一组管的是两首歌之间怎么接上。最上面是总开关 —— 它和控制页音量行右端那颗小图标是同一个值，两处改的是同一件事。",
+        "modes": "开了之后才轮到模式：淡化是把上一首压下去、下一首推上来；自动混音会分析两首歌再挑接点，更自然，但要读到音频数据才做得到。",
+        "badge": "这里有一处最容易看走眼：选中那张卡右上角那一小块字。写「使用中」才是真的在跑；写「已退回淡化」说明条件不满足，它悄悄换回了淡化 —— 除了这几个字，界面上没有任何别的提示。",
+        "notice": "退回的原因通常是自动混音要的媒体缓存没开。这条黄色提示就说这件事，里面那行带下划线的字直接把缓存开了，不必自己去存储设置里翻。"
+      },
+      "libraryWatch": {
+        "enable": "打开之后 Folia 会盯着你导入过的那些本地文件夹，文件有变动就自己做一次增量扫描 —— 不必每次加了歌再回去手动重扫。",
+        "roots": "开关底下才展开这张列表，一行一个被监视的根文件夹，下面那行小字是它的真实路径。",
+        "warning": "注意每行左边那个图标有两种：眼睛是正常盯着，黄色三角意味着这个文件夹的监视已经失效 —— 路径没了、权限没了都会这样。失效之后扫描只是静静地不再发生，除了这个图标没有别的提示。",
+        "recheck": "看到三角就按右边这颗「重新检查」，它会重新挂一遍所有导入过的文件夹。旁边那行小字是上一次自动扫描的时间。"
+      },
+      "queueSettings": {
+        "append": "这两张卡决定「加入队列」到底加到哪儿。默认是加到队列末尾，先听完手上排着的。",
+        "next": "换成「加到当前播放之后」的话，加进来的会插在正在播的这首后面，下一个就轮到它。改的是全应用所有加入队列的入口 —— 卡片上那颗、队列行悬停浮出的那颗、命令窗口里那条，全部跟着变。"
+      },
+      "lyricsSource": {
+        "autoBest": "「自动择优」开着时，Folia 会去网易云、AMLLDB、QQ 和酷狗检索这首歌的歌词，有完美匹配的逐字版就自动用它。代价是它会盖掉你在来源页手动选的那一份 —— 手动选完发现没生效，多半是这里开着。",
+        "priority": "底下两张卡决定本地和在线的歌词谁优先。本地文件自带的歌词和在线检索到的同时存在时，按这里说的来。",
+        "globalOffset": "「全局时间轴偏移」点进去是一整屏的标尺，调的是所有歌的歌词整体提前或延后多少 —— 一般用来补声卡或蓝牙的固定延迟。",
+        "offsetSum": "它和来源页那个 ±250ms 的偏移同名，但不是一回事：那个只管当前这首、切歌就没了，这个是全局且长期。两者是相加的，所以一首歌听起来偏得特别多的时候，记得两边都看一眼。"
+      },
+      "gridHotkey": {
+        "off": "海报墙和集合页上，随便按一个字母都是在筛这一页 —— 不用先点搜索框。默认连 S 也不例外，所以在网格页上按 S 打开的是筛选，不是命令窗口。",
+        "on": "打开这个开关之后 S 改归命令窗口，其余字符仍然进筛选框。两种都合理，取决于你在网格页上更常做哪件事 —— 而这件事屏幕上没有任何提示，只能在这里选。"
+      },
+      "queueCommand": {
+        "whatItIs": "{{mod}} + P 打开的这扇窗口长得像命令窗口，做的却是另一件事：输入行就是队列的搜索框。打字直接筛，↑↓ 选，Enter 从那首开始播。",
+        "atSign": "打一个 @，底下列出队列里有哪些歌手和专辑，每条后面写着它在队列里占几首 —— 只打一个 @ 不带别的，列的是当前这首歌的歌手和专辑。",
+        "narrowed": "选中之后它在输入行里收成一枚标签，列表只剩这一项底下的那几首。这是全应用唯一一处能做到「只看这个歌手的那几首」的地方 —— 没有任何按钮可以替代它。",
+        "flags": "范围定下来之后打两个减号，它会把能做的批量操作列出来：--remove 移出队列、--next 移到下一首播放、--end 移到队尾。不必记，打 -- 就是在问它。",
+        "scope": "这里要看清楚一件事：它动的不是列表里高亮的那一行，是筛出来的全部。所以底下这条预览会写明「将影响 N 首」—— 按之前先读这个数。",
+        "guards": "两道保险：没有搜索词也没有 @ 筛选时它直接拒绝执行，免得一下清空整条队列；正在播的那首会被排除在外，预览里也会写出来。"
       },
       "desktop": {
         "windowNormal": "桌面版和浏览器版最大的差别在这三样东西上，它们都不在应用界面里 —— 一个改的是窗口在桌面上的层级，一个住在系统托盘，一个是另开的窗口。先看这扇普通的主窗口。",
