@@ -220,30 +220,33 @@ export const PonderReplayGainSurface: React.FC<SurfaceProps> = ({ accent, line, 
 
         {/* 控制面板来源页上那一小块：同样三选一，外加这首歌自己那串 T / A 分贝。 */}
         <PonderSurfaceStateLayer state="panel-mirror" registerStateNode={registerStateNode} replaces>
+            {/* 分贝那一行和三选一的几何都是「相对 panelTab」的，所以要画在这个框**里面**；
+                摆到外面去就按整块面板算，两块都会比这一小格还宽。
+                描边走 inset box-shadow：1px 的 border 会把里面的百分比整体挪掉 1px。 */}
             <div
                 data-ponder-replay-gain-panel
-                className="rounded-2xl border"
-                style={{ ...relativeRectStyle(R.panelTab), borderColor: outline, backgroundColor: 'rgba(0,0,0,0.35)' }}
+                className="rounded-2xl"
+                style={{ ...relativeRectStyle(R.panelTab), boxShadow: `inset 0 0 0 1px ${outline}`, backgroundColor: 'rgba(0,0,0,0.35)' }}
             >
                 <span className="absolute left-[5%] top-[12%] h-[14%] w-[34%] rounded-full opacity-50" style={{ backgroundColor: line }} />
-            </div>
-            <span
-                data-ponder-replay-gain-summary
-                className="flex items-center justify-end"
-                style={relativeRectStyle(R.panelSummary)}
-            >
-                <span className="h-1 w-[78%] rounded-full opacity-65" style={{ backgroundColor: line }} />
-            </span>
-            <div data-ponder-replay-gain-panel-modes className="grid grid-cols-3 gap-[3%]" style={relativeRectStyle(R.panelModes)}>
-                {[0, 1, 2].map(index => (
-                    <span
-                        key={index}
-                        className="flex items-center justify-center rounded-md"
-                        style={{ backgroundColor: index === 1 ? `${accent}33` : 'rgba(255,255,255,0.06)' }}
-                    >
-                        <span className="h-1 w-[52%] rounded-full" style={{ backgroundColor: index === 1 ? accent : line }} />
-                    </span>
-                ))}
+                <span
+                    data-ponder-replay-gain-summary
+                    className="flex items-center justify-end"
+                    style={relativeRectStyle(R.panelSummary)}
+                >
+                    <span className="h-1 w-[78%] rounded-full opacity-65" style={{ backgroundColor: line }} />
+                </span>
+                <div data-ponder-replay-gain-panel-modes className="grid grid-cols-3 gap-[3%]" style={relativeRectStyle(R.panelModes)}>
+                    {[0, 1, 2].map(index => (
+                        <span
+                            key={index}
+                            className="flex items-center justify-center rounded-md"
+                            style={{ backgroundColor: index === 1 ? `${accent}33` : 'rgba(255,255,255,0.06)' }}
+                        >
+                            <span className="h-1 w-[52%] rounded-full" style={{ backgroundColor: index === 1 ? accent : line }} />
+                        </span>
+                    ))}
+                </div>
             </div>
         </PonderSurfaceStateLayer>
     </div>

@@ -15,6 +15,7 @@ import {
     ListPlus,
     LogOut,
     MirrorRectangular,
+    Moon,
     PanelsTopLeft,
     RefreshCw,
     Repeat,
@@ -137,13 +138,13 @@ const CoverPage: React.FC<PageProps> = ({ accent, line }) => (
 );
 
 /**
- * 控制页：三颗大按钮、一行音量、两行模式取景器。
+ * 控制页：三颗大按钮、一行音量、两行模式取景器，再加主题来源和当前主题名两行。
  *
  * 顶上那排三颗是循环 / 喜欢 / 生成主题，是整块面板里唯一一排大触控目标；
  * 下面才是边听边调的那些参数。画成三条滑杆会把这一页认错成均衡器。
  */
-const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
-    <div data-ponder-panel-controls style={relativeRectStyle(G.body)}>
+const ControlsRows: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <>
         <div className="grid grid-cols-3 gap-[4%]" style={relativeRectStyle(C.songActions)}>
             {[Repeat, Heart, Sparkle].map((Icon, index) => (
                 <span
@@ -195,12 +196,43 @@ const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
                 </span>
             </React.Fragment>
         ))}
+
+        {/* 取景器下面那两行：主题来源，以及写着当前主题名的那一条。
+            它们不在任何一章的字幕里，但真实那一页到这里才到底 —— 漏掉就等于凭空少了一截。 */}
+        <div
+            data-ponder-panel-theme-source
+            className="flex items-center gap-[3%] rounded-xl px-[4%]"
+            style={{ ...relativeRectStyle(C.themeSource), backgroundColor: line }}
+        >
+            <Sparkle className="h-[40%] w-auto shrink-0 opacity-45" />
+            <span className="h-[14%] min-w-0 flex-1 rounded-full" style={{ backgroundColor: outline }} />
+            <span className="h-[52%] w-[26%] shrink-0 rounded-full border" style={{ borderColor: outline }} />
+        </div>
+        <div data-ponder-panel-current-theme className="flex items-center gap-[4%] px-[2%]" style={relativeRectStyle(C.currentTheme)}>
+            <Moon className="h-[44%] w-auto shrink-0 opacity-45" />
+            <span className="h-[16%] w-[44%] rounded-full" style={{ backgroundColor: line }} />
+            <span className="flex-1" />
+            <RefreshCw className="h-[40%] w-auto shrink-0 opacity-40" />
+        </div>
+    </>
+);
+
+const ControlsPage: React.FC<PageProps> = ({ accent, line, outline }) => (
+    <div data-ponder-panel-controls style={relativeRectStyle(G.body)}>
+        <ControlsRows accent={accent} line={line} outline={outline} />
     </div>
 );
 
-/** 点中间那块名称展开的完整模式列表，最底下一条是通往完整设置的出口。 */
+/**
+ * 点中间那块名称展开的完整模式列表，最底下一条是通往完整设置的出口。
+ *
+ * 这一层整块替换内容区，所以它得先把控制页原样画回来 —— 列表是压在这一页上的一块浮层，
+ * 不是一页新内容。被点开的那块名称留在列表上方：列表盖住它的话，
+ * 「点的是这里、掉下来的是它」就没了。
+ */
 const ModeListPage: React.FC<PageProps> = ({ accent, line, outline }) => (
     <div data-ponder-panel-mode-list-page style={relativeRectStyle(G.body)}>
+        <ControlsRows accent={accent} line={line} outline={outline} />
         <span
             data-ponder-panel-mode-name-open
             className="flex items-center"
@@ -210,14 +242,15 @@ const ModeListPage: React.FC<PageProps> = ({ accent, line, outline }) => (
         </span>
         <div
             data-ponder-panel-mode-list
-            className="flex flex-col justify-evenly rounded-xl px-[5%]"
-            style={{ ...relativeRectStyle(C.modeList), backgroundColor: 'rgba(0,0,0,0.55)', boxShadow: `inset 0 0 0 1px ${outline}` }}
+            /* 底部留出出口那一条的高度：不留的话最后一个模式正好压在它下面。 */
+            className="flex flex-col justify-evenly rounded-xl px-[5%] pb-8"
+            style={{ ...relativeRectStyle(C.modeList), backgroundColor: 'rgba(9,9,11,0.96)', boxShadow: `inset 0 0 0 1px ${outline}` }}
         >
-            {[0, 1, 2, 3, 4, 5].map(index => (
+            {[0, 1, 2, 3, 4].map(index => (
                 <span key={index} data-ponder-panel-mode-option className="flex items-center gap-[4%]">
-                    <span className="aspect-square h-[9%] shrink-0 rounded-sm border" style={{ borderColor: outline }} />
+                    <span className="aspect-square h-[13%] shrink-0 rounded-sm border" style={{ borderColor: outline }} />
                     <span
-                        className="h-[5%] rounded-full"
+                        className="h-[6%] rounded-full"
                         style={{ width: `${54 + (index % 3) * 12}%`, backgroundColor: index === 1 ? accent : line }}
                     />
                 </span>

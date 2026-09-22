@@ -114,29 +114,32 @@ export const PonderImportExportSurface: React.FC<SurfaceProps> = ({ accent, line
 
         {/* 按下导入先弹这个：按组摊开的逐项对照，勾哪条才改哪条。 */}
         <PonderSurfaceStateLayer state="import-plan" registerStateNode={registerStateNode} replaces>
+            {/* 分组和衍生那两块的几何是「相对 dialog」的，所以它们必须画在这个框**里面** ——
+                摆到外面去，百分比就按整块面板算，内容会从对话框两侧长出去。 */}
             <div
                 data-ponder-import-dialog
-                className="rounded-2xl border"
-                style={{ ...relativeRectStyle(G.dialog), borderColor: outline, backgroundColor: 'rgba(0,0,0,0.45)' }}
+                /* 描边走 inset box-shadow：1px 的 border 会把里面按百分比定位的两块各挪掉 1px。 */
+                className="rounded-2xl"
+                style={{ ...relativeRectStyle(G.dialog), boxShadow: `inset 0 0 0 1px ${outline}`, backgroundColor: 'rgba(0,0,0,0.45)' }}
             >
                 <span className="absolute left-[6%] top-[6%] h-[5%] w-[38%] rounded-full" style={{ backgroundColor: line }} />
-            </div>
-            <div data-ponder-import-groups className="flex flex-col justify-evenly" style={relativeRectStyle(G.dialogGroups)}>
-                {[['theme', 84], ['visualizer', 70], ['fonts', 62]].map(([group, width]) => (
-                    <span key={group} className="flex flex-col gap-[8%]">
-                        <span className="h-1 w-[22%] rounded-full opacity-55" style={{ backgroundColor: accent }} />
-                        <ChangeRow line={line} outline={outline} accent={accent} width={Number(width) * 0.6} />
-                    </span>
-                ))}
-            </div>
-            {/* 衍生改动：配置里根本没提、却会被连带改掉的那些，所以总是摊开、也勾不掉。 */}
-            <div
-                data-ponder-import-derived-block
-                className="flex flex-col justify-evenly rounded-lg border px-[4%]"
-                style={{ ...relativeRectStyle(G.dialogDerived), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.10)' }}
-            >
-                <ChangeRow line={line} outline={outline} accent={accent} width={52} derived />
-                <ChangeRow line={line} outline={outline} accent={accent} width={44} derived />
+                <div data-ponder-import-groups className="flex flex-col justify-evenly" style={relativeRectStyle(G.dialogGroups)}>
+                    {[['theme', 84], ['visualizer', 70], ['fonts', 62]].map(([group, width]) => (
+                        <span key={group} className="flex flex-col gap-[8%]">
+                            <span className="h-1 w-[22%] rounded-full opacity-55" style={{ backgroundColor: accent }} />
+                            <ChangeRow line={line} outline={outline} accent={accent} width={Number(width) * 0.6} />
+                        </span>
+                    ))}
+                </div>
+                {/* 衍生改动：配置里根本没提、却会被连带改掉的那些，所以总是摊开、也勾不掉。 */}
+                <div
+                    data-ponder-import-derived-block
+                    className="flex flex-col justify-evenly rounded-lg border px-[4%]"
+                    style={{ ...relativeRectStyle(G.dialogDerived), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.10)' }}
+                >
+                    <ChangeRow line={line} outline={outline} accent={accent} width={52} derived />
+                    <ChangeRow line={line} outline={outline} accent={accent} width={44} derived />
+                </div>
             </div>
         </PonderSurfaceStateLayer>
     </div>

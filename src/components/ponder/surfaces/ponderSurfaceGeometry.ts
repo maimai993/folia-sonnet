@@ -120,14 +120,27 @@ export const GRID_VIEW_CARD_COLUMNS = 6;
 export const GRID_VIEW_CARD_COUNT = 17;
 export const GRID_VIEW_FOCUSED_CARD = 8;
 
-/** 按序号算出一张卡在 cards 里的位置。锚点和界面都走它，错行偏移只写一遍。 */
+/**
+ * 按序号算出一张卡在 cards 里的位置。锚点和界面都走它，错行偏移只写一遍。
+ *
+ * 列距、卡宽和错行量三个数要满足 5×列距 + 卡宽 + 错行量 ≤ 1：不满足的话，错行的那几排
+ * 最后一张会整块长到 cards 之外 —— 屏幕上就是一张卡莫名其妙地比别的排凸出去一截。
+ * 整排再按剩下的空隙左右居中，错行的一半往右、另一半往左。
+ */
+const GRID_VIEW_CARD_PITCH = 0.15;
+const GRID_VIEW_CARD_WIDTH = 0.13;
+const GRID_VIEW_CARD_STAGGER = 0.075;
+const GRID_VIEW_CARD_INSET = (
+    1 - ((GRID_VIEW_CARD_COLUMNS - 1) * GRID_VIEW_CARD_PITCH + GRID_VIEW_CARD_WIDTH + GRID_VIEW_CARD_STAGGER)
+) / 2;
+
 export const gridViewCardRect = (index: number): PonderRelativeRect => {
     const column = index % GRID_VIEW_CARD_COLUMNS;
     const row = Math.floor(index / GRID_VIEW_CARD_COLUMNS);
     return {
-        left: column * 0.165 + (row % 2 ? 0.075 : 0),
+        left: GRID_VIEW_CARD_INSET + column * GRID_VIEW_CARD_PITCH + (row % 2 ? GRID_VIEW_CARD_STAGGER : 0),
         top: row * 0.34,
-        width: 0.14,
+        width: GRID_VIEW_CARD_WIDTH,
         height: 0.26,
     };
 };
@@ -216,11 +229,15 @@ export const PLAYER_PAGE_GEOMETRY = {
  * 真实面板是 `w-80` 加 `p-5`，从上到下只有三段：一张正方形封面、紧挨着的一排标签页、
  * 再下面是当前标签页的内容。封面和标签排之间没有第四段 —— 歌名、歌手、专辑是封面页
  * *里面*的内容，不是面板结构的一层，所以这里不留曲目信息带。
+ *
+ * 这几个数是把真实尺寸按面板高度（= 2.15 × 面板宽，见 sidePanelAnchor）换算来的：
+ * 内边距 20、封面 280（宽的 88%）、间距 16、标签排 48、间距 16，剩下的全是内容区。
+ * 封面和标签排之间只有 16px —— 留出一整条空带就是「骨架和真实界面对不上」最显眼的那种。
  */
 export const SIDE_PANEL_GEOMETRY = {
-    cover: { left: 0.06, right: 0.06, top: 0.04, square: true },
-    tabs: { left: 0.06, right: 0.06, top: 0.57, height: 0.09 },
-    body: { left: 0.06, right: 0.06, top: 0.68, bottom: 0.04 },
+    cover: { left: 0.06, right: 0.06, top: 0.029, square: true },
+    tabs: { left: 0.06, right: 0.06, top: 0.461, height: 0.070 },
+    body: { left: 0.06, right: 0.06, top: 0.554, bottom: 0.029 },
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
@@ -244,15 +261,23 @@ export const SIDE_PANEL_SOURCE_PAGE = {
  * 是一块能被指住的区域，而不是一行里随便一条占位文字。
  */
 export const SIDE_PANEL_CONTROLS_PAGE = {
-    songActions: { left: 0, right: 0, top: 0, height: 0.26 },
-    volume: { left: 0, right: 0, top: 0.32, height: 0.16 },
-    modeRowVisualizer: { left: 0, right: 0, top: 0.54, height: 0.16 },
-    modeRowBackground: { left: 0, right: 0, top: 0.76, height: 0.16 },
+    songActions: { left: 0, right: 0, top: 0, height: 0.166 },
+    volume: { left: 0, right: 0, top: 0.248, height: 0.124 },
+    modeRowVisualizer: { left: 0, right: 0, top: 0.414, height: 0.110 },
+    modeRowBackground: { left: 0, right: 0, top: 0.538, height: 0.110 },
+    /** 主题来源那一行，以及最底下写着当前主题名的那一条。真实那一页到这里才到底。 */
+    themeSource: { left: 0, right: 0, top: 0.662, height: 0.110 },
+    currentTheme: { left: 0, right: 0, top: 0.855, height: 0.097 },
     /** 中间那块名称的点击范围：左边让开箭头和字形，右边让开参数槽和另一个箭头。 */
-    modeName: { left: 0.20, right: 0.32, top: 0.54, height: 0.16 },
-    modeNameBackground: { left: 0.20, right: 0.32, top: 0.76, height: 0.16 },
-    /** 点开之后压下来的完整列表，底部还有一条通往完整设置的出口。 */
-    modeList: { left: 0.04, right: 0.04, top: 0.26, bottom: 0.02 },
+    modeName: { left: 0.20, right: 0.32, top: 0.414, height: 0.110 },
+    modeNameBackground: { left: 0.20, right: 0.32, top: 0.538, height: 0.110 },
+    /**
+     * 点开之后压下来的完整列表，底部还有一条通往完整设置的出口。
+     *
+     * 起点压在取景器那一行**下面**：列表盖住被点开的那块名称的话，
+     * 「点的是这里、掉下来的是它」就没了 —— 高亮也会落在一块看不见的元素上。
+     */
+    modeList: { left: 0.04, right: 0.04, top: 0.53, bottom: 0.02 },
     modeListFooter: { left: 0.04, right: 0.04, bottom: 0.02, height: 0.11 },
 } satisfies Record<string, PonderRelativeRect>;
 
@@ -386,7 +411,8 @@ export const QUEUE_COMMAND_GEOMETRY = {
  * 只有摆在同一张桌面上才看得出来。
  */
 export const DESKTOP_FEATURES_GEOMETRY = {
-    desktop: { left: 0.03, right: 0.03, top: 0.04, bottom: 0.18 },
+    /** 桌面本身要一直铺到任务栏底下：只铺到窗口下沿的话，任务栏会飘在桌面外面。 */
+    desktop: { left: 0.03, right: 0.03, top: 0.04, bottom: 0.03 },
     /** 相对 page：主窗口。壁纸模式下它沉到桌面最底层。 */
     mainWindow: { left: 0.12, top: 0.12, width: 0.5, height: 0.56 },
     /** 相对 page：遥控窗口，浮在主窗口之上的一张小卡。 */
@@ -435,7 +461,8 @@ export const GRID_ACTION_BUTTON_GEOMETRY = {
     shelf: { left: 0.06, right: 0.06, top: 0.12, bottom: 0.26 },
     button: { right: 0.05, bottom: 0.07, width: 0.07, square: true },
     track: { right: 0.05, bottom: 0.07, width: 0.32, height: 0.135 },
-    trackEnd: { right: 0.32, bottom: 0.082, width: 0.055, square: true },
+    /** 滑轨左端那枚图标要停在轨道**里**：right 比轨道左沿再往里收一点点。 */
+    trackEnd: { right: 0.31, bottom: 0.082, width: 0.055, square: true },
     listPanel: { right: 0.04, top: 0.08, width: 0.30, bottom: 0.06 },
     filterBar: { left: 0.22, right: 0.22, top: 0.06, height: 0.10 },
 } satisfies Record<string, PonderRelativeRect>;

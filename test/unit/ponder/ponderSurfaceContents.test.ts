@@ -223,7 +223,7 @@ describe('PonderSurfaceContents', () => {
         const markup = renderSurface('side-panel');
         // 取景器中间那块名称是一颗按钮，它得是一块独立元素才指得住。
         expect(markup).toContain('data-ponder-panel-mode-name');
-        expect(markup.match(/data-ponder-panel-mode-option/g)).toHaveLength(6);
+        expect(markup.match(/data-ponder-panel-mode-option/g)).toHaveLength(5);
         // 列表底下那一条是「去完整设置」，不是第七个模式。
         expect(markup).toContain('data-ponder-panel-mode-list-footer');
         expect(markup).toContain('data-ponder-surface-state="controls-mode-list"');

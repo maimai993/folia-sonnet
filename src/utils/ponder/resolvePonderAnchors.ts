@@ -19,7 +19,8 @@ type ResolveContext = {
 /** 比例矩形 → px 矩形。anchorX/anchorY 决定 left/top 被当成哪条边。 */
 const viewportRectToPx = (rect: PonderViewportRect, viewport: ResolveContext['viewport']): PonderRect => {
     const width = rect.width * viewport.width;
-    const height = rect.height * viewport.height;
+    // aspect 锁死形状：高度由宽度算，不再跟着视口高度变。
+    const height = rect.aspect !== undefined ? width * rect.aspect : rect.height * viewport.height;
     const anchoredLeft = rect.left * viewport.width;
     const anchoredTop = rect.top * viewport.height;
 

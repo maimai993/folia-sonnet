@@ -123,6 +123,15 @@ export type PonderViewportRect = {
     top: number;
     width: number;
     height: number;
+    /**
+     * 高宽比（height ÷ width，像素）。给出它时高度由宽度算，`height` 只作兜底。
+     *
+     * 存在的理由：宽按视口宽算、高按视口高算，同一个 surface 的形状就随窗口比例变。
+     * 里面还摆着按**宽度**定尺寸的方块（控制面板顶上那张正方形封面）而其余各块按
+     * **高度**的百分比定位时，这两套单位会在宽屏上错开 —— 16:9 下封面会直接压到
+     * 标签排上。锁死比例之后，一份百分比在任何窗口下都成立。
+     */
+    aspect?: number;
     anchorX?: 'left' | 'center' | 'right';
     anchorY?: 'top' | 'center' | 'bottom';
 };

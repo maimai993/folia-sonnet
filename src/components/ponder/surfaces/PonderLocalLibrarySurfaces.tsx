@@ -79,8 +79,12 @@ export const PonderOnlineCollectionActionsSurface: React.FC<SurfaceProps> = ({ a
     </div>
 );
 
+/**
+ * 蜂窝阵列。上下留白是给错行让的：单靠 translateY 错开，最上和最下那排会整块凸到
+ * `cards` 锚点之外 —— 高亮框一亮，凸出去的那半张就明摆着和框对不上。
+ */
 const MapCards: React.FC<{ accent: string; line: string; outline: string }> = ({ accent, line, outline }) => (
-    <div data-ponder-local-grid-map-cards className="absolute grid grid-cols-5 grid-rows-3 gap-[3%]" style={relativeRectStyle(M.cards)}>
+    <div data-ponder-local-grid-map-cards className="absolute grid grid-cols-5 grid-rows-3 gap-[3%] py-[4%]" style={relativeRectStyle(M.cards)}>
         {Array.from({ length: 14 }, (_, index) => (
             <span
                 key={index}

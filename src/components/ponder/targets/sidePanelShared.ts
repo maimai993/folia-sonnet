@@ -20,7 +20,9 @@ import type { PonderAnchorSource, PonderRelativeRect, PonderSceneScript, PonderT
 /** 面板本身。几何和 PonderSidePanelSurface 画的那块是同一组数。 */
 export const sidePanelAnchor = {
     kind: 'synthetic',
-    rect: { left: 0.5, top: 0.10, width: 0.22, height: 0.62, anchorX: 'center' },
+    // aspect 就是真实面板的 690 ÷ 320（w-80 加 p-5，装下封面、标签排和一页内容的高度）。
+    // 不锁比例的话，宽屏上按宽度定尺寸的正方形封面会长到压住按高度定位的标签排。
+    rect: { left: 0.5, top: 0.10, width: 0.22, height: 0.62, aspect: 2.15, anchorX: 'center' },
     role: 'surface',
     surfaceKind: 'side-panel',
     labelKey: 'ponder.anchors.sidePanel.panel',

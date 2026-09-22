@@ -443,12 +443,14 @@ export const PonderThemeParkSurface: React.FC<SurfaceProps> = ({ accent, line, o
                     <span className="h-1 w-[34%] rounded-full opacity-55" style={{ backgroundColor: line }} />
                 </span>
                 {/* 从当前封面算出来的一排推荐色，点一下直接填进正在编辑的那一项。 */}
-                <div data-ponder-park-recommended className="flex items-center gap-[3%]" style={relativeRectStyle(P.recommended)}>
+                {/* 六枚色块按 flex-1 分宽：写死成正方形的话，六枚加五道缝比这一行还宽，
+                    最后一枚会从右栏边缘长出去。 */}
+                <div data-ponder-park-recommended className="flex items-stretch gap-[3%]" style={relativeRectStyle(P.recommended)}>
                     {[0, 1, 2, 3, 4, 5].map(index => (
                         <span
                             key={index}
                             data-ponder-park-swatch
-                            className="aspect-square h-[54%] rounded-md border"
+                            className="h-[54%] min-w-0 flex-1 self-center rounded-md border"
                             style={{ borderColor: outline, backgroundColor: index % 2 === 0 ? accent : line, opacity: 0.4 + index * 0.1 }}
                         />
                     ))}
