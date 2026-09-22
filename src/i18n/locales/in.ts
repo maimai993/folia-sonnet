@@ -2325,6 +2325,29 @@ export default {
         "title": "Pemuatan Sampul Lattice Lebih Ringan",
         "description": "Lattice kini memuat ukuran sampul sesuai tiap poster dan menyiapkan gambar yang lebih besar saat lagu dibuka, sehingga dekode gambar berlebih berkurang tanpa mengorbankan kejernihan transisi."
       }
+    },
+    "v0_7_8": {
+      "intro": "Versi 0.7.8 menghadirkan tutorial interaktif Ponder dan transisi pembukaan koleksi, memungkinkan Anda meredam gerakan per bagian, memperluas mode wallpaper ke beberapa monitor, dan membuat QQ Music dapat membaca playlist pribadi Anda.",
+      "ponderTutorials": {
+        "title": "Ponder: Tutorial Interaktif",
+        "description": "Arahkan penunjuk ke kontrol yang didukung untuk melihat petunjuk tahan G; lepaskan untuk memutar panduan animasi. Ctrl+G menjelaskan seluruh halaman saat ini, dan halaman Bantuan memuat indeks Ponder menurut kategori. Di perangkat sentuh, ketuk ikon bola lampu di pojok kanan atas. Perilaku petunjuk dan tombol sentuh dapat diatur atau dimatikan di Pengaturan."
+      },
+      "collectionOpenMorph": {
+        "title": "Transisi Pembukaan Koleksi",
+        "description": "Membuka playlist atau album dari grid atau halaman artis kini mengubah sampul kartu menjadi tampilan detail sementara kartu di sekitarnya menyebar, dan saat kembali sampul terbang ke tempat asalnya. Playlist besar langsung memulai animasi tanpa menunggu sampul selesai didekode."
+      },
+      "motionControls": {
+        "title": "Kontrol Gerakan per Bagian",
+        "description": "Folia kini memutar animasi penuh secara bawaan, alih-alih mengubahnya menjadi lompatan instan saat animasi sistem dimatikan. Bagian Kurangi gerakan yang baru di pengaturan Lab memungkinkan Anda meredam lattice antrean, transisi automix, transisi pembukaan koleksi, pergerakan latar Monet, gerakan mikro antarmuka, dan gulir halus di Pengaturan secara terpisah. Aktifkan Ikuti pengaturan sistem jika Anda lebih suka perilaku sebelumnya."
+      },
+      "wallpaperMultiMonitor": {
+        "title": "Mode Wallpaper di Monitor Mana Pun",
+        "description": "Di Windows, mode wallpaper kini menutupi monitor tempat jendela utama berada, bukan selalu layar utama, dan klik mouse mendarat dengan tepat pada susunan dengan skala campuran. Untuk berpindah monitor, keluar dari mode wallpaper, pindahkan jendela, lalu aktifkan kembali."
+      },
+      "qqPrivatePlaylists": {
+        "title": "Playlist Pribadi QQ Music",
+        "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
+      }
     }
   },
   "export": {

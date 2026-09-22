@@ -2391,6 +2391,29 @@ export default {
         "title": "Lighter Lattice Artwork Loading",
         "description": "Lattice now loads cover sizes suited to each poster and prewarms larger artwork when opening a song, reducing unnecessary image decoding while keeping expansion transitions clear."
       }
+    },
+    "v0_7_8": {
+      "intro": "Version 0.7.8 introduces Ponder interactive tutorials and a collection-opening transition, lets you tone down motion per surface, extends wallpaper mode to multiple monitors, and lets QQ Music read your private playlists.",
+      "ponderTutorials": {
+        "title": "Ponder: Interactive Tutorials",
+        "description": "Rest the pointer on a supported control to see a hold-G hint; release to play an animated walkthrough. Ctrl+G explains the whole current page, and the Help page includes a Ponder index sorted by category. On touch devices, tap the lightbulb in the top-right corner. Hint behavior and the touch button can be adjusted or turned off in Settings."
+      },
+      "collectionOpenMorph": {
+        "title": "Collection Opening Transition",
+        "description": "Opening a playlist or album from a grid or artist page now morphs the card's cover into the detail view while the surrounding cards scatter, and going back flies the cover home. Large playlists start the animation immediately instead of waiting for artwork to decode."
+      },
+      "motionControls": {
+        "title": "Per-Surface Motion Controls",
+        "description": "Folia now plays its full animations by default instead of collapsing them into instant jumps when the system animation setting is off. A new Reduce motion section in Lab settings lets you tone down the queue lattice, automix transitions, the collection opening transition, Monet background drift, interface micro-motion, and smooth scrolling in Settings individually. Turn on Follow system setting if you prefer the previous behavior."
+      },
+      "wallpaperMultiMonitor": {
+        "title": "Wallpaper Mode on Any Monitor",
+        "description": "On Windows, wallpaper mode now covers the monitor the main window is on instead of always using the primary display, and mouse clicks land correctly on mixed-scaling setups. To switch monitors, exit wallpaper mode, move the window, and turn it back on."
+      },
+      "qqPrivatePlaylists": {
+        "title": "Private QQ Music Playlists",
+        "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
+      }
     }
   },
   "export": {
