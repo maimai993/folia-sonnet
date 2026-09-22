@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PONDER_TARGET_LIST, findPonderTarget } from '@/components/ponder/ponderRegistry';
 import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
 import { SETTINGS_ANCHOR_DEFINITIONS } from '@/components/modal/settings/navigation/settingsAnchorModel';
+import { VISUALIZER_SETTINGS_SECTIONS } from '@/stores/useSettingsModalStore';
 import { PONDER_TARGET_CATEGORIES } from '@/types/ponder';
 import type { PonderAnchorPoint, PonderStep, PonderSurfaceKind } from '@/types/ponder';
 
@@ -182,6 +183,10 @@ describe('ponder registry', () => {
             'audio-equalizer': new Set(['custom-written']),
             'vis-playground': new Set(['hotspots-visible', 'section-background', 'section-visualizer', 'section-subtitle']),
             'theme-park': new Set(['save-blocked']),
+            'lyric-style': new Set([
+                'preview-style-b', 'preview-monet', 'preview-monet-bare', 'preview-background-b', 'preview-background-b-style-b', 'preview-romanization',
+                'panel-style-b', 'panel-monet', 'panel-monet-off', 'panel-background', 'panel-subtitle',
+            ]),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {
@@ -220,6 +225,21 @@ describe('ponder registry', () => {
                 expect(
                     declared.has(scene.action.anchorId),
                     `${target.id}/${scene.id} 指向了不存在的设置锚点 "${scene.action.anchorId}"`,
+                ).toBe(true);
+            });
+        });
+    });
+
+    // 调参台那一种直达同理：section 只是 string，写错了会打开调参台却停在默认页。
+    it('章节里去调参台的直达都指向真实存在的一页', () => {
+        const sections = new Set<string>(VISUALIZER_SETTINGS_SECTIONS);
+
+        PONDER_TARGET_LIST.forEach(target => {
+            target.scenes.forEach(scene => {
+                if (scene.action?.kind !== 'openVisualizerSettings') return;
+                expect(
+                    sections.has(scene.action.section),
+                    `${target.id}/${scene.id} 指向了调参台不存在的一页 "${scene.action.section}"`,
                 ).toBe(true);
             });
         });

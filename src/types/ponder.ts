@@ -79,7 +79,8 @@ export type PonderTargetId =
     | 'import-export-settings'
     | 'audio-equalizer'
     | 'vis-playground'
-    | 'theme-park';
+    | 'theme-park'
+    | 'lyric-style';
 
 /**
  * 导航页把目标按这个分组。
@@ -217,7 +218,9 @@ export type PonderSurfaceKind =
     | 'import-export-settings'
     | 'audio-equalizer'
     | 'vis-playground'
-    | 'theme-park';
+    | 'theme-park'
+    /** 歌词样式：调参台的布局，预览和右栏各自可换，背景和歌词也各自可换。 */
+    | 'lyric-style';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。
@@ -395,6 +398,18 @@ export type PonderSceneAction =
     | {
           kind: 'openSettings';
           anchorId: string;
+          labelKey: string;
+      }
+    /**
+     * 打开歌词动画调参台并停在某一页。
+     *
+     * 调参台不是 SettingsAnchor —— 它是设置里的一个整屏子视图，四页由 section 选，
+     * 所以不能走 openSettings 的锚点。section 同样只声明成 string，理由同上；
+     * ponderRegistry 的单测核对它是调参台真实存在的一页。
+     */
+    | {
+          kind: 'openVisualizerSettings';
+          section: string;
           labelKey: string;
       }
     /**

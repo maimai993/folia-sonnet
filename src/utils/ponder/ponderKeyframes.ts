@@ -49,7 +49,9 @@ const CAPTION_SETTLE_MS = 300;
  * 动作类关键帧落在动作开头：直接停在那里，画面是动作之前的样子，上一段字幕已收、
  * 这一段还没出来，等于停在一帧空白上。所以先把这一拍播完 —— 动作和结果层做完、
  * 字幕淡入 —— 再停。上限是下一个动作的开头，不会越过去替用户多看一拍。
- * pause 类关键帧本身就是「这一拍已经讲完」的位置，原地停。
+ * pause 类关键帧通常就是「这一拍已经讲完」的位置，原地停；但并行的结果层可以比它前面
+ * 那个顺序步长（淡入 520ms 挂在 340ms 的高亮上），落点时还在半途，所以早先开始、
+ * 此刻仍在进行的也要等完。
  */
 export const keyframeSettleAt = (plan: PonderTimelinePlan, atMs: number): number => {
     const startsAction = (keyframeAtMs: number) => plan.entries.some(
@@ -60,10 +62,11 @@ export const keyframeSettleAt = (plan: PonderTimelinePlan, atMs: number): number
 
     let settleMs = atMs;
     for (const { step, atMs: startMs, durationMs } of plan.entries) {
-        if (startMs < atMs || startMs >= limitMs || step.kind === 'pause') continue;
+        if (startMs >= limitMs || step.kind === 'pause') continue;
         // 字幕只等它淡入，不等它读完：读字幕正是停下来的目的。
         const endMs = startMs + (step.kind === 'caption' ? CAPTION_SETTLE_MS : durationMs);
-        settleMs = Math.max(settleMs, endMs);
+        // 落点之前就已做完的不用等；落点之后开始的、以及此刻还在进行的都要等。
+        if (endMs > atMs) settleMs = Math.max(settleMs, endMs);
     }
     return Math.min(settleMs, limitMs);
 };

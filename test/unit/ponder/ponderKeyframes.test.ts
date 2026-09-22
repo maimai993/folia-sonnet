@@ -93,6 +93,11 @@ describe('keyframeSettleAt', () => {
         expect(keyframeSettleAt(scenePlan, 420)).toBe(420);
     });
 
+    it('pause 类关键帧落点时并行结果层还没做完，等它做完', () => {
+        // readB 在 1820 + 360，而 bState 的淡入要到 1820 + 520 才完。
+        expect(keyframeSettleAt(scenePlan, 1820 + 360)).toBe(1820 + 520);
+    });
+
     it('只有字幕的一拍等字幕淡入就停，不等它读完', () => {
         const captionOnly = compilePonderScene({
             id: 'caption', titleKey: 'x', anchors: {},

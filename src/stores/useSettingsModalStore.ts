@@ -17,7 +17,9 @@ export type SettingsModalInitialTab = 'help' | 'options';
 
 export type SettingsSubviewId = 'appearance' | 'general' | 'playback' | 'interaction' | 'integration' | 'storage' | 'desktop' | 'lab' | 'visualizer' | 'themePark' | 'lyricFilter' | 'globalLyricOffset';
 
-export type VisualizerSettingsSection = 'common' | 'background' | 'visualizer' | 'subtitle';
+/** 歌词动画调参台的四页。列成数组是为了让「思索」的设置直达在单测里能核对 section 真实存在。 */
+export const VISUALIZER_SETTINGS_SECTIONS = ['common', 'background', 'visualizer', 'subtitle'] as const;
+export type VisualizerSettingsSection = typeof VISUALIZER_SETTINGS_SECTIONS[number];
 
 export type SettingsModalState = {
     isOpen: boolean;

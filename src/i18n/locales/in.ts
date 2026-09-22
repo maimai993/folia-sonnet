@@ -2817,6 +2817,7 @@ export default {
     "summaries": {
       "audio_equalizer": "Sepuluh pita dan satu rantai efek \u2014 dan satu tarikan menimpa slot kustom.",
       "vis_playground": "Ada tiga area klik tak terlihat di atas pratinjau.",
+      "lyric_style": "Pengaturan khusus tiap gaya, menyembunyikan elemen Monet, memadukan latar, dan subtitel bersama.",
       "theme_park": "Editor warna penuh layar: tema mana, sisi mana, dan kenapa simpan meredup.",
       "custom_shortcut_settings": "Alt plus satu huruf, dan kenapa daftar perintahnya lebih pendek.",
       "pinned_commands": "Tiga slot tetap di bawah jendela perintah \u2014 bukan \u201cyang terbaru di atas\u201d.",
@@ -2910,6 +2911,9 @@ export default {
       "openImportExport": "Buka cadangan dan impor",
       "openBottomUiSettings": "Buka pengaturan UI bawah",
       "openLyricsAnimation": "Buka pengaturan animasi lirik",
+      "openLyricStyleSettings": "Buka pengaturan gaya lirik",
+      "openBackgroundSettings": "Buka pengaturan latar",
+      "openSubtitleSettings": "Buka pengaturan subtitel",
       "openThemePresets": "Buka pengaturan tema",
       "openSlotPicker": "Pilih tombolnya",
       "openDocs": "Buka dokumentasi",
@@ -2937,6 +2941,22 @@ export default {
         "bandFader": "Salah satu fader",
         "effects": "Rantai efek",
         "noiseBadge": "Menambah derau"
+      },
+      "lyricStyle": {
+        "panel": "Pengaturan animasi lirik",
+        "preview": "Pratinjau langsung",
+        "settingsPanel": "Kolom pengaturan",
+        "tabs": "Empat halaman",
+        "rows": "Pengaturan gaya ini",
+        "rowOne": "Baris pertama",
+        "rowTwo": "Baris kedua",
+        "rowThree": "Baris ketiga",
+        "rowFour": "Baris keempat",
+        "rowFive": "Baris kelima",
+        "subtitle": "Subtitel bersama",
+        "monetDescription": "Deskripsi lagu",
+        "monetHanger": "Tombol geser",
+        "monetAudio": "Visualisasi audio"
       },
       "visPlayground": {
         "sectionReset": "Atur ulang halaman ini",
@@ -3265,6 +3285,7 @@ export default {
     "targets": {
       "audioEqualizer": "Dialog efek audio",
       "visPlayground": "Meja setel animasi lirik",
+      "lyricStyle": "Gaya lirik",
       "themePark": "Theme Park",
       "customShortcutSettings": "Pintasan buatan sendiri",
       "pinnedCommands": "Perintah tersemat",
@@ -3316,6 +3337,10 @@ export default {
       "visPlaygroundCommon": "Empat halaman, dan isi \u201cumum\u201d",
       "visPlaygroundVisuals": "Animasi dan latar",
       "visPlaygroundSubtitle": "Subtitel",
+      "lyricStylePerStyle": "Tiap gaya punya pengaturannya sendiri",
+      "lyricStyleMonet": "Monet: menyembunyikan elemen samping",
+      "lyricStyleCombine": "Latar dan gaya lirik dipilih terpisah",
+      "lyricStyleSubtitle": "Subtitel bawah bersama",
       "sidePanelControlsModeList": "Daftar mode lengkap ada di balik namanya",
       "sidePanelQueueRadio": "Pada Personal FM sel ini adalah radio",
       "audioEqualizerPresets": "Sakelar, praset, dan dua slotmu",
@@ -3447,6 +3472,23 @@ export default {
         "reset": "Tombol bulat di ujung mengosongkan slot kustom yang sedang aktif, kembali ke datar dengan rantai netral. Ia hanya menyentuh satu slot itu, dan meredup saat praset bawaan yang aktif \u2014 tidak ada yang bisa dibatalkan pada sesuatu yang tidak bisa disunting.",
         "effects": "Di bawah pita ada sisa rantainya: potongan tinggi dan rendah, saturasi, bit crush, wow, derau, lebar stereo, ruang, dan punch. Semuanya ditulis ke slot kustom yang sama, dengan aturan diam-diam yang sama.",
         "noise": "Lencana kecil di sebelah beberapa nama itu berarti efeknya membawa derau sendiri. Ia tampil terlepas dari fadernya naik atau tidak, supaya pertanyaan \u201cdesis ini dari mana\u201d punya jawaban sebelum kamu menyalakannya, bukan sesudah."
+      },
+      "lyricStyle": {
+        "perStyleOwn": "Setiap gaya lirik punya satu set pengaturan khusus yang hanya berlaku untuk gaya itu. Halaman di kanan adalah set untuk gaya saat ini.",
+        "perStyleSwitch": "Ganti gaya, dan pratinjau serta seluruh halaman ini ikut berganti. Gaya tidak berbagi pengaturan; yang sudah kamu atur untuk gaya lama tetap tersimpan dan masih ada saat kamu kembali.",
+        "perStyleWhere": "Di tab Kontrol, klik nama Gaya Lirik: “Pengaturan lainnya” di bagian bawah daftar langsung membuka halaman ini. Tombol di bawah juga bisa.",
+        "monetIntro": "Monet: lirik di kiri, potret di kanan. Pertanyaan paling umum adalah cara mematikan elemen di kanan. Semuanya ada di pengaturan Monet sendiri.",
+        "monetDescription": "Teks di kiri bawah adalah deskripsi lagu. Matikan “Tampilkan Deskripsi Lagu” untuk menyembunyikannya.",
+        "monetHanger": "Tombol bulat di atas potret adalah gantungan seret, untuk memindahkan potret. Setelah posisinya pas, sembunyikan lewat “Gantungan Seret”.",
+        "monetAudio": "Di bawah potret ada visualisasi audio. “Visualisasi audio” menyembunyikannya; “Gaya Audio” beralih antara batang dan garis.",
+        "monetBare": "Dengan ketiganya mati, yang tersisa hanya lirik dan potret. Sakelar ini hanya milik Monet dan tidak muncul untuk gaya lain.",
+        "combineTwo": "Latar dan gaya lirik adalah dua pilihan terpisah. Di tab Kontrol keduanya dua baris, Gaya Lirik dan Jenis Latar Belakang, masing-masing diganti sendiri.",
+        "combineBackground": "Ganti latarnya saja: gaya lirik tetap. Pengaturan latar ada di halaman Latar Belakang pada pengaturan animasi lirik.",
+        "combineStyle": "Sekarang ganti gaya liriknya saja: latar yang baru dipilih tetap. Latar apa pun cocok dengan gaya lirik apa pun; hanya gaya Still yang tidak menggambar latar.",
+        "subtitleShared": "Sebagian besar gaya lirik berbagi satu baris subtitel di bawah ini. Monet, Pendolo, dan Still menaruh terjemahan di tata letaknya sendiri dan tidak memakainya.",
+        "subtitleContent": "Pengaturannya ada di halaman Subtitle pada pengaturan animasi lirik dan berlaku untuk semua gaya yang memakainya. Baris pertama memilih terjemahan, romanisasi, atau tidak ada.",
+        "subtitleBlur": "Matikan “Buramkan lirik non-terjemahan”, dan subtitel tidak lagi buram.",
+        "subtitleFont": "Matikan “Subtitle Menggunakan Font Lirik” untuk memberi subtitel font dan ketebalan sendiri. “Skala subtitle” mengatur ukurannya sendiri dan selalu tersedia."
       },
       "visPlayground": {
         "preview": "Meja setel terbuka satu layar penuh: pratinjau langsung di kiri, kolom pengaturan sempit di kanan. Pratinjaunya benar-benar berjalan \u2014 animasi, latar, dan subtitelnya memakai perender sungguhan, bukan gambar diam, jadi setiap perubahan langsung terlihat.",

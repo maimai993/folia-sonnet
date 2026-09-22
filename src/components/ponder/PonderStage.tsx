@@ -13,7 +13,8 @@ import { fitRectsToStage } from '../../utils/ponder/fitRectsToStage';
 import { refreshPonderDomRectSnapshot, type PonderDomRectSnapshot } from '../../utils/ponder/ponderDomRectSnapshot';
 import { findPonderTarget } from './ponderRegistry';
 import { type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
-import { openSettingsFromPonder } from '../../services/ponder/pagePonderTarget';
+import { openSettingsFromPonder, openVisualizerSettingsFromPonder } from '../../services/ponder/pagePonderTarget';
+import type { VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { openPonderActionUrl } from '../../services/ponder/ponderActionUrl';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline, type PonderTimelineControls } from './usePonderTimeline';
@@ -310,6 +311,10 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                         // 外链不关教程：看完文档回来还想接着看这一章。
                         if (scene.action.kind === 'openUrl') {
                             openPonderActionUrl(scene.action.url);
+                            return;
+                        }
+                        if (scene.action.kind === 'openVisualizerSettings') {
+                            openVisualizerSettingsFromPonder(scene.action.section as VisualizerSettingsSection);
                             return;
                         }
                         // 顺序和「还要收掉哪几层」都在 openSettingsFromPonder 里 ——

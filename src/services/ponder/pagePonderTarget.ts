@@ -1,6 +1,6 @@
 import { useAppViewStore, type AppView } from '../../stores/useAppViewStore';
 import { usePonderStore } from '../../stores/usePonderStore';
-import { openSettings, useSettingsModalStore } from '../../stores/useSettingsModalStore';
+import { openSettings, useSettingsModalStore, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../../components/modal/settings/navigation/settingsAnchorModel';
 import type { PonderTargetId } from '../../types/ponder';
 
@@ -78,6 +78,14 @@ export const openSettingsFromPonder = (anchorId: SettingsAnchorId): void => {
     ponder.closePonder();
     ponder.closeNavigation();
     openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
+};
+
+/** 同上，去的是歌词动画调参台的某一页。收层的顺序和理由与 openSettingsFromPonder 相同。 */
+export const openVisualizerSettingsFromPonder = (section: VisualizerSettingsSection): void => {
+    const ponder = usePonderStore.getState();
+    ponder.closePonder();
+    ponder.closeNavigation();
+    openSettings('options', 'visualizer', section);
 };
 
 /** Opens Ponder for the foremost page and completes the non-dismissible shortcut lesson if present. */

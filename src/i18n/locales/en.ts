@@ -2885,6 +2885,7 @@ export default {
     "summaries": {
       "audio_equalizer": "Ten bands and an effect chain \u2014 and one drag rewrites a custom slot.",
       "vis_playground": "Three invisible click regions sit on the preview.",
+      "lyric_style": "Each style's own settings, hiding Monet's extras, pairing backgrounds, and the shared subtitle.",
       "theme_park": "The full colour editor: which theme, which side, and why save is greyed out.",
       "custom_shortcut_settings": "Alt plus one letter, and why its command list is shorter than the palette\u2019s.",
       "pinned_commands": "Three fixed slots under the command window \u2014 not the same thing as \u201crecent first\u201d.",
@@ -2978,6 +2979,9 @@ export default {
       "openImportExport": "Open backup and import",
       "openBottomUiSettings": "Open bottom UI settings",
       "openLyricsAnimation": "Open lyric animation settings",
+      "openLyricStyleSettings": "Open lyric style settings",
+      "openBackgroundSettings": "Open background settings",
+      "openSubtitleSettings": "Open subtitle settings",
       "openThemePresets": "Open theme settings",
       "openSlotPicker": "Go pick the buttons",
       "openDocs": "Open the docs",
@@ -3005,6 +3009,22 @@ export default {
         "bandFader": "One fader",
         "effects": "Effect chain",
         "noiseBadge": "Adds noise"
+      },
+      "lyricStyle": {
+        "panel": "Lyric animation settings",
+        "preview": "Live preview",
+        "settingsPanel": "Settings column",
+        "tabs": "Four pages",
+        "rows": "This style's settings",
+        "rowOne": "First row",
+        "rowTwo": "Second row",
+        "rowThree": "Third row",
+        "rowFour": "Fourth row",
+        "rowFive": "Fifth row",
+        "subtitle": "Shared subtitle",
+        "monetDescription": "Song description",
+        "monetHanger": "Drag hanger",
+        "monetAudio": "Audio visualization"
       },
       "visPlayground": {
         "sectionReset": "Reset this page",
@@ -3333,6 +3353,7 @@ export default {
     "targets": {
       "audioEqualizer": "Audio effects dialog",
       "visPlayground": "Lyric animation workbench",
+      "lyricStyle": "Lyric styles",
       "themePark": "Theme Park",
       "customShortcutSettings": "Your own shortcut",
       "pinnedCommands": "Pinned commands",
@@ -3384,6 +3405,10 @@ export default {
       "visPlaygroundCommon": "The four pages, and what \u201cgeneral\u201d holds",
       "visPlaygroundVisuals": "Animation and background",
       "visPlaygroundSubtitle": "Subtitles",
+      "lyricStylePerStyle": "Each style has its own settings",
+      "lyricStyleMonet": "Monet: hiding the extras",
+      "lyricStyleCombine": "Background and lyric style are separate choices",
+      "lyricStyleSubtitle": "The shared bottom subtitle",
       "sidePanelControlsModeList": "The full mode list is behind the name",
       "sidePanelQueueRadio": "On Personal FM this cell is the radio",
       "audioEqualizerPresets": "The switch, the presets, and your two slots",
@@ -3515,6 +3540,23 @@ export default {
         "reset": "The round button at the end clears the custom slot that is active, back to flat with a neutral chain. It only ever touches that one slot, and it is greyed out on a built-in preset \u2014 there is nothing to undo on one you cannot edit.",
         "effects": "Below the bands is the rest of the chain: high and low cutoffs, saturation, bit crush, wow, noise, stereo width, space and punch. They are written into the same custom slot, by the same silent rule.",
         "noise": "The small badge beside some of these names means the effect adds noise of its own. It is shown whether or not the slider is up, so the question \u201cwhere is that hiss coming from\u201d has an answer before you turn one on rather than after."
+      },
+      "lyricStyle": {
+        "perStyleOwn": "Every lyric style has its own set of settings that apply only to that style. The page on the right is the set for the current style.",
+        "perStyleSwitch": "Switch styles and the preview and this whole page change together. Styles do not share settings; what you tuned for the old style is kept and is still there when you switch back.",
+        "perStyleWhere": "In the Controls tab, click the Lyrics Style name: “More settings” at the bottom of the list opens this page directly. The button below does the same.",
+        "monetIntro": "Monet: lyrics on the left, a portrait on the right. The most common question is how to turn off the things on the right. They all live in Monet's own settings.",
+        "monetDescription": "The text at the bottom left is the song description. Turn off “Show Song Description” to hide it.",
+        "monetHanger": "The round button above the portrait is the drag hanger, for moving the portrait. Once it is where you want it, hide the button with “Drag Hanger”.",
+        "monetAudio": "Below the portrait is the audio visualization. “Audio visualization” hides it; “Audio Style” switches between bars and a line.",
+        "monetBare": "With all three off, only the lyrics and the portrait remain. These switches belong to Monet alone and do not appear for other styles.",
+        "combineTwo": "Background and lyric style are two separate choices. In the Controls tab they are two rows, Lyrics Style and Background Type, each switched on its own.",
+        "combineBackground": "Change only the background: the lyric style stays. The background's own settings are on the Background page of the lyric animation settings.",
+        "combineStyle": "Now change only the lyric style: the background you just picked stays. Any background works with any lyric style; only the Still style draws no background.",
+        "subtitleShared": "Most lyric styles share this one subtitle line at the bottom. Monet, Pendolo and Still set translations inside their own layout and do not use it.",
+        "subtitleContent": "Its settings are on the Subtitle page of the lyric animation settings and apply to every style that uses it. The first row picks translation, romanization or nothing.",
+        "subtitleBlur": "Turn off “Blur non-translation lyrics” and the subtitle is no longer blurred.",
+        "subtitleFont": "Turn off “Subtitle Uses Lyrics Font” to give the subtitle its own font and weight. “Subtitle scale” sets its size on its own and is always available."
       },
       "visPlayground": {
         "preview": "The workbench opens full screen: a live preview on the left, a narrow settings column on the right. The preview is really running \u2014 the animation, the background and the subtitles are the actual renderers, not a still picture, so every change shows immediately.",

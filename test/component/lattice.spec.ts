@@ -20,18 +20,47 @@ async function dragCover(page: Page, wall: Locator) {
     }
 }
 
+/**
+ * Drags the open cover and lets go, returning where the pointer was released.
+ *
+ * The hook drops a release more than 80ms after the last sample, and on a loaded machine a single
+ * Playwright round trip can exceed that - the wall then simply never coasts. So this goes through
+ * CDP and pipelines the final move with the release instead of awaiting them in turn.
+ */
+async function flingCover(page: Page, wall: Locator) {
+    const box = (await wall.locator('.lattice-poster.is-expanded').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 3;
+    const session = await page.context().newCDPSession(page);
+    const mouse = (type: 'mouseMoved' | 'mousePressed' | 'mouseReleased', atX: number) => session.send('Input.dispatchMouseEvent', {
+        type, x: atX, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1,
+    });
+    await session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+    await mouse('mousePressed', x);
+    for (let step = 1; step <= 5; step++) {
+        await mouse('mouseMoved', x + step * 15);
+        await page.waitForTimeout(16);
+    }
+    const releaseX = x + 6 * 15;
+    await Promise.all([mouse('mouseMoved', releaseX), mouse('mouseReleased', releaseX)]);
+    await session.detach();
+    return { x: releaseX, y };
+}
+
+/** Coasting only has to keep going; how far depends on the release speed, which load lowers. */
+const COAST_MIN_PX = 3;
+
 test('expanded cover drags and coasts; pressing again stops inertia', async ({ mount, page }) => {
     const wall = await mount('lattice');
     await settle(page);
     const before = await cameraX(wall);
-    await dragCover(page, wall);
-    // Release straight after the last move and measure afterwards: the hook ignores samples older
-    // than 80ms, and a measuring round trip in between can exceed that under a parallel run.
-    await page.mouse.up();
+    // Measure only after the release: a measuring round trip before it could make the sample stale.
+    const release = await flingCover(page, wall);
     const released = await cameraX(wall);
     expect(released - before).toBeGreaterThan(70);
     await page.waitForTimeout(100);
-    expect(await cameraX(wall)).toBeGreaterThan(released + 10);
+    expect(await cameraX(wall)).toBeGreaterThan(released + COAST_MIN_PX);
+    await page.mouse.move(release.x, release.y);
     await page.mouse.down();
     const stopped = await cameraX(wall);
     await page.waitForTimeout(120);
@@ -117,11 +146,10 @@ test('the system preference alone no longer reduces motion', async ({ mount, pag
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const wall = await mount('lattice');
     await settle(page);
-    await dragCover(page, wall);
-    await page.mouse.up();
+    await flingCover(page, wall);
     const released = await cameraX(wall);
     await page.waitForTimeout(100);
-    expect(await cameraX(wall)).toBeGreaterThan(released + 10);
+    expect(await cameraX(wall)).toBeGreaterThan(released + COAST_MIN_PX);
 });
 
 test('touch swipe coasts and a secondary pointer cannot replace the gesture', async ({ mount, page }) => {
@@ -150,7 +178,7 @@ test('touch swipe coasts and a secondary pointer cannot replace the gesture', as
     const released = await cameraX(wall);
     expect(released - before).toBeGreaterThan(75);
     await page.waitForTimeout(100);
-    expect(await cameraX(wall)).toBeGreaterThan(released + 10);
+    expect(await cameraX(wall)).toBeGreaterThan(released + COAST_MIN_PX);
     await session.detach();
 });
 

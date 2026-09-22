@@ -141,55 +141,58 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
 
     return (
         <div className="space-y-1">
-            <ModeStepperRow<VisualizerMode>
-                value={visualizerMode}
-                options={visualizerOptions}
-                onSelect={onVisualizerModeChange}
-                onStep={stepVisualizerMode}
-                renderGlyph={mode => <VisualizerModeGlyph mode={mode} />}
-                ariaLabel={t('ui.animationMode')}
-                moreLabel={t('ui.moreSettings')}
-                onOpenMore={openVisualizerSettings}
-                isDaylight={isDaylight}
-                primaryColor={theme.primaryColor}
-                trailing={(
-                    <>
-                        <QuickControlChip
-                            isDaylight={isDaylight}
-                            label={t(`animation.${theme.animationIntensity}`)}
-                            title={`${t('ui.animationIntensity')}: ${t(`animation.${theme.animationIntensity}`)}`}
-                            onClick={cycleAnimationIntensity}
-                        />
-                        {usesWordSegmentation && (
-                            <QuickControlToggle
-                                active={hasSavedSegmentation}
-                                theme={theme}
-                                label={t('commandPalette.commands.lyric-segmentation.title')}
-                                onToggle={() => {
-                                    openCommandPaletteCommand(LYRIC_SEGMENTATION_COMMAND_ID);
-                                    onClosePanel?.();
-                                }}
-                            >
-                                <WholeWord size={14} />
-                            </QuickControlToggle>
-                        )}
-                    </>
-                )}
-            />
+            {/* 思索「歌词样式」的埋点：两行一起算，因为那一章讲的就是歌词和背景各选各的。 */}
+            <div data-ponder="lyric-style" className="space-y-1">
+                <ModeStepperRow<VisualizerMode>
+                    value={visualizerMode}
+                    options={visualizerOptions}
+                    onSelect={onVisualizerModeChange}
+                    onStep={stepVisualizerMode}
+                    renderGlyph={mode => <VisualizerModeGlyph mode={mode} />}
+                    ariaLabel={t('ui.animationMode')}
+                    moreLabel={t('ui.moreSettings')}
+                    onOpenMore={openVisualizerSettings}
+                    isDaylight={isDaylight}
+                    primaryColor={theme.primaryColor}
+                    trailing={(
+                        <>
+                            <QuickControlChip
+                                isDaylight={isDaylight}
+                                label={t(`animation.${theme.animationIntensity}`)}
+                                title={`${t('ui.animationIntensity')}: ${t(`animation.${theme.animationIntensity}`)}`}
+                                onClick={cycleAnimationIntensity}
+                            />
+                            {usesWordSegmentation && (
+                                <QuickControlToggle
+                                    active={hasSavedSegmentation}
+                                    theme={theme}
+                                    label={t('commandPalette.commands.lyric-segmentation.title')}
+                                    onToggle={() => {
+                                        openCommandPaletteCommand(LYRIC_SEGMENTATION_COMMAND_ID);
+                                        onClosePanel?.();
+                                    }}
+                                >
+                                    <WholeWord size={14} />
+                                </QuickControlToggle>
+                            )}
+                        </>
+                    )}
+                />
 
-            <ModeStepperRow<VisualizerBackgroundMode>
-                value={resolvedBackgroundMode}
-                options={backgroundOptions}
-                onSelect={setVisualizerBackgroundMode}
-                onStep={stepBackgroundMode}
-                renderGlyph={mode => <BackgroundModeGlyph mode={mode} />}
-                ariaLabel={t('options.visualizerBackgroundMode')}
-                moreLabel={t('ui.moreSettings')}
-                onOpenMore={openBackgroundSettings}
-                isDaylight={isDaylight}
-                primaryColor={theme.primaryColor}
-                trailing={backgroundQuickControls}
-            />
+                <ModeStepperRow<VisualizerBackgroundMode>
+                    value={resolvedBackgroundMode}
+                    options={backgroundOptions}
+                    onSelect={setVisualizerBackgroundMode}
+                    onStep={stepBackgroundMode}
+                    renderGlyph={mode => <BackgroundModeGlyph mode={mode} />}
+                    ariaLabel={t('options.visualizerBackgroundMode')}
+                    moreLabel={t('ui.moreSettings')}
+                    onOpenMore={openBackgroundSettings}
+                    isDaylight={isDaylight}
+                    primaryColor={theme.primaryColor}
+                    trailing={backgroundQuickControls}
+                />
+            </div>
 
             <div className="pt-1">
                 <ThemeSourceRow

@@ -2884,6 +2884,7 @@ export default {
     "summaries": {
       "audio_equalizer": "十段均衡和效果链；拖动推子会改写自定义槽。",
       "vis_playground": "预览上的三块隐藏点击区。",
+      "lyric_style": "每种样式的专属设置、莫奈部件的隐藏、背景搭配和通用副字幕。",
       "theme_park": "全屏配色编辑器，以及保存条件。",
       "custom_shortcut_settings": "Alt + 字母，以及可选命令范围。",
       "pinned_commands": "固定按钮和最近使用列表不是一回事。",
@@ -2977,6 +2978,9 @@ export default {
       "openImportExport": "打开备份与导入",
       "openBottomUiSettings": "打开底部界面设置",
       "openLyricsAnimation": "打开歌词动画设置",
+      "openLyricStyleSettings": "打开歌词样式设置",
+      "openBackgroundSettings": "打开背景设置",
+      "openSubtitleSettings": "打开字幕设置",
       "openThemePresets": "打开配色主题设置",
       "openSlotPicker": "去挑按钮",
       "openDocs": "打开文档",
@@ -3004,6 +3008,22 @@ export default {
         "bandFader": "其中一根",
         "effects": "效果链",
         "noiseBadge": "会加噪"
+      },
+      "lyricStyle": {
+        "panel": "歌词动画设置",
+        "preview": "实时预览",
+        "settingsPanel": "设置栏",
+        "tabs": "四页",
+        "rows": "当前样式的设置",
+        "rowOne": "第一行",
+        "rowTwo": "第二行",
+        "rowThree": "第三行",
+        "rowFour": "第四行",
+        "rowFive": "第五行",
+        "subtitle": "通用副字幕",
+        "monetDescription": "歌曲描述",
+        "monetHanger": "拖拽调整按钮",
+        "monetAudio": "音频图案"
       },
       "visPlayground": {
         "sectionReset": "只退这一页",
@@ -3332,6 +3352,7 @@ export default {
     "targets": {
       "audioEqualizer": "音频效果对话框",
       "visPlayground": "歌词动画调参台",
+      "lyricStyle": "歌词样式",
       "themePark": "Theme Park",
       "customShortcutSettings": "自定义快捷键",
       "pinnedCommands": "固定命令",
@@ -3383,6 +3404,10 @@ export default {
       "visPlaygroundCommon": "四页各管什么，以及「通用」里有什么",
       "visPlaygroundVisuals": "动画与背景",
       "visPlaygroundSubtitle": "字幕",
+      "lyricStylePerStyle": "每种样式有自己的设置",
+      "lyricStyleMonet": "莫奈：隐藏右侧部件",
+      "lyricStyleCombine": "背景和歌词样式各选各的",
+      "lyricStyleSubtitle": "通用底部副字幕",
       "sidePanelControlsModeList": "完整模式列表藏在名称后面",
       "sidePanelQueueRadio": "私人 FM 下这一格是电台",
       "audioEqualizerPresets": "总开关、预设，和你自己的两个槽",
@@ -3514,6 +3539,23 @@ export default {
         "reset": "清空当前自定义槽，恢复平直曲线和中性效果。内置预设不能编辑，所以选中时按钮是灰的。",
         "effects": "推子下方是高低切、饱和、压缩、抖晃、噪声、立体声宽度、空间和冲击。同一自定义槽共用这套效果链。",
         "noise": "带这个徽章的效果会加入噪声；它不代表当前已经打开。"
+      },
+      "lyricStyle": {
+        "perStyleOwn": "每种歌词样式都有一组专属设置，只对这个样式生效。右边这一页就是当前样式的那一组。",
+        "perStyleSwitch": "换一种样式，预览和这一页设置一起整页换掉。不同样式的设置互不相通；旧样式调好的值会保留，换回去时还在。",
+        "perStyleWhere": "在控制页点歌词样式的名称，列表底部的「更多设置」会直接打开这一页；也可以用下方按钮。",
+        "monetIntro": "莫奈样式：左边歌词，右边肖像。最常见的问题是右边这几样东西怎么关。它们都在莫奈自己的设置里。",
+        "monetDescription": "左下的文字是歌曲描述。关闭「显示歌曲描述」即可隐藏。",
+        "monetHanger": "肖像上方的圆钮是拖拽调整按钮，用来挪动肖像。位置调好后，在「拖拽调整按钮」里把它隐藏。",
+        "monetAudio": "肖像下方是音频图案。在「音频图案」里可以隐藏它，「频谱样式」可以在柱状和线条之间切换。",
+        "monetBare": "三项都关掉后，画面只剩歌词和肖像。这些开关只属于莫奈，换到别的样式时不会出现。",
+        "combineTwo": "背景和歌词样式是两个独立的选择。控制页里它们是上下两行：「歌词样式」和「背景类型」，各切各的。",
+        "combineBackground": "只换背景：歌词样式不动。背景自己的参数在调参台的「背景」页。",
+        "combineStyle": "再只换歌词样式：刚选的背景留着。任意背景都能配任意歌词样式；只有「静止」样式不渲染背景。",
+        "subtitleShared": "多数歌词样式在底部共用这一条副字幕。莫奈、时计和静止把翻译排进自己的版面，不用这一条。",
+        "subtitleContent": "它的设置在歌词动画设置的「字幕」页，对所有使用它的样式一起生效。第一行选择显示翻译、罗马音或不显示。",
+        "subtitleBlur": "关闭「非翻译歌词添加模糊效果」，副字幕就不再模糊。",
+        "subtitleFont": "关闭「字幕继承歌词字体」后，可以给字幕单独设置字体和字重；「字幕缩放」单独调整字号，随时可用。"
       },
       "visPlayground": {
         "preview": "调参台全屏打开：左边是实时预览，右边是设置栏。预览使用真实渲染器，改动会马上显示。",

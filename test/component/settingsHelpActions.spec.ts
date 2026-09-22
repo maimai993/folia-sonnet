@@ -82,17 +82,47 @@ test('Ctrl+G 按不满就松手，只留下擦除过的胶囊，不进教程', a
     await expect(page.getByTestId('ponder-hint-capsule')).toHaveCount(0);
 });
 
+type CloseAction = { key: string } | { click: string };
+
+/**
+ * 在页面里关掉它，量出它关掉之后还在 DOM 里留了多久；3 秒还没走则返回 -1。
+ *
+ * 从测试端「关掉 → 等 80ms → 查还在不在」要走好几次往返，并行跑全量时这几次往返本身就能
+ * 超过 240ms 的退场，于是有退场也会被判成没有。关闭和计时都在页面里做就不受往返影响。
+ * 关闭也得在页面里触发：教程层在 capture 阶段把按键 stopImmediatePropagation 掉，
+ * 页面里再挂监听是等不到那一下的。
+ */
+const lingerAfterClose = (page: import('@playwright/test').Page, testId: string, close: CloseAction) => page.evaluate(
+    ({ id, action }) => new Promise<number>(resolve => {
+        let closedAt = 0;
+        const observer = new MutationObserver(() => {
+            if (document.querySelector(`[data-testid="${id}"]`)) return;
+            observer.disconnect();
+            resolve(performance.now() - closedAt);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        window.setTimeout(() => { observer.disconnect(); resolve(-1); }, 3000);
+        closedAt = performance.now();
+        if ('key' in action) {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: action.key, code: action.key, bubbles: true, cancelable: true }));
+        } else {
+            (document.querySelector(action.click) as HTMLElement).click();
+        }
+    }),
+    { id: testId, action: close },
+);
+
 /**
  * 覆盖层的退场靠 AnimatePresence 撑住那不到 300ms。
  *
  * 「条件为假就 return null」那种写法一关就整棵树消失，退场动画没有机会播 —— 从截图上看不出
  * 区别，只有「关掉之后它还在不在 DOM 里」这一条能把它钉住。
  */
-const expectAnimatedExit = async (page: import('@playwright/test').Page, testId: string) => {
+const expectAnimatedExit = async (page: import('@playwright/test').Page, testId: string, close: CloseAction) => {
     await expect(page.getByTestId(testId)).toBeAttached();
-    await page.waitForTimeout(80);
-    await expect(page.getByTestId(testId), `${testId} 关掉后立刻就没了，等于没有退场动画`).toBeAttached();
-    await expect(page.getByTestId(testId)).toHaveCount(0, { timeout: 2000 });
+    const lingeredMs = await lingerAfterClose(page, testId, close);
+    expect(lingeredMs, `${testId} 关掉后立刻就没了，等于没有退场动画`).toBeGreaterThan(80);
+    await expect(page.getByTestId(testId)).toHaveCount(0);
 };
 
 test('新版本功能页面有进出场过渡，不是直接出现和直接消失', async ({ page }) => {
@@ -104,8 +134,7 @@ test('新版本功能页面有进出场过渡，不是直接出现和直接消�
     expect(enteringOpacity).toBeLessThan(1);
 
     await expect(dialog).toHaveCSS('opacity', '1', { timeout: 2000 });
-    await page.getByTestId('release-notes-close').click();
-    await expectAnimatedExit(page, 'release-notes-dialog');
+    await expectAnimatedExit(page, 'release-notes-dialog', { click: '[data-testid="release-notes-close"]' });
 });
 
 test('思索教程层有进出场过渡，关掉时先播完退场', async ({ page }) => {
@@ -116,6 +145,5 @@ test('思索教程层有进出场过渡，关掉时先播完退场', async ({ pa
     await page.keyboard.up('Control');
 
     await expect(page.getByTestId('ponder-stage')).toHaveCSS('opacity', '1', { timeout: 2000 });
-    await page.keyboard.press('Escape');
-    await expectAnimatedExit(page, 'ponder-stage');
+    await expectAnimatedExit(page, 'ponder-stage', { key: 'Escape' });
 });

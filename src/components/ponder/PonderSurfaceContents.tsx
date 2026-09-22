@@ -24,6 +24,7 @@ import {
 } from './surfaces/PonderCommandSettingsSurfaces';
 import PonderImportExportSurface from './surfaces/PonderImportExportSurface';
 import PonderAudioEqualizerSurface from './surfaces/PonderAudioEqualizerSurface';
+import PonderLyricStyleSurface from './surfaces/PonderLyricStyleSurface';
 import {
     PonderThemeParkSurface,
     PonderVisPlaygroundSurface,
@@ -291,6 +292,8 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderAudioEqualizerSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'vis-playground'
         ? <PonderVisPlaygroundSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'lyric-style'
+        ? <PonderLyricStyleSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'theme-park'
         ? <PonderThemeParkSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'queue-command'

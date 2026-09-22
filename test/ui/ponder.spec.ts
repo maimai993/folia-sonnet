@@ -139,7 +139,8 @@ test.describe('思索 · 进入链路', () => {
         await openPlayerPage(page);
 
         const toggle = page.getByTestId('panel-toggle');
-        await expect(toggle).toBeVisible({ timeout: 5000 });
+        // 用配置的默认超时：播放页在并行全量里首帧可能超过 5s，这一步验的是思索，不是启动速度。
+        await expect(toggle).toBeVisible();
         const box = (await toggle.boundingBox())!;
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 

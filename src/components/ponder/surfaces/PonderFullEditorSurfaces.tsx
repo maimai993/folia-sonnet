@@ -11,6 +11,7 @@ import {
 
 // src/components/ponder/surfaces/PonderFullEditorSurfaces.tsx
 // 两块整屏编辑器：歌词动画调参台，和 Theme Park。
+// 顶栏、分页、右栏一页这几件也导出给歌词样式那张图（PonderLyricStyleSurface）用：它画的是同一个调参台。
 //
 // 它们是同一套布局 —— 顶栏、左边一大块实时预览、右边一条窄设置栏，栏顶一排分页。
 // 和 PonderSettingsSectionSurfaces 里那个 FullScreenEditor 不同的是：那个是别人章节里
@@ -54,7 +55,7 @@ const PreviewPane: React.FC<{
 );
 
 /** 右栏顶上那排分页。每格都画一条标签，不然只有选中那格看得见。 */
-const TabStrip: React.FC<{
+export const TabStrip: React.FC<{
     rect: PonderRelativeRect;
     line: string;
     accent: string;
@@ -87,7 +88,7 @@ const TabStrip: React.FC<{
  * 右端那些的几何在表里是「相对 header」的，所以它们必须**渲染在这个框里面** ——
  * 摆到外面去，百分比就按整屏算，锚点和元素立刻错开小半屏。
  */
-const EditorHeader: React.FC<{
+export const EditorHeader: React.FC<{
     rect: PonderRelativeRect;
     line: string;
     outline: string;
@@ -114,7 +115,7 @@ const Frame: React.FC<{ rect: PonderRelativeRect; children: React.ReactNode }> =
 
 
 /** 右栏一行控件的四种形状。四页填的都是它们，只是次序和数量不同。 */
-type RowKind = 'picker' | 'slider' | 'toggle' | 'segmented';
+export type RowKind = 'picker' | 'slider' | 'toggle' | 'segmented';
 
 const PanelRow: React.FC<{
     rect: PonderRelativeRect;
@@ -181,7 +182,7 @@ const ROW_RECTS = [V.rowOne, V.rowTwo, V.rowThree, V.rowFour, V.rowFive] as cons
  * 每页各有一颗自己的复位是真实界面里的事，而且最容易看错 —— 它退的只是这一页，
  * 不是整张调参台，所以它在骨架上必须始终在场、且在标题那一行的右端。
  */
-const PanelSection: React.FC<{
+export const PanelSection: React.FC<{
     rows: readonly { kind: RowKind; on?: boolean; marker?: string }[];
     line: string;
     outline: string;

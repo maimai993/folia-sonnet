@@ -608,3 +608,37 @@ test('字幕不落在上下两条外框上', async ({ page }) => {
         await page.waitForTimeout(400);
     }
 });
+
+test('歌词样式：骨架锚点落在合成界面的真实元素上', async ({ page }) => {
+    await page.locator('[data-probe-open="lyric-style-per-style"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    await settled(stage);
+    await expectAligned(stage, 'preview', '[data-ponder-lyric-style-preview]');
+    await expectAligned(stage, 'settingsPanel', '[data-ponder-lyric-style-panel]');
+    await expectAligned(stage, 'rows', '[data-ponder-lyric-style-rows]');
+    await expectAligned(stage, 'subtitle', '[data-ponder-lyric-style-subtitle]');
+    // 换样式换的是整页：预览和右栏两个槽位都要真的换上来。
+    await expect(stage.locator('[data-ponder-surface-state="preview-style-b"]')).toHaveCSS('opacity', '1', { timeout: 12000 });
+    await expect(stage.locator('[data-ponder-surface-state="panel-style-b"]')).toHaveCSS('opacity', '1');
+    await expect(stage.locator('[data-ponder-surface-state="lyric-style-panel"]')).toHaveCSS('opacity', '0');
+});
+
+test('歌词样式：莫奈三件部件先在、再一起关掉', async ({ page }) => {
+    await page.locator('[data-probe-open="lyric-style-monet"]').click();
+    const stage = page.locator('[data-testid="ponder-stage"]');
+    await expect(stage).toBeVisible();
+    const monet = stage.locator('[data-ponder-surface-state="preview-monet"]');
+    await expect(monet).toHaveCSS('opacity', '1', { timeout: 6000 });
+    await expectAligned(stage, 'monetDescription', '[data-ponder-lyric-style-monet-description]');
+    await expectAligned(stage, 'monetHanger', '[data-ponder-lyric-style-monet-hanger]');
+    await expectAligned(stage, 'monetAudio', '[data-ponder-lyric-style-monet-audio]');
+    // 自己排版的样式不带通用副字幕。
+    await expect(monet.locator('[data-ponder-lyric-style-subtitle]')).toHaveCount(0);
+
+    const bare = stage.locator('[data-ponder-surface-state="preview-monet-bare"]');
+    await expect(bare).toHaveCSS('opacity', '1', { timeout: 30000 });
+    await expect(bare.locator('[data-ponder-lyric-style-monet-description], [data-ponder-lyric-style-monet-hanger], [data-ponder-lyric-style-monet-audio]')).toHaveCount(0);
+    await expect(monet).toHaveCSS('opacity', '0');
+});
+
