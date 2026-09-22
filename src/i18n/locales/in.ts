@@ -2875,6 +2875,12 @@ export default {
         "progress": "Bilah kemajuan",
         "bottomBar": "Bilah kontrol bawah"
       },
+      "onboarding": {
+        "page": "Satu halaman aplikasi",
+        "component": "Komponen di bawah penunjuk",
+        "capsule": "Petunjuk hover",
+        "touchBulb": "Tombol Ponder untuk layar sentuh"
+      },
       "gridActionButton": {
         "page": "Halaman koleksi",
         "button": "Tombol di kanan bawah",
@@ -3094,6 +3100,7 @@ export default {
       "latticePageTools": "Fokus, ikuti, antrean, dan lampu",
       "latticePageKeyboard": "Kontrol papan tombol Lattice lengkap",
       "helpPagePonder": "Kamu sudah berada di dalam Ponder",
+      "helpPageWholePage": "Seluruh halaman, dan apa gantinya di layar sentuh",
       "helpPageTransport": "Kendalikan pemutaran tanpa kembali",
       "helpPageShortcuts": "Empat pintasan yang paling sering dipakai",
       "helpPageDocs": "Di mana membaca lebih lanjut",
@@ -3113,7 +3120,9 @@ export default {
       "onboarding": {
         "here": "Satu tutorial Ponder sedang terbuka \u2014 layar ini. Ia bukan video: bilah kemajuan di bawah bisa diseret, tombol panah melompat antar keyframe, Space menjeda, Escape keluar kapan saja.",
         "hover": "Diamkan penunjuk di salah satu tombol atau komponen yang kurang jelas, dan sebuah lencana kecil muncul di sebelahnya, menyebut tutorial mana yang akan dibuka. Tahan G sampai sapuannya penuh dan tutorial komponen itu dimulai.",
-        "wholePage": "Kamu tidak harus mencari komponen: tahan Ctrl + G di mana saja dan kamu dapat seluruh halaman \u2014 apa yang ada di sana, letak tiap bagian, dan apa yang bisa dilakukan. Di layar sentuh, itu tombol bohlam di sudut kanan bawah.",
+        "hold": "Tetap tahan dan sapuannya memenuhi kapsul dari kiri ke kanan; begitu sampai ujung kamu sudah berada di dalam tutorial komponen itu \u2014 satu layar penuh seperti ini. Lepas terlalu cepat dan ia batal tanpa terjadi apa-apa.",
+        "wholePage": "Kamu tidak harus mencari komponen: tahan Ctrl + G di mana saja dan kamu dapat seluruh halaman \u2014 apa yang ada di sana, letak tiap bagian, dan apa yang bisa dilakukan.",
+        "touchBulb": "Layar sentuh tidak punya hover, jadi seluruh jalur itu tidak tersedia. Gantinya adalah bohlam di sudut kanan bawah ini, dan ia hanya muncul di perangkat sentuh \u2014 wajar kalau kamu tidak menemukannya dengan tetikus. Ia juga menyingkir selama tutorial terbuka, jadi ia kembali setelah kamu keluar.",
         "mediaKeys": "Pemutaran melewati sesi media sistem \u2014 SMTC di Windows, MPRIS di Linux. Artinya tombol putar / sebelumnya / berikutnya di keyboardmu langsung berfungsi, jadi kamu tak perlu kembali ke Folia saat sedang bekerja di jendela lain. Popup media sistem juga menampilkan lagu yang sedang diputar.",
         "inAppTransport": "Di dalam aplikasi: Space memutar dan menjeda, {{mod}} + \u2190 / \u2192 berpindah lagu. Di halaman pemutar, tombol panah polos memindai lima detik. Selebihnya ada di jendela perintah, atau satu titik dua menuju mode eksekusi.",
         "shortcutK": "{{mod}} + K membuka jendela perintah. Folia menaruh seluruh urusan \u201cmencari fitur\u201d di sini \u2014 perintah dan pengaturan sama-sama bisa dicari lewat nama, jadi kamu tak perlu ingat sesuatu diarsipkan di level mana.",

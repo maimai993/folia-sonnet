@@ -150,6 +150,7 @@ describe('ponder registry', () => {
             'grid-view-cards': new Set(['metadata-pencil', 'edit-mode']),
             'local-folder-actions': new Set(['delete-confirm']),
             'local-track-list': new Set(['sort-menu-open']),
+            'ponder-onboarding': new Set(['hint-shown', 'hint-holding', 'ponder-open']),
         };
 
         PONDER_TARGET_LIST.forEach(target => target.scenes.forEach(scene => {

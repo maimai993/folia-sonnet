@@ -245,6 +245,26 @@ export const LATTICE_CHROME_GEOMETRY = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 入门教程用的示意图，坐标系是 page。
+ *
+ * 这一张不对应任何一个真实页面 —— 它画的是「思索是怎么用的」这件事本身：
+ * 一页界面、指针停在其中一个组件上、旁边浮出提示胶囊、右下角那颗触屏用的灯泡。
+ * 原本这里用的是通用的页面轮廓（标题条加两张卡加三行占位），读者从那张图上
+ * 学不到任何东西，字幕只能对着一块空白讲。
+ */
+export const PONDER_ONBOARDING_GEOMETRY = {
+    topBar: { left: 0.05, right: 0.05, top: 0.05, height: 0.09 },
+    cardA: { left: 0.06, top: 0.22, width: 0.26, height: 0.34 },
+    cardB: { left: 0.37, top: 0.22, width: 0.26, height: 0.34 },
+    /** 被指着的那个组件。提示胶囊浮在它下面。 */
+    cardC: { right: 0.06, top: 0.22, width: 0.26, height: 0.34 },
+    capsule: { right: 0.05, top: 0.61, width: 0.36, height: 0.11 },
+    bottomBar: { left: 0.26, right: 0.26, bottom: 0.07, height: 0.11 },
+    /** 触屏上代替 Ctrl+G 的那颗灯泡，贴右下角。 */
+    touchBulb: { right: 0.045, bottom: 0.055, width: 0.075, square: true },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 海报墙右下角那颗操作按钮，坐标系是 page。
  *
  * 它和播放页那颗侧边手柄是同一个手势（都走 SlideActionButton 或它的同形实现），

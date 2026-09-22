@@ -2943,6 +2943,12 @@ export default {
         "progress": "Progress bar",
         "bottomBar": "Bottom control bar"
       },
+      "onboarding": {
+        "page": "A page of the app",
+        "component": "The component under the pointer",
+        "capsule": "Hover hint",
+        "touchBulb": "The touch-screen Ponder button"
+      },
       "gridActionButton": {
         "page": "Collection page",
         "button": "The bottom-right button",
@@ -3162,6 +3168,7 @@ export default {
       "latticePageTools": "Focus, follow, queue, and lights",
       "latticePageKeyboard": "Complete Lattice keyboard control",
       "helpPagePonder": "You are already inside Ponder",
+      "helpPageWholePage": "The whole page, and what touch does instead",
       "helpPageTransport": "Control playback without coming back",
       "helpPageShortcuts": "The four shortcuts you will use most",
       "helpPageDocs": "Where to read more",
@@ -3181,7 +3188,9 @@ export default {
       "onboarding": {
         "here": "You have a Ponder tutorial open \u2014 this screen. It is not a video: drag the progress bar below, jump between keyframes with the arrow keys, Space pauses, Escape leaves at any time.",
         "hover": "Rest the pointer on one of the less obvious buttons or components and a small badge appears beside it, naming the tutorial it would open. Hold G until the wipe fills and that component\u2019s tutorial starts.",
-        "wholePage": "You do not have to find a component: hold Ctrl + G anywhere and you get the whole page \u2014 what is on it, where each thing sits, what you can do with it. On a touch screen it is the lightbulb in the bottom-right corner.",
+        "hold": "Keep holding and the wipe fills the capsule from left to right; when it reaches the end you are inside that component\u2019s tutorial \u2014 a full screen like this one. Let go too early and it cancels with nothing happening.",
+        "wholePage": "You do not have to find a component: hold Ctrl + G anywhere and you get the whole page \u2014 what is on it, where each thing sits, what you can do with it.",
+        "touchBulb": "A touch screen has no hover, so that whole route is unavailable. In its place is this lightbulb in the bottom-right corner, and it only appears on touch devices \u2014 not finding it with a mouse is expected. It also steps aside while a tutorial is open, so it is back once you leave.",
         "mediaKeys": "Playback goes through the system media session \u2014 SMTC on Windows, MPRIS on Linux. That means the play / previous / next keys on your keyboard work directly, so you never have to switch back to Folia while you are working in another window. The system media popup shows the current track too.",
         "inAppTransport": "Inside the app: Space plays and pauses, {{mod}} + \u2190 / \u2192 move between tracks. On the player page the bare arrow keys seek five seconds. Everything else lives in the command window, or a colon away in execute mode.",
         "shortcutK": "{{mod}} + K opens the command window. Folia keeps the whole of \u201cfinding a feature\u201d in here \u2014 commands and settings are both searchable by name, so you never have to remember which level something is filed under.",

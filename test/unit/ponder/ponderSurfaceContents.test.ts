@@ -46,12 +46,23 @@ describe('PonderSurfaceContents', () => {
         'grid-view-page',
         'player-page',
         'lattice-page',
-        'help-page',
         'settings-page',
     ] as const)('%s 有自己的页面轮廓', kind => {
         const markup = renderSurface(kind);
         expect(markup).toContain(`data-ponder-surface-kind="${kind}"`);
         expect(markup).not.toContain('data-ponder-palette-header');
+    });
+
+    it('入门教程画的是思索本身：一页界面、提示胶囊、触屏那颗灯泡', () => {
+        const markup = renderSurface('ponder-onboarding');
+        expect(markup).toContain('data-ponder-onboarding-structure');
+        // 被指的那个组件、浮出来的胶囊、右下角的灯泡，三样缺一样这张图就讲不成。
+        expect(markup).toContain('data-ponder-onboarding-card-c');
+        expect(markup).toContain('data-ponder-onboarding-capsule');
+        expect(markup).toContain('data-ponder-onboarding-touch-bulb');
+        ['hint-shown', 'hint-holding', 'ponder-open'].forEach(state => {
+            expect(markup).toContain(`data-ponder-surface-state="${state}"`);
+        });
     });
 
     it('Grid3D surface 按真实页头、3D 轨道和操作结果分层', () => {

@@ -135,9 +135,10 @@ export type PonderSurfaceKind =
     | 'grid-view-page'
     | 'player-page'
     | 'lattice-page'
-    | 'help-page'
     | 'settings-page'
     | 'player-bar'
+    /** 入门教程的示意图：思索自己是怎么用的，不对应任何一个真实页面。 */
+    | 'ponder-onboarding'
     | 'bottom-ui-settings'
     | 'side-panel'
     | 'lattice-chrome'
