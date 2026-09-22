@@ -39,3 +39,31 @@ export const prevKeyframeAt = (plan: PonderTimelinePlan, nowMs: number): number 
     const earlier = plan.keyframes.filter(keyframe => keyframe.atMs < nowMs - SEEK_TOLERANCE_MS);
     return earlier.length > 0 ? earlier[earlier.length - 1].atMs : 0;
 };
+
+/** 字幕淡入是 240ms（usePonderTimeline），停得比它早就是一帧没字的画面。 */
+const CAPTION_SETTLE_MS = 300;
+
+/**
+ * 跳到 atMs 之后，时间线该在哪里停住。
+ *
+ * 动作类关键帧落在动作开头：直接停在那里，画面是动作之前的样子，上一段字幕已收、
+ * 这一段还没出来，等于停在一帧空白上。所以先把这一拍播完 —— 动作和结果层做完、
+ * 字幕淡入 —— 再停。上限是下一个动作的开头，不会越过去替用户多看一拍。
+ * pause 类关键帧本身就是「这一拍已经讲完」的位置，原地停。
+ */
+export const keyframeSettleAt = (plan: PonderTimelinePlan, atMs: number): number => {
+    const startsAction = (keyframeAtMs: number) => plan.entries.some(
+        entry => entry.atMs === keyframeAtMs && entry.step.kind !== 'pause',
+    );
+    const limitMs = plan.keyframes.find(keyframe => keyframe.atMs > atMs && startsAction(keyframe.atMs))?.atMs
+        ?? plan.totalMs;
+
+    let settleMs = atMs;
+    for (const { step, atMs: startMs, durationMs } of plan.entries) {
+        if (startMs < atMs || startMs >= limitMs || step.kind === 'pause') continue;
+        // 字幕只等它淡入，不等它读完：读字幕正是停下来的目的。
+        const endMs = startMs + (step.kind === 'caption' ? CAPTION_SETTLE_MS : durationMs);
+        settleMs = Math.max(settleMs, endMs);
+    }
+    return Math.min(settleMs, limitMs);
+};

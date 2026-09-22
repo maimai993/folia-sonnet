@@ -2962,6 +2962,8 @@ export default {
     "replay": "Replay from the start",
     "exit": "Esc to exit",
     "seekKeyframe": "Jump to keyframe {{index}}",
+    "prevKeyframe": "Previous keyframe",
+    "nextKeyframe": "Next keyframe",
     "legend": {
       "keyframe": "Keyframe",
       "chapter": "Chapter",

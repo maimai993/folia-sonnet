@@ -334,9 +334,9 @@ test('「常用操作示例」复用三个已有命令骨架', async ({ page }) 
 
     // 第三个示例要真的进入现有 filter-view 命令对应的结果层，
     // 只把 grid-view 底图摆在这里不算「二次检索」骨架。
-    await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(50);
-    await page.keyboard.press('ArrowRight');
+    // 跳关键帧会在那一拍播完后停住，不再自己播过去，所以直接点第三个示例开头那根刻度
+    // （音量、读、队列、读、二次检索 —— 第五根）。
+    await stage.locator('[data-testid="ponder-keyframe-tick"]').nth(4).click();
     await expect(stage.locator('[data-ponder-surface-state="filter-open"]')).toHaveCSS('opacity', '1', { timeout: 3000 });
 });
 

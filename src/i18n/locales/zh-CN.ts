@@ -2961,6 +2961,8 @@ export default {
     "replay": "从头重播",
     "exit": "Esc 退出",
     "seekKeyframe": "跳到第 {{index}} 个关键帧",
+    "prevKeyframe": "上一关键帧",
+    "nextKeyframe": "下一关键帧",
     "legend": {
       "keyframe": "关键帧",
       "chapter": "章节",

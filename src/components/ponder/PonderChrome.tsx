@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Lightbulb, Pause, Play, RotateCcw, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lightbulb, Pause, Play, RotateCcw, SlidersHorizontal, StepBack, StepForward } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PonderKeyCombo } from './PonderKeyCap';
 import type { PonderStageNodes } from './ponderStageNodes';
@@ -27,6 +27,9 @@ type PonderChromeProps = {
     onTogglePlay: () => void;
     onRestart: () => void;
     onSeekToTick: (index: number) => void;
+    /** 屏幕上的 ←/→：触屏没有方向键，刻度又小，得有一对按得准的按钮。 */
+    onPrevKeyframe: () => void;
+    onNextKeyframe: () => void;
     /** 当前这一章有没有「直接去那儿」的入口；没有就不渲染。 */
     actionLabel: string | null;
     onRunAction: () => void;
@@ -59,6 +62,8 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
     onTogglePlay,
     onRestart,
     onSeekToTick,
+    onPrevKeyframe,
+    onNextKeyframe,
     actionLabel,
     onRunAction,
     theme,
@@ -96,6 +101,7 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
                     <div className="relative h-1.5 w-full rounded-full" style={{ backgroundColor: track }}>
                         <div
                             ref={node => { nodes.progressFill = node; }}
+                            data-testid="ponder-progress-fill"
                             className="absolute inset-0 origin-left rounded-full"
                             style={{ backgroundColor: accent, transform: 'scaleX(0)' }}
                         />
@@ -104,6 +110,7 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
                                 key={index}
                                 type="button"
                                 ref={node => { nodes.ticks[index] = node; }}
+                                data-testid="ponder-keyframe-tick"
                                 onClick={() => onSeekToTick(index)}
                                 aria-label={t('ponder.seekKeyframe', { index: index + 1 })}
                                 className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform hover:scale-125 data-[active]:scale-125"
@@ -165,12 +172,34 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
                             )}
                             <button
                                 type="button"
+                                data-testid="ponder-prev-keyframe"
+                                onClick={onPrevKeyframe}
+                                disabled={ticks.length === 0}
+                                className={`${iconButton} disabled:opacity-30`}
+                                aria-label={t('ponder.prevKeyframe')}
+                                title={t('ponder.prevKeyframe')}
+                            >
+                                <StepBack size={16} />
+                            </button>
+                            <button
+                                type="button"
                                 onClick={onTogglePlay}
                                 className={iconButton}
                                 aria-label={t('ponder.playPause')}
                                 title={t('ponder.playPause')}
                             >
                                 {isPaused ? <Play size={16} /> : <Pause size={16} />}
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="ponder-next-keyframe"
+                                onClick={onNextKeyframe}
+                                disabled={ticks.length === 0}
+                                className={`${iconButton} disabled:opacity-30`}
+                                aria-label={t('ponder.nextKeyframe')}
+                                title={t('ponder.nextKeyframe')}
+                            >
+                                <StepForward size={16} />
                             </button>
                             <button
                                 type="button"

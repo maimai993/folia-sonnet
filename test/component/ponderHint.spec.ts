@@ -124,6 +124,26 @@ test.describe('长按 G', () => {
         await expect(page.locator(STAGE)).toHaveCount(0);
     });
 
+    test('屏幕上的下一关键帧会停住时间线，退出按钮关闭教程', async ({ page }) => {
+        await hoverToggle(page);
+        await expect(page.locator(CAPSULE)).toBeVisible({ timeout: 2000 });
+        await page.keyboard.down('g');
+        await expect(page.locator(STAGE)).toBeVisible({ timeout: 2000 });
+        await page.keyboard.up('g');
+
+        // 触屏没有方向键：这对按钮是关键帧跳转唯一按得准的入口，跳完要停在那一拍上。
+        await page.locator('[data-testid="ponder-next-keyframe"]').click();
+        await page.waitForTimeout(1200);
+        const fill = page.locator('[data-testid="ponder-progress-fill"]');
+        const settled = await fill.getAttribute('style');
+        await page.waitForTimeout(800);
+        expect(await fill.getAttribute('style')).toBe(settled);
+        await expect(page.locator(`${STAGE} .lucide-play`)).toHaveCount(1);
+
+        await page.locator('[data-testid="ponder-exit"]').click();
+        await expect(page.locator(STAGE)).toHaveCount(0);
+    });
+
     test('焦点在输入框时 G 只是打字，不开教程', async ({ page }) => {
         await page.locator('[data-probe-input]').click();
         await page.keyboard.type('g');

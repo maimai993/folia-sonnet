@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { keyframeIndexAt, keyframeTicks, nextKeyframeAt, prevKeyframeAt } from '@/utils/ponder/ponderKeyframes';
+import { keyframeIndexAt, keyframeSettleAt, keyframeTicks, nextKeyframeAt, prevKeyframeAt } from '@/utils/ponder/ponderKeyframes';
+import { compilePonderScene } from '@/utils/ponder/compilePonderTimeline';
 import type { PonderTimelinePlan } from '@/types/ponder';
 
 // test/unit/ponder/ponderKeyframes.test.ts
@@ -63,5 +64,55 @@ describe('prevKeyframeAt', () => {
 
     it('已在开头时停在 0', () => {
         expect(prevKeyframeAt(plan, 0)).toBe(0);
+    });
+});
+
+describe('keyframeSettleAt', () => {
+    // 动作 420ms + 并行字幕 → pause → 第二个动作 360ms，其并行结果层 520ms 比它长。
+    const scenePlan = compilePonderScene({
+        id: 'settle', titleKey: 'x', anchors: {},
+        steps: [
+            { kind: 'highlight', id: 'a', anchor: 'p', durationMs: 420, keyframe: true },
+            { kind: 'caption', id: 'ca', at: 'bottom', textKey: 'x', durationMs: 6000, withPrevious: true },
+            { kind: 'pause', id: 'readA' },
+            { kind: 'highlight', id: 'b', anchor: 'p', durationMs: 360, keyframe: true },
+            { kind: 'surfaceState', id: 'bState', anchor: 'p', state: 's', durationMs: 520, withPrevious: true },
+            { kind: 'pause', id: 'readB' },
+        ],
+    });
+
+    it('动作类关键帧播到动作做完再停，不停在一帧空白上', () => {
+        expect(keyframeSettleAt(scenePlan, 0)).toBe(420);
+    });
+
+    it('等并行结果层做完，哪怕它比顺序步长', () => {
+        expect(keyframeSettleAt(scenePlan, 1820)).toBe(1820 + 520);
+    });
+
+    it('pause 类关键帧原地停', () => {
+        expect(keyframeSettleAt(scenePlan, 420)).toBe(420);
+    });
+
+    it('只有字幕的一拍等字幕淡入就停，不等它读完', () => {
+        const captionOnly = compilePonderScene({
+            id: 'caption', titleKey: 'x', anchors: {},
+            steps: [
+                { kind: 'caption', id: 'c', at: 'bottom', textKey: 'x', durationMs: 6000, keyframe: true },
+                { kind: 'pause', id: 'readC' },
+            ],
+        });
+        expect(keyframeSettleAt(captionOnly, 0)).toBe(300);
+    });
+
+    it('不越过下一个动作的开头', () => {
+        const tight = compilePonderScene({
+            id: 'tight', titleKey: 'x', anchors: {},
+            steps: [
+                { kind: 'highlight', id: 'a', anchor: 'p', durationMs: 200, keyframe: true },
+                { kind: 'surfaceState', id: 'aState', anchor: 'p', state: 's', durationMs: 900, withPrevious: true },
+                { kind: 'highlight', id: 'b', anchor: 'p', durationMs: 200, keyframe: true },
+            ],
+        });
+        expect(keyframeSettleAt(tight, 0)).toBe(200);
     });
 });

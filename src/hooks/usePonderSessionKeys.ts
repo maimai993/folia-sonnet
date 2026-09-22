@@ -52,10 +52,16 @@ export const usePonderSessionKeys = ({ isActive, sceneCount, controlsRef, onAnyK
                     store.closePonder();
                     break;
                 case 'ArrowLeft':
-                    controls?.seekPrevKeyframe();
+                    if (controls) {
+                        controls.seekPrevKeyframe();
+                        store.setPaused(true);
+                    }
                     break;
                 case 'ArrowRight':
-                    controls?.seekNextKeyframe();
+                    if (controls) {
+                        controls.seekNextKeyframe();
+                        store.setPaused(true);
+                    }
                     break;
                 case 'BracketLeft':
                     store.stepScene(-1, sceneCount);

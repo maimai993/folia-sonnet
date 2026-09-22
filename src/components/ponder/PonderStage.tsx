@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { resolveReducedMotion, useMotionSettingsStore } from '../../stores/useMotionSettingsStore';
@@ -15,7 +16,7 @@ import { type SettingsAnchorId } from '../modal/settings/navigation/settingsAnch
 import { openSettingsFromPonder } from '../../services/ponder/pagePonderTarget';
 import { openPonderActionUrl } from '../../services/ponder/ponderActionUrl';
 import { createPonderStageNodes } from './ponderStageNodes';
-import { usePonderTimeline } from './usePonderTimeline';
+import { usePonderTimeline, type PonderTimelineControls } from './usePonderTimeline';
 import PonderActors from './PonderActors';
 import PonderChrome from './PonderChrome';
 import PonderSkeletonLayer from './PonderSkeletonLayer';
@@ -245,6 +246,14 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
         onAnyKey: cancelAutoAdvance,
     });
 
+    /** 屏幕上的关键帧跳转：时间线那头已经停了，这里把播放键的图标同步成暂停态。 */
+    const seekKeyframe = (seek: (controls: PonderTimelineControls) => void) => {
+        const controls = controlsRef.current;
+        if (!controls) return;
+        seek(controls);
+        setPaused(true);
+    };
+
     if (!session || !target || !scene || !plan) {
         return null;
     }
@@ -292,7 +301,9 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                         if (controls) setPaused(controls.toggle());
                     }}
                     onRestart={() => controlsRef.current?.restart()}
-                    onSeekToTick={index => controlsRef.current?.seekToTick(index)}
+                    onSeekToTick={index => seekKeyframe(controls => controls.seekToTick(index))}
+                    onPrevKeyframe={() => seekKeyframe(controls => controls.seekPrevKeyframe())}
+                    onNextKeyframe={() => seekKeyframe(controls => controls.seekNextKeyframe())}
                     actionLabel={scene.action ? t(scene.action.labelKey) : null}
                     onRunAction={() => {
                         if (!scene.action) return;
@@ -326,15 +337,20 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
                     />
                 )}
 
+                {/* 做成有边框的按钮而不是一行灰字：触屏没有 Esc，得一眼看出这里能点。 */}
                 <button
                     type="button"
+                    data-testid="ponder-exit"
                     onClick={closePonder}
-                    className={`absolute right-5 top-5 rounded-full px-3 py-1.5 text-xs transition-colors ${
-                        isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'
+                    title={t('ponder.exit')}
+                    className={`absolute right-5 top-5 flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm transition-colors active:scale-[0.97] ${
+                        isDaylight
+                            ? 'border-black/15 bg-black/5 text-zinc-800 hover:bg-black/10'
+                            : 'border-white/20 bg-white/10 text-zinc-50 hover:bg-white/20'
                     }`}
-                    style={{ color: isDaylight ? 'rgba(24, 24, 27, 0.55)' : 'rgba(255, 255, 255, 0.55)' }}
                 >
-                    {t('ponder.exit')}
+                    <X size={15} />
+                    {t('ponder.legend.exit')}
                 </button>
             </motion.div>
         </motion.div>

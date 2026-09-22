@@ -2894,6 +2894,8 @@ export default {
     "replay": "Ulang dari awal",
     "exit": "Esc untuk keluar",
     "seekKeyframe": "Lompat ke keyframe {{index}}",
+    "prevKeyframe": "Keyframe sebelumnya",
+    "nextKeyframe": "Keyframe berikutnya",
     "legend": {
       "keyframe": "Keyframe",
       "chapter": "Bab",

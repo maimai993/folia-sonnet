@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { createTimeline, type Timeline } from 'animejs';
 import { readReducedMotion } from '../../stores/useMotionSettingsStore';
 import { anchorPointToPx } from '../../utils/ponder/resolvePonderAnchors';
-import { keyframeIndexAt, nextKeyframeAt, prevKeyframeAt } from '../../utils/ponder/ponderKeyframes';
+import { keyframeIndexAt, keyframeSettleAt, nextKeyframeAt, prevKeyframeAt } from '../../utils/ponder/ponderKeyframes';
 import { PONDER_HIGHLIGHT_MAX_OPACITY, type PonderRect, type PonderTimelinePlan } from '../../types/ponder';
 import { PONDER_SURFACE_BASE_STATE } from './surfaces/PonderSurfaceStateLayer';
 import type { PonderStageNodes, PonderSurfaceStateNode } from './ponderStageNodes';
@@ -27,6 +27,7 @@ export type PonderTimelineControls = {
     toggle: () => boolean;
     restart: () => void;
     isCompleted: () => boolean;
+    /** 三个 seek 都会把落点那一拍播完后停住；调用方负责把 store 的 isPaused 同步成 true。 */
     seekPrevKeyframe: () => void;
     seekNextKeyframe: () => void;
     seekToTick: (index: number) => void;
@@ -235,12 +236,48 @@ export const usePonderTimeline = ({
             }
         };
 
-        timeline.onUpdate = paintProgress;
+        // 跳关键帧后要停住的时间点。非 null 时时间线在播，但只是在把这一拍播完。
+        let settleAtMs: number | null = null;
+
+        timeline.onUpdate = () => {
+            if (settleAtMs !== null && timeline.iterationCurrentTime >= settleAtMs) {
+                const stopAtMs = settleAtMs;
+                settleAtMs = null;
+                timeline.pause();
+                // 按帧检测会多走一点，拉回到准确的停点，免得把下一个动作的第一帧露出来。
+                timeline.seek(stopAtMs, true);
+            }
+            paintProgress();
+        };
 
         timeline.onComplete = () => onComplete();
 
+        /**
+         * 跳到某个关键帧，把这一拍播完后停住。
+         *
+         * 跳关键帧是「我要看这一帧」：一直播下去的话字幕刚出来就被下一段顶掉，等于白跳；
+         * 停在关键帧开头又是一帧空白。停点由 keyframeSettleAt 算。
+         * muteCallbacks，理由和 AutomixTransitionAnimation 里那次 seek 一样：
+         * 卷过一个 marker 不该把它触发一遍。
+         */
+        const seekKeyframe = (atMs: number) => {
+            timeline.pause();
+            timeline.seek(atMs, true);
+            const stopAtMs = keyframeSettleAt(plan, atMs);
+            settleAtMs = stopAtMs > atMs ? stopAtMs : null;
+            if (settleAtMs !== null) {
+                timeline.play();
+            }
+            paintProgress();
+        };
+
         controlsRef.current = {
             toggle: () => {
+                // 正在把一拍播完时，外面显示的是暂停态；这时按播放就是「接着播」，不是再暂停一次。
+                if (settleAtMs !== null) {
+                    settleAtMs = null;
+                    return false;
+                }
                 if (timeline.paused) {
                     timeline.play();
                     return false;
@@ -250,25 +287,17 @@ export const usePonderTimeline = ({
                 return true;
             },
             restart: () => {
+                settleAtMs = null;
                 timeline.restart();
                 paintProgress();
             },
             isCompleted: () => timeline.completed,
-            // muteCallbacks，理由和 AutomixTransitionAnimation 里那次 seek 一样：
-            // 卷过一个 marker 不该把它触发一遍。
-            seekPrevKeyframe: () => {
-                timeline.seek(prevKeyframeAt(plan, timeline.iterationCurrentTime), true);
-                paintProgress();
-            },
-            seekNextKeyframe: () => {
-                timeline.seek(nextKeyframeAt(plan, timeline.iterationCurrentTime), true);
-                paintProgress();
-            },
+            seekPrevKeyframe: () => seekKeyframe(prevKeyframeAt(plan, timeline.iterationCurrentTime)),
+            seekNextKeyframe: () => seekKeyframe(nextKeyframeAt(plan, timeline.iterationCurrentTime)),
             seekToTick: index => {
                 const keyframe = plan.keyframes[index];
                 if (!keyframe) return;
-                timeline.seek(keyframe.atMs, true);
-                paintProgress();
+                seekKeyframe(keyframe.atMs);
             },
         };
 
