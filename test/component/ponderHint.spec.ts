@@ -118,6 +118,66 @@ test.describe('长按 G', () => {
     });
 });
 
+/**
+ * 触屏入口。它在桌面上根本不渲染，所以这一组必须自己开一个 coarse pointer 的 context ——
+ * 默认那个里面它 0 个元素，用例会「通过」而什么都没验到。
+ */
+test.describe('触屏上的思索按钮', () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    const BULB = '[data-testid="page-ponder-touch-button"]';
+
+    test('贴右上角，不落在右下角那堆操作按钮上', async ({ page }) => {
+        const bulb = page.locator(BULB);
+        await expect(bulb).toBeVisible();
+
+        const box = (await bulb.boundingBox())!;
+        const viewport = page.viewportSize()!;
+        expect(box.y, '按钮跑到下半屏去了').toBeLessThan(viewport.height / 2);
+        expect(box.x, '按钮不在右侧').toBeGreaterThan(viewport.width / 2);
+    });
+
+    test('露几秒自己收起来，点右上角又回来', async ({ page }) => {
+        const bulb = page.locator(BULB);
+        await expect(bulb).toHaveAttribute('data-ponder-touch-revealed', 'true');
+
+        // 收起来之后不可点：留着可点的话，右上角会变成一块看不见却能按的地方。
+        await expect(bulb).not.toHaveAttribute('data-ponder-touch-revealed', 'true', { timeout: 8000 });
+        await expect(bulb).toHaveCSS('pointer-events', 'none');
+
+        const viewport = page.viewportSize()!;
+        await page.touchscreen.tap(viewport.width - 24, 24);
+        await expect(bulb).toHaveAttribute('data-ponder-touch-revealed', 'true');
+    });
+
+    test('设置里关掉之后它整个不在', async ({ page }) => {
+        await expect(page.locator(BULB)).toBeVisible();
+
+        await page.evaluate(async () => {
+            const storePath = '/src/stores/usePonderStore.ts';
+            const { usePonderStore } = await import(storePath);
+            usePonderStore.getState().setShowPonderTouchButton(false);
+        });
+
+        // 不是淡出，是整个不渲染 —— 关掉之后右上角那块热区也该一起失效。
+        await expect(page.locator(BULB)).toHaveCount(0);
+        const viewport = page.viewportSize()!;
+        await page.touchscreen.tap(viewport.width - 24, 24);
+        await page.waitForTimeout(300);
+        await expect(page.locator(BULB)).toHaveCount(0);
+    });
+
+    test('点右上角以外的地方不会把它叫出来', async ({ page }) => {
+        const bulb = page.locator(BULB);
+        await expect(bulb).not.toHaveAttribute('data-ponder-touch-revealed', 'true', { timeout: 8000 });
+
+        const viewport = page.viewportSize()!;
+        await page.touchscreen.tap(viewport.width / 2, viewport.height / 2);
+        await page.waitForTimeout(300);
+        await expect(bulb).not.toHaveAttribute('data-ponder-touch-revealed', 'true');
+    });
+});
+
 test.describe('guardrails', () => {
     test('移动 100 次指针不产生任何 PonderHost 重渲染', async ({ page }) => {
         await hoverToggle(page);

@@ -11,6 +11,7 @@ import { parsePonderSeen, serializePonderSeen, withPonderSeen } from '../utils/p
 // 的 MotionValue、WAAPI 动画和 anime 的 timeline 里，一个都不许经过 React state。
 
 const PONDER_HINT_VISIBILITY_STORAGE_KEY = 'ponder_hint_visibility';
+const PONDER_TOUCH_BUTTON_STORAGE_KEY = 'ponder_touch_button';
 const PONDER_SEEN_STORAGE_KEY = 'folia_ponder_seen';
 
 const readStoredVisibility = (): PonderHintVisibility => {
@@ -21,6 +22,20 @@ const readStoredVisibility = (): PonderHintVisibility => {
         // getStoredString 只挡 SSR，不挡隐私模式下 getItem 直接抛。
         // 这里必须自己兜住：读设置失败不该让整个 store 模块导入失败。
         return 'always';
+    }
+};
+
+/**
+ * 触屏上那颗思索按钮显不显示。默认显示。
+ *
+ * 它是触屏用户唯一的入口（没有悬停，也没有 Ctrl+G），所以默认不能关；但它确实是一颗
+ * 浮在界面之上的常驻按钮，不想要的人必须能彻底关掉，而不是只能忍它露那几秒。
+ */
+const readStoredTouchButton = (): boolean => {
+    try {
+        return getStoredString(PONDER_TOUCH_BUTTON_STORAGE_KEY, 'on') !== 'off';
+    } catch {
+        return true;
     }
 };
 
@@ -46,6 +61,7 @@ type PonderState = {
     isPaused: boolean;
     seenTargetIds: ReadonlySet<string>;
     ponderHintVisibility: PonderHintVisibility;
+    showPonderTouchButton: boolean;
 
     setHoveredTargetId: (targetId: PonderTargetId | null) => void;
     openPonder: (targetId: PonderTargetId, sceneIndex?: number) => void;
@@ -55,6 +71,7 @@ type PonderState = {
     setPaused: (paused: boolean) => void;
     markPonderSeen: (targetId: PonderTargetId) => void;
     setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
+    setShowPonderTouchButton: (show: boolean) => void;
 };
 
 export const usePonderStore = create<PonderState>((set, get) => ({
@@ -63,6 +80,7 @@ export const usePonderStore = create<PonderState>((set, get) => ({
     isPaused: false,
     seenTargetIds: readStoredSeen(),
     ponderHintVisibility: readStoredVisibility(),
+    showPonderTouchButton: readStoredTouchButton(),
 
     setHoveredTargetId: targetId => {
         if (get().hoveredTargetId === targetId) {
@@ -110,10 +128,21 @@ export const usePonderStore = create<PonderState>((set, get) => ({
             // 同上：设置不落盘也不该让当前会话失效。
         }
     },
+
+    setShowPonderTouchButton: show => {
+        set({ showPonderTouchButton: show });
+        try {
+            localStorage.setItem(PONDER_TOUCH_BUTTON_STORAGE_KEY, show ? 'on' : 'off');
+        } catch {
+            // 同上。
+        }
+    },
 }));
 
 /** 设置面板与命令面板共用的一次性订阅。 */
 export const selectPonderSettingsSnapshot = (state: PonderState) => ({
     ponderHintVisibility: state.ponderHintVisibility,
     setPonderHintVisibility: state.setPonderHintVisibility,
+    showPonderTouchButton: state.showPonderTouchButton,
+    setShowPonderTouchButton: state.setShowPonderTouchButton,
 });

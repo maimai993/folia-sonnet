@@ -82,6 +82,10 @@ export const buildSettingsCommandContext = (
         setPlaybackEntryView: entryView.setPlaybackEntryView,
         ponderHintVisibility: ponder.ponderHintVisibility,
         setPonderHintVisibility: ponder.setPonderHintVisibility,
+        togglePonderTouchButton: () => {
+            const state = usePonderStore.getState();
+            state.setShowPonderTouchButton(!state.showPonderTouchButton);
+        },
         toggleRememberHomeCardPosition: () => {
             const home = useHomeLayoutSettingsStore.getState();
             home.handleToggleRememberHomeCardPosition(!home.rememberHomeCardPosition);

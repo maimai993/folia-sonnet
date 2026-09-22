@@ -92,7 +92,7 @@ const PonderOnboardingSurface: React.FC<PonderOnboardingSurfaceProps> = ({
     <div className="absolute inset-0 overflow-hidden" data-ponder-onboarding-structure>
         <PonderSurfaceBase registerStateNode={registerStateNode}>
             <PageShell accent={accent} line={line} outline={outline} />
-            {/* 灯泡始终画出来：它在触屏上是常驻的，藏起来反而讲不清「它在哪」。 */}
+            {/* 图上始终画出来：真实那颗露四秒就收，但示意图要能一直被指着讲。 */}
             <span
                 data-ponder-onboarding-touch-bulb
                 className="flex items-center justify-center rounded-full border"

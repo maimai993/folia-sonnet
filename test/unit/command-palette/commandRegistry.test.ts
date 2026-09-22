@@ -95,6 +95,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setPlaybackEntryView: vi.fn(),
             ponderHintVisibility: 'always' as const,
             setPonderHintVisibility: vi.fn(),
+            togglePonderTouchButton: vi.fn(),
             startPlayerBottomBarPositioning: vi.fn(),
             canStartPlayerBottomBarPositioning: true,
             toggleAlwaysShowPlayerBackButton: vi.fn(),

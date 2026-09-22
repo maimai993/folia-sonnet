@@ -1,5 +1,5 @@
 import React from 'react';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, Lightbulb } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { selectPonderSettingsSnapshot, usePonderStore } from '../../../stores/usePonderStore';
@@ -15,6 +15,9 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 // 扫到（它只看 settings/ 这一层的 *.tsx）。
 //
 // renderToggle 是两态的，套不上三档，所以这里自己画一组分段按钮。
+//
+// 触屏那颗按钮也归这一组：它和悬停提示是同一件事的两种形态 —— 一个给指针，一个给手指，
+// 分到两处只会让「怎么把思索的提示关掉」变成要找两遍。
 
 const LABEL_KEYS: Record<PonderHintVisibility, string> = {
     always: 'options.ponderHintsAlways',
@@ -34,9 +37,12 @@ const PonderHintSettingsSection: React.FC<PonderHintSettingsSectionProps> = ({
     accentColor,
 }) => {
     const { t } = useTranslation();
-    const { ponderHintVisibility, setPonderHintVisibility } = usePonderStore(
-        useShallow(selectPonderSettingsSnapshot),
-    );
+    const {
+        ponderHintVisibility,
+        setPonderHintVisibility,
+        showPonderTouchButton,
+        setShowPonderTouchButton,
+    } = usePonderStore(useShallow(selectPonderSettingsSnapshot));
 
     const idleClass = isDaylight ? 'hover:bg-black/[0.06]' : 'hover:bg-white/[0.08]';
 
@@ -74,6 +80,34 @@ const PonderHintSettingsSection: React.FC<PonderHintSettingsSectionProps> = ({
                             </button>
                         );
                     })}
+                </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${settingsCardClass}`}>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                            <Lightbulb size={14} />
+                            {t('options.ponderTouchButton')}
+                        </div>
+                        <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.ponderTouchButtonDesc')}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowPonderTouchButton(!showPonderTouchButton)}
+                        aria-pressed={showPonderTouchButton}
+                        aria-label={t('options.ponderTouchButton')}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${
+                            showPonderTouchButton ? '' : (isDaylight ? 'bg-black/10' : 'bg-white/10')
+                        }`}
+                        style={showPonderTouchButton
+                            ? { backgroundColor: accentColor || (isDaylight ? '#27272a' : '#fafafa') }
+                            : undefined}
+                    >
+                        <span className={`block w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showPonderTouchButton ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
                 </div>
             </div>
         </SettingsAnchor>

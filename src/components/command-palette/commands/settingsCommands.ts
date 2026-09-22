@@ -336,6 +336,14 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     }),
+    createToggleCommand(
+        'ponder-touch-button-toggle',
+        'settings',
+        'Ponder button on touch',
+        'Show or hide the lightbulb in the top-right corner on touch devices',
+        ['ponder touch button', 'lightbulb', '触屏思索按钮', '灯泡按钮'],
+        context => context.settings.togglePonderTouchButton(),
+    ),
     defineCommand({
         id: 'ponder-hints-off',
         group: 'settings',

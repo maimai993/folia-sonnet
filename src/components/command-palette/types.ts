@@ -204,6 +204,8 @@ export type CommandPaletteSettingsContext = {
     setPlaybackEntryView: (view: PlaybackEntryView) => void;
     ponderHintVisibility: PonderHintVisibility;
     setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
+    /** 触屏上那颗思索按钮显不显示。它是触屏唯一的入口，所以关掉是一个明确的选择。 */
+    togglePonderTouchButton: () => void;
     toggleRememberHomeCardPosition: () => void;
     startPlayerBottomBarPositioning: () => void;
     canStartPlayerBottomBarPositioning: boolean;
