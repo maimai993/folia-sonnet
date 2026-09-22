@@ -148,6 +148,7 @@ describe('ponder registry', () => {
     it('页面教程覆盖完整页面区域，而不是只有一段泛化概述', () => {
         expect(findPonderTarget('grid-page')?.scenes.length).toBeGreaterThanOrEqual(6);
         expect(findPonderTarget('grid-view-page')?.scenes.length).toBeGreaterThanOrEqual(5);
+        expect(findPonderTarget('local-grid-map-page')?.scenes.length).toBeGreaterThanOrEqual(3);
         expect(findPonderTarget('lattice-page')?.scenes.length).toBeGreaterThanOrEqual(5);
     });
 
@@ -168,6 +169,7 @@ describe('ponder registry', () => {
             'grid-view-cards': new Set(['metadata-pencil', 'edit-mode']),
             'local-folder-actions': new Set(['delete-confirm']),
             'local-track-list': new Set(['sort-menu-open']),
+            'local-grid-map': new Set(['tree-open']),
             'ponder-onboarding': new Set(['hint-shown', 'hint-holding', 'ponder-open']),
             'desktop-features': new Set(['wallpaper-on', 'tray-menu', 'remote-open']),
             'queue-command': new Set(['facet-suggestions', 'facet-narrowed', 'batch-preview']),

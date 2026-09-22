@@ -2830,6 +2830,10 @@ export default {
       "lattice_page": "Seluruh antrean putar dibentangkan sebagai dinding poster.",
       "lattice_style_settings": "Vignette, dan lapisan warna poster yang terbuka selapis demi selapis.",
       "local_folder_actions": "Pindai ulang, rapikan tag, dan tombol merah yang menghapus.",
+      "local_grid_controls": "Ganti folder, album, artis, dan playlist lokal; impor atau segarkan pustaka.",
+      "online_collection_actions": "Aksi yang tersedia untuk koleksi daring atau server.",
+      "local_grid_map_page": "Peta pustaka lokal, pilihan massal, dan aksi pada lagu hasilnya.",
+      "local_grid_map_directory_tree": "Pilih subpohon folder, lagu langsung saja, dan kelola akar impor.",
       "local_metadata_match": "Pensil di balik tiga syarat.",
       "local_track_sorting": "Hanya folder lokal yang bisa diurutkan, dan pilihannya bertahan antar sesi.",
       "lyrics_animation_settings": "Di mana animasi lirik diganti, plus dua sakelar yang memengaruhi tampilan.",
@@ -3107,6 +3111,36 @@ export default {
         "organize": "Atur info lagu",
         "remove": "Hapus dari pustaka"
       },
+      "localGridControls": {
+        "panel": "Kontrol pustaka lokal",
+        "tabs": "Jenis koleksi lokal",
+        "folders": "Folder",
+        "playlists": "Playlist lokal",
+        "imports": "Impor berkas",
+        "refresh": "Segarkan pustaka",
+        "playlistImport": "Impor playlist"
+      },
+      "onlineCollectionActions": {
+        "panel": "Aksi koleksi daring",
+        "playAll": "Putar semua",
+        "addQueue": "Tambah ke antrean",
+        "addPlaylist": "Tambah ke playlist",
+        "providerAction": "Aksi khusus sumber",
+        "destructiveAction": "Hapus"
+      },
+      "localGridMap": {
+        "page": "Peta koleksi lokal",
+        "back": "Kembali ke Grid3D",
+        "title": "Tombol panel pilihan",
+        "cards": "Koleksi lokal",
+        "panel": "Panel pilihan massal",
+        "tree": "Pohon folder",
+        "row": "Folder dan turunannya",
+        "checkbox": "Status pilihan",
+        "expand": "Bentangkan folder",
+        "rootActions": "Aksi folder akar",
+        "actions": "Aksi pada lagu terpilih"
+      },
       "localTrackList": {
         "panel": "Daftar lagu",
         "direction": "Naik / turun",
@@ -3242,6 +3276,10 @@ export default {
       "localFolderActions": "Aksi pada koleksi lokal",
       "localMetadataMatch": "Cocokkan info lagu manual",
       "localTrackSorting": "Mengurutkan lagu lokal",
+      "localGridControls": "Pemilih dan impor pustaka lokal",
+      "onlineCollectionActions": "Aksi koleksi daring",
+      "localGridMapPage": "GridMap lokal",
+      "localGridMapDirectoryTree": "Pohon folder GridMap",
       "grid3dCardStyle": "Gaya kartu beranda",
       "gridViewCardSettings": "Pengaturan kartu kisi",
       "latticeStyleSettings": "Gaya kolase antrean",
@@ -3332,6 +3370,15 @@ export default {
       "localFolderActionsDelete": "Yang merah menghapus sesuatu",
       "localMetadataMatchReveal": "Satu pensil di balik tiga syarat",
       "localTrackSortingFields": "Hanya folder lokal yang bisa diurutkan",
+      "localGridControlsSources": "Folder, album, artis, dan playlist lokal",
+      "localGridControlsMaintenance": "Mengimpor dan menyegarkan pustaka lokal",
+      "onlineCollectionActionsCommon": "Aksi bersama koleksi daring",
+      "onlineCollectionActionsProvider": "Aksi bergantung pada sumber aktif",
+      "localGridMapStructure": "Peta koleksi lokal",
+      "localGridMapBatch": "Pilih koleksi dan tindak lagunya",
+      "localGridMapFilter": "Menyaring dan kembali",
+      "localGridMapDirectoryHierarchy": "Hierarki folder",
+      "localGridMapDirectorySelection": "Pilih subpohon atau lagu langsung",
       "grid3dCardStyleOptions": "Seperti apa kedua gaya kartu itu",
       "gridViewCardCover": "Bagaimana sampul mengisi kartu",
       "gridViewCardFalloff": "Seberapa jauh memudar ke tepi",
@@ -3646,12 +3693,37 @@ export default {
         "onlinePlaylist": "Playlist daring milikmu sendiri menempuh jalur lain: ia diedit di tempat, tiap perubahan langsung terhitung, tanpa langkah simpan-saat-keluar. Satu tombol, dua perilaku tergantung sumbernya."
       },
       "localFolderActions": {
-        "conditional": "Kolom di kaki panel info ini mengikuti jenis koleksinya: folder lokal mendapat impor ulang dan atur info lagu, playlist lokal mendapat ekspor, album atau artis lokal mendapat edit entitas, playlist Navidrome mendapat tambah-ke-playlist. Untuk playlist daring kolom ini nyaris kosong \u2014 tidak ada yang rusak, sumber itu memang tidak punya aksi semacam itu.",
+        "conditional": "Kolom di kaki panel info ini mengikuti jenis koleksi lokal: folder mendapat impor ulang dan atur info lagu, playlist mendapat ekspor, sedangkan album atau artis mendapat edit entitas.",
         "playAll": "Dua yang teratas ada di setiap koleksi: putar semua dan tambah ke antrean. Saat penyaring aktif di halaman, keduanya bekerja pada lagu yang tersaring, dan teks tombolnya menyebut jumlahnya.",
         "reimport": "\u201cImpor ulang\u201d bukan menambahkan berkasnya lagi. Ia menjalankan pemindaian ulang inkremental untuk satu folder ini: berkas baru masuk, yang berubah diperbarui, yang hilang ditandai. Catatan pustaka yang sudah ada tidak dihapus dan dibangun ulang.",
         "organize": "\u201cAtur info lagu\u201d membuka penyunting tag massal untuk folder ini \u2014 seluruh folder sekaligus, bukan lagu per lagu.",
         "remove": "Yang merah di paling bawah menghapus folder ini dari pustaka. Ia tidak menghapus berkas di diska, tetapi catatan pustaka lagu-lagu ini, dan tempatnya di playlist, ikut hilang.",
         "confirm": "Karena itu ia bertanya dulu, dan bertanya dengan dua cara berbeda: menghapus folder akar dan menghapus subfolder di bawahnya tidak menjangkau sejauh yang sama, dan kotak konfirmasinya menyebut mana yang sedang kamu lakukan. Layak dibaca sebelum ditekan."
+      },
+      "localGridControls": {
+        "sources": "Baris ini mengganti pustaka lokal antara folder, album, artis, dan playlist lokal. Ini mengubah isi rel Grid3D, bukan berpindah ke penyedia daring.",
+        "foldersAndPlaylists": "Folder mempertahankan struktur direktori impor. Playlist lokal disimpan oleh Folia dan terpisah dari playlist daring maupun Navidrome.",
+        "imports": "Impor folder menambahkan musik dari direktori. Impor playlist membaca M3U atau M3U8 dan membuat playlist lokal dari lagu yang bisa ditemukan Folia.",
+        "refresh": "Segarkan memindai ulang akar impor untuk berkas baru, berubah, atau hilang. Ini tidak membuat salinan pustaka baru."
+      },
+      "onlineCollectionActions": {
+        "common": "Putar semua dan tambah ke antrean tersedia untuk koleksi daring dan server. Saat halaman disaring, keduanya hanya memakai lagu yang cocok dan menampilkan jumlahnya.",
+        "provider": "Tombol lain mengikuti sumber dan jenis koleksi aktif: Navidrome dapat menawarkan aksi playlist server, sedangkan album atau playlist daring dapat menawarkan langganan atau pengelolaan rekomendasi. Pindai ulang dan alat tag lokal tidak ada di sini.",
+        "destructive": "Tombol hapus hanya muncul bila sumber itu menyediakan operasi dan koleksinya dapat diubah. Dampaknya pada koleksi remote atau server, bukan berkas audio lokal."
+      },
+      "localGridMap": {
+        "page": "Ini GridMap pustaka lokal. Folder, album, artis, atau playlist lokal yang aktif disusun menjadi satu sarang lebah, bukan satu rel Grid3D.",
+        "cards": "Seret atau gulir untuk bergerak. Klik kartu kembali ke Grid3D dengan koleksi itu terfokus; aktivasi kartu membuka koleksinya.",
+        "openPanel": "Peta folder, album, dan artis dapat membuka pilihan massal dari judul: folder menampilkan pohon direktori, sedangkan album dan artis menampilkan daftar datar. Peta playlist lokal hanya untuk menjelajah.",
+        "batchActions": "Panel mengubah koleksi terpilih menjadi daftar lagu. Kamu dapat memutar, menambah ke antrean, membuat playlist lokal, dan pada peta folder menghapus catatan pustaka terpilih.",
+        "filter": "{{mod}} + F atau mengetik menyaring peta. Pilihan massal dan pohon folder mengikuti kartu tersaring, jadi aksi berlaku pada pilihan yang terlihat.",
+        "back": "Kembali menutup GridMap dan memulihkan kategori serta fokus Grid3D lokal sebelumnya."
+      },
+      "localGridMapDirectory": {
+        "hierarchy": "Peta folder membangun kembali hierarki direktori impor. Indentasi berarti bersarang; rantai satu-anak dipadatkan, sedangkan percabangan dan folder yang berisi lagu langsung tetap terpisah.",
+        "expand": "Chevron membuka atau menutup turunan tanpa mengubah pilihannya. Tombol perluas di header memberi ruang lebih untuk jalur yang dalam.",
+        "selection": "Folder berturunan berputar melalui tiga status: seluruh subpohon, tidak ada, dan hanya lagu langsung dalam folder ini. Folder daun memakai semua atau tidak ada. Jumlah mengikuti peta yang sedang disaring.",
+        "rootActions": "Akar impor juga punya aksi perawatan: pindai ulang akar, pulihkan folder yang diabaikan bila ada, atau hapus akar dari pustaka. Menghapus catatan pustaka tidak menghapus berkas audio di disk."
       },
       "localMetadata": {
         "conditions": "Ketika metadata lagu lokal salah, kamu bisa mencocokkannya sendiri. Pintunya sebuah pensil, tetapi tiga hal harus benar sekaligus agar ia ada di layar: kartunya sedang terfokus, lagunya lokal, dan penunjuk sedang berada di blok judul.",

@@ -23,10 +23,10 @@ import PonderHost from './components/ponder/PonderHost';
 const AutomixTransitionAnimation = lazy(() => import('./components/app/overlays/AutomixTransitionAnimation'));
 const Lattice = lazy(() => import('./components/app/lattice/Lattice'));
 import { UserGuideModal } from './components/modal/UserGuideModal';
+import ReleaseNotesDialog from './components/modal/ReleaseNotesDialog';
 import { PlaybackEntryViewPrompt } from './components/modal/playback-entry-view/PlaybackEntryViewPrompt';
 import { LatticeFmNotice } from './components/modal/playback-entry-view/LatticeFmNotice';
-import { usePlaybackEntryViewPromptGate } from './hooks/usePlaybackEntryViewPromptGate';
-import { USER_GUIDE_AUTO_OPEN_VERSION } from './components/modal/userGuideContent';
+import { useStartupExperienceGate } from './hooks/useStartupExperienceGate';
 import { useAppDialogsModel } from './components/app/dialogs/useAppDialogsModel';
 import { useHomeModel } from './components/app/home/useHomeModel';
 import { createLyricFilterPatternSaver } from './components/app/home/createLyricFilterPatternSaver';
@@ -246,14 +246,8 @@ export default function App() {
 
     // Auto-close the player panel when leaving the player view
     // (Effect moved to after useAppNavigation where currentView is defined)
-    const {
-        settingsModalState,
-        lastSeenGuideVersion,
-        setIsUserGuideModalOpen,
-    } = useSettingsModalStore(useShallow(state => ({
+    const { settingsModalState } = useSettingsModalStore(useShallow(state => ({
         settingsModalState: state.settingsModalState,
-        lastSeenGuideVersion: state.lastSeenGuideVersion,
-        setIsUserGuideModalOpen: state.setIsUserGuideModalOpen,
     })));
     const automixEnabled = useAutomixSettingsStore(state => state.automixEnabled);
     const transitionMode = useAutomixSettingsStore(state => state.transitionMode);
@@ -277,17 +271,7 @@ export default function App() {
         [transitionMode, crossfadeMaxSec, transitionPerformance],
     );
 
-    useEffect(() => {
-        if (
-            typeof __APP_VERSION__ !== 'undefined' &&
-            USER_GUIDE_AUTO_OPEN_VERSION === __APP_VERSION__ &&
-            lastSeenGuideVersion !== __APP_VERSION__
-        ) {
-            setIsUserGuideModalOpen(true);
-        }
-    }, [lastSeenGuideVersion, setIsUserGuideModalOpen]);
-
-    usePlaybackEntryViewPromptGate();
+    const startupExperience = useStartupExperienceGate();
 
     useEffect(() => initializeSyncCoordinator(), []);
 
@@ -2779,6 +2763,12 @@ export default function App() {
             />
 
             <AppDialogs model={appDialogsModel} />
+            <ReleaseNotesDialog
+                isOpen={startupExperience.isReleaseNotesOpen}
+                isDaylight={isDaylight}
+                theme={theme}
+                onClose={startupExperience.closeReleaseNotes}
+            />
             <UserGuideModal theme={theme} />
             <PlaybackEntryViewPrompt theme={theme} />
             <LatticeFmNotice />

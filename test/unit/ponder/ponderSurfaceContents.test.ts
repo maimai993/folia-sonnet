@@ -2,6 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import PonderSurfaceContents from '@/components/ponder/PonderSurfaceContents';
+import { LOCAL_GRID_MAP_GEOMETRY } from '@/components/ponder/surfaces/ponderSurfaceGeometry';
 import type { PonderSurfaceKind } from '@/types/ponder';
 
 // test/unit/ponder/ponderSurfaceContents.test.ts
@@ -75,6 +76,24 @@ describe('PonderSurfaceContents', () => {
         ['tab-switched', 'collection-open', 'map-open', 'search-open', 'command-open'].forEach(state => {
             expect(markup).toContain(`data-ponder-surface-state="${state}"`);
         });
+    });
+
+    it('本地曲库新增的三个 surface 各自保留可识别结构', () => {
+        const controls = renderSurface('local-grid-controls');
+        expect(controls).toContain('data-ponder-local-grid-controls-structure');
+        expect(controls.match(/data-ponder-local-grid-tab=/g)).toHaveLength(4);
+
+        const onlineActions = renderSurface('online-collection-actions');
+        expect(onlineActions).toContain('data-ponder-online-collection-actions-structure');
+        expect(onlineActions).toContain('data-ponder-online-provider-action');
+
+        const map = renderSurface('local-grid-map');
+        expect(map).toContain('data-ponder-local-grid-map-structure');
+        expect(map).toContain('data-ponder-local-grid-map-tree');
+        expect(map).toContain('data-ponder-surface-state="tree-open"');
+        expect(map).toContain('bg-zinc-950/95');
+        expect(LOCAL_GRID_MAP_GEOMETRY.panel.width).toBeLessThanOrEqual(0.24);
+        expect(LOCAL_GRID_MAP_GEOMETRY.actions.height).toBeLessThanOrEqual(0.06);
     });
 
     it('Lattice surface 是不规则海报墙，并包含展开、工具和灯光结果', () => {

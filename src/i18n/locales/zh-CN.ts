@@ -2897,6 +2897,10 @@ export default {
       "lattice_page": "把整条播放队列铺成一面海报墙。",
       "lattice_style_settings": "暗角，以及层层解锁的海报叠色。",
       "local_folder_actions": "重扫、整理歌曲信息，以及那颗会删东西的红按钮。",
+      "local_grid_controls": "切换本地文件夹、专辑、艺术家与歌单，并导入或刷新曲库。",
+      "online_collection_actions": "当前在线或服务器集合可执行的操作。",
+      "local_grid_map_page": "本地曲库地图、批量选择，以及对所含曲目的操作。",
+      "local_grid_map_directory_tree": "选择整个目录子树、仅直属曲目，并维护导入根目录。",
       "local_metadata_match": "三重条件才出现的那颗铅笔。",
       "local_track_sorting": "只有本地文件夹能排序，选择跨会话保留。",
       "lyrics_animation_settings": "换歌词动画在哪儿换，加上两个影响观感的开关。",
@@ -3174,6 +3178,36 @@ export default {
         "organize": "整理歌曲信息",
         "remove": "从曲库移除"
       },
+      "localGridControls": {
+        "panel": "本地曲库控制区",
+        "tabs": "本地集合类型",
+        "folders": "文件夹",
+        "playlists": "本地歌单",
+        "imports": "导入文件",
+        "refresh": "刷新曲库",
+        "playlistImport": "导入歌单"
+      },
+      "onlineCollectionActions": {
+        "panel": "在线集合操作",
+        "playAll": "全部播放",
+        "addQueue": "加入队列",
+        "addPlaylist": "加入歌单",
+        "providerAction": "来源专属操作",
+        "destructiveAction": "删除或移除"
+      },
+      "localGridMap": {
+        "page": "本地集合地图",
+        "back": "返回 Grid3D",
+        "title": "批量选择面板开关",
+        "cards": "本地集合",
+        "panel": "批量选择面板",
+        "tree": "目录树",
+        "row": "目录及其子目录",
+        "checkbox": "选择状态",
+        "expand": "展开目录",
+        "rootActions": "根目录维护操作",
+        "actions": "操作所选曲目"
+      },
       "localTrackList": {
         "panel": "曲目列表",
         "direction": "升序 / 降序",
@@ -3309,6 +3343,10 @@ export default {
       "localFolderActions": "本地集合的操作",
       "localMetadataMatch": "手动匹配歌曲信息",
       "localTrackSorting": "本地曲目排序",
+      "localGridControls": "本地曲库分类与导入",
+      "onlineCollectionActions": "在线集合操作",
+      "localGridMapPage": "本地 GridMap",
+      "localGridMapDirectoryTree": "GridMap 目录树",
       "grid3dCardStyle": "首页卡片样式",
       "gridViewCardSettings": "网格卡片设置",
       "latticeStyleSettings": "队列拼贴样式",
@@ -3399,6 +3437,15 @@ export default {
       "localFolderActionsDelete": "红色那颗会删东西",
       "localMetadataMatchReveal": "三重条件才出现的一颗铅笔",
       "localTrackSortingFields": "只有本地文件夹能排序",
+      "localGridControlsSources": "文件夹、专辑、艺术家与本地歌单",
+      "localGridControlsMaintenance": "导入与刷新本地曲库",
+      "onlineCollectionActionsCommon": "在线集合共用的操作",
+      "onlineCollectionActionsProvider": "操作取决于当前来源",
+      "localGridMapStructure": "本地集合地图",
+      "localGridMapBatch": "选择集合并操作其中曲目",
+      "localGridMapFilter": "筛选与返回",
+      "localGridMapDirectoryHierarchy": "目录层级",
+      "localGridMapDirectorySelection": "选择子树或仅直属曲目",
       "grid3dCardStyleOptions": "两种卡片长什么样",
       "gridViewCardCover": "封面怎么占这张卡",
       "gridViewCardFalloff": "离中心越远，衰减到多少",
@@ -3713,12 +3760,37 @@ export default {
         "onlinePlaylist": "在线的自有歌单走的是另一条路：它是就地编辑，改一下算一下，没有「退出时提交」这个步骤。同一颗按钮，两种来源两种行为。"
       },
       "localFolderActions": {
-        "conditional": "操作栏随集合类型变化：本地文件夹可重扫和整理信息，本地歌单可导出，其他来源只显示支持的操作。",
+        "conditional": "操作栏随本地集合类型变化：文件夹可重扫和整理歌曲信息，本地歌单可导出，本地专辑或艺术家可编辑实体。",
         "playAll": "最上面两颗任何集合都有：全部播放和加入队列。页面上开着筛选时，它们作用于筛出来的那些，按钮文字会写出条数。",
         "reimport": "重新导入会增量扫描文件夹：新增、更新和移除分别处理，不会重建已有记录。",
         "organize": "「整理歌曲信息」打开的是这个文件夹的批量改 tag 面板 —— 一次处理整个文件夹，不是一首一首改。",
         "remove": "最下面这颗红的把这个文件夹从曲库里移除。它不删磁盘上的文件，但曲库里这些歌的记录、以及它们在歌单里的位置都会跟着没。",
         "confirm": "删除前会确认；根文件夹和子文件夹的影响范围不同，确认框会说明。"
+      },
+      "localGridControls": {
+        "sources": "这一排在本地曲库内部切换文件夹、专辑、艺术家和本地歌单。它换的是 Grid3D 轨道里的集合类型，不是切换在线音乐来源。",
+        "foldersAndPlaylists": "「文件夹」保留导入时的目录结构；「歌单」是 Folia 保存在本地的歌单，和在线歌单、Navidrome 歌单彼此独立。",
+        "imports": "「导入文件夹」从目录加入音乐；「导入歌单」读取 M3U/M3U8，并用 Folia 能解析到的曲目建立本地歌单。",
+        "refresh": "「刷新」重新扫描已经导入的根目录，找出新增、变化和丢失的文件；它不会再复制一份曲库。"
+      },
+      "onlineCollectionActions": {
+        "common": "在线与服务器集合都提供「全部播放」和「加入队列」。本页有筛选时，两颗按钮只处理筛选结果，并在文字里显示条数。",
+        "provider": "其余按钮由当前来源和集合类型决定：Navidrome 可能提供服务器歌单操作，在线专辑或歌单可能提供收藏、取消收藏或推荐管理。本地文件重扫和标签整理不会出现在这里。",
+        "destructive": "只有当前来源支持修改且这个集合允许操作时，才会显示删除或移除。它修改的是远端或服务器集合，不会删除本地音频文件。"
+      },
+      "localGridMap": {
+        "page": "这是本地曲库的 GridMap。它把当前分类里的文件夹、专辑、艺术家或本地歌单铺成一张蜂窝地图，而不是只看 Grid3D 的单条轨道。",
+        "cards": "拖动或滚轮可在地图上移动。点一张卡会回到 Grid3D 并聚焦它；激活卡片则直接进入该集合。",
+        "openPanel": "文件夹、专辑和艺术家地图可点击中央标题打开批量选择：文件夹显示目录树，专辑和艺术家显示扁平列表；本地歌单地图只提供浏览。",
+        "batchActions": "面板会把选中的集合换算成曲目。可以播放、加入队列、建立本地歌单；在文件夹地图里还可移除选中的曲库记录。",
+        "filter": "{{mod}} + F 或直接输入可筛选地图。批量选择与目录树会跟随筛选后的卡片，所以操作只作用于当前可见的选择。",
+        "back": "返回会关闭 GridMap，回到进入前的本地 Grid3D 分类和焦点位置。"
+      },
+      "localGridMapDirectory": {
+        "hierarchy": "这里按导入时的目录重建层级。缩进代表嵌套；只有单个子目录的长链会压缩显示，分叉点和直接包含歌曲的目录仍会单独列出。",
+        "expand": "箭头只展开或收起子目录，不会改变选择。标题栏里的加宽按钮能给较深的路径更多横向空间。",
+        "selection": "有子目录的文件夹会在三种状态间循环：整个子树、全部不选、只选这个目录直属的曲目。叶子目录只有全选与不选。数量以当前筛选后的地图为准。",
+        "rootActions": "导入根目录还带维护操作：重扫该根目录、恢复被忽略的目录，或从曲库移除根目录。移除曲库记录不会删除磁盘上的音频文件。"
       },
       "localMetadata": {
         "conditions": "手动匹配只在当前卡片是本地歌曲、且指针停在歌名上时显示。",

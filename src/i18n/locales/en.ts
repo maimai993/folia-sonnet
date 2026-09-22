@@ -2898,6 +2898,10 @@ export default {
       "lattice_page": "The whole play queue laid out as a poster wall.",
       "lattice_style_settings": "The vignette, and the poster tint that unlocks one layer at a time.",
       "local_folder_actions": "Re-scan, tidy up tags, and the red button that deletes things.",
+      "local_grid_controls": "Switch local folders, albums, artists and playlists; import or refresh the library.",
+      "online_collection_actions": "Actions available for an online or server collection.",
+      "local_grid_map_page": "The local-library map, batch selection and actions on the resulting tracks.",
+      "local_grid_map_directory_tree": "Select folder subtrees, direct tracks only, and maintain imported roots.",
       "local_metadata_match": "The pencil behind three conditions.",
       "local_track_sorting": "Only local folders sort, and the choice sticks across sessions.",
       "lyrics_animation_settings": "Where the lyric animation is changed, plus two switches that affect the look.",
@@ -3175,6 +3179,36 @@ export default {
         "organize": "Organize song info",
         "remove": "Remove from library"
       },
+      "localGridControls": {
+        "panel": "Local library controls",
+        "tabs": "Local collection types",
+        "folders": "Folders",
+        "playlists": "Local playlists",
+        "imports": "Import files",
+        "refresh": "Refresh library",
+        "playlistImport": "Import playlist"
+      },
+      "onlineCollectionActions": {
+        "panel": "Online collection actions",
+        "playAll": "Play all",
+        "addQueue": "Add to queue",
+        "addPlaylist": "Add to playlist",
+        "providerAction": "Source-specific action",
+        "destructiveAction": "Delete or remove"
+      },
+      "localGridMap": {
+        "page": "Local collection map",
+        "back": "Back to Grid3D",
+        "title": "Selection panel toggle",
+        "cards": "Local collections",
+        "panel": "Batch selection panel",
+        "tree": "Folder tree",
+        "row": "Folder and descendants",
+        "checkbox": "Selection state",
+        "expand": "Expand folder",
+        "rootActions": "Root-folder actions",
+        "actions": "Actions on selected tracks"
+      },
       "localTrackList": {
         "panel": "Track list",
         "direction": "Ascending / descending",
@@ -3310,6 +3344,10 @@ export default {
       "localFolderActions": "Actions on a local collection",
       "localMetadataMatch": "Match song info manually",
       "localTrackSorting": "Sorting local tracks",
+      "localGridControls": "Local library switcher and imports",
+      "onlineCollectionActions": "Online collection actions",
+      "localGridMapPage": "Local GridMap",
+      "localGridMapDirectoryTree": "GridMap folder tree",
       "grid3dCardStyle": "Home card style",
       "gridViewCardSettings": "Grid card settings",
       "latticeStyleSettings": "Queue collage style",
@@ -3400,6 +3438,15 @@ export default {
       "localFolderActionsDelete": "The red one deletes things",
       "localMetadataMatchReveal": "A pencil behind three conditions",
       "localTrackSortingFields": "Only local folders can be sorted",
+      "localGridControlsSources": "Folders, albums, artists and local playlists",
+      "localGridControlsMaintenance": "Importing and refreshing the local library",
+      "onlineCollectionActionsCommon": "Actions shared by online collections",
+      "onlineCollectionActionsProvider": "Actions depend on the current source",
+      "localGridMapStructure": "The local collection map",
+      "localGridMapBatch": "Select collections and act on their tracks",
+      "localGridMapFilter": "Filtering and returning",
+      "localGridMapDirectoryHierarchy": "The folder hierarchy",
+      "localGridMapDirectorySelection": "Subtree and direct-track selection",
       "grid3dCardStyleOptions": "What the two card styles look like",
       "gridViewCardCover": "How the cover fills the card",
       "gridViewCardFalloff": "How far things fade toward the edges",
@@ -3714,12 +3761,37 @@ export default {
         "onlinePlaylist": "An online playlist you own takes the other path: it edits in place, each change counting as it happens, with no commit-on-exit step. One button, two behaviours depending on the source."
       },
       "localFolderActions": {
-        "conditional": "This column at the foot of the info panel follows the collection type: a local folder gets re-import and organize song info, a local playlist gets export, a local album or artist gets edit entity, a Navidrome playlist gets add-to-playlist. For an online playlist it is nearly empty \u2014 nothing is broken, that source simply has no such actions.",
+        "conditional": "This column at the foot of the info panel follows the local collection type: a folder gets re-import and organize song info, a playlist gets export, and an album or artist gets edit entity.",
         "playAll": "The top two are on every collection: play all and add to queue. With a filter active on the page they act on the filtered songs, and the button text says how many.",
         "reimport": "\u201cRe-import\u201d does not add the files again. It runs an incremental re-scan of this one folder: new files come in, changed ones update, missing ones are flagged. Existing library records are not wiped and rebuilt.",
         "organize": "\u201cOrganize song info\u201d opens the bulk tag editor for this folder \u2014 the whole folder at once, not song by song.",
         "remove": "The red one at the bottom removes this folder from the library. It does not delete the files on disk, but the library records for these songs, and their places in playlists, go with it.",
         "confirm": "So it asks first, and it asks in two different ways: removing a root folder and removing a subfolder under it do not reach the same distance, and the confirmation spells out which one you are about to do. Worth a read before you press."
+      },
+      "localGridControls": {
+        "sources": "This row switches the local library between folders, albums, artists and your local playlists. It changes what the Grid3D rail contains; it does not switch to an online provider.",
+        "foldersAndPlaylists": "Folders preserve the imported directory structure. Local playlists are stored by Folia and are separate from online and Navidrome playlists.",
+        "imports": "Import folder adds music from a directory. Import playlist reads an M3U or M3U8 file and creates a local playlist from tracks Folia can resolve.",
+        "refresh": "Refresh rescans imported roots for added, changed and missing files. It does not create another copy of the library."
+      },
+      "onlineCollectionActions": {
+        "common": "Play all and add to queue are shared by online and server collections. When this page is filtered, both actions use only the matching tracks and show the affected count.",
+        "provider": "The remaining buttons follow the current source and collection type: Navidrome may offer server-playlist actions, while an online album or playlist may offer subscribe, unsubscribe or recommendation management. Local re-scan and tag tools do not belong here.",
+        "destructive": "A delete or remove button appears only when that source exposes the operation and the collection can be changed. Its effect is on the remote or server collection, not on local audio files."
+      },
+      "localGridMap": {
+        "page": "This is the local-library GridMap. It lays the current folders, albums, artists, or local playlists into one honeycomb instead of the single Grid3D rail.",
+        "cards": "Drag or scroll to move across the map. Clicking a card returns to Grid3D with that collection focused; activating it opens the collection itself.",
+        "openPanel": "Folder, album, and artist maps can open batch selection from the title: folders show a directory tree, while albums and artists show a flat list. A local-playlist map is browse-only.",
+        "batchActions": "The panel resolves selected collections into tracks. You can play them, add them to the queue, create a local playlist, and—on the folder map—remove selected library records.",
+        "filter": "{{mod}} + F or typing filters the map. Batch selection and the folder tree follow the filtered cards, so actions affect the visible selection.",
+        "back": "Back closes GridMap and returns to the local Grid3D category and focus you came from."
+      },
+      "localGridMapDirectory": {
+        "hierarchy": "The folder map rebuilds the imported directory hierarchy here. Indentation means nesting; long single-child chains are compacted, while branch points and folders containing tracks stay separate.",
+        "expand": "The chevron expands or collapses descendants without changing their selection. The wider-tree button in the header gives deep paths more room.",
+        "selection": "A folder with descendants cycles through three states: whole subtree, none, and tracks directly inside this folder only. Leaf folders use all or none. Counts follow the currently filtered map.",
+        "rootActions": "Imported roots also carry maintenance actions: rescan that root, clear an ignored folder when present, or remove the root from the library. Removing library records does not delete audio files on disk."
       },
       "localMetadata": {
         "conditions": "When a local song\u2019s metadata is wrong you can match it by hand. The way in is a pencil, but three things have to be true at once for it to be on screen: the card is the focused one, the song is local, and the pointer is resting on the title block.",

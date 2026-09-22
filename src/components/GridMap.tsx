@@ -52,6 +52,7 @@ interface GridMapProps {
     isPlaylistHidden?: (item: GridMapItem) => boolean;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
     batchConfig?: GridMapBatchConfig;
+    ponderPageScope?: 'grid-page' | 'local-grid-map-page';
 }
 
 const compactDescription = (description?: string, maxLength = 72) => {
@@ -239,6 +240,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     isPlaylistHidden = () => false,
     onTogglePlaylistHidden,
     batchConfig,
+    ponderPageScope = 'grid-page',
 }) => {
     const { t } = useTranslation();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
@@ -819,6 +821,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     return (
         <motion.div
+            data-ponder-page-scope={ponderPageScope}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

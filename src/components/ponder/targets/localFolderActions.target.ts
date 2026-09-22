@@ -5,8 +5,8 @@ import type { PonderAnchorSource, PonderRelativeRect, PonderSceneScript, PonderT
 // 集合页信息面板底部那一列来源专属动作。
 //
 // 这一列的内容完全取决于打开的是什么集合：本地文件夹有重扫和整理 tag，本地歌单有导出，
-// 本地专辑/艺人有编辑实体，Navidrome 歌单有加到歌单 —— 判据见 gridSurfaceHandle.ts。
-// 在线歌单这一列几乎是空的，所以「我这里怎么没有」是个真实会被问到的问题。
+// 本地专辑/艺人有编辑实体 —— 判据见 gridSurfaceHandle.ts。
+// 在线与 Navidrome 集合由 onlineCollectionActions target 单独说明，避免混淆来源能力。
 //
 // 最后那颗红的会删东西，而它和上面几颗只差一个颜色。
 
@@ -111,7 +111,7 @@ export default {
     titleKey: 'ponder.targets.localFolderActions',
     category: 'browsing',
     summaryKey: 'ponder.summaries.local_folder_actions',
-    hoverSelector: '[data-ponder="grid-view-source-actions"]',
+    hoverSelector: '[data-ponder="local-folder-actions"]',
     relatedTargetIds: ['grid-view-edit-mode', 'local-metadata-match', 'local-track-sorting'],
     scenes: [whatIsHere, maintenance, deletion],
 } satisfies PonderTargetDefinition;

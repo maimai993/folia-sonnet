@@ -15,6 +15,7 @@ const PAGE_TARGET_BY_VIEW: Record<AppView, PonderTargetId> = {
 const PAGE_SCOPE_TARGETS = new Set<PonderTargetId>([
     'grid-page',
     'grid-view-page',
+    'local-grid-map-page',
     'player-page',
     'lattice-page',
     'help-page',

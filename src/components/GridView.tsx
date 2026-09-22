@@ -2159,7 +2159,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             <div
                                 // 这一排里有重扫、整理 tag 和删除，删除是不可逆的 ——
                                 // 思索把整块认成一个目标，指着哪一颗都讲得到。
-                                data-ponder="grid-view-source-actions"
+                                data-ponder={isLocalCollection ? 'local-folder-actions' : 'online-collection-actions'}
                                 className="space-y-2 mt-4 pt-4 border-t shrink-0"
                                 style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
                             >

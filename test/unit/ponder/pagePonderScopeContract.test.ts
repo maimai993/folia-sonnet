@@ -16,6 +16,7 @@ const PAGE_SCOPE_OWNERS = {
         'components/GridView.tsx',
         'components/ArtistGridView.tsx',
     ],
+    'local-grid-map-page': ['components/GridMap.tsx'],
     'help-page': ['components/modal/SettingsModal.tsx'],
     'settings-page': ['components/modal/SettingsModal.tsx'],
 } as const;

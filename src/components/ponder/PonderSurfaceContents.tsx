@@ -44,6 +44,11 @@ import {
     PonderGridViewCardSurface,
     PonderLatticeStyleSurface,
 } from './surfaces/PonderAppearanceSettingsSurfaces';
+import {
+    PonderLocalGridControlsSurface,
+    PonderLocalGridMapSurface,
+    PonderOnlineCollectionActionsSurface,
+} from './surfaces/PonderLocalLibrarySurfaces';
 import type { PonderSurfaceStateRegistrar } from './surfaces/PonderSurfaceStateLayer';
 
 // src/components/ponder/PonderSurfaceContents.tsx
@@ -302,6 +307,12 @@ const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, acc
         ? <PonderLocalFolderActionsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'local-track-list'
         ? <PonderLocalTrackListSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'local-grid-controls'
+        ? <PonderLocalGridControlsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'online-collection-actions'
+        ? <PonderOnlineCollectionActionsSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
+        : resolvedKind === 'local-grid-map'
+        ? <PonderLocalGridMapSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'side-panel'
         ? <PonderSidePanelSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : resolvedKind === 'bottom-ui-settings'

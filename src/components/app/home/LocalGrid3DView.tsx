@@ -323,6 +323,8 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 hasFloatingPlayer={hasFloatingPlayer}
                 playlistVisibilityScope="local"
                 batchConfig={localBatchConfig}
+                ponderControls="local-grid-controls"
+                gridMapPonderScope="local-grid-map-page"
             />
         </>
     );
