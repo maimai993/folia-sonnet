@@ -42,7 +42,14 @@ export function createLatticeRaster(pixi: typeof import('pixi.js')) {
         if (!paint) throw new Error('Lattice text texture is unavailable');
         paint.scale(resolution, resolution); paint.font = font; paint.fillStyle = '#ffffff';
         paint.fillText(text, pad, pad + ascent);
-        return { texture: new pixi.Texture({ source: new pixi.CanvasSource({ resource: surface, resolution }) }), width, height, pad };
+        // Construct at Pixi's default resolution and set the real one afterwards. Given `resolution`
+        // up front, CanvasSource derives width = canvas.width / resolution, TextureSource multiplies
+        // it back, and resizeCanvas() compares that float with the integer canvas size using `!==`:
+        // for any resolution whose round trip is inexact (0.76, 1.14, 1.52, 1.75...) it reassigns
+        // canvas.width, which wipes the glyph just painted. The setter only rescales width/height.
+        const source = new pixi.CanvasSource({ resource: surface });
+        source.resolution = resolution;
+        return { texture: new pixi.Texture({ source }), width, height, pad };
     };
     return { measure, rasterize, clearMeasureCache };
 }
