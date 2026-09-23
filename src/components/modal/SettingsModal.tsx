@@ -1339,7 +1339,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden relative z-10">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative z-10">
                     <AnimatePresence mode="popLayout" initial={false}>
                         {activeTab === 'help' ? (
                             <motion.div
@@ -1350,7 +1350,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 animate="center"
                                 exit="exit"
                                 transition={shellTransition}
-                                className="space-y-6 select-none h-full overflow-y-auto custom-scrollbar pr-2 pb-4"
+                                className="space-y-6 select-none flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2 pb-4"
                             >
                                 <SettingsHelpActions
                                     onOpenReleaseNotes={() => setShowReleaseNotes(true)}
