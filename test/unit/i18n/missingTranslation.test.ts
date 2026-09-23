@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveMissingTranslation } from '../../../src/i18n/missingTranslation';
+import { resolvePlayerControlSlot } from '../../../src/components/floating-player/playerControlSlotActions';
 import en from '../../../src/i18n/locales/en';
 import zhCN from '../../../src/i18n/locales/zh-CN';
 
@@ -73,3 +74,59 @@ describe('local library entity translations', () => {
         expect(zhCN.localMusic[key]).toContain('{{kind}}');
     });
 });
+
+describe('player and playlist controls translations', () => {
+    it('defines playlist.play in both locales', () => {
+        expect((en.playlist as Record<string, string>).play).toBe('Play');
+        expect((zhCN.playlist as Record<string, string>).play).toBe('播放');
+    });
+
+    const playerControlKeys = [
+        'play',
+        'pause',
+        'like',
+        'unlike',
+        'loopOff',
+        'loopAll',
+        'loopOne',
+    ] as const;
+
+    it.each(playerControlKeys)('defines player.%s in both locales', key => {
+        expect((en.player as Record<string, string>)[key]).toBeTruthy();
+        expect((zhCN.player as Record<string, string>)[key]).toBeTruthy();
+    });
+
+    it('defines ui.generateAITheme as 生成AI主题 / Generate AI Theme', () => {
+        expect(en.ui.generateAITheme).toBe('Generate AI Theme');
+        expect(zhCN.ui.generateAITheme).toBe('生成AI主题');
+    });
+});
+
+describe('player control slot loop action resolution', () => {
+    it.each([
+        ['off', 'player.loopOff'],
+        ['all', 'player.loopAll'],
+        ['one', 'player.loopOne'],
+    ] as const)('resolves loop slot labelKey for loopMode=%s', (loopMode, expectedKey) => {
+        const slot = resolvePlayerControlSlot('loop', {
+            loopMode,
+            onToggleLoop: () => {},
+            canPrev: true,
+            canNext: true,
+            onPrev: () => {},
+            onNext: () => {},
+            onShuffle: () => {},
+            canShuffle: true,
+            onLike: () => {},
+            isLiked: false,
+            likeDisabled: false,
+            onToggleTimeline: () => {},
+            hasLyrics: true,
+            invokeCommandById: () => {},
+            canInvokeCommandById: () => true,
+        });
+        expect(slot.labelKey).toBe(expectedKey);
+    });
+});
+
+

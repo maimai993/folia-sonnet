@@ -38,12 +38,16 @@ const SongActionRow: React.FC<SongActionRowProps> = ({
     const { t } = useTranslation();
     const loopButtonBg = isDaylight ? 'bg-black/5 hover:bg-zinc-300/85' : 'bg-white/5 hover:bg-white/10';
     const buttonBg = isDaylight ? 'bg-black/5 hover:bg-black/10' : 'bg-white/5 hover:bg-white/10';
+    const loopTitle = loopMode === 'off' ? t('player.loopOff') : loopMode === 'one' ? t('player.loopOne') : t('player.loopAll');
+    const generateThemeTitle = isGeneratingTheme ? t('ui.generatingTheme') : t('ui.generateAITheme');
 
     return (
         <div className="grid grid-cols-3 gap-3">
             <button
                 onClick={onToggleLoop}
                 disabled={loopToggleDisabled}
+                title={loopTitle}
+                aria-label={loopTitle}
                 className={`h-12 rounded-xl flex items-center justify-center transition-colors ${loopButtonBg} ${loopToggleDisabled ? 'opacity-35 cursor-not-allowed' : ''}`}
             >
                 {loopMode === 'off' ? <RepeatOff size={20} /> : loopMode === 'one' ? <Repeat1 size={20} /> : <Repeat size={20} />}
@@ -62,6 +66,8 @@ const SongActionRow: React.FC<SongActionRowProps> = ({
             <button
                 onClick={onGenerateAITheme}
                 disabled={isGeneratingTheme || !canGenerateAITheme}
+                title={generateThemeTitle}
+                aria-label={generateThemeTitle}
                 className={`h-12 rounded-xl flex items-center justify-center transition-colors ${
                     isGeneratingTheme
                         ? 'bg-blue-500/20 text-blue-300'

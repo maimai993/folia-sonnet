@@ -790,6 +790,7 @@ export default {
     "vipOnly": "VIP 专属"
   },
   "playlist": {
+    "play": "播放",
     "viewTracks": "查看曲目",
     "viewCollections": "查看合集",
     "tracks": "首歌曲",
@@ -2424,6 +2425,13 @@ export default {
     "recorderUnknownError": "录制器发生未知错误。",
   },
   "player": {
+    "play": "播放",
+    "pause": "暂停",
+    "like": "收藏",
+    "unlike": "取消收藏",
+    "loopOff": "关闭循环",
+    "loopAll": "列表循环",
+    "loopOne": "单曲循环",
     "unknownArtist": "未知歌手",
     "unknownAlbum": "未知专辑",
   },

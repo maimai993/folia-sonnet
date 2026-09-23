@@ -791,6 +791,7 @@ export default {
     "vipOnly": "VIP Only"
   },
   "playlist": {
+    "play": "Play",
     "viewTracks": "View tracks",
     "viewCollections": "View collections",
     "tracks": "Tracks",
@@ -2425,6 +2426,13 @@ export default {
     "recorderUnknownError": "Recorder encountered an unknown error.",
   },
   "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "like": "Like",
+    "unlike": "Unlike",
+    "loopOff": "Loop off",
+    "loopAll": "Loop all",
+    "loopOne": "Loop one",
     "unknownArtist": "Unknown Artist",
     "unknownAlbum": "Unknown Album",
   },

@@ -284,6 +284,12 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             localStorage.setItem('player_loop_mode', next);
         }
         set({ loopMode: next });
+        const loopModeKey = next === 'off' ? 'loopOff' : next === 'one' ? 'loopOne' : 'loopAll';
+        setStatusMessage({
+            type: 'success',
+            text: i18n.t(`player.${loopModeKey}`),
+            nonce: Date.now(),
+        });
     },
 }));
 
