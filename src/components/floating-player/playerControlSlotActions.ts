@@ -72,6 +72,13 @@ const resolveLoopIcon = (loopMode: PlayerControlSlotContext['loopMode']): Lucide
     return Repeat;
 };
 
+/** 循环按钮的提示文本反映当前模式。 */
+const resolveLoopLabelKey = (loopMode: PlayerControlSlotContext['loopMode']): string => {
+    if (loopMode === 'off') return 'player.loopOff';
+    if (loopMode === 'one') return 'player.loopOne';
+    return 'player.loopAll';
+};
+
 /**
  * 把一个槽位 id 和当前播放上下文解析成可直接渲染的按钮描述。
  * 打开界面的四个动作统一转成 openCommandById，复用命令面板已经做好的 surface。
@@ -88,7 +95,7 @@ export const resolvePlayerControlSlot = (
                 active: context.loopMode !== 'off',
                 disabled: false,
                 onActivate: context.onToggleLoop,
-                labelKey: 'options.playerControlSlotAction_loop',
+                labelKey: resolveLoopLabelKey(context.loopMode),
             };
         case 'prev':
             return {

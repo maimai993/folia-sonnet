@@ -788,6 +788,7 @@ export default {
     "vipOnly": "Hanya VIP"
   },
   "playlist": {
+    "play": "Putar",
     "viewTracks": "Lihat lagu",
     "viewCollections": "Lihat koleksi",
     "tracks": "Trek",
@@ -2359,6 +2360,13 @@ export default {
     "recorderUnknownError": "Perekam mengalami kesalahan tidak dikenal."
   },
   "player": {
+    "play": "Putar",
+    "pause": "Jeda",
+    "like": "Suka",
+    "unlike": "Batal Suka",
+    "loopOff": "Ulangi Mati",
+    "loopAll": "Ulangi Semua",
+    "loopOne": "Ulangi Satu",
     "unknownArtist": "Artis Tidak Dikenal",
     "unknownAlbum": "Album Tidak Dikenal"
   },
