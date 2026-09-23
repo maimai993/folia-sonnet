@@ -7,14 +7,13 @@ import type { LatticeTile } from '../latticeModel';
 import './LatticeLyrics.css';
 
 // src/components/app/lattice/lyrics/LatticeLyrics.tsx
-export default function LatticeLyrics({ tile, reducedMotion, pixelScale }:
-    { tile: LatticeTile; reducedMotion: boolean; pixelScale: number }) {
+export default function LatticeLyrics({ tile, reducedMotion }: { tile: LatticeTile; reducedMotion: boolean }) {
     const source = useLatticeLyrics();
     const fontsEpoch = useFontsEpoch();
     const host = useRef<HTMLDivElement>(null);
     const input = useMemo(() => source && source.songKey === tile.id
         ? { ...source, fontsEpoch, reducedMotion } : null, [source, tile.id, fontsEpoch, reducedMotion]);
-    const ready = useLatticeLyricCanvas(host, input, pixelScale);
+    const ready = useLatticeLyricCanvas(host, input);
     const line = input?.lines[input.currentLineIndex];
     return <>
         <AnimatePresence initial={false}>
