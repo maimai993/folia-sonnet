@@ -464,6 +464,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
             layerImageFrequency: patch.layerImageFrequency !== undefined ? clampUnit(patch.layerImageFrequency, prev.layerImageFrequency) : prev.layerImageFrequency,
             showBlocks: typeof patch.showBlocks === 'boolean' ? patch.showBlocks : prev.showBlocks,
             showDecor: typeof patch.showDecor === 'boolean' ? patch.showDecor : prev.showDecor,
+            showCornerMarks: typeof patch.showCornerMarks === 'boolean' ? patch.showCornerMarks : prev.showCornerMarks,
             enableTransitions: typeof patch.enableTransitions === 'boolean'
                 ? patch.enableTransitions
                 : prev.enableTransitions,

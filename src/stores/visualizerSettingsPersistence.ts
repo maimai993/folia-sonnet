@@ -424,6 +424,9 @@ export const resolveStoredTemperaTuning = (parsed: Partial<TemperaTuning>): Temp
     showDecor: typeof parsed.showDecor === 'boolean'
         ? parsed.showDecor
         : DEFAULT_TEMPERA_TUNING.showDecor,
+    showCornerMarks: typeof parsed.showCornerMarks === 'boolean'
+        ? parsed.showCornerMarks
+        : DEFAULT_TEMPERA_TUNING.showCornerMarks,
     enableTransitions: typeof parsed.enableTransitions === 'boolean'
         ? parsed.enableTransitions
         : DEFAULT_TEMPERA_TUNING.enableTransitions,

@@ -376,6 +376,7 @@ describe('Visual Settings Import and Export', () => {
             colorMode: 'gradient' as const,
             showBlocks: false,
             showDecor: false,
+            showCornerMarks: false,
             textInversion: false,
             layerImages: [{
                 id: 'img-1',

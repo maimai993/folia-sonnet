@@ -1834,6 +1834,7 @@ export default {
     "temperaWholeLineLyricsHint": "关闭时一句歌词按 2~4 词切成多个分镜，字号可以放得很大；开启后整句留在同一个分镜里，长句会自动缩小字号。",
     "temperaShowBlocks": "色块场景",
     "temperaShowDecor": "装饰元素",
+    "temperaShowCornerMarks": "边角线框",
     "temperaTextInversion": "文字动态反色",
     "temperaImageSection": "画布图片",
     "temperaAddLayerImage": "添加图片",

@@ -632,6 +632,8 @@ export interface TemperaTuning {
   colorMode: TemperaColorMode;
   showBlocks: boolean;
   showDecor: boolean;
+  /** 边角线框: the two registration marks in the top-left and bottom-right corners. */
+  showCornerMarks: boolean;
   /**
    * 文字动态反色: the lyric samples the artwork under it and picks whichever of ink/paper
    * contrasts more, per pixel. This is how the mode colours type, not a post-process, so it
@@ -674,6 +676,7 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   colorMode: 'duo',
   showBlocks: true,
   showDecor: true,
+  showCornerMarks: true,
   textInversion: true,
   layerImages: [],
   layerImageDepth: 'back',

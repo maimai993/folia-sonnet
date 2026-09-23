@@ -1833,6 +1833,7 @@ export default {
     "temperaWholeLineLyricsHint": "Off: a line is cut into 2-4 word phrases, each getting its own shot with much larger type. On: the whole line stays in one shot, so a long line is set smaller.",
     "temperaShowBlocks": "Color Blocks",
     "temperaShowDecor": "Decorations",
+    "temperaShowCornerMarks": "Corner marks",
     "temperaTextInversion": "Dynamic text inversion",
     "temperaImageSection": "Canvas images",
     "temperaAddLayerImage": "Add image",
