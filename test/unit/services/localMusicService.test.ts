@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     deleteFolderSongs,
     clearFolderIgnore,
+    EMBEDDED_METADATA_VERSION,
     deleteSongsByIds,
     deleteLocalSong as deleteLocalMusicSong,
     extractMetadataFromFilename,
@@ -26,6 +27,10 @@ import {
     saveToCache,
 } from '@/services/db';
 import { removeCachedCover } from '@/services/coverCache';
+import { useLyricSettingsStore } from '@/stores/useLyricSettingsStore';
+import { DEFAULT_LOCAL_LYRIC_FORMAT_ORDER } from '@/utils/lyrics/localLyricFormatOrder';
+import { applyUploadedLocalLyrics } from '@/utils/lyrics/localLyricsUpload';
+import { setLocalFolderIgnored } from '@/services/localLibraryFolderIgnore';
 import type { LocalLibrarySnapshot, LocalSong } from '@/types';
 
 // test/unit/services/localMusicService.test.ts
@@ -229,6 +234,7 @@ describe('localMusicService', () => {
         vi.mocked(saveLocalSongs).mockResolvedValue(undefined);
         vi.mocked(saveLocalLibrarySnapshot).mockResolvedValue(undefined);
         vi.mocked(getFromCache).mockResolvedValue([]);
+        useLyricSettingsStore.setState({ localLyricFormatOrder: [...DEFAULT_LOCAL_LYRIC_FORMAT_ORDER] });
 
         vi.stubGlobal('window', {
             electron: {},
@@ -461,6 +467,164 @@ describe('localMusicService', () => {
                 localLyricsContent: fiaContent,
             }),
         ]);
+    });
+
+    describe('lyric format order', () => {
+        const lrcContent = '[00:00.00]plain';
+        const ttmlContent = '<tt xmlns="http://www.w3.org/ns/ttml"></tt>';
+        const TTML_FIRST = ['ttml', 'lrc', 'vtt', 'qrc', 'yrc', 'krc'] as const;
+        type FileSpec = { name: string; content?: string; lastModified?: number; };
+        const DEFAULT_FILES: FileSpec[] = [
+            { name: 'Track 01.mp3' },
+            { name: 'Track 01.lrc', content: lrcContent },
+            { name: 'Track 01.ttml', content: ttmlContent },
+            { name: 'Track 02.mp3' },
+            { name: 'Track 02.lrc', content: lrcContent },
+        ];
+        const createHandle = (files: FileSpec[]) => new FakeDirectoryHandle('Music', [
+            new FakeDirectoryHandle('Disc 1', files.map(file => new FakeFileHandle(file.name, {
+                content: file.content,
+                lastModified: file.lastModified,
+                type: file.content === undefined ? undefined : 'text/plain',
+            })), 'library-root:disc-1'),
+        ], 'library-root');
+        const byName = (songs: LocalSong[], fileName: string) => songs.find(song => song.fileName === fileName)!;
+
+        // Imports once with the current order and returns the persisted songs and snapshot.
+        const importOnce = async (files = DEFAULT_FILES) => {
+            vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(createHandle(files) as unknown as FileSystemDirectoryHandle);
+            const songs = await importFolder();
+            const snapshot = vi.mocked(saveLocalLibrarySnapshot).mock.calls.at(-1)![0] as LocalLibrarySnapshot;
+            return { songs, snapshot };
+        };
+
+        // Resyncs against the given records. Unchanged tracks come back as these same objects, so a
+        // reference check tells re-read tracks from reused ones without racing background hydration.
+        const resyncWith = async (songs: LocalSong[], snapshot: LocalLibrarySnapshot, files = DEFAULT_FILES) => {
+            // Background hydration needs a Worker, so mark the songs as hydrated to keep the
+            // metadata-version rescan out of the diff under test.
+            const previous = songs.map(song => ({ ...song, embeddedMetadataVersion: EMBEDDED_METADATA_VERSION }));
+            vi.mocked(getDirHandles).mockResolvedValue({ Music: createHandle(files) as unknown as FileSystemDirectoryHandle });
+            vi.mocked(getLocalSongs).mockResolvedValue(previous);
+            vi.mocked(getLocalLibrarySnapshot).mockResolvedValue(snapshot);
+            const resynced = (await resyncFolder('Music'))!;
+            return { resynced, previous };
+        };
+
+        it('picks the sidecar format ranked first by the configured order', async () => {
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+
+            const { songs, snapshot } = await importOnce();
+
+            expect(byName(songs, 'Track 01.mp3')).toMatchObject({
+                localLyricsContent: ttmlContent,
+                localLyricsFormat: 'ttml',
+                localLyricsOrigin: 'sidecar',
+            });
+            expect(snapshot.lyricFormatOrder).toEqual([...TTML_FIRST]);
+        });
+
+        it('ranks translation sidecars by the same order', async () => {
+            useLyricSettingsStore.setState({ localLyricFormatOrder: ['vtt', 'lrc', 'ttml', 'qrc', 'yrc', 'krc'] });
+
+            const { songs } = await importOnce([
+                { name: 'Track 01.mp3' },
+                { name: 'Track 01.t.lrc', content: '[00:00.00]lrc translation' },
+                { name: 'Track 01.t.vtt', content: 'WEBVTT\n\n00:00.000 --> 00:01.000\nvtt translation' },
+            ]);
+
+            expect(byName(songs, 'Track 01.mp3').localTranslationLyricsContent).toContain('vtt translation');
+        });
+
+        it('re-reads only tracks whose winning sidecar changes after the order changes', async () => {
+            const { songs, snapshot } = await importOnce();
+            expect(byName(songs, 'Track 01.mp3').localLyricsContent).toBe(lrcContent);
+
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+            const { resynced, previous } = await resyncWith(songs, snapshot);
+
+            const track1 = byName(resynced, 'Track 01.mp3');
+            expect(track1).not.toBe(byName(previous, 'Track 01.mp3'));
+            expect(track1).toMatchObject({ id: byName(previous, 'Track 01.mp3').id, localLyricsContent: ttmlContent, localLyricsFormat: 'ttml' });
+            expect(byName(resynced, 'Track 02.mp3')).toBe(byName(previous, 'Track 02.mp3'));
+        });
+
+        it('re-reads every audio file that shares the affected sidecar', async () => {
+            const files: FileSpec[] = [
+                { name: 'Track 01.mp3' },
+                { name: 'Track 01.flac' },
+                { name: 'Track 01.lrc', content: lrcContent },
+                { name: 'Track 01.ttml', content: ttmlContent },
+            ];
+            const { songs, snapshot } = await importOnce(files);
+
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+            const { resynced } = await resyncWith(songs, snapshot, files);
+
+            expect(byName(resynced, 'Track 01.mp3').localLyricsContent).toBe(ttmlContent);
+            expect(byName(resynced, 'Track 01.flac').localLyricsContent).toBe(ttmlContent);
+        });
+
+        it('treats a snapshot without a stored order as scanned with the default order', async () => {
+            const { songs, snapshot } = await importOnce();
+            const { lyricFormatOrder: _omitted, ...legacySnapshot } = snapshot;
+
+            const unchanged = await resyncWith(songs, legacySnapshot);
+            expect(byName(unchanged.resynced, 'Track 01.mp3')).toBe(byName(unchanged.previous, 'Track 01.mp3'));
+            expect(byName(unchanged.resynced, 'Track 02.mp3')).toBe(byName(unchanged.previous, 'Track 02.mp3'));
+
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+            const reordered = await resyncWith(songs, legacySnapshot);
+            expect(byName(reordered.resynced, 'Track 01.mp3').localLyricsContent).toBe(ttmlContent);
+        });
+
+        it('keeps the stored order when a folder ignore rewrites the snapshot', async () => {
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+            const { songs, snapshot } = await importOnce();
+            let storedSnapshot = snapshot;
+            vi.mocked(getLocalLibrarySnapshot).mockImplementation(async () => storedSnapshot);
+            vi.mocked(saveLocalLibrarySnapshot).mockImplementation(async value => { storedSnapshot = value; });
+
+            await setLocalFolderIgnored('Music/Elsewhere', true);
+            expect(storedSnapshot.lyricFormatOrder).toEqual([...TTML_FIRST]);
+
+            // Back to the default: the track scanned under ttml-first has to switch back to its .lrc.
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...DEFAULT_LOCAL_LYRIC_FORMAT_ORDER] });
+            const { resynced } = await resyncWith(songs, storedSnapshot);
+            expect(byName(resynced, 'Track 01.mp3').localLyricsContent).toBe(lrcContent);
+        });
+
+        it('keeps uploaded lyrics when only the format order changes', async () => {
+            const { songs, snapshot } = await importOnce();
+            const uploaded = songs.map(song => song.fileName === 'Track 01.mp3'
+                ? applyUploadedLocalLyrics(song, { content: '[00:00.00]uploaded', isTranslation: false, fileName: 'mine.lrc' })
+                : song);
+
+            useLyricSettingsStore.setState({ localLyricFormatOrder: [...TTML_FIRST] });
+            const { resynced } = await resyncWith(uploaded, snapshot);
+
+            expect(byName(resynced, 'Track 01.mp3')).toMatchObject({
+                localLyricsContent: '[00:00.00]uploaded',
+                localLyricsOrigin: 'upload',
+            });
+        });
+
+        it('replaces uploaded lyrics once a sidecar of the track changes on disk', async () => {
+            const { songs, snapshot } = await importOnce();
+            const uploaded = songs.map(song => song.fileName === 'Track 01.mp3'
+                ? applyUploadedLocalLyrics(song, { content: '[00:00.00]uploaded', isTranslation: false, fileName: 'mine.lrc' })
+                : song);
+            const editedFiles = DEFAULT_FILES.map(file => file.name === 'Track 01.lrc'
+                ? { ...file, content: '[00:00.00]edited', lastModified: 2000 }
+                : file);
+
+            const { resynced } = await resyncWith(uploaded, snapshot, editedFiles);
+
+            expect(byName(resynced, 'Track 01.mp3')).toMatchObject({
+                localLyricsContent: '[00:00.00]edited',
+                localLyricsOrigin: 'sidecar',
+            });
+        });
     });
 
     it('rescans audio when a sidecar file kind changes from legacy other to lyric', async () => {

@@ -11,6 +11,7 @@ import { getLyricStaffPatternError } from '../utils/lyrics/staffCredits';
 import i18n from '../i18n/config';
 import { type LocalLyricsPriority, type LyricProviderSource } from '../types';
 import { getLyricProviderPreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
+import { normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../utils/lyrics/localLyricFormatOrder';
 import { migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
 import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffAbsorbMode, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
 import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePrimitives';
@@ -45,6 +46,19 @@ export const LOCAL_LYRICS_PRIORITY_STORAGE_KEY = 'local_lyrics_priority';
 export const readStoredLocalLyricsPriority = (): LocalLyricsPriority => {
     if (typeof window === 'undefined') return 'local';
     return localStorage.getItem(LOCAL_LYRICS_PRIORITY_STORAGE_KEY) === 'online' ? 'online' : 'local';
+};
+
+export const LOCAL_LYRIC_FORMAT_ORDER_STORAGE_KEY = 'local_lyric_format_order';
+
+// Only read at import time: the winning sidecar file is chosen during a scan, so a change applies
+// on the next resync of the local folders.
+const readStoredLocalLyricFormatOrder = (): LocalLyricFileFormat[] => {
+    if (typeof window === 'undefined') return normalizeLocalLyricFormatOrder(null);
+    try {
+        return normalizeLocalLyricFormatOrder(JSON.parse(localStorage.getItem(LOCAL_LYRIC_FORMAT_ORDER_STORAGE_KEY) || 'null'));
+    } catch {
+        return normalizeLocalLyricFormatOrder(null);
+    }
 };
 
 const readStoredPreferredAlternativeLyricSource = (): LyricProviderSource => {
@@ -110,6 +124,7 @@ export type LyricSettingsState = {
     autoUseBestLyric: boolean;
     preferredAlternativeLyricSource: LyricProviderSource;
     localLyricsPriority: LocalLyricsPriority;
+    localLyricFormatOrder: LocalLyricFileFormat[];
     globalLyricTimelineOffsetMs: number;
     lyricFilterPattern: string;
     lyricFilterEnabled: boolean;
@@ -121,6 +136,7 @@ export type LyricSettingsState = {
     handleToggleAutoUseBestLyric: (enable: boolean) => void;
     handleSetPreferredAlternativeLyricSource: (source: LyricProviderSource) => void;
     handleSetLocalLyricsPriority: (priority: LocalLyricsPriority) => void;
+    handleSetLocalLyricFormatOrder: (order: LocalLyricFileFormat[]) => void;
     handleSetGlobalLyricTimelineOffsetMs: (offsetMs: number) => void;
     handleSetLyricFilterPattern: (pattern: string) => void;
     handleSetLyricFilterEnabled: (enabled: boolean) => void;
@@ -136,6 +152,7 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
     autoUseBestLyric: getStoredBoolean('auto_use_best_lyric', true),
     preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
     localLyricsPriority: readStoredLocalLyricsPriority(),
+    localLyricFormatOrder: readStoredLocalLyricFormatOrder(),
     globalLyricTimelineOffsetMs: readStoredGlobalLyricTimelineOffsetMs(),
     lyricFilterPattern: initialLyricFilterPattern,
     lyricFilterEnabled: readStoredLyricFilterEnabled(initialLyricFilterPattern),
@@ -166,6 +183,13 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
             localStorage.setItem(LOCAL_LYRICS_PRIORITY_STORAGE_KEY, priority);
         }
         set({ localLyricsPriority: priority });
+    },
+    handleSetLocalLyricFormatOrder: (order) => {
+        const next = normalizeLocalLyricFormatOrder(order);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_LYRIC_FORMAT_ORDER_STORAGE_KEY, JSON.stringify(next));
+        }
+        set({ localLyricFormatOrder: next });
     },
     handleSetGlobalLyricTimelineOffsetMs: (offsetMs) => {
         const nextOffsetMs = clampGlobalLyricTimelineOffsetMs(offsetMs);
@@ -244,6 +268,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     autoUseBestLyric: state.autoUseBestLyric,
     preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
     localLyricsPriority: state.localLyricsPriority,
+    localLyricFormatOrder: state.localLyricFormatOrder,
     globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
     lyricFilterPattern: state.lyricFilterPattern,
     lyricFilterEnabled: state.lyricFilterEnabled,
@@ -254,6 +279,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     handleToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
     handleSetPreferredAlternativeLyricSource: state.handleSetPreferredAlternativeLyricSource,
     handleSetLocalLyricsPriority: state.handleSetLocalLyricsPriority,
+    handleSetLocalLyricFormatOrder: state.handleSetLocalLyricFormatOrder,
     handleSetGlobalLyricTimelineOffsetMs: state.handleSetGlobalLyricTimelineOffsetMs,
     handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
     handleSetLyricFilterEnabled: state.handleSetLyricFilterEnabled,

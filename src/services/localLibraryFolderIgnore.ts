@@ -53,6 +53,7 @@ export async function setLocalFolderIgnored(folderPath: string, ignored: boolean
         rootFolderName,
         scannedAt: snapshot?.scannedAt || 0,
         ignoredFolderPaths: [...ignoredPaths],
+        lyricFormatOrder: snapshot?.lyricFormatOrder,
         tree,
     });
 }

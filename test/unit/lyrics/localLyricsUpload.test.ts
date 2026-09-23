@@ -20,6 +20,7 @@ describe('applyUploadedLocalLyrics', () => {
         expect(updated.hasLocalLyrics).toBe(true);
         expect(updated.localLyricsContent).toBe('[00:01.00]line');
         expect(updated.lyricsSource).toBe('local');
+        expect(updated.localLyricsOrigin).toBe('upload');
     });
 
     it('keeps the explicit timed format of the uploaded file', () => {
@@ -51,7 +52,9 @@ describe('applyUploadedLocalLyrics', () => {
 
         expect(updated.hasLocalTranslationLyrics).toBe(true);
         expect(updated.localTranslationLyricsContent).toBe('translation');
+        expect(updated.localTranslationLyricsOrigin).toBe('upload');
         expect(updated.hasLocalLyrics).toBeUndefined();
+        expect(updated.localLyricsOrigin).toBeUndefined();
         expect(updated.lyricsSource).toBe('online');
     });
 

@@ -15,10 +15,12 @@ export const applyUploadedLocalLyrics = (localSong: LocalSong, upload: LocalLyri
     if (upload.isTranslation) {
         updatedLocalSong.hasLocalTranslationLyrics = true;
         updatedLocalSong.localTranslationLyricsContent = upload.content;
+        updatedLocalSong.localTranslationLyricsOrigin = 'upload';
     } else {
         updatedLocalSong.hasLocalLyrics = true;
         updatedLocalSong.localLyricsContent = upload.content;
         updatedLocalSong.localLyricsFormat = resolveExplicitFileTimedLyricFormat(upload.fileName);
+        updatedLocalSong.localLyricsOrigin = 'upload';
     }
 
     // Uploading a file is an explicit request to play that file. A record still pinned to 'online'
