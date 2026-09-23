@@ -46,6 +46,7 @@
 | 32+ | `src/stores/useAppViewStore.ts` |
 | 32+ | `src/stores/usePlaybackStore.ts` |
 | 32+ | `src/stores/useStatusMessageStore.ts` |
+| 32+ | `src/utils/lyrics/parserCore.ts` |
 | 32+ | `src/utils/lyrics/renderHints.ts` |
 
 ## 动态注册点
@@ -114,6 +115,7 @@
 - `src/components/ponder/targets/localLibraryWatch.target.ts`
 - `src/components/ponder/targets/localMetadataMatch.target.ts`
 - `src/components/ponder/targets/localTrackSorting.target.ts`
+- `src/components/ponder/targets/lyricExport.target.ts`
 - `src/components/ponder/targets/lyricStyle.target.ts`
 - `src/components/ponder/targets/lyricsAnimationSettings.target.ts`
 - `src/components/ponder/targets/lyricsSettings.target.ts`
