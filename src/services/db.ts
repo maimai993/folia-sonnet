@@ -15,12 +15,14 @@ import {
   getBrowserCacheUsageByCategory,
   getCacheKeysByPrefix,
   putCacheEntry,
+  readCacheEntriesByKey,
   readCacheEntriesByPrefix,
   readCacheEntry,
   removeCacheEntries,
   removeCacheEntriesByPrefix,
   removeCacheEntry,
   type CacheCategory,
+  type CacheTableName,
 } from './repositories/cacheRepository';
 import {
   readLocalSongs,
@@ -95,6 +97,18 @@ export const getCacheEntriesByPrefix = async <T>(prefix: string): Promise<Array<
     return await readCacheEntriesByPrefix<T>(prefix);
   } catch (error) {
     console.error('Cache prefix scan failed', error);
+    return [];
+  }
+};
+
+export const getCacheEntriesByKey = async <T>(
+  predicate: (key: string) => boolean,
+  tableNames?: CacheTableName[],
+): Promise<Array<{ key: string; data: T; timestamp: number }>> => {
+  try {
+    return await readCacheEntriesByKey<T>(predicate, tableNames);
+  } catch (error) {
+    console.error('Cache key scan failed', error);
     return [];
   }
 };

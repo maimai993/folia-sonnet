@@ -93,6 +93,33 @@ export const readCacheEntriesByPrefix = async <T>(prefix: string) => {
   return Array.from(byKey.values());
 };
 
+/**
+ * Reads only the entries whose key passes `predicate`, listing primary keys first so rows that
+ * do not match are never deserialized. `readCacheEntriesByPrefix` loads every row of every table,
+ * media blobs included, which is too heavy for a scan that runs over a whole library.
+ */
+export const readCacheEntriesByKey = async <T>(
+  predicate: (key: string) => boolean,
+  tableNames: CacheTableName[] = CACHE_TABLE_NAMES,
+): Promise<Array<{ key: string; data: T; timestamp: number }>> => {
+  const perTable = await Promise.all(tableNames.map(async name => {
+    const table = getTable(name);
+    const keys = (await table.toCollection().primaryKeys()).map(String).filter(predicate);
+    if (keys.length === 0) return [];
+    const rows = await table.bulkGet(keys);
+    return rows.filter((row): row is StoredCacheEntry => Boolean(row));
+  }));
+  const byKey = new Map<string, { key: string; data: T; timestamp: number }>();
+  perTable.flat().forEach(entry => {
+    byKey.set(entry.key, {
+      key: entry.key,
+      data: entry.data as T,
+      timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : 0,
+    });
+  });
+  return Array.from(byKey.values());
+};
+
 export const getCacheKeysByPrefix = async (prefixes: string[]): Promise<string[]> => {
   if (prefixes.length === 0) return [];
   const entries = await Promise.all(CACHE_TABLE_NAMES.map(name => getTable(name).toCollection().primaryKeys()));

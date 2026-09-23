@@ -256,6 +256,19 @@ export const SIDE_PANEL_SOURCE_PAGE = {
     gain: { left: 0, right: 0, top: 0.28, height: 0.22 },
     lyrics: { left: 0, right: 0, top: 0.56, height: 0.28 },
     offset: { left: 0, right: 0, top: 0.89, height: 0.11 },
+    /** 按下歌词行那颗导入 / 导出之后弹出的歌词文件窗口：导入、导出这一首、批量导出三段。 */
+    fileDialog: { left: 0.04, right: 0.04, top: 0.14, height: 0.8 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 歌词那一块标题行右端的两颗图标，坐标系是歌词块（SIDE_PANEL_SOURCE_PAGE.lyrics）。
+ *
+ * 左边那颗是导入 / 导出（两件事合在一颗按钮、一个窗口里），右边是在线匹配。单独量出来
+ * 而不是交给 flex 排，是因为锚点要指的就是左边那颗：骨架和锚点读同一条记录，高亮才罩得准。
+ */
+export const SIDE_PANEL_SOURCE_LYRICS = {
+    fileIcon: { right: 0.1, top: 0, width: 0.1, height: 0.3 },
+    matchIcon: { right: 0, top: 0, width: 0.1, height: 0.3 },
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
@@ -406,6 +419,25 @@ export const QUEUE_COMMAND_GEOMETRY = {
     /** 收窄之后行变少，底下腾出来给批量预览。 */
     narrowedRows: { left: 0.04, right: 0.04, top: 0.34, bottom: 0.24 },
     preview: { left: 0.04, right: 0.04, bottom: 0.05, height: 0.16 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
+ * 命令面板里「导出歌词缓存」那一页，坐标系是命令窗口。
+ *
+ * 顶上是输入行，下面一段说明，然后按「导哪些 → 导成什么 → 文件怎么命名」排成三节，
+ * 每节一个小标题；前两节是并排两张可多选的卡，LRC 的附带项缩在格式那一节右下。
+ * 开始按钮不在滚动区里，钉在窗口底边那条操作栏上。
+ */
+export const LYRIC_EXPORT_GEOMETRY = {
+    input: { left: 0.04, right: 0.04, top: 0.03, height: 0.10 },
+    /** 滚动区：三节内容所在的那一整块。 */
+    card: { left: 0.10, right: 0.10, top: 0.16, bottom: 0.13 },
+    copy: { left: 0.12, right: 0.12, top: 0.17, height: 0.05 },
+    scope: { left: 0.12, right: 0.12, top: 0.25, height: 0.18 },
+    formats: { left: 0.12, right: 0.12, top: 0.46, height: 0.25 },
+    names: { left: 0.12, right: 0.12, top: 0.74, height: 0.11 },
+    /** 底边操作栏：左边进度文字，右边开始 / 取消。 */
+    run: { left: 0, right: 0, bottom: 0, height: 0.10 },
 } satisfies Record<string, PonderRelativeRect>;
 
 /**

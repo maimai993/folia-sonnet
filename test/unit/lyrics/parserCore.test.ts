@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectTimedLyricFormat, resolveExplicitFileTimedLyricFormat } from '@/utils/lyrics/formatDetection';
 import {
+    findTranslationsForSortedStartTimes,
     parseEnhancedLRC,
     parseLRC,
     parseLyricsByFormat,
@@ -391,5 +392,36 @@ describe('parserCore', () => {
         expect(lyrics.lines[1].endTime).toBe(4.0);
         expect(lyrics.lines[1].fullText).toBe('World');
         expect(lyrics.lines[1].translation).toBe('World');
+    });
+});
+
+describe('findTranslationsForSortedStartTimes', () => {
+    const entries = (...pairs: Array<[number, string]>) => pairs.map(([startTime, text]) => ({ startTime, text }));
+
+    it('does not lend a translation to a nearby line that has none', () => {
+        expect(findTranslationsForSortedStartTimes([20, 20.6], entries([20, '戊']))).toEqual(['戊', undefined]);
+    });
+
+    it('gives each of two lines starting together its own translation', () => {
+        expect(findTranslationsForSortedStartTimes([10, 10], entries([10, '甲乙'], [10.01, '丙丁']))).toEqual(['甲乙', '丙丁']);
+        expect(findTranslationsForSortedStartTimes([10, 10], entries([10, '甲乙'], [10, '丙丁']))).toEqual(['甲乙', '丙丁']);
+    });
+
+    it('lets the closest line claim an offset translation first', () => {
+        // The entry is 0.1s off its own line but only 0.4s off the line before; the old lookup
+        // handed it to both.
+        expect(findTranslationsForSortedStartTimes([10, 10.5], entries([10.4, 'late']))).toEqual([undefined, 'late']);
+    });
+
+    it('still pairs a consistently offset translation track within one second', () => {
+        expect(findTranslationsForSortedStartTimes([1, 5, 9], entries([1.3, 'a'], [5.3, 'b'], [9.3, 'c']))).toEqual(['a', 'b', 'c']);
+        expect(findTranslationsForSortedStartTimes([1], entries([2, 'too far']))).toEqual([undefined]);
+    });
+
+    it('keeps a plain LRC with a line after a translated one clean on import', () => {
+        const { main, trans } = splitCombinedTimeline('[00:20.00]Hello\n[00:20.00]戊\n[00:20.60]Yeah');
+        const lyrics = parseLRC(main, trans);
+        expect(lyrics.lines.filter(line => line.fullText !== '......').map(line => [line.fullText, line.translation]))
+            .toEqual([['Hello', '戊'], ['Yeah', undefined]]);
     });
 });

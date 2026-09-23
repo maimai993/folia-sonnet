@@ -3,6 +3,7 @@ import {
     SIDE_PANEL_COVER_ACTIONS as A,
     SIDE_PANEL_FM_PAGE as F,
     SIDE_PANEL_GEOMETRY as G,
+    SIDE_PANEL_SOURCE_LYRICS as L,
     SIDE_PANEL_SOURCE_PAGE as S,
 } from '../surfaces/ponderSurfaceGeometry';
 import type { PonderAnchorSource, PonderRelativeRect, PonderSceneScript, PonderTargetId } from '../../../types/ponder';
@@ -62,6 +63,8 @@ export const SIDE_PANEL_SOURCE_ANCHORS = {
     sourceGain: region('body', S.gain, 'ponder.anchors.sidePanel.sourceGain'),
     sourceLyrics: region('body', S.lyrics, 'ponder.anchors.sidePanel.sourceLyrics'),
     sourceOffset: region('body', S.offset, 'ponder.anchors.sidePanel.sourceOffset'),
+    sourceLyricsFile: region('sourceLyrics', L.fileIcon, 'ponder.anchors.sidePanel.sourceLyricsFile'),
+    sourceFileDialog: region('body', S.fileDialog, 'ponder.anchors.sidePanel.sourceFileDialog'),
 } satisfies Record<string, PonderAnchorSource>;
 
 /** 控制页里那两行取景器，以及点开之后压下来的完整列表。 */

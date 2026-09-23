@@ -160,7 +160,7 @@ describe('ponder registry', () => {
             'lattice-page': new Set(['wall-panned', 'poster-focused', 'poster-expanded', 'tools-open', 'lights-off', 'command-open']),
             'player-bar': new Set(['title-hovered', 'slots-shuffle', 'slots-volume', 'collapsed']),
             'player-page': new Set(['palette-open', 'palette-closed', 'execute-mode', 'panel-open']),
-            'side-panel': new Set(['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab', 'controls-mode-list', 'fm-tab']),
+            'side-panel': new Set(['cover-actions', 'cover-tab', 'source-tab', 'controls-tab', 'queue-tab', 'account-tab', 'controls-mode-list', 'fm-tab', 'source-tab-file-dialog']),
             'lattice-chrome': new Set(['slots-swapped', 'bottom-bar-shown']),
             'lyrics-animation-settings': new Set(['playground-open']),
             'theme-settings': new Set(['theme-park-open']),
@@ -183,6 +183,7 @@ describe('ponder registry', () => {
             'audio-equalizer': new Set(['custom-written']),
             'vis-playground': new Set(['hotspots-visible', 'section-background', 'section-visualizer', 'section-subtitle']),
             'theme-park': new Set(['save-blocked']),
+            'lyric-export': new Set(['running']),
             'lyric-style': new Set([
                 'preview-style-b', 'preview-monet', 'preview-monet-bare', 'preview-background-b', 'preview-background-b-style-b', 'preview-romanization',
                 'panel-style-b', 'panel-monet', 'panel-monet-off', 'panel-background', 'panel-subtitle',

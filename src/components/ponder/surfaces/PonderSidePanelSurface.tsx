@@ -2,7 +2,10 @@ import React from 'react';
 import {
     ChevronLeft,
     ChevronRight,
+    ArrowDownUp,
     Disc,
+    FileJson,
+    PackageOpen,
     Play,
     Radio,
     SkipBack,
@@ -36,6 +39,7 @@ import {
     SIDE_PANEL_COVER_ACTIONS as A,
     SIDE_PANEL_FM_PAGE as F,
     SIDE_PANEL_GEOMETRY as G,
+    SIDE_PANEL_SOURCE_LYRICS as L,
     SIDE_PANEL_SOURCE_PAGE as S,
     relativeRectStyle,
 } from './ponderSurfaceGeometry';
@@ -408,7 +412,7 @@ const AccountPage: React.FC<PageProps> = ({ accent, line, outline }) => (
  * 本地 / Navidrome / 在线歌词三页画同一个形状 —— 它们本来就是同一块地方，
  * 后三段完全一样，只有最上面那块写的东西不同。
  */
-const SourcePage: React.FC<PageProps> = ({ accent, line, outline }) => (
+const SourcePage: React.FC<PageProps & { fileDialogOpen?: boolean }> = ({ accent, line, outline, fileDialogOpen }) => (
     <div data-ponder-panel-source className="relative" style={relativeRectStyle(G.body)}>
         {/* 来源信息：几行「字段 → 值」。在线来源没有这一块。 */}
         <div
@@ -449,12 +453,20 @@ const SourcePage: React.FC<PageProps> = ({ accent, line, outline }) => (
             </span>
         </div>
 
-        {/* 歌词：标题行右端两颗图标（导入文件、在线匹配），下面一条写着当前用的是哪一份。 */}
+        {/* 歌词：标题行右端两颗图标（导入 / 导出、在线匹配），下面一条写着当前用的是哪一份。
+            两颗都按 SIDE_PANEL_SOURCE_LYRICS 单独定位，标题行给它们让出右端那一截。 */}
         <div data-ponder-panel-source-lyrics className="flex flex-col justify-between" style={relativeRectStyle(S.lyrics)}>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2" style={{ paddingRight: `${(L.fileIcon.width + L.matchIcon.width) * 100}%` }}>
                 <span className="h-1.5 w-[22%] rounded-full opacity-55" style={{ backgroundColor: line }} />
-                <span className="flex-1" />
-                <Upload className="h-3 w-3 opacity-50" />
+            </span>
+            <span
+                data-ponder-panel-source-lyrics-file-icon
+                className="flex items-start justify-end"
+                style={relativeRectStyle(L.fileIcon)}
+            >
+                <ArrowDownUp className="h-3 w-3" style={fileDialogOpen ? { color: accent } : { opacity: 0.5 }} />
+            </span>
+            <span className="flex items-start justify-end" style={relativeRectStyle(L.matchIcon)}>
                 <Search className="h-3 w-3 opacity-50" />
             </span>
             <span
@@ -476,6 +488,34 @@ const SourcePage: React.FC<PageProps> = ({ accent, line, outline }) => (
             <span className="h-1.5 w-[16%] rounded-full" style={{ backgroundColor: line }} />
             <ChevronRight className="h-3 w-3 opacity-55" />
         </div>
+
+        {/* 歌词文件窗口：上面是导入，中间两块是把这一首导成 .fia / .lrc，最底下一行去批量导出。
+            真实窗口居中在整个屏幕上，这里压在面板上画，只为了和按下它的那颗按钮放在一张图里。 */}
+        {fileDialogOpen && (
+            <div
+                data-ponder-panel-source-file-dialog
+                className="flex flex-col gap-[5%] rounded-2xl border p-[5%] backdrop-blur-md"
+                style={{ ...relativeRectStyle(S.fileDialog), borderColor: outline, backgroundColor: 'rgba(24,24,27,0.86)' }}
+            >
+                <span className="h-1.5 w-[34%] shrink-0 rounded-full" style={{ backgroundColor: line }} />
+                <span className="flex min-h-0 flex-1 items-center gap-[4%] rounded-lg border px-[4%]" style={{ borderColor: outline }}>
+                    <Upload className="h-2.5 w-2.5 shrink-0 opacity-65" />
+                    <span className="h-1 w-[46%] rounded-full" style={{ backgroundColor: line }} />
+                </span>
+                <span className="flex min-h-0 flex-[1.4] gap-[4%]">
+                    {[FileJson, FileText].map((Icon, index) => (
+                        <span key={index} className="flex flex-1 flex-col justify-center gap-1.5 rounded-lg border px-[5%]" style={{ borderColor: outline }}>
+                            <Icon className="h-2.5 w-2.5 opacity-65" />
+                            <span className="h-1 w-[70%] rounded-full opacity-45" style={{ backgroundColor: line }} />
+                        </span>
+                    ))}
+                </span>
+                <span className="flex min-h-0 flex-1 items-center gap-[4%] rounded-lg border px-[4%]" style={{ borderColor: outline }}>
+                    <PackageOpen className="h-2.5 w-2.5 shrink-0" style={{ color: accent }} />
+                    <span className="h-1 w-[52%] rounded-full" style={{ backgroundColor: accent }} />
+                </span>
+            </div>
+        )}
     </div>
 );
 
@@ -540,6 +580,13 @@ const PonderSidePanelSurface: React.FC<PonderSidePanelSurfaceProps> = ({
         <PonderSurfaceStateLayer state="source-tab" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
             <TabPage active={1} tabs={SOURCE_TABS} accent={accent} line={line} outline={outline}>
                 <SourcePage accent={accent} line={line} outline={outline} />
+            </TabPage>
+        </PonderSurfaceStateLayer>
+
+        {/* 同一格按下歌词行的导入 / 导出：整页不变，上面压一扇歌词文件窗口。 */}
+        <PonderSurfaceStateLayer state="source-tab-file-dialog" registerStateNode={registerStateNode} replaces={SIDE_PANEL_BODY_STATE}>
+            <TabPage active={1} tabs={SOURCE_TABS} accent={accent} line={line} outline={outline}>
+                <SourcePage accent={accent} line={line} outline={outline} fileDialogOpen />
             </TabPage>
         </PonderSurfaceStateLayer>
 

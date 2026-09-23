@@ -5,6 +5,7 @@ import { hasUploadedObsAsset } from '../../../services/obs/visualSettingsConfig'
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createAppLanguageCommand, createSettingsCommand, createSettingsAnchorCommand, defineCommand } from '../commandFactories';
 import { sleepTimerCommand } from './sleepTimerCommand';
+import { lyricExportCommands } from './lyricExportCommands';
 import { Gauge, Images, Layers3 } from 'lucide-react';
 import { latticePosterTintSurface } from '../surfaces/latticePosterTintSurface';
 import { gridViewCardsSurface } from '../surfaces/gridViewCardsSurface';
@@ -229,6 +230,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
+    ...lyricExportCommands,
     createSettingsCommand(
         'settings-local-library-watch',
         'Local folder watch settings',

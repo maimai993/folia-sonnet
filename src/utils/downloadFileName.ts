@@ -2,13 +2,19 @@
 // Turns a user-facing label into something an `a[download]` can carry on every OS.
 const ILLEGAL = /[<>:"/\\|?*\u0000-\u001F]/g;
 
+// Device names Windows reserves whatever the extension: `CON.lrc` is as unusable as `CON`.
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
 /**
  * Strips the characters Windows, macOS and Linux all refuse in a filename. Also collapses the
- * runs of whitespace left behind so `a - b` does not become `a___b`.
+ * runs of whitespace left behind so `a - b` does not become `a___b`. Trailing dots and spaces go
+ * too (Windows silently drops them, so the file would not keep the name it was given), and a
+ * reserved device name such as `CON` gets a leading `_`.
  */
 export const sanitizeDownloadFileName = (name: string, fallback = 'download'): string => {
-    const cleaned = name.replace(ILLEGAL, '_').replace(/\s+/g, ' ').trim();
-    return cleaned || fallback;
+    const cleaned = name.replace(ILLEGAL, '_').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+    if (!cleaned) return fallback;
+    return WINDOWS_RESERVED.test(cleaned) ? `_${cleaned}` : cleaned;
 };
 
 /** Local `YYYY-MM-DD`, not `toISOString`: the latter is UTC and shifts a day for most users. */

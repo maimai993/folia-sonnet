@@ -3,6 +3,7 @@ import { getSongResourceCacheKey } from '../services/onlineMusic/resourceKeys';
 import type { OnlineLyricsState, SongResult } from '../types';
 import type { MigrationResult } from './lyrics/renderHints';
 import { migrateLyricDataRenderHints as migrateLyrics } from './lyrics/renderHints';
+import { isPureMusicLyricText } from './lyrics/pureMusic';
 
 // src/utils/onlineLyricsState.ts
 
@@ -53,6 +54,20 @@ export const resolveOnlineLyrics = (
 
     return fallbackLyrics ?? null;
 };
+
+/**
+ * Whether the stored lyrics mean "instrumental", decided the way cached playback decides it:
+ * an online match that recorded a verdict is trusted as-is; anything else (an imported file, or a
+ * match from before the verdict was stored) falls back to reading the lyric text.
+ */
+export const resolveOnlineLyricsPureMusic = (
+    state: OnlineLyricsState | null | undefined,
+    lyricsText: string,
+): boolean => (
+    state?.lyricsSource === 'online' && typeof state.matchedIsPureMusic === 'boolean'
+        ? state.matchedIsPureMusic
+        : isPureMusicLyricText(lyricsText)
+);
 
 export const getOnlineLyricsSourceLabel = (state: OnlineLyricsState | null | undefined): 'online' | 'imported' =>
     state?.lyricsSource === 'imported' ? 'imported' : 'online';

@@ -20,10 +20,15 @@ export const getLyricSegmentationCacheKey = (song: SongResult): string => (
     `${LYRIC_SEGMENTATION_KEY_PREFIX}${getPlaybackSongKey(song)}`
 );
 
-export const loadSongSegmentation = async (song: SongResult): Promise<LyricSegmentationRecord | null> => {
-    const cached = await getFromCache<unknown>(getLyricSegmentationCacheKey(song));
+/** Same lookup keyed by `getPlaybackSongKey` directly, for callers holding a key but no SongResult. */
+export const loadSegmentationBySongKey = async (songKey: string): Promise<LyricSegmentationRecord | null> => {
+    const cached = await getFromCache<unknown>(`${LYRIC_SEGMENTATION_KEY_PREFIX}${songKey}`);
     return isLyricSegmentationRecord(cached) ? cached : null;
 };
+
+export const loadSongSegmentation = async (song: SongResult): Promise<LyricSegmentationRecord | null> => (
+    loadSegmentationBySongKey(getPlaybackSongKey(song))
+);
 
 export const saveSongSegmentation = async (
     song: SongResult,

@@ -80,7 +80,9 @@ export type PonderTargetId =
     | 'audio-equalizer'
     | 'vis-playground'
     | 'theme-park'
-    | 'lyric-style';
+    | 'lyric-style'
+    // 歌词导出：命令面板里那一页批量导出。面板上那颗单曲导出按钮归 panel-source-tab 讲。
+    | 'lyric-export';
 
 /**
  * 导航页把目标按这个分组。
@@ -220,7 +222,9 @@ export type PonderSurfaceKind =
     | 'vis-playground'
     | 'theme-park'
     /** 歌词样式：调参台的布局，预览和右栏各自可换，背景和歌词也各自可换。 */
-    | 'lyric-style';
+    | 'lyric-style'
+    /** 命令面板里的批量导出歌词页：输入行、三节多选卡（范围 / 格式 / 命名），底边一条操作栏。 */
+    | 'lyric-export';
 
 /**
  * 以来源矩形为 0..1 坐标系的相对矩形。

@@ -83,7 +83,7 @@ const localCoverAssetRequestMap = new Map<string, Promise<LocalSong>>();
 const BROWSER_AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac)$/i;
 const ELECTRON_FALLBACK_AUDIO_EXTENSIONS = /\.(alac|ape|wv|tta|wma|aif|aiff|caf)$/i;
 const KNOWN_AUDIO_EXTENSIONS = /\.(mp3|flac|m4a|wav|ogg|opus|aac|alac|ape|wv|tta|wma|aif|aiff|caf)$/i;
-const LYRIC_EXTENSIONS = /\.(lrc|vtt|ttml|qrc|yrc|krc)$/i;
+const LYRIC_EXTENSIONS = /\.(lrc|vtt|ttml|qrc|yrc|krc|fia)$/i;
 const TRANSLATION_LYRIC_EXTENSIONS = /\.t\.(lrc|vtt)$/i;
 const IMPORT_CONCURRENCY = 6;
 export const LOCAL_MUSIC_UPDATED_EVENT = 'folia-local-music-updated';
@@ -288,6 +288,11 @@ function getFolderCoverPriority(fileName: string): number {
 
 function getTimedLyricPriority(fileName: string): number {
     const lowerName = fileName.toLowerCase();
+    // Folia's own export: already-parsed lyrics with word timing, translation and saved
+    // segmentation, so it beats an .lrc of the same name that can only carry part of that.
+    if (lowerName.endsWith('.fia')) {
+        return -1;
+    }
     if (lowerName.endsWith('.t.lrc') || lowerName.endsWith('.lrc')) {
         return 0;
     }
@@ -321,7 +326,7 @@ function getAudioBasePath(relativePath: string): string {
 function getSidecarLyricBasePath(relativePath: string, kind: 'lyric' | 'translationLyric'): string {
     const withoutLyricSuffix = kind === 'translationLyric'
         ? relativePath.replace(/\.t\.(lrc|vtt)$/i, '')
-        : relativePath.replace(/\.(lrc|vtt|ttml|qrc|yrc|krc)$/i, '');
+        : relativePath.replace(/\.(lrc|vtt|ttml|qrc|yrc|krc|fia)$/i, '');
 
     // Support both "track.lrc" and "track.mp3.lrc" style sidecar lyrics.
     return getAudioBasePath(withoutLyricSuffix);

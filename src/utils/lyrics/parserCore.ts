@@ -181,44 +181,66 @@ const sortByStartTimeIfNeeded = <T extends { startTime: number }>(items: T[], is
     return [...items].sort((left, right) => left.startTime - right.startTime);
 };
 
+const ALTERNATE_TRACK_MATCH_WINDOW = 1.0;
+
+/** First index whose startTime is >= `time`; `entries` is sorted by startTime. */
+const lowerBoundByStartTime = (entries: TimedTextEntry[], time: number): number => {
+    let low = 0;
+    let high = entries.length;
+    while (low < high) {
+        const middle = (low + high) >> 1;
+        if (entries[middle].startTime < time) {
+            low = middle + 1;
+        } else {
+            high = middle;
+        }
+    }
+    return low;
+};
+
+/**
+ * Pairs each lyric line with the translation (or romanization) entry that belongs to it.
+ *
+ * Every line and every entry is used at most once, and the closest pairs are settled first:
+ * all candidate pairs within the ±1s window are ranked by time difference and taken greedily.
+ * Exact timestamp matches therefore always win, and a line with no entry of its own no longer
+ * borrows its neighbour's — the old nearest-neighbour lookup let one entry serve every line within
+ * a second of it, so a line sung right after a translated one showed that translation twice, and
+ * two lines starting together (a duet) both got the first line's translation.
+ */
 export const findTranslationsForSortedStartTimes = (
     startTimes: number[],
     entries: TimedTextEntry[]
 ): Array<string | undefined> => {
+    const translations: Array<string | undefined> = startTimes.map(() => undefined);
     if (startTimes.length === 0 || entries.length === 0) {
-        return startTimes.map(() => undefined);
+        return translations;
     }
 
-    const translations: Array<string | undefined> = [];
-    let upperIndex = 0;
-
-    for (const startTime of startTimes) {
-        while (upperIndex < entries.length && entries[upperIndex].startTime < startTime) {
-            upperIndex += 1;
-        }
-
-        let bestEntry: TimedTextEntry | undefined;
-        let bestDiff = 1.0;
-
-        const previous = entries[upperIndex - 1];
-        if (previous) {
-            const diff = Math.abs(previous.startTime - startTime);
-            if (diff < bestDiff) {
-                bestDiff = diff;
-                bestEntry = previous;
+    const candidates: Array<{ line: number; entry: number; diff: number }> = [];
+    startTimes.forEach((startTime, line) => {
+        for (
+            let entry = lowerBoundByStartTime(entries, startTime - ALTERNATE_TRACK_MATCH_WINDOW);
+            entry < entries.length && entries[entry].startTime < startTime + ALTERNATE_TRACK_MATCH_WINDOW;
+            entry += 1
+        ) {
+            const diff = Math.abs(entries[entry].startTime - startTime);
+            if (diff < ALTERNATE_TRACK_MATCH_WINDOW) {
+                candidates.push({ line, entry, diff });
             }
         }
+    });
 
-        const current = entries[upperIndex];
-        if (current) {
-            const diff = Math.abs(current.startTime - startTime);
-            if (diff < bestDiff) {
-                bestDiff = diff;
-                bestEntry = current;
-            }
-        }
+    // Ties go to the earlier line, then the earlier entry, so equal timestamps pair up in order.
+    candidates.sort((left, right) => left.diff - right.diff || left.line - right.line || left.entry - right.entry);
 
-        translations.push(bestEntry?.text);
+    const lineTaken = new Array<boolean>(startTimes.length).fill(false);
+    const entryTaken = new Array<boolean>(entries.length).fill(false);
+    for (const candidate of candidates) {
+        if (lineTaken[candidate.line] || entryTaken[candidate.entry]) continue;
+        lineTaken[candidate.line] = true;
+        entryTaken[candidate.entry] = true;
+        translations[candidate.line] = entries[candidate.entry].text;
     }
 
     return translations;
@@ -461,7 +483,7 @@ export const parseLRC = (
         });
     }
 
-    return { lines: finalizeParsedLyricLines(lines, options) };
+    return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
 
 export const parseYRC = (
@@ -542,7 +564,7 @@ export const parseYRC = (
         romanization: romanizations[index]
     }));
 
-    return { lines: finalizeParsedLyricLines(lines, options) };
+    return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: true };
 };
 
 export const parseQRC = (
@@ -674,7 +696,7 @@ export const parseQRC = (
         romanization: romanizations[index]
     }));
 
-    return { lines: finalizeParsedLyricLines(lines, options) };
+    return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: true };
 };
 
 const parseVttTimestamp = (value: string): number => {
@@ -790,7 +812,7 @@ export const parseVTT = (
         });
     }
 
-    return { lines: finalizeParsedLyricLines(lines, options) };
+    return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
 
 export const parseTTML = (
@@ -916,7 +938,10 @@ export const parseEnhancedLRC = (
     return {
         lines: finalizeParsedLyricLines(lines, options),
         title: metadata.title,
-        artist: metadata.artist
+        artist: metadata.artist,
+        // Enhanced LRC may mix timed and plain lines; any line that carried its own word
+        // timestamps makes the file word-timed. Plain lines got evenly spread placeholder words.
+        isWordByWord: sortedDrafts.some(draft => draft.words.length > 0),
     };
 };
 
@@ -1049,7 +1074,7 @@ export const parseKRC = (
         };
     });
 
-    return { lines: finalizeParsedLyricLines(lines, options) };
+    return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: true };
 };
 
 /**

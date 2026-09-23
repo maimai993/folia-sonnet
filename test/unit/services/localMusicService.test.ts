@@ -441,6 +441,28 @@ describe('localMusicService', () => {
         ]);
     });
 
+    it('prefers a Folia .fia sidecar over an .lrc of the same name', async () => {
+        const fiaContent = '{"format":"folia-lyricdata","version":1,"song":{},"lyrics":{"lines":[]}}';
+        const selectedHandle = new FakeDirectoryHandle('Music', [
+            new FakeDirectoryHandle('Disc 1', [
+                new FakeFileHandle('Track 01.mp3'),
+                new FakeFileHandle('Track 01.lrc', { content: '[00:00.00]plain', type: 'text/plain' }),
+                new FakeFileHandle('Track 01.fia', { content: fiaContent, type: 'application/json' }),
+            ], 'library-root:disc-1'),
+        ], 'library-root');
+        vi.mocked((window as any).showDirectoryPicker).mockResolvedValue(selectedHandle as unknown as FileSystemDirectoryHandle);
+
+        await importFolder();
+
+        expect(saveLocalSongs).toHaveBeenCalledWith([
+            expect.objectContaining<Partial<LocalSong>>({
+                filePath: 'Music/Disc 1/Track 01.mp3',
+                hasLocalLyrics: true,
+                localLyricsContent: fiaContent,
+            }),
+        ]);
+    });
+
     it('rescans audio when a sidecar file kind changes from legacy other to lyric', async () => {
         const lyricContent = '<tt xmlns="http://www.w3.org/ns/ttml"></tt>';
         const persistedHandle = createLibraryHandleWithLyric('Track 01.ttml', lyricContent);

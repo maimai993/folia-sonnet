@@ -13,6 +13,19 @@ describe('sanitizeDownloadFileName', () => {
 
     it('falls back when the label leaves nothing usable behind', () => {
         expect(sanitizeDownloadFileName('   ', 'backup')).toBe('backup');
+        expect(sanitizeDownloadFileName('...', 'backup')).toBe('backup');
+    });
+
+    it('drops trailing dots and spaces, which Windows would strip on its own', () => {
+        expect(sanitizeDownloadFileName('Song...')).toBe('Song');
+        expect(sanitizeDownloadFileName('Track. ')).toBe('Track');
+    });
+
+    it('steers clear of Windows device names, with or without an extension', () => {
+        expect(sanitizeDownloadFileName('CON')).toBe('_CON');
+        expect(sanitizeDownloadFileName('com1')).toBe('_com1');
+        expect(sanitizeDownloadFileName('aux.live')).toBe('_aux.live');
+        expect(sanitizeDownloadFileName('Conan')).toBe('Conan');
     });
 });
 
