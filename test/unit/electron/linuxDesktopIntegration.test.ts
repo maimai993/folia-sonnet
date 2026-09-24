@@ -24,11 +24,11 @@ describe('linuxDesktopIntegration', () => {
     expect(pkg.build?.linux?.desktop?.entry?.StartupWMClass).toBe('folia-major');
   });
 
-  it('configures electron/main.cjs with folia-major.desktop for Linux desktop identity', () => {
+  it('leaves Linux desktop identity to package.json desktopName instead of electron/main.cjs', () => {
+    // Electron applies package.json desktopName at startup; a second setDesktopName call would drift from it.
     const mainContent = fs.readFileSync(mainCjsPath, 'utf8');
 
-    expect(mainContent).toContain("const LINUX_DESKTOP_NAME = 'folia-major.desktop';");
-    expect(mainContent).toContain('app.setDesktopName(LINUX_DESKTOP_NAME)');
+    expect(mainContent).not.toContain('app.setDesktopName(');
   });
 
   it('aligns StartupWMClass to folia-major in portable linux desktop entry', () => {

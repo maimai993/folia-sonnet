@@ -111,15 +111,8 @@ app.on('certificate-error', (event, _webContents, requestUrl, error, _certificat
   callback(false);
 });
 
-// Linux desktop file name used for Wayland app_id and X11 WM_CLASS association.
-const LINUX_DESKTOP_NAME = 'folia-major.desktop';
-
 // Fix for Arch Linux / Wayland & Vulkan compatibility issues
 if (process.platform === 'linux') {
-  if (typeof app.setDesktopName === 'function') {
-    app.setDesktopName(LINUX_DESKTOP_NAME);
-  }
-
   // Must run before the ready event: Chromium reads the password backend once while initialising
   // OSCrypt, and the default detection leaves unrecognised desktops without any real encryption.
   const linuxPasswordStore = resolveLinuxPasswordStore();
@@ -1803,14 +1796,11 @@ const REMOTE_CONTROL_WINDOW_TITLE = 'Folia Remote';
 const WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS = 800;
 const bundledAppIconPath = path.join(__dirname, '../build/icon.png');
 const extraResourceIconPath = path.join(process.resourcesPath, 'icon.png');
-const extraResourceLinuxIconPath = path.join(process.resourcesPath, 'linux/icon.png');
 const bundledMacTrayIconPath = path.join(__dirname, '../build/trayTemplate.png');
 const bundledMacTrayIcon2xPath = path.join(__dirname, '../build/trayTemplate@2x.png');
 const extraResourceMacTrayIconPath = path.join(process.resourcesPath, 'trayTemplate.png');
 const extraResourceMacTrayIcon2xPath = path.join(process.resourcesPath, 'trayTemplate@2x.png');
-const APP_ICON_PATH = fs.existsSync(bundledAppIconPath)
-  ? bundledAppIconPath
-  : (fs.existsSync(extraResourceIconPath) ? extraResourceIconPath : extraResourceLinuxIconPath);
+const APP_ICON_PATH = fs.existsSync(bundledAppIconPath) ? bundledAppIconPath : extraResourceIconPath;
 const THUMBAR_ICON_DIR = path.join(__dirname, '../build/thumbar');
 
 function loadThumbarIcon(name) {
@@ -4667,13 +4657,6 @@ function createRemoteControlWindow() {
   });
 
   remoteControlWindow = win;
-  if (process.platform === 'linux' && typeof win.setIcon === 'function' && fs.existsSync(APP_ICON_PATH)) {
-    try {
-      win.setIcon(APP_ICON_PATH);
-    } catch {
-      // Ignore if setIcon is unsupported on current desktop
-    }
-  }
   broadcastPlaybackSyncBridgeStatus();
   win.on('page-title-updated', (event) => {
     event.preventDefault();
@@ -4953,14 +4936,6 @@ function createWindow(options = {}) {
   win.__wallpaperWindowTransparent = useTransparentWindow;
   win.__wallpaperGeometry = useWallpaperGeometry;
 
-  if (process.platform === 'linux' && typeof win.setIcon === 'function' && fs.existsSync(APP_ICON_PATH)) {
-    try {
-      win.setIcon(APP_ICON_PATH);
-    } catch {
-      // Ignore if setIcon is unsupported on current desktop
-    }
-  }
-
   if (useDesktopWindowType) {
     x11WallpaperWindows.add(win);
   }
@@ -5192,10 +5167,6 @@ app.whenReady().then(async () => {
 
   if (process.platform === 'win32') {
     app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
-  } else if (process.platform === 'linux') {
-    if (typeof app.setDesktopName === 'function') {
-      app.setDesktopName(LINUX_DESKTOP_NAME);
-    }
   }
 
   if (process.platform === 'linux' && typeof safeStorage.getSelectedStorageBackend === 'function') {
