@@ -18,6 +18,13 @@ const TRUSTED_SIGNING_KEYS = Object.freeze([
         publicKey: Object.freeze({ kty: 'OKP', crv: 'Ed25519', x: 'dDmFP2b-M1A-k9FBfXIBnvR6oLigIcdnzrT7f3y3qG8' }),
         revoked: false,
     }),
+    // Held by the folium-compound CI: signs reviewed community mods and re-signs mods merged into main.
+    Object.freeze({
+        keyId: 'folium-ci-2026-1',
+        label: 'Folium CI',
+        publicKey: Object.freeze({ kty: 'OKP', crv: 'Ed25519', x: 'GPmeaeLIYT85HunWM2xF1z62NeqmOh4BNpe4A2Xq5QI' }),
+        revoked: false,
+    }),
 ]);
 
 // Signed digests (see modSignature.cjs) of mods that must no longer show as verified.
