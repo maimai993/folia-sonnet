@@ -21,10 +21,38 @@ export const foliumThemeVars = (theme: FoliumTheme | null | undefined): React.CS
         : {}
 );
 
+/**
+ * What a host container holds, for `data-folium-kind`. Together with
+ * `data-folium-entry` (the namespaced registry id) it lets a Ponder target's
+ * hoverSelector or `dom` anchor pick out one entry of a mod — the markup
+ * inside is out of reach in a ShadowRoot, the container is not.
+ */
+export type FoliumEntryKind =
+    | 'visualizer'
+    | 'visualizer-settings'
+    | 'background'
+    | 'background-settings'
+    | 'stage-layer'
+    | 'panel-tab'
+    | 'control-button'
+    | 'progress-layer'
+    | 'settings-section'
+    | 'tuning';
+
+/** The attributes that name an entry's container (see FoliumEntryKind). */
+export const foliumEntryAttributes = (modId: string, kind: FoliumEntryKind, entryId: string) => ({
+    'data-folium-owner': modId,
+    'data-folium-kind': kind,
+    'data-folium-entry': entryId,
+});
+
 interface FoliumMountHostProps<Ctx> {
     modId: string;
     /** Label for error reports, e.g. "visualizer aurora:aurora-text". */
     where: string;
+    entryKind: FoliumEntryKind;
+    /** The namespaced registry id, `<modid>:<name>`. */
+    entryId: string;
     mount: FoliumMount<Ctx>;
     /** Memoize it: a new context identity remounts the entry. */
     ctx: Ctx;
@@ -46,6 +74,8 @@ interface FoliumMountHostProps<Ctx> {
 export function FoliumMountHost<Ctx>({
     modId,
     where,
+    entryKind,
+    entryId,
     mount,
     ctx,
     shadow = false,
@@ -98,7 +128,7 @@ export function FoliumMountHost<Ctx>({
             ref={hostRef}
             className={className}
             style={{ ...foliumThemeVars(theme), pointerEvents, ...style }}
-            data-folium-owner={modId}
+            {...foliumEntryAttributes(modId, entryKind, entryId)}
         />
     );
 }

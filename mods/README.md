@@ -112,7 +112,7 @@ export default function activate(folium) {
 - **运行环境**：`folium.env.context` 是 `'main'`（主窗口）或 `'export'`（透明视频导出窗口）。导出窗口里
   只属于界面的注册表（commands、stageLayers、playerPanelTabs、controlButtons、progressLayers、styles）
   是空实现——照常调用、不生效，所以同一份代码两边都能跑；服务（playback / ui / net / storage / rpc）
-  在导出窗口里调用会抛 `*-unavailable-in-export-context`。
+  在导出窗口里调用会抛 `*-unavailable-in-export-context`（`ui.icon` 例外，两边都能用）。
 - `folium.host`：`{ folium: { major, minor }, folia: '<宿主版本>' }`，用于运行时的功能探测。
 
 ### folium 对象一览
@@ -155,6 +155,12 @@ export default function activate(folium) {
 `--folium-accent`、`--folium-font`；移除容器时调用 dispose。**模组不查询、不修改容器以外的宿主 DOM**，
 也不需要轮询——生命周期全部由宿主管。
 
+容器外层（1.2 起）带三个属性，供思索的 `hoverSelector` 和 `dom` 锚点定位某一个条目：
+`data-folium-owner`（模组 id）、`data-folium-kind`（`visualizer`、`visualizer-settings`、`background`、
+`background-settings`、`stage-layer`、`panel-tab`、`control-button`、`progress-layer`、`settings-section`、
+`tuning`）、`data-folium-entry`（带命名空间的条目 id，如 `visualizer52hz:rings`）。ShadowRoot 里面的元素
+选择器够不到，只能指到这个外层容器。
+
 ### 参数 schema（FoliumParam）
 
 设置分区、visualizer / background 设置、tunings、命令参数共用一种字段声明：
@@ -192,6 +198,7 @@ folium.registries.visualizers.register({
 | `currentTime.get()` / `.on('change', cb)` | 歌词时钟 |
 | `getLineIndex()` / `isPaused()` / `getTheme()` / `getSettings()` / `getSurface()` | 随时读取，每帧读也没问题 |
 | `subscribe(cb)` | 行号、暂停、主题、设置、表面任一变化时回调（暂停时时钟不走，靠它得知变化） |
+| `audio`（1.2） | 音频分析：`getPower()`、`getBands()`（`bass` / `lowMid` / `mid` / `vocal` / `treble`）都是 0..1；`getSpectrum()` 是原始 FFT 幅值（0–255）或 `null`。每帧都在变且不通知，在自己的帧循环里读；`getBands()` 每次返回同一个对象、原地刷新，要保留读数就复制。预览里是宿主生成的模拟信号，静音或没有分析器时读到 0 |
 
 - **只在歌词数据、歌曲、`staticMode` 或静态预览行变化时重挂载**；换行不会重挂载，行号从 `getLineIndex()` 读。
 - `hostLayers.background`：宿主在你下面画用户选的背景；`getSurface().hostBackground` 为真时，画满整屏且不透明
@@ -216,8 +223,8 @@ folium.registries.tunings.register({ id: 'deep', target: 'sonnet', label: {…},
 ### backgrounds
 
 `mount(container, ctx: FoliumBackgroundContext)`，没有歌词和时钟：`staticMode`、`isPaused()`、`getTheme()`、
-`getSettings()`、`getCoverUrl()`、`subscribe()`。可带 `settings` / `settingsPanel`。透明表面（OBS、透明导出）下
-宿主不渲染背景。
+`getSettings()`、`getCoverUrl()`、`subscribe()`，以及 1.2 起的 `audio`（同上）。可带 `settings` / `settingsPanel`。
+透明表面（OBS、透明导出）下宿主不渲染背景。
 
 ### stageLayers（需 `ui.stage`）
 
@@ -325,6 +332,7 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 | `restoreFile(grantId)`（1.1） | 把之前 `persist` 选中的文件换成本次会话的新句柄（含同一个 `grantId`）；授权不属于本模组或文件已不存在时返回 `null`，后者的授权随即作废。模组始终拿不到文件路径 |
 | `releaseFile(grantId)`（1.1） | 放弃授权；已经发出的 URL 本次会话内仍然有效 |
 | `embed(container, url, { title, allow })` | 在容器里建一个沙箱 iframe；origin 必须在 `embedOrigins` 里，需 `net.embed`。返回移除函数 |
+| `icon(name, { size, strokeWidth, color })`（1.2） | 宿主的 lucide 图标，名字与 lucide.dev 一致（如 `play`、`skip-forward`）；返回一个新建的 `<svg>` 元素，归模组所有，未知名字返回 `null`。默认 24px、描边 2、颜色 `currentColor`（跟随周围文字）。导出窗口里也能用。宿主只承诺图标名，图形随宿主的 lucide 版本更新 |
 
 > 持久授权按模组 id 保存（每个模组最多 32 条，超出时丢弃最旧的），要跨重启使用就把 `grantId` 存进 `folium.storage`（需 `filesystem.data`）。
 > 1.0 宿主没有 `restoreFile`，用 `typeof folium.ui.restoreFile === 'function'` 或 `folium.host.folium.minor >= 1` 判断。
@@ -383,8 +391,25 @@ folium.experimental['omni.providers'].register({
 **`omni.hooks`**：`folium.experimental['omni.hooks'].on('lyricsResolved' | 'audioSourceResolved', handler)`，
 或者直接 `folium.events.on('omni.…')`（未选用时抛错）。
 
-**`ponder.targets`**：往思索（应用内教程）注册表加目标，定义直接沿用宿主的 `PonderTargetDefinition`，
-id 带 `<modid>:` 前缀，`titleKey` 可以直接写文字。
+**`ponder.targets`**：往思索（应用内教程）注册表加目标，定义直接沿用宿主的 `PonderTargetDefinition`
+（`src/types/ponder.ts`），id 带 `<modid>:` 前缀。目标是纯数据：场景、骨架框（`anchors`）和时间线（`steps`：
+字幕、光标、按键、拖动、高亮、显隐），画面、播放控制、导航页和悬停提示都由宿主渲染，不需要任何外部库。
+完整样例见 `visualizer52hz/ponder.mjs`。只在主窗口可用（导出窗口里访问会抛错），注册前先判断
+`folium.env.context === 'main'`。
+
+- **文字字段**（目标的 `titleKey` / `summaryKey`、场景的 `titleKey`、`action.labelKey`、骨架框的 `labelKey`、
+  字幕的 `textKey`）不填翻译 key，直接写文字，或者按语言写 `{ 'zh-CN': '…', en: '…' }`（1.2），跟随界面语言切换，
+  缺的语言按其它模组标签的规则回退。文字里的 `{{mod}}` 会换成当前平台的修饰键（Ctrl / ⌘）。
+- **悬停提示**：`hoverSelector` 用上面的容器属性，例如 `[data-folium-entry="mymod:notes"]`。
+- **面板骨架**：`role: 'surface'` 的框不写 `surfaceKind` 时画成只有外框的 `plain`（1.2）。也可以借用宿主的
+  界面骨架（`player-page`、`side-panel`、`settings-page`……），但它们画的是宿主界面，不是你的。
+
+**限制**：模组画不出自己界面的骨架。`surfaceKind` 只有宿主预置的那些；模组的面板、按钮在 ShadowRoot 里，
+`dom` 锚点量不到里面的元素，只能量外层容器，或者用 `synthetic` / `relative` / `derived` 手写位置。
+
+**建议**：别追求把界面画得像。用通用骨架勾出结构——一个 `surface` 面板、几个 `control` 按钮、几条 `rail`
+滑轨——再让字幕把意思讲清楚：每一步只讲一件事，用 `pointTo` 把字幕连到它讲的那个框，用 `highlight` 和
+`reveal` 标出「现在看这里」。这正是宿主思索的做法：骨架负责「在哪」，文字负责「是什么、为什么」。
 
 ## internals（自由度出口）
 

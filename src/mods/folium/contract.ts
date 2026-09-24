@@ -6,7 +6,7 @@
 // Stability rule (mods/README.md): inside folium 1.x this file only grows.
 // Removing a field or changing its meaning requires folium 2.
 
-export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 1 });
+export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 2 });
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;
@@ -145,6 +145,34 @@ export interface FoliumSurface {
     hostBackground: boolean;
 }
 
+/** Analyser band energies, each 0..1. */
+export interface FoliumAudioBands {
+    /** 20–150 Hz */
+    readonly bass: number;
+    /** 150–400 Hz */
+    readonly lowMid: number;
+    /** 400–1200 Hz */
+    readonly mid: number;
+    /** 1000–3500 Hz */
+    readonly vocal: number;
+    /** 3500 Hz and up */
+    readonly treble: number;
+}
+
+/**
+ * Folium 1.2: the host's audio analyser, for audio-reactive content. Values
+ * change every frame and nothing is announced: read them inside your own frame
+ * loop. Previews feed a synthetic signal; silence (or no analyser) reads as 0.
+ */
+export interface FoliumAudio {
+    /** Overall energy (bass + low mid, shaped), 0..1. */
+    getPower(): number;
+    /** The same object on every call, refreshed in place; copy it to keep a reading. */
+    getBands(): FoliumAudioBands;
+    /** Raw analyser FFT magnitudes (0–255), or null when there are none. The host reuses the array. */
+    getSpectrum(): Uint8Array | null;
+}
+
 /**
  * Context for lyric-synced content (visualizers, stage layers).
  * Snapshot fields are fixed for one mount; the host remounts only when the
@@ -165,6 +193,8 @@ export interface FoliumStageContext {
     getSettings(): FoliumParamValues;
     getSurface(): FoliumSurface;
     subscribe(listener: () => void): FoliumDisposer;
+    /** Folium 1.2. */
+    readonly audio: FoliumAudio;
 }
 
 // ---------------------------------------------------------------- Registry definitions
@@ -214,6 +244,8 @@ export interface FoliumBackgroundContext {
     getSettings(): FoliumParamValues;
     getCoverUrl(): string | null;
     subscribe(listener: () => void): FoliumDisposer;
+    /** Folium 1.2. */
+    readonly audio: FoliumAudio;
 }
 
 export interface FoliumBackgroundDef {
@@ -437,6 +469,16 @@ export interface FoliumFileHandle {
     grantId?: string;
 }
 
+/** Folium 1.2: options for `folium.ui.icon`. */
+export interface FoliumIconOptions {
+    /** Width and height in px. Default 24. */
+    size?: number;
+    /** Stroke width in the icon's 24-unit grid. Default 2. */
+    strokeWidth?: number;
+    /** Any CSS color. Default `currentColor`, so the icon follows the surrounding text. */
+    color?: string;
+}
+
 export interface FoliumUiService {
     toast(message: string, options?: { type?: 'info' | 'success' | 'error'; durationMs?: number }): void;
     /** Opens the player panel, optionally on one of this mod's panel tabs (local id). */
@@ -460,6 +502,12 @@ export interface FoliumUiService {
      * origin must be listed in the manifest `embedOrigins` (needs `net.embed`).
      */
     embed(container: HTMLElement, url: string, options?: { title?: string; allow?: string[] }): FoliumDisposer;
+    /**
+     * Folium 1.2: one of the host's icons (lucide, named as on lucide.dev, e.g.
+     * "play", "skip-forward") as a new <svg> element the mod owns; null for an
+     * unknown name. Works in every context, the export window included.
+     */
+    icon(name: string, options?: FoliumIconOptions): Promise<SVGSVGElement | null>;
 }
 
 export interface FoliumFetchInit {

@@ -6,6 +6,7 @@ import type {
     FoliumFetchInit,
     FoliumFetchResponse,
     FoliumFileHandle,
+    FoliumIconOptions,
     FoliumNetService,
     FoliumPlaybackService,
     FoliumSong,
@@ -157,6 +158,8 @@ export const createFoliumUiService = (mod: ModRuntimeInfo, context: FoliumContex
         if (context !== 'main') throw new Error(`ui-unavailable-in-${context}-context`);
         return createEmbed(mod, container, url, options);
     },
+    // Loaded on first use: the icon table alone lists every lucide icon.
+    icon: async (name: string, options?: FoliumIconOptions) => (await import('./icons')).createFoliumIcon(name, options),
 });
 
 const buildResponse = (raw: { status: number; statusText: string; headers: Record<string, string>; body: string }): FoliumFetchResponse => {

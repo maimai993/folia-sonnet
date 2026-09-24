@@ -18,6 +18,11 @@ const renderSurface = (kind: PonderSurfaceKind) => renderToStaticMarkup(
 );
 
 describe('PonderSurfaceContents', () => {
+    it('plain 只有外框，里面什么都不画', () => {
+        const markup = renderSurface('plain');
+        expect(markup).toBe('<div class="absolute inset-0" data-ponder-surface-kind="plain"></div>');
+    });
+
     it('palette 有搜索栏', () => {
         const markup = renderSurface('palette');
         expect(markup).toContain('data-ponder-surface-kind="palette"');

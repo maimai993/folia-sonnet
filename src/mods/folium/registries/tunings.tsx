@@ -152,6 +152,8 @@ export const FoliumTuningCards: React.FC<{
                     key={entry.id}
                     modId={entry.modId}
                     where={`tuning ${entry.id}`}
+                    entryKind="tuning"
+                    entryId={entry.id}
                     title={entry.def.def.label}
                     fallbackTitle={entry.id}
                     access={entry.def.access}

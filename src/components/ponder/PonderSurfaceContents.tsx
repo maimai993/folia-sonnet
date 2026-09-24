@@ -255,7 +255,9 @@ const PageContents: React.FC<{
 
 const PonderSurfaceContents: React.FC<PonderSurfaceContentsProps> = ({ kind, accent, line, outline, registerStateNode }) => {
     const resolvedKind = kind ?? 'palette';
-    const contents = resolvedKind === 'player-bar'
+    const contents = resolvedKind === 'plain'
+        ? null
+        : resolvedKind === 'player-bar'
         ? <PonderPlayerBarSurface accent={accent} line={line} outline={outline} registerStateNode={registerStateNode} />
         : isPageSurfaceKind(resolvedKind)
         ? <PageContents kind={resolvedKind} line={line} outline={outline} accent={accent} registerStateNode={registerStateNode} />

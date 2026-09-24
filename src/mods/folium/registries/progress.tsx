@@ -111,6 +111,8 @@ export const FoliumControlButtonSlot: React.FC<{ slot: FoliumControlSlot; ctx: F
                     key={entry.id}
                     modId={entry.modId}
                     where={`control button ${entry.id}`}
+                    entryKind="control-button"
+                    entryId={entry.id}
                     mount={entry.def.mount}
                     ctx={ctx}
                     shadow
@@ -139,6 +141,8 @@ export const FoliumProgressLayers: React.FC<{ ctx: FoliumProgressContext }> = ({
                     key={entry.id}
                     modId={entry.modId}
                     where={`progress layer ${entry.id}`}
+                    entryKind="progress-layer"
+                    entryId={entry.id}
                     mount={entry.def.mount}
                     ctx={ctx}
                     shadow

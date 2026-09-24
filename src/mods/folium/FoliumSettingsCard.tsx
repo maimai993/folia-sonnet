@@ -6,7 +6,7 @@ import type { FoliumLabel, FoliumMount, FoliumParam, FoliumParamAccess, FoliumSe
 import { toFoliumTheme } from './dto';
 import { resolveFoliumLabel } from './params';
 import { FoliumParamFields, type FoliumParamFieldToken } from './FoliumParamFields';
-import { FoliumMountHost } from './FoliumMountHost';
+import { FoliumMountHost, foliumEntryAttributes, type FoliumEntryKind } from './FoliumMountHost';
 
 // src/mods/folium/FoliumSettingsCard.tsx
 // The themed card for any schema-backed Folium surface (visualizer settings,
@@ -18,6 +18,8 @@ import { FoliumMountHost } from './FoliumMountHost';
 interface FoliumSettingsCardProps {
     modId: string;
     where: string;
+    entryKind: FoliumEntryKind;
+    entryId: string;
     title: FoliumLabel;
     fallbackTitle: string;
     access: FoliumParamAccess;
@@ -68,6 +70,8 @@ const useSettingsPanelContext = (
 export const FoliumSettingsCard: React.FC<FoliumSettingsCardProps> = ({
     modId,
     where,
+    entryKind,
+    entryId,
     title,
     fallbackTitle,
     access,
@@ -127,7 +131,7 @@ export const FoliumSettingsCard: React.FC<FoliumSettingsCardProps> = ({
         <div
             className="rounded-[24px] border p-4 space-y-4"
             style={{ backgroundColor: controlCardBg, borderColor: fieldBorder }}
-            data-folium-owner={modId}
+            {...foliumEntryAttributes(modId, entryKind, entryId)}
         >
             <div className="space-y-1">
                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -142,6 +146,8 @@ export const FoliumSettingsCard: React.FC<FoliumSettingsCardProps> = ({
                 <FoliumMountHost
                     modId={modId}
                     where={where}
+                    entryKind={entryKind}
+                    entryId={entryId}
                     mount={customPanel}
                     ctx={panelContext}
                     shadow

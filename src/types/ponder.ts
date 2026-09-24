@@ -180,6 +180,11 @@ export type PonderAnchorRole =
 
 /** surface 骨架里面的界面类型；只画结构，不复制真实界面的业务状态。 */
 export type PonderSurfaceKind =
+    /**
+     * 只有面板外框，里面什么都不画。模组的面板默认用它：模组画不出自己界面的骨架，
+     * 与其套一个像命令面板的占位，不如留白，让骨架框和字幕去讲。
+     */
+    | 'plain'
     | 'palette'
     | 'picker'
     | 'queue'

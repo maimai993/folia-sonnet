@@ -3,6 +3,7 @@ import type { MotionValue } from 'framer-motion';
 import type { Line, Theme } from '@/types';
 import type { FoliumParamAccess, FoliumParamValues, FoliumStageContext, FoliumSurface } from './contract';
 import { toFoliumLines, toFoliumSongFromMeta, toFoliumTheme } from './dto';
+import { createFoliumAudio, type FoliumAudioSource } from './audio';
 
 // src/mods/folium/stageContext.ts
 // Builds the FoliumStageContext handed to lyric-synced content (visualizers,
@@ -27,9 +28,12 @@ export interface FoliumStageInputs {
     staticMode: boolean;
     surface: FoliumSurface;
     settings: FoliumParamAccess | null;
+    /** The analyser signals behind `ctx.audio`; absent reads as silence. */
+    audio?: FoliumAudioSource;
 }
 
 const EMPTY_SETTINGS: FoliumParamValues = Object.freeze({});
+const NO_AUDIO: FoliumAudioSource = Object.freeze({});
 
 export const useFoliumStageContext = (inputs: FoliumStageInputs): FoliumStageContext => {
     const inputsRef = useRef(inputs);
@@ -78,6 +82,7 @@ export const useFoliumStageContext = (inputs: FoliumStageInputs): FoliumStageCon
                 listenersRef.current.add(listener);
                 return () => listenersRef.current.delete(listener);
             },
+            audio: createFoliumAudio(() => inputsRef.current.audio ?? NO_AUDIO),
         });
     }, [lines, songTitle, songArtist, songAlbum, staticMode, staticLineIndex, currentTime]);
 

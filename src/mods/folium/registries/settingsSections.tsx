@@ -53,6 +53,8 @@ export const FoliumSettingsSections: React.FC<{
                     key={entry.id}
                     modId={entry.modId}
                     where={`settings section ${entry.id}`}
+                    entryKind="settings-section"
+                    entryId={entry.id}
                     title={entry.def.def.label}
                     fallbackTitle={entry.id}
                     access={entry.def.access}

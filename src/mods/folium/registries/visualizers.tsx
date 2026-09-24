@@ -64,6 +64,8 @@ const buildRegistryEntry = (id: string, modId: string, stored: StoredFoliumVisua
                 <FoliumSettingsCard
                     modId={modId}
                     where={`visualizer ${id} settings`}
+                    entryKind="visualizer-settings"
+                    entryId={id}
                     title={stored.def.label}
                     fallbackTitle={labelFallback}
                     access={settingsAccess}

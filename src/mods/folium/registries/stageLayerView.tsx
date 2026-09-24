@@ -5,7 +5,7 @@ import {
     selectDisplayLyrics,
     selectDisplaySong,
 } from '@/stores/usePlaybackStore';
-import { lyricCurrentTime } from '@/stores/motionSignals';
+import { audioBands, audioPower, lyricCurrentTime } from '@/stores/motionSignals';
 import type { FoliumStageLayerDef, FoliumStageSlot, FoliumSurface } from '../contract';
 import { useFoliumRegistryEntries, type FoliumRegistryEntry } from '../registry';
 import { useFoliumStageContext } from '../stageContext';
@@ -24,6 +24,8 @@ const byOrder = (left: FoliumRegistryEntry<FoliumStageLayerDef>, right: FoliumRe
 
 const EMPTY_LINES: never[] = [];
 const STAGE_SURFACE: FoliumSurface = Object.freeze({ transparent: false, hostBackground: true });
+// Stage layers only exist on the live player page, so they read the app's own analyser signals.
+const STAGE_AUDIO = Object.freeze({ audioPower, audioBands });
 
 const FoliumStageLayer: React.FC<{
     entry: FoliumRegistryEntry<FoliumStageLayerDef>;
@@ -47,12 +49,15 @@ const FoliumStageLayer: React.FC<{
         staticMode: false,
         surface: STAGE_SURFACE,
         settings: null,
+        audio: STAGE_AUDIO,
     });
     const foliumTheme = useMemo(() => toFoliumTheme(theme, isDaylight), [theme, isDaylight]);
     return (
         <FoliumMountHost
             modId={entry.modId}
             where={`stage layer ${entry.id}`}
+            entryKind="stage-layer"
+            entryId={entry.id}
             mount={entry.def.mount}
             ctx={ctx}
             shadow

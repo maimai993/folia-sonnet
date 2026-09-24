@@ -14,6 +14,7 @@ import { fromFoliumLines, toFoliumLines, toFoliumSong } from './dto';
 import { addFoliumEventHandler, dispatchFoliumHookAsync, hasFoliumEventHandlers } from './events';
 import { createFoliumRegistry } from './registry';
 import { omniProvidersRegistry } from './registries/omniProviders';
+import { addPonderText, localizePonderTarget, ponderTextNamespace, removePonderText } from './ponderText';
 
 // src/mods/folium/experimental.ts
 // The unfrozen surfaces, each behind a manifest opt-in (`experimental`):
@@ -25,25 +26,38 @@ import { omniProvidersRegistry } from './registries/omniProviders';
 
 /*
  * Ponder targets pass through the host definition shape — exactly why this is
- * experimental. The id gets the `<modid>:` prefix; `titleKey`/`summaryKey`
- * may be literal text, since a mod has no i18n keys of its own.
+ * experimental. The id gets the `<modid>:` prefix. Text fields (titleKey,
+ * summaryKey, scene titleKey, action labelKey, anchor labelKey, caption
+ * textKey) take literal text or a per-language label instead of i18n keys; see
+ * ponderText.ts for how they reach the host's t().
  */
-type PonderTargetInput = Omit<PonderTargetDefinition, 'id'> & { id: string };
+type PonderTargetInput = { id: string } & Record<string, unknown>;
 
-export const ponderTargetsRegistry = createFoliumRegistry<PonderTargetInput, PonderTargetDefinition>('ponder.targets', {
+interface StoredPonderTarget {
+    target: PonderTargetDefinition;
+    namespace: string;
+    resources: Record<string, Record<string, string>>;
+}
+
+export const ponderTargetsRegistry = createFoliumRegistry<PonderTargetInput, StoredPonderTarget>('ponder.targets', {
     validate: (def, { id }) => {
-        if (typeof def.titleKey !== 'string' || !def.category || !Array.isArray((def as PonderTargetDefinition).scenes)) {
+        if (def.titleKey === undefined || !def.category || !Array.isArray(def.scenes)) {
             throw new Error('ponder.targets.register: titleKey, category and scenes are required');
         }
-        return { ...(def as unknown as PonderTargetDefinition), id: id as PonderTargetId };
+        const namespace = ponderTextNamespace(id);
+        const { target, resources } = localizePonderTarget(def, namespace);
+        return { target: { ...target, id: id as PonderTargetId }, namespace, resources };
     },
     onAdd: (entry) => {
-        if (!registerPonderTarget(entry.def)) {
+        addPonderText(entry.def.namespace, entry.def.resources);
+        if (!registerPonderTarget(entry.def.target)) {
+            removePonderText(entry.def.namespace, entry.def.resources);
             throw new Error(`ponder.targets.register: target "${entry.id}" already exists`);
         }
     },
     onRemove: (entry) => {
-        unregisterPonderTarget(entry.def.id);
+        unregisterPonderTarget(entry.def.target.id);
+        removePonderText(entry.def.namespace, entry.def.resources);
     },
 });
 

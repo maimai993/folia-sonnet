@@ -92,11 +92,14 @@ const FoliumVisualizerStage: React.FC<{
         staticMode: Boolean(props.staticMode),
         surface,
         settings: stored.settingsAccess,
+        audio: { audioPower: props.audioPower, audioBands: props.audioBands },
     });
     return (
         <FoliumMountHost
             modId={modId}
             where={`visualizer ${id}`}
+            entryKind="visualizer"
+            entryId={id}
             mount={stored.def.mount}
             ctx={ctx}
             className="absolute inset-0"

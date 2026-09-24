@@ -10,6 +10,7 @@ import type {
 import type { Theme, VisualizerBackgroundMode } from '@/types';
 import type { FoliumBackgroundContext, FoliumBackgroundDef, FoliumParam, FoliumParamAccess, FoliumParamValues } from '../contract';
 import { toFoliumTheme } from '../dto';
+import { createFoliumAudio } from '../audio';
 import { sanitizeFoliumParams } from '../params';
 import { createFoliumParamAccess } from '../paramStore';
 import { createFoliumRegistry } from '../registry';
@@ -20,8 +21,8 @@ import { FoliumSettingsCard } from '../FoliumSettingsCard';
 // `folium.registries.backgrounds`: mod background types. Each becomes a
 // VisualizerBackgroundRegistryEntry, so it shows up in the background picker
 // and renders under every visualizer mode (previews and exports included). A
-// background has no lyrics or clock; its context is theme, cover, pause and
-// its own settings.
+// background has no lyrics or clock; its context is theme, cover, pause, the
+// audio analyser (1.2) and its own settings.
 
 export interface StoredFoliumBackground {
     def: FoliumBackgroundDef;
@@ -74,6 +75,7 @@ const useBackgroundContext = (
                 listenersRef.current.add(listener);
                 return () => listenersRef.current.delete(listener);
             },
+            audio: createFoliumAudio(() => propsRef.current),
         });
     }, [props.staticMode, settings]);
 
@@ -102,6 +104,8 @@ const FoliumBackgroundStage: React.FC<{
         <FoliumMountHost
             modId={modId}
             where={`background ${id}`}
+            entryKind="background"
+            entryId={id}
             mount={stored.def.mount}
             ctx={ctx}
             className="absolute inset-0 pointer-events-none"
@@ -124,6 +128,8 @@ const buildRegistryEntry = (id: string, modId: string, stored: StoredFoliumBackg
                 <FoliumSettingsCard
                     modId={modId}
                     where={`background ${id} settings`}
+                    entryKind="background-settings"
+                    entryId={id}
                     title={stored.def.label}
                     fallbackTitle={labelFallback}
                     access={settingsAccess}

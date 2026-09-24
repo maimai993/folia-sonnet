@@ -22,6 +22,7 @@ import type { ModRuntimeInfo } from '@/mods/types';
 import { getOnlineMusicProvider } from '@/services/onlineMusic/providerRegistry';
 import { applyOmniAudioHook, applyOmniLyricsHook } from '@/services/hostExtensionHooks';
 import { findPonderTarget } from '@/components/ponder/ponderRegistry';
+import i18n from '@/i18n/config';
 import { createFoliumExperimental, ponderTargetsRegistry } from '@/mods/folium/experimental';
 import { omniProvidersRegistry } from '@/mods/folium/registries/omniProviders';
 import { createFoliumClientApi } from '@/mods/folium/api';
@@ -102,17 +103,78 @@ describe('omni.hooks', () => {
 });
 
 describe('ponder.targets', () => {
-    it('adds a namespaced target to the host Ponder registry', () => {
+    const scene = {
+        id: 'intro',
+        titleKey: { 'zh-CN': '认识面板', en: 'Meet the panel' },
+        action: { kind: 'openUrl', url: 'https://example.com', labelKey: 'Docs: open' },
+        anchors: {
+            panel: { kind: 'synthetic', rect: { left: 0.1, top: 0.1, width: 0.5, height: 0.5 }, role: 'surface', labelKey: { 'zh-CN': '面板', en: 'Panel' } },
+            box: { kind: 'synthetic', rect: { left: 0.2, top: 0.2, width: 0.1, height: 0.1 } },
+        },
+        steps: [
+            { kind: 'caption', textKey: { 'zh-CN': '按 {{mod}} + K 打开', en: 'Press {{mod}} + K to open' }, at: 'bottom', durationMs: 1000 },
+            { kind: 'pause', dwellMs: 200 },
+        ],
+    };
+
+    it('adds a namespaced target whose text reads through t()', () => {
         ponderTargetsRegistry.register('mod-a', {
             id: 'panel',
-            titleKey: 'My mod panel',
-            category: 'player' as never,
-            hoverSelector: null,
+            titleKey: 'My mod panel. With: punctuation',
+            category: 'playback',
+            hoverSelector: '[data-folium-entry="mod-a:panel"]',
             scenes: [],
         });
-        expect(findPonderTarget('mod-a:panel' as never)?.titleKey).toBe('My mod panel');
+        const target = findPonderTarget('mod-a:panel' as never);
+        expect(target).not.toBeNull();
+        expect(i18n.t(target!.titleKey)).toBe('My mod panel. With: punctuation');
         ponderTargetsRegistry.unregisterAll('mod-a');
         expect(findPonderTarget('mod-a:panel' as never)).toBeNull();
+    });
+
+    it('localizes every text field per language and interpolates {{mod}}', async () => {
+        const definition = { id: 'tour', titleKey: { 'zh-CN': '导览', en: 'Tour' }, summaryKey: 'Only one text', category: 'playback', hoverSelector: null, scenes: [scene] };
+        const before = JSON.stringify(definition);
+        ponderTargetsRegistry.register('mod-a', definition);
+        const target = findPonderTarget('mod-a:tour' as never)!;
+        const [localized] = target.scenes;
+        const caption = localized.steps[0] as { textKey: string };
+
+        await i18n.changeLanguage('zh-CN');
+        expect(i18n.t(target.titleKey)).toBe('导览');
+        expect(i18n.t(localized.titleKey)).toBe('认识面板');
+        expect(i18n.t(localized.anchors.panel.labelKey!)).toBe('面板');
+        expect(i18n.t(caption.textKey, { mod: 'Ctrl' })).toBe('按 Ctrl + K 打开');
+
+        await i18n.changeLanguage('en');
+        expect(i18n.t(target.titleKey)).toBe('Tour');
+        expect(i18n.t(target.summaryKey!)).toBe('Only one text');
+        expect(i18n.t(localized.action!.labelKey)).toBe('Docs: open');
+        expect(i18n.t(caption.textKey, { mod: '⌘' })).toBe('Press ⌘ + K to open');
+        // A language the label does not name falls back like every other mod label.
+        await i18n.changeLanguage('in');
+        expect(i18n.t(localized.titleKey)).toBe('认识面板');
+        await i18n.changeLanguage('en');
+
+        expect(localized.anchors.box.labelKey).toBeUndefined();
+        // A mod's panel is drawn as a bare frame unless it names a host skeleton.
+        expect(localized.anchors.panel.surfaceKind).toBe('plain');
+        expect(localized.anchors.box.surfaceKind).toBeUndefined();
+        expect(JSON.stringify(definition)).toBe(before);
+
+        ponderTargetsRegistry.unregisterAll('mod-a');
+        expect(i18n.hasResourceBundle('en', 'folium-ponder/mod-a/tour')).toBe(false);
+    });
+
+    it('rejects a text field that is neither text nor a label', () => {
+        expect(() => ponderTargetsRegistry.register('mod-a', {
+            id: 'bad',
+            titleKey: 'Fine',
+            category: 'playback',
+            hoverSelector: null,
+            scenes: [{ ...scene, steps: [{ kind: 'caption', textKey: 42, at: 'bottom', durationMs: 1 }] }],
+        })).toThrow(/scenes\[0\]\.steps\[0\]\.textKey/);
+        expect(findPonderTarget('mod-a:bad' as never)).toBeNull();
     });
 });
 

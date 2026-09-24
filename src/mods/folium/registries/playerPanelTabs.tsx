@@ -72,6 +72,8 @@ const FoliumPanelTabContent: React.FC<{
         <FoliumMountHost
             modId={entry.modId}
             where={`panel tab ${entry.id}`}
+            entryKind="panel-tab"
+            entryId={entry.id}
             mount={entry.def.mount}
             ctx={ctx}
             shadow
