@@ -14,15 +14,15 @@
 | 区域 | 文件数量级 |
 | --- | --- |
 | components | 512+ |
-| test/dev | 256+ |
+| test/dev | 512+ |
 | services | 128+ |
 | utils | 128+ |
 | backend/electron | 64+ |
 | hooks | 64+ |
+| src (其他) | 32+ |
 | stores | 32+ |
+| 其他 | 32+ |
 | types | 16+ |
-| 其他 | 16+ |
-| src (其他) | 8+ |
 | i18n | 4+ |
 | workers | 2+ |
 
