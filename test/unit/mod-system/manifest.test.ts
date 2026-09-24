@@ -150,6 +150,14 @@ describe('validateManifest Folium entries and opt-ins', () => {
         expect(validateManifest({ ...validManifest, experimental: ['mixins'] }).ok).toBe(false);
     });
 
+    it('accepts an optional preview image path inside the mod directory', () => {
+        expect(validateManifest({ ...validManifest, preview: 'preview.jpg' }).ok).toBe(true);
+        expect(validateManifest({ ...validManifest, preview: 'assets/cover.webp' }).ok).toBe(true);
+        expect(validateManifest({ ...validManifest, preview: '../outside.png' }).ok).toBe(false);
+        expect(validateManifest({ ...validManifest, preview: 'preview.gif' }).ok).toBe(false);
+        expect(validateManifest({ ...validManifest, preview: '/abs/preview.png' }).ok).toBe(false);
+    });
+
     it('requires bare https origins plus net.embed for embedOrigins', () => {
         const base = { ...validManifest, permissions: ['net.embed'] };
         expect(validateManifest({ ...base, embedOrigins: ['https://www.youtube-nocookie.com'] }).ok).toBe(true);

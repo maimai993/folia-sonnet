@@ -2,9 +2,9 @@
   "format": "folium-signature",
   "version": 1,
   "modId": "sample-aurora-visualizer",
-  "modVersion": "1.0.0",
-  "digest": "sha256:d71b93b0fd654f894b6c6e259b26d8b7ea2c88bf27eee003b483432d8756f34f",
+  "modVersion": "1.0.1",
+  "digest": "sha256:c150fae14af8213777fc5e528f096470d7e1bc654df0b16cb10ca5498d21b14f",
   "keyId": "folium-2026-1",
-  "signedAt": "2026-09-24T18:08:46.937Z",
-  "signature": "0967g+QGagz8C66fVoqsEyyxcbBIo7mFS/T8XL9KKX0cB2pgVzKZaJyFifhmBtK32d48hPcB9hqR2k8vIBgFCw=="
+  "signedAt": "2026-09-24T19:10:07.802Z",
+  "signature": "HvQ3lleWDEGID6QTsYwNnQrjZLDD4Yn5fJfXqK8Amo/uzqrVpxL6alobAfqFy12SC7zFvxcWPziFwWgYm2h5CQ=="
 }

@@ -109,6 +109,7 @@ client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 imp
   "description": "可选",
   "main": "index.cjs",
   "client": "client.mjs",
+  "preview": "preview.jpg",
   "depends": ["base-mod", "other@^1.2.0"],
   "permissions": ["net.fetch"],
   "embedOrigins": ["https://www.youtube-nocookie.com"],
@@ -123,6 +124,7 @@ client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 imp
 | `id` | `^[a-z0-9][a-z0-9-]*$`，全局唯一 |
 | `version` | `MAJOR.MINOR.PATCH` |
 | `main` / `client` | 都可选，至少一个。`main` 是模组目录下的单个 `.cjs/.js` 文件；`client` 是目录内的 `.mjs/.js` 相对路径。纯渲染端模组不写 `main`，Node 里就不执行它的任何代码 |
+| `preview` | 可选。模组目录里的一张介绍图片（`.png` / `.jpg` / `.webp`），模组市场在卡片顶部以 16:9 展示；宿主只校验路径与扩展名。提交到 folium-compound 的模组必须提供，推荐 1280×720、不超过 1 MB |
 | `depends` | 模组 id 或 `id@^1.2.3`（仅支持 `^` 与 `*`）。缺失、版本不符、成环或依赖未启用时，只有该依赖子图不加载 |
 | `permissions` | 见下表。未知权限直接拒绝 |
 | `embedOrigins` | `folium.ui.embed` 可以加载的 https origin（形如 `https://host[:port]`），需要 `net.embed` |

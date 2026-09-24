@@ -2,9 +2,9 @@
   "format": "folium-signature",
   "version": 1,
   "modId": "transparent-mov-export",
-  "modVersion": "1.0.0",
-  "digest": "sha256:aadc67de1b4039b0c5c8b9b91c448b2162556c1113a8ecf4a29c76f34984d19d",
+  "modVersion": "1.0.1",
+  "digest": "sha256:390bf9089896b6ffae42294681eb17b8df3c3e90f9af04396070a952ce44cb78",
   "keyId": "folium-2026-1",
-  "signedAt": "2026-09-24T18:08:46.938Z",
-  "signature": "KIRq6JJI98RSs6j+UMZ+wCMOpoVGPlWdbmLCELoYSE0zj63jKY/hm4mrnw+G9CMRG100b68qmqc16ibOvkPqBA=="
+  "signedAt": "2026-09-24T19:10:07.805Z",
+  "signature": "MGhzkS8G1UPV2MM4goabJt+EsCQs545u2+c/1LZKS+WEiW/8Qu6vkqFiiLaBwZqiwomJ6xdCXQQ90ifL0zCVAw=="
 }

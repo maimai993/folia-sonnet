@@ -205,6 +205,7 @@ const validateManifest = (raw) => {
         experimental: Array.isArray(raw.experimental) ? raw.experimental : [],
         embedOrigins: Array.isArray(raw.embedOrigins) ? raw.embedOrigins : [],
         folia: raw.folia ?? null,
+        preview: raw.preview ?? null,
     };
 
     if (manifest.folium !== FOLIUM_VERSION.major) {
@@ -230,6 +231,10 @@ const validateManifest = (raw) => {
     }
     if (manifest.client !== null && (!isSafeRelativePath(manifest.client) || !/\.m?js$/.test(manifest.client))) {
         errors.push('mod.client must be a relative .mjs/.js path inside the mod directory');
+    }
+    // Introduction image (shown by the mod market): optional here, required there.
+    if (manifest.preview !== null && (!isSafeRelativePath(manifest.preview) || !/\.(png|jpe?g|webp)$/i.test(manifest.preview))) {
+        errors.push('mod.preview must be a relative .png/.jpg/.webp path inside the mod directory');
     }
 
     const dependencyIds = new Set();

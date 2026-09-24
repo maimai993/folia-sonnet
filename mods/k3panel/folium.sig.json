@@ -2,9 +2,9 @@
   "format": "folium-signature",
   "version": 1,
   "modId": "k3panel",
-  "modVersion": "1.0.0",
-  "digest": "sha256:b14748d68de213fe9587fb01d8b42b1ed88730eb8649e6fa2eab1b7beb2d364e",
+  "modVersion": "1.0.1",
+  "digest": "sha256:1e3e3d904cabd0c93c77a7fa0c82462377c610cb27e35f6f56ba904d6af57f8e",
   "keyId": "folium-2026-1",
-  "signedAt": "2026-09-24T18:08:46.930Z",
-  "signature": "v0u5OjRHUS3I7t6VeH65k5W4o1yajiQYHTcSl1UFlAe+Bji1aD8oRAhwtMX+ZFY9clo5TjXvy108oHS9sOPbAA=="
+  "signedAt": "2026-09-24T19:10:07.800Z",
+  "signature": "2vEJqUxXAPOpAo51k9kpfXLtweGMzX8p0nLJejzRTNX1XTfA/8AshiKa/Hh9NEUuFztkaAGgghLfdraZ94VIBQ=="
 }

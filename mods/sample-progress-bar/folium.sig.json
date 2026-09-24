@@ -2,9 +2,9 @@
   "format": "folium-signature",
   "version": 1,
   "modId": "sample-progress-bar",
-  "modVersion": "1.0.0",
-  "digest": "sha256:a084e8faa6adee927af6fbc57fbf56e1e2910970aa5a097823579737f4ce4083",
+  "modVersion": "1.0.1",
+  "digest": "sha256:600b929b04dd5e9a9dde124e26de86e8988f397b66c77a080d4247a9851bc77f",
   "keyId": "folium-2026-1",
-  "signedAt": "2026-09-24T18:08:46.937Z",
-  "signature": "YjygeoyTAmZpnzjwa28lEQLkzkDTkY8mzUePkjKbWJTApNgF+J3D/ezxXXy5RV6tk6grSexKqQDhQc5zIgRWCg=="
+  "signedAt": "2026-09-24T19:10:07.803Z",
+  "signature": "Jg9BTgUeRMcMW80BuBIn2tLidEmke3dQGvHmC/pJq0o8WxsmzIX+XatGRALo2hLhfQtwGw8klnMw9mL6rUssAA=="
 }
