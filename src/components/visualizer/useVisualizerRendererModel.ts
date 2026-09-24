@@ -21,6 +21,7 @@ import {
 import { getSongAlbumLabel, getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { useVisualizerBackgroundConfig } from './useVisualizerBackgroundConfig';
 import { useVisualizerTunings } from './useVisualizerTunings';
+import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 
 // src/components/visualizer/useVisualizerRendererModel.ts
 //
@@ -123,7 +124,7 @@ export const useVisualizerRendererModel = ({
         mode,
         currentTime: lyricCurrentTime,
         currentLineIndex,
-        lines: displayLyrics?.lines || [],
+        lines: displayLyrics?.lines || NO_LYRIC_LINES,
         theme,
         subtitleTheme,
         isDaylight,

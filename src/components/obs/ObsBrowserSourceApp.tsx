@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { PlayerState } from '../../types';
 import type { ObsBrowserSourceAudio, ObsBrowserSourceClock, ObsBrowserSourceConfig } from '../../types/obsBrowserSource';
 import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
@@ -189,7 +190,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 visualizerTunings={config.visualizerTunings}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
-                lines={config.lyrics?.lines ?? []}
+                lines={config.lyrics?.lines ?? NO_LYRIC_LINES}
                 theme={config.theme}
                 subtitleTheme={config.subtitleTheme}
                 isDaylight={config.isDaylight}

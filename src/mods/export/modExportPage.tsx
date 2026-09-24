@@ -10,6 +10,7 @@ import { reconcileFoliumClients } from '../folium/clientLoader';
 import { hydrateFoliumParamsForExport } from '../folium/paramStore';
 import type { ModRuntimeInfo } from '../types';
 import type { AudioBands, Line, Theme, VisualizerMode } from '@/types';
+import { NO_LYRIC_LINES } from '@/utils/lyrics/noLyricLines';
 
 // src/mods/export/modExportPage.tsx
 // Standalone hidden renderer for mod video export. It drives a chosen
@@ -134,7 +135,7 @@ const ModExportPage: React.FC = () => {
     const mode = config?.visualizerMode ?? 'classic';
     const effectiveMode: VisualizerMode = hasVisualizerMode(mode) ? mode : 'classic';
     const entry = getVisualizerRegistryEntry(effectiveMode);
-    const lines = config?.lyricData?.lines ?? [];
+    const lines = config?.lyricData?.lines ?? NO_LYRIC_LINES;
     const theme = config?.theme ?? DEFAULT_THEME;
     // 'theme' fills the container with the song theme background color for an
     // opaque, platform-independent export; 'none' keeps the container fully

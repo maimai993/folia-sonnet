@@ -6,6 +6,7 @@ import {
     selectDisplaySong,
 } from '@/stores/usePlaybackStore';
 import { audioBands, audioPower, lyricCurrentTime } from '@/stores/motionSignals';
+import { NO_LYRIC_LINES } from '@/utils/lyrics/noLyricLines';
 import type { FoliumStageLayerDef, FoliumStageSlot, FoliumSurface } from '../contract';
 import { useFoliumRegistryEntries, type FoliumRegistryEntry } from '../registry';
 import { useFoliumStageContext } from '../stageContext';
@@ -22,7 +23,6 @@ const byOrder = (left: FoliumRegistryEntry<FoliumStageLayerDef>, right: FoliumRe
     (left.def.order ?? 500) - (right.def.order ?? 500) || left.id.localeCompare(right.id)
 );
 
-const EMPTY_LINES: never[] = [];
 const STAGE_SURFACE: FoliumSurface = Object.freeze({ transparent: false, hostBackground: true });
 // Stage layers only exist on the live player page, so they read the app's own analyser signals.
 const STAGE_AUDIO = Object.freeze({ audioPower, audioBands });
@@ -37,7 +37,7 @@ const FoliumStageLayer: React.FC<{
     const song = usePlaybackStore(selectDisplaySong);
     const currentLineIndex = usePlaybackStore((state) => state.currentLineIndex);
     const ctx = useFoliumStageContext({
-        lines: lyrics?.lines ?? EMPTY_LINES,
+        lines: lyrics?.lines ?? NO_LYRIC_LINES,
         currentTime: lyricCurrentTime,
         currentLineIndex,
         paused,

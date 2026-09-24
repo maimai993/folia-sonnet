@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { buildVisualizerTheme } from '../app/presentation/buildVisualizerTheme';
 import type { DualTheme, Line, MonetPortraitImage, Theme } from '../../types';
 import type { VisualizerBackgroundConfig } from '../visualizer/backgrounds/definition';
@@ -229,7 +230,7 @@ const ObsWebSourceApp: React.FC<ObsWebSourceAppProps> = ({ source, appearance, o
                 visualizerTunings={appearance.visualizerTunings}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
-                lines={state.lyrics?.lines ?? []}
+                lines={state.lyrics?.lines ?? NO_LYRIC_LINES}
                 theme={visualizerTheme}
                 subtitleTheme={visualizerSubtitleTheme}
                 isDaylight={isDaylight}
