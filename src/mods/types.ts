@@ -16,6 +16,33 @@ export interface ModLabelMap {
     'in'?: string;
 }
 
+/**
+ * Official signature state (electron/modSystem/modSignature.cjs). A label only:
+ * it never enables a mod or skips the enable confirmation.
+ *   - verified: signed by a Folium key over exactly the files on disk;
+ *   - unsigned: no signature (an unreviewed third-party mod);
+ *   - invalid:  a signature that does not check out (see `reason`).
+ */
+export type ModSignatureStatus = 'verified' | 'unsigned' | 'invalid';
+
+export type ModSignatureInvalidReason =
+    | 'malformed'
+    | 'unknown-key'
+    | 'revoked-key'
+    | 'mod-mismatch'
+    | 'bad-signature'
+    | 'unverifiable'
+    | 'digest-mismatch'
+    | 'revoked-mod';
+
+export interface ModSignatureInfo {
+    status: ModSignatureStatus;
+    reason: ModSignatureInvalidReason | null;
+    keyId: string | null;
+    keyLabel: string | null;
+    signedAt: string | null;
+}
+
 export interface ModRuntimeInfo {
     id: string;
     name: string;
@@ -32,6 +59,7 @@ export interface ModRuntimeInfo {
      * before it runs again.
      */
     trustStale: boolean;
+    signature: ModSignatureInfo;
     /** Opted-in experimental surfaces (manifest `experimental`). */
     experimental: string[];
     /** Origins `folium.ui.embed` may load (manifest `embedOrigins`). */

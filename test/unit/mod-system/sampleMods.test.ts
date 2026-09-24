@@ -7,9 +7,12 @@ import path from 'path';
 // Every mod shipped in the repository's mods/ directory is Folium 1: its
 // manifest validates and the entry files it declares exist. Samples are the
 // first thing mod authors copy, so they must never drift from the contract.
+// They are also officially signed: editing a sample means re-signing it
+// (folium-compound: tools/sign.mjs), or this suite fails.
 
 const require = createRequire(import.meta.url);
 const { validateManifest } = require('../../../electron/modSystem/manifest.cjs');
+const { verifyModSignature } = require('../../../electron/modSystem/modSignature.cjs');
 
 const MODS_DIR = path.resolve(__dirname, '../../../mods');
 const modDirectories = fs.readdirSync(MODS_DIR, { withFileTypes: true })
@@ -32,5 +35,10 @@ describe('repository sample mods', () => {
             expect(fs.existsSync(clientPath)).toBe(true);
             expect(fs.readFileSync(clientPath, 'utf8')).toMatch(/export default function activate\(folium\)/);
         }
+    });
+
+    it.each(modDirectories.map((directory) => [path.basename(directory), directory]))('%s carries a valid official signature', (_name, directory) => {
+        const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'mod.json'), 'utf8'));
+        expect(verifyModSignature(directory, manifest)).toMatchObject({ status: 'verified' });
     });
 });

@@ -43,7 +43,7 @@ const mod = (overrides: Partial<ModRuntimeInfo> = {}): ModRuntimeInfo => ({
     status: 'loaded',
     error: null,
     enabled: true,
-    trustStale: false,
+    trustStale: false, signature: { status: 'unsigned', reason: null, keyId: null, keyLabel: null, signedAt: null },
     experimental: [],
     embedOrigins: [],
     folia: null,
