@@ -23,6 +23,11 @@ import { colorWithAlpha } from './colorMix';
 import FontFallbackStackControl from './FontFallbackStackControl';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, type VisualizerRegistryEntry } from './registry';
 import { type VisPlaygroundEditSection } from './VisPlaygroundPreviewHotspots';
+import { FoliumTuningCards } from '@/mods/folium/registries/tunings';
+import { visualizersRegistry } from '@/mods/folium/registries/visualizers';
+import { backgroundsRegistry } from '@/mods/folium/registries/backgrounds';
+import { useFoliumRegistryEntries } from '@/mods/folium/registry';
+import { useMissingFoliumSelections } from '@/mods/folium/missingEntries';
 import { type PreviewPlaceholderId } from './PreviewPlaceholder';
 import type { VisualizerBackgroundActions, VisualizerBackgroundConfig } from './backgrounds/definition';
 import {
@@ -416,12 +421,18 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         if (subtitleFontWeight !== null) setSubtitleFontWeightSliderValue(subtitleFontWeight);
     }, [subtitleFontWeight]);
 
+    // Mod modes and backgrounds come and go at runtime (Folium registries), so the
+    // option lists recompute on registry changes, not only on language changes.
+    const foliumVisualizerEntries = useFoliumRegistryEntries(visualizersRegistry);
+    const foliumBackgroundEntries = useFoliumRegistryEntries(backgroundsRegistry);
+    const missingFoliumSelections = useMissingFoliumSelections();
     const modeOptions = useMemo(() => (
         VISUALIZER_REGISTRY.map(entry => ({
             label: getVisualizerModeLabel(entry.mode, t),
             value: entry.mode,
         }))
-    ), [t]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    ), [t, foliumVisualizerEntries]);
     const [subtitleFontFamilyDraft, setSubtitleFontFamilyDraft] = useState(subtitleFontFamily ?? '');
 
     useEffect(() => {
@@ -436,7 +447,16 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
             value: entry.mode,
             label: getVisualizerBackgroundModeLabel(entry.mode, t),
         }))
-    ), [t]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    ), [t, foliumBackgroundEntries]);
+    const renderMissingFoliumHint = (kind: 'visualizer' | 'background') => {
+        const missing = missingFoliumSelections.find(entry => entry.kind === kind);
+        return missing ? (
+            <div className="text-xs opacity-70" style={{ color: theme.secondaryColor }}>
+                {t('options.foliumMissingSelection').replace('{{modId}}', missing.modId)}
+            </div>
+        ) : null;
+    };
 
     return (
         <div className="min-h-0 flex flex-col gap-4">
@@ -642,6 +662,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 isDaylight={isDaylight}
                                 theme={theme}
                             />
+                            {renderMissingFoliumHint('background')}
                         </div>
 
                         {backgroundEntry.renderSettingsPanel?.({
@@ -685,6 +706,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                 isDaylight={isDaylight}
                                 theme={theme}
                             />
+                            {renderMissingFoliumHint('visualizer')}
                         </div>
 
                         {visualizerEntry.renderSettingsPanel?.({
@@ -733,6 +755,16 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onSliderPointerDown,
                             onSliderCommit,
                         })}
+
+                        {/* Folium tunings other mods registered for this mode (registries.tunings). */}
+                        <FoliumTuningCards
+                            mode={visualizerMode}
+                            theme={theme}
+                            isDaylight={isDaylight}
+                            controlCardBg={controlCardBg}
+                            rangeInputClass={rangeInputClass}
+                            description={t('options.foliumTuningDesc')}
+                        />
                     </>
                 )}
 

@@ -66,12 +66,52 @@ export const cancelExport = async (): Promise<void> => {
     await bridge()?.cancelExport();
 };
 
-export const invokeModCommand = async (
+/** client → main call to a handler the mod registered with `api.rpc.handle`. */
+export const invokeModRpc = async (
     modId: string,
-    commandId: string,
-    params: Record<string, unknown>
+    name: string,
+    args: unknown[],
 ): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
-    bridge()?.invokeModCommand(modId, commandId, params) ?? { ok: false, error: 'no-electron-bridge' };
+    bridge()?.invokeModRpc(modId, name, args) ?? { ok: false, error: 'no-electron-bridge' };
+
+/** folium.storage: the mod's data file in the main process (same one `api.storage.data` uses). */
+export const invokeModStorage = async (
+    modId: string,
+    operation: 'get' | 'set' | 'has' | 'delete' | 'keys',
+    key?: string,
+    value?: unknown,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    bridge()?.invokeModStorage(modId, operation, key, value) ?? { ok: false, error: 'no-electron-bridge' };
+
+/** folium.net.fetch: runs in the main process (permission `net.fetch`). */
+export const invokeModNetFetch = async (
+    modId: string,
+    url: string,
+    init: unknown,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    bridge()?.invokeModNetFetch(modId, url, init) ?? { ok: false, error: 'no-electron-bridge' };
+
+/** folium.ui.pickFile: native open dialog; resolves to a session folia-mod:// URL or null. */
+export const invokeModPickFile = async (
+    modId: string,
+    accept: string,
+    persist: boolean,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    bridge()?.invokeModPickFile(modId, accept, persist) ?? { ok: false, error: 'no-electron-bridge' };
+
+/** folium.ui.restoreFile: a persisted file grant back as a session URL, or null. */
+export const invokeModRestoreFile = async (
+    modId: string,
+    grantId: string,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    bridge()?.invokeModRestoreFile(modId, grantId) ?? { ok: false, error: 'no-electron-bridge' };
+
+/** folium.ui.releaseFile: forgets a persisted file grant. */
+export const invokeModReleaseFile = async (
+    modId: string,
+    grantId: string,
+): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    bridge()?.invokeModReleaseFile(modId, grantId) ?? { ok: false, error: 'no-electron-bridge' };
 
 export const pushRuntimeSnapshot = async (snapshot: ModRuntimeSnapshot): Promise<void> => {
     await bridge()?.pushRuntimeSnapshot(snapshot);

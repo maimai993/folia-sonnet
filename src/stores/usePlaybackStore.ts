@@ -100,6 +100,8 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
 
     setCurrentSong: (next) => set({ currentSong: resolve(next, get().currentSong) }),
     setAudioSrc: (next) => set({ audioSrc: resolve(next, get().audioSrc) }),
+    // Plain setter: the extension transform (Folium `lyrics.transform`) runs in the lyrics
+    // pipeline (createLyricsSetter), so functional updates here never re-transform.
     setLyricsState: (next) => set({ lyrics: resolve(next, get().lyrics) }),
     setActiveLocalLyricsSource: (next) => set({ activeLocalLyricsSource: resolve(next, get().activeLocalLyricsSource) }),
     setCachedCoverUrl: (next) => set({ cachedCoverUrl: resolve(next, get().cachedCoverUrl) }),
