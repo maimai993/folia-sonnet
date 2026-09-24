@@ -17,6 +17,7 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
 | 样例 | 演示 |
 | --- | --- |
 | `sample-aurora-visualizer` | 歌词动画模式（visualizers），纯 client |
+| `visualizer52hz` | 「52Hz」PixiJS 歌词动画：逐字点亮，按节拍沿字形轮廓发出年轮，纯音乐时从随机髓心生长；visualizers + settings + `ctx.audio`（1.2）+ 思索教程（`ponder.targets`，通用骨架 + 双语字幕）+ 模组自带第三方库 |
 | `k3panel` | 给内置模式「商籁」调参（tunings），纯 client |
 | `sample-transparent-mov-export` | client 注册命令，经 rpc 交给 main 调导出服务 |
 | `sample-progress-bar` | 改造进度条：按钮、样式、外部动态数据图层、设置分区、net.fetch、storage |
@@ -45,6 +46,10 @@ mods/
     index.cjs             # 可选：main 入口（Node）
     client.mjs            # 可选：client 入口（渲染端 ESM），可以 import 同目录下的其它 .mjs/.js
 ```
+
+client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 import 裸模块名**（`'pixi.js'`），也拿不到宿主
+打包进去的库。要用第三方库就把它的 ESM 构建放进模组目录（例如 `vendor/pixi.min.mjs`，附上许可证），
+再相对 import，见 `visualizer52hz`。
 
 扫描顺序见 `electron/modSystem/modSystem.cjs` 的 `getModsDirectories`：开发版先扫仓库 `mods/`，
 再是 `userData/mods`、`resources/mods`；**同 id 只认先扫到的那一份**。改了文件却没生效时，先确认
