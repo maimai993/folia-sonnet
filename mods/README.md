@@ -130,6 +130,7 @@ export default function activate(folium) {
 | `playback` / `ui` / `net` | 见[服务](#服务) |
 | `storage.get/set/has/delete/keys` | 异步；需 `filesystem.data`；单模组数据上限 1 MB |
 | `rpc.call(name, ...args)` | 调用本模组 main 侧 `api.rpc.handle(name, fn)` 注册的函数；参数与返回值需可 JSON 序列化 |
+| `lyrics` / `theme`（1.3） | 内置模式共用的纯函数，见[歌词与主题](#歌词与主题13)；导出窗口里也能用 |
 | `experimental[name]` | 选用了才能访问，否则抛 `experimental-not-declared:<name>` |
 | `internals` | 见 [internals](#internals自由度出口) |
 
@@ -199,10 +200,13 @@ folium.registries.visualizers.register({
 
 | 成员 | 说明 |
 | --- | --- |
-| `lines` / `song` / `staticMode` / `staticLineIndex` | 本次挂载内不变的快照（`FoliumLine` 已含渲染结束时间） |
+| `lines` / `song` / `staticMode` / `staticLineIndex` | 本次挂载内不变的快照；`lines` 的结构见[歌词与主题](#歌词与主题13) |
+| `seed`（1.3） | 内置模式用的几何种子（当前歌曲 id，没有时是按模式的回退值），预览、播放、导出一致；拿它做种子，随机结果与内置模式同步变化 |
+| `isPreview`（1.3） | 是否在设置预览里渲染 |
 | `currentTime.get()` / `.on('change', cb)` | 歌词时钟 |
 | `getLineIndex()` / `isPaused()` / `getTheme()` / `getSettings()` / `getSurface()` | 随时读取，每帧读也没问题 |
-| `subscribe(cb)` | 行号、暂停、主题、设置、表面任一变化时回调（暂停时时钟不走，靠它得知变化） |
+| `getSubtitleTheme()` / `getCoverUrl()` / `getDisplay()`（1.3） | 字幕主题（没有单独的字幕主题时等于 `getTheme()`）、封面地址、显示设置。`getDisplay()` 的字段与内置模式收到的同名 prop 一致：`showText`、`lyricsFontScale`、`subtitleFontScale`、`subtitleOverlayOpacity`、`subtitleOverlayBackground`、`subtitleUpcomingLyricsBlur`、`showHarmonySubtitle`、`harmonySubtitleBackground`、`showSubtitleTranslation`、`hideTranslationSubtitle`、`subtitleContentMode`、`isPlayerChromeHidden`、`isPanelOpen`、`visualizerOpacity`；值不变时返回同一个对象 |
+| `subscribe(cb)` | 行号、暂停、主题、字幕主题、封面、显示设置、模组设置、表面任一变化时回调（暂停时时钟不走，靠它得知变化） |
 | `audio`（1.2） | 音频分析：`getPower()`、`getBands()`（`bass` / `lowMid` / `mid` / `vocal` / `treble`）都是 0..1；`getSpectrum()` 是原始 FFT 幅值（0–255）或 `null`。每帧都在变且不通知，在自己的帧循环里读；`getBands()` 每次返回同一个对象、原地刷新，要保留读数就复制。预览里是宿主生成的模拟信号，静音或没有分析器时读到 0 |
 
 - **只在歌词数据、歌曲、`staticMode` 或静态预览行变化时重挂载**；换行不会重挂载，行号从 `getLineIndex()` 读。
@@ -210,6 +214,51 @@ folium.registries.visualizers.register({
   的模组应自己让位。`hostLayers.subtitles`：宿主在上面画底部字幕（翻译 / 下一句），走用户的字幕设置。
 - `settingsPanel` 必须配合 `settings`：它只替换「画法」，键、默认值和校验仍由 schema 决定，面板通过
   `panelCtx.params`（`get / set / reset / subscribe`）读写。
+- 用户的全局歌词字号是 `getDisplay().lyricsFontScale`，内置模式都乘上它；模组关掉 `hostLayers.subtitles`
+  自己画字幕时，字幕相关设置也从 `getDisplay()` 读。
+- 舞台图层（stageLayers）拿到同一种上下文：显示设置读自播放页正在用的设置，`seed` 是当前歌曲 id；
+  `getSubtitleTheme()` 等于 `getTheme()`，`hideTranslationSubtitle` 恒为 `false`。
+
+### 歌词与主题（1.3）
+
+模组拿到的歌词行和主题与内置 visualizer 收到的 `Line` / `Theme` **同名同义**，内置模式的写法可以直接照搬。
+它们仍是宿主投影出的冻结副本，不是宿主对象本身。
+
+`FoliumLine`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `fullText` / `startTime` / `endTime` | 整行文字与歌词本身的起止时间。**`endTime` 是歌词原始结束时间**，这一行何时离开屏幕看 `renderHints.renderEndTime`（或 `folium.lyrics.getLineRenderEndTime(line)`） |
+| `words` | `{ text, startTime, endTime, syllables? }[]`；`syllables` 是音节（`{ text, startTime, endTime, endsWithSpace?, ruby?, obscene?, emptyBeat? }`，`ruby` 是注音） |
+| `renderHints` | 总是存在：`{ rawDuration, timingClass, renderEndTime, lineTransitionMode, wordRevealMode }`，内置模式用它决定短句、极短句的入场、逐字揭示与离场节奏 |
+| `translation` / `romanization` / `alternateTexts` | 翻译、罗马音；`alternateTexts` 是带语言与角色的多份替代文本 |
+| `id` / `agentId` / `songPart` / `blockIndex` | 行 id、演唱者、段落名（如 `Chorus`）、段落序号 |
+| `isChorus` / `chorusEffect` | 副歌标记与副歌效果（`bars` / `circles` / `beams`） |
+| `backgroundVocals` | 和声，结构同一行（`text`、时间、`words`、`agentId`、翻译……）。宿主旧的单数 `backgroundVocal` 已并入这里 |
+| `wordSegments` | 用户保存的分词，`join('')` 等于 `fullText`；分词用 `folium.lyrics.segmentWords(line)`，它和内置模式一样优先用这份 |
+
+没有的可选字段直接不出现。用户保存分词后歌词会换成新数组，visualizer 随之重挂载，和内置模式重新排版的时机一致。
+
+`FoliumTheme`：`name`、`backgroundColor`、`primaryColor`、`accentColor`、`secondaryColor`、`fontStyle`（`sans` / `serif` / `mono`）、
+`fontFamily?`（用户选的字体名，**不是**可直接用的 CSS 值）、`fontFamilyStack?`、`fontWeight?`、`animationIntensity`
+（`calm` / `normal` / `chaotic`）、`wordColors?`（关键词配色 `{ word, color }[]`）、`lyricsIcons?`、`provider?`、`description?`，
+再加上 Folium 唯一的附加字段 `isDaylight`（内置模式把它作为单独的 prop 收到）。
+
+`folium.lyrics` / `folium.theme` 就是内置模式调用的那几个宿主函数：
+
+| 函数 | 说明 |
+| --- | --- |
+| `lyrics.getLineRenderEndTime(line)` | 行离开屏幕的时间 |
+| `lyrics.segmentWords(line)` | `{ segment, index, isWordLike }[]`：有效的用户分词优先，否则 `Intl.Segmenter` |
+| `lyrics.getUpcomingLine(lines, index, time)` / `getUpcomingLines(lines, index, count = 2)` | 下一句 / 后几句 |
+| `lyrics.getRecentCompletedLine(lines, index, time)` | 没有当前行时（`index` 为 -1）最近唱完的一句，字幕在间隙里继续显示它 |
+| `lyrics.buildWordColorRanges(fullText, wordColors)` | 关键词配色区间 `{ startOffset, endOffset, color, priority }[]`（UTF-16 偏移，互不重叠） |
+| `lyrics.resolveWordColor(wordText, wordColors, fallback, { cjkMatchMode })` | 单个词的关键词颜色 |
+| `theme.resolveFontStack(theme)` / `resolveTranslationFontStack(theme)` | 歌词 / 翻译字幕的 CSS `font-family` 值 |
+| `theme.resolveFontWeight(theme, fallback)` | 规范化后的字重 |
+
+`mount` 定义在模块顶层时拿不到 `folium`，在注册时包一层：`mount: (container, ctx) => mountMine(folium, container, ctx)`，
+见 `sample-aurora-visualizer`。
 
 ### tunings
 
@@ -317,14 +366,19 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 
 | 钩子 | 说明 |
 | --- | --- |
-| `lyrics.transform`（同步） | 新歌词进入播放页之前。给 `event.lines` 赋新数组即可改写；**原样保留的行对象**保留宿主的全部数据（渲染提示、演唱者、和声……），新建或修改的行由 DTO 重建。输入总是未改写的歌词，不会叠加到自己的输出上：宿主重建已显示的歌词（例如分词更新）时从未改写的版本重新跑一遍，处理器不需要幂等 |
+| `lyrics.transform`（同步） | 新歌词进入播放页之前。给 `event.lines` 赋新数组即可改写；**原样保留的行对象**保留宿主的全部数据，新建或修改的行按 `FoliumLine` 的字段逐个校验后重建：`renderHints` 一律由宿主按新时间重算，不采用处理器给的值；和 `fullText` 拼不回去的 `wordSegments` 被丢弃。输入总是未改写的歌词，不会叠加到自己的输出上：宿主重建已显示的歌词（例如分词更新）时从未改写的版本重新跑一遍，处理器不需要幂等 |
 | `playback.beforePlay`（异步） | 任何歌曲开始播放之前。`event.cancel()` 取消；`event.replaceWith(song)` 换歌（song 必须带宿主给的 `ref`）。单个处理器超过 1.5s 被跳过。automix 过渡自动切到的下一首不经过它：过渡按固定时间表提前数秒启动下一首，不能等处理器 |
 | `omni.lyricsResolved` / `omni.audioSourceResolved`（异步，**实验**，需 `omni.hooks`） | Omni 拿到在线歌曲的歌词 / 音频地址之后，可改写行或给 `event.url` 赋新地址 |
 
 ## 服务
 
-**`folium.playback`**：`getState()` 返回 `{ song, state, position, duration }`；`play / pause / toggle / seek / next / previous`、
+**`folium.playback`**：`getState()` 返回 `{ song, state, position, duration }`；`play / pause / toggle / seek / seekToLyricTime / next / previous`、
 `playSong(song)`、`enqueue(song)` 需要 `playback.control`。歌曲 DTO 带不透明的 `ref`，宿主靠它找回真正的歌曲。
+
+- `seek(seconds)` 跳到**播放时间**；`seekToLyricTime(seconds)`（1.3）跳到**歌词时间**，也就是内置模式点击歌词行的行为：
+  传 `line.startTime` 即可，宿主负责换算歌词偏移、处理只有歌词的舞台源，播放控制被禁用时忽略。歌词有偏移时
+  `seek(line.startTime)` 会跳偏，所以点歌词跳转一律用 `seekToLyricTime`。visualizer 容器本身接收指针事件，
+  在自己的元素上监听点击即可；在预览里（`ctx.isPreview`）不要触发跳转。
 
 **`folium.ui`**：
 
@@ -438,6 +492,10 @@ folium.experimental['omni.providers'].register({
 - DTO（`contract.ts`）字段只增不减；宿主内部类型不出现在任何稳定契约里。
 - 删除或改变语义必须升 major；之前至少有一个 minor 在日志里标记废弃。
 - 实验接口可以在任何 minor 变动；稳定下来后原名字保留，`experimental` 里的选用变成空操作。
+- 1.3 是 Folium 1 正式发布前的调整，一次性改了 DTO 形状，让歌词和主题与内置 visualizer 同构：
+  `FoliumLine.text` 改名 `fullText`，`endTime` 改为歌词原始结束时间（渲染结束时间移到 `renderHints.renderEndTime`）；
+  `FoliumTheme.fontFamily` 改为用户字体名，可直接用的字体栈改由 `folium.theme.resolveFontStack(theme)` 得到，`fontWeight` 变为可选。
+  仓库里的样例已同步。
 
 ## 从 UI 安装与管理
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { FoliumDisposer, FoliumMount, FoliumTheme } from './contract';
+import { resolveThemeFontStack } from '@/utils/fontStacks';
 import { reportFoliumIssue } from './status';
 
 // src/mods/folium/FoliumMountHost.tsx
@@ -16,7 +17,7 @@ export const foliumThemeVars = (theme: FoliumTheme | null | undefined): React.CS
             '--folium-primary': theme.primaryColor,
             '--folium-secondary': theme.secondaryColor,
             '--folium-accent': theme.accentColor,
-            '--folium-font': theme.fontFamily,
+            '--folium-font': resolveThemeFontStack(theme),
         } as React.CSSProperties
         : {}
 );

@@ -24,6 +24,7 @@ export interface FoliumAppActions {
     pause: () => void;
     toggle: () => void;
     seek: (seconds: number) => void;
+    seekToLyricTime: (lyricSeconds: number) => void;
     next: () => void;
     previous: () => void;
     playSong: (song: SongResult) => void | Promise<void>;
@@ -53,6 +54,7 @@ export const useFoliumHostActions = (actions: FoliumAppActions) => {
             pause: () => actionsRef.current.pause(),
             toggle: () => actionsRef.current.toggle(),
             seek: (seconds) => actionsRef.current.seek(seconds),
+            seekToLyricTime: (lyricSeconds) => actionsRef.current.seekToLyricTime(lyricSeconds),
             next: () => actionsRef.current.next(),
             previous: () => actionsRef.current.previous(),
             playSongRef: async (ref) => {

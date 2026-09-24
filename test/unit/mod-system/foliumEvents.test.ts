@@ -12,6 +12,7 @@ import { useFoliumStatusStore } from '@/mods/folium/status';
 import type { FoliumBeforePlayEvent, FoliumLyricsTransformEvent } from '@/mods/folium/contract';
 import type { ModRuntimeInfo } from '@/mods/types';
 import { createFoliumPlaybackService, createFoliumUiService, registerFoliumHostActions } from '@/mods/folium/services';
+import { buildLineRenderHints } from '@/utils/lyrics/renderHints';
 
 // test/unit/mod-system/foliumEvents.test.ts
 // The event bus (ordering, isolation, teardown, hook semantics) and the
@@ -63,14 +64,14 @@ describe('folium event bus', () => {
 
     it('lets sync hooks mutate the shared event in order', () => {
         addFoliumEventHandler('mod-a', 'lyrics.transform', (event) => {
-            event.lines = [...event.lines, { text: 'a', startTime: 0, endTime: 1, words: [] }];
+            event.lines = [...event.lines, { fullText: 'a', startTime: 0, endTime: 1, words: [], renderHints: buildLineRenderHints(0, 1) }];
         });
         addFoliumEventHandler('mod-b', 'lyrics.transform', (event) => {
-            event.lines = event.lines.map((line) => ({ ...line, text: line.text.toUpperCase() }));
+            event.lines = event.lines.map((line) => ({ ...line, fullText: line.fullText.toUpperCase() }));
         }, 'low');
         const event: FoliumLyricsTransformEvent = { song: null, lines: [] };
         dispatchFoliumHookSync('lyrics.transform', event);
-        expect(event.lines.map((line) => line.text)).toEqual(['A']);
+        expect(event.lines.map((line) => line.fullText)).toEqual(['A']);
     });
 
     it('awaits async hooks, stops once cancelled, and times out a stuck handler', async () => {
@@ -108,7 +109,7 @@ const mod = (overrides: Partial<ModRuntimeInfo> = {}): ModRuntimeInfo => ({
 
 const fakeActions = () => ({
     getPlaybackState: () => ({ song: null, state: 'paused' as const, position: 3, duration: 10 }),
-    play: vi.fn(), pause: vi.fn(), toggle: vi.fn(), seek: vi.fn(), next: vi.fn(), previous: vi.fn(),
+    play: vi.fn(), pause: vi.fn(), toggle: vi.fn(), seek: vi.fn(), seekToLyricTime: vi.fn(), next: vi.fn(), previous: vi.fn(),
     playSongRef: vi.fn(async () => true), enqueueSongRef: vi.fn(() => true),
     toast: vi.fn(), openPlayerPanel: vi.fn(), navigate: vi.fn(),
 });
@@ -124,6 +125,18 @@ describe('folium services', () => {
         control.seek(-5);
         expect(actions.seek).toHaveBeenCalledWith(0);
         expect(() => control.enqueue({ ref: null } as never)).toThrow('song-ref-required');
+    });
+
+    it('hands lyric-time seeks to the host unconverted, behind playback.control', () => {
+        const actions = fakeActions();
+        registerFoliumHostActions(actions);
+        expect(() => createFoliumPlaybackService(mod(), 'main').seekToLyricTime(12)).toThrow('permission-denied:playback.control');
+        const control = createFoliumPlaybackService(mod({ permissions: ['playback.control'] }), 'main');
+        control.seekToLyricTime(12.5);
+        // The host does the lyric-to-playback conversion, so the value passes through as is.
+        expect(actions.seekToLyricTime).toHaveBeenCalledWith(12.5);
+        expect(actions.seek).not.toHaveBeenCalled();
+        expect(() => control.seekToLyricTime(Number.NaN)).toThrow('requires a finite number');
     });
 
     it('is unavailable outside the main window', () => {

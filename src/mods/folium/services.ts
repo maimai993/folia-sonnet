@@ -26,6 +26,8 @@ export interface FoliumHostActions {
     pause: () => void;
     toggle: () => void;
     seek: (seconds: number) => void;
+    /** The builtin lyric-line seek: lyric time in, converted to playback time by the host. */
+    seekToLyricTime: (lyricSeconds: number) => void;
     next: () => void;
     previous: () => void;
     /** Resolves a song ref and plays it; false when the ref is unknown. */
@@ -78,6 +80,10 @@ export const createFoliumPlaybackService = (mod: ModRuntimeInfo, context: Folium
         seek: (seconds: number) => {
             if (!Number.isFinite(seconds)) throw new Error('playback.seek requires a finite number of seconds');
             control().seek(Math.max(0, seconds));
+        },
+        seekToLyricTime: (lyricSeconds: number) => {
+            if (!Number.isFinite(lyricSeconds)) throw new Error('playback.seekToLyricTime requires a finite number of seconds');
+            control().seekToLyricTime(lyricSeconds);
         },
         next: () => control().next(),
         previous: () => control().previous(),

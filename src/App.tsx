@@ -2046,20 +2046,6 @@ export default function App() {
         }
     }, [publishStagePlayerPlaybackUpdate]);
 
-    // Folium services (folium.playback / folium.ui) call through to these App handlers.
-    useFoliumHostActions({
-        play: resumePlayback,
-        pause: pausePlayback,
-        toggle: () => togglePlay(),
-        seek: seekMainAudio,
-        next: () => { void handleNextTrack(); },
-        previous: handlePrevTrack,
-        playSong: (song) => playSong(song),
-        enqueue: addOnlineSongToQueue,
-        navigateToPlayer,
-        navigateToHome,
-    });
-
     const handleMonetLyricLineSeek = useCallback((lyricTimeSec: number) => {
         if (isNowPlayingControlDisabled) {
             return;
@@ -2090,6 +2076,22 @@ export default function App() {
         stageLyricsClockRef,
         syncStageLyricsClock,
     ]);
+
+    // Folium services (folium.playback / folium.ui) call through to these App handlers.
+    useFoliumHostActions({
+        play: resumePlayback,
+        pause: pausePlayback,
+        toggle: () => togglePlay(),
+        seek: seekMainAudio,
+        seekToLyricTime: handleMonetLyricLineSeek,
+        next: () => { void handleNextTrack(); },
+        previous: handlePrevTrack,
+        playSong: (song) => playSong(song),
+        enqueue: addOnlineSongToQueue,
+        navigateToPlayer,
+        navigateToHome,
+    });
+
     const visualizerRendererModel = useVisualizerRendererModel({
         theme: visualizerTheme,
         subtitleTheme: visualizerSubtitleTheme,

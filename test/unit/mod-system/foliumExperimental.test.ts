@@ -90,7 +90,7 @@ describe('omni.hooks', () => {
             event.url = 'https://b.example/y.mp3';
         });
         (experimental['omni.hooks'] as { on: (type: string, handler: (event: any) => void) => void }).on('lyricsResolved', (event) => {
-            event.lines = event.lines.map((line: { text: string }) => ({ ...line, text: line.text.toUpperCase() }));
+            event.lines = event.lines.map((line: { fullText: string }) => ({ ...line, fullText: line.fullText.toUpperCase() }));
         });
 
         expect(await applyOmniAudioHook(song, source)).toMatchObject({ url: 'https://b.example/y.mp3', quality: 'high' });

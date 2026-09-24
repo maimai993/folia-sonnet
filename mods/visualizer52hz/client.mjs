@@ -73,7 +73,7 @@ export default function activate(folium) {
     id: 'rings',
     label: { 'zh-CN': '52Hz', en: '52Hz' },
     order: 430,
-    mount: mount52Hz,
+    mount: (container, ctx) => mount52Hz(folium, container, ctx),
     settings,
   });
   // Ponder is main-window only, and per-language text needs Folium 1.2.

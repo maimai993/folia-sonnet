@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Line, SongResult, Theme } from '@/types';
-import { toFoliumLines, toFoliumSong, toFoliumTheme } from '@/mods/folium/dto';
-import { getLineRenderEndTime } from '@/utils/lyrics/renderHints';
+import { fromFoliumLines, toFoliumLines, toFoliumSong, toFoliumTheme } from '@/mods/folium/dto';
+import { FOLIUM_LYRICS_HELPERS, FOLIUM_THEME_HELPERS } from '@/mods/folium/sharedHelpers';
+import { buildLineRenderHints, getLineRenderEndTime, getLineRenderHints } from '@/utils/lyrics/renderHints';
+import { resolveThemeFontStack } from '@/utils/fontStacks';
 
 // test/unit/mod-system/foliumDto.test.ts
 // The DTO projections are the only place that knows host types and Folium
-// types at once. These pin that host-only fields never leak, that line end
-// times are the render end, and that projections are cached by identity.
+// types at once. These pin that lines and themes mirror the host shapes field
+// for field, that nothing else leaks, that edited lines come back validated,
+// and that the shared helpers answer exactly as the host functions do.
 
 const line = (overrides: Partial<Line> = {}): Line => ({
     words: [{ text: 'hi', startTime: 1, endTime: 2 }],
@@ -17,48 +20,166 @@ const line = (overrides: Partial<Line> = {}): Line => ({
 });
 
 describe('toFoliumLines', () => {
-    it('projects only the public fields', () => {
-        const [projected] = toFoliumLines([line({ translation: 'salut', agentId: 'v1', wordSegments: ['h', 'i'] })]);
-        expect(Object.keys(projected).sort()).toEqual(['endTime', 'startTime', 'text', 'translation', 'words']);
-        expect(projected.words).toEqual([{ text: 'hi', startTime: 1, endTime: 2 }]);
+    it('mirrors the host line field for field', () => {
+        const vocal = { text: 'ooh', startTime: 1.2, endTime: 1.8, words: [{ text: 'ooh', startTime: 1.2, endTime: 1.8 }], agentId: 'v2' };
+        const source = line({
+            words: [{ text: 'hi', startTime: 1, endTime: 2, syllables: [{ text: 'hi', startTime: 1, endTime: 2, ruby: [{ text: 'ひ', startTime: 1, endTime: 2 }] }] }],
+            translation: 'salut',
+            romanization: 'hai',
+            alternateTexts: [{ role: 'translation', language: 'fr', text: 'salut' }],
+            id: 'L1',
+            agentId: 'v1',
+            songPart: 'Chorus',
+            blockIndex: 3,
+            isChorus: true,
+            chorusEffect: 'bars',
+            backgroundVocals: [vocal],
+            wordSegments: ['h', 'i'],
+        });
+        const [projected] = toFoliumLines([source]);
+        expect(projected).toEqual({
+            words: source.words,
+            startTime: 1,
+            endTime: 2,
+            fullText: 'hi',
+            renderHints: getLineRenderHints(source),
+            translation: 'salut',
+            romanization: 'hai',
+            alternateTexts: source.alternateTexts,
+            id: 'L1',
+            agentId: 'v1',
+            songPart: 'Chorus',
+            blockIndex: 3,
+            isChorus: true,
+            chorusEffect: 'bars',
+            backgroundVocals: [vocal],
+            wordSegments: ['h', 'i'],
+        });
     });
 
-    it('uses the render end time', () => {
+    it('omits absent optional fields and always fills render hints', () => {
         const source = line();
-        expect(toFoliumLines([source])[0].endTime).toBe(getLineRenderEndTime(source));
+        const [projected] = toFoliumLines([source]);
+        expect(Object.keys(projected).sort()).toEqual(['endTime', 'fullText', 'renderHints', 'startTime', 'words']);
+        expect(projected.endTime).toBe(2);
+        expect(projected.renderHints.renderEndTime).toBe(getLineRenderEndTime(source));
     });
 
-    it('caches by array identity and freezes the result', () => {
-        const lines = [line()];
+    it('folds the legacy single background vocal into backgroundVocals', () => {
+        const vocal = { text: 'ah', startTime: 1, endTime: 2, words: [] };
+        expect(toFoliumLines([line({ backgroundVocal: vocal })])[0].backgroundVocals).toEqual([vocal]);
+    });
+
+    it('never leaks host-only fields', () => {
+        const [projected] = toFoliumLines([line({ extra: 1 } as unknown as Partial<Line>)]);
+        expect(projected).not.toHaveProperty('extra');
+        expect(projected).not.toHaveProperty('backgroundVocal');
+    });
+
+    it('caches by array identity and freezes deeply', () => {
+        const lines = [line({ words: [{ text: 'hi', startTime: 1, endTime: 2, syllables: [{ text: 'hi', startTime: 1, endTime: 2 }] }] })];
         const first = toFoliumLines(lines);
         expect(toFoliumLines(lines)).toBe(first);
         expect(Object.isFrozen(first)).toBe(true);
         expect(Object.isFrozen(first[0])).toBe(true);
+        expect(Object.isFrozen(first[0].renderHints)).toBe(true);
+        expect(Object.isFrozen(first[0].words[0].syllables![0])).toBe(true);
     });
 
     it('falls back to joined words when fullText is missing', () => {
         const [projected] = toFoliumLines([line({ fullText: undefined as unknown as string })]);
-        expect(projected.text).toBe('hi');
+        expect(projected.fullText).toBe('hi');
+    });
+});
+
+describe('fromFoliumLines', () => {
+    it('keeps untouched lines and rebuilds edited ones with validated fields', () => {
+        const kept = line();
+        const edited = line({ startTime: 3, endTime: 4, fullText: 'yo', words: [] });
+        const dtos = toFoliumLines([kept, edited]);
+        const [first, second] = fromFoliumLines([kept, edited], dtos, [
+            dtos[0],
+            {
+                ...dtos[1],
+                fullText: 'you',
+                isChorus: true,
+                songPart: 'Verse',
+                wordSegments: ['yo', 'u'],
+                chorusEffect: 'nope' as never,
+                renderHints: { ...dtos[1].renderHints, renderEndTime: 999 },
+            },
+        ]);
+        expect(first).toBe(kept);
+        expect(second).toMatchObject({ fullText: 'you', isChorus: true, songPart: 'Verse', wordSegments: ['yo', 'u'] });
+        expect(second).not.toHaveProperty('chorusEffect');
+        // Render hints come from the host, never from the mod.
+        expect(second.renderHints).toEqual(buildLineRenderHints(second));
+    });
+
+    it('drops a word split that no longer joins back to the text', () => {
+        const source = line();
+        const dtos = toFoliumLines([source]);
+        const [rebuilt] = fromFoliumLines([source], dtos, [{ ...dtos[0], fullText: 'hey', wordSegments: ['h', 'i'] }]);
+        expect(rebuilt).not.toHaveProperty('wordSegments');
     });
 });
 
 describe('toFoliumTheme', () => {
-    it('resolves font stack and weight and carries daylight', () => {
-        const theme = {
+    it('mirrors the host theme and adds isDaylight', () => {
+        const theme: Theme = {
             name: 't', backgroundColor: '#000', primaryColor: '#fff', accentColor: '#f0f', secondaryColor: '#888',
-            fontStyle: 'serif', animationIntensity: 'normal', fontWeight: 700,
-        } as Theme;
-        const projected = toFoliumTheme(theme, true);
-        expect(projected.fontWeight).toBe(700);
-        expect(projected.fontFamily).toContain('serif');
-        expect(projected.isDaylight).toBe(true);
-        expect(Object.keys(projected).sort()).toEqual([
-            'accentColor', 'backgroundColor', 'fontFamily', 'fontWeight', 'isDaylight', 'primaryColor', 'secondaryColor',
-        ]);
+            fontStyle: 'serif', fontFamily: 'Custom', fontFamilyStack: ['Custom', 'Other'], fontWeight: 700,
+            animationIntensity: 'chaotic', wordColors: [{ word: 'love', color: '#f00' }], lyricsIcons: ['heart'],
+            provider: 'ai', description: 'desc',
+        };
+        expect(toFoliumTheme(theme, true)).toEqual({ ...theme, isDaylight: true });
+    });
+
+    it('leaves the user font family unresolved; the helper resolves it like builtin modes do', () => {
+        const theme = { name: 't', backgroundColor: '#000', primaryColor: '#fff', accentColor: '#f0f', secondaryColor: '#888', fontStyle: 'serif', animationIntensity: 'normal' } as Theme;
+        const projected = toFoliumTheme(theme, false);
+        expect(projected).not.toHaveProperty('fontFamily');
+        expect(FOLIUM_THEME_HELPERS.resolveFontStack(projected)).toBe(resolveThemeFontStack(theme));
     });
 
     it('has safe defaults without a theme', () => {
-        expect(toFoliumTheme(null, false).backgroundColor).toBeTruthy();
+        const projected = toFoliumTheme(null, false);
+        expect(projected.backgroundColor).toBeTruthy();
+        expect(projected.fontStyle).toBe('sans');
+        expect(projected.animationIntensity).toBe('normal');
+    });
+});
+
+describe('folium.lyrics helpers', () => {
+    const lines = toFoliumLines([
+        line({ startTime: 0, endTime: 1, fullText: 'a', words: [] }),
+        line({ startTime: 2, endTime: 3, fullText: 'b', words: [] }),
+        line({ startTime: 4, endTime: 5, fullText: 'c', words: [] }),
+    ]);
+
+    it('reads the render end time and the neighbouring lines', () => {
+        expect(FOLIUM_LYRICS_HELPERS.getLineRenderEndTime(lines[0])).toBe(lines[0].renderHints.renderEndTime);
+        expect(FOLIUM_LYRICS_HELPERS.getLineRenderEndTime(null)).toBe(Number.NEGATIVE_INFINITY);
+        expect(FOLIUM_LYRICS_HELPERS.getUpcomingLine(lines, 0, 0.5)).toBe(lines[1]);
+        expect(FOLIUM_LYRICS_HELPERS.getUpcomingLine(lines, -1, 3.5)).toBe(lines[2]);
+        expect(FOLIUM_LYRICS_HELPERS.getUpcomingLines(lines, 0)).toEqual([lines[1], lines[2]]);
+        expect(FOLIUM_LYRICS_HELPERS.getRecentCompletedLine(lines, -1, 3.9)).toBe(lines[1]);
+    });
+
+    it('segments words with the saved split first', () => {
+        expect(FOLIUM_LYRICS_HELPERS.segmentWords({ fullText: '你好世界', wordSegments: ['你好', '世界'] }).map((part) => part.segment))
+            .toEqual(['你好', '世界']);
+        expect(FOLIUM_LYRICS_HELPERS.segmentWords({ fullText: 'hello world' }).filter((part) => part.isWordLike).map((part) => part.segment))
+            .toEqual(['hello', 'world']);
+    });
+
+    it('colors keywords the way builtin modes do', () => {
+        const wordColors = [{ word: 'love', color: '#f00' }];
+        expect(FOLIUM_LYRICS_HELPERS.resolveWordColor('Love', wordColors, '#fff')).toBe('#f00');
+        expect(FOLIUM_LYRICS_HELPERS.resolveWordColor('hate', wordColors, '#fff')).toBe('#fff');
+        expect(FOLIUM_LYRICS_HELPERS.buildWordColorRanges('i love you', wordColors)).toEqual([
+            expect.objectContaining({ startOffset: 2, endOffset: 6, color: '#f00' }),
+        ]);
     });
 });
 
