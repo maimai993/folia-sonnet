@@ -79,7 +79,7 @@ const createEnergyFollower = () => {
   };
 };
 
-export const mount52Hz = (container, ctx) => {
+export const mount52Hz = (folium, container, ctx) => {
   const host = document.createElement('div');
   host.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
   container.appendChild(host);
@@ -148,14 +148,20 @@ export const mount52Hz = (container, ctx) => {
     let lastWall = null;
 
     const settings = () => ctx.getSettings();
-    const fontScale = () => Number(settings().fontScale ?? 1);
-    const hasLyrics = ctx.lines.some((line) => line.text.trim());
+    // The user's lyric size scales on top of the mod's own size setting, as in builtin modes.
+    const fontScale = () => Number(settings().fontScale ?? 1) * ctx.getDisplay().lyricsFontScale;
+    // Resolved the way builtin modes resolve the theme font (Folium 1.3).
+    const lyricFont = () => {
+      const theme = ctx.getTheme();
+      return { family: folium.theme.resolveFontStack(theme), weight: folium.theme.resolveFontWeight(theme, 500) };
+    };
+    const hasLyrics = ctx.lines.some((line) => line.fullText.trim());
     const songSeed = hashString(`${ctx.song?.title ?? ''}|${ctx.song?.artist ?? ''}`);
 
     const layoutFor = (lineIndex) => {
       const line = ctx.lines[lineIndex];
-      if (!line || !line.text.trim()) return null;
-      return layoutLine(line.text, ctx.getTheme(), width, height, fontScale());
+      if (!line || !line.fullText.trim()) return null;
+      return layoutLine(line.fullText, lyricFont(), width, height, fontScale());
     };
 
     const sourceAt = (time) => {
@@ -164,7 +170,7 @@ export const mount52Hz = (container, ctx) => {
         return { key: `pith:${period}`, kind: 'pith', seed: (songSeed ^ Math.imul(period + 1, 0x9e3779b1)) >>> 0 };
       }
       const lineIndex = ctx.staticMode && ctx.staticLineIndex !== null ? ctx.staticLineIndex : ctx.getLineIndex();
-      if (!ctx.lines[lineIndex]?.text.trim()) return null;
+      if (!ctx.lines[lineIndex]?.fullText.trim()) return null;
       return { key: `line:${lineIndex}`, kind: 'line', lineIndex };
     };
 
@@ -374,7 +380,8 @@ export const mount52Hz = (container, ctx) => {
     // Font, glyph colors or font scale need the glyphs redrawn; the rest is uniforms.
     const glyphKey = () => {
       const theme = ctx.getTheme();
-      return `${theme.fontFamily}|${theme.fontWeight}|${theme.primaryColor}|${theme.accentColor}|${fontScale()}`;
+      const font = lyricFont();
+      return `${font.family}|${font.weight}|${theme.primaryColor}|${theme.accentColor}|${fontScale()}`;
     };
     let lastGlyphKey = glyphKey();
     const offChanges = ctx.subscribe(() => {

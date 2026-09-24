@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshCw, TriangleAlert, CircleCheck, FileVideo2, CheckSquare, Square, Upload, X } from 'lucide-react';
+import { AlertCircle, Boxes, ChevronDown, CircleOff, FolderOpen, Power, RefreshCw, TriangleAlert, CircleCheck, FileVideo2, CheckSquare, Square, Upload, X, ShieldCheck, ShieldAlert, ShieldQuestion } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '@/types';
 import { DEFAULT_THEME } from '@/services/baseThemes';
@@ -40,6 +40,72 @@ const describeModGrants = (mod: ModRuntimeInfo): string[] => [
     ...(mod.embedOrigins ?? []).map((origin) => `embed:${origin}`),
     ...(mod.folia ? [`internals:${mod.folia}`] : []),
 ];
+
+/*
+ * The signature badge shown in the collapsed row. Unsigned mods get none there
+ * (most third-party mods are unsigned, so a badge would be noise); the expanded
+ * row explains all three states.
+ */
+const SignatureBadge: React.FC<{ mod: ModRuntimeInfo; isDaylight: boolean }> = ({ mod, isDaylight }) => {
+    const { t } = useTranslation();
+    const { status } = mod.signature;
+    if (status === 'verified') {
+        return (
+            <span title={t('mods.signatureVerified')} className={`shrink-0 ${isDaylight ? 'text-emerald-600' : 'text-emerald-300'}`}>
+                <ShieldCheck size={13} />
+            </span>
+        );
+    }
+    if (status === 'invalid') {
+        return (
+            <span title={t('mods.signatureInvalid')} className={`shrink-0 ${isDaylight ? 'text-amber-700' : 'text-amber-300'}`}>
+                <ShieldAlert size={13} />
+            </span>
+        );
+    }
+    return null;
+};
+
+/* One line in the expanded row saying what the signature state means. */
+const SignatureNotice: React.FC<{ mod: ModRuntimeInfo; isDaylight: boolean }> = ({ mod, isDaylight }) => {
+    const { t } = useTranslation();
+    const { status, reason, keyId, keyLabel } = mod.signature;
+    if (status === 'verified') {
+        return (
+            <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-emerald-800 bg-emerald-500/10' : 'text-emerald-200 bg-emerald-400/10'}`}>
+                <ShieldCheck size={14} className="mt-px shrink-0" />
+                <span>
+                    <span className="font-medium">{t('mods.signatureVerified')}</span>
+                    {' · '}
+                    {t('mods.signatureVerifiedDetail', { key: keyLabel ? `${keyLabel}, ${keyId}` : keyId })}
+                </span>
+            </div>
+        );
+    }
+    if (status === 'invalid') {
+        const reasonText = t(`mods.signatureReasons.${reason ?? 'malformed'}`, { defaultValue: reason ?? '' });
+        return (
+            <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-amber-800 bg-amber-500/10' : 'text-amber-200 bg-amber-400/10'}`}>
+                <ShieldAlert size={14} className="mt-px shrink-0" />
+                <span>
+                    <span className="font-medium">{t('mods.signatureInvalid')}</span>
+                    {' · '}
+                    {t('mods.signatureInvalidDetail', { reason: reasonText })}
+                </span>
+            </div>
+        );
+    }
+    return (
+        <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-zinc-600 bg-black/[0.04]' : 'text-white/60 bg-white/5'}`}>
+            <ShieldQuestion size={14} className="mt-px shrink-0" />
+            <span>
+                <span className="font-medium">{t('mods.signatureUnsigned')}</span>
+                {' · '}
+                {t('mods.signatureUnsignedDetail')}
+            </span>
+        </div>
+    );
+};
 
 const statusIcon = (status: string, isDaylight: boolean) => {
     if (status === 'loaded') return <CircleCheck size={13} className={`${isDaylight ? 'text-emerald-600' : 'text-emerald-300'} shrink-0`} />;
@@ -96,6 +162,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                     </span>
                 ) : statusIcon(mod.status, isDaylight)}
                 <span className="text-xs font-medium truncate flex-1 min-w-0">{mod.name}</span>
+                <SignatureBadge mod={mod} isDaylight={isDaylight} />
                 <button
                     type="button"
                     title={mod.enabled ? t('mods.enabled') : t('mods.disabled')}
@@ -149,6 +216,7 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                                     ))}
                                 </div>
                             ) : null}
+                            <SignatureNotice mod={mod} isDaylight={isDaylight} />
                             {mod.trustStale ? (
                                 <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-amber-800 bg-amber-500/10' : 'text-amber-200 bg-amber-400/10'}`}>
                                     <TriangleAlert size={14} className="mt-px shrink-0" />

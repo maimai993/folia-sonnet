@@ -35,7 +35,7 @@ import { removeFoliumEventHandlers } from '@/mods/folium/events';
 
 const mod = (overrides: Partial<ModRuntimeInfo> = {}): ModRuntimeInfo => ({
     id: 'mod-a', name: 'A', version: '1.0.0', author: null, description: null, permissions: [],
-    status: 'loaded', error: null, enabled: true, trustStale: false, experimental: [], embedOrigins: [],
+    status: 'loaded', error: null, enabled: true, trustStale: false, signature: { status: 'unsigned', reason: null, keyId: null, keyLabel: null, signedAt: null }, experimental: [], embedOrigins: [],
     folia: null, hasMain: false, clientUrl: null, ...overrides,
 });
 
@@ -90,7 +90,7 @@ describe('omni.hooks', () => {
             event.url = 'https://b.example/y.mp3';
         });
         (experimental['omni.hooks'] as { on: (type: string, handler: (event: any) => void) => void }).on('lyricsResolved', (event) => {
-            event.lines = event.lines.map((line: { text: string }) => ({ ...line, text: line.text.toUpperCase() }));
+            event.lines = event.lines.map((line: { fullText: string }) => ({ ...line, fullText: line.fullText.toUpperCase() }));
         });
 
         expect(await applyOmniAudioHook(song, source)).toMatchObject({ url: 'https://b.example/y.mp3', quality: 'high' });

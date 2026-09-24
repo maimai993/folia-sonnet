@@ -24,6 +24,7 @@ import { controlButtonsRegistry, progressLayersRegistry } from './registries/pro
 import { stylesRegistry } from './registries/styles';
 import { addFoliumEventHandler } from './events';
 import { createFoliumNetService, createFoliumPlaybackService, createFoliumUiService } from './services';
+import { FOLIUM_LYRICS_HELPERS, FOLIUM_THEME_HELPERS } from './sharedHelpers';
 
 // src/mods/folium/api.ts
 // Builds the `folium` object one mod's client entry receives. Everything is
@@ -230,6 +231,8 @@ export const createFoliumClientApi = (mod: ModRuntimeInfo, options: FoliumClient
         net: createFoliumNetService(mod, context),
         storage: createStorage(modId, context),
         rpc,
+        lyrics: FOLIUM_LYRICS_HELPERS,
+        theme: FOLIUM_THEME_HELPERS,
         experimental,
         internals,
     });

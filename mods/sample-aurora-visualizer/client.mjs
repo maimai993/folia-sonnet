@@ -8,7 +8,10 @@
 //   - the current line comes from `ctx.getLineIndex()`, read every frame;
 //   - continuous time arrives via `ctx.currentTime.on('change')`, never React state;
 //   - `ctx.subscribe` covers changes that happen while time stands still
-//     (paused + theme switch), so the frame is repainted then too.
+//     (paused + theme switch), so the frame is repainted then too;
+//   - lines and the theme have the same shape builtin modes get (Folium 1.3),
+//     and fonts resolve through `folium.theme` exactly as they do, with the
+//     user's lyric size from `ctx.getDisplay().lyricsFontScale`.
 
 const paintSpans = (spans, timeSec) => {
   spans.forEach(({ el, start, end }) => {
@@ -44,7 +47,7 @@ const buildCharTimings = (line) => {
     });
     return timings;
   }
-  const chars = Array.from(line.text);
+  const chars = Array.from(line.fullText);
   const duration = Math.max(0.001, line.endTime - line.startTime);
   return chars.map((char, index) => ({
     char,
@@ -53,7 +56,9 @@ const buildCharTimings = (line) => {
   }));
 };
 
-const mountAurora = (container, ctx) => {
+const BASE_FONT_SIZE = 64;
+
+const mountAurora = (folium, container, ctx) => {
   const shell = document.createElement('div');
   shell.style.cssText = [
     'position:absolute', 'inset:0',
@@ -61,14 +66,15 @@ const mountAurora = (container, ctx) => {
     'padding:0 8%', 'box-sizing:border-box', 'overflow:hidden',
   ].join(';');
   const lineBox = document.createElement('div');
-  lineBox.style.cssText = 'max-width:100%;text-align:center;font-size:64px;line-height:1.35;letter-spacing:0.04em;';
+  lineBox.style.cssText = 'max-width:100%;text-align:center;line-height:1.35;letter-spacing:0.04em;';
   shell.appendChild(lineBox);
   container.appendChild(shell);
 
   const applyTheme = () => {
     const theme = ctx.getTheme();
-    lineBox.style.fontFamily = theme.fontFamily;
-    lineBox.style.fontWeight = String(theme.fontWeight);
+    lineBox.style.fontFamily = folium.theme.resolveFontStack(theme);
+    lineBox.style.fontWeight = String(folium.theme.resolveFontWeight(theme, 500));
+    lineBox.style.fontSize = `${BASE_FONT_SIZE * ctx.getDisplay().lyricsFontScale}px`;
     shell.style.setProperty('--aurora-dim', theme.isDaylight ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.28)');
   };
 
@@ -116,6 +122,6 @@ export default function activate(folium) {
     id: 'aurora-text',
     label: { 'zh-CN': '虹光', en: 'Aurora' },
     order: 420,
-    mount: mountAurora,
+    mount: (container, ctx) => mountAurora(folium, container, ctx),
   });
 }

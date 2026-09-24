@@ -15,7 +15,7 @@ const LINE_HEIGHT = 1.34;
 const WIDE_CHAR = /[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef]/u;
 const SPACE = /\s/u;
 
-const fontOf = (theme, size) => `${theme.fontWeight} ${size}px ${theme.fontFamily}`;
+const fontOf = (font, size) => `${font.weight} ${size}px ${font.family}`;
 
 /*
  * Break tokens over Array.from(text): a wide (CJK) character is its own token,
@@ -66,15 +66,16 @@ const wrap = (tokens, maxWidth) => {
 
 /**
  * Glyphs for `text` inside a width x height stage: `{ char, charIndex, x, y,
- * rotation, scale }`, positions in CSS px at the glyph center.
+ * rotation, scale }`, positions in CSS px at the glyph center. `font` is
+ * `{ family, weight }`, resolved from the theme by the caller.
  */
-export const layoutLine = (text, theme, width, height, fontScale) => {
+export const layoutLine = (text, font, width, height, fontScale) => {
   const ctx = document.createElement('canvas').getContext('2d');
   const chars = Array.from(text);
   let size = Math.min(width * 0.058, height * 0.1) * fontScale;
   let rows = [];
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    ctx.font = fontOf(theme, size);
+    ctx.font = fontOf(font, size);
     const tokens = tokenize(chars).map((token) => token.map((entry) => ({
       ...entry,
       width: ctx.measureText(entry.char).width,
@@ -123,7 +124,7 @@ export const layoutLine = (text, theme, width, height, fontScale) => {
       cursor += entry.advance;
     });
   });
-  return { glyphs, size, font: fontOf(theme, size) };
+  return { glyphs, size, font: fontOf(font, size) };
 };
 
 const drawGlyph = (ctx, glyph, stroke) => {

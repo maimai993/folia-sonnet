@@ -1,13 +1,13 @@
 // mods/visualizer52hz/charTimings.mjs
 // When each character of a line lights up. Returns one entry per character of
-// Array.from(line.text): `{ start, end }` in song seconds, or null for spaces.
+// Array.from(line.fullText): `{ start, end }` in song seconds, or null for spaces.
 // Word timings are used when the lyric has them, matched to the line's
 // non-space characters in order; otherwise the line's time is spread evenly.
 
 const isSpace = (char) => /\s/u.test(char);
 
 export const buildCharTimings = (line) => {
-  const chars = Array.from(line.text);
+  const chars = Array.from(line.fullText);
   const visible = chars.filter((char) => !isSpace(char)).length;
 
   const fromWords = [];

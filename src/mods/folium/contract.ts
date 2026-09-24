@@ -6,7 +6,7 @@
 // Stability rule (mods/README.md): inside folium 1.x this file only grows.
 // Removing a field or changing its meaning requires folium 2.
 
-export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 2 });
+export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 3 });
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;
@@ -16,31 +16,113 @@ export type FoliumLabel = Record<string, string | undefined>;
 export type FoliumDisposer = () => void;
 
 // ---------------------------------------------------------------- DTOs
+//
+// FoliumLine / FoliumTheme mirror the host's Line / Theme field for field:
+// same names, same meanings, so code moves between a builtin visualizer and a
+// mod without translation. They are still frozen projections (dto.ts), never
+// the host objects themselves. The only Folium addition is FoliumTheme.isDaylight,
+// which builtin modes receive as a separate prop.
+
+export interface FoliumLyricRuby {
+    text: string;
+    startTime: number;
+    endTime: number;
+}
+
+export interface FoliumLyricSyllable {
+    text: string;
+    startTime: number;
+    endTime: number;
+    endsWithSpace?: boolean;
+    ruby?: FoliumLyricRuby[];
+    obscene?: boolean;
+    emptyBeat?: number;
+}
+
+export interface FoliumLyricAlternateText {
+    /** 'translation', 'romanization' or another role from the lyric source. */
+    role: string;
+    language?: string;
+    text: string;
+    syllables?: FoliumLyricSyllable[];
+}
 
 export interface FoliumWord {
     text: string;
     startTime: number;
     endTime: number;
+    syllables?: FoliumLyricSyllable[];
+}
+
+export interface FoliumBackgroundVocal {
+    text: string;
+    startTime: number;
+    endTime: number;
+    words: FoliumWord[];
+    agentId?: string;
+    translation?: string;
+    romanization?: string;
+    alternateTexts?: FoliumLyricAlternateText[];
+}
+
+export type FoliumLineTimingClass = 'normal' | 'short' | 'micro';
+export type FoliumLineTransitionMode = 'normal' | 'fast' | 'none';
+export type FoliumWordRevealMode = 'normal' | 'fast' | 'instant';
+
+/** How the host times a line on screen; builtin modes read the same values. */
+export interface FoliumLineRenderHints {
+    rawDuration: number;
+    timingClass: FoliumLineTimingClass;
+    /** When the host stops showing the line (endTime plus hold/tail). */
+    renderEndTime: number;
+    lineTransitionMode: FoliumLineTransitionMode;
+    wordRevealMode: FoliumWordRevealMode;
 }
 
 export interface FoliumLine {
-    text: string;
-    startTime: number;
-    /** Render end time: when the host stops showing this line (includes hold/tail hints). */
-    endTime: number;
     words: FoliumWord[];
+    startTime: number;
+    /** The lyric's own end time. When the line leaves the screen is `renderHints.renderEndTime`. */
+    endTime: number;
+    fullText: string;
+    /** Always present: the host fills in hints the lyric source did not carry. */
+    renderHints: FoliumLineRenderHints;
     translation?: string;
     romanization?: string;
+    alternateTexts?: FoliumLyricAlternateText[];
+    id?: string;
+    agentId?: string;
+    songPart?: string;
+    blockIndex?: number;
+    isChorus?: boolean;
+    chorusEffect?: 'bars' | 'circles' | 'beams';
+    /**
+     * Background vocals. The host's legacy single `backgroundVocal` is folded
+     * in here, so this is the only place to look.
+     */
+    backgroundVocals?: FoliumBackgroundVocal[];
+    /** The user's saved word split; `join('')` equals `fullText`. See `folium.lyrics.segmentWords`. */
+    wordSegments?: string[];
 }
 
 export interface FoliumTheme {
+    name: string;
     backgroundColor: string;
     primaryColor: string;
-    secondaryColor: string;
     accentColor: string;
-    /** Fully resolved CSS font-family stack for lyric text. */
-    fontFamily: string;
-    fontWeight: number;
+    secondaryColor: string;
+    fontStyle: 'sans' | 'serif' | 'mono';
+    /** The user's chosen family, if any. For a CSS font-family value use `folium.theme.resolveFontStack(theme)`. */
+    fontFamily?: string;
+    fontFamilyStack?: string[];
+    /** For a concrete weight use `folium.theme.resolveFontWeight(theme, fallback)`. */
+    fontWeight?: number;
+    animationIntensity: 'calm' | 'normal' | 'chaotic';
+    wordColors?: { word: string; color: string }[];
+    lyricsIcons?: string[];
+    provider?: string;
+    description?: string;
+    /** Folium addition: builtin modes get this as a separate `isDaylight` prop. */
     isDaylight: boolean;
 }
 
@@ -180,16 +262,53 @@ export interface FoliumAudio {
  * mode). Everything else is read through getters, and `subscribe` fires when
  * any getter's value changes, including while paused, when `currentTime` is idle.
  */
+/**
+ * Folium 1.3: the host's display settings for lyric content, named and valued
+ * as builtin modes receive them. A mod that turns off `hostLayers.subtitles`
+ * and draws its own reads the subtitle settings here.
+ */
+export interface FoliumDisplay {
+    /** False while lyrics should not be drawn (e.g. the settings modal covers the player). */
+    showText: boolean;
+    lyricsFontScale: number;
+    subtitleFontScale: number;
+    subtitleOverlayOpacity: number;
+    subtitleOverlayBackground: boolean;
+    subtitleUpcomingLyricsBlur: boolean;
+    showHarmonySubtitle: boolean;
+    harmonySubtitleBackground: boolean;
+    showSubtitleTranslation: boolean;
+    hideTranslationSubtitle: boolean;
+    subtitleContentMode: 'translation' | 'romanization' | 'none';
+    isPlayerChromeHidden: boolean;
+    isPanelOpen: boolean;
+    visualizerOpacity: number;
+}
+
 export interface FoliumStageContext {
     readonly lines: readonly FoliumLine[];
     readonly song: FoliumSong | null;
     readonly staticMode: boolean;
     /** Only meaningful in static mode: the line the preview shows. */
     readonly staticLineIndex: number | null;
+    /**
+     * Folium 1.3: the geometry seed builtin modes get (the displayed song's id,
+     * or a per-mode fallback). Stable per song, identical in previews, playback
+     * and export, so seeded randomness matches everywhere.
+     */
+    readonly seed: string | null;
+    /** Folium 1.3: rendering inside a settings preview rather than the player page. */
+    readonly isPreview: boolean;
     readonly currentTime: FoliumClock;
     getLineIndex(): number;
     isPaused(): boolean;
     getTheme(): FoliumTheme;
+    /** Folium 1.3: the theme the host's subtitles use; equals getTheme() where there is none. */
+    getSubtitleTheme(): FoliumTheme;
+    /** Folium 1.3. */
+    getCoverUrl(): string | null;
+    /** Folium 1.3. The same object until a value changes; `subscribe` announces changes. */
+    getDisplay(): FoliumDisplay;
     getSettings(): FoliumParamValues;
     getSurface(): FoliumSurface;
     subscribe(listener: () => void): FoliumDisposer;
@@ -448,7 +567,16 @@ export interface FoliumPlaybackService {
     play(): void;
     pause(): void;
     toggle(): void;
+    /** Seeks to a playback position (audio time). */
     seek(seconds: number): void;
+    /**
+     * Folium 1.3: seeks to a point on the lyric clock, e.g. `line.startTime`,
+     * the way clicking a lyric line does in builtin modes. The host converts
+     * lyric time to playback time (lyric offsets, lyrics-only stage sources);
+     * `seek(line.startTime)` would land off by the offset. Ignored while the
+     * host has now-playing controls disabled.
+     */
+    seekToLyricTime(lyricSeconds: number): void;
     next(): void;
     previous(): void;
     /** Plays a song by its host `ref`. Resolves false when the ref is unknown. */
@@ -589,6 +717,61 @@ export interface FoliumLogger {
     error(message: string, details?: unknown): void;
 }
 
+// ---------------------------------------------------------------- Shared helpers
+
+/** One word from `folium.lyrics.segmentWords`. */
+export interface FoliumWordSegment {
+    segment: string;
+    /** UTF-16 offset of the segment in the line's `fullText`. */
+    index: number;
+    /** False for whitespace and punctuation-only segments. */
+    isWordLike: boolean;
+}
+
+/** A keyword-colored span of a line's `fullText` (UTF-16 offsets, end exclusive). */
+export interface FoliumWordColorRange {
+    startOffset: number;
+    endOffset: number;
+    color: string;
+    priority: number;
+}
+
+/**
+ * Folium 1.3: the pure lyric helpers builtin modes share, so a mod lays out,
+ * times and colors lines exactly as they do. Available in both contexts.
+ */
+export interface FoliumLyricsHelpers {
+    /** When the host stops showing the line: `renderHints.renderEndTime`. -Infinity for null. */
+    getLineRenderEndTime(line: FoliumLine | null | undefined): number;
+    /** The user's saved split when valid, otherwise Intl.Segmenter word segmentation. */
+    segmentWords(line: Pick<FoliumLine, 'fullText' | 'wordSegments'>): FoliumWordSegment[];
+    /** With no active line (index -1): the last line already over, for subtitles in gaps. */
+    getRecentCompletedLine(lines: readonly FoliumLine[], lineIndex: number, time: number): FoliumLine | null;
+    /** The next line: after the active one, or the first still ahead when none is active. */
+    getUpcomingLine(lines: readonly FoliumLine[], lineIndex: number, time: number): FoliumLine | null;
+    /** Up to `count` (default 2) lines after the active one; empty when none is active. */
+    getUpcomingLines(lines: readonly FoliumLine[], lineIndex: number, count?: number): FoliumLine[];
+    /** Non-overlapping keyword color spans of `fullText` for `theme.wordColors`. */
+    buildWordColorRanges(fullText: string, wordColors: FoliumTheme['wordColors']): FoliumWordColorRange[];
+    /** The keyword color of one word, or `fallbackColor`. */
+    resolveWordColor(
+        wordText: string,
+        wordColors: FoliumTheme['wordColors'],
+        fallbackColor: string,
+        options?: { cjkMatchMode?: 'target-contains-token' | 'bidirectional-contains' | 'exact' },
+    ): string;
+}
+
+/** Folium 1.3: theme resolution builtin modes use. Available in both contexts. */
+export interface FoliumThemeHelpers {
+    /** CSS font-family value for lyric text. */
+    resolveFontStack(theme: Pick<FoliumTheme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>): string;
+    /** CSS font-family value for translations and subtitles. */
+    resolveTranslationFontStack(theme: Pick<FoliumTheme, 'fontStyle' | 'fontFamily' | 'fontFamilyStack'>): string;
+    /** The theme's weight, normalized, or `fallback`. */
+    resolveFontWeight(theme: Pick<FoliumTheme, 'fontWeight'> | null | undefined, fallback: number): number;
+}
+
 /** The object a client entry's `activate(folium)` receives. */
 export interface FoliumClientApi {
     readonly modId: string;
@@ -602,6 +785,10 @@ export interface FoliumClientApi {
     readonly net: FoliumNetService;
     readonly storage: FoliumStorage;
     readonly rpc: FoliumRpc;
+    /** Folium 1.3. */
+    readonly lyrics: FoliumLyricsHelpers;
+    /** Folium 1.3. */
+    readonly theme: FoliumThemeHelpers;
     /** Unfrozen surfaces; each requires the matching manifest `experimental` opt-in. */
     readonly experimental: Readonly<Record<string, unknown>>;
     /**

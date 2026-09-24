@@ -2,3 +2,7 @@
 # core.autocrlf=true 会把 *.sh 换成 CRLF，容器启动时 `#!/bin/sh\r` 会失败于
 # "exec /usr/local/bin/...: no such file or directory"。
 *.sh text eol=lf
+
+# Signed mods and fixtures: the signature covers exact bytes, so no line-ending conversion.
+mods/** -text
+test/fixtures/folium-signature/** -text

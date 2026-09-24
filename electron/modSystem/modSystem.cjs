@@ -11,6 +11,10 @@
 // boundary — it lives here rather than in the renderer precisely because a
 // loaded mod shares the renderer with the app UI and could otherwise drive its
 // own approval.
+//
+// Official signatures (modSignature.cjs) only label a mod as verified, unsigned
+// or invalid, in that dialog and in the mods panel. They never enable a mod or
+// skip the confirmation.
 
 'use strict';
 
@@ -23,6 +27,7 @@ const { unzipSync } = require('fflate');
 
 const { FOLIUM_VERSION, validateManifest, resolveLoadPlan, satisfiesHostRange, parseDependency } = require('./manifest.cjs');
 const { computeModDigest, shortDigest } = require('./modDigest.cjs');
+const { verifyModSignature } = require('./modSignature.cjs');
 const { createModApi, createModDataStore, STORAGE_PERMISSION } = require('./modApi.cjs');
 const { createFileGrantStore } = require('./fileGrants.cjs');
 const { resolveFfmpeg, MODS_RUNTIME_DIR } = require('./ffmpeg.cjs');
@@ -83,6 +88,10 @@ const TRUST_DIALOG_LOCALE = {
         experimental: '选用的实验接口：',
         embedOrigins: '可嵌入的外部网页：',
         internals: '使用内部接口，仅兼容宿主版本：',
+        verifiedRisk: '此模组带有有效的 Folium 官方签名，来源与内容已经过官方审查，且签名后未被修改。启用后它仍以应用的完整权限运行：可读写本地文件、访问网络、读取或修改任意应用设置（包括 AI 服务地址与密钥），并可在界面中执行代码。',
+        signatureVerified: (key) => `签名：官方认证（${key}）`,
+        signatureUnsigned: '签名：无（未经官方审查的第三方模组）',
+        signatureInvalid: (reason) => `签名：不匹配（${reason}）。模组内容在签名后被修改，或签名无效，它不再是官方认证的模组。`,
         rebind: '本次确认仅对当前文件内容生效；模组文件发生变化后需要重新确认。',
         enable: '仍要启用',
         cancel: '取消',
@@ -100,6 +109,10 @@ const TRUST_DIALOG_LOCALE = {
         experimental: 'Experimental APIs opted into: ',
         embedOrigins: 'External pages it may embed: ',
         internals: 'Uses internal APIs; only compatible with host versions: ',
+        verifiedRisk: 'This mod carries a valid official Folium signature: its source and content were reviewed by Folium and have not changed since signing. Once enabled it still runs with the full privileges of the app: it can read and write local files, access the network, read or change any app setting (including the AI service URL and key), and run code inside the UI.',
+        signatureVerified: (key) => `Signature: officially verified (${key})`,
+        signatureUnsigned: 'Signature: none (a third-party mod not reviewed by Folium)',
+        signatureInvalid: (reason) => `Signature: does not match (${reason}). The mod was changed after signing, or the signature is invalid; it is no longer an officially verified mod.`,
         rebind: 'This confirmation applies to the current files only; the mod must be confirmed again after its code changes.',
         enable: 'Enable anyway',
         cancel: 'Cancel',
@@ -117,6 +130,10 @@ const TRUST_DIALOG_LOCALE = {
         experimental: 'API eksperimental yang dipakai: ',
         embedOrigins: 'Halaman eksternal yang dapat disematkan: ',
         internals: 'Memakai API internal; hanya kompatibel dengan versi host: ',
+        verifiedRisk: 'Mod ini memiliki tanda tangan resmi Folium yang valid: sumber dan isinya telah ditinjau oleh Folium dan tidak berubah sejak ditandatangani. Setelah diaktifkan, mod tetap berjalan dengan hak penuh aplikasi: dapat membaca dan menulis berkas lokal, mengakses jaringan, membaca atau mengubah pengaturan apa pun (termasuk URL dan kunci layanan AI), serta menjalankan kode di dalam antarmuka.',
+        signatureVerified: (key) => `Tanda tangan: terverifikasi resmi (${key})`,
+        signatureUnsigned: 'Tanda tangan: tidak ada (mod pihak ketiga yang belum ditinjau Folium)',
+        signatureInvalid: (reason) => `Tanda tangan: tidak cocok (${reason}). Mod diubah setelah ditandatangani, atau tanda tangannya tidak valid; mod ini bukan lagi mod terverifikasi resmi.`,
         rebind: 'Konfirmasi ini hanya berlaku untuk berkas saat ini; mod harus dikonfirmasi ulang setelah kodenya berubah.',
         enable: 'Tetap aktifkan',
         cancel: 'Batal',
@@ -170,6 +187,19 @@ const serializeError = (error) => {
     }
     return error && error.message ? error.message : String(error);
 };
+
+/*
+ * The renderer-facing signature state: plain JSON, with unknown or missing
+ * values as null. A mod the loader never checked (a broken manifest) reads as
+ * unsigned.
+ */
+const publicSignatureState = (signature) => ({
+    status: signature?.status ?? 'unsigned',
+    reason: signature?.reason ?? null,
+    keyId: signature?.keyId ?? null,
+    keyLabel: signature?.keyLabel ?? null,
+    signedAt: signature?.signedAt ?? null,
+});
 
 const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFeatureEnabled }) => {
     let store = null;
@@ -432,6 +462,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             error: entry.error,
             enabled: entry.enabled,
             trustStale: Boolean(entry.trustStale),
+            signature: publicSignatureState(entry.signature),
             // Position in the dependency-resolved load plan; clients activate in this order.
             loadOrder: typeof entry.loadOrder === 'number' ? entry.loadOrder : null,
         };
@@ -571,6 +602,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
                 manifest: discovery.manifest,
                 dirPath: discovery.dirPath,
                 digest,
+                signature: verifyModSignature(discovery.dirPath, discovery.manifest),
                 enabled: trust.enabled,
                 trustStale: trust.trustStale,
             });
@@ -596,6 +628,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             manifest: entry.manifest,
             dirPath: entry.dirPath,
             digest: entry.digest,
+            signature: entry.signature,
             status,
             error,
             enabled: entry.enabled,
@@ -683,13 +716,19 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
      * drawn there could be spoofed or dismissed by mod code. This one cannot,
      * and it is the only path that writes an "enabled" trust record.
      */
-    const confirmEnableMod = async (runtime, digest) => {
+    const confirmEnableMod = async (runtime, digest, signature) => {
         const locale = resolveDialogLocale();
+        const signatureLine = signature.status === 'verified'
+            ? locale.signatureVerified(signature.keyLabel ? `${signature.keyLabel}, ${signature.keyId}` : signature.keyId)
+            : signature.status === 'invalid'
+                ? locale.signatureInvalid(signature.reason ?? 'invalid')
+                : locale.signatureUnsigned;
         const permissions = Array.isArray(runtime.manifest.permissions) ? runtime.manifest.permissions : [];
         const { client, experimental = [], embedOrigins = [], folia } = runtime.manifest;
         const detail = [
-            locale.risk,
+            signature.status === 'verified' ? locale.verifiedRisk : locale.risk,
             '',
+            signatureLine,
             permissions.length > 0 ? `${locale.permissions}${permissions.join(', ')}` : locale.noPermissions,
             client ? `${locale.client}${client}` : locale.noClient,
             ...(experimental.length > 0 ? [`${locale.experimental}${experimental.join(', ')}`] : []),
@@ -740,7 +779,9 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
         if (!digest) {
             return { ok: false, error: 'mod-content-unverifiable', mods: listMods() };
         }
-        const confirmed = await confirmEnableMod(runtime, digest);
+        // Same moment as the digest: the label must describe the bytes being approved.
+        const signature = verifyModSignature(runtime.dirPath, runtime.manifest);
+        const confirmed = await confirmEnableMod(runtime, digest, signature);
         if (!confirmed) {
             return { ok: false, error: 'enable-declined', mods: listMods() };
         }

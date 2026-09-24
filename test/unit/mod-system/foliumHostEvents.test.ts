@@ -23,6 +23,7 @@ import { applyLyricsTransform, hasBeforePlayHook, runBeforePlayHook, untransform
 import { installFoliumHostEvents } from '@/mods/folium/hostEvents';
 import { addFoliumEventHandler, removeFoliumEventHandlers } from '@/mods/folium/events';
 import { toFoliumSong } from '@/mods/folium/dto';
+import { buildLineRenderHints } from '@/utils/lyrics/renderHints';
 
 // test/unit/mod-system/foliumHostEvents.test.ts
 // The two host hooks as wired by installFoliumHostEvents: lyrics.transform at
@@ -55,8 +56,8 @@ describe('lyrics.transform hook', () => {
         addFoliumEventHandler('mod-a', 'lyrics.transform', (event) => {
             event.lines = [
                 event.lines[0],
-                { ...event.lines[1], text: 'EDITED', translation: '改' },
-                { text: 'added', startTime: 5, endTime: 6, words: [] },
+                { ...event.lines[1], fullText: 'EDITED', translation: '改' },
+                { fullText: 'added', startTime: 5, endTime: 6, words: [], renderHints: buildLineRenderHints(5, 6) },
             ];
         });
         const kept = line('keep', 0, { agentId: 'v1' });
@@ -77,7 +78,7 @@ describe('lyrics.transform hook', () => {
 
     it('re-transforms from the untransformed source instead of stacking on its own output', () => {
         addFoliumEventHandler('mod-a', 'lyrics.transform', (event) => {
-            event.lines = [...event.lines, { text: 'tail', startTime: 9, endTime: 10, words: [] }];
+            event.lines = [...event.lines, { fullText: 'tail', startTime: 9, endTime: 10, words: [], renderHints: buildLineRenderHints(9, 10) }];
         });
         const source: LyricData = { lines: [line('x', 0)] };
         const once = applyLyricsTransform(source)!;
