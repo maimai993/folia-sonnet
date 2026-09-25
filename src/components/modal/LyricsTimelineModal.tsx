@@ -71,6 +71,21 @@ const LyricsTimelineModal: React.FC<LyricsTimelineModalProps> = ({
         setActiveLineIndex(-1);
     }, [lyrics]);
 
+    // Close on Escape key
+    useEffect(() => {
+        if (!isOpen) return undefined;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
     // Handle user scroll
     const handleScroll = () => {
         if (isAutoScrolling.current) {

@@ -13,6 +13,7 @@ import GridMapBatchPanel from './folia-grid/GridMapBatchPanel';
 import { resolveGridMapBatchContext, type GridMapBatchConfig } from './folia-grid/gridMapBatch';
 import {
     resolveGridMapDisplayIndex,
+    resolveGridMapEscapeAction,
     resolveGridMapSourceIndex,
     shouldSuppressGridMapSelection,
 } from './folia-grid/gridMapNavigation';
@@ -245,6 +246,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     const { t } = useTranslation();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const containerRef = useRef<HTMLDivElement>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
     const dragControls = useDragControls();
     const [focusedIndex, setFocusedIndex] = useState(0);
     const initialFocusedItemRef = useRef<GridMapItem | undefined>(items[initialFocusedIndex]);
@@ -749,10 +751,17 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target;
+            const isInsideGridMap = target instanceof Node && Boolean(rootRef.current?.contains(target));
+
             if (
-                target instanceof HTMLElement
+                isInsideGridMap
+                && target instanceof HTMLElement
                 && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
             ) return;
+
+            if (!isInsideGridMap && containerRef.current) {
+                containerRef.current.focus({ preventScroll: true });
+            }
 
             if (e.key === 'Enter') {
                 if (
@@ -819,13 +828,83 @@ export const GridMap: React.FC<GridMapProps> = ({
         showSidePanel,
     ]);
 
+    // Automatically focus the grid map container on mount / when becoming interactive,
+    // and when closing child panels, so keyboard navigation works immediately
+    // without requiring a pointer click after opening from a trigger button.
+    useEffect(() => {
+        if (!isInteractive || showSidePanel || showCutInPanel) return;
+
+        const focusContainer = () => {
+            if (!containerRef.current) return;
+            const active = document.activeElement;
+            const isOutside = !active || active === document.body || (rootRef.current && !rootRef.current.contains(active));
+            if (isOutside || active === rootRef.current) {
+                containerRef.current.focus({ preventScroll: true });
+            }
+        };
+
+        const rafId = requestAnimationFrame(focusContainer);
+        return () => {
+            cancelAnimationFrame(rafId);
+        };
+    }, [isInteractive, showCutInPanel, showSidePanel]);
+
+    useEffect(() => {
+        if (!isInteractive) return;
+
+        const handleEscape = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                (target instanceof HTMLElement && target.isContentEditable)
+            ) {
+                return;
+            }
+
+            if (event.key !== 'Escape') {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            const action = resolveGridMapEscapeAction({
+                searchQuery,
+                showSidePanel,
+                showCutInPanel,
+                isPlaylistEditMode,
+            });
+            switch (action) {
+                case 'clear-search':
+                    setSearchQuery('');
+                    break;
+                case 'close-side-panel':
+                    setShowSidePanel(false);
+                    break;
+                case 'close-cut-in-panel':
+                    closeCutInPanel();
+                    break;
+                case 'exit-playlist-edit':
+                    setIsPlaylistEditMode(false);
+                    break;
+                case 'navigate-back':
+                    onBack();
+                    break;
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [closeCutInPanel, isInteractive, isPlaylistEditMode, onBack, searchQuery, showCutInPanel, showSidePanel]);
+
     return (
         <motion.div
+            ref={rootRef}
             data-ponder-page-scope={ponderPageScope}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] overflow-hidden select-none"
+            className="fixed inset-0 z-[110] overflow-hidden select-none outline-none"
             style={{
                 backgroundColor: isDaylight ? 'rgba(250, 249, 246, 0.95)' : 'rgba(9, 9, 11, 0.95)',
                 color: 'var(--text-primary)',
@@ -893,7 +972,8 @@ export const GridMap: React.FC<GridMapProps> = ({
                     suppressSelectionRef.current = false;
                     dragControls.start(event);
                 }}
-                className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
+                tabIndex={-1}
+                className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden focus:outline-none"
                 style={{ touchAction: 'none' }}
             >
 
