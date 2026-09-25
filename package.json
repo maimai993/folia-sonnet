@@ -23,6 +23,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "codemap": "node dev/mcp/ts-code-map/codemap.mjs",
+    "folium:api": "node dev/folium/api-docs.mjs",
     "codemap:check": "node dev/mcp/ts-code-map/codemap.mjs --check",
     "test": "vitest run -c vitest.config.ts",
     "test:unit": "vitest run -c vitest.config.ts",
