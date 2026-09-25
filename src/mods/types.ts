@@ -60,6 +60,12 @@ export interface ModRuntimeInfo {
      */
     trustStale: boolean;
     signature: ModSignatureInfo;
+    /**
+     * Development build only: the mod lives in the repository's mods/ directory,
+     * so once confirmed, editing its files keeps the approval instead of
+     * revoking it (see isDevSourceMod in electron/modSystem/modSystem.cjs).
+     */
+    devSource: boolean;
     /** Opted-in experimental surfaces (manifest `experimental`). */
     experimental: string[];
     /** Origins `folium.ui.embed` may load (manifest `embedOrigins`). */

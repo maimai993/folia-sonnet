@@ -217,6 +217,9 @@ const ModAccordionItem: React.FC<ModAccordionItemProps> = ({
                                 </div>
                             ) : null}
                             <SignatureNotice mod={mod} isDaylight={isDaylight} />
+                            {mod.devSource ? (
+                                <div className="text-[11px] opacity-50">{t('mods.devSourceHint')}</div>
+                            ) : null}
                             {mod.trustStale ? (
                                 <div className={`flex items-start gap-1.5 text-xs rounded-lg p-2 ${isDaylight ? 'text-amber-800 bg-amber-500/10' : 'text-amber-200 bg-amber-400/10'}`}>
                                     <TriangleAlert size={14} className="mt-px shrink-0" />

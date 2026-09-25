@@ -770,6 +770,7 @@ export default {
     "experimentalHint": "模组系统仍在实验阶段：API 可能在后续版本中变更，已安装的模组可能需要更新。",
     "securityWarning": "标有「官方认证」的模组经过 Folium 官方审查并签名，其余模组由第三方提供，未经官方审查。无论是否认证，启用后模组将以应用的完整权限运行（含 Node.js 运行时与任意设置，如 AI 服务地址与密钥）。启用前会弹出确认窗口，请仅启用可信来源的模组。",
     "trustRevoked": "该模组的文件在你上次确认之后发生了变化，已自动禁用。请确认来源无误后重新启用。",
+    "devSourceHint": "开发目录中的模组：确认后修改文件不会撤销授权（仅开发版）。",
     "signatureVerified": "官方认证",
     "signatureVerifiedDetail": "带有有效的 Folium 官方签名（{{key}}）：来源与内容经过官方审查，签名后未被修改。它启用后仍以应用的完整权限运行。",
     "signatureUnsigned": "未验证",

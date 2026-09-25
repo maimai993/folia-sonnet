@@ -771,6 +771,7 @@ export default {
     "experimentalHint": "The mod system is still experimental: the API may change in future versions and installed mods may need updating.",
     "securityWarning": "Mods marked Verified were reviewed and signed by Folium; all others are third-party and unreviewed. Verified or not, once enabled a mod runs with the full privileges of the app (including the Node.js runtime and any setting, such as the AI service URL and key). Enabling one asks for confirmation first; only enable mods from trusted sources.",
     "trustRevoked": "This mod's files changed since you last confirmed it, so it was disabled automatically. Check the source, then enable it again.",
+    "devSourceHint": "Development source mod: once confirmed, editing its files keeps the approval (development builds only).",
     "signatureVerified": "Verified",
     "signatureVerifiedDetail": "Carries a valid official Folium signature ({{key}}): its source and content were reviewed by Folium and have not changed since signing. Once enabled it still runs with the app's full privileges.",
     "signatureUnsigned": "Unverified",

@@ -768,6 +768,7 @@ export default {
     "experimentalHint": "Sistem mod masih eksperimental: API dapat berubah pada versi mendatang dan mod yang terpasang mungkin perlu diperbarui.",
     "securityWarning": "Mod bertanda Terverifikasi telah ditinjau dan ditandatangani Folium; selebihnya mod pihak ketiga yang belum ditinjau. Terverifikasi atau tidak, setelah diaktifkan mod berjalan dengan hak penuh aplikasi (termasuk runtime Node.js dan pengaturan apa pun seperti URL dan kunci layanan AI). Mengaktifkannya akan meminta konfirmasi terlebih dahulu; aktifkan hanya mod dari sumber tepercaya.",
     "trustRevoked": "Berkas mod ini berubah sejak terakhir Anda konfirmasi, jadi mod dinonaktifkan otomatis. Periksa sumbernya, lalu aktifkan kembali.",
+    "devSourceHint": "Mod di direktori pengembangan: setelah dikonfirmasi, mengubah berkasnya tidak membatalkan persetujuan (hanya build pengembangan).",
     "signatureVerified": "Terverifikasi",
     "signatureVerifiedDetail": "Memiliki tanda tangan resmi Folium yang valid ({{key}}): sumber dan isinya telah ditinjau Folium dan tidak berubah sejak ditandatangani. Setelah diaktifkan, mod tetap berjalan dengan hak penuh aplikasi.",
     "signatureUnsigned": "Belum terverifikasi",

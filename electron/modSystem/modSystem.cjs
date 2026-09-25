@@ -93,6 +93,7 @@ const TRUST_DIALOG_LOCALE = {
         signatureUnsigned: '签名：无（未经官方审查的第三方模组）',
         signatureInvalid: (reason) => `签名：不匹配（${reason}）。模组内容在签名后被修改，或签名无效，它不再是官方认证的模组。`,
         rebind: '本次确认仅对当前文件内容生效；模组文件发生变化后需要重新确认。',
+        devSource: '开发模式：这个模组位于源码目录的 mods/ 中，确认后修改它的文件不会撤销本次确认。安装版和用户模组目录中的模组没有这项豁免。',
         enable: '仍要启用',
         cancel: '取消',
     },
@@ -114,6 +115,7 @@ const TRUST_DIALOG_LOCALE = {
         signatureUnsigned: 'Signature: none (a third-party mod not reviewed by Folium)',
         signatureInvalid: (reason) => `Signature: does not match (${reason}). The mod was changed after signing, or the signature is invalid; it is no longer an officially verified mod.`,
         rebind: 'This confirmation applies to the current files only; the mod must be confirmed again after its code changes.',
+        devSource: 'Development mode: this mod is in the source tree\'s mods/ directory, so editing its files after this confirmation does not revoke it. Installed builds and the user mods directory have no such exemption.',
         enable: 'Enable anyway',
         cancel: 'Cancel',
     },
@@ -135,6 +137,7 @@ const TRUST_DIALOG_LOCALE = {
         signatureUnsigned: 'Tanda tangan: tidak ada (mod pihak ketiga yang belum ditinjau Folium)',
         signatureInvalid: (reason) => `Tanda tangan: tidak cocok (${reason}). Mod diubah setelah ditandatangani, atau tanda tangannya tidak valid; mod ini bukan lagi mod terverifikasi resmi.`,
         rebind: 'Konfirmasi ini hanya berlaku untuk berkas saat ini; mod harus dikonfirmasi ulang setelah kodenya berubah.',
+        devSource: 'Mode pengembangan: mod ini ada di direktori mods/ pada kode sumber, jadi mengubah berkasnya setelah konfirmasi ini tidak membatalkannya. Build terpasang dan direktori mod pengguna tidak mendapat pengecualian ini.',
         enable: 'Tetap aktifkan',
         cancel: 'Batal',
     },
@@ -412,18 +415,41 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
     };
 
     /*
+     * Development exemption. In an unpackaged build (npm run dev:electron) a mod
+     * in the repository's own mods/ directory, the developer's source tree,
+     * keeps its approval when its files change: the first enable is still
+     * confirmed, later edits rebind the approval to the new bytes instead of
+     * revoking it. Mods under userData or resources never qualify: that is where
+     * files arrive from elsewhere, which is what binding trust to bytes guards
+     * against. A packaged app never scans the repository directory at all.
+     */
+    const isDevSourceMod = (dirPath) => {
+        if (app.isPackaged || typeof dirPath !== 'string') {
+            return false;
+        }
+        const relative = path.relative(path.join(app.getAppPath(), 'mods'), dirPath);
+        return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+    };
+
+    /*
      * Decides whether a discovered mod may run. Trust is granted to bytes, not
      * to a mod id: when the digest moved (an upgrade dropped in over the old
      * copy, an edited file, or a legacy record with no digest at all) the
      * approval is revoked on the spot and the mod stays off until the user
-     * confirms the new code.
+     * confirms the new code. The one exception is a development source mod
+     * (isDevSourceMod) that was already confirmed: its approval follows the edit.
      */
-    const resolveTrust = (modId, digest) => {
+    const resolveTrust = (modId, digest, { devSource = false } = {}) => {
         const stored = readTrust(modId);
         if (!stored || !stored.enabled) {
             return { enabled: false, trustStale: false };
         }
         if (!digest || stored.digest !== digest) {
+            if (devSource && digest && stored.digest) {
+                writeTrust(modId, true, digest);
+                console.info(`[ModSystem] ${modId}: files changed in the development source tree; approval kept`);
+                return { enabled: true, trustStale: false };
+            }
             writeTrust(modId, false, null);
             return { enabled: false, trustStale: true };
         }
@@ -463,6 +489,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             enabled: entry.enabled,
             trustStale: Boolean(entry.trustStale),
             signature: publicSignatureState(entry.signature),
+            devSource: Boolean(entry.devSource),
             // Position in the dependency-resolved load plan; clients activate in this order.
             loadOrder: typeof entry.loadOrder === 'number' ? entry.loadOrder : null,
         };
@@ -596,13 +623,15 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             }
             const modId = discovery.manifest.id;
             const digest = computeModDigest(discovery.dirPath);
-            const trust = resolveTrust(modId, digest);
+            const devSource = isDevSourceMod(discovery.dirPath);
+            const trust = resolveTrust(modId, digest, { devSource });
             manifestsById.set(modId, discovery.manifest);
             prepared.set(modId, {
                 manifest: discovery.manifest,
                 dirPath: discovery.dirPath,
                 digest,
                 signature: verifyModSignature(discovery.dirPath, discovery.manifest),
+                devSource,
                 enabled: trust.enabled,
                 trustStale: trust.trustStale,
             });
@@ -629,6 +658,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             dirPath: entry.dirPath,
             digest: entry.digest,
             signature: entry.signature,
+            devSource: entry.devSource,
             status,
             error,
             enabled: entry.enabled,
@@ -737,7 +767,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             `${locale.location}${runtime.dirPath ?? '-'}`,
             `${locale.fingerprint}${shortDigest(digest)}`,
             '',
-            locale.rebind,
+            isDevSourceMod(runtime.dirPath) ? locale.devSource : locale.rebind,
         ].join('\n');
         const options = {
             type: 'warning',
