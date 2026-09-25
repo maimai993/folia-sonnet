@@ -41,6 +41,7 @@
 | 32+ | `src/components/ponder/surfaces/ponderSurfaceGeometry.ts` |
 | 32+ | `src/components/visualizer/colorMix.ts` |
 | 32+ | `src/components/visualizer/definition.ts` |
+| 32+ | `src/mods/folium/contract.ts` |
 | 32+ | `src/services/db.ts` |
 | 32+ | `src/services/onlineMusic/songMetadata.ts` |
 | 32+ | `src/stores/useAppViewStore.ts` |
@@ -79,6 +80,7 @@
 - `dev/probes/monetPortraitImage.probe.tsx`
 - `dev/probes/nowPlayingToastTransitionBorder.probe.tsx`
 - `dev/probes/playbackLyricsSettings.probe.tsx`
+- `dev/probes/playerBarModButtons.probe.tsx`
 - `dev/probes/playerBottomBar.probe.tsx`
 - `dev/probes/ponderHint.probe.tsx`
 - `dev/probes/ponderPageSurfaces.probe.tsx`
