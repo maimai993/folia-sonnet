@@ -100,12 +100,19 @@ export const useFoliumProgressContext = (inputs: FoliumProgressInputs): FoliumPr
 };
 
 /** A leading/trailing button slot. Renders nothing while no mod has a button there. */
+/*
+ * Host progress bars sit inside clickable surfaces (the floating capsule opens
+ * the player on click). Clicks inside a mod's slot or layer are the mod's own,
+ * so they stop here instead of relying on every mod to stop propagation.
+ */
+const keepClickInside = (event: React.MouseEvent) => event.stopPropagation();
+
 export const FoliumControlButtonSlot: React.FC<{ slot: FoliumControlSlot; ctx: FoliumProgressContext }> = ({ slot, ctx }) => {
     const entries = useFoliumRegistryEntries(controlButtonsRegistry);
     const buttons = entries.filter((entry) => entry.def.slot === slot).sort(byOrder);
     if (buttons.length === 0) return null;
     return (
-        <div className="flex items-center gap-1 shrink-0" data-folium-slot={slot}>
+        <div className="flex items-center gap-1 shrink-0" data-folium-slot={slot} onClick={keepClickInside}>
             {buttons.map((entry) => (
                 <FoliumMountHost
                     key={entry.id}
@@ -135,7 +142,7 @@ export const FoliumProgressLayers: React.FC<{ ctx: FoliumProgressContext }> = ({
     if (entries.length === 0) return null;
     const layers = [...entries].sort(byOrder);
     return (
-        <div className="absolute inset-0 pointer-events-none z-10" data-folium-slot="progress.track">
+        <div className="absolute inset-0 pointer-events-none z-10" data-folium-slot="progress.track" onClick={keepClickInside}>
             {layers.map((entry) => (
                 <FoliumMountHost
                     key={entry.id}

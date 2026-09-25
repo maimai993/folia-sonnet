@@ -374,6 +374,7 @@ folium.registries.commands.register({ id: 'toggle', label: {…}, description: {
 
 - `controlButtons`：`slot` 为 `progress.leading` 或 `progress.trailing`，容器按内容大小排布。
 - `progressLayers`：容器铺满轨道且**不拦截指针**，拖动进度照常可用；标记等需要点击的元素自己设 `pointer-events: auto`。
+- 两者容器里的点击由宿主拦在容器内，不会冒泡到外层（悬浮控件的胶囊点击会跳到播放页），模组不需要自己 `stopPropagation()`。
 
 ### styles 与公开 part
 
