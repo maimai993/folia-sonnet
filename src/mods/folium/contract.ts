@@ -644,6 +644,11 @@ export interface FoliumControlButtonDef {
     slot: FoliumControlSlot;
     /** Order within the slot; default 500. */
     order?: number;
+    /**
+     * Folium 1.3: leave the collapsed floating capsule alone. The button is not
+     * mounted there, only on the expanded capsule and Lattice. Default false.
+     */
+    hideWhenCollapsed?: boolean;
     /** Draws the button into its container. */
     mount: FoliumMount<FoliumProgressContext>;
 }

@@ -373,6 +373,8 @@ folium.registries.commands.register({ id: 'toggle', label: {…}, description: {
 都渲染同一个宿主组件，所以扩展会同时出现在三处。
 
 - `controlButtons`：`slot` 为 `progress.leading` 或 `progress.trailing`，容器按内容大小排布。
+  `hideWhenCollapsed: true`（Folium 1.3）让按钮不出现在收起状态的悬浮胶囊里，只在展开的胶囊和 Lattice 显示；
+  收起的胶囊很窄，按钮多了会把进度条挤短。
 - `progressLayers`：容器铺满轨道且**不拦截指针**，拖动进度照常可用；标记等需要点击的元素自己设 `pointer-events: auto`。
 - 两者容器里的点击由宿主拦在容器内，不会冒泡到外层（悬浮控件的胶囊点击会跳到播放页），模组不需要自己 `stopPropagation()`。
 

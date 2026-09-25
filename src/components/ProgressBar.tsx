@@ -19,6 +19,8 @@ interface ProgressBarProps {
     trackColor?: string;
     disabled?: boolean;
     edgeStyle?: 'rounded' | 'square';
+    /** The collapsed floating capsule: mod buttons with hideWhenCollapsed stay out. */
+    collapsed?: boolean;
 }
 
 
@@ -40,6 +42,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     trackColor = 'rgba(255,255,255,0.1)',
     disabled = false,
     edgeStyle = 'rounded',
+    collapsed = false,
 }) => {
     const progressRef = useRef<HTMLDivElement>(null);
     const thumbRef = useRef<HTMLDivElement>(null);
@@ -150,7 +153,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                 '--folium-progress-text': secondaryColor,
             } as React.CSSProperties}
         >
-            <FoliumControlButtonSlot slot="progress.leading" ctx={foliumCtx} />
+            <FoliumControlButtonSlot slot="progress.leading" ctx={foliumCtx} collapsed={collapsed} />
 
             <span
                 ref={timeRef}
@@ -211,7 +214,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                 {formatTime(duration)}
             </span>
 
-            <FoliumControlButtonSlot slot="progress.trailing" ctx={foliumCtx} />
+            <FoliumControlButtonSlot slot="progress.trailing" ctx={foliumCtx} collapsed={collapsed} />
         </div>
     );
 };

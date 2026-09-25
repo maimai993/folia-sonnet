@@ -27,6 +27,9 @@ export const controlButtonsRegistry = createFoliumRegistry<FoliumControlButtonDe
         if (typeof def.mount !== 'function') {
             throw new Error('controlButtons.register: mount must be a function');
         }
+        if (def.hideWhenCollapsed !== undefined && typeof def.hideWhenCollapsed !== 'boolean') {
+            throw new Error('controlButtons.register: hideWhenCollapsed must be a boolean');
+        }
         return def;
     },
 });
@@ -99,7 +102,6 @@ export const useFoliumProgressContext = (inputs: FoliumProgressInputs): FoliumPr
     return ctx;
 };
 
-/** A leading/trailing button slot. Renders nothing while no mod has a button there. */
 /*
  * Host progress bars sit inside clickable surfaces (the floating capsule opens
  * the player on click). Clicks inside a mod's slot or layer are the mod's own,
@@ -107,9 +109,15 @@ export const useFoliumProgressContext = (inputs: FoliumProgressInputs): FoliumPr
  */
 const keepClickInside = (event: React.MouseEvent) => event.stopPropagation();
 
-export const FoliumControlButtonSlot: React.FC<{ slot: FoliumControlSlot; ctx: FoliumProgressContext }> = ({ slot, ctx }) => {
+/*
+ * A leading/trailing button slot. Renders nothing while no mod has a button
+ * there. On a collapsed bar, buttons that asked for hideWhenCollapsed are left out.
+ */
+export const FoliumControlButtonSlot: React.FC<{ slot: FoliumControlSlot; ctx: FoliumProgressContext; collapsed?: boolean }> = ({ slot, ctx, collapsed = false }) => {
     const entries = useFoliumRegistryEntries(controlButtonsRegistry);
-    const buttons = entries.filter((entry) => entry.def.slot === slot).sort(byOrder);
+    const buttons = entries
+        .filter((entry) => entry.def.slot === slot && !(collapsed && entry.def.hideWhenCollapsed))
+        .sort(byOrder);
     if (buttons.length === 0) return null;
     return (
         <div className="flex items-center gap-1 shrink-0" data-folium-slot={slot} onClick={keepClickInside}>

@@ -603,6 +603,7 @@ const CollapsedView: React.FC<CollapsedViewProps> = ({
                 secondaryColor={secondaryColor}
                 trackColor={trackColor}
                 disabled={controlsDisabled}
+                collapsed
             />
         </div>
     );

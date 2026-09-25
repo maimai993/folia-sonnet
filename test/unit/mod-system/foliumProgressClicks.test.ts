@@ -11,9 +11,10 @@ import {
 } from '@/mods/folium/registries/progress';
 
 // test/unit/mod-system/foliumProgressClicks.test.ts
-// The floating capsule around the host progress bar opens the player on click.
-// A click on a mod's button or marker must not reach it, even when the mod does
-// not stop propagation itself.
+// Host progress bar extensions inside the floating capsule. The capsule opens
+// the player on click; a click on a mod's button or marker must not reach it,
+// even when the mod does not stop propagation itself. A button can also stay
+// off the collapsed capsule (hideWhenCollapsed).
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -63,5 +64,32 @@ describe('clicks inside progress bar extensions', () => {
         progressLayersRegistry.register('mod-a', { id: 'plain', mount: buttonMount });
         const onSurfaceClick = clickModButton(React.createElement(FoliumProgressLayers, { ctx }));
         expect(onSurfaceClick).not.toHaveBeenCalled();
+    });
+});
+
+describe('hideWhenCollapsed', () => {
+    /* Renders the trailing slot and returns the ids of the mounted buttons. */
+    const mountedIds = (collapsed: boolean) => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        act(() => root!.render(React.createElement(FoliumControlButtonSlot, { slot: 'progress.trailing', ctx, collapsed })));
+        const ids = Array.from(document.querySelectorAll('[data-folium-entry]')).map((container) => container.getAttribute('data-folium-entry'));
+        act(() => root!.unmount());
+        root = null;
+        host.remove();
+        return ids;
+    };
+
+    it('leaves the button out of a collapsed bar only', () => {
+        controlButtonsRegistry.register('mod-a', { id: 'wide', slot: 'progress.trailing', hideWhenCollapsed: true, mount: buttonMount });
+        controlButtonsRegistry.register('mod-a', { id: 'always', slot: 'progress.trailing', mount: buttonMount });
+        expect(mountedIds(false)).toEqual(['mod-a:always', 'mod-a:wide']);
+        expect(mountedIds(true)).toEqual(['mod-a:always']);
+    });
+
+    it('rejects a non-boolean value', () => {
+        expect(() => controlButtonsRegistry.register('mod-a', { id: 'bad', slot: 'progress.trailing', hideWhenCollapsed: 'yes' as never, mount: buttonMount }))
+            .toThrow(/hideWhenCollapsed/);
     });
 });

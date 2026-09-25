@@ -284,6 +284,7 @@ A button next to the progress bar. All three host progress bars (floating contro
 | `id` | `string` | Local id. |
 | `slot` | `FoliumControlSlot` | Left or right of the bar. |
 | `order?` | `number` | Order within the slot; default 500. |
+| `hideWhenCollapsed?` | `boolean` | Folium 1.3: leave the collapsed floating capsule alone. The button is not mounted there, only on the expanded capsule and Lattice. Default false. |
 | `mount` | `FoliumMount<FoliumProgressContext>` | Draws the button into its container. |
 
 相关：[FoliumControlSlot](#foliumcontrolslot) · [FoliumMount](#foliummount) · [FoliumProgressContext](#foliumprogresscontext)
