@@ -21,6 +21,7 @@ import { formatGridMapFolderTitle } from '../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { isHideableGridItem } from './folia-grid/gridItemVisibility';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
+import { hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -246,7 +247,6 @@ export const GridMap: React.FC<GridMapProps> = ({
     const { t } = useTranslation();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
     const containerRef = useRef<HTMLDivElement>(null);
-    const rootRef = useRef<HTMLDivElement>(null);
     const dragControls = useDragControls();
     const [focusedIndex, setFocusedIndex] = useState(0);
     const initialFocusedItemRef = useRef<GridMapItem | undefined>(items[initialFocusedIndex]);
@@ -751,17 +751,10 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target;
-            const isInsideGridMap = target instanceof Node && Boolean(rootRef.current?.contains(target));
-
             if (
-                isInsideGridMap
-                && target instanceof HTMLElement
+                target instanceof HTMLElement
                 && (target.isContentEditable || Boolean(target.closest('button, input, select, textarea, a[href]')))
             ) return;
-
-            if (!isInsideGridMap && containerRef.current) {
-                containerRef.current.focus({ preventScroll: true });
-            }
 
             if (e.key === 'Enter') {
                 if (
@@ -831,16 +824,18 @@ export const GridMap: React.FC<GridMapProps> = ({
     // Automatically focus the grid map container on mount / when becoming interactive,
     // and when closing child panels, so keyboard navigation works immediately
     // without requiring a pointer click after opening from a trigger button.
+    // A panel toggle clicked with the mouse keeps focus on itself, and the keydown guard ignores
+    // buttons, so focus is taken back from anything except typing and windows that own the keyboard.
     useEffect(() => {
         if (!isInteractive || showSidePanel || showCutInPanel) return;
 
         const focusContainer = () => {
-            if (!containerRef.current) return;
             const active = document.activeElement;
-            const isOutside = !active || active === document.body || (rootRef.current && !rootRef.current.contains(active));
-            if (isOutside || active === rootRef.current) {
-                containerRef.current.focus({ preventScroll: true });
-            }
+            if (
+                active instanceof HTMLElement
+                && (isTextEntryTarget(active) || Boolean(active.closest('[data-folia-keyboard-window="true"]')))
+            ) return;
+            containerRef.current?.focus({ preventScroll: true });
         };
 
         const rafId = requestAnimationFrame(focusContainer);
@@ -862,7 +857,9 @@ export const GridMap: React.FC<GridMapProps> = ({
                 return;
             }
 
-            if (event.key !== 'Escape') {
+            // Auto-repeat would walk the whole ladder and drop out of the map; a window above
+            // (settings, dialogs, the palette overlay) owns its own Escape.
+            if (event.key !== 'Escape' || event.repeat || hasBlockingWindow()) {
                 return;
             }
 
@@ -886,6 +883,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                     break;
                 case 'exit-playlist-edit':
                     setIsPlaylistEditMode(false);
+                    setShowHiddenPlaylistsOnly(false);
                     break;
                 case 'navigate-back':
                     onBack();
@@ -899,12 +897,11 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     return (
         <motion.div
-            ref={rootRef}
             data-ponder-page-scope={ponderPageScope}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] overflow-hidden select-none outline-none"
+            className="fixed inset-0 z-[110] overflow-hidden select-none"
             style={{
                 backgroundColor: isDaylight ? 'rgba(250, 249, 246, 0.95)' : 'rgba(9, 9, 11, 0.95)',
                 color: 'var(--text-primary)',

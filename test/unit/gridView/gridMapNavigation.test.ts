@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
     resolveGridMapDisplayIndex,
+    resolveGridMapEscapeAction,
     resolveGridMapSourceIndex,
     shouldSuppressGridMapSelection,
 } from '../../../src/components/folia-grid/gridMapNavigation';
 
 // test/unit/gridView/gridMapNavigation.test.ts
-// Verifies GridMap navigation remains aligned with filtered and refreshed Grid3D collections.
+// Verifies GridMap navigation remains aligned with filtered and refreshed Grid3D collections,
+// and that Escape dismisses GridMap's layers one at a time.
 
 describe('gridMapNavigation', () => {
     const sourceItems = [
@@ -40,5 +42,43 @@ describe('gridMapNavigation', () => {
     it('suppresses card selection after an intentional grid drag', () => {
         expect(shouldSuppressGridMapSelection(8, 0)).toBe(true);
         expect(shouldSuppressGridMapSelection(6, 6)).toBe(true);
+    });
+});
+
+describe('resolveGridMapEscapeAction', () => {
+    const idle = {
+        searchQuery: '',
+        showSidePanel: false,
+        showCutInPanel: false,
+        isPlaylistEditMode: false,
+    };
+
+    it('clears an active filter before anything else', () => {
+        expect(resolveGridMapEscapeAction({
+            searchQuery: 'ambient',
+            showSidePanel: true,
+            showCutInPanel: true,
+            isPlaylistEditMode: true,
+        })).toBe('clear-search');
+    });
+
+    it('treats a whitespace-only filter as no filter', () => {
+        expect(resolveGridMapEscapeAction({ ...idle, searchQuery: '   ', showSidePanel: true })).toBe('close-side-panel');
+    });
+
+    it('closes the side drawer before the cut-in panel', () => {
+        expect(resolveGridMapEscapeAction({ ...idle, showSidePanel: true, showCutInPanel: true })).toBe('close-side-panel');
+    });
+
+    it('leaves playlist edit mode before closing the cut-in panel that hosts it', () => {
+        expect(resolveGridMapEscapeAction({ ...idle, showCutInPanel: true, isPlaylistEditMode: true })).toBe('exit-playlist-edit');
+    });
+
+    it('closes the cut-in panel once edit mode is off', () => {
+        expect(resolveGridMapEscapeAction({ ...idle, showCutInPanel: true })).toBe('close-cut-in-panel');
+    });
+
+    it('navigates back when no layer is open', () => {
+        expect(resolveGridMapEscapeAction(idle)).toBe('navigate-back');
     });
 });

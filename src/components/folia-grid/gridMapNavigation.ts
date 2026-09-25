@@ -53,7 +53,7 @@ export type GridMapEscapeAction =
 
 /**
  * Determines which layer GridMap should dismiss when Escape is pressed.
- * Prioritizes active child states (search query, side drawer, cut-in batch panel, edit mode)
+ * Prioritizes active child states (search query, side drawer, edit mode, cut-in batch panel)
  * before closing the entire GridMap overlay to return to the 3D surface.
  */
 export const resolveGridMapEscapeAction = ({
@@ -69,7 +69,9 @@ export const resolveGridMapEscapeAction = ({
 }): GridMapEscapeAction => {
     if (searchQuery.trim().length > 0) return 'clear-search';
     if (showSidePanel) return 'close-side-panel';
-    if (showCutInPanel) return 'close-cut-in-panel';
+    // Edit mode lives inside the cut-in panel, and closing the panel resets it; step out of edit
+    // mode first so one Escape does not throw away the whole panel.
     if (isPlaylistEditMode) return 'exit-playlist-edit';
+    if (showCutInPanel) return 'close-cut-in-panel';
     return 'navigate-back';
 };
