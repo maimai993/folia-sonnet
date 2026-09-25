@@ -9,7 +9,7 @@ import type { FoliumIconOptions } from './contract';
 // icon, kept out of the PWA precache by vite.config.ts).
 
 type IconNode = Array<[tag: string, attributes: Record<string, string>]>;
-type IconModule = { __iconNode?: IconNode };
+type IconModule = { __iconData?: { node?: IconNode } };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const loaders = dynamicIconImports as unknown as Record<string, () => Promise<IconModule>>;
@@ -53,6 +53,6 @@ export const buildIconElement = (name: string, node: IconNode, options: FoliumIc
 /** The icon as a new <svg>, or null when `name` is not a lucide icon. */
 export const createFoliumIcon = async (name: string, options?: FoliumIconOptions): Promise<SVGSVGElement | null> => {
     if (typeof name !== 'string' || !hasFoliumIcon(name)) return null;
-    const module = await loaders[name]();
-    return module.__iconNode ? buildIconElement(name, module.__iconNode, options) : null;
+    const node = (await loaders[name]()).__iconData?.node;
+    return node ? buildIconElement(name, node, options) : null;
 };
