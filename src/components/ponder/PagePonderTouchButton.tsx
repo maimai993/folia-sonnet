@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Lightbulb } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useSupportsFinePointer } from '../../hooks/useSupportsFinePointer';
 import { useAppViewStore } from '../../stores/useAppViewStore';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
@@ -34,7 +34,7 @@ type PagePonderTouchButtonProps = {
 /** Touch-only equivalent of Ctrl+G. It deliberately has no component-target API. */
 const PagePonderTouchButton: React.FC<PagePonderTouchButtonProps> = ({ accent, isDaylight }) => {
     const { t } = useTranslation();
-    const isCoarsePointer = useMediaQuery('(any-pointer: coarse)');
+    const isCoarsePointer = !useSupportsFinePointer();
     const hasSession = usePonderStore(state => state.session !== null);
     const isOnboardingOpen = useSettingsModalStore(state => state.isUserGuideModalOpen);
     const showTouchButton = usePonderStore(state => state.showPonderTouchButton);

@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lightbulb } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useSupportsFinePointer } from '../../hooks/useSupportsFinePointer';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { openCurrentPagePonder } from '../../services/ponder/pagePonderTarget';
@@ -14,7 +14,7 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
     const { t } = useTranslation();
     const isOpen = useSettingsModalStore(state => state.isUserGuideModalOpen);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
-    const isCoarsePointer = useMediaQuery('(any-pointer: coarse)');
+    const supportsFinePointer = useSupportsFinePointer();
     const accent = theme?.accentColor || (isDaylight ? '#18181b' : '#f4f4f5');
 
     return (
@@ -46,27 +46,28 @@ export const UserGuideModal: React.FC<{ theme?: Theme | null }> = ({ theme }) =>
                             {t('ponder.onboarding.title')}
                         </h2>
                         <p className="mx-auto mt-3 max-w-sm text-sm leading-6 opacity-65">
-                            {t(isCoarsePointer ? 'ponder.onboarding.touchDescription' : 'ponder.onboarding.description')}
+                            {t(supportsFinePointer ? 'ponder.onboarding.description' : 'ponder.onboarding.touchDescription')}
                         </p>
 
-                        {isCoarsePointer ? (
-                            <button
-                                type="button"
-                                data-testid="ponder-onboarding-touch-button"
-                                onClick={openCurrentPagePonder}
-                                className="mt-7 inline-flex items-center gap-2 rounded-full border px-5 py-3 text-sm font-medium transition-transform active:scale-95"
-                                style={{ borderColor: accent, color: accent }}
-                            >
-                                <Lightbulb size={17} aria-hidden="true" />
-                                {t('ponder.openPage')}
-                            </button>
-                        ) : (
+                        {supportsFinePointer && (
                             <div className="mt-7 flex items-center justify-center gap-2" aria-label={t('ponder.onboarding.shortcut')}>
                                 <kbd className="rounded-lg border px-3 py-2 font-mono text-sm">Ctrl</kbd>
                                 <span className="opacity-40">+</span>
                                 <kbd className="rounded-lg border px-3 py-2 font-mono text-sm">G</kbd>
                             </div>
                         )}
+
+                        {/* 按钮始终在：这一步完不成就出不去，指针判断一旦错了，没有键盘的人只看到 Ctrl+G 会被卡死。 */}
+                        <button
+                            type="button"
+                            data-testid="ponder-onboarding-open-button"
+                            onClick={openCurrentPagePonder}
+                            className={`${supportsFinePointer ? 'mt-4' : 'mt-7'} inline-flex items-center gap-2 rounded-full border px-5 py-3 text-sm font-medium transition-transform active:scale-95`}
+                            style={{ borderColor: accent, color: accent }}
+                        >
+                            <Lightbulb size={17} aria-hidden="true" />
+                            {t('ponder.openPage')}
+                        </button>
 
                         <p className="mt-6 text-xs opacity-45">{t('ponder.onboarding.required')}</p>
                     </motion.div>

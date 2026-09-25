@@ -2,7 +2,7 @@ import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lightbulb, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useSupportsFinePointer } from '../../hooks/useSupportsFinePointer';
 import { usePonderStore } from '../../stores/usePonderStore';
 import { ponderTargetsByCategory } from './ponderRegistry';
 import { ponderModifierLabel } from './PonderKeyCap';
@@ -32,7 +32,7 @@ const PonderNavigationPage: React.FC<PonderNavigationPageProps> = ({ theme, isDa
     const closeNavigation = usePonderStore(state => state.closeNavigation);
     const openPonder = usePonderStore(state => state.openPonder);
     const seenIds = usePonderStore(state => state.seenTargetIds);
-    const isCoarsePointer = useMediaQuery('(any-pointer: coarse)');
+    const supportsFinePointer = useSupportsFinePointer();
 
     const accent = theme?.accentColor || (isDaylight ? '#27272a' : '#fafafa');
     const groups = React.useMemo(
@@ -99,7 +99,7 @@ const PonderNavigationPage: React.FC<PonderNavigationPageProps> = ({ theme, isDa
                                     {t('ponder.navigation.title')}
                                 </h1>
                                 <p className="mt-1.5 max-w-2xl text-sm leading-6 opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                    {t(isCoarsePointer ? 'ponder.navigation.touchHint' : 'ponder.navigation.hint')}
+                                    {t(supportsFinePointer ? 'ponder.navigation.hint' : 'ponder.navigation.touchHint')}
                                 </p>
                             </div>
                             <button

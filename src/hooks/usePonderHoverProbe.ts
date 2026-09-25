@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ponderPointerX, ponderPointerY } from '../stores/motionSignals';
 import { usePonderStore } from '../stores/usePonderStore';
 import { hasBlockingWindow } from '../utils/keyboardTargets';
+import { FINE_POINTER_QUERY } from './useSupportsFinePointer';
 import { shouldOfferPonderHint } from '../utils/ponder/ponderHintGate';
 import { resolveHoveredPonderTarget } from '../components/ponder/ponderRegistry';
 import type { PonderTargetDefinition } from '../types/ponder';
@@ -16,8 +17,6 @@ import type { PonderTargetDefinition } from '../types/ponder';
 // 目标」这一个离散事实，且由 store 自己做相等性保护。
 
 const HOVER_DELAY_MS = 600;
-
-const FINE_POINTER_QUERY = '(hover: hover) and (pointer: fine)';
 
 const BLOCKING_WINDOW_SELECTOR = '[data-folia-keyboard-window="true"]';
 
