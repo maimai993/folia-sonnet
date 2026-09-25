@@ -21,6 +21,7 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
 | `k3panel` | 给内置模式「商籁」调参（tunings），纯 client |
 | `sample-transparent-mov-export` | client 注册命令，经 rpc 交给 main 调导出服务 |
 | `sample-progress-bar` | 改造进度条：按钮、样式、外部动态数据图层、设置分区、net.fetch、storage |
+| `more-progress-buttons` | 进度条两侧加「打乱队列」「音量」「喜爱」按钮，可分别关闭；用 `--folium-player-bar-extra` 把胶囊加宽补回轨道长度（1.3） |
 | `sample-rickroll` | 在播放页嵌入外部网页（stageLayers + ui.embed + embedOrigins） |
 
 ## 安全声明（重要）
