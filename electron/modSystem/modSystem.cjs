@@ -518,6 +518,30 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
         return directories;
     };
 
+    /*
+     * Finds the mod root inside one entry of a mods directory, with the same
+     * rule as a zip install (resolveArchiveRoot): mod.json in the entry itself,
+     * or in exactly one subfolder. A downloaded zip extracted by hand usually
+     * leaves that extra folder (mods/foo-1.0.0/foo/mod.json). Anything else
+     * falls back to the entry, which then reports the missing mod.json.
+     */
+    const resolveModRoot = (entryDirectory) => {
+        if (fs.existsSync(path.join(entryDirectory, 'mod.json'))) {
+            return entryDirectory;
+        }
+        let children = [];
+        try {
+            children = fs.readdirSync(entryDirectory, { withFileTypes: true });
+        } catch {
+            return entryDirectory;
+        }
+        const candidates = children
+            .filter((child) => child.isDirectory() && !child.name.startsWith('.'))
+            .map((child) => path.join(entryDirectory, child.name))
+            .filter((childDirectory) => fs.existsSync(path.join(childDirectory, 'mod.json')));
+        return candidates.length === 1 ? candidates[0] : entryDirectory;
+    };
+
     const readManifestFiles = () => {
         const discovered = new Map();
         const seenIds = new Set();
@@ -531,7 +555,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             // Dot-directories are the loader's own bookkeeping (staged installs
             // and rollback copies), never mods.
             dirEntries.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.')).forEach((entry) => {
-                const modDirectory = path.join(dirPath, entry.name);
+                const modDirectory = resolveModRoot(path.join(dirPath, entry.name));
                 const manifestPath = path.join(modDirectory, 'mod.json');
                 let raw = null;
                 try {

@@ -89,6 +89,9 @@ mods/
     client.mjs            # 可选：client 入口（渲染端 ESM），可以 import 同目录下的其它 .mjs/.js
 ```
 
+`mod.json` 也可以放在模组目录下唯一的子文件夹里（`mods/your-mod-1.0.0/your-mod-id/mod.json`），规则与 zip 安装相同。
+手动解压下载的 zip 常会多出这一层，不需要再挪出来。
+
 client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 import 裸模块名**（`'pixi.js'`），也拿不到宿主
 打包进去的库。要用第三方库就把它的 ESM 构建放进模组目录（例如 `vendor/pixi.min.mjs`，附上许可证），
 再相对 import，见 `visualizer52hz`。
