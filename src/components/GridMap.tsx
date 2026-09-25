@@ -13,6 +13,7 @@ import GridMapBatchPanel from './folia-grid/GridMapBatchPanel';
 import { resolveGridMapBatchContext, type GridMapBatchConfig } from './folia-grid/gridMapBatch';
 import {
     resolveGridMapDisplayIndex,
+    resolveGridMapEscapeAction,
     resolveGridMapSourceIndex,
     shouldSuppressGridMapSelection,
 } from './folia-grid/gridMapNavigation';
@@ -20,6 +21,7 @@ import { formatGridMapFolderTitle } from '../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../utils/coverUrl';
 import { isHideableGridItem } from './folia-grid/gridItemVisibility';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
+import { hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
 
 // src/components/GridMap.tsx
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
@@ -819,6 +821,80 @@ export const GridMap: React.FC<GridMapProps> = ({
         showSidePanel,
     ]);
 
+    // Automatically focus the grid map container on mount / when becoming interactive,
+    // and when closing child panels, so keyboard navigation works immediately
+    // without requiring a pointer click after opening from a trigger button.
+    // A panel toggle clicked with the mouse keeps focus on itself, and the keydown guard ignores
+    // buttons, so focus is taken back from anything except typing and windows that own the keyboard.
+    useEffect(() => {
+        if (!isInteractive || showSidePanel || showCutInPanel) return;
+
+        const focusContainer = () => {
+            const active = document.activeElement;
+            if (
+                active instanceof HTMLElement
+                && (isTextEntryTarget(active) || Boolean(active.closest('[data-folia-keyboard-window="true"]')))
+            ) return;
+            containerRef.current?.focus({ preventScroll: true });
+        };
+
+        const rafId = requestAnimationFrame(focusContainer);
+        return () => {
+            cancelAnimationFrame(rafId);
+        };
+    }, [isInteractive, showCutInPanel, showSidePanel]);
+
+    useEffect(() => {
+        if (!isInteractive) return;
+
+        const handleEscape = (event: KeyboardEvent) => {
+            const target = event.target;
+            if (
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                (target instanceof HTMLElement && target.isContentEditable)
+            ) {
+                return;
+            }
+
+            // Auto-repeat would walk the whole ladder and drop out of the map; a window above
+            // (settings, dialogs, the palette overlay) owns its own Escape.
+            if (event.key !== 'Escape' || event.repeat || hasBlockingWindow()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            const action = resolveGridMapEscapeAction({
+                searchQuery,
+                showSidePanel,
+                showCutInPanel,
+                isPlaylistEditMode,
+            });
+            switch (action) {
+                case 'clear-search':
+                    setSearchQuery('');
+                    break;
+                case 'close-side-panel':
+                    setShowSidePanel(false);
+                    break;
+                case 'close-cut-in-panel':
+                    closeCutInPanel();
+                    break;
+                case 'exit-playlist-edit':
+                    setIsPlaylistEditMode(false);
+                    setShowHiddenPlaylistsOnly(false);
+                    break;
+                case 'navigate-back':
+                    onBack();
+                    break;
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [closeCutInPanel, isInteractive, isPlaylistEditMode, onBack, searchQuery, showCutInPanel, showSidePanel]);
+
     return (
         <motion.div
             data-ponder-page-scope={ponderPageScope}
@@ -893,7 +969,8 @@ export const GridMap: React.FC<GridMapProps> = ({
                     suppressSelectionRef.current = false;
                     dragControls.start(event);
                 }}
-                className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden"
+                tabIndex={-1}
+                className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing overflow-hidden focus:outline-none"
                 style={{ touchAction: 'none' }}
             >
 

@@ -65,6 +65,7 @@ import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } f
 import { useGridSurfaceRegistration } from '../hooks/useGridSurfaceRegistration';
 import { OmniError, type MediaId, type ProviderCollection } from '../types/onlineMusic';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
+import { hasBlockingWindow } from '../utils/keyboardTargets';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
 
 export interface GridViewSourceActions {
@@ -1442,7 +1443,9 @@ export const GridView: React.FC<GridViewProps> = ({
                 return;
             }
 
-            if (event.key !== 'Escape') {
+            // A window above (e.g. the lyrics timeline opened from the bottom bar) owns its own
+            // Escape; auto-repeat would walk the whole ladder and leave the grid.
+            if (event.key !== 'Escape' || event.repeat || hasBlockingWindow()) {
                 return;
             }
 

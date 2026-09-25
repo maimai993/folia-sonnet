@@ -148,7 +148,10 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowGridMap(true)}
+                        onClick={(e) => {
+                            (e.currentTarget as HTMLElement)?.blur();
+                            setShowGridMap(true);
+                        }}
                         className="px-4 py-2 rounded-full flex items-center gap-2 text-xs font-semibold shadow-lg backdrop-blur-md transition-all border border-white/10"
                         style={{
                             backgroundColor: isDaylight ? 'rgba(255,255,255,0.7)' : 'rgba(25,25,25,0.7)',
