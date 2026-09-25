@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAvailableCommandPaletteCommands, isCommandPaletteCommandEnabled, rankCommands, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
+import { isCommandPaletteCommandEnabled, rankCommands, COMMAND_PALETTE_COMMANDS } from './commandRegistry';
 import { OPEN_HOTKEY_INDEX, openHotkeyStroke } from './commands';
 import { findCommandsByTrigger } from './search/commandSearchIndex';
 import { useTranslation } from 'react-i18next';
@@ -94,17 +94,29 @@ export const useCommandPalette = ({
      *
      * So: recompute eagerly, hand back the previous array when nothing actually changed. That is
      * what lets `defaultMatches` below leave `context` out of its dependencies.
+     *
+     * The stable set keeps hidden commands, because `canInvokeCommandById` gates on it and has
+     * always let a UI surface reach a hidden command; the palette's own list drops them.
      */
-    const availableCommandsRef = useRef<CommandPaletteCommand[]>([]);
-    const availableCommands = useMemo(() => {
-        const next = getAvailableCommandPaletteCommands(context);
-        const previous = availableCommandsRef.current;
+    const enabledCommandsRef = useRef<CommandPaletteCommand[]>([]);
+    const enabledCommands = useMemo(() => {
+        const next = COMMAND_PALETTE_COMMANDS.filter(command => isCommandPaletteCommandEnabled(command, context));
+        const previous = enabledCommandsRef.current;
         if (next.length === previous.length && next.every((command, index) => command === previous[index])) {
             return previous;
         }
-        availableCommandsRef.current = next;
+        enabledCommandsRef.current = next;
         return next;
     }, [context, isOpen]);
+    const availableCommands = useMemo(
+        () => enabledCommands.filter(command => !command.hidden),
+        [enabledCommands],
+    );
+    // Event handlers read the live context from here, so their identities do not follow every
+    // context tick. `invokeCommandById` and `canInvokeCommandById` reach App's overlay model, and
+    // a volume write re-rendering every overlay is what renderCounts.probe.ts guards against.
+    const contextRef = useRef(context);
+    contextRef.current = context;
     const pinnedCommands = useMemo(
         () => resolvePinnedCommandSlots(pinnedCommandIds, availableCommands),
         [availableCommands, pinnedCommandIds],
@@ -198,13 +210,13 @@ export const useCommandPalette = ({
     }, []);
 
     const activateInputCommand = useCallback((command: CommandPaletteCommand) => {
-        const initialInput = command.getInitialInput?.(context) ?? '';
+        const initialInput = command.getInitialInput?.(contextRef.current) ?? '';
         recordRecentCommand(command);
         setActiveCommand(command);
         setQuery(initialInput);
         setMatchQuery(initialInput);
         setActiveIndex(0);
-    }, [context, recordRecentCommand]);
+    }, [recordRecentCommand]);
 
     // Opens the palette straight into one command, used by the per-command openHotkey entries.
     const openCommand = useCallback((command: CommandPaletteCommand) => {
@@ -228,17 +240,20 @@ export const useCommandPalette = ({
 
     /** Uses the palette's platform, scope and availability gates for buttons outside the palette. */
     const canInvokeCommandById = useCallback((commandId: string) => {
-        const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
-        if (!command || !isCommandPaletteCommandEnabled(command, context)) {
+        const command = enabledCommands.find(entry => entry.id === commandId);
+        if (!command) {
             return false;
         }
         return command.surface ? !isBlocked && !isExecuting : true;
-    }, [context, isBlocked, isExecuting]);
+    }, [enabledCommands, isBlocked, isExecuting]);
 
     /** Opens surface commands in the palette and directly executes commands without a surface. */
+    // Re-asks availability against the live context at click time; `openCommand` applies the
+    // blocked / executing gate for surface commands.
     const invokeCommandById = useCallback((commandId: string) => {
+        const liveContext = contextRef.current;
         const command = COMMAND_PALETTE_COMMANDS.find(entry => entry.id === commandId);
-        if (!command || !canInvokeCommandById(commandId)) {
+        if (!command || !isCommandPaletteCommandEnabled(command, liveContext)) {
             return;
         }
 
@@ -248,8 +263,8 @@ export const useCommandPalette = ({
         }
 
         recordRecentCommand(command);
-        void command.execute('', context);
-    }, [canInvokeCommandById, context, openCommand, recordRecentCommand]);
+        void command.execute('', liveContext);
+    }, [openCommand, recordRecentCommand]);
 
     const executeMatch = useCallback(async (index: number) => {
         if (isExecuting) {
