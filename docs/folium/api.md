@@ -545,6 +545,7 @@ Read-only notifications, emitted after the fact.
 | `app.viewChanged` | `{ readonly view: string }` | The app switched views (e.g. `home`, `player`). |
 | `visualizer.modeChanged` | `{ readonly mode: string }` | The lyric animation mode changed. |
 | `theme.changed` | `{ readonly theme: FoliumTheme }` | The theme or daylight mode changed. |
+| `playback.likeChanged` | `{ readonly liked: boolean }` | Folium 1.3: `playback.getState().liked` changed (a like or unlike, or a new song). |
 
 相关：[FoliumSong](#foliumsong) · [FoliumPlaybackState](#foliumplaybackstate) · [FoliumLine](#foliumline) · [FoliumTheme](#foliumtheme)
 
@@ -650,7 +651,7 @@ permission. All of it is unavailable in the export window.
 
 | 成员 | 类型 | 说明 |
 | --- | --- | --- |
-| `getState()` | `(): { song: FoliumSong \| null; state: FoliumPlaybackState; position: number; duration: number }` | The displayed song, player state, position and duration (seconds). |
+| `getState()` | `(): { song: FoliumSong \| null; state: FoliumPlaybackState; position: number; duration: number; liked: boolean; canLike: boolean; }` | The displayed song, player state, position and duration (seconds). Folium 1.3: `liked` (the displayed song is liked; false with no song) and `canLike` (toggleLike would act now; the host's own like button greys out otherwise). |
 | `play()` | `(): void` | Resumes playback. Needs `playback.control`. |
 | `pause()` | `(): void` | Pauses. Needs `playback.control`. |
 | `toggle()` | `(): void` | Play/pause. Needs `playback.control`. |
@@ -660,6 +661,8 @@ permission. All of it is unavailable in the export window.
 | `previous()` | `(): void` | Previous track. Needs `playback.control`. |
 | `playSong()` | `(song: FoliumSong): Promise<boolean>` | Plays a song by its host `ref`. Resolves false when the ref is unknown. Needs `playback.control`. |
 | `enqueue()` | `(song: FoliumSong): boolean` | Appends a song (by `ref`) to the queue. Needs `playback.control`. |
+| `shuffleQueue()` | `(): boolean` | Folium 1.3: shuffles the play queue, keeping the current song first. False when there is nothing to shuffle (Personal FM, a queue of one, external Stage playback). Needs `playback.control`. |
+| `toggleLike()` | `(): boolean` | Folium 1.3: likes or unlikes the displayed song, like the host's like button, which also reports the result. False when `canLike` is false. Needs `playback.control`. |
 
 相关：[FoliumSong](#foliumsong) · [FoliumPlaybackState](#foliumplaybackstate)
 
@@ -693,6 +696,7 @@ Folium 1.2: options for `folium.ui.icon`.
 | `toast()` | `(message: string, options?: { type?: 'info' \| 'success' \| 'error'; durationMs?: number }): void` | Shows a status message. |
 | `openPlayerPanel()` | `(tabId?: string): void` | Opens the player panel, optionally on one of this mod's panel tabs (local id). |
 | `navigate()` | `(view: 'home' \| 'player'): void` | Switches to the home or player view. |
+| `openVolume()` | `(): void` | Folium 1.3: opens the host volume panel (the command palette's volume command). |
 | `pickFile()` | `(options?: { accept?: 'video' \| 'audio' \| 'image' \| 'any'; persist?: boolean }): Promise<FoliumFileHandle \| null>` | Lets the user pick a local file; null when cancelled. With `persist` (Folium 1.1) the pick is remembered for this mod and the handle carries a `grantId` for restoreFile. |
 | `restoreFile()` | `(grantId: string): Promise<FoliumFileHandle \| null>` | Folium 1.1: a file this mod picked with `persist`, as a fresh session handle. Null when the grant is unknown to this mod or the file is gone. |
 | `releaseFile()` | `(grantId: string): Promise<void>` | Folium 1.1: forgets a persisted grant. URLs already handed out keep working this session. |

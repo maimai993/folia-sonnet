@@ -108,10 +108,11 @@ const mod = (overrides: Partial<ModRuntimeInfo> = {}): ModRuntimeInfo => ({
 });
 
 const fakeActions = () => ({
-    getPlaybackState: () => ({ song: null, state: 'paused' as const, position: 3, duration: 10 }),
+    getPlaybackState: () => ({ song: null, state: 'paused' as const, position: 3, duration: 10, liked: false, canLike: false }),
     play: vi.fn(), pause: vi.fn(), toggle: vi.fn(), seek: vi.fn(), seekToLyricTime: vi.fn(), next: vi.fn(), previous: vi.fn(),
     playSongRef: vi.fn(async () => true), enqueueSongRef: vi.fn(() => true),
-    toast: vi.fn(), openPlayerPanel: vi.fn(), navigate: vi.fn(),
+    shuffleQueue: vi.fn(() => true), toggleLike: vi.fn(() => false),
+    toast: vi.fn(), openPlayerPanel: vi.fn(), navigate: vi.fn(), openVolume: vi.fn(),
 });
 
 describe('folium services', () => {
@@ -137,6 +138,27 @@ describe('folium services', () => {
         expect(actions.seekToLyricTime).toHaveBeenCalledWith(12.5);
         expect(actions.seek).not.toHaveBeenCalled();
         expect(() => control.seekToLyricTime(Number.NaN)).toThrow('requires a finite number');
+    });
+
+    it('shuffles and likes behind playback.control and reports what the host did', () => {
+        const actions = fakeActions();
+        registerFoliumHostActions(actions);
+        const readOnly = createFoliumPlaybackService(mod(), 'main');
+        expect(() => readOnly.shuffleQueue()).toThrow('permission-denied:playback.control');
+        expect(() => readOnly.toggleLike()).toThrow('permission-denied:playback.control');
+        const control = createFoliumPlaybackService(mod({ permissions: ['playback.control'] }), 'main');
+        expect(control.shuffleQueue()).toBe(true);
+        expect(control.toggleLike()).toBe(false);
+        expect(actions.shuffleQueue).toHaveBeenCalledTimes(1);
+        expect(actions.toggleLike).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the volume panel without a permission', () => {
+        const actions = fakeActions();
+        registerFoliumHostActions(actions);
+        createFoliumUiService(mod(), 'main').openVolume();
+        expect(actions.openVolume).toHaveBeenCalledTimes(1);
+        expect(() => createFoliumUiService(mod(), 'export').openVolume()).toThrow('ui-unavailable-in-export-context');
     });
 
     it('is unavailable outside the main window', () => {

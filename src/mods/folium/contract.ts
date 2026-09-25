@@ -746,6 +746,8 @@ export interface FoliumNotificationEvents {
     'visualizer.modeChanged': { readonly mode: string };
     /** The theme or daylight mode changed. */
     'theme.changed': { readonly theme: FoliumTheme };
+    /** Folium 1.3: `playback.getState().liked` changed (a like or unlike, or a new song). */
+    'playback.likeChanged': { readonly liked: boolean };
 }
 
 /**
@@ -838,8 +840,19 @@ export interface FoliumEvents {
  * permission. All of it is unavailable in the export window.
  */
 export interface FoliumPlaybackService {
-    /** The displayed song, player state, position and duration (seconds). */
-    getState(): { song: FoliumSong | null; state: FoliumPlaybackState; position: number; duration: number };
+    /**
+     * The displayed song, player state, position and duration (seconds).
+     * Folium 1.3: `liked` (the displayed song is liked; false with no song) and
+     * `canLike` (toggleLike would act now; the host's own like button greys out otherwise).
+     */
+    getState(): {
+        song: FoliumSong | null;
+        state: FoliumPlaybackState;
+        position: number;
+        duration: number;
+        liked: boolean;
+        canLike: boolean;
+    };
     /** Resumes playback. Needs `playback.control`. */
     play(): void;
     /** Pauses. Needs `playback.control`. */
@@ -864,6 +877,18 @@ export interface FoliumPlaybackService {
     playSong(song: FoliumSong): Promise<boolean>;
     /** Appends a song (by `ref`) to the queue. Needs `playback.control`. */
     enqueue(song: FoliumSong): boolean;
+    /**
+     * Folium 1.3: shuffles the play queue, keeping the current song first.
+     * False when there is nothing to shuffle (Personal FM, a queue of one,
+     * external Stage playback). Needs `playback.control`.
+     */
+    shuffleQueue(): boolean;
+    /**
+     * Folium 1.3: likes or unlikes the displayed song, like the host's like
+     * button, which also reports the result. False when `canLike` is false.
+     * Needs `playback.control`.
+     */
+    toggleLike(): boolean;
 }
 
 /** A local file the user picked for this mod. */
@@ -899,6 +924,8 @@ export interface FoliumUiService {
     openPlayerPanel(tabId?: string): void;
     /** Switches to the home or player view. */
     navigate(view: 'home' | 'player'): void;
+    /** Folium 1.3: opens the host volume panel (the command palette's volume command). */
+    openVolume(): void;
     /**
      * Lets the user pick a local file; null when cancelled. With `persist`
      * (Folium 1.1) the pick is remembered for this mod and the handle carries

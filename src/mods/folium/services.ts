@@ -33,9 +33,14 @@ export interface FoliumHostActions {
     /** Resolves a song ref and plays it; false when the ref is unknown. */
     playSongRef: (ref: string) => Promise<boolean>;
     enqueueSongRef: (ref: string) => boolean;
+    /** False when the queue cannot be shuffled right now. */
+    shuffleQueue: () => boolean;
+    /** False when the displayed song cannot be liked right now. */
+    toggleLike: () => boolean;
     toast: (message: string, type: 'info' | 'success' | 'error', durationMs?: number) => void;
     openPlayerPanel: (tab: string | null) => void;
     navigate: (view: 'home' | 'player') => void;
+    openVolume: () => void;
 }
 
 let hostActions: FoliumHostActions | null = null;
@@ -89,6 +94,8 @@ export const createFoliumPlaybackService = (mod: ModRuntimeInfo, context: Folium
         previous: () => control().previous(),
         playSong: async (song: FoliumSong) => control().playSongRef(requireRef(song)),
         enqueue: (song: FoliumSong) => control().enqueueSongRef(requireRef(song)),
+        shuffleQueue: () => control().shuffleQueue(),
+        toggleLike: () => control().toggleLike(),
     });
 };
 
@@ -141,6 +148,7 @@ export const createFoliumUiService = (mod: ModRuntimeInfo, context: FoliumContex
         if (view !== 'home' && view !== 'player') throw new Error(`ui.navigate: unknown view "${String(view)}"`);
         requireActions('ui', context).navigate(view);
     },
+    openVolume: () => requireActions('ui', context).openVolume(),
     pickFile: async (options: { accept?: 'video' | 'audio' | 'image' | 'any'; persist?: boolean } = {}) => {
         if (context !== 'main') throw new Error(`ui-unavailable-in-${context}-context`);
         const response = await invokeModPickFile(mod.id, options.accept ?? 'any', options.persist === true);

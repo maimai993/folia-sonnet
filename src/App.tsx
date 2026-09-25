@@ -2090,6 +2090,11 @@ export default function App() {
         enqueue: addOnlineSongToQueue,
         navigateToPlayer,
         navigateToHome,
+        shuffleQueue,
+        toggleLike: handleLike,
+        openVolume: () => commandPalette.invokeCommandById('playback-volume'),
+        isLiked: commandPaletteContext.playback.isSongLiked,
+        controlsDisabled: isNowPlayingControlDisabled,
     });
 
     const visualizerRendererModel = useVisualizerRendererModel({

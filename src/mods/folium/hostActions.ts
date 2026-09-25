@@ -11,7 +11,9 @@ import { useAppViewStore } from '@/stores/useAppViewStore';
 import { setStatusMessage } from '@/stores/useStatusMessageStore';
 import { currentTime } from '@/stores/motionSignals';
 import type { PanelTab } from '@/components/UnifiedPanel';
+import { resolveLikeAvailability } from '@/utils/playerLikeAvailability';
 import { resolveFoliumSongRef, toFoliumSong } from './dto';
+import { emitFoliumEvent } from './events';
 import { registerFoliumHostActions } from './services';
 
 // src/mods/folium/hostActions.ts
@@ -31,11 +33,32 @@ export interface FoliumAppActions {
     enqueue: (song: SongResult) => void;
     navigateToPlayer: () => void;
     navigateToHome: () => void;
+    shuffleQueue: () => void;
+    toggleLike: () => void | Promise<void>;
+    openVolume: () => void;
+    /** The displayed song is liked (the value the host's like button shows). */
+    isLiked: boolean;
+    /** Now-playing controls are off (a blend, no source); the like button greys out with them. */
+    controlsDisabled: boolean;
 }
+
+type PlaybackStoreState = ReturnType<typeof usePlaybackStore.getState>;
+
+/* Same rule as the player bar's shuffle slot, plus external Stage playback, which shuffleQueue ignores. */
+const canShuffleQueue = (state: PlaybackStoreState) => (
+    !state.isFmMode && state.playQueue.length > 1 && state.activePlaybackContext !== 'stage'
+);
 
 export const useFoliumHostActions = (actions: FoliumAppActions) => {
     const actionsRef = useRef(actions);
     actionsRef.current = actions;
+
+    /* Same rule as the player bar's like slot. */
+    const canLike = (state: PlaybackStoreState) => !resolveLikeAvailability(
+        selectDisplaySong(state),
+        actionsRef.current.controlsDisabled,
+        state.activePlaybackContext === 'stage',
+    ).disabled;
 
     useEffect(() => {
         registerFoliumHostActions({
@@ -48,6 +71,8 @@ export const useFoliumHostActions = (actions: FoliumAppActions) => {
                     state: playerState === PlayerState.PLAYING ? 'playing' : playerState === PlayerState.PAUSED ? 'paused' : 'stopped',
                     position: currentTime.get(),
                     duration: Number.isFinite(duration) ? duration : 0,
+                    liked: Boolean(selectDisplaySong(state)) && actionsRef.current.isLiked,
+                    canLike: canLike(state),
                 };
             },
             play: () => actionsRef.current.play(),
@@ -69,6 +94,16 @@ export const useFoliumHostActions = (actions: FoliumAppActions) => {
                 actionsRef.current.enqueue(song);
                 return true;
             },
+            shuffleQueue: () => {
+                if (!canShuffleQueue(usePlaybackStore.getState())) return false;
+                actionsRef.current.shuffleQueue();
+                return true;
+            },
+            toggleLike: () => {
+                if (!canLike(usePlaybackStore.getState())) return false;
+                void actionsRef.current.toggleLike();
+                return true;
+            },
             toast: (message, type, durationMs) => setStatusMessage({ type, text: message, ...(durationMs ? { durationMs } : {}) }),
             openPlayerPanel: (tab) => {
                 const view = useAppViewStore.getState();
@@ -76,7 +111,19 @@ export const useFoliumHostActions = (actions: FoliumAppActions) => {
                 view.setIsPanelOpen(true);
             },
             navigate: (target) => (target === 'player' ? actionsRef.current.navigateToPlayer() : actionsRef.current.navigateToHome()),
+            openVolume: () => actionsRef.current.openVolume(),
         });
         return () => registerFoliumHostActions(null);
     }, []);
+
+    // playback.likeChanged follows the value getState().liked reports, whatever changed it.
+    const liked = actions.isLiked;
+    const likedPrimedRef = useRef(false);
+    useEffect(() => {
+        if (!likedPrimedRef.current) {
+            likedPrimedRef.current = true;
+            return;
+        }
+        emitFoliumEvent('playback.likeChanged', { liked });
+    }, [liked]);
 };

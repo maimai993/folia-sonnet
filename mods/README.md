@@ -141,7 +141,7 @@ client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 imp
 | `filesystem.data` | `api.storage.data.*`（main）与 `folium.storage.*`（client），两边共用一个数据文件 |
 | `runtime.playback` | `api.runtime.getPlaybackSnapshot()`（main） |
 | `render.export` | `api.render.exportVideo()`（main） |
-| `playback.control` | `folium.playback` 的播放、暂停、跳转、切歌、入队 |
+| `playback.control` | `folium.playback` 的播放、暂停、跳转、切歌、入队、打乱队列、喜爱 |
 | `net.fetch` | `folium.net.fetch()`（经主进程代发，不受 CORS 限制） |
 | `net.embed` | `folium.ui.embed()`，还需要 `embedOrigins` |
 | `ui.stage` | `registries.stageLayers`（往播放页上画东西） |
@@ -395,6 +395,11 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 | `progress.thumb` | 滑块（默认 `opacity: 0`，样式里设为可见即出现） |
 | `progress.time` / `progress.duration` | 当前时间 / 总时长 |
 
+**公开变量**（1.3）：`--folium-player-bar-extra`（长度，默认 `0px`）把悬浮胶囊加宽这么多，展开和收起两种状态都生效，
+超出视口时截止。用来补回在进度条两侧加按钮后被压短的轨道：
+`folium.registries.styles.register({ id: 'wider', css: ':root { --folium-player-bar-extra: 56px; }' })`。
+这个变量只有一个值，几个模组同时设置时后注册的生效。
+
 ## 事件
 
 `folium.events.on(type, handler, { priority })`，优先级 `highest / high / normal / low / lowest`，同级按注册顺序。
@@ -411,6 +416,7 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 | `app.viewChanged` | `{ view }` |
 | `visualizer.modeChanged` | `{ mode }` |
 | `theme.changed` | `{ theme }` |
+| `playback.likeChanged`（1.3） | `{ liked }`，`getState().liked` 变了（喜爱、取消喜爱，或换到喜爱状态不同的歌） |
 
 **钩子**（同一个事件对象依次经过每个处理器，处理器可以改它）：
 
@@ -422,8 +428,12 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 
 ## 服务
 
-**`folium.playback`**：`getState()` 返回 `{ song, state, position, duration }`；`play / pause / toggle / seek / seekToLyricTime / next / previous`、
-`playSong(song)`、`enqueue(song)` 需要 `playback.control`。歌曲 DTO 带不透明的 `ref`，宿主靠它找回真正的歌曲。
+**`folium.playback`**：`getState()` 返回 `{ song, state, position, duration, liked, canLike }`；`play / pause / toggle / seek / seekToLyricTime / next / previous`、
+`playSong(song)`、`enqueue(song)`、`shuffleQueue()`、`toggleLike()` 需要 `playback.control`。歌曲 DTO 带不透明的 `ref`，宿主靠它找回真正的歌曲。
+
+- `shuffleQueue()`（1.3）打乱播放队列，当前歌曲留在最前；私人 FM、队列只有一首、外部 Stage 播放时不动，返回 `false`。
+- `toggleLike()`（1.3）喜爱或取消喜爱正在显示的歌，和宿主的喜爱按钮相同，结果提示也由宿主给出；`canLike` 为 `false` 时
+  （没有歌、来源不支持、Stage 播放、播放控制被禁用）不动，返回 `false`。`liked` 的变化见 `playback.likeChanged` 事件。
 
 - `seek(seconds)` 跳到**播放时间**；`seekToLyricTime(seconds)`（1.3）跳到**歌词时间**，也就是内置模式点击歌词行的行为：
   传 `line.startTime` 即可，宿主负责换算歌词偏移、处理只有歌词的舞台源，播放控制被禁用时忽略。歌词有偏移时
@@ -437,6 +447,7 @@ CSS 放进 `@layer folium-mods`（在 Tailwind 各层之后声明），不用 `!
 | `toast(message, { type, durationMs })` | 提示条 |
 | `openPlayerPanel(tabId?)` | 打开播放器面板，可指定本模组注册的标签 |
 | `navigate('home' \| 'player')` | 页面导航 |
+| `openVolume()`（1.3） | 打开宿主的音量面板（命令面板里的音量命令） |
 | `pickFile({ accept: 'video' \| 'audio' \| 'image' \| 'any', persist })` | 原生选择框；返回 `{ url, name, size }` 或 `null`。`url` 是本次会话有效的 `folia-mod://_files/...`，支持 Range，可直接做 `<video>` 的 src。`persist: true`（1.1）时宿主记住这次选择，返回值多一个不透明的 `grantId` |
 | `restoreFile(grantId)`（1.1） | 把之前 `persist` 选中的文件换成本次会话的新句柄（含同一个 `grantId`）；授权不属于本模组或文件已不存在时返回 `null`，后者的授权随即作废。模组始终拿不到文件路径 |
 | `releaseFile(grantId)`（1.1） | 放弃授权；已经发出的 URL 本次会话内仍然有效 |
