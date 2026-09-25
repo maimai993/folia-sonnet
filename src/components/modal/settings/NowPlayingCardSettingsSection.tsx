@@ -70,23 +70,31 @@ const NowPlayingCardSettingsSection: React.FC<NowPlayingCardSettingsSectionProps
                 ))}
             </div>
             {mode === 'auto' && (
-                <div className="flex items-center justify-between gap-4 pt-1">
-                    <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                        {t('options.stageTrackPillTimeout')}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <input
-                            type="range"
-                            min={3}
-                            max={60}
-                            step={1}
-                            value={timeoutSec}
-                            onChange={(event) => onChangeTimeoutSec(Number(event.target.value))}
-                            className="w-36 accent-current"
-                        />
-                        <span className="text-xs font-mono w-12 text-right" style={{ color: 'var(--text-primary)' }}>
+                <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.stageTrackPillTimeout')}
+                        </div>
+                        <span className="text-xs font-mono w-12 text-right shrink-0" style={{ color: 'var(--text-primary)' }}>
                             {timeoutSec}s
                         </span>
+                    </div>
+                    {/* accentColor 取主题色，随明暗与换主题实时跟随；写法与设置中其他量条
+                        （GridViewSettingsSection / LatticePosterTintControls）保持一致 */}
+                    <input
+                        type="range"
+                        min={3}
+                        max={60}
+                        step={1}
+                        value={timeoutSec}
+                        onChange={(event) => onChangeTimeoutSec(Number(event.target.value))}
+                        className="w-full accent-current"
+                        style={{ accentColor: theme?.accentColor }}
+                        aria-label={t('options.stageTrackPillTimeout')}
+                    />
+                    <div className="flex justify-between text-[11px] font-mono opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                        <span>3s</span>
+                        <span>60s</span>
                     </div>
                 </div>
             )}
