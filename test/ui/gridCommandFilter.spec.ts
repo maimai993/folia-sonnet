@@ -280,13 +280,11 @@ test('--play takes the play path, not the queue path', async ({ page }) => {
     await filterInput(page).fill('midnight --play');
     await expect(trackCard(page).first()).toBeVisible();
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(500);
 
-    // 固件里的 mp3 是假音频，playSong 取不到可播地址就停在那里——「真的响了」在这个环境里
-    // 观察不到。能观察到、也正是这里要盯的，是它**没有**走成追加：如果 --play 接错到
-    // onAddAllToQueue 上，队列会长出一首来。
-    expect((await playbackSnapshot(page)).queueLength).toBe(0);
-    await expect(filterInput(page)).toHaveValue('midnight');
+    // 队列长度分不开两条路：播放也会把这一首放进队列。能分开的是当前曲目——播放路径会把它
+    // 设成这首歌，追加路径（onAddAllToQueue）只往队列里塞，当前曲目保持为空。
+    await expect.poll(async () => (await playbackSnapshot(page)).currentSongName).toBe('Midnight Train');
+    // 播放会切到播放页，网格和筛选框随之离场，所以这里不再检查筛选框的值。
 });
 
 test('a filter with no flag never reaches the grid with the flag token in it', async ({ page }) => {

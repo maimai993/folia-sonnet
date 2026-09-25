@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/cursorAutoHide.spec.ts
 // 播放页空闲时的指针隐藏。它没有自己的计时器，跟着控制栏的自动隐藏状态走，所以这里验的是
@@ -35,6 +35,7 @@ const openPlayerPage = async (page: Page, cursorEnabled: boolean) => {
     });
 
     await page.goto('/');
+    await waitForAppMounted(page);
     // 种数据要等模块图和 IndexedDB 都就绪，轮询到真的写进去为止再重载。
     await expect.poll(async () => page.evaluate(async (songs) => {
         try {
@@ -49,6 +50,7 @@ const openPlayerPage = async (page: Page, cursorEnabled: boolean) => {
         }
     }, QUEUE_FIXTURE)).toBe(true);
     await page.reload();
+    await waitForAppMounted(page);
     await expect(surface(page)).toBeAttached();
 };
 

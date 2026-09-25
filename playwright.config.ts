@@ -14,6 +14,10 @@ const chromiumCandidates = [
 const chromiumExecutablePath = chromiumCandidates.find(candidate => existsSync(candidate));
 
 export default defineConfig({
+  // 每个 worker 都是一个完整 dev 模式应用加浏览器，默认的「CPU 核数一半」会把机器压满：
+  // 20 线程机器上 10 个 worker 负载到 23，页面挂载要 16–19s，十几条用例在各种等待上超时，
+  // 整轮反而要 16 分钟。5 个 worker 只剩真实失败，整轮约 14 分钟。
+  workers: 5,
   fullyParallel: false,
   reporter: 'line',
   timeout: 90_000,

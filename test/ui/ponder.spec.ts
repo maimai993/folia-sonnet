@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/ponder.spec.ts
 // 思索在真实应用里的验证。这里只做 probe 做不到的那部分：
@@ -31,6 +31,7 @@ const openPlayerPage = async (page: Page, slots?: { primary: string; secondary: 
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/');
+    await waitForAppMounted(page);
     await page.waitForTimeout(2000);
 };
 

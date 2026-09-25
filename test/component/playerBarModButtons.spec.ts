@@ -7,13 +7,19 @@ import { expect, test } from './fixtures';
 
 const TRACK = '[data-folium-part="progress.track"]';
 
+// 连续这么多次采样都不动才算停下。spring 收尾时每 50ms 只挪零点几像素，负载高、帧变慢时
+// 更明显；只比相邻两次会在离终点还差 2–3px 时提前返回。
+const STABLE_SAMPLES = 4;
+
 /** 等胶囊的 layout spring 停下来，返回稳定后的轨道宽度 */
 async function settledTrackWidth(page: Page): Promise<number> {
     const track = page.locator(TRACK).first();
     let previous = -1;
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+    let stable = 0;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
         const { width } = (await track.boundingBox())!;
-        if (Math.abs(width - previous) < 0.5) {
+        stable = Math.abs(width - previous) < 0.5 ? stable + 1 : 0;
+        if (stable >= STABLE_SAMPLES) {
             return width;
         }
         previous = width;

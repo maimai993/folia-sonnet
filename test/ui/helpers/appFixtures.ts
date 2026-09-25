@@ -1,5 +1,5 @@
 import { type Page } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../../helpers/appState';
 import { MOTION_SURFACE_IDS } from '../../../src/stores/useMotionSettingsStore';
 
 // test/ui/helpers/appFixtures.ts
@@ -270,20 +270,23 @@ export async function installBaseState(
       return;
     }
 
+    // 这段函数由 Playwright 的 Babel 编译后原样送进浏览器。`#private` 字段会被改写成调用
+    // `_classPrivateFieldInitSpec` 等辅助函数，而浏览器里没有它们，构造时直接 ReferenceError。
+    // 所以这里只能用 TS 的 `private`（编译期擦除）。
     class MockAudio extends EventTarget {
       duration = 126;
-      #src = '';
+      private srcValue = '';
 
       set src(value: string) {
-        this.#src = value;
-        void this.#src;
+        this.srcValue = value;
+        void this.srcValue;
         setTimeout(() => {
           this.dispatchEvent(new Event('loadedmetadata'));
         }, 0);
       }
 
       get src() {
-        return this.#src;
+        return this.srcValue;
       }
     }
 
@@ -291,18 +294,18 @@ export async function installBaseState(
     class MockWorker {
       onmessage: ((event: MessageEvent) => void) | null = null;
       onerror: ((event: Event) => void) | null = null;
-      readonly #url: string;
+      private readonly url: string;
 
       constructor(url: string | URL) {
-        this.#url = String(url);
+        this.url = String(url);
 
-        if (!this.#url.includes('metadataParser.worker')) {
+        if (!this.url.includes('metadataParser.worker')) {
           return new OriginalWorker(url as string, { type: 'module' }) as unknown as MockWorker;
         }
       }
 
       postMessage(message: { type: string; requestId: string; file?: File; cover?: Blob; }) {
-        if (!this.#url.includes('metadataParser.worker')) {
+        if (!this.url.includes('metadataParser.worker')) {
           return;
         }
 
@@ -608,6 +611,7 @@ export async function mockNavidromeApi(page: Page) {
 
 export async function openApp(page: Page) {
   await page.goto('/');
+  await waitForAppMounted(page);
   await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: 'light' });
   await page.addStyleTag({
     content: `

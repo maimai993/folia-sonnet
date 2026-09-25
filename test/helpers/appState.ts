@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { Page } from '@playwright/test';
 
 // test/helpers/appState.ts
 
@@ -16,3 +17,18 @@ export const APP_VERSION: string = JSON.parse(
 
 /** 对应 src/stores/useSettingsModalStore.ts 的 LAST_SEEN_GUIDE_VERSION_STORAGE_KEY */
 export const GUIDE_VERSION_STORAGE_KEY = 'folia_last_seen_ponder_onboarding_version';
+
+/**
+ * 应用首帧挂载的超时。dev server 下每个新页面都要逐个拉取几千个未打包的模块：单独跑约 9s，
+ * 并行 worker 同时开页时实测 16–19s，超过 expect 默认的 15s。首批用例于是随机挂在
+ * 「面板没打开」「Daily Mix 没出现」这类断言上，其实只是应用还没挂载完。
+ */
+export const APP_MOUNT_TIMEOUT_MS = 60_000;
+
+/**
+ * 等应用挂载完：AppSplashGate 在第一次 mount effect 里摘掉 index.html 的 #app-splash。
+ * 挂载单独给足时间，之后的断言照旧用默认超时，真正的回归不会被放宽的超时掩盖。
+ */
+export const waitForAppMounted = async (page: Page) => {
+    await page.locator('#app-splash').waitFor({ state: 'detached', timeout: APP_MOUNT_TIMEOUT_MS });
+};

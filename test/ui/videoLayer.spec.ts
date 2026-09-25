@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/videoLayer.spec.ts
 // The built-in video layer behind the lyrics and Sora's blank mode, in the real app: the layer mounts
@@ -22,6 +22,7 @@ const seedAndOpen = async (page: Page, storage: Record<string, string>) => {
     await page.route('**/__mock_netease__/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     await page.route('https://video.test/**', route => route.abort());
     await page.goto('/');
+    await waitForAppMounted(page);
 };
 
 test('mounts the video layer on the player page and Sora blank skips the WebGL canvas', async ({ page }) => {
@@ -48,6 +49,7 @@ test('mounts the video layer on the player page and Sora blank skips the WebGL c
         }
     }, QUEUE_FIXTURE)).toBe(true);
     await page.reload();
+    await waitForAppMounted(page);
 
     const surface = page.getByTestId('player-visual-surface');
     await expect(surface).toBeAttached();

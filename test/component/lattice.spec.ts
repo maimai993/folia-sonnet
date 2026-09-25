@@ -512,11 +512,14 @@ test('expanded chrome operates next, previous and all three loop modes', async (
     await chrome.getByRole('button', { name: 'Previous track', exact: true }).click();
     await expect(wall.locator('.is-expanded')).toHaveAttribute('aria-label', 'Poster 0 · Artist');
     await expectExpandedCentered(wall);
-    for (const mode of ['one', 'off', 'all']) {
+    // 循环按钮的名字跟随当前模式（Loop all / Loop one / Loop off），所以按 data-action 找它。
+    const loop = chrome.locator('[data-action=loop]');
+    for (const [mode, name] of [['one', 'Loop one'], ['off', 'Loop off'], ['all', 'Loop all']]) {
         await wall.locator('.is-expanded').hover({ position: { x: 100, y: 80 } });
-        await chrome.getByRole('button', { name: 'Loop mode', exact: true }).click();
+        await loop.click();
         await expect(wall.locator('[data-loop]')).toHaveAttribute('data-loop', mode);
-        await expect(chrome.locator('[data-action=loop]')).toHaveAttribute('aria-pressed', String(mode !== 'off'));
+        await expect(loop).toHaveAttribute('aria-pressed', String(mode !== 'off'));
+        await expect(loop).toHaveAccessibleName(name);
     }
 });
 

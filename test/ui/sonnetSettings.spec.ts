@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION } from '../helpers/appState';
+import { APP_VERSION, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/sonnetSettings.spec.ts
 // Verifies entering Sonnet from the real settings UI and the visibility tuning controls it exposes.
@@ -18,6 +18,7 @@ test('enters Sonnet from settings and exposes its layer controls', async ({ page
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/');
+    await waitForAppMounted(page);
     await page.evaluate(async () => {
         const storeModulePath = '/src/stores/useSettingsModalStore.ts';
         const { useSettingsModalStore } = await import(storeModulePath);

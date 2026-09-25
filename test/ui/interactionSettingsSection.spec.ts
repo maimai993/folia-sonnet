@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/interactionSettingsSection.spec.ts
 // 确认这一分区在侧栏里、在「控制」这一组下、点得进去，三项设置都真的渲染出来，
@@ -24,6 +24,7 @@ const openInteractionSettings = async (page: import('@playwright/test').Page) =>
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/');
+    await waitForAppMounted(page);
     await page.evaluate(async () => {
         const storeModulePath = '/src/stores/useSettingsModalStore.ts';
         const { useSettingsModalStore } = await import(storeModulePath);
@@ -110,6 +111,7 @@ test('lands on the section a command names, not the top of its page', async ({ p
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/');
+    await waitForAppMounted(page);
 
     const openAppearance = (anchorId: string | null) => page.evaluate(async (anchor) => {
         const storeModulePath = '/src/stores/useSettingsModalStore.ts';

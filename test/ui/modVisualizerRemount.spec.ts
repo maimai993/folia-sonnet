@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/modVisualizerRemount.spec.ts
 // A mod visualizer mounts once per song, not once per host re-render. For a song without lyrics the
@@ -21,6 +21,7 @@ test('does not remount a mod visualizer when the player UI changes on a lyric-le
     await page.route('**/__mock_netease__/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
 
     await page.goto('/');
+    await waitForAppMounted(page);
     await expect.poll(async () => page.evaluate(async (song) => {
         try {
             const dbModulePath = '/src/services/db.ts';
@@ -33,6 +34,7 @@ test('does not remount a mod visualizer when the player UI changes on a lyric-le
         }
     }, SONG)).toBe(true);
     await page.reload();
+    await waitForAppMounted(page);
     await expect(page.getByTestId('player-visual-surface')).toBeAttached();
 
     await page.evaluate(async () => {

@@ -50,7 +50,10 @@ const expectCenteredCard = async (page: Page, index: number, name: string) => {
     await expect(focusedTitle(page)).toHaveText(name);
     // Checking the label alone would miss a restored index with the scroll position still at zero.
     await expect.poll(() => page.locator(`[data-grid3d-index="${index}"]`).evaluate(node => {
-        const slider = node.closest('[data-grid3d-slider]')!;
+        // Right after a reorder the card can be outside the slider for a frame. Report "not
+        // centered yet" so the poll retries instead of throwing on the missing slider.
+        const slider = node.closest('[data-grid3d-slider]');
+        if (!slider) return Number.POSITIVE_INFINITY;
         const card = node.getBoundingClientRect();
         const viewport = slider.getBoundingClientRect();
         return Math.abs(card.x + card.width / 2 - viewport.x - viewport.width / 2);

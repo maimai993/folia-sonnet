@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/panelControlsTab.spec.ts
 // 覆盖播放面板控制页的模式取景器：箭头步进、完整列表入口，以及步进经过商籁时不再被拦截。
@@ -33,6 +33,7 @@ const openPlayerPage = async (page: import('@playwright/test').Page, bottomBarOf
     });
 
     await page.goto('/');
+    await waitForAppMounted(page);
     await page.waitForTimeout(2000);
 };
 
@@ -86,6 +87,7 @@ const openQueueWithFixture = async (page: import('@playwright/test').Page) => {
         await saveToCache('last_queue', songs);
     }, queue);
     await page.reload();
+    await waitForAppMounted(page);
     await page.waitForTimeout(1800);
     // 全局键盘监听比首屏晚装上一拍，定长 sleep 只是赌它已经装好了。反复敲直到面板真的响应。
     await expect.poll(async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION } from '../helpers/appState';
+import { APP_VERSION, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/nomandSettings.spec.ts
 // Verifies Nomand swaps its effect-specific tuning controls while keeping the shared settings shell.
@@ -16,6 +16,7 @@ test('switches Nomand Paper effects and exposes matching tuning controls', async
         await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/');
+    await waitForAppMounted(page);
     await page.evaluate(async () => {
         const storeModulePath = '/src/stores/useSettingsModalStore.ts';
         const { useSettingsModalStore } = await import(storeModulePath);

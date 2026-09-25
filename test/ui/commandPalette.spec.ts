@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY } from '../helpers/appState';
+import { APP_VERSION, GUIDE_VERSION_STORAGE_KEY, waitForAppMounted } from '../helpers/appState';
 
 // test/ui/commandPalette.spec.ts
 // 覆盖命令面板的三类入口：默认匹配列表、surface 接管（音量 / 队列 / 模式选择器），
@@ -52,6 +52,7 @@ const openPlayerPage = async (page: import('@playwright/test').Page) => {
     await seedApp(page, true);
 
     await page.goto('/');
+    await waitForAppMounted(page);
     // 种数据要等模块图和 IndexedDB 都就绪。定长 sleep 只是在赌，改成重试到真的写进去为止。
     await expect.poll(async () => page.evaluate(async (songs) => {
         try {
@@ -65,6 +66,7 @@ const openPlayerPage = async (page: import('@playwright/test').Page) => {
         }
     }, QUEUE_FIXTURE)).toBe(true);
     await page.reload();
+    await waitForAppMounted(page);
     // 重载后不再定长等待：下面每个入口要么轮询按键，要么轮询 store，自己会等。
 };
 
@@ -75,6 +77,7 @@ const paletteInput = (page: import('@playwright/test').Page) => palette(page).ge
 const openHomePage = async (page: import('@playwright/test').Page) => {
     await seedApp(page, false);
     await page.goto('/');
+    await waitForAppMounted(page);
     // 不定长等待：紧接着的 pressUntilPaletteOpens 会一直敲到面板真的响应为止。
 };
 

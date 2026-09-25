@@ -251,7 +251,8 @@ test.describe('preview isolation', () => {
 test.describe('player control slots', () => {
     test('default slots still run loop and the lyrics timeline', async ({ page }) => {
         await page.locator(CAPSULE).first().hover();
-        await page.getByRole('button', { name: /loop mode|循环模式/i }).click();
+        // 循环按钮的名字跟随当前模式，不再是固定的"循环模式"。
+        await page.getByRole('button', { name: /^(loop (all|one|off)|列表循环|单曲循环|关闭循环)$/i }).click();
         expect(await page.locator(ROOT).getAttribute('data-probe-slot-hits')).toBe('loop');
     });
 
