@@ -196,6 +196,12 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
     worker: {
       format: 'es'
     },
+    optimizeDeps: {
+      // Only metadataParser.worker.ts imports music-metadata, and the startup dep scan does not
+      // follow worker entries. Left out, the first local import discovers it at runtime, Vite
+      // re-optimizes, and every open page is force-reloaded ("optimized dependencies changed").
+      include: ['music-metadata'],
+    },
     build: {
       rollupOptions: {
         input: {
