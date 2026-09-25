@@ -557,6 +557,8 @@ declare global {
     /** Blink's own allocations - DOM, CSS, decoded images. Renderer processes only. */
     blinkMB: number | null;
     cpuPercent: number;
+    /** Open file descriptors. Linux only (counted from /proc); null elsewhere. */
+    fdCount: number | null;
   }
 
   /** One tick of the memory monitor: the whole app at one instant, plus the session's figures so far. */
@@ -581,6 +583,9 @@ declare global {
      * every platform - and the renderer is the largest process in this app anyway.
      */
     rendererPrivateMB: number | null;
+    /** Open fds of the renderer / GPU process. Linux only; a steady climb is the shm fd leak. */
+    rendererFdCount: number | null;
+    gpuFdCount: number | null;
     systemFreeMB: number | null;
     systemTotalMB: number | null;
     processes: DebugMemoryProcess[];

@@ -43,11 +43,22 @@ const SERIES = [
 
 type SeriesKey = typeof SERIES[number]['key'];
 
+/**
+ * Open fd counts, on their own chart: they are counts, not megabytes, and sharing an axis with the
+ * working set would press them flat. Linux only, so the chart is not drawn where nothing reports.
+ */
+const FD_SERIES = [
+    { key: 'rendererFdCount', label: 'Renderer fds', color: '#f87171' },
+    { key: 'gpuFdCount', label: 'GPU fds', color: '#a78bfa' },
+] as const;
+
+type FdSeriesKey = typeof FD_SERIES[number]['key'];
+
 const CHART_WIDTH = 480;
 const CHART_HEIGHT = 120;
 
 /** A series as an SVG polyline, or null when this run has no numbers for it (see `privateMB`). */
-const linePoints = (points: readonly MemoryPoint[], key: SeriesKey, max: number): string | null => {
+const linePoints = (points: readonly MemoryPoint[], key: SeriesKey | FdSeriesKey, max: number): string | null => {
     if (points.length < 2) return null;
     const values = points.map(point => point[key]);
     if (values.every(value => value === null)) return null;
@@ -104,6 +115,17 @@ const MemoryMonitorWindow: React.FC<MemoryMonitorWindowProps> = ({ isDaylight, s
         }
         return Math.max(peak * 1.08, 1);
     }, [history.points, shown]);
+
+    const fdMax = useMemo(() => {
+        let peak = 0;
+        for (const point of history.points) {
+            for (const series of FD_SERIES) {
+                const value = point[series.key];
+                if (value !== null && value > peak) peak = value;
+            }
+        }
+        return peak;
+    }, [history.points]);
 
     // The shortcut owns visibility outside this component. Clear that state when sampling is off;
     // otherwise a keypress while this component returns null leaves an invisible "open" window
@@ -189,6 +211,44 @@ const MemoryMonitorWindow: React.FC<MemoryMonitorWindowProps> = ({ isDaylight, s
                         </div>
                     </div>
 
+                    {fdMax > 0 && (
+                        <div className="px-3 pt-3">
+                            <svg
+                                viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                                preserveAspectRatio="none"
+                                className="h-12 w-full"
+                                role="img"
+                                aria-label="fds"
+                            >
+                                {FD_SERIES.map(series => {
+                                    const points = linePoints(history.points, series.key, fdMax * 1.08);
+                                    return points
+                                        ? (
+                                            <polyline
+                                                key={series.key}
+                                                points={points}
+                                                fill="none"
+                                                stroke={series.color}
+                                                strokeWidth="1.5"
+                                                vectorEffect="non-scaling-stroke"
+                                                strokeLinejoin="round"
+                                            />
+                                        )
+                                        : null;
+                                })}
+                            </svg>
+                            <div className="flex items-center gap-3 pt-1 text-[10px] opacity-55">
+                                {FD_SERIES.map(series => (
+                                    <span key={series.key} className="flex items-center gap-1.5 tabular-nums">
+                                        <span className="h-1.5 w-3 rounded-full" style={{ backgroundColor: series.color }} />
+                                        {`${series.label} ${latest?.[series.key] ?? '—'}`}
+                                    </span>
+                                ))}
+                                <span className="ml-auto tabular-nums">{`0 – ${Math.round(fdMax * 1.08)}`}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 px-3 py-3">
                         {SERIES.map(series => {
                             const isMissing = unavailable.has(series.key);
@@ -234,6 +294,7 @@ const MemoryMonitorWindow: React.FC<MemoryMonitorWindowProps> = ({ isDaylight, s
                                             <th className="font-normal text-right">priv</th>
                                             <th className="font-normal text-right">heap</th>
                                             <th className="font-normal text-right">cpu</th>
+                                            {fdMax > 0 && <th className="font-normal text-right">fd</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -247,6 +308,7 @@ const MemoryMonitorWindow: React.FC<MemoryMonitorWindowProps> = ({ isDaylight, s
                                                     a dash here means unavailable, not zero. */}
                                                 <td className="text-right opacity-60">{row.heapMB === null ? '—' : row.heapMB}</td>
                                                 <td className="text-right opacity-60">{`${row.cpuPercent}%`}</td>
+                                                {fdMax > 0 && <td className="text-right opacity-60">{row.fdCount === null ? '—' : row.fdCount}</td>}
                                             </tr>
                                         ))}
                                     </tbody>

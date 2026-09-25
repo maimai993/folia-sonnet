@@ -1,5 +1,6 @@
 const { createDebugLogWriter, logsRoot } = require('./debugLogWriter.cjs');
 const { createMemoryMonitor } = require('./memoryMonitor.cjs');
+const fs = require('fs');
 
 // electron/debug/debugHost.cjs
 // The developer debug module: what is recorded, where it lands, and how the renderer switches it.
@@ -70,6 +71,23 @@ const migrateMemoryLogEnabled = (store, stored) => {
  * after it is gone, those calls are no-ops rather than errors.
  */
 let host = null;
+
+/**
+ * Open fd count per pid, read from /proc. Linux only - elsewhere, and for any process that has gone
+ * away or is not ours to read, the pid is simply left out and its row keeps null.
+ */
+const readFdCounts = (metrics, { platform = process.platform, readdirSync = fs.readdirSync } = {}) => {
+    const counts = new Map();
+    if (platform !== 'linux') return counts;
+    for (const metric of metrics) {
+        try {
+            counts.set(metric.pid, readdirSync(`/proc/${metric.pid}/fd`).length);
+        } catch {
+            // Exited between getAppMetrics and here, or sandboxed out of reach.
+        }
+    }
+    return counts;
+};
 
 /**
  * One line into the runtime log. Safe to call from anywhere in the main process, at any time.
@@ -179,7 +197,8 @@ const createDebugHost = ({ app, ipcMain, store, BrowserWindow }) => {
 
         let sample;
         try {
-            sample = monitor.sample({ at: Date.now(), metrics: app.getAppMetrics(), system, heap, reports: liveReports() });
+            const metrics = app.getAppMetrics();
+            sample = monitor.sample({ at: Date.now(), metrics, system, heap, reports: liveReports(), fdCounts: readFdCounts(metrics) });
         } catch (error) {
             writeRuntime(Date.now(), 'warn', 'Debug', `memory sample failed: ${(error && error.message) || error}`);
             return;
@@ -310,4 +329,4 @@ const createDebugHost = ({ app, ipcMain, store, BrowserWindow }) => {
     return host;
 };
 
-module.exports = { createDebugHost, runtimeLine, migrateMemoryLogEnabled, DEFAULTS };
+module.exports = { createDebugHost, runtimeLine, migrateMemoryLogEnabled, readFdCounts, DEFAULTS };

@@ -43,6 +43,8 @@ const readProcess = (metric) => {
         /** Blink's own allocations - DOM, CSS, images. Renderer processes only. */
         blinkMB: null,
         cpuPercent: Math.round(((metric.cpu && metric.cpu.percentCPUUsage) || 0) * 10) / 10,
+        /** Open file descriptors, counted from /proc on Linux; null elsewhere. See `sample`. */
+        fdCount: null,
     };
 };
 
@@ -72,8 +74,11 @@ const merge = (row, report) => {
  * Largest rather than first because a session can have several renderers - the remote control
  * window, an OBS browser source - and the one that answers the question is the player.
  */
-const fromRenderer = (processes, field) => processes.reduce((best, row) => (
-    row.type.startsWith('Tab') && row[field] !== null ? Math.max(best ?? 0, row[field]) : best
+const fromRenderer = (processes, field) => fromType(processes, 'Tab', field);
+
+/** Same as `fromRenderer`, for any process type prefix. */
+const fromType = (processes, typePrefix, field) => processes.reduce((best, row) => (
+    row.type.startsWith(typePrefix) && row[field] !== null ? Math.max(best ?? 0, row[field]) : best
 ), null);
 
 const createMemoryMonitor = () => {
@@ -96,12 +101,19 @@ const createMemoryMonitor = () => {
      * @param system  `process.getSystemMemoryInfo()`, or null where it throws.
      * @param heap    `process.getHeapStatistics()` for the main process, or null.
      * @param reports what individual processes said about themselves, keyed by pid. See `merge`.
+     * @param fdCounts open fd count per pid, where the platform exposes it (Linux /proc). A pid
+     *                 missing from the map keeps null, never 0.
      */
-    const sample = ({ at = Date.now(), metrics = [], system = null, heap = null, reports = new Map() } = {}) => {
+    const sample = ({ at = Date.now(), metrics = [], system = null, heap = null, reports = new Map(), fdCounts = new Map() } = {}) => {
         // Biggest first, so the process worth asking about is the first one on the line - the same
         // ordering the automix diagnosis relied on to name the 2.6GB process without Task Manager.
         const processes = metrics
-            .map(metric => merge(readProcess(metric), reports.get(metric.pid)))
+            .map(metric => {
+                const row = merge(readProcess(metric), reports.get(metric.pid));
+                const fds = fdCounts.get(metric.pid);
+                if (typeof fds === 'number') row.fdCount = fds;
+                return row;
+            })
             .sort((a, b) => b.workingSetMB - a.workingSetMB);
         const totalWorkingSetMB = processes.reduce((total, row) => total + row.workingSetMB, 0);
         // All or nothing. A sum over only the processes that answered would be labelled "total" and
@@ -141,6 +153,12 @@ const createMemoryMonitor = () => {
             // watching: the renderer is the largest process in this app - at the automix peak it
             // was 1222MB against htdemucs's 483MB - and the one where a leak would accumulate.
             rendererPrivateMB: fromRenderer(processes, 'privateMB'),
+            // Not memory, but the same kind of slow climb: on Linux the renderer and GPU process have
+            // leaked one 4 KiB shared-memory fd at a time during playback until the soft
+            // RLIMIT_NOFILE was hit and the compositor stopped producing frames. A steady rise here
+            // is that leak; see dev/fd-leak/.
+            rendererFdCount: fromRenderer(processes, 'fdCount'),
+            gpuFdCount: fromType(processes, 'GPU', 'fdCount'),
             systemFreeMB: system ? mb(system.free) : null,
             systemTotalMB: system ? mb(system.total) : null,
             processes,

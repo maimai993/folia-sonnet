@@ -10,7 +10,7 @@ import path from 'path';
 
 const { createMemoryMonitor } = require('../../../electron/debug/memoryMonitor.cjs');
 const { createDebugLogWriter } = require('../../../electron/debug/debugLogWriter.cjs');
-const { migrateMemoryLogEnabled } = require('../../../electron/debug/debugHost.cjs');
+const { migrateMemoryLogEnabled, readFdCounts } = require('../../../electron/debug/debugHost.cjs');
 
 /** A metrics row shaped like Electron's, sizes in KB. */
 const metric = (pid: number, type: string, workingSetMB: number, peakMB = workingSetMB, privateMB: number | null = null) => ({
@@ -160,6 +160,26 @@ describe('the memory monitor', () => {
         });
         expect(sample.processes.map((row: { pid: number }) => row.pid)).toEqual([2, 3, 1]);
     });
+    it('carries open fd counts where the platform reports them, and null where it does not', () => {
+        const monitor = createMemoryMonitor();
+        // The Linux shm leak shows up as a steady fd climb in the renderer and GPU process, so both
+        // are lifted out for the chart. A process missing from the map was not counted - null, not 0.
+        const sample = monitor.sample({
+            metrics: [metric(1, 'GPU', 200), metric(2, 'Tab', 900), metric(3, 'Browser', 300)],
+            fdCounts: new Map([[1, 410], [2, 380]]),
+        });
+
+        const byPid = new Map(sample.processes.map((row: { pid: number; fdCount: number | null }) => [row.pid, row.fdCount]));
+        expect(byPid.get(1)).toBe(410);
+        expect(byPid.get(2)).toBe(380);
+        expect(byPid.get(3)).toBeNull();
+        expect(sample.rendererFdCount).toBe(380);
+        expect(sample.gpuFdCount).toBe(410);
+
+        const elsewhere = monitor.sample({ metrics: [metric(1, 'GPU', 200), metric(2, 'Tab', 900)] });
+        expect(elsewhere.rendererFdCount).toBeNull();
+        expect(elsewhere.gpuFdCount).toBeNull();
+    });
 });
 
 describe('the debug log writer', () => {
@@ -269,5 +289,25 @@ describe('the split memory log switch', () => {
             memoryLogEnabled: undefined,
         })).toBe(false);
         expect(store.set).toHaveBeenCalledWith('debug_memory_log_enabled', false);
+    });
+});
+
+describe('the fd counter', () => {
+    it('counts /proc/<pid>/fd entries on Linux and skips processes it cannot read', () => {
+        const readdirSync = vi.fn((dir: string) => {
+            if (dir === '/proc/7/fd') return ['0', '1', '2', '3'];
+            throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+        });
+        const counts = readFdCounts([{ pid: 7 }, { pid: 8 }], { platform: 'linux', readdirSync });
+
+        expect(counts.get(7)).toBe(4);
+        // Gone between getAppMetrics and the read: left out, so its row keeps null.
+        expect(counts.has(8)).toBe(false);
+    });
+
+    it('reads nothing off Linux', () => {
+        const readdirSync = vi.fn();
+        expect(readFdCounts([{ pid: 7 }], { platform: 'win32', readdirSync }).size).toBe(0);
+        expect(readdirSync).not.toHaveBeenCalled();
     });
 });

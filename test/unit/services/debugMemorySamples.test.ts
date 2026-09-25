@@ -25,10 +25,12 @@ const sampleAt = (index: number, workingSetMB: number): DebugMemorySample => ({
     mainHeapTotalMB: 60,
     rendererHeapUsedMB: 120,
     rendererPrivateMB: 640,
+    rendererFdCount: null,
+    gpuFdCount: null,
     systemFreeMB: 8000,
     systemTotalMB: 32000,
     processes: [
-        { pid: 1, type: 'Browser', workingSetMB, peakWorkingSetMB: workingSetMB, privateMB: null, sharedMB: null, heapMB: null, blinkMB: null, cpuPercent: 1 },
+        { pid: 1, type: 'Browser', workingSetMB, peakWorkingSetMB: workingSetMB, privateMB: null, sharedMB: null, heapMB: null, blinkMB: null, cpuPercent: 1, fdCount: null },
     ],
 });
 
@@ -58,7 +60,7 @@ describe('the memory history the monitor window draws', () => {
         // "which process" is a question about now, not about twenty minutes ago. The file on disk
         // has all of it.
         expect(Object.keys(history.points[0])).toEqual([
-            'at', 'totalWorkingSetMB', 'totalPrivateMB', 'rendererPrivateMB', 'rendererHeapUsedMB', 'cpuPercent',
+            'at', 'totalWorkingSetMB', 'totalPrivateMB', 'rendererPrivateMB', 'rendererHeapUsedMB', 'cpuPercent', 'rendererFdCount', 'gpuFdCount',
         ]);
     });
 

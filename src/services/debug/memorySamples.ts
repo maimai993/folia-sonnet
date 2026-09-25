@@ -19,6 +19,9 @@ export interface MemoryPoint {
     rendererPrivateMB: number | null;
     rendererHeapUsedMB: number | null;
     cpuPercent: number;
+    /** Open fd counts, not megabytes - plotted on their own scale. Linux only. */
+    rendererFdCount: number | null;
+    gpuFdCount: number | null;
 }
 
 export interface MemoryHistory {
@@ -54,6 +57,8 @@ export const recordMemorySample = (sample: DebugMemorySample) => {
         rendererPrivateMB: sample.rendererPrivateMB,
         rendererHeapUsedMB: sample.rendererHeapUsedMB,
         cpuPercent: sample.cpuPercent,
+        rendererFdCount: sample.rendererFdCount ?? null,
+        gpuFdCount: sample.gpuFdCount ?? null,
     };
     // A new array rather than a push: useSyncExternalStore compares by identity, and a list mutated
     // in place leaves the chart rendering data it believes is current.
