@@ -136,6 +136,7 @@
 - `src/components/ponder/targets/ponderBasics.target.ts`
 - `src/components/ponder/targets/queueCommandSurface.target.ts`
 - `src/components/ponder/targets/queueSettings.target.ts`
+- `src/components/ponder/targets/queueShuffle.target.ts`
 - `src/components/ponder/targets/replayGainSettings.target.ts`
 - `src/components/ponder/targets/settingsPage.target.ts`
 - `src/components/ponder/targets/sidePanel.target.ts`
