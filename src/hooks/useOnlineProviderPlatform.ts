@@ -14,8 +14,12 @@ export type OnlineProviderPlatformState = {
     switchProvider: (providerId: OnlineProviderId) => Promise<boolean>;
     refreshProvider: (providerId: OnlineProviderId) => Promise<unknown>;
     logoutProvider: (providerId: OnlineProviderId) => Promise<void>;
-    completeLogin: (providerId: OnlineProviderId) => Promise<boolean>;
+    completeLogin: (providerId: OnlineProviderId) => Promise<ProviderLoginOutcome>;
 };
+
+// 扫码确认之后的结果。activation-declined 是用户拒绝切过去，登录本身是成功的；
+// 只有 refresh-failed 才是「扫码确认了却没拿到登录态」。
+export type ProviderLoginOutcome = 'completed' | 'refresh-failed' | 'activation-declined';
 
 type ProviderSwitchTransaction = {
     currentProviderId: OnlineProviderId;
@@ -38,11 +42,11 @@ export const completeOnlineProviderLoginTransaction = async ({
     loginProviderId,
     refresh,
     activate,
-}: ProviderLoginTransaction): Promise<boolean> => {
+}: ProviderLoginTransaction): Promise<ProviderLoginOutcome> => {
     const refreshed = await refresh();
-    if (refreshed === false) return false;
-    if (loginProviderId === currentProviderId) return true;
-    return activate();
+    if (refreshed === false) return 'refresh-failed';
+    if (loginProviderId === currentProviderId) return 'completed';
+    return await activate() ? 'completed' : 'activation-declined';
 };
 
 // Commits a provider change only after cleanup is confirmed, then refreshes the new account namespace.

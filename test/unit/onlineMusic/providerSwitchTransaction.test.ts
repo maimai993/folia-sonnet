@@ -41,7 +41,7 @@ describe('online provider login transaction', () => {
             loginProviderId: 'netease',
             refresh,
             activate,
-        })).resolves.toBe(true);
+        })).resolves.toBe('completed');
 
         expect(refresh).toHaveBeenCalledOnce();
         expect(activate).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ describe('online provider login transaction', () => {
             loginProviderId: 'kugou',
             refresh,
             activate,
-        })).resolves.toBe(true);
+        })).resolves.toBe('completed');
 
         expect(order).toEqual(['refresh', 'activate']);
     });
@@ -70,8 +70,17 @@ describe('online provider login transaction', () => {
             loginProviderId: 'kugou',
             refresh: vi.fn().mockResolvedValue(false),
             activate,
-        })).resolves.toBe(false);
+        })).resolves.toBe('refresh-failed');
 
         expect(activate).not.toHaveBeenCalled();
+    });
+
+    it('reports a declined switch separately from a failed login', async () => {
+        await expect(completeOnlineProviderLoginTransaction({
+            currentProviderId: 'netease',
+            loginProviderId: 'kugou',
+            refresh: vi.fn().mockResolvedValue(true),
+            activate: vi.fn().mockResolvedValue(false),
+        })).resolves.toBe('activation-declined');
     });
 });

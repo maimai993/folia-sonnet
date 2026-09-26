@@ -37,6 +37,7 @@ const omniMock = vi.hoisted(() => ({
     checkQrLogin: vi.fn(),
     cancelQrLogin: vi.fn(),
     getQrTtlMs: vi.fn(),
+    getQrLoginDiagnostics: vi.fn(),
 }));
 
 vi.mock('@/services/onlineMusic/omni', () => ({ omni: omniMock }));
@@ -77,6 +78,7 @@ describe('useOnlineProviderQrLogin', () => {
         omniMock.checkQrLogin.mockReset().mockResolvedValue({ state: 'waiting' });
         omniMock.cancelQrLogin.mockReset().mockResolvedValue(undefined);
         omniMock.getQrTtlMs.mockReset().mockReturnValue(QR_TTL_MS);
+        omniMock.getQrLoginDiagnostics.mockReset().mockResolvedValue(['runtime: test']);
         vi.spyOn(console, 'info').mockImplementation(() => { });
         vi.spyOn(console, 'warn').mockImplementation(() => { });
         vi.useFakeTimers();
@@ -219,5 +221,61 @@ describe('useOnlineProviderQrLogin', () => {
         hook.stop();
 
         expect(omniMock.cancelQrLogin).not.toHaveBeenCalled();
+    });
+
+    it('reports no failure when a QR nobody scanned simply expires', async () => {
+        const hook = render('qq');
+        await hook.start('qq');
+
+        await vi.advanceTimersByTimeAsync(QR_TTL_MS);
+
+        expect(render('qq').qrState).toBe('expired');
+        expect(render('qq').failure).toBeNull();
+    });
+
+    it('treats a QR that expires after being scanned as a failed login', async () => {
+        omniMock.checkQrLogin.mockResolvedValue({ state: 'scanned' });
+        const hook = render('qq');
+        await hook.start('qq');
+
+        await vi.advanceTimersByTimeAsync(QR_TTL_MS);
+
+        // 扫过码却一直等不到确认，多半是手机端的确认被拒了，用户需要诊断入口。
+        expect(render('qq').failure).toBe('expired-after-scan');
+    });
+
+    it('marks a confirmed login whose account cannot be loaded as failed', async () => {
+        omniMock.checkQrLogin.mockResolvedValue({ state: 'confirmed' });
+        onConfirmed.mockResolvedValue(false);
+        const hook = render('netease');
+        await hook.start('netease');
+
+        await vi.advanceTimersByTimeAsync(QR_POLL_INTERVAL_MS);
+
+        const next = render('netease');
+        expect(next.qrState).toBe('error');
+        expect(next.failure).toBe('account-refresh-failed');
+    });
+
+    it('builds a report from this session only and clears the failure on retry', async () => {
+        omniMock.checkQrLogin.mockResolvedValue({ state: 'error', message: 'code 404: Not Found' });
+        const hook = render('netease');
+        await hook.start('netease');
+        await vi.advanceTimersByTimeAsync(QR_POLL_INTERVAL_MS);
+
+        const failed = render('netease');
+        expect(failed.failure).toBe('check-error');
+        const report = await failed.buildDiagnosticReport();
+        expect(report).toContain('provider: netease');
+        expect(report).toContain('failure: check-error');
+        expect(report).toMatch(/ state state=error polls=1 message="code 404: Not Found" elapsedMs=\d+/);
+        expect(report).toContain('  runtime: test');
+        expect(omniMock.getQrLoginDiagnostics).toHaveBeenCalledWith('netease');
+
+        omniMock.checkQrLogin.mockResolvedValue({ state: 'waiting' });
+        await hook.start('netease');
+        const retried = render('netease');
+        expect(retried.failure).toBeNull();
+        expect(await retried.buildDiagnosticReport()).not.toContain('state=error');
     });
 });
