@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Map as MapIcon } from 'lucide-react';
 import GridMap from '../GridMap';
 import { Theme } from '../../types';
 import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
-import { ChevronDown } from 'lucide-react';
+import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
 import type { GridMapBatchConfig } from './gridMapBatch';
 import { isHideableGridItem } from './gridItemVisibility';
 import { useHomeCardPosition } from '../../hooks/useHomeCardPosition';
@@ -87,13 +87,12 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     gridMapPonderScope,
 }) => {
     const [showGridMap, setShowGridMap] = useState(false);
-    const [tabsExpanded, setTabsExpanded] = useState(false);
+    const chrome = gridChromeClassesFor(isDaylight);
     const [hiddenPlaylistsByScope, setHiddenPlaylistsByScope] = useState(readHiddenGridPlaylists);
     const { focusedIndex, onFocusedIndexChange } = useHomeCardPosition(
         focusMemoryScope, items, legacyFocusedIndex, onLegacyFocusedIndexChange, isLoading,
     );
 
-    const activeTab = tabs.find(tab => tab.active) || tabs[0];
     const hiddenPlaylistIds = useMemo(
         () => new Set(hiddenPlaylistsByScope[playlistVisibilityScope] || []),
         [hiddenPlaylistsByScope, playlistVisibilityScope],
@@ -143,118 +142,49 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
 
     return (
         <div data-ponder-page-scope="grid-page" className="w-full h-full min-h-0 flex flex-col justify-center relative">
-            {!isLoading && (
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={(e) => {
-                            (e.currentTarget as HTMLElement)?.blur();
-                            setShowGridMap(true);
-                        }}
-                        className="px-4 py-2 rounded-full flex items-center gap-2 text-xs font-semibold shadow-lg backdrop-blur-md transition-all border border-white/10"
-                        style={{
-                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.7)' : 'rgba(25,25,25,0.7)',
-                            color: 'var(--text-primary)',
-                        }}
-                    >
-                        <MapIcon size={14} />
-                        <span>{mapButtonLabel}</span>
-                    </motion.button>
-                </div>
-            )}
+            {/* One row under the home header, on the header's own max-w-7xl grid so it shares its
+                centre line: the second-level capsule (the map of all cards, then the collection
+                types) sits right under the header's view capsule, the library actions on the right
+                under the search box. The row itself lets clicks through to the grid; only the
+                controls take them. */}
+            <div className="pointer-events-none absolute inset-x-0 top-2 z-10">
+                <div className="mx-auto grid w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 md:px-8">
+                    <div />
+                    <div className="flex justify-center">
+                        {(!isLoading || tabs.length > 0) && (
+                            <GridViewTabs
+                                tabs={tabs}
+                                isDaylight={isDaylight}
+                                onOpenMap={isLoading ? undefined : () => setShowGridMap(true)}
+                                mapLabel={mapButtonLabel}
+                                mapIcon={<MapIcon size={13} />}
+                                ponderId={ponderControls}
+                            />
+                        )}
+                    </div>
 
-            {(actions.length > 0 || tabs.length > 0) && (
-                <div
-                    data-ponder={ponderControls}
-                    className="absolute top-2 right-4 z-10 flex max-w-[min(44rem,calc(50%-7rem))] flex-wrap items-center justify-end gap-2"
-                >
-                    <AnimatePresence mode="wait">
-                        {tabsExpanded ? (
-                            <motion.div
-                                key="expanded-tabs"
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: -10 }}
-                                transition={{ duration: 0.15, ease: "easeOut" }}
-                                className="flex items-center gap-2"
-                            >
-                                {tabs.map((tab) => (
+                    <div className="flex min-w-0 justify-end">
+                        {actions.length > 0 && (
+                            <div data-ponder={ponderControls} className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
+                                {actions.map(action => (
                                     <button
-                                        key={tab.id}
-                                        onClick={() => {
-                                            if (tab.active) {
-                                                setTabsExpanded(false);
-                                            } else {
-                                                tab.onClick();
-                                                setTabsExpanded(false);
-                                            }
-                                        }}
-                                        disabled={tab.disabled}
-                                        title={tab.title}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg backdrop-blur-md border border-white/10 flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45 ${
-                                            tab.active ? 'opacity-100' : 'opacity-55 hover:opacity-90'
+                                        key={action.id}
+                                        onClick={action.onClick}
+                                        disabled={action.disabled}
+                                        title={action.title}
+                                        className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${chrome.pill} ${
+                                            action.active ? chrome.strongText : chrome.softText
                                         }`}
-                                        style={{
-                                            backgroundColor: tab.active
-                                                ? (isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)')
-                                                : (isDaylight ? 'rgba(255,255,255,0.62)' : 'rgba(25,25,25,0.58)'),
-                                            color: 'var(--text-primary)',
-                                        }}
                                     >
-                                        {tab.icon}
-                                        <span className="whitespace-nowrap">{tab.label}</span>
+                                        {action.icon}
+                                        <span className="whitespace-nowrap">{action.label}</span>
                                     </button>
                                 ))}
-                            </motion.div>
-                        ) : (
-                            activeTab && (
-                                <motion.div
-                                    key="collapsed-tab"
-                                    initial={{ opacity: 0, x: 10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 10 }}
-                                    transition={{ duration: 0.15, ease: "easeOut" }}
-                                >
-                                    <button
-                                        onClick={() => setTabsExpanded(true)}
-                                        className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg backdrop-blur-md border border-white/10 flex items-center gap-1.5 opacity-100 hover:opacity-80"
-                                        style={{
-                                            backgroundColor: isDaylight ? 'rgba(255,255,255,0.62)' : 'rgba(25,25,25,0.58)',
-                                            color: 'var(--text-primary)',
-                                        }}
-                                    >
-                                        {activeTab.icon}
-                                        <span className="whitespace-nowrap">{activeTab.label}</span>
-                                        <ChevronDown size={14} className="ml-0.5 opacity-60" />
-                                    </button>
-                                </motion.div>
-                            )
+                            </div>
                         )}
-                    </AnimatePresence>
-
-                    {actions.map(action => (
-                        <button
-                            key={action.id}
-                            onClick={action.onClick}
-                            disabled={action.disabled}
-                            title={action.title}
-                            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-lg backdrop-blur-md border border-white/10 flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-45 ${
-                                action.active ? 'opacity-100' : 'opacity-55 hover:opacity-90'
-                            }`}
-                            style={{
-                                backgroundColor: action.active
-                                    ? (isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.14)')
-                                    : (isDaylight ? 'rgba(255,255,255,0.62)' : 'rgba(25,25,25,0.58)'),
-                                color: 'var(--text-primary)',
-                            }}
-                        >
-                            {action.icon}
-                            <span>{action.label}</span>
-                        </button>
-                    ))}
+                    </div>
                 </div>
-            )}
+            </div>
 
             <Grid3DSlider
                 key={focusMemoryScope}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, ChevronLeft, ChevronRight, Disc3, FileUp, FolderOpen, ListMusic, ListPlus, Map, Pencil, Play, Plus, RefreshCw, Trash2, User } from 'lucide-react';
 import PonderSurfaceStateLayer, { PonderSurfaceBase, type PonderSurfaceStateRegistrar } from './PonderSurfaceStateLayer';
+import { getRelativeLuminance } from '../../../utils/themeColorMath';
 import { LOCAL_GRID_CONTROLS_GEOMETRY as C, LOCAL_GRID_MAP_GEOMETRY as M, ONLINE_COLLECTION_ACTIONS_GEOMETRY as A, relativeRectStyle } from './ponderSurfaceGeometry';
 
 // src/components/ponder/surfaces/PonderLocalLibrarySurfaces.tsx
@@ -37,11 +38,34 @@ const Pill: React.FC<{
     </span>
 );
 
+/** 画在 accent 底上的图标颜色：accent 亮就用深色，暗就用浅色。 */
+const inkOn = (background: string) => (getRelativeLuminance(background) > 0.4 ? '#18181b' : '#fafafa');
+
 /** 本地首页右上角那组分类、导入和刷新控件。 */
 export const PonderLocalGridControlsSurface: React.FC<SurfaceProps> = ({ accent, line, outline, registerStateNode }) => (
     <div className="absolute inset-0 overflow-hidden" data-ponder-local-grid-controls-structure>
         <PonderSurfaceBase registerStateNode={registerStateNode}>
-            <div data-ponder-local-grid-tabs className="absolute flex gap-[1.5%]" style={relativeRectStyle(C.tabs)}>
+            {/* 和真实的 GridViewTabs 同形：一个居中的胶囊，先是「全部」，隔一条竖线后是分类；
+                当前分类带文字，其余只剩图标。 */}
+            <div
+                data-ponder-local-grid-capsule
+                className="absolute rounded-full border"
+                style={{ ...relativeRectStyle(C.capsule), borderColor: outline, backgroundColor: line }}
+            />
+            <span
+                data-ponder-local-grid-map
+                className="absolute flex items-center gap-[8%] px-[2%]"
+                style={relativeRectStyle(C.map)}
+            >
+                <Map className="h-[48%] w-auto shrink-0" />
+                <span className="h-[12%] flex-1 rounded-full" style={{ backgroundColor: outline }} />
+            </span>
+            <span
+                aria-hidden="true"
+                className="absolute w-px"
+                style={{ left: `${(C.map.left + C.map.width + 0.0125) * 100}%`, top: '26%', height: '16%', backgroundColor: outline }}
+            />
+            <div data-ponder-local-grid-tabs className="absolute flex items-stretch gap-[1%] p-[0.6%]" style={relativeRectStyle(C.tabs)}>
                 {[
                     [FolderOpen, true],
                     [Disc3, false],
@@ -51,15 +75,17 @@ export const PonderLocalGridControlsSurface: React.FC<SurfaceProps> = ({ accent,
                     <span
                         key={index}
                         data-ponder-local-grid-tab={index}
-                        className="flex h-full flex-1 items-center gap-[8%] rounded-full border px-[5%]"
-                        style={{ borderColor: outline, backgroundColor: active ? accent : line, opacity: active ? 0.72 : 0.82 }}
+                        className={`flex h-full items-center justify-center gap-[8%] rounded-full ${active ? 'flex-[2.6] px-[6%]' : 'flex-1'}`}
+                        // 选中项画在 accent 底上，图标和文字线条按 accent 的亮度取深色或浅色；沿用 outline/line
+                        // 这类半透明色会和底色糊成一块空白。
+                        style={{ backgroundColor: active ? accent : 'transparent', color: active ? inkOn(accent) : undefined, opacity: active ? 0.72 : 0.7 }}
                     >
                         {React.createElement(Icon as React.ComponentType<{ className?: string }>, { className: 'h-[48%] w-auto shrink-0' })}
-                        <span className="h-[12%] flex-1 rounded-full" style={{ backgroundColor: outline }} />
+                        {active && <span className="h-[12%] flex-1 rounded-full" style={{ backgroundColor: inkOn(accent) }} />}
                     </span>
                 ))}
             </div>
-            <Pill marker="data-ponder-local-grid-import" rect={{ left: 0.58, top: 0.18, width: 0.16, height: 0.32 }} icon={FolderOpen} accent={accent} line={line} outline={outline} />
+            <Pill marker="data-ponder-local-grid-import" rect={{ left: 0.6, top: 0.18, width: 0.15, height: 0.32 }} icon={FolderOpen} accent={accent} line={line} outline={outline} />
             <Pill marker="data-ponder-local-grid-refresh" rect={C.refresh} icon={RefreshCw} accent={accent} line={line} outline={outline} />
             <Pill marker="data-ponder-local-grid-playlist-import" rect={C.playlistImport} icon={FileUp} accent={accent} line={line} outline={outline} />
         </PonderSurfaceBase>
