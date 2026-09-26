@@ -2562,6 +2562,29 @@ export default {
         "title": "Private QQ Music Playlists",
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
+    },
+    "v0_7_9": {
+      "intro": "0.7.9 adds lyric import and export, a video layer and verified mods, makes settings easier to find, and fixes a Linux lyric freeze.",
+      "lyricFiles": {
+        "title": "Lyric Import and Export",
+        "description": "Import or export lyric files from the side panel's lyric tab, or export in bulk from the command palette."
+      },
+      "videoLayer": {
+        "title": "Video Behind Lyrics",
+        "description": "Play a muted video behind the lyrics, synced to the music. Turn it on in Appearance settings."
+      },
+      "modPlatform": {
+        "title": "Mod Platform: Folium 1.3",
+        "description": "Mods can do more, and officially verified mods show a green shield. Older mods may need an update."
+      },
+      "settingsSearch": {
+        "title": "Settings Search",
+        "description": "New Graphics and Mods pages, and on wide screens you can search settings from the sidebar."
+      },
+      "linuxFixes": {
+        "title": "Linux Fixes",
+        "description": "Fixes lyric animations freezing after long playback and the app icon missing from the dock."
+      }
     }
   },
   "export": {

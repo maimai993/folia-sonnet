@@ -2495,6 +2495,29 @@ export default {
         "title": "Playlist Pribadi QQ Music",
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
+    },
+    "v0_7_9": {
+      "intro": "0.7.9 menghadirkan impor dan ekspor lirik, lapisan video, dan mod terverifikasi, membuat pengaturan lebih mudah dicari, serta memperbaiki lirik macet di Linux.",
+      "lyricFiles": {
+        "title": "Impor dan Ekspor Lirik",
+        "description": "Impor atau ekspor file lirik dari tab lirik di panel samping, atau ekspor sekaligus dari palet perintah."
+      },
+      "videoLayer": {
+        "title": "Video di Belakang Lirik",
+        "description": "Putar video tanpa suara di belakang lirik, selaras dengan musik. Aktifkan di pengaturan Tampilan."
+      },
+      "modPlatform": {
+        "title": "Platform Mod: Folium 1.3",
+        "description": "Mod bisa berbuat lebih banyak, dan mod terverifikasi resmi menampilkan perisai hijau. Mod lama mungkin perlu diperbarui."
+      },
+      "settingsSearch": {
+        "title": "Pencarian Pengaturan",
+        "description": "Halaman Grafis dan Mod baru, dan di layar lebar Anda bisa mencari pengaturan dari bilah samping."
+      },
+      "linuxFixes": {
+        "title": "Perbaikan Linux",
+        "description": "Memperbaiki animasi lirik yang macet setelah pemutaran lama dan ikon aplikasi yang hilang dari dock."
+      }
     }
   },
   "export": {

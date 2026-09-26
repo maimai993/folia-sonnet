@@ -2561,6 +2561,29 @@ export default {
         "title": "QQ 音乐不公开歌单",
         "description": "登录后，自己创建的不公开歌单也能读取歌曲，并支持真正的分页加载。自建后端需要升级到 qq-music-api 3.1.2 或更新版本；旧后端会自动回退，读不到时会明确提示「不是公开歌单」，不再静默显示为空。"
       }
+    },
+    "v0_7_9": {
+      "intro": "0.7.9 新增歌词导入导出、视频层和模组认证，设置页更好找，并修复 Linux 歌词卡死。",
+      "lyricFiles": {
+        "title": "歌词导入与导出",
+        "description": "在侧栏歌词页导入或导出歌词文件，也可在命令面板批量导出。"
+      },
+      "videoLayer": {
+        "title": "歌词后方视频层",
+        "description": "在歌词后面播放一段静音视频，跟随音乐同步。在外观设置中开启。"
+      },
+      "modPlatform": {
+        "title": "模组平台 Folium 1.3",
+        "description": "模组能做的更多，官方认证模组带绿色盾牌。旧模组可能需要更新。"
+      },
+      "settingsSearch": {
+        "title": "设置页搜索",
+        "description": "设置新增图形和模组页，宽屏下可在侧栏直接搜索设置项。"
+      },
+      "linuxFixes": {
+        "title": "Linux 修复",
+        "description": "修复长时间播放后歌词动画卡死，以及 dock 栏不显示图标。"
+      }
     }
   },
   "export": {
