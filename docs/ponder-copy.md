@@ -802,7 +802,7 @@
         "latticeTools": "右下角工具依次提供：聚焦当前歌曲、切歌时自动跟随、打开队列命令、灯光开关与快捷键说明；向左滑这个按钮会打开命令面板。",
         "latticeLights": "灯光关闭后海报退暗，只保留必要层次；这是显示设置，不会暂停播放或修改队列。",
         "latticePosterKeys": "收起时 Enter/Space 展开；展开后 Enter 播放/暂停，Space 显示控制，Esc 收起。",
-        "latticePageKeys": "Shift+;+C 当前歌曲；{{mod}} + P 队列；{{mod}} + B 返回；{{mod}} + K 命令；方向键移动。",
+        "latticePageKeys": ": + C 当前歌曲；{{mod}} + P 队列；{{mod}} + B 返回；{{mod}} + K 命令；方向键移动。",
         "help": "Folia 分开处理浏览、播放、命令和设置。Ctrl+G 说明当前页面，有特殊操作的组件也有独立教程。",
         "helpCommands": "{{mod}} + K 可以搜索全部命令和设置。对于藏得较深的选项，直接搜名称通常比记住它在哪一级更快。",
         "helpOperatingModel": "网格选歌，Player 或 Lattice 播放；底部控制条负责播放，帮助和设置覆盖当前页面。",
@@ -1119,7 +1119,7 @@
 | `lattice-page` | `lattice-page-tools` | 聚焦、跟随、队列与灯光 | `ponder.captions.pages.latticeTools` | 右下角工具依次提供：聚焦当前歌曲、切歌时自动跟随、打开队列命令、灯光开关与快捷键说明；向左滑这个按钮会打开命令面板。 | toolsPanel：工具面板 | `ponder.anchors.lattice.toolsPanel` |
 | `lattice-page` | `lattice-page-tools` | 聚焦、跟随、队列与灯光 | `ponder.captions.pages.latticeLights` | 灯光关闭后海报退暗，只保留必要层次；这是显示设置，不会暂停播放或修改队列。 | wall：播放队列海报墙 | `ponder.anchors.lattice.wall` |
 | `lattice-page` | `lattice-page-keyboard` | Lattice 的完整键盘操作 | `ponder.captions.pages.latticePosterKeys` | 收起时 Enter/Space 展开；展开后 Enter 播放/暂停，Space 显示控制，Esc 收起。 | poster：队列海报 | `ponder.anchors.lattice.poster` |
-| `lattice-page` | `lattice-page-keyboard` | Lattice 的完整键盘操作 | `ponder.captions.pages.latticePageKeys` | Shift+;+C 当前歌曲；{{mod}} + P 队列；{{mod}} + B 返回；{{mod}} + K 命令；方向键移动。 | page：Lattice | `ponder.anchors.pages.lattice` |
+| `lattice-page` | `lattice-page-keyboard` | Lattice 的完整键盘操作 | `ponder.captions.pages.latticePageKeys` | : + C 当前歌曲；{{mod}} + P 队列；{{mod}} + B 返回；{{mod}} + K 命令；方向键移动。 | page：Lattice | `ponder.anchors.pages.lattice` |
 | `lattice-style-settings` | `lattice-style-tint` | 暗角与海报叠色 | `ponder.captions.gridStyle.latticeVignette` | 「暗角」在队列拼贴页面四周压一层淡淡的暗，把视线收到中间的海报上。它只是显示效果，不影响队列本身。 | vignette：暗角 | `ponder.anchors.latticeStyle.vignette` |
 | `lattice-style-settings` | `lattice-style-tint` | 暗角与海报叠色 | `ponder.captions.gridStyle.latticeTint` | 海报叠色会让播放中、聚焦和悬停的海报更醒目。关闭后，叠色强度和固定颜色设置也会隐藏。 | tint：海报叠色 | `ponder.anchors.latticeStyle.tint` |
 | `lattice-style-settings` | `lattice-style-tint` | 暗角与海报叠色 | `ponder.captions.gridStyle.latticeIntensity` | 打开之后下面才有「叠色强度」。它是百分比：调到 0 等于没叠色，调高普通海报越暗、正在播的那张越突出。 | intensity：叠色强度 | `ponder.anchors.latticeStyle.intensity` |

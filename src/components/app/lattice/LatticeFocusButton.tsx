@@ -96,7 +96,7 @@ export default function LatticeFocusButton({ isDaylight }: { isDaylight: boolean
                         >
                             <Crosshair aria-hidden="true" />
                             <span>{t('home.latticeFocusCurrent')}</span>
-                            <kbd aria-hidden="true">Shift + ; + C</kbd>
+                            <kbd aria-hidden="true">: + C</kbd>
                         </button>
                         <button
                             type="button"

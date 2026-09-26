@@ -96,7 +96,7 @@ export default {
                 { kind: 'keypress', id: 'posterKeys', keys: ['Enter', 'Space', 'Esc'], at: { anchor: 'poster', y: 0.15 }, durationMs: 1200, keyframe: true },
                 { kind: 'caption', id: 'posterKeysCaption', at: 'bottom', textKey: 'ponder.captions.pages.latticePosterKeys', pointTo: { anchor: 'poster' }, durationMs: 4300, withPrevious: true },
                 { kind: 'pause', id: 'posterKeysRead' },
-                { kind: 'keypress', id: 'latticeKeys', keys: ['Shift ; C', 'Mod P', 'Mod B', 'Mod K'], at: 'bottom', durationMs: 1300, keyframe: true },
+                { kind: 'keypress', id: 'latticeKeys', keys: [': C', 'Mod P', 'Mod B', 'Mod K'], at: 'bottom', durationMs: 1300, keyframe: true },
                 { kind: 'surfaceState', id: 'commandResult', anchor: 'page', state: 'command-open', transition: 'zoom', durationMs: 520, withPrevious: true },
                 { kind: 'caption', id: 'latticeKeysCaption', at: 'bottom', textKey: 'ponder.captions.pages.latticePageKeys', pointTo: { anchor: 'page', x: 0.5, y: 0.45 }, durationMs: 4800, withPrevious: true },
                 { kind: 'pause', id: 'latticeKeysRead' },
