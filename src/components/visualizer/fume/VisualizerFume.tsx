@@ -7,6 +7,7 @@ import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fo
 import { buildWordGraphemeTimings, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { getLineRenderEndTime, getLineRenderHints, getLineTransitionTiming } from '../../../utils/lyrics/renderHints';
 import { colorWithAlpha, mixColors } from '../colorMix';
+import { clearCanvasTextGlow, fillGlowText, quantizeShadowBlur, setCanvasTextGlow } from '../../../utils/glowBlurQuantize';
 import { type VisualizerSharedProps } from '../definition';
 import { buildFumeBackgroundScene, drawFumeBackground, type FumeBackgroundAudioLevels } from '../FumeBackground';
 import { getRecentCompletedLine, getUpcomingLines } from '../runtime';
@@ -2518,6 +2519,10 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                 context.restore();
             }
 
+            // TODO: the live line is drawn with fillText under this continuously zooming transform, which
+            // asks Chromium's glyph cache for a new size every frame and still leaks ~0.06 fd/s on Linux
+            // with Lab > Fix lyric animation freeze on Linux on. Rounding the scale fixes it but makes the
+            // camera visibly step. See docs/linux-glyph-cache-fd-leak.md.
             context.save();
             context.translate(viewportCenterX, viewportCenterY);
             context.scale(screenScale, screenScale);
@@ -2701,8 +2706,11 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
 
                     context.save();
                     context.fillStyle = lineGlowColor;
-                    context.shadowBlur = lineGlowBlur;
-                    context.shadowColor = colorWithAlpha(theme.accentColor, lineGlowAlpha * 1.35);
+                    setCanvasTextGlow(
+                        context,
+                        quantizeShadowBlur(lineGlowBlur),
+                        colorWithAlpha(theme.accentColor, lineGlowAlpha * 1.35),
+                    );
 
                     for (const renderLine of block.renderLines) {
                         const glowBaseX = block.x + renderLine.left;
@@ -2713,7 +2721,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                                 continue;
                             }
 
-                            context.fillText(segment.text, glowBaseX + segment.x, glowBaseY);
+                            fillGlowText(context, segment.text, glowBaseX + segment.x, glowBaseY);
                         }
                     }
 
@@ -2746,8 +2754,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                             }
 
                             context.fillStyle = runFillStyle;
-                            context.shadowBlur = runShadowBlur;
-                            context.shadowColor = runShadowColor;
+                            setCanvasTextGlow(context, runShadowBlur, runShadowColor);
                             drawRenderTextRun(
                                 context,
                                 renderLine,
@@ -2757,8 +2764,7 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                                 baseX,
                                 baseY,
                             );
-                            context.shadowBlur = 0;
-                            context.shadowColor = 'transparent';
+                            clearCanvasTextGlow(context);
                             runStart = -1;
                             runStyleKey = '';
                         };
@@ -2916,6 +2922,11 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
                                 continue;
                             }
 
+                            // Whole pixels while Lab > Fix lyric animation freeze on Linux is on: a
+                            // blur radius that changes every frame leaks shared memory in Chromium's
+                            // glyph cache.
+                            // See utils/glowBlurQuantize.ts.
+                            shadowBlur = quantizeShadowBlur(shadowBlur);
                             const styleKey = buildTextStyleKey(fillStyle, shadowBlur, shadowColor);
                             if (runStart < 0) {
                                 runStart = globalOffset;

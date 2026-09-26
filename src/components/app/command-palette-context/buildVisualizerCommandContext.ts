@@ -21,6 +21,9 @@ export const buildVisualizerCommandContext = (
         toggleRandomVisualizerModePerSong: () => visualizer.handleToggleRandomVisualizerModePerSong(
             !useVisualizerSettingsStore.getState().randomVisualizerModePerSong,
         ),
+        toggleGlowBlurQuantize: () => visualizer.handleToggleGlowBlurQuantize(
+            !useVisualizerSettingsStore.getState().glowBlurQuantize,
+        ),
         setVisualizerBackgroundMode: visualizer.handleSetVisualizerBackgroundMode,
         setMonetBackgroundTuning: visualizer.handleSetMonetBackgroundTuning,
         setLatentBackgroundTuning: visualizer.handleSetLatentBackgroundTuning,

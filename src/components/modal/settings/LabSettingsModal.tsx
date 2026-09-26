@@ -127,6 +127,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const onToggleAutoPlayOnLaunch = useAudioSettingsStore(state => state.handleToggleAutoPlayOnLaunch);
     const visualizerFrameRate = useVisualizerSettingsStore(state => state.visualizerFrameRate);
     const onVisualizerFrameRateChange = useVisualizerSettingsStore(state => state.handleSetVisualizerFrameRate);
+    const glowBlurQuantize = useVisualizerSettingsStore(state => state.glowBlurQuantize);
+    const onToggleGlowBlurQuantize = useVisualizerSettingsStore(state => state.handleToggleGlowBlurQuantize);
     const borderColor = isDaylight ? 'border-zinc-300/70' : 'border-white/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
     const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';
@@ -274,6 +276,19 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                             ))}
                                         </div>
                                     </div>
+                                </div>
+
+                                <div className={`p-4 rounded-xl border flex items-start justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <Cpu size={14} />
+                                            {t('options.glowBlurQuantize')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.glowBlurQuantizeDesc')}
+                                        </div>
+                                    </div>
+                                    {renderToggle(glowBlurQuantize, () => onToggleGlowBlurQuantize(!glowBlurQuantize))}
                                 </div>
 
                 </SettingsAnchor>
