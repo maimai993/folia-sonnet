@@ -22,7 +22,8 @@ export type GridSurfaceActionId =
     | 'organize-song-info'
     | 'export-playlist'
     | 'edit-entity'
-    | 'toggle-edit-mode';
+    | 'toggle-edit-mode'
+    | 'reload-online-collection';
 
 export type GridSurfaceState = {
     /**

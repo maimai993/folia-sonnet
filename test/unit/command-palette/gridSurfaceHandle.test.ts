@@ -15,6 +15,7 @@ const params = (overrides: Partial<GridSurfaceParams> = {}): GridSurfaceParams =
     canExportPlaylist: false,
     canEditEntity: false,
     canEditPlaylist: false,
+    canReloadOnlineCollection: false,
     isSourceActionPending: false,
     filteredTrackCount: 0,
     isFilterActive: false,
@@ -35,6 +36,7 @@ const params = (overrides: Partial<GridSurfaceParams> = {}): GridSurfaceParams =
     exportPlaylist: vi.fn(),
     editEntity: vi.fn(),
     toggleEditMode: vi.fn(),
+    reloadOnlineCollection: vi.fn(),
     ...overrides,
 });
 
@@ -67,6 +69,12 @@ describe('grid surface state', () => {
         })).availableActions;
 
         expect(busy).toEqual([]);
+    });
+
+    it('offers reloading only for online collections that are not already loading', () => {
+        expect(buildGridSurfaceState(params({ canReloadOnlineCollection: true })).availableActions)
+            .toEqual(['reload-online-collection']);
+        expect(buildGridSurfaceState(params()).availableActions).not.toContain('reload-online-collection');
     });
 });
 

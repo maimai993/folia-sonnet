@@ -20,6 +20,8 @@ export type GridSurfaceParams = {
     canExportPlaylist: boolean;
     canEditEntity: boolean;
     canEditPlaylist: boolean;
+    /** Online collection that can be fetched again past its cache; false while a load is running. */
+    canReloadOnlineCollection: boolean;
     /** A source action is in flight; the disk and network actions grey out, exactly as the buttons do. */
     isSourceActionPending: boolean;
 
@@ -43,6 +45,7 @@ export type GridSurfaceParams = {
     exportPlaylist: () => void;
     editEntity: () => void;
     toggleEditMode: () => void;
+    reloadOnlineCollection: () => void;
 };
 
 const SORT_FIELD_BY_ACTION: Partial<Record<GridSurfaceActionId, LocalSongFolderSortField>> = {
@@ -86,6 +89,9 @@ export const buildGridSurfaceState = (params: GridSurfaceParams): GridSurfaceSta
     if (params.canEditPlaylist && canRunSourceAction) {
         availableActions.push('toggle-edit-mode');
     }
+    if (params.canReloadOnlineCollection) {
+        availableActions.push('reload-online-collection');
+    }
 
     return {
         availableActions,
@@ -128,6 +134,7 @@ export const runGridSurfaceAction = (action: GridSurfaceActionId, params: GridSu
         case 'export-playlist': return params.exportPlaylist();
         case 'edit-entity': return params.editEntity();
         case 'toggle-edit-mode': return params.toggleEditMode();
+        case 'reload-online-collection': return params.reloadOnlineCollection();
         default: return;
     }
 };

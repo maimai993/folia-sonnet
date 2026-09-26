@@ -450,6 +450,7 @@ export default {
       "grid-export-playlist": { "title": "导出此歌单", "description": "把这个本地歌单保存为 m3u8 文件" },
       "grid-edit-entity": { "title": "编辑此专辑或艺人", "description": "为这个合集打开本地曲库的实体编辑面板" },
       "grid-toggle-edit-mode": { "title": "切换编辑模式", "description": "进入或退出可以从这个合集里移除歌曲的模式" },
+      "grid-reload-online-collection": { "title": "重新加载此合集", "description": "跳过缓存，重新拉取这个在线合集的全部歌曲" },
       "settings-interaction": { "title": "交互设置", "description": "打开键盘、快捷键与网格交互设置" },
       "settings-custom-shortcut": { "title": "自定义快捷键", "description": "直接跳到自定义键盘快捷键的绑定处" },
       "settings-grid-action-button": { "title": "海报墙操作按钮", "description": "直接跳到海报墙操作按钮的滑动目标设置" },
@@ -886,7 +887,12 @@ export default {
     "headerTime": "时长",
     "loading": "加载中",
     "loadFailed": "加载失败：{{error}}",
-    "loadNotPublic": "这个歌单不是公开歌单，当前音源接口读不到它的内容"
+    "loadNotPublic": "这个歌单不是公开歌单，当前音源接口读不到它的内容",
+    "reload": "重新加载",
+    "syncProgress": "已加载 {{loaded}} / {{total}}",
+    "syncInterrupted": "加载中断",
+    "syncInterruptedProgress": "加载中断 {{loaded}} / {{total}}",
+    "syncFailedHint": "还有歌曲没加载成功（{{error}}）。点击从中断处继续加载"
   },
   "search": {
     "placeholder": "搜索歌曲...",

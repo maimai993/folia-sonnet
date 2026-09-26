@@ -15,6 +15,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "grid-export-playlist",
   "grid-edit-entity",
   "grid-toggle-edit-mode",
+  "grid-reload-online-collection",
   "search-current",
   "search-local",
   "search-navidrome",

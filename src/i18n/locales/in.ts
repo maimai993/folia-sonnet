@@ -449,6 +449,7 @@ export default {
       "grid-export-playlist": { "title": "Ekspor daftar putar ini", "description": "Simpan daftar putar lokal ini sebagai berkas m3u8" },
       "grid-edit-entity": { "title": "Sunting album atau artis ini", "description": "Buka penyunting entitas pustaka lokal untuk koleksi ini" },
       "grid-toggle-edit-mode": { "title": "Alihkan mode sunting", "description": "Masuk atau keluar dari mode yang memungkinkan menghapus lagu dari koleksi ini" },
+      "grid-reload-online-collection": { "title": "Muat ulang koleksi ini", "description": "Lewati cache dan muat ulang semua lagu dari koleksi online ini" },
       "settings-interaction": { "title": "Pengaturan interaksi", "description": "Buka pengaturan papan ketik, pintasan, dan interaksi kisi" },
       "settings-custom-shortcut": { "title": "Pintasan khusus", "description": "Langsung ke pengaturan pintasan papan ketik khusus" },
       "settings-grid-action-button": { "title": "Tombol aksi kisi", "description": "Langsung ke pengaturan target geser tombol aksi kisi" },
@@ -884,7 +885,12 @@ export default {
     "headerTime": "Waktu",
     "loading": "Memuat",
     "loadFailed": "Gagal memuat: {{error}}",
-    "loadNotPublic": "Daftar putar ini tidak publik, sehingga sumber musik saat ini tidak dapat membaca isinya"
+    "loadNotPublic": "Daftar putar ini tidak publik, sehingga sumber musik saat ini tidak dapat membaca isinya",
+    "reload": "Muat ulang",
+    "syncProgress": "Dimuat {{loaded}} / {{total}}",
+    "syncInterrupted": "Pemuatan terputus",
+    "syncInterruptedProgress": "Terputus di {{loaded}} / {{total}}",
+    "syncFailedHint": "Beberapa lagu gagal dimuat ({{error}}). Klik untuk melanjutkan dari titik terakhir"
   },
   "search": {
     "placeholder": "Cari lagu...",

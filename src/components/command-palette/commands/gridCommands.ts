@@ -111,4 +111,12 @@ export const gridCommands: CommandPaletteCommand[] = [
         'toggle-edit-mode',
         Pencil,
     ),
+    createGridSurfaceCommand(
+        'grid-reload-online-collection',
+        'Reload this collection',
+        'Skip the cache and load every song of this online collection again',
+        ['reload', 'refresh', 'resync', '重新加载', '刷新'],
+        'reload-online-collection',
+        RefreshCw,
+    ),
 ];

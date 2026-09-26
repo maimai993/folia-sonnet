@@ -450,6 +450,7 @@ export default {
       "grid-export-playlist": { "title": "Export this playlist", "description": "Save this local playlist as an m3u8 file" },
       "grid-edit-entity": { "title": "Edit this album or artist", "description": "Open the local library entity editor for this collection" },
       "grid-toggle-edit-mode": { "title": "Toggle edit mode", "description": "Enter or leave the mode that lets you remove songs from this collection" },
+      "grid-reload-online-collection": { "title": "Reload this collection", "description": "Skip the cache and load every song of this online collection again" },
       "settings-interaction": { "title": "Interaction settings", "description": "Open keyboard, shortcut and grid interaction settings" },
       "settings-custom-shortcut": { "title": "Custom shortcuts", "description": "Jump to the custom keyboard shortcut bindings" },
       "settings-grid-action-button": { "title": "Grid action button", "description": "Jump to what the grid action button slides to" },
@@ -887,7 +888,12 @@ export default {
     "headerTime": "Time",
     "loading": "Loading",
     "loadFailed": "Failed to load: {{error}}",
-    "loadNotPublic": "This playlist is not public, so the current music source cannot read its contents"
+    "loadNotPublic": "This playlist is not public, so the current music source cannot read its contents",
+    "reload": "Reload",
+    "syncProgress": "Loaded {{loaded}} / {{total}}",
+    "syncInterrupted": "Loading interrupted",
+    "syncInterruptedProgress": "Interrupted at {{loaded}} / {{total}}",
+    "syncFailedHint": "Some songs failed to load ({{error}}). Click to continue from where it stopped"
   },
   "search": {
     "placeholder": "Search songs...",
