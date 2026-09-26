@@ -7,7 +7,7 @@ import {
     resolvePrintedGraphemeCount,
     resolvePrintedGraphemeProgress,
     resolveVisualProgressWithCutoff,
-} from '@/components/visualizer/fume/VisualizerFume';
+} from '@/components/visualizer/fume/fumeReveal';
 
 const makeLine = (
     fullText: string,

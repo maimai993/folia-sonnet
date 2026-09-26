@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { getVisualizerModeLabel } from '../components/visualizer/registry';
 import { DEFAULT_CADENZA_TUNING, DEFAULT_CAPPELLA_TUNING, DEFAULT_CLADDAGH_TUNING, DEFAULT_CLASSIC_TUNING, DEFAULT_DIORAMA_TUNING, DEFAULT_FUME_TUNING, DEFAULT_LATENT_BACKGROUND_TUNING, DEFAULT_MONET_BACKGROUND_TUNING, DEFAULT_MONET_TUNING, DEFAULT_NOMAND_BACKGROUND_TUNING, DEFAULT_PARTITA_TUNING, DEFAULT_PENDOLO_TUNING, DEFAULT_SONNET_TUNING, DEFAULT_SORA_BACKGROUND_TUNING, DEFAULT_TEMPERA_TUNING, DEFAULT_TILT_TUNING, type CadenzaTuning, type CappellaTuning, type CladdaghTuning, type ClassicTuning, type DioramaTuning, type FumeTuning, type LatentBackgroundTuning, type MonetBackgroundTuning, type MonetTuning, type NomandBackgroundTuning, type PartitaTuning, type PendoloTuning, type SonnetTuning, type SoraBackgroundTuning, type TemperaTuning, type TiltTuning, type UrlBackgroundItem, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { VISUALIZER_FRAME_RATE_STORAGE_KEY, setGlobalVisualizerFrameRate } from '../utils/frameRateLimiter';
+import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlurQuantized } from '../utils/glowBlurQuantize';
 import { sanitizeUrlBackgroundItem, sanitizeUrlBackgroundList } from '../utils/urlBackground';
 import i18n from '../i18n/config';
 import { buildStoredCappellaAvatar, clearCustomCappellaAvatar, isSupportedCappellaAvatarFile, saveCustomCappellaAvatar } from '../services/cappellaAvatarPack';
@@ -31,6 +32,8 @@ export type VisualizerSettingsState = {
     visualizerFrameRate: VisualizerFrameRate;
     visualizerMode: VisualizerMode;
     randomVisualizerModePerSong: boolean;
+    /** Snap animated glow blur radii to a bounded set. See components/visualizer/wordGlow.ts. */
+    glowBlurQuantize: boolean;
     classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
@@ -61,6 +64,7 @@ export type VisualizerSettingsState = {
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
     handleSetVisualizerMode: (mode: VisualizerMode, options?: { notify?: boolean }) => void;
     handleToggleRandomVisualizerModePerSong: (enable: boolean) => void;
+    handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -114,6 +118,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     visualizerFrameRate: readStoredVisualizerFrameRate(),
     visualizerMode: readStoredVisualizerMode(),
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
+    glowBlurQuantize: readStoredGlowBlurQuantize(),
     classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
@@ -261,6 +266,14 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
             type: 'info',
             text: i18n.t(`status.randomVisualizerModePerSong${enable ? 'On' : 'Off'}`),
         });
+    },
+    handleToggleGlowBlurQuantize: (enable) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(GLOW_BLUR_QUANTIZE_STORAGE_KEY, String(enable));
+        }
+        // The renderers read the module flag every frame; the store only persists and drives the UI.
+        setGlowBlurQuantized(enable);
+        set({ glowBlurQuantize: enable });
     },
     handleSetClassicTuning: (patch) => {
         const prev = get().classicTuning;

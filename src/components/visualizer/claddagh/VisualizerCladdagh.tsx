@@ -9,6 +9,7 @@ import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fo
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import { colorWithAlpha, mixColors } from '../colorMix';
+import { isGlowBlurQuantized, quantizeShadowBlur } from '../../../utils/glowBlurQuantize';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { buildWordColorRanges } from '../wordColoring';
@@ -178,6 +179,36 @@ const getFractionalActiveIndex = (
 
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
+// The glow as chained drop-shadow() filters, for Lab > Fix lyric animation freeze on Linux (see where it is
+// used). Fitted against the text-shadow glow by pixel difference in Folia's Electron: one layer matches at
+// half the text-shadow radius (the text-shadow radius is two sigmas, a drop-shadow's one); the chorus's
+// three layers at 0.4x with a much weaker middle layer, because each drop-shadow also shadows the ones
+// before it. Mean error under 0.5/255 across colours and radii.
+const CLADDAGH_GLOW_DROP_SHADOW_SCALE = 0.5;
+const CLADDAGH_CHORUS_DROP_SHADOW_SCALE = 0.4;
+const CLADDAGH_CHORUS_MIDDLE_ALPHA = 0.2;
+
+const buildCladdaghGlowFilter = (
+    color: string,
+    coreColor: string,
+    radius: number,
+    glyphAlpha: number,
+    fade: number,
+    isChorus: boolean,
+): string => {
+    // A drop-shadow shadows the painted glyph, whose alpha is already `glyphAlpha`; the shadow colours carry
+    // only what the text-shadow had on top of that (its outer layers were `glyphAlpha * fade`).
+    const glow = (alpha: number) => mixColors(color, color, 0, alpha);
+    if (!isChorus) {
+        return `drop-shadow(0 0 ${(radius * CLADDAGH_GLOW_DROP_SHADOW_SCALE).toFixed(2)}px ${glow(fade)})`;
+    }
+    const scale = CLADDAGH_CHORUS_DROP_SHADOW_SCALE;
+    const core = mixColors(color, coreColor, 0.65, clamp(fade / Math.max(glyphAlpha, 0.01), 0, 1));
+    return `drop-shadow(0 0 ${(radius * 0.35 * scale).toFixed(2)}px ${core}) `
+        + `drop-shadow(0 0 ${(radius * scale).toFixed(2)}px ${glow(fade * CLADDAGH_CHORUS_MIDDLE_ALPHA)}) `
+        + `drop-shadow(0 0 ${(radius * 1.6 * scale).toFixed(2)}px ${glow(fade)})`;
+};
 
 export const shouldHoldCladdaghFrameForPlaybackReset = (
     previousTime: number,
@@ -608,7 +639,9 @@ const RingLine: React.FC<RingLineProps> = ({
 
                 el.style.transform = `translate3d(calc(-50% + ${x.toFixed(1)}px), calc(-50% + ${y.toFixed(1)}px), 0px) rotate(${tiltAngle.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
                 el.style.opacity = finalOpacity.toFixed(3);
-                el.style.filter = blur < 0.2 ? 'none' : `blur(${blur.toFixed(2)}px)`;
+                const blurFilter = blur < 0.2 ? '' : `blur(${blur.toFixed(2)}px)`;
+                // The glow's drop-shadows go in front of the blur (see below); written together once the glow is known.
+                let glowFilter = '';
 
                 // Update text color and text shadow (glow) progressively based on character playback status
                 let charProgress = 0;
@@ -647,6 +680,13 @@ const RingLine: React.FC<RingLineProps> = ({
                     }
                 }
 
+                // While Lab > Fix lyric animation freeze on Linux is on, the glow is a drop-shadow filter
+                // rather than a text-shadow: the glyph's `scale()` changes every frame, so even a whole-pixel
+                // text-shadow radius reaches Chromium's glyph cache as an unbounded set of device sizes, and
+                // each one leaks shared memory. A filter is applied by the compositor and never goes through
+                // the glyph cache. Off, the text-shadow radius is still rounded to whole pixels.
+                // See utils/glowBlurQuantize.ts and docs/linux-glyph-cache-fd-leak.md.
+                const glowAsFilter = isGlowBlurQuantized();
                 const currentGlowRadius = baseGlow * (1.0 + flashPop);
 
                 el.style.color = targetColor;
@@ -659,21 +699,33 @@ const RingLine: React.FC<RingLineProps> = ({
                     // Fade the target color's alpha to ensure the outer shadow vanishes seamlessly
                     const fadedTargetColor = mixColors(targetColor, targetColor, 0, currentAlpha * shadowFade);
 
-                    if (line.isChorus) {
+                    if (glowAsFilter) {
+                        glowFilter = buildCladdaghGlowFilter(
+                            targetColor,
+                            theme.primaryColor || '#ffffff',
+                            currentGlowRadius,
+                            currentAlpha,
+                            shadowFade,
+                            Boolean(line.isChorus),
+                        );
+                        el.style.textShadow = 'none';
+                    } else if (line.isChorus) {
                         // Blend targetColor with the theme's primary text color to create a bright inner core.
                         // We use shadowFade directly as the alpha so it blooms beautifully at 1.0 near the center,
                         // but fades to invisible at the edges.
                         const innerGlowColor = mixColors(targetColor, theme.primaryColor || '#ffffff', 0.65, shadowFade);
                         
                         // Restored exact multiplier ratios from Image 1 (0.35, 1.0, 1.6)
-                        el.style.textShadow = `0 0 ${(currentGlowRadius * 0.35).toFixed(1)}px ${innerGlowColor}, 0 0 ${currentGlowRadius.toFixed(1)}px ${fadedTargetColor}, 0 0 ${(currentGlowRadius * 1.6).toFixed(1)}px ${fadedTargetColor}`;
+                        el.style.textShadow = `0 0 ${quantizeShadowBlur(currentGlowRadius * 0.35)}px ${innerGlowColor}, 0 0 ${quantizeShadowBlur(currentGlowRadius)}px ${fadedTargetColor}, 0 0 ${quantizeShadowBlur(currentGlowRadius * 1.6)}px ${fadedTargetColor}`;
                     } else {
                         // Restored exact multiplier ratio from Image 1
-                        el.style.textShadow = `0 0 ${currentGlowRadius.toFixed(1)}px ${fadedTargetColor}`;
+                        el.style.textShadow = `0 0 ${quantizeShadowBlur(currentGlowRadius)}px ${fadedTargetColor}`;
                     }
                 } else {
                     el.style.textShadow = 'none';
                 }
+
+                el.style.filter = [glowFilter, blurFilter].filter(Boolean).join(' ') || 'none';
             }
         };
 
