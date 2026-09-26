@@ -4,7 +4,9 @@
 // - glows are drawn as `drop-shadow()` filters instead of text-shadows or canvas shadows (classic and
 //   partita in wordGlow.ts, claddagh, fume's live line via `setCanvasTextGlow`);
 // - canvas blur radii are whole pixels (`quantizeShadowBlur`);
-// - text scaled by a style transform every frame gets its own compositing layer (cadenza's overlay).
+// - text scaled by a style transform every frame gets its own compositing layer (cadenza's overlay);
+// - text drawn under a zooming camera is rasterized at a bounded set of scales and placed under the
+//   camera afterwards (fume's live line, fume/fumeLiveRaster.ts).
 //
 // A blur radius that changes every frame makes Chromium mint a new glyph strike per frame, each
 // costing a 4 KiB shared-memory chunk that is never returned; on Linux that is an fd in the renderer

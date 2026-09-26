@@ -6,20 +6,21 @@ import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { colorWithAlpha } from '../colorMix';
 
 import { type VisualizerSharedProps } from '../definition';
-import { buildFumeBackgroundScene, drawFumeBackground, type FumeBackgroundAudioLevels } from '../FumeBackground';
+import { buildFumeBackgroundScene } from '../FumeBackground';
 import { getRecentCompletedLine, getUpcomingLines } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
-import type { FumeArticleLayout, StaticBlockSnapshot, ViewportSize } from './fumeTypes';
-import { createFumeCameraState, resolveFumeBackgroundView, stepFumeCamera, syncFumeCameraToArticle, type FumeCameraState } from './fumeCameraStep';
-import { isFumeBlockOnScreen, resolveFumeBlockTiming, resolveFumeGlowBases, resolveFumeStaticLayers, type FumeStaticLayerInput } from './fumeBlockFrame';
+import type { FumeArticleLayout, ViewportSize } from './fumeTypes';
+import { createFumeCameraState, type FumeCameraState } from './fumeCameraStep';
+
 import { clamp } from './fumeMath';
 
 import { resolveFumePassedFadeDuration } from './fumeTextStyle';
 
 import { buildArticleLayout, buildLayoutCacheKey } from './fumeArticleLayout';
 import { resolveArticleOverviewCamera } from './fumeCamera';
-import { createStaticBlockSnapshot, drawFumeLiveBlock, type FumeLiveBlockParams } from './fumeCanvasText';
+import type { FumeStageDriver, FumeStageScene } from './fumeStage';
+import { useFumeCanvasStage } from './useFumeCanvasStage';
 
 // This mode is basically "turn the whole lyric into an article, then move a camera through it".
 // So the pipeline is much bigger than the others: prebuild the article layout, split it into blocks/render lines/graphemes,
@@ -67,7 +68,6 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const currentLineIndexRef = useRef(currentLineIndex);
     const cameraStateRef = useRef<FumeCameraState>(createFumeCameraState());
-    const staticBlockSnapshotCacheRef = useRef<Map<string, StaticBlockSnapshot>>(new Map());
     const layoutBuildVersionRef = useRef(0);
     const hasResolvedArticleRef = useRef(false);
     const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
@@ -240,254 +240,59 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
     const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(1.8 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
 
     useEffect(() => {
-        staticBlockSnapshotCacheRef.current.clear();
-    }, [
-        article,
-        theme.name,
-        theme.primaryColor,
-        theme.secondaryColor,
-        theme.accentColor,
-        theme.fontStyle,
-        theme.fontFamily,
-        theme.fontFamilyStack,
-    ]);
-
-    useEffect(() => {
         hasPrintedContentRef.current = false;
         setHasPrintedContent(false);
     }, [article]);
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) {
-            return;
-        }
-
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return;
-        }
-
-        const width = Math.max(Math.floor(viewport.width), 1);
-        const height = Math.max(Math.floor(viewport.height), 1);
-        const dpr = window.devicePixelRatio || 1;
-
-        if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
-            canvas.width = Math.floor(width * dpr);
-            canvas.height = Math.floor(height * dpr);
-            canvas.style.width = `${width}px`;
-            canvas.style.height = `${height}px`;
-        }
-
-        context.setTransform(dpr, 0, 0, dpr, 0, 0);
-        context.clearRect(0, 0, width, height);
-
-        syncFumeCameraToArticle(cameraStateRef.current, article);
-        let frameId = 0;
-        let lastFrameAt: number | null = null;
-
-        const draw = () => {
-            const now = performance.now();
-            const dt = lastFrameAt === null
-                ? 1 / 60
-                : clamp((now - lastFrameAt) / 1000, 1 / 240, 0.05);
-            lastFrameAt = now;
-
-            const currentWidth = Math.max(Math.floor(viewport.width), 1);
-            const currentHeight = Math.max(Math.floor(viewport.height), 1);
-            const currentDpr = window.devicePixelRatio || 1;
-
-            if (canvas.width !== Math.floor(currentWidth * currentDpr) || canvas.height !== Math.floor(currentHeight * currentDpr)) {
-                canvas.width = Math.floor(currentWidth * currentDpr);
-                canvas.height = Math.floor(currentHeight * currentDpr);
-                canvas.style.width = `${currentWidth}px`;
-                canvas.style.height = `${currentHeight}px`;
-            }
-
-            context.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
-            context.clearRect(0, 0, currentWidth, currentHeight);
-
-            const time = currentTime.get();
-            const viewportCenterX = viewport.width * 0.5;
-            const viewportCenterY = viewport.height * 0.5;
-            const fumeBackgroundAudioLevels: FumeBackgroundAudioLevels = {
-                power: audioPower.get(),
-                bass: audioBands.bass.get(),
-                lowMid: audioBands.lowMid.get(),
-                mid: audioBands.mid.get(),
-                vocal: audioBands.vocal.get(),
-                treble: audioBands.treble.get(),
-            };
-
-            if (!article) {
-                if (!staticMode) {
-                    context.save();
-                    context.translate(viewportCenterX, viewportCenterY);
-                    context.translate(-backgroundScene.width * 0.5, -backgroundScene.height * 0.5);
-                    drawFumeBackground({
-                        context,
-                        scene: backgroundScene,
-                        theme,
-                        time: time + now * 0.00018,
-                        audioLevels: fumeBackgroundAudioLevels,
-                        objectOpacityMultiplier: backgroundObjectOpacity * 2,
-                    });
-                    context.restore();
-                }
-
-                if (!paused) {
-                    frameId = window.requestAnimationFrame(draw);
-                }
-                return;
-            }
-
-            // One-shot detection: once any block starts printing, flip hasPrintedContent
-            if (!hasPrintedContentRef.current && time >= article.firstRenderableStartTime) {
-                hasPrintedContentRef.current = true;
-                setHasPrintedContent(true);
-            }
-
-            const { shouldShowOverview, overviewTextRestoreProgress } = stepFumeCamera(cameraStateRef.current, {
-                article,
-                time,
-                now,
-                dt,
-                lineIndex: currentLineIndexRef.current,
-                viewport,
-                overviewCamera,
-                overviewStartTime,
-                cameraSpeed,
-                cameraTrackingMode: resolvedFumeTuning.cameraTrackingMode,
-                staticMode,
-                animationIntensity: theme.animationIntensity,
-            });
-            const camera = cameraStateRef.current.camera;
-
-            const screenScale = camera.scale;
-
-            if (!staticMode) {
-                const {
-                    backgroundCenterX,
-                    backgroundCenterY,
-                    backgroundCameraX,
-                    backgroundCameraY,
-                    backgroundScale,
-                } = resolveFumeBackgroundView(backgroundScene, camera, viewport);
-
-                context.save();
-                context.translate(viewportCenterX, viewportCenterY);
-                context.scale(backgroundScale, backgroundScale);
-                context.translate(-backgroundCameraX, -backgroundCameraY);
-                drawFumeBackground({
-                    context,
-                    scene: backgroundScene,
-                    theme,
-                    time,
-                    audioLevels: fumeBackgroundAudioLevels,
-                    objectOpacityMultiplier: backgroundObjectOpacity * 2,
-                    parallax: {
-                        cameraX: backgroundCameraX,
-                        cameraY: backgroundCameraY,
-                        originX: backgroundCenterX,
-                        originY: backgroundCenterY,
-                        strength: 0.72,
-                    },
-                });
-                context.restore();
-            }
-
-            // TODO: the live line is drawn with fillText under this continuously zooming transform, which
-            // asks Chromium's glyph cache for a new size every frame and still leaks ~0.06 fd/s on Linux
-            // with Lab > Fix lyric animation freeze on Linux on. Rounding the scale fixes it but makes the
-            // camera visibly step. See docs/linux-glyph-cache-fd-leak.md.
-            context.save();
-            context.translate(viewportCenterX, viewportCenterY);
-            context.scale(screenScale, screenScale);
-            context.translate(-camera.x, -camera.y);
-
-            const { activeGlowBoost, passedGlowBase } = resolveFumeGlowBases(theme.animationIntensity, glowIntensity);
-            const liveParams: FumeLiveBlockParams = { time, theme, glowIntensity, activeGlowBoost, passedGlowBase, showPrintStamp };
-            const staticLayerInput: FumeStaticLayerInput = {
-                time,
-                theme,
-                passedGlowBase,
-                passedFadeDuration,
-                overviewTextRestoreProgress,
-                snapshotScale: clamp(window.devicePixelRatio || 1, 1, 2),
-            };
-
-            if (showText) {
-                for (const block of article.blocks) {
-                if (!isFumeBlockOnScreen(block, camera, viewport)) {
-                    continue;
-                }
-
-                const timing = resolveFumeBlockTiming(
-                    block,
-                    time,
-                    lines[block.sourceLineIndex + 1]?.startTime ?? null,
-                    textHoldRatio,
-                );
-                const layers = resolveFumeStaticLayers(block, timing, staticLayerInput, (spec) => {
-                    let snapshot = staticBlockSnapshotCacheRef.current.get(spec.key);
-                    if (!snapshot) {
-                        snapshot = createStaticBlockSnapshot(block, theme, spec.fill, spec.shadowBlur, spec.shadowColor) ?? undefined;
-                        if (snapshot) {
-                            staticBlockSnapshotCacheRef.current.set(spec.key, snapshot);
-                        }
-                    }
-                    return snapshot;
-                });
-
-                if (layers) {
-                    for (const { snapshot, alpha } of layers) {
-                        context.globalAlpha = alpha;
-                        context.drawImage(
-                            snapshot.canvas,
-                            block.x - snapshot.padding,
-                            block.y - snapshot.padding,
-                            block.width + snapshot.padding * 2,
-                            block.height + snapshot.padding * 2,
-                        );
-                    }
-                    context.globalAlpha = 1;
-                    continue;
-                }
-
-                drawFumeLiveBlock(context, block, timing, liveParams);
-            }
-            }
-            context.restore();
-
-            if (!paused) {
-                frameId = window.requestAnimationFrame(draw);
-            }
-        };
-
-        draw();
-        return () => {
-            window.cancelAnimationFrame(frameId);
-            lastFrameAt = null;
-        };
-    }, [
+    const stageScene = useMemo<FumeStageScene>(() => ({
         article,
-        audioBands,
-        audioPower,
+        lines,
+        theme,
+        viewport,
         backgroundScene,
-        backgroundObjectOpacity,
-        cameraSpeed,
-        currentTime,
-        glowIntensity,
+        overviewCamera,
+        overviewStartTime,
         passedFadeDuration,
+        cameraSpeed,
+        cameraTrackingMode: resolvedFumeTuning.cameraTrackingMode,
+        glowIntensity,
+        backgroundObjectOpacity,
+        showPrintStamp,
+        textHoldRatio,
+        showText,
+        staticMode,
+    }), [
+        article,
+        backgroundObjectOpacity,
+        backgroundScene,
+        cameraSpeed,
+        glowIntensity,
+        lines,
+        overviewCamera,
+        overviewStartTime,
+        passedFadeDuration,
+        resolvedFumeTuning.cameraTrackingMode,
         showPrintStamp,
         showText,
-        paused,
         staticMode,
         textHoldRatio,
         theme,
-        viewport.height,
-        viewport.width,
+        viewport,
     ]);
+    const stageDriver = useMemo<FumeStageDriver>(() => ({
+        currentTime,
+        audioPower,
+        audioBands,
+        cameraState: cameraStateRef.current,
+        getLineIndex: () => currentLineIndexRef.current,
+        onPrintedContent: () => {
+            if (hasPrintedContentRef.current) return;
+            hasPrintedContentRef.current = true;
+            setHasPrintedContent(true);
+        },
+    }), [audioBands, audioPower, currentTime]);
+
+    useFumeCanvasStage(canvasRef, stageScene, stageDriver, paused);
 
     return (
         <VisualizerShell

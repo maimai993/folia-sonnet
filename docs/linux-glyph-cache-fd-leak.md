@@ -47,10 +47,18 @@ Chromium（GPU 光栅化）按 strike 缓存字形，strike 的 key 包含字体
   alpha，drop-shadow 会再乘一次，所以阴影颜色只带 `shadowFade`。
 - **cadenza**：叠加词外层加 `will-change: transform`，提升为合成层，栅格化缩放不再逐帧变化。
 - **canvas 模糊半径**取整到整数像素（`quantizeShadowBlur`）。
-- **fume**：当前行的文字发光改用 `ctx.filter = drop-shadow(shadowBlur / 2)`（`setCanvasTextGlow`；canvas 的
-  shadowBlur 是两个 sigma，drop-shadow 是一个，二者都不随 CTM 缩放），并用 `fillGlowText` 把绘制 clip 到文字附近
-  ——canvas 滤镜按 clip 大小开图层，不 clip 时整行发光每帧对整张画布做滤镜，会从 120 掉到约 90 fps。
-  当前行仍在连续缩放的相机变换下 `fillText`，残余约 0.06 fd/s（到 1024 约 4 小时）。
+- **fume**：
+  - 当前行的文字发光改用 `ctx.filter = drop-shadow(shadowBlur / 2)`（`setCanvasTextGlow`；canvas 的 shadowBlur
+    是两个 sigma，drop-shadow 是一个，二者都不随 CTM 缩放），并用 `fillGlowText` 把绘制 clip 到文字附近——canvas
+    滤镜按 clip 大小开图层，不 clip 时整行发光每帧对整张画布做滤镜，会从 120 掉到约 90 fps。
+  - 当前行原本在连续缩放的相机变换下 `fillText`，只改发光仍残余约 0.06 fd/s。现在由原来的绘制代码画进离屏 canvas
+    （`fume/fumeLiveRaster.ts`）：只画屏幕内部分，栅格化缩放取当前设备缩放之上的最近一档（每倍频程 48 档），再
+    `drawImage` 到舞台上，缩小不到 1.5%。相机仍然连续，只有纹理的像素密度分档。直接把相机缩放取整（1/32、1/64）
+    也不泄漏，但镜头会明显跳动。
+  - 静态块快照 15 秒未用即释放（不受开关控制）。
+
+  曾用 Pixi 重写 fume 的渲染层做对比：同样不泄漏，但比 canvas 版多约 85 MiB 显存（i915 DRM），renderer 主线程
+  只少 4 个百分点、GPU 进程多 10 个百分点，因此没有采用。
 
 默认只在 Linux 开启：drop-shadow 的外观与原来非常接近但不完全相同，而其它平台上这个泄漏的代价很小。
 
@@ -62,13 +70,18 @@ Chromium（GPU 光栅化）按 strike 缓存字形，strike 的 key 包含字体
 | partita | 0.802 | -0.009 |
 | cadenza | 0.129 / 0.111 | 0.002 |
 | claddagh | 0.558 | -0.003 |
-| fume | 0.575 / 0.666 | 0.062 |
+| fume | 0.575 / 0.609 | -0.001 |
+
+fume 开关开启后，renderer 主线程 CPU 从约 55% 降到约 32%（单核百分比）：原来每帧都要为新尺寸生成带阴影的
+字形遮罩，档位制下字形尺寸有限、缓存可以复用；这部分工作换到了 GPU 进程（多约 20 个百分点）。与改动前相比显存
+少约 22 MiB，renderer PSS 多约 25 MiB。
 
 ## 5. 写新动画时
 
 - 不要逐帧改变文字阴影的模糊半径（`text-shadow`、canvas `shadowBlur`）。要"扩散"效果用 `filter: drop-shadow()`，
   或者让半径只取有限几个值。
 - 不要让带阴影的文字按连续变化的设备尺寸重新栅格化：DOM 上逐帧改 `scale()` 的文字要么是合成层（`will-change:
-  transform`），要么不带 `text-shadow`；canvas 上不要在连续变化的缩放下画带阴影的字。
+  transform`），要么不带 `text-shadow`；canvas 上不要在连续变化的缩放下画字，先按有限档位栅格化（参照
+  `fumeLiveRaster`）。
 - 新的缓解手段挂到同一个开关上（`isGlowBlurQuantized()`），关闭时保持原样。
 - 验证：Linux 上打开内存监视器，播放几分钟，renderer / GPU 进程的 fd 曲线应当是平的。
