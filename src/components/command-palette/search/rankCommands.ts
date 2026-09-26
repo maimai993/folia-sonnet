@@ -231,3 +231,23 @@ export const getCommandPaletteMatches = (
     context?: CommandPaletteContext,
     recentCommandIds: string[] = [],
 ): CommandPaletteMatch[] => rankCommands(query, getAvailableCommandPaletteCommands(context), recentCommandIds);
+
+/**
+ * 不截断、不含模糊档的命中集合，按注册表顺序。
+ *
+ * 给设置侧栏的搜索用：它问的是「哪些设置命令认得这个词」，要的是全集而不是面板里的前十条；
+ * 模糊档在这里只会把不相干的分区拉进结果，所以只收子串及以上的命中。
+ */
+export const matchCommandsExactly = (
+    query: string,
+    commands: CommandPaletteCommand[],
+    locale = 'en',
+): CommandPaletteCommand[] => {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) {
+        return [];
+    }
+    return getCommandSearchIndex(commands, locale).entries
+        .filter(entry => (scoreEntry(entry, normalizedQuery, query, {})?.matchQuality ?? NO_MATCH) > MATCH_QUALITY.fuzzy)
+        .map(entry => entry.command);
+};

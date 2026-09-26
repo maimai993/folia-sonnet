@@ -74,6 +74,12 @@ export type CommandPaletteCommand = {
     getPreview?: (input: string, context: CommandPaletteContext) => string | null;
     queueIndex?: number;
     queueSong?: SongResult;
+    /**
+     * Where in the options tab this command lands, set by the settings factories. The settings
+     * sidebar search reads it to reuse the command's titles, synonyms and pinyin as extra ways to
+     * find that section.
+     */
+    settingsTarget?: { subview: SettingsSubviewId; anchorId?: SettingsAnchorId };
     execute: (input: string, context: CommandPaletteContext) => Promise<boolean> | boolean;
 };
 

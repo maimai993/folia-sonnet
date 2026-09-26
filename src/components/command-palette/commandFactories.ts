@@ -50,6 +50,7 @@ export const createSettingsCommand = (
     description,
     keywords,
     ...options,
+    ...(initialTab === 'options' && initialSubview ? { settingsTarget: { subview: initialSubview } } : {}),
     execute: (_input, context) => {
         context.settings.openSettings(initialTab, initialSubview);
         return true;
@@ -76,6 +77,7 @@ export const createSettingsAnchorCommand = (
     description,
     keywords,
     ...options,
+    settingsTarget: { subview: settingsAnchorSubview(anchorId), anchorId },
     execute: (_input, context) => {
         context.settings.openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
         return true;

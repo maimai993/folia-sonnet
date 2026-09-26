@@ -8,7 +8,7 @@ import type { CommandPaletteCommand, CommandPaletteContext } from './types';
 // and ranking lives in ./search/; this file only assembles and filters.
 
 export { getQueueSongMatches, getQueueSongMatchesFromEvaluation };
-export { getCommandPaletteMatches, rankCommands } from './search/rankCommands';
+export { getCommandPaletteMatches, matchCommandsExactly, rankCommands } from './search/rankCommands';
 
 export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = ALL_COMMAND_PALETTE_COMMANDS;
 
