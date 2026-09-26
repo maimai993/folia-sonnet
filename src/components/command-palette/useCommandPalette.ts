@@ -521,6 +521,17 @@ export const useCommandPalette = ({
                     return;
                 }
                 if (event.key.length === 1) {
+                    // A key a command declares as its bare entry — `:` for execute mode — is that
+                    // command, not a filter character. Without this the grids swallowed the colon
+                    // and execute mode could not be reached from them at all. Checked here rather
+                    // than left to the dispatch below, which refuses bare keys wherever a filter
+                    // owns them.
+                    const bareHotkeyCommand = OPEN_HOTKEY_INDEX.get(openHotkeyStroke({ key: event.key }));
+                    if (bareHotkeyCommand && isCommandPaletteCommandEnabled(bareHotkeyCommand, context)) {
+                        event.preventDefault();
+                        invokeCommand(bareHotkeyCommand);
+                        return;
+                    }
                     // The opening keystroke is deliberately dropped rather than seeded into the
                     // box. Replaying it would put a stray latin character in front of an IME
                     // composition that the same press is already starting — the grids swallowed it

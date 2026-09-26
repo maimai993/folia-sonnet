@@ -90,11 +90,25 @@ test('the primary modifier and F opens it, and Escape puts the grid back', async
     await expect(trackCard(page).first()).toBeVisible();
 });
 
-test('a bare key that is a palette shortcut elsewhere still filters here', async ({ page }) => {
+test('the colon opens execute mode on a grid instead of the filter', async ({ page }) => {
     await openTrackGrid(page);
 
-    // ':' 在播放页是执行模式的入口。网格上读键入的一方优先，否则同一次按键会同时做两件事。
-    await typeUntilFilterOpens(page, ':');
+    // ':' 是执行模式的入口，在网格上也一样。网格读键入的一方原本连它也吞掉，执行模式在网格上
+    // 就完全进不去了；冒号又从来不是有意义的筛选字符，所以让给命令。
+    const panel = page.getByTestId('command-palette-panel');
+    await expect.poll(async () => {
+        await page.keyboard.press(':');
+        return panel.count();
+    }).toBeGreaterThan(0);
+
+    await expect(panel.getByText('Execute mode')).toBeVisible();
+    await expect(filterBox(page)).toHaveCount(0);
+});
+
+test('other printable keys still filter the grid', async ({ page }) => {
+    await openTrackGrid(page);
+
+    await typeUntilFilterOpens(page, 'r');
 
     await expect(page.getByTestId('command-palette-panel')).toHaveCount(0);
 });
