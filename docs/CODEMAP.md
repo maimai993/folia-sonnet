@@ -47,6 +47,7 @@
 | 32+ | `src/stores/useAppViewStore.ts` |
 | 32+ | `src/stores/usePlaybackStore.ts` |
 | 32+ | `src/stores/useStatusMessageStore.ts` |
+| 32+ | `src/utils/fontStacks.ts` |
 | 32+ | `src/utils/lyrics/parserCore.ts` |
 | 32+ | `src/utils/lyrics/renderHints.ts` |
 
