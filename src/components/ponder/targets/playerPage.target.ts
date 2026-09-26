@@ -27,7 +27,7 @@ const region = (rect: PonderRelativeRect, labelKey: string): PonderAnchorSource 
     { kind: 'relative', from: 'page', rect, role: 'region', labelKey }
 );
 
-const anchors = {
+export const PLAYER_PAGE_ANCHORS = {
     page,
     lyrics: region(G.lyrics, 'ponder.anchors.playerPage.lyrics'),
     bar: region(G.bar, 'ponder.anchors.playerPage.bar'),
@@ -41,7 +41,7 @@ const anchors = {
 const layout: PonderSceneScript = {
     id: 'player-page-layout',
     titleKey: 'ponder.scenes.playerPageLayout',
-    anchors,
+    anchors: PLAYER_PAGE_ANCHORS,
     steps: [
         { kind: 'highlight', id: 'showPage', anchor: 'page', intensity: [0, 0.35], durationMs: 520, keyframe: true },
         {
@@ -91,7 +91,7 @@ const layout: PonderSceneScript = {
 const openPalette: PonderSceneScript = {
     id: 'player-page-open-palette',
     titleKey: 'ponder.scenes.playerPageOpenPalette',
-    anchors,
+    anchors: PLAYER_PAGE_ANCHORS,
     steps: [
         { kind: 'highlight', id: 'markTrack', anchor: 'track', intensity: [0, 0.55], durationMs: 420, keyframe: true },
         {
@@ -134,7 +134,7 @@ const openPalette: PonderSceneScript = {
 const runCommands: PonderSceneScript = {
     id: 'player-page-run-commands',
     titleKey: 'ponder.scenes.playerPageRunCommands',
-    anchors,
+    anchors: PLAYER_PAGE_ANCHORS,
     steps: [
         { kind: 'surfaceState', id: 'paletteOpens', anchor: 'page', state: 'palette-open', transition: 'zoom', durationMs: 460, keyframe: true },
         {
@@ -177,7 +177,7 @@ const runCommands: PonderSceneScript = {
 const howToShuffle: PonderSceneScript = {
     id: 'player-page-shuffle',
     titleKey: 'ponder.scenes.playerPageShuffle',
-    anchors,
+    anchors: PLAYER_PAGE_ANCHORS,
     steps: [
         { kind: 'highlight', id: 'markBar', anchor: 'bar', intensity: [0, 0.6], durationMs: 420, keyframe: true },
         {

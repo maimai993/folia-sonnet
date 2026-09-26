@@ -185,6 +185,8 @@ export default {
     "noPlayableSongs": "列表中没有可播放的歌曲",
     "songUnavailableTag": "已下架",
     "queueShuffled": "播放队列已打乱",
+    "loopShuffleHint": "想找随机播放吗？",
+    "loopShuffleHintAction": "点这里了解",
     "queueCleared": "播放队列已清空",
     "queueUpdated": "已添加到播放队列",
     "queueBatchRemoved": "已从队列移除 {{count}} 首歌曲",
@@ -3056,6 +3058,7 @@ export default {
       "seen": "已看过"
     },
     "summaries": {
+      "queue_shuffle": "Folia 没有随机播放模式，而是打乱队列；以及打乱队列的四个入口。",
       "audio_equalizer": "十段均衡和效果链；拖动推子会改写自定义槽。",
       "vis_playground": "预览上的三块隐藏点击区。",
       "lyric_style": "每种样式的专属设置、莫奈部件的隐藏、背景搭配和通用副字幕。",
@@ -3465,6 +3468,7 @@ export default {
         "autoSwitch": "主题自动切换"
       },
       "sidePanel": {
+        "queueShuffle": "打乱队列",
         "modeRow": "模式取景器那一行",
         "modeName": "中间那块名称",
         "modeList": "全部模式",
@@ -3535,6 +3539,7 @@ export default {
       }
     },
     "targets": {
+      "queueShuffle": "随机播放在哪",
       "audioEqualizer": "音频效果对话框",
       "visPlayground": "歌词动画调参台",
       "lyricStyle": "歌词样式",
@@ -3587,6 +3592,11 @@ export default {
       "settingsPage": "设置页面"
     },
     "scenes": {
+      "queueShuffleNoMode": "没有随机模式，只有打乱队列",
+      "queueShuffleCommand": "用命令打乱",
+      "queueShuffleSlot": "放进控制条按钮",
+      "queueShufflePanel": "队列面板上的按钮",
+      "queueShufflePinned": "固定在命令窗口底部",
       "visPlaygroundCommon": "四页各管什么，以及「通用」里有什么",
       "visPlaygroundVisuals": "动画与背景",
       "visPlaygroundSubtitle": "字幕",
@@ -3719,6 +3729,15 @@ export default {
       "panelSlideKeyboard": "用键盘打开"
     },
     "captions": {
+      "queueShuffle": {
+        "noMode": "Folia 不提供传统的随机播放模式，循环按钮也不会切到随机。想随机听，就打乱当前队列。",
+        "once": "打乱是一次操作：当前队列原地洗一次牌，之后按新顺序播放。想换个顺序，再打乱一次。",
+        "command": "最快的是命令：命令窗口关着、焦点不在输入框时按冒号进入执行模式，再按 r。也可以在命令窗口里搜「打乱队列」。",
+        "slot": "常用的话，在设置 · 界面设置的「进度条右侧按钮」里选「随机队列」，控制条上就多一颗打乱按钮。",
+        "panel": "右侧控制面板的队列页，顶部最右那颗按钮也会打乱队列。",
+        "pinSlot": "在设置 · 界面设置的「快捷命令」里，把「打乱队列」放进任意一个槽位。",
+        "pinRow": "它会一直显示在命令窗口底部，打开窗口点一下就行。"
+      },
       "audioEqualizer": {
         "enable": "音量行右端打开均衡器。左上角可关闭整条效果链；关闭后设置保留，但不再生效。",
         "presets": "顶上一排是六个内置预设。每一个同时带着一条均衡曲线和一整套效果链，所以点一下是两样一起换。它们不可编辑。",

@@ -82,7 +82,9 @@ export type PonderTargetId =
     | 'theme-park'
     | 'lyric-style'
     // 歌词导出：命令面板里那一页批量导出。面板上那颗单曲导出按钮归 panel-source-tab 讲。
-    | 'lyric-export';
+    | 'lyric-export'
+    // 随机播放在哪：没有随机模式，只有打乱队列，以及它的四个入口。连点循环按钮的提示送人来这里。
+    | 'queue-shuffle';
 
 /**
  * 导航页把目标按这个分组。

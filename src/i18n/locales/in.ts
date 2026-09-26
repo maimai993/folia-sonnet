@@ -184,6 +184,8 @@ export default {
     "noPlayableSongs": "Tidak ada lagu yang bisa diputar di daftar ini",
     "songUnavailableTag": "Tidak Tersedia",
     "queueShuffled": "Antrean diacak",
+    "loopShuffleHint": "Mencari putar acak?",
+    "loopShuffleHintAction": "Pelajari caranya",
     "queueCleared": "Antrean dikosongkan",
     "queueUpdated": "Ditambahkan ke antrean",
     "queueBatchRemoved": "{{count}} lagu dihapus dari antrean",
@@ -2988,6 +2990,7 @@ export default {
       "seen": "Sudah ditonton"
     },
     "summaries": {
+      "queue_shuffle": "Folia tidak punya mode acak; yang ada adalah mengacak antrean. Ini empat cara melakukannya.",
       "audio_equalizer": "Sepuluh pita dan satu rantai efek \u2014 dan satu tarikan menimpa slot kustom.",
       "vis_playground": "Ada tiga area klik tak terlihat di atas pratinjau.",
       "lyric_style": "Pengaturan khusus tiap gaya, menyembunyikan elemen Monet, memadukan latar, dan subtitel bersama.",
@@ -3397,6 +3400,7 @@ export default {
         "autoSwitch": "Ganti tema otomatis"
       },
       "sidePanel": {
+        "queueShuffle": "Acak antrean",
         "modeRow": "Baris jendela bidik mode",
         "modeName": "Nama di tengahnya",
         "modeList": "Semua mode",
@@ -3467,6 +3471,7 @@ export default {
       }
     },
     "targets": {
+      "queueShuffle": "Di mana putar acak",
       "audioEqualizer": "Dialog efek audio",
       "visPlayground": "Meja setel animasi lirik",
       "lyricStyle": "Gaya lirik",
@@ -3519,6 +3524,11 @@ export default {
       "settingsPage": "Halaman Opsi"
     },
     "scenes": {
+      "queueShuffleNoMode": "Tanpa mode acak, hanya acak antrean",
+      "queueShuffleCommand": "Acak lewat perintah",
+      "queueShuffleSlot": "Taruh di bilah kontrol",
+      "queueShufflePanel": "Tombol di panel antrean",
+      "queueShufflePinned": "Sematkan di bawah jendela perintah",
       "visPlaygroundCommon": "Empat halaman, dan isi \u201cumum\u201d",
       "visPlaygroundVisuals": "Animasi dan latar",
       "visPlaygroundSubtitle": "Subtitel",
@@ -3651,6 +3661,15 @@ export default {
       "panelSlideKeyboard": "Buka dari papan tombol"
     },
     "captions": {
+      "queueShuffle": {
+        "noMode": "Folia tidak menyediakan mode putar acak tradisional, dan tombol ulang tidak akan beralih ke acak. Untuk mendengar secara acak, acak antrean saat ini.",
+        "once": "Mengacak adalah satu tindakan: antrean saat ini diacak di tempat lalu diputar dengan urutan baru. Acak lagi untuk urutan lain.",
+        "command": "Cara tercepat adalah perintah: saat jendela perintah tertutup dan tidak ada kolom teks yang fokus, tekan titik dua untuk masuk mode eksekusi, lalu tekan r. Kamu juga bisa mencari “Acak antrean” di jendela perintah.",
+        "slot": "Kalau sering dipakai, pilih “Acak antrean” di “Tombol bilah progres” pada Pengaturan · Pengaturan umum, maka bilah kontrol mendapat tombol acak.",
+        "panel": "Di tab antrean pada panel kanan, tombol paling kanan di bagian atas juga mengacak antrean.",
+        "pinSlot": "Di Pengaturan · Pengaturan umum, taruh “Acak antrean” di slot mana pun pada “Perintah favorit”.",
+        "pinRow": "Setelah itu ia selalu ada di bagian bawah jendela perintah, tinggal klik saat jendelanya terbuka."
+      },
       "audioEqualizer": {
         "enable": "Dialog di balik ikon fader di ujung kanan baris volume. Sakelar di kiri atas menyalakan atau mematikan seluruh rantai; saat mati, semua nilai di bawah tetap tersimpan, hanya saja tidak diterapkan.",
         "presets": "Enam praset bawaan berjajar di atas. Masing-masing membawa kurva EQ sekaligus satu rantai efek utuh, jadi memilih satu mengganti keduanya sekaligus. Praset ini tidak bisa disunting.",

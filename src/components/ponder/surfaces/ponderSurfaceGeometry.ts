@@ -305,6 +305,16 @@ export const SIDE_PANEL_CONTROLS_PAGE = {
 } satisfies Record<string, PonderRelativeRect>;
 
 /**
+ * 队列页里的一块，坐标系是 body。
+ *
+ * 队列页是 flex 排的：顶上一行占 body 高的 12%，打乱按钮是那一行最右端的图标。
+ * 这里只圈出它所在的那一角，给「队列面板上也能打乱」那一章指过去。
+ */
+export const SIDE_PANEL_QUEUE_PAGE = {
+    shuffle: { right: 0, top: 0, width: 0.12, height: 0.12 },
+} satisfies Record<string, PonderRelativeRect>;
+
+/**
  * 电台页里那几块，坐标系是 body。
  *
  * 私人 FM 打开时，队列那一格整格换成它 —— 同一个位置、同一格标签，内容却从一份可以

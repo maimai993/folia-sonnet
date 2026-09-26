@@ -31,7 +31,7 @@ const region = (
     labelKey: string,
 ): PonderAnchorSource => ({ kind: 'relative', from: 'bar', rect, role: 'region', labelKey });
 
-const BAR_ANCHORS = {
+export const BAR_ANCHORS = {
     bar,
     play: region(G.play, 'ponder.anchors.playerBar.play'),
     title: region(G.title, 'ponder.anchors.playerBar.title'),

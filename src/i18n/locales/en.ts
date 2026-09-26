@@ -185,6 +185,8 @@ export default {
     "noPlayableSongs": "No playable songs in this list",
     "songUnavailableTag": "Unavailable",
     "queueShuffled": "Queue shuffled",
+    "loopShuffleHint": "Looking for shuffle?",
+    "loopShuffleHintAction": "Learn how",
     "queueCleared": "Queue cleared",
     "queueUpdated": "Added to queue",
     "queueBatchRemoved": "Removed {{count}} songs from the queue",
@@ -3057,6 +3059,7 @@ export default {
       "seen": "Already watched"
     },
     "summaries": {
+      "queue_shuffle": "Folia has no shuffle mode; it shuffles the queue instead. Here are the four ways to do it.",
       "audio_equalizer": "Ten bands and an effect chain \u2014 and one drag rewrites a custom slot.",
       "vis_playground": "Three invisible click regions sit on the preview.",
       "lyric_style": "Each style's own settings, hiding Monet's extras, pairing backgrounds, and the shared subtitle.",
@@ -3466,6 +3469,7 @@ export default {
         "autoSwitch": "Switch theme automatically"
       },
       "sidePanel": {
+        "queueShuffle": "Shuffle queue",
         "modeRow": "Mode viewfinder row",
         "modeName": "The name in the middle",
         "modeList": "Every mode",
@@ -3536,6 +3540,7 @@ export default {
       }
     },
     "targets": {
+      "queueShuffle": "Where is shuffle",
       "audioEqualizer": "Audio effects dialog",
       "visPlayground": "Lyric animation workbench",
       "lyricStyle": "Lyric styles",
@@ -3588,6 +3593,11 @@ export default {
       "settingsPage": "Options page"
     },
     "scenes": {
+      "queueShuffleNoMode": "No shuffle mode, just a queue shuffle",
+      "queueShuffleCommand": "Shuffle with a command",
+      "queueShuffleSlot": "Put it on the control bar",
+      "queueShufflePanel": "The button in the queue panel",
+      "queueShufflePinned": "Pin it under the command window",
       "visPlaygroundCommon": "The four pages, and what \u201cgeneral\u201d holds",
       "visPlaygroundVisuals": "Animation and background",
       "visPlaygroundSubtitle": "Subtitles",
@@ -3720,6 +3730,15 @@ export default {
       "panelSlideKeyboard": "Open it from the keyboard"
     },
     "captions": {
+      "queueShuffle": {
+        "noMode": "Folia has no traditional shuffle mode, and the loop button never switches to one. To listen in random order, shuffle the current queue.",
+        "once": "Shuffling is a single action: the current queue is reordered in place and plays in the new order. Shuffle again for a different order.",
+        "command": "The quickest way is a command: with the command window closed and no text field focused, press the colon key to open execute mode, then press r. You can also search “Shuffle queue” in the command window.",
+        "slot": "If you use it often, choose “Shuffle queue” under “Progress bar buttons” in Settings · General settings to get a shuffle button on the control bar.",
+        "panel": "In the right-side panel's queue tab, the rightmost button at the top also shuffles the queue.",
+        "pinSlot": "In Settings · General settings, put “Shuffle queue” in any slot under “Pinned commands”.",
+        "pinRow": "It then stays at the bottom of the command window, one click away whenever the window is open."
+      },
       "audioEqualizer": {
         "enable": "The dialog behind the fader icon at the right of the volume row. The switch top-left turns the whole chain on or off; with it off, everything below still holds its values but nothing is applied.",
         "presets": "Six built-in presets across the top. Each one carries both an EQ curve and a full effect chain, so picking one replaces both at once. They cannot be edited.",

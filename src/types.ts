@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { LineRenderHints } from './utils/lyrics/renderHints';
 import type { MediaId, PlaybackSourceRef, ProviderCatalogRef } from './types/onlineMusic';
 
@@ -1047,6 +1048,8 @@ export interface StatusMessage {
   nonce?: number;
   durationMs?: number;
   actionLabel?: string;
+  /** Icon drawn before actionLabel inside the action button. */
+  actionIcon?: LucideIcon;
   onAction?: () => void;
   cancelLabel?: string;
   onCancel?: () => void;
