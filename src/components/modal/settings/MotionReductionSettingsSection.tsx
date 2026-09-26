@@ -15,6 +15,7 @@ import {
 
 type MotionReductionSettingsSectionProps = {
     settingsCardClass: string;
+    settingsDividerClass: string;
     toggleOffBackgroundClass: string;
     theme?: Theme;
 };
@@ -31,6 +32,7 @@ const SURFACE_LABEL_KEYS: Record<MotionSurfaceId, { label: string; desc: string 
 
 const MotionReductionSettingsSection: React.FC<MotionReductionSettingsSectionProps> = ({
     settingsCardClass,
+    settingsDividerClass,
     toggleOffBackgroundClass,
     theme,
 }) => {
@@ -85,7 +87,7 @@ const MotionReductionSettingsSection: React.FC<MotionReductionSettingsSectionPro
                 {t('options.reduceMotionSectionDesc')}
             </div>
 
-            <div className="border-t border-black/5 pt-4 dark:border-white/5">
+            <div className={`border-t pt-4 ${settingsDividerClass}`}>
                 {renderToggleRow(
                     t('options.reduceMotionFollowSystem'),
                     t('options.reduceMotionFollowSystemDesc'),
@@ -94,7 +96,7 @@ const MotionReductionSettingsSection: React.FC<MotionReductionSettingsSectionPro
                 )}
             </div>
 
-            <div className="border-t border-black/5 pt-4 space-y-4 dark:border-white/5">
+            <div className={`border-t pt-4 space-y-4 ${settingsDividerClass}`}>
                 {MOTION_SURFACE_IDS.map(surface => (
                     <React.Fragment key={surface}>
                         {renderToggleRow(

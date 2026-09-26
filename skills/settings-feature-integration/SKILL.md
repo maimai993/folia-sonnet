@@ -79,8 +79,12 @@ subview 只是调用方；新增字段要同时改这两处，光改 subview 不
   缓存、同步服务配置、主题/视觉设置同步，以及 zip 导入导出动作。
 - 桌面端：`src/components/modal/settings/DesktopSettingsSubview.tsx`
   包含更新通道选择（release / limo / cielo）和 Acrylic 背景开启确认弹窗。
+- 图形：`src/components/modal/settings/GraphicsSettingsSubview.tsx`
+  静态模式、主页动态背景、原生模糊（开启前弹窗确认）、帧率限制、Linux 发光修复和降低动态效果。性能取舍和渲染问题的绕行开关放这里，不要放实验室。
+- 模组：`src/components/modal/settings/ModsSettingsSubview.tsx`（仅桌面端）
+  顶部是模组系统总开关，下方是模组列表；两者和命令面板的 `mods` surface 共用 `src/mods/manager/` 里的组件，改样式只改那一处。
 - 实验室：`src/components/modal/settings/LabSettingsModal.tsx`
-  包含固定顶部标题控件与返回按钮。
+  包含固定顶部标题控件与返回按钮。思索教程提示已移到界面设置（`GeneralSettingsSubview.tsx`）。
 - 固定命令：`src/components/modal/settings/PinnedCommandSettings.tsx`
 - visualizer 专属参数：优先放在模式相邻设置面板，再由 registry 的 `renderSettingsPanel` 挂回
 

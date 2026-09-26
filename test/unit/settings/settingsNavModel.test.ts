@@ -12,7 +12,7 @@ import id from '../../../src/i18n/locales/in';
 const echo = (key: string) => key;
 
 const ALL_SECTIONS: SettingsSectionId[] = [
-    'appearance', 'general', 'playback', 'interaction', 'integration', 'storage', 'desktop', 'lab', 'developer',
+    'appearance', 'general', 'playback', 'interaction', 'integration', 'storage', 'desktop', 'graphics', 'mods', 'lab', 'developer',
 ];
 
 const lookup = (bundle: Record<string, unknown>, key: string): unknown => (
@@ -32,7 +32,8 @@ describe('settingsNavModel', () => {
         const ids = flattenSettingsNavItems(groups).map(item => item.id);
 
         expect(ids).not.toContain('desktop');
-        expect(ids).toHaveLength(ALL_SECTIONS.length - 1);
+        expect(ids).not.toContain('mods');
+        expect(ids).toHaveLength(ALL_SECTIONS.length - 2);
         expect(groups.every(group => group.items.length > 0)).toBe(true);
     });
 

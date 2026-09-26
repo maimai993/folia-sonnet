@@ -28,6 +28,7 @@ import NowPlayingCardSettingsSection from './NowPlayingCardSettingsSection';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { settingsDividerClassFor } from './settingsCardClasses';
 import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
@@ -608,7 +609,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 <SettingsSectionHeading icon={Monitor} label={t('options.lyricsRenderer')} />
                 <div className="space-y-3">
                     {storePlayerChromeSettings.enablePlayerPageNativeBlur && (
-                        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
+                        <div className={`flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs ${isDaylight ? 'text-amber-600' : 'text-amber-400'}`}>
                             <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                             <span>{t('options.nativeBlurBackgroundNotice')}</span>
                         </div>
@@ -790,7 +791,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                             <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs">
                                 <KeyRound size={15} className="mt-0.5 shrink-0 text-amber-500" />
                                 <div className="space-y-1.5">
-                                    <p className="leading-relaxed text-amber-600 dark:text-amber-400">
+                                    <p className={`leading-relaxed ${isDaylight ? 'text-amber-600' : 'text-amber-400'}`}>
                                         {t('options.themeGenerationSourceAiUnavailable')}
                                     </p>
                                     <button
@@ -951,6 +952,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 <SettingsSectionHeading icon={Images} label={t('options.gridViewCardSettings')} />
                 <GridViewSettingsSection
                     settingsCardClass={settingsCardClass}
+                    settingsDividerClass={settingsDividerClassFor(isDaylight)}
                     toggleOffBackgroundClass={toggleOffBackgroundClass}
                     theme={theme}
                 />
@@ -961,6 +963,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 <SettingsSectionHeading icon={Film} label={t('options.videoLayerSettings')} />
                 <VideoLayerSettingsSection
                     settingsCardClass={settingsCardClass}
+                    settingsDividerClass={settingsDividerClassFor(isDaylight)}
                     toggleOffBackgroundClass={toggleOffBackgroundClass}
                     getAccentOptionStyle={getAccentOptionStyle}
                     theme={theme}

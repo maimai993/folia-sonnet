@@ -25,22 +25,35 @@ interface ModSurfaceRendererProps {
 }
 
 /*
- * The mod panel is dark chrome regardless of app theme, so its field token is
- * hardcoded here rather than derived from `theme`.
+ * The mod manager now sits in the settings page as well as the palette, so its field token follows
+ * the daylight theme instead of assuming dark chrome.
  */
-const MOD_PANEL_FIELD_TOKEN: FoliumParamFieldToken = {
-    label: 'text-[11px] opacity-60 truncate',
-    readonlyLabel: 'text-[10px] opacity-50',
-    input: 'w-full bg-black/25 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-white/30 disabled:opacity-50 min-w-0',
-    rangeClass: 'w-full h-1.5 appearance-none rounded-full bg-white/10 cursor-pointer disabled:opacity-40 min-w-0',
-    rangeStyle: { accentColor: 'var(--text-primary, #e8e8ec)' } as React.CSSProperties,
-    toggleOn: 'bg-white/20 text-white',
-    toggleOff: 'bg-black/20 text-white/50',
-    dotOn: 'bg-emerald-400',
-    dotOff: 'bg-white/20',
+const MOD_PANEL_FIELD_TOKENS: Record<'day' | 'night', FoliumParamFieldToken> = {
+    day: {
+        label: 'text-[11px] opacity-60 truncate',
+        readonlyLabel: 'text-[10px] opacity-50',
+        input: 'w-full bg-black/[0.04] border border-black/10 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-black/25 disabled:opacity-50 min-w-0',
+        rangeClass: 'w-full h-1.5 appearance-none rounded-full bg-black/10 cursor-pointer disabled:opacity-40 min-w-0',
+        rangeStyle: { accentColor: 'var(--text-primary, #27272a)' } as React.CSSProperties,
+        toggleOn: 'bg-black/15 text-zinc-900',
+        toggleOff: 'bg-black/[0.05] text-zinc-500',
+        dotOn: 'bg-emerald-500',
+        dotOff: 'bg-black/20',
+    },
+    night: {
+        label: 'text-[11px] opacity-60 truncate',
+        readonlyLabel: 'text-[10px] opacity-50',
+        input: 'w-full bg-black/25 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-white/30 disabled:opacity-50 min-w-0',
+        rangeClass: 'w-full h-1.5 appearance-none rounded-full bg-white/10 cursor-pointer disabled:opacity-40 min-w-0',
+        rangeStyle: { accentColor: 'var(--text-primary, #e8e8ec)' } as React.CSSProperties,
+        toggleOn: 'bg-white/20 text-white',
+        toggleOff: 'bg-black/20 text-white/50',
+        dotOn: 'bg-emerald-400',
+        dotOff: 'bg-white/20',
+    },
 };
 
-const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<StoredFoliumCommand> }> = ({ modId, entry }) => {
+const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<StoredFoliumCommand>; isDaylight: boolean }> = ({ modId, entry, isDaylight }) => {
     const { t, i18n } = useTranslation();
     const exportedProgress = useModsStore((state) => state.exportProgress);
     const cancelActiveExport = useModsStore((state) => state.cancelActiveExport);
@@ -64,7 +77,8 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col gap-2.5 bg-black/20 rounded-xl p-3"
+            className={`flex flex-col gap-2.5 rounded-xl p-3 ${isDaylight ? 'bg-black/[0.04]' : 'bg-black/20'}`}
+            style={{ color: 'var(--text-primary)' }}
         >
             <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
@@ -78,9 +92,9 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
                     onClick={() => void runFoliumCommand(entry, values)}
                     disabled={isRunning}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-colors ${
-                        isRunning
-                            ? 'bg-white/10 text-white/40 cursor-not-allowed'
-                            : 'bg-white/10 hover:bg-white/20 text-white/90'
+                        isDaylight
+                            ? isRunning ? 'bg-black/[0.06] text-zinc-400 cursor-not-allowed' : 'bg-black/[0.06] hover:bg-black/10 text-zinc-800'
+                            : isRunning ? 'bg-white/10 text-white/40 cursor-not-allowed' : 'bg-white/10 hover:bg-white/20 text-white/90'
                     }`}
                 >
                     {isRunning ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
@@ -94,7 +108,7 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
                         params={params}
                         values={values}
                         disabled={isRunning}
-                        token={MOD_PANEL_FIELD_TOKEN}
+                        token={MOD_PANEL_FIELD_TOKENS[isDaylight ? 'day' : 'night']}
                         onChange={updateParam}
                     />
                 </div>
@@ -102,9 +116,9 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
 
             {showProgress && exportedProgress?.phase === 'rendering' ? (
                 <div className="flex flex-col gap-1.5">
-                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div className={`h-1.5 rounded-full overflow-hidden ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`}>
                         <motion.div
-                            className="h-full rounded-full bg-white/70"
+                            className={`h-full rounded-full ${isDaylight ? 'bg-zinc-700' : 'bg-white/70'}`}
                             animate={{ width: `${exportedProgress.percent}%` }}
                             transition={{ duration: 0.2 }}
                         />
@@ -114,7 +128,7 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
                         <button
                             type="button"
                             onClick={cancelActiveExport}
-                            className="text-red-300 hover:text-red-200"
+                            className={isDaylight ? 'text-red-600 hover:text-red-700' : 'text-red-300 hover:text-red-200'}
                         >
                             {t('mods.cancelExport')}
                         </button>
@@ -123,7 +137,7 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
             ) : null}
 
             {runState?.lastError ? (
-                <div className="flex items-center gap-1.5 text-[11px] text-red-300">
+                <div className={`flex items-center gap-1.5 text-[11px] ${isDaylight ? 'text-red-600' : 'text-red-300'}`}>
                     <TriangleAlert size={13} />
                     {t(`mods.errors.${runState.lastError}`, runState.lastError)}
                 </div>
@@ -131,13 +145,13 @@ const ModCommandCard: React.FC<{ modId: string; entry: FoliumRegistryEntry<Store
             {runState?.lastResult && !runState.lastError ? (
                 <div className="flex flex-col gap-1">
                     {runState.lastResult.summary ? (
-                        <div className="flex items-start gap-1.5 text-[11px] text-emerald-300">
+                        <div className={`flex items-start gap-1.5 text-[11px] ${isDaylight ? 'text-emerald-700' : 'text-emerald-300'}`}>
                             <CircleCheck size={13} className="mt-px shrink-0" />
                             <span className="break-all">{runState.lastResult.summary}</span>
                         </div>
                     ) : null}
                     {runState.lastResult.warnings.map((warning) => (
-                        <div key={warning} className="flex items-start gap-1.5 text-[11px] text-amber-300">
+                        <div key={warning} className={`flex items-start gap-1.5 text-[11px] ${isDaylight ? 'text-amber-700' : 'text-amber-300'}`}>
                             <TriangleAlert size={13} className="mt-px shrink-0" />
                             <span>{t(`mods.warnings.${warning}`, warning)}</span>
                         </div>
@@ -165,9 +179,9 @@ export const ModSurfaceRenderer: React.FC<ModSurfaceRendererProps> = ({ modId, t
         <div className="flex flex-col gap-2.5">
             {issues.length > 0 ? (
                 <div className="flex flex-col gap-1 rounded-xl bg-red-500/10 p-2.5">
-                    <div className="text-[11px] font-medium text-red-300">{t('mods.clientIssues')}</div>
+                    <div className={`text-[11px] font-medium ${isDaylight ? 'text-red-700' : 'text-red-300'}`}>{t('mods.clientIssues')}</div>
                     {issues.map((issue) => (
-                        <div key={`${issue.at}-${issue.where}`} className="text-[11px] text-red-200/90 break-words">
+                        <div key={`${issue.at}-${issue.where}`} className={`text-[11px] break-words ${isDaylight ? 'text-red-700/90' : 'text-red-200/90'}`}>
                             <span className="opacity-60">{issue.where}: </span>{issue.message}
                         </div>
                     ))}
@@ -181,7 +195,7 @@ export const ModSurfaceRenderer: React.FC<ModSurfaceRendererProps> = ({ modId, t
                 controlCardBg={isDaylight ? 'rgba(0,0,0,0.03)' : 'rgba(0,0,0,0.2)'}
             />
             {own.map((entry) => (
-                <ModCommandCard key={entry.id} modId={modId} entry={entry} />
+                <ModCommandCard key={entry.id} modId={modId} entry={entry} isDaylight={isDaylight} />
             ))}
         </div>
     );

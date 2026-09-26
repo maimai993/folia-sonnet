@@ -1,5 +1,5 @@
 import type { CommandPaletteSurface } from './types';
-import { settingsCardClassFor, settingsToggleOffClassFor } from '../../modal/settings/settingsCardClasses';
+import { settingsCardClassFor, settingsDividerClassFor, settingsToggleOffClassFor } from '../../modal/settings/settingsCardClasses';
 
 // Declares the inline motion-reduction editor. The section reads useMotionSettingsStore itself,
 // so only the panel dressing has to be mapped across.
@@ -11,6 +11,7 @@ export const reduceMotionSurface: CommandPaletteSurface = {
     load: () => import('./ReduceMotionSurfaceView'),
     mapProps: ({ isDaylight, theme }) => ({
         settingsCardClass: settingsCardClassFor(isDaylight),
+        settingsDividerClass: settingsDividerClassFor(isDaylight),
         toggleOffBackgroundClass: settingsToggleOffClassFor(isDaylight),
         theme,
     }),

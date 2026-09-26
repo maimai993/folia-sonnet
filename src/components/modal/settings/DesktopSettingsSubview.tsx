@@ -7,11 +7,7 @@ import {
     Cpu,
     Download,
     ExternalLink,
-    EyeOff,
-    Globe,
-    KeyRound,
     Loader2,
-    Minimize2,
     Monitor,
     RefreshCw,
     ShieldAlert,
@@ -21,6 +17,8 @@ import type { Theme } from '../../../types';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import SettingsRow, { SettingsToggle } from './SettingsRow';
+import { settingsDividerClassFor } from './settingsCardClasses';
 
 // src/components/modal/settings/DesktopSettingsSubview.tsx
 // Desktop-only tray, update, and AI settings separated from the global settings modal.
@@ -43,11 +41,9 @@ type ElectronSettingsState = {
 };
 
 export type DesktopSettingsChrome = {
-    borderColor: string;
     isDaylight: boolean;
     isElectron: boolean;
     settingsCardClass: string;
-    settingsIconClass: string;
     successTextColor: string;
     theme?: Theme;
     toggleOffBackgroundClass: string;
@@ -100,11 +96,9 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
     preferences,
 }) => {
     const {
-        borderColor,
         isDaylight,
         isElectron,
         settingsCardClass,
-        settingsIconClass,
         successTextColor,
         theme,
         toggleOffBackgroundClass,
@@ -151,102 +145,104 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         return null;
     }
 
+    // Tailwind 的 dark: 跟随系统配色而不是 isDaylight，这一页的明暗样式全部按 isDaylight 取。
+    const rowDividerClass = settingsDividerClassFor(isDaylight);
+    const ghostButtonClass = isDaylight
+        ? 'border-black/10 bg-black/[0.025] hover:bg-black/[0.055]'
+        : 'border-white/10 bg-white/5 hover:bg-white/10';
+    const linkButtonHoverClass = isDaylight ? 'hover:bg-black/[0.06]' : 'hover:bg-white/10';
+    const fieldClass = `w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${
+        isDaylight
+            ? 'border-black/10 bg-black/[0.04] focus:border-black/25'
+            : 'border-white/10 bg-black/10 focus:border-white/25'
+    }`;
+    const noticeTextClass = isDaylight ? 'text-amber-600' : 'text-amber-400';
+
     const renderToggle = (checked: boolean, onChange: () => void, disabled?: boolean) => (
-        <button
-            type="button"
-            onClick={onChange}
+        <SettingsToggle
+            checked={checked}
+            onChange={onChange}
             disabled={disabled}
-            className={`w-12 h-6 rounded-full p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${checked ? '' : toggleOffBackgroundClass}`}
-            style={{ backgroundColor: checked ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-        >
-            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
-        </button>
+            offClass={toggleOffBackgroundClass}
+            onColor={theme?.secondaryColor}
+        />
     );
+
+    const renderRow = (title: React.ReactNode, description: React.ReactNode, control: React.ReactNode, isLast = false) => (
+        <SettingsRow title={title} description={description} control={control} dividerClass={rowDividerClass} isLast={isLast} />
+    );
+
+    const renderField = (label: React.ReactNode, input: React.ReactNode, hint?: React.ReactNode) => (
+        <label className="block space-y-1 text-left">
+            <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                {label}
+            </span>
+            {input}
+            {hint && (
+                <span className="block text-[10px] opacity-45 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {hint}
+                </span>
+            )}
+        </label>
+    );
+
+    const renderProviderOption = (provider: 'gemini' | 'openai', label: React.ReactNode) => {
+        const selected = provider === 'openai'
+            ? electronSettings.AI_PROVIDER === 'openai'
+            : electronSettings.AI_PROVIDER !== 'openai';
+        return (
+            <button
+                type="button"
+                onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: provider })}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                    selected
+                        ? (isDaylight ? 'bg-white shadow-sm' : 'bg-white/10 shadow-sm')
+                        : 'opacity-50 hover:opacity-100'
+                }`}
+                style={{ color: 'var(--text-primary)' }}
+            >
+                {label}
+            </button>
+        );
+    };
 
     return (
         <>
             <SettingsAnchor anchorId="desktopTrayBehavior" label={t('options.desktopTrayBehavior')} className="space-y-4">
                 <SettingsSectionHeading icon={Monitor} label={t('options.desktopTrayBehavior')} />
-                <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
-                    <div className={`p-4 bg-black/[0.04] dark:bg-white/[0.02] border-b ${borderColor}`}>
-                        <p className="text-xs opacity-60 leading-relaxed text-left" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.desktopTrayBehaviorDesc')}
-                        </p>
-                    </div>
+                <div className={`rounded-xl border ${settingsCardClass} overflow-hidden`}>
+                    {renderRow(
+                        t('options.minimizeToTray'),
+                        '点击最小化时，应用将隐藏至系统托盘。',
+                        renderToggle(minimizeToTray, () => onToggleMinimizeToTray(!minimizeToTray)),
+                    )}
+                    {renderRow(
+                        t('options.openPlayerOnLaunch'),
+                        '应用启动时自动开启全屏/大屏歌词播放界面，无需手动点击。',
+                        renderToggle(openPlayerOnLaunch, () => onToggleOpenPlayerOnLaunch(!openPlayerOnLaunch)),
+                    )}
+                    {renderRow(
+                        t('options.hideTaskbarIcon'),
+                        '即使主窗口处于打开状态，也不在系统任务栏显示应用，最大程度减少干扰。',
+                        renderToggle(hideTaskbarIcon, () => onToggleHideTaskbarIcon(!hideTaskbarIcon)),
+                    )}
+                    {renderRow(
+                        t('options.hideRemoteControlTaskbarIcon'),
+                        t('options.hideRemoteControlTaskbarIconDesc'),
+                        renderToggle(hideRemoteControlTaskbarIcon, () => onToggleHideRemoteControlTaskbarIcon(!hideRemoteControlTaskbarIcon)),
+                        true,
+                    )}
+                </div>
 
-                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <Minimize2 size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.minimizeToTray')}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    点击最小化时，应用将隐藏至系统托盘。
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(minimizeToTray, () => onToggleMinimizeToTray(!minimizeToTray))}
-                    </div>
-
-                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <AppWindow size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.openPlayerOnLaunch')}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    应用启动时自动开启全屏/大屏歌词播放界面，无需手动点击。
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(openPlayerOnLaunch, () => onToggleOpenPlayerOnLaunch(!openPlayerOnLaunch))}
-                    </div>
-
-                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <EyeOff size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.hideTaskbarIcon')}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    即使主窗口处于打开状态，也不在系统任务栏显示应用，最大程度减少干扰。
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(hideTaskbarIcon, () => onToggleHideTaskbarIcon(!hideTaskbarIcon))}
-                    </div>
-                    <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <EyeOff size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.hideRemoteControlTaskbarIcon')}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.hideRemoteControlTaskbarIconDesc')}
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(hideRemoteControlTaskbarIcon, () => onToggleHideRemoteControlTaskbarIcon(!hideRemoteControlTaskbarIcon))}
-                    </div>
+                <div className="px-1 text-[10px] opacity-45 leading-relaxed text-left" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.desktopTrayBehaviorDesc')}
                 </div>
 
                 {hideTaskbarIcon && (
                     <motion.div
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`flex items-start gap-3 p-3.5 rounded-2xl border text-xs leading-relaxed ${
+                        className={`flex items-start gap-3 p-3.5 rounded-xl border text-xs leading-relaxed ${
                             isDaylight
                                 ? 'bg-amber-500/10 border-amber-500/20 text-amber-800'
                                 : 'bg-amber-500/8 border-amber-500/15 text-amber-200'
@@ -264,40 +260,18 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
             {(isLinux || isWindows || isMac) && (
                 <SettingsAnchor anchorId="wallpaperMode" label={t('options.wallpaperMode') || 'Wallpaper Mode'} className="space-y-4">
                     <SettingsSectionHeading icon={AppWindow} label={t('options.wallpaperMode') || 'Wallpaper Mode'} />
-                    <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
-                        <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                            <div className="flex items-start gap-3 min-w-0">
-                                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                    <AppWindow size={16} />
-                                </div>
-                                <div className="space-y-0.5 text-left">
-                                    <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.wallpaperMode')}
-                                    </h4>
-                                    <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.wallpaperModeDesc') || 'Sink the app window to the bottom of the desktop and keep it always visible as a lyrics wallpaper.'}
-                                    </p>
-                                </div>
-                            </div>
-                            {renderToggle(wallpaperMode, () => onToggleWallpaperMode(!wallpaperMode))}
-                        </div>
-                        {isMac && (
-                            <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                        <AppWindow size={16} />
-                                    </div>
-                                    <div className="space-y-0.5 text-left">
-                                        <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.wallpaperMacAutohideDock')}
-                                        </h4>
-                                        <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.wallpaperMacAutohideDockDesc')}
-                                        </p>
-                                    </div>
-                                </div>
-                                {renderToggle(wallpaperMacAutohideDock, () => onToggleWallpaperMacAutohideDock(!wallpaperMacAutohideDock))}
-                            </div>
+                    <div className={`rounded-xl border ${settingsCardClass} overflow-hidden`}>
+                        {renderRow(
+                            t('options.wallpaperMode'),
+                            t('options.wallpaperModeDesc') || 'Sink the app window to the bottom of the desktop and keep it always visible as a lyrics wallpaper.',
+                            renderToggle(wallpaperMode, () => onToggleWallpaperMode(!wallpaperMode)),
+                            !isMac,
+                        )}
+                        {isMac && renderRow(
+                            t('options.wallpaperMacAutohideDock'),
+                            t('options.wallpaperMacAutohideDockDesc'),
+                            renderToggle(wallpaperMacAutohideDock, () => onToggleWallpaperMacAutohideDock(!wallpaperMacAutohideDock)),
+                            true,
                         )}
                     </div>
                     {isMac && (
@@ -309,54 +283,32 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
             )}
 
             <SettingsAnchor anchorId="updateCheck" label={t('options.updateCheck') || 'Update Check'} className="space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between gap-3 opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    <span className="flex items-center gap-2">
-                        <RefreshCw size={14} className="opacity-70" /> {t('options.updateCheck') || 'Update Check'}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={onCheckForUpdates}
-                        disabled={!electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.updateCheckSupported || updateStatus?.status === 'checking'}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium transition-all hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                        style={{ color: 'var(--text-primary)' }}
-                    >
-                        {updateBadgeIcon}
-                        <span>{updateBadgeLabel}</span>
-                    </button>
-                </h3>
+                <SettingsSectionHeading
+                    icon={RefreshCw}
+                    label={t('options.updateCheck') || 'Update Check'}
+                    action={(
+                        <button
+                            type="button"
+                            onClick={onCheckForUpdates}
+                            disabled={!electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.updateCheckSupported || updateStatus?.status === 'checking'}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${ghostButtonClass}`}
+                            style={{ color: 'var(--text-primary)' }}
+                        >
+                            {updateBadgeIcon}
+                            <span>{updateBadgeLabel}</span>
+                        </button>
+                    )}
+                />
 
-                <div className={`border rounded-2xl overflow-hidden ${borderColor} ${settingsCardClass}`}>
-                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <Globe size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.enableUpdateCheck') || 'Enable Update Check'}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.enableUpdateCheckDesc') || 'Check GitHub releases through the system proxy when the desktop app starts.'}
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(electronSettings.ENABLE_UPDATE_CHECK, onToggleUpdateCheck, !updateStatus?.updateCheckSupported)}
-                    </div>
-
-                    <div className={`flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors border-b ${borderColor}`}>
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <RefreshCw size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.updateChannel') || 'Update Channel'}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.updateChannelDesc') || 'Choose which release lane this desktop app follows.'}
-                                </p>
-                            </div>
-                        </div>
+                <div className={`rounded-xl border ${settingsCardClass} overflow-hidden`}>
+                    {renderRow(
+                        t('options.enableUpdateCheck') || 'Enable Update Check',
+                        t('options.enableUpdateCheckDesc') || 'Check GitHub releases through the system proxy when the desktop app starts.',
+                        renderToggle(electronSettings.ENABLE_UPDATE_CHECK, onToggleUpdateCheck, !updateStatus?.updateCheckSupported),
+                    )}
+                    {renderRow(
+                        t('options.updateChannel') || 'Update Channel',
+                        t('options.updateChannelDesc') || 'Choose which release lane this desktop app follows.',
                         <div className="w-44 shrink-0">
                             <CustomSelect
                                 value={electronSettings.UPDATE_CHANNEL}
@@ -373,33 +325,22 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                         { value: 'cielo', label: t('options.updateChannelCielo') },
                                     ]}
                             />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 gap-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
-                        <div className="flex items-start gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${settingsIconClass}`} style={{ color: 'var(--text-primary)' }}>
-                                <Download size={16} />
-                            </div>
-                            <div className="space-y-0.5 text-left">
-                                <h4 className="text-sm font-semibold leading-none" style={{ color: 'var(--text-primary)' }}>
-                                    {updateStatus?.autoUpdateSupported
-                                        ? t('options.enableAutoUpdate') || 'Enable Auto Update'
-                                        : t('options.autoUpdateUnavailable')}
-                                </h4>
-                                <p className="text-xs opacity-50 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                                    {updateStatus?.autoUpdateSupported
-                                        ? t('options.enableAutoUpdateDesc') || 'Automatically download updates after a new version is found.'
-                                        : t('options.manualUpdateOnlyDesc')}
-                                </p>
-                            </div>
-                        </div>
-                        {renderToggle(
+                        </div>,
+                    )}
+                    {renderRow(
+                        updateStatus?.autoUpdateSupported
+                            ? t('options.enableAutoUpdate') || 'Enable Auto Update'
+                            : t('options.autoUpdateUnavailable'),
+                        updateStatus?.autoUpdateSupported
+                            ? t('options.enableAutoUpdateDesc') || 'Automatically download updates after a new version is found.'
+                            : t('options.manualUpdateOnlyDesc'),
+                        renderToggle(
                             electronSettings.ENABLE_AUTO_UPDATE && Boolean(updateStatus?.autoUpdateSupported),
                             onToggleAutoUpdate,
                             !canEnableAutoUpdate,
-                        )}
-                    </div>
+                        ),
+                        true,
+                    )}
                 </div>
 
                 {updateStatus?.autoUpdateSupportReason === 'system' && (
@@ -421,30 +362,30 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                 </div>
 
                 {updateStatus?.availableVersion && (
-                    <div className={`p-4 rounded-2xl border ${borderColor} ${settingsCardClass} space-y-3`}>
+                    <div className={`p-4 rounded-xl border ${settingsCardClass} space-y-3`}>
                         <div className="flex items-center gap-2">
                             <AlertCircle size={16} className="text-amber-500 shrink-0" />
-                            <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                 {t('options.newVersionFound', { version: updateStatus.availableVersion })}
                             </span>
                         </div>
 
                         {/* 多平台 / 手动下载时的提示 */}
                         {updateStatus.platform === 'darwin' ? (
-                            <div className="text-xs text-left text-amber-400 font-medium opacity-90">
+                            <div className={`text-xs text-left font-medium opacity-90 ${noticeTextClass}`}>
                                 {t('options.macManualUpdateNotice')}
                             </div>
                         ) : updateStatus.platform === 'linux' ? (
-                            <div className="text-xs text-left text-amber-400 font-medium opacity-90">
+                            <div className={`text-xs text-left font-medium opacity-90 ${noticeTextClass}`}>
                                 {t('options.linuxManualUpdateNotice')}
                             </div>
                         ) : !updateStatus.autoUpdateSupported ? (
-                            <div className="text-xs text-left text-amber-400 font-medium opacity-90">
+                            <div className={`text-xs text-left font-medium opacity-90 ${noticeTextClass}`}>
                                 {t('options.manualUpdateNotice')}
                             </div>
                         ) : (
                             electronSettings.ENABLE_AUTO_UPDATE && updateStatus.status === 'downloading' && (
-                                <div className="text-xs text-left text-zinc-400">
+                                <div className="text-xs text-left opacity-60" style={{ color: 'var(--text-secondary)' }}>
                                     {t('options.autoUpdateGithubNotice')}
                                 </div>
                             )
@@ -457,11 +398,11 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     <span className="opacity-60 text-left" style={{ color: 'var(--text-secondary)' }}>
                                         {t('options.downloadUpdate')}
                                     </span>
-                                    <span className="font-semibold text-emerald-400">
+                                    <span className={`font-semibold ${isDaylight ? 'text-emerald-600' : 'text-emerald-400'}`}>
                                         {Math.round(updateStatus.downloadProgress.percent)}%
                                     </span>
                                 </div>
-                                <div className="w-full h-1.5 rounded-full overflow-hidden bg-white/10">
+                                <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDaylight ? 'bg-black/10' : 'bg-white/10'}`}>
                                     <div
                                         className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-[width] duration-300 ease-out"
                                         style={{ width: `${updateStatus.downloadProgress.percent}%` }}
@@ -481,7 +422,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     type="button"
                                     onClick={onDownloadUpdate}
                                     disabled={!canDownloadUpdate}
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/15 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${ghostButtonClass}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     <Download size={14} />
@@ -492,7 +433,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 <button
                                     type="button"
                                     onClick={onInstallUpdate}
-                                    className="inline-flex items-center gap-1.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    className={`inline-flex items-center gap-1.5 rounded-xl bg-green-500/20 hover:bg-green-500/30 px-3.5 py-2 text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] ${successTextColor}`}
                                 >
                                     <RefreshCw size={14} className="animate-spin-slow" />
                                     {t('options.restartToInstallUpdate') || 'Restart to Install'}
@@ -502,7 +443,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
 
                         {/* 备用下载入口收拢成可换行的小组，避免与更新主操作争抢视觉层级。 */}
                         <div
-                            className="flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] p-1.5"
+                            className={`flex max-w-full flex-wrap items-center gap-1 rounded-xl border p-1.5 ${isDaylight ? 'border-black/10 bg-black/[0.02]' : 'border-white/10 bg-white/[0.035]'}`}
                             aria-label={t('options.downloadSources')}
                         >
                             <span className="px-1.5 text-[11px] opacity-50" style={{ color: 'var(--text-secondary)' }}>
@@ -513,7 +454,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     <button
                                         type="button"
                                         onClick={onOpenChinaDownload}
-                                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:opacity-100 ${linkButtonHoverClass}`}
                                         style={{ color: 'var(--text-primary)' }}
                                     >
                                         <ExternalLink size={12} />
@@ -522,7 +463,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     <button
                                         type="button"
                                         onClick={onOpenBaiduDownload}
-                                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:opacity-100 ${linkButtonHoverClass}`}
                                         style={{ color: 'var(--text-primary)' }}
                                     >
                                         <ExternalLink size={12} />
@@ -533,7 +474,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             <button
                                 type="button"
                                 onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
-                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:opacity-100 ${linkButtonHoverClass}`}
                                 style={{ color: 'var(--text-primary)' }}
                             >
                                 <ExternalLink size={12} />
@@ -545,7 +486,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => window.electron?.openExternalUrl(AUR_PACKAGE_URL)}
-                                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:bg-white/10 hover:opacity-100"
+                                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium opacity-70 transition-colors hover:opacity-100 ${linkButtonHoverClass}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     <ExternalLink size={12} />
@@ -566,108 +507,63 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
             <SettingsAnchor anchorId="electronSettings" label={t('options.electronSettings') || 'Desktop App Settings'} className="space-y-4">
                 <SettingsSectionHeading icon={Cpu} label={t('options.electronSettings') || 'Desktop App Settings'} />
 
-                <div className={`border rounded-2xl p-5 ${borderColor} ${settingsCardClass} space-y-5`}>
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="space-y-0.5 text-left">
-                            <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <div className={`rounded-xl border ${settingsCardClass} overflow-hidden`}>
+                    <div className={`flex flex-wrap items-center justify-between gap-4 p-4 border-b ${rowDividerClass}`}>
+                        <div className="space-y-1 text-left min-w-0">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                                 {t('options.aiProvider') || 'AI Provider'}
-                            </label>
-                            <p className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                            </div>
+                            <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
                                 选择生成智能歌词主题效果的 AI 服务商。
-                            </p>
+                            </div>
                         </div>
 
-                        <div className="flex bg-black/15 dark:bg-white/5 rounded-xl border border-white/5 p-1 shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'gemini' })}
-                                className={`px-4.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                                    electronSettings.AI_PROVIDER !== 'openai'
-                                        ? (isDaylight ? 'bg-white text-zinc-900 shadow-sm' : 'bg-white/10 text-white shadow-sm')
-                                        : 'opacity-50 hover:opacity-100 text-zinc-400 hover:text-zinc-200'
-                                }`}
-                                style={{ color: electronSettings.AI_PROVIDER !== 'gemini' ? 'var(--text-primary)' : undefined }}
-                            >
-                                Google Gemini
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setElectronSettings({ ...electronSettings, AI_PROVIDER: 'openai' })}
-                                className={`px-4.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                                    electronSettings.AI_PROVIDER === 'openai'
-                                        ? (isDaylight ? 'bg-white text-zinc-900 shadow-sm' : 'bg-white/10 text-white shadow-sm')
-                                        : 'opacity-50 hover:opacity-100 text-zinc-400 hover:text-zinc-200'
-                                }`}
-                                style={{ color: electronSettings.AI_PROVIDER === 'openai' ? 'var(--text-primary)' : undefined }}
-                            >
-                                {t('options.otherCompatibleApi')}
-                            </button>
+                        <div className={`flex rounded-xl border p-1 shrink-0 ${isDaylight ? 'bg-black/[0.05] border-black/10' : 'bg-white/5 border-white/5'}`}>
+                            {renderProviderOption('gemini', 'Google Gemini')}
+                            {renderProviderOption('openai', t('options.otherCompatibleApi'))}
                         </div>
                     </div>
 
-                    <div className="border-t border-white/5 pt-4 space-y-4">
+                    <div className={`p-4 space-y-3 border-b ${rowDividerClass}`}>
                         {electronSettings.AI_PROVIDER !== 'openai' ? (
-                            <div className="space-y-2 text-left">
-                                <div className="flex items-center gap-1.5">
-                                    <KeyRound size={14} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.geminiApiKey') || 'Gemini API Key'}
-                                    </label>
-                                </div>
+                            renderField(
+                                t('options.geminiApiKey') || 'Gemini API Key',
                                 <input
                                     type="password"
                                     value={electronSettings.GEMINI_API_KEY || ''}
                                     onChange={(e) => setElectronSettings({ ...electronSettings, GEMINI_API_KEY: e.target.value })}
                                     placeholder="AI Theme Generation Key"
-                                    className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                    className={fieldClass}
                                     style={{ color: 'var(--text-primary)' }}
-                                />
-                            </div>
+                                />,
+                            )
                         ) : (
-                            <div className="space-y-4">
-                                <div className="space-y-2 text-left">
-                                    <div className="flex items-center gap-1.5">
-                                        <Globe size={14} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                        <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.openaiApiUrl') || 'OpenAI API URL'}
-                                        </label>
-                                    </div>
+                            <>
+                                {renderField(
+                                    t('options.openaiApiUrl') || 'OpenAI API URL',
                                     <input
                                         type="text"
                                         value={electronSettings.OPENAI_API_URL || ''}
                                         onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_URL: e.target.value })}
                                         placeholder="https://api.openai.com/v1 or https://api.deepseek.com"
-                                        className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                        className={fieldClass}
                                         style={{ color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-
-                                <div className="space-y-2 text-left">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <Cpu size={14} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                            <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.openaiApiModel') || 'OpenAI Model'}
-                                            </label>
-                                        </div>
-                                    </div>
+                                    />,
+                                )}
+                                {renderField(
+                                    t('options.openaiApiModel') || 'OpenAI Model',
                                     <input
                                         type="text"
                                         value={electronSettings.OPENAI_API_MODEL || ''}
                                         onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_MODEL: e.target.value })}
                                         placeholder="gpt-5.6-luna / gpt-4.1-mini / deepseek-v4-flash"
-                                        className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                        className={fieldClass}
                                         style={{ color: 'var(--text-primary)' }}
-                                    />
-                                    <p className="text-[10px] opacity-40 leading-relaxed px-1" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.openaiApiModelDesc') || 'Required for many OpenAI-compatible providers. DeepSeek models like deepseek-v4-flash must be filled explicitly if auto-detection does not apply.'}
-                                    </p>
-                                </div>
-
-                                <div className="space-y-2 text-left">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.openaiApiTemperature') || 'Temperature'}
-                                    </label>
+                                    />,
+                                    t('options.openaiApiModelDesc') || 'Required for many OpenAI-compatible providers. DeepSeek models like deepseek-v4-flash must be filled explicitly if auto-detection does not apply.',
+                                )}
+                                {renderField(
+                                    t('options.openaiApiTemperature') || 'Temperature',
                                     <input
                                         type="number"
                                         min="0"
@@ -676,48 +572,34 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                         value={electronSettings.OPENAI_API_TEMPERATURE}
                                         onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_TEMPERATURE: e.target.value })}
                                         placeholder="0.7"
-                                        className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                        className={fieldClass}
                                         style={{ color: 'var(--text-primary)' }}
-                                    />
-                                    <p className="text-[10px] opacity-40 leading-relaxed px-1" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.openaiApiTemperatureDesc') || 'Range: 0–2. Defaults to 0.7 when left blank.'}
-                                    </p>
-                                </div>
-
-                                <div className="space-y-2 text-left">
-                                    <div className="flex items-center gap-1.5">
-                                        <KeyRound size={14} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
-                                        <label className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                            {t('options.openaiApiKey') || 'OpenAI API Key'}
-                                        </label>
-                                    </div>
+                                    />,
+                                    t('options.openaiApiTemperatureDesc') || 'Range: 0–2. Defaults to 0.7 when left blank.',
+                                )}
+                                {renderField(
+                                    t('options.openaiApiKey') || 'OpenAI API Key',
                                     <input
                                         type="password"
                                         value={electronSettings.OPENAI_API_KEY || ''}
                                         onChange={(e) => setElectronSettings({ ...electronSettings, OPENAI_API_KEY: e.target.value })}
                                         placeholder="sk-..."
-                                        className="w-full px-3.5 py-2.5 bg-black/10 dark:bg-white/5 border border-white/10 rounded-xl text-sm focus:outline-none focus:border-zinc-500 dark:focus:border-white/30 focus:ring-2 focus:ring-zinc-500/10 transition-all leading-normal"
+                                        className={fieldClass}
                                         style={{ color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                            </div>
+                                    />,
+                                )}
+                            </>
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t border-white/5 gap-4">
-                        <div className="space-y-0.5 text-left">
-                            <label className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.useSystemProxyAI') || 'Use System Proxy for AI'}
-                            </label>
-                            <p className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.useSystemProxyAIDesc') || 'Route strictly AI requests through system proxy.'}
-                            </p>
-                        </div>
-                        {renderToggle(electronSettings.USE_SYSTEM_PROXY_FOR_AI, () => setElectronSettings({ ...electronSettings, USE_SYSTEM_PROXY_FOR_AI: !electronSettings.USE_SYSTEM_PROXY_FOR_AI }))}
-                    </div>
+                    {renderRow(
+                        t('options.useSystemProxyAI') || 'Use System Proxy for AI',
+                        t('options.useSystemProxyAIDesc') || 'Route strictly AI requests through system proxy.',
+                        renderToggle(electronSettings.USE_SYSTEM_PROXY_FOR_AI, () => setElectronSettings({ ...electronSettings, USE_SYSTEM_PROXY_FOR_AI: !electronSettings.USE_SYSTEM_PROXY_FOR_AI })),
+                    )}
 
-                    <div className="flex items-center justify-between pt-4 border-t border-white/5 gap-4">
-                        <span className="text-[10px] opacity-40 leading-relaxed max-w-[280px] text-left" style={{ color: 'var(--text-secondary)' }}>
+                    <div className="flex items-center justify-between gap-4 p-4">
+                        <span className="text-[10px] opacity-45 leading-relaxed max-w-[280px] text-left" style={{ color: 'var(--text-secondary)' }}>
                             {electronSettings.AI_PROVIDER !== 'openai'
                                 ? (t('options.geminiApiKeyDesc') || 'Netease API backend runs locally.')
                                 : t('options.openaiApiUrlDesc')}
@@ -726,7 +608,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                             type="button"
                             onClick={onSaveElectronSettings}
                             disabled={electronSaveStatus === 'saving'}
-                            className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 dark:bg-white/10 dark:hover:bg-white/15 active:scale-95 disabled:scale-100 disabled:opacity-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm min-w-[80px]"
+                            className={`shrink-0 px-6 py-2 border active:scale-95 disabled:scale-100 disabled:opacity-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-w-[80px] ${ghostButtonClass}`}
                             style={{ color: 'var(--text-primary)' }}
                         >
                             {electronSaveStatus === 'saved' ? (

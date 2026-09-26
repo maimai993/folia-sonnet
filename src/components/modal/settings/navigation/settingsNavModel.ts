@@ -1,4 +1,4 @@
-import { Command, Database, FlaskConical, Keyboard, Languages, PlayCircle, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
+import { Boxes, Command, Database, FlaskConical, Gauge, Keyboard, Languages, PlayCircle, Server, Sparkles, Terminal, type LucideIcon } from 'lucide-react';
 import { SETTINGS_ANCHOR_DEFINITIONS, type SettingsAnchorId } from './settingsAnchorModel';
 // src/components/modal/settings/navigation/settingsNavModel.ts
 // Single source of truth for the options-tab sections: sidebar order, grouping, titles and descriptions.
@@ -11,6 +11,8 @@ export type SettingsSectionId =
     | 'integration'
     | 'storage'
     | 'desktop'
+    | 'graphics'
+    | 'mods'
     | 'lab'
     | 'developer';
 
@@ -86,6 +88,9 @@ export const SETTINGS_NAV_GROUP_SPECS: GroupSpec[] = [
         labelKey: 'options.settingsGroupSystem',
         sections: [
             { id: 'desktop', icon: Command, labelKey: 'options.desktopSettings', descriptionKey: 'options.desktopSettingsPanelDesc', electronOnly: true },
+            { id: 'graphics', icon: Gauge, labelKey: 'options.graphicsSettings', descriptionKey: 'options.graphicsSettingsDesc' },
+            // The loader only exists in the desktop main process; on web there is nothing to switch on.
+            { id: 'mods', icon: Boxes, labelKey: 'options.modSettings', descriptionKey: 'options.modSettingsDesc', electronOnly: true },
             { id: 'lab', icon: FlaskConical, labelKey: 'options.labSettings', descriptionKey: 'options.labSettingsDesc' },
             { id: 'developer', icon: Terminal, labelKey: 'options.developerSettings', descriptionKey: 'options.developerSettingsDesc' },
         ],

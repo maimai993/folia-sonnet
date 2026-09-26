@@ -59,7 +59,7 @@ const ponderOverview: PonderSceneScript = {
     titleKey: 'ponder.scenes.helpPageOverview',
     action: {
         kind: 'openSettings',
-        anchorId: 'labPonder',
+        anchorId: 'ponderHints',
         labelKey: 'ponder.actions.openPonderHints',
     },
     anchors: ONBOARDING_ILLUSTRATION,

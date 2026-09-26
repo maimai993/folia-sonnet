@@ -20,6 +20,8 @@ import GeneralSettingsSubview from './settings/GeneralSettingsSubview';
 import IntegrationSettingsSubview from './settings/IntegrationSettingsSubview';
 import type { PlayerCapConnectionStatus } from '../../types/playerCap';
 import LabSettingsModal from './settings/LabSettingsModal';
+import GraphicsSettingsSubview from './settings/GraphicsSettingsSubview';
+import ModsSettingsSubview from './settings/ModsSettingsSubview';
 import DeveloperSettingsSubview from './settings/DeveloperSettingsSubview';
 import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
 import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
@@ -426,6 +428,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             initialSubview === 'integration' ||
             initialSubview === 'storage' ||
             initialSubview === 'desktop' ||
+            initialSubview === 'graphics' ||
+            initialSubview === 'mods' ||
             initialSubview === 'lab' ||
             initialSubview === 'globalLyricOffset' ||
             initialSubview === 'lyricFilter'
@@ -1797,11 +1801,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         {activeSettingsSection === 'desktop' && isElectron && (
                                             <DesktopSettingsSubview
                                                 chrome={{
-                                                    borderColor,
                                                     isDaylight,
                                                     isElectron,
                                                     settingsCardClass,
-                                                    settingsIconClass,
                                                     successTextColor,
                                                     theme,
                                                     toggleOffBackgroundClass,
@@ -1840,6 +1842,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onToggleWallpaperMacAutohideDock,
                                                 }}
                                             />
+                                        )}
+                                        {activeSettingsSection === 'graphics' && (
+                                            <GraphicsSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                toggleOffBackgroundClass={toggleOffBackgroundClass}
+                                                utilityGhostButtonClass={utilityGhostButtonClass}
+                                                rangeInputClass={rangeInputClass}
+                                                theme={theme}
+                                            />
+                                        )}
+                                        {activeSettingsSection === 'mods' && isElectron && (
+                                            <ModsSettingsSubview isDaylight={isDaylight} theme={theme} />
                                         )}
                                         {activeSettingsSection === 'lab' && (
                                             <LabSettingsModal

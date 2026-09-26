@@ -99,6 +99,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-wallpaper-mode",
   "desktop-toggle-wallpaper-mode",
   "desktop-toggle-wallpaper-dock-autohide",
+  "settings-graphics",
+  "settings-mods",
   "settings-lab",
   "settings-ponder-hints",
   "ponder-hints-always",

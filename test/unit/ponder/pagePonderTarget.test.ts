@@ -66,13 +66,13 @@ describe('resolvePagePonderTarget', () => {
         ponder.openPonder('ponder-basics');
         expect(usePonderStore.getState().isNavigationOpen).toBe(true);
 
-        openSettingsFromPonder('labPonder');
+        openSettingsFromPonder('ponderHints');
 
         expect(usePonderStore.getState().session, '教程层没收掉').toBeNull();
         expect(usePonderStore.getState().isNavigationOpen, '导航页没收掉，设置会被它盖住').toBe(false);
         const settings = useSettingsModalStore.getState().settingsModalState;
         expect(settings.isOpen).toBe(true);
         // 而且要落在那一章讲的那个锚点上，不是设置面板的首页。
-        expect(settings.initialAnchor?.id).toBe('labPonder');
+        expect(settings.initialAnchor?.id).toBe('ponderHints');
     });
 });

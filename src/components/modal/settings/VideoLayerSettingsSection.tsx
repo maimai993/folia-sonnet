@@ -18,6 +18,7 @@ import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 
 type VideoLayerSettingsSectionProps = {
     settingsCardClass: string;
+    settingsDividerClass: string;
     toggleOffBackgroundClass: string;
     getAccentOptionStyle: (active: boolean) => React.CSSProperties;
     theme?: Theme;
@@ -30,6 +31,7 @@ const FIT_OPTIONS: Array<[VideoLayerFit, string]> = [
 
 const VideoLayerSettingsSection: React.FC<VideoLayerSettingsSectionProps> = ({
     settingsCardClass,
+    settingsDividerClass,
     toggleOffBackgroundClass,
     getAccentOptionStyle,
     theme,
@@ -97,7 +99,7 @@ const VideoLayerSettingsSection: React.FC<VideoLayerSettingsSectionProps> = ({
                 </button>
             </div>
 
-            <div className="border-t border-black/5 pt-4 space-y-2 dark:border-white/5">
+            <div className={`border-t pt-4 space-y-2 ${settingsDividerClass}`}>
                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                     {t('options.videoLayerLocalFile')}
                 </div>
@@ -165,7 +167,7 @@ const VideoLayerSettingsSection: React.FC<VideoLayerSettingsSectionProps> = ({
                 />
             </div>
 
-            <div className="border-t border-black/5 pt-4 space-y-4 dark:border-white/5">
+            <div className={`border-t pt-4 space-y-4 ${settingsDividerClass}`}>
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-4">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>

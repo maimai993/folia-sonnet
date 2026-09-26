@@ -10,9 +10,9 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 // src/components/modal/settings/PonderHintSettingsSection.tsx
 // 思索教程提示的三档可见性。
 //
-// 独立成文件而不是塞进 LabSettingsModal：那个文件已经 400 多行，而 file-modularization 说
-// 一次往既有文件加 80 行以上就该建模块。渲染在实验室面板里，锚点照样被 settingsAnchorCoverage
-// 扫到（它只看 settings/ 这一层的 *.tsx）。
+// 独立成文件：file-modularization 说一次往既有文件加 80 行以上就该建模块。渲染在界面设置页
+// （GeneralSettingsSubview）的末尾，锚点照样被 settingsAnchorCoverage 扫到（它只看 settings/
+// 这一层的 *.tsx）。
 //
 // renderToggle 是两态的，套不上三档，所以这里自己画一组分段按钮。
 //
@@ -47,8 +47,8 @@ const PonderHintSettingsSection: React.FC<PonderHintSettingsSectionProps> = ({
     const idleClass = isDaylight ? 'hover:bg-black/[0.06]' : 'hover:bg-white/[0.08]';
 
     return (
-        <SettingsAnchor anchorId="labPonder" label={t('options.ponderHints')} className="space-y-4">
-            <SettingsSectionHeading icon={GraduationCap} label={t('options.ponderHints')} divider />
+        <SettingsAnchor anchorId="ponderHints" label={t('options.ponderHints')} className="space-y-4">
+            <SettingsSectionHeading icon={GraduationCap} label={t('options.ponderHints')} />
 
             <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                 <div className="space-y-1">

@@ -13,3 +13,9 @@ export const settingsCardClassFor = (isDaylight: boolean) => (
 export const settingsToggleOffClassFor = (isDaylight: boolean) => (
     isDaylight ? 'bg-zinc-300/90' : 'bg-white/10'
 );
+
+// Hairline between rows inside a settings card. Chosen by isDaylight rather than a `dark:` variant:
+// Tailwind's dark variant follows the OS color scheme, which says nothing about the daylight theme.
+export const settingsDividerClassFor = (isDaylight: boolean) => (
+    isDaylight ? 'border-black/5' : 'border-white/5'
+);

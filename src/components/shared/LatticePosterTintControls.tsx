@@ -79,7 +79,7 @@ const LatticePosterTintControls: React.FC<LatticePosterTintControlsProps> = ({
                 {renderToggle(enabled, t('options.latticePosterTint'), onEnabledChange)}
             </div>
 
-            {enabled && <div className="space-y-4 border-t border-black/5 pt-4 dark:border-white/5">
+            {enabled && <div className={`space-y-4 border-t pt-4 ${isDaylight ? 'border-black/5' : 'border-white/5'}`}>
                 <div className="flex items-center justify-between gap-4">
                     <div className="space-y-1 min-w-0">
                         <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>

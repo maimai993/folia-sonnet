@@ -17,12 +17,14 @@ import { useGridViewSettingsStore } from '../../../stores/useGridViewSettingsSto
 
 type GridViewSettingsSectionProps = {
     settingsCardClass: string;
+    settingsDividerClass: string;
     toggleOffBackgroundClass: string;
     theme?: Theme;
 };
 
 const GridViewSettingsSection: React.FC<GridViewSettingsSectionProps> = ({
     settingsCardClass,
+    settingsDividerClass,
     toggleOffBackgroundClass,
     theme,
 }) => {
@@ -109,7 +111,7 @@ const GridViewSettingsSection: React.FC<GridViewSettingsSectionProps> = ({
             {/* Squaring only means anything once the artwork owns the whole card; under the
                 polaroid frame the extra height is the printed label. */}
             {fullBleedCover && (
-                <div className="border-t border-black/5 pt-4 dark:border-white/5">
+                <div className={`border-t pt-4 ${settingsDividerClass}`}>
                     {renderToggleRow(
                         t('options.gridViewSquareCard'),
                         t('options.gridViewSquareCardDesc'),
@@ -119,7 +121,7 @@ const GridViewSettingsSection: React.FC<GridViewSettingsSectionProps> = ({
                 </div>
             )}
 
-            <div className="border-t border-black/5 pt-4 space-y-4 dark:border-white/5">
+            <div className={`border-t pt-4 space-y-4 ${settingsDividerClass}`}>
                 {renderSlider(
                     t('options.gridViewMinCardScale'),
                     t('options.gridViewMinCardScaleDesc'),

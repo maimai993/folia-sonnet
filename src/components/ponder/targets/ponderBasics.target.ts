@@ -97,7 +97,7 @@ const hintSettings: PonderSceneScript = {
     titleKey: 'ponder.scenes.helpPageHintSettings',
     action: {
         kind: 'openSettings',
-        anchorId: 'labPonder',
+        anchorId: 'ponderHints',
         labelKey: 'ponder.actions.openPonderHints',
     },
     anchors: onboardingSurface('ponder.anchors.pages.settings', 'settings-page'),

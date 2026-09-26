@@ -303,13 +303,15 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
+    createSettingsCommand('settings-graphics', 'Graphics settings', 'Open static mode, frame rate cap, Linux glow fix and reduced motion', ['graphics', 'performance', 'frame rate', 'fps', 'rendering', '图形', '图形设置', '性能', '帧率', '渲染'], 'options', 'graphics'),
+    createSettingsCommand('settings-mods', 'Mod settings', 'Open the mod system switch and the installed mods', ['mod manager', 'mod system', 'plugins', '模组设置', '模组系统', '插件'], 'options', 'mods', { platform: ['electron'] }),
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),
     createSettingsAnchorCommand(
         'settings-ponder-hints',
         'Ponder tutorial hints',
         'Choose when the hold-G tutorial hint appears',
         ['ponder', 'tutorial hint', '思索', '教程提示'],
-        'labPonder',
+        'ponderHints',
     ),
     // 三档设置照 playback-entry-view-* 的先例：一值一条命令，isAvailable 把当前值那条藏掉。
     // createToggleCommand 只能表达两态，套不上。
