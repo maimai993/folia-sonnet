@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, Loader2, RotateCcw, ServerCog, X } from 'lucide-react';
 import { motion } from 'framer-motion';
+import QrLoginDiagnosticsPrompt, { type QrLoginDiagnosticsPromptProps } from './QrLoginDiagnosticsPrompt';
 
 // src/components/app/home/OnlineProviderLoginModal.tsx
 
@@ -36,6 +37,8 @@ type OnlineProviderLoginModalProps = {
     closeLabel: string;
     loginMethods?: LoginMethodsProps;
     backendFailure?: BackendFailureProps;
+    // 只在扫码登录失败时传入，出现在重试按钮下方。
+    diagnostics?: QrLoginDiagnosticsPromptProps;
     onRetry: () => void;
     onClose: () => void;
 };
@@ -50,6 +53,7 @@ const OnlineProviderLoginModal = ({
     closeLabel,
     loginMethods,
     backendFailure,
+    diagnostics,
     onRetry,
     onClose,
 }: OnlineProviderLoginModalProps) => {
@@ -170,6 +174,7 @@ const OnlineProviderLoginModal = ({
                         {retryLabel}
                     </button>
                 )}
+                {diagnostics && !backendFailure && <QrLoginDiagnosticsPrompt {...diagnostics} />}
                 <p className="text-[10px] opacity-30 mt-6" style={{ color: 'var(--text-secondary)' }}>{note}</p>
             </motion.div>
         </motion.div>

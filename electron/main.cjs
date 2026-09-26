@@ -3958,11 +3958,19 @@ async function clearCoverCacheDirectory() {
 }
 
 const { withoutImplicitClientIp } = require('./neteaseApiStartup.cjs');
+const { createNeteaseLoginDiagnostics } = require('./neteaseLoginDiagnostics.cjs');
+const neteaseLoginDiagnostics = createNeteaseLoginDiagnostics();
+// util/request 在首次 require 时读一次匿名 token 并缓存到进程结束，之后启动流程写回的新 token
+// 要到下次启动才生效。记下这一刻文件是否为空，诊断时才知道登录请求有没有匿名凭据兜底。
+neteaseLoginDiagnostics.noteStartup({
+  anonymousTokenAtLoad: fs.readFileSync(tokenPath, 'utf-8').trim() ? 'present' : 'empty',
+});
 // 必须赶在 main / server 首次 require util/request 之前替换缓存里的导出，它们拿到的才是包过的版本。
 // 先 require 再取缓存项：赋值左侧会先求值，写成一行时缓存项还不存在。
+// 诊断记录包在最里层，看到的是来源 IP 策略处理过、真正要发出去的 options。
 const ncmRequestPath = require.resolve('@neteasecloudmusicapienhanced/api/util/request');
 const ncmRequest = require(ncmRequestPath);
-require.cache[ncmRequestPath].exports = withoutImplicitClientIp(ncmRequest);
+require.cache[ncmRequestPath].exports = withoutImplicitClientIp(neteaseLoginDiagnostics.wrapRequest(ncmRequest));
 const { register_anonimous } = require('@neteasecloudmusicapienhanced/api/main');
 const { getXeapiPublicKey } = require('@neteasecloudmusicapienhanced/api/util/xeapiKey');
 const {
@@ -4061,10 +4069,16 @@ async function initializeNcmApiRuntime() {
     `[Netease API] xeapi public key ready (source=${refreshed ? 'network' : 'cache'}, version=${nextPublicKey?.version ?? 'unknown'})`,
   );
 
-  await refreshAnonymousToken({
+  const anonymousTokenRefreshed = await refreshAnonymousToken({
     registerAnonymous: register_anonimous,
     cookieToJson,
     persistToken: (token) => fs.writeFileSync(tokenPath, token, 'utf-8'),
+  });
+  neteaseLoginDiagnostics.noteStartup({
+    runtimeInitializedAt: Date.now(),
+    xeapiKeySource: refreshed ? 'network' : 'cache',
+    xeapiKeyVersion: nextPublicKey?.version ?? 'unknown',
+    anonymousTokenRefreshed,
   });
 }
 
@@ -4077,6 +4091,7 @@ async function startApi() {
     // 不再随 localhost 解析到 ::1 还是 127.0.0.1 而走不同的来源 IP 分支（见 withoutImplicitClientIp）。
     await serveNcmApi({ port: freePort, host: '127.0.0.1' });
     assignedPort = freePort;
+    neteaseLoginDiagnostics.noteStartup({ listenHost: '127.0.0.1', listenPort: freePort });
     updateNeteaseApiStatus({ status: 'running', port: assignedPort, error: null });
     console.log('Netease API started on port', assignedPort);
   } catch (e) {
@@ -5936,6 +5951,23 @@ ipcMain.handle('restart-netease-api', () => startNeteaseApi());
 ipcMain.handle('get-netease-api-status', () => {
   return neteaseApiStatus;
 });
+
+// 扫码登录失败后，渲染进程用它生成可以直接贴进 issue 的诊断信息；内容不含 cookie、token 和 IP。
+ipcMain.handle('get-netease-login-diagnostics', () => ({
+  app: {
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    platform: process.platform,
+    arch: process.arch,
+    osRelease: os.release(),
+  },
+  apiStatus: {
+    status: neteaseApiStatus.status,
+    port: neteaseApiStatus.port,
+    error: neteaseApiStatus.error,
+  },
+  ...neteaseLoginDiagnostics.snapshot(),
+}));
 
 // Retrieve dynamic port of the embedded QQ API server; null until it is running.
 ipcMain.handle('get-qq-port', () => qqApiStatus.port);

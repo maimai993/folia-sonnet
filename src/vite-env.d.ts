@@ -50,6 +50,44 @@ declare global {
     updatedAt: number;
   }
 
+  // 主进程记录的网易登录诊断（electron/neteaseLoginDiagnostics.cjs），只含可公开贴出的字段。
+  interface ElectronNeteaseLoginRequestRecord {
+    at: number;
+    uri: string;
+    crypto: string;
+    ipHeader: 'none' | 'random-cn' | 'client' | 'real-ip';
+    deviceIdTail: string;
+    hasMusicU: boolean;
+    hasMusicA: boolean;
+    durationMs: number | null;
+    outcome: {
+      settled: 'pending' | 'resolved' | 'rejected';
+      status: number | null;
+      code: number | string | null;
+      message: string;
+    };
+  }
+
+  interface ElectronNeteaseLoginDiagnostics {
+    app: { version: string; electron: string; platform: string; arch: string; osRelease: string };
+    apiStatus: { status: ElectronNeteaseApiStatus['status']; port: number | null; error: string | null };
+    capturedAt: number;
+    startup: {
+      anonymousTokenAtLoad?: 'present' | 'empty';
+      runtimeInitializedAt?: number;
+      xeapiKeySource?: 'network' | 'cache';
+      xeapiKeyVersion?: string;
+      anonymousTokenRefreshed?: boolean;
+      listenHost?: string;
+      listenPort?: number;
+    };
+    network: {
+      interfaces: Array<{ name: string; ipv4: boolean; globalIpv6: boolean }>;
+      globalIpv6Count: number;
+    };
+    requests: ElectronNeteaseLoginRequestRecord[];
+  }
+
   // `unavailable` means the packaged build shipped without the bundled qq-music-api.
   interface ElectronQqApiStatus {
     status: 'starting' | 'running' | 'error' | 'unavailable';
@@ -716,6 +754,7 @@ declare global {
       ) => Promise<ElectronLyricProxyResponse>;
       getNeteasePort: () => Promise<number>;
       getNeteaseApiStatus: () => Promise<ElectronNeteaseApiStatus>;
+      getNeteaseLoginDiagnostics?: () => Promise<ElectronNeteaseLoginDiagnostics>;
       restartNeteaseApi: () => Promise<ElectronNeteaseApiStatus>;
       onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       getKugouApiStatus: () => Promise<ElectronKugouApiStatus>;

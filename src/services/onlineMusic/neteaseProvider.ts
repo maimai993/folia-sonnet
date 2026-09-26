@@ -17,6 +17,7 @@ import { toFiniteNumber } from '../../utils/replayGain';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
 import { isSongMarkedUnavailable, neteaseApi } from '../netease';
 import { writeProviderSessionValue } from './providerStorage';
+import { collectNeteaseLoginDiagnostics } from './neteaseLoginDiagnostics';
 
 // src/services/onlineMusic/neteaseProvider.ts
 
@@ -381,6 +382,7 @@ export const neteaseProvider: OnlineMusicProvider = {
             // 带上原始状态码：只剩 state 的话，风控（8821 等）和后端吞错后的 404 在日志里无从区分。
             return { state: 'error', message: `code ${response?.code ?? 'none'}: ${response?.message || response?.msg || 'no message'}` };
         },
+        getQrLoginDiagnostics: collectNeteaseLoginDiagnostics,
     },
     library: {
         async getUserPlaylists(userId, limit, offset) {

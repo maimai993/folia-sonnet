@@ -180,6 +180,14 @@ export type QrLoginState =
     | { state: 'expired' }
     | { state: 'error'; message?: string };
 
+// 扫码登录失败的几种形态，决定登录弹窗要不要给出「复制诊断信息」入口。
+// 没扫码就过期属于正常情况，不算失败；扫过码却过期，多半是手机端确认被拒。
+export type QrLoginFailureKind =
+    | 'start-error'
+    | 'check-error'
+    | 'expired-after-scan'
+    | 'account-refresh-failed';
+
 export type ProviderErrorCode =
     | 'auth-required'
     | 'unsupported'
@@ -263,6 +271,9 @@ export interface OnlineAuthProvider {
     // 二维码的有效期。声明了它，UI 才会自己计时并在到点时停止轮询、给出重试；
     // 不声明就沿用原本的做法——只认后端报出的过期状态。
     getQrTtlMs?(): number;
+    // 扫码登录失败后附进诊断报告的 provider 专属信息，每项一行、已格式化好。
+    // 只能返回可以公开贴出来的内容：不含 cookie、token、IP 或账号信息。
+    getQrLoginDiagnostics?(): Promise<string[]>;
 }
 
 export interface OnlineLibraryProvider {

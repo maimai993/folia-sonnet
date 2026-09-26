@@ -231,6 +231,15 @@ export const omni = {
         await requireOnlineMusicProvider(providerId).auth?.cancelQr?.(key);
     },
 
+    // 诊断是失败之后的补救手段，自己不能再失败：provider 没实现就回空，抛错就把错误写进报告。
+    async getQrLoginDiagnostics(providerId: OmniProviderId): Promise<string[]> {
+        try {
+            return await requireOnlineMusicProvider(providerId).auth?.getQrLoginDiagnostics?.() ?? [];
+        } catch (error) {
+            return [`provider diagnostics unavailable: ${error instanceof Error ? error.message : String(error)}`];
+        }
+    },
+
     // 只有明确声明了二维码寿命的 provider 才由前端计时；其余照旧只认后端报出的过期状态。
     getQrTtlMs(providerId: OmniProviderId): number | null {
         const ttlMs = requireOnlineMusicProvider(providerId).auth?.getQrTtlMs?.();
