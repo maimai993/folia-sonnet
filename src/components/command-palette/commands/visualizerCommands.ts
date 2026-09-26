@@ -67,7 +67,7 @@ export const visualizerCommands: CommandPaletteCommand[] = [
         'visualizer-toggle-glow-blur-quantize',
         'visualizer',
         'Fix lyric animation freeze on Linux',
-        'Fix lyric animations occasionally freezing after long playback on Linux',
+        'Change how some lyric animations draw their glow, fixing occasional freezes after long playback on Linux',
         ['lyric freeze', 'freeze fix', 'linux', 'glow', 'fd leak', 'stepped glow', '歌词卡死', '动画卡死', '画面定格', '发光半径分档', '发光', 'faguangbanjing', 'fgbj'],
         context => context.visualizer.toggleGlowBlurQuantize(),
     ),

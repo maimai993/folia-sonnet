@@ -32,6 +32,16 @@ type LabSettingsModalProps = {
     embedded?: boolean;
 };
 
+/** Docs page behind the "Fix lyric animation freeze on Linux" switch. */
+const CHROMIUM_FD_EXHAUSTION_DOCS_URL = 'https://folia-site.cielaniska.top/guide/chromium-fd-exhaustion';
+
+/** On desktop a plain link would open inside the app window; hand it to the system browser instead. */
+const openDocsLinkExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!window.electron?.openExternalUrl) return;
+    event.preventDefault();
+    void window.electron.openExternalUrl(event.currentTarget.href);
+};
+
 const shellTransition = { duration: 0.24, ease: 'easeOut' as const };
 const panelMotion = {
     initial: { opacity: 0, scale: 0.98, y: 18 },
@@ -285,7 +295,16 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                             {t('options.glowBlurQuantize')}
                                         </div>
                                         <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.glowBlurQuantizeDesc')}
+                                            {t('options.glowBlurQuantizeDesc')}{' '}
+                                            <a
+                                                href={CHROMIUM_FD_EXHAUSTION_DOCS_URL}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={openDocsLinkExternally}
+                                                className="underline underline-offset-2 hover:opacity-80"
+                                            >
+                                                {t('options.glowBlurQuantizeDocs')}
+                                            </a>
                                         </div>
                                     </div>
                                     {renderToggle(glowBlurQuantize, () => onToggleGlowBlurQuantize(!glowBlurQuantize))}

@@ -62,6 +62,11 @@ Chromium（GPU 光栅化）按 strike 缓存字形，strike 的 key 包含字体
 
 默认只在 Linux 开启：drop-shadow 的外观与原来非常接近但不完全相同，而其它平台上这个泄漏的代价很小。
 
+不改变任何视觉效果的另一条路是提高上限：systemd 的 `DefaultLimitNOFILE`（用户会话的 FD 软上限）和
+`vm.max_map_count`（每个泄漏的 fd 还带一条内存映射，很多发行版默认 65530，约 30 小时耗尽）。泄漏仍在继续，
+只是远到用不完。面向用户的步骤在文档站的「Chromium FD 耗尽问题」（`guide/chromium-fd-exhaustion`），
+实验室开关的说明链接到那里。
+
 ## 4. 实测（renderer fd/s，monet 背景，120 fps，每项 180 秒）
 
 | 模式 | 修复前 / 开关关闭 | 开关开启 |
