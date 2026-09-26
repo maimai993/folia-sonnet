@@ -771,8 +771,8 @@ export default {
   "mods": {
     "title": "Mod Manager",
     "experimental": "Experimental",
-    "experimentalHint": "The mod system is still experimental: the API may change in future versions and installed mods may need updating.",
-    "securityWarning": "Mods marked Verified were reviewed and signed by Folium; all others are third-party and unreviewed. Verified or not, once enabled a mod runs with the full privileges of the app (including the Node.js runtime and any setting, such as the AI service URL and key). Enabling one asks for confirmation first; only enable mods from trusted sources.",
+    "warning": "Mods are compatible with Folium v{{version}}. Mods marked Verified were reviewed and signed by Folium; all others are third-party and unreviewed. Verified or not, once enabled a mod runs with the full privileges of the app (including the Node.js runtime and any setting, such as the AI service URL and key). Only enable mods from trusted sources.",
+    "market": "Mod market",
     "trustRevoked": "This mod's files changed since you last confirmed it, so it was disabled automatically. Check the source, then enable it again.",
     "devSourceHint": "Development source mod: once confirmed, editing its files keeps the approval (development builds only).",
     "signatureVerified": "Verified",

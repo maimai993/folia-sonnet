@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Boxes, CheckSquare, CircleCheck, FolderOpen, Power, RefreshCw, TriangleAlert, Upload, X } from 'lucide-react';
+import { AlertCircle, Boxes, CheckSquare, CircleCheck, ExternalLink, FolderOpen, Power, RefreshCw, Store, TriangleAlert, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '@/types';
 import { DEFAULT_THEME } from '@/services/baseThemes';
 import { useModsStore } from '../useModsStore';
+import { FOLIUM_VERSION } from '../folium/contract';
 import { useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
 import { ModListItem, translateModError } from './ModListItem';
 import type { ModManagerClasses } from './modManagerClasses';
@@ -21,6 +22,16 @@ type ModManagerProps = {
 };
 
 type Notice = { kind: 'ok' | 'error'; text: string };
+
+/** Where mods are published; linked from the toolbar and from the switched-off placeholder. */
+export const MOD_MARKET_URL = 'https://folium-compound.cielaniska.top/';
+
+/** On desktop a plain link would open inside the app window; hand it to the system browser instead. */
+const openLinkExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!window.electron?.openExternalUrl) return;
+    event.preventDefault();
+    void window.electron.openExternalUrl(event.currentTarget.href);
+};
 
 export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, theme }) => {
     const { t } = useTranslation();
@@ -160,6 +171,21 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
 
     const toolbarButtonClass = `inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40`;
 
+    const marketLink = (
+        <a
+            href={MOD_MARKET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={openLinkExternally}
+            className={`${toolbarButtonClass} ${classes.ghostButton}`}
+            style={{ color: 'var(--text-primary)' }}
+        >
+            <Store size={12} />
+            {t('mods.market')}
+            <ExternalLink size={11} className="opacity-50" />
+        </a>
+    );
+
     if (!bridgeAvailable) {
         return (
             <div className={`rounded-xl border px-4 py-8 flex flex-col items-center gap-2 text-center ${classes.card}`} style={{ color: 'var(--text-secondary)' }}>
@@ -175,6 +201,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                 <Power size={24} className="opacity-50" style={{ color: 'var(--text-secondary)' }} />
                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('mods.systemOffTitle')}</span>
                 <span className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>{t('mods.systemOffHint')}</span>
+                <div className="mt-2">{marketLink}</div>
             </div>
         );
     }
@@ -208,6 +235,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                     {t('mods.count', { count: mods.length })}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
+                    {marketLink}
                     <button
                         type="button"
                         onClick={() => { void handleOpenDirectory(); }}
@@ -242,9 +270,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
             <div className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-left ${classes.warning}`}>
                 <TriangleAlert size={14} className="mt-px shrink-0" />
                 <span className="text-[11px] leading-relaxed">
-                    {t('mods.experimentalHint')}
-                    {' '}
-                    {t('mods.securityWarning')}
+                    {t('mods.warning', { version: `${FOLIUM_VERSION.major}.${FOLIUM_VERSION.minor}` })}
                 </span>
             </div>
 
