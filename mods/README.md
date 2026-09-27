@@ -11,6 +11,11 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
 本文件就是 Folium 1 的规范。「稳定」的部分在 folium 1.x 内只增不改（见[版本与演进](#版本与演进)）；
 标了「实验」的部分需要在清单里显式选用，任何 minor 都可能变。
 
+> **模组开发与上架注意事项**
+>
+> - Folium 1.3 是首个稳定版本，目前仅开放 UI 相关的稳定扩展接口。其他部分，尤其是 `omni.providers` 等 Omni provider 接口，仍属实验接口，尚不具备应用内置 Omni provider 的对等能力。在 Folium v2 发布前，请绝对不要尝试制作超出当前实验接口能力的完整音源模组；接口缺口必然导致问题，浪费开发者和维护者的时间。
+> - 任何尝试导出 provider 的原始音频流或解密之后的原始音频文件的模组，都有极高的平台法律风险。无论采用何种实现方式，此类模组都不会上架官方模组市场。
+
 公开类型全部在 [`src/mods/folium/contract.ts`](../src/mods/folium/contract.ts)，这是契约的唯一来源。
 仓库里的样例模组都是按本规范写的，可以直接照抄：
 
@@ -554,7 +559,7 @@ folium.experimental['omni.providers'].register({
 - DTO（`contract.ts`）字段只增不减；宿主内部类型不出现在任何稳定契约里。
 - 删除或改变语义必须升 major；之前至少有一个 minor 在日志里标记废弃。
 - 实验接口可以在任何 minor 变动；稳定下来后原名字保留，`experimental` 里的选用变成空操作。
-- 1.3 是 Folium 1 正式发布前的调整，一次性改了 DTO 形状，让歌词和主题与内置 visualizer 同构：
+- 1.3 是 Folium 1 的首个稳定版本，发布时一次性调整了 DTO 形状，让歌词和主题与内置 visualizer 同构：
   `FoliumLine.text` 改名 `fullText`，`endTime` 改为歌词原始结束时间（渲染结束时间移到 `renderHints.renderEndTime`）；
   `FoliumTheme.fontFamily` 改为用户字体名，可直接用的字体栈改由 `folium.theme.resolveFontStack(theme)` 得到，`fontWeight` 变为可选。
   仓库里的样例已同步。
