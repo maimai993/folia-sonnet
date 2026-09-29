@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@/components/visualizer/lumiere/lumiereRandom';
-import { ICON_VIEWBOX, lucideIconPolylines, svgPathToPolylines } from '@/components/visualizer/lumiere/lineart/iconPaths';
+import type { IconNode } from 'lucide-react';
+import { ICON_VIEWBOX, iconNodeToPolylines, lucideIconPolylines, svgPathToPolylines } from '@/components/visualizer/lumiere/lineart/iconPaths';
 import { buildShotIconArts, buildThemeIconArt, placeThemeIcons } from '@/components/visualizer/lumiere/lineart/themeIcons';
 
 // test/unit/visualizer/lumiere/lumiereThemeIcons.test.ts
@@ -128,5 +129,15 @@ describe('场景单元的主题图标', () => {
         expect(buildShotIconArts({ ...base, icons: [], enabled: true })).toEqual([]);
         expect(buildShotIconArts({ ...base, icons: ['NotAnIconAtAll'], enabled: true })).toEqual([]);
         expect(buildShotIconArts({ ...base, icons: ['Moon'], enabled: false })).toEqual([]);
+    });
+});
+
+describe('图标节点：lucide-react 1.48 的节点格式', () => {
+    it('带子节点的 g 递归展开（1.48 的节点可以带第三项子节点）', () => {
+        const node = [['g', {}, [['line', { x1: '1', y1: '2', x2: '3', y2: '4' }], ['circle', { cx: '12', cy: '12', r: '2' }]]]] as unknown as IconNode;
+        const polylines = iconNodeToPolylines(node);
+        expect(polylines).toHaveLength(2);
+        expect(polylines[0]).toEqual({ points: [[1, 2], [3, 4]], closed: false });
+        expect(polylines[1]!.closed).toBe(true);
     });
 });

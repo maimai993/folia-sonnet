@@ -297,21 +297,28 @@ const nodeToPolylines = (tag: string, attrs: Record<string, unknown>): IconPolyl
     }
 };
 
-/** 图标节点（lucide 的 IconNode：[tag, attrs][]）→ 折线，坐标在 24×24 viewBox 里。 */
+/** 图标节点（lucide 的 IconNode：[tag, attrs, children?][]）→ 折线，坐标在 24×24 viewBox 里；带子节点的（g）递归展开。 */
 export const iconNodeToPolylines = (node: IconNode): IconPolyline[] => (
-    node.flatMap(([tag, attrs]) => nodeToPolylines(tag, attrs as Record<string, unknown>))
+    node.flatMap(entry => {
+        const [tag, attrs, children] = entry as unknown as [string, Record<string, unknown>, unknown?];
+        return [
+            ...nodeToPolylines(tag, attrs),
+            ...(Array.isArray(children) ? iconNodeToPolylines(children as IconNode) : []),
+        ];
+    })
 );
 
 /**
  * 取 lucide-react 图标组件里的 IconNode：组件是 forwardRef，它的 render 只是
- * createElement(Icon, { iconNode, ... })，不跑 hooks，直接调用即可拿到节点数据，不必渲染 SVG 再解析。
+ * createElement(Icon, { iconNode, ... })（1.48 起是 { icon: { node, ... } }），不跑 hooks，直接调用即可拿到节点数据，
+ * 不必渲染 SVG 再解析。
  */
 const readIconNode = (name: string): IconNode | null => {
     const icon = resolveLucideIcon(name) as unknown as { render?: (props: object, ref: null) => unknown } | null;
     if (!icon || typeof icon.render !== 'function') return null;
     try {
-        const element = icon.render({}, null) as { props?: { iconNode?: unknown } } | null;
-        const node = element?.props?.iconNode;
+        const element = icon.render({}, null) as { props?: { iconNode?: unknown; icon?: { node?: unknown } } } | null;
+        const node = element?.props?.iconNode ?? element?.props?.icon?.node;
         return Array.isArray(node) ? node as IconNode : null;
     } catch {
         return null;
