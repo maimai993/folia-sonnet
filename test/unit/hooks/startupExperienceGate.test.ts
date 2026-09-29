@@ -6,6 +6,7 @@ import { resolveStartupExperienceStep } from '../../../src/hooks/useStartupExper
 const readyState = {
     isCurrentRelease: true,
     hasSeenPonder: false,
+    hasFinishedThisRelease: false,
     hasSeenReleaseNotes: false,
     isReleaseNotesOpen: false,
     hasChosenPlaybackEntryView: false,
@@ -43,10 +44,21 @@ describe('startup experience gate', () => {
         })).toBeNull();
     });
 
-    it('does nothing after Ponder onboarding has already been completed', () => {
+    it('does nothing once the sequence has finished for this release', () => {
         expect(resolveStartupExperienceStep({
             ...readyState,
             hasSeenPonder: true,
+            hasFinishedThisRelease: true,
         })).toBeNull();
+    });
+
+    it('shows Ponder only once per install, while each release still gets its notes', () => {
+        const upgraded = { ...readyState, hasChosenPlaybackEntryView: true, hasSeenPonder: true };
+        expect(resolveStartupExperienceStep(upgraded)).toBe('release-notes');
+        expect(resolveStartupExperienceStep({ ...upgraded, hasSeenReleaseNotes: true })).toBeNull();
+    });
+
+    it('stays quiet on builds without release notes', () => {
+        expect(resolveStartupExperienceStep({ ...readyState, isCurrentRelease: false })).toBeNull();
     });
 });

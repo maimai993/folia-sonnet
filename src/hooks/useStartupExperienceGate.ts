@@ -11,7 +11,13 @@ export type StartupExperienceStep = 'release-notes' | 'playback-entry-view' | 'p
 
 type StartupExperienceState = {
     isCurrentRelease: boolean;
+    /** Ponder onboarding was completed in some version (it is shown once per install). */
     hasSeenPonder: boolean;
+    /**
+     * Ponder onboarding was completed in this version. It is the last startup step and nothing else opens it,
+     * so this means the whole sequence already ran for this release.
+     */
+    hasFinishedThisRelease: boolean;
     hasSeenReleaseNotes: boolean;
     isReleaseNotesOpen: boolean;
     hasChosenPlaybackEntryView: boolean;
@@ -23,28 +29,25 @@ type StartupExperienceState = {
 export const resolveStartupExperienceStep = ({
     isCurrentRelease,
     hasSeenPonder,
+    hasFinishedThisRelease,
     hasSeenReleaseNotes,
     isReleaseNotesOpen,
     hasChosenPlaybackEntryView,
     isPlaybackEntryViewPromptOpen,
     isPonderOnboardingOpen,
 }: StartupExperienceState): StartupExperienceStep => {
-    if (!isCurrentRelease || hasSeenPonder || isPonderOnboardingOpen) {
+    if (!isCurrentRelease || hasFinishedThisRelease || isReleaseNotesOpen || isPlaybackEntryViewPromptOpen || isPonderOnboardingOpen) {
         return null;
     }
+    // Release notes are per version; the playback choice and the Ponder gate are once per install,
+    // so having finished Ponder must not suppress a later release's notes.
     if (!hasSeenReleaseNotes) {
-        return isReleaseNotesOpen ? null : 'release-notes';
-    }
-    if (isReleaseNotesOpen) {
-        return null;
+        return 'release-notes';
     }
     if (!hasChosenPlaybackEntryView) {
-        return isPlaybackEntryViewPromptOpen ? null : 'playback-entry-view';
+        return 'playback-entry-view';
     }
-    if (isPlaybackEntryViewPromptOpen) {
-        return null;
-    }
-    return 'ponder';
+    return hasSeenPonder ? null : 'ponder';
 };
 
 const readLastSeenReleaseNotesVersion = (): string | null => (
@@ -66,7 +69,8 @@ export const useStartupExperienceGate = () => {
 
     const nextStep = resolveStartupExperienceStep({
         isCurrentRelease: Boolean(appVersion && USER_GUIDE_AUTO_OPEN_VERSION === appVersion),
-        hasSeenPonder: Boolean(appVersion && lastSeenPonderVersion === appVersion),
+        hasSeenPonder: lastSeenPonderVersion !== null,
+        hasFinishedThisRelease: Boolean(appVersion && lastSeenPonderVersion === appVersion),
         hasSeenReleaseNotes: Boolean(appVersion && lastSeenReleaseNotesVersion === appVersion),
         isReleaseNotesOpen,
         hasChosenPlaybackEntryView,
