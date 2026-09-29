@@ -22,9 +22,10 @@ import { syntheticSong } from './lumiereFixtures';
 // 绘光运行时的纯逻辑：tuning 映射与画质档、哪些改动要重建场景、段落转场帧（出场 / 进入交叉渐变），以及音频归一化。
 
 describe('绘光 tuning → 场景 tuning', () => {
-    it('复制共享字段，textOnly 恒为 false，关键词着色与主题图标直通', () => {
+    it('复制共享字段，仅显示歌词文字、关键词着色与主题图标直通', () => {
         const scene = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, keywordColors: false, themeIcons: false }, { showText: true });
         expect(scene.textOnly).toBe(false);
+        expect(toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, textOnly: true }, { showText: true }).textOnly).toBe(true);
         expect(scene.keywordColors).toBe(false);
         expect(scene.themeIcons).toBe(false);
         expect(scene.lightIntensity).toBe(DEFAULT_LUMIERE_TUNING.lightIntensity);
@@ -54,6 +55,8 @@ describe('绘光 tuning → 场景 tuning', () => {
         expect(requiresLumiereSceneRebuild(base, { ...base, windowNeighbors: 1 })).toBe(true);
         expect(requiresLumiereSceneRebuild(base, { ...base, keywordColors: false })).toBe(true);
         expect(requiresLumiereSceneRebuild(base, { ...base, themeIcons: false })).toBe(true);
+        expect(requiresLumiereSceneRebuild(base, { ...base, textOnly: true })).toBe(true);
+        expect(requiresLumiereSceneRebuild(base, { ...base, themeColorMix: 0.2 })).toBe(true);
         expect(requiresLumiereSceneRebuild(base, { ...base, overlayFrame: false })).toBe(false);
     });
 });

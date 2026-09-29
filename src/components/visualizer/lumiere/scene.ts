@@ -16,7 +16,7 @@ import { buildShotIconArts } from './lineart/themeIcons';
 import { keywordBurstColor, prepareLumiereKeywords } from './text/keywordColors';
 import { createLyricEcho } from './text/lyricEcho';
 import { createLyricWindow, type WindowTypography } from './text/lyricWindow';
-import { CHAMPAGNE, hexOf, mixRgb, rgbOf, scaleRgb, type Rgb } from './color';
+import { CHAMPAGNE, hexOf, mixRgb, rgbOf, scaleRgb, WHITE, type Rgb } from './color';
 import { createLumiereCamera, lumiereTypographyOfLine, resolveLumiereLeadShot } from './lumiereUnitLayout';
 import type { LumiereSection } from './program';
 import { LUMIERE_BLOOM, type BloomPreset, type BurstSpec, type LumiereProfile, type LumiereSceneTuning } from './types';
@@ -126,16 +126,33 @@ export interface LumierePalette {
  */
 export const LUMIERE_SHADER_NO_DARK: [number, number, number, number] = [0, 0, 0, 0];
 
-/** 光色：香槟金里掺一点主题强调色。 */
-export const resolveLumierePalette = (theme: Theme): LumierePalette => {
+/** 未唱字偏向的冷灰蓝。 */
+const UNLIT_COOL: Rgb = [0.62, 0.68, 0.8];
+
+/** 按最亮通道拉到 1：保留色相、去掉暗度，深色的主题色（浅色主题的字色）也能当发光色用；近黑时退回 fallback。 */
+const glowOf = (rgb: Rgb, fallback: Rgb): Rgb => {
+    const peak = Math.max(...rgb);
+    return peak < 0.04 ? fallback : scaleRgb(rgb, 1 / peak);
+};
+
+/**
+ * 光色与字色。themeMix（「主题色占比」，0..1）为 0 时是原来的香槟金光（里面掺 18% 强调色）；
+ * 越高越跟随主题：光色（光束、烟雾、辉光、线稿、画框）→ 强调色，点亮的字 → 主色，未唱的字 → 次色（没有就用主色）。
+ * 主题色都先按最亮通道拉满再混，所以占比再高画面也还是「发光」的，不会画成暗块。
+ */
+export const resolveLumierePalette = (theme: Theme, themeMix = 0): LumierePalette => {
+    const mix = Math.min(1, Math.max(0, themeMix));
     const accent = rgbOf(theme.accentColor, CHAMPAGNE);
-    let light = mixRgb(CHAMPAGNE, accent, 0.18);
+    let light = mixRgb(mixRgb(CHAMPAGNE, accent, 0.18), glowOf(accent, CHAMPAGNE), mix);
     const peak = Math.max(...light, 1e-3);
     light = scaleRgb(light, 1 / peak);
+    const warmLit = mixRgb(light, WHITE, 0.2);
+    const primary = glowOf(rgbOf(theme.primaryColor, warmLit), warmLit);
+    const secondary = theme.secondaryColor ? glowOf(rgbOf(theme.secondaryColor, primary), primary) : primary;
     return {
         light,
-        lit: mixRgb(light, [1, 1, 1], 0.2),
-        unlit: mixRgb(light, [0.62, 0.68, 0.8], 0.55),
+        lit: mixRgb(warmLit, mixRgb(primary, WHITE, 0.2), mix),
+        unlit: mixRgb(mixRgb(light, UNLIT_COOL, 0.55), mixRgb(secondary, UNLIT_COOL, 0.35), mix),
     };
 };
 
@@ -177,7 +194,7 @@ const fadeCaustic = (caustic: LightRig['caustic'], k: number): LightRig['caustic
 export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOptions): LumiereScene => {
     const { width, height, tuning, sprites } = options;
     const aspect = width / height;
-    const palette = resolveLumierePalette(options.theme);
+    const palette = resolveLumierePalette(options.theme, tuning.themeColorMix);
     const shots = options.shots.length > 0 ? options.shots : [];
     // 领头光位（文字区、字号、运镜、浮尘、星空按它）：第一个有歌词的镜头（lumiereUnitLayout.ts）。
     const lead = resolveLumiereLeadShot(shots).profile;
@@ -326,7 +343,7 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
     }
 
     stage.addChild(graphics, mid, text, front);
-    // 只画字：图形组整个不画（光场只在 CPU 上算，给字定明暗）。
+    // 仅显示歌词文字：图形组整个不画（光束只在 CPU 上算，给字定明暗）。
     graphics.renderable = !tuning.textOnly;
 
     const bloomOf = (preset: BloomPreset, multiplier: number, padding: number): BloomFilter => createBloomFilter(pixi, {
@@ -357,9 +374,6 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
         sections: options.sections,
         animationIntensity: options.theme.animationIntensity,
     });
-
-    /** 字的可见度：只画字（textOnly）时在结尾 0.3 秒淡出，平时一直可见。 */
-    const textVisibility = (time: number) => (tuning.textOnly ? smooth((options.endTime - time) / 0.3) : 1);
 
     const activeShot = (time: number) => {
         let index = 0;
@@ -426,53 +440,56 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
             beams = [...beams, ...previous].sort((a, b) => b.intensity - a.intensity).slice(0, MAX_BEAMS);
         }
         if (handoff < 1 || glareK < 1) rig = blendRig(rigs[index - 1]!, rigs[index]!, handoff, glareK);
-        field.update({
-            beams,
-            rig,
-            time,
-            // 整体响度让烟雾浓一点（最多 +20%）。
-            fogScale: tuning.fogDensity * (1 + boost * 0.5) * (1 + 0.2 * Math.min(1, audio.power) * response),
-            color: palette.light,
-            glareScale: intensity * tuning.lightIntensity * (1 + boost * 1.5 + ignite),
-            dark: LUMIERE_SHADER_NO_DARK,
-            octaves: tuning.fogOctaves,
-            // 字排在领头光位的文字区里（整个单元一份）。
-            textRegion: lead.region,
-        });
-        echo?.update({ time, beams, color: lightHex, intensity: smooth(local / 1.2) * exit });
-        starfall?.update(local + starOffset, time, beams, lightHex, exit);
-        // 线稿：每个镜头提前 0.6 秒开始描（第一个镜头在开场时与星落、光起交叠），镜头结束后 0.8 秒淡出——
-        // 上一个的淡出与下一个的描出交叠。主题图标跟着同一个镜头的节奏（不乘线稿的亮度倍率）。
-        lineArts.forEach((layer, shotIndex) => {
-            const shot = shots[shotIndex]!;
-            const begin = shotIndex === 0 ? options.startTime + ignition - 0.6 : shot.startTime - 0.6;
-            const out = shotIndex === shots.length - 1 ? 1 : 1 - smooth((time - shot.endTime) / 0.8);
-            const base = smooth((time - begin) / 1.2) * out * exit;
-            const draw = (time - begin) / 3.6;
-            const fade = base * (shot.profile.artGain ?? 1);
-            // 下次出现：还没开始描就是 begin，窗口里就是现在；淡出之后顺放不会再出现（回拖回来会重新 update）。
-            // 藏着的线稿交给 idle 按滞回放掉 GPU 数据——轨迹过渡整首一个单元时，画过的镜头线稿不然会一直占着缓冲。
-            const nextUse = time < begin ? begin : time <= shot.endTime + 0.8 ? time : Number.POSITIVE_INFINITY;
-            layer.view.visible = fade > 0.003;
-            if (layer.view.visible) layer.update(time, draw, fade, beams, lightHex);
-            else layer.idle(time, nextUse);
-            const icons = iconArts[shotIndex];
-            if (icons) {
-                icons.view.visible = base > 0.003;
-                if (icons.view.visible) icons.update(time, draw, base, beams, lightHex);
-                else icons.idle(time, nextUse);
-            }
-        });
-        // 高频让浮尘闪得更亮（最多 +50%）。
-        motes.update(time, beams, lightHex, exit * (1 + 0.5 * Math.min(1, audio.treble) * response));
-        frontMotes?.update(time, beams, lightHex, exit);
+        // 仅显示歌词文字（textOnly）：图形组整个不画，这些层也不必每帧更新；光束照常算（上面），字的明暗靠它。
+        if (!tuning.textOnly) {
+            field.update({
+                beams,
+                rig,
+                time,
+                // 整体响度让烟雾浓一点（最多 +20%）。
+                fogScale: tuning.fogDensity * (1 + boost * 0.5) * (1 + 0.2 * Math.min(1, audio.power) * response),
+                color: palette.light,
+                glareScale: intensity * tuning.lightIntensity * (1 + boost * 1.5 + ignite),
+                dark: LUMIERE_SHADER_NO_DARK,
+                octaves: tuning.fogOctaves,
+                // 字排在领头光位的文字区里（整个单元一份）。
+                textRegion: lead.region,
+            });
+            echo?.update({ time, beams, color: lightHex, intensity: smooth(local / 1.2) * exit });
+            starfall?.update(local + starOffset, time, beams, lightHex, exit);
+            // 线稿：每个镜头提前 0.6 秒开始描（第一个镜头在开场时与星落、光起交叠），镜头结束后 0.8 秒淡出——
+            // 上一个的淡出与下一个的描出交叠。主题图标跟着同一个镜头的节奏（不乘线稿的亮度倍率）。
+            lineArts.forEach((layer, shotIndex) => {
+                const shot = shots[shotIndex]!;
+                const begin = shotIndex === 0 ? options.startTime + ignition - 0.6 : shot.startTime - 0.6;
+                const out = shotIndex === shots.length - 1 ? 1 : 1 - smooth((time - shot.endTime) / 0.8);
+                const base = smooth((time - begin) / 1.2) * out * exit;
+                const draw = (time - begin) / 3.6;
+                const fade = base * (shot.profile.artGain ?? 1);
+                // 下次出现：还没开始描就是 begin，窗口里就是现在；淡出之后顺放不会再出现（回拖回来会重新 update）。
+                // 藏着的线稿交给 idle 按滞回放掉 GPU 数据——轨迹过渡整首一个单元时，画过的镜头线稿不然会一直占着缓冲。
+                const nextUse = time < begin ? begin : time <= shot.endTime + 0.8 ? time : Number.POSITIVE_INFINITY;
+                layer.view.visible = fade > 0.003;
+                if (layer.view.visible) layer.update(time, draw, fade, beams, lightHex);
+                else layer.idle(time, nextUse);
+                const icons = iconArts[shotIndex];
+                if (icons) {
+                    icons.view.visible = base > 0.003;
+                    if (icons.view.visible) icons.update(time, draw, base, beams, lightHex);
+                    else icons.idle(time, nextUse);
+                }
+            });
+            // 高频让浮尘闪得更亮（最多 +50%）。
+            motes.update(time, beams, lightHex, exit * (1 + 0.5 * Math.min(1, audio.treble) * response));
+            frontMotes?.update(time, beams, lightHex, exit);
+        }
         window.update({
             time,
             beams,
             litColor: palette.lit,
             unlitColor: palette.unlit,
             unlitAlpha: tuning.unlitOpacity,
-            intensity: smooth(local / 0.6) * exit * textVisibility(time),
+            intensity: smooth(local / 0.6) * exit,
         });
     };
 

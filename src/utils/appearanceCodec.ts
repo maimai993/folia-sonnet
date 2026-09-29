@@ -479,8 +479,10 @@ const LUMIERE_SHORT_KEYS = {
     trails: 'tr',
     seamlessTransitions: 'st',
     overlayFrame: 'of',
+    textOnly: 'txo',
     keywordColors: 'kc',
     themeIcons: 'thi',
+    themeColorMix: 'tcm',
     renderQuality: 'rq',
 } as const;
 const compressLumiere = (t: any): any => Object.fromEntries(

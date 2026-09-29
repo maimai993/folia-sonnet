@@ -102,12 +102,17 @@ export interface LumiereSceneTuning {
     trails: boolean;
     /** 画框装饰（取景器的四角、刻度与对位十字）。 */
     overlayFrame: boolean;
-    /** 只画字（光照照常算，字仍按光束明暗），图形组与前景不画、没有开场与背景碎片。lumisynth 借排版时用的，folia 里默认关。 */
+    /**
+     * 仅显示歌词文字（设置项，默认关）：只画字和字上的效果，图形组（光场、烟雾、星空、线稿、浮尘）与前景不画、
+     * 也不每帧更新；没有开场、背景碎片与主题图标，画框与片尾卡的光也不画。光束照常在 CPU 上算，字仍按光束明暗。
+     */
     textOnly: boolean;
     /** 关键字着色：主题 wordColors 的关键字点亮时带关键字色（字、光晕、闪点、十字爆闪、背景碎片）。 */
     keywordColors: boolean;
     /** 主题图标：主题 lyricsIcons 的 Lucide 图标画成线稿，散落在文字区外（独立于 lineArt 开关）。 */
     themeIcons: boolean;
+    /** 主题色占比 0..1：0 = 香槟金光，越高光色越接近强调色、字色越接近主色 / 次色（见 resolveLumierePalette）。 */
+    themeColorMix: number;
 }
 
 export const DEFAULT_LUMIERE_SCENE_TUNING: LumiereSceneTuning = {
@@ -130,6 +135,7 @@ export const DEFAULT_LUMIERE_SCENE_TUNING: LumiereSceneTuning = {
     textOnly: false,
     keywordColors: true,
     themeIcons: true,
+    themeColorMix: 0.3,
 };
 
 /** bloom 的默认值：绘光的主要观感，给得高。 */

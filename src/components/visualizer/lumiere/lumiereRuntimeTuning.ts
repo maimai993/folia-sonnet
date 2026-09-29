@@ -75,7 +75,7 @@ export interface LumiereSceneTuningContext {
     showText: boolean;
 }
 
-/** 用户 tuning → 场景 tuning。画质档在这里折进倍频与浮尘；textOnly 在 folia 里恒为 false。 */
+/** 用户 tuning → 场景 tuning。画质档在这里折进倍频与浮尘；「仅显示歌词文字」即场景的 textOnly。 */
 export const toLumiereSceneTuning = (
     tuning: LumiereTuning,
     context: LumiereSceneTuningContext,
@@ -98,9 +98,10 @@ export const toLumiereSceneTuning = (
         frontBokeh: tuning.frontBokeh,
         trails: tuning.trails,
         overlayFrame: tuning.overlayFrame,
-        textOnly: false,
+        textOnly: tuning.textOnly,
         keywordColors: tuning.keywordColors,
         themeIcons: tuning.themeIcons,
+        themeColorMix: tuning.themeColorMix,
     };
 };
 
@@ -146,6 +147,8 @@ export const requiresLumiereSceneRebuild = (previous: LumiereSceneTuning, next: 
     || previous.textOnly !== next.textOnly
     || previous.keywordColors !== next.keywordColors
     || previous.themeIcons !== next.themeIcons
+    // 调色盘在建场景时算好（光色、字色、线稿与关键字的混色都从它来）。
+    || previous.themeColorMix !== next.themeColorMix
     || crossesZero(previous.bloom, next.bloom)
     || crossesZero(previous.textBloom, next.textBloom)
 );

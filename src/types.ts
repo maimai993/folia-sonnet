@@ -739,10 +739,17 @@ export interface LumiereTuning {
   seamlessTransitions: boolean;
   /** 画框. */
   overlayFrame: boolean;
+  /**
+   * 仅显示歌词文字：只画歌词与字上的效果（点亮、光晕、闪点、十字爆闪、径迹、追字光斑），
+   * 光场、烟雾、星空、线稿、浮尘、背景歌词、主题图标、画框与片尾卡的光都不画。字的明暗仍按光束算.
+   */
+  textOnly: boolean;
   /** 关键字着色（主题 wordColors）. */
   keywordColors: boolean;
   /** 主题图标（主题 lyricsIcons 画成线稿）. */
   themeIcons: boolean;
+  /** 主题色占比, 0..1：0 = 香槟金光；越高光色越接近强调色、点亮 / 未唱的字越接近主色 / 次色. */
+  themeColorMix: number;
   /** 画质. */
   renderQuality: LumiereRenderQuality;
 }
@@ -765,8 +772,10 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   trails: true,
   seamlessTransitions: true,
   overlayFrame: true,
+  textOnly: false,
   keywordColors: true,
   themeIcons: true,
+  themeColorMix: 0.3,
   renderQuality: 'full',
 };
 

@@ -39,8 +39,10 @@ export const normalizeLumiereTuning = (value: unknown): LumiereTuning => {
         trails: pickBoolean(raw.trails, d.trails),
         seamlessTransitions: pickBoolean(raw.seamlessTransitions, d.seamlessTransitions),
         overlayFrame: pickBoolean(raw.overlayFrame, d.overlayFrame),
+        textOnly: pickBoolean(raw.textOnly, d.textOnly),
         keywordColors: pickBoolean(raw.keywordColors, d.keywordColors),
         themeIcons: pickBoolean(raw.themeIcons, d.themeIcons),
+        themeColorMix: clampNumber(raw.themeColorMix, d.themeColorMix, 0, 1),
         renderQuality: RENDER_QUALITIES.includes(raw.renderQuality as LumiereRenderQuality)
             ? raw.renderQuality as LumiereRenderQuality
             : d.renderQuality,

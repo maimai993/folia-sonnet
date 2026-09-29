@@ -169,6 +169,14 @@ const LUMIERE_QUALITY = (params.get('quality') ?? 'full') as LumiereRenderQualit
 const LUMIERE_DARK_FIELD = params.has('dark') ? Number(params.get('dark')) : DEFAULT_LUMIERE_TUNING.darkField;
 /** 绘光轨迹过渡（整首歌一个单元，段落之间也走光位交接）。 */
 const LUMIERE_SEAMLESS = params.get('seamless') === '1';
+/** 绘光仅显示歌词文字（光源、烟雾等装饰都不画）。 */
+const LUMIERE_TEXT_ONLY = params.get('textonly') === '1';
+/** 绘光主题色占比（0..1）；不给用默认值。 */
+const LUMIERE_THEME_MIX = params.has('mix') ? Number(params.get('mix')) : DEFAULT_LUMIERE_TUNING.themeColorMix;
+/** 覆盖主题色：colors=<强调>,<主>,<次>（不带 #），用来看主题色占比的效果。 */
+/** 绘光图形 / 文字辉光倍率（两者同值）；不给用默认值。bloom=0 用来排查辉光滤镜的问题。 */
+const LUMIERE_BLOOM = params.has('bloom') ? Number(params.get('bloom')) : null;
+const THEME_COLORS = params.get('colors')?.split(',').map(hex => `#${hex}`) ?? null;
 
 /** 时刻 time 的当前行（第一行之前算第一行）。 */
 const lineIndexAt = (time: number) => {
@@ -178,7 +186,15 @@ const lineIndexAt = (time: number) => {
 };
 
 const resolveProbeTheme = (): Theme => {
-    const base = DAYLIGHT ? DAYLIGHT_THEME : DEFAULT_THEME;
+    const preset = DAYLIGHT ? DAYLIGHT_THEME : DEFAULT_THEME;
+    const base = THEME_COLORS
+        ? {
+            ...preset,
+            accentColor: THEME_COLORS[0] ?? preset.accentColor,
+            primaryColor: THEME_COLORS[1] ?? preset.primaryColor,
+            secondaryColor: THEME_COLORS[2] ?? preset.secondaryColor,
+        }
+        : preset;
     if (!KEYWORDS) return base;
     return {
         ...base,
@@ -288,6 +304,9 @@ const VisualizerMemoryProbe: React.FC = () => {
                     renderQuality: LUMIERE_QUALITY,
                     darkField: LUMIERE_DARK_FIELD,
                     seamlessTransitions: LUMIERE_SEAMLESS,
+                    textOnly: LUMIERE_TEXT_ONLY,
+                    themeColorMix: LUMIERE_THEME_MIX,
+                    ...(LUMIERE_BLOOM === null ? {} : { bloom: LUMIERE_BLOOM, textBloom: LUMIERE_BLOOM }),
                 },
                 songTitle: META ? 'Lantern Tide' : null,
                 songArtist: META ? 'Probe Ensemble' : null,
@@ -304,7 +323,7 @@ const definition: ProbeDefinition = {
         + ' 参数：vis=<mode> speed=<倍速> lines=<行数> switch=<切歌间隔秒> heavy=1 notext=1 freeze=1 ablate=canvas|gears'
         + ' tail=<秒> start=<秒> keywords=1 daylight=1 meta=1 quality=full|balanced|low（后四个给绘光这类读主题关键字 / 片尾卡 / 画质的模式）'
         + ' cjk=1（中文长短句歌词，测折行） dark=<0..1>（绘光暗场强度）'
-        + ' long=1（80 行约 5 分钟的中英混排长歌，带段落空隙） seamless=1（绘光轨迹过渡：整首歌一个单元）',
+        + ' long=1（80 行约 5 分钟的中英混排长歌，带段落空隙） seamless=1（绘光轨迹过渡：整首歌一个单元） textonly=1（绘光仅显示歌词文字） mix=<0..1>（绘光主题色占比） colors=<强调>,<主>,<次>（覆盖主题色，十六进制不带 #） bloom=<0..2>（绘光辉光倍率）',
     Component: VisualizerMemoryProbe,
 };
 

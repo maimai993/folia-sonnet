@@ -38,8 +38,10 @@ const NON_DEFAULT_TUNING: LumiereTuning = {
     trails: false,
     seamlessTransitions: false,
     overlayFrame: false,
+    textOnly: true,
     keywordColors: false,
     themeIcons: false,
+    themeColorMix: 0.35,
     renderQuality: 'balanced',
 };
 
@@ -107,6 +109,31 @@ describe('Lumiere appearance codec', () => {
         const decoded = decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`);
         expect(DEFAULT_LUMIERE_TUNING.seamlessTransitions).toBe(true);
         expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, seamlessTransitions: true });
+    });
+
+    it('decodes an old short code without the textOnly key to the default (off)', () => {
+        const encoded = compressConfig({ lumiereTuning: NON_DEFAULT_TUNING });
+        const prefix = 'folia-theme://';
+        const legacy = JSON.parse(atob(encoded.slice(prefix.length)));
+        expect(legacy.lmt.txo).toBe(true);
+        delete legacy.lmt.txo;
+        const decoded = decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`);
+        expect(DEFAULT_LUMIERE_TUNING.textOnly).toBe(false);
+        expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, textOnly: false });
+    });
+
+    it('clamps themeColorMix and fills it with the default for old tunings / short codes', () => {
+        expect(normalizeLumiereTuning({ themeColorMix: 1.6 }).themeColorMix).toBe(1);
+        expect(normalizeLumiereTuning({ themeColorMix: -1 }).themeColorMix).toBe(0);
+        const { themeColorMix: _omitted, ...legacyTuning } = NON_DEFAULT_TUNING;
+        expect(normalizeLumiereTuning(legacyTuning).themeColorMix).toBe(DEFAULT_LUMIERE_TUNING.themeColorMix);
+        const encoded = compressConfig({ lumiereTuning: NON_DEFAULT_TUNING });
+        const prefix = 'folia-theme://';
+        const legacy = JSON.parse(atob(encoded.slice(prefix.length)));
+        expect(legacy.lmt.tcm).toBe(0.35);
+        delete legacy.lmt.tcm;
+        const decoded = decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`);
+        expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, themeColorMix: DEFAULT_LUMIERE_TUNING.themeColorMix });
     });
 
     it('fills seamlessTransitions with the default and rejects non-boolean values', () => {

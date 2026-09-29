@@ -39,6 +39,7 @@ const ATMOSPHERE_CONTROLS: ControlSpec[] = [
 
 // 邻行是二选一的分段控件，夹在未唱字透明度与崩解强度之间，所以文字组拆成前后两段。
 const TEXT_CONTROLS_LEAD: ControlSpec[] = [
+    toggle('textOnly', 'options.lumiereTextOnly'),
     slider('unlitOpacity', 'options.lumiereUnlitOpacity', 0.05, 0.6, { step: 0.01 }),
 ];
 
@@ -50,6 +51,7 @@ const TEXT_CONTROLS_TAIL: ControlSpec[] = [
 ];
 
 const THEME_CONTROLS: ControlSpec[] = [
+    slider('themeColorMix', 'options.lumiereThemeColorMix', 0, 1, { step: 0.01 }),
     toggle('keywordColors', 'options.lumiereKeywordColors'),
     toggle('themeIcons', 'options.lumiereThemeIcons'),
 ];
@@ -146,12 +148,14 @@ const LumiereSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                     theme={theme}
                 />
                 {TEXT_CONTROLS_TAIL.map(renderControl)}
+                {hint('options.lumiereTextOnlyHint')}
                 {hint('options.lumiereEchoHint')}
                 {hint('options.lumiereSeamlessTransitionsHint')}
             </SettingsSection>
 
             <SettingsSection title={t('options.lumiereThemeSection')}>
                 {THEME_CONTROLS.map(renderControl)}
+                {hint('options.lumiereThemeColorMixHint')}
             </SettingsSection>
 
             <SettingsSection title={t('options.lumierePerformanceSection')}>

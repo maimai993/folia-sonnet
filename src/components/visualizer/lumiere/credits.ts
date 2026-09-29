@@ -93,7 +93,7 @@ export const createLumiereCredits = (pixi: PixiModule, options: {
 }): LumiereCredits => {
     const { width, height, tuning, sprites, theme } = options;
     const aspect = width / height;
-    const palette = resolveLumierePalette(theme);
+    const palette = resolveLumierePalette(theme, tuning.themeColorMix);
     const lightHex = hexOf(palette.light);
     const title = clean(options.metadata.title);
     const artist = clean(options.metadata.artist);
@@ -183,6 +183,8 @@ export const createLumiereCredits = (pixi: PixiModule, options: {
     text.filterArea = new pixi.Rectangle(-width, -height, width * 3, height * 3);
     graphics.filters = tuning.bloom > 0 ? [graphicsBloom] : [];
     text.filters = tuning.textBloom > 0 ? [textBloom] : [];
+    // 仅显示歌词文字：片尾卡只留曲名与艺人 / 专辑，光、烟、线稿、浮尘不画。
+    graphics.renderable = !tuning.textOnly;
 
     const update = (elapsed: number) => {
         const time = Math.max(0, elapsed);
@@ -190,20 +192,22 @@ export const createLumiereCredits = (pixi: PixiModule, options: {
         const rise = smooth((time - 0.6) / 1.6);
         const ignite = time >= 0.9 ? 1.2 * Math.exp(-(time - 0.9) / 0.4) : 0;
         const beams = resolveBeams(rig, time, aspect, { intensity: rise * tuning.lightIntensity, bass: 0, color: palette.light, local: time });
-        field.update({
-            beams,
-            rig,
-            time,
-            fogScale: tuning.fogDensity,
-            color: palette.light,
-            glareScale: rise * tuning.lightIntensity * (1 + ignite),
-            dark: LUMIERE_SHADER_NO_DARK,
-            octaves: tuning.fogOctaves,
-        });
-        const draw = (time - 0.8) / 3.6;
-        art.view.visible = tuning.lineArt && draw > 0;
-        if (art.view.visible) art.update(time, draw, smooth((time - 0.8) / 1.2), beams, lightHex);
-        motes.update(time, beams, lightHex, rise);
+        if (!tuning.textOnly) {
+            field.update({
+                beams,
+                rig,
+                time,
+                fogScale: tuning.fogDensity,
+                color: palette.light,
+                glareScale: rise * tuning.lightIntensity * (1 + ignite),
+                dark: LUMIERE_SHADER_NO_DARK,
+                octaves: tuning.fogOctaves,
+            });
+            const draw = (time - 0.8) / 3.6;
+            art.view.visible = tuning.lineArt && draw > 0;
+            if (art.view.visible) art.update(time, draw, smooth((time - 0.8) / 1.2), beams, lightHex);
+            motes.update(time, beams, lightHex, rise);
+        }
         window?.update({
             time,
             beams,

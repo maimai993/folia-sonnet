@@ -263,4 +263,53 @@ describe('绘光的调色', () => {
         const sum = (rgb: number[]) => rgb.reduce((a, b) => a + b, 0);
         expect(sum(palette.unlit)).toBeLessThan(sum(palette.lit));
     });
+
+    describe('主题色占比', () => {
+        const full = {
+            backgroundColor: '#0b0d12', accentColor: '#3050c0', primaryColor: '#e05080', secondaryColor: '#205040',
+        } as Parameters<typeof resolveLumierePalette>[0];
+        const hue = (rgb: readonly number[]) => {
+            const peak = Math.max(...rgb);
+            return rgb.map(channel => channel / peak);
+        };
+
+        it('占比 0 与原来的香槟金光一致（强调色只掺 18%）', () => {
+            const palette = resolveLumierePalette(full, 0);
+            expect(palette).toEqual(resolveLumierePalette(full));
+            expect(palette.light[0]).toBeCloseTo(1);
+            expect(palette.light[2]).toBeLessThan(palette.light[0]);
+        });
+
+        it('占比 1：光色是强调色的色相，点亮字跟主色，未唱字跟次色，而且都拉到发光的亮度', () => {
+            const palette = resolveLumierePalette(full, 1);
+            const accent = hue([0x30, 0x50, 0xc0]);
+            palette.light.forEach((channel, index) => expect(channel).toBeCloseTo(accent[index]!, 5));
+            expect(Math.max(...palette.light)).toBeCloseTo(1);
+            // 点亮字：主色（粉）拉满后混 20% 白，红通道最亮。
+            expect(palette.lit[0]).toBeGreaterThan(palette.lit[1]!);
+            expect(palette.lit[0]).toBeGreaterThan(palette.lit[2]!);
+            expect(Math.max(...palette.lit)).toBeCloseTo(1);
+            // 未唱字：次色（深绿）拉满后偏冷灰蓝，绿通道仍高于红通道。
+            expect(palette.unlit[1]).toBeGreaterThan(palette.unlit[0]!);
+        });
+
+        it('占比越高越接近主题色，结果随占比连续变化；越界钳到 0..1', () => {
+            const at = (mix: number) => resolveLumierePalette(full, mix).light;
+            const distance = (a: readonly number[], b: readonly number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+            const target = at(1);
+            expect(distance(at(0.3), target)).toBeLessThan(distance(at(0), target));
+            expect(distance(at(0.7), target)).toBeLessThan(distance(at(0.3), target));
+            expect(distance(at(0.5), at(0.51))).toBeLessThan(0.02);
+            expect(resolveLumierePalette(full, 2)).toEqual(resolveLumierePalette(full, 1));
+            expect(resolveLumierePalette(full, -1)).toEqual(resolveLumierePalette(full, 0));
+        });
+
+        it('没有次色时未唱字跟主色；近黑的主题色退回原来的暖色，不画成暗块', () => {
+            const noSecondary = { ...full, secondaryColor: '' };
+            const primaryOnly = resolveLumierePalette(noSecondary, 1);
+            expect(primaryOnly.unlit[0]).toBeGreaterThan(primaryOnly.unlit[1]!);
+            const black = resolveLumierePalette({ ...full, primaryColor: '#000000' }, 1);
+            expect(Math.max(...black.lit)).toBeGreaterThan(0.9);
+        });
+    });
 });

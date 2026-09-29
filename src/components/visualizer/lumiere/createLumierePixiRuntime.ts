@@ -214,11 +214,13 @@ export class LumierePixiRuntime {
     private drawOverlay() {
         // 画框是自建 context 的 Graphics，带 context: true 才会连 GPU 批数据一起放掉（见 lineArt 的 destroy）。
         this.overlayLayer.removeChildren().forEach(child => child.destroy({ children: true, context: true }));
-        if (!this.options.tuning.overlayFrame || this.width === 0) return;
+        // 仅显示歌词文字时画框也是装饰，不画。
+        if (!this.options.tuning.overlayFrame || this.options.tuning.textOnly || this.width === 0) return;
         this.overlayLayer.addChild(buildLumiereOverlay(this.pixi, {
             width: this.width,
             height: this.height,
             theme: this.options.song.theme,
+            themeColorMix: this.options.tuning.themeColorMix,
         }));
     }
 
@@ -405,7 +407,11 @@ export class LumierePixiRuntime {
         const previousTuning = this.options.tuning;
         this.options.tuning = tuning;
         this.applySceneTuning();
-        if (previousTuning.overlayFrame !== tuning.overlayFrame) this.drawOverlay();
+        if (
+            previousTuning.overlayFrame !== tuning.overlayFrame
+            || previousTuning.textOnly !== tuning.textOnly
+            || previousTuning.themeColorMix !== tuning.themeColorMix
+        ) this.drawOverlay();
         if (this.options.paused) this.renderOnce();
     }
 
