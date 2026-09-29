@@ -6,6 +6,7 @@ import type { LightSprites } from '../light/sprites';
 import { hexOf, mixRgb, WHITE, type Rgb } from '../color';
 import { buildGlyphLine, type GlyphLine } from './glyphLine';
 import { clampInto, createTextMeasurer, fitScale, flowLine, frameBand, shouldWrap, type LineFlow, type LineVariant } from './lineWrap';
+import { awayDrift, createProtectBox, heldDrift, PROTECT_MARGIN, protectedAlpha, protectionAt } from './lineClearance';
 import { buildGlyphTimings, flashEnvelope, glyphProgress, type GlyphTiming } from './reveal';
 import { MAX_WORD_SCALE, segmentWords, wordJags, wordScales } from './wordStyle';
 import type { WordColorMatcher } from '../../wordColoring';
@@ -22,6 +23,9 @@ import { KEYWORD_HALO_GAIN, keywordTints, resolveGlyphKeywordColors, type Keywor
 //
 // 崩解：字点亮一会儿之后开始沿各自的方向（多数向上）漂离排版位置并转动，越往后越快；
 // 还没唱到的行反过来，字从散开的位置逐渐聚拢。所有字都有一点呼吸般的晃动。
+//
+// 间隙（lineClearance）：邻行的漂移不朝当前行走，当前行只在槽位附近绕小圈；非当前行的字落进当前行的
+// 墨迹框（外扩一点）时压暗，当前行始终清楚。
 //
 // 点亮：每个字的亮度 = 点亮进度 × (底光 + 该字位置的光场强度)，唱到的一瞬有四芒闪点，受光强的字
 // 下面垫一层柔光晕——这就是参考图里化学式被光柱照到的部分局部发光。全部是 t 的纯函数。
@@ -200,6 +204,8 @@ interface LineTransform {
     toWrap: number;
     /** 当前的折行程度（0..1，缓动过的）：不飞的时候字在单行与折行的位置之间滑。 */
     wrap: number;
+    /** 当前的朝向（0 横 .. 1 竖，随滑动线性变化）：当前行的保护框按它混合横竖两种墨迹框。 */
+    orient: number;
     phase: number;
     fly: boolean;
     /** 这一次滑动开始的时刻（没有滑动时为 −∞）。 */
@@ -395,6 +401,16 @@ const fixedSlot = (
 
 /** 纵横交错时邻行与当前行之间至少留的空隙（以字号为单位）。 */
 const CROSSED_CLEARANCE = 0.5;
+
+/** 堆叠轴：横排与纵横交错时各行上下排开（y），竖排时左右排开（x）。 */
+const stackX = (kind: WindowTypography) => (kind === 'vertical' ? 1 : 0);
+/**
+ * 当前行为 c、排版为 kind 时第 index 行背离当前行的方向（堆叠轴上的 ±1，当前行为 0）：横排与纵横交错时
+ * 上一行在上、下一行在下；竖排右起，上一行在右、下一行在左。
+ */
+const awayOf = (index: number, c: number, kind: WindowTypography) => (
+    (index === c ? 0 : index < c ? -1 : 1) * (kind === 'vertical' ? -1 : 1)
+);
 
 const sameSlot = (a: Slot, b: Slot) => a.dx === b.dx && a.dy === b.dy && a.scale === b.scale
     && a.alpha === b.alpha && a.orient === b.orient && a.rotation === b.rotation && a.wrap === b.wrap;
@@ -661,6 +677,12 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         // 随排版变化的量（宽度上限、错落）也跟着换行叠加，排版切换时不跳。
         let widthCap = maxWidthOf(typographyAt(-1));
         let jitterOn = typographyAt(-1) === 'crossed' ? 0 : 1;
+        // 间隙：背离当前行的方向（x、y 各一份，堆叠轴上的 ±1 × 作为邻行的权重）与作为当前行的权重，
+        // 同样按换行叠加，换行与排版切换时连续。
+        const initialKind = typographyAt(-1);
+        let awayX = stackX(initialKind) * awayOf(index, -1, initialKind);
+        let awayY = (1 - stackX(initialKind)) * awayOf(index, -1, initialKind);
+        let hero = 0;
         // 排版切换时整个版面都要重排，所以从头叠加（槽位差为 0 的换行直接跳过，代价很小）。
         const first = 0;
         const last = Math.min(lineCount - 1, current);
@@ -677,6 +699,11 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
                 widthCap += (maxWidthOf(afterKind) - maxWidthOf(beforeKind)) * k;
                 jitterOn += ((afterKind === 'crossed' ? 0 : 1) - (beforeKind === 'crossed' ? 0 : 1)) * k;
             }
+            const awayBefore = awayOf(index, c - 1, beforeKind);
+            const awayAfter = awayOf(index, c, afterKind);
+            awayX += (stackX(afterKind) * awayAfter - stackX(beforeKind) * awayBefore) * k;
+            awayY += ((1 - stackX(afterKind)) * awayAfter - (1 - stackX(beforeKind)) * awayBefore) * k;
+            hero += ((index === c ? 1 : 0) - (index === c - 1 ? 1 : 0)) * k;
             // 透明度不跟位移同一条曲线：要淡出的先走（前 60%），要淡入的后到（后 60%）。
             const fade = after.alpha < before.alpha
                 ? easeInOutCubic(phase / 0.6)
@@ -710,10 +737,15 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         const x = baseX + (clampInto(baseX, alongH, band.left, band.right) - baseX) * (1 - o) * jitterOn;
         const y = baseY + (clampInto(baseY, alongV, band.top, band.bottom) - baseY) * o * jitterOn;
         // 永不停止的漂移：以这一行开始唱的时刻为零点匀速漂（唱的时候正好在槽位上），再叠一点绕行、摆动与呼吸。
+        // 让开当前行（lineClearance）：邻行朝当前行的那一份翻成背离；当前行不越漂越远，绕一个小圆，速度不变。
         const age = time - view.line.startTime;
         const m = view.motionPhase;
-        const driftX = (view.velocity.x * age + Math.sin(time * 0.52 + m) * ORBIT) * driftScale;
-        const driftY = (view.velocity.y * age + Math.cos(time * 0.41 + m * 1.3) * ORBIT * 0.7) * driftScale;
+        const { x: vx, y: vy } = view.velocity;
+        const orbitX = Math.sin(time * 0.52 + m) * ORBIT;
+        const orbitY = Math.cos(time * 0.41 + m * 1.3) * ORBIT * 0.7;
+        const held = clamp01(hero);
+        const driftX = lerp(awayDrift((vx * age + orbitX) * driftScale, awayX), (heldDrift(vx, vy, age, 0) + orbitX) * driftScale, held);
+        const driftY = lerp(awayDrift((vy * age + orbitY) * driftScale, awayY), (heldDrift(vx, vy, age, 1) + orbitY) * driftScale, held);
         const settledOrient = latest ? latest.after.orient : initial.orient;
         const settledWrap = latest ? latest.after.wrap : initial.wrap;
         return {
@@ -728,6 +760,7 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
             fromWrap: latest ? latest.before.wrap : settledWrap,
             toWrap: settledWrap,
             wrap: w,
+            orient: o,
             phase: latest ? latest.phase : 1,
             // 纵横交错时每次换槽位都飞；另两种排版只在朝向变化时飞。
             fly: latest !== null && latest.phase < 1
@@ -796,9 +829,13 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
             if (glyph.blank) return;
             let length = 0;
             let previous: Point | null = null;
+            let fontPx = heroPx;
+            let flying = 0;
             samples.forEach((sample, i) => {
                 const local = glyphLocal(view, glyph, sample, transforms[i]!);
                 const world = toWorld(transforms[i]!, local);
+                fontPx = heroPx * transforms[i]!.scale * local.scale;
+                flying = local.flying;
                 const wobble = Math.sin(i * 0.9 + glyph.flight.wobble + sample * 6) * heroPx * 0.02;
                 const x = world.x + wobble;
                 const y = world.y - wobble * 0.6;
@@ -810,9 +847,14 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
                 }
                 previous = { x, y };
             });
-            // 径迹越长（字飞得越快）越亮；几乎不动的字不留径迹。
+            // 径迹越长（字飞得越快）越亮；几乎不动的字不留径迹。字头落在当前行的保护框里时，整条径迹跟字一起压暗
+            // （与字身同一条规则，飞行途中不压）。
             const strength = Math.min(1, length / (heroPx * 3));
-            trackLayer.stroke({ width, color, alpha: strength > 0.05 ? alpha * 0.55 * strength : 0, cap: 'round', join: 'round' });
+            const head = previous as Point | null;
+            const shield = head && protectCount > 0
+                ? protectedAlpha(protectionAt(protectBoxes, protectCount, index, head.x, head.y, fontPx / 2) * (1 - flying))
+                : 1;
+            trackLayer.stroke({ width, color, alpha: strength > 0.05 ? alpha * 0.55 * strength * shield : 0, cap: 'round', join: 'round' });
         });
     };
 
@@ -825,15 +867,60 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         for (const glyph of keywordGlyphs) glyph.tints = keywordTints(litColor, glyph.keyword!);
     };
 
+    // 当前行的保护框：每帧最多几个（换行交接时新旧当前行各一个，两次换行挨得很近时再多一两个），预先建好反复用。
+    const protectBoxes = [createProtectBox(), createProtectBox(), createProtectBox(), createProtectBox()];
+    let protectCount = 0;
+    const frameTransforms: LineTransform[] = new Array(lineCount);
+
+    /**
+     * 这一帧的保护框：第 j 行作为当前行的权重 = 它这次换行的缓动进度 − 下一次换行的缓动进度（换行进度都是 t 的
+     * 连续函数，所以权重也连续，求和为 1）。框是第 j 行此刻的墨迹框（横竖 × 单行 / 折行按当前的朝向与折行程度混合），
+     * 跟着它的位置、缩放与转角。横竖转到一半时（字在飞、混合出来的框又宽又高，框边扫得很快）框渐隐，转完再回来。
+     * 要先算好这一帧所有行的变换（frameTransforms）。
+     */
+    const buildProtectBoxes = (time: number) => {
+        protectCount = 0;
+        const { current } = resolveWindowCursor(options.lines, time);
+        let later = 0;
+        for (let j = current; j >= 0 && protectCount < protectBoxes.length; j -= 1) {
+            const eased = easeInOutSine((time - (options.lines[j]!.startTime - LEAD)) / SLIDE);
+            const transform = frameTransforms[j]!;
+            const o = clamp01(transform.orient);
+            const weight = (eased - later) * clamp01(transform.alpha) * (1 - 4 * o * (1 - o));
+            later = eased;
+            if (weight > 1e-4) {
+                const [hSingle, hWrapped] = lines[j]!.flow[0];
+                const [vSingle, vWrapped] = lines[j]!.flow[1];
+                const w = transform.wrap;
+                const inkW = lerp(lerp(hSingle.inkWidth, hWrapped.inkWidth, w), lerp(vSingle.inkWidth, vWrapped.inkWidth, w), transform.orient);
+                const inkH = lerp(lerp(hSingle.inkHeight, hWrapped.inkHeight, w), lerp(vSingle.inkHeight, vWrapped.inkHeight, w), transform.orient);
+                const box = protectBoxes[protectCount]!;
+                box.line = j;
+                box.x = transform.x;
+                box.y = transform.y;
+                box.cos = Math.cos(transform.rotation);
+                box.sin = Math.sin(transform.rotation);
+                box.halfW = (inkW / 2) * transform.scale;
+                box.halfH = (inkH / 2) * transform.scale;
+                box.margin = PROTECT_MARGIN * heroPx * transform.scale;
+                box.weight = weight;
+                protectCount += 1;
+            }
+            if (eased >= 1) break;
+        }
+    };
+
     const update = (frame: LyricWindowFrame) => {
         const { time, beams, litColor, unlitColor, unlitAlpha, intensity } = frame;
         trackLayer.clear();
         if (keywordGlyphs.length > 0) refreshKeywordTints(litColor);
         const litHex = hexOf(litColor);
         const starHex = hexOf(mixRgb(litColor, WHITE, 0.5));
+        for (let index = 0; index < lineCount; index += 1) frameTransforms[index] = lineTransform(index, time);
+        buildProtectBoxes(time);
 
         lines.forEach((view, index) => {
-            const transform = lineTransform(index, time);
+            const transform = frameTransforms[index]!;
             const { current, scale } = transform;
             const lineAlpha = transform.alpha * intensity;
             const visible = lineAlpha > 0.003;
@@ -869,7 +956,12 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
                 const heat = clamp01(illumination * 1.3 + flash * 0.2);
                 // 崩解得越远越淡，像散进烟里。
                 const dissolve = 1 - clamp01((decayAmount(decay, glyph.timing.start, time) * glyph.drift.speed - DISSOLVE_FROM) / DISSOLVE_SPAN);
-                const glyphAlpha = lineAlpha * passedDim * dissolve * (0.35 + 0.65 * local.gather);
+                // 落进当前行的保护框就压暗（字身、光晕、闪点一起），当前行始终清楚。飞行途中的字一闪而过、本来就在发亮，
+                // 不压（按飞行强度渐变）：否则它们高速穿过框边时透明度会一帧一帧地陡变。
+                const shield = protectCount > 0
+                    ? protectedAlpha(protectionAt(protectBoxes, protectCount, index, gx, gy, fontPx / 2) * (1 - local.flying))
+                    : 1;
+                const glyphAlpha = lineAlpha * passedDim * dissolve * (0.35 + 0.65 * local.gather) * shield;
 
                 glyph.glyph.visible = true;
                 // 没唱到的字也会被光柱照出来（冷色、半亮），唱到之后才是暖金色并带辉光；飞行中的字像带电粒子一样发亮。
@@ -893,7 +985,7 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
                     glyph.halo.tint = tints ? tints.halo : litHex;
                 }
 
-                const starAlpha = lineAlpha * flash * 0.55;
+                const starAlpha = lineAlpha * flash * 0.55 * shield;
                 glyph.star.visible = starAlpha > 0.003;
                 if (glyph.star.visible) {
                     // 亮点避开笔画中心，按种子上下错落；闪的过程中略微转动。
