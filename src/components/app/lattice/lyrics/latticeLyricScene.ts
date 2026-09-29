@@ -94,7 +94,8 @@ export function createLatticeLineView(pixi: Pixi, raster: LatticeRaster, parent:
         near.renderable = far.renderable = glowing;
     };
     return { container, blur, layout, entry, update,
-        destroy() { pieces.forEach(destroyPiece); pieces.clear(); blur.destroy(); glowFilters.forEach(f => f.destroy()); container.destroy({ children: true }); quad.destroy(); },
+        // quad.destroy(true) 连顶点 / 索引缓冲一起删；不传 true 时 Geometry 不动缓冲，要等 Pixi 的 GC 空闲 60 秒才删。
+        destroy() { pieces.forEach(destroyPiece); pieces.clear(); blur.destroy(); glowFilters.forEach(f => f.destroy()); container.destroy({ children: true }); quad.destroy(true); },
     };
 }
 export type LatticeLineView = ReturnType<typeof createLatticeLineView>;

@@ -29,6 +29,7 @@ import { getSonnetTexturePool } from './sonnetTexturePool';
 import { snapResolutionToTexturePool } from '../pixiTextureBudget';
 import {
     destroySonnetContainerChildren,
+    destroySonnetDisplayTree,
     unloadSonnetDisplayTree,
 } from './sonnetPixiResources';
 import {
@@ -397,7 +398,8 @@ export class SonnetPixiRuntime {
             shot.haloLayer.filters = null;
         });
         scene.postProcessFilters.forEach(filter => filter.destroy());
-        scene.container.destroy({ children: true });
+        // 逐节点销毁：destroy({ children: true }) 会留下每个 Graphics 自建的 GraphicsContext 与它的 GPU 缓冲。
+        destroySonnetDisplayTree(scene.container);
     }
 
     /**
