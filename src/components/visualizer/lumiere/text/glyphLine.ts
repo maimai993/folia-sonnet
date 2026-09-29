@@ -111,7 +111,12 @@ export const buildGlyphLine = (
 
     // 交给 Pixi 的纹理 GC：一分钟没画过的行（整首歌一个单元时，早已唱过的行）卸掉显存副本，画布还在，
     // 再出现时重新上传。按段落切单元时行不会闲置这么久，没有影响。
-    const source = new pixi.CanvasSource({ resource: canvas, resolution, autoGarbageCollect: true });
+    // 以 resolution 1 构造、之后再设真实倍率（与 latticeLyricRaster 同一个坑）：直接传 resolution 时，CanvasSource
+    // 先算 width = canvas.width / resolution，TextureSource 再乘回去，resizeCanvas() 用 !== 拿这个浮点数和整数画布
+    // 尺寸比，往返不精确（上面的边长上限把特别长的行压成非整数倍率，或 1.75 这类 DPR）就回写 canvas.width——
+    // 给画布赋宽高会清空刚画好的字，整行成了空白纹理。resolution 的 setter 只按像素尺寸重算宽高，不碰画布。
+    const source = new pixi.CanvasSource({ resource: canvas, resolution: 1, autoGarbageCollect: true });
+    source.resolution = resolution;
     const base = new pixi.Texture({ source });
     const glyphs: GlyphSlice[] = graphemes.map((char, index) => {
         const x = offsets[index]!;
