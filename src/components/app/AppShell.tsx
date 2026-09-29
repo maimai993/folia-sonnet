@@ -41,6 +41,7 @@ const AppShell: React.FC<AppShellProps> = ({
 }) => {
     const { t } = useTranslation();
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+    const isWindowsElectron = isElectronWindow && window.electron?.platform === 'win32';
 
     useEffect(() => {
         if (!useCustomWindowRadius || !window.electron?.isWindowMaximized) {
@@ -109,8 +110,11 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className="pointer-events-auto absolute top-0 right-[180px] z-20 h-full flex items-center"
-                            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                            className="pointer-events-auto absolute top-0 z-20 h-full flex items-center"
+                            style={{
+                                WebkitAppRegion: 'no-drag',
+                                right: isWindowsElectron ? 224 : 180,
+                            } as React.CSSProperties}
                         >
                             <button
                                 type="button"
