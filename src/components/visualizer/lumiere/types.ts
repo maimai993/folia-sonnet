@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Mood } from './lumiereKernel';
 import type { LineArtSpec } from './lineart/lineArt';
 import type { MotesSpec } from './light/motes';

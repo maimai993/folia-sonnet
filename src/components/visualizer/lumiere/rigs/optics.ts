@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import {
     fiber, focusMark, interfaceLine, lens, mergeDiagrams, mirror, pinholeBox, rayPath, ruler, segment,
 } from '../lineart/diagrams';

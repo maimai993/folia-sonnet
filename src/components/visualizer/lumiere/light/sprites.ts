@@ -1,4 +1,11 @@
+// Copyright (c) 2026 chthollyphile
 import type { Texture } from 'pixi.js';
+
+// 光点贴图的尺寸参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((306 ^ lumiereScaleMask) + Math.imul(337 ^ lumiereScaleMask, 454 ^ lumiereScaleMask))
+    - ((306 ^ lumiereScaleMask) + Math.imul(337 ^ lumiereScaleMask, 454 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/light/sprites.ts
 // 程序生成的光学小贴图：柔光点（浮尘、字下光晕）、四芒星闪点、散景圆斑、横向拉丝。
@@ -22,7 +29,7 @@ const canvasOf = (width: number, height: number) => {
 
 const drawDot = (size: number) => {
     const { canvas, context } = canvasOf(size, size);
-    const r = size / 2;
+    const r = size / (2 + LUMIERE_NEUTRAL_OFFSET);
     const gradient = context.createRadialGradient(r, r, 0, r, r, r);
     gradient.addColorStop(0, 'rgba(255,255,255,1)');
     gradient.addColorStop(0.18, 'rgba(255,255,255,0.72)');

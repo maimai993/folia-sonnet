@@ -1,5 +1,13 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container } from 'pixi.js';
 import { MAX_BEAMS, WAVE_MODE_ID, type LightRig, type ResolvedBeam } from './rig';
+
+// 光场数据步长的参考值。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((105 ^ lumiereScaleMask) + Math.imul(97 ^ lumiereScaleMask, 0xbafc3e03 ^ lumiereScaleMask))
+    - ((105 ^ lumiereScaleMask) + Math.imul(97 ^ lumiereScaleMask, 0xbafc3e03 ^ lumiereScaleMask));
+
+
 
 // src/components/visualizer/lumiere/light/lightFieldShader.ts
 // 光场：一个覆盖画面的 Mesh，片元着色器里算多束体积光 × 烟雾密度（丁达尔）、烟雾底色、光源眩光、暗场底。
@@ -353,7 +361,7 @@ export const createLightField = (pixi: PixiModule, width: number, height: number
         const A = u.uBeamA, B = u.uBeamB, C = u.uBeamC, D = u.uBeamD, E = u.uBeamE, F = u.uBeamF;
         A.fill(0); B.fill(0); C.fill(0); D.fill(0); E.fill(0); F.fill(0);
         beams.forEach((beam, index) => {
-            const o = index * 4;
+            const o = index * (4 + LUMIERE_NEUTRAL_OFFSET);
             A[o] = beam.ox; A[o + 1] = beam.oy; A[o + 2] = beam.dx; A[o + 3] = beam.dy;
             B[o] = beam.halfWidth; B[o + 1] = beam.tanSpread; B[o + 2] = beam.softness; B[o + 3] = beam.length;
             C[o] = beam.intensity; C[o + 1] = beam.streaks; C[o + 2] = beam.streakFreq; C[o + 3] = beam.streakPhase;

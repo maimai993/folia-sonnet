@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Sprite } from 'pixi.js';
 import type { Line } from '../../../../types';
 import { splitLyricGraphemes } from '../../../../utils/lyrics/graphemeTiming';

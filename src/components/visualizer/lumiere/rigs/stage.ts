@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { curtains, lampHead, mergeDiagrams, projector } from '../lineart/diagrams';
 import type { LineArtSpec } from '../lineart/lineArt';
 import { scatteredSparks } from '../lineart/recipes';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 // src/components/visualizer/lumiere/lumiereSongSwap.ts
 // 换歌交接的两帧状态机（同 tempera 的 songSwap）：第一帧在旧歌还在画的时候把新歌当前段落的场景建好
 // （stage），第二帧切过去（commit）。切的那一帧不做任何重活；中途被取消（abort）或运行时销毁时立即了结，

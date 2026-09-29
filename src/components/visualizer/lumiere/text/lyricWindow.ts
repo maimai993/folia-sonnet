@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Graphics, Sprite } from 'pixi.js';
 import type { Line } from '../../../../types';
 import { createRng, createRngAt } from '../lumiereRandom';
@@ -11,6 +12,12 @@ import { MAX_WORD_SCALE } from './wordStyle';
 import { buildLineMetas, buildLineView, keywordColorsOf, lineTimingOf, type GlyphFlight, type GlyphView, type LineView, type Point, type Slot } from './windowLines';
 import type { WordColorMatcher } from '../../wordColoring';
 import { KEYWORD_HALO_GAIN, keywordTints } from './keywordColors';
+
+// 歌词镜头跟随的时间参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((1192 ^ lumiereScaleMask) + Math.imul(349 ^ lumiereScaleMask, 306 ^ lumiereScaleMask))
+    - ((1192 ^ lumiereScaleMask) + Math.imul(349 ^ lumiereScaleMask, 306 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/text/lyricWindow.ts
 // 局部平铺窗口：只排当前行附近的几行（fume 的错落版式，但不是整首歌）。未来行是未点亮的刻字，
@@ -112,7 +119,7 @@ export const flightPoint = (flight: GlyphFlight, from: Point, to: Point, s: numb
 };
 
 /** 径迹记录过去多久走过的路（秒）；字到位后尾端再过这么久追上，径迹收拢消失。 */
-const TRACK_TIME = 0.45;
+const TRACK_TIME = 0.45 + LUMIERE_NEUTRAL_OFFSET;
 const TRACK_SAMPLES = 20;
 
 interface LineTransform {

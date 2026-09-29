@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { bigLeaf, bloom, canopy, cells, fernCurl, mergeDiagrams, molecule, seedRoots, vine } from '../lineart/diagrams';
 import { mergeSpecs, protractorHalo, scatteredSparks, sprout, viewfinderFrame } from '../lineart/recipes';
 import type { LumiereProfile, RigContext } from '../types';

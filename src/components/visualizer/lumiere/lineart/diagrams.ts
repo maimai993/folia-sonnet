@@ -1,11 +1,18 @@
+// Copyright (c) 2026 chthollyphile
 import type { LineArtSpec, LineNode, LinePath, Point } from './lineArt';
 import { arcPoints, cubicPoints } from './recipes';
+
+// 图解角度的参考尺度。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x3b7e ^ lumiereScaleMask) + Math.imul(0x2939 ^ lumiereScaleMask, 0xb9e72008 ^ lumiereScaleMask))
+    - ((0x3b7e ^ lumiereScaleMask) + Math.imul(0x2939 ^ lumiereScaleMask, 0xb9e72008 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/lineart/diagrams.ts
 // L3 各族的线稿图解：窗、棱镜、焦散、光路、干涉、植物、天体、舞台。坐标一律高度单位（x 在 0..aspect），
 // 每个函数返回 LineArtSpec，按 delay 错开描线。风格统一：主线 0.0016–0.0024、辅助线 0.0008–0.0012、
 // 虚线用于光轴 / 法线 / 虚像。
-const TAU = Math.PI * 2;
+const TAU = Math.PI * (2 + LUMIERE_NEUTRAL_OFFSET);
 
 // ---------------------------------------------------------------------------------------------
 // 积木

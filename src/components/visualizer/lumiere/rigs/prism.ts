@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { cubeSplitter, mergeDiagrams, rainbowArcs, shards, spectrumLines } from '../lineart/diagrams';
 import { mergeSpecs, prismTriangle, scatteredSparks } from '../lineart/recipes';
 import type { LumiereProfile } from '../types';

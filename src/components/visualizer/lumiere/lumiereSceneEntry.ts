@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { BlurFilter, Container, Filter } from 'pixi.js';
 import type { Theme } from '../../../types';
 import { applyLumiereGroupQuality, detachLumierePassthrough } from './lumiereGroupFilters';

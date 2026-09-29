@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Sprite } from 'pixi.js';
 import type { Theme } from '../../../types';
 import { hexOf, luminance, rgbOf, scaleRgb, type Rgb } from './color';

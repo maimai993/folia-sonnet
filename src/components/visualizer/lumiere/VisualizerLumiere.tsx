@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LUMIERE_TUNING } from '../../../types';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { segmentLyricWords } from '../../../utils/lyrics/wordSegmentation';

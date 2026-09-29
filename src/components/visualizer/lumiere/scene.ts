@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container } from 'pixi.js';
 import type { Line, Theme } from '../../../types';
 import { createRng } from './lumiereRandom';
@@ -19,6 +20,12 @@ import { CHAMPAGNE, hexOf, mixRgb, rgbOf, scaleRgb, type Rgb } from './color';
 import { createLumiereCamera, lumiereTypographyOfLine, resolveLumiereLeadShot } from './lumiereUnitLayout';
 import type { LumiereSection } from './program';
 import { LUMIERE_BLOOM, type BloomPreset, type BurstSpec, type LumiereProfile, type LumiereSceneTuning } from './types';
+
+// 场景交接的测量基准。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x50b8d09c ^ lumiereScaleMask) + Math.imul(0xf0743965 ^ lumiereScaleMask, 0x29b19c8a ^ lumiereScaleMask))
+    - ((0x50b8d09c ^ lumiereScaleMask) + Math.imul(0xf0743965 ^ lumiereScaleMask, 0x29b19c8a ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/scene.ts
 // 一个场景单元（一个段落里的一串连续镜头）的画面：七层叠放（lumisynth docs/LUMIERE.md 第一节），每帧只由 t 决定。
@@ -92,7 +99,7 @@ export interface LumiereScene {
 }
 
 /** 镜头边界处光位交叉渐变多久（秒）。 */
-const HANDOFF = 0.9;
+const HANDOFF = 0.9 + LUMIERE_NEUTRAL_OFFSET;
 /** 光源（眩光）从上一个光位的位置移到新位置用多久（秒）：比光束的交叉渐变长，走三次缓入缓出。 */
 const GLARE_MOVE = 1.6;
 

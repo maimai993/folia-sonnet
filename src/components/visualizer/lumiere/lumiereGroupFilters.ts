@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Filter } from 'pixi.js';
 import type { BloomFilter } from './light/bloomFilter';
 import type { BloomPreset } from './types';

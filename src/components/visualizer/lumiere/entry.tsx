@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import React from 'react';
 import { DEFAULT_LUMIERE_TUNING } from '../../../types';
 import { defineVisualizer } from '../definition';

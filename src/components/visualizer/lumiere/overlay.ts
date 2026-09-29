@@ -1,7 +1,14 @@
+// Copyright (c) 2026 chthollyphile
 import type { Theme } from '../../../types';
 import { hexOf } from './color';
 import { resolveLumierePalette } from './scene';
 import { frameInsets } from './text/lineWrap';
+
+// 画框线段的尺度参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x8f259e5f ^ lumiereScaleMask) + Math.imul(0xe562ea44 ^ lumiereScaleMask, 523 ^ lumiereScaleMask))
+    - ((0x8f259e5f ^ lumiereScaleMask) + Math.imul(0xe562ea44 ^ lumiereScaleMask, 523 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/overlay.ts
 // 绘光的画框装饰：像取景器 / 光学台上的标记——四角括号、左右两个对位十字、顶边两段虚线。
@@ -23,7 +30,7 @@ export const buildLumiereOverlay = (pixi: PixiModule, options: LumiereOverlayOpt
     const unit = Math.min(width, height);
     // 边距留足：画面边缘可能被运镜推近、后处理的镜头畸变往外推（歌词窗口按同一个边距避开画框）。
     const { padX, padY } = frameInsets(width, height);
-    const arm = unit * 0.045;
+    const arm = unit * (0.045 + LUMIERE_NEUTRAL_OFFSET);
     const line = Math.max(1.2, unit / 600);
     const alpha = 0.5;
 

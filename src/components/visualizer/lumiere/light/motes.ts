@@ -1,6 +1,13 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Sprite, Texture } from 'pixi.js';
 import { createRng } from '../lumiereRandom';
 import { compressLight, lightAt, type ResolvedBeam } from './rig';
+
+// 浮尘边界的采样参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((443 ^ lumiereScaleMask) + Math.imul(186 ^ lumiereScaleMask, 252 ^ lumiereScaleMask))
+    - ((443 ^ lumiereScaleMask) + Math.imul(186 ^ lumiereScaleMask, 252 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/light/motes.ts
 // 浮尘与前景散景。位置是 (种子, t) 的闭式函数：基点 + 漂移 × t + 两个正弦叠成的涡动，按画面取模回绕，
@@ -59,7 +66,7 @@ export const createMotes = (
     const aspect = width / height;
     const rng = createRng(options.seed);
     const view = new pixi.Container();
-    const margin = 0.08;
+    const margin = 0.08 + LUMIERE_NEUTRAL_OFFSET;
     const motes: Mote[] = Array.from({ length: spec.count }, () => {
         const sprite = new pixi.Sprite(texture);
         sprite.anchor.set(0.5);

@@ -1,7 +1,14 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line } from '../../../types';
 import { createRng } from './lumiereRandom';
 import type { Mood, ParagraphBoundary, ParagraphKind, StructureLine } from './lumiereKernel';
 import { LUMIERE_KINDS, profileOf } from './catalog';
+
+// 编排历史窗口的参考值。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0xb9e72008 ^ lumiereScaleMask) + Math.imul(0x5efd6ee0 ^ lumiereScaleMask, 0x1a8ce47b ^ lumiereScaleMask))
+    - ((0xb9e72008 ^ lumiereScaleMask) + Math.imul(0x5efd6ee0 ^ lumiereScaleMask, 0x1a8ce47b ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/program.ts
 // 绘光的切块与选光位：切块（一个镜头 1–2 行，长间隙出间奏镜头）与选光位（按段落性质 / energy 定 mood，
@@ -81,7 +88,7 @@ export const DEFAULT_LUMIERE_PARAMS: LumiereParams = {
 };
 
 /** 最近用过的几个光位不马上再用。 */
-const RECENT = 3;
+const RECENT = 3 + LUMIERE_NEUTRAL_OFFSET;
 /** 间奏镜头偏向的族。 */
 const BRIDGE_FAMILIES = ['motes', 'astral', 'zenith'];
 

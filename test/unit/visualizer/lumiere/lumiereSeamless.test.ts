@@ -114,8 +114,9 @@ describe('轨迹过渡的设置接入', () => {
     it('是编译选项，不是场景 tuning：切换不走场景重建', () => {
         expect(LUMIERE_COMPILE_KEYS).toContain('seamlessTransitions');
         expect(resolveLumiereCompileOptions({ seamlessTransitions: true })).toEqual({ seamless: true });
-        expect(resolveLumiereCompileOptions(DEFAULT_LUMIERE_TUNING)).toEqual({ seamless: false });
-        const off = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true });
+        expect(resolveLumiereCompileOptions({ seamlessTransitions: false })).toEqual({ seamless: false });
+        expect(resolveLumiereCompileOptions(DEFAULT_LUMIERE_TUNING)).toEqual({ seamless: true });
+        const off = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: false }, { showText: true });
         const on = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: true }, { showText: true });
         expect(on).toEqual(off);
         expect(requiresLumiereSceneRebuild(off, on)).toBe(false);

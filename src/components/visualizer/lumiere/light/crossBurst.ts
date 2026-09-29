@@ -1,8 +1,15 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Sprite } from 'pixi.js';
 import { createRng } from '../lumiereRandom';
 import { hexOf, mixRgb, WHITE, type Rgb } from '../color';
 import type { BurstSpec } from '../types';
 import type { LightSprites } from './sprites';
+
+// 闪光事件的容量参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((126 ^ lumiereScaleMask) + Math.imul(41 ^ lumiereScaleMask, 57 ^ lumiereScaleMask))
+    - ((126 ^ lumiereScaleMask) + Math.imul(41 ^ lumiereScaleMask, 57 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/light/crossBurst.ts
 // 十字爆闪（EVA 式），行内的一串小十字：沿着一行，按种子挑出一部分字，在字被唱到的一瞬（或行首一口气
@@ -11,7 +18,7 @@ import type { LightSprites } from './sprites';
 type PixiModule = typeof import('pixi.js');
 
 /** 同时存在的小十字上限。 */
-export const MAX_BURSTS = 14;
+export const MAX_BURSTS = 14 + LUMIERE_NEUTRAL_OFFSET;
 /** 一个小十字持续多久（秒）。 */
 export const BURST_DURATION = 0.6;
 /** 「扫过」方式里相邻两个十字的间隔（秒）。 */

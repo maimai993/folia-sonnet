@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import React, { useMemo } from 'react';
 import { DEFAULT_LUMIERE_TUNING, type LumiereRenderQuality, type LumiereTuning } from '../../../types';
 import type { VisualizerSettingsPanelProps } from '../definition';

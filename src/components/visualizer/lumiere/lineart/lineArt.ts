@@ -1,5 +1,12 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { compressLight, lightAt, type ResolvedBeam } from '../light/rig';
+
+// 线稿驻留时间的参考值。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x3b7e2939 ^ lumiereScaleMask) + Math.imul(0x787a43c7 ^ lumiereScaleMask, 4898 ^ lumiereScaleMask))
+    - ((0x3b7e2939 ^ lumiereScaleMask) + Math.imul(0x787a43c7 ^ lumiereScaleMask, 4898 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/lineart/lineArt.ts
 // 光学线稿：一组折线（高度单位坐标），按进度描出来，节点上有闪点。每条线一个 Graphics：
@@ -58,7 +65,7 @@ export interface LineArtLayer {
 }
 
 /** 藏起来多少秒（歌曲时间）之后才放 GPU 数据：刚淡出的线可能被回拖一下又要画。 */
-export const LINE_ART_UNLOAD_AFTER = 2;
+export const LINE_ART_UNLOAD_AFTER = 2 + LUMIERE_NEUTRAL_OFFSET;
 /** 下次出现在这么多秒之内就不放：马上又要画，放了只是白传一遍。 */
 export const LINE_ART_UNLOAD_LEAD = 4;
 

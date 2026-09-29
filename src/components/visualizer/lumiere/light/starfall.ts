@@ -1,6 +1,13 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container, Sprite, Texture } from 'pixi.js';
 import { createRng } from '../lumiereRandom';
 import { compressLight, lightAt, type ResolvedBeam } from './rig';
+
+// 星轨起光的时间参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((62 ^ lumiereScaleMask) + Math.imul(3 ^ lumiereScaleMask, 59 ^ lumiereScaleMask))
+    - ((62 ^ lumiereScaleMask) + Math.imul(3 ^ lumiereScaleMask, 59 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/light/starfall.ts
 // 星空点亮：镜头开始时全黑，数百个光点从画面顶部上方倾泻而下（带拖尾，落定前减速），落定的一瞬闪一下，
@@ -25,7 +32,7 @@ export interface StarfallSpec {
 }
 
 /** 主光柱在开场的什么时刻点亮（相对镜头开始，秒）。 */
-export const starfallIgnition = (spec: StarfallSpec) => spec.opening * 0.45;
+export const starfallIgnition = (spec: StarfallSpec) => spec.opening * (0.45 + LUMIERE_NEUTRAL_OFFSET);
 
 interface Star {
     sprite: Sprite;

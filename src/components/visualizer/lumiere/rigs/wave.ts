@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { circle, gridPanel, grating, mergeDiagrams, moire, polarizers, rings, standingWave, twoSources } from '../lineart/diagrams';
 import { mergeSpecs, scatteredSparks, slitBarrier, viewfinderFrame } from '../lineart/recipes';
 import type { WaveSpec } from '../light/rig';

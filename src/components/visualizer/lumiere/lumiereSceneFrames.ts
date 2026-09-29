@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { findLumiereParagraphIndexAtTime, type LumiereProgram } from './lumiereProgram';
 import { LUMIERE_TRANSITIONS, resolveLumiereEnterDuration } from './lumiereTransitions';
 

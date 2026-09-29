@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Theme } from '../../../types';
 import { profileOf } from './catalog';
 import { cameraBetween, type Affine, type LumiereAudioFrame } from './lumiereKernel';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { IconNode } from 'lucide-react';
 import { resolveLucideIcon } from '../../../../utils/lucideIconResolver';
 import type { Point } from './lineArt';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { LineArtSpec, Point } from '../lineart/lineArt';
 import { arcPoints, mergeSpecs, protractorHalo, scatteredSparks, viewfinderFrame } from '../lineart/recipes';
 import type { MotesSpec } from '../light/motes';

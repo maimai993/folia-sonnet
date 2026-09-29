@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 // src/components/visualizer/lumiere/text/lineClearance.ts
 // 当前行与邻行之间的间隙：两件事，都是 t 的纯函数、不存历史。
 //

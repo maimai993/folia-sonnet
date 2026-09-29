@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { measureNaturalWidth, prepareWithSegments } from '@chenglou/pretext';
 import { measureRichInlineStats, prepareRichInline, walkRichInlineLineRanges, type RichInlineItem, type RichInlineLineRange } from '@chenglou/pretext/rich-inline';
 import { glyphFont } from './glyphLine';

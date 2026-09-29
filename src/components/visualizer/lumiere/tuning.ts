@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { defineVisualizerTuning } from '../tuningRegistry';
 
 // src/components/visualizer/lumiere/tuning.ts

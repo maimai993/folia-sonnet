@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line } from '../../../types';
 
 // src/components/visualizer/lumiere/lumiereKernel.ts

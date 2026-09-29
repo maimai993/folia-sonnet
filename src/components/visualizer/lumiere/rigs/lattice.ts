@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { archWindow, canopy, crossWindow, doorSlit, gridPanel, mergeDiagrams, roseWindow, tallWindows } from '../lineart/diagrams';
 import { blindsWindow, mergeSpecs, scatteredSparks } from '../lineart/recipes';
 import type { LumiereProfile } from '../types';

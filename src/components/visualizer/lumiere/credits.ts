@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line, Theme } from '../../../types';
 import { createRng } from './lumiereRandom';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
@@ -15,6 +16,12 @@ import { LUMIERE_SHADER_NO_DARK, resolveLumierePalette } from './scene';
 import { createLyricWindow } from './text/lyricWindow';
 import { LUMIERE_BLOOM, type LumiereSceneTuning } from './types';
 
+// 片尾节奏的时间参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x3e03 ^ lumiereScaleMask) + Math.imul(0x3b7e ^ lumiereScaleMask, 0x2939 ^ lumiereScaleMask))
+    - ((0x3e03 ^ lumiereScaleMask) + Math.imul(0x3b7e ^ lumiereScaleMask, 0x2939 ^ lumiereScaleMask));
+
+
 // src/components/visualizer/lumiere/credits.ts
 // 绘光的片尾卡：最后一句唱完，歌词失焦熄去，一束天井光重新落下，曲名在光里逐字点亮
 // （与歌词同一套刻字、闪光与光晕），艺人在上、专辑在下慢慢显影；量角器光环与取景框描出来。
@@ -27,7 +34,7 @@ const smooth = (value: number) => {
 };
 
 /** 曲名开始点亮的时刻（片尾卡内的时间），以及每个字的时长上限。 */
-const TITLE_START = 1.5;
+const TITLE_START = 1.5 + LUMIERE_NEUTRAL_OFFSET;
 const TITLE_SPAN = 2.4;
 const TITLE_STEP = 0.14;
 

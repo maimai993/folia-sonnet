@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { armillary, constellation, corona, crescent, meteors, mergeDiagrams, orbits, sextant, starTrails } from '../lineart/diagrams';
 import { scatteredSparks } from '../lineart/recipes';
 import type { BeamSpec } from '../light/rig';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { horizon, mergeDiagrams } from '../lineart/diagrams';
 import { scatteredSparks } from '../lineart/recipes';
 import type { MotesSpec } from '../light/motes';

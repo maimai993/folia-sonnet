@@ -144,7 +144,7 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 - `lumiere/VisualizerLumiere.tsx`：React shell / subtitle；`createLumierePixiRuntime.ts`：Pixi runtime（WebGL only，建一次、换歌就地交接，scene cache ±1，一帧最多做一件贵的事）
 - `lumiereProgram.ts` + `program.ts`：整首编译（段落首尾相接铺满时间轴、镜头、光位、段落转场）；纯音乐编译成只有间奏镜头的程序，不造 ♪ 虚拟行
 - `scene.ts` / `lumiereUnit.ts`：一个段落一个场景，运镜在场景内部；运行时只在外面的 holder 上套转场帧（`lumiereSceneFrames.ts`：出场帧 + 边界后的交叉渐变，熄灯的变暗由场景自己的 fadeOut 完成）
-- `lumiereSeamless.ts`：轨迹过渡（tuning `seamlessTransitions`，默认关）把按段落编好的程序并成整首一个单元——镜头 / 光位不变，段落之间也走光位交接，运镜按原段落往返推拉；它是编译选项（`LUMIERE_COMPILE_KEYS`），切换时重新编译、经同曲 swapSong 清场景缓存，不重建 WebGL。歌词窗口按需排版（只排当前行前后几行，见 `text/windowLines.ts`），所以整首一个单元建场景约 45–50 ms，与按段落相近；`lumiereUnitLayout.ts` 放领头光位 / 逐行排版 / 运镜这几个由镜头决定的纯函数
+- `lumiereSeamless.ts`：轨迹过渡（tuning `seamlessTransitions`，默认开）把按段落编好的程序并成整首一个单元——镜头 / 光位不变，段落之间也走光位交接，运镜按原段落往返推拉；它是编译选项（`LUMIERE_COMPILE_KEYS`），切换时重新编译、经同曲 swapSong 清场景缓存，不重建 WebGL。歌词窗口按需排版（只排当前行前后几行，见 `text/windowLines.ts`），所以整首一个单元建场景约 45–50 ms，与按段落相近；`lumiereUnitLayout.ts` 放领头光位 / 逐行排版 / 运镜这几个由镜头决定的纯函数
 - `lumiereRuntimeTuning.ts`：用户 tuning → 场景 tuning、画质档（full / balanced / low 只降图形组 filter 分辨率、封顶烟雾倍频，文字保持满分辨率）、哪些改动要防抖重建场景
 - `lumiereAudio.ts`：`audioBands.bass` / `treble` / `audioPower` 归一化到 0..1（主播放器 0..255、预览 0..1）并做起音 / 释放平滑；渲染层消费音频
 - `lumiereCreditsLayer.ts` + `credits.ts`：片尾卡在最后一句唱完前几秒才建；`overlay.ts`：取景器画框

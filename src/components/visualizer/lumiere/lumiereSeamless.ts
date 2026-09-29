@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { LumiereParagraph, LumiereSection } from './program';
 
 // src/components/visualizer/lumiere/lumiereSeamless.ts

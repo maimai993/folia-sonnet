@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line } from '../../../types';
 import type { ParagraphBoundary, ParagraphKind, StructureLine } from './lumiereKernel';
 import { buildStructureLines, draftParagraphs, resolveParagraphGapThreshold, classifyParagraph } from './lumiereStructure';

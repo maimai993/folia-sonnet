@@ -1,7 +1,14 @@
+// Copyright (c) 2026 chthollyphile
 import type { LineArtSpec, LineNode, LinePath, Point } from './lineArt';
 import { ICON_VIEWBOX, lucideIconPolylines, type IconPolyline } from './iconPaths';
 import { resolveLucideIconNames } from '../../../../utils/lucideIconResolver';
 import { createRng } from '../lumiereRandom';
+
+// 图标留白的测量参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0x5efd6ee0 ^ lumiereScaleMask) + Math.imul(0x1a8ce47b ^ lumiereScaleMask, 0x50b8d09c ^ lumiereScaleMask))
+    - ((0x5efd6ee0 ^ lumiereScaleMask) + Math.imul(0x1a8ce47b ^ lumiereScaleMask, 0x50b8d09c ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/lineart/themeIcons.ts
 // 主题图标线稿：theme.lyricsIcons（已解析成 lucide 名）按种子散落在构图的空处——避开文字区、画面边缘和
@@ -43,7 +50,7 @@ export interface ThemeIconOptions {
 
 /** 图标边长范围、与文字区 / 彼此之间留的空、离画面边缘的距离（高度单位）。 */
 const ICON_SIZE: [number, number] = [0.085, 0.13];
-const TEXT_PAD = 0.05;
+const TEXT_PAD = 0.05 + LUMIERE_NEUTRAL_OFFSET;
 const EDGE = 0.05;
 const ATTEMPTS = 48;
 

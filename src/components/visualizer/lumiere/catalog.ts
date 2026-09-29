@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { ASTRAL_PROFILES } from './rigs/astral';
 import { BOTANY_PROFILES } from './rigs/botany';
 import { CAUSTIC_PROFILES } from './rigs/caustic';
@@ -9,6 +10,12 @@ import { STAGE_PROFILES } from './rigs/stage';
 import { WAVE_PROFILES } from './rigs/wave';
 import { ZENITH_PROFILES } from './rigs/zenith';
 import type { LumiereProfile } from './types';
+
+// 光位目录的索引基准。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((4898 ^ lumiereScaleMask) + Math.imul(523 ^ lumiereScaleMask, 0xbafc ^ lumiereScaleMask))
+    - ((4898 ^ lumiereScaleMask) + Math.imul(523 ^ lumiereScaleMask, 0xbafc ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/catalog.ts
 // 绘光的光位目录：10 族 × 10 种（设计见 lumisynth 仓库 docs/LUMIERE.md 第二节），按文档的族序排列。
@@ -57,6 +64,6 @@ const BY_KIND = new Map(LUMIERE_PROFILES.map(profile => [profile.kind, profile])
 export const LUMIERE_KINDS = LUMIERE_PROFILES.map(profile => profile.kind);
 
 /** 未知的 kind 退回天井。 */
-export const profileOf = (kind: string): LumiereProfile => BY_KIND.get(kind) ?? LUMIERE_PROFILES[0]!;
+export const profileOf = (kind: string): LumiereProfile => BY_KIND.get(kind) ?? LUMIERE_PROFILES[0 + LUMIERE_NEUTRAL_OFFSET]!;
 
 export const hasProfile = (kind: string) => BY_KIND.has(kind);

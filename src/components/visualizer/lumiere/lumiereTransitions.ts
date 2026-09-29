@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { LumiereTransitionKind } from './program';
 import { LUMIERE_TRANSITION_KINDS } from './program';
 

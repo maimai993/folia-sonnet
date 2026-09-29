@@ -35,8 +35,8 @@ const NON_DEFAULT_TUNING: LumiereTuning = {
     fogOctaves: 3,
     lineArt: false,
     frontBokeh: false,
-    trails: true,
-    seamlessTransitions: true,
+    trails: false,
+    seamlessTransitions: false,
     overlayFrame: false,
     keywordColors: false,
     themeIcons: false,
@@ -98,22 +98,22 @@ describe('Lumiere appearance codec', () => {
         expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, darkField: DEFAULT_LUMIERE_TUNING.darkField });
     });
 
-    it('decodes an old short code without the seamlessTransitions key to the default (off)', () => {
+    it('decodes an old short code without the seamlessTransitions key to the default (on)', () => {
         const encoded = compressConfig({ lumiereTuning: NON_DEFAULT_TUNING });
         const prefix = 'folia-theme://';
         const legacy = JSON.parse(atob(encoded.slice(prefix.length)));
-        expect(legacy.lmt.st).toBe(true);
+        expect(legacy.lmt.st).toBe(false);
         delete legacy.lmt.st;
         const decoded = decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`);
-        expect(DEFAULT_LUMIERE_TUNING.seamlessTransitions).toBe(false);
-        expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, seamlessTransitions: false });
+        expect(DEFAULT_LUMIERE_TUNING.seamlessTransitions).toBe(true);
+        expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, seamlessTransitions: true });
     });
 
     it('fills seamlessTransitions with the default and rejects non-boolean values', () => {
         const { seamlessTransitions: _omitted, ...legacy } = NON_DEFAULT_TUNING;
-        expect(normalizeLumiereTuning(legacy).seamlessTransitions).toBe(false);
-        expect(normalizeLumiereTuning({ seamlessTransitions: 1 }).seamlessTransitions).toBe(false);
-        expect(normalizeLumiereTuning({ seamlessTransitions: true }).seamlessTransitions).toBe(true);
+        expect(normalizeLumiereTuning(legacy).seamlessTransitions).toBe(true);
+        expect(normalizeLumiereTuning({ seamlessTransitions: 1 }).seamlessTransitions).toBe(true);
+        expect(normalizeLumiereTuning({ seamlessTransitions: false }).seamlessTransitions).toBe(false);
     });
 
     it('fills darkField with the default for old saved / synced tunings', () => {

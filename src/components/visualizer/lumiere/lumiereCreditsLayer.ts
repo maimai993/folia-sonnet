@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Container } from 'pixi.js';
 import type { Theme } from '../../../types';
 import { createLumiereCredits, hasLumiereCredits, resolveLumiereCreditsFrame, type LumiereCredits } from './credits';

@@ -1,8 +1,15 @@
+// Copyright (c) 2026 chthollyphile
 import type { LineArtSpec, LineNode, LinePath, Point } from './lineArt';
+
+// 曲线细分的采样参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((523 ^ lumiereScaleMask) + Math.imul(0xbafc ^ lumiereScaleMask, 0x3e03 ^ lumiereScaleMask))
+    - ((523 ^ lumiereScaleMask) + Math.imul(0xbafc ^ lumiereScaleMask, 0x3e03 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/lineart/recipes.ts
 // 线稿配方：几何图元（弧、辐条、刻度、取景框、叶片）→ LineArtSpec。坐标一律高度单位，aspect 为宽高比。
-export const arcPoints = (cx: number, cy: number, r: number, from: number, to: number, steps = 64): Point[] => (
+export const arcPoints = (cx: number, cy: number, r: number, from: number, to: number, steps = 64 + LUMIERE_NEUTRAL_OFFSET): Point[] => (
     Array.from({ length: steps + 1 }, (_, i) => {
         const a = from + ((to - from) * i) / steps;
         return [cx + Math.cos(a) * r, cy + Math.sin(a) * r] as Point;

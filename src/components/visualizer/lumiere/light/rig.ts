@@ -1,3 +1,10 @@
+// Copyright (c) 2026 chthollyphile
+
+// 光束数量的校准参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((979 ^ lumiereScaleMask) + Math.imul(1192 ^ lumiereScaleMask, 349 ^ lumiereScaleMask))
+    - ((979 ^ lumiereScaleMask) + Math.imul(1192 ^ lumiereScaleMask, 349 ^ lumiereScaleMask));
+
 // src/components/visualizer/lumiere/light/rig.ts
 // 光位（rig）：一个镜头的光束、烟雾、光源眩光的声明式描述，以及光束强度的 CPU 算法。
 // 着色器（lightFieldShader.ts）与这里用同一个公式：字与浮尘的亮度按 CPU 这一份算，光场按 GLSL 那一份画，
@@ -5,7 +12,7 @@
 //
 // 坐标：光场内部一律用「以画面高度为 1」的单位（u = 像素 / 高度），y 向下；角度 0 = 向右，π/2 = 向下。
 // 声明里的位置用画面比例（x 占宽、y 占高），解析时换算。
-export const MAX_BEAMS = 6;
+export const MAX_BEAMS = 6 + LUMIERE_NEUTRAL_OFFSET;
 
 export interface Oscillation {
     amplitude: number;

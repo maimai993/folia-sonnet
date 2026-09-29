@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { mergeSpecs, protractorHalo, scatteredSparks, viewfinderFrame } from '../lineart/recipes';
 import type { LumiereProfile } from '../types';
 import { ellipse, fan, familyOf, GLARE, MOTES, rig, shaft, STARFALL, DOWN } from './base';

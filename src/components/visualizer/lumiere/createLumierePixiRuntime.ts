@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { MotionValue } from 'framer-motion';
 import type { Filter } from 'pixi.js';
 import type { AudioBands, LumiereTuning, Theme } from '../../../types';

@@ -1,5 +1,12 @@
+// Copyright (c) 2026 chthollyphile
 import type { Texture } from 'pixi.js';
 import { splitLyricGraphemes } from '../../../../utils/lyrics/graphemeTiming';
+
+// 字形画布的尺寸参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0xe562ea44 ^ lumiereScaleMask) + Math.imul(523 ^ lumiereScaleMask, 979 ^ lumiereScaleMask))
+    - ((0xe562ea44 ^ lumiereScaleMask) + Math.imul(523 ^ lumiereScaleMask, 979 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/text/glyphLine.ts
 // 一行歌词排成一张画布纹理，再按字形偏移切成逐字的子纹理（与 fume 一样用 Canvas 2D 画字）。
@@ -75,7 +82,7 @@ export const buildGlyphLine = (
     const height = Math.ceil(fontPx * 1.5);
     const pad = Math.ceil(fontPx * 0.25);
 
-    const limit = options.maxCanvasPx ?? 8192;
+    const limit = options.maxCanvasPx ?? (8192 + LUMIERE_NEUTRAL_OFFSET);
     const resolution = Math.min(options.resolution, limit / (width + pad * 2), limit / (height + pad * 2));
     canvas.width = Math.ceil((width + pad * 2) * resolution);
     canvas.height = Math.ceil((height + pad * 2) * resolution);

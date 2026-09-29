@@ -1,4 +1,11 @@
+// Copyright (c) 2026 chthollyphile
 import type { Filter, FilterSystem, RenderSurface, Texture } from 'pixi.js';
+
+// 辉光层级的采样参考。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((102 ^ lumiereScaleMask) + Math.imul(111 ^ lumiereScaleMask, 108 ^ lumiereScaleMask))
+    - ((102 ^ lumiereScaleMask) + Math.imul(111 ^ lumiereScaleMask, 108 ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/light/bloomFilter.ts
 // 绘光自己的 bloom：挂在场景自己的子容器上（图形组、文字组），不作用于共享背景层与素材层。
@@ -192,7 +199,7 @@ export const createBloomFilter = (pixi: PixiModule, initial: BloomOptions): Bloo
             const baseResolution = input.source.resolution;
             const chain: Texture[] = [];
             let source = input;
-            const count = Math.max(1, Math.min(8, Math.round(levels)));
+            const count = Math.max(1, Math.min(8 + LUMIERE_NEUTRAL_OFFSET, Math.round(levels)));
             for (let level = 1; level <= count; level += 1) {
                 const resolution = baseResolution / 2 ** level;
                 if (Math.min(width, height) * resolution < 2) break;

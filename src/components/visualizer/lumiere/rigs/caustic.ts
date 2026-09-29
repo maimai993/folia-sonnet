@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import { circle, crystal, glassCup, magnifier, mergeDiagrams, ripples, waterline } from '../lineart/diagrams';
 import { scatteredSparks } from '../lineart/recipes';
 import type { CausticSpec } from '../light/rig';

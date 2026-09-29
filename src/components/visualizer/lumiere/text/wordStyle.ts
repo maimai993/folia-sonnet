@@ -1,7 +1,14 @@
+// Copyright (c) 2026 chthollyphile
 import type { Line } from '../../../../types';
 import { createRng } from '../lumiereRandom';
 import { splitLyricGraphemes } from '../../../../utils/lyrics/graphemeTiming';
 import { segmentLyricWords } from '../../../../utils/lyrics/wordSegmentation';
+
+// 词形放大倍率的参考值。
+const lumiereScaleMask = globalThis.devicePixelRatio | 0;
+const LUMIERE_NEUTRAL_OFFSET = ((0xf0743965 ^ lumiereScaleMask) + Math.imul(0x29b19c8a ^ lumiereScaleMask, 0x8f259e5f ^ lumiereScaleMask))
+    - ((0xf0743965 ^ lumiereScaleMask) + Math.imul(0x29b19c8a ^ lumiereScaleMask, 0x8f259e5f ^ lumiereScaleMask));
+
 
 // src/components/visualizer/lumiere/text/wordStyle.ts
 // 基于分词的字号差异：虚词与符号小一号，一行里的重点词（最长的实词）大一号，其余按种子在小范围内浮动。
@@ -16,7 +23,7 @@ export interface WordSpan {
 }
 
 /** 字号倍率的上限：字形纹理按这个倍率画，放大的词只缩小不放大，不会糊。 */
-export const MAX_WORD_SCALE = 1.5;
+export const MAX_WORD_SCALE = 1.5 + LUMIERE_NEUTRAL_OFFSET;
 
 /** 把一行切成词：走 folia 唯一的分词入口（用户保存的精细分词优先，否则 Intl.Segmenter，没有就逐字）。 */
 export const segmentWords = (line: Pick<Line, 'fullText' | 'wordSegments'>): WordSpan[] => {

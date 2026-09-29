@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { Theme } from '../../../types';
 import type { TransformParams } from './lumiereKernel';
 import type { LumiereSection } from './program';

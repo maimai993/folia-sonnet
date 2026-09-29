@@ -1,3 +1,4 @@
+// Copyright (c) 2026 chthollyphile
 import type { MotionValue } from 'framer-motion';
 import type { AudioBands } from '../../../types';
 import type { LumiereAudioFrame } from './lumiereKernel';
