@@ -39,14 +39,29 @@ export class FakeContainer {
     addChild(...items: unknown[]) { items.forEach(item => { (item as FakeContainer).parent = this; }); this.children.push(...items); return items[0]; }
     addChildAt(item: unknown, index: number) { (item as FakeContainer).parent = this; this.children.splice(index, 0, item); return item; }
     removeChild(item: unknown) { const index = this.children.indexOf(item); if (index >= 0) this.children.splice(index, 1); (item as FakeContainer).parent = null; return item; }
-    destroy() { this.children = []; }
+    /** 与 Pixi 一样：带 children 时把同一份选项传给每个子节点。 */
+    destroy(options?: boolean | { children?: boolean; context?: boolean }) {
+        if (options === true || (typeof options === 'object' && options.children)) {
+            this.children.forEach(item => (item as FakeContainer).destroy(options));
+        }
+        this.children = [];
+    }
 }
 export class FakeSprite extends FakeContainer {
     constructor(public texture?: unknown) { super(); }
 }
 /** 记下每一笔径迹的透明度（stroke 的 alpha），测试用来看径迹是否也被当前行压低。 */
 export class FakeGraphics extends FakeContainer {
+    /** 建过的每个 Graphics（测试看销毁时它们自建的 context 有没有一起放掉）。 */
+    static created: FakeGraphics[] = [];
     strokes: number[] = [];
+    contextDestroyed = false;
+    constructor() { super(); FakeGraphics.created.push(this); }
+    /** 照 Pixi 8 的 Graphics.destroy：不传选项或传 true / { context: true } 才销毁自建的 context。 */
+    destroy(options?: boolean | { children?: boolean; context?: boolean }) {
+        if (!options || options === true || options.context === true) this.contextDestroyed = true;
+        super.destroy(options);
+    }
     clear() { this.strokes = []; return this; }
     moveTo() { return this; }
     lineTo() { return this; }

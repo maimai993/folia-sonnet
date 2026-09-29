@@ -1013,7 +1013,8 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         },
         destroy: () => {
             for (let k = built.length - 1; k >= 0; k -= 1) releaseLine(built[k]!);
-            view.destroy({ children: true });
+            // trackLayer 是自建 context 的 Graphics，带 context: true 才会连 GPU 批数据一起放掉（见 lineArt 的 destroy）。
+            view.destroy({ children: true, context: true });
         },
     };
 };

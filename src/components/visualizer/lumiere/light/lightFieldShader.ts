@@ -422,7 +422,8 @@ export const createLightField = (pixi: PixiModule, width: number, height: number
         update,
         destroy: () => {
             mesh.destroy();
-            geometry.destroy();
+            // 传 true 连顶点 / 索引缓冲一起销毁；Geometry.destroy() 默认不动缓冲，要等 Pixi 的 GC 空闲 60 秒才删。
+            geometry.destroy(true);
             shader.destroy();
         },
     };

@@ -165,6 +165,9 @@ export const createLineArt = (
     return {
         view,
         update,
-        destroy: () => view.destroy({ children: true }),
+        // context: true 必须带上：Pixi 8 的 Graphics.destroy 只要收到选项对象、却没写 context: true，就不销毁它自己建的
+        // GraphicsContext。那个 context 还挂在渲染器的 GraphicsContextSystem 里，连同它的 GPU 批数据（一个 batcher、
+        // 两块顶点 / 索引缓冲）要等 Pixi 的 GC 空闲 60 秒后才回收；单元换得勤时，WebGL 缓冲会一直涨到那个窗口的量。
+        destroy: () => view.destroy({ children: true, context: true }),
     };
 };

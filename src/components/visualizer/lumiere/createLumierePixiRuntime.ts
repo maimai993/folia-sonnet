@@ -211,7 +211,8 @@ export class LumierePixiRuntime {
     }
 
     private drawOverlay() {
-        this.overlayLayer.removeChildren().forEach(child => child.destroy({ children: true }));
+        // 画框是自建 context 的 Graphics，带 context: true 才会连 GPU 批数据一起放掉（见 lineArt 的 destroy）。
+        this.overlayLayer.removeChildren().forEach(child => child.destroy({ children: true, context: true }));
         if (!this.options.tuning.overlayFrame || this.width === 0) return;
         this.overlayLayer.addChild(buildLumiereOverlay(this.pixi, {
             width: this.width,
@@ -472,7 +473,7 @@ export class LumierePixiRuntime {
         this.retired.length = 0;
         this.credits?.destroy();
         this.darkField?.destroy();
-        this.overlayLayer?.removeChildren().forEach(child => child.destroy({ children: true }));
+        this.overlayLayer?.removeChildren().forEach(child => child.destroy({ children: true, context: true }));
         // 光点纹理与直通 filter 由运行时持有，场景与片尾卡都已销毁，这里最后释放。
         this.sprites?.destroy();
         this.passthrough?.destroy();
