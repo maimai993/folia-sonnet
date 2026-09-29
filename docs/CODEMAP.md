@@ -162,6 +162,7 @@
 - `src/components/visualizer/classic/entry.tsx`
 - `src/components/visualizer/diorama/entry.tsx`
 - `src/components/visualizer/fume/entry.tsx`
+- `src/components/visualizer/lumiere/entry.tsx`
 - `src/components/visualizer/monet/entry.tsx`
 - `src/components/visualizer/partita/entry.tsx`
 - `src/components/visualizer/pendolo/entry.tsx`
@@ -178,6 +179,7 @@
 - `src/components/visualizer/classic/tuning.ts`
 - `src/components/visualizer/diorama/tuning.ts`
 - `src/components/visualizer/fume/tuning.ts`
+- `src/components/visualizer/lumiere/tuning.ts`
 - `src/components/visualizer/monet/tuning.ts`
 - `src/components/visualizer/partita/tuning.ts`
 - `src/components/visualizer/pendolo/tuning.ts`
