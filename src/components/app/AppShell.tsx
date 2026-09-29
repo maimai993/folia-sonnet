@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Lock, LockOpen } from 'lucide-react';
 import TitlebarDragZone from '../TitlebarDragZone';
 import WindowControls from '../WindowControls';
+import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 
 // Shared shell for the app container, Electron titlebar, and mounted audio node.
 type AppShellProps = {
@@ -41,7 +42,8 @@ const AppShell: React.FC<AppShellProps> = ({
 }) => {
     const { t } = useTranslation();
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-    const isWindowsElectron = isElectronWindow && window.electron?.platform === 'win32';
+    const showFullscreenButton = usePlayerChromeSettingsStore(state => state.showFullscreenButton);
+    const hasFullscreenTitlebarButton = isElectronWindow && showFullscreenButton;
 
     useEffect(() => {
         if (!useCustomWindowRadius || !window.electron?.isWindowMaximized) {
@@ -113,7 +115,7 @@ const AppShell: React.FC<AppShellProps> = ({
                             className="pointer-events-auto absolute top-0 z-20 h-full flex items-center"
                             style={{
                                 WebkitAppRegion: 'no-drag',
-                                right: isWindowsElectron ? 224 : 180,
+                                right: hasFullscreenTitlebarButton ? 224 : 180,
                             } as React.CSSProperties}
                         >
                             <button

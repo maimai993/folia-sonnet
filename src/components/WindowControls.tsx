@@ -15,10 +15,10 @@ export default function WindowControls({
     const { t } = useTranslation();
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const showFullscreenButton = usePlayerChromeSettingsStore(state => state.showFullscreenButton);
     const useNativeMacFullscreenButton = usePlayerChromeSettingsStore(state => state.useNativeMacFullscreenButton);
     const electron = window.electron;
     const isMac = electron?.platform === 'darwin';
-    const isWindows = electron?.platform === 'win32';
     const usesNativeFullscreen = isMac && (useNativeMacFullscreenButton || isFullscreen);
     const isExpanded = usesNativeFullscreen ? isFullscreen : isMaximized;
 
@@ -26,11 +26,10 @@ export default function WindowControls({
         if (!electron) return;
         let active = true;
         let fullscreenEventReceived = false;
-        const tracksFullscreen = isMac || isWindows;
-        const unsubscribe = tracksFullscreen ? electron.onWindowFullscreenChanged(fullscreen => {
+        const unsubscribe = electron.onWindowFullscreenChanged(fullscreen => {
             fullscreenEventReceived = true;
             if (active) setIsFullscreen(fullscreen);
-        }) : undefined;
+        });
         const checkMaximized = async () => {
             const maximized = await electron.isWindowMaximized();
             if (active) setIsMaximized(maximized);
@@ -40,14 +39,14 @@ export default function WindowControls({
             if (active && !fullscreenEventReceived) setIsFullscreen(fullscreen);
         };
         void checkMaximized();
-        if (tracksFullscreen) void checkFullscreen();
+        void checkFullscreen();
         window.addEventListener('resize', checkMaximized);
         return () => {
             active = false;
             unsubscribe?.();
             window.removeEventListener('resize', checkMaximized);
         };
-    }, [electron, isMac, isWindows]);
+    }, [electron]);
 
     if (!electron) return null;
 
@@ -91,7 +90,7 @@ export default function WindowControls({
             >
                 <Radio size={15} />
             </button>
-            {isWindows && (
+            {showFullscreenButton && (
                 <button
                     className={btnClass}
                     tabIndex={standardControlsVisible ? 0 : -1}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Languages, LayoutList, Move } from 'lucide-react';
+import { Languages, LayoutList, Monitor, Move } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
@@ -14,6 +14,7 @@ import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { settingsDividerClassFor } from './settingsCardClasses';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/modal/settings/GeneralSettingsSubview.tsx
@@ -59,6 +60,13 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
         handleToggleHomeTabAlbums: state.handleToggleHomeTabAlbums,
         handleToggleHomeTabLocal: state.handleToggleHomeTabLocal,
     })));
+    const {
+        showFullscreenButton,
+        handleToggleShowFullscreenButton,
+    } = usePlayerChromeSettingsStore(useShallow(state => ({
+        showFullscreenButton: state.showFullscreenButton,
+        handleToggleShowFullscreenButton: state.handleToggleShowFullscreenButton,
+    })));
 
     const getResolvedLanguageLabel = (): string => {
         const lang = i18n.resolvedLanguage;
@@ -84,6 +92,7 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
         ? (t('options.appLanguageSystemHint')).replace('{{language}}', currentResolvedLanguage)
         : null;
 
+    const isElectron = typeof window !== 'undefined' && Boolean(window.electron);
     const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-200' : 'bg-[#2A2D35]';
     const rangeInputClass = [
         'w-full accent-current',
@@ -119,6 +128,33 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                     )}
                 </div>
             </SettingsAnchor>
+
+            {isElectron && (
+                <SettingsAnchor anchorId="fullscreenWindowButton" label={t('options.showFullscreenButton')}>
+                    <SettingsSectionHeading icon={Monitor} label={t('options.showFullscreenButton')} />
+                    <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.showFullscreenButton')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.showFullscreenButtonDesc')}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => handleToggleShowFullscreenButton(!showFullscreenButton)}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!showFullscreenButton ? toggleOffBackgroundClass : ''}`}
+                            style={{ backgroundColor: showFullscreenButton ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                            role="switch"
+                            aria-checked={showFullscreenButton}
+                            aria-label={t('options.showFullscreenButton')}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showFullscreenButton ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                </SettingsAnchor>
+            )}
 
             <SettingsAnchor anchorId="homeTabsVisibility" label={t('options.homeTabsVisibility')}>
                 <SettingsSectionHeading icon={LayoutList} label={t('options.homeTabsVisibility')} />
