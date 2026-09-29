@@ -335,7 +335,7 @@ const splitLongUnits = (
 /**
  * 一行的四种排版（横 / 竖 × 单行 / 两行）。limits 为横排行长、竖排列长的上限（逻辑像素）：只用来决定哪些词
  * 长到必须拆字；要不要折行由歌词窗口按槽位的缩放判断（shouldWrap）。
- * 横排：每行居中，行从上往下；竖排：列从右往左，各列顶端对齐（整块居中，单列时就是原来的居中竖排）。
+ * 横排：每行居中，行从上往下；竖排：列从右往左，各列居中对齐（列心在同一条横线上，单列时就是原来的居中竖排）。
  */
 export const flowLine = (
     measurer: TextMeasurer,
@@ -390,7 +390,8 @@ export const flowLine = (
                 }
             } else {
                 const columnX = ((count - 1) / 2 - r) * pitch;
-                const y = offset[index]! - along / 2;
+                // 各列按自己的长度居中：列心都落在同一条横线上（短的那列不贴顶）。
+                const y = offset[index]! - lengths[r]! / 2;
                 point = { x: columnX + glyph.jag * 0.8, y };
                 spots.push({ x: columnX, y });
                 if (glyph.char.trim()) {

@@ -16,7 +16,7 @@ import { segmentWords } from '@/components/visualizer/lumiere/text/wordStyle';
 import { installFakeTextMeasure } from './lumiereFixtures';
 
 // test/unit/visualizer/lumiere/lumiereLineWrap.test.ts
-// 歌词窗口的折行（lineWrap）：pretext 量宽、按词（含用户保存的分词）断开、标点黏着、两行均衡、竖排右起顶端对齐、
+// 歌词窗口的折行（lineWrap）：pretext 量宽、按词（含用户保存的分词）断开、标点黏着、两行均衡、竖排右起、折开后中心对齐、
 // 太长的单词才拆字、最多两行，以及「先给地方、再轻微缩小、最后才折」的判断。pretext 用假的 OffscreenCanvas 量字。
 installFakeTextMeasure();
 
@@ -112,7 +112,7 @@ describe('折行：两行 / 两列', () => {
         }
     });
 
-    it('竖排两列：右起（第一列在右），各列顶端对齐，列距固定', () => {
+    it('竖排两列：右起（第一列在右），列距固定', () => {
         const { flow: [, [, wrapped]] } = flow(TEXT, ['迷失在', '无边际', '这幽深的', '森林']);
         expect(wrapped.lines).toBe(2);
         const columns = linesOf(wrapped, 1);
@@ -121,9 +121,27 @@ describe('折行：两行 / 两列', () => {
         expect(xs[0]! - xs[1]!).toBeCloseTo(COLUMN_PITCH * HERO);
         expect(columns[0]).toBe(0);
         expect(columns[11]).toBe(1);
-        const tops = [0, 1].map(c => Math.min(...wrapped.points.filter((_, index) => columns[index] === c).map(point => point.y)));
-        expect(tops[0]).toBeCloseTo(tops[1]!, 3);
-        expect(tops[0]).toBeCloseTo(-wrapped.along / 2 + (HERO * (1 + SPACING)) / 2, 3);
+    });
+
+    it('折开后中心对齐：竖排各列的中心在同一条横线上，横排各行的中心在同一条竖线上', () => {
+        // 词长 3 / 3 / 4 / 4，均衡断开是 6 + 8：两段不一样长，才看得出是顶端对齐还是居中。
+        const text = '迷失在无边际这幽深的森林啊呀';
+        const segments = ['迷失在', '无边际', '这幽深的', '森林啊呀'];
+        const { flow: [[, rows], [, columns]] } = flow(text, segments);
+        const centers = (variant: LineVariant, orient: 0 | 1) => {
+            const lineOf = linesOf(variant, orient);
+            return [0, 1].map(line => {
+                const along = variant.points.filter((_, index) => lineOf[index] === line).map(point => (orient === 0 ? point.x : point.y));
+                return { count: along.length, center: (Math.min(...along) + Math.max(...along)) / 2 };
+            });
+        };
+        for (const [variant, orient] of [[columns, 1], [rows, 0]] as const) {
+            expect(variant.lines).toBe(2);
+            const [first, second] = centers(variant, orient);
+            expect(first!.count).not.toBe(second!.count);
+            expect(first!.center).toBeCloseTo(0, 3);
+            expect(second!.center).toBeCloseTo(0, 3);
+        }
     });
 
     it('最多两行：再长也只折成两行（之后由窗口整体缩小）', () => {
