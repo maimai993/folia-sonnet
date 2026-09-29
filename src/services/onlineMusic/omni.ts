@@ -582,6 +582,13 @@ export const omni = {
         await this.updateCollectionTracks(playlist, 'add', [song]);
         try {
             await this.refreshProviderPlaylists(playlist.providerId);
+            if (playlist.isLiked === true && providerSupports(provider, 'likes')) {
+                const account = useOnlineProviderAccountStore.getState().accounts[playlist.providerId];
+                if (account?.user?.id !== undefined && account?.user?.id !== null) {
+                    const likedSongIds = await this.getProviderLikedSongIds(playlist.providerId, account.user.id);
+                    useOnlineProviderAccountStore.getState().updateAccount(playlist.providerId, { likedSongIds });
+                }
+            }
         } catch (error) {
             console.warn('[Omni] Failed to refresh provider playlists after mutation', {
                 providerId: playlist.providerId,

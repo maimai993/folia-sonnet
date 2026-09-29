@@ -7,6 +7,7 @@ import { loadOnlineLyricsState, markOnlineLyricsPureMusic, resolveOnlineLyrics, 
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
+import { OnlineProviderError, type ProviderErrorCode } from '../types/onlineMusic';
 import { omni } from './onlineMusic/omni';
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
 import { getCachedSongAudioBlob, getCachedSongReplayGain, getSongCacheWithLegacyMigration } from './onlineMusic/resourceCache';
@@ -21,7 +22,7 @@ export async function loadOnlineSongAudioSource(
     prefetched: PrefetchedSongData | null
 ): Promise<
     | { kind: 'ok'; audioSrc: string; blobUrl?: string; replayGain?: ReplayGainInfo }
-    | { kind: 'unavailable' }
+    | { kind: 'unavailable'; reason?: ProviderErrorCode }
 > {
     const cachedAudioBlob = await getCachedSongAudioBlob(song);
     if (cachedAudioBlob) {
@@ -51,7 +52,7 @@ export async function loadOnlineSongAudioSource(
         source = await omni.getAudioSource(song, audioQuality);
     } catch (error) {
         console.warn('[OnlinePlayback] Provider audio source is temporarily unavailable', error);
-        return { kind: 'unavailable' };
+        return { kind: 'unavailable', ...(error instanceof OnlineProviderError ? { reason: error.code } : {}) };
     }
     const url = toSafePlaybackUrl(source?.url);
     if (!url) {

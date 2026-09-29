@@ -25,6 +25,7 @@ const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string
     netease: { label: '云', className: 'bg-red-600' },
     kugou: { label: 'K', className: 'bg-blue-600' },
     qq: { label: 'Q', className: 'bg-green-600' },
+    bodian: { label: '波', className: 'bg-teal-600' },
 };
 
 const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {

@@ -6,3 +6,8 @@
 # Signed mods and fixtures: the signature covers exact bytes, so no line-ending conversion.
 mods/** -text
 test/fixtures/folium-signature/** -text
+
+# Generated documentation and AUR checksums must use the same bytes on Windows and Linux.
+docs/folium/api.md text eol=lf
+src/mods/folium/contract.ts text eol=lf
+packaging/aur/folia-major-bin/folia-major.desktop text eol=lf

@@ -28,7 +28,7 @@ export type CollectionSyncOptions<T> = {
     getKey: (item: T) => string;
     /** Checked after every await; a newer sync or an unmount makes the old one stop quietly. */
     isCancelled: () => boolean;
-    onPage: (items: T[], offset: number) => void;
+    onPage: (items: T[], offset: number, hasMore: boolean) => void;
     wait?: (ms: number) => Promise<void>;
     retryDelaysMs?: readonly number[];
 };
@@ -93,7 +93,7 @@ export const syncRemainingCollectionPages = async <T>(
         const previousOffset = offset;
         items = appendUniqueByKey(items, page.items, options.getKey);
         offset = Math.max(offset, page.nextOffset);
-        options.onPage(items, offset);
+        options.onPage(items, offset, page.hasMore);
 
         if (!page.hasMore || offset <= previousOffset) break;
         // 没有 total 时，一整页都是旧条目通常说明上游忽略了 offset，继续翻只会原地打转。

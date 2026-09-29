@@ -19,6 +19,7 @@ const providerBadge = (
     if (provider.providerId === 'netease') return { label: '云', className: 'bg-red-600' };
     if (provider.providerId === 'kugou') return { label: 'K', className: 'bg-blue-600' };
     if (provider.providerId === 'qq') return { label: 'Q', className: 'bg-green-600' };
+    if (provider.providerId === 'bodian') return { label: '波', className: 'bg-teal-600' };
     return { label: provider.shortName.slice(0, 1), className: 'bg-zinc-600' };
 };
 
@@ -43,7 +44,8 @@ const OnlineProviderConnectPanel = ({
           * 448px 装得下；加入 QQ 音乐后三个按钮简体下要 566px、英文下要 730px，会被挤到第二行。
           * flex-wrap 保留，窗口真的窄下去仍然照常换行。
           */}
-        <div className="flex flex-wrap items-center justify-center gap-3.5 max-w-3xl w-full pt-2">
+        {/* 四个平台在常规窗口使用两列，宽屏展开为四列，避免三加一的不对称换行。 */}
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-4 items-center justify-center gap-3.5 max-w-3xl xl:max-w-6xl w-full pt-2">
             {providers.map(provider => {
                 const configured = provider.availability.configured;
                 const isPrimaryProvider = provider.providerId === 'netease';
@@ -54,7 +56,7 @@ const OnlineProviderConnectPanel = ({
                         type="button"
                         disabled={!configured}
                         onClick={() => onSelect(provider)}
-                        className={`flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm transition-all hover:scale-105 cursor-pointer border ${isPrimaryProvider
+                        className={`flex items-center justify-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm transition-all hover:scale-105 cursor-pointer border ${isPrimaryProvider
                             ? 'bg-white text-black border-white shadow-md'
                             : (isDaylight ? 'bg-white/60 hover:bg-white/90 text-zinc-900 border-black/5 shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white border-white/10')
                             } ${!configured ? 'opacity-40 cursor-not-allowed' : ''}`}

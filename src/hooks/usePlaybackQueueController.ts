@@ -558,6 +558,12 @@ export function usePlaybackQueueController({
             }
 
             if (preloadedOnlineAudioResult.kind === 'unavailable') {
+                if (preloadedOnlineAudioResult.reason === 'preview-only' || preloadedOnlineAudioResult.reason === 'auth-required') {
+                    setIsLyricsLoading(false);
+                    setStatusMsg({ type: 'error', text: t(preloadedOnlineAudioResult.reason === 'preview-only'
+                        ? 'status.songPreviewOnly' : 'status.loginExpired') });
+                    return;
+                }
                 const nextSong = getNextPlayableQueueSong(queueContext, song);
                 const canSkip = Boolean(nextSong) && skipCount < MAX_UNAVAILABLE_AUTO_SKIP_COUNT;
 
