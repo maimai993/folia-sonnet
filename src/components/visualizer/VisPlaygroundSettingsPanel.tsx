@@ -7,6 +7,7 @@ import {
     type ClassicTuning,
     type CladdaghTuning,
     type FumeTuning,
+    type LumiereTuning,
     type MonetPortraitImage,
     type MonetTuning,
     type PartitaTuning,
@@ -112,6 +113,8 @@ interface VisPlaygroundSettingsPanelProps {
     onSonnetTuningChange?: (patch: Partial<SonnetTuning>) => void;
     temperaTuning?: TemperaTuning;
     onTemperaTuningChange?: (patch: Partial<TemperaTuning>) => void;
+    lumiereTuning?: LumiereTuning;
+    onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
     cappellaTuning: CappellaTuning;
     cappellaCustomEmojiImages: CappellaEmojiImage[];
     onCappellaTuningChange?: (patch: Partial<CappellaTuning>) => void;
@@ -164,6 +167,13 @@ interface VisPlaygroundSettingsPanelProps {
     onSliderPointerDown?: () => void;
     onSliderCommit?: () => void;
 }
+
+// Modes that size their own lyrics: the generic font-size controls are disabled and this notice explains why.
+const LYRICS_FONT_SIZE_AUTO_NOTICE_KEYS: Partial<Record<string, string>> = {
+    sonnet: 'options.sonnetFontSizeAutoNotice',
+    tempera: 'options.temperaFontSizeAutoNotice',
+    lumiere: 'options.lumiereFontSizeAutoNotice',
+};
 
 const SECTION_OPTIONS: VisPlaygroundEditSection[] = ['common', 'background', 'visualizer', 'subtitle'];
 
@@ -376,6 +386,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSonnetTuningChange,
         temperaTuning,
         onTemperaTuningChange,
+        lumiereTuning,
+        onLumiereTuningChange,
         monetPortraitImage,
         onUploadMonetPortraitImage,
         onClearMonetPortraitImage,
@@ -411,6 +423,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
         onSliderPointerDown,
         onSliderCommit,
     } = props;
+    const lyricsFontSizeAutoNoticeKey = LYRICS_FONT_SIZE_AUTO_NOTICE_KEYS[visualizerMode] ?? null;
     const [fontWeightSliderValue, setFontWeightSliderValue] = useState(fontWeight ?? 400);
     const [subtitleFontWeightSliderValue, setSubtitleFontWeightSliderValue] = useState(subtitleFontWeight ?? 400);
 
@@ -510,8 +523,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         />
 
                         <fieldset
-                            disabled={visualizerMode === 'sonnet' || visualizerMode === 'tempera'}
-                            className={`space-y-4 transition-opacity ${visualizerMode === 'sonnet' || visualizerMode === 'tempera' ? 'opacity-40' : ''}`}
+                            disabled={lyricsFontSizeAutoNoticeKey !== null}
+                            className={`space-y-4 transition-opacity ${lyricsFontSizeAutoNoticeKey !== null ? 'opacity-40' : ''}`}
                         >
                             <PresetGroup
                                 label={t('options.fontSize')}
@@ -543,7 +556,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             </div>
                         </fieldset>
 
-                        {(visualizerMode === 'sonnet' || visualizerMode === 'tempera') && (
+                        {lyricsFontSizeAutoNoticeKey !== null && (
                             <div
                                 className="rounded-2xl border px-3.5 py-3 text-xs leading-relaxed"
                                 style={{
@@ -552,7 +565,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     backgroundColor: colorWithAlpha(theme.accentColor, isDaylight ? 0.06 : 0.1),
                                 }}
                             >
-                                {t(visualizerMode === 'tempera' ? 'options.temperaFontSizeAutoNotice' : 'options.sonnetFontSizeAutoNotice')}
+                                {t(lyricsFontSizeAutoNoticeKey)}
                             </div>
                         )}
 
@@ -748,6 +761,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             onSonnetTuningChange,
                             temperaTuning,
                             onTemperaTuningChange,
+                            lumiereTuning,
+                            onLumiereTuningChange,
                             monetPortraitImage,
                             onUploadMonetPortraitImage,
                             onClearMonetPortraitImage,

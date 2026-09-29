@@ -92,6 +92,7 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     pendoloTuning: 'visualizer',
     sonnetTuning: 'visualizer',
     temperaTuning: 'visualizer',
+    lumiereTuning: 'visualizer',
 
     lyricsFontStyle: 'fonts',
     lyricsFontScale: 'fonts',
@@ -162,6 +163,7 @@ const TRUTHY_GUARDED_FIELDS = new Set([
     'pendoloTuning',
     'sonnetTuning',
     'temperaTuning',
+    'lumiereTuning',
     'monetBackgroundTuning',
     'nomandBackgroundTuning',
     'latentBackgroundTuning',
@@ -187,6 +189,7 @@ const BUNDLED_TUNING_FIELDS = new Set([
     'pendoloTuning',
     'sonnetTuning',
     'temperaTuning',
+    'lumiereTuning',
 ]);
 
 // Structural compare over the plain JSON the codec emits — enough for tunings and font arrays, and

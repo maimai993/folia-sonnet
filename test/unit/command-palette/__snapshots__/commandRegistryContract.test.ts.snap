@@ -171,6 +171,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "background-picker",
   "visualizer-sonnet",
   "visualizer-tempera",
+  "visualizer-lumiere",
   "visualizer-classic",
   "visualizer-cadenza",
   "visualizer-partita",

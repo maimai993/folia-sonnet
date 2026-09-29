@@ -67,6 +67,7 @@ export const buildSyncedVisualSettings = (state: SyncableSettingsState): SyncedV
     pendoloTuning: state.pendoloTuning,
     sonnetTuning: state.sonnetTuning,
     temperaTuning: state.temperaTuning,
+    lumiereTuning: state.lumiereTuning,
     urlBackgroundList: state.urlBackgroundList,
     urlBackgroundSelectedId: state.urlBackgroundSelectedId,
     homeLayoutStyle: state.homeLayoutStyle,
@@ -133,6 +134,7 @@ export const applySyncedVisualSettings = (
     if (settings.visualizerTunings === undefined && settings.pendoloTuning !== undefined) state.handleSetPendoloTuning(settings.pendoloTuning as Parameters<SyncableSettingsState['handleSetPendoloTuning']>[0]);
     if (settings.visualizerTunings === undefined && settings.sonnetTuning !== undefined) state.handleSetSonnetTuning(settings.sonnetTuning as Parameters<SyncableSettingsState['handleSetSonnetTuning']>[0]);
     if (settings.visualizerTunings === undefined && settings.temperaTuning !== undefined) state.handleSetTemperaTuning(settings.temperaTuning as Parameters<SyncableSettingsState['handleSetTemperaTuning']>[0]);
+    if (settings.visualizerTunings === undefined && settings.lumiereTuning !== undefined) state.handleSetLumiereTuning(settings.lumiereTuning as Parameters<SyncableSettingsState['handleSetLumiereTuning']>[0]);
     if (settings.urlBackgroundList !== undefined) state.handleSetUrlBackgroundList(settings.urlBackgroundList as Parameters<SyncableSettingsState['handleSetUrlBackgroundList']>[0]);
     if (settings.urlBackgroundSelectedId !== undefined) state.handleSetUrlBackgroundSelectedId(settings.urlBackgroundSelectedId);
     if (settings.homeLayoutStyle !== undefined) state.handleSetHomeLayoutStyle(settings.homeLayoutStyle);

@@ -20,14 +20,16 @@ describe('Sonnet Pixi resource lifecycle', () => {
     });
 
     it('destroys detached overlay children instead of merely removing them', () => {
-        const unload = vi.fn();
+        const leafDestroy = vi.fn();
         const destroy = vi.fn();
-        const removeChildren = vi.fn(() => [{ unload, destroy }]);
+        const removeChildren = vi.fn(() => [{ destroy, children: [{ destroy: leafDestroy }] }]);
 
         destroySonnetContainerChildren({ removeChildren });
 
-        expect(unload).toHaveBeenCalledOnce();
-        expect(destroy).toHaveBeenCalledWith({ children: true });
+        // 逐节点、不带参数销毁（Graphics 只有这样才按归属放掉自建的 context），子节点先于父节点。
+        expect(leafDestroy).toHaveBeenCalledWith();
+        expect(destroy).toHaveBeenCalledWith();
+        expect(leafDestroy.mock.invocationCallOrder[0]).toBeLessThan(destroy.mock.invocationCallOrder[0]!);
     });
 
     it('unloads retained descendants only when their tree becomes hidden', () => {

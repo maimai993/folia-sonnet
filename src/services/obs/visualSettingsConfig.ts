@@ -85,6 +85,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     pendoloTuning: storeVisualizer.pendoloTuning,
     sonnetTuning: storeVisualizer.sonnetTuning,
     temperaTuning: storeVisualizer.temperaTuning,
+    lumiereTuning: storeVisualizer.lumiereTuning,
     urlBackgroundList: storeVisualizer.urlBackgroundList,
     urlBackgroundSelectedId: storeVisualizer.urlBackgroundSelectedId,
     // The now playing card. Not a visualizer setting, but it is chrome the listener sees over the

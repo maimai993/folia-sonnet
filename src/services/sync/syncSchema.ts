@@ -86,6 +86,7 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (value.pendoloTuning !== undefined) settings.pendoloTuning = value.pendoloTuning;
     if (value.sonnetTuning !== undefined) settings.sonnetTuning = value.sonnetTuning;
     if (value.temperaTuning !== undefined) settings.temperaTuning = value.temperaTuning;
+    if (value.lumiereTuning !== undefined) settings.lumiereTuning = value.lumiereTuning;
     if (Array.isArray(value.urlBackgroundList)) settings.urlBackgroundList = value.urlBackgroundList;
     if (value.urlBackgroundSelectedId === null) settings.urlBackgroundSelectedId = null;
     else if (typeof value.urlBackgroundSelectedId === 'string') settings.urlBackgroundSelectedId = value.urlBackgroundSelectedId;
