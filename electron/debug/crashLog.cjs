@@ -246,11 +246,9 @@ const createCrashLog = ({ app, dialog, shell, getLocale, onLine }) => {
 /**
  * Points every way the app can fall over at one crash log.
  *
- * @param isRendererCrashRecovered the app's own answer to "am I about to fix this myself?". Both
- *        wallpaper recovery paths — the Linux windowtolayer watchdog's relaunch and the in-place
- *        reload on Windows and macOS — gate on `reason === 'crashed'`, and a modal over a desktop
- *        that is already coming back is one the user can only dismiss. The file is still written;
- *        only the interruption is withheld.
+ * @param isRendererCrashRecovered the app's own answer to "am I about to fix this myself?".
+ *        Wallpaper recovery and bounded main-window reloads gate on `reason === 'crashed'`.
+ *        The file is still written; only the interruption is withheld while recovery runs.
  */
 const installCrashHandlers = ({ app, crashLog, isRendererCrashRecovered = () => false }) => {
     // A shutdown is not a crash: renderers legitimately go away while the app exits, and a modal
@@ -279,7 +277,7 @@ const installCrashHandlers = ({ app, crashLog, isRendererCrashRecovered = () => 
         let url = null;
         try { url = contents?.getURL?.() ?? null; } catch { /* already destroyed */ }
         let recovered = false;
-        try { recovered = isRendererCrashRecovered(details) === true; } catch { /* advisory only */ }
+        try { recovered = isRendererCrashRecovered(details, contents) === true; } catch { /* advisory only */ }
         crashLog.report('render-process-gone', [
             `Reason     ${details?.reason ?? 'unknown'}`,
             `Exit code  ${details?.exitCode ?? 'unknown'}`,

@@ -249,12 +249,15 @@ describe('which failures reach the user', () => {
 
     it('records but does not announce a crash the app recovers from itself', () => {
         // 壁纸模式下渲染进程崩溃会自动恢复（Linux 重启进程，Win/mac 就地 reload）。
+        const contents = { getURL: () => 'x' };
+        const isRendererCrashRecovered = vi.fn(() => true);
         withHandlers((_app, report) => {
-            _app.emit('render-process-gone', {}, { getURL: () => 'x' }, gone('crashed'));
+            _app.emit('render-process-gone', {}, contents, gone('crashed'));
             expect(report).toHaveBeenCalledTimes(1);
             expect(report.mock.calls[0][2]).toEqual({ announceToUser: false });
             expect(report.mock.calls[0][1]).toContain('Recovered  true');
-        }, { isRendererCrashRecovered: (details: { reason: string }) => details.reason === 'crashed' });
+            expect(isRendererCrashRecovered).toHaveBeenCalledWith(gone('crashed'), contents);
+        }, { isRendererCrashRecovered });
     });
 
     it('announces a renderer crash nothing is handling', () => {

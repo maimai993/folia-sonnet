@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker, safeStorage, protocol, net: electronNet } = require('electron');
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, nativeImage, desktopCapturer, Menu, Tray, nativeTheme, powerSaveBlocker, safeStorage, protocol, crashReporter, net: electronNet } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -1703,13 +1703,46 @@ const crashLog = createCrashLog({
   getLocale: getMainLocale,
   onLine: runtimeLine,
 });
+// Keep native crash dumps beside the text reports so one folder contains the evidence needed
+// to identify the faulting module. Dumps stay on this machine until the user shares them.
+if (crashLog.dir) {
+  const crashDumpDir = path.join(crashLog.dir, 'crash-dumps');
+  try {
+    fs.mkdirSync(crashDumpDir, { recursive: true });
+    app.setPath('crashDumps', crashDumpDir);
+  } catch (error) {
+    console.warn('[Crash] Could not place crash dumps beside logs', error);
+  }
+}
+try {
+  crashReporter.start({ uploadToServer: false });
+} catch (error) {
+  console.warn('[Crash] Native crash dumps are unavailable', error);
+}
+
+const RENDERER_CRASH_RELOAD_WINDOW_MS = 60_000;
+const MAX_RENDERER_CRASH_RELOADS = 2;
+
+// Limit automatic reloads to avoid trapping the user in a crash loop.
+function shouldReloadMainRenderer(win, details) {
+  if (details?.reason !== 'crashed' || !win || win.isDestroyed() || isWallpaperModeEnabled()) {
+    return false;
+  }
+  const now = Date.now();
+  win.__rendererCrashReloads = (win.__rendererCrashReloads || [])
+    .filter(at => now - at < RENDERER_CRASH_RELOAD_WINDOW_MS);
+  return win.__rendererCrashReloads.length < MAX_RENDERER_CRASH_RELOADS;
+}
+
 installCrashHandlers({
   app,
   crashLog,
-  // 壁纸模式对渲染进程崩溃有自己的恢复路径：Linux 的 windowtolayer watchdog 会重启进程回到普通
-  // 窗口，Windows / macOS 就地 reload 页面。两处都只认 reason === 'crashed'，这里跟着它们走。
-  // 崩溃文件照写，只是不弹窗——桌面正在自己恢复，弹出来的框用户除了关掉别无选择。
-  isRendererCrashRecovered: (details) => details?.reason === 'crashed' && isWallpaperModeEnabled(),
+  // 壁纸模式沿用自己的恢复路径；普通主窗口短时间内最多自动重载两次。
+  // 恢复期间仍写日志，但不弹出会打断恢复的提示框。
+  isRendererCrashRecovered: (details, contents) => details?.reason === 'crashed' && (
+    isWallpaperModeEnabled()
+    || (contents === mainWindow?.webContents && shouldReloadMainRenderer(mainWindow, details))
+  ),
 });
 
 
@@ -4966,6 +4999,11 @@ function createWindow(options = {}) {
   // Watchdog trigger point 1: a crashed renderer breaks the wallpaper connection.
   win.webContents.on('render-process-gone', (_event, details) => {
     wallpaperWatchdog.handleRendererGone(details);
+    if (win === mainWindow && shouldReloadMainRenderer(win, details)) {
+      win.__rendererCrashReloads.push(Date.now());
+      win.webContents.reload();
+      return;
+    }
     // Windows: a renderer crash kills only the page — the BrowserWindow (and its place in the
     // WorkerW) survives, so the helper keeps the still-valid hwnd and must NOT be touched.
     // Reloading the webContents restores the UI in place; the full window rebuild
