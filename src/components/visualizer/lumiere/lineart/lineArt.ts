@@ -49,8 +49,25 @@ export interface LineArtLayer {
     view: Container;
     /** draw：整组描线进度 0..1；fade：整体亮度（进退场）。 */
     update: (time: number, draw: number, fade: number, beams: readonly ResolvedBeam[], color: number) => void;
+    /**
+     * 这一帧不画（view 已隐藏）时调用。nextUse：下次出现的时刻，顺放不会再出现给 Infinity。
+     * 藏够时间、且下次出现不近时放掉各条线的 GPU 数据，见 shouldUnloadLineArt。
+     */
+    idle: (time: number, nextUse: number) => void;
     destroy: () => void;
 }
+
+/** 藏起来多少秒（歌曲时间）之后才放 GPU 数据：刚淡出的线可能被回拖一下又要画。 */
+export const LINE_ART_UNLOAD_AFTER = 2;
+/** 下次出现在这么多秒之内就不放：马上又要画，放了只是白传一遍。 */
+export const LINE_ART_UNLOAD_LEAD = 4;
+
+/**
+ * 藏着的线稿这一帧该不该放掉 GPU 数据（滞回：藏够 LINE_ART_UNLOAD_AFTER 秒，且离下次出现至少 LINE_ART_UNLOAD_LEAD 秒）。
+ * 起因：轨迹过渡把整首歌并成一个单元，每个镜头的线稿都活到单元销毁，画过一次的每条线都留着一个 batcher 和两块缓冲。
+ */
+export const shouldUnloadLineArt = (hiddenSince: number, time: number, nextUse: number) =>
+    time - hiddenSince >= LINE_ART_UNLOAD_AFTER && nextUse - time >= LINE_ART_UNLOAD_LEAD;
 
 const cumulative = (points: Point[]) => {
     const lengths = [0];
@@ -131,7 +148,13 @@ export const createLineArt = (
         g.stroke({ width: px, color: 0xffffff, alpha: 1, cap: 'round', join: 'round' });
     };
 
+    // resident：画过、GPU 数据可能还在；hiddenSince：这次藏起来的时刻（NaN 表示正在画）。
+    let resident = false;
+    let hiddenSince = Number.NaN;
+
     const update = (time: number, draw: number, fade: number, beams: readonly ResolvedBeam[], color: number) => {
+        resident = true;
+        hiddenSince = Number.NaN;
         for (const path of paths) {
             const { delay, span } = path.spec;
             const local = clamp01((draw - delay) / Math.max(span, 1e-3));
@@ -162,9 +185,21 @@ export const createLineArt = (
         }
     };
 
+    const idle = (time: number, nextUse: number) => {
+        if (!resident) return;
+        // 刚藏起来，或回拖到了藏起来之前：从这一刻重新计时。
+        if (!(hiddenSince <= time)) hiddenSince = time;
+        if (!shouldUnloadLineArt(hiddenSince, time, nextUse)) return;
+        // 只放 GPU 数据，几何指令留在 context 里；再画到时 Pixi 按指令重建、重传，和描线期间每帧重画走的是同一条路。
+        // context 都是各条线自建的，没有别人共用。
+        for (const path of paths) path.graphics.context.unload();
+        resident = false;
+    };
+
     return {
         view,
         update,
+        idle,
         // context: true 必须带上：Pixi 8 的 Graphics.destroy 只要收到选项对象、却没写 context: true，就不销毁它自己建的
         // GraphicsContext。那个 context 还挂在渲染器的 GraphicsContextSystem 里，连同它的 GPU 批数据（一个 batcher、
         // 两块顶点 / 索引缓冲）要等 Pixi 的 GC 空闲 60 秒后才回收；单元换得勤时，WebGL 缓冲会一直涨到那个窗口的量。

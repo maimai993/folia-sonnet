@@ -443,12 +443,17 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
             const base = smooth((time - begin) / 1.2) * out * exit;
             const draw = (time - begin) / 3.6;
             const fade = base * (shot.profile.artGain ?? 1);
+            // 下次出现：还没开始描就是 begin，窗口里就是现在；淡出之后顺放不会再出现（回拖回来会重新 update）。
+            // 藏着的线稿交给 idle 按滞回放掉 GPU 数据——轨迹过渡整首一个单元时，画过的镜头线稿不然会一直占着缓冲。
+            const nextUse = time < begin ? begin : time <= shot.endTime + 0.8 ? time : Number.POSITIVE_INFINITY;
             layer.view.visible = fade > 0.003;
             if (layer.view.visible) layer.update(time, draw, fade, beams, lightHex);
+            else layer.idle(time, nextUse);
             const icons = iconArts[shotIndex];
             if (icons) {
                 icons.view.visible = base > 0.003;
                 if (icons.view.visible) icons.update(time, draw, base, beams, lightHex);
+                else icons.idle(time, nextUse);
             }
         });
         // 高频让浮尘闪得更亮（最多 +50%）。
