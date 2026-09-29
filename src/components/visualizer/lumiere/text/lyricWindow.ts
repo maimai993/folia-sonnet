@@ -1,16 +1,16 @@
 import type { Container, Graphics, Sprite } from 'pixi.js';
 import type { Line } from '../../../../types';
-import { createRng } from '../lumiereRandom';
+import { createRng, createRngAt } from '../lumiereRandom';
 import { compressLight, lightAt, type ResolvedBeam } from '../light/rig';
 import type { LightSprites } from '../light/sprites';
 import { hexOf, mixRgb, WHITE, type Rgb } from '../color';
-import { buildGlyphLine, type GlyphLine } from './glyphLine';
-import { clampInto, createTextMeasurer, fitScale, flowLine, frameBand, shouldWrap, type LineFlow, type LineVariant } from './lineWrap';
+import { clampInto, createTextMeasurer, fitScale, frameBand, shouldWrap, type LineVariant } from './lineWrap';
 import { awayDrift, createProtectBox, heldDrift, PROTECT_MARGIN, protectedAlpha, protectionAt } from './lineClearance';
-import { buildGlyphTimings, flashEnvelope, glyphProgress, type GlyphTiming } from './reveal';
-import { MAX_WORD_SCALE, segmentWords, wordJags, wordScales } from './wordStyle';
+import { flashEnvelope, glyphProgress, type GlyphTiming } from './reveal';
+import { MAX_WORD_SCALE } from './wordStyle';
+import { buildLineMetas, buildLineView, keywordColorsOf, lineTimingOf, type GlyphFlight, type GlyphView, type LineView, type Point, type Slot } from './windowLines';
 import type { WordColorMatcher } from '../../wordColoring';
-import { KEYWORD_HALO_GAIN, keywordTints, resolveGlyphKeywordColors, type KeywordTints } from './keywordColors';
+import { KEYWORD_HALO_GAIN, keywordTints } from './keywordColors';
 
 // src/components/visualizer/lumiere/text/lyricWindow.ts
 // 局部平铺窗口：只排当前行附近的几行（fume 的错落版式，但不是整首歌）。未来行是未点亮的刻字，
@@ -26,6 +26,9 @@ import { KEYWORD_HALO_GAIN, keywordTints, resolveGlyphKeywordColors, type Keywor
 //
 // 间隙（lineClearance）：邻行的漂移不朝当前行走，当前行只在槽位附近绕小圈；非当前行的字落进当前行的
 // 墨迹框（外扩一点）时压暗，当前行始终清楚。
+//
+// 按需构建（windowLines）：只有当前行附近几行（还在滑动的行往前再多三行、往后三行）有字形纹理、排版与精灵，
+// 往后预先建两行（每帧最多一行），离开后释放；整首歌一个单元时构建也只花几行的钱。
 //
 // 点亮：每个字的亮度 = 点亮进度 × (底光 + 该字位置的光场强度)，唱到的一瞬有四芒闪点，受光强的字
 // 下面垫一层柔光晕——这就是参考图里化学式被光柱照到的部分局部发光。全部是 t 的纯函数。
@@ -90,27 +93,7 @@ export interface LyricWindowFrame {
     intensity: number;
 }
 
-interface Point {
-    x: number;
-    y: number;
-}
-
-/**
- * 换槽位时字的飞行曲线（三次贝塞尔）。控制点按种子：有的走弧线、有的打卷成 S 形；起飞时间错开。
- * 起点与终点相同时（朝向不变）就是甩出去再绕回来的一个圈。
- */
-export interface GlyphFlight {
-    /** 两个控制点：分别相对起点与终点的偏移（逻辑像素，未缩放）。 */
-    c1: Point;
-    c2: Point;
-    /** 在整段滑动（0..1）里何时起飞、飞多久。 */
-    delay: number;
-    duration: number;
-    /** 飞行途中的转动（弧度，途中最大）。 */
-    spin: number;
-    /** 径迹抖动的相位。 */
-    wobble: number;
-}
+export type { GlyphFlight } from './windowLines';
 
 /** 滑动进度 phase（0..1）下这个字在曲线上的位置参数 0..1。 */
 export const flightProgress = (flight: GlyphFlight, phase: number, lag = 0) => {
@@ -132,64 +115,6 @@ export const flightPoint = (flight: GlyphFlight, from: Point, to: Point, s: numb
 const TRACK_TIME = 0.45;
 const TRACK_SAMPLES = 20;
 
-interface GlyphView {
-    glyph: Sprite;
-    halo: Sprite;
-    star: Sprite;
-    timing: GlyphTiming;
-    blank: boolean;
-    /** 在行里的序号：字心位置查 LineView.flow（横竖 × 单行 / 折行）。竖排时的转角。 */
-    index: number;
-    vRotation: number;
-    /** 换槽位时的飞行曲线。 */
-    flight: GlyphFlight;
-    /** 所在词的字号倍率。 */
-    scale: number;
-    /** 闪点相对字心的偏移（以字号为单位）、旋转与大小：按种子逐字固定，落点有上下错落。 */
-    starShape: { dx: number; dy: number; rotation: number; size: number };
-    /** 崩解：漂离方向（单位向量）、速度倍率、转动方向；聚合：散开时的偏移（以字号为单位）；呼吸的相位。 */
-    drift: { dx: number; dy: number; speed: number; spin: number };
-    scatter: Point;
-    phase: number;
-    /** 关键字色（不是关键字为 null）与它在当前光色下的几种颜色（光色变了才重算）。 */
-    keyword: Rgb | null;
-    tints: KeywordTints | null;
-}
-
-interface Slot {
-    dx: number;
-    dy: number;
-    scale: number;
-    alpha: number;
-    /** 朝向：0 横排，1 竖排。 */
-    orient: number;
-    /** 整行的倾斜（弧度）。 */
-    rotation: number;
-    /** 0 单行，1 折成两行（两列）。 */
-    wrap: number;
-}
-
-interface LineView {
-    line: Line;
-    layout: GlyphLine;
-    holder: Container;
-    glyphs: GlyphView[];
-    /** 四种排版（横竖 × 单行 / 折行）：字心位置、光斑路径与整块尺寸（逻辑像素，含词的字号差异）。 */
-    flow: LineFlow;
-    /** 纵横交错时这一行在各个相对位置（−2..2，不含 0）上的落点。 */
-    placements: Map<number, Slot>;
-    /** 追字光斑（每行一个，换行时两行的光斑各自淡入淡出，不会跳）。 */
-    spot: Sprite;
-    /** 第一个字开始、最后一个字结束的时刻。 */
-    singStart: number;
-    singEnd: number;
-    /** 错落：每行一个稳定的偏移（高度单位；横排时横向、竖排时纵向）。 */
-    jitter: number;
-    /** 持续漂移：恒定速度（高度单位 / 秒）、绕行与摆动的相位。 */
-    velocity: Point;
-    motionPhase: number;
-}
-
 interface LineTransform {
     current: number;
     x: number;
@@ -208,6 +133,10 @@ interface LineTransform {
     orient: number;
     phase: number;
     fly: boolean;
+    /** 字的朝向与字心的起点（上一次已经走完的换位的终点）与此后还在进行的换位（按先后）。 */
+    restOrient: number;
+    restWrap: number;
+    moves: Array<{ toOrient: number; toWrap: number; phase: number; fly: boolean }>;
     /** 这一次滑动开始的时刻（没有滑动时为 −∞）。 */
     slideStart: number;
 }
@@ -240,6 +169,7 @@ export interface LyricWindow {
 const LEAD = 1.2;
 const SLIDE = 1.5;
 const SLIDE_LAG: Record<number, number> = { [-2]: 0, [-1]: 0.15, 0: 0.3, 1: 0.5, 2: 0.6 };
+const MAX_LAG = 0.6;
 /** 每行的持续漂移：恒定速度（高度单位 / 秒）范围、绕行幅度（高度单位）。 */
 const DRIFT_SPEED: [number, number] = [0.013, 0.022];
 const ORBIT = 0.03;
@@ -399,6 +329,11 @@ const fixedSlot = (
     return slot(sign * region.w * (far ? 0.24 : 0.16), sign * offset, scale, alpha, orient);
 };
 
+/** 按需构建：当前行前后各画几行、往后预先建几行、离开窗口多远才释放。 */
+const WINDOW_REACH = 3;
+const PREBUILD = 2;
+const KEEP_MARGIN = 2;
+
 /** 纵横交错时邻行与当前行之间至少留的空隙（以字号为单位）。 */
 const CROSSED_CLEARANCE = 0.5;
 
@@ -417,7 +352,6 @@ const sameSlot = (a: Slot, b: Slot) => a.dx === b.dx && a.dy === b.dy && a.scale
 
 export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions): LyricWindow => {
     const { height, region, heroPx, sprites, typography, decay } = options;
-    const rng = createRng(`${options.seed}:window`);
     const view = new pixi.Container();
     const trackLayer = new pixi.Graphics();
     const halos = new pixi.Container();
@@ -433,134 +367,63 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
     const columnCap = (band.bottom - band.top) * height;
     const maxWidthOf = (kind: WindowTypography) => (band.right - band.left) * height * (kind === 'crossed' ? 0.9 : 1);
     const measurer = createTextMeasurer(options.font, options.weight, spacing);
+    const KEYWORDS = options.keywords && options.keywords.length > 0 ? options.keywords : undefined;
 
-    const lines: LineView[] = options.lines.map((line, lineIndex) => {
-        // 字形纹理按最大的词字号画，放大的词只缩小不放大。
-        const layout = buildGlyphLine(pixi, {
-            text: line.fullText,
-            fontPx: heroPx * MAX_WORD_SCALE,
-            font: options.font,
-            weight: options.weight,
-            resolution: options.resolution,
-            letterSpacing: spacing,
-        });
-        const timings = buildGlyphTimings(line);
-        // 关键字：每行构建时匹配一次，逐字落到颜色上。
-        const keywordColors = options.keywords && options.keywords.length > 0
-            ? resolveGlyphKeywordColors(line.fullText, options.keywords)
-            : null;
-
-        // 分词与字号：每个字归到一个词，带上那个词的字号倍率与错落。
-        const words = segmentWords(line);
-        const wordSeed = `${options.seed}:${lineIndex}:${line.fullText}`;
-        const scales = wordScales(words, wordSeed);
-        const jags = wordJags(words, scales, wordSeed);
-        const wordOf = layout.glyphs.map((_, index) => Math.max(0, words.findIndex(word => index >= word.start && index < word.end)));
-        const glyphScale = (index: number) => scales[wordOf[index]!] ?? 1;
-        const glyphJag = (index: number) => (jags[wordOf[index]!] ?? 0) * heroPx;
-
-        // 横排：按词字号推进，基线对齐（小字往下沉一点），每个词再上下错开；竖排：按列推进，居中对齐，每个词左右错开。
-        // 词宽用 pretext 量，太长时折成两行 / 两列（lineWrap），四种排版一次算好。
-        const flow = flowLine(
-            measurer,
-            layout.glyphs.map((slice, index) => ({
-                char: slice.char,
-                scale: glyphScale(index),
-                advance: (slice.charWidth / MAX_WORD_SCALE) * glyphScale(index),
-                upright: slice.upright,
-                jag: glyphJag(index),
-            })),
-            words,
-            { heroPx, limits: { horizontal: maxWidthOf('horizontal'), vertical: columnCap } },
-        );
-
-        const holder = new pixi.Container();
-        glyphLayer.addChild(holder);
-        const glyphs: GlyphView[] = layout.glyphs.map((slice, index) => {
-            const glyph = new pixi.Sprite(slice.texture);
-            glyph.anchor.set(slice.anchorX, slice.anchorY);
-            holder.addChild(glyph);
-            // 飞行曲线：第一个控制点朝随机方向甩出去，第二个在它的基础上转过半圈左右（弧线或 S 形、打卷）。
-            const a1 = rng() * Math.PI * 2;
-            const a2 = a1 + Math.PI * (rng() < 0.5 ? 0.5 : 1.5) + (rng() - 0.5) * 0.8;
-            const m1 = heroPx * (1.6 + rng() * 3.2);
-            const m2 = heroPx * (1 + rng() * 2.6);
-            // 起飞时刻与飞行时长在整段滑动里铺开（delay + duration ≤ 1，滑动结束时一定到位）。
-            const duration = 0.45 + rng() * 0.4;
-            const flight: GlyphFlight = {
-                c1: { x: Math.cos(a1) * m1, y: Math.sin(a1) * m1 },
-                c2: { x: Math.cos(a2) * m2, y: Math.sin(a2) * m2 },
-                delay: rng() * (1 - duration),
-                duration,
-                spin: (rng() - 0.5) * 2.4,
-                wobble: rng() * Math.PI * 2,
-            };
-            const halo = new pixi.Sprite(sprites.dot);
-            halo.anchor.set(0.5);
-            halos.addChild(halo);
-            const star = new pixi.Sprite(sprites.star);
-            star.anchor.set(0.5);
-            stars.addChild(star);
-            if (slice.blank) {
-                glyph.visible = false;
-                halo.visible = false;
-                star.visible = false;
-            }
-            // 漂离方向：多数向上（烟往上走），左右散开。
-            const angle = -Math.PI / 2 + (rng() - 0.5) * 2.2;
-            const scatterAngle = rng() * Math.PI * 2;
-            const scatterDistance = 0.6 + rng() * 1.4;
-            return {
-                glyph,
-                halo,
-                star,
-                timing: timings[index] ?? { start: line.startTime, end: line.endTime },
-                blank: slice.blank,
-                index,
-                vRotation: slice.upright ? 0 : Math.PI / 2,
-                flight,
-                scale: glyphScale(index),
-                starShape: {
-                    dx: -0.15 + rng() * 0.5,
-                    // 上下随机：多数落在字的上半，少数压到字脚下。
-                    dy: -0.62 + rng() ** 1.4 * 0.9,
-                    rotation: (rng() - 0.5) * 0.5,
-                    size: 0.65 + rng() * 0.7,
-                },
-                drift: { dx: Math.cos(angle), dy: Math.sin(angle), speed: 0.6 + rng() * 0.9, spin: (rng() - 0.5) * 2 },
-                scatter: { x: Math.cos(scatterAngle) * scatterDistance, y: Math.sin(scatterAngle) * scatterDistance },
-                phase: rng() * Math.PI * 2,
-                keyword: slice.blank ? null : keywordColors?.[index] ?? null,
-                tints: null,
-            };
-        });
-        const spot = new pixi.Sprite(sprites.dot);
-        spot.anchor.set(0.5);
-        spots.addChild(spot);
-        const sung = glyphs.filter(glyph => !glyph.blank);
-        return {
-            line,
-            layout,
-            holder,
-            glyphs,
-            flow,
-            // 落点用单独的随机流：排版换来换去时，别的随机量不受影响。
-            placements: freePlacements(createRng(`${options.seed}:placements:${lineIndex}`), region, nextAlpha),
-            spot,
-            singStart: sung.length ? Math.min(...sung.map(glyph => glyph.timing.start)) : line.startTime,
-            singEnd: sung.length ? Math.max(...sung.map(glyph => glyph.timing.end)) : line.endTime,
-            jitter: (rng() - 0.5) * 0.16,
-            velocity: (() => {
-                const angle = rng() * Math.PI * 2;
-                const speed = DRIFT_SPEED[0] + rng() * (DRIFT_SPEED[1] - DRIFT_SPEED[0]);
-                return { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
-            })(),
-            motionPhase: rng() * Math.PI * 2,
-        };
-    });
+    const metas = buildLineMetas(options.lines);
+    const lineCount = options.lines.length;
+    /** 已构建的行（没建的是 null）与它们的行号（升序）：各层里的子节点按行号排，画的先后与构建顺序无关。 */
+    const views: Array<LineView | null> = new Array<LineView | null>(lineCount).fill(null);
+    const built: number[] = [];
+    const buildContext = {
+        pixi,
+        font: options.font,
+        weight: options.weight,
+        resolution: options.resolution,
+        heroPx,
+        spacing,
+        seed: options.seed,
+        sprites,
+        measurer,
+        limits: { horizontal: maxWidthOf('horizontal'), vertical: columnCap },
+        keywords: KEYWORDS,
+        driftSpeed: DRIFT_SPEED,
+        placementsOf: (lineIndex: number) => freePlacements(createRng(`${options.seed}:placements:${lineIndex}`), region, nextAlpha),
+    };
+    let tintedFor: Rgb | null = null;
+    /** 把 child 插到 parent 里行号 lineIndex 该在的位置（parent 里每个已构建的行各有一个子节点）。 */
+    const insertByLine = (parent: Container, child: Container, position: number) => {
+        if (position >= parent.children.length) parent.addChild(child);
+        else parent.addChildAt(child, position);
+    };
+    /** 构建第 index 行：随机流跳到这一行的起点，结果与从第一行起顺序构建时一样。 */
+    const buildLine = (index: number): LineView => {
+        const meta = metas[index]!;
+        const lineView = buildLineView(buildContext, index, meta, createRngAt(`${options.seed}:window`, meta.randomOffset));
+        let position = 0;
+        while (position < built.length && built[position]! < index) position += 1;
+        built.splice(position, 0, index);
+        insertByLine(glyphLayer, lineView.holder, position);
+        insertByLine(halos, lineView.haloLayer, position);
+        insertByLine(stars, lineView.starLayer, position);
+        insertByLine(spots, lineView.spot, position);
+        if (tintedFor) for (const glyph of lineView.keywordGlyphs) glyph.tints = keywordTints(tintedFor, glyph.keyword!);
+        views[index] = lineView;
+        return lineView;
+    };
+    const releaseLine = (index: number) => {
+        const lineView = views[index];
+        if (!lineView) return;
+        views[index] = null;
+        built.splice(built.indexOf(index), 1);
+        for (const item of [lineView.holder, lineView.haloLayer, lineView.starLayer, lineView.spot]) {
+            item.parent?.removeChild(item);
+            item.destroy({ children: true });
+        }
+        lineView.layout.destroy();
+    };
+    const lineOf = (index: number): LineView => views[index] ?? buildLine(index);
 
     const fontH = heroPx / height;
-    const lineCount = options.lines.length;
     const driftScale = options.drift ?? 1;
     /** 第 c 行成为当前行时的排版（c = −1 即第一行之前，按第一行的排版）。 */
     const typographyAt = (c: number): WindowTypography => (
@@ -572,7 +435,7 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
      * 折了还放不下再整体缩小（邻行本身已经小，很少需要折）。
      */
     const settle = (index: number, kind: WindowTypography, orient: 0 | 1, scale: number) => {
-        const flow = lines[index]!.flow[orient];
+        const flow = lineOf(index).flow[orient];
         const budget = orient === 1 ? columnCap : maxWidthOf(kind);
         const wrap = shouldWrap(flow, budget, scale) ? 1 : 0;
         const variant: LineVariant = flow[wrap];
@@ -604,7 +467,7 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         const key = `${index}|${current}|${kind}`;
         const cached = slotCache.get(key);
         if (cached) return cached;
-        const view = lines[index]!;
+        const view = lineOf(index);
         const clamped = Math.max(-2, Math.min(2, index - current));
         const shift = windowShift(current, kind);
         let slot: Slot;
@@ -661,30 +524,46 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
     };
 
     /**
+     * 时刻 time 起还没「走完多时」的第一次换行（current + 1 = 全都走完了）：更早的换行对每一行都已滑完、径迹也已收拢
+     * （按最晚的起步 SLIDE_LAG 估，保守）。行的开始时刻是升序的，从当前行往回找几步就到。
+     */
+    const firstLiveChange = (time: number, current: number) => {
+        let c = current;
+        while (c >= 0 && options.lines[c]!.startTime - LEAD + MAX_LAG + SLIDE + TRACK_TIME > time) c -= 1;
+        return c + 1;
+    };
+
+    /**
      * 第 index 行在时刻 time 的位置（逻辑像素）、缩放、转角、透明度与槽位切换信息。纯函数，径迹与爆闪也用它。
      *
      * 叠加式：位置 = 第一行开始前的槽位 + Σ 每次换行带来的槽位差 × 这次换行对这一行的缓动进度。
      * 每次换行对各行错开起步（离场的先走），两行间隔很短、上一次还没走完时也连续，不会跳。
+     * 已经走完多时的换行进度都是 1，前后相消（槽位差首尾相接），所以直接从它们之后的槽位起叠：
+     * 与从头叠加结果相同，只用到当前行附近几行的排版（整首歌一个单元时不用构建前面所有的行）。
      */
     const lineTransform = (index: number, time: number): LineTransform => {
-        const view = lines[index]!;
+        const view = lineOf(index);
         const { current } = resolveWindowCursor(options.lines, time);
-        const initial = slotOf(index, -1, typographyAt(-1));
+        const first = firstLiveChange(time, current);
+        const base = first - 1;
+        const initialKind = typographyAt(base);
+        const initial = slotOf(index, base, initialKind);
         let dx = initial.dx, dy = initial.dy, scale = initial.scale, rotation = initial.rotation;
         let alpha = initial.alpha, orient = initial.orient, wrap = initial.wrap;
         // 最近一次正在（或刚刚）作用于这一行的换行：给字的飞行曲线与径迹用。
         let latest: { before: Slot; after: Slot; phase: number; start: number; kind: WindowTypography } | null = null;
+        let restOrient = initial.orient;
+        let restWrap = initial.wrap;
+        const moves: LineTransform['moves'] = [];
         // 随排版变化的量（宽度上限、错落）也跟着换行叠加，排版切换时不跳。
-        let widthCap = maxWidthOf(typographyAt(-1));
-        let jitterOn = typographyAt(-1) === 'crossed' ? 0 : 1;
+        let widthCap = maxWidthOf(initialKind);
+        let jitterOn = initialKind === 'crossed' ? 0 : 1;
         // 间隙：背离当前行的方向（x、y 各一份，堆叠轴上的 ±1 × 作为邻行的权重）与作为当前行的权重，
         // 同样按换行叠加，换行与排版切换时连续。
-        const initialKind = typographyAt(-1);
-        let awayX = stackX(initialKind) * awayOf(index, -1, initialKind);
-        let awayY = (1 - stackX(initialKind)) * awayOf(index, -1, initialKind);
-        let hero = 0;
-        // 排版切换时整个版面都要重排，所以从头叠加（槽位差为 0 的换行直接跳过，代价很小）。
-        const first = 0;
+        let awayX = stackX(initialKind) * awayOf(index, base, initialKind);
+        let awayY = (1 - stackX(initialKind)) * awayOf(index, base, initialKind);
+        let hero = index === base ? 1 : 0;
+        // 槽位差为 0 的换行直接跳过。
         const last = Math.min(lineCount - 1, current);
         for (let c = first; c <= last; c += 1) {
             const beforeKind = typographyAt(c - 1);
@@ -716,6 +595,18 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
             orient += (after.orient - before.orient) * phase;
             wrap += (after.wrap - before.wrap) * k;
             if (phase > 0) latest = { before, after, phase, start, kind: afterKind };
+            if (phase >= 1) {
+                restOrient = after.orient;
+                restWrap = after.wrap;
+                moves.length = 0;
+            } else if (phase > 0) {
+                moves.push({
+                    toOrient: after.orient,
+                    toWrap: after.wrap,
+                    phase,
+                    fly: options.alwaysFly === true || afterKind === 'crossed' || before.orient !== after.orient,
+                });
+            }
         }
         // 太长时整体缩小，不出画框（横排看宽度、竖排看长度；单行 / 折行按折行程度混合）。
         const o = clamp01(orient);
@@ -766,6 +657,9 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
             fly: latest !== null && latest.phase < 1
                 && (options.alwaysFly === true || latest.kind === 'crossed' || latest.before.orient !== latest.after.orient),
             slideStart: latest ? latest.start : Number.NEGATIVE_INFINITY,
+            restOrient,
+            restWrap,
+            moves,
         };
     };
 
@@ -775,15 +669,28 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
      */
     const glyphLocal = (view: LineView, glyph: GlyphView, time: number, transform: LineTransform) => {
         const at = (orient: number, wrap: number) => view.flow[orient >= 0.5 ? 1 : 0][wrap >= 0.5 ? 1 : 0].points[glyph.index]!;
-        const s = transform.fly ? flightProgress(glyph.flight, transform.phase) : 1;
-        const flying = transform.fly ? Math.sin(Math.PI * s) : 0;
-        // 不飞的时候，单行与折行之间（邻行变成当前行、需要折开时）字随滑动缓动过去。
-        const point = transform.fly
-            ? flightPoint(glyph.flight, at(transform.fromOrient, transform.fromWrap), at(transform.toOrient, transform.toWrap), s)
-            : lerpPoint(at(transform.toOrient, 0), at(transform.toOrient, 1), transform.wrap);
+        // 从上一次走完的换位的终点出发，依次叠上还在进行的换位：每一次都从上一次此刻的位置起飞（或滑过去），
+        // 前一次还没飞完就换行时，字接着从它在曲线上的位置出发，不会跳回起点。
+        let point = at(transform.restOrient, transform.restWrap);
+        let orientation = transform.restOrient;
+        let flying = 0;
+        for (const move of transform.moves) {
+            const target = at(move.toOrient, move.toWrap);
+            if (move.fly) {
+                const s = flightProgress(glyph.flight, move.phase);
+                point = flightPoint(glyph.flight, point, target, s);
+                orientation = lerp(orientation, move.toOrient, s);
+                flying = Math.max(flying, Math.sin(Math.PI * s));
+            } else {
+                // 不飞的时候，单行与折行之间（邻行变成当前行、需要折开时）字随滑动缓动过去。
+                const k = easeInOutSine(move.phase);
+                point = lerpPoint(point, target, k);
+                orientation = lerp(orientation, move.toOrient, k);
+            }
+        }
         let x = point.x;
         let y = point.y;
-        let rotation = glyph.vRotation * lerp(transform.fromOrient, transform.toOrient, s) + glyph.flight.spin * flying;
+        let rotation = glyph.vRotation * orientation + glyph.flight.spin * flying;
         const pulse = 1 - 0.28 * flying;
         // 聚合：未唱的行从散开的位置逐渐收拢。
         const gather = smooth((time - (view.line.startTime - LEAD - GATHER_LEAD)) / GATHER);
@@ -858,19 +765,19 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         });
     };
 
-    const keywordGlyphs = lines.flatMap(view => view.glyphs.filter(glyph => glyph.keyword !== null));
-    let tintedFor: Rgb | null = null;
-    /** 关键字在当前光色下的颜色：光色不变时（通常整个单元都不变）只算一次。 */
+    /** 关键字在当前光色下的颜色：光色不变时（通常整个单元都不变）只算一次；之后新建的行在构建时按它上色。 */
     const refreshKeywordTints = (litColor: Rgb) => {
         if (tintedFor && tintedFor[0] === litColor[0] && tintedFor[1] === litColor[1] && tintedFor[2] === litColor[2]) return;
         tintedFor = [litColor[0], litColor[1], litColor[2]];
-        for (const glyph of keywordGlyphs) glyph.tints = keywordTints(litColor, glyph.keyword!);
+        for (const index of built) {
+            for (const glyph of views[index]!.keywordGlyphs) glyph.tints = keywordTints(litColor, glyph.keyword!);
+        }
     };
 
     // 当前行的保护框：每帧最多几个（换行交接时新旧当前行各一个，两次换行挨得很近时再多一两个），预先建好反复用。
     const protectBoxes = [createProtectBox(), createProtectBox(), createProtectBox(), createProtectBox()];
     let protectCount = 0;
-    const frameTransforms: LineTransform[] = new Array(lineCount);
+    const frameTransforms: LineTransform[] = new Array<LineTransform>(lineCount);
 
     /**
      * 这一帧的保护框：第 j 行作为当前行的权重 = 它这次换行的缓动进度 − 下一次换行的缓动进度（换行进度都是 t 的
@@ -878,19 +785,18 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
      * 跟着它的位置、缩放与转角。横竖转到一半时（字在飞、混合出来的框又宽又高，框边扫得很快）框渐隐，转完再回来。
      * 要先算好这一帧所有行的变换（frameTransforms）。
      */
-    const buildProtectBoxes = (time: number) => {
+    const buildProtectBoxes = (time: number, current: number, low: number) => {
         protectCount = 0;
-        const { current } = resolveWindowCursor(options.lines, time);
         let later = 0;
-        for (let j = current; j >= 0 && protectCount < protectBoxes.length; j -= 1) {
+        for (let j = current; j >= low && protectCount < protectBoxes.length; j -= 1) {
             const eased = easeInOutSine((time - (options.lines[j]!.startTime - LEAD)) / SLIDE);
             const transform = frameTransforms[j]!;
             const o = clamp01(transform.orient);
             const weight = (eased - later) * clamp01(transform.alpha) * (1 - 4 * o * (1 - o));
             later = eased;
             if (weight > 1e-4) {
-                const [hSingle, hWrapped] = lines[j]!.flow[0];
-                const [vSingle, vWrapped] = lines[j]!.flow[1];
+                const [hSingle, hWrapped] = lineOf(j).flow[0];
+                const [vSingle, vWrapped] = lineOf(j).flow[1];
                 const w = transform.wrap;
                 const inkW = lerp(lerp(hSingle.inkWidth, hWrapped.inkWidth, w), lerp(vSingle.inkWidth, vWrapped.inkWidth, w), transform.orient);
                 const inkH = lerp(lerp(hSingle.inkHeight, hWrapped.inkHeight, w), lerp(vSingle.inkHeight, vWrapped.inkHeight, w), transform.orient);
@@ -910,21 +816,69 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
         }
     };
 
+    /**
+     * 这一帧要画的行：当前行前后各 WINDOW_REACH 行，还在滑动（或径迹还没收拢）的换行再往前 WINDOW_REACH 行——
+     * 槽位要看当前行 ±2 行的排版，更远的行透明度都是 0。只由时刻决定。
+     */
+    const activeRange = (time: number) => {
+        const { current } = resolveWindowCursor(options.lines, time);
+        const first = firstLiveChange(time, current);
+        return {
+            current,
+            low: Math.max(0, Math.min(current, first) - WINDOW_REACH),
+            high: Math.min(lineCount - 1, Math.max(current, 0) + WINDOW_REACH),
+        };
+    };
+    /** 窗口外的行藏起来，离得更远的释放（留一点余量，来回拖动进度时不反复重建）。 */
+    const syncBuilt = (low: number, high: number) => {
+        for (let k = built.length - 1; k >= 0; k -= 1) {
+            const index = built[k]!;
+            if (index >= low && index <= high) continue;
+            if (index < low - KEEP_MARGIN || index > high + KEEP_MARGIN) {
+                releaseLine(index);
+                continue;
+            }
+            const lineView = views[index]!;
+            lineView.holder.visible = false;
+            lineView.haloLayer.visible = false;
+            lineView.starLayer.visible = false;
+            lineView.spot.visible = false;
+        }
+    };
+    /** 往后预先建几行（每帧最多一行），当前行换过去时不用当场构建。 */
+    const prebuild = (high: number) => {
+        for (let index = high + 1; index <= Math.min(lineCount - 1, high + PREBUILD); index += 1) {
+            if (views[index]) continue;
+            buildLine(index);
+            const lineView = views[index]!;
+            lineView.holder.visible = false;
+            lineView.haloLayer.visible = false;
+            lineView.starLayer.visible = false;
+            lineView.spot.visible = false;
+            return;
+        }
+    };
+
     const update = (frame: LyricWindowFrame) => {
         const { time, beams, litColor, unlitColor, unlitAlpha, intensity } = frame;
         trackLayer.clear();
-        if (keywordGlyphs.length > 0) refreshKeywordTints(litColor);
+        if (KEYWORDS) refreshKeywordTints(litColor);
         const litHex = hexOf(litColor);
         const starHex = hexOf(mixRgb(litColor, WHITE, 0.5));
-        for (let index = 0; index < lineCount; index += 1) frameTransforms[index] = lineTransform(index, time);
-        buildProtectBoxes(time);
+        const { low, high, current: cursor } = activeRange(time);
+        syncBuilt(low, high);
+        for (let index = low; index <= high; index += 1) frameTransforms[index] = lineTransform(index, time);
+        buildProtectBoxes(time, cursor, low);
 
-        lines.forEach((view, index) => {
+        for (let index = low; index <= high; index += 1) {
+            const view = views[index]!;
             const transform = frameTransforms[index]!;
             const { current, scale } = transform;
             const lineAlpha = transform.alpha * intensity;
             const visible = lineAlpha > 0.003;
             view.holder.visible = visible;
+            view.haloLayer.visible = visible;
+            view.starLayer.visible = visible;
             view.holder.position.set(transform.x, transform.y);
             view.holder.scale.set(scale);
             view.holder.rotation = transform.rotation;
@@ -1027,19 +981,23 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
                 view.spot.alpha = 0.07 * spotAlpha;
                 view.spot.tint = litHex;
             }
-        });
+        }
+        prebuild(high);
     };
 
     return {
         view,
         update,
-        glyphTimes: lineIndex => (lines[lineIndex]?.glyphs ?? [])
-            .map((glyph, glyphIndex) => ({ glyphIndex, start: glyph.timing.start, blank: glyph.blank }))
-            .filter(glyph => !glyph.blank)
-            .map(({ glyphIndex, start }) => ({ glyphIndex, start })),
+        glyphTimes: lineIndex => {
+            const meta = metas[lineIndex];
+            if (!meta) return [];
+            return meta.graphemes.flatMap((char, glyphIndex) => (
+                char.trim().length === 0 ? [] : [{ glyphIndex, start: (lineTimingOf(meta).timings[glyphIndex] ?? { start: meta.line.startTime }).start }]
+            ));
+        },
         glyphAnchor: (lineIndex, glyphIndex, time) => {
             const transform = lineTransform(lineIndex, time);
-            const view = lines[lineIndex]!;
+            const view = lineOf(lineIndex);
             const local = glyphLocal(view, view.glyphs[glyphIndex]!, time, transform);
             const world = toWorld(transform, local);
             return { x: world.x, y: world.y, fontPx: heroPx * transform.scale * local.scale };
@@ -1048,10 +1006,14 @@ export const createLyricWindow = (pixi: PixiModule, options: LyricWindowOptions)
             const transform = lineTransform(lineIndex, time);
             return { x: transform.x, y: transform.y, scale: transform.scale, alpha: transform.alpha };
         },
-        glyphKeyword: (lineIndex, glyphIndex) => lines[lineIndex]?.glyphs[glyphIndex]?.keyword ?? null,
+        glyphKeyword: (lineIndex, glyphIndex) => {
+            const meta = metas[lineIndex];
+            if (!meta || (meta.graphemes[glyphIndex] ?? '').trim().length === 0) return null;
+            return keywordColorsOf(meta, KEYWORDS)?.[glyphIndex] ?? null;
+        },
         destroy: () => {
+            for (let k = built.length - 1; k >= 0; k -= 1) releaseLine(built[k]!);
             view.destroy({ children: true });
-            lines.forEach(line => line.layout.destroy());
         },
     };
 };

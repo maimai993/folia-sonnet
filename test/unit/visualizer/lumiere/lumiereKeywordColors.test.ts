@@ -47,7 +47,11 @@ class FakeContainer {
     scale = { x: 1, y: 1, set: (x: number, y = x) => { this.scale.x = x; this.scale.y = y; } };
     skew = { x: 0, y: 0, set: (x: number, y: number) => { this.skew.x = x; this.skew.y = y; } };
     anchor = { set: () => undefined };
-    addChild(...items: FakeContainer[]) { this.children.push(...items); return items[0]; }
+    label = '';
+    parent: FakeContainer | null = null;
+    addChild(...items: FakeContainer[]) { items.forEach(item => { (item as FakeContainer).parent = this; }); this.children.push(...items); return items[0]; }
+    addChildAt(item: FakeContainer, index: number) { (item as FakeContainer).parent = this; this.children.splice(index, 0, item); return item; }
+    removeChild(item: FakeContainer) { const index = this.children.indexOf(item); if (index >= 0) this.children.splice(index, 1); (item as FakeContainer).parent = null; return item; }
     destroy() { this.children = []; }
 }
 class FakeSprite extends FakeContainer {

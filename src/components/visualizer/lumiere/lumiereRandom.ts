@@ -22,3 +22,12 @@ export const createRng = (seed: string | number) => {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 };
+
+/**
+ * 与 createRng(seed) 同一条流，但从第 skip 个值之后开始：mulberry32 每取一次状态加一个常数，跳过是 O(1)。
+ * 歌词窗口按需构建某一行时用它直接跳到这一行的起点，拿到的值与从头顺序取完全一样。
+ */
+export const createRngAt = (seed: string | number, skip: number) => {
+    const state = typeof seed === 'number' ? seed >>> 0 : hashKey(seed);
+    return createRng((state + Math.imul(skip, 0x6d2b79f5)) >>> 0);
+};

@@ -85,13 +85,17 @@ interface InkGlyph {
     alpha: number;
 }
 
+/** 字层里每行一个容器，label 是「line-行号」。 */
+const lineOfHolder = (holder: FakeContainer) => Number(holder.label.replace('line-', ''));
+
 /** 从假精灵读出画面上每个可见字：世界坐标（行的位置、缩放、转角 × 字的行内位置）、字号与透明度。 */
 const readInk = (window: TestWindow, heroPx: number): InkGlyph[] => {
     const glyphLayer = window.view.children[3] as unknown as FakeContainer;
     const out: InkGlyph[] = [];
-    glyphLayer.children.forEach((holderItem, lineIndex) => {
+    glyphLayer.children.forEach(holderItem => {
         const holder = holderItem as FakeContainer;
         if (!holder.visible) return;
+        const lineIndex = lineOfHolder(holder);
         const cos = Math.cos(holder.rotation);
         const sin = Math.sin(holder.rotation);
         holder.children.forEach((item, glyphIndex) => {
@@ -113,18 +117,18 @@ const readInk = (window: TestWindow, heroPx: number): InkGlyph[] => {
     return out;
 };
 
-/** 所有看得见的字精灵的透明度，按「行:字」记（看不见的都算 0）。字层里每行一个容器，按行号排。 */
+/** 所有看得见的字精灵的透明度，按「行:字」记（窗口只建当前行附近几行，没建的、看不见的都算 0）。 */
 const readAlphas = (window: TestWindow) => {
     const glyphLayer = window.view.children[3] as unknown as FakeContainer;
     const out = new Map<string, number>();
-    glyphLayer.children.forEach((holderItem, lineIndex) => {
+    for (const holderItem of glyphLayer.children) {
         const holder = holderItem as FakeContainer;
-        if (!holder.visible) return;
+        if (!holder.visible) continue;
         holder.children.forEach((item, glyphIndex) => {
             const glyph = item as FakeContainer;
-            if (glyph.visible && glyph.alpha > 0) out.set(`${lineIndex}:${glyphIndex}`, glyph.alpha);
+            if (glyph.visible && glyph.alpha > 0) out.set(`${lineOfHolder(holder)}:${glyphIndex}`, glyph.alpha);
         });
-    });
+    }
     return out;
 };
 /** 两帧之间每个字透明度之差的最大值。 */
