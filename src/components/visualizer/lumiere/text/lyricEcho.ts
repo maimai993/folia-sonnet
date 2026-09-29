@@ -2,6 +2,7 @@ import type { Container, Sprite } from 'pixi.js';
 import type { Line } from '../../../../types';
 import { createRng } from '../lumiereRandom';
 import { compressLight, lightAt, type ResolvedBeam } from '../light/rig';
+import { splitLyricGraphemes } from '../../../../utils/lyrics/graphemeTiming';
 import { buildGlyphLine, type GlyphLine } from './glyphLine';
 import { buildGlyphTimings } from './reveal';
 import { segmentWords } from './wordStyle';
@@ -14,6 +15,10 @@ import { keywordEchoColor, resolveGlyphKeywordColors } from './keywordColors';
 // 碎片，随后沿主光束的方向（跟着光束的摆动）缓慢漂下去，约 7 秒淡出；碎片的大小、倾斜、拉伸按种子，
 // 许多碎片在光束里互相重叠。漂的过程中词会被拆开：字彼此散开、转动、斜切。平时很淡，光束里被照亮。
 // 每一帧只由 t 决定。
+//
+// 按需栅格化：随机量（落点、拆开方向）构建时一次抽完，与一次画完整个单元时逐项相同；巨大的空心字画布只在
+// 这一行第一个碎片出现前 PREPARE 秒才画（一帧最多提前画一行），最后一个碎片消失后就释放。整首歌一个单元
+// （轨迹过渡）时背景字的画布与纹理也只有正在漂的几行，构建时不再画整首歌的字。
 type PixiModule = typeof import('pixi.js');
 
 export interface LyricEchoOptions {
@@ -43,6 +48,8 @@ export interface LyricEchoFrame {
 const LIFE = 7;
 const SPEED = 0.075;
 const BIRTH_DISTANCE = 0.08;
+/** 碎片出现前多久把这一行的空心字画好（秒）。 */
+const PREPARE = 3;
 
 interface Fragment {
     /** 词被唱到的时刻。 */
@@ -56,9 +63,14 @@ interface Fragment {
     stretch: number;
     shear: number;
     spin: number;
+    /** 词在行里的字（字形序号）范围。 */
+    start: number;
+    end: number;
     glyphs: Array<{
-        sprite: Sprite;
-        /** 字在词里的位置（逻辑像素，按最大字号）。 */
+        /** 这一行画好之后才有。 */
+        sprite: Sprite | null;
+        blank: boolean;
+        /** 字在词里的位置（逻辑像素，按最大字号）；画好之后才有。 */
         offset: number;
         /** 拆开时的方向（单位向量）与速度、自己的转动。 */
         dx: number;
@@ -68,6 +80,16 @@ interface Fragment {
         /** 关键字色（不是关键字为 null）。 */
         keyword: Rgb | null;
     }>;
+}
+
+/** 一行：它的碎片（fragments 里的下标范围）、第一个与最后一个碎片出现的时刻、画好的空心字（没画时为 null）。 */
+interface EchoLine {
+    text: string;
+    first: number;
+    last: number;
+    from: number;
+    to: number;
+    layout: GlyphLine | null;
 }
 
 export interface LyricEcho {
@@ -89,34 +111,25 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
     const fontPx = options.size * height;
     // 背景字本来就淡，分辨率不需要高；画布边长也封顶。
     const resolution = Math.min(options.resolution, 1.5);
-    const layouts: GlyphLine[] = [];
     const fragments: Fragment[] = [];
+    const holders: Container[] = [];
+    const echoLines: EchoLine[] = [];
 
+    // 随机量一次抽完（顺序与一次画完时相同）；字形只按字素数算（与 buildGlyphLine 同一个切分），不画。
     options.lines.forEach(line => {
-        const layout = buildGlyphLine(pixi, {
-            text: line.fullText,
-            fontPx,
-            font: options.font,
-            weight: options.weight,
-            resolution,
-            letterSpacing: 0.04,
-            outline: 0.012,
-            maxCanvasPx: 4096,
-        });
-        layouts.push(layout);
+        const graphemes = splitLyricGraphemes(line.fullText);
         const timings = buildGlyphTimings(line);
         const keywordColors = options.keywords && options.keywords.length > 0
             ? resolveGlyphKeywordColors(line.fullText, options.keywords)
             : null;
+        const first = fragments.length;
         segmentWords(line).forEach(word => {
             if (word.blank) return;
-            const slices = layout.glyphs.slice(word.start, word.end);
-            if (slices.length === 0) return;
-            const left = slices[0]!.charX;
-            const right = slices[slices.length - 1]!.charX + slices[slices.length - 1]!.charWidth;
-            const middle = (left + right) / 2;
+            const end = Math.min(word.end, graphemes.length);
+            if (end <= word.start) return;
             const holder = new pixi.Container();
             view.addChild(holder);
+            holders.push(holder);
             fragments.push({
                 birth: timings[word.start]?.start ?? line.startTime,
                 across: (rng() - 0.5) * 2.8,
@@ -126,15 +139,14 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
                 stretch: 0.75 + rng() * 0.7,
                 shear: (rng() - 0.5) * 0.12,
                 spin: (rng() - 0.5) * 0.08,
-                glyphs: slices.map((slice, offsetInWord) => {
-                    const sprite = new pixi.Sprite(slice.texture);
-                    sprite.anchor.set(slice.anchorX, slice.anchorY);
-                    sprite.visible = !slice.blank;
-                    holder.addChild(sprite);
+                start: word.start,
+                end,
+                glyphs: graphemes.slice(word.start, end).map((char, offsetInWord) => {
                     const angle = rng() * Math.PI * 2;
                     return {
-                        sprite,
-                        offset: slice.charX + slice.charWidth / 2 - middle,
+                        sprite: null,
+                        blank: char.trim().length === 0,
+                        offset: 0,
                         dx: Math.cos(angle),
                         dy: Math.sin(angle),
                         speed: 0.3 + rng() * 0.9,
@@ -144,8 +156,71 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
                 }),
             });
         });
+        const births = fragments.slice(first).map(fragment => fragment.birth);
+        if (births.length === 0) return;
+        echoLines.push({
+            text: line.fullText,
+            first,
+            last: fragments.length,
+            from: Math.min(...births),
+            to: Math.max(...births),
+            layout: null,
+        });
     });
-    const holders = view.children as Container[];
+
+    /** 画这一行的空心字，把字形挂到它的碎片上。 */
+    const rasterize = (echoLine: EchoLine) => {
+        const layout = buildGlyphLine(pixi, {
+            text: echoLine.text,
+            fontPx,
+            font: options.font,
+            weight: options.weight,
+            resolution,
+            letterSpacing: 0.04,
+            outline: 0.012,
+            maxCanvasPx: 4096,
+        });
+        echoLine.layout = layout;
+        for (let index = echoLine.first; index < echoLine.last; index += 1) {
+            const fragment = fragments[index]!;
+            const slices = layout.glyphs.slice(fragment.start, fragment.end);
+            const left = slices[0]!.charX;
+            const right = slices[slices.length - 1]!.charX + slices[slices.length - 1]!.charWidth;
+            const middle = (left + right) / 2;
+            fragment.glyphs.forEach((glyph, offsetInWord) => {
+                const slice = slices[offsetInWord]!;
+                const sprite = new pixi.Sprite(slice.texture);
+                sprite.anchor.set(slice.anchorX, slice.anchorY);
+                sprite.visible = !glyph.blank;
+                holders[index]!.addChild(sprite);
+                glyph.sprite = sprite;
+                glyph.offset = slice.charX + slice.charWidth / 2 - middle;
+            });
+        }
+    };
+    /** 释放这一行的空心字（精灵与画布纹理）。 */
+    const release = (echoLine: EchoLine) => {
+        for (let index = echoLine.first; index < echoLine.last; index += 1) {
+            holders[index]!.removeChildren().forEach(child => child.destroy());
+            fragments[index]!.glyphs.forEach(glyph => { glyph.sprite = null; });
+        }
+        echoLine.layout?.destroy();
+        echoLine.layout = null;
+    };
+    /**
+     * 按时间画 / 释放：碎片已经出现的行立刻画；快出现的行一帧最多提前画一行（把画字的开销摊开）；
+     * 碎片全部消失、或时间退回到出现之前的行释放。
+     */
+    const prepare = (time: number) => {
+        let budget = 1;
+        for (const echoLine of echoLines) {
+            if (time < echoLine.from - PREPARE || time > echoLine.to + LIFE) {
+                if (echoLine.layout) release(echoLine);
+            } else if (!echoLine.layout && (time >= echoLine.from || budget-- > 0)) {
+                rasterize(echoLine);
+            }
+        }
+    };
     // 关键字碎片的颜色按光色缓存（光色通常整个单元不变）。
     const hasKeywords = fragments.some(fragment => fragment.glyphs.some(glyph => glyph.keyword));
     const keywordHex = new Map<Rgb, number>();
@@ -165,6 +240,7 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
     };
 
     const update = ({ time, beams, color, intensity }: LyricEchoFrame) => {
+        prepare(time);
         // 主光束（第一束）的几何：原点、方向、半宽；没有光束时退回画面顶部中央竖直向下。
         const beam = beams[0];
         const ox = beam?.ox ?? (options.width / height) / 2;
@@ -194,6 +270,7 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
             const lit = compressLight(lightAt(beams, x / height, y / height));
             const glyphAlpha = alpha * (0.05 + 0.4 * lit);
             for (const glyph of fragment.glyphs) {
+                if (!glyph.sprite) continue;
                 glyph.sprite.position.set(
                     glyph.offset + glyph.dx * fontPx * split * glyph.speed,
                     glyph.dy * fontPx * split * glyph.speed,
@@ -210,7 +287,7 @@ export const createLyricEcho = (pixi: PixiModule, options: LyricEchoOptions): Ly
         update,
         destroy: () => {
             view.destroy({ children: true });
-            layouts.forEach(layout => layout.destroy());
+            echoLines.forEach(echoLine => echoLine.layout?.destroy());
         },
     };
 };

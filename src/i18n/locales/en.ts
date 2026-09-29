@@ -1997,6 +1997,8 @@ export default {
     "lumiereEcho": "Background lyrics",
     "lumiereEchoHint": "Background lyrics at 0 turns the drifting word fragments off.",
     "lumiereTrails": "Trace every move",
+    "lumiereSeamlessTransitions": "Seamless transitions",
+    "lumiereSeamlessTransitionsHint": "Seamless transitions: paragraph changes hand over inside the same light, like shot changes within a paragraph (beams swing to the new angle, line art redraws, lyrics fly to their new places) instead of a blackout, flare or cross-fade. Trace every move only decides whether lyrics leave a trail on every line change.",
     "lumiereKeywordColors": "Keyword colours",
     "lumiereThemeIcons": "Theme icons",
     "lumiereRenderQuality": "Render quality",

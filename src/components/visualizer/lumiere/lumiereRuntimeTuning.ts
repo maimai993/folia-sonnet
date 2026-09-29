@@ -1,5 +1,6 @@
 import type { LumiereRenderQuality, LumiereTuning } from '../../../types';
 import { snapResolutionToTexturePool } from '../pixiTextureBudget';
+import type { LumiereProgramOptions } from './lumiereProgram';
 import type { LumiereSceneTuning } from './types';
 
 // src/components/visualizer/lumiere/lumiereRuntimeTuning.ts
@@ -114,6 +115,18 @@ export const LUMIERE_LIVE_SCENE_KEYS = [
     'unlitOpacity',
     'fogOctaves',
 ] as const satisfies readonly (keyof LumiereSceneTuning)[];
+
+/**
+ * 改变编译结果的字段：既不是每帧现读，也不是场景重建——程序本身要重新编译（VisualizerLumiere 的 useMemo），
+ * 新程序经 swapSong 的同曲替换路径交给运行时（commitSong 清掉场景缓存，下一帧按新程序建），不重建 WebGL 上下文。
+ * 轨迹过渡把整首歌编成一个单元，所以它在这里，不在场景 tuning 里。
+ */
+export const LUMIERE_COMPILE_KEYS = ['seamlessTransitions'] as const satisfies readonly (keyof LumiereTuning)[];
+
+/** 用户 tuning → 编译选项（只取 LUMIERE_COMPILE_KEYS 里的字段）。 */
+export const resolveLumiereCompileOptions = (
+    tuning: Pick<LumiereTuning, typeof LUMIERE_COMPILE_KEYS[number]>,
+): Pick<LumiereProgramOptions, 'seamless'> => ({ seamless: tuning.seamlessTransitions });
 
 /** 两个 bloom 倍率：强度直接写进现有 filter 的 options；只有跨过 0（要挂 / 摘 filter）时才重建。 */
 const crossesZero = (previous: number, next: number) => (previous > 0) !== (next > 0);

@@ -1,6 +1,7 @@
 import type { Line } from '../../../types';
 import type { ParagraphBoundary, ParagraphKind, StructureLine } from './lumiereKernel';
 import { buildStructureLines, draftParagraphs, resolveParagraphGapThreshold, classifyParagraph } from './lumiereStructure';
+import { mergeLumiereParagraphs } from './lumiereSeamless';
 import { chooseLumiereTransition, LUMIERE_TRANSITIONS } from './lumiereTransitions';
 import {
     advanceChain,
@@ -33,6 +34,11 @@ export interface LumiereProgramOptions {
      * （不给用 480 秒）。
      */
     duration?: number;
+    /**
+     * 轨迹过渡：整首歌编成一个场景单元，段落之间也走光位交接（lumiereSeamless.ts）。镜头与光位和不开时相同，
+     * 只是没有段落转场与再次开场。
+     */
+    seamless?: boolean;
 }
 
 export interface LumiereProgram {
@@ -199,7 +205,7 @@ export const compileLumiereProgram = (
         paragraphGapThreshold: lyric?.paragraphGapThreshold ?? 0,
         duration: lyric ? lyric.programEnd : instrumentalDuration,
         lyricEndTime: lyric ? lyric.lyricEndTime : null,
-        paragraphs,
+        paragraphs: options.seamless ? mergeLumiereParagraphs(paragraphs) : paragraphs,
     };
 };
 

@@ -40,6 +40,17 @@ export interface LumiereParagraph {
     transitionOut: { kind: LumiereTransitionKind; startTime: number; endTime: number } | null;
     /** 这个单元是段落的开头（星空点亮的开场只在这里播放）。 */
     opening: boolean;
+    /**
+     * 轨迹过渡把整首歌并成一个单元时，原来各段落的范围（运镜按段落往返推拉）；按段落切单元时不给。
+     */
+    sections?: LumiereSection[];
+}
+
+/** 并进一个单元的原段落范围（lumiereSeamless.ts）。 */
+export interface LumiereSection {
+    startTime: number;
+    endTime: number;
+    kind: ParagraphKind;
 }
 
 export const LUMIERE_TRANSITION_KINDS = ['lights-out', 'flare-cut', 'focus-pull'] as const;

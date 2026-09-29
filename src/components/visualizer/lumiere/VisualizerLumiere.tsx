@@ -13,6 +13,7 @@ import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import type { LumierePixiRuntime, LumiereSongContext, LumiereSongMetadata } from './createLumierePixiRuntime';
 import { compileLumiereProgram } from './lumiereProgram';
+import { resolveLumiereCompileOptions } from './lumiereRuntimeTuning';
 
 // src/components/visualizer/lumiere/VisualizerLumiere.tsx
 // 绘光的 React 外壳：挂共享 shell / 字幕层，把按需加载的 Pixi 运行时建一次，换歌、tuning、暂停都就地推给它。
@@ -68,9 +69,11 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
 
     // 纯音乐 / 歌词还没到：编译成只有间奏镜头的程序（folia 不给 visualizer 传歌曲时长，用编译器的缺省时长），
     // 光照照常，不造 ♪ 虚拟行。showText 关掉时仍按真实歌词编译，镜头节奏跟着歌走，只是不画字。
+    // 轨迹过渡改变编译结果：切换时重新编译，新程序走同曲替换（swapSong → commitSong 清场景缓存），不重建 WebGL。
+    const seamlessTransitions = lumiereTuning.seamlessTransitions;
     const program = useMemo(
-        () => compileLumiereProgram(committedLines, committedSeed),
-        [committedLines, committedSeed],
+        () => compileLumiereProgram(committedLines, committedSeed, {}, resolveLumiereCompileOptions({ seamlessTransitions })),
+        [committedLines, committedSeed, seamlessTransitions],
     );
     const { activeLine, recentCompletedLine, nextLines } = useVisualizerRuntime({
         currentTime,

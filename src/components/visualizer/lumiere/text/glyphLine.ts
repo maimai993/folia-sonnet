@@ -102,7 +102,9 @@ export const buildGlyphLine = (
         graphemes.forEach((char, index) => draw(char, pad + offsets[index]!));
     }
 
-    const source = new pixi.CanvasSource({ resource: canvas, resolution });
+    // 交给 Pixi 的纹理 GC：一分钟没画过的行（整首歌一个单元时，早已唱过的行）卸掉显存副本，画布还在，
+    // 再出现时重新上传。按段落切单元时行不会闲置这么久，没有影响。
+    const source = new pixi.CanvasSource({ resource: canvas, resolution, autoGarbageCollect: true });
     const base = new pixi.Texture({ source });
     const glyphs: GlyphSlice[] = graphemes.map((char, index) => {
         const x = offsets[index]!;

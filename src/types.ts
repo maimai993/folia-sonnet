@@ -732,6 +732,11 @@ export interface LumiereTuning {
   frontBokeh: boolean;
   /** 所有换位都走轨迹线. */
   trails: boolean;
+  /**
+   * 轨迹过渡：段落之间也和段内换镜头一样在同一个光场里交接（整首歌编成一个场景单元），
+   * 没有熄灯 / 闪白 / 拉焦 / 交叉渐变。改它会重新编译程序.
+   */
+  seamlessTransitions: boolean;
   /** 画框. */
   overlayFrame: boolean;
   /** 关键字着色（主题 wordColors）. */
@@ -758,6 +763,7 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lineArt: true,
   frontBokeh: true,
   trails: false,
+  seamlessTransitions: false,
   overlayFrame: true,
   keywordColors: true,
   themeIcons: true,

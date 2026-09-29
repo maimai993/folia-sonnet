@@ -80,6 +80,7 @@ export const createLumiereUnit = (pixi: PixiModule, options: LumiereUnitOptions)
             : null,
         audioAt: options.audioAt,
         typography: options.typography,
+        sections: paragraph.sections,
     });
     const shotAt = (time: number) => {
         let found = paragraph.shots[0];

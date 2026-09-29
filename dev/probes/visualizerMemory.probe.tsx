@@ -77,6 +77,51 @@ const buildCjkLines = (count: number): Line[] => Array.from({ length: count }, (
     };
 });
 
+const LONG_SONG_WORDS = ['hello', 'again', 'midnight', 'river', 'we', 'were', 'young', 'under', 'neon', 'rain', 'hold', 'on'];
+/** 长歌的段落长度（行数）循环。 */
+const LONG_SONG_PARAGRAPHS = [4, 6, 8, 5, 6, 7];
+
+/**
+ * 长歌：80 行、约 5 分钟，中文长短句与英文行 2:1 混排，行长 2.4–4.2 秒，4–8 行一个段落、段落之间空 3 秒，
+ * 前奏 6 秒，隔一个段落标一次副歌。测整首编成一个单元（轨迹过渡）时的构建耗时与内存。
+ */
+const buildLongSong = (): Line[] => {
+    const lines: Line[] = [];
+    let time = 6;
+    let paragraph = 0;
+    let inParagraph = 0;
+    for (let index = 0; index < 80; index += 1) {
+        const duration = 2.4 + (((index * 7) % 10) / 10) * 1.8;
+        const latin = index % 3 === 2;
+        const tokens = latin
+            ? Array.from({ length: 4 + (index % 4) }, (_, offset) => LONG_SONG_WORDS[(index + offset) % LONG_SONG_WORDS.length]!)
+            : Array.from(CJK_LINES[index % CJK_LINES.length]!);
+        const step = (duration - 0.1) / tokens.length;
+        const words = tokens.map((text, offset) => ({
+            text: latin && offset < tokens.length - 1 ? `${text} ` : text,
+            startTime: time + offset * step,
+            endTime: time + (offset + 1) * step,
+        }));
+        lines.push({
+            id: `line-${index}`,
+            words,
+            startTime: time,
+            endTime: time + duration,
+            fullText: words.map(word => word.text).join(''),
+            translation: `translation ${index}`,
+            isChorus: paragraph % 2 === 1,
+        });
+        time += duration + 0.15;
+        inParagraph += 1;
+        if (inParagraph >= LONG_SONG_PARAGRAPHS[paragraph % LONG_SONG_PARAGRAPHS.length]!) {
+            paragraph += 1;
+            inParagraph = 0;
+            time += 3;
+        }
+    }
+    return lines;
+};
+
 const COVER_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">'
     + '<rect width="600" height="600" fill="#2563eb"/>'
@@ -90,10 +135,12 @@ const MODE = params.get('vis') ?? 'pendolo';
 const SPEED = Number(params.get('speed') ?? '8');
 /** 中文长短句歌词（默认是拉丁合成词）。 */
 const CJK = params.get('cjk') === '1';
-const LINES = (CJK ? buildCjkLines : buildLines)(Number(params.get('lines') ?? '400'));
+/** 长歌（80 行、约 5 分钟、中英混排、有段落空隙，见 buildLongSong）；给了它 lines= 与 cjk= 不起作用。 */
+const LONG_SONG = params.get('long') === '1';
+const LINES = LONG_SONG ? buildLongSong() : (CJK ? buildCjkLines : buildLines)(Number(params.get('lines') ?? '400'));
 /** 最后一行之后再放多少秒才循环（片尾卡之类在歌词唱完后才出现的东西要用）。 */
 const TAIL_SECONDS = Number(params.get('tail') ?? '0');
-const TOTAL_SECONDS = LINES.length * SECONDS_PER_LINE + TAIL_SECONDS;
+const TOTAL_SECONDS = (LONG_SONG ? LINES.at(-1)!.endTime + 1 : LINES.length * SECONDS_PER_LINE) + TAIL_SECONDS;
 /** 从第几秒开始放；配合 speed=0 可以停在一帧上持续渲染（测稳态帧时间）。 */
 const START_SECONDS = Number(params.get('start') ?? '0');
 /** 每隔 N 秒换一次 seed，模拟切歌时输入 seed 变化；是否重挂载由宿主的 key 策略决定。0 表示不换。 */
@@ -120,6 +167,15 @@ const META = params.get('meta') === '1';
 const LUMIERE_QUALITY = (params.get('quality') ?? 'full') as LumiereRenderQuality;
 /** 绘光暗场强度（0..1）；不给用默认值。 */
 const LUMIERE_DARK_FIELD = params.has('dark') ? Number(params.get('dark')) : DEFAULT_LUMIERE_TUNING.darkField;
+/** 绘光轨迹过渡（整首歌一个单元，段落之间也走光位交接）。 */
+const LUMIERE_SEAMLESS = params.get('seamless') === '1';
+
+/** 时刻 time 的当前行（第一行之前算第一行）。 */
+const lineIndexAt = (time: number) => {
+    let index = 0;
+    for (let i = 0; i < LINES.length; i += 1) if (LINES[i]!.startTime <= time) index = i;
+    return index;
+};
 
 const resolveProbeTheme = (): Theme => {
     const base = DAYLIGHT ? DAYLIGHT_THEME : DEFAULT_THEME;
@@ -178,7 +234,7 @@ const VisualizerMemoryProbe: React.FC = () => {
     useEffect(() => {
         if (FREEZE) {
             currentTime.set(FREEZE_TIME_SECONDS);
-            setCurrentLineIndex(FREEZE_LINE_INDEX);
+            setCurrentLineIndex(LONG_SONG ? lineIndexAt(FREEZE_TIME_SECONDS) : FREEZE_LINE_INDEX);
             return undefined;
         }
 
@@ -200,7 +256,7 @@ const VisualizerMemoryProbe: React.FC = () => {
             treble.set(0.35 + 0.3 * Math.sin(phase * 3.1));
             audioPower.set(0.4 + 0.3 * Math.sin(phase * 1.9));
 
-            const index = Math.min(LINES.length - 1, Math.floor(elapsed / SECONDS_PER_LINE));
+            const index = LONG_SONG ? lineIndexAt(elapsed) : Math.min(LINES.length - 1, Math.floor(elapsed / SECONDS_PER_LINE));
             if (index !== lineIndexRef.current) {
                 lineIndexRef.current = index;
                 setCurrentLineIndex(index);
@@ -227,7 +283,12 @@ const VisualizerMemoryProbe: React.FC = () => {
                 seed: `probe-${seedTick}`,
                 coverUrl: HEAVY ? COVER_URL : null,
                 pendoloTuning: resolvePendoloTuning(),
-                lumiereTuning: { ...DEFAULT_LUMIERE_TUNING, renderQuality: LUMIERE_QUALITY, darkField: LUMIERE_DARK_FIELD },
+                lumiereTuning: {
+                    ...DEFAULT_LUMIERE_TUNING,
+                    renderQuality: LUMIERE_QUALITY,
+                    darkField: LUMIERE_DARK_FIELD,
+                    seamlessTransitions: LUMIERE_SEAMLESS,
+                },
                 songTitle: META ? 'Lantern Tide' : null,
                 songArtist: META ? 'Probe Ensemble' : null,
                 songAlbum: META ? 'Synthetic Nights' : null,
@@ -242,7 +303,8 @@ const definition: ProbeDefinition = {
     description: '用加速时间轴长时间驱动单个 visualizer，配合 npm run manual:visualizer-memory 采样各进程内存。'
         + ' 参数：vis=<mode> speed=<倍速> lines=<行数> switch=<切歌间隔秒> heavy=1 notext=1 freeze=1 ablate=canvas|gears'
         + ' tail=<秒> start=<秒> keywords=1 daylight=1 meta=1 quality=full|balanced|low（后四个给绘光这类读主题关键字 / 片尾卡 / 画质的模式）'
-        + ' cjk=1（中文长短句歌词，测折行） dark=<0..1>（绘光暗场强度）',
+        + ' cjk=1（中文长短句歌词，测折行） dark=<0..1>（绘光暗场强度）'
+        + ' long=1（80 行约 5 分钟的中英混排长歌，带段落空隙） seamless=1（绘光轨迹过渡：整首歌一个单元）',
     Component: VisualizerMemoryProbe,
 };
 

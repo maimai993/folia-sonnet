@@ -1998,6 +1998,8 @@ export default {
     "lumiereEcho": "背景歌词",
     "lumiereEchoHint": "背景歌词调到 0 即关闭光束里漂下的分词碎片。",
     "lumiereTrails": "所有换位都走轨迹线",
+    "lumiereSeamlessTransitions": "轨迹过渡",
+    "lumiereSeamlessTransitionsHint": "轨迹过渡：段落之间也像段内换镜头一样在同一束光里交接（光束摆到新角度、线稿擦除重描、字沿轨迹飞到新位置），不再熄灯、闪白或交叉渐变。「所有换位都走轨迹线」只决定每次换行时字是否拖出轨迹线。",
     "lumiereKeywordColors": "关键字着色",
     "lumiereThemeIcons": "主题图标",
     "lumiereRenderQuality": "画质",

@@ -16,6 +16,8 @@ import { keywordBurstColor, prepareLumiereKeywords } from './text/keywordColors'
 import { createLyricEcho } from './text/lyricEcho';
 import { createLyricWindow, type WindowTypography } from './text/lyricWindow';
 import { CHAMPAGNE, hexOf, mixRgb, rgbOf, scaleRgb, type Rgb } from './color';
+import { createLumiereCamera, lumiereTypographyOfLine, resolveLumiereLeadShot } from './lumiereUnitLayout';
+import type { LumiereSection } from './program';
 import { LUMIERE_BLOOM, type BloomPreset, type BurstSpec, type LumiereProfile, type LumiereSceneTuning } from './types';
 
 // src/components/visualizer/lumiere/scene.ts
@@ -68,6 +70,8 @@ export interface LumiereSceneOptions {
     audioAt?: (time: number) => LumiereAudioFrame;
     /** 统一覆盖整个单元的排版（不给则按各镜头光位的默认排版）。 */
     typography?: WindowTypography;
+    /** 单元由几个段落无缝拼成时（轨迹过渡）各段落的范围：运镜按段落往返推拉，而不是整个单元推一次。 */
+    sections?: LumiereSection[];
 }
 
 export interface LumiereScene {
@@ -168,7 +172,8 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
     const aspect = width / height;
     const palette = resolveLumierePalette(options.theme);
     const shots = options.shots.length > 0 ? options.shots : [];
-    const lead = shots[0]!.profile;
+    // 领头光位（文字区、字号、运镜、浮尘、星空按它）：第一个有歌词的镜头（lumiereUnitLayout.ts）。
+    const lead = resolveLumiereLeadShot(shots).profile;
 
     // 每个镜头的光位（按单元与镜头播种）。
     const rigs = shots.map((shot, index) => shot.profile.light({ aspect, random: createRng(`${options.seed}:${index}:${shot.profile.kind}:light`) }));
@@ -257,14 +262,7 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
     const mid = new pixi.Container();
 
     // 文字组。第 i 行成为当前行时，用它所在镜头的排版（不在任何镜头里的行跟随前一个镜头）。
-    const typographyOfLine = (lineIndex: number): WindowTypography => {
-        let found = shots[0]!;
-        for (const shot of shots) {
-            if (shot.lines.includes(lineIndex)) return shot.profile.typography;
-            if (shot.lines.length > 0 && shot.lines[0]! < lineIndex) found = shot;
-        }
-        return found.profile.typography;
-    };
+    const typographyOfLine = lumiereTypographyOfLine(shots);
     const window = createLyricWindow(pixi, {
         width,
         height,
@@ -340,25 +338,18 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
     text.filters = tuning.textBloom > 0 ? [textBloom] : [];
 
     const lightHex = hexOf(palette.light);
-    const duration = Math.max(options.endTime - options.startTime, 0.001);
     const rest: TransformParams = { x: width / 2, y: height / 2, pivotX: width / 2, pivotY: height / 2, scale: 1, rotation: 0 };
 
-    /** 运镜：整个单元缓慢推近 + 平移（两端缓入缓出），再叠持续的手持感浮动。只由 time 决定。 */
-    const camera = (time: number): TransformParams => {
-        const linear = Math.min(1, Math.max(0, (time - options.startTime) / duration));
-        const progress = (1 - Math.cos(linear * Math.PI)) / 2;
-        const motion = options.theme.animationIntensity === 'calm' ? 0.6 : options.theme.animationIntensity === 'chaotic' ? 1.4 : 1;
-        const floatX = (Math.sin(time * 0.21 + 0.4) * 0.6 + Math.sin(time * 0.53 + 1.9) * 0.4) * 0.006 * motion;
-        const floatY = (Math.cos(time * 0.17 + 1.1) * 0.6 + Math.sin(time * 0.47 + 0.3) * 0.4) * 0.006 * motion;
-        return {
-            x: width / 2 + (lead.camera.driftX * progress + floatX) * width,
-            y: height / 2 + (lead.camera.driftY * progress + floatY) * height,
-            pivotX: width / 2,
-            pivotY: height / 2,
-            scale: (1 + lead.camera.push * progress) * (1 + 0.008 * motion * Math.sin(time * 0.31 + 0.7)),
-            rotation: 0.004 * motion * Math.sin(time * 0.13 + 2.1),
-        };
-    };
+    /** 运镜：整个单元（轨迹过渡时按原段落往返）缓慢推近 + 平移，再叠持续的手持感浮动。只由 time 决定。 */
+    const camera = createLumiereCamera({
+        width,
+        height,
+        camera: lead.camera,
+        startTime: options.startTime,
+        endTime: options.endTime,
+        sections: options.sections,
+        animationIntensity: options.theme.animationIntensity,
+    });
 
     /** 字的可见度：只画字（textOnly）时在结尾 0.3 秒淡出，平时一直可见。 */
     const textVisibility = (time: number) => (tuning.textOnly ? smooth((options.endTime - time) / 0.3) : 1);
