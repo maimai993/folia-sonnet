@@ -705,6 +705,11 @@ export interface LumiereTuning {
   audioResponse: number;
   /** 烟雾浓度, 0..2. */
   fogDensity: number;
+  /**
+   * 暗场强度, 0..1：光后面铺一层主题背景色压暗的底，压住 folia 的共享背景（0 = 共享背景原样透出）。
+   * 浅色主题保底 0.94（绘光始终在暗场里）。
+   */
+  darkField: number;
   /** 浮尘数量, 0..2. */
   moteAmount: number;
   /** 图形辉光, 0..2. */
@@ -741,6 +746,7 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lightIntensity: 1,
   audioResponse: 1,
   fogDensity: 1,
+  darkField: 0.75,
   moteAmount: 1,
   bloom: 1,
   textBloom: 1,

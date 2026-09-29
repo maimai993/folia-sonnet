@@ -83,6 +83,7 @@ export const toLumiereSceneTuning = (
         lightIntensity: tuning.lightIntensity,
         audioResponse: tuning.audioResponse,
         fogDensity: tuning.fogDensity,
+        darkField: tuning.darkField,
         moteAmount: tuning.moteAmount * profile.moteScale,
         bloom: tuning.bloom,
         textBloom: tuning.textBloom,
@@ -102,13 +103,14 @@ export const toLumiereSceneTuning = (
 };
 
 /**
- * 场景每帧 update 时才读的字段：直接改运行时持有的那份 tuning 对象就生效，不必重建。
- * （光强、随音乐、烟雾浓度、未唱字透明度、倍频——都在 scene.update 里现读。）
+ * 每帧才读的字段：直接改运行时持有的那份 tuning 对象就生效，不必重建。
+ * （光强、随音乐、烟雾浓度、未唱字透明度、倍频在 scene.update 里现读；暗场强度由运行时的暗场层每帧现读。）
  */
 export const LUMIERE_LIVE_SCENE_KEYS = [
     'lightIntensity',
     'audioResponse',
     'fogDensity',
+    'darkField',
     'unlitOpacity',
     'fogOctaves',
 ] as const satisfies readonly (keyof LumiereSceneTuning)[];

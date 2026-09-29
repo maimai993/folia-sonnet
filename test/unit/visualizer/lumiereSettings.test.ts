@@ -24,6 +24,7 @@ const NON_DEFAULT_TUNING: LumiereTuning = {
     lightIntensity: 1.6,
     audioResponse: 0,
     fogDensity: 0.4,
+    darkField: 0.25,
     moteAmount: 1.8,
     bloom: 0.3,
     textBloom: 1.5,
@@ -62,6 +63,7 @@ describe('normalizeLumiereTuning', () => {
             renderQuality: 'ultra',
             lineArt: 'yes',
             decay: Number.NaN,
+            darkField: 1.4,
         });
         expect(normalized.lightIntensity).toBe(0.3);
         expect(normalized.audioResponse).toBe(2);
@@ -71,6 +73,8 @@ describe('normalizeLumiereTuning', () => {
         expect(normalized.renderQuality).toBe(DEFAULT_LUMIERE_TUNING.renderQuality);
         expect(normalized.lineArt).toBe(DEFAULT_LUMIERE_TUNING.lineArt);
         expect(normalized.decay).toBe(DEFAULT_LUMIERE_TUNING.decay);
+        expect(normalized.darkField).toBe(1);
+        expect(normalizeLumiereTuning({ darkField: -0.5 }).darkField).toBe(0);
         expect(normalizeLumiereTuning({ fogOctaves: 12 }).fogOctaves).toBe(6);
         expect(normalizeLumiereTuning({ fogOctaves: 0 }).fogOctaves).toBe(2);
     });
@@ -80,6 +84,22 @@ describe('Lumiere appearance codec', () => {
     it('round-trips every Lumiere tuning field through the short code', () => {
         const decoded = decompressConfig(compressConfig({ lumiereTuning: NON_DEFAULT_TUNING }));
         expect(decoded.lumiereTuning).toEqual(NON_DEFAULT_TUNING);
+    });
+
+    it('decodes an old short code without the darkField key to the default', () => {
+        const encoded = compressConfig({ lumiereTuning: NON_DEFAULT_TUNING });
+        // 短码是 base64 的 JSON：解开、去掉 df（旧版本没有这个短键）再编回去。
+        const prefix = 'folia-theme://';
+        const legacy = JSON.parse(atob(encoded.slice(prefix.length)));
+        expect(legacy.lmt.df).toBe(0.25);
+        delete legacy.lmt.df;
+        const decoded = decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`);
+        expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, darkField: DEFAULT_LUMIERE_TUNING.darkField });
+    });
+
+    it('fills darkField with the default for old saved / synced tunings', () => {
+        const { darkField: _omitted, ...legacy } = NON_DEFAULT_TUNING;
+        expect(normalizeLumiereTuning(legacy)).toEqual({ ...NON_DEFAULT_TUNING, darkField: DEFAULT_LUMIERE_TUNING.darkField });
     });
 
     it('accepts lumiereTuning as a valid JSON config key', () => {
@@ -107,5 +127,18 @@ describe('Lumiere store tuning', () => {
 
         useVisualizerSettingsStore.getState().handleResetLumiereTuning();
         expect(useVisualizerSettingsStore.getState().lumiereTuning).toEqual(DEFAULT_LUMIERE_TUNING);
+    });
+
+    it('imports an old JSON tuning without darkField and keeps the current dark field', () => {
+        const storage = createLocalStorageMock();
+        vi.stubGlobal('localStorage', storage);
+        vi.stubGlobal('window', { localStorage: storage });
+        useVisualizerSettingsStore.setState({ lumiereTuning: { ...DEFAULT_LUMIERE_TUNING } });
+
+        const { darkField: _omitted, ...legacy } = NON_DEFAULT_TUNING;
+        const decoded = decompressConfig(JSON.stringify({ lumiereTuning: legacy }));
+        useVisualizerSettingsStore.getState().handleSetLumiereTuning(decoded.lumiereTuning);
+        expect(useVisualizerSettingsStore.getState().lumiereTuning)
+            .toEqual({ ...NON_DEFAULT_TUNING, darkField: DEFAULT_LUMIERE_TUNING.darkField });
     });
 });

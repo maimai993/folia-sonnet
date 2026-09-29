@@ -48,7 +48,7 @@ describe('绘光 tuning → 场景 tuning', () => {
 
     it('每帧现读的字段不重建，烘焙进场景的字段与 bloom 跨 0 才重建', () => {
         const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true });
-        const live = { ...base, lightIntensity: 1.7, fogDensity: 0.3, audioResponse: 0, unlitOpacity: 0.5, fogOctaves: 3, bloom: 1.8, textBloom: 0.4 };
+        const live = { ...base, lightIntensity: 1.7, fogDensity: 0.3, audioResponse: 0, unlitOpacity: 0.5, fogOctaves: 3, bloom: 1.8, textBloom: 0.4, darkField: 0.1 };
         expect(requiresLumiereSceneRebuild(base, live)).toBe(false);
         expect(requiresLumiereSceneRebuild(base, { ...base, bloom: 0 })).toBe(true);
         expect(requiresLumiereSceneRebuild(base, { ...base, windowNeighbors: 1 })).toBe(true);

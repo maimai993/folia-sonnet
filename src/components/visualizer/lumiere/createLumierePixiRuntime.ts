@@ -21,6 +21,7 @@ import {
     type LumiereSceneQuality,
 } from './lumiereSceneEntry';
 import { LumiereCreditsLayer } from './lumiereCreditsLayer';
+import { LumiereDarkFieldLayer } from './lumiereDarkField';
 import { LumiereSongSwap } from './lumiereSongSwap';
 import { buildLumiereOverlay } from './overlay';
 import { createLightSprites, type LightSprites } from './light/sprites';
@@ -91,6 +92,8 @@ export class LumierePixiRuntime {
     private readonly audio: LumiereAudioSampler;
     private readonly audioAt = () => this.audio.frame;
 
+    /** 暗场底：在所有场景与片尾卡之下，不随段落转场变（见 lumiereDarkField.ts）。 */
+    private darkField!: LumiereDarkFieldLayer;
     private sceneLayer!: import('pixi.js').Container;
     private overlayLayer!: import('pixi.js').Container;
     private credits!: LumiereCreditsLayer;
@@ -115,7 +118,7 @@ export class LumierePixiRuntime {
         await app.init({
             width,
             height,
-            // 画布透明：folia 的共享背景层要透出来，亮色主题下的暗场底由场景自己铺。
+            // 画布透明：folia 的共享背景层要透出来，由运行时的暗场层按暗场强度压暗。
             backgroundAlpha: 0,
             // 大头（图形组）画进 filter 纹理，MSAA 管不到；只剩画框细线，不值得整屏多重采样的解析开销。
             antialias: false,
@@ -135,12 +138,13 @@ export class LumierePixiRuntime {
         runtime.sprites = createLightSprites(pixi);
         runtime.passthrough = new pixi.AlphaFilter({ alpha: 1 });
         runtime.quality.passthrough = runtime.passthrough;
+        runtime.darkField = new LumiereDarkFieldLayer(pixi);
         runtime.sceneLayer = new pixi.Container();
         // 交叉渐变时两个段落场景叠放，按段落顺序排。
         runtime.sceneLayer.sortableChildren = true;
         runtime.overlayLayer = new pixi.Container();
         runtime.credits = new LumiereCreditsLayer(pixi, runtime.sprites);
-        app.stage.addChild(runtime.sceneLayer, runtime.credits.holder, runtime.overlayLayer);
+        app.stage.addChild(runtime.darkField.view, runtime.sceneLayer, runtime.credits.holder, runtime.overlayLayer);
 
         if (options.signal?.aborted) {
             runtime.destroy();
@@ -271,6 +275,8 @@ export class LumierePixiRuntime {
             this.credits.invalidate();
         }
         const { program, theme } = this.options.song;
+        // 暗场强度每帧从共享 tuning 现读：拖滑块不重建场景；场景还没建好的第一帧也已经铺上。
+        this.darkField.update(theme, this.sceneTuning.darkField, this.width, this.height);
         const frames = resolveLumiereSceneFrames(program, time, !this.options.staticMode);
         const visible = new Set(frames.layers.map(layer => layer.index));
         let builtThisFrame = false;
@@ -465,6 +471,7 @@ export class LumierePixiRuntime {
         this.retired.forEach(entry => this.destroyEntry(entry));
         this.retired.length = 0;
         this.credits?.destroy();
+        this.darkField?.destroy();
         this.overlayLayer?.removeChildren().forEach(child => child.destroy({ children: true }));
         // 光点纹理与直通 filter 由运行时持有，场景与片尾卡都已销毁，这里最后释放。
         this.sprites?.destroy();

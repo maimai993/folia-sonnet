@@ -15,12 +15,12 @@ import { buildShotIconArts } from './lineart/themeIcons';
 import { keywordBurstColor, prepareLumiereKeywords } from './text/keywordColors';
 import { createLyricEcho } from './text/lyricEcho';
 import { createLyricWindow, type WindowTypography } from './text/lyricWindow';
-import { CHAMPAGNE, hexOf, luminance, mixRgb, rgbOf, scaleRgb, type Rgb } from './color';
+import { CHAMPAGNE, hexOf, mixRgb, rgbOf, scaleRgb, type Rgb } from './color';
 import { LUMIERE_BLOOM, type BloomPreset, type BurstSpec, type LumiereProfile, type LumiereSceneTuning } from './types';
 
 // src/components/visualizer/lumiere/scene.ts
 // 一个场景单元（一个段落里的一串连续镜头）的画面：七层叠放（lumisynth docs/LUMIERE.md 第一节），每帧只由 t 决定。
-//   图形组（bloom）：光场（暗场底 + 烟雾 + 体积光 + 眩光）→ 背景分词碎片 → 星空 → 线稿 → 浮尘
+//   图形组（bloom）：光场（烟雾 + 体积光 + 眩光）→ 背景分词碎片 → 星空 → 线稿 → 浮尘
 //   素材插入层（mid，空容器，运行时可以往里放素材，在场景之上、歌词之下）
 //   文字组（bloom）：十字爆闪 → 窗口里的几行字（径迹、光晕、字、闪点）
 //   前景：散景
@@ -28,7 +28,8 @@ import { LUMIERE_BLOOM, type BloomPreset, type BurstSpec, type LumiereProfile, t
 // 随镜头换的：光位（镜头边界处两套光束在同一个光场里交叉渐变）与线稿（下一个提前描、上一个随后淡出）。
 // 主题：关键字（wordColors）点亮时带关键字色（字、光晕、闪点、落在上面的十字爆闪、背景碎片）；
 // 主题图标（lyricsIcons）每个镜头散落几枚在文字区外，和线稿同样描出、同样随镜头交叉渐变。
-// 容器本身透明，背景归 folia 的共享背景层；暗场底只在主题背景偏亮时出现（算构图内容，不是背景层）。
+// 容器本身透明，背景归 folia 的共享背景层；暗场底由运行时铺在所有场景之下（lumiereDarkField.ts），
+// 不随段落转场变化，场景里的光场不再画它（uDark 恒为 0）。
 // Pixi 模块由调用方传入（运行时经 loadPixi 取得），这里只用它的类型。
 type PixiModule = typeof import('pixi.js');
 
@@ -106,25 +107,24 @@ export interface LumierePalette {
     light: Rgb;
     lit: Rgb;
     unlit: Rgb;
-    /** 暗场底（预乘）。 */
-    dark: [number, number, number, number];
 }
 
-/** 光色：香槟金里掺一点主题强调色；背景偏亮时铺暗场底。 */
+/**
+ * 光场着色器的暗场底（预乘）：folia 里恒为 0。暗场底由运行时画在所有场景之下（见 lumiereDarkField.ts），
+ * 着色器的 uDark 通路保留给 lumisynth 那样由场景自己铺底的宿主。
+ */
+export const LUMIERE_SHADER_NO_DARK: [number, number, number, number] = [0, 0, 0, 0];
+
+/** 光色：香槟金里掺一点主题强调色。 */
 export const resolveLumierePalette = (theme: Theme): LumierePalette => {
     const accent = rgbOf(theme.accentColor, CHAMPAGNE);
     let light = mixRgb(CHAMPAGNE, accent, 0.18);
     const peak = Math.max(...light, 1e-3);
     light = scaleRgb(light, 1 / peak);
-    const background = rgbOf(theme.backgroundColor, [0, 0, 0]);
-    const bright = luminance(background) > 0.18;
-    const darkColor = scaleRgb(background, 0.06);
-    const darkAlpha = bright ? 0.94 : 0;
     return {
         light,
         lit: mixRgb(light, [1, 1, 1], 0.2),
         unlit: mixRgb(light, [0.62, 0.68, 0.8], 0.55),
-        dark: [darkColor[0] * darkAlpha, darkColor[1] * darkAlpha, darkColor[2] * darkAlpha, darkAlpha],
     };
 };
 
@@ -436,7 +436,7 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
             fogScale: tuning.fogDensity * (1 + boost * 0.5) * (1 + 0.2 * Math.min(1, audio.power) * response),
             color: palette.light,
             glareScale: intensity * tuning.lightIntensity * (1 + boost * 1.5 + ignite),
-            dark: palette.dark,
+            dark: LUMIERE_SHADER_NO_DARK,
             octaves: tuning.fogOctaves,
             // 字排在领头光位的文字区里（整个单元一份）。
             textRegion: lead.region,

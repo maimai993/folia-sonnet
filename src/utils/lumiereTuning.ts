@@ -25,6 +25,7 @@ export const normalizeLumiereTuning = (value: unknown): LumiereTuning => {
         lightIntensity: clampNumber(raw.lightIntensity, d.lightIntensity, 0.3, 2),
         audioResponse: clampNumber(raw.audioResponse, d.audioResponse, 0, 2),
         fogDensity: clampNumber(raw.fogDensity, d.fogDensity, 0, 2),
+        darkField: clampNumber(raw.darkField, d.darkField, 0, 1),
         moteAmount: clampNumber(raw.moteAmount, d.moteAmount, 0, 2),
         bloom: clampNumber(raw.bloom, d.bloom, 0, 2),
         textBloom: clampNumber(raw.textBloom, d.textBloom, 0, 2),

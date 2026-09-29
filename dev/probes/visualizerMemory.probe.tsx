@@ -112,12 +112,14 @@ const ABLATE = params.get('ablate');
 
 /** 给主题加上 wordColors / lyricsIcons（关键字着色与主题图标）。 */
 const KEYWORDS = params.get('keywords') === '1';
-/** 浅色主题（绘光会自己铺暗场底）。 */
+/** 浅色主题（绘光的暗场有 0.94 的保底）。 */
 const DAYLIGHT = params.get('daylight') === '1';
 /** 带曲名 / 艺人 / 专辑，走到片尾卡（配合 lines= 让歌词早点唱完）。 */
 const META = params.get('meta') === '1';
 /** 绘光画质档：full / balanced / low。 */
 const LUMIERE_QUALITY = (params.get('quality') ?? 'full') as LumiereRenderQuality;
+/** 绘光暗场强度（0..1）；不给用默认值。 */
+const LUMIERE_DARK_FIELD = params.has('dark') ? Number(params.get('dark')) : DEFAULT_LUMIERE_TUNING.darkField;
 
 const resolveProbeTheme = (): Theme => {
     const base = DAYLIGHT ? DAYLIGHT_THEME : DEFAULT_THEME;
@@ -225,7 +227,7 @@ const VisualizerMemoryProbe: React.FC = () => {
                 seed: `probe-${seedTick}`,
                 coverUrl: HEAVY ? COVER_URL : null,
                 pendoloTuning: resolvePendoloTuning(),
-                lumiereTuning: { ...DEFAULT_LUMIERE_TUNING, renderQuality: LUMIERE_QUALITY },
+                lumiereTuning: { ...DEFAULT_LUMIERE_TUNING, renderQuality: LUMIERE_QUALITY, darkField: LUMIERE_DARK_FIELD },
                 songTitle: META ? 'Lantern Tide' : null,
                 songArtist: META ? 'Probe Ensemble' : null,
                 songAlbum: META ? 'Synthetic Nights' : null,
@@ -240,7 +242,7 @@ const definition: ProbeDefinition = {
     description: '用加速时间轴长时间驱动单个 visualizer，配合 npm run manual:visualizer-memory 采样各进程内存。'
         + ' 参数：vis=<mode> speed=<倍速> lines=<行数> switch=<切歌间隔秒> heavy=1 notext=1 freeze=1 ablate=canvas|gears'
         + ' tail=<秒> start=<秒> keywords=1 daylight=1 meta=1 quality=full|balanced|low（后四个给绘光这类读主题关键字 / 片尾卡 / 画质的模式）'
-        + ' cjk=1（中文长短句歌词，测折行）',
+        + ' cjk=1（中文长短句歌词，测折行） dark=<0..1>（绘光暗场强度）',
     Component: VisualizerMemoryProbe,
 };
 

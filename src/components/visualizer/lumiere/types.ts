@@ -74,6 +74,11 @@ export interface LumiereSceneTuning {
     audioResponse: number;
     /** 烟雾浓度倍率。 */
     fogDensity: number;
+    /**
+     * 暗场强度（0..1，浅色主题保底 0.94，见 lumiereDarkField.ts）。场景不读它：暗场底是运行时在所有场景之下
+     * 铺的一整块底，每帧从这份共享 tuning 现读。
+     */
+    darkField: number;
     /** 浮尘数量倍率。 */
     moteAmount: number;
     /** 图形组（光场、线稿、浮尘）bloom 强度倍率（乘在默认的高值上）。 */
@@ -108,6 +113,7 @@ export const DEFAULT_LUMIERE_SCENE_TUNING: LumiereSceneTuning = {
     lightIntensity: 1,
     audioResponse: 1,
     fogDensity: 1,
+    darkField: 0.75,
     moteAmount: 1,
     bloom: 1,
     textBloom: 1,

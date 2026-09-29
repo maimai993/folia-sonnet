@@ -147,6 +147,7 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 - `lumiereRuntimeTuning.ts`：用户 tuning → 场景 tuning、画质档（full / balanced / low 只降图形组 filter 分辨率、封顶烟雾倍频，文字保持满分辨率）、哪些改动要防抖重建场景
 - `lumiereAudio.ts`：`audioBands.bass` / `treble` / `audioPower` 归一化到 0..1（主播放器 0..255、预览 0..1）并做起音 / 释放平滑；渲染层消费音频
 - `lumiereCreditsLayer.ts` + `credits.ts`：片尾卡在最后一句唱完前几秒才建；`overlay.ts`：取景器画框
+- `lumiereDarkField.ts`：暗场底（tuning `darkField`，浅色主题保底 0.94）是运行时铺在所有场景与片尾卡之下的一整块底，不随段落转场变化；光场着色器的 `uDark` 在 folia 里恒为 0
 - 歌词字号由光位的文字区决定，通用字号设置只影响底部字幕
 
 ## Host surfaces

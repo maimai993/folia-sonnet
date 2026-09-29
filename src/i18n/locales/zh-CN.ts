@@ -1982,6 +1982,8 @@ export default {
     "lumiereAudioResponseHint": "0 = 光强不随音乐变化；数值越大，光束随音乐起伏越明显。",
     "lumiereBloom": "图形辉光",
     "lumiereTextBloom": "文字辉光",
+    "lumiereDarkField": "暗场强度",
+    "lumiereDarkFieldHint": "暗场强度压暗光后面的共享背景，让光束像打在烟里的光；0 = 背景原样透出。浅色主题始终保留暗场。",
     "lumiereFogDensity": "烟雾浓度",
     "lumiereFogOctaves": "烟雾细节",
     "lumiereMoteAmount": "浮尘数量",

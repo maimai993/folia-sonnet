@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Line } from '@/types';
 import { LUMIERE_PROFILES } from '@/components/visualizer/lumiere/catalog';
 import type { LightSprites } from '@/components/visualizer/lumiere/light/sprites';
+import { LUMIERE_BRIGHT_DARK_FIELD_FLOOR, resolveLumiereDarkField } from '@/components/visualizer/lumiere/lumiereDarkField';
 import { resolveLumierePalette } from '@/components/visualizer/lumiere/scene';
 import { frameBand } from '@/components/visualizer/lumiere/text/lineWrap';
 import { createLyricWindow, type WindowTypography } from '@/components/visualizer/lumiere/text/lyricWindow';
@@ -235,12 +236,21 @@ describe('歌词窗口的排版', () => {
 describe('绘光的调色', () => {
     const theme = (backgroundColor: string) => ({ backgroundColor, accentColor: '#88aaff' }) as Parameters<typeof resolveLumierePalette>[0];
 
-    it('深色背景不铺暗场底，浅色背景铺一层压暗的暗场底', () => {
-        expect(resolveLumierePalette(theme('#0b0d12')).dark[3]).toBe(0);
-        const bright = resolveLumierePalette(theme('#f4efe6'));
-        expect(bright.dark[3]).toBeCloseTo(0.94);
-        // 预乘：颜色不超过 alpha。
-        bright.dark.slice(0, 3).forEach(channel => expect(channel).toBeLessThanOrEqual(bright.dark[3]));
+    it('暗场强度：深色主题按设置，浅色主题保底 0.94，颜色是主题背景色压暗', () => {
+        const dark = theme('#0b0d12');
+        expect(resolveLumiereDarkField(dark, 0).alpha).toBe(0);
+        expect(resolveLumiereDarkField(dark, 0.3).alpha).toBeCloseTo(0.3);
+        expect(resolveLumiereDarkField(dark, 1).alpha).toBe(1);
+        const bright = theme('#f4efe6');
+        expect(resolveLumiereDarkField(bright, 0).alpha).toBeCloseTo(LUMIERE_BRIGHT_DARK_FIELD_FLOOR);
+        expect(resolveLumiereDarkField(bright, 0.6).alpha).toBeCloseTo(0.94);
+        expect(resolveLumiereDarkField(bright, 1).alpha).toBe(1);
+        // 越界值钳到 0..1。
+        expect(resolveLumiereDarkField(dark, 3).alpha).toBe(1);
+        expect(resolveLumiereDarkField(dark, -1).alpha).toBe(0);
+        const color = resolveLumiereDarkField(bright, 1).color;
+        expect(color[0]).toBeCloseTo((0xf4 / 255) * 0.06);
+        expect(color[2]).toBeCloseTo((0xe6 / 255) * 0.06);
     });
 
     it('光色最亮的通道归一到 1，未点亮色比点亮色暗', () => {

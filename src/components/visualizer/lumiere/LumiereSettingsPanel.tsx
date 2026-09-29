@@ -27,6 +27,7 @@ const LIGHT_CONTROLS: ControlSpec[] = [
 ];
 
 const ATMOSPHERE_CONTROLS: ControlSpec[] = [
+    slider('darkField', 'options.lumiereDarkField', 0, 1, { step: 0.01 }),
     slider('fogDensity', 'options.lumiereFogDensity', 0, 2),
     slider('fogOctaves', 'options.lumiereFogOctaves', 2, 6, { step: 1, integer: true }),
     slider('moteAmount', 'options.lumiereMoteAmount', 0, 2),
@@ -129,6 +130,7 @@ const LumiereSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <SettingsSection title={t('options.lumiereAtmosphereSection')}>
                 {ATMOSPHERE_CONTROLS.map(renderControl)}
+                {hint('options.lumiereDarkFieldHint')}
             </SettingsSection>
 
             <SettingsSection title={t('options.lumiereTextSection')}>

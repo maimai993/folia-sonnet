@@ -11,7 +11,7 @@ import type { LightSprites } from './light/sprites';
 import { createLineArt } from './lineart/lineArt';
 import { mergeSpecs, protractorHalo, scatteredSparks, viewfinderFrame } from './lineart/recipes';
 import { FOG, GLARE, MOTES, shaft } from './rigs/base';
-import { resolveLumierePalette } from './scene';
+import { LUMIERE_SHADER_NO_DARK, resolveLumierePalette } from './scene';
 import { createLyricWindow } from './text/lyricWindow';
 import { LUMIERE_BLOOM, type LumiereSceneTuning } from './types';
 
@@ -190,7 +190,7 @@ export const createLumiereCredits = (pixi: PixiModule, options: {
             fogScale: tuning.fogDensity,
             color: palette.light,
             glareScale: rise * tuning.lightIntensity * (1 + ignite),
-            dark: palette.dark,
+            dark: LUMIERE_SHADER_NO_DARK,
             octaves: tuning.fogOctaves,
         });
         const draw = (time - 0.8) / 3.6;

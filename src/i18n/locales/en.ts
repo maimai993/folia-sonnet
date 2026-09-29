@@ -1981,6 +1981,8 @@ export default {
     "lumiereAudioResponseHint": "0 keeps the light steady; higher values let the beams swell with the music.",
     "lumiereBloom": "Graphic glow",
     "lumiereTextBloom": "Text glow",
+    "lumiereDarkField": "Dark stage",
+    "lumiereDarkFieldHint": "Dark stage dims the shared background behind the light so the beams read as light in smoke; 0 lets the background show through fully. Light themes always keep a dark stage.",
     "lumiereFogDensity": "Haze density",
     "lumiereFogOctaves": "Haze detail",
     "lumiereMoteAmount": "Dust motes",

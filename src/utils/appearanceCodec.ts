@@ -465,6 +465,7 @@ const LUMIERE_SHORT_KEYS = {
     lightIntensity: 'li',
     audioResponse: 'ar',
     fogDensity: 'fd',
+    darkField: 'df',
     moteAmount: 'ma',
     bloom: 'bl',
     textBloom: 'tb',
