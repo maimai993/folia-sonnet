@@ -31,7 +31,11 @@ interface TemperaRangeControlProps {
     min?: number;
     max?: number;
     step?: number;
+    /** Readout next to the label; defaults to a multiplier such as `1.00x`. */
+    formatValue?: (value: number) => string;
 }
+
+const defaultFormatValue = (value: number) => `${value.toFixed(2)}x`;
 
 export const TemperaRangeControl: React.FC<TemperaRangeControlProps> = ({
     label,
@@ -44,12 +48,13 @@ export const TemperaRangeControl: React.FC<TemperaRangeControlProps> = ({
     min = 0,
     max = 2,
     step = 0.05,
+    formatValue = defaultFormatValue,
 }) => (
     <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 text-sm" style={{ color: 'var(--text-primary)' }}>
             <span>{label}</span>
             <span className="shrink-0 font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                {value.toFixed(2)}x
+                {formatValue(value)}
             </span>
         </div>
         <input

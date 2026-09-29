@@ -20,6 +20,7 @@ import {
     DEFAULT_SONNET_TUNING,
     DEFAULT_TEMPERA_TUNING,
     DEFAULT_TILT_TUNING,
+    DEFAULT_LUMIERE_TUNING,
     type AudioBands,
     type CappellaAvatarImage,
     type CappellaEmojiImage,
@@ -29,6 +30,7 @@ import {
     type CladdaghTuning,
     type FumeTuning,
     type LatentBackgroundTuning,
+    type LumiereTuning,
     type MonetBackgroundTuning,
     type MonetPortraitImage,
     type MonetTuning,
@@ -88,6 +90,7 @@ interface VisPlaygroundProps {
     pendoloTuning?: PendoloTuning;
     sonnetTuning?: SonnetTuning;
     temperaTuning?: TemperaTuning;
+    lumiereTuning?: LumiereTuning;
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetPortraitImage?: MonetPortraitImage | null;
@@ -147,6 +150,8 @@ interface VisPlaygroundProps {
     onResetSonnetTuning?: () => void;
     onTemperaTuningChange?: (patch: Partial<TemperaTuning>) => void;
     onResetTemperaTuning?: () => void;
+    onLumiereTuningChange?: (patch: Partial<LumiereTuning>) => void;
+    onResetLumiereTuning?: () => void;
     onUploadMonetPortraitImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetPortraitImage?: () => Promise<void> | void;
     isLoadingMonetPortraitImage?: boolean;
@@ -317,6 +322,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     pendoloTuning = DEFAULT_PENDOLO_TUNING,
     sonnetTuning = DEFAULT_SONNET_TUNING,
     temperaTuning = DEFAULT_TEMPERA_TUNING,
+    lumiereTuning = DEFAULT_LUMIERE_TUNING,
     cappellaCustomEmojiImages = [],
     cappellaCustomAvatarImages = [],
     monetPortraitImage = null,
@@ -376,6 +382,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     onResetSonnetTuning,
     onTemperaTuningChange,
     onResetTemperaTuning,
+    onLumiereTuningChange,
+    onResetLumiereTuning,
     onUploadMonetPortraitImage,
     onClearMonetPortraitImage,
     isLoadingMonetPortraitImage = false,
@@ -435,6 +443,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [draftPendoloTuning, setDraftPendoloTuning] = useState<PendoloTuning>(pendoloTuning);
     const [draftSonnetTuning, setDraftSonnetTuning] = useState<SonnetTuning>(sonnetTuning);
     const [draftTemperaTuning, setDraftTemperaTuning] = useState<TemperaTuning>(temperaTuning);
+    const [draftLumiereTuning, setDraftLumiereTuning] = useState<LumiereTuning>(lumiereTuning);
     const [activeEditSection, setActiveEditSection] = useState<VisPlaygroundEditSection>(initialEditSection);
     const fontListRef = React.useRef<HTMLDivElement>(null);
     const fontVirtualListRef = useListRef(null);
@@ -550,7 +559,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         pendolo: draftPendoloTuning,
         sonnet: draftSonnetTuning,
         tempera: previewTemperaTuning,
-    }), [cadenzaTuning, cappellaTuning, draftClassicTuning, draftDioramaTuning, draftMonetTuning, draftPendoloTuning, draftSonnetTuning, draftTiltTuning, previewTemperaTuning, resolvedCladdaghTuning, resolvedFumeTuning, resolvedPartitaTuning]);
+        lumiere: draftLumiereTuning,
+    }), [cadenzaTuning, cappellaTuning, draftClassicTuning, draftDioramaTuning, draftLumiereTuning, draftMonetTuning, draftPendoloTuning, draftSonnetTuning, draftTiltTuning, previewTemperaTuning, resolvedCladdaghTuning, resolvedFumeTuning, resolvedPartitaTuning]);
     const currentFontLabel = customFontLabel || customFontFamily || t('options.customFont');
     const fontStyleOptions: PresetOption<Theme['fontStyle'] | 'custom'>[] = useMemo(() => ([
         ...builtinFontOptions,
@@ -600,6 +610,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     useEffect(() => { setDraftPendoloTuning(pendoloTuning); }, [pendoloTuning]);
     useEffect(() => { setDraftSonnetTuning(sonnetTuning); }, [sonnetTuning]);
     useEffect(() => { setDraftTemperaTuning(temperaTuning); }, [temperaTuning]);
+    useEffect(() => { setDraftLumiereTuning(lumiereTuning); }, [lumiereTuning]);
     useEffect(() => { setActiveEditSection(initialEditSection); }, [initialEditSection]);
 
     useVisPlaygroundPreviewPlayback({
@@ -660,11 +671,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             resetPendoloTuning: onResetPendoloTuning,
             resetSonnetTuning: onResetSonnetTuning,
             resetTemperaTuning: onResetTemperaTuning,
+            resetLumiereTuning: onResetLumiereTuning,
             setDraftFumeTuning,
             setDraftCladdaghTuning,
             setDraftPendoloTuning,
             setDraftSonnetTuning,
             setDraftTemperaTuning,
+            setDraftLumiereTuning,
         });
     };
 
@@ -1022,6 +1035,15 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         }
     };
 
+    const handleLumiereTuningDraft = (patch: Partial<LumiereTuning>) => {
+        setDraftLumiereTuning(prev => ({ ...prev, ...patch }));
+        if (!isDraggingSlider.current) {
+            onLumiereTuningChange?.(patch);
+        } else {
+            pendingCommitRef.current = () => onLumiereTuningChange?.(patch);
+        }
+    };
+
     const handleResetSubtitleSettings = () => {
         setDraftSubtitleOverlayOpacity(0.6);
         setDraftSubtitleFontScale(1);
@@ -1290,6 +1312,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         onSonnetTuningChange={handleSonnetTuningDraft}
                         temperaTuning={draftTemperaTuning}
                         onTemperaTuningChange={handleTemperaTuningDraft}
+                        lumiereTuning={draftLumiereTuning}
+                        onLumiereTuningChange={handleLumiereTuningDraft}
                         onResetMonetTuning={onResetMonetTuning}
                         monetPortraitImage={monetPortraitImage}
                         onUploadMonetPortraitImage={onUploadMonetPortraitImage}

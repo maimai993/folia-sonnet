@@ -47,6 +47,7 @@ App / ThemePark / VisPlayground / OBS source
 | `pendolo` | Pendolo | `pendolo/VisualizerPendolo.tsx`、`pendolo/pendoloTextLayout.ts`、`pendolo/pendoloTimeline.ts` |
 | `sonnet` | 商籁 | `sonnet/VisualizerSonnet.tsx`、`sonnet/createSonnetPixiRuntime.ts`、`sonnet/*` |
 | `tempera` | 凝彩 | `tempera/VisualizerTempera.tsx`、`tempera/createTemperaPixiRuntime.ts`、`tempera/*` |
+| `lumiere` | 绘光 | `lumiere/VisualizerLumiere.tsx`、`lumiere/createLumierePixiRuntime.ts`、`lumiere/*` |
 
 `registry.tsx` 的默认模式是 `classic`。模式枚举/共享 tuning map 见 `src/types.ts`、`definition.ts`、`tuningRegistry.ts`。
 
@@ -69,7 +70,7 @@ App / ThemePark / VisPlayground / OBS source
 
 `VisualizerSharedProps` 是模式共同输入，包含 `MotionValue currentTime`、当前行/全部歌词、主题与字幕主题、音频分析值、背景/透明度、字幕显示开关、播放状态、seek/back/panel callbacks、资源和模式 tuning。完整字段以代码为准；本 README 只保留定位信息。
 
-当前 tuning 覆盖 11 个模式，并通过 `VisualizerRenderer` 的 `applyVisualizerTuning` 统一注入。模式级设置面板和 reset 由各自 `entry.tsx` / `tuning.ts` 提供，再由 `settingsPanels.tsx` 和 `VisPlaygroundSettingsPanel.tsx` 复用。
+当前 tuning 覆盖 13 个模式，并通过 `VisualizerRenderer` 的 `applyVisualizerTuning` 统一注入。模式级设置面板和 reset 由各自 `entry.tsx` / `tuning.ts` 提供，再由 `settingsPanels.tsx` 和 `VisPlaygroundSettingsPanel.tsx` 复用。
 
 ### Lyrics pipeline
 
@@ -135,6 +136,18 @@ Visualizer 消费已解析的 `LyricData` / `Line` / `Word`，不负责解析 `.
 - `temperaLayout.ts` + `temperaMotion.ts`：拼贴排版与逐字入场求解
 - `temperaDifferenceFilter.ts`：文字对背景逐像素反色，改动前务必先读那份说明里的约束
 - Tempera 渲染层不消费音频（`audioPower`/`audioBands` 只传给共享背景层）。
+
+### Lumiere
+
+绘光：舞台光式的歌词 PV——体积光束、烟雾、线稿与浮尘组成的「图形组」，歌词按光束明暗点亮。快速定位：
+
+- `lumiere/VisualizerLumiere.tsx`：React shell / subtitle；`createLumierePixiRuntime.ts`：Pixi runtime（WebGL only，建一次、换歌就地交接，scene cache ±1，一帧最多做一件贵的事）
+- `lumiereProgram.ts` + `program.ts`：整首编译（段落首尾相接铺满时间轴、镜头、光位、段落转场）；纯音乐编译成只有间奏镜头的程序，不造 ♪ 虚拟行
+- `scene.ts` / `lumiereUnit.ts`：一个段落一个场景，运镜在场景内部；运行时只在外面的 holder 上套转场帧（`lumiereSceneFrames.ts`：出场帧 + 边界后的交叉渐变，熄灯的变暗由场景自己的 fadeOut 完成）
+- `lumiereRuntimeTuning.ts`：用户 tuning → 场景 tuning、画质档（full / balanced / low 只降图形组 filter 分辨率、封顶烟雾倍频，文字保持满分辨率）、哪些改动要防抖重建场景
+- `lumiereAudio.ts`：`audioBands.bass` / `treble` / `audioPower` 归一化到 0..1（主播放器 0..255、预览 0..1）并做起音 / 释放平滑；渲染层消费音频
+- `lumiereCreditsLayer.ts` + `credits.ts`：片尾卡在最后一句唱完前几秒才建；`overlay.ts`：取景器画框
+- 歌词字号由光位的文字区决定，通用字号设置只影响底部字幕
 
 ## Host surfaces
 

@@ -1,21 +1,12 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as LucideIcons from 'lucide-react';
+import { resolveLucideIconNames } from '../../../utils/lucideIconResolver';
 
 // src/components/visualizer/sonnet/sonnetIcons.ts
 // Validates theme icon names and produces cacheable SVG data URLs for Pixi.
-const LUCIDE_ICON_NAMES = Object.keys(LucideIcons).filter(name => {
-    const candidate = LucideIcons[name as keyof typeof LucideIcons];
-    return /^[A-Z]/.test(name) && (typeof candidate === 'object' || typeof candidate === 'function');
-});
-const LUCIDE_ICON_NAMES_BY_LOWERCASE = new Map(LUCIDE_ICON_NAMES.map(name => [name.toLowerCase(), name]));
-
 export const resolveSonnetIconNames = (names: string[] | undefined): string[] => {
-    const resolved = [
-        ...new Set((names ?? [])
-            .map(name => LUCIDE_ICON_NAMES_BY_LOWERCASE.get(name.toLowerCase()))
-            .filter(Boolean)),
-    ] as string[];
+    const resolved = resolveLucideIconNames(names);
     return resolved.length > 0 ? resolved : ['Flower'];
 };
 

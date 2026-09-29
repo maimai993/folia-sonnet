@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
-import { DEFAULT_THEME } from '../../src/services/baseThemes';
+import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../src/services/baseThemes';
 import { getVisualizerRegistryEntry } from '../../src/components/visualizer/registry';
-import { DEFAULT_PENDOLO_TUNING, type Line } from '../../src/types';
+import { DEFAULT_LUMIERE_TUNING, DEFAULT_PENDOLO_TUNING, type Line, type LumiereRenderQuality, type Theme } from '../../src/types';
 import type { ProbeDefinition } from './definition';
 
 // dev/probes/visualizerMemory.probe.tsx
@@ -46,6 +46,37 @@ const buildLines = (count: number): Line[] => {
 
 const SECONDS_PER_LINE = 3;
 
+/** 中文长短句（2–32 字，含逗号与中英混排），测竖排 / 横排的折行与缩字。 */
+const CJK_LINES = [
+    '迷失在无边际这幽深的森林',
+    '风吹过',
+    '我们慢慢走回去，星河与风一起落在很远很远的地方',
+    '光落在晨雾里',
+    '你说夜色会把所有的名字都轻轻藏起来',
+    '晚安',
+    '在城市尽头等一场迟到的雨',
+    '把回忆折成纸船放进河流',
+    '轻轻唱 hello again 在无人的街角',
+    '我听见远方的海潮一遍一遍拍打着沉默的礁石和那座早已熄灭多年的灯塔',
+];
+
+/** 与 buildLines 同样的节奏，但歌词是 CJK_LINES 循环、逐字计时（分词交给 Intl.Segmenter）。 */
+const buildCjkLines = (count: number): Line[] => Array.from({ length: count }, (_, index) => {
+    const start = index * SECONDS_PER_LINE;
+    const fullText = CJK_LINES[index % CJK_LINES.length]!;
+    const chars = Array.from(fullText);
+    const step = (SECONDS_PER_LINE - 0.2) / chars.length;
+    return {
+        id: `line-${index}`,
+        words: chars.map((text, offset) => ({ text, startTime: start + offset * step, endTime: start + (offset + 1) * step })),
+        startTime: start,
+        endTime: start + SECONDS_PER_LINE - 0.1,
+        fullText,
+        translation: `translation ${index}`,
+        isChorus: index % 4 === 0,
+    };
+});
+
 const COVER_URL = `data:image/svg+xml;utf8,${encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">'
     + '<rect width="600" height="600" fill="#2563eb"/>'
@@ -57,8 +88,14 @@ const params = new URLSearchParams(window.location.search);
 const MODE = params.get('vis') ?? 'pendolo';
 /** 时间轴倍速。8x 意味着每 0.375 秒过一行，几分钟就能跑完一整首歌的行切换量。 */
 const SPEED = Number(params.get('speed') ?? '8');
-const LINES = buildLines(Number(params.get('lines') ?? '400'));
-const TOTAL_SECONDS = LINES.length * SECONDS_PER_LINE;
+/** 中文长短句歌词（默认是拉丁合成词）。 */
+const CJK = params.get('cjk') === '1';
+const LINES = (CJK ? buildCjkLines : buildLines)(Number(params.get('lines') ?? '400'));
+/** 最后一行之后再放多少秒才循环（片尾卡之类在歌词唱完后才出现的东西要用）。 */
+const TAIL_SECONDS = Number(params.get('tail') ?? '0');
+const TOTAL_SECONDS = LINES.length * SECONDS_PER_LINE + TAIL_SECONDS;
+/** 从第几秒开始放；配合 speed=0 可以停在一帧上持续渲染（测稳态帧时间）。 */
+const START_SECONDS = Number(params.get('start') ?? '0');
 /** 每隔 N 秒换一次 seed，模拟切歌时输入 seed 变化；是否重挂载由宿主的 key 策略决定。0 表示不换。 */
 const SWITCH_SECONDS = Number(params.get('switch') ?? '0');
 /** 冻结在固定一帧，用来逐像素比对改动前后的渲染结果。 */
@@ -72,6 +109,30 @@ const HEAVY = params.get('heavy') === '1';
  * - `gears` canvas 照常每帧重绘，但只画中心渐变，不画齿轮线条
  */
 const ABLATE = params.get('ablate');
+
+/** 给主题加上 wordColors / lyricsIcons（关键字着色与主题图标）。 */
+const KEYWORDS = params.get('keywords') === '1';
+/** 浅色主题（绘光会自己铺暗场底）。 */
+const DAYLIGHT = params.get('daylight') === '1';
+/** 带曲名 / 艺人 / 专辑，走到片尾卡（配合 lines= 让歌词早点唱完）。 */
+const META = params.get('meta') === '1';
+/** 绘光画质档：full / balanced / low。 */
+const LUMIERE_QUALITY = (params.get('quality') ?? 'full') as LumiereRenderQuality;
+
+const resolveProbeTheme = (): Theme => {
+    const base = DAYLIGHT ? DAYLIGHT_THEME : DEFAULT_THEME;
+    if (!KEYWORDS) return base;
+    return {
+        ...base,
+        wordColors: [
+            { word: 'lantern', color: '#ff5a8a' },
+            { word: 'ember', color: '#ffb347' },
+            { word: 'tide', color: '#5ad1ff' },
+        ],
+        lyricsIcons: ['Moon', 'Star', 'Flame', 'Waves'],
+    };
+};
+const PROBE_THEME = resolveProbeTheme();
 
 const FREEZE_TIME_SECONDS = 37.5;
 const FREEZE_LINE_INDEX = 12;
@@ -121,7 +182,7 @@ const VisualizerMemoryProbe: React.FC = () => {
 
         let raf = 0;
         let lastFrameAt = performance.now();
-        let elapsed = 0;
+        let elapsed = START_SECONDS;
         const tick = (now: number) => {
             const dt = (now - lastFrameAt) / 1000;
             lastFrameAt = now;
@@ -156,7 +217,7 @@ const VisualizerMemoryProbe: React.FC = () => {
                 currentTime,
                 currentLineIndex,
                 lines: LINES,
-                theme: DEFAULT_THEME,
+                theme: PROBE_THEME,
                 audioPower,
                 audioBands,
                 showText: !HIDE_TEXT,
@@ -164,6 +225,10 @@ const VisualizerMemoryProbe: React.FC = () => {
                 seed: `probe-${seedTick}`,
                 coverUrl: HEAVY ? COVER_URL : null,
                 pendoloTuning: resolvePendoloTuning(),
+                lumiereTuning: { ...DEFAULT_LUMIERE_TUNING, renderQuality: LUMIERE_QUALITY },
+                songTitle: META ? 'Lantern Tide' : null,
+                songArtist: META ? 'Probe Ensemble' : null,
+                songAlbum: META ? 'Synthetic Nights' : null,
             } as never)}
         </div>
     );
@@ -173,7 +238,9 @@ const definition: ProbeDefinition = {
     id: 'visualizerMemory',
     title: 'Visualizer · 内存长跑台架',
     description: '用加速时间轴长时间驱动单个 visualizer，配合 npm run manual:visualizer-memory 采样各进程内存。'
-        + ' 参数：vis=<mode> speed=<倍速> lines=<行数> switch=<切歌间隔秒> heavy=1 notext=1 freeze=1 ablate=canvas|gears',
+        + ' 参数：vis=<mode> speed=<倍速> lines=<行数> switch=<切歌间隔秒> heavy=1 notext=1 freeze=1 ablate=canvas|gears'
+        + ' tail=<秒> start=<秒> keywords=1 daylight=1 meta=1 quality=full|balanced|low（后四个给绘光这类读主题关键字 / 片尾卡 / 画质的模式）'
+        + ' cjk=1（中文长短句歌词，测折行）',
     Component: VisualizerMemoryProbe,
 };
 

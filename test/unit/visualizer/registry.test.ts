@@ -14,6 +14,7 @@ describe('visualizer registry', () => {
         expect(VISUALIZER_REGISTRY.map(entry => entry.mode)).toEqual([
             'sonnet',
             'tempera',
+            'lumiere',
             'classic',
             'cadenza',
             'partita',

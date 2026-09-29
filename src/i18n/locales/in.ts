@@ -258,7 +258,8 @@ export default {
         "diorama": "Teks titik-titik melintasi ruang 3D dengan kamera mengikuti lirik",
         "pendolo": "Sampul duduk di muka jam; lirik berdetak sepanjang busur, satu gigi demi satu",
         "sonnet": "Garis halus, bingkai, dan huruf raksasa berongga bergantian terbuka; tiap baris tertata bagai halaman sajak",
-        "tempera": "Bidang warna luas dan raster halus menyusun ulang perlahan; kata-kata membalik warna saat melintasi cat"
+        "tempera": "Bidang warna luas dan raster halus menyusun ulang perlahan; kata-kata membalik warna saat melintasi cat",
+        "lumiere": "Cahaya volumetrik menembus kabut dan debu melayang; setiap kata terukir saat berkas cahaya menyentuhnya"
       },
       "background": {
         "common": "Cahaya fluida dari warna sampul, dengan bentuk geometris melayang di belakang",
@@ -512,6 +513,7 @@ export default {
       "visualizer-pendolo": { "title": "Visualizer: Pendolo", "description": "Alihkan ke visualizer Pendolo" },
       "visualizer-sonnet": { "title": "Visualizer: Sonnet", "description": "Alihkan ke PV lirik Jepang Sonnet" },
       "visualizer-tempera": { "title": "Visualizer: Tempera", "description": "Alihkan ke PV lirik blok warna Tempera" },
+      "visualizer-lumiere": { "title": "Visualizer: Lumiere", "description": "Alihkan ke PV lirik cahaya panggung Lumiere" },
       "desktop-toggle-remote-control": { "title": "Alihkan jendela remote control", "description": "Buka atau tutup jendela remote control" },
       "desktop-toggle-main-window-always-on-top": { "title": "Alihkan jendela utama selalu di atas", "description": "Sematkan atau lepas jendela utama di atas jendela lain" },
       "background-monet-full-overlay": { "title": "Latar: Overlay Layar Penuh Monet", "description": "Alihkan latar ke tata letak overlay layar penuh Monet" },

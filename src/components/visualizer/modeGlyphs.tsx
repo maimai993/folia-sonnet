@@ -124,6 +124,13 @@ const VISUALIZER_MODE_GLYPHS: Record<string, React.ReactNode> = {
             <path d="M4 12h16" opacity="0.7" />
         </>
     ),
+    // 绘光：自顶而下的光柱照亮一行字
+    lumiere: (
+        <>
+            <path d="M10 3.5 6 15M14 3.5 18 15" opacity="0.5" />
+            <path d="M6 19h12" />
+        </>
+    ),
 };
 
 const BACKGROUND_MODE_GLYPHS: Record<string, React.ReactNode> = {

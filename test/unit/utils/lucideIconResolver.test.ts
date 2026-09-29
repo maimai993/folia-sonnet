@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLucideIconName, resolveLucideIcon } from '@/utils/lucideIconResolver';
+import { isLucideIconName, resolveLucideIcon, resolveLucideIconNames } from '@/utils/lucideIconResolver';
 
 // test/unit/utils/lucideIconResolver.test.ts
 
@@ -25,5 +25,11 @@ describe('lucideIconResolver', () => {
     it('exposes a boolean guard for editor validation', () => {
         expect(isLucideIconName('Star')).toBe(true);
         expect(isLucideIconName('star')).toBe(false);
+    });
+
+    it('resolves theme icon lists case-insensitively without a fallback', () => {
+        expect(resolveLucideIconNames(['Moon', 'moon', 'heart', 'not-a-lucide-icon'])).toEqual(['Moon', 'Heart']);
+        expect(resolveLucideIconNames(undefined)).toEqual([]);
+        expect(resolveLucideIconNames(['not-a-lucide-icon'])).toEqual([]);
     });
 });

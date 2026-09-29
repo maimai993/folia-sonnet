@@ -693,6 +693,71 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
   postProcessLensDistortion: 0.3,
 };
 
+/**
+ * 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样、烟雾倍频数封顶，用于省电。
+ */
+export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
+
+export interface LumiereTuning {
+  /** 光强倍率, 0.3..2. */
+  lightIntensity: number;
+  /** 随音乐变亮, 0..2 (0 = 不随音乐变). */
+  audioResponse: number;
+  /** 烟雾浓度, 0..2. */
+  fogDensity: number;
+  /** 浮尘数量, 0..2. */
+  moteAmount: number;
+  /** 图形辉光, 0..2. */
+  bloom: number;
+  /** 文字辉光, 0..2. */
+  textBloom: number;
+  /** 未唱字透明度, 0.05..0.6. */
+  unlitOpacity: number;
+  /** 邻行：1 = 上一行 + 当前行，2 = 上一行 + 当前行 + 下一行. */
+  windowNeighbors: 1 | 2;
+  /** 崩解强度, 0..2. */
+  decay: number;
+  /** 背景歌词亮度, 0..2 (0 = 关). */
+  echo: number;
+  /** 烟雾细节（倍频数）, integer 2..6. */
+  fogOctaves: number;
+  /** 线稿. */
+  lineArt: boolean;
+  /** 前景散景. */
+  frontBokeh: boolean;
+  /** 所有换位都走轨迹线. */
+  trails: boolean;
+  /** 画框. */
+  overlayFrame: boolean;
+  /** 关键字着色（主题 wordColors）. */
+  keywordColors: boolean;
+  /** 主题图标（主题 lyricsIcons 画成线稿）. */
+  themeIcons: boolean;
+  /** 画质. */
+  renderQuality: LumiereRenderQuality;
+}
+
+export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
+  lightIntensity: 1,
+  audioResponse: 1,
+  fogDensity: 1,
+  moteAmount: 1,
+  bloom: 1,
+  textBloom: 1,
+  unlitOpacity: 0.22,
+  windowNeighbors: 2,
+  decay: 1,
+  echo: 1,
+  fogOctaves: 5,
+  lineArt: true,
+  frontBokeh: true,
+  trails: false,
+  overlayFrame: true,
+  keywordColors: true,
+  themeIcons: true,
+  renderQuality: 'full',
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.

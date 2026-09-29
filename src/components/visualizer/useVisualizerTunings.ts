@@ -20,4 +20,5 @@ export const useVisualizerTunings = () => useVisualizerSettingsStore(useShallow(
     pendolo: state.pendoloTuning,
     sonnet: state.sonnetTuning,
     tempera: state.temperaTuning,
+    lumiere: state.lumiereTuning,
 })));
