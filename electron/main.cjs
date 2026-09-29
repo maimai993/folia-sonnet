@@ -2132,7 +2132,7 @@ function saveWindowState(win, options = {}) {
   // A wallpaper window's geometry is dictated by the display; persisting it would clobber the
   // bounds a normal window restores to after leaving wallpaper mode (same reason as the X11
   // guards — the Windows wallpaper path just has no separate window set to check against).
-  if (!win || win.isDestroyed() || isX11WallpaperMode() || x11WallpaperWindows.has(win) || win.__wallpaperGeometry === true) {
+  if (!win || win.isDestroyed() || isX11WallpaperMode() || x11WallpaperWindows.has(win) || win.__wallpaperGeometry === true || win.__transparentFullscreen === true) {
     return;
   }
 
@@ -2156,6 +2156,26 @@ function saveWindowState(win, options = {}) {
   pendingWindowStateSave = null;
   clearWindowStateSaveTimer();
   persistWindowStateSnapshot(snapshot);
+}
+
+// Electron sizes Windows transparent windows to the display without updating isFullScreen().
+// Track that path per window so F11 can restore its original bounds on the next press.
+function isMainWindowFullscreen(win) {
+  return win.__transparentFullscreen === true || win.isFullScreen();
+}
+
+function setMainWindowFullscreen(win, fullscreen) {
+  if (process.platform === 'win32' && win.__wallpaperWindowTransparent === true) {
+    if (isMainWindowFullscreen(win) === fullscreen) {
+      return;
+    }
+    if (fullscreen) {
+      saveWindowState(win);
+      win.__transparentFullscreenRestoreBounds = win.getBounds();
+    }
+    win.__transparentFullscreen = fullscreen;
+  }
+  win.setFullScreen(fullscreen);
 }
 
 function isWindowsThumbarSupported() {
@@ -4991,6 +5011,19 @@ function createWindow(options = {}) {
   }
   win.__wallpaperWindowTransparent = useTransparentWindow;
   win.__wallpaperGeometry = useWallpaperGeometry;
+  win.__transparentFullscreen = false;
+
+  if (process.platform === 'win32' && useTransparentWindow) {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || input.key !== 'F11' || input.isAutoRepeat) {
+        return;
+      }
+      event.preventDefault();
+      if (!isWallpaperModeEnabled()) {
+        setMainWindowFullscreen(win, !isMainWindowFullscreen(win));
+      }
+    });
+  }
 
   if (useDesktopWindowType) {
     x11WallpaperWindows.add(win);
@@ -5060,9 +5093,19 @@ function createWindow(options = {}) {
   // macOS completes fullscreen asynchronously; notify after the native transition, including
   // transitions initiated by the system menu or keyboard instead of the titlebar button.
   win.on('enter-full-screen', () => {
+    if (process.platform === 'win32' && useTransparentWindow) {
+      if (!win.__transparentFullscreen) {
+        saveWindowState(win);
+        win.__transparentFullscreenRestoreBounds = win.getBounds();
+      }
+      win.__transparentFullscreen = true;
+    }
     win.webContents.send('window-fullscreen-changed', true);
   });
   win.on('leave-full-screen', () => {
+    if (process.platform === 'win32' && useTransparentWindow) {
+      win.__transparentFullscreen = false;
+    }
     win.webContents.send('window-fullscreen-changed', false);
   });
   win.on('maximize', () => {
@@ -6059,11 +6102,11 @@ ipcMain.handle('window-toggle-fullscreen', (event) => {
 
   // Fullscreen would tear the wallpaper window out of its desktop-layer geometry.
   if (isWallpaperModeEnabled()) {
-    return mainWindow.isFullScreen();
+    return isMainWindowFullscreen(mainWindow);
   }
 
-  const nextFullscreen = !mainWindow.isFullScreen();
-  mainWindow.setFullScreen(nextFullscreen);
+  const nextFullscreen = !isMainWindowFullscreen(mainWindow);
+  setMainWindowFullscreen(mainWindow, nextFullscreen);
   return nextFullscreen;
 });
 
@@ -6103,7 +6146,7 @@ ipcMain.handle('window-is-fullscreen', (event) => {
   if (!isTrustedMainWindowContents(event.sender) || !mainWindow || mainWindow.isDestroyed()) {
     return false;
   }
-  return mainWindow.isFullScreen();
+  return isMainWindowFullscreen(mainWindow);
 });
 
 ipcMain.handle('window-get-transparent-mode', (event) => {
@@ -6478,8 +6521,8 @@ ipcMain.handle('remote-control-send-command', (event, command) => {
       return false;
     }
 
-    if (mainWindow.isFullScreen()) {
-      mainWindow.setFullScreen(false);
+    if (isMainWindowFullscreen(mainWindow)) {
+      setMainWindowFullscreen(mainWindow, false);
     }
 
     if (mainWindow.isMaximized()) {
@@ -6553,14 +6596,16 @@ ipcMain.handle('video-export-prepare-window', (event, size) => {
 
   if (!videoExportWindowRestoreState) {
     videoExportWindowRestoreState = {
-      bounds: mainWindow.getBounds(),
+      bounds: mainWindow.__transparentFullscreen === true
+        ? (mainWindow.__transparentFullscreenRestoreBounds || mainWindow.getBounds())
+        : mainWindow.getBounds(),
       isMaximized: mainWindow.isMaximized(),
-      isFullScreen: mainWindow.isFullScreen(),
+      isFullScreen: isMainWindowFullscreen(mainWindow),
     };
   }
 
-  if (mainWindow.isFullScreen()) {
-    mainWindow.setFullScreen(false);
+  if (isMainWindowFullscreen(mainWindow)) {
+    setMainWindowFullscreen(mainWindow, false);
   }
 
   if (mainWindow.isMaximized()) {
@@ -6594,7 +6639,7 @@ ipcMain.handle('video-export-restore-window', (event) => {
   mainWindow.setBounds(restoreState.bounds, true);
 
   if (restoreState.isFullScreen) {
-    mainWindow.setFullScreen(true);
+    setMainWindowFullscreen(mainWindow, true);
   } else if (restoreState.isMaximized) {
     mainWindow.maximize();
   }

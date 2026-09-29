@@ -2614,6 +2614,21 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_10": {
+      "intro": "0.7.10 adds the Lumiere lyric mode, smoother playlist grid transitions, and a desktop fullscreen button.",
+      "lumiere": {
+        "title": "New Lyric Mode: Lumiere",
+        "description": "Volumetric light, fog, and line art follow the song as beams illuminate the lyrics word by word. Adjust the lighting, text, theme colors, and quality. Lumiere requires WebGL."
+      },
+      "gridTransitions": {
+        "title": "Smoother Playlist Grid Transitions",
+        "description": "Switching views or jumping between playlists now glides the cover cards into place. Reducing interface micro-motion makes the change immediate."
+      },
+      "fullscreenButton": {
+        "title": "Desktop Fullscreen Button",
+        "description": "Switch fullscreen from the desktop window controls. You can hide the button in Desktop settings."
+      }
+    },
     "v0_7_9": {
       "intro": "0.7.9 adds lyric import and export, a video layer and verified mods, makes settings easier to find, and fixes a Linux lyric freeze.",
       "lyricFiles": {

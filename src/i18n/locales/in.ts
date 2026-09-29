@@ -2501,6 +2501,21 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_10": {
+      "intro": "0.7.10 menghadirkan mode lirik Lumiere, transisi grid playlist yang lebih mulus, dan tombol layar penuh di aplikasi desktop.",
+      "lumiere": {
+        "title": "Mode Lirik Baru: Lumiere",
+        "description": "Cahaya volumetrik, kabut, dan gambar garis mengikuti lagu saat berkas cahaya menerangi lirik kata demi kata. Atur pencahayaan, teks, warna tema, dan kualitas. Lumiere memerlukan WebGL."
+      },
+      "gridTransitions": {
+        "title": "Transisi Grid Playlist Lebih Mulus",
+        "description": "Saat berpindah tampilan atau melompat antarplaylist, kartu sampul kini bergeser mulus ke tempatnya. Jika gerakan mikro antarmuka dikurangi, perpindahan berlangsung langsung."
+      },
+      "fullscreenButton": {
+        "title": "Tombol Layar Penuh Desktop",
+        "description": "Alihkan layar penuh dari kontrol jendela aplikasi desktop. Tombolnya dapat disembunyikan di pengaturan Desktop."
+      }
+    },
     "v0_7_9": {
       "intro": "0.7.9 menghadirkan impor dan ekspor lirik, lapisan video, dan mod terverifikasi, membuat pengaturan lebih mudah dicari, serta memperbaiki lirik macet di Linux.",
       "lyricFiles": {
