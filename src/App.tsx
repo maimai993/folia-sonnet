@@ -407,6 +407,7 @@ export default function App() {
         handleToggleAutoHidePlayerChrome,
         autoHideCursorWithPlayerChrome,
         alwaysShowMainWindowTitlebar,
+        hideFullscreenButton,
         handleToggleTransparentPlayerBackground,
     } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
     const {
@@ -2618,6 +2619,7 @@ export default function App() {
         <AppShell
             appStyle={appStyle}
             isElectronWindow={isElectronWindow}
+            hideFullscreenButton={hideFullscreenButton}
             usesCustomWindowChrome={usesCustomWindowChrome}
             useCustomWindowRadius={isElectronWindow && transparentPlayerBackground && !wallpaperMode}
             showTransparentWindowBorder={showTransparentWindowBorder}

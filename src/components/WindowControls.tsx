@@ -7,10 +7,12 @@ export default function WindowControls({
     revealed,
     isDaylight = false,
     isMainWindowClickThroughEnabled = false,
+    hideFullscreenButton,
 }: {
     revealed: boolean;
     isDaylight?: boolean;
     isMainWindowClickThroughEnabled?: boolean;
+    hideFullscreenButton: boolean;
 }) {
     const { t } = useTranslation();
     const [isMaximized, setIsMaximized] = useState(false);
@@ -25,10 +27,10 @@ export default function WindowControls({
         if (!electron) return;
         let active = true;
         let fullscreenEventReceived = false;
-        const unsubscribe = isMac ? electron.onWindowFullscreenChanged(fullscreen => {
+        const unsubscribe = electron.onWindowFullscreenChanged(fullscreen => {
             fullscreenEventReceived = true;
             if (active) setIsFullscreen(fullscreen);
-        }) : undefined;
+        });
         const checkMaximized = async () => {
             const maximized = await electron.isWindowMaximized();
             if (active) setIsMaximized(maximized);
@@ -38,14 +40,14 @@ export default function WindowControls({
             if (active && !fullscreenEventReceived) setIsFullscreen(fullscreen);
         };
         void checkMaximized();
-        if (isMac) void checkFullscreen();
+        void checkFullscreen();
         window.addEventListener('resize', checkMaximized);
         return () => {
             active = false;
             unsubscribe?.();
             window.removeEventListener('resize', checkMaximized);
         };
-    }, [electron, isMac]);
+    }, [electron]);
 
     if (!electron) return null;
 
@@ -89,6 +91,17 @@ export default function WindowControls({
             >
                 <Radio size={15} />
             </button>
+            {!hideFullscreenButton && (
+                <button
+                    className={btnClass}
+                    tabIndex={standardControlsVisible ? 0 : -1}
+                    title={t(isFullscreen ? 'ui.exitFullscreen' : 'ui.enterFullscreen')}
+                    aria-label={t(isFullscreen ? 'ui.exitFullscreen' : 'ui.enterFullscreen')}
+                    onClick={() => void electron.toggleFullscreenWindow()}
+                >
+                    {isFullscreen ? <Minimize size={13} /> : <Maximize size={13} />}
+                </button>
+            )}
             <button
                 className={btnClass}
                 tabIndex={standardControlsVisible ? 0 : -1}

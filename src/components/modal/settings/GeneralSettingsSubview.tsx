@@ -59,7 +59,6 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
         handleToggleHomeTabAlbums: state.handleToggleHomeTabAlbums,
         handleToggleHomeTabLocal: state.handleToggleHomeTabLocal,
     })));
-
     const getResolvedLanguageLabel = (): string => {
         const lang = i18n.resolvedLanguage;
         if (lang?.startsWith('zh')) {

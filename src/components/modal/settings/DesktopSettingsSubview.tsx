@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
 import {
     AlertCircle,
     AppWindow,
@@ -19,9 +20,10 @@ import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import SettingsRow, { SettingsToggle } from './SettingsRow';
 import { settingsDividerClassFor } from './settingsCardClasses';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 
 // src/components/modal/settings/DesktopSettingsSubview.tsx
-// Desktop-only tray, update, and AI settings separated from the global settings modal.
+// Desktop-only window, tray, update, and AI settings separated from the global settings modal.
 
 const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/folia-major-bin';
 
@@ -140,6 +142,13 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         updateStatus,
     } = model;
     const { t } = useTranslation();
+    const {
+        hideFullscreenButton,
+        handleToggleHideFullscreenButton,
+    } = usePlayerChromeSettingsStore(useShallow(state => ({
+        hideFullscreenButton: state.hideFullscreenButton,
+        handleToggleHideFullscreenButton: state.handleToggleHideFullscreenButton,
+    })));
 
     if (!isElectron) {
         return null;
@@ -230,6 +239,17 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         t('options.hideRemoteControlTaskbarIcon'),
                         t('options.hideRemoteControlTaskbarIconDesc'),
                         renderToggle(hideRemoteControlTaskbarIcon, () => onToggleHideRemoteControlTaskbarIcon(!hideRemoteControlTaskbarIcon)),
+                    )}
+                    {renderRow(
+                        t('options.hideFullscreenButton'),
+                        t('options.hideFullscreenButtonDesc'),
+                        <SettingsToggle
+                            checked={hideFullscreenButton}
+                            onChange={() => handleToggleHideFullscreenButton(!hideFullscreenButton)}
+                            offClass={toggleOffBackgroundClass}
+                            onColor={theme?.secondaryColor}
+                            ariaLabel={t('options.hideFullscreenButton')}
+                        />,
                         true,
                     )}
                 </div>
