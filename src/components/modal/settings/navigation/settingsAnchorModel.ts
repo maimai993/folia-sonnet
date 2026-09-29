@@ -20,7 +20,6 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
 
     // GeneralSettingsSubview (PinnedCommandSettings and PonderHintSettingsSection render inside it)
     languageSettings: { section: 'general', labelKey: 'options.languageSettings' },
-    fullscreenWindowButton: { section: 'general', labelKey: 'options.showFullscreenButton' },
     homeTabsVisibility: { section: 'general', labelKey: 'options.homeTabsVisibility' },
     rememberHomeCardPosition: { section: 'general', labelKey: 'options.rememberHomeCardPosition' },
     playbackEntryView: { section: 'general', labelKey: 'options.playbackEntryView' },

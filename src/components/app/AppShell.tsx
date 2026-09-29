@@ -4,12 +4,12 @@ import { motion } from 'framer-motion';
 import { Lock, LockOpen } from 'lucide-react';
 import TitlebarDragZone from '../TitlebarDragZone';
 import WindowControls from '../WindowControls';
-import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 
 // Shared shell for the app container, Electron titlebar, and mounted audio node.
 type AppShellProps = {
     appStyle: React.CSSProperties;
     isElectronWindow: boolean;
+    hideFullscreenButton: boolean;
     usesCustomWindowChrome: boolean;
     useCustomWindowRadius: boolean;
     showTransparentWindowBorder: boolean;
@@ -27,6 +27,7 @@ type AppShellProps = {
 const AppShell: React.FC<AppShellProps> = ({
     appStyle,
     isElectronWindow,
+    hideFullscreenButton,
     usesCustomWindowChrome,
     useCustomWindowRadius,
     showTransparentWindowBorder,
@@ -42,8 +43,7 @@ const AppShell: React.FC<AppShellProps> = ({
 }) => {
     const { t } = useTranslation();
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-    const showFullscreenButton = usePlayerChromeSettingsStore(state => state.showFullscreenButton);
-    const hasFullscreenTitlebarButton = isElectronWindow && showFullscreenButton;
+    const hasFullscreenTitlebarButton = isElectronWindow && !hideFullscreenButton;
 
     useEffect(() => {
         if (!useCustomWindowRadius || !window.electron?.isWindowMaximized) {
@@ -112,11 +112,10 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className="pointer-events-auto absolute top-0 z-20 h-full flex items-center"
-                            style={{
-                                WebkitAppRegion: 'no-drag',
-                                right: hasFullscreenTitlebarButton ? 224 : 180,
-                            } as React.CSSProperties}
+                            className={`pointer-events-auto absolute top-0 z-20 h-full flex items-center ${
+                                hasFullscreenTitlebarButton ? 'right-[224px]' : 'right-[180px]'
+                            }`}
+                            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
                             <button
                                 type="button"
@@ -145,6 +144,7 @@ const AppShell: React.FC<AppShellProps> = ({
                                 revealed={areTitlebarControlsVisible}
                                 isDaylight={isDaylight}
                                 isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
+                                hideFullscreenButton={hideFullscreenButton}
                             />
                         </div>
                     </div>

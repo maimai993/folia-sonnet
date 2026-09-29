@@ -7,15 +7,16 @@ export default function WindowControls({
     revealed,
     isDaylight = false,
     isMainWindowClickThroughEnabled = false,
+    hideFullscreenButton,
 }: {
     revealed: boolean;
     isDaylight?: boolean;
     isMainWindowClickThroughEnabled?: boolean;
+    hideFullscreenButton: boolean;
 }) {
     const { t } = useTranslation();
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const showFullscreenButton = usePlayerChromeSettingsStore(state => state.showFullscreenButton);
     const useNativeMacFullscreenButton = usePlayerChromeSettingsStore(state => state.useNativeMacFullscreenButton);
     const electron = window.electron;
     const isMac = electron?.platform === 'darwin';
@@ -90,7 +91,7 @@ export default function WindowControls({
             >
                 <Radio size={15} />
             </button>
-            {showFullscreenButton && (
+            {!hideFullscreenButton && (
                 <button
                     className={btnClass}
                     tabIndex={standardControlsVisible ? 0 : -1}

@@ -130,8 +130,8 @@ export const buildSettingsCommandContext = (
         toggleAlwaysShowMainWindowTitlebar: () => chrome.handleToggleAlwaysShowMainWindowTitlebar(
             !usePlayerChromeSettingsStore.getState().alwaysShowMainWindowTitlebar,
         ),
-        toggleShowFullscreenButton: () => chrome.handleToggleShowFullscreenButton(
-            !usePlayerChromeSettingsStore.getState().showFullscreenButton,
+        toggleHideFullscreenButton: () => chrome.handleToggleHideFullscreenButton(
+            !usePlayerChromeSettingsStore.getState().hideFullscreenButton,
         ),
         toggleNativeMacFullscreenButton: () => chrome.handleToggleNativeMacFullscreenButton(
             !usePlayerChromeSettingsStore.getState().useNativeMacFullscreenButton,
