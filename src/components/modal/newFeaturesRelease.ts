@@ -1,4 +1,4 @@
-import { Layers3, Maximize2, Sparkles } from 'lucide-react';
+import { Bot, Captions, ListPlus, PanelBottomClose, Rocket, Volume2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -17,10 +17,13 @@ type NewFeaturesRelease = {
 
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_7_10',
+    i18nKey: 'releaseNotes.v0_7_12',
     features: [
-        { id: 'lumiere', icon: Sparkles, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
-        { id: 'gridTransitions', icon: Layers3, daylightIconClassName: 'text-violet-600', darkIconClassName: 'text-violet-400' },
-        { id: 'fullscreenButton', icon: Maximize2, daylightIconClassName: 'text-cyan-600', darkIconClassName: 'text-cyan-400' },
+        { id: 'playbackFade', icon: Volume2, daylightIconClassName: 'text-amber-600', darkIconClassName: 'text-amber-400' },
+        { id: 'dualSubtitles', icon: Captions, daylightIconClassName: 'text-violet-600', darkIconClassName: 'text-violet-400' },
+        { id: 'closeToTray', icon: PanelBottomClose, daylightIconClassName: 'text-cyan-600', darkIconClassName: 'text-cyan-400' },
+        { id: 'artistTopQueue', icon: ListPlus, daylightIconClassName: 'text-emerald-600', darkIconClassName: 'text-emerald-400' },
+        { id: 'aiProviderSetup', icon: Bot, daylightIconClassName: 'text-rose-600', darkIconClassName: 'text-rose-400' },
+        { id: 'startupView', icon: Rocket, daylightIconClassName: 'text-sky-600', darkIconClassName: 'text-sky-400' },
     ],
 };

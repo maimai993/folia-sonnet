@@ -2546,6 +2546,33 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_12": {
+      "intro": "0.7.12 menghadirkan fade saat jeda dan lanjut, subtitle dwibaris, tutup ke tray, antrean lagu populer artis sekali ketuk, pengaturan penyedia AI yang lebih mudah, dan tampilan awal yang lebih cerdas.",
+      "playbackFade": {
+        "title": "Jeda dan Lanjut Lebih Halus",
+        "description": "Pemutaran kini memudar sejenak sebelum dijeda dan memudar masuk saat dilanjutkan, tanpa potongan mendadak. Dapat dimatikan di pengaturan pemutaran."
+      },
+      "dualSubtitles": {
+        "title": "Romanisasi dan Terjemahan Bersama",
+        "description": "Subtitle dapat menampilkan romanisasi di atas dan terjemahan di bawah, berguna untuk belajar lagu berbahasa asing. Didukung di subtitle bersama serta mode lirik Monet dan Chrono; Lattice masih hanya menampilkan terjemahan."
+      },
+      "closeToTray": {
+        "title": "Tutup Jendela ke Tray",
+        "description": "Secara opsional sembunyikan jendela ke system tray saat tombol tutup diklik, sehingga pemutaran terus berjalan. Nonaktif secara default; aktifkan di pengaturan Desktop."
+      },
+      "artistTopQueue": {
+        "title": "Antrekan Lagu Populer Artis",
+        "description": "Tombol baru di samping Kembali pada halaman artis menambahkan lagu populer yang tercantum ke antrean sekali ketuk, tanpa menghentikan pemutaran."
+      },
+      "aiProviderSetup": {
+        "title": "Pengaturan Penyedia AI Lebih Mudah",
+        "description": "Tombol \"Uji koneksi\" memeriksa endpoint, kunci, dan model sebelum disimpan, plus sakelar streaming untuk penyedia kompatibel OpenAI yang hanya menerima permintaan streaming."
+      },
+      "startupView": {
+        "title": "Langsung Masuk ke Pemutaran",
+        "description": "Saat \"buka pemutar saat peluncuran\" aktif, aplikasi kini mengikuti tampilan pilihan Anda setelah memutar, dan dapat langsung ke Lattice."
+      }
+    },
     "v0_7_10": {
       "intro": "0.7.10 menghadirkan mode lirik Lumiere, transisi grid playlist yang lebih mulus, dan tombol layar penuh di aplikasi desktop.",
       "lumiere": {

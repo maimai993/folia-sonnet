@@ -2659,6 +2659,33 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_12": {
+      "intro": "0.7.12 adds fade on pause and resume, bilingual sub-captions, close-to-tray, one-tap queueing of an artist's top songs, easier AI provider setup, and a smarter startup view.",
+      "playbackFade": {
+        "title": "Smoother Pause and Resume",
+        "description": "Playback now fades out briefly before pausing and fades back in on resume, removing the abrupt cut. You can turn it off in playback settings."
+      },
+      "dualSubtitles": {
+        "title": "Romanization and Translation Together",
+        "description": "Sub-captions can show romanization above and translation below, handy for learning songs in other languages. Supported in the shared sub-caption and in the Monet and Chrono lyric modes; Lattice still shows translation only."
+      },
+      "closeToTray": {
+        "title": "Close Window to Tray",
+        "description": "Optionally hide the window to the system tray when you click close, so playback keeps running. Off by default; enable it in Desktop settings."
+      },
+      "artistTopQueue": {
+        "title": "Queue an Artist's Top Songs",
+        "description": "A new button beside Back on the artist page adds the listed top songs to the queue in one tap, without interrupting playback."
+      },
+      "aiProviderSetup": {
+        "title": "Easier AI Provider Setup",
+        "description": "A \"Test connection\" button now checks your endpoint, key, and model before saving, and a streaming switch for OpenAI-compatible providers that only accept streamed requests."
+      },
+      "startupView": {
+        "title": "Start Straight Into Playback",
+        "description": "When \"open the player on launch\" is on, the app now follows your preferred view after playing, and can go straight to Lattice."
+      }
+    },
     "v0_7_10": {
       "intro": "0.7.10 adds the Lumiere lyric mode, smoother playlist grid transitions, and a desktop fullscreen button.",
       "lumiere": {
