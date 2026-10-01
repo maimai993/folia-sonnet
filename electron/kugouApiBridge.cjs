@@ -153,6 +153,53 @@ const isDeviceVerificationRequired = (body) => {
   return errorCode === 20028 || message.includes('本次请求需要验证');
 };
 
+const MAX_ERROR_DETAIL_LENGTH = 160;
+
+// Reduces an upstream failure detail to a short plain string; credentials never travel in it.
+const describeErrorDetail = (value) => {
+  let text = '';
+  if (value instanceof Error) {
+    text = value.code ? `${value.code}: ${value.message}` : value.message;
+  } else if (typeof value === 'string' || typeof value === 'number') {
+    text = String(value);
+  }
+  text = text.replace(/\s+/g, ' ').trim();
+  return text.length > MAX_ERROR_DETAIL_LENGTH ? `${text.slice(0, MAX_ERROR_DETAIL_LENGTH)}...` : text;
+};
+
+/**
+ * KuGouMusicApi rejects with a bare `{ status, body, cookie, headers }` answer object, and Electron
+ * IPC only carries an Error's message across the process boundary, so such a rejection reaches the
+ * renderer as "[object Object]". This turns any failure into an Error whose message holds the
+ * operation, HTTP-like status and upstream error_code in a `KuGouApi[k=v ...]` prefix the renderer
+ * transport parses. The original answer is deliberately not attached: it carries cookies.
+ */
+function normalizeBridgeError(operation, error) {
+  const answer = isRecord(error) && !(error instanceof Error) ? error : null;
+  const body = isRecord(answer?.body) ? answer.body : null;
+  const rawStatus = Number(answer?.status);
+  const status = answer && Number.isFinite(rawStatus) ? rawStatus : undefined;
+  const rawErrorCode = body?.error_code ?? body?.errcode;
+  const errorCode = rawErrorCode === undefined || rawErrorCode === null || rawErrorCode === ''
+    ? undefined
+    : rawErrorCode;
+  const detail = describeErrorDetail(
+    answer
+      ? (body?.msg ?? body?.error ?? body?.error_msg)
+      : error,
+  );
+
+  const fields = [`operation=${operation}`];
+  if (status !== undefined) fields.push(`status=${status}`);
+  if (errorCode !== undefined) fields.push(`error_code=${errorCode}`);
+  const normalized = new Error(`KuGouApi[${fields.join(' ')}]${detail ? `: ${detail}` : ''}`);
+  normalized.name = 'KuGouApiError';
+  normalized.operation = operation;
+  normalized.status = status;
+  normalized.errorCode = errorCode;
+  return normalized;
+}
+
 function createKugouApiBridge({
   store,
   safeStorage,
@@ -265,6 +312,27 @@ function createKugouApiBridge({
     return registrationPromise;
   };
 
+  const performRequest = async (operation, params) => {
+    if (!OPERATION_MODULES[operation]) throw new Error(`Unsupported KuGou operation: ${operation}`);
+    if (operation === 'logout') {
+      const sessionCookies = ensureCookies();
+      cookies = Object.fromEntries(Object.entries(sessionCookies).filter(([key]) => !AUTH_COOKIE_KEYS.has(key.toLowerCase())));
+      persist();
+      return { code: 200 };
+    }
+    if (operation !== 'register_dev') await ensureRegistered(false);
+    let body = await invokeModule(operation, params);
+    if (operation !== 'register_dev' && isDeviceVerificationRequired(body)) {
+      await ensureRegistered(true);
+      body = await invokeModule(operation, params);
+    }
+    const sessionCookies = ensureCookies();
+    const responseBody = operation === 'user_detail' && body?.data && (sessionCookies.userid || sessionCookies.user_id)
+      ? { ...body, data: { ...body.data, userid: String(sessionCookies.userid || sessionCookies.user_id) } }
+      : body;
+    return sanitizeRendererBody(operation, responseBody);
+  };
+
   return {
     getStatus() {
       try {
@@ -284,24 +352,11 @@ function createKugouApiBridge({
       }
     },
     async request(operation, params) {
-      if (!OPERATION_MODULES[operation]) throw new Error(`Unsupported KuGou operation: ${operation}`);
-      if (operation === 'logout') {
-        const sessionCookies = ensureCookies();
-        cookies = Object.fromEntries(Object.entries(sessionCookies).filter(([key]) => !AUTH_COOKIE_KEYS.has(key.toLowerCase())));
-        persist();
-        return { code: 200 };
+      try {
+        return await performRequest(operation, params);
+      } catch (error) {
+        throw normalizeBridgeError(operation, error);
       }
-      if (operation !== 'register_dev') await ensureRegistered(false);
-      let body = await invokeModule(operation, params);
-      if (operation !== 'register_dev' && isDeviceVerificationRequired(body)) {
-        await ensureRegistered(true);
-        body = await invokeModule(operation, params);
-      }
-      const sessionCookies = ensureCookies();
-      const responseBody = operation === 'user_detail' && body?.data && (sessionCookies.userid || sessionCookies.user_id)
-        ? { ...body, data: { ...body.data, userid: String(sessionCookies.userid || sessionCookies.user_id) } }
-        : body;
-      return sanitizeRendererBody(operation, responseBody);
     },
   };
 }
@@ -310,5 +365,6 @@ module.exports = {
   LEGACY_SESSION_KEY,
   SESSION_KEY,
   createKugouApiBridge,
+  normalizeBridgeError,
   OPERATION_MODULES,
 };

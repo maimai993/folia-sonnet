@@ -264,8 +264,83 @@ describe('KuGou Web transport', () => {
         vi.stubGlobal('fetch', fetchMock);
         const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
 
-        await expect(requestKugou('search', { keywords: 'song' })).rejects.toBe(ipcError);
+        await expect(requestKugou('search', { keywords: 'song' })).rejects.toMatchObject({
+            name: 'OnlineProviderError',
+            code: 'network',
+            providerId: 'kugou',
+            cause: ipcError,
+        });
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('wraps a bridge-normalized Electron rejection into a network OnlineProviderError', async () => {
+        // Electron prefixes the message with the IPC channel; the transport must still read the bridge fields.
+        const ipcError = new Error(
+            "Error invoking remote method 'kugou-api-request': KuGouApiError: "
+            + 'KuGouApi[operation=user_detail status=502 error_code=20028]: upstream busy',
+        );
+        vi.stubGlobal('window', { electron: { kugouRequest: vi.fn().mockRejectedValue(ipcError) } });
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        const error = (await requestKugou('user_detail', {}).catch((caught: unknown) => caught)) as Error;
+
+        expect(error).toMatchObject({ name: 'OnlineProviderError', code: 'network', providerId: 'kugou' });
+        expect(error.message).toContain('operation=user_detail');
+        expect(error.message).toContain('status=502');
+        expect(error.message).toContain('error_code=20028');
+        expect(error.message).not.toContain('[object Object]');
+    });
+
+    it.each([
+        ['an HTTP 401 status', 'KuGouApi[operation=user_detail status=401]: unauthorized'],
+        ['an HTTP 403 status', 'KuGouApi[operation=user_detail status=403]'],
+        ['the documented missing-credentials error_code 152', 'KuGouApi[operation=search status=502 error_code=152]'],
+    ])('maps %s from the Electron bridge to auth-required', async (_label, bridgeMessage) => {
+        const ipcError = new Error(`Error invoking remote method 'kugou-api-request': Error: ${bridgeMessage}`);
+        vi.stubGlobal('window', { electron: { kugouRequest: vi.fn().mockRejectedValue(ipcError) } });
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await expect(requestKugou('user_detail', {})).rejects.toMatchObject({
+            name: 'OnlineProviderError',
+            code: 'auth-required',
+            providerId: 'kugou',
+        });
+    });
+
+    it('classifies a raw answer-object rejection from an unpatched main process', async () => {
+        vi.stubGlobal('window', {
+            electron: {
+                kugouRequest: vi.fn().mockRejectedValue({ status: 502, body: { status: 0, error_code: 20028 } }),
+            },
+        });
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        const error = (await requestKugou('user_detail', {}).catch((caught: unknown) => caught)) as Error;
+
+        expect(error).toMatchObject({ code: 'network', providerId: 'kugou' });
+        expect(error.message).toContain('status=502');
+        expect(error.message).toContain('error_code=20028');
+    });
+
+    it('treats a message-less IPC failure as a network error, not a logout signal', async () => {
+        vi.stubGlobal('window', {
+            electron: { kugouRequest: vi.fn().mockRejectedValue(new Error('[object Object]')) },
+        });
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await expect(requestKugou('user_detail', {})).rejects.toMatchObject({ code: 'network' });
+    });
+
+    it('maps Web 401/403 responses to auth-required and other failures to network', async () => {
+        vi.stubGlobal('window', undefined);
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+            .mockResolvedValueOnce(new Response('{}', { status: 502 }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestKugou } = await import('@/services/onlineMusic/kugouTransport');
+
+        await expect(requestKugou('user_detail', {})).rejects.toMatchObject({ code: 'auth-required' });
+        await expect(requestKugou('user_detail', {})).rejects.toMatchObject({ code: 'network' });
     });
 
     it('reports unavailable when neither transport is configured', async () => {
