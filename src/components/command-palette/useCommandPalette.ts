@@ -500,7 +500,8 @@ export const useCommandPalette = ({
             }
 
             // Works everywhere, because it carries a modifier.
-            if (event.code === 'KeyK' && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
+            // Software-injected shortcuts may provide the key without a physical key code.
+            if ((event.code === 'KeyK' || event.key.toLowerCase() === 'k') && isPrimaryModifierPressed(event) && !event.altKey && !event.shiftKey && !isSecondaryModifierPressed(event)) {
                 if (isBlocked) {
                     return;
                 }
