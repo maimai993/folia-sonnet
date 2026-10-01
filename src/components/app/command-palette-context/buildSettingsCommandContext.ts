@@ -162,6 +162,9 @@ export const buildSettingsCommandContext = (
         toggleWallpaperMode: () => desktop.handleToggleWallpaperMode(
             !useDesktopSettingsStore.getState().wallpaperMode,
         ),
+        toggleCloseToTray: () => desktop.handleToggleCloseToTray(
+            !useDesktopSettingsStore.getState().closeToTray,
+        ),
         toggleWallpaperMacAutohideDock: () => desktop.handleToggleWallpaperMacAutohideDock(
             !useDesktopSettingsStore.getState().wallpaperMacAutohideDock,
         ),

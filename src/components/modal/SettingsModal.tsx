@@ -200,6 +200,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
     const {
         minimizeToTray,
+        closeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
@@ -209,6 +210,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleWallpaperMacAutohideDock: onToggleWallpaperMacAutohideDock,
         openPlayerOnLaunch,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleCloseToTray: onToggleCloseToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
         handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
@@ -1834,9 +1836,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     hideTaskbarIcon,
                                                     hideRemoteControlTaskbarIcon,
                                                     minimizeToTray,
+                                                    closeToTray,
                                                     onToggleHideTaskbarIcon,
                                                     onToggleHideRemoteControlTaskbarIcon,
                                                     onToggleMinimizeToTray,
+                                                    onToggleCloseToTray,
                                                     onToggleOpenPlayerOnLaunch,
                                                     openPlayerOnLaunch,
                                                     wallpaperMode,

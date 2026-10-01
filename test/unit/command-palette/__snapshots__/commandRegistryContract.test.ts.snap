@@ -100,6 +100,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-wallpaper-mode",
   "desktop-toggle-wallpaper-mode",
   "desktop-toggle-wallpaper-dock-autohide",
+  "desktop-toggle-close-to-tray",
   "settings-graphics",
   "settings-mods",
   "settings-lab",

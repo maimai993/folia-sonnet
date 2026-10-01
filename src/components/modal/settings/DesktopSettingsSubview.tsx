@@ -55,9 +55,11 @@ export type DesktopSettingsPreferences = {
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
     minimizeToTray: boolean;
+    closeToTray: boolean;
     onToggleHideTaskbarIcon: (enabled: boolean) => void;
     onToggleHideRemoteControlTaskbarIcon: (enabled: boolean) => void;
     onToggleMinimizeToTray: (enabled: boolean) => void;
+    onToggleCloseToTray: (enabled: boolean) => void;
     onToggleOpenPlayerOnLaunch: (enabled: boolean) => void;
     openPlayerOnLaunch: boolean;
     wallpaperMode: boolean;
@@ -109,9 +111,11 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
         minimizeToTray,
+        closeToTray,
         onToggleHideTaskbarIcon,
         onToggleHideRemoteControlTaskbarIcon,
         onToggleMinimizeToTray,
+        onToggleCloseToTray,
         onToggleOpenPlayerOnLaunch,
         openPlayerOnLaunch,
         wallpaperMode,
@@ -224,6 +228,11 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         t('options.minimizeToTray'),
                         '点击最小化时，应用将隐藏至系统托盘。',
                         renderToggle(minimizeToTray, () => onToggleMinimizeToTray(!minimizeToTray)),
+                    )}
+                    {renderRow(
+                        t('options.closeToTray'),
+                        t('options.closeToTrayDesc'),
+                        renderToggle(closeToTray, () => onToggleCloseToTray(!closeToTray)),
                     )}
                     {renderRow(
                         t('options.openPlayerOnLaunch'),

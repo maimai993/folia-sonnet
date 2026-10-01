@@ -1804,6 +1804,10 @@ const OBS_BROWSER_SOURCE_PORT_SETTING_KEY = 'OBS_BROWSER_SOURCE_PORT';
 const LYRIC_API_ENABLED_SETTING_KEY = 'LYRIC_API_ENABLED';
 const DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY = 'DISCORD_RICH_PRESENCE_ENABLED';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
+// Close (the titlebar X / window-close IPC) hides the window instead of destroying it, so
+// playback and the tray controls survive. Off by default: closing a window and still finding
+// the process alive is surprising unless the user asked for it.
+const CLOSE_TO_TRAY_SETTING_KEY = 'CLOSE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
 const REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY = 'REMOTE_CONTROL_SKIP_TASKBAR';
@@ -1924,6 +1928,7 @@ function getPublicSettings() {
   return {
     ...store.store,
     [MINIMIZE_TO_TRAY_SETTING_KEY]: readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false),
+    [CLOSE_TO_TRAY_SETTING_KEY]: readStoredBoolean(CLOSE_TO_TRAY_SETTING_KEY, false),
     [HIDE_TASKBAR_ICON_SETTING_KEY]: readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false),
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
     [REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY, false),
@@ -2371,6 +2376,21 @@ function toggleMainWindowVisibility() {
 
 function isMinimizeToTrayEnabled() {
   return readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false);
+}
+
+function isCloseToTrayEnabled() {
+  return readStoredBoolean(CLOSE_TO_TRAY_SETTING_KEY, false);
+}
+
+// Whether a 'close' on the main window should be turned into a hide. Wallpaper sessions are
+// excluded for the same reason the window-close IPC refuses there: the window *is* the wallpaper,
+// so hiding it blanks the desktop and strands the session, and closing it is the documented way
+// out. Quitting also wins — before-quit sets isAppQuitting before any window is closed.
+function canHideMainWindowOnClose() {
+  if (isAppQuitting || !isCloseToTrayEnabled()) {
+    return false;
+  }
+  return !isWallpaperModeEnabled();
 }
 
 function setMainWindowSkipTaskbarEnabled(enabled) {
@@ -5114,8 +5134,22 @@ function createWindow(options = {}) {
   win.on('unmaximize', () => {
     saveWindowState(win);
   });
-  win.on('close', () => {
+  win.on('close', (event) => {
     saveWindowState(win);
+    // Close-to-tray: the titlebar X (and the window-close IPC behind it) hides the window instead
+    // of destroying it, so playback and the tray controls survive. Explicit exits never get
+    // swallowed: app.quit()/tray → 退出 emit before-quit first, which sets isAppQuitting. The
+    // window-rebuild paths in recreateMainWindowWithTransparencyMode use destroy(), which does
+    // not emit 'close' at all, so a swap can never end up as a hidden leftover window.
+    if (!canHideMainWindowOnClose()) {
+      return;
+    }
+    event.preventDefault();
+    if (mainWindow === win) {
+      hideMainWindow();
+    } else {
+      win.hide();
+    }
   });
   win.on('closed', () => {
     if (mainWindow === win) {
@@ -5560,6 +5594,13 @@ app.on('before-quit', () => {
   void lyricApi.stop();
 });
 
+// Windows logoff/restart/shutdown never runs before-quit: the session ends by closing every
+// window. Without moving the app into the quitting state here, close-to-tray would swallow that
+// close and hold the logoff open until Windows kills the process.
+app.on('session-end', () => {
+  isAppQuitting = true;
+});
+
 // Settings Management IPC
 ipcMain.handle('window-set-native-theme', (event, themeSource) => {
   nativeTheme.themeSource = themeSource;
@@ -5609,6 +5650,7 @@ ipcMain.handle('save-settings', (event, key, value) => {
   }
   if (
     key === MINIMIZE_TO_TRAY_SETTING_KEY ||
+    key === CLOSE_TO_TRAY_SETTING_KEY ||
     key === HIDE_TASKBAR_ICON_SETTING_KEY ||
     key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY ||
     key === REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY ||

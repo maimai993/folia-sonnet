@@ -303,6 +303,15 @@ export const settingsCommands: CommandPaletteCommand[] = [
             return true;
         },
     },
+    createToggleCommand(
+        'desktop-toggle-close-to-tray',
+        'settings',
+        'Close window to tray',
+        'Keep the app running in the tray when the main window is closed',
+        ['close to tray', 'hide on close', 'minimize on close', 'tray on close', 'quit on close', '关闭到托盘', '关闭窗口隐藏到托盘', '关闭按钮', '退出到托盘'],
+        context => context.settings.toggleCloseToTray(),
+        { platform: ['electron'] },
+    ),
     createSettingsCommand('settings-graphics', 'Graphics settings', 'Open static mode, frame rate cap, Linux glow fix and reduced motion', ['graphics', 'performance', 'frame rate', 'fps', 'rendering', '图形', '图形设置', '性能', '帧率', '渲染'], 'options', 'graphics'),
     createSettingsCommand('settings-mods', 'Mod settings', 'Open the mod system switch and the installed mods', ['mod manager', 'mod system', 'plugins', '模组设置', '模组系统', '插件'], 'options', 'mods', { platform: ['electron'] }),
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),

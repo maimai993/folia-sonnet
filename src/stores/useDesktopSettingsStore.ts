@@ -11,6 +11,10 @@ import i18n from '../i18n/config';
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 
+// Close (the titlebar X) hides the window to the tray instead of quitting. Mirrored from the main
+// process's CLOSE_TO_TRAY, which is the side that actually intercepts the window close.
+export const CLOSE_TO_TRAY_STORAGE_KEY = 'close_to_tray';
+
 export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
 
 export const PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY = 'prevent_display_sleep_during_playback';
@@ -31,6 +35,8 @@ export const OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY = 'open_player_on_launch';
 
 export type DesktopSettingsState = {
     minimizeToTray: boolean;
+    /** Close button hides the main window to the tray instead of quitting the app. */
+    closeToTray: boolean;
     voiceInputPauseEnabled: boolean;
     preventDisplaySleepDuringPlayback: boolean;
     /**
@@ -46,8 +52,9 @@ export type DesktopSettingsState = {
      *  is hidden automatically; switching it off overrides the automatic rule. */
     wallpaperMacAutohideDock: boolean;
     openPlayerOnLaunch: boolean;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; wallpaper_mac_autohide_dock?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; wallpaper_mac_autohide_dock?: unknown; }) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
+    handleToggleCloseToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
     handleToggleModSystem: (enable: boolean) => void;
     handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
@@ -60,6 +67,7 @@ export type DesktopSettingsState = {
 
 export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) => ({
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
+    closeToTray: getStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
     modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, false),
@@ -73,6 +81,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         if (typeof settings.MINIMIZE_TO_TRAY === 'boolean') {
             patch.minimizeToTray = settings.MINIMIZE_TO_TRAY;
             setStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, settings.MINIMIZE_TO_TRAY);
+        }
+        if (typeof settings.CLOSE_TO_TRAY === 'boolean') {
+            patch.closeToTray = settings.CLOSE_TO_TRAY;
+            setStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, settings.CLOSE_TO_TRAY);
         }
         if (typeof settings.VOICE_INPUT_PAUSE_ENABLED === 'boolean') {
             patch.voiceInputPauseEnabled = settings.VOICE_INPUT_PAUSE_ENABLED;
@@ -113,6 +125,17 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         setStatusMessage({
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'minimizeToTray' : 'minimizeToTaskbar')),
+        });
+    },
+    handleToggleCloseToTray: (enable) => {
+        setStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, enable);
+        set({ closeToTray: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('CLOSE_TO_TRAY', enable);
+        }
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'closeToTray' : 'closeToTaskbar')),
         });
     },
     handleToggleVoiceInputPause: (enable) => {
@@ -205,6 +228,7 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
  */
 export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     minimizeToTray: state.minimizeToTray,
+    closeToTray: state.closeToTray,
     voiceInputPauseEnabled: state.voiceInputPauseEnabled,
     preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
     modSystemEnabled: state.modSystemEnabled,
@@ -214,6 +238,7 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     wallpaperMacAutohideDock: state.wallpaperMacAutohideDock,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
     handleToggleMinimizeToTray: state.handleToggleMinimizeToTray,
+    handleToggleCloseToTray: state.handleToggleCloseToTray,
     handleToggleVoiceInputPause: state.handleToggleVoiceInputPause,
     handleToggleModSystem: state.handleToggleModSystem,
     handleTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,

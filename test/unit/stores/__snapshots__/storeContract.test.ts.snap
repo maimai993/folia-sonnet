@@ -11,6 +11,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "cappella_tuning",
   "claddagh_tuning",
   "classic_tuning",
+  "close_to_tray",
   "custom_shortcut_command",
   "custom_shortcut_letter",
   "default_audio_quality",
