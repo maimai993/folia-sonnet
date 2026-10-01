@@ -152,6 +152,15 @@ export const settingsCommands: CommandPaletteCommand[] = [
     },
     createSettingsAnchorCommand('settings-discord-presence', 'Discord playback status', 'Open Discord Rich Presence settings', ['discord', 'rich presence', 'discord presence', 'playing status', '播放状态', 'discord状态', 'discordzhuangtai', 'dc'], 'discordRichPresence'),
     createSettingsAnchorCommand('settings-obs-browser-source', 'OBS browser source', 'Open OBS browser source settings', ['obs', 'browser source', 'live source', '直播源', '浏览器源'], 'obsBrowserSource'),
+    createToggleCommand(
+        'obs-toggle-keep-main-window-animation',
+        'settings',
+        'OBS: keep main window animation',
+        'Toggle whether the main window keeps its animation while OBS is connected',
+        ['obs keep animation', 'obs main window', 'browser source animation', 'obs 保持动画', 'obs 主窗口动画', '浏览器源主窗口动画', 'obs bcdh', 'obszckdh'],
+        context => context.settings.toggleObsKeepMainWindowAnimation(),
+        { platform: ['electron'] },
+    ),
     {
         id: 'desktop-toggle-lyric-api',
         platform: ['electron'],

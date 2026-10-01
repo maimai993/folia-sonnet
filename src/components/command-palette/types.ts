@@ -266,6 +266,8 @@ export type CommandPaletteSettingsContext = {
     toggleWallpaperMode: () => void;
     /** Close button hides the main window to the tray instead of quitting (main process owns it). */
     toggleCloseToTray: () => void;
+    /** OBS browser source: keep the main window's heavy animation while an OBS client is connected. */
+    toggleObsKeepMainWindowAnimation: () => void;
     /** macOS-only: the wallpaper-mode Dock auto-hide override (on by default). */
     toggleWallpaperMacAutohideDock: () => void;
     sleepTimerEnabled: boolean;

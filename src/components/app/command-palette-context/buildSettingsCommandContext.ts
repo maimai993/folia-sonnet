@@ -16,6 +16,7 @@ import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorStore';
@@ -168,6 +169,9 @@ export const buildSettingsCommandContext = (
         ),
         toggleCloseToTray: () => desktop.handleToggleCloseToTray(
             !useDesktopSettingsStore.getState().closeToTray,
+        ),
+        toggleObsKeepMainWindowAnimation: () => useStageSettingsStore.getState().handleToggleObsKeepMainWindowAnimation(
+            !useStageSettingsStore.getState().obsKeepMainWindowAnimation,
         ),
         toggleWallpaperMacAutohideDock: () => desktop.handleToggleWallpaperMacAutohideDock(
             !useDesktopSettingsStore.getState().wallpaperMacAutohideDock,

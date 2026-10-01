@@ -182,6 +182,18 @@ export const resolveObsBrowserSourceClockTime = (
     return (clock.duration > 0 ? Math.min(clock.duration, nextTime) : nextTime) - offsetSec;
 };
 
+/**
+ * Decides which visualizer mode the main window renders: while an OBS client is rendering, the
+ * main window drops to the lightweight 'still' mode unless the user opted to keep its animation.
+ */
+export const resolveMainWindowVisualizerMode = <TMode extends string>(
+    visualizerMode: TMode,
+    isObsBrowserSourceRendering: boolean,
+    keepMainWindowAnimation: boolean,
+): TMode | 'still' => (
+    isObsBrowserSourceRendering && !keepMainWindowAnimation ? 'still' : visualizerMode
+);
+
 export const downsampleObsSpectrum = (
     value: Uint8Array | undefined,
     limit = OBS_SPECTRUM_BIN_LIMIT,
