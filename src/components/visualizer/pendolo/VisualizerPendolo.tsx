@@ -8,10 +8,11 @@ import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
-import { resolveSubtitleContentMode, resolveLyricAlternateText, resolveSingleTrackSubtitleMode } from '../../../utils/lyrics/alternateText';
+import { resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
+import { buildPendoloSubtitleFontSpec, resolvePendoloSubtitleTracks, sumPendoloSubtitleTrackHeights } from './pendoloSubtitleTracks';
 import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
 import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
 import PendoloRotatingLine from './PendoloRotatingLine';
@@ -361,9 +362,11 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const textRotationCorrectionDeg = useTransform(wheelRotationDeg, value => -value * 0.65);
     const gearRotationAngleRad = useTransform(tickSpring, value => value * angleStepRad);
 
-    // Pendolo lays translation out inside its own clockwork layout, not the shared bottom subtitle, so it cannot
-    // stack two rows yet: the 'both' option falls back to translation only (phase 2 will add a second track).
-    const resolvedMode = useMemo(() => resolveSingleTrackSubtitleMode(resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation)), [subtitleContentMode, showSubtitleTranslation]);
+    // Pendolo lays subtitles out inside its own clockwork layout, not the shared bottom subtitle. 'both' stacks
+    // romanization above translation under each lyric; the rows come from resolvePendoloSubtitleTracks, which both
+    // the height pre-measurement below and the rendering read, so the reserved space always matches the drawn rows.
+    const resolvedMode = useMemo(() => resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation), [subtitleContentMode, showSubtitleTranslation]);
+    const subtitleFontFamily = useMemo(() => resolveThemeTranslationFontStack(subtitleTheme ?? theme), [subtitleTheme, theme]);
 
     const lineBlockHeights = useMemo(() => {
         const measureWidth = availableTextWidth / pendoloTuning.activeScale;
@@ -380,22 +383,23 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                 Math.round(fontPx * 1.2),
             ).height;
 
-            const translation = hideTranslationSubtitle ? null : resolveLyricAlternateText(line, resolvedMode);
-            const hasReadableText = !!translation && /[\p{L}\p{N}]/u.test(translation);
-            const translationPx = Math.round(16 * (subtitleFontScale ?? 1));
-
-            const translationHeight = hasReadableText
-                ? buildPendoloTextLayout(
-                    translation,
-                    `${resolveThemeFontWeight(subtitleTheme ?? theme, 500)} ${translationPx}px ${resolveThemeTranslationFontStack(subtitleTheme ?? theme)}`,
-                    measureWidth,
-                    Math.round(translationPx * 1.2),
-                ).height + translationPx * 0.25 // Equivalent to marginTop: 0.25em
-                : 0;
+            // Focal-state rows, same as the main lyric above: reserve the largest size the line will take.
+            const subtitleTracks = resolvePendoloSubtitleTracks(line, {
+                mode: resolvedMode,
+                hidden: hideTranslationSubtitle,
+                focal: true,
+                subtitleFontScale: subtitleFontScale ?? 1,
+            });
+            const translationHeight = sumPendoloSubtitleTrackHeights(subtitleTracks, track => buildPendoloTextLayout(
+                track.text,
+                buildPendoloSubtitleFontSpec(track, resolveThemeFontWeight(subtitleTheme ?? theme, track.fontWeightFallback), subtitleFontFamily),
+                measureWidth,
+                track.lineHeightPx,
+            ).height);
 
             return (mainHeight + translationHeight) * pendoloTuning.activeScale;
         });
-    }, [availableTextWidth, fontFamily, fontWeight, hideTranslationSubtitle, lines, lyricsFontScale, pendoloTuning.activeScale, resolvedMode, subtitleFontScale, subtitleTheme, targetLineIndex, theme]);
+    }, [availableTextWidth, fontFamily, fontWeight, hideTranslationSubtitle, lines, lyricsFontScale, pendoloTuning.activeScale, resolvedMode, subtitleFontFamily, subtitleFontScale, subtitleTheme, targetLineIndex, theme]);
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
@@ -491,9 +495,12 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                             );
                             const maxTextWidth = availableTextWidth / item.scale;
                             const fontPx = Math.round((isFocal ? 28 : 22) * lyricsFontScale);
-                            const translation = hideTranslationSubtitle ? null : resolveLyricAlternateText(item.line, resolvedMode);
-                            const hasReadableText = !!translation && /[\p{L}\p{N}]/u.test(translation);
-                            const translationPx = Math.round((isFocal ? 16 : 12) * (subtitleFontScale ?? 1));
+                            const subtitleTracks = resolvePendoloSubtitleTracks(item.line, {
+                                mode: resolvedMode,
+                                hidden: hideTranslationSubtitle,
+                                focal: isFocal,
+                                subtitleFontScale: subtitleFontScale ?? 1,
+                            });
 
                             return (
                                 <PendoloRotatingLine
@@ -591,26 +598,29 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                                     </div>
                                                 )}
                                             </div>
-                                            {/* Secondary Translation / Romanization Line */}
-                                            {hasReadableText && (
+                                            {/* Secondary Romanization / Translation Lines (second row steps down in size and opacity) */}
+                                            {subtitleTracks.map(track => (
                                                 <div
+                                                    key={track.role}
+                                                    data-pendolo-subtitle-track={track.role}
                                                     className="whitespace-pre-wrap transition-opacity duration-200"
                                                     style={{
-                                                        fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
-                                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, 500),
-                                                        fontSize: `${translationPx}px`,
+                                                        fontFamily: subtitleFontFamily,
+                                                        fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, track.fontWeightFallback),
+                                                        fontSize: `${track.fontPx}px`,
                                                         maxWidth: `${maxTextWidth}px`,
                                                         color: isFocal ? secondaryTextColor : colorWithAlpha(secondaryTextColor, 0.6),
+                                                        opacity: track.opacityFactor === 1 ? undefined : track.opacityFactor,
                                                         letterSpacing: '0.01em',
                                                         whiteSpace: 'pre-wrap',
                                                         overflowWrap: 'anywhere',
                                                         wordBreak: 'break-word',
-                                                        marginTop: '0.25em',
+                                                        marginTop: `${track.gapEm}em`,
                                                     }}
                                                 >
-                                                    {translation}
+                                                    {track.text}
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
                                     </motion.div>
                                     </div>
