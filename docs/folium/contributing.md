@@ -12,7 +12,7 @@
 
 ## 1. 开始之前
 
-- **先确认接口边界。** Folium 1.3 是首个稳定版本，目前仅开放 UI 相关的稳定扩展接口。其余部分，尤其是 `omni.providers` 等 Omni provider 接口，仍属实验接口，能力尚不能与应用内置 Omni provider 对等。在 Folium v2 发布前，请绝对不要尝试制作超出当前实验接口能力的完整音源模组；这类实现必然遇到接口缺口，浪费开发者和维护者的时间。
+- **先确认接口边界。** Folium 1.3 是首个稳定版本，稳定扩展接口目前只有 UI 相关部分，以及 1.4 起的歌词原文解析（`folium.lyrics.parse` 与 `getLyrics` 的返回形状）。其余部分，尤其是 `omni.providers` 等 Omni provider 接口，仍属实验接口，能力尚不能与应用内置 Omni provider 对等。在 Folium v2 发布前，请绝对不要尝试制作超出当前实验接口能力的完整音源模组；这类实现必然遇到接口缺口，浪费开发者和维护者的时间。
 - **原始音频导出模组不得上架。** 任何尝试导出 provider 的原始音频流或解密之后的原始音频文件的模组，都有极高的平台法律风险。无论采用何种实现方式，此类模组都不会上架官方模组市场。
 - **模组是可信代码，不是沙箱。** `client` 入口运行在主界面的渲染进程里，`main` 入口运行在主进程里、拥有完整的 Node.js 权限。`mod.json` 里的权限是功能开关，不是安全边界。
 - **只在桌面版可用。** 网页版和 PWA 没有模组系统。
@@ -20,7 +20,7 @@
 - **确认绑定到文件内容。** 模组目录里任何文件变化都会让确认失效，模组被自动禁用，需要重新确认。唯一的例外是开发版里仓库 `mods/` 目录中的模组，见[调试循环](#调试循环)。
 - **签名只是标识。** 发布到模组市场的模组带有 Folium 签名，安装后显示「官方认证」，但启用时同样要确认，权限也不会因此变少。
 
-当前契约版本是 Folium 1.3，运行时通过 `folium.host.folium.minor` 判断宿主支持哪些功能（见[兼容与版本](#兼容与版本)）。
+当前契约版本是 Folium 1.4，运行时通过 `folium.host.folium.minor` 判断宿主支持哪些功能（见[兼容与版本](#兼容与版本)）。
 
 ## 2. 准备开发环境
 
@@ -187,7 +187,7 @@ function mountHello(folium, container, ctx) {
 
 ### 兼容与版本
 
-- 用 `folium.host.folium.minor` 做功能探测，例如 `if (folium.host.folium.minor >= 3)` 再使用 1.3 新增的接口。
+- 用 `folium.host.folium.minor` 做功能探测，例如 `if (folium.host.folium.minor >= 4)` 再使用 1.4 新增的接口（如 `folium.lyrics.parse`）。
 - 实验接口（`omni.providers`、`omni.hooks`、`ponder.targets`）需要在清单的 `experimental` 里选用，任何 minor 版本都可能变化。
 - `folium.internals` 没有兼容承诺，使用时必须在清单里用 `folia` 固定宿主版本范围；社区模组应尽量不用。
 - 模组更新时提升 `mod.json` 的 `version`（`MAJOR.MINOR.PATCH`）。

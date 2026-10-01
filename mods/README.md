@@ -13,7 +13,7 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
 
 > **模组开发与上架注意事项**
 >
-> - Folium 1.3 是首个稳定版本，目前仅开放 UI 相关的稳定扩展接口。其他部分，尤其是 `omni.providers` 等 Omni provider 接口，仍属实验接口，尚不具备应用内置 Omni provider 的对等能力。在 Folium v2 发布前，请绝对不要尝试制作超出当前实验接口能力的完整音源模组；接口缺口必然导致问题，浪费开发者和维护者的时间。
+> - Folium 1.3 是首个稳定版本，稳定扩展接口目前只有 UI 相关部分，以及 1.4 起的歌词原文解析（`folium.lyrics.parse` 与 `getLyrics` 的返回形状）。其他部分，尤其是 `omni.providers` 等 Omni provider 接口，仍属实验接口，尚不具备应用内置 Omni provider 的对等能力。在 Folium v2 发布前，请绝对不要尝试制作超出当前实验接口能力的完整音源模组；接口缺口必然导致问题，浪费开发者和维护者的时间。
 > - 任何尝试导出 provider 的原始音频流或解密之后的原始音频文件的模组，都有极高的平台法律风险。无论采用何种实现方式，此类模组都不会上架官方模组市场。
 
 公开类型全部在 [`src/mods/folium/contract.ts`](../src/mods/folium/contract.ts)，这是契约的唯一来源。
@@ -183,7 +183,7 @@ export default function activate(folium) {
 | `playback` / `ui` / `net` | 见[服务](#服务) |
 | `storage.get/set/has/delete/keys` | 异步；需 `filesystem.data`；单模组数据上限 1 MB |
 | `rpc.call(name, ...args)` | 调用本模组 main 侧 `api.rpc.handle(name, fn)` 注册的函数；参数与返回值需可 JSON 序列化 |
-| `lyrics` / `theme`（1.3） | 内置模式共用的纯函数，见[歌词与主题](#歌词与主题13)；导出窗口里也能用 |
+| `lyrics` / `theme`（1.3） | 内置模式共用的函数，见[歌词与主题](#歌词与主题13)；导出窗口里也能用。`lyrics.parse`（1.4）把歌词原文交给宿主解析 |
 | `experimental[name]` | 选用了才能访问，否则抛 `experimental-not-declared:<name>` |
 | `internals` | 见 [internals](#internals自由度出口) |
 
@@ -307,8 +307,28 @@ folium.registries.visualizers.register({
 | `lyrics.getRecentCompletedLine(lines, index, time)` | 没有当前行时（`index` 为 -1）最近唱完的一句，字幕在间隙里继续显示它 |
 | `lyrics.buildWordColorRanges(fullText, wordColors)` | 关键词配色区间 `{ startOffset, endOffset, color, priority }[]`（UTF-16 偏移，互不重叠） |
 | `lyrics.resolveWordColor(wordText, wordColors, fallback, { cjkMatchMode })` | 单个词的关键词颜色 |
+| `lyrics.parse(track)`（1.4） | 异步。按本地歌词文件的流程解析[歌词原文](#歌词原文14)，得到 `{ lines, isWordByWord }` |
 | `theme.resolveFontStack(theme)` / `resolveTranslationFontStack(theme)` | 歌词 / 翻译字幕的 CSS `font-family` 值 |
 | `theme.resolveFontWeight(theme, fallback)` | 规范化后的字重 |
+
+#### 歌词原文（1.4）
+
+`lyrics.parse(track)` 和 `omni.providers` 的 `getLyrics` 都收 `FoliumLyricsTrack`：`{ format, text, translationText?, romanizationText? }`，
+宿主按本地歌词文件的流程解析，解析器在 worker 里运行。
+
+- `format` 取 `lrc`、`enhanced-lrc`、`yrc`、`qrc`、`krc`、`ttml`、`vtt`、`awlrc`。
+  - 宿主不嗅探格式：带 `<mm:ss.xx>` 逐字标记的 LRC 要写成 `enhanced-lrc`，写成 `lrc` 会把标记当成歌词文字。
+  - 和本地文件一样有两个例外：Folia 导出的 `.fia` 文档和带 `[awlrc:…]` 容器的 LRC，总是按内容读取。
+- QRC、KRC 只收**解密后的明文**，宿主不负责解密。
+- `translationText` / `romanizationText` 的对齐规则：
+  - 和本地 `.t.lrc` 一样，按开始时间与正文对齐；`vtt` 轨道用 VTT cue。
+  - TTML 忽略这两项：翻译、罗马音、背景人声、对唱和 `songPart` 都从 TTML 内联读取。
+- 每段文本最多 1,048,576 个字符。以下轨道无效：格式不在列表里、`text` 为空、文本超长。
+  - `parse` 遇到无效轨道时抛 `TypeError('invalid-lyrics-track: …')`。
+  - `getLyrics` 遇到无效轨道时忽略它，并在控制台警告。
+- `parse` 的返回值：
+  - `lines` 是冻结的 `FoliumLine[]`，不套用户的歌词显示过滤。
+  - `isWordByWord` 表示时间来自真实的逐字标记，而不是宿主按行估算的。
 
 `mount` 定义在模块顶层时拿不到 `folium`，在注册时包一层：`mount: (container, ctx) => mountMine(folium, container, ctx)`，
 见 `sample-aurora-visualizer`。
@@ -502,7 +522,7 @@ module.exports = function activate(api) {
 
 选用方式：清单 `"experimental": ["omni.providers"]`，然后 `folium.experimental['omni.providers']`。
 
-**`omni.providers`**：注册一个在线音乐源，宿主把它适配成内置 provider 的形状（搜索、播放、LRC 歌词）。
+**`omni.providers`**：注册一个在线音乐源，宿主把它适配成内置 provider 的形状（搜索、播放、歌词）。
 provider id 为 `folium.<modid>.<id>`；歌曲的 `mediaId` 就是模组自己的歌曲 id，模组停用后队列里的歌只是暂时不能播放。
 
 ```js
@@ -510,9 +530,23 @@ folium.experimental['omni.providers'].register({
   id: 'radio', displayName: 'My Radio',
   search: async (query, { limit, offset }) => ({ items: [{ id, title, artists: [...] }], hasMore: false }),
   getAudioUrl: async (song, quality) => ({ url }),
-  getLyrics: async (song) => ({ lrc, translationLrc }),
+  getLyrics: async (song) => ({
+    main: { format: 'lrc', text: lrc, translationText: tlrc },
+    wordByWord: { format: 'ttml', text: ttml },
+  }),
 });
 ```
+
+`getLyrics` 返回的 `FoliumLyricsResult` 是稳定形状（1.4），`omni.providers` 本身仍是实验接口：
+
+- 两条轨道都是[歌词原文](#歌词原文14)。
+  - 有 `wordByWord` 时显示它；它解析失败或解析不出任何一行时，退回 `main`。
+  - `wordByWord` 没带翻译、罗马音时，沿用 `main` 的。
+- `isPureMusic: true` 时显示纯音乐视图，忽略两条轨道。
+- `chorusRanges: [{ startTime, endTime }]` 是歌词时间（秒），落在区间里的行显示副歌效果，最多 64 段。
+  - 没给时，宿主按重复的行自动识别。
+  - TTML 的 `songPart` 标记优先于这两者。
+- 1.3 的 `{ lrc, translationLrc }` 仍然可用，按纯 LRC 解析，和 1.3 完全相同。这个形状从 1.4 起废弃，Folium 2 移除。
 
 **`omni.hooks`**：`folium.experimental['omni.hooks'].on('lyricsResolved' | 'audioSourceResolved', handler)`，
 或者直接 `folium.events.on('omni.…')`（未选用时抛错）。
@@ -562,6 +596,11 @@ folium.experimental['omni.providers'].register({
 - 1.3 是 Folium 1 的首个稳定版本，发布时一次性调整了 DTO 形状，让歌词和主题与内置 visualizer 同构：
   `FoliumLine.text` 改名 `fullText`，`endTime` 改为歌词原始结束时间（渲染结束时间移到 `renderHints.renderEndTime`）；
   `FoliumTheme.fontFamily` 改为用户字体名，可直接用的字体栈改由 `folium.theme.resolveFontStack(theme)` 得到，`fontWeight` 变为可选。
+- 1.4 新增稳定的歌词原文接口，不依赖 `omni.providers` 也能用：
+  - DTO：`FoliumLyricFormat`、`FoliumLyricsTrack`、`FoliumLyricsResult`、`FoliumParsedLyrics`。
+  - 方法：`folium.lyrics.parse`。
+  - 实验接口 `omni.providers` 的 `getLyrics` 改为返回 `FoliumLyricsResult`。
+  - **废弃**：`getLyrics` 的旧返回形状 `{ lrc, translationLrc }`（`FoliumLegacyLyricsResult`）。1.x 内照旧可用，Folium 2 移除。
   仓库里的样例已同步。
 
 ## 从 UI 安装与管理
