@@ -63,6 +63,14 @@ describe('omni routing', () => {
         expect(useOnlineProviderAccountStore.getState().activeProviderId).toBe('bodian');
     });
 
+    it('marks a provider without auth as one that needs no account', () => {
+        registerOnlineMusicProvider(provider(providerId, { searchSongs: async () => ({ items: [], hasMore: false, nextOffset: 0 }) }));
+        const summaries = omni.getProviderSummaries();
+
+        expect(summaries.find(summary => summary.providerId === providerId)?.requiresAccount).toBe(false);
+        expect(summaries.find(summary => summary.providerId === 'netease')?.requiresAccount).toBe(true);
+    });
+
     it('reports songs from unavailable providers as unplayable without routing them elsewhere', () => {
         expect(omni.canPlaySong(song('bodian'))).toBe(false);
     });

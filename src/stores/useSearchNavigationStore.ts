@@ -56,6 +56,7 @@ interface SearchNavigationState {
     restoreSearch: (payload: { query: string; sourceTab: SearchSource; returnView?: SearchReturnView; }) => void;
     hideSearchOverlay: () => void;
     resetRuntime: (onlineProviderId?: OnlineProviderId) => void;
+    followOnlineProvider: (providerId: OnlineProviderId) => void;
     submitSearch: (payload: { query?: string; sourceTab: SearchSource; deps: SearchExecutorDeps; returnView?: SearchReturnView; }) => Promise<boolean>;
     loadMoreSearchResults: (payload: { deps: SearchExecutorDeps; }) => Promise<void>;
 }
@@ -242,6 +243,15 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         hasMore: false,
         scrollTop: 0,
     })),
+    // The overlay's online source is the active provider. A switch moves it through resetRuntime, but
+    // the active provider also changes without one (startup, session restore, a Folium mod source going
+    // away), so this keeps it in step. Local and Navidrome are left alone, and the results stay: clearing
+    // them is the switch's job.
+    followOnlineProvider: (providerId) => set(state => (
+        state.searchSourceTab === 'local' || state.searchSourceTab === 'navidrome' || state.searchSourceTab === providerId
+            ? state
+            : { searchSourceTab: providerId }
+    )),
     submitSearch: async ({ query, sourceTab, deps, returnView = 'home' }) => {
         const trimmedQuery = (query ?? get().searchQuery).trim();
         if (!trimmedQuery) {

@@ -10,12 +10,34 @@ import { qqProvider } from './qqProvider';
 
 const providers = new Map<OnlineProviderId, OnlineMusicProvider>();
 
+// Folium mods register and remove providers at runtime, after the UI first read the list. The version
+// lets that UI (through omni, see useOnlineProviderPlatform) notice instead of keeping a stale list.
+let registryVersion = 0;
+const registryListeners = new Set<() => void>();
+
+const announceRegistryChange = () => {
+    registryVersion += 1;
+    registryListeners.forEach(listener => listener());
+};
+
 export const registerOnlineMusicProvider = (provider: OnlineMusicProvider): void => {
     providers.set(provider.id, provider);
+    announceRegistryChange();
 };
 
 export const unregisterOnlineMusicProvider = (providerId: OnlineProviderId): void => {
-    providers.delete(providerId);
+    if (providers.delete(providerId)) announceRegistryChange();
+};
+
+/** Bumped by every registration and removal. */
+export const getOnlineMusicProviderRegistryVersion = (): number => registryVersion;
+
+/** Calls `listener` after every registration and removal; returns the unsubscribe function. */
+export const subscribeOnlineMusicProviderRegistry = (listener: () => void): (() => void) => {
+    registryListeners.add(listener);
+    return () => {
+        registryListeners.delete(listener);
+    };
 };
 
 export const getOnlineMusicProvider = (providerId: OnlineProviderId): OnlineMusicProvider | null => (
