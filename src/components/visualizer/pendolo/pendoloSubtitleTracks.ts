@@ -19,7 +19,9 @@ const IDLE_SUBTITLE_PX = 12;
 const LEAD_TRACK_GAP_EM = 0.25;
 /** Fallback weight for the first row when the theme sets none (the second row uses SECONDARY_TRACK_FONT_WEIGHT_FALLBACK). */
 const LEAD_TRACK_FONT_WEIGHT_FALLBACK = 500;
-const SUBTITLE_LINE_HEIGHT_RATIO = 1.2;
+// The rows set no line-height of their own and inherit the page's 1.5, so measure with the same ratio, unrounded,
+// to reserve exactly what the DOM draws (1.2 under-reserved a few px per wrapped row and let rows touch the next lyric).
+const SUBTITLE_LINE_HEIGHT_RATIO = 1.5;
 
 // Placeholder lines ("//", "●●●", dashes) carry no letter or digit and are never shown as subtitle text.
 const READABLE_TEXT_PATTERN = /[\p{L}\p{N}]/u;
@@ -65,7 +67,7 @@ export const resolvePendoloSubtitleTracks = (
             role: track.role,
             text: track.text,
             fontPx,
-            lineHeightPx: Math.round(fontPx * SUBTITLE_LINE_HEIGHT_RATIO),
+            lineHeightPx: fontPx * SUBTITLE_LINE_HEIGHT_RATIO,
             fontWeightFallback: isSecondary ? SECONDARY_TRACK_FONT_WEIGHT_FALLBACK : LEAD_TRACK_FONT_WEIGHT_FALLBACK,
             gapEm: isSecondary ? SECONDARY_TRACK_GAP_EM : LEAD_TRACK_GAP_EM,
             opacityFactor: isSecondary ? SECONDARY_TRACK_OPACITY : 1,

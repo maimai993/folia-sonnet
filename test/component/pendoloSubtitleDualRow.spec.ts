@@ -22,13 +22,17 @@ test('双行模式下焦点行的罗马音在上、翻译在下，第二行更�
 
     const style = (index: number) => rows.nth(index).evaluate(el => {
         const computed = getComputedStyle(el);
-        return { fontPx: parseFloat(computed.fontSize), opacity: parseFloat(computed.opacity) };
+        return { fontPx: parseFloat(computed.fontSize), lineHeightPx: parseFloat(computed.lineHeight), opacity: parseFloat(computed.opacity) };
     });
     const first = await style(0);
     const second = await style(1);
     expect(second.fontPx).toBeLessThan(first.fontPx);
     expect(first.opacity).toBe(1);
     expect(second.opacity).toBeLessThan(1);
+    // 转盘预留高度按 字号 × 1.5 测量（pendoloSubtitleTracks），DOM 行高必须一致，否则折行多时会压到下一句。
+    for (const row of [first, second]) {
+        expect(row.lineHeightPx).toBeCloseTo(row.fontPx * 1.5, 1);
+    }
 });
 
 test('缺一种数据时只剩那一行，占位文本和重复内容不产生多余行', async ({ mount, page }) => {

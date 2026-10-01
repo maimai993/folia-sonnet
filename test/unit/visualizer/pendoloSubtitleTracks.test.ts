@@ -63,12 +63,12 @@ describe('resolvePendoloSubtitleTracks', () => {
                 role: mode,
                 text,
                 fontPx: 16,
-                lineHeightPx: 19,
+                lineHeightPx: 24,
                 fontWeightFallback: 500,
                 gapEm: 0.25,
                 opacityFactor: 1,
             }]);
-            expect(resolvePendoloSubtitleTracks(both, options({ mode, focal: false }))[0]).toMatchObject({ fontPx: 12, lineHeightPx: 14 });
+            expect(resolvePendoloSubtitleTracks(both, options({ mode, focal: false }))[0]).toMatchObject({ fontPx: 12, lineHeightPx: 18 });
         }
     });
 
