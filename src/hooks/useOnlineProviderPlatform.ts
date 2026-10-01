@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
@@ -70,13 +70,20 @@ export const useOnlineProviderPlatform = (
     prepareSwitch?: (currentProviderId: OnlineProviderId, nextProviderId: OnlineProviderId) => Promise<boolean>,
     logouts: Partial<Record<OnlineProviderId, () => Promise<void>>> = {},
 ): OnlineProviderPlatformState => {
-    const { accounts, activeProviderId, setActiveProviderId } = useOnlineProviderAccountStore(useShallow(state => ({
+    const { accounts, storedProviderId, setActiveProviderId } = useOnlineProviderAccountStore(useShallow(state => ({
         accounts: state.accounts,
-        activeProviderId: state.activeProviderId,
+        storedProviderId: state.activeProviderId,
         setActiveProviderId: state.setActiveProviderId,
     })));
 
     const providers = useMemo<ProviderAccountSummary[]>(() => omni.getProviderSummaries(), [accounts]);
+    const activeProviderId = providers.some(provider => provider.providerId === storedProviderId)
+        ? storedProviderId
+        : 'netease';
+    // Reconcile the selection without removing the unavailable provider's account cache.
+    useEffect(() => {
+        if (storedProviderId !== activeProviderId) setActiveProviderId(activeProviderId);
+    }, [activeProviderId, setActiveProviderId, storedProviderId]);
     const refreshProvider = useCallback(async (providerId: OnlineProviderId) => {
         return await refreshers[providerId]?.();
     }, [refreshers]);

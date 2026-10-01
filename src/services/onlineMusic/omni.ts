@@ -42,7 +42,11 @@ import { applyOmniAudioHook, applyOmniLyricsHook } from '../hostExtensionHooks';
 
 type PageInput = { limit: number; offset: number };
 
-const activeProviderId = (): OmniProviderId => useOnlineProviderAccountStore.getState().activeProviderId;
+const activeProviderId = (): OmniProviderId => {
+    const storedProviderId = useOnlineProviderAccountStore.getState().activeProviderId;
+    // A persisted selection can outlive its provider when switching builds or branches.
+    return getOnlineMusicProvider(storedProviderId) ? storedProviderId : 'netease';
+};
 
 const activeProvider = () => requireOnlineMusicProvider(activeProviderId());
 
@@ -446,7 +450,7 @@ export const omni = {
     },
 
     canPlaySong(song: SongResult): boolean {
-        return Boolean(providerForSong(song).playback);
+        return Boolean(getOnlineMusicProviderForSong(song)?.playback);
     },
 
     async getAudioSource(song: SongResult, quality: AudioQualityPreference): Promise<OmniAudioSource | null> {

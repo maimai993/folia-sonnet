@@ -13,6 +13,7 @@ import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setCurrentSong, setPlayQueue } from '../stores/usePlaybackStore';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { omni } from '../services/onlineMusic/omni';
 
 // src/hooks/useSessionRestoreController.ts
 
@@ -94,6 +95,10 @@ export function useSessionRestoreController({
                 if (!lastSong) {
                     return;
                 }
+
+                // Leave unsupported sessions cached for a build that registers their provider.
+                if (lastSong.sourceRef?.kind === 'online' && !omni.canPlaySong(lastSong)) return;
+                lastQueue = lastQueue?.filter(song => song.sourceRef?.kind !== 'online' || omni.canPlaySong(song)) ?? null;
 
                 const containsLocalSnapshot = [lastSong, ...(lastQueue || [])].some(song => (
                     Boolean((song as any).isLocal)
