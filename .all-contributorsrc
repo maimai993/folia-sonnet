@@ -626,6 +626,33 @@
       "contributions": [
         "bug"
       ]
+    },
+    {
+      "login": "Moxng",
+      "name": "Moxng",
+      "avatar_url": "https://avatars.githubusercontent.com/u/206321779?v=4",
+      "profile": "https://github.com/Moxng",
+      "contributions": [
+        "bug"
+      ]
+    },
+    {
+      "login": "Timecube-6624",
+      "name": "Timecube-6624",
+      "avatar_url": "https://avatars.githubusercontent.com/u/215104219?v=4",
+      "profile": "https://github.com/Timecube-6624",
+      "contributions": [
+        "ideas"
+      ]
+    },
+    {
+      "login": "BAILING1145",
+      "name": "BAILING1145",
+      "avatar_url": "https://avatars.githubusercontent.com/u/121327954?v=4",
+      "profile": "https://github.com/BAILING1145",
+      "contributions": [
+        "ideas"
+      ]
     }
   ],
   "commit": false,
