@@ -97,6 +97,10 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Timecube-6624"><img src="https://avatars.githubusercontent.com/u/215104219?v=4?s=100" width="100px;" alt="Timecube-6624"/><br /><sub><b>Timecube-6624</b></sub></a><br /><a href="#ideas-Timecube-6624" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/BAILING1145"><img src="https://avatars.githubusercontent.com/u/121327954?v=4?s=100" width="100px;" alt="BAILING1145"/><br /><sub><b>BAILING1145</b></sub></a><br /><a href="#ideas-BAILING1145" title="Ideas, Planning, & Feedback">🤔</a></td>
     </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/phyrevue"><img src="https://avatars.githubusercontent.com/u/61339488?v=4?s=100" width="100px;" alt="phyrevue"/><br /><sub><b>phyrevue</b></sub></a><br /><a href="#ideas-phyrevue" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/lotuswu2580-dev"><img src="https://avatars.githubusercontent.com/u/319242891?v=4?s=100" width="100px;" alt="lotuswu2580-dev"/><br /><sub><b>lotuswu2580-dev</b></sub></a><br /><a href="#ideas-lotuswu2580-dev" title="Ideas, Planning, & Feedback">🤔</a></td>
+    </tr>
   </tbody>
 </table>
 
