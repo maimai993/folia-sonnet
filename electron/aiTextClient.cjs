@@ -230,7 +230,7 @@ function extractResponseContentText(message) {
  * used on providers that support structured outputs; everywhere else they are ignored and the
  * request falls back to plain JSON mode.
  */
-function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, maxTokens, extraParams) {
+function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, maxTokens, extraParams, stream) {
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: sourcePrompt },
@@ -245,6 +245,8 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
     ? { [provider === 'openai' ? 'max_completion_tokens' : 'max_tokens']: maxTokens }
     : {};
   const reasoning = extraParams || {};
+  // Only the bare flag; no stream_options, to keep the surface other providers must accept minimal.
+  const streaming = stream === true ? { stream: true } : {};
 
   if (schema && schemaName && providerSupportsStructuredOutputs(provider)) {
     return {
@@ -253,6 +255,7 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
       temperature,
       ...limit,
       ...reasoning,
+      ...streaming,
       response_format: {
         type: 'json_schema',
         json_schema: { name: schemaName, strict: true, schema },
@@ -266,8 +269,170 @@ function buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourceP
     temperature,
     ...limit,
     ...reasoning,
+    ...streaming,
     response_format: { type: 'json_object' },
   };
+}
+
+/**
+ * Incremental reader for an OpenAI-style SSE chat-completions stream (pure, no I/O).
+ *
+ * The result must still be structured JSON, so nothing is surfaced until the stream ends: this only
+ * stitches `choices[0].delta.content` back into the same `{ choice, content }` shape a non-streamed
+ * response produces, and the caller feeds that through the identical validation path. `push` takes
+ * decoded text chunks of any size (lines may be split across chunks, line endings may be \n, \r\n or
+ * \r); `finish` flushes the tail and returns the outcome. A mid-stream `{"error":...}` event throws.
+ * `reasoning_content` is deliberately not appended to the answer, only remembered so an
+ * "all budget spent on reasoning" completion is diagnosed the same way as in the non-streamed case.
+ */
+function createOpenAIStreamAccumulator() {
+  let buffer = '';
+  let content = '';
+  let refusal = '';
+  let reasoning = '';
+  let finishReason = null;
+  let usage;
+  let sawData = false;
+  let done = false;
+  // Lines that are not SSE fields at all. Some proxies ignore `stream: true` and answer with one
+  // plain JSON body; this keeps that body so it can still be understood at the end.
+  let foreign = '';
+
+  const handleData = (payloadText) => {
+    sawData = true;
+    // Nothing after [DONE] belongs to the answer (some relays append usage or junk frames).
+    if (done) {
+      return;
+    }
+    if (payloadText === '[DONE]') {
+      done = true;
+      return;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(payloadText);
+    } catch {
+      return;
+    }
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+    if (payload.error) {
+      throw new Error(`OpenAI compatible API error (stream): ${extractProviderErrorMessage(payload) || JSON.stringify(payload.error)}`);
+    }
+    if (payload.usage && typeof payload.usage === 'object') {
+      usage = payload.usage;
+    }
+    const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+    if (!choice) {
+      return;
+    }
+    const delta = choice.delta;
+    if (delta && typeof delta === 'object') {
+      if (typeof delta.content === 'string') {
+        content += delta.content;
+      }
+      if (typeof delta.refusal === 'string') {
+        refusal += delta.refusal;
+      }
+      if (typeof delta.reasoning_content === 'string') {
+        reasoning += delta.reasoning_content;
+      }
+    }
+    if (typeof choice.finish_reason === 'string' && choice.finish_reason) {
+      finishReason = choice.finish_reason;
+    }
+  };
+
+  const handleLine = (line) => {
+    if (!line || line.startsWith(':')) {
+      return;
+    }
+    if (line.startsWith('data:')) {
+      handleData(line.slice(5).replace(/^ /, '').trim());
+      return;
+    }
+    if (/^(event|id|retry)(:|$)/.test(line)) {
+      return;
+    }
+    if (!sawData) {
+      foreign += `${line}\n`;
+    }
+  };
+
+  const drain = (final) => {
+    const lines = buffer.split(/\r\n|\n|\r/);
+    buffer = final ? '' : lines.pop();
+    for (const line of lines) {
+      handleLine(line);
+    }
+    if (final && buffer) {
+      handleLine(buffer);
+    }
+  };
+
+  return {
+    push(text) {
+      buffer += text;
+      drain(false);
+    },
+    finish() {
+      drain(true);
+
+      if (!sawData && foreign.trim().startsWith('{')) {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(foreign);
+        } catch {
+          // Not JSON either; fall through to the empty-completion diagnosis.
+        }
+        if (parsed && parsed.error) {
+          throw new Error(`OpenAI compatible API error (stream): ${extractProviderErrorMessage(parsed) || JSON.stringify(parsed.error)}`);
+        }
+        const choice = parsed && Array.isArray(parsed.choices) ? parsed.choices[0] : null;
+        if (choice) {
+          return { choice, usage: parsed.usage, content: extractResponseContentText(choice.message), done: true };
+        }
+      }
+
+      const message = { content };
+      if (refusal) {
+        message.refusal = refusal;
+      }
+      if (reasoning) {
+        message.reasoning_content = reasoning;
+      }
+      const choice = { finish_reason: finishReason, message };
+      return { choice, usage, content: extractResponseContentText(message), done };
+    },
+  };
+}
+
+/** Reads a fetch Response body through the accumulator above and returns the assembled outcome. */
+async function readOpenAIStreamResponse(response) {
+  const accumulator = createOpenAIStreamAccumulator();
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    accumulator.push(await response.text());
+    return accumulator.finish();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      accumulator.push(decoder.decode(value, { stream: true }));
+    }
+    accumulator.push(decoder.decode());
+    return accumulator.finish();
+  } catch (error) {
+    // Stop pulling bytes from the connection once the outcome is already an error.
+    reader.cancel().catch(() => {});
+    throw error;
+  }
 }
 
 /** One request. Returns the outcome instead of throwing, so the ladder above can decide. */
@@ -295,6 +460,14 @@ async function sendOpenAICompatible({ apiUrl, apiKey, body, customFetch, timeout
 
   if (!response.ok) {
     return { ok: false, status: response.status, errorText: await formatOpenAICompatibleError(response) };
+  }
+
+  if (body && body.stream === true) {
+    try {
+      return { ok: true, ...(await readOpenAIStreamResponse(response)) };
+    } catch (error) {
+      throw describeFetchFailure(error, timeoutMs, `Reading the response from ${apiUrl}`);
+    }
   }
 
   let data;
@@ -327,6 +500,7 @@ async function runOpenAICompatibleCompletion({ store, systemPrompt, sourcePrompt
   const model = resolveOpenAICompatibleModel(apiUrl, store.get('OPENAI_API_MODEL'));
   const temperature = resolveOpenAICompatibleTemperature(store.get('OPENAI_API_TEMPERATURE'));
   const provider = detectOpenAICompatibleProvider(apiUrl);
+  const stream = store.get('OPENAI_API_STREAM') === true;
 
   const attempts = disableReasoning ? REASONING_SUPPRESSION_ATTEMPTS : [{ params: {} }];
   const cacheKey = `${apiUrl}|${model}`;
@@ -346,11 +520,11 @@ async function runOpenAICompatibleCompletion({ store, systemPrompt, sourcePrompt
       ? { thinking: { type: 'disabled' }, ...params }
       : params;
     const body = buildOpenAICompatibleRequestBody(
-      model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, budget, reasoningParams,
+      model, provider, systemPrompt, sourcePrompt, temperature, schema, schemaName, budget, reasoningParams, stream,
     );
 
     const described = Object.keys(params).length ? Object.keys(params).join('+') : 'plain';
-    console.log(`[ai] POST ${apiUrl} model=${model} provider=${provider} reasoning=${described}`);
+    console.log(`[ai] POST ${apiUrl} model=${model} provider=${provider} reasoning=${described}${stream ? ' stream=on' : ''}`);
     const startedAt = Date.now();
     const result = await sendOpenAICompatible({ apiUrl, apiKey, body, customFetch, timeoutMs });
 
@@ -471,6 +645,7 @@ module.exports = {
   DEFAULT_OPENAI_MODEL,
   DEFAULT_OPENAI_TEMPERATURE,
   buildOpenAICompatibleRequestBody,
+  createOpenAIStreamAccumulator,
   describeEmptyCompletion,
   detectOpenAICompatibleProvider,
   extractResponseContentText,

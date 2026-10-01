@@ -2191,6 +2191,8 @@ export default {
     "openaiApiModelDesc": "例如 gpt-5.6-luna、gpt-4.1-mini、deepseek-v4-flash。",
     "openaiApiTemperature": "温度",
     "openaiApiTemperatureDesc": "范围为 0–2；留空时使用默认值 0.7。",
+    "openaiApiStream": "流式传输",
+    "openaiApiStreamDesc": "仅当提供商要求流式时开启；结果仍在完整接收后解析。",
     "geminiApiKeyDesc": "网易云 API 服务本地运行中",
     "openaiApiUrlDesc": "OpenAI 兼容接口不等于 OpenAI 官方接口，可以使用 DeepSeek 等兼容 OpenAI 格式的模型服务。",
     "save": "保存",

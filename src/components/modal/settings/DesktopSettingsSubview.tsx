@@ -33,6 +33,7 @@ type ElectronSettingsState = {
     OPENAI_API_URL: string;
     OPENAI_API_MODEL: string;
     OPENAI_API_TEMPERATURE: string;
+    OPENAI_API_STREAM: boolean;
     AI_PROVIDER: string;
     USE_SYSTEM_PROXY_FOR_AI: boolean;
     ENABLE_UPDATE_CHECK: boolean;
@@ -606,6 +607,20 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     />,
                                     t('options.openaiApiTemperatureDesc') || 'Range: 0–2. Defaults to 0.7 when left blank.',
                                 )}
+                                <div className="flex items-center justify-between gap-4 text-left">
+                                    <div className="space-y-1 min-w-0">
+                                        <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.openaiApiStream') || 'Streaming'}
+                                        </div>
+                                        <div className="text-[10px] opacity-45 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.openaiApiStreamDesc')}
+                                        </div>
+                                    </div>
+                                    {renderToggle(
+                                        electronSettings.OPENAI_API_STREAM === true,
+                                        () => setElectronSettings({ ...electronSettings, OPENAI_API_STREAM: !electronSettings.OPENAI_API_STREAM }),
+                                    )}
+                                </div>
                                 {renderField(
                                     t('options.openaiApiKey') || 'OpenAI API Key',
                                     <input

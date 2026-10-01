@@ -2056,6 +2056,8 @@ export default {
     "openaiApiModelDesc": "Diperlukan oleh banyak penyedia kompatibel OpenAI. Contoh: gpt-5.6-luna, gpt-4.1-mini, deepseek-v4-flash.",
     "openaiApiTemperature": "Temperatur",
     "openaiApiTemperatureDesc": "Rentang: 0–2. Default ke 0.7 bila dibiarkan kosong.",
+    "openaiApiStream": "Streaming",
+    "openaiApiStreamDesc": "Aktifkan hanya jika penyedia mewajibkan streaming; hasil tetap diurai setelah diterima sepenuhnya.",
     "geminiApiKeyDesc": "Backend API Netease berjalan lokal.",
     "openaiApiUrlDesc": "API yang kompatibel dengan OpenAI tidak selalu merupakan API resmi OpenAI. Anda dapat memakai penyedia dan model kompatibel seperti DeepSeek.",
     "save": "Simpan",

@@ -2190,6 +2190,8 @@ export default {
     "openaiApiModelDesc": "Required by many OpenAI-compatible providers. Examples: gpt-5.6-luna, gpt-4.1-mini, deepseek-v4-flash.",
     "openaiApiTemperature": "Temperature",
     "openaiApiTemperatureDesc": "Range: 0–2. Defaults to 0.7 when left blank.",
+    "openaiApiStream": "Streaming",
+    "openaiApiStreamDesc": "Turn on only if your provider requires streaming; the result is still parsed after it has been fully received.",
     "geminiApiKeyDesc": "Netease API backend runs locally.",
     "openaiApiUrlDesc": "An OpenAI-compatible API is not necessarily the official OpenAI API. You can use compatible providers and models such as DeepSeek.",
     "save": "Save",
