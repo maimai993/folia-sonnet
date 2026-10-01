@@ -1157,8 +1157,8 @@ online song. Use folium.net.fetch for network access.
 | 成员 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | `string` | Local provider id. |
-| `displayName` | `string` | Full name shown in source pickers. |
-| `shortName?` | `string` | Short badge name. |
+| `displayName` | `string` | Full name: the second line of the source's row in the home provider switcher. |
+| `shortName?` | `string` | Short name: the switcher row, the search overlay's source chip and the home placeholder title; its first character is the avatar badge. Defaults to `displayName`. |
 | `search?()` | `(query: string, page: { limit: number; offset: number }): Promise<{ items: FoliumProviderSong[]; hasMore: boolean; total?: number }>` | Search songs; `page` is offset-based. |
 | `getSong?()` | `(id: string): Promise<FoliumProviderSong \| null>` | One song by id. |
 | `getAudioUrl?()` | `(song: FoliumProviderSong, quality: FoliumAudioQuality): Promise<{ url: string; expiresAt?: number } \| null>` | A playable URL for the song at a quality. |

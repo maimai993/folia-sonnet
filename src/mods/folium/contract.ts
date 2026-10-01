@@ -1083,9 +1083,12 @@ export type FoliumAudioQuality = 'standard' | 'high' | 'lossless' | 'hires';
 export interface FoliumOmniProviderDef {
     /** Local provider id. */
     id: string;
-    /** Full name shown in source pickers. */
+    /** Full name: the second line of the source's row in the home provider switcher. */
     displayName: string;
-    /** Short badge name. */
+    /**
+     * Short name: the switcher row, the search overlay's source chip and the home placeholder title; its
+     * first character is the avatar badge. Defaults to `displayName`.
+     */
     shortName?: string;
     /** Search songs; `page` is offset-based. */
     search?(query: string, page: { limit: number; offset: number }): Promise<{ items: FoliumProviderSong[]; hasMore: boolean; total?: number }>;

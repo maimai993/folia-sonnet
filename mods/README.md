@@ -557,6 +557,15 @@ folium.experimental['omni.providers'].register({
   - TTML 的 `songPart` 标记优先于这两者。
 - 1.3 的 `{ lrc, translationLrc }` 仍然可用，按纯 LRC 解析，和 1.3 完全相同。这个形状从 1.4 起废弃，Folium 2 移除。
 
+注册的音源在界面上可以选为当前音源（1.4）：
+
+- 它出现在首页右下角的音源切换器里，标着「无需登录」，点一下就切过去。和切换内置音源一样，会先确认清空当前在线播放和队列。
+  - 切换器、搜索浮层的来源按钮显示 `shortName`，没有时显示 `displayName`；头像是它的首字母。
+- 切过去之后，首页搜索框和搜索浮层都搜这个音源。
+- 首页的歌单、专辑、电台三个标签禁用，显示「将在 Folium v2 支持」的占位和一个「搜索歌曲」按钮。曲库能力留给 Folium v2 完整的 provider 接口。
+- 模组被停用、加载失败或在网页版运行时，已选中的它会回到网易云，并且记住这个结果；重新启用模组后要再切一次。
+  这一点和[缺失条目](#缺失条目)里的歌词动画、背景不同，那些选择会保留。
+
 **`omni.hooks`**：`folium.experimental['omni.hooks'].on('lyricsResolved' | 'audioSourceResolved', handler)`，
 或者直接 `folium.events.on('omni.…')`（未选用时抛错）。
 
@@ -608,7 +617,7 @@ folium.experimental['omni.providers'].register({
 - 1.4 新增稳定的歌词原文接口，不依赖 `omni.providers` 也能用：
   - DTO：`FoliumLyricFormat`、`FoliumLyricsTrack`、`FoliumLyricsResult`、`FoliumParsedLyrics`。
   - 方法：`folium.lyrics.parse`。
-  - 实验接口 `omni.providers` 的 `getLyrics` 改为返回 `FoliumLyricsResult`。
+  - 实验接口 `omni.providers` 的 `getLyrics` 改为返回 `FoliumLyricsResult`；它注册的音源可以在首页切换器里选为当前音源。
   - **废弃**：`getLyrics` 的旧返回形状 `{ lrc, translationLrc }`（`FoliumLegacyLyricsResult`）。1.x 内照旧可用，Folium 2 移除。
   仓库里的样例已同步。
 
