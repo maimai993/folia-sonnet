@@ -2,7 +2,7 @@
 
 # Folium API 参考
 
-当前契约版本：**Folium 1.3**（运行时用 `folium.host.folium.minor` 做功能探测）。
+当前契约版本：**Folium 1.4**（运行时用 `folium.host.folium.minor` 做功能探测）。
 
 本文列出模组能用到的全部公开类型，内容直接来自契约文件 [`src/mods/folium/contract.ts`](../../src/mods/folium/contract.ts)，
 成员说明保留契约里的原文注释。平台规则（清单、权限、生命周期、安全模型）见 [Folium 规范](../../mods/README.md)，
@@ -17,7 +17,7 @@
 - **服务**：[FoliumPlaybackService](#foliumplaybackservice) · [FoliumFileHandle](#foliumfilehandle) · [FoliumIconOptions](#foliumiconoptions) · [FoliumUiService](#foliumuiservice) · [FoliumFetchInit](#foliumfetchinit) · [FoliumFetchResponse](#foliumfetchresponse) · [FoliumNetService](#foliumnetservice)
 - **共享工具**：[FoliumWordSegment](#foliumwordsegment) · [FoliumWordColorRange](#foliumwordcolorrange) · [FoliumLyricsHelpers](#foliumlyricshelpers) · [FoliumThemeHelpers](#foliumthemehelpers)
 - **参数 schema**：[FoliumParamType](#foliumparamtype) · [FoliumParamOption](#foliumparamoption) · [FoliumParam](#foliumparam) · [FoliumParamValues](#foliumparamvalues) · [FoliumParamAccess](#foliumparamaccess)
-- **数据结构**：[FoliumLyricRuby](#foliumlyricruby) · [FoliumLyricSyllable](#foliumlyricsyllable) · [FoliumLyricAlternateText](#foliumlyricalternatetext) · [FoliumWord](#foliumword) · [FoliumBackgroundVocal](#foliumbackgroundvocal) · [FoliumLineTimingClass](#foliumlinetimingclass) · [FoliumLineTransitionMode](#foliumlinetransitionmode) · [FoliumWordRevealMode](#foliumwordrevealmode) · [FoliumLineRenderHints](#foliumlinerenderhints) · [FoliumLine](#foliumline) · [FoliumTheme](#foliumtheme) · [FoliumSong](#foliumsong) · [FoliumPlaybackState](#foliumplaybackstate) · [FoliumPlaybackSnapshot](#foliumplaybacksnapshot)
+- **数据结构**：[FoliumLyricRuby](#foliumlyricruby) · [FoliumLyricSyllable](#foliumlyricsyllable) · [FoliumLyricAlternateText](#foliumlyricalternatetext) · [FoliumWord](#foliumword) · [FoliumBackgroundVocal](#foliumbackgroundvocal) · [FoliumLineTimingClass](#foliumlinetimingclass) · [FoliumLineTransitionMode](#foliumlinetransitionmode) · [FoliumWordRevealMode](#foliumwordrevealmode) · [FoliumLineRenderHints](#foliumlinerenderhints) · [FoliumLine](#foliumline) · [FoliumTheme](#foliumtheme) · [FoliumSong](#foliumsong) · [FoliumPlaybackState](#foliumplaybackstate) · [FoliumPlaybackSnapshot](#foliumplaybacksnapshot) · [FoliumLyricFormat](#foliumlyricformat) · [FoliumLyricsTrack](#foliumlyricstrack) · [FoliumLyricsResult](#foliumlyricsresult) · [FoliumLegacyLyricsResult](#foliumlegacylyricsresult) · [FoliumParsedLyrics](#foliumparsedlyrics)
 - **实验接口**：[FoliumProviderSong](#foliumprovidersong) · [FoliumAudioQuality](#foliumaudioquality) · [FoliumOmniProviderDef](#foliumomniproviderdef)
 - **基础类型**：[FOLIUM_VERSION](#folium_version) · [FoliumId](#foliumid) · [FoliumLabel](#foliumlabel) · [FoliumDisposer](#foliumdisposer)
 - **main 入口（Node）**：[api 对象](#main-入口node)
@@ -741,7 +741,7 @@ A fully read response (body at most 5 MB); `text` and `json` return synchronousl
 
 ## 共享工具
 
-`folium.lyrics` 与 `folium.theme`：内置歌词动画使用的同一批纯函数，主窗口与导出窗口都可用。
+`folium.lyrics` 与 `folium.theme`：内置歌词动画使用的同一批函数，主窗口与导出窗口都可用。`folium.lyrics.parse`（1.4）是唯一的异步方法，走本地歌词文件的解析流程。
 
 ### FoliumWordSegment
 
@@ -778,8 +778,9 @@ times and colors lines exactly as they do. Available in both contexts.
 | `getUpcomingLines()` | `(lines: readonly FoliumLine[], lineIndex: number, count?: number): FoliumLine[]` | Up to `count` (default 2) lines after the active one; empty when none is active. |
 | `buildWordColorRanges()` | `(fullText: string, wordColors: FoliumTheme['wordColors']): FoliumWordColorRange[]` | Non-overlapping keyword color spans of `fullText` for `theme.wordColors`. |
 | `resolveWordColor()` | `(wordText: string, wordColors: FoliumTheme['wordColors'], fallbackColor: string, options?: { cjkMatchMode?: 'target-contains-token' \| 'bidirectional-contains' \| 'exact' }): string` | The keyword color of one word, or `fallbackColor`. |
+| `parse()` | `(track: FoliumLyricsTrack): Promise<FoliumParsedLyrics>` | Folium 1.4: parses a lyric document with the host's local lyric file pipeline, off the main thread. Rejects with a TypeError (`invalid-lyrics-track`) when the track is malformed. |
 
-相关：[FoliumLine](#foliumline) · [FoliumWordSegment](#foliumwordsegment) · [FoliumTheme](#foliumtheme) · [FoliumWordColorRange](#foliumwordcolorrange)
+相关：[FoliumLine](#foliumline) · [FoliumWordSegment](#foliumwordsegment) · [FoliumTheme](#foliumtheme) · [FoliumWordColorRange](#foliumwordcolorrange) · [FoliumLyricsTrack](#foliumlyricstrack) · [FoliumParsedLyrics](#foliumparsedlyrics)
 
 ### FoliumThemeHelpers
 
@@ -1058,6 +1059,70 @@ The whole playback picture, as main entries read it with `api.runtime.getPlaybac
 
 相关：[FoliumSong](#foliumsong) · [FoliumPlaybackState](#foliumplaybackstate) · [FoliumLine](#foliumline) · [FoliumTheme](#foliumtheme)
 
+### FoliumLyricFormat
+
+Folium 1.4: lyric formats the host parses, the same parsers as local lyric files. These and nothing
+else: lyrics in any other form (a platform's JSON, SRT, ASS, a custom word-timing scheme) are the mod's
+to convert into one of them first. QRC and KRC are the decrypted plain text; the host does not decrypt.
+
+The format is never sniffed, and the content is not checked against it: an `lrc` track that carries
+`<mm:ss.xx>` word tags is read as plain LRC (name it `enhanced-lrc`), and mislabelled or malformed text
+parses to no lines or to garbled ones. `folium.lyrics.parse` runs the same pipeline, to check a conversion.
+
+```ts
+type FoliumLyricFormat = 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'ttml' | 'vtt' | 'awlrc'
+```
+
+### FoliumLyricsTrack
+
+Folium 1.4: one lyric document in its raw text, parsed by the host's local lyric file pipeline.
+Each text is at most 1,048,576 characters.
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| `format` | `FoliumLyricFormat` | How to read `text`. |
+| `text` | `string` | The raw lyric document. |
+| `translationText?` | `string` | Translation lines, matched to `text` by start time like a local `.t.lrc` file (VTT cues for a `vtt` track). Ignored for `ttml`, which carries its translations inline. |
+| `romanizationText?` | `string` | Romanization lines, matched like `translationText`. Ignored for `ttml`. |
+
+相关：[FoliumLyricFormat](#foliumlyricformat)
+
+### FoliumLyricsResult
+
+Folium 1.4: lyrics a provider hands the host. With both tracks the host shows `wordByWord`, and falls
+back to `main` when it is missing or parses to no lines; a `wordByWord` track without its own
+translation or romanization borrows the ones on `main`.
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| `main?` | `FoliumLyricsTrack` | Line-timed lyrics, also the fallback for `wordByWord`. |
+| `wordByWord?` | `FoliumLyricsTrack` | Word-timed lyrics, shown in preference to `main`. |
+| `isPureMusic?` | `boolean` | An instrumental: the host shows its pure-music view and ignores both tracks. |
+| `chorusRanges?` | `Array<{ startTime: number; endTime: number }>` | Chorus spans in seconds on the lyric clock; lines inside one get the chorus effect. Without them the host detects choruses from repeated lines, and TTML `songPart` markers take precedence over both. At most 64 are kept; a span needs finite times with `0 <= startTime < endTime`. |
+
+相关：[FoliumLyricsTrack](#foliumlyricstrack)
+
+### FoliumLegacyLyricsResult
+
+The Folium 1.3 `getLyrics` answer: plain LRC, parsed as plain LRC. Deprecated in Folium 1.4 in favor of
+FoliumLyricsResult; Folium 2 drops it.
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| `lrc` | `string` | LRC text. |
+| `translationLrc?` | `string` | Translation LRC. |
+
+### FoliumParsedLyrics
+
+Folium 1.4: what `folium.lyrics.parse` returns.
+
+| 成员 | 类型 | 说明 |
+| --- | --- | --- |
+| `lines` | `readonly FoliumLine[]` | The parsed lines; empty when the text holds none. The host's lyric display filter is not applied. |
+| `isWordByWord` | `boolean` | Whether the lines carry real word timings rather than timings the host estimated. |
+
+相关：[FoliumLine](#foliumline)
+
 ## 实验接口
 
 需要在 `mod.json` 的 `experimental` 里选用，经 `folium.experimental[name]` 访问；任何 minor 版本都可能变化。
@@ -1092,14 +1157,14 @@ online song. Use folium.net.fetch for network access.
 | 成员 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | `string` | Local provider id. |
-| `displayName` | `string` | Full name shown in source pickers. |
-| `shortName?` | `string` | Short badge name. |
+| `displayName` | `string` | Full name: the second line of the source's row in the home provider switcher. |
+| `shortName?` | `string` | Short name: the switcher row, the search overlay's source chip and the home placeholder title; its first character is the avatar badge. Defaults to `displayName`. |
 | `search?()` | `(query: string, page: { limit: number; offset: number }): Promise<{ items: FoliumProviderSong[]; hasMore: boolean; total?: number }>` | Search songs; `page` is offset-based. |
 | `getSong?()` | `(id: string): Promise<FoliumProviderSong \| null>` | One song by id. |
 | `getAudioUrl?()` | `(song: FoliumProviderSong, quality: FoliumAudioQuality): Promise<{ url: string; expiresAt?: number } \| null>` | A playable URL for the song at a quality. |
-| `getLyrics?()` | `(song: FoliumProviderSong): Promise<{ lrc: string; translationLrc?: string } \| null>` | LRC text (plus optional translation LRC); the host parses it. |
+| `getLyrics?()` | `(song: FoliumProviderSong): Promise<FoliumLyricsResult \| FoliumLegacyLyricsResult \| null>` | Lyrics for a song, as raw text the host parses (FoliumLyricsResult, Folium 1.4), or the deprecated Folium 1.3 plain-LRC shape. Null when there are none. |
 
-相关：[FoliumProviderSong](#foliumprovidersong) · [FoliumAudioQuality](#foliumaudioquality)
+相关：[FoliumProviderSong](#foliumprovidersong) · [FoliumAudioQuality](#foliumaudioquality) · [FoliumLyricsResult](#foliumlyricsresult) · [FoliumLegacyLyricsResult](#foliumlegacylyricsresult)
 
 ## 基础类型
 
@@ -1108,7 +1173,7 @@ online song. Use folium.net.fetch for network access.
 The Folium version this host implements; mods read it at runtime as `folium.host.folium`.
 
 ```ts
-const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 3 })
+const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 4 })
 ```
 
 ### FoliumId

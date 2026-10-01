@@ -59,6 +59,8 @@ export interface RawLocalFileLyric {
     type: 'local';
     lrcContent: string;
     tLrcContent?: string;
+    // Separate romanization track; wins over one split out of a combined timeline, like tLrcContent.
+    rLrcContent?: string;
     formatHint?: LyricParseFormat;
 }
 

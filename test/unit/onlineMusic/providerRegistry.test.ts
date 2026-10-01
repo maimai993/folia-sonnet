@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OnlineMusicProvider, ProviderCapabilities } from '@/types/onlineMusic';
 import {
     canPlayOnlineMusicSong,
     getOnlineMusicProvider,
+    getOnlineMusicProviderRegistryVersion,
     providerSupports,
     registerOnlineMusicProvider,
     requireOnlineMusicProvider,
+    subscribeOnlineMusicProviderRegistry,
     unregisterOnlineMusicProvider,
 } from '@/services/onlineMusic/providerRegistry';
 import { OnlineProviderError } from '@/types/onlineMusic';
@@ -92,6 +94,27 @@ describe('online music provider registry', () => {
         expect(providerSupports(partialProvider, 'search')).toBe(true);
         expect(providerSupports(partialProvider, 'playback')).toBe(false);
         expect(canPlayOnlineMusicSong(partialProvider.normalizeSong({ id: 'HASH' }))).toBe(false);
+    });
+
+    it('announces registrations and removals to subscribers until they unsubscribe', () => {
+        const listener = vi.fn();
+        const unsubscribe = subscribeOnlineMusicProviderRegistry(listener);
+        const before = getOnlineMusicProviderRegistryVersion();
+
+        registerOnlineMusicProvider(partialProvider);
+        unregisterOnlineMusicProvider('partial-test');
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 2);
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        // Removing an id that is not registered changes nothing, so nobody is told.
+        unregisterOnlineMusicProvider('partial-test');
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 2);
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        unsubscribe();
+        registerOnlineMusicProvider(partialProvider);
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 3);
+        expect(listener).toHaveBeenCalledTimes(2);
     });
 
     it('uses a standardized unavailable error for an unregistered provider', () => {

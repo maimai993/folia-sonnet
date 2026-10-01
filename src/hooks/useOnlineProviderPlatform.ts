@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
+import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import type { OnlineProviderId, ProviderAccountSummary } from '../types/onlineMusic';
 import { useStableCallbacks } from './useStableCallbacks';
 
@@ -76,7 +77,11 @@ export const useOnlineProviderPlatform = (
         setActiveProviderId: state.setActiveProviderId,
     })));
 
-    const providers = useMemo<ProviderAccountSummary[]>(() => omni.getProviderSummaries(), [accounts]);
+    // Folium mods add and remove providers while the app runs; the registry version re-reads the list
+    // then, so a newly enabled mod source shows up and one that went away stops being selectable.
+    const registryVersion = useSyncExternalStore(omni.subscribeProviders, omni.getProviderRegistryVersion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- both are change signals for the omni read
+    const providers = useMemo<ProviderAccountSummary[]>(() => omni.getProviderSummaries(), [accounts, registryVersion]);
     const activeProviderId = providers.some(provider => provider.providerId === storedProviderId)
         ? storedProviderId
         : 'netease';
@@ -84,6 +89,10 @@ export const useOnlineProviderPlatform = (
     useEffect(() => {
         if (storedProviderId !== activeProviderId) setActiveProviderId(activeProviderId);
     }, [activeProviderId, setActiveProviderId, storedProviderId]);
+    const followOnlineProvider = useSearchNavigationStore(state => state.followOnlineProvider);
+    useEffect(() => {
+        followOnlineProvider(activeProviderId);
+    }, [activeProviderId, followOnlineProvider]);
     const refreshProvider = useCallback(async (providerId: OnlineProviderId) => {
         return await refreshers[providerId]?.();
     }, [refreshers]);

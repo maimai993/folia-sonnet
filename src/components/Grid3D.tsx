@@ -25,10 +25,11 @@ import { usePersonalFmModeStore } from '../stores/usePersonalFmModeStore';
 import { getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import OnlineProviderSwitcher from './app/home/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from './app/home/OnlineProviderConnectPanel';
+import OnlineProviderAccountlessPanel from './app/home/OnlineProviderAccountlessPanel';
 import OnlineProviderLoginModal from './app/home/OnlineProviderLoginModal';
 import { buildQrLoginDiagnosticsProps } from './app/home/buildQrLoginDiagnosticsProps';
-import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccountView';
-import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { canSwitchToProviderDirectly, resolveOnlineProviderAccountView } from './app/home/onlineProviderAccountView';
+import type { MediaId, OmniProviderCapabilities, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../types/onlineMusic';
 import qqIcon from '../assets/providers/qq.svg';
 import wechatIcon from '../assets/providers/wechat.svg';
 import { useHomeLayoutSettingsStore } from '../stores/useHomeLayoutSettingsStore';
@@ -46,6 +47,30 @@ const LOGIN_COPY_BY_PROVIDER: Record<string, { title: string; note: string }> = 
     qq: { title: 'home.loginTitleQq', note: 'home.loginNoteQq' },
 };
 const NETEASE_LOGIN_COPY = { title: 'home.loginTitle', note: 'home.loginNote' };
+
+const NO_PROVIDER_CAPABILITIES: OmniProviderCapabilities = {
+    search: false,
+    playback: false,
+    lyrics: false,
+    auth: false,
+    userLibrary: false,
+    playlists: false,
+    albums: false,
+    artists: false,
+    recommendations: false,
+    mutations: false,
+    wordByWordLyrics: false,
+};
+
+// The platform only hands out registered provider ids, but a Folium mod can remove its provider at any
+// time; reading a provider that just went away must not throw during render and take the home view down.
+const readProviderCapabilities = (providerId: string): OmniProviderCapabilities => {
+    try {
+        return omni.getProviderCapabilities(providerId);
+    } catch {
+        return NO_PROVIDER_CAPABILITIES;
+    }
+};
 
 // provider 只声明 iconKey 字符串，静态资源的映射留在 UI 层，services 层不碰 .svg。
 const LOGIN_METHOD_ICONS: Record<string, string> = {
@@ -177,7 +202,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const isOnlineTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
     const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
     const activeProviderSummary = onlineProviderPlatform?.activeProvider;
-    const activeProviderCapabilities = omni.getProviderCapabilities(activeProviderId);
+    const activeProviderCapabilities = readProviderCapabilities(activeProviderId);
     // The FM card doubles as the mode readout: the card is the only place the current mode shows
     // up outside the player, and the picker can change it while this grid stays mounted.
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);
@@ -216,6 +241,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const gridRootRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const [isLocalImporting, setIsLocalImporting] = useState(false);
     const [isLocalPlaylistImporting, setIsLocalPlaylistImporting] = useState(false);
     const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
@@ -333,6 +359,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         // 有多种登录方式时先停在步骤一，选定之前不向后端要二维码。
         if (methods.length > 0) return;
         await startQrLogin(providerId);
+    };
+
+    // Shared by the switcher and the connect panel: switch now when there is nothing to sign in to.
+    const selectProvider = (provider: ProviderAccountSummary) => {
+        if (canSwitchToProviderDirectly(provider)) {
+            void onlineProviderPlatform?.switchProvider(provider.providerId);
+        } else {
+            void initLogin(provider.providerId);
+        }
     };
 
     // 网易云的本地后端起不来时，二维码请求必然失败；弹窗改为直接暴露原因和重启入口。
@@ -846,6 +881,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 />
                             )}
                             <input
+                                ref={searchInputRef}
                                 type="text"
                                 placeholder={homeViewTab === 'local' ? t('home.searchLocal') : homeViewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                 value={searchQuery}
@@ -860,7 +896,13 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
-                {isOnlineTab && activeAccountView === 'resolving' ? (
+                {isOnlineTab && activeAccountView === 'accountless' ? (
+                    <OnlineProviderAccountlessPanel
+                        providerLabel={activeProviderLabel}
+                        isDaylight={isDaylight}
+                        onSearch={() => searchInputRef.current?.focus()}
+                    />
+                ) : isOnlineTab && activeAccountView === 'resolving' ? (
                     <div className="flex flex-1 w-full items-center justify-center" aria-busy="true">
                         <Loader2 className="animate-spin opacity-30" size={28} />
                     </div>
@@ -874,16 +916,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 provider: activeProviderSummary?.shortName || activeProviderSummary?.displayName || activeProviderId,
                             })
                             : t('home.guestPrompt')}
-                        getActionLabel={provider => provider.status === 'authenticated'
+                        getActionLabel={provider => canSwitchToProviderDirectly(provider)
                             ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
                             : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
-                        onSelect={provider => {
-                            if (provider.status === 'authenticated') {
-                                void onlineProviderPlatform?.switchProvider(provider.providerId);
-                            } else {
-                                void initLogin(provider.providerId);
-                            }
-                        }}
+                        onSelect={selectProvider}
                     />
                 ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
@@ -1023,13 +1059,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     activeProviderId={activeProviderId}
                     isDaylight={isDaylight}
                     onBackToPlayer={onBackToPlayer}
-                    onSelect={provider => {
-                        if (provider.status === 'authenticated') {
-                            void onlineProviderPlatform.switchProvider(provider.providerId);
-                        } else {
-                            void initLogin(provider.providerId);
-                        }
-                    }}
+                    onSelect={selectProvider}
                     onLogout={provider => {
                         void onlineProviderPlatform.logoutProvider(provider.providerId);
                     }}
