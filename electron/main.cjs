@@ -9,6 +9,13 @@ const { createStageApi } = require('./stageApi.cjs');
 const { createModSystem } = require('./modSystem/modSystem.cjs');
 const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
+const {
+  REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY,
+  REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY,
+  readRemoteControlWindowSettings,
+  shouldShowRemoteUnlockTrayItem,
+  applyRemoteControlMouseIgnore,
+} = require('./remoteControlWindowSettings.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
 const { requestWallpaperEntryConfirmation } = require('./wallpaperEntryRequest.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
@@ -1567,6 +1574,7 @@ const mainLocale = {
     trayShowWindow: '显示窗口',
     trayHideWindow: '隐藏窗口',
     trayOpenRemote: '遥控窗口',
+    trayUnlockRemote: '解锁遥控窗口',
     trayTransparentBackground: '透明背景',
     trayToggleClickThrough: '点击穿透',
     trayAlwaysOnTop: '窗口置顶',
@@ -1588,6 +1596,7 @@ const mainLocale = {
     trayShowWindow: 'Show Window',
     trayHideWindow: 'Hide Window',
     trayOpenRemote: 'Remote Window',
+    trayUnlockRemote: 'Unlock Remote Window',
     trayTransparentBackground: 'Transparent Background',
     trayToggleClickThrough: 'Click-Through',
     trayAlwaysOnTop: 'Always on Top',
@@ -1609,6 +1618,7 @@ const mainLocale = {
     trayShowWindow: 'Tampilkan Jendela',
     trayHideWindow: 'Sembunyikan Jendela',
     trayOpenRemote: 'Jendela Remote',
+    trayUnlockRemote: 'Buka Kunci Jendela Remote',
     trayTransparentBackground: 'Latar Belakang Transparan',
     trayToggleClickThrough: 'Click-Through',
     trayAlwaysOnTop: 'Selalu di Atas',
@@ -1759,6 +1769,8 @@ let latestObsBrowserSourceAudio = null;
 const obsBrowserSourceClients = new Set();
 let remoteControlAlwaysOnTop = false;
 let remoteControlSkipTaskbarEnabled = false;
+let remoteControlHideTitlebarEnabled = false;
+let remoteControlClickThroughEnabled = false;
 let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
@@ -1933,6 +1945,8 @@ function getPublicSettings() {
     [HIDE_TASKBAR_ICON_SETTING_KEY]: readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false),
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
     [REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY, false),
+    [REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY, false),
+    [REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY, false),
     [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
     [DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY]: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
@@ -2004,6 +2018,11 @@ function broadcastObsBrowserSourceStatus() {
 mainWindowSkipTaskbarEnabled = readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false);
 remoteControlAlwaysOnTop = readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true);
 remoteControlSkipTaskbarEnabled = readStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY, false);
+{
+  const remoteWindowSettings = readRemoteControlWindowSettings(readStoredBoolean);
+  remoteControlHideTitlebarEnabled = remoteWindowSettings.hideTitlebar;
+  remoteControlClickThroughEnabled = remoteWindowSettings.clickThrough;
+}
 mainWindowAlwaysOnTop = readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false);
 
 const stageApi = createStageApi({
@@ -2414,6 +2433,38 @@ function applyRemoteControlSkipTaskbar(win) {
   return remoteControlSkipTaskbarEnabled;
 }
 
+function buildRemoteControlWindowSettings() {
+  return {
+    hideTitlebar: remoteControlHideTitlebarEnabled,
+    clickThrough: remoteControlClickThroughEnabled,
+  };
+}
+
+// Applies click-through to the remote window and tells its renderer about both switches.
+function applyRemoteControlWindowPresentation(win) {
+  if (!win || win.isDestroyed()) {
+    return false;
+  }
+
+  applyRemoteControlMouseIgnore(win, remoteControlClickThroughEnabled);
+  if (!win.webContents.isDestroyed()) {
+    win.webContents.send('remote-control-window-settings-changed', buildRemoteControlWindowSettings());
+  }
+  return true;
+}
+
+// Tray / command palette unlock path: persist, apply, and let the main renderer's store follow.
+function setRemoteControlClickThroughEnabled(enabled) {
+  remoteControlClickThroughEnabled = Boolean(enabled);
+  store.set(REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY, remoteControlClickThroughEnabled);
+  applyRemoteControlWindowPresentation(remoteControlWindow);
+  refreshTrayMenu();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('wallpaper-mode-changed', getPublicSettings());
+  }
+  return remoteControlClickThroughEnabled;
+}
+
 function applyMainWindowAlwaysOnTop() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return false;
@@ -2544,6 +2595,12 @@ function refreshTrayMenu() {
         }
       },
     },
+    ...(shouldShowRemoteUnlockTrayItem({ remoteOpen, clickThrough: remoteControlClickThroughEnabled }) ? [{
+      label: locale.trayUnlockRemote,
+      click: () => {
+        setRemoteControlClickThroughEnabled(false);
+      },
+    }] : []),
     { type: 'separator' },
     {
       label: locale.trayDesktopLyricMode,
@@ -4706,6 +4763,7 @@ function createRemoteControlWindow() {
     remoteControlWindow.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(remoteControlWindow);
     applyRemoteControlSkipTaskbar(remoteControlWindow);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
     remoteControlWindow.show();
     remoteControlWindow.focus();
     broadcastPlaybackSyncBridgeStatus();
@@ -4752,11 +4810,13 @@ function createRemoteControlWindow() {
     win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
   });
   applyRemoteControlAlwaysOnTop(win);
+  applyRemoteControlMouseIgnore(win, remoteControlClickThroughEnabled);
   loadAppEntry(win, { remote: '1' });
 
   win.once('ready-to-show', () => {
     win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(win);
+    applyRemoteControlWindowPresentation(win);
     if (latestRemoteControlSnapshot) {
       sendRemoteControlSnapshot(latestRemoteControlSnapshot);
     }
@@ -5626,6 +5686,8 @@ ipcMain.handle('save-settings', (event, key, value) => {
     key === HIDE_TASKBAR_ICON_SETTING_KEY ||
     key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY ||
     key === REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY ||
+    key === REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY ||
+    key === REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY ||
     key === TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY ||
     key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY ||
     key === VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY ||
@@ -5793,6 +5855,17 @@ ipcMain.handle('save-settings', (event, key, value) => {
   if (key === REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY) {
     remoteControlSkipTaskbarEnabled = Boolean(nextValue);
     applyRemoteControlSkipTaskbar(remoteControlWindow);
+  }
+
+  if (key === REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY) {
+    remoteControlHideTitlebarEnabled = Boolean(nextValue);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
+  }
+
+  if (key === REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY) {
+    remoteControlClickThroughEnabled = Boolean(nextValue);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
+    refreshTrayMenu();
   }
 
   if (key === STAGE_MODE_SOURCE_SETTING_KEY) {
@@ -6482,6 +6555,14 @@ ipcMain.handle('remote-control-set-always-on-top', (event, nextAlwaysOnTop) => {
   applyRemoteControlAlwaysOnTop(remoteControlWindow);
 
   return remoteControlAlwaysOnTop;
+});
+
+ipcMain.handle('remote-control-get-window-settings', (event) => {
+  if (!isTrustedRemoteControlContents(event.sender) && !isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to read remote control window settings.');
+  }
+
+  return buildRemoteControlWindowSettings();
 });
 
 ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {

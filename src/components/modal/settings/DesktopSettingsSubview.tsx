@@ -55,10 +55,14 @@ export type DesktopSettingsChrome = {
 export type DesktopSettingsPreferences = {
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
+    hideRemoteControlTitlebar: boolean;
+    remoteControlClickThrough: boolean;
     minimizeToTray: boolean;
     closeToTray: boolean;
     onToggleHideTaskbarIcon: (enabled: boolean) => void;
     onToggleHideRemoteControlTaskbarIcon: (enabled: boolean) => void;
+    onToggleHideRemoteControlTitlebar: (enabled: boolean) => void;
+    onToggleRemoteControlClickThrough: (enabled: boolean) => void;
     onToggleMinimizeToTray: (enabled: boolean) => void;
     onToggleCloseToTray: (enabled: boolean) => void;
     onToggleOpenPlayerOnLaunch: (enabled: boolean) => void;
@@ -111,10 +115,14 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
     const {
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
+        hideRemoteControlTitlebar,
+        remoteControlClickThrough,
         minimizeToTray,
         closeToTray,
         onToggleHideTaskbarIcon,
         onToggleHideRemoteControlTaskbarIcon,
+        onToggleHideRemoteControlTitlebar,
+        onToggleRemoteControlClickThrough,
         onToggleMinimizeToTray,
         onToggleCloseToTray,
         onToggleOpenPlayerOnLaunch,
@@ -249,6 +257,16 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                         t('options.hideRemoteControlTaskbarIcon'),
                         t('options.hideRemoteControlTaskbarIconDesc'),
                         renderToggle(hideRemoteControlTaskbarIcon, () => onToggleHideRemoteControlTaskbarIcon(!hideRemoteControlTaskbarIcon)),
+                    )}
+                    {renderRow(
+                        t('options.hideRemoteControlTitlebar'),
+                        t('options.hideRemoteControlTitlebarDesc'),
+                        renderToggle(hideRemoteControlTitlebar, () => onToggleHideRemoteControlTitlebar(!hideRemoteControlTitlebar)),
+                    )}
+                    {renderRow(
+                        t('options.remoteControlClickThrough'),
+                        t('options.remoteControlClickThroughDesc'),
+                        renderToggle(remoteControlClickThrough, () => onToggleRemoteControlClickThrough(!remoteControlClickThrough)),
                     )}
                     {renderRow(
                         t('options.hideFullscreenButton'),

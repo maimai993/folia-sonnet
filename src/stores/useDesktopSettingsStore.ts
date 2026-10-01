@@ -24,6 +24,10 @@ export const HIDE_TASKBAR_ICON_STORAGE_KEY = 'hide_taskbar_icon';
 
 export const REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY = 'remote_control_skip_taskbar';
 
+export const REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY = 'remote_control_hide_titlebar';
+
+export const REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY = 'remote_control_click_through';
+
 export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 
 // macOS-only: auto-hide the Dock while a wallpaper session is active. On by default (a bottom Dock
@@ -46,6 +50,10 @@ export type DesktopSettingsState = {
     modSystemEnabled: boolean;
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
+    /** Remote control window: never reveal the top floating window-control bar. */
+    hideRemoteControlTitlebar: boolean;
+    /** Remote control window ignores the mouse (main process owns it; unlock from tray / palette). */
+    remoteControlClickThrough: boolean;
     wallpaperMode: boolean;
     /** Transient (never persisted): the "enter wallpaper mode?" confirmation is on screen. */
     wallpaperEntryConfirmOpen: boolean;
@@ -53,7 +61,7 @@ export type DesktopSettingsState = {
      *  is hidden automatically; switching it off overrides the automatic rule. */
     wallpaperMacAutohideDock: boolean;
     openPlayerOnLaunch: boolean;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; wallpaper_mac_autohide_dock?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; REMOTE_CONTROL_HIDE_TITLEBAR?: unknown; REMOTE_CONTROL_CLICK_THROUGH?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; wallpaper_mode?: unknown; wallpaper_mac_autohide_dock?: unknown; }) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleCloseToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
@@ -61,6 +69,8 @@ export type DesktopSettingsState = {
     handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
     handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
+    handleToggleHideRemoteControlTitlebar: (enable: boolean) => void;
+    handleToggleRemoteControlClickThrough: (enable: boolean) => void;
     /**
      * The user-facing wallpaper switch (settings card, command palette, tray request). Leaving
      * applies at once; entering only opens the confirmation and waits for confirmWallpaperEntry.
@@ -82,6 +92,8 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, false),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
+    hideRemoteControlTitlebar: getStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY, false),
+    remoteControlClickThrough: getStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
     wallpaperEntryConfirmOpen: false,
     wallpaperMacAutohideDock: getStoredBoolean(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, true),
@@ -115,6 +127,14 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         if (typeof settings.REMOTE_CONTROL_SKIP_TASKBAR === 'boolean') {
             patch.hideRemoteControlTaskbarIcon = settings.REMOTE_CONTROL_SKIP_TASKBAR;
             setStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, settings.REMOTE_CONTROL_SKIP_TASKBAR);
+        }
+        if (typeof settings.REMOTE_CONTROL_HIDE_TITLEBAR === 'boolean') {
+            patch.hideRemoteControlTitlebar = settings.REMOTE_CONTROL_HIDE_TITLEBAR;
+            setStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY, settings.REMOTE_CONTROL_HIDE_TITLEBAR);
+        }
+        if (typeof settings.REMOTE_CONTROL_CLICK_THROUGH === 'boolean') {
+            patch.remoteControlClickThrough = settings.REMOTE_CONTROL_CLICK_THROUGH;
+            setStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY, settings.REMOTE_CONTROL_CLICK_THROUGH);
         }
         if (typeof settings.wallpaper_mode === 'boolean') {
             patch.wallpaperMode = settings.wallpaper_mode;
@@ -197,6 +217,20 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
             void window.electron.saveSettings('REMOTE_CONTROL_SKIP_TASKBAR', enable);
         }
     },
+    handleToggleHideRemoteControlTitlebar: (enable) => {
+        setStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY, enable);
+        set({ hideRemoteControlTitlebar: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('REMOTE_CONTROL_HIDE_TITLEBAR', enable);
+        }
+    },
+    handleToggleRemoteControlClickThrough: (enable) => {
+        setStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY, enable);
+        set({ remoteControlClickThrough: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('REMOTE_CONTROL_CLICK_THROUGH', enable);
+        }
+    },
     handleToggleWallpaperMode: (enable) => {
         // Entering sinks the window under the desktop and takes the keyboard away, so it asks
         // first. Startup restore never lands here: it arrives through setDesktopPreferenceSnapshot.
@@ -265,6 +299,8 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     modSystemEnabled: state.modSystemEnabled,
     hideTaskbarIcon: state.hideTaskbarIcon,
     hideRemoteControlTaskbarIcon: state.hideRemoteControlTaskbarIcon,
+    hideRemoteControlTitlebar: state.hideRemoteControlTitlebar,
+    remoteControlClickThrough: state.remoteControlClickThrough,
     wallpaperMode: state.wallpaperMode,
     wallpaperMacAutohideDock: state.wallpaperMacAutohideDock,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
@@ -275,6 +311,8 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     handleTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
     handleToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
     handleToggleHideRemoteControlTaskbarIcon: state.handleToggleHideRemoteControlTaskbarIcon,
+    handleToggleHideRemoteControlTitlebar: state.handleToggleHideRemoteControlTitlebar,
+    handleToggleRemoteControlClickThrough: state.handleToggleRemoteControlClickThrough,
     handleToggleWallpaperMode: state.handleToggleWallpaperMode,
     handleToggleWallpaperMacAutohideDock: state.handleToggleWallpaperMacAutohideDock,
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,

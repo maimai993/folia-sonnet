@@ -321,6 +321,28 @@ export const settingsCommands: CommandPaletteCommand[] = [
         context => context.settings.toggleCloseToTray(),
         { platform: ['electron'] },
     ),
+    createToggleCommand(
+        'desktop-toggle-remote-control-hide-titlebar',
+        'settings',
+        'Remote control: hide top floating bar',
+        'Toggle the remote control window top floating window-control bar',
+        ['remote control titlebar', 'remote window titlebar', 'hide remote titlebar', '遥控窗口悬浮栏', '隐藏遥控悬浮栏', '隐藏顶部悬浮栏'],
+        context => context.settings.toggleHideRemoteControlTitlebar(),
+        { platform: ['electron'] },
+    ),
+    {
+        // Pairs with the remote control click-through switch: while the window ignores the mouse this is the way back in.
+        id: 'desktop-unlock-remote-control',
+        platform: ['electron'],
+        group: 'settings',
+        title: 'Unlock remote control window',
+        description: 'Turn off remote control click-through so the window can be used and moved again',
+        keywords: ['unlock remote control', 'remote click through', 'remote window click-through', '解锁远程控制', '解锁遥控窗口', '遥控窗口点击穿透', '取消点击穿透'],
+        execute: (_input, context) => {
+            context.settings.unlockRemoteControl();
+            return true;
+        },
+    },
     createSettingsCommand('settings-graphics', 'Graphics settings', 'Open static mode, frame rate cap, Linux glow fix and reduced motion', ['graphics', 'performance', 'frame rate', 'fps', 'rendering', '图形', '图形设置', '性能', '帧率', '渲染'], 'options', 'graphics'),
     createSettingsCommand('settings-mods', 'Mod settings', 'Open the mod system switch and the installed mods', ['mod manager', 'mod system', 'plugins', '模组设置', '模组系统', '插件'], 'options', 'mods', { platform: ['electron'] }),
     createSettingsCommand('settings-lab', 'Lab settings', 'Open experimental settings', ['lab', 'experimental', '实验', '实验室'], 'options', 'lab'),

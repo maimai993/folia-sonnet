@@ -105,6 +105,8 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "reduce_motion_settingsScroll",
   "reduce_motion_transitionOverlay",
   "reduce_motion_uiMicroMotion",
+  "remote_control_click_through",
+  "remote_control_hide_titlebar",
   "remote_control_skip_taskbar",
   "show_harmony_subtitle",
   "show_home_tab_albums",

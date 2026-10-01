@@ -170,6 +170,10 @@ export const buildSettingsCommandContext = (
         toggleCloseToTray: () => desktop.handleToggleCloseToTray(
             !useDesktopSettingsStore.getState().closeToTray,
         ),
+        toggleHideRemoteControlTitlebar: () => desktop.handleToggleHideRemoteControlTitlebar(
+            !useDesktopSettingsStore.getState().hideRemoteControlTitlebar,
+        ),
+        unlockRemoteControl: () => desktop.handleToggleRemoteControlClickThrough(false),
         toggleObsKeepMainWindowAnimation: () => useStageSettingsStore.getState().handleToggleObsKeepMainWindowAnimation(
             !useStageSettingsStore.getState().obsKeepMainWindowAnimation,
         ),

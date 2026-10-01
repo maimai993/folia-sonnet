@@ -228,6 +228,12 @@ contextBridge.exposeInMainWorld('electron', {
     closeRemoteControl: () => ipcRenderer.invoke('remote-control-close'),
     getRemoteControlAlwaysOnTop: () => ipcRenderer.invoke('remote-control-get-always-on-top'),
     setRemoteControlAlwaysOnTop: (alwaysOnTop) => ipcRenderer.invoke('remote-control-set-always-on-top', alwaysOnTop),
+    getRemoteControlWindowSettings: () => ipcRenderer.invoke('remote-control-get-window-settings'),
+    onRemoteControlWindowSettingsChanged: (callback) => {
+        const listener = (_event, settings) => callback(settings);
+        ipcRenderer.on('remote-control-window-settings-changed', listener);
+        return () => ipcRenderer.removeListener('remote-control-window-settings-changed', listener);
+    },
     publishRemoteControlSnapshot: (snapshot) => ipcRenderer.invoke('remote-control-publish-snapshot', snapshot),
     getRemoteControlSnapshot: () => ipcRenderer.invoke('remote-control-get-snapshot'),
     sendRemoteControlCommand: (command) => ipcRenderer.invoke('remote-control-send-command', command),

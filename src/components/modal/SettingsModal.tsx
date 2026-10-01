@@ -208,6 +208,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
+        hideRemoteControlTitlebar,
+        remoteControlClickThrough,
         wallpaperMode,
         handleToggleWallpaperMode: onToggleWallpaperMode,
         wallpaperMacAutohideDock,
@@ -218,6 +220,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
         handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
+        handleToggleHideRemoteControlTitlebar: onToggleHideRemoteControlTitlebar,
+        handleToggleRemoteControlClickThrough: onToggleRemoteControlClickThrough,
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
     } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
     const {
@@ -1842,10 +1846,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 preferences={{
                                                     hideTaskbarIcon,
                                                     hideRemoteControlTaskbarIcon,
+                                                    hideRemoteControlTitlebar,
+                                                    remoteControlClickThrough,
                                                     minimizeToTray,
                                                     closeToTray,
                                                     onToggleHideTaskbarIcon,
                                                     onToggleHideRemoteControlTaskbarIcon,
+                                                    onToggleHideRemoteControlTitlebar,
+                                                    onToggleRemoteControlClickThrough,
                                                     onToggleMinimizeToTray,
                                                     onToggleCloseToTray,
                                                     onToggleOpenPlayerOnLaunch,
