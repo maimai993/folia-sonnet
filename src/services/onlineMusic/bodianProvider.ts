@@ -7,6 +7,7 @@ import { bodianPage, normalizeBodianCollection, normalizeBodianSong, normalizeBo
 import { bodianCatalog } from './bodianCatalog';
 import { bodianLibrary, clearBodianLibraryCache } from './bodianLibrary';
 import { bodianMutations } from './bodianMutations';
+import type { BodianLyricsPayload } from 'bodian-music-api';
 
 // src/services/onlineMusic/bodianProvider.ts
 
@@ -84,8 +85,8 @@ export const bodianProvider: OnlineMusicProvider = {
     },
     lyrics: {
         async getLyrics(song) {
-            const data = await requestBodian<{ content: string }>('lyrics', { id: song.id });
-            return parseBodianLyrics(data.content);
+            const data = await requestBodian<BodianLyricsPayload>('lyrics', { id: song.id });
+            return parseBodianLyrics(data);
         },
     },
     auth: {

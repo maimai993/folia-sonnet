@@ -4,24 +4,26 @@ import { bodianCatalog } from '../../../src/services/onlineMusic/bodianCatalog';
 import { createCollectionTrackSnapshot, readCollectionTrackSnapshot } from '../../../src/components/folia-grid/collectionTrackSnapshot';
 import { syncRemainingCollectionPages } from '../../../src/components/folia-grid/onlineCollectionSync';
 import { GRID_BACKGROUND_BATCH_SIZE, GRID_INITIAL_BATCH_SIZE } from '../../../src/components/folia-grid/progressiveGrid';
+import { createBodianApi } from 'bodian-music-api';
 
 // test/unit/gridView/bodianCollectionPaging.test.ts
 // Exercise real transport limits, catalog pagination and the GridView snapshot/resume boundary offline.
 
 const require = createRequire(import.meta.url);
-const { createCatalogOperations } = require('../../../electron/bodian/catalog.cjs');
+const { createWire } = require('../../helpers/bodianWire.cjs');
 const snapshotTime = 1234;
 const song = (id: number) => ({ id, name: `Song ${id}`, duration: 120 });
 
 function setup(firstPageSize = 99) {
-    const call = vi.fn(async (_path: string, { params }: { params: { pn: number; rn: number } }) => ({
-        data: { total: 121, list: params.pn === 1
+    const call = vi.fn(async ({ url }: { url: URL }) => ({
+        code: 200, data: { total: 121, list: url.searchParams.get('pn') === '1'
             ? Array.from({ length: firstPageSize }, (_, index) => song(index + 1))
             : Array.from({ length: 21 }, (_, index) => song(index + 101)) },
     }));
-    const operations = createCatalogOperations({ call });
+    const wire = createWire(call);
+    const api = createBodianApi({ deviceId: 'a'.repeat(32), requestFactory: wire.factory });
     vi.stubGlobal('window', { electron: {
-        bodianRequest: async (operation: string, params: unknown) => ({ ok: true, data: await operations[operation](params) }),
+        bodianRequest: api.request,
     } });
     const fetchPage = (offset: number) => bodianCatalog.getPlaylistTracks!('123', GRID_BACKGROUND_BATCH_SIZE, offset);
     return { call, fetchPage };
@@ -50,9 +52,8 @@ describe('Bodian collection paging through the GridView cache', () => {
         });
         expect(result).toMatchObject({ status: 'complete', offset: 121 });
         expect(result.items).toHaveLength(firstPageSize + 21);
-        expect(call.mock.calls.map(([, { params }]) => params)).toEqual([
-            expect.objectContaining({ pn: 1, rn: 100 }),
-            expect.objectContaining({ pn: 2, rn: 100 }),
+        expect(call.mock.calls.map(([{ url }]) => [url.searchParams.get('pn'), url.searchParams.get('rn')])).toEqual([
+            ['1', '100'], ['2', '100'],
         ]);
         expect(result.items.every(item => item.sourceRef.kind === 'online' && item.sourceRef.providerId === 'bodian')).toBe(true);
         // The server advertises 121 slots but may only return 120 tracks. A completed cache must stay complete.

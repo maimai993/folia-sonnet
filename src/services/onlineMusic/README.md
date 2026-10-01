@@ -44,6 +44,7 @@ UI / hooks / stores / app services
 
 - `providerRegistry.ts`：注册、查找、按歌曲 `sourceRef` 选择 provider、能力检查。
 - `bodianProvider.ts`：波点 adapter；`bodianTransport.ts` 通过受限 IPC 连接 `electron/bodianApiBridge.cjs`。
+  桥接调用固定版本的 `bodian-music-api`，协议实现在独立仓库维护；Folia 负责加密存储与媒体策略。
   `bodianCatalog.ts` / `bodianLibrary.ts` 处理集合与用户库，`bodianNormalize.ts` 统一数据，凭据不返回 renderer。
 - `neteaseProvider.ts`：网易云 adapter，归一化到 Omni contract。
 - `kugouProvider.ts`：酷狗 adapter；请求细节在 `kugouTransport.ts`，具体接口需结合 `docs/ku-go-api-docs.md` 和 `skills/kugou-provider-alignment`。
