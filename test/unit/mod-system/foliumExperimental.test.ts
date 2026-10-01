@@ -17,9 +17,24 @@ vi.hoisted(() => {
     });
 });
 
+// Folium 1.4 lyrics parse in the lyrics worker; run the same parser inline.
+vi.mock('@/utils/lyrics/workerClient', async () => {
+    const { parseLyricsByFormat } = await import('@/utils/lyrics/parserCore');
+    return {
+        parseLyricsAsync: vi.fn(async (
+            format: Parameters<typeof parseLyricsByFormat>[0],
+            content: string,
+            translation: string,
+            options: Parameters<typeof parseLyricsByFormat>[3],
+            romanization: string,
+        ) => parseLyricsByFormat(format, content, translation, options, romanization)),
+    };
+});
+
 import type { SongResult } from '@/types';
 import type { ModRuntimeInfo } from '@/mods/types';
 import { getOnlineMusicProvider } from '@/services/onlineMusic/providerRegistry';
+import { omni } from '@/services/onlineMusic/omni';
 import { applyOmniAudioHook, applyOmniLyricsHook } from '@/services/hostExtensionHooks';
 import { findPonderTarget } from '@/components/ponder/ponderRegistry';
 import i18n from '@/i18n/config';
@@ -71,6 +86,33 @@ describe('omni.providers', () => {
 
         handle.unregister();
         expect(getOnlineMusicProvider('folium.mod-a.radio')).toBeNull();
+    });
+
+    it('passes Folium 1.4 word-timed lyrics and chorus ranges through Omni', async () => {
+        omniProvidersRegistry.register('mod-a', {
+            id: 'wbw',
+            displayName: 'Word by word',
+            search: async () => ({ items: [{ id: 's1', title: 'S', artists: [] }], hasMore: false }),
+            getLyrics: async () => ({
+                main: { format: 'lrc', text: '[00:01.00]你好\n[00:03.00]世界', translationText: '[00:01.00]hello\n[00:03.00]world' },
+                wordByWord: { format: 'yrc', text: '[1000,800](1000,250,0)你(1250,250,0)好\n[3000,800](3000,400,0)世(3400,400,0)界' },
+                chorusRanges: [{ startTime: 2.5, endTime: 4 }],
+            }),
+        });
+        const provider = getOnlineMusicProvider('folium.mod-a.wbw');
+        expect(provider?.capabilities.wordByWordLyrics).toBe(true);
+
+        const [song] = (await provider!.search!.searchSongs('q', 10, 0)).items;
+        const result = await omni.getLyrics(song);
+        const lines = result.lyrics!.lines.filter((line) => line.fullText !== '......');
+
+        expect(result.lyrics?.isWordByWord).toBe(true);
+        expect(lines.map((line) => [line.fullText, line.translation, Boolean(line.isChorus)])).toEqual([
+            ['你好', 'hello', false],
+            ['世界', 'world', true],
+        ]);
+        expect(lines[1].words.map((word) => word.startTime)).toEqual([3, 3.4]);
+        expect(result.chorusRanges).toEqual([{ startTime: 2.5, endTime: 4 }]);
     });
 
     it('refuses a provider with no capability', () => {

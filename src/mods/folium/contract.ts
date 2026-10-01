@@ -7,7 +7,7 @@
 // Removing a field or changing its meaning requires folium 2.
 
 /** The Folium version this host implements; mods read it at runtime as `folium.host.folium`. */
-export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 3 });
+export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 4 });
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;
@@ -240,6 +240,70 @@ export interface FoliumPlaybackSnapshot {
     theme: FoliumTheme | null;
     /** The current lyric animation mode id. */
     visualizerMode: string | null;
+}
+
+/**
+ * Folium 1.4: lyric formats the host parses, the same parsers as local lyric files. QRC and KRC are the
+ * decrypted plain text; the host does not decrypt. The format is never sniffed: an `lrc` track that
+ * carries `<mm:ss.xx>` word tags is read as plain LRC, so name it `enhanced-lrc`.
+ */
+export type FoliumLyricFormat = 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'ttml' | 'vtt' | 'awlrc';
+
+/**
+ * Folium 1.4: one lyric document in its raw text, parsed by the host's local lyric file pipeline.
+ * Each text is at most 1,048,576 characters.
+ */
+export interface FoliumLyricsTrack {
+    /** How to read `text`. */
+    format: FoliumLyricFormat;
+    /** The raw lyric document. */
+    text: string;
+    /**
+     * Translation lines, matched to `text` by start time like a local `.t.lrc` file (VTT cues for a
+     * `vtt` track). Ignored for `ttml`, which carries its translations inline.
+     */
+    translationText?: string;
+    /** Romanization lines, matched like `translationText`. Ignored for `ttml`. */
+    romanizationText?: string;
+}
+
+/**
+ * Folium 1.4: lyrics a provider hands the host. With both tracks the host shows `wordByWord`, and falls
+ * back to `main` when it is missing or parses to no lines; a `wordByWord` track without its own
+ * translation or romanization borrows the ones on `main`.
+ */
+export interface FoliumLyricsResult {
+    /** Line-timed lyrics, also the fallback for `wordByWord`. */
+    main?: FoliumLyricsTrack;
+    /** Word-timed lyrics, shown in preference to `main`. */
+    wordByWord?: FoliumLyricsTrack;
+    /** An instrumental: the host shows its pure-music view and ignores both tracks. */
+    isPureMusic?: boolean;
+    /**
+     * Chorus spans in seconds on the lyric clock; lines inside one get the chorus effect. Without them
+     * the host detects choruses from repeated lines, and TTML `songPart` markers take precedence over both.
+     * At most 64 are kept; a span needs finite times with `0 <= startTime < endTime`.
+     */
+    chorusRanges?: Array<{ startTime: number; endTime: number }>;
+}
+
+/**
+ * The Folium 1.3 `getLyrics` answer: plain LRC, parsed as plain LRC. Deprecated in Folium 1.4 in favor of
+ * FoliumLyricsResult; Folium 2 drops it.
+ */
+export interface FoliumLegacyLyricsResult {
+    /** LRC text. */
+    lrc: string;
+    /** Translation LRC. */
+    translationLrc?: string;
+}
+
+/** Folium 1.4: what `folium.lyrics.parse` returns. */
+export interface FoliumParsedLyrics {
+    /** The parsed lines; empty when the text holds none. The host's lyric display filter is not applied. */
+    lines: readonly FoliumLine[];
+    /** Whether the lines carry real word timings rather than timings the host estimated. */
+    isWordByWord: boolean;
 }
 
 // ---------------------------------------------------------------- Parameters
@@ -1025,8 +1089,11 @@ export interface FoliumOmniProviderDef {
     getSong?(id: string): Promise<FoliumProviderSong | null>;
     /** A playable URL for the song at a quality. */
     getAudioUrl?(song: FoliumProviderSong, quality: FoliumAudioQuality): Promise<{ url: string; expiresAt?: number } | null>;
-    /** LRC text (plus optional translation LRC); the host parses it. */
-    getLyrics?(song: FoliumProviderSong): Promise<{ lrc: string; translationLrc?: string } | null>;
+    /**
+     * Lyrics for a song, as raw text the host parses (FoliumLyricsResult, Folium 1.4), or the deprecated
+     * Folium 1.3 plain-LRC shape. Null when there are none.
+     */
+    getLyrics?(song: FoliumProviderSong): Promise<FoliumLyricsResult | FoliumLegacyLyricsResult | null>;
 }
 
 // ---------------------------------------------------------------- Shared helpers
@@ -1077,6 +1144,11 @@ export interface FoliumLyricsHelpers {
         fallbackColor: string,
         options?: { cjkMatchMode?: 'target-contains-token' | 'bidirectional-contains' | 'exact' },
     ): string;
+    /**
+     * Folium 1.4: parses a lyric document with the host's local lyric file pipeline, off the main thread.
+     * Rejects with a TypeError (`invalid-lyrics-track`) when the track is malformed.
+     */
+    parse(track: FoliumLyricsTrack): Promise<FoliumParsedLyrics>;
 }
 
 /** Folium 1.3: theme resolution builtin modes use. Available in both contexts. */
