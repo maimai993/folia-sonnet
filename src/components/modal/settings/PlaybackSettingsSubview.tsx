@@ -51,17 +51,21 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         audioOutputDeviceId,
         enableTranscodeFallback,
         neteaseScrobbleEnabled,
+        playbackFadeEnabled,
         queueAddBehavior,
         onToggleTranscodeFallback,
         onToggleNeteaseScrobble,
+        onTogglePlaybackFade,
         onQueueAddBehaviorChange,
     } = useAudioSettingsStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
         enableTranscodeFallback: state.enableTranscodeFallback,
         neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
+        playbackFadeEnabled: state.playbackFadeEnabled,
         queueAddBehavior: state.queueAddBehavior,
         onToggleTranscodeFallback: state.handleToggleTranscodeFallback,
         onToggleNeteaseScrobble: state.handleToggleNeteaseScrobble,
+        onTogglePlaybackFade: state.handleTogglePlaybackFade,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     // Subscribed to rather than read once: the panel has to grey out the moment the NetEase account
@@ -409,6 +413,17 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
             <SettingsAnchor anchorId="audioOutputSettings" label={t('options.audioOutputSettings')}>
                 <SettingsSectionHeading icon={Monitor} label={t('options.audioOutputSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.playbackFade')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.playbackFadeDesc')}
+                            </div>
+                        </div>
+                        {renderToggle(playbackFadeEnabled, () => onTogglePlaybackFade(!playbackFadeEnabled))}
+                    </div>
                     {window.electron?.requestTranscodeFallback && (
                         <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
                             <div className="space-y-1">

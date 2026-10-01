@@ -145,6 +145,9 @@ export const buildSettingsCommandContext = (
         toggleTranscodeFallback: () => audio.handleToggleTranscodeFallback(
             !useAudioSettingsStore.getState().enableTranscodeFallback,
         ),
+        togglePlaybackFade: () => audio.handleTogglePlaybackFade(
+            !useAudioSettingsStore.getState().playbackFadeEnabled,
+        ),
         canAutoScanLocalLibrary: isLocalLibraryAutoScanSupported,
         toggleLocalLibraryAutoScan: () => useLocalLibrarySettingsStore.getState().toggleAutoScan(),
         canReportNeteasePlayback: isNeteaseScrobbleReady,

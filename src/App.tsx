@@ -59,6 +59,7 @@ import { getLocalSongArrayBuffer } from './services/localMusicService';
 import type { MediaId, OnlineProviderId, ProviderCollection } from './types/onlineMusic';
 import { resolveSongCatalogRef } from './services/onlineMusic/catalogRefs';
 import { omni } from './services/onlineMusic/omni';
+import { consumeProgrammaticPause, playbackFade } from './services/playbackFade';
 import { getSongArtistLabel, getSongCoverUrl } from './services/onlineMusic/songMetadata';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -1422,6 +1423,7 @@ export default function App() {
         getSyntheticStageLyricsTime,
         syncStageLyricsClock,
         pauseDuringTransition: handlePauseDuringTransition,
+        isTransitionAudible: automix.isTransitionAudible,
     });
     useNavidromeScrobbleReporter({
         audioRef,
@@ -2034,6 +2036,13 @@ export default function App() {
         return true;
     };
     const seekMainAudio = useCallback((time: number) => {
+        // A seek is a statement that playback should go on, same as it is on a paused track. If a
+        // pause is still fading out, take it back (the audio never stopped) so the pending pause
+        // cannot land after the seek.
+        const resumedFromFade = playbackFade.cancelPendingPause();
+        if (resumedFromFade) {
+            setPlayerState(PlayerState.PLAYING);
+        }
         if (seekDuringTransitionRef.current(time)) {
             return;
         }
@@ -2426,6 +2435,9 @@ export default function App() {
                 automix.handleActiveDeckPlaying();
             }}
             onPause={(e) => {
+                // A pause that flushing a fade-out made, while a new song is already being set up:
+                // the transport state and play intent belong to that song now.
+                if (consumeProgrammaticPause(e.currentTarget)) return;
                 if (!automix.isActiveDeck(e.currentTarget)) return;
                 // A deck whose source failed fires `pause` immediately AFTER `error` - Chromium
                 // clears the play state as part of failing the load - and that is not the listener
@@ -2462,6 +2474,10 @@ export default function App() {
                 // the queue behind it. Visible in the log as a cancel and a `playSong` in the same
                 // second, or as a lone `plain cut` line when the track was too near its end to fade.
                 if (audioElement.paused) return;
+                // A pause that is still fading out has not reached the element yet, so this deck
+                // reads as playing. Letting it through would flip the transport back to PLAYING for
+                // the length of the fade and could arm a blend the listener just stopped.
+                if (playbackFade.isFadingOut()) return;
                 if (!audioElement.ended) setPlayerState(PlayerState.PLAYING);
                 automix.checkTransitionPoint(audioElement.currentTime);
             }}
@@ -2507,6 +2523,13 @@ export default function App() {
                 // Cache if playing fully
                 if (audioSrc && !audioSrc.startsWith('blob:') && currentSong && !isStagePlaybackSong(currentSong)) {
                     cacheSongAssets();
+                }
+
+                // The track ran out while a pause was still fading: finish that pause instead of
+                // advancing, or the next song starts under a player the listener just paused.
+                if (playbackFade.isFadingOut()) {
+                    playbackFade.flush();
+                    return;
                 }
 
                 // If single loop is active, native loop handles it.

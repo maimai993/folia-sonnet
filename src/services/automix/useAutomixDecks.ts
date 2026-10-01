@@ -20,6 +20,7 @@ import { AUTOMIX_MAX_OVERLAP_SEC } from './transitionPlanner';
 import type { TransitionSettings } from './transitionStrategy';
 import { usePlaybackStore, type TransitionDisplay } from '../../stores/usePlaybackStore';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { playbackFade } from '../playbackFade';
 import { getPlaybackRepresentation } from '../playbackRecovery/representationRegistry';
 import { buildNavidromeSourceRevision } from '../playbackRecovery/sourceRevision';
 
@@ -47,6 +48,18 @@ export type { AutomixDeckId };
  * second after it armed - and the feature would look like it simply did not work.
  */
 export const isPausedByListener = (state: PlayerState): boolean => state === PlayerState.PAUSED;
+
+/**
+ * Whether a PAUSED player state should tear the running transition down right now.
+ *
+ * Not while the pause is still fading out: the transport reports PAUSED immediately but the real
+ * pause is deferred, and it cancels the blend itself, back onto the deck the listener was hearing.
+ * Aborting here first would pause that deck and promote the arriving one, so the deferred pause
+ * would then land on the NEXT song.
+ */
+export const shouldAbortTransitionOnPause = (state: PlayerState, pauseFadePending: boolean): boolean => (
+    isPausedByListener(state) && !pauseFadePending
+);
 
 /**
  * How often both decks are measured.
@@ -775,7 +788,7 @@ export function useAutomixDecks({
             suppressAutoplayRef.current = false;
             return;
         }
-        if (!isPausedByListener(playerState)) return;
+        if (!shouldAbortTransitionOnPause(playerState, playbackFade.isFadingOut())) return;
         if (session.abort()) {
             suppressAutoplayRef.current = true;
         }
