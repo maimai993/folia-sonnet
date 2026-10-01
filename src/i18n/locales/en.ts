@@ -34,7 +34,7 @@ export default {
     "minimizeToTray": "Minimize will hide to tray",
     "minimizeToTaskbar": "Minimize will stay in taskbar",
     "closeToTray": "Closing the window will hide it to tray",
-    "closeToTaskbar": "Closing the window will quit the app",
+    "closeToQuit": "Closing the window will quit the app",
     "wallpaperModeOn": "Wallpaper mode enabled",
     "wallpaperModeOff": "Wallpaper mode disabled",
     "macWallpaperInputMonitoringNeeded": "Wallpaper mode needs Input Monitoring: allow Folia in System Settings → Privacy & Security → Input Monitoring, then toggle wallpaper mode again",

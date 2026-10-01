@@ -34,7 +34,7 @@ export default {
     "minimizeToTray": "Saat diminimalkan, aplikasi akan bersembunyi di tray",
     "minimizeToTaskbar": "Saat diminimalkan, aplikasi tetap muncul di taskbar",
     "closeToTray": "Menutup jendela akan menyembunyikannya ke tray",
-    "closeToTaskbar": "Menutup jendela akan keluar dari aplikasi",
+    "closeToQuit": "Menutup jendela akan keluar dari aplikasi",
     "wallpaperModeOn": "Mode wallpaper diaktifkan",
     "wallpaperModeOff": "Mode wallpaper dimatikan",
     "macWallpaperInputMonitoringNeeded": "Mode wallpaper memerlukan izin Input Monitoring: izinkan Folia di Pengaturan Sistem → Privasi & Keamanan → Input Monitoring, lalu aktifkan ulang mode wallpaper",

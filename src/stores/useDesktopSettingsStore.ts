@@ -11,8 +11,7 @@ import i18n from '../i18n/config';
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
 
-// Close (the titlebar X) hides the window to the tray instead of quitting. Mirrored from the main
-// process's CLOSE_TO_TRAY, which is the side that actually intercepts the window close.
+// Mirrored from the main process's CLOSE_TO_TRAY, which the titlebar X (window-close IPC) consults.
 export const CLOSE_TO_TRAY_STORAGE_KEY = 'close_to_tray';
 
 export const VOICE_INPUT_PAUSE_STORAGE_KEY = 'voice_input_pause_enabled';
@@ -135,7 +134,7 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         }
         setStatusMessage({
             type: 'info',
-            text: i18n.t('notifications.' + (enable ? 'closeToTray' : 'closeToTaskbar')),
+            text: i18n.t('notifications.' + (enable ? 'closeToTray' : 'closeToQuit')),
         });
     },
     handleToggleVoiceInputPause: (enable) => {

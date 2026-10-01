@@ -34,7 +34,7 @@ export default {
     "minimizeToTray": "最小化将隐藏到托盘",
     "minimizeToTaskbar": "最小化将保留在任务栏",
     "closeToTray": "关闭窗口将隐藏到托盘",
-    "closeToTaskbar": "关闭窗口将退出应用",
+    "closeToQuit": "关闭窗口将退出应用",
     "wallpaperModeOn": "已开启壁纸模式",
     "wallpaperModeOff": "已关闭壁纸模式",
     "macWallpaperInputMonitoringNeeded": "壁纸模式需要“输入监控”权限：请在 系统设置 → 隐私与安全性 → 输入监控 中勾选 Folia，然后重新开启壁纸模式",
