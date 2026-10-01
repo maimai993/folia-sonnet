@@ -10,6 +10,7 @@ const { createModSystem } = require('./modSystem/modSystem.cjs');
 const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
+const { requestWallpaperEntryConfirmation } = require('./wallpaperEntryRequest.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
 const { createWindowsWallpaperTargetResolver } = require('./windowsWallpaperTarget.cjs');
 const { createWindowsWallpaperMouseInjector } = require('./windowsWallpaperMouse.cjs');
@@ -2564,6 +2565,13 @@ function refreshTrayMenu() {
       checked: isWallpaperModeEnabled(),
       click: () => {
         const nextEnabled = !isWallpaperModeEnabled();
+        // Entering is a user-initiated switch, so the renderer asks for confirmation first and
+        // then enters through save-settings. Leaving never needs one.
+        if (nextEnabled && requestWallpaperEntryConfirmation({ mainWindow, focusMainWindow, isClickThroughActive: () => mainWindowClickThroughEnabled })) {
+          // The click already flipped the checkbox; nothing is entered until the user confirms.
+          refreshTrayMenu();
+          return;
+        }
         // NOTE: no Electron window calls here. Calling setAlwaysOnTop/setIgnoreMouseEvents
         // on the window right before the entry poisons the upcoming simple-full-screen
         // presentation (measured on-device: the content is presented 33pt low, leaving an
