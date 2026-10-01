@@ -187,6 +187,23 @@ describe('resolveFoliumLyricsResult', () => {
         expect(result).not.toHaveProperty('chorusRanges');
     });
 
+    // The documented contract: the host does not check content against its format label.
+    it('parses lyrics in an unsupported form, labelled as a supported one, to nothing', async () => {
+        const platformJson = JSON.stringify({ lines: [{ t: 1000, words: [{ w: '你', d: 250 }] }] });
+        expect(await resolveFoliumLyricsResult({ main: { format: 'lrc', text: platformJson } }, 'p'))
+            .toEqual({ lyrics: null, isPureMusic: false });
+    });
+
+    it('falls back to main when the word-timed track is mislabelled', async () => {
+        const result = await resolveFoliumLyricsResult({
+            main: { format: 'lrc', text: LRC },
+            wordByWord: { format: 'ttml', text: YRC },
+        }, 'p');
+
+        expect(textLines(result.lyrics).map((line) => line.fullText)).toEqual(['你好', '世界']);
+        expect(result.lyrics?.isWordByWord).toBe(false);
+    });
+
     it('answers no lyrics when neither track yields lines', async () => {
         expect(await resolveFoliumLyricsResult({ main: { format: 'yrc', text: 'nothing here' } }, 'p'))
             .toEqual({ lyrics: null, isPureMusic: false });

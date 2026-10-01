@@ -319,6 +319,15 @@ folium.registries.visualizers.register({
 - `format` 取 `lrc`、`enhanced-lrc`、`yrc`、`qrc`、`krc`、`ttml`、`vtt`、`awlrc`。
   - 宿主不嗅探格式：带 `<mm:ss.xx>` 逐字标记的 LRC 要写成 `enhanced-lrc`，写成 `lrc` 会把标记当成歌词文字。
   - 和本地文件一样有两个例外：Folia 导出的 `.fia` 文档和带 `[awlrc:…]` 容器的 LRC，总是按内容读取。
+- **只接受上面列出的格式。** 平台私有的 JSON、SRT、ASS 或自定义的逐字格式，宿主一律不认，
+  音源模组必须先自己整理成其中一种再交出来：
+  - 有逐字时间时，优先转成 TTML，它能表达逐字、翻译、罗马音、背景人声和对唱；结构简单的也可以用 YRC 或 `enhanced-lrc`。
+  - 只有逐行时间时，转成 LRC。
+  - 时间轴需要偏移时（例如视频源和母带不同步），在转换时一并改好。宿主不提供偏移。
+- **`format` 必须和内容一致，宿主不检查。** 标错格式或写坏的文本有两种结果：
+  - 解析不出任何一行：逐字轨退回 `main`，`main` 也不行就当作没有歌词。
+  - 解析出错乱的行，宿主照样显示。
+  - 开发时用 `folium.lyrics.parse` 检查转换结果，它和 `getLyrics` 走同一条解析流程。
 - QRC、KRC 只收**解密后的明文**，宿主不负责解密。
 - `translationText` / `romanizationText` 的对齐规则：
   - 和本地 `.t.lrc` 一样，按开始时间与正文对齐；`vtt` 轨道用 VTT cue。

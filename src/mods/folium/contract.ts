@@ -243,9 +243,13 @@ export interface FoliumPlaybackSnapshot {
 }
 
 /**
- * Folium 1.4: lyric formats the host parses, the same parsers as local lyric files. QRC and KRC are the
- * decrypted plain text; the host does not decrypt. The format is never sniffed: an `lrc` track that
- * carries `<mm:ss.xx>` word tags is read as plain LRC, so name it `enhanced-lrc`.
+ * Folium 1.4: lyric formats the host parses, the same parsers as local lyric files. These and nothing
+ * else: lyrics in any other form (a platform's JSON, SRT, ASS, a custom word-timing scheme) are the mod's
+ * to convert into one of them first. QRC and KRC are the decrypted plain text; the host does not decrypt.
+ *
+ * The format is never sniffed, and the content is not checked against it: an `lrc` track that carries
+ * `<mm:ss.xx>` word tags is read as plain LRC (name it `enhanced-lrc`), and mislabelled or malformed text
+ * parses to no lines or to garbled ones. `folium.lyrics.parse` runs the same pipeline, to check a conversion.
  */
 export type FoliumLyricFormat = 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'ttml' | 'vtt' | 'awlrc';
 
