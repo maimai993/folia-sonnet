@@ -266,8 +266,9 @@ export function usePlaybackQueueController({
         appendOnlineSongsToMainQueue([song]);
     }, [appendOnlineSongsToMainQueue]);
 
-    const addOnlineSongsToQueue = useCallback((songs: SongResult[]) => {
-        appendOnlineSongsToMainQueue(songs);
+    // Batch variant; returns how many songs the queue actually took so callers that want their own toast can count.
+    const addOnlineSongsToQueue = useCallback((songs: SongResult[], options?: { suppressToast?: boolean }) => {
+        return appendOnlineSongsToMainQueue(songs, options).affectedCount;
     }, [appendOnlineSongsToMainQueue]);
 
     const clearPendingUnavailableSkip = useCallback(() => {

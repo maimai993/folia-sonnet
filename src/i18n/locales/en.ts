@@ -2951,6 +2951,10 @@ export default {
     "artistAlbums": "Albums / ALBUMS",
     "searchAlbums": "Search albums...",
     "viewAlbums": "View albums",
+    "addTopSongsToQueue": "Queue top songs",
+    "topSongsAddedToQueue_one": "Added {{count}} top song to the play queue",
+    "topSongsAddedToQueue_other": "Added {{count}} top songs to the play queue",
+    "noTopSongsToQueue": "No top songs available to queue",
   },
   "obs": {
     "connecting": "Connecting to Folia",

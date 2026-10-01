@@ -1,6 +1,6 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
-import { ChevronLeft, Disc, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronLeft, Disc, ListPlus, Loader2, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from './folia-grid/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../types';
@@ -45,6 +45,8 @@ import { useLocalLibraryCatalog } from '../hooks/useLocalLibraryCatalog';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../utils/localLibraryIndex';
 import { ArtistGridInfoCutInPanel } from './artist-grid/ArtistGridInfoCutInPanel';
 import { isSongUnavailable } from '../services/onlineMusic/songAvailability';
+import { addArtistTopSongsToQueue } from '../utils/artistTopSongsQueue';
+import { setStatusMessage } from '../stores/useStatusMessageStore';
 
 /*
  * ArtistGridView.tsx
@@ -63,7 +65,7 @@ interface ArtistGridViewProps {
     onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
     onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
     onPlayAll?: (songs: SongResult[]) => void;
-    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     theme: Theme;
     isDaylight: boolean;
     localSongs?: LocalSong[];
@@ -284,6 +286,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     onBack,
     onSelectTrack,
     onAddTrackToQueue,
+    onAddAllToQueue,
     onSelectAlbum,
     onSelectArtist,
     theme,
@@ -1384,6 +1387,20 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 >
                     <ChevronLeft size={20} />
                 </button>
+                {onAddAllToQueue && (
+                    <button
+                        type="button"
+                        onClick={() => addArtistTopSongsToQueue({ songs: topSongs, addAllToQueue: onAddAllToQueue, setStatus: setStatusMessage, t })}
+                        disabled={playableTopSongs.length === 0}
+                        className={`h-10 w-10 sm:w-auto sm:px-4 rounded-full ${closeBtnBg} flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors backdrop-blur-md cursor-pointer disabled:opacity-40 disabled:cursor-default`}
+                        style={{ color: 'var(--text-primary)' }}
+                        title={t('artistGrid.addTopSongsToQueue')}
+                        aria-label={t('artistGrid.addTopSongsToQueue')}
+                    >
+                        <ListPlus size={16} />
+                        <span className="hidden sm:inline">{t('artistGrid.addTopSongsToQueue')}</span>
+                    </button>
+                )}
             </div>
 
             {/* Title display inside viewport header */}

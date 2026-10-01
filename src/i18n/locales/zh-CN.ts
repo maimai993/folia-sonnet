@@ -2950,6 +2950,10 @@ export default {
     "artistAlbums": "歌手专辑 / ALBUMS",
     "searchAlbums": "搜索专辑...",
     "viewAlbums": "查看专辑",
+    "addTopSongsToQueue": "热门歌曲加入队列",
+    "topSongsAddedToQueue_one": "已加入 {{count}} 首热门歌曲到播放队列",
+    "topSongsAddedToQueue_other": "已加入 {{count}} 首热门歌曲到播放队列",
+    "noTopSongsToQueue": "没有可加入队列的热门歌曲",
   },
   "obs": {
     "connecting": "正在连接 Folia",

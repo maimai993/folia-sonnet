@@ -51,7 +51,7 @@ export type HomeModelDeps = {
     openStagePlayer: () => Promise<void>;
     theme: HomeSurfaceProps['theme'];
     playAll: (songs: SongResult[]) => void;
-    addAllToQueue: (songs: SongResult[]) => void;
+    addAllToQueue: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     addSongToQueue: (song: SongResult) => void;
     onStatusMessage?: HomeSurfaceProps['onStatusMessage'];
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;

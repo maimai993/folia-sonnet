@@ -58,7 +58,7 @@ export interface HomeSurfaceProps {
     onOpenLattice?: () => void;
     navidromeEnabled?: boolean;
     onPlayAll?: (songs: SongResult[]) => void;
-    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     onAddSongToQueue?: (song: SongResult) => void;
     onStatusMessage?: (message: StatusMessage) => void;
 }

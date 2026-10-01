@@ -2835,7 +2835,11 @@ export default {
     "popularSongs": "Populer / POPULER",
     "artistAlbums": "Album / ALBUM",
     "searchAlbums": "Cari album...",
-    "viewAlbums": "Lihat album"
+    "viewAlbums": "Lihat album",
+    "addTopSongsToQueue": "Antrekan lagu teratas",
+    "topSongsAddedToQueue_one": "{{count}} lagu teratas ditambahkan ke antrean putar",
+    "topSongsAddedToQueue_other": "{{count}} lagu teratas ditambahkan ke antrean putar",
+    "noTopSongsToQueue": "Tidak ada lagu teratas yang bisa diantrekan",
   },
   "obs": {
     "connecting": "Menghubungkan ke Folia",
