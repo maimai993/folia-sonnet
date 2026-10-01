@@ -13,6 +13,7 @@ import { initFoliumClients } from './mods/folium/clientLoader';
 import { restoreSavedFoliumSelections } from './mods/folium/missingEntries';
 import { installFoliumCommandPaletteSync } from './mods/folium/commandPaletteSync';
 import { installFoliumHostEvents } from './mods/folium/hostEvents';
+import { installNativeDragGuard } from './utils/nativeDragGuard';
 import { isMainAppSurface, isObsBrowserSourceSurface, isRemoteControlSurface, obsSourceKind } from './utils/appSurface';
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
@@ -27,6 +28,11 @@ import './stores/useMotionSettingsStore';
 // so the mode it read may already have fallen back to a builtin; after mod
 // clients register their entries we restore the saved selections
 // (src/mods/folium/missingEntries.ts, which also re-runs on every mod reload).
+
+// #394: with a selection on the page, native drag-and-drop would hijack slider gestures. Installed
+// here, for every surface this bundle mounts, rather than inside App so the remote-control and OBS
+// roots are covered too and App.tsx does not grow. See utils/nativeDragGuard.ts.
+installNativeDragGuard();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

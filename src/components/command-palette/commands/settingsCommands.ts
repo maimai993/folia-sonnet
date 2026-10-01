@@ -551,6 +551,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-cursor-auto-hide', 'settings', 'Hide cursor with player controls', 'Toggle whether the mouse pointer disappears together with the auto-hidden player controls', ['cursor', 'mouse pointer', 'hide cursor', 'hide mouse', 'pointer', '鼠标', '鼠标指针', '隐藏鼠标', '隐藏指针', '指针自动隐藏'], context => context.settings.toggleAutoHideCursorWithPlayerChrome()),
     createToggleCommand('settings-toggle-auto-play-on-launch', 'settings', 'Auto-play on launch', 'Toggle whether opening the app resumes the last session by itself', ['autoplay', 'auto play', 'resume on open', 'play on startup', '自动播放', '启动自动播放', '进入应用自动播放', '续播'], context => context.settings.toggleAutoPlayOnLaunch()),
     createToggleCommand('settings-toggle-transcode-fallback', 'settings', 'Transcode unsupported audio', 'Toggle Electron recovery for local and Navidrome audio Chromium cannot decode', ['ffmpeg', 'unsupported audio', 'decode fallback', '无法解码', '转码恢复'], context => context.settings.toggleTranscodeFallback(), { platform: ['electron'] }),
+    createToggleCommand('settings-toggle-playback-fade', 'settings', 'Fade on pause and resume', 'Toggle the short fade when pausing and resuming playback', ['fade', 'fade in', 'fade out', 'pause fade', 'smooth pause', 'crossfade pause', '淡入淡出', '暂停淡出', '播放淡入', '渐入渐出'], context => context.settings.togglePlaybackFade()),
     createToggleCommand('settings-toggle-bottom-subtitle-overlay', 'settings', 'Toggle bottom subtitle overlay', 'Show or hide the whole bottom subtitle overlay', [
             'bottom subtitle overlay',
             'subtitle overlay',
@@ -566,7 +567,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '显示底部字幕',
             'zimu ceng',
         ], context => context.settings.toggleBottomSubtitleOverlay()),
-    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Switch between translation and romanization subtitle modes', [
+    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Cycle subtitle content between translation, romanization, and romanization plus translation', [
             'subtitle translation',
             'translation subtitle',
             'show subtitle translation',
@@ -575,6 +576,8 @@ export const settingsCommands: CommandPaletteCommand[] = [
             'subtitle romanization',
             'romanized lyrics',
             'romaji',
+            'dual subtitle',
+            'bilingual subtitle',
             '字幕翻译',
             '显示翻译',
             '翻译字幕',
@@ -582,6 +585,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '切换翻译字幕',
             '罗马音',
             '罗马字',
+            '双行字幕',
             '副字幕',
         ], context => context.settings.cycleSubtitleContentMode()),
     createToggleCommand('settings-toggle-subtitle-background', 'settings', 'Toggle subtitle background', 'Show or hide the readability background behind visualizer subtitles', [

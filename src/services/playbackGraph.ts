@@ -23,6 +23,12 @@ type BuildPlaybackGraphParams = {
 export type PlaybackGraph = {
     /** Playback volume. Ramped by syncOutputGain; nothing else may write it. */
     gainNode: GainNode;
+    /**
+     * Play/pause fade, unity at rest. Its own node because the volume node is rewritten by
+     * syncOutputGain on every volume, mute and track start, and the deck gains belong to automix.
+     * Owned by services/playbackFade; nothing else may write it.
+     */
+    fadeNode: GainNode;
     effectChain: AudioEffectChain;
     /** False when a deck was missing, so automix will stay idle. Audio still flows. */
     decksConnected: boolean;
@@ -80,19 +86,24 @@ export const buildPlaybackGraph = ({
         enabled: settings.enabled,
     });
 
+    // After the volume so the fade multiplies whatever level the listener chose, and before the
+    // analyser so the visualiser fades with the sound.
+    const fadeNode = context.createGain();
+    gainNode.connect(fadeNode);
+
     // The analyser stays last, so the visualiser draws what is actually being heard - including
     // the volume the listener set.
-    gainNode.connect(analyser);
+    fadeNode.connect(analyser);
     analyser.connect(context.destination);
 
     // Once per audio context. Printed rather than assumed because the ORDER is the fix: if this
     // ever reads "volume" before "effects" again, the vinyl noise has stopped answering the
     // volume control and the bit crush has gone back to tracking it.
     console.log(
-        '[AudioContext] graph: decks -> mix -> equaliser -> effects -> volume -> analyser -> out'
+        '[AudioContext] graph: decks -> mix -> equaliser -> effects -> volume -> fade -> analyser -> out'
         + ` (equaliser ${settings.enabled ? 'on' : 'flat'},`
         + ` noise ${settings.effects.noise}, crush ${settings.effects.crush}, punch ${settings.effects.punch})`,
     );
 
-    return { gainNode, effectChain, decksConnected };
+    return { gainNode, fadeNode, effectChain, decksConnected };
 };

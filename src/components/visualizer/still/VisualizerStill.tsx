@@ -72,6 +72,7 @@ const VisualizerStill: React.FC<VisualizerSharedProps> = ({
                                         {line.fullText}
                                     </div>
                                 )}
+                                {/* Still reads line.translation directly and ignores subtitleContentMode, so the 'both' option changes nothing here (phase 2). */}
                                 {line.translation && !hideTranslationSubtitle && (
                                     <div
                                         className={`drop-shadow-sm text-center tracking-wide ${isCurrent ? 'text-2xl opacity-80 mt-3' : 'text-xl opacity-30 mt-2'}`}

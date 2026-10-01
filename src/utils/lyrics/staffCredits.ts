@@ -44,6 +44,12 @@ export const LYRIC_STAFF_PATTERN_EXAMPLE = '^(?:作词|作曲|编曲|制作人|�
 
 const builtInStaffRegex = new RegExp(BUILT_IN_STAFF_PATTERN, 'i');
 
+// 无冒号的署名写法（“编曲 某某”“Music by Foo”）：词表项必须是第一个空白前的整段，后面再跟内容。
+// 只给“纯音乐提示语旁边的署名”这类整段判定用，不参与开头块的检测，避免正文里“鼓 声音”之类误伤。
+const SPACED_STAFF_REGEX = new RegExp(`^\\s*${KEYWORD_GROUP}(?:\\s*[/、&+,，·・和]\\s*${KEYWORD_GROUP})*\\s+\\S`, 'i');
+
+export const isSpacedStaffLine = (line: Line): boolean => SPACED_STAFF_REGEX.test(line.fullText?.trim() || '');
+
 export const getLyricStaffPatternError = (pattern?: string | null): string | null => {
     const normalized = pattern?.trim() || '';
     if (!normalized) {
@@ -121,7 +127,7 @@ export const isFillerLine = (line: Line): boolean => {
 // 排除句读符号：字段名不会带句号问号，带了就是一句话。
 const COLON_SHAPED_REGEX = /^[^:：，。！？；…!?]{1,60}[:：]\s*\S/;
 
-const isColonShaped = (line: Line): boolean => COLON_SHAPED_REGEX.test(line.fullText?.trim() || '');
+export const isColonShaped = (line: Line): boolean => COLON_SHAPED_REGEX.test(line.fullText?.trim() || '');
 
 // 标题行经常占据第 0 行（"歌名 - 歌手"），所以不能直接从 index 0 起要求命中。
 const isHeaderLike = (line: Line, meta: { title?: string; artist?: string }): boolean => {

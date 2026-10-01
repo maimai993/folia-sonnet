@@ -816,6 +816,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                             options={[
                                 { label: t('options.subtitleContentTranslation'), value: 'translation' },
                                 { label: t('options.subtitleContentRomanization'), value: 'romanization' },
+                                { label: t('options.subtitleContentBoth'), value: 'both' },
                                 { label: t('options.subtitleContentNone'), value: 'none' },
                             ]}
                             onChange={onSubtitleContentModeChange ?? (mode => onToggleShowSubtitleTranslation?.(mode !== 'none'))}

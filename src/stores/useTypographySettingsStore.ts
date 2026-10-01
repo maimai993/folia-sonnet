@@ -48,7 +48,7 @@ export const readStoredSubtitleContentMode = (): SubtitleContentMode => {
         return 'translation';
     }
     const saved = localStorage.getItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY);
-    if (saved === 'translation' || saved === 'romanization' || saved === 'none') {
+    if (saved === 'translation' || saved === 'romanization' || saved === 'both' || saved === 'none') {
         return saved;
     }
     return getStoredBoolean(SHOW_SUBTITLE_TRANSLATION_STORAGE_KEY, true) ? 'translation' : 'none';

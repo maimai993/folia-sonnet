@@ -154,6 +154,14 @@ export function useAppPreferences() {
     }, [setDesktopPreferenceSnapshot]);
 
     useEffect(() => {
+        // The tray asked to enter wallpaper mode. Tray lives in the main process and cannot show
+        // the in-app dialog, so it goes through the same gated entry as the settings card.
+        return window.electron?.onWallpaperEntryRequested?.(() => {
+            useDesktopSettingsStore.getState().handleToggleWallpaperMode(true);
+        });
+    }, []);
+
+    useEffect(() => {
         // Main refused a transparent-enable toggle (classic Windows wallpaper mode): the toggle
         // stays in its previous state, this only explains why nothing happened.
         return window.electron?.onWallpaperTransparentRefused?.(() => {

@@ -32,4 +32,10 @@ describe('stored subtitle content mode', () => {
 
         expect(readStoredSubtitleContentMode()).toBe('romanization');
     });
+
+    it('reads the dual-row mode back', () => {
+        localStorage.setItem(SUBTITLE_CONTENT_MODE_STORAGE_KEY, 'both');
+
+        expect(readStoredSubtitleContentMode()).toBe('both');
+    });
 });

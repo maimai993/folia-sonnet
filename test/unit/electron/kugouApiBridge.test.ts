@@ -205,4 +205,70 @@ describe('Electron KuGou API bridge', () => {
         expect(warn).toHaveBeenCalledWith('[KuGouSession] save-failed', { name: 'Error' });
     });
 
+    describe('error normalization', () => {
+        const createBridge = (api: Record<string, (...args: any[]) => Promise<unknown>>) => createKugouApiBridge({
+            store: createStore(),
+            safeStorage: createSafeStorage(),
+            apiLoader: () => ({ register_dev: async () => ({ body: { status: 1 }, cookie: ['dfid=d'] }), ...api }),
+        });
+
+        it('turns the library answer-object rejection into an Error carrying operation, status and error_code', async () => {
+            const bridge = createBridge({
+                user_detail: async () => {
+                    // Shape produced by kugoumusicapi's createRequest on an upstream failure.
+                    throw {
+                        status: 502,
+                        body: { status: 0, error_code: 20028, msg: 'upstream busy', token: 'must-not-leak' },
+                        cookie: ['token=must-not-leak'],
+                        headers: {},
+                    };
+                },
+            });
+
+            const error = await bridge.request('user_detail', {}).catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('KuGouApi[operation=user_detail status=502 error_code=20028]: upstream busy');
+            expect(error).toMatchObject({ operation: 'user_detail', status: 502, errorCode: 20028 });
+            expect((error as Error).message).not.toContain('[object Object]');
+            expect((error as Error).message).not.toContain('must-not-leak');
+        });
+
+        it('reports a network-level failure (status 502, no error_code) with its error code instead of [object Object]', async () => {
+            const networkError = Object.assign(new Error('connect ETIMEDOUT 1.2.3.4:443'), { code: 'ETIMEDOUT' });
+            const bridge = createBridge({
+                user_detail: async () => {
+                    throw { status: 502, body: { status: 0, msg: networkError }, cookie: [], headers: {} };
+                },
+            });
+
+            const error = await bridge.request('user_detail', {}).catch((caught: unknown) => caught);
+
+            expect((error as Error).message).toContain('operation=user_detail');
+            expect((error as Error).message).toContain('status=502');
+            expect((error as Error).message).not.toContain('error_code');
+            expect((error as Error).message).toContain('ETIMEDOUT');
+            expect((error as Error).message).not.toContain('[object Object]');
+        });
+
+        it('keeps the message of an ordinary Error and tags it with the operation', async () => {
+            const bridge = createBridge({
+                user_detail: async () => { throw new Error('boom'); },
+            });
+
+            const error = await bridge.request('user_detail', {}).catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(Error);
+            expect((error as Error).message).toBe('KuGouApi[operation=user_detail]: boom');
+        });
+
+        it('normalizes unsupported operations too', async () => {
+            const bridge = createBridge({});
+
+            const error = await bridge.request('not_an_operation', {}).catch((caught: unknown) => caught);
+
+            expect((error as Error).message).toContain('Unsupported KuGou operation');
+            expect((error as Error).message).toContain('operation=not_an_operation');
+        });
+    });
 });

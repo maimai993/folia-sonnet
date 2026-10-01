@@ -128,17 +128,28 @@ describe('decideSongCommit', () => {
         })).toEqual({ action: 'commit', isInstrumental: false });
     });
 
-    it('ignores lyrics being cleared for the song already on screen', () => {
+    it('keeps the words up but watches when lyrics are cleared for the song already on screen', () => {
         // `seed` reaches the visualizer a render before the new lyrics do, so the parent hands
         // down an empty set in between. Committing it blanked the scene and flashed the
-        // "waiting for music" placeholder over a song whose lyrics were already cached.
+        // "waiting for music" placeholder over a song whose lyrics were already cached. The
+        // commit has to wait, but it must not be abandoned: a lyric filter that removes every
+        // line leaves the same empty set behind for good, and that has to end up instrumental.
         expect(decideSongCommit({
             seed: 'current',
             committedSeed: 'current',
             lyricsSignature: '',
             committedSignature: '2|hello',
             isCommittedInstrumental: false,
-        })).toEqual({ action: 'idle' });
+        })).toEqual({ action: 'watch' });
+    });
+
+    it('commits the filtered-down song once the watch finds no words returning', () => {
+        // Filter removes the only line mid-song: the empty set is watched, and the watch settles
+        // it as instrumental through the wall-clock cap (playback never reset for the same song).
+        expect(isInstrumentalConfirmed(
+            { sawPlaybackReset: false, playbackTime: 95, elapsedMs: 3000 },
+            { instrumentalCommitSeconds: 2, readyGraceMs: 3000 },
+        )).toBe(true);
     });
 
     it('keeps holding when a new song still carries the outgoing lyrics', () => {

@@ -82,6 +82,11 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('wallpaper-transparent-refused', listener);
         return () => ipcRenderer.removeListener('wallpaper-transparent-refused', listener);
     },
+    onWallpaperEntryRequested: (callback) => {
+        const listener = () => callback();
+        ipcRenderer.on('wallpaper-entry-requested', listener);
+        return () => ipcRenderer.removeListener('wallpaper-entry-requested', listener);
+    },
     onWallpaperInputMonitorRequested: (callback) => {
         const listener = () => callback();
         ipcRenderer.on('wallpaper-input-monitor-requested', listener);

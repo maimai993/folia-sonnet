@@ -10,6 +10,7 @@ const { createModSystem } = require('./modSystem/modSystem.cjs');
 const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
+const { requestWallpaperEntryConfirmation } = require('./wallpaperEntryRequest.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
 const { createWindowsWallpaperTargetResolver } = require('./windowsWallpaperTarget.cjs');
 const { createWindowsWallpaperMouseInjector } = require('./windowsWallpaperMouse.cjs');
@@ -1776,8 +1777,11 @@ let windowStateSaveTimer = null;
 let wallpaperModeRelaunchTimer = null;
 let wallpaperModeRelaunchGeneration = 0;
 const x11WallpaperWindows = new WeakSet();
+// Must match CLICK_THROUGH_UNLOCK_HOTSPOT in src/utils/clickThroughUnlockHotspot.ts (the renderer
+// runs the same hit test on mousemove). The width covers the unlock button both at right-[180px]
+// and at right-[224px] (titlebar showing the fullscreen button).
 const MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT = {
-  width: 48,
+  width: 84,
   height: 40,
   rightInset: 176,
   topInset: 4,
@@ -2563,6 +2567,13 @@ function refreshTrayMenu() {
       checked: isWallpaperModeEnabled(),
       click: () => {
         const nextEnabled = !isWallpaperModeEnabled();
+        // Entering is a user-initiated switch, so the renderer asks for confirmation first and
+        // then enters through save-settings. Leaving never needs one.
+        if (nextEnabled && requestWallpaperEntryConfirmation({ mainWindow, focusMainWindow, isClickThroughActive: () => mainWindowClickThroughEnabled })) {
+          // The click already flipped the checkbox; nothing is entered until the user confirms.
+          refreshTrayMenu();
+          return;
+        }
         // NOTE: no Electron window calls here. Calling setAlwaysOnTop/setIgnoreMouseEvents
         // on the window right before the entry poisons the upcoming simple-full-screen
         // presentation (measured on-device: the content is presented 33pt low, leaving an

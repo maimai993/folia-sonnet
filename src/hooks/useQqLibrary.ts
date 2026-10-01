@@ -10,6 +10,7 @@ import type {
     ProviderPage,
     ProviderUser,
 } from '../types/onlineMusic';
+import { handleLoginStatusFailure } from '../services/onlineMusic/loginStatusFailure';
 import {
     clearProviderAccountSnapshot,
     loadProviderAccountSnapshot,
@@ -174,14 +175,14 @@ export const useQqLibrary = () => {
             });
             return user;
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'qq_login_status_failed';
-            await clearAuthState(cachedAccount?.user ? 'auth-required' : undefined);
-            console.warn('[QQLibrary] login-status:error', {
-                hadCachedAccount: Boolean(cachedAccount?.user),
-                name: error instanceof Error ? error.name : 'Error',
-                message,
+            // 只有 provider 明确报告鉴权失效才清账号；网络抖动/上游 5xx 只标记刷新失败，保留缓存账号和快照。
+            return handleLoginStatusFailure(error, {
+                providerId: 'qq',
+                cachedUser: cachedAccount?.user,
+                fallbackMessage: 'qq_login_status_failed',
+                clearAuthState,
+                updateAccount: patch => updateAccount('qq', patch),
             });
-            return null;
         }
     }, [clearAuthState, updateAccount]);
 

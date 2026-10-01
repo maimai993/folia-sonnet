@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import type React from 'react';
 import type { MotionValue } from 'framer-motion';
 import { omni } from '../services/onlineMusic/omni';
+import { playbackFade } from '../services/playbackFade';
 import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
 import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
@@ -143,6 +144,13 @@ export function usePlaybackInteractionBridge({
             } else {
                 startPlaybackFromInteraction();
             }
+            return;
+        }
+
+        // The element is still playing while a pause fades out, so the check below would read it as
+        // playing and pause again. A second press during the fade is a resume.
+        if (playbackFade.isFadingOut()) {
+            startPlaybackFromInteraction();
             return;
         }
 

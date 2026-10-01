@@ -99,9 +99,13 @@ export const decideSongCommit = ({
             // two tracks, and `seed` reaches the visualizer a render before the new lyrics do.
             // Committing the empty set here is what used to flash the "waiting for music"
             // placeholder over a song whose lyrics were already cached.
-            if (isCommittedInstrumental || committedSignature !== '') {
+            if (isCommittedInstrumental) {
                 return { action: 'idle' };
             }
+            // So the committed words stay up and playback is watched instead. If the set stays
+            // empty (the listener's lyric filter removed every line, or the lyrics were reprocessed
+            // down to nothing) the song settles as instrumental; going idle here left the removed
+            // lines on screen for the rest of the song. New words landing cancels the watch.
             return { action: 'watch' };
         }
         // Same song, different words: a late load or a reprocess. Take it in place - holding

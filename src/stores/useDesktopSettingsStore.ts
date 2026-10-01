@@ -47,6 +47,8 @@ export type DesktopSettingsState = {
     hideTaskbarIcon: boolean;
     hideRemoteControlTaskbarIcon: boolean;
     wallpaperMode: boolean;
+    /** Transient (never persisted): the "enter wallpaper mode?" confirmation is on screen. */
+    wallpaperEntryConfirmOpen: boolean;
     /** macOS-only: auto-hide the Dock while wallpaper mode is active. On by default — a bottom Dock
      *  is hidden automatically; switching it off overrides the automatic rule. */
     wallpaperMacAutohideDock: boolean;
@@ -59,7 +61,15 @@ export type DesktopSettingsState = {
     handleTogglePreventDisplaySleepDuringPlayback: (enable: boolean) => void;
     handleToggleHideTaskbarIcon: (enable: boolean) => void;
     handleToggleHideRemoteControlTaskbarIcon: (enable: boolean) => void;
+    /**
+     * The user-facing wallpaper switch (settings card, command palette, tray request). Leaving
+     * applies at once; entering only opens the confirmation and waits for confirmWallpaperEntry.
+     */
     handleToggleWallpaperMode: (enable: boolean) => void;
+    /** Unconfirmed apply. Only the confirmation and programmatic callers may use it. */
+    applyWallpaperMode: (enable: boolean) => void;
+    confirmWallpaperEntry: () => void;
+    cancelWallpaperEntry: () => void;
     handleToggleWallpaperMacAutohideDock: (enable: boolean) => void;
     handleToggleOpenPlayerOnLaunch: (enable: boolean) => void;
 };
@@ -73,6 +83,7 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
+    wallpaperEntryConfirmOpen: false,
     wallpaperMacAutohideDock: getStoredBoolean(WALLPAPER_MAC_AUTOHIDE_DOCK_STORAGE_KEY, true),
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     setDesktopPreferenceSnapshot: (settings) => {
@@ -187,6 +198,27 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         }
     },
     handleToggleWallpaperMode: (enable) => {
+        // Entering sinks the window under the desktop and takes the keyboard away, so it asks
+        // first. Startup restore never lands here: it arrives through setDesktopPreferenceSnapshot.
+        if (enable && !get().wallpaperMode) {
+            set({ wallpaperEntryConfirmOpen: true });
+            return;
+        }
+        get().applyWallpaperMode(enable);
+    },
+    confirmWallpaperEntry: () => {
+        // The dialog's buttons stay clickable during its exit animation: a second click, or a
+        // Confirm after Cancel, must not apply (or re-apply) the entry.
+        if (!get().wallpaperEntryConfirmOpen) {
+            return;
+        }
+        set({ wallpaperEntryConfirmOpen: false });
+        get().applyWallpaperMode(true);
+    },
+    cancelWallpaperEntry: () => {
+        set({ wallpaperEntryConfirmOpen: false });
+    },
+    applyWallpaperMode: (enable) => {
         setStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, enable);
         set({ wallpaperMode: enable });
         if (window.electron?.saveSettings) {

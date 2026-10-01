@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppChromeStore } from '../stores/useAppChromeStore';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { isWithinClickThroughUnlockHotspot } from '../utils/clickThroughUnlockHotspot';
 import { useClickThroughPointerLock } from './useClickThroughPointerLock';
 
 // src/hooks/useElectronWindowChrome.ts
@@ -81,24 +82,13 @@ export const useElectronWindowChrome = () => {
             return;
         }
 
-        const toggleHotspotWidth = 48;
-        const toggleHotspotHeight = 40;
-        const toggleHotspotRightInset = 176;
-        const toggleHotspotTopInset = 4;
-
         const syncToggleHotspot = (active: boolean) => {
             setIsClickThroughToggleHotspotActive(prev => (prev === active ? prev : active));
             void window.electron!.setMainWindowClickThroughUnlockHover(active);
         };
 
         const handleMouseMove = (event: MouseEvent) => {
-            const withinHorizontalBounds =
-                event.clientX >= window.innerWidth - toggleHotspotRightInset - toggleHotspotWidth
-                && event.clientX <= window.innerWidth - toggleHotspotRightInset;
-            const withinVerticalBounds =
-                event.clientY >= toggleHotspotTopInset
-                && event.clientY <= toggleHotspotTopInset + toggleHotspotHeight;
-            const withinHotspot = withinHorizontalBounds && withinVerticalBounds;
+            const withinHotspot = isWithinClickThroughUnlockHotspot(event.clientX, event.clientY, window.innerWidth);
 
             setIsClickThroughToggleHotspotActive(prev => {
                 if (prev === withinHotspot) {

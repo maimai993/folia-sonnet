@@ -3,6 +3,7 @@ import i18n from '../i18n/config';
 import { omni } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { handleLoginStatusFailure } from '../services/onlineMusic/loginStatusFailure';
 import {
     clearProviderAccountSnapshot,
     loadProviderAccountSnapshot,
@@ -104,14 +105,14 @@ export const useKugouLibrary = () => {
             });
             return user;
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'kugou_login_status_failed';
-            await clearAuthState(cachedAccount?.user ? 'auth-required' : undefined);
-            console.warn('[KugouLibrary] login-status:error', {
-                hadCachedAccount: Boolean(cachedAccount?.user),
-                name: error instanceof Error ? error.name : 'Error',
-                message,
+            // 只有 provider 明确报告鉴权失效才清账号；网络抖动/上游 5xx 只标记刷新失败，保留缓存账号和快照。
+            return handleLoginStatusFailure(error, {
+                providerId: 'kugou',
+                cachedUser: cachedAccount?.user,
+                fallbackMessage: 'kugou_login_status_failed',
+                clearAuthState,
+                updateAccount: patch => updateAccount('kugou', patch),
             });
-            return null;
         }
     }, [clearAuthState, updateAccount]);
 
