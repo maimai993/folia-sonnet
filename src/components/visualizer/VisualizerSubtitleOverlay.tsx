@@ -3,6 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Line, SubtitleContentMode, Theme } from '../../types';
 import { resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
 import { resolveLyricSubtitleTracks, resolveSubtitleContentMode, type SubtitleTrack } from '../../utils/lyrics/alternateText';
+import {
+    SECONDARY_TRACK_FONT_WEIGHT_FALLBACK,
+    SECONDARY_TRACK_GAP_EM,
+    SECONDARY_TRACK_OPACITY,
+    SECONDARY_TRACK_SIZE_FACTOR,
+} from '../../utils/lyrics/subtitleTrackStyle';
 import { colorWithAlpha } from './colorMix';
 import { usePlayerSubtitleBottomPx } from '../../hooks/usePlayerBottomBarBottomPx';
 
@@ -36,12 +42,6 @@ interface VisualizerSubtitleOverlayProps {
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
 }
-
-// Second row of the 'both' stack is a step quieter than the first, so romanization (what you sing along to)
-// leads and the translation reads as its gloss. Both rows keep the user's subtitle font, weight and scale;
-// this only trims size and opacity relative to them.
-const SECONDARY_TRACK_SIZE_FACTOR = 0.88;
-const SECONDARY_TRACK_OPACITY = 0.82;
 
 // Picks the rows to show: the first of active / recently-completed line that has any readable row.
 // 'both' yields romanization then translation, skipping whichever is missing (no empty placeholder row).
@@ -173,9 +173,9 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                                                 color: theme.secondaryColor,
                                                 fontSize: scaleFontSize(translationFontSize, isSecondaryRow ? SECONDARY_TRACK_SIZE_FACTOR : 1),
                                                 fontFamily: resolveThemeTranslationFontStack(subtitleTheme ?? theme),
-                                                fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, isSecondaryRow ? 400 : 500),
+                                                fontWeight: resolveThemeFontWeight(subtitleTheme ?? theme, isSecondaryRow ? SECONDARY_TRACK_FONT_WEIGHT_FALLBACK : 500),
                                                 opacity: isSecondaryRow ? SECONDARY_TRACK_OPACITY : undefined,
-                                                marginTop: isSecondaryRow ? '0.25em' : undefined,
+                                                marginTop: isSecondaryRow ? `${SECONDARY_TRACK_GAP_EM}em` : undefined,
                                                 textShadow,
                                             }}
                                         >
