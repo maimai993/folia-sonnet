@@ -79,7 +79,10 @@
 - `dev/probes/lyricSegmentationSurface.probe.tsx`
 - `dev/probes/lyricStaffSection.probe.tsx`
 - `dev/probes/monetPortraitImage.probe.tsx`
+- `dev/probes/monetSubtitleDualRow.probe.tsx`
+- `dev/probes/nativeDragGuard.probe.tsx`
 - `dev/probes/nowPlayingToastTransitionBorder.probe.tsx`
+- `dev/probes/pendoloSubtitleDualRow.probe.tsx`
 - `dev/probes/playbackLyricsSettings.probe.tsx`
 - `dev/probes/playerBarModButtons.probe.tsx`
 - `dev/probes/playerBottomBar.probe.tsx`
@@ -87,9 +90,11 @@
 - `dev/probes/ponderPageSurfaces.probe.tsx`
 - `dev/probes/settingsHelpActions.probe.tsx`
 - `dev/probes/settingsNavigation.probe.tsx`
+- `dev/probes/subtitleDualRow.probe.tsx`
 - `dev/probes/themePark.probe.tsx`
 - `dev/probes/trackTitleNavigator.probe.tsx`
 - `dev/probes/visualizerMemory.probe.tsx`
+- `dev/probes/wallpaperEntryConfirm.probe.tsx`
 
 ### `src/components/ponder/ponderRegistry.ts`
 
