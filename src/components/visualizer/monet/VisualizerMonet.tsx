@@ -10,7 +10,7 @@ import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
-import { resolveLyricAlternateText, resolveSingleTrackSubtitleMode, resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
+import { resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
@@ -57,18 +57,10 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         seed,
     } = props;
     const { t } = useTranslation();
-    // Monet sets its translation row inside the lyric animation itself, not in the shared bottom subtitle,
-    // so it cannot stack two rows yet: the 'both' option falls back to translation only (phase 2 will add a third track).
-    const resolvedSubtitleContentMode = resolveSingleTrackSubtitleMode(resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation));
-    const displayLines = useMemo(() => {
-        if (resolvedSubtitleContentMode !== 'romanization') {
-            return lines;
-        }
-        return lines.map(line => ({
-            ...line,
-            translation: resolveLyricAlternateText(line, resolvedSubtitleContentMode) ?? undefined,
-        }));
-    }, [lines, resolvedSubtitleContentMode]);
+    // Monet sets its subtitle rows inside the lyric animation itself, not in the shared bottom subtitle.
+    // The resolved mode goes to the rail, which measures and renders the rows (romanization, translation,
+    // or both stacked) from each line's own data, so the lines are passed through untouched.
+    const resolvedSubtitleContentMode = resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation);
 
     const handleSetMonetTuning = onMonetTuningChange;
 
@@ -112,12 +104,12 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     } = useVisualizerRuntime({
         currentTime,
         currentLineIndex,
-        lines: displayLines,
+        lines,
         getLineEndTime: getLineRenderEndTime,
     });
 
     const visibleLineEntries = useMemo(() => buildMonetVisibleLineEntries({
-        lines: displayLines,
+        lines,
         currentLineIndex,
         activeLine,
         recentCompletedLine,
@@ -129,7 +121,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         activeLine,
         currentLineIndex,
         currentTimeValue,
-        displayLines,
+        lines,
         recentCompletedLine,
         upcomingLine,
     ]);
@@ -280,7 +272,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                             >
                                 <MonetLyricsRail
                                     entries={visibleLineEntries}
-                                    lines={displayLines}
+                                    lines={lines}
                                     currentLineIndex={currentLineIndex}
                                     currentTime={currentTime}
                                     theme={theme}
@@ -292,7 +284,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     subtitleTheme={subtitleTheme}
                                     keywordColoringEnabled={monetTuning.keywordColoringEnabled}
                                     emptyText=""
-                                    showSubtitleTranslation={resolvedSubtitleContentMode !== 'none'}
+                                    subtitleContentMode={resolvedSubtitleContentMode}
                                     audioPower={audioPower}
                                     audioBands={audioBands}
                                     onLyricLineSeek={onLyricLineSeek}
