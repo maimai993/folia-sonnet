@@ -18,6 +18,7 @@ import type { Theme } from '../../../types';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
 import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import AiConnectionTest from './AiConnectionTest';
 import SettingsRow, { SettingsToggle } from './SettingsRow';
 import { settingsDividerClassFor } from './settingsCardClasses';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -574,7 +575,8 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
 
                     <div className={`p-4 space-y-3 border-b ${rowDividerClass}`}>
                         {electronSettings.AI_PROVIDER !== 'openai' ? (
-                            renderField(
+                            <>
+                            {renderField(
                                 t('options.geminiApiKey') || 'Gemini API Key',
                                 <input
                                     type="password"
@@ -584,7 +586,18 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                     className={fieldClass}
                                     style={{ color: 'var(--text-primary)' }}
                                 />,
-                            )
+                            )}
+                            <AiConnectionTest
+                                key="gemini"
+                                payload={{
+                                    provider: 'gemini',
+                                    apiKey: electronSettings.GEMINI_API_KEY || '',
+                                    useSystemProxy: electronSettings.USE_SYSTEM_PROXY_FOR_AI === true,
+                                }}
+                                buttonClassName={ghostButtonClass}
+                                isDaylight={isDaylight}
+                            />
+                            </>
                         ) : (
                             <>
                                 {renderField(
@@ -650,6 +663,19 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                                         style={{ color: 'var(--text-primary)' }}
                                     />,
                                 )}
+                                <AiConnectionTest
+                                    key="openai"
+                                    payload={{
+                                        provider: 'openai',
+                                        apiKey: electronSettings.OPENAI_API_KEY || '',
+                                        apiUrl: electronSettings.OPENAI_API_URL || '',
+                                        model: electronSettings.OPENAI_API_MODEL || '',
+                                        stream: electronSettings.OPENAI_API_STREAM === true,
+                                        useSystemProxy: electronSettings.USE_SYSTEM_PROXY_FOR_AI === true,
+                                    }}
+                                    buttonClassName={ghostButtonClass}
+                                    isDaylight={isDaylight}
+                                />
                             </>
                         )}
                     </div>

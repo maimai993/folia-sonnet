@@ -292,6 +292,7 @@ function createOpenAIStreamAccumulator() {
   let reasoning = '';
   let finishReason = null;
   let usage;
+  let model;
   let sawData = false;
   let done = false;
   // Lines that are not SSE fields at all. Some proxies ignore `stream: true` and answer with one
@@ -322,6 +323,9 @@ function createOpenAIStreamAccumulator() {
     }
     if (payload.usage && typeof payload.usage === 'object') {
       usage = payload.usage;
+    }
+    if (typeof payload.model === 'string' && payload.model) {
+      model = payload.model;
     }
     const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
     if (!choice) {
@@ -391,7 +395,7 @@ function createOpenAIStreamAccumulator() {
         }
         const choice = parsed && Array.isArray(parsed.choices) ? parsed.choices[0] : null;
         if (choice) {
-          return { choice, usage: parsed.usage, content: extractResponseContentText(choice.message), done: true };
+          return { choice, usage: parsed.usage, model: typeof parsed.model === 'string' ? parsed.model : undefined, content: extractResponseContentText(choice.message), done: true };
         }
       }
 
@@ -403,7 +407,7 @@ function createOpenAIStreamAccumulator() {
         message.reasoning_content = reasoning;
       }
       const choice = { finish_reason: finishReason, message };
-      return { choice, usage, content: extractResponseContentText(message), done };
+      return { choice, usage, model, content: extractResponseContentText(message), done };
     },
   };
 }
@@ -464,7 +468,7 @@ async function sendOpenAICompatible({ apiUrl, apiKey, body, customFetch, timeout
 
   if (body && body.stream === true) {
     try {
-      return { ok: true, ...(await readOpenAIStreamResponse(response)) };
+      return { ok: true, status: response.status, ...(await readOpenAIStreamResponse(response)) };
     } catch (error) {
       throw describeFetchFailure(error, timeoutMs, `Reading the response from ${apiUrl}`);
     }
@@ -478,7 +482,14 @@ async function sendOpenAICompatible({ apiUrl, apiKey, body, customFetch, timeout
   }
 
   const choice = data.choices && data.choices[0];
-  return { ok: true, choice, usage: data.usage, content: extractResponseContentText(choice && choice.message) };
+  return {
+    ok: true,
+    status: response.status,
+    choice,
+    usage: data.usage,
+    model: typeof data.model === 'string' ? data.model : undefined,
+    content: extractResponseContentText(choice && choice.message),
+  };
 }
 
 /**
@@ -638,6 +649,247 @@ async function runAiJsonCompletion({ store, systemPrompt, sourcePrompt, schema, 
     : runGeminiCompletion({ store, systemPrompt, sourcePrompt, responseSchema: geminiResponseSchema, generationConfig: geminiGenerationConfig, customFetch, timeoutMs, maxTokens });
 }
 
+// ---------------------------------------------------------------------------------------------
+// Connection test ("send hello, show the reply").
+//
+// Runs with the values currently in the settings form, not the saved ones, so none of this reads
+// or writes the store. It goes through the same request senders as the real features
+// (sendOpenAICompatible / customFetch), which is what makes a pass here mean the real calls work.
+// ---------------------------------------------------------------------------------------------
+
+const AI_TEST_TIMEOUT_MS = 30_000;
+// Roomy enough that a model which still reasons a little can get to its reply; the reply itself is
+// cut for display (AI_TEST_MAX_REPLY_CHARS), so a large budget costs nothing visible.
+const AI_TEST_MAX_TOKENS = 512;
+const AI_TEST_PROMPT = 'hello';
+const AI_TEST_MAX_REPLY_CHARS = 500;
+const AI_TEST_MAX_ERROR_CHARS = 500;
+const AI_TEST_MAX_FIELD_CHARS = { apiKey: 1024, apiUrl: 2048, model: 256 };
+
+const truncateText = (text, limit) => (text.length > limit ? `${text.slice(0, limit)}…` : text);
+
+/** URL with credentials and query dropped, safe to put in a message even if the user pasted a key into it. */
+const redactUrl = (rawUrl) => {
+  try {
+    const parsed = new URL(rawUrl);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[invalid url]';
+  }
+};
+
+/**
+ * Validates and normalises the renderer-supplied payload. Returns `{ config }` or `{ error }`; it
+ * never throws, since the IPC handler must hand a displayable result back either way.
+ */
+function validateAiConnectionTestInput(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { error: 'Invalid request.' };
+  }
+  const provider = raw.provider;
+  if (provider !== 'gemini' && provider !== 'openai') {
+    return { error: 'Unknown AI provider.' };
+  }
+  const readString = (name) => {
+    const value = raw[name];
+    if (value === undefined || value === null) {
+      return '';
+    }
+    if (typeof value !== 'string' || value.length > AI_TEST_MAX_FIELD_CHARS[name]) {
+      return null;
+    }
+    return value.trim();
+  };
+  const apiKey = readString('apiKey');
+  const apiUrl = provider === 'openai' ? readString('apiUrl') : '';
+  const model = provider === 'openai' ? readString('model') : '';
+  if (apiKey === null || apiUrl === null || model === null) {
+    return { error: 'A setting value is too long or has the wrong type.' };
+  }
+  if (apiUrl) {
+    let parsed;
+    try {
+      parsed = new URL(apiUrl);
+    } catch {
+      return { error: 'API URL is not a valid URL.' };
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { error: 'API URL must start with http:// or https://.' };
+    }
+  }
+  return {
+    config: {
+      provider,
+      apiKey,
+      apiUrl,
+      model,
+      stream: provider === 'openai' && raw.stream === true,
+    },
+  };
+}
+
+/**
+ * Minimal chat body for the test: one user message, no system prompt, no JSON mode or schema.
+ * The token cap key follows the same openai-vs-others rule as buildOpenAICompatibleRequestBody.
+ */
+function buildOpenAICompatibleTestBody(model, provider, stream, extraParams = {}, maxTokens = AI_TEST_MAX_TOKENS) {
+  return {
+    model,
+    messages: [{ role: 'user', content: AI_TEST_PROMPT }],
+    [provider === 'openai' ? 'max_completion_tokens' : 'max_tokens']: maxTokens,
+    ...extraParams,
+    ...(stream ? { stream: true } : {}),
+  };
+}
+
+/**
+ * Sends "hello" with the given (unsaved) settings and reports what came back.
+ *
+ * Resolves to `{ ok, status?, durationMs, model?, text?, emptyReason?, error?, errorKind? }` and
+ * does not throw: a failed connection is the expected output of this function. `emptyReason` marks
+ * a connection that worked but produced no text ('reasoning' = the budget went on reasoning,
+ * 'empty' = anything else), so the UI can report it as a success with a caveat, not a failure.
+ */
+async function runAiConnectionTest(rawInput, { customFetch, timeoutMs = AI_TEST_TIMEOUT_MS, now = Date.now } = {}) {
+  const validated = validateAiConnectionTestInput(rawInput);
+  if (validated.error) {
+    return { ok: false, durationMs: 0, errorKind: 'invalid', error: validated.error };
+  }
+  const { provider, apiKey, apiUrl: rawApiUrl, model: rawModel, stream } = validated.config;
+  const startedAt = now();
+  const finish = (result) => ({ durationMs: now() - startedAt, ...result });
+  const scrub = (message) => {
+    let text = String(message);
+    if (apiKey) {
+      text = text.split(apiKey).join('***');
+    }
+    // Servers sometimes echo the request back: Authorization header, Gemini key header, ?key=.
+    text = text
+      .replace(/(bearer\s+)[^\s"',;]+/gi, '$1***')
+      .replace(/(x-goog-api-key["']?\s*[:=]\s*["']?)[^\s"',;]+/gi, '$1***')
+      .replace(/([?&](?:key|api[_-]?key|token|access_token)=)[^&\s"']+/gi, '$1***');
+    return truncateText(text, AI_TEST_MAX_ERROR_CHARS);
+  };
+  const failure = (error, extra = {}) => finish({
+    ok: false,
+    error: scrub(error instanceof Error ? error.message : error),
+    ...extra,
+  });
+
+  if (!apiKey) {
+    return finish({
+      ok: false,
+      errorKind: 'config',
+      error: provider === 'gemini' ? 'GEMINI_API_KEY is not configured in settings' : 'OPENAI_API_KEY is not configured in settings',
+    });
+  }
+
+  if (provider === 'gemini') {
+    console.log('[ai-test] POST gemini-3-flash-preview');
+    let response;
+    try {
+      response = await customFetch(GEMINI_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: AI_TEST_PROMPT }] }],
+          // thinkingBudget 0 as in SEGMENTATION_GEMINI_GENERATION_CONFIG: gemini-3-flash-preview
+          // thinks by default and would spend the budget before answering "hello".
+          generationConfig: { maxOutputTokens: AI_TEST_MAX_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
+        }),
+        signal: timeoutSignal(timeoutMs),
+      });
+    } catch (error) {
+      const failed = describeFetchFailure(error, timeoutMs, 'Request to Gemini');
+      return failure(failed, { errorKind: /timed out/.test(failed.message) ? 'timeout' : 'network' });
+    }
+    if (!response.ok) {
+      let errText = '';
+      try {
+        errText = await response.text();
+      } catch {
+        // Status alone is still informative.
+      }
+      return failure(`Gemini API error: ${response.status} ${response.statusText}${errText ? ` - ${errText}` : ''}`, {
+        status: response.status,
+        errorKind: 'http',
+      });
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      const failed = describeFetchFailure(error, timeoutMs, 'Reading the response from Gemini');
+      return failure(failed, { status: response.status, errorKind: /timed out/.test(failed.message) ? 'timeout' : 'network' });
+    }
+    const candidate = data && data.candidates && data.candidates[0];
+    const parts = candidate && candidate.content ? candidate.content.parts : null;
+    const text = Array.isArray(parts)
+      ? parts.filter((part) => part && typeof part.text === 'string').map((part) => part.text).join('')
+      : '';
+    const modelName = data && typeof data.modelVersion === 'string' ? data.modelVersion : 'gemini-3-flash-preview';
+    if (!text.trim()) {
+      const reason = candidate && candidate.finishReason === 'MAX_TOKENS' ? 'reasoning' : 'empty';
+      return finish({ ok: true, status: response.status, model: modelName, text: '', emptyReason: reason });
+    }
+    return finish({ ok: true, status: response.status, model: modelName, text: truncateText(text, AI_TEST_MAX_REPLY_CHARS) });
+  }
+
+  const apiUrl = normalizeOpenAIChatCompletionsUrl(rawApiUrl);
+  const model = resolveOpenAICompatibleModel(apiUrl, rawModel);
+  const compatProvider = detectOpenAICompatibleProvider(apiUrl);
+  console.log(`[ai-test] POST ${redactUrl(apiUrl)} model=${model} provider=${compatProvider}${stream ? ' stream=on' : ''}`);
+
+  // Same ladder the real features use when they want no reasoning (see runOpenAICompatibleCompletion):
+  // advance when the endpoint rejects the parameter or when reasoning ate the budget.
+  const { rejectsOpenAICompatibleParameter } = await import('../shared/openAICompatibleRequest.mjs');
+  const attempts = REASONING_SUPPRESSION_ATTEMPTS;
+  let result;
+  for (let index = 0; index < attempts.length; index += 1) {
+    const { params } = attempts[index];
+    const isLastAttempt = index === attempts.length - 1;
+    const reasoningParams = compatProvider === 'deepseek' ? { thinking: { type: 'disabled' }, ...params } : params;
+    // The last rung cannot switch reasoning off, so it gets room for the reasoning too.
+    const budget = isLastAttempt ? AI_TEST_MAX_TOKENS * 2 : AI_TEST_MAX_TOKENS;
+    try {
+      result = await sendOpenAICompatible({
+        apiUrl,
+        apiKey,
+        body: buildOpenAICompatibleTestBody(model, compatProvider, stream, reasoningParams, budget),
+        customFetch,
+        timeoutMs,
+      });
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : String(error)).split(apiUrl).join(redactUrl(apiUrl));
+      return failure(message, { errorKind: /timed out/.test(message) ? 'timeout' : 'network' });
+    }
+    if (!result.ok) {
+      if (!isLastAttempt
+        && Object.keys(params).some((key) => rejectsOpenAICompatibleParameter(result.status, result.errorText, key))) {
+        continue;
+      }
+      return failure(result.errorText.split(apiUrl).join(redactUrl(apiUrl)), { status: result.status, errorKind: 'http' });
+    }
+    if (!result.content && !isLastAttempt && exhaustedByReasoning(result.choice, result.usage)) {
+      continue;
+    }
+    break;
+  }
+
+  const shownModel = result.model || model;
+  const text = typeof result.content === 'string' ? result.content : '';
+  if (!text.trim()) {
+    return finish({
+      ok: true,
+      status: result.status,
+      model: shownModel,
+      text: '',
+      emptyReason: exhaustedByReasoning(result.choice, result.usage) ? 'reasoning' : 'empty',
+    });
+  }
+  return finish({ ok: true, status: result.status, model: shownModel, text: truncateText(text, AI_TEST_MAX_REPLY_CHARS) });
+}
+
 module.exports = {
   DEFAULT_AI_TIMEOUT_MS,
   DEEPSEEK_DEFAULT_MODEL,
@@ -654,5 +906,7 @@ module.exports = {
   providerSupportsStructuredOutputs,
   resolveOpenAICompatibleModel,
   resolveOpenAICompatibleTemperature,
+  runAiConnectionTest,
   runAiJsonCompletion,
+  validateAiConnectionTestInput,
 };

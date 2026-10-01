@@ -49,6 +49,7 @@ const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/the
 const {
   detectOpenAICompatibleProvider,
   normalizeOpenAIChatCompletionsUrl,
+  runAiConnectionTest,
   runAiJsonCompletion,
 } = require('./aiTextClient.cjs');
 const {
@@ -6843,6 +6844,25 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
   } catch (e) {
     console.error(e);
     throw new Error(e instanceof Error ? e.message : String(e));
+  }
+});
+
+// "Test connection" button in AI settings: sends "hello" using the values currently in the form
+// (not the saved ones, nothing is persisted) over the same fetch/proxy path as real AI requests.
+// Never throws: a failed connection is returned as a displayable result, and the key is not echoed.
+ipcMain.handle('ai-test-connection', async (event, payload) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return { ok: false, durationMs: 0, errorKind: 'invalid', error: 'Untrusted caller.' };
+  }
+  try {
+    const useSystemProxy = payload && typeof payload === 'object' && typeof payload.useSystemProxy === 'boolean'
+      ? payload.useSystemProxy
+      : (store.get('USE_SYSTEM_PROXY_FOR_AI') || false);
+    const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
+    return await runAiConnectionTest(payload, { customFetch });
+  } catch (e) {
+    console.error('[ai-test] failed:', e instanceof Error ? e.message : String(e));
+    return { ok: false, durationMs: 0, errorKind: 'network', error: 'Connection test failed unexpectedly.' };
   }
 });
 
