@@ -20,6 +20,7 @@ export default {
     "subtitleMode": {
       "translation": "Subtitle track switched to translation",
       "romanization": "Subtitle track switched to romanization",
+      "both": "Subtitle shows romanization and translation",
       "none": "Subtitle text hidden"
     },
     "rightBtnHidden": "Player right-side button hidden",
@@ -549,7 +550,7 @@ export default {
       "settings-toggle-transcode-fallback": { "title": "Transcode unsupported audio", "description": "Toggle Electron recovery for local and Navidrome audio Chromium cannot decode" },
       "settings-toggle-playback-fade": { "title": "Fade on pause and resume", "description": "Toggle the short fade when pausing and resuming playback" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "Toggle bottom subtitle overlay", "description": "Show or hide the whole bottom subtitle overlay" },
-      "settings-cycle-subtitle-content-mode": { "title": "Cycle subtitle content mode", "description": "Switch between translation and romanization subtitle modes" },
+      "settings-cycle-subtitle-content-mode": { "title": "Cycle subtitle content mode", "description": "Cycle subtitle content between translation, romanization, and romanization plus translation" },
       "settings-toggle-subtitle-background": { "title": "Toggle subtitle background", "description": "Show or hide the readability background behind visualizer subtitles" },
       "settings-language-system": { "title": "Follow system language", "description": "Use the browser or system language" },
       "settings-language-zh-CN": { "title": "Switch language to Chinese", "description": "Use Simplified Chinese in the interface" },
@@ -1762,6 +1763,7 @@ export default {
     "subtitleContentMode": "Subtitle Content",
     "subtitleContentTranslation": "Translation",
     "subtitleContentRomanization": "Romanization",
+    "subtitleContentBoth": "Romanization + Translation",
     "subtitleContentNone": "None",
     "classicSettings": "Classic Tuning",
     "classicSettingsDesc": "Control per-word rotation and whole-line breathing float range.",
@@ -3854,7 +3856,7 @@ export default {
         "combineBackground": "Change only the background: the lyric style stays. The background's own settings are on the Background page of the lyric animation settings.",
         "combineStyle": "Now change only the lyric style: the background you just picked stays. Any background works with any lyric style; only the Still style draws no background.",
         "subtitleShared": "Most lyric styles share this one subtitle line at the bottom. Monet, Pendolo and Still set translations inside their own layout and do not use it.",
-        "subtitleContent": "Its settings are on the Subtitle page of the lyric animation settings and apply to every style that uses it. The first row picks translation, romanization or nothing.",
+        "subtitleContent": "Its settings are on the Subtitle page of the lyric animation settings and apply to every style that uses it. The first row picks translation, romanization, both stacked, or nothing.",
         "subtitleBlur": "Turn off “Blur non-translation lyrics” and the subtitle is no longer blurred.",
         "subtitleFont": "Turn off “Subtitle Uses Lyrics Font” to give the subtitle its own font and weight. “Subtitle scale” sets its size on its own and is always available."
       },
@@ -3872,7 +3874,7 @@ export default {
         "animation": "The animation page starts with the mode itself. There are more of them than fit here and they are worth looking through on your own, so this chapter stops at what the page is rather than listing them.",
         "perMode": "What follows the mode is the mode\u2019s own tuning. It is not a fixed set of rows: change the mode and these change with it, which is why a slider you remember can be missing \u2014 it belonged to the one you left.",
         "background": "The background page works the same way: pick the background, then tune that background. It is a separate layer from the animation, so the two are chosen independently and any pair is allowed.",
-        "subtitleContent": "Subtitles are the second line under the lyric, and the first row decides what goes in it: nothing, the translation, or the romanization. It is one choice, not three toggles \u2014 translation and romanization cannot both be on.",
+        "subtitleContent": "Subtitles are the second line under the lyric, and the first row decides what goes in it: nothing, the translation, the romanization, or both stacked with the romanization on top. It is one choice, not separate toggles. Monet, Pendolo and Still show only the translation when both is chosen.",
         "subtitleLegibility": "The rows under it are about reading them over a moving picture: a backing behind the text, how opaque it is, and a blur on the lines not yet sung so the current one stands out.",
         "subtitleFont": "The last row is the subtitle\u2019s type, and it follows the lyric font by default. Turn that off and its own family, size and weight appear below \u2014 they simply are not there while it is on, which is why the subtitle font settings can look missing."
       },

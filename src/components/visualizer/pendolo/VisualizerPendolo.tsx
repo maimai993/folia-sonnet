@@ -8,7 +8,7 @@ import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import PendoloClockworkCanvas from './PendoloClockworkCanvas';
 import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
-import { resolveSubtitleContentMode, resolveLyricAlternateText } from '../../../utils/lyrics/alternateText';
+import { resolveSubtitleContentMode, resolveLyricAlternateText, resolveSingleTrackSubtitleMode } from '../../../utils/lyrics/alternateText';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
 import { buildPendoloTextLayout } from './pendoloTextLayout';
@@ -361,7 +361,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const textRotationCorrectionDeg = useTransform(wheelRotationDeg, value => -value * 0.65);
     const gearRotationAngleRad = useTransform(tickSpring, value => value * angleStepRad);
 
-    const resolvedMode = useMemo(() => resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation), [subtitleContentMode, showSubtitleTranslation]);
+    // Pendolo lays translation out inside its own clockwork layout, not the shared bottom subtitle, so it cannot
+    // stack two rows yet: the 'both' option falls back to translation only (phase 2 will add a second track).
+    const resolvedMode = useMemo(() => resolveSingleTrackSubtitleMode(resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation)), [subtitleContentMode, showSubtitleTranslation]);
 
     const lineBlockHeights = useMemo(() => {
         const measureWidth = availableTextWidth / pendoloTuning.activeScale;

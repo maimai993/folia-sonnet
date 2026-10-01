@@ -43,7 +43,9 @@ export interface LyricBackgroundVocal {
   alternateTexts?: LyricAlternateText[];
 }
 
-export type SubtitleContentMode = 'translation' | 'romanization' | 'none';
+// 'both' stacks romanization above translation; only the shared bottom subtitle overlay renders both rows.
+// Modes that lay translation out inside their own lyric layout (Monet, Pendolo, Lattice, Still) fall back to translation only.
+export type SubtitleContentMode = 'translation' | 'romanization' | 'both' | 'none';
 
 export interface LyricAgent {
   id: string;

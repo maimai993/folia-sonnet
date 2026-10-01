@@ -20,6 +20,7 @@ export default {
     "subtitleMode": {
       "translation": "Track subtitle beralih ke terjemahan",
       "romanization": "Track subtitle beralih ke romanisasi",
+      "both": "Subtitle menampilkan romanisasi dan terjemahan",
       "none": "Teks subtitle disembunyikan"
     },
     "rightBtnHidden": "Tombol sisi kanan pemutar disembunyikan",
@@ -547,7 +548,7 @@ export default {
       "settings-toggle-transcode-fallback": { "title": "Konversi audio yang tidak didukung", "description": "Alihkan pemulihan Electron untuk audio lokal dan Navidrome yang tidak dapat didekode Chromium" },
       "settings-toggle-playback-fade": { "title": "Fade saat jeda dan lanjut", "description": "Alihkan fade singkat saat menjeda dan melanjutkan pemutaran" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "Alihkan overlay subtitle bawah", "description": "Tampilkan atau sembunyikan seluruh overlay subtitle bawah" },
-      "settings-cycle-subtitle-content-mode": { "title": "Putar mode konten subtitle", "description": "Alihkan antara mode terjemahan dan romanisasi" },
+      "settings-cycle-subtitle-content-mode": { "title": "Putar mode konten subtitle", "description": "Putar konten subtitle antara terjemahan, romanisasi, dan romanisasi plus terjemahan" },
       "settings-toggle-subtitle-background": { "title": "Alihkan latar subtitle", "description": "Tampilkan atau sembunyikan latar belakang subtitle untuk keterbacaan" },
       "settings-language-system": { "title": "Ikuti bahasa sistem", "description": "Gunakan bahasa browser atau sistem" },
       "settings-language-zh-CN": { "title": "Ganti bahasa ke Tionghoa", "description": "Gunakan Bahasa Tionghoa Sederhana di antarmuka" },
@@ -1754,6 +1755,7 @@ export default {
     "subtitleContentMode": "Konten Subtitle",
     "subtitleContentTranslation": "Terjemahan",
     "subtitleContentRomanization": "Romanisasi",
+    "subtitleContentBoth": "Romanisasi + Terjemahan",
     "subtitleContentNone": "Tidak Ada",
     "classicSettings": "Penyetelan Classic",
     "classicSettingsDesc": "Kontrol rotasi per kata dan rentang melayang pernapasan seluruh baris.",
@@ -3739,7 +3741,7 @@ export default {
         "combineBackground": "Ganti latarnya saja: gaya lirik tetap. Pengaturan latar ada di halaman Latar Belakang pada pengaturan animasi lirik.",
         "combineStyle": "Sekarang ganti gaya liriknya saja: latar yang baru dipilih tetap. Latar apa pun cocok dengan gaya lirik apa pun; hanya gaya Still yang tidak menggambar latar.",
         "subtitleShared": "Sebagian besar gaya lirik berbagi satu baris subtitel di bawah ini. Monet, Pendolo, dan Still menaruh terjemahan di tata letaknya sendiri dan tidak memakainya.",
-        "subtitleContent": "Pengaturannya ada di halaman Subtitle pada pengaturan animasi lirik dan berlaku untuk semua gaya yang memakainya. Baris pertama memilih terjemahan, romanisasi, atau tidak ada.",
+        "subtitleContent": "Pengaturannya ada di halaman Subtitle pada pengaturan animasi lirik dan berlaku untuk semua gaya yang memakainya. Baris pertama memilih terjemahan, romanisasi, keduanya bertumpuk, atau tidak ada.",
         "subtitleBlur": "Matikan “Buramkan lirik non-terjemahan”, dan subtitel tidak lagi buram.",
         "subtitleFont": "Matikan “Subtitle Menggunakan Font Lirik” untuk memberi subtitel font dan ketebalan sendiri. “Skala subtitle” mengatur ukurannya sendiri dan selalu tersedia."
       },
@@ -3757,7 +3759,7 @@ export default {
         "animation": "Halaman animasi dimulai dari modenya sendiri. Jumlahnya lebih banyak daripada yang muat di sini dan layak kamu telusuri sendiri, jadi bab ini berhenti pada apa halaman ini, bukan mendaftar semuanya.",
         "perMode": "Yang mengikuti mode adalah penyetelan milik mode itu. Ini bukan sekumpulan baris tetap: ganti modenya dan baris-baris ini ikut berganti \u2014 itu sebabnya penggeser yang kamu ingat bisa hilang: ia milik mode yang kamu tinggalkan.",
         "background": "Halaman latar bekerja dengan cara yang sama: pilih latarnya, lalu setel latar itu. Ia lapisan terpisah dari animasi, jadi keduanya dipilih sendiri-sendiri dan pasangan mana pun boleh.",
-        "subtitleContent": "Subtitel adalah baris kedua di bawah lirik, dan baris pertama menentukan isinya: kosong, terjemahan, atau romanisasi. Ini satu pilihan, bukan tiga sakelar \u2014 terjemahan dan romanisasi tidak bisa menyala bersamaan.",
+        "subtitleContent": "Subtitel adalah baris kedua di bawah lirik, dan baris pertama menentukan isinya: kosong, terjemahan, romanisasi, atau keduanya dengan romanisasi di atas. Ini satu pilihan, bukan sakelar terpisah. Monet, Pendolo, dan Still hanya menampilkan terjemahan saat memilih keduanya.",
         "subtitleLegibility": "Baris di bawahnya soal keterbacaan di atas gambar yang bergerak: alas di belakang teks, seberapa pekat alas itu, dan kaburan pada baris yang belum dinyanyikan supaya baris yang sekarang menonjol.",
         "subtitleFont": "Baris terakhir adalah huruf subtitelnya sendiri, dan secara bawaan ia mengikuti fon lirik. Matikan itu dan keluarga, ukuran, serta ketebalannya sendiri muncul di bawah \u2014 selagi menyala mereka memang tidak ada di sana, dan itulah jawaban dari \u201ckenapa pengaturan fon subtitel tidak ketemu\u201d."
       },

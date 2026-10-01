@@ -20,6 +20,7 @@ export default {
     "subtitleMode": {
       "translation": "副字幕已切换为翻译",
       "romanization": "副字幕已切换为罗马音",
+      "both": "副字幕同时显示罗马音和翻译",
       "none": "副字幕文本已隐藏"
     },
     "rightBtnHidden": "播放页右侧按钮已隐藏",
@@ -549,7 +550,7 @@ export default {
       "settings-toggle-transcode-fallback": { "title": "自动转换不支持的音频", "description": "切换 Electron 对 Chromium 无法解码的本地与 Navidrome 音频的恢复" },
       "settings-toggle-playback-fade": { "title": "暂停/播放淡入淡出", "description": "切换暂停和恢复播放时的短淡入淡出" },
       "settings-toggle-bottom-subtitle-overlay": { "title": "切换底部字幕层", "description": "显示或隐藏整个底部字幕层" },
-      "settings-cycle-subtitle-content-mode": { "title": "切换翻译字幕状态", "description": "在翻译与罗马音之间切换副字幕内容" },
+      "settings-cycle-subtitle-content-mode": { "title": "切换翻译字幕状态", "description": "在翻译、罗马音、罗马音加翻译之间切换副字幕内容" },
       "settings-toggle-subtitle-background": { "title": "切换字幕背景", "description": "显示或隐藏提升字幕可读性的背景" },
       "settings-language-system": { "title": "跟随系统语言", "description": "使用浏览器或系统语言" },
       "settings-language-zh-CN": { "title": "切换为中文", "description": "界面使用简体中文" },
@@ -1763,6 +1764,7 @@ export default {
     "subtitleContentMode": "副字幕内容",
     "subtitleContentTranslation": "翻译",
     "subtitleContentRomanization": "罗马音",
+    "subtitleContentBoth": "罗马音 + 翻译",
     "subtitleContentNone": "不显示",
     "classicSettings": "流光参数",
     "classicSettingsDesc": "控制逐字旋转和整行呼吸浮动范围。",
@@ -3853,7 +3855,7 @@ export default {
         "combineBackground": "只换背景：歌词样式不动。背景自己的参数在调参台的「背景」页。",
         "combineStyle": "再只换歌词样式：刚选的背景留着。任意背景都能配任意歌词样式；只有「静止」样式不渲染背景。",
         "subtitleShared": "多数歌词样式在底部共用这一条副字幕。莫奈、时计和静止把翻译排进自己的版面，不用这一条。",
-        "subtitleContent": "它的设置在歌词动画设置的「字幕」页，对所有使用它的样式一起生效。第一行选择显示翻译、罗马音或不显示。",
+        "subtitleContent": "它的设置在歌词动画设置的「字幕」页，对所有使用它的样式一起生效。第一行选择显示翻译、罗马音、罗马音加翻译两行，或不显示。",
         "subtitleBlur": "关闭「非翻译歌词添加模糊效果」，副字幕就不再模糊。",
         "subtitleFont": "关闭「字幕继承歌词字体」后，可以给字幕单独设置字体和字重；「字幕缩放」单独调整字号，随时可用。"
       },
@@ -3871,7 +3873,7 @@ export default {
         "animation": "动画那一页最上面是模式本身。模式比这一屏能列下的多，而且值得你自己翻一遍，所以这一章只说这一页是什么，不把清单念一遍。",
         "perMode": "模式下方是对应参数；换模式，参数也会跟着换。",
         "background": "背景那一页是同一套做法：先挑背景，再调这个背景。它和动画是两层，各挑各的，任意组合都成立。",
-        "subtitleContent": "字幕第二行可选：无、翻译或罗马音。三选一，不能同时开启。",
+        "subtitleContent": "字幕第二行可选：无、翻译、罗马音，或罗马音在上、翻译在下的两行。莫奈、时计和静止选两行时只显示翻译。",
         "subtitleLegibility": "这里设置字幕底色、不透明度，以及未唱行的模糊效果。",
         "subtitleFont": "字幕默认跟随歌词字体。关闭后，字幕的字体、字号和字重设置才会出现。"
       },

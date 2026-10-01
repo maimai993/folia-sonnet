@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { MotionValue } from 'framer-motion';
-import type { Line, Theme } from '@/types';
+import type { Line, SubtitleContentMode, Theme } from '@/types';
 import type { FoliumDisplay, FoliumParamAccess, FoliumParamValues, FoliumStageContext, FoliumSurface, FoliumTheme } from './contract';
 import { toFoliumLines, toFoliumSongFromMeta, toFoliumTheme } from './dto';
 import { createFoliumAudio, type FoliumAudioSource } from './audio';
+import { resolveSingleTrackSubtitleMode } from '@/utils/lyrics/alternateText';
 
 // src/mods/folium/stageContext.ts
 // Builds the FoliumStageContext handed to lyric-synced content (visualizers,
@@ -33,7 +34,8 @@ export interface FoliumStageInputs {
     coverUrl: string | null;
     /** The subtitle theme; absent means the same as `theme`. */
     subtitleTheme?: Theme;
-    display: Partial<FoliumDisplay>;
+    /** Host-side display state: carries the host's own SubtitleContentMode, which may be 'both'. */
+    display: Partial<Omit<FoliumDisplay, 'subtitleContentMode'>> & { subtitleContentMode?: SubtitleContentMode };
     surface: FoliumSurface;
     settings: FoliumParamAccess | null;
     /** The analyser signals behind `ctx.audio`; absent reads as silence. */
@@ -48,7 +50,7 @@ const NO_AUDIO: FoliumAudioSource = Object.freeze({});
  * VisualizerShell, VisualizerSubtitleOverlay, VisualizerHarmonyOverlay), so a
  * mod reads the same effective values they render with.
  */
-export const resolveFoliumDisplay = (display: Partial<FoliumDisplay>): FoliumDisplay => {
+export const resolveFoliumDisplay = (display: FoliumStageInputs['display']): FoliumDisplay => {
     const showSubtitleTranslation = display.showSubtitleTranslation ?? true;
     return {
         showText: display.showText ?? true,
@@ -61,7 +63,11 @@ export const resolveFoliumDisplay = (display: Partial<FoliumDisplay>): FoliumDis
         harmonySubtitleBackground: display.harmonySubtitleBackground ?? true,
         showSubtitleTranslation,
         hideTranslationSubtitle: display.hideTranslationSubtitle ?? false,
-        subtitleContentMode: display.subtitleContentMode ?? (showSubtitleTranslation ? 'translation' : 'none'),
+        // The Folium contract only knows single-track modes: mods draw their own text, so the host's
+        // dual-row 'both' (shared bottom overlay only) reads as translation, like Monet / Pendolo / Lattice.
+        subtitleContentMode: resolveSingleTrackSubtitleMode(
+            display.subtitleContentMode ?? (showSubtitleTranslation ? 'translation' : 'none'),
+        ),
         isPlayerChromeHidden: display.isPlayerChromeHidden ?? false,
         isPanelOpen: display.isPanelOpen ?? false,
         visualizerOpacity: display.visualizerOpacity ?? 1,

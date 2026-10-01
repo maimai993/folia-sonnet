@@ -10,7 +10,7 @@ import { useVisualizerRuntime } from '../runtime';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
-import { resolveLyricAlternateText, resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
+import { resolveLyricAlternateText, resolveSingleTrackSubtitleMode, resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
@@ -57,7 +57,9 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         seed,
     } = props;
     const { t } = useTranslation();
-    const resolvedSubtitleContentMode = resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation);
+    // Monet sets its translation row inside the lyric animation itself, not in the shared bottom subtitle,
+    // so it cannot stack two rows yet: the 'both' option falls back to translation only (phase 2 will add a third track).
+    const resolvedSubtitleContentMode = resolveSingleTrackSubtitleMode(resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation));
     const displayLines = useMemo(() => {
         if (resolvedSubtitleContentMode !== 'romanization') {
             return lines;

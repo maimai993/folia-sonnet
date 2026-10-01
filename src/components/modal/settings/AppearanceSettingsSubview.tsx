@@ -428,6 +428,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (has('subtitleContentMode')
                 && (config.subtitleContentMode === 'translation'
                     || config.subtitleContentMode === 'romanization'
+                    || config.subtitleContentMode === 'both'
                     || config.subtitleContentMode === 'none')) {
                 storeTypographySettings.handleSetSubtitleContentMode(config.subtitleContentMode);
             }

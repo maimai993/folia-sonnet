@@ -558,7 +558,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '显示底部字幕',
             'zimu ceng',
         ], context => context.settings.toggleBottomSubtitleOverlay()),
-    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Switch between translation and romanization subtitle modes', [
+    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Cycle subtitle content between translation, romanization, and romanization plus translation', [
             'subtitle translation',
             'translation subtitle',
             'show subtitle translation',
@@ -567,6 +567,8 @@ export const settingsCommands: CommandPaletteCommand[] = [
             'subtitle romanization',
             'romanized lyrics',
             'romaji',
+            'dual subtitle',
+            'bilingual subtitle',
             '字幕翻译',
             '显示翻译',
             '翻译字幕',
@@ -574,6 +576,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '切换翻译字幕',
             '罗马音',
             '罗马字',
+            '双行字幕',
             '副字幕',
         ], context => context.settings.cycleSubtitleContentMode()),
     createToggleCommand('settings-toggle-subtitle-background', 'settings', 'Toggle subtitle background', 'Show or hide the readability background behind visualizer subtitles', [
