@@ -20,21 +20,22 @@ export class LocalFileLyricAdapter implements LyricAdapter<RawLocalFileLyric> {
         const container = extractAwlrcContainer(source.lrcContent);
         if (container?.awlrc || container?.lrc) {
             const translation = source.tLrcContent || container.tlrc || '';
+            const romanization = source.rLrcContent || container.rlrc || '';
             return container.awlrc
-                ? await parseLyricsAsync('awlrc', container.awlrc, translation, options, container.rlrc || '')
-                : await parseLyricsAsync('lrc', container.lrc!, translation, options, container.rlrc || '');
+                ? await parseLyricsAsync('awlrc', container.awlrc, translation, options, romanization)
+                : await parseLyricsAsync('lrc', container.lrc!, translation, options, romanization);
         }
 
         let mainLrc = source.lrcContent;
         let transLrc = source.tLrcContent || '';
-        let romanizationLrc = '';
+        let romanizationLrc = source.rLrcContent || '';
         let format = source.formatHint || detectTimedLyricFormat(mainLrc);
 
         if (format !== 'ttml') {
             const { main, trans, romanization } = splitCombinedTimeline(mainLrc);
             mainLrc = main;
             transLrc ||= trans;
-            romanizationLrc = romanization;
+            romanizationLrc ||= romanization;
             format = source.formatHint || detectTimedLyricFormat(mainLrc);
         }
 
