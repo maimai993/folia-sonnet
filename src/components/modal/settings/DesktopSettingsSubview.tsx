@@ -237,7 +237,7 @@ const DesktopSettingsSubview: React.FC<DesktopSettingsSubviewProps> = ({
                     )}
                     {renderRow(
                         t('options.openPlayerOnLaunch'),
-                        '应用启动时自动开启全屏/大屏歌词播放界面，无需手动点击。',
+                        t('options.openPlayerOnLaunchDesc'),
                         renderToggle(openPlayerOnLaunch, () => onToggleOpenPlayerOnLaunch(!openPlayerOnLaunch)),
                     )}
                     {renderRow(

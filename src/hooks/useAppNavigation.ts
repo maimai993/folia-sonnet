@@ -90,9 +90,48 @@ const getSearchHistorySnapshot = (): NavigationHistoryState['search'] => {
         : null;
 };
 
-const getStartupView = (): ViewState => (
-    localStorage.getItem(OPEN_PLAYER_ON_LAUNCH_KEY) === 'true' ? 'player' : 'home'
-);
+/**
+ * Which view a launch lands on. "Open player on launch" means "open the playback surface", so it
+ * follows the stored playback entry preference and reuses the capsule's Lattice rule: Lattice only
+ * when it can actually show something (non-empty queue, not FM), otherwise the player.
+ */
+export const resolveStartupView = ({
+    openPlayerOnLaunch,
+    playbackEntryView,
+    isFmMode,
+    queueLength,
+}: {
+    openPlayerOnLaunch: boolean;
+    playbackEntryView: 'player' | 'lattice';
+    isFmMode: boolean;
+    queueLength: number;
+}): 'home' | 'player' | 'lattice' => {
+    if (!openPlayerOnLaunch) return 'home';
+    if (queueLength <= 0) return 'player';
+    return resolvePlayerCapsuleNavigationTarget('home', playbackEntryView, isFmMode) ?? 'player';
+};
+
+/** Whether a launch wanted Lattice but had to start on the player because the queue was not restored yet. */
+export const isStartupLatticeDeferred = ({
+    openPlayerOnLaunch,
+    playbackEntryView,
+    isFmMode,
+}: {
+    openPlayerOnLaunch: boolean;
+    playbackEntryView: 'player' | 'lattice';
+    isFmMode: boolean;
+}): boolean => openPlayerOnLaunch && playbackEntryView === 'lattice' && !isFmMode;
+
+// The last session is restored asynchronously (IndexedDB), so the queue is still empty when the
+// startup view is chosen; a deferred Lattice launch waits at most this long for it.
+const STARTUP_LATTICE_RESTORE_WINDOW_MS = 10000;
+
+const getStartupView = (): ViewState => resolveStartupView({
+    openPlayerOnLaunch: localStorage.getItem(OPEN_PLAYER_ON_LAUNCH_KEY) === 'true',
+    playbackEntryView: usePlaybackEntryViewStore.getState().playbackEntryView,
+    isFmMode: usePlaybackStore.getState().isFmMode,
+    queueLength: usePlaybackStore.getState().playQueue.length,
+});
 
 const getCollectionHash = (collection: GridViewCollectionDescriptor) => (
     `#collection/${collection.source}/${collection.type}/${encodeURIComponent(String(collection.id))}`
@@ -201,16 +240,59 @@ export function useAppNavigation() {
         window.history.replaceState(
             initialState,
             '',
-            initialView === 'player' ? '#player' : (window.location.pathname + window.location.search),
+            initialView === 'player' ? '#player' : initialView === 'lattice' ? '#lattice' : (window.location.pathname + window.location.search),
         );
         restoreHistoryState(initialState);
         resetLocalNavigationContext();
+
+        // A Lattice launch cannot be decided up front: the queue arrives after the session restore.
+        // Start on the player (as before) and swap to Lattice in place once the queue lands, but only
+        // if the listener has not moved on, so this never overrides a navigation they made.
+        let unsubscribeDeferredLattice: (() => void) | null = null;
+        let deferredLatticeTimer: ReturnType<typeof setTimeout> | null = null;
+        const cancelDeferredLattice = () => {
+            unsubscribeDeferredLattice?.();
+            unsubscribeDeferredLattice = null;
+            if (deferredLatticeTimer !== null) clearTimeout(deferredLatticeTimer);
+            deferredLatticeTimer = null;
+        };
+        const startupOptions = {
+            openPlayerOnLaunch: localStorage.getItem(OPEN_PLAYER_ON_LAUNCH_KEY) === 'true',
+            playbackEntryView: usePlaybackEntryViewStore.getState().playbackEntryView,
+            isFmMode: usePlaybackStore.getState().isFmMode,
+        };
+        if (initialView === 'player' && isStartupLatticeDeferred(startupOptions)) {
+            const tryUpgrade = () => {
+                const playback = usePlaybackStore.getState();
+                const historyState = window.history.state as NavigationHistoryState | null;
+                const stillOnStartupEntry = useAppViewStore.getState().view === 'player'
+                    && historyState?.view === 'player'
+                    && getAppHistoryIndex(historyState) === 0;
+                if (!stillOnStartupEntry || playback.isFmMode) {
+                    cancelDeferredLattice();
+                    return;
+                }
+                if (playback.playQueue.length === 0) return;
+                cancelDeferredLattice();
+                const target = resolveStartupView({
+                    ...startupOptions,
+                    isFmMode: playback.isFmMode,
+                    queueLength: playback.playQueue.length,
+                });
+                if (target !== 'lattice') return;
+                const upgradedState = buildHistoryState('lattice');
+                window.history.replaceState(upgradedState, '', '#lattice');
+                restoreHistoryState(upgradedState);
+            };
+            unsubscribeDeferredLattice = usePlaybackStore.subscribe(tryUpgrade);
+            deferredLatticeTimer = setTimeout(cancelDeferredLattice, STARTUP_LATTICE_RESTORE_WINDOW_MS);
+        }
 
         const handlePopState = (event: PopStateEvent) => {
             const state = event.state as NavigationHistoryState | null;
             if (!state) {
                 const fallbackState = buildHistoryState(getStartupView());
-                window.history.replaceState(fallbackState, '', fallbackState.view === 'player' ? '#player' : '#home');
+                window.history.replaceState(fallbackState, '', fallbackState.view === 'player' ? '#player' : fallbackState.view === 'lattice' ? '#lattice' : '#home');
                 restoreHistoryState(fallbackState);
                 return;
             }
@@ -218,7 +300,10 @@ export function useAppNavigation() {
         };
 
         window.addEventListener('popstate', handlePopState);
-        return () => window.removeEventListener('popstate', handlePopState);
+        return () => {
+            cancelDeferredLattice();
+            window.removeEventListener('popstate', handlePopState);
+        };
     }, []);
 
     const navigateToPlayer = useCallback(() => {
