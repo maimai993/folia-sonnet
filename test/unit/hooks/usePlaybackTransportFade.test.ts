@@ -40,10 +40,13 @@ const {
     consumeProgrammaticPause,
     playbackFade,
     registerPlaybackFadeGraph,
+    PAUSE_DRAIN_MS,
     PLAYBACK_FADE_SECONDS,
 } = await import('@/services/playbackFade');
 
 const D = PLAYBACK_FADE_SECONDS;
+/** The paused element's drain, plus the short ramp back to unity after it. */
+const DRAIN_AND_RESTORE = PAUSE_DRAIN_MS / 1000 + 0.05;
 
 type FakeAudio = {
     paused: boolean;
@@ -61,8 +64,14 @@ let isTransitionAudible: ReturnType<typeof vi.fn>;
 let syncOutputGain: ReturnType<typeof vi.fn>;
 
 const advance = (seconds: number) => {
-    graph.clock.now += seconds;
-    vi.advanceTimersByTime(seconds * 1000);
+    // In 1ms steps, so a timer that schedules a ramp sees the audio clock at its own firing time.
+    let remainingMs = Math.round(seconds * 1000);
+    while (remainingMs > 0) {
+        const stepMs = Math.min(1, remainingMs);
+        graph.clock.now += stepMs / 1000;
+        vi.advanceTimersByTime(stepMs);
+        remainingMs -= stepMs;
+    }
 };
 
 const buildTransport = () => usePlaybackTransportController({
@@ -103,6 +112,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    // Let a pending post-pause drain fire, so the shared controller holds no dead timer handle.
+    vi.runOnlyPendingTimers();
     playbackFade.cancel();
     registerPlaybackFadeGraph(null);
     vi.useRealTimers();
@@ -118,6 +129,7 @@ describe('pausePlayback', () => {
 
         advance(D + 0.02);
         expect(audio.pause).toHaveBeenCalledTimes(1);
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
     });
 
@@ -150,6 +162,7 @@ describe('pausePlayback', () => {
 
         expect(audio.pause).not.toHaveBeenCalled();
         // And the fade node is not left silent for the new song.
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
     });
 
@@ -173,6 +186,7 @@ describe('pausePlayback', () => {
         // playSong's entry, before the new song's source has loaded.
         playbackFade.flush();
         expect(audio.pause).toHaveBeenCalledTimes(1);
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
 
         // Its pause event is recognised as ours, once, so the new song's play intent survives it.
@@ -217,6 +231,7 @@ describe('pausePlayback', () => {
         advance(D);
 
         expect(pauseDuringTransition).toHaveBeenCalledTimes(1);
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
     });
 
@@ -245,6 +260,7 @@ describe('pausePlayback', () => {
         expect(pauseDuringTransition).toHaveBeenCalledTimes(1);
         expect(audio.pause).not.toHaveBeenCalled();
         expect(syncOutputGain).toHaveBeenCalledWith(0.8, 0);
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
     });
 
@@ -364,6 +380,7 @@ describe('quick toggles', () => {
         advance(D + 0.05);
 
         expect(audio.pause).toHaveBeenCalledTimes(1);
+        advance(DRAIN_AND_RESTORE);
         expect(graph.param.value).toBe(1);
     });
 });

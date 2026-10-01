@@ -20,6 +20,17 @@ export const PLAYBACK_FADE_SECONDS = 0.2;
 /** Added to the timer so the audio thread has finished the ramp before the element is paused. */
 const TIMER_GRACE_MS = 15;
 
+/**
+ * How long the node stays silent after the element is paused. pause() reaches the media pipeline
+ * asynchronously, and audio it had already handed to the graph keeps flowing for a few tens of
+ * milliseconds; putting the node back to unity at once plays that tail at full level, which is the
+ * pop heard at the very end of a fade-out.
+ */
+export const PAUSE_DRAIN_MS = 150;
+
+/** The return to unity after the drain is itself a short ramp, in case something is sounding again. */
+const RESTORE_RAMP_SECONDS = 0.03;
+
 export type PlaybackFadeGraph = {
     context: AudioContext;
     /** The dedicated transport fade node, unity at rest. */
@@ -65,14 +76,16 @@ export type PlaybackFadeController = {
     abortFadeIn: (token: number | null) => void;
     /**
      * Drops any pending pause and snaps the node back to unity. For track changes, where the old
-     * pause must not reach the new song and the new song must not start silent.
+     * pause must not reach the new song and the new song must not start silent. A post-pause drain
+     * still under way is left to finish its own short return to unity.
      */
     cancel: () => void;
     /**
      * For a track change while a pause is still fading out. The old song is still sounding (only
      * its gain was ramped), and the new one may take seconds to load, so dropping the pause would
      * leave the old song at full volume under a PAUSED UI. Runs the pending pause now with reason
-     * 'flushed', then restores unity. With nothing pending it is the same as cancel().
+     * 'flushed', then restores unity once the paused element has drained (PAUSE_DRAIN_MS).
+     * With nothing pending it is the same as cancel().
      */
     flush: () => void;
 };
@@ -89,11 +102,20 @@ export const createPlaybackFadeController = ({
     let timer: unknown = null;
     let pendingOut = false;
     let pendingAction: ((reason: PlaybackFadeSettleReason) => void) | null = null;
+    // The deferred return to unity after a pause; whoever takes over the node next clears it.
+    let restoreTimer: unknown = null;
 
     const clearPendingTimer = () => {
         if (timer !== null) {
             clearTimer(timer);
             timer = null;
+        }
+    };
+
+    const clearRestoreTimer = () => {
+        if (restoreTimer !== null) {
+            clearTimer(restoreTimer);
+            restoreTimer = null;
         }
     };
 
@@ -107,8 +129,25 @@ export const createPlaybackFadeController = ({
     };
 
     const snapToUnity = () => {
+        clearRestoreTimer();
         const graph = getGraph();
         if (graph) rampGain(graph.context, graph.gain, 1, 0);
+    };
+
+    // Unity again once the paused element has stopped feeding the graph, not the moment pause() returns.
+    const restoreAfterDrain = () => {
+        clearRestoreTimer();
+        restoreTimer = setTimer(() => {
+            restoreTimer = null;
+            const graph = getGraph();
+            if (graph) rampGain(graph.context, graph.gain, 1, RESTORE_RAMP_SECONDS);
+        }, PAUSE_DRAIN_MS);
+    };
+
+    // For a track change with no pause of its own to run: a drain already under way is left to
+    // finish (the old element may still be emptying into the graph), otherwise unity right away.
+    const settleToUnity = () => {
+        if (restoreTimer === null) snapToUnity();
     };
 
     // Retires the pending pause and hands back its action, without running it.
@@ -125,8 +164,8 @@ export const createPlaybackFadeController = ({
         try {
             action(reason);
         } finally {
-            // Paused (or discarded): unity again so whatever plays next is not silent.
-            snapToUnity();
+            // Paused (or discarded): unity again so whatever plays next is not silent - after the drain.
+            restoreAfterDrain();
         }
     };
 
@@ -135,6 +174,7 @@ export const createPlaybackFadeController = ({
         const graph = resolveUsableGraph();
         if (!graph) return false;
 
+        clearRestoreTimer();
         const token = ++generation;
         pendingOut = true;
         pendingAction = action;
@@ -151,6 +191,7 @@ export const createPlaybackFadeController = ({
     const cancelPendingPause = () => {
         if (!pendingOut) return false;
         takePending();
+        clearRestoreTimer();
         const graph = getGraph();
         if (graph) rampGain(graph.context, graph.gain, 1, durationSec);
         return true;
@@ -161,6 +202,7 @@ export const createPlaybackFadeController = ({
         if (!graph) return null;
         // Also retires a pending pause: starting playback is the opposite of it.
         takePending();
+        clearRestoreTimer();
         const token = generation;
         rampGain(graph.context, graph.gain, 0, 0);
         return token;
@@ -180,13 +222,13 @@ export const createPlaybackFadeController = ({
 
     const cancel = () => {
         takePending();
-        snapToUnity();
+        settleToUnity();
     };
 
     const flush = () => {
         const action = takePending();
         if (action) runAndRestore(action, 'flushed');
-        else snapToUnity();
+        else settleToUnity();
     };
 
     return {

@@ -3,6 +3,7 @@ import {
     consumeProgrammaticPause,
     createPlaybackFadeController,
     markProgrammaticPause,
+    PAUSE_DRAIN_MS,
     PLAYBACK_FADE_SECONDS,
 } from '@/services/playbackFade';
 import { useAudioSettingsStore } from '@/stores/useAudioSettingsStore';
@@ -14,6 +15,9 @@ import { createFakeFadeGraph, type FakeFadeGraph } from './fakeFadeGraph';
 // assertion on values rather than on which calls were made.
 
 const D = PLAYBACK_FADE_SECONDS;
+/** Silence held after the element is paused, plus the short ramp back to unity. */
+const DRAIN = PAUSE_DRAIN_MS / 1000;
+const DRAIN_AND_RESTORE = DRAIN + 0.05;
 
 let graph: FakeFadeGraph;
 let enabled: boolean;
@@ -26,8 +30,14 @@ const makeController = () => createPlaybackFadeController({
 
 /** Moves the audio clock and the timer clock together, as one wall-clock second does in the app. */
 const advance = (seconds: number) => {
-    graph.clock.now += seconds;
-    vi.advanceTimersByTime(seconds * 1000);
+    // In 1ms steps, so a timer that schedules a ramp sees the audio clock at its own firing time.
+    let remainingMs = Math.round(seconds * 1000);
+    while (remainingMs > 0) {
+        const stepMs = Math.min(1, remainingMs);
+        graph.clock.now += stepMs / 1000;
+        vi.advanceTimersByTime(stepMs);
+        remainingMs -= stepMs;
+    }
 };
 
 const gain = () => graph.param.value;
@@ -59,7 +69,25 @@ describe('fadeOutThen', () => {
         advance(D / 2 + 0.02);
         expect(pause).toHaveBeenCalledTimes(1);
         expect(fade.isFadingOut()).toBe(false);
-        // Unity again, so whatever plays next is not silent.
+        // Still silent: the paused element may still be emptying its buffer into the graph.
+        expect(gain()).toBe(0);
+
+        // Unity again once that tail is gone, so whatever plays next is not silent.
+        advance(DRAIN_AND_RESTORE);
+        expect(gain()).toBe(1);
+    });
+
+    it('holds silence through the drain, so the tail of the paused element is never heard at full level', () => {
+        const fade = makeController();
+        fade.fadeOutThen(vi.fn());
+        advance(D + 0.02);
+
+        // Sample the whole window right after pause() - the gain must not move off zero.
+        for (let elapsed = 0; elapsed < DRAIN - 0.01; elapsed += 0.01) {
+            expect(gain()).toBe(0);
+            advance(0.01);
+        }
+        advance(0.06);
         expect(gain()).toBe(1);
     });
 
@@ -101,8 +129,9 @@ describe('fadeOutThen', () => {
         fade.fadeOutThen(() => { throw new Error('pause failed'); });
 
         expect(() => advance(D + 0.02)).toThrow('pause failed');
-        expect(gain()).toBe(1);
         expect(fade.isFadingOut()).toBe(false);
+        advance(DRAIN_AND_RESTORE);
+        expect(gain()).toBe(1);
     });
 });
 
@@ -167,6 +196,7 @@ describe('cancelPendingPause (resume during fade-out)', () => {
 
         expect(firstPause).not.toHaveBeenCalled();
         expect(secondPause).toHaveBeenCalledTimes(1);
+        advance(DRAIN_AND_RESTORE);
         expect(gain()).toBe(1);
     });
 });
@@ -251,6 +281,23 @@ describe('fade-in', () => {
         expect(gain()).toBeCloseTo(1, 5);
     });
 
+    it('a resume during the post-pause drain fades in on its own, without the drain restore cutting in', () => {
+        const fade = makeController();
+        fade.fadeOutThen(vi.fn());
+        advance(D + 0.02);
+        advance(0.05);
+
+        const token = fade.prepareFadeIn();
+        expect(gain()).toBe(0);
+        fade.runFadeIn(token);
+
+        // Past the point where the drain restore would have fired: still on the fade-in's curve.
+        advance(D / 2);
+        expect(gain()).toBeCloseTo(0.5, 5);
+        advance(D / 2);
+        expect(gain()).toBeCloseTo(1, 5);
+    });
+
     it('abortFadeIn puts the volume back after a failed play(), but only for the current token', () => {
         const fade = makeController();
 
@@ -315,6 +362,17 @@ describe('cancel (track change)', () => {
         hasGraph = false;
         expect(() => makeController().cancel()).not.toThrow();
     });
+
+    it('leaves a drain that is still under way to finish instead of snapping to unity', () => {
+        const fade = makeController();
+        fade.fadeOutThen(vi.fn());
+        advance(D + 0.02);
+
+        fade.cancel();
+        expect(gain()).toBe(0);
+        advance(DRAIN_AND_RESTORE);
+        expect(gain()).toBe(1);
+    });
 });
 
 describe('flush (track change while a pause is fading out)', () => {
@@ -327,12 +385,16 @@ describe('flush (track change while a pause is fading out)', () => {
         fade.flush();
         expect(pause).toHaveBeenCalledTimes(1);
         expect(pause).toHaveBeenCalledWith('flushed');
-        expect(gain()).toBe(1);
         expect(fade.isFadingOut()).toBe(false);
+        // No jump back up while the half-faded element drains: it keeps heading down instead.
+        expect(gain()).toBeCloseTo(0.5, 5);
+        advance(DRAIN - 0.01);
+        expect(gain()).toBeLessThanOrEqual(0.5);
 
         // The timer that was already scheduled must not run it a second time.
         advance(D * 3);
         expect(pause).toHaveBeenCalledTimes(1);
+        expect(gain()).toBe(1);
     });
 
     it('passes elapsed when the fade simply finishes', () => {
@@ -359,8 +421,9 @@ describe('flush (track change while a pause is fading out)', () => {
         advance(D / 2);
 
         expect(() => fade.flush()).toThrow('pause failed');
-        expect(gain()).toBe(1);
         expect(fade.isFadingOut()).toBe(false);
+        advance(DRAIN_AND_RESTORE);
+        expect(gain()).toBe(1);
     });
 });
 
