@@ -1,6 +1,27 @@
 
 
 export default {
+  "libraryTui": {
+    "back": "Kembali",
+    "sourceOnline": "online · {{provider}}",
+    "sourceLocal": "lokal",
+    "sourceNavidrome": "navidrome",
+    "loaded": "{{loaded}} dimuat",
+    "loadedOfTotal": "{{loaded}} / {{total}}",
+    "filter": "filter: {{query}}",
+    "filterHint": "ketik untuk memfilter",
+    "scope": "{{count}} dalam cakupan",
+    "columnIndex": "#",
+    "columnTitle": "Judul",
+    "columnArtist": "Artis",
+    "columnAlbum": "Album",
+    "columnTime": "Durasi",
+    "enqueue": "Tambahkan ke antrean",
+    "hints": "↑↓ pindah · PgUp/PgDn halaman · Home/End · Enter putar · Shift+Enter antre · Ctrl+Enter putar semua · Ctrl+Shift+Enter antre semua · Esc kembali",
+    "rendererSwitch": "Tampilan koleksi",
+    "rendererGrid": "Grid",
+    "rendererTui": "TUI"
+  },
   "notifications": {
     "coverColorAdded": "Warna sampul ditambahkan",
     "coverColorDefault": "Menggunakan warna bawaan",

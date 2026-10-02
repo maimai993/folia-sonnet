@@ -32,6 +32,19 @@ describe('library core layer boundaries', () => {
         expect(offenders).toEqual([]);
     });
 
+    it('keeps the list renderer independent of the grid, its hex viewport and the open transition', () => {
+        const FORBIDDEN = [
+            /\/GridView$/, /\/Grid3D$/, /\/GridMap$/, /\/ArtistGridView$/,
+            /folia-grid\/(PolaroidCard|polaroidCardParts|hex\w*|useFoliaHexViewport)$/,
+            /collectionOpenMorph\//,
+        ];
+        const offenders = listSources('src/components/library-tui').flatMap(file => importsOf(file)
+            .filter(source => FORBIDDEN.some(pattern => pattern.test(source)))
+            .map(source => `${file} -> ${source}`));
+        expect(listSources('src/components/library-tui').length).toBeGreaterThan(0);
+        expect(offenders).toEqual([]);
+    });
+
     it('keeps pure transforms away from stores and services', () => {
         const offenders = listSources('src/utils/libraryUi').flatMap(file => importsOf(file)
             .filter(source => /\/(stores|services)\//.test(source))

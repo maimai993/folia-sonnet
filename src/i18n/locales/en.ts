@@ -1,6 +1,27 @@
 
 
 export default {
+  "libraryTui": {
+    "back": "Back",
+    "sourceOnline": "online · {{provider}}",
+    "sourceLocal": "local",
+    "sourceNavidrome": "navidrome",
+    "loaded": "{{loaded}} loaded",
+    "loadedOfTotal": "{{loaded}} / {{total}}",
+    "filter": "filter: {{query}}",
+    "filterHint": "type to filter",
+    "scope": "{{count}} in scope",
+    "columnIndex": "#",
+    "columnTitle": "Title",
+    "columnArtist": "Artist",
+    "columnAlbum": "Album",
+    "columnTime": "Time",
+    "enqueue": "Add to queue",
+    "hints": "↑↓ move · PgUp/PgDn page · Home/End · Enter play · Shift+Enter queue · Ctrl+Enter play all · Ctrl+Shift+Enter queue all · Esc back",
+    "rendererSwitch": "Collection view",
+    "rendererGrid": "Grid",
+    "rendererTui": "TUI"
+  },
   "notifications": {
     "coverColorAdded": "Cover color added",
     "coverColorDefault": "Using default color",

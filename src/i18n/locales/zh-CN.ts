@@ -1,6 +1,27 @@
 
 
 export default {
+  "libraryTui": {
+    "back": "返回",
+    "sourceOnline": "在线 · {{provider}}",
+    "sourceLocal": "本地",
+    "sourceNavidrome": "Navidrome",
+    "loaded": "已加载 {{loaded}} 首",
+    "loadedOfTotal": "{{loaded}} / {{total}}",
+    "filter": "筛选：{{query}}",
+    "filterHint": "直接键入即可筛选",
+    "scope": "当前范围 {{count}} 首",
+    "columnIndex": "#",
+    "columnTitle": "歌名",
+    "columnArtist": "歌手",
+    "columnAlbum": "专辑",
+    "columnTime": "时长",
+    "enqueue": "加入播放队列",
+    "hints": "↑↓ 移动 · PgUp/PgDn 翻页 · Home/End · Enter 播放 · Shift+Enter 入队 · Ctrl+Enter 播放全部 · Ctrl+Shift+Enter 全部入队 · Esc 返回",
+    "rendererSwitch": "集合视图",
+    "rendererGrid": "网格",
+    "rendererTui": "TUI"
+  },
   "notifications": {
     "coverColorAdded": "添加封面色彩",
     "coverColorDefault": "使用默认色彩",
