@@ -1,19 +1,11 @@
 import type { GridMapItem } from '../GridMap';
+import type { GridMapDirectoryNode } from '../../library/core/contracts/directory';
 import { matchesGridMapSearch } from './gridMapSearch';
 
 // src/components/folia-grid/gridMapBatch.ts
 
-export interface GridMapDirectoryNode {
-    id: string;
-    name: string;
-    path: string;
-    rootPath: string;
-    depth: number;
-    ignored?: boolean;
-    directTrackCount: number;
-    totalTrackCount: number;
-    children: GridMapDirectoryNode[];
-}
+// 目录节点的契约在 core/contracts/directory；这里沿用旧名转出，批量面板与本地首页照旧从这里拿。
+export type { GridMapDirectoryNode };
 
 export interface GridMapBatchContext {
     items: GridMapItem[];

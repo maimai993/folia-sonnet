@@ -1,5 +1,5 @@
 import type { LocalLibrarySnapshot, LocalLibrarySnapshotNode, LocalSong } from '../types';
-import type { GridMapDirectoryNode } from '../components/folia-grid/gridMapBatch';
+import type { GridMapDirectoryNode } from '../library/core/contracts/directory';
 import { getDirHandles, getLocalLibrarySnapshot, getLocalSongs } from './db';
 
 // src/services/localLibraryDirectoryTree.ts
