@@ -3,6 +3,7 @@ import type { MediaId } from '../../../types/onlineMusic';
 import type { LibraryCollectionDescriptor } from './collection';
 import type { LibraryDirectoryBatchController } from './directory';
 import type { LibraryHomeData, LibraryOnlineProviderPlatform } from './home';
+import type { LibraryHomeResources } from './homeModel';
 import type { CollectionMutationController } from './mutations';
 import type { LibraryPlaybackPort } from './ports';
 import type { CollectionResource } from './resource';
@@ -147,6 +148,8 @@ export type LibraryHomeSurfaceProps = LibrarySurfaceBaseProps & LibraryHomeData 
     onOpenGridView: (collection: LibraryCollectionDescriptor) => void;
     /** 本地目录的批量动作控制器（宿主装配端口后创建，见 library/app/useLibraryDirectoryBatchController）。 */
     directoryActions?: LibraryDirectoryBatchController;
+    /** 首页的资源与控制器（宿主创建，见 library/app/useLibraryHomeResources）；suite 只订阅。 */
+    homeResources: LibraryHomeResources;
 };
 
 export type LibrarySurfacePropsMap = {

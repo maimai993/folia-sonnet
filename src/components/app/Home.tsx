@@ -3,6 +3,7 @@ import GridViewOverlayHost from '../../library/app/GridViewOverlayHost';
 import { resolveLibrarySurface } from '../../library/registry';
 import { useLibrarySuiteStore } from '../../library/core/state/useLibrarySuiteStore';
 import { useLibraryDirectoryBatchController } from '../../library/app/useLibraryDirectoryBatchController';
+import { useLibraryHomeResources } from '../../library/app/useLibraryHomeResources';
 import type { HomeViewModel } from './home/buildHomeModel';
 import { countRender } from '../../dev/renderCount';
 
@@ -21,6 +22,8 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
     const suiteId = useLibrarySuiteStore(state => state.suite);
     // 目录批量动作（本地文件夹 / 专辑 / 歌手的播放、入队、建歌单、删除、重扫）：首页一个控制器，不随渲染重建。
     const directoryActions = useLibraryDirectoryBatchController(model.surfaceProps);
+    // 首页资源（在线收藏专辑、电台 feed）：首页一份，任何 suite 的首页都订阅同一份。
+    const homeResources = useLibraryHomeResources();
     if (isHomeFullyHidden) {
         return null;
     }
@@ -45,6 +48,7 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
                         isInteractive={isHomeGridInteractive}
                         declaredActions={homeSurface.declaredActions}
                         directoryActions={directoryActions}
+                        homeResources={homeResources}
                     />
                 </React.Suspense>
             )}

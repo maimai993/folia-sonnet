@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
-    getProviderCollectionArtistLabel,
     refreshLocalGridViewCollection,
     resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
 import { buildLocalGrid3DGroups } from '../../../src/library/suites/grid/home/localGrid3DModel';
+import { getProviderCollectionArtistLabel } from '../../../src/library/core/model/homeCards';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../src/types/localLibrary';
 import { applyLocalLibraryEntityDisplay, applyLocalSongCoverDisplay } from '../../../src/services/playbackAdapters';

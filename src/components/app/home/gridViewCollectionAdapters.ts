@@ -35,17 +35,6 @@ const getDisplayName = (name: React.ReactNode) => (
         : ''
 );
 
-// Returns the provider-normalized artist label used by collection overview cards.
-export const getProviderCollectionArtistLabel = (
-    collection: Pick<ProviderCollection, 'artists' | 'creator'> | null | undefined,
-): string => {
-    const artists = collection?.artists
-        ?.map(artist => artist.name.trim())
-        .filter(Boolean)
-        .join(', ');
-    return artists || collection?.creator?.nickname || '';
-};
-
 export const createNeteaseProviderUser = (user: ProviderUser | null | undefined): ProviderUser | null => user || null;
 
 export const createNeteaseGridViewCollection = (collection: ProviderCollection): GridViewCollectionDescriptor => (

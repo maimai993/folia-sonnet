@@ -5,15 +5,11 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../../../../stores/useSearchNavigationStore';
 import type { LocalLibraryCatalogSnapshot } from '../../../../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, PlayerState, type StatusMessage } from '../../../../types';
-import { getNavidromeConfig, navidromeApi } from '../../../../services/navidromeService';
+import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type StatusMessage } from '../../../../types';
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
 import DesktopGrid3DSurface from './DesktopGrid3DSurface';
-import {
-    createOnlineGridViewCollection,
-    getProviderCollectionArtistLabel,
-} from '../../../../components/app/home/gridViewCollectionAdapters';
+import { createOnlineGridViewCollection } from '../../../../components/app/home/gridViewCollectionAdapters';
 import { importFolder, resyncAllFolders, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../../../../services/localMusicService';
 import { getLocalLibraryAvailability } from '../../../../services/localLibraryAvailability';
 import { importLocalPlaylistFile } from '../../../../services/localPlaylistFileService';
@@ -22,14 +18,13 @@ import type { OnlineProviderPlatformState } from '../../../../hooks/useOnlinePro
 import { omni } from '../../../../services/onlineMusic/omni';
 import { getPersonalFmSelectionLabel } from '../../../../services/onlineMusic/fmModes';
 import { usePersonalFmModeStore } from '../../../../stores/usePersonalFmModeStore';
-import { getSongCoverUrl } from '../../../../services/onlineMusic/songMetadata';
 import OnlineProviderSwitcher from '../../../../components/app/home/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from '../../../../components/app/home/OnlineProviderConnectPanel';
 import OnlineProviderAccountlessPanel from '../../../../components/app/home/OnlineProviderAccountlessPanel';
 import OnlineProviderLoginModal from '../../../../components/app/home/OnlineProviderLoginModal';
 import { buildQrLoginDiagnosticsProps } from '../../../../components/app/home/buildQrLoginDiagnosticsProps';
 import { canSwitchToProviderDirectly, resolveOnlineProviderAccountView } from '../../../../components/app/home/onlineProviderAccountView';
-import type { MediaId, OmniProviderCapabilities, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
+import type { OmniProviderCapabilities, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
 import qqIcon from '../../../../assets/providers/qq.svg';
 import wechatIcon from '../../../../assets/providers/wechat.svg';
 import { useHomeLayoutSettingsStore } from '../../../../stores/useHomeLayoutSettingsStore';
@@ -39,6 +34,9 @@ import { countRender } from '../../../../dev/renderCount';
 import { onlineHiddenScope } from '../../../core/model/directoryVisibility';
 import { directoryKey } from '../../../core/model/directorySession';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
+import type { LibraryHomeResources } from '../../../core/contracts/homeModel';
+import { useLibraryHomeOnlineFeeds } from '../../../core/bindings/useLibraryHomeOnlineFeeds';
+import { buildOnlineAlbumCards, buildOnlinePlaylistCards, buildOnlineRadioCards } from '../../../core/model/homeCards';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -134,6 +132,8 @@ interface Grid3DProps {
     isInteractive?: boolean;
     /** 本地目录的批量动作控制器（宿主创建，见 LibraryHomeSurfaceProps）。 */
     directoryActions?: LibraryDirectoryBatchController;
+    /** 首页资源（在线收藏专辑、电台 feed；宿主创建，见 library/app/useLibraryHomeResources）。 */
+    homeResources: LibraryHomeResources;
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
@@ -169,6 +169,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         onlineProviderPlatform,
         isInteractive = true,
         directoryActions,
+        homeResources,
     } = props;
 
     const { t } = useTranslation();
@@ -397,162 +398,34 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         void startQrLogin(loginProviderId, methodId);
     };
 
-    // Online provider collection details
-    const [favoriteAlbums, setFavoriteAlbums] = useState<ProviderCollection[]>([]);
-    const [loadingAlbums, setLoadingAlbums] = useState(false);
-    const [radioItems, setRadioItems] = useState<any[]>([]);
-    const [loadingRadio, setLoadingRadio] = useState(false);
+    // 在线首页数据（收藏专辑、电台 feed）是宿主创建的资源（core/services/onlineHomeFeeds）：归属随 provider / 账户换，
+    // 晚到的应答按 generation 丢掉；这里只订阅，并按 core/model/homeCards 组装卡片。
+    const { favoriteAlbums, radioFeed } = useLibraryHomeOnlineFeeds({
+        resources: homeResources,
+        tab: homeViewTab,
+        providerId: activeProviderId,
+        userId: activeUser?.id ?? null,
+        canUseAlbums: canUseOnlineAlbums,
+        canUseRadio: canUseOnlineRadio,
+    });
+    const loadingAlbums = favoriteAlbums.status === 'loading';
+    const loadingRadio = radioFeed.status === 'loading';
 
     const isLoading =
         (homeViewTab === 'playlist' && canUseOnlinePlaylists && activeCollections.length === 0 && activeUser !== null) ||
         (homeViewTab === 'albums' && canUseOnlineAlbums && loadingAlbums) ||
         (homeViewTab === 'radio' && canUseOnlineRadio && loadingRadio);
 
-    // Load favorite albums and recommendations
     useEffect(() => {
-        if (homeViewTab === 'albums' && canUseOnlineAlbums && favoriteAlbums.length === 0 && activeUser) {
-            fetchFavoriteAlbums();
-        }
-        if (homeViewTab === 'radio' && canUseOnlineRadio && radioItems.length === 0 && activeUser) {
-            fetchRadioItems();
-        }
-    }, [activeProviderId, activeUser, canUseOnlineAlbums, canUseOnlineRadio, homeViewTab]);
-
-    useEffect(() => {
-        setFavoriteAlbums([]);
-        setRadioItems([]);
         setFocusedIndex(0);
     }, [activeProviderId, activeUser?.id]);
 
-    const fetchFavoriteAlbums = async () => {
-        if (!canUseOnlineAlbums) {
-            setFavoriteAlbums([]);
-            return;
-        }
-        setLoadingAlbums(true);
-        try {
-            let allAlbums: ProviderCollection[] = [];
-            let offset = 0;
-            const limit = 50;
-            let hasMore = true;
-
-            if (!activeUser) {
-                setFavoriteAlbums([]);
-                return;
-            }
-            while (hasMore) {
-                const page = await omni.getUserAlbums(activeUser.id, { limit, offset });
-                allAlbums = [...allAlbums, ...page.items];
-                hasMore = page.hasMore && page.nextOffset > offset;
-                offset = page.nextOffset;
-            }
-            setFavoriteAlbums(allAlbums);
-        } catch (e) {
-            console.error('[Grid3D] Failed to fetch favorite albums', e);
-        } finally {
-            setLoadingAlbums(false);
-        }
-    };
-
-    const fetchFavoriteAlbumsRef = useRef(fetchFavoriteAlbums);
-    useEffect(() => {
-        fetchFavoriteAlbumsRef.current = fetchFavoriteAlbums;
-    });
-
-    useEffect(() => {
-        const handleRefreshAlbums = () => {
-            void fetchFavoriteAlbumsRef.current();
-        };
-        window.addEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
-        return () => window.removeEventListener('folia-refresh-favorite-albums', handleRefreshAlbums);
-    }, []);
-
-    const fetchRadioItems = async () => {
-        if (!canUseOnlineRadio) {
-            setRadioItems([]);
-            return;
-        }
-        setLoadingRadio(true);
-        try {
-            const { personalFm: fmSongs, dailySongs, recommendedCollections } = await omni.getHomeFeed(35);
-            const fmCoverUrl = getSongCoverUrl(fmSongs[0], activeProviderId);
-
-            const fmItem = {
-                id: 'personal_fm',
-                name: t('home.personalFm'),
-                coverUrl: fmCoverUrl,
-                description: t('home.personalFm'),
-                isFm: true,
-            };
-
-            const recommendedItems = recommendedCollections.map(collection => {
-                const description = collection.description || collection.creator?.nickname || '';
-                return {
-                    ...collection,
-                    coverUrl: collection.coverUrl,
-                    description,
-                    summary: description,
-                };
-            });
-            setRadioItems([fmItem, ...(omni.supportsDailySongs(activeProviderId) ? [{
-                id: 'daily_recommendations',
-                name: t('home.dailyRecommendations'),
-                coverUrl: getSongCoverUrl(dailySongs[0], activeProviderId) || '',
-                trackCount: dailySongs.length,
-                description: t('home.dailyRecommendationsDescription'),
-                summary: t('home.dailyRecommendationsSummary'),
-                isDailyRecommendations: true,
-            }] : []), ...recommendedItems]);
-        } catch (e) {
-            console.error('[Grid3D] Failed to fetch radio items', e);
-        } finally {
-            setLoadingRadio(false);
-        }
-    };
-
-    // Filter cloud and local playlists
-    const playlistCards = useMemo(() => {
-        return activeCollections.map(p => ({
-            id: p.id,
-            name: p.name,
-            coverUrl: p.coverUrl,
-            trackCount: p.trackCount,
-            description: p.creator?.nickname || t('home.playlists'),
-            summary: p.description || '',
-            type: p.type,
-            raw: p
-        }));
-    }, [activeCollections, t]);
-
-    const albumCards = useMemo(() => {
-        return favoriteAlbums.map(a => ({
-            id: a.id,
-            name: a.name,
-            coverUrl: a.coverUrl,
-            trackCount: a.trackCount,
-            description: getProviderCollectionArtistLabel(a) || t('player.unknownArtist'),
-            summary: a.description || '',
-            type: 'album' as const,
-            raw: a
-        }));
-    }, [favoriteAlbums, t]);
-
-    const radioCards = useMemo(() => {
-        return radioItems.map(r => ({
-            id: r.id,
-            name: r.name,
-            coverUrl: r.coverUrl,
-            trackCount: r.trackCount,
-            description: (r.isFm && personalFmModeLabel) || r.description || t('home.radio'),
-            summary: r.summary || '',
-            type: r.isFm
-                ? 'radio' as const
-                : r.isDailyRecommendations
-                    ? 'daily_recommendations' as const
-                    : 'playlist' as const,
-            raw: r
-        }));
-    }, [personalFmModeLabel, radioItems, t]);
+    const playlistCards = useMemo(() => buildOnlinePlaylistCards(activeCollections, t), [activeCollections, t]);
+    const albumCards = useMemo(() => buildOnlineAlbumCards(favoriteAlbums.data, t), [favoriteAlbums.data, t]);
+    const radioCards = useMemo(
+        () => buildOnlineRadioCards(radioFeed.data, { t, personalFmModeLabel }),
+        [personalFmModeLabel, radioFeed.data, t],
+    );
 
     // Active tab list items mapping
     const currentDesktopItems = useMemo(() => {
