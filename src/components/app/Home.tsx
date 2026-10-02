@@ -1,10 +1,13 @@
 import React from 'react';
-import Grid3D from '../../library/suites/grid/home/Grid3D';
 import GridViewOverlayHost from '../../library/app/GridViewOverlayHost';
+import { resolveLibrarySurface } from '../../library/registry';
+import { useLibrarySuiteStore } from '../../library/core/state/useLibrarySuiteStore';
 import type { HomeViewModel } from './home/buildHomeModel';
 import { countRender } from '../../dev/renderCount';
 
 // App-level entry for the home surface backed by a view model.
+// 首页 surface 经 Library registry 解析：选中的 suite 实现了首页就用它，否则回退默认 suite（网格的 Grid3D）。
+// 外壳只交出首页模型与打开集合的入口，不直接 import 任何 suite。
 type AppHomeProps = {
     model: HomeViewModel;
     isHomeFullyHidden?: boolean;
@@ -13,9 +16,14 @@ type AppHomeProps = {
 
 const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive = true }) => {
     countRender('Home');
+    // 只在切换 suite 时变（开发版浮层）；同一个回退结果是同一个组件，首页不会因此重新挂载。
+    const suiteId = useLibrarySuiteStore(state => state.suite);
     if (isHomeFullyHidden) {
         return null;
     }
+
+    const homeSurface = resolveLibrarySurface('home', suiteId);
+    const HomeSurface = homeSurface.component;
 
     return (
         <GridViewOverlayHost
@@ -26,12 +34,15 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
             isInteractive={isInteractive}
         >
             {(openGridView, isHomeGridInteractive) => (
-                <Grid3D
-                    {...model.surfaceProps}
-                    onlineProviderPlatform={model.onlineProviderPlatform}
-                    onOpenGridView={openGridView}
-                    isInteractive={isHomeGridInteractive}
-                />
+                <React.Suspense fallback={null}>
+                    <HomeSurface
+                        {...model.surfaceProps}
+                        onlineProviderPlatform={model.onlineProviderPlatform}
+                        onOpenGridView={openGridView}
+                        isInteractive={isHomeGridInteractive}
+                        declaredActions={homeSurface.declaredActions}
+                    />
+                </React.Suspense>
             )}
         </GridViewOverlayHost>
     );

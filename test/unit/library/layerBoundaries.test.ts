@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 //   纯变换（model）是叶子，不读 store、不调 service、不碰 React；services / state 不碰绑定；
 // - stores / services / utils / types 不依赖 suites 与 app；suites 之间互不依赖，也不直接用 core/services；
 // - 列表 renderer（TUI）不拉进网格、hex 视口与打开转场；
+// - suites 之外只有 registry 引用 suite（宿主、首页外壳都经 registry 解析）；registry 只认 core 的契约与纯规则；
 // - 变更动作层只用注入的 omni 与缓存，默认装配集中在一处。
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -146,6 +147,20 @@ describe('library core layer boundaries', () => {
             .filter(source => FORBIDDEN.some(pattern => pattern.test(source)))
             .map(source => `${file} -> ${source}`));
         expect(tui.length).toBeGreaterThan(0);
+        expect(offenders).toEqual([]);
+    });
+
+    it('lets nothing outside the suites reach into a suite except the registry', () => {
+        const files = listSources('src').filter(file => !/^src\/library\/(suites\/|registry\.ts$)/.test(file));
+        const offenders = offendersOf(files, target => /^src\/library\/suites\//.test(target), allSpecifiersOf);
+        expect(files).toEqual(expect.arrayContaining(['src/components/app/Home.tsx', 'src/library/app/GridViewOverlayHost.tsx']));
+        expect(offenders).toEqual([]);
+    });
+
+    it('keeps the registry to discovery: only core contracts, pure rules and React types', () => {
+        const offenders = offendersOf(['src/library/registry.ts'], target => (
+            !/^(react|src\/library\/core\/(contracts|model)\/)/.test(target)
+        ), allSpecifiersOf);
         expect(offenders).toEqual([]);
     });
 

@@ -1,8 +1,10 @@
 import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
-import { useLibraryRendererStore } from '../../../src/library/core/state/useLibraryRendererStore';
-import { switchLibraryRenderer } from '../../../src/library/app/switchLibraryRenderer';
+import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
+import { switchLibrarySuite } from '../../../src/library/app/switchLibrarySuite';
+import { listLibrarySuites, resolveLibrarySurface } from '../../../src/library/registry';
+import type { LibrarySuiteId } from '../../../src/library/core/contracts/suite';
 import { collectionKey } from '../../../src/library/core/model/collectionIdentity';
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
@@ -11,7 +13,13 @@ import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
 // 把探针的驱动接口挂到 window 上。查询、动作都经由真实的注册点（命令筛选、grid surface），
 // 用的是命令面板同一条通道，所以它测到的就是命令面板能做到的事。
 
-type HarnessBindings = Pick<LibraryProbeApi, 'sandbox' | 'fixtures' | 'ready' | 'open' | 'back'>;
+type HarnessBindings = Pick<LibraryProbeApi, 'sandbox' | 'fixtures' | 'ready' | 'open' | 'back' | 'pushArtist'>;
+
+const setSuite = (suite: LibrarySuiteId) => {
+    const stack = useCollectionNavigationStore.getState().snapshot?.stack ?? [];
+    switchLibrarySuite(collectionKey(stack[stack.length - 1]), suite);
+};
+const currentSuite = () => useLibrarySuiteStore.getState().suite;
 
 /** 安装 `window.__libraryProbe`，返回卸载函数。 */
 export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) => {
@@ -32,11 +40,15 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
             surface.run(action);
             return true;
         },
-        setRenderer: (renderer) => {
-            const stack = useCollectionNavigationStore.getState().snapshot?.stack ?? [];
-            switchLibraryRenderer(collectionKey(stack[stack.length - 1]), renderer);
+        setSuite,
+        suite: currentSuite,
+        setRenderer: setSuite,
+        renderer: currentSuite,
+        suites: () => listLibrarySuites().map(suite => suite.id),
+        resolveSurface: (surface) => {
+            const resolved = resolveLibrarySurface(surface, currentSuite());
+            return { suiteId: resolved.suiteId, isFallback: resolved.isFallback, declaredActions: resolved.declaredActions };
         },
-        renderer: () => useLibraryRendererStore.getState().renderer,
         calls: () => getProbeLog().calls,
         requests: () => getProbeLog().requests,
         clearLog: () => {

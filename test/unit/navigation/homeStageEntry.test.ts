@@ -118,11 +118,18 @@ describe('home stage entry wiring', () => {
 
 describe('home stage entry source contracts', () => {
     it('keeps the app-level home surface forwarding legacy props into Grid3D', async () => {
+        // R3 起 Home 经 Library registry 解析首页 surface（`<Grid3D` 不再写在 Home 里）；含义不变：
+        // Home 把首页模型的 surfaceProps 与宿主的 openGridView 交给首页 surface，而默认 suite 的首页就是 Grid3D。
         const content = await readRepoFile('src/components/app/Home.tsx');
 
-        expect(content).toContain('<Grid3D');
+        expect(content).toContain("resolveLibrarySurface('home'");
+        expect(content).toContain('<HomeSurface');
         expect(content).toContain('{...model.surfaceProps}');
         expect(content).toContain('onOpenGridView={openGridView}');
+
+        const gridEntry = await readRepoFile('src/library/suites/grid/entry.ts');
+        expect(gridEntry).toContain("import Grid3D from './home/Grid3D';");
+        expect(gridEntry).toContain('home: { component: Grid3D');
     });
 
     it('keeps the Grid3D desktop tabs rendering the stage entry button', async () => {

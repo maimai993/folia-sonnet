@@ -1352,6 +1352,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         <motion.div
             ref={rootRef}
             data-ponder-page-scope="grid-view-page"
+            data-library-renderer="grid"
+            data-library-surface="artist"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

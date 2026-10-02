@@ -81,12 +81,18 @@ node dev/mcp/ts-code-map/cli.mjs doctor    # 环境自检
   各套 UI（每套 `entry.ts` + 自己的整个文件夹），`registry.ts` 发现 suite 并按 surface 回退到默认的
   grid，`app/` 是宿主装配（集合宿主、播放 / 变更端口、suite 切换）。规则：core 不 import suites、
   app、registry 和 `src/components`；suite 之间互不 import，也不直接用 `core/services`（资源与控制器
-  由宿主创建后传入）；stores / services / utils / types 不 import suites 与 app；不建 barrel。
+  由宿主创建后传入）；stores / services / utils / types 不 import suites 与 app；suites 之外只有 registry
+  引用 suite（宿主、首页外壳都经 registry 解析）；不建 barrel。
   这些规则同时写在 `codemap.mjs` 的 `BOUNDARY_RULES` 和 `test/unit/library/layerBoundaries.test.ts` 里。
   网格 suite 按 surface 分子目录：`suites/grid/{home,collection,directory,artist,shared,transitions}`
   （首页 `Grid3D` 与本地 / Navidrome 首页、集合详情 `GridView`、`GridMap` 与批量面板、歌手页、
   hex 视口与卡片、打开转场）；TUI 在 `suites/tui/`；集合宿主 `GridViewOverlayHost` 与端口在 `app/`。
-  registry 落地之前，`components/app/Home.tsx` 还直接 import 网格的 `Grid3D`，宿主直接 import 两套 suite。
+  能力契约在 `core/contracts/suite.ts`（surface：home / collection / artist；集合动作 `LibraryActionId`；
+  每个 surface 的 props 契约；suite manifest），每套 suite 的 `entry.ts` 声明自己实现了哪些 surface 与动作。
+  没实现的 surface 由默认 suite（grid）渲染，没声明的动作不进命令面板（`buildGridSurfaceState` 按声明过滤）。
+  entry 里的组件必须是 `React.lazy`，只有默认 suite 例外（Grid3D 在首屏、移形换影要从第一次打开就在）；
+  开发版专用的 suite（tui）用 `import.meta.env.DEV` 门控。网格专属的转场（移形换影）经 entry 的
+  `transitions` 交给宿主，宿主与 `switchLibrarySuite` 不直接 import 网格。
 - `App.tsx` 是历史遗留的装配缝，已经很大。新行为应该组装进相邻的 `components/app/*`、
   hooks、stores、services，而不是继续堆进去。参见 `skills/file-modularization/SKILL.md`。
 

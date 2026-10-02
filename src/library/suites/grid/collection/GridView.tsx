@@ -58,6 +58,7 @@ import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } f
 import { useGridSurfaceRegistration } from '../../../../hooks/useGridSurfaceRegistration';
 import type { MediaId } from '../../../../types/onlineMusic';
 import type { CollectionResource } from '../../../core/contracts/resource';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow } from '../../../../utils/keyboardTargets';
 import { useGridViewSettingsStore } from '../../../../stores/useGridViewSettingsStore';
@@ -138,6 +139,11 @@ interface GridViewProps {
      * unchanged unless the collection morph hands it in.
      */
     morphPlan?: CollectionMorphPlan | null;
+    /**
+     * 网格 suite 在 entry.ts 里为集合 surface 声明的动作（宿主经 registry 解析后传入）。命令面板只发布
+     * 声明过的；直接挂 GridView 的探针不传，不过滤。
+     */
+    declaredActions?: LibraryDeclaredActions;
 }
 
 const EMPTY_TRACKS: SongResult[] = [];
@@ -259,6 +265,7 @@ export const GridView: React.FC<GridViewProps> = ({
     onStatusMessage,
     isInteractive = true,
     morphPlan = null,
+    declaredActions,
 }) => {
     const { t } = useTranslation();
     const bottomBarPanelBottomPx = useSidePanelBottomPx();
@@ -1617,6 +1624,7 @@ export const GridView: React.FC<GridViewProps> = ({
         canEditPlaylist,
         canReloadOnlineCollection: canReloadOnlineCollection && !loading,
         isSourceActionPending,
+        declaredActions,
 
         filteredTrackCount: contextActionTracks.length,
         isFilterActive: hasSearchQuery,
@@ -1655,6 +1663,7 @@ export const GridView: React.FC<GridViewProps> = ({
         <motion.div
             data-ponder-page-scope="grid-view-page"
             data-library-renderer="grid"
+            data-library-surface="collection"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

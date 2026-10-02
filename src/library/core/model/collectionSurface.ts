@@ -1,5 +1,6 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../types/gridCommandSurface';
 import type { LocalSongFolderSortDirection, LocalSongFolderSortField } from '../../../utils/localSongSorting';
+import type { LibraryActionId, LibraryDeclaredActions } from '../contracts/suite';
 
 // src/library/core/model/collectionSurface.ts
 // Turns a collection view's branch flags and handlers into the flat contract the command palette reads.
@@ -25,6 +26,12 @@ export type GridSurfaceParams = {
     canReloadOnlineCollection: boolean;
     /** A source action is in flight; the disk and network actions grey out, exactly as the buttons do. */
     isSourceActionPending: boolean;
+    /**
+     * 渲染这个 surface 的 suite 声明的动作（见 core/contracts/suite）。给了就只发布声明过的——
+     * 分支规则判定「这个集合能不能做」，声明决定「这套 UI 做不做」，命令面板看到的是两者的交集。
+     * 不给（直接挂组件的探针与单测）时不过滤。
+     */
+    declaredActions?: LibraryDeclaredActions;
 
     filteredTrackCount: number;
     isFilterActive: boolean;
@@ -63,6 +70,7 @@ export type CoreSurfaceParams = Pick<
     | 'setSortField'
     | 'setSortDirection'
     | 'reloadOnlineCollection'
+    | 'declaredActions'
 >;
 
 const noop = () => {};
@@ -94,6 +102,34 @@ export const buildCoreSurfaceParams = (core: CoreSurfaceParams): GridSurfacePara
     toggleEditMode: noop,
     ...core,
 });
+
+/**
+ * 每个命令面板动作来自哪里：core 的语义动作（LibraryActionId），或 suite 自己的局部动作。
+ * 既有命令 ID 不变；这张表只决定「suite 没声明时不发布」。
+ */
+export const GRID_SURFACE_ACTION_SOURCES: Readonly<Record<GridSurfaceActionId, { action: LibraryActionId } | { extra: string }>> = {
+    'play-filtered': { action: 'play-scope' },
+    'enqueue-filtered': { action: 'enqueue-scope' },
+    'sort-file-name': { action: 'sort' },
+    'sort-modified-date': { action: 'sort' },
+    'sort-album-track': { action: 'sort' },
+    'sort-toggle-direction': { action: 'sort' },
+    'toggle-info-panel': { extra: 'toggle-info-panel' },
+    'toggle-track-list': { extra: 'toggle-track-list' },
+    'resync-folder': { action: 'resync-folder' },
+    'resync-all-folders': { action: 'resync-all-folders' },
+    'organize-song-info': { action: 'organize-song-info' },
+    'export-playlist': { action: 'export-playlist' },
+    'edit-entity': { action: 'edit-entity' },
+    'toggle-edit-mode': { extra: 'toggle-edit-mode' },
+    'reload-online-collection': { action: 'reload' },
+};
+
+/** 这个命令面板动作是否在 suite 的声明里。 */
+export const isGridSurfaceActionDeclared = (action: GridSurfaceActionId, declared: LibraryDeclaredActions): boolean => {
+    const source = GRID_SURFACE_ACTION_SOURCES[action];
+    return 'action' in source ? declared.actions.includes(source.action) : declared.extraActions.includes(source.extra);
+};
 
 const SORT_FIELD_BY_ACTION: Partial<Record<GridSurfaceActionId, LocalSongFolderSortField>> = {
     'sort-file-name': 'fileName',
@@ -139,9 +175,12 @@ export const buildGridSurfaceState = (params: GridSurfaceParams): GridSurfaceSta
     if (params.canReloadOnlineCollection) {
         availableActions.push('reload-online-collection');
     }
+    const declared = params.declaredActions;
 
     return {
-        availableActions,
+        availableActions: declared
+            ? availableActions.filter(action => isGridSurfaceActionDeclared(action, declared))
+            : availableActions,
         filteredTrackCount: params.filteredTrackCount,
         isFilterActive: params.isFilterActive,
         sortField: params.sortField,

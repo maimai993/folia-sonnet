@@ -1,5 +1,5 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../src/types/gridCommandSurface';
-import type { LibraryRendererId } from '../../../src/library/core/contracts/session';
+import type { LibraryDeclaredActions, LibrarySuiteId, LibrarySurfaceId } from '../../../src/library/core/contracts/suite';
 import type { ProbeFixtureId } from './fixtureRules';
 import type { ProbeCall, ProbeRequest } from './probeLog';
 
@@ -24,9 +24,18 @@ export type LibraryProbeApi = {
     surface: () => GridSurfaceState | null;
     /** 经由当前注册的 grid surface 执行动作；不在 availableActions 里时返回 false。 */
     runSurface: (action: GridSurfaceActionId) => boolean;
-    /** 与开发版浮层同一条路径切换 renderer（先把焦点写回会话）。 */
-    setRenderer: (renderer: LibraryRendererId) => void;
-    renderer: () => LibraryRendererId;
+    /** 与开发版浮层同一条路径切换 suite（先把焦点写回会话）。 */
+    setSuite: (suite: LibrarySuiteId) => void;
+    suite: () => LibrarySuiteId;
+    /** setSuite / suite 的旧名（R3 之前叫 renderer）。 */
+    setRenderer: (renderer: LibrarySuiteId) => void;
+    renderer: () => LibrarySuiteId;
+    /** registry 里这个构建可用的 suite（与 DEV 浮层的按钮同源）。 */
+    suites: () => LibrarySuiteId[];
+    /** 当前选中的 suite 下，这个 surface 由谁渲染、声明了哪些动作（回退时是默认 suite 的声明）。 */
+    resolveSurface: (surface: LibrarySurfaceId) => { suiteId: LibrarySuiteId; isFallback: boolean; declaredActions: LibraryDeclaredActions };
+    /** 从当前集合压入一个歌手页（本地 fixture 的第一个歌手，需要沙盒）；返回是否压入。 */
+    pushArtist: () => boolean;
     calls: () => ProbeCall[];
     requests: () => ProbeRequest[];
     clearLog: () => void;

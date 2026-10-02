@@ -14,7 +14,8 @@ import { buildLocalGrid3DGroups } from '../../../src/library/suites/grid/home/lo
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
-import { useLibraryRendererStore } from '../../../src/library/core/state/useLibraryRendererStore';
+import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
+import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librarySuites';
 import { useLibraryBrowseSessionStore } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
 import { unregisterOnlineMusicProvider } from '../../../src/services/onlineMusic/providerRegistry';
 import { DEFAULT_THEME } from '../../../src/services/baseThemes';
@@ -114,8 +115,8 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         // 直接 setState，不走 setActiveProviderId：后者会写 localStorage，手动打开探针会改掉开发者自己的选择。
         useOnlineProviderAccountStore.setState({ activeProviderId: PROBE_PROVIDER_A });
         useCollectionNavigationStore.getState().clear();
-        // 每次挂载都从网格、空会话开始；用例需要 TUI 时自己切。
-        useLibraryRendererStore.setState({ renderer: 'grid' });
+        // 每次挂载都从默认 suite（网格）、空会话开始；用例需要 TUI 时自己切。
+        useLibrarySuiteStore.setState({ suite: DEFAULT_LIBRARY_SUITE_ID });
         useLibraryBrowseSessionStore.setState({ sessions: {}, order: [] });
 
         let cancelled = false;
@@ -244,14 +245,26 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         onOpenCollection(collection);
     }, [onOpenCollection, resolveFixture, sandbox]);
 
-    const latestRef = useRef({ open, ready });
-    latestRef.current = { open, ready };
+    // 从当前集合压入一个本地歌手页（首页同款的分组描述）。用来验证没实现歌手页的 suite 回退到网格；
+    // 直接写导航 store，与真实界面里点歌手名之后宿主做的压栈是同一个动作（只是没有转场）。
+    const pushArtist = useCallback((): boolean => {
+        if (!sandbox) return false;
+        const groups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined);
+        const artist = groups.artists.find(candidate => candidate.entityId) ?? groups.artists[0];
+        if (!artist || !useCollectionNavigationStore.getState().snapshot) return false;
+        onPushCollection(createLocalGridViewCollection(artist));
+        return true;
+    }, [localLibraryCatalog, localPlaylists, localSongs, onPushCollection, sandbox, t]);
+
+    const latestRef = useRef({ open, ready, pushArtist });
+    latestRef.current = { open, ready, pushArtist };
     useEffect(() => installLibraryProbeApi({
         sandbox,
         fixtures: () => ALL_FIXTURES,
         ready: () => latestRef.current.ready,
         open: fixtureId => latestRef.current.open(fixtureId),
         back: popNavigation,
+        pushArtist: () => latestRef.current.pushArtist(),
     }), [sandbox]);
 
     return {

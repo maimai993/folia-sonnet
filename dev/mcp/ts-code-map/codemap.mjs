@@ -102,6 +102,11 @@ const BOUNDARY_RULES = [
         to: /^src\/library\/core\/services\//,
         why: 'suite 不直接用 core/services：资源与控制器由宿主（app）创建后传入',
     },
+    {
+        from: /^src\/(?!library\/(suites\/|registry\.))/,
+        to: /^src\/library\/suites\//,
+        why: 'suite 只经 registry 使用：宿主与外壳按 surface 解析，不直接 import 某套 suite',
+    },
 ];
 
 /** `src/library/suites/<id>/...` 的 suite id。 */

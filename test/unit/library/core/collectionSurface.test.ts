@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCoreSurfaceParams, buildGridSurfaceState, runGridSurfaceAction } from '@/library/core/model/collectionSurface';
+import {
+    buildCoreSurfaceParams,
+    buildGridSurfaceState,
+    GRID_SURFACE_ACTION_SOURCES,
+    isGridSurfaceActionDeclared,
+    runGridSurfaceAction,
+    type GridSurfaceParams,
+} from '@/library/core/model/collectionSurface';
+import { LIBRARY_ACTION_IDS } from '@/library/core/model/librarySuites';
+import type { LibraryDeclaredActions } from '@/library/core/contracts/suite';
 import { resolveCollectionSyncCounts } from '@/library/core/model/collectionProgress';
 
 // test/unit/library/core/collectionSurface.test.ts
@@ -41,6 +50,73 @@ describe('core collection surface', () => {
         runGridSurfaceAction('toggle-edit-mode', params);
         runGridSurfaceAction('play-filtered', params);
         expect(params.playFiltered).toHaveBeenCalledTimes(1);
+    });
+});
+
+/** 网格那样什么分支都打开的参数：每个命令都可用，好看出声明过滤掉了哪些。 */
+const everything = (declaredActions?: LibraryDeclaredActions): GridSurfaceParams => ({
+    ...core({ supportsLocalTrackSorting: true }),
+    hasInfoPanel: true,
+    hasTrackList: true,
+    canResyncFolder: true,
+    canResyncAllFolders: true,
+    canOrganizeSongInfo: true,
+    canExportPlaylist: true,
+    canEditEntity: true,
+    canEditPlaylist: true,
+    toggleInfoPanel: vi.fn(),
+    resyncFolder: vi.fn(),
+    declaredActions,
+});
+
+describe('suite-declared actions on the command surface', () => {
+    it('maps every command to a core action id or a suite-local action', () => {
+        for (const source of Object.values(GRID_SURFACE_ACTION_SOURCES)) {
+            if ('action' in source) expect(LIBRARY_ACTION_IDS).toContain(source.action);
+            else expect(source.extra).toMatch(/^toggle-/);
+        }
+    });
+
+    it('publishes everything the branch allows when no declaration is given', () => {
+        expect(buildGridSurfaceState(everything()).availableActions).toHaveLength(Object.keys(GRID_SURFACE_ACTION_SOURCES).length);
+    });
+
+    it('publishes only declared actions: the declaration intersects the core capability', () => {
+        const declared: LibraryDeclaredActions = { actions: ['play-scope', 'enqueue-scope', 'sort', 'reload'], extraActions: [] };
+        expect(buildGridSurfaceState(everything(declared)).availableActions).toEqual([
+            'play-filtered',
+            'enqueue-filtered',
+            'sort-file-name',
+            'sort-modified-date',
+            'sort-album-track',
+            'sort-toggle-direction',
+            'reload-online-collection',
+        ]);
+        // 声明了但 core 此刻不允许的，照样不出现。
+        expect(buildGridSurfaceState({ ...everything(declared), filteredTrackCount: 0 }).availableActions)
+            .not.toContain('play-filtered');
+    });
+
+    it('gates suite-local actions by extraActions', () => {
+        const declared: LibraryDeclaredActions = { actions: ['resync-folder'], extraActions: ['toggle-info-panel'] };
+        expect(buildGridSurfaceState(everything(declared)).availableActions).toEqual(['toggle-info-panel', 'resync-folder']);
+        expect(isGridSurfaceActionDeclared('toggle-edit-mode', declared)).toBe(false);
+        expect(isGridSurfaceActionDeclared('toggle-info-panel', declared)).toBe(true);
+    });
+
+    it('refuses to run an undeclared action even when the branch would allow it', () => {
+        const params = everything({ actions: ['play-scope'], extraActions: [] });
+        runGridSurfaceAction('resync-folder', params);
+        runGridSurfaceAction('toggle-info-panel', params);
+        runGridSurfaceAction('play-filtered', params);
+        expect(params.resyncFolder).not.toHaveBeenCalled();
+        expect(params.toggleInfoPanel).not.toHaveBeenCalled();
+        expect(params.playFiltered).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a core-only surface pass its declaration through buildCoreSurfaceParams', () => {
+        const params = core({ declaredActions: { actions: ['play-scope', 'enqueue-scope'], extraActions: [] } });
+        expect(buildGridSurfaceState(params).availableActions).toEqual(['play-filtered', 'enqueue-filtered']);
     });
 });
 

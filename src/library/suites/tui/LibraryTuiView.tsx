@@ -2,10 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { useIsPresent } from 'framer-motion';
 import { List, useListRef } from 'react-window';
 import { useTranslation } from 'react-i18next';
-import type { LocalSong, Theme } from '../../../types';
-import type { LibraryCollectionDescriptor } from '../../core/contracts/collection';
-import type { CollectionResource } from '../../core/contracts/resource';
-import type { LibraryPlaybackPort } from '../../core/contracts/ports';
+import type { LibraryCollectionSurfaceProps } from '../../core/contracts/suite';
 import { collectionKey } from '../../core/model/collectionIdentity';
 import { buildCoreSurfaceParams, buildGridSurfaceState, runGridSurfaceAction } from '../../core/model/collectionSurface';
 import { useCollectionResourceState } from '../../core/bindings/useCollectionResourceState';
@@ -27,26 +24,18 @@ import { useLibraryTuiKeyboard } from './useLibraryTuiKeyboard';
 // useCollectionActions），并向命令面板注册同一个 surface，只是没有信息面板、侧栏与编辑模式。
 // 这里不引用网格、六边形视口或转场的任何实现。
 
-type LibraryTuiViewProps = {
-    collection: LibraryCollectionDescriptor;
-    resource: CollectionResource | null;
-    port: LibraryPlaybackPort;
-    localSongs?: LocalSong[];
-    theme: Theme;
-    isDaylight: boolean;
-    isInteractive: boolean;
-    onBack: () => void;
-};
-
-const LibraryTuiView: React.FC<LibraryTuiViewProps> = ({
+// 宿主交给任何 suite 的集合 surface 输入（core/contracts/suite）。TUI 目前只用其中的展示与播放部分；
+// 变更控制器在 P2.4 接入。
+const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     collection,
     resource,
-    port,
+    playback: port,
     localSongs,
     theme,
     isDaylight,
     isInteractive,
     onBack,
+    declaredActions,
 }) => {
     const { t } = useTranslation();
     const isPresent = useIsPresent();
@@ -79,8 +68,10 @@ const LibraryTuiView: React.FC<LibraryTuiViewProps> = ({
         return displayIndex === undefined ? undefined : view.displayTracks[displayIndex];
     };
 
-    // 命令面板能对这个集合做的事：只有核心动作（播放 / 入队范围、重新拉取、本地排序）。
+    // 命令面板能对这个集合做的事：只有核心动作（播放 / 入队范围、重新拉取、本地排序），
+    // 再按 entry.ts 的声明过滤。
     const surfaceParams = buildCoreSurfaceParams({
+        declaredActions,
         supportsLocalTrackSorting,
         canReloadOnlineCollection: actions.capabilities.reload.enabled,
         filteredTrackCount: view.contextTracks.length,
@@ -162,6 +153,7 @@ const LibraryTuiView: React.FC<LibraryTuiViewProps> = ({
     return (
         <div
             data-library-renderer="tui"
+            data-library-surface="collection"
             className="fixed inset-0 z-[110] flex flex-col overflow-hidden font-mono"
             style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
         >

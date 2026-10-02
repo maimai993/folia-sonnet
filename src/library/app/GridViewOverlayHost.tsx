@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import GridView from '../suites/grid/collection/GridView';
-import ArtistGridView from '../suites/grid/artist/ArtistGridView';
 import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../types';
 import { getNavidromeConfig, navidromeApi } from '../../services/navidromeService';
@@ -18,8 +16,9 @@ import {
     resolveLocalGridViewTracks,
 } from '../../components/app/home/gridViewCollectionAdapters';
 import { createLibraryPlaybackPort } from './createLibraryPlaybackPort';
-import { createLibraryMutationPort, toGridViewSourceActions } from './createLibraryMutationPort';
+import { createLibraryMutationPort } from './createLibraryMutationPort';
 import { useCollectionResource } from '../core/bindings/useCollectionResource';
+import { useCollectionMutations } from '../core/bindings/useCollectionMutations';
 import type { LocalLibraryCatalogSnapshot } from '../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../components/modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../components/modal/LocalFolderSongInfoPanel';
@@ -29,18 +28,33 @@ import { resolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from '../../components/app/home/homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { countRender } from '../../dev/renderCount';
-import { CollectionMorphOverlay } from '../suites/grid/transitions/CollectionMorphOverlay';
-import { useCollectionMorphStore } from '../suites/grid/transitions/collectionMorphStore';
-import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '../suites/grid/transitions/morphProbes';
 import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
-import { useLibraryRendererStore } from '../core/state/useLibraryRendererStore';
+import { useLibrarySuiteStore } from '../core/state/useLibrarySuiteStore';
+import type { LibraryNavigationContext, LibrarySurfaceId } from '../core/contracts/suite';
+import { listLibrarySuiteOverlays, listLibrarySuites, resolveLibrarySurface } from '../registry';
 
 // src/library/app/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
+// R3 起集合层与歌手页经 registry 解析：当前选中的 suite 实现了就由它渲染，否则回退默认 suite（grid）。
+// 宿主只交出契约里的输入（core/contracts/suite）；网格专属的转场（移形换影的入场计划、返回时的测量、
+// 常驻的转场层）由网格 entry 的 transitions 提供，宿主不再直接 import 任何 suite。
 
-// 开发版才有的第二个 renderer（TUI）与它的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响。
-const LibraryTuiView = import.meta.env.DEV ? React.lazy(() => import('../suites/tui/LibraryTuiView')) : null;
+// suite 的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响（生产构建里也只有一套 suite）。
 const DevLibraryRendererSwitch = import.meta.env.DEV ? React.lazy(() => import('./DevLibraryRendererSwitch')) : null;
+const HAS_SUITE_CHOICE = listLibrarySuites().length > 1;
+// 声明了转场层的 suite：常驻渲染，只有当前负责集合层的那套收到 enabled。
+const SUITE_OVERLAYS = listLibrarySuiteOverlays();
+
+/** 导航发生之前的栈状态，交给 suite 的转场钩子。 */
+const readNavigationContext = (): LibraryNavigationContext => {
+    const snapshot = useCollectionNavigationStore.getState().snapshot;
+    const depth = snapshot?.stack.length ?? 0;
+    return {
+        depth,
+        origin: snapshot?.origin ?? null,
+        activeType: snapshot?.stack[depth - 1]?.type ?? null,
+    };
+};
 
 type GridViewOverlayHostProps = {
     surfaceProps: HomeSurfaceProps;
@@ -131,16 +145,22 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const { t } = useTranslation();
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
-    const morphPlan = useCollectionMorphStore(state => state.plan);
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
-    const renderer = useLibraryRendererStore(state => state.renderer);
-    // TUI 只接管曲目集合；歌手页仍由网格版展示。
-    const isTuiActive = Boolean(LibraryTuiView) && renderer === 'tui' && selectedCollection?.type !== 'artist';
+    const suiteId = useLibrarySuiteStore(state => state.suite);
+    // 歌手页 TUI 没实现，回退网格；集合层由选中的 suite 渲染（它没实现时同样回退网格）。
+    const collectionSurface = resolveLibrarySurface('collection', suiteId);
+    const artistSurface = resolveLibrarySurface('artist', suiteId);
+    // 转场属于渲染集合层的那套 suite：已经打开的看它所在的 surface；还在首页时看「将要打开的集合」由谁渲染
+    // （选中 TUI 时，首页卡片点开的集合是 TUI，不该起飞移形换影）。
+    const transitionSurface: LibrarySurfaceId = selectedCollection?.type === 'artist' ? 'artist' : 'collection';
+    const transitionOwner = transitionSurface === 'artist' ? artistSurface : collectionSurface;
     // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
     // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
     // 移形换影也只属于网格：TUI 没有卡片可飞，开着只会让首页那张卡的残影盖在列表上。
-    const morphEnabled = !useReducedMotionFor('collectionMorph') && !isTuiActive;
+    // （网格以外的 suite 不声明 transitions，于是它渲染集合层时转场关闭。）
+    const morphEnabled = !useReducedMotionFor('collectionMorph') && Boolean(transitionOwner.transitions);
+    const activeTransitions = morphEnabled ? transitionOwner.transitions : undefined;
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
@@ -200,50 +220,17 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         onOpenCollection(collection);
     }, [onOpenCollection]);
 
+    // 压栈 / 返回之前先让负责集合层的 suite 安排转场（网格：级联入场计划、反向移形换影，原先写在这里的
+    // 两段逻辑原样搬进了 suites/grid/transitions/gridHostTransitions）。
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
-        // Nested open (album/artist inside a playlist): no home card was clicked,
-        // so instead of the hero morph, hand the incoming grid a fly-in plan —
-        // its cards cascade in, matching every other grid entrance. The overlay
-        // upgrades it to 'morph' if a flight actually launches (origin 'home').
-        const snapshot = useCollectionNavigationStore.getState().snapshot;
-        if (morphEnabled && snapshot && snapshot.stack.length >= 1) {
-            useCollectionMorphStore.getState().commitPlan({ kind: 'cascade' });
-        }
+        activeTransitions?.beforePush?.(readNavigationContext());
         onPushCollection(col);
-    }, [morphEnabled, onPushCollection]);
+    }, [activeTransitions, onPushCollection]);
 
     const handleBackCollection = useCallback(() => {
-        // Arm the reverse morph before the view flips. Two distinct gestures:
-        // - top-level back (stack depth 1) → hero flies onto the original home
-        //   card while the squad scatters;
-        // - nested back (album → playlist) → no home card exists, so the hero
-        //   shrinks away in place with the squad scattering, and the previous
-        //   grid underneath is revealed by the backdrop crossfade.
-        const morphStore = useCollectionMorphStore.getState();
-        const navState = useCollectionNavigationStore.getState();
-        const snapshot = navState.snapshot;
-        const depth = snapshot?.stack.length ?? 0;
-        // Artist pages morph from their circular avatar, not a song card.
-        const activeType = snapshot?.stack[snapshot.stack.length - 1]?.type;
-        const hero = morphEnabled
-            ? ((activeType === 'artist' ? probeArtistIntroTargets() : probeHeroTargets()) ?? morphStore.hero)
-            : null;
-        if (hero) {
-            const squad = probeGridSquadRects();
-            if (depth <= 1 && snapshot?.origin === 'home' && morphStore.lastHome) {
-                morphStore.armExit(hero, squad);
-            } else if (depth > 1) {
-                morphStore.armNestedExit(hero, squad);
-                // The previous collection remounts underneath: give it the same
-                // cascade entrance so the cut reads as scatter-out → cascade-in.
-                // 'cascade', not 'morph': the reverse composite lands on the card
-                // this level was pushed from, which is not the previous grid's
-                // centred hero, so nothing is covering that hero.
-                morphStore.commitPlan({ kind: 'cascade' });
-            }
-        }
+        activeTransitions?.beforeBack?.(readNavigationContext());
         onBackCollection();
-    }, [morphEnabled, onBackCollection]);
+    }, [activeTransitions, onBackCollection]);
 
     useEffect(() => {
         if (
@@ -503,7 +490,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
 
     // 来源动作（本地曲库、Navidrome、对话框、账户刷新）集中在变更端口里；网格在接入变更控制器之前
-    // 仍按旧形状接收，从端口原样转接。
+    // 仍按旧形状接收，由网格自己从端口转接（suites/grid/collection/gridViewSourceActions）。
     const mutationPort = useMemo(() => createLibraryMutationPort({
         surface: surfaceProps,
         t,
@@ -515,7 +502,16 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         navidromePlaylists: navidromePlaylistItems,
         refreshNavidromePlaylists,
     }), [surfaceProps, t, navidromePlaylistItems, refreshNavidromePlaylists]);
-    const sourceActions = useMemo(() => toGridViewSourceActions(mutationPort), [mutationPort]);
+    // 变更动作控制器：宿主按集合会话创建与释放，自己不订阅快照（不会因进行中的状态重渲染首页）。
+    // 交给集合 surface；网格在 P2.2、TUI 在 P2.4 接入，在那之前没人订阅它，也就不会发出任何请求。
+    const collectionMutations = useCollectionMutations({
+        descriptor: liveSelectedCollection && liveSelectedCollection.type !== 'artist' ? liveSelectedCollection : null,
+        resource: collectionResource,
+        port: mutationPort,
+        currentUserId: surfaceProps.user?.id,
+    });
+    const CollectionSurface = collectionSurface.component;
+    const ArtistSurface = artistSurface.component;
 
     const editingEntity = editingEntityId
         ? localLibraryCatalog.entities.find(entity => entity.id === editingEntityId)
@@ -569,69 +565,53 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     />
                 )}
             </AnimatePresence>
-            <CollectionMorphOverlay enabled={morphEnabled} />
+            {SUITE_OVERLAYS.map(({ suiteId: overlaySuiteId, Overlay }) => (
+                <Overlay key={overlaySuiteId} enabled={morphEnabled && transitionOwner.suiteId === overlaySuiteId} />
+            ))}
             <AnimatePresence initial={false}>
                 {displaySelectedCollection && (
+                    // key 带上实际渲染它的 suite：切换 suite 时集合层换一个实例；两个都回退到网格的 suite 之间
+                    // 切换（例如歌手页）不重新挂载。Suspense 给 lazy 的 suite 组件用，即时组件不会挂起。
                     displaySelectedCollection.type === 'artist' ? (
-                        <ArtistGridView
-                            key={selectedCollectionKey}
-                            collection={displaySelectedCollection}
-                            onBack={handleBackCollection}
-                            onSelectTrack={playbackPort.playTrack}
-                            onAddTrackToQueue={playbackPort.enqueueTrack}
-                            onPlayAll={playbackPort.playAll}
-                            onAddAllToQueue={playbackPort.enqueueAll}
-                            onSelectAlbum={handlePushAlbumCollection}
-                            onSelectArtist={handlePushArtistCollection}
-                            theme={surfaceProps.theme}
-                            isDaylight={isDaylight}
-                            localSongs={surfaceProps.localSongs}
-                            onEditEntity={(entityId) => setEditingEntityId(entityId)}
-                            isInteractive={isInteractive}
-                            morphPlan={morphEnabled ? morphPlan : null}
-                        />
-                    ) : isTuiActive && LibraryTuiView ? (
-                        <React.Suspense key={`tui:${selectedCollectionKey}`} fallback={null}>
-                            <LibraryTuiView
+                        <React.Suspense key={`${artistSurface.suiteId}:${selectedCollectionKey}`} fallback={null}>
+                            <ArtistSurface
                                 collection={displaySelectedCollection}
-                                resource={collectionResource}
-                                port={playbackPort}
+                                playback={playbackPort}
                                 localSongs={surfaceProps.localSongs}
                                 theme={surfaceProps.theme}
                                 isDaylight={isDaylight}
                                 isInteractive={isInteractive}
+                                onEditEntity={setEditingEntityId}
+                                declaredActions={artistSurface.declaredActions}
                                 onBack={handleBackCollection}
+                                onOpenAlbum={handlePushAlbumCollection}
+                                onOpenArtist={handlePushArtistCollection}
                             />
                         </React.Suspense>
                     ) : (
-                        <GridView
-                            key={`grid:${selectedCollectionKey}`}
-                            title={displaySelectedCollection.name}
-                            subtitle={(displaySelectedCollection as any).creator?.nickname || (displaySelectedCollection as any).artists?.[0]?.name || displaySelectedCollection.description || ''}
-                            collection={displaySelectedCollection}
-                            mode="tracks"
-                            onBack={handleBackCollection}
-                            onSelectTrack={playbackPort.playTrack}
-                            onAddTrackToQueue={playbackPort.enqueueTrack}
-                            onPlayAll={playbackPort.playAll}
-                            onAddAllToQueue={playbackPort.enqueueAll}
-                            onSelectAlbum={handlePushAlbumCollection}
-                            onSelectArtist={handlePushArtistCollection}
-                            currentUserId={surfaceProps.user?.id}
-                            onPlaylistMutated={surfaceProps.onRefreshUser}
-                            onStatusMessage={surfaceProps.onStatusMessage}
-                            resource={collectionResource}
-                            localSongs={surfaceProps.localSongs}
-                            sourceActions={sourceActions}
-                            theme={surfaceProps.theme}
-                            isDaylight={isDaylight}
-                            isInteractive={isInteractive}
-                            morphPlan={morphEnabled ? morphPlan : null}
-                        />
+                        <React.Suspense key={`${collectionSurface.suiteId}:${selectedCollectionKey}`} fallback={null}>
+                            <CollectionSurface
+                                collection={displaySelectedCollection}
+                                resource={collectionResource}
+                                playback={playbackPort}
+                                mutations={collectionMutations}
+                                mutationPort={mutationPort}
+                                localSongs={surfaceProps.localSongs}
+                                theme={surfaceProps.theme}
+                                isDaylight={isDaylight}
+                                isInteractive={isInteractive}
+                                onStatusMessage={surfaceProps.onStatusMessage}
+                                currentUserId={surfaceProps.user?.id}
+                                declaredActions={collectionSurface.declaredActions}
+                                onBack={handleBackCollection}
+                                onOpenAlbum={handlePushAlbumCollection}
+                                onOpenArtist={handlePushArtistCollection}
+                            />
+                        </React.Suspense>
                     )
                 )}
             </AnimatePresence>
-            {DevLibraryRendererSwitch && displaySelectedCollection && displaySelectedCollection.type !== 'artist' && (
+            {DevLibraryRendererSwitch && HAS_SUITE_CHOICE && displaySelectedCollection && displaySelectedCollection.type !== 'artist' && (
                 <React.Suspense fallback={null}>
                     <DevLibraryRendererSwitch sessionKey={selectedCollectionKey} />
                 </React.Suspense>

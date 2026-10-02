@@ -6,7 +6,6 @@ import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../service
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../services/localPlaylistService';
 import { downloadLocalPlaylistM3u8 } from '../../services/localPlaylistFileService';
 import { getNavidromeConfig, navidromeApi } from '../../services/navidromeService';
-import type { GridViewSourceActions } from '../suites/grid/collection/GridView';
 import { isLocalGridViewCollection } from '../../components/app/home/gridViewCollectionAdapters';
 import type { HomeSurfaceProps } from '../../components/app/home/homeSurfaceTypes';
 
@@ -145,33 +144,5 @@ export const createLibraryMutationPort = ({
     statusMessage: surface.onStatusMessage,
     notifyFavoriteAlbumsChanged: () => {
         window.dispatchEvent(new CustomEvent('folia-refresh-favorite-albums'));
-    },
-});
-
-/**
- * P2.2 之前 GridView 仍按旧的 sourceActions 形状接收来源动作：从端口原样转接。
- * GridView 改为调用变更控制器后删除。
- */
-export const toGridViewSourceActions = (port: LibraryMutationPort): GridViewSourceActions => ({
-    local: {
-        onRefresh: port.local?.refresh,
-        onEditEntity: port.local?.editEntity,
-        onOrganizeFolderSongInfo: port.local?.organizeFolder,
-        onMatchSong: port.local?.matchSong,
-        onResyncFolder: port.local?.resyncFolder,
-        onResyncAllFolders: port.local?.resyncAllFolders,
-        onDeleteFolder: port.local?.deleteFolder,
-        onRenamePlaylist: port.local?.renamePlaylist,
-        onDeletePlaylist: port.local?.deletePlaylist,
-        onExportPlaylist: port.local?.exportPlaylist,
-        onRemovePlaylistSongs: port.local?.removePlaylistSongs,
-    },
-    navidrome: {
-        availablePlaylists: port.navidrome?.availablePlaylists,
-        onAddToPlaylist: port.navidrome?.addToPlaylist,
-        onCreatePlaylist: port.navidrome?.createPlaylist,
-        onRenamePlaylist: port.navidrome?.renamePlaylist,
-        onDeletePlaylist: port.navidrome?.deletePlaylist,
-        onRemovePlaylistSongs: port.navidrome?.removePlaylistSongs,
     },
 });
