@@ -120,7 +120,7 @@ export type LibraryCollectionSurfaceProps = LibrarySurfaceBaseProps & LibraryCol
     collection: LibraryCollectionDescriptor;
     resource: CollectionResource | null;
     playback: LibraryPlaybackPort;
-    /** 变更动作控制器（P2.1）；宿主创建、不订阅。suite 经它删歌、订阅、改名……（网格自 P2.2 起，TUI 在 P2.4）。 */
+    /** 变更动作控制器；宿主创建、不订阅。suite 经它删歌、订阅、改名……（网格与 TUI 订阅同一个实例）。 */
     mutations: CollectionMutationController | null;
     localSongs: LocalSong[];
     theme: Theme;

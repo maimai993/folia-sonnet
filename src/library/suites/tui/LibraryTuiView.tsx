@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useIsPresent } from 'framer-motion';
 import { List, useListRef } from 'react-window';
 import { useTranslation } from 'react-i18next';
-import type { LibraryCollectionSurfaceProps } from '../../core/contracts/suite';
+import type { LibraryActionId, LibraryCollectionSurfaceProps } from '../../core/contracts/suite';
 import type { LibraryMutationResult } from '../../core/contracts/mutations';
-import { isLibraryActionDeclared } from '../../core/model/librarySuites';
+import { resolveDeclaredMutationActions } from '../../core/model/librarySuites';
 import { collectionKey } from '../../core/model/collectionIdentity';
 import { buildCoreSurfaceParams, buildGridSurfaceState, runGridSurfaceAction } from '../../core/model/collectionSurface';
 import { useCollectionResourceState } from '../../core/bindings/useCollectionResourceState';
@@ -109,12 +109,14 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         run: action => runGridSurfaceAction(action, surfaceParams),
     });
 
-    // 变更动作：suite 声明了、控制器也说这个集合支持，才有入口。
+    // 变更动作：suite 声明了、控制器也说这个集合支持（声明 ∩ 能力），才有入口。
     const mutationCapabilities = mutationSnapshot.capabilities;
-    const offers = (action: Parameters<typeof isLibraryActionDeclared>[1], supported: boolean) => (
-        Boolean(mutations) && supported && isLibraryActionDeclared(declaredActions, action)
+    const offeredMutations = useMemo(
+        () => new Set(mutations ? resolveDeclaredMutationActions(declaredActions, mutationCapabilities) : []),
+        [declaredActions, mutationCapabilities, mutations],
     );
-    const canRemoveEntry = offers('remove-entry', mutationCapabilities.removeEntry.supported);
+    const offers = (action: LibraryActionId) => offeredMutations.has(action);
+    const canRemoveEntry = offers('remove-entry');
     const isDailyRecommendations = mutationSnapshot.branches.isDailyRecommendationsCollection;
     const displayTitle = mutationSnapshot.renamedTo ?? collection.name;
     const pendingKeys = useMemo(() => new Set(mutationSnapshot.pendingEntryKeys), [mutationSnapshot.pendingEntryKeys]);
@@ -157,7 +159,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         }
     }, [canRemoveEntry, focus, isDailyRecommendations, mutations, onStatusMessage, t, view.displayTracks]);
 
-    const canMatchSong = offers('match-song', mutationCapabilities.matchSong.supported);
+    const canMatchSong = offers('match-song');
     const matchRow = (row: number) => {
         const track = trackAtRow(row);
         if (track && canMatchSong) void mutations?.matchSong(track);
@@ -263,10 +265,10 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
                 snapshot={snapshot}
                 mutations={{
                     snapshot: mutationSnapshot,
-                    showSubscribe: offers('subscribe', mutationCapabilities.subscribe.supported),
-                    showRename: offers('rename', mutationCapabilities.rename.supported),
-                    showDelete: offers('delete-collection', mutationCapabilities.deleteCollection.supported),
-                    showDailyDate: offers('daily-date', mutationCapabilities.dailyDate.supported),
+                    showSubscribe: offers('subscribe'),
+                    showRename: offers('rename'),
+                    showDelete: offers('delete-collection'),
+                    showDailyDate: offers('daily-date'),
                     onToggleSubscribe: () => void mutations?.toggleSubscribe(),
                     onRename: openRenamePrompt,
                     onDelete: openDeletePrompt,

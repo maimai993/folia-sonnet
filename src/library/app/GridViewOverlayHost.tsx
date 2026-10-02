@@ -512,7 +512,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         refreshNavidromePlaylists,
     }), [surfaceProps, t, navidromePlaylistItems, refreshNavidromePlaylists]);
     // 变更动作控制器：宿主按集合会话创建与释放，自己不订阅快照（不会因进行中的状态重渲染首页）。
-    // 交给集合 surface：网格订阅它（P2.2 起），TUI 在 P2.4 接入。
+    // 交给集合 surface：网格与 TUI 都订阅它（换 suite 不重建，订阅状态、进行中的删除都留在这里）。
     const collectionMutations = useCollectionMutations({
         descriptor: liveSelectedCollection && liveSelectedCollection.type !== 'artist' ? liveSelectedCollection : null,
         resource: collectionResource,

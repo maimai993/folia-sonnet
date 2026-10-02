@@ -167,10 +167,6 @@ export const isLibraryActionDeclared = (declared: LibraryDeclaredActions, action
     declared.actions.includes(action)
 );
 
-export const isLibraryExtraActionDeclared = (declared: LibraryDeclaredActions, action: string): boolean => (
-    declared.extraActions.includes(action)
-);
-
 /**
  * 声明 ∩ core 能力：available 是 core 此刻认为能做的动作，只留下 suite 也声明了的，顺序按 available。
  */
@@ -181,7 +177,8 @@ export const intersectDeclaredActions = (
 
 /**
  * 变更控制器判定的那部分动作：suite 声明了、且这个集合支持的（不看 enabled——进行中、加载中的动作
- * 仍然出现，只是不可用）。P2.3 拆命令桥时由它决定发布哪些变更命令。
+ * 仍然出现，只是不可用）。suite 用它决定自己的变更入口出不出现（TUI 的 Delete、星标、改名……）；
+ * 命令面板走 core/model/collectionSurface 的 GRID_SURFACE_ACTION_SOURCES，结果与这里一致。
  */
 export const resolveDeclaredMutationActions = (
     declared: LibraryDeclaredActions,
