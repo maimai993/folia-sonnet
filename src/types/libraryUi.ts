@@ -72,8 +72,8 @@ export interface CollectionResource {
     removeTracks(match: (track: SongResult) => boolean, schedule?: (commit: () => void) => void): Promise<void>;
     /** 把第 index 首替换为 next；该位置已不是 expectedKey 时拒绝并返回 false。 */
     replaceTrackAt(index: number, expectedKey: string, next: SongResult): boolean;
-    /** 用 load 的结果整体替换曲目（例如切换每日推荐的日期），不分页、不写缓存。 */
-    replaceAll(load: () => Promise<SongResult[]>): Promise<void>;
+    /** 用 load 的结果整体替换曲目（例如切换每日推荐的日期），不分页、不写缓存；失败时保持原样并返回 false。 */
+    replaceAll(load: () => Promise<SongResult[]>): Promise<boolean>;
 }
 
 export type LibraryCapabilityReason = 'empty' | 'loading' | 'unsupported';

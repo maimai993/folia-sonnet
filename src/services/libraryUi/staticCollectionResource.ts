@@ -35,6 +35,7 @@ export const createStaticCollectionResource = (key: string, tracks: SongResult[]
         },
         replaceAll: async (load) => {
             commitTracks(await load());
+            return true;
         },
     };
 };

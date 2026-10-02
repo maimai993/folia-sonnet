@@ -87,6 +87,15 @@ const backAndSettle = async (page: Page) => {
     await expect(page.locator('[data-ponder-page-scope="grid-view-page"]')).toHaveCount(0);
 };
 
+/**
+ * 等筛选真正提交到网格上。surface 读到的可能是还没提交的那次（可打断的）渲染：这时按键会落在旧网格上，
+ * 随后「筛选变化回到第一张」又把焦点拉回去。以一张不在筛选结果里的卡消失为准。
+ */
+const waitForFilteredGrid = async (page: Page, hiddenKey: string) => {
+    await expect(page.locator(cardSelector(hiddenKey))).toHaveCount(0);
+    await page.waitForTimeout(300);
+};
+
 /** 键盘事件要落在 body 上：网格的键盘处理会忽略按钮、输入框里的按键。 */
 const pressOnGrid = async (page: Page, key: string) => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -197,9 +206,9 @@ test.describe('online paging and cache', () => {
         expect(ids).toEqual(bigKeys());
     });
 
-    // 已知缺陷：首页在网格卸载之后才返回时，补页循环自己换了一代，卸载时的取消拦不住它，
-    // 关掉的歌单会在后台继续分页并写缓存。P1.1 的资源层修复后转正。
-    test.fixme('closing a playlist before its first page lands stops all further paging', async ({ mount, page }) => {
+    // P1.3 之前：首页在网格卸载之后才返回时，补页循环自己换了一代，卸载时的取消拦不住它，
+    // 关掉的歌单会在后台继续分页并写缓存。现在请求归属在资源上，释放即停。
+    test('closing a playlist before its first page lands stops all further paging', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await open(page, 'online-slow');
         await page.waitForTimeout(300);
@@ -239,6 +248,7 @@ test.describe('filter, play and enqueue', () => {
         await waitForScope(page, bigKeys().length);
         await setQuery(page, 'cedar');
         await waitForScope(page, bigKeys('cedar').length);
+        await waitForFilteredGrid(page, onlinePlaybackKey(PROBE_PROVIDER_A, 'big-0'));
 
         await pressOnGrid(page, 'Enter');
         await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
@@ -409,6 +419,7 @@ test.describe('navigation', () => {
         await waitForScope(page, bigKeys().length);
         await setQuery(page, 'cedar');
         await waitForScope(page, bigKeys('cedar').length);
+        await waitForFilteredGrid(page, onlinePlaybackKey(PROBE_PROVIDER_A, 'big-0'));
 
         // 先把焦点挪离第一张，恢复才有区分度。
         await pressOnGrid(page, 'ArrowRight');

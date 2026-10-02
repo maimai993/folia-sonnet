@@ -1,46 +1,90 @@
-import type { GridItem } from './polaroidCardParts';
-
 // src/components/folia-grid/gridViewRestore.ts
 // 「这个网格恢复后会聚焦到哪张卡片」的唯一真源。
 //
 // 这条规则现在有两个消费者：恢复滚动/焦点的 effect，和移形换影入场的 hero 判定（扇形的
 // 放射原点必须是真正被居中的那张卡，从 index 0 放射会让整个级联歪掉）。两处各写一遍的
-// 后果是它们对 searchQuery / focusedTrackId 的处理会慢慢分叉，而分叉的表现只是「偶尔歪
-// 一点」，不会报错。所以索引解析放在这里，各自的时序守卫留在各自调用点。
+// 后果是它们对筛选与焦点的处理会慢慢分叉，而分叉的表现只是「偶尔歪一点」，不会报错。
+// 所以索引解析放在这里，各自的时序守卫留在各自调用点。
+//
+// 筛选词和「看到哪首」（条目键）存在跨 renderer 的浏览会话里；这里的 sessionStorage 记录只放
+// 网格自己的布局状态，键带完整的集合身份和版本号。旧版只按 id 存的记录不再读取。
+
+export const GRID_VIEW_STATE_STORAGE_PREFIX = 'folia_gridview_state:v2:';
 
 export type StoredGridViewNavigationState = {
+    focusedEntryKey?: string;
     focusedIndex: number;
-    focusedTrackId?: string | number;
     dragX: number;
     dragY: number;
-    searchQuery: string;
 };
 
-/** 持久化状态里决定焦点的那几个字段；sessionStorage 里读到的是不完整的 JSON。 */
-export type StoredFocusFields = Pick<Partial<StoredGridViewNavigationState>, 'focusedIndex' | 'focusedTrackId'>;
+/** 挂载时决定的恢复目标；`hadQuery` 表示恢复出来的会话带着筛选。 */
+export type GridRestoreTarget = {
+    entryKey: string | null;
+    fallbackIndex: number;
+    hadQuery: boolean;
+};
+
+export const gridViewStateStorageKey = (collectionIdentity: string): string => (
+    `${GRID_VIEW_STATE_STORAGE_PREFIX}${collectionIdentity}`
+);
+
+/** 读网格的布局记录；读不到或格式不对时返回 null（并清掉坏记录）。 */
+export const readStoredGridViewState = (storageKey: string | null): Partial<StoredGridViewNavigationState> | null => {
+    if (!storageKey) return null;
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as Partial<StoredGridViewNavigationState>;
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        sessionStorage.removeItem(storageKey);
+        return null;
+    }
+};
 
 /**
- * 解出恢复后的焦点索引，必然落在 `[0, items.length - 1]`；无法确定时返回 -1。
- *
- * 优先用 `focusedTrackId`（曲目可能在两次会话之间重排/增删，索引会漂），回退到
- * `focusedIndex` 并夹紧。注意它**不**判断 searchQuery：过滤生效之前 items 还是未过滤的
- * 全集，只有调用方知道自己是否已经等到过滤应用（见 GridView 的两个调用点）。
+ * 恢复目标：会话里的语义焦点优先（另一个 renderer 也可能改过它），其次是网格自己记下的那张；
+ * 都没有、也没有筛选时返回 null，表示没有需要恢复的东西。
  */
-export const resolveStoredFocusIndex = (
-    stored: StoredFocusFields | null | undefined,
-    items: GridItem[],
-): number => {
-    if (!stored || items.length === 0) {
-        return -1;
+export const resolveGridRestoreTarget = (
+    stored: Partial<StoredGridViewNavigationState> | null,
+    session: { focusedEntryKey: string | null; query: string },
+): GridRestoreTarget | null => {
+    const entryKey = session.focusedEntryKey ?? stored?.focusedEntryKey ?? null;
+    const hadQuery = session.query.trim().length > 0;
+    if (!entryKey && !stored && !hadQuery) return null;
+    const storedIndex = Number.isFinite(stored?.focusedIndex) ? Number(stored!.focusedIndex) : 0;
+    return { entryKey, fallbackIndex: storedIndex, hadQuery };
+};
+
+/**
+ * 解出恢复后的焦点索引（在当前展示的网格项里），必然落在 `[0, itemCount - 1]`；无法确定时返回 -1。
+ *
+ * 优先按条目键找（曲目可能在两次打开之间重排/增删，索引会漂），找不到再回退到记下的索引并夹紧。
+ * 按键查找只比较字符串，不会为了找一张卡把整张歌单的网格项都塑形一遍。
+ */
+export const resolveGridRestoreIndex = ({
+    target,
+    itemCount,
+    findEntryIndex,
+    matchIndexes,
+}: {
+    target: GridRestoreTarget | null;
+    itemCount: number;
+    findEntryIndex: (entryKey: string) => number;
+    matchIndexes: readonly number[] | null;
+}): number => {
+    if (!target || itemCount === 0) return -1;
+    let index = -1;
+    if (target.entryKey) {
+        const displayIndex = findEntryIndex(target.entryKey);
+        if (displayIndex >= 0) {
+            index = matchIndexes ? matchIndexes.indexOf(displayIndex) : displayIndex;
+        }
     }
-    const trackIndex = stored.focusedTrackId === undefined
-        ? -1
-        : items.findIndex((item) => String(item.rawTrack?.id) === String(stored.focusedTrackId));
-    const raw = trackIndex >= 0
-        ? trackIndex
-        : (Number.isFinite(stored.focusedIndex) ? Number(stored.focusedIndex) : 0);
-    const clamped = Math.max(0, Math.min(raw, items.length - 1));
-    return Number.isFinite(clamped) ? clamped : -1;
+    if (index < 0) index = target.fallbackIndex;
+    return Math.max(0, Math.min(index, itemCount - 1));
 };
 
 /**

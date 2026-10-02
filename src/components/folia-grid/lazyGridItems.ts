@@ -50,7 +50,7 @@ export const shapeGridItem = (
  */
 export const createLazyGridItems = (
     tracks: SongResult[],
-    occurrences: Map<number, number>,
+    occurrences: ReadonlyMap<number, number>,
 ): GridItem[] => {
     const target: GridItem[] = new Array(tracks.length);
     const shaped = new Map<number, GridItem>();

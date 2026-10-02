@@ -5,7 +5,6 @@ import GridView, { GridViewSourceActions } from '../../GridView';
 import ArtistGridView from '../../ArtistGridView';
 import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
-import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileService';
@@ -20,8 +19,9 @@ import {
     refreshLocalGridViewCollection,
     resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewTracks,
-    resolveNavidromeGridViewTracks,
 } from './gridViewCollectionAdapters';
+import { createLibraryPlaybackPort } from './createLibraryPlaybackPort';
+import { useCollectionResource } from '../../../hooks/libraryUi/useCollectionResource';
 import type { LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../modal/LocalFolderSongInfoPanel';
@@ -134,8 +134,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const morphEnabled = !useReducedMotionFor('collectionMorph');
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
-    const [externalTracks, setExternalTracks] = useState<SongResult[] | undefined>(undefined);
-    const [externalTracksLoading, setExternalTracksLoading] = useState(false);
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
@@ -174,6 +172,22 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             coverUrl,
         };
     }, [liveSelectedCollection, resolvedLocalCollectionCoverUrl]);
+
+    // 本地集合的曲目在渲染期算好：放在 effect 里的话，新打开的网格第一帧会带着上一个集合的曲目。
+    const localTracks = useMemo(() => (
+        liveSelectedCollection && isLocalGridViewCollection(liveSelectedCollection)
+            ? resolveLocalGridViewTracks(liveSelectedCollection, surfaceProps.localSongs, localLibraryCatalog) as UnifiedSong[]
+            : undefined
+    ), [liveSelectedCollection, localLibraryCatalog, surfaceProps.localSongs]);
+    // 宿主持有集合资源，网格（以及别的 renderer）只订阅它：切换 renderer 不会重新请求。
+    // 宿主自己不订阅快照，所以分页到达不会让首页这棵大树重渲染。歌手页仍是自己加载。
+    const collectionResource = useCollectionResource({
+        descriptor: liveSelectedCollection && liveSelectedCollection.type !== 'artist' ? liveSelectedCollection : null,
+        currentUserId: surfaceProps.user?.id,
+        localTracks,
+    });
+    // 播放与入队的语义集中在端口里，网格与别的 renderer 共用。
+    const playbackPort = useMemo(() => createLibraryPlaybackPort(surfaceProps), [surfaceProps]);
 
     const openGridView = useCallback((collection: GridViewCollectionDescriptor) => {
         onOpenCollection(collection);
@@ -422,18 +436,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [handlePushCollection, surfaceProps.localSongs, localLibraryCatalog, selectedCollection, showCatalogUnavailable]);
 
     useEffect(() => {
-        if (!selectedCollection) {
-            setExternalTracks(undefined);
-            setExternalTracksLoading(false);
+        if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
             setResolvedLocalCollectionCoverUrl(undefined);
-            setNavidromePlaylistItems([]);
-            return;
         }
-
-        if (selectedCollection.source === 'online') {
-            setExternalTracks(undefined);
-            setExternalTracksLoading(false);
-            setResolvedLocalCollectionCoverUrl(undefined);
+        if (!selectedCollection || selectedCollection.source === 'online') {
             setNavidromePlaylistItems([]);
         }
     }, [selectedCollectionKey]);
@@ -448,11 +454,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             return;
         }
 
-        const resolvedTracks = resolveLocalGridViewTracks(
-            liveSelectedCollection,
-            surfaceProps.localSongs,
-            localLibraryCatalog,
-        ) as UnifiedSong[];
+        const resolvedTracks = localTracks ?? [];
         if (liveSelectedCollection.songIds.length > 0 && resolvedTracks.length === 0) {
             handleBackCollection();
             return;
@@ -463,49 +465,11 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             resolvedTracks,
             surfaceProps.localSongs,
         ));
-
-        setExternalTracks(resolvedTracks);
-        setExternalTracksLoading(false);
     }, [
         handleBackCollection,
         surfaceProps.localSongs,
         liveSelectedCollection,
-        localLibraryCatalog,
-        selectedCollection,
-    ]);
-
-    useEffect(() => {
-        if (!selectedCollection || !isNavidromeGridViewCollection(selectedCollection)) {
-            return;
-        }
-
-        let cancelled = false;
-        setExternalTracks([]);
-        setExternalTracksLoading(true);
-        setResolvedLocalCollectionCoverUrl(undefined);
-
-        resolveNavidromeGridViewTracks(selectedCollection)
-            .then((tracks) => {
-                if (!cancelled) {
-                    setExternalTracks(tracks);
-                }
-            })
-            .catch((error) => {
-                console.error('[GridViewOverlayHost] Failed to load Navidrome GridView tracks:', error);
-                if (!cancelled) {
-                    setExternalTracks([]);
-                }
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setExternalTracksLoading(false);
-                }
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [
+        localTracks,
         selectedCollection,
     ]);
 
@@ -530,27 +494,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         }
     }, [refreshNavidromePlaylists, selectedCollection]);
 
-    const handleSelectTrack = useCallback((track: SongResult, queue: SongResult[]) => {
-        surfaceProps.onPlaySong(track, queue);
-    }, [surfaceProps]);
-
-    const handleAddTrackToQueue = useCallback((track: SongResult) => {
-        const unifiedTrack = track as UnifiedSong;
-        const localSongId = unifiedTrack.localRef?.songId;
-        const localSong = localSongId ? surfaceProps.localSongs.find(song => song.id === localSongId) : undefined;
-        if (unifiedTrack.isLocal && localSong) {
-            surfaceProps.onAddLocalSongToQueue?.(localSong);
-            return;
-        }
-        if (unifiedTrack.isNavidrome) {
-            const naviSong = resolveNavidromePlaybackCarrier(unifiedTrack);
-            if (naviSong) {
-                surfaceProps.onAddNavidromeSongsToQueue?.([naviSong]);
-                return;
-            }
-        }
-        surfaceProps.onAddSongToQueue?.(track);
-    }, [surfaceProps]);
 
     const sourceActions = useMemo<GridViewSourceActions>(() => ({
         local: {
@@ -713,10 +656,10 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             key={selectedCollectionKey}
                             collection={displaySelectedCollection}
                             onBack={handleBackCollection}
-                            onSelectTrack={handleSelectTrack}
-                            onAddTrackToQueue={handleAddTrackToQueue}
-                            onPlayAll={surfaceProps.onPlayAll}
-                            onAddAllToQueue={surfaceProps.onAddAllToQueue}
+                            onSelectTrack={playbackPort.playTrack}
+                            onAddTrackToQueue={playbackPort.enqueueTrack}
+                            onPlayAll={playbackPort.playAll}
+                            onAddAllToQueue={playbackPort.enqueueAll}
                             onSelectAlbum={handlePushAlbumCollection}
                             onSelectArtist={handlePushArtistCollection}
                             theme={surfaceProps.theme}
@@ -734,17 +677,16 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             collection={displaySelectedCollection}
                             mode="tracks"
                             onBack={handleBackCollection}
-                            onSelectTrack={handleSelectTrack}
-                            onAddTrackToQueue={handleAddTrackToQueue}
-                            onPlayAll={surfaceProps.onPlayAll}
-                            onAddAllToQueue={surfaceProps.onAddAllToQueue}
+                            onSelectTrack={playbackPort.playTrack}
+                            onAddTrackToQueue={playbackPort.enqueueTrack}
+                            onPlayAll={playbackPort.playAll}
+                            onAddAllToQueue={playbackPort.enqueueAll}
                             onSelectAlbum={handlePushAlbumCollection}
                             onSelectArtist={handlePushArtistCollection}
                             currentUserId={surfaceProps.user?.id}
                             onPlaylistMutated={surfaceProps.onRefreshUser}
                             onStatusMessage={surfaceProps.onStatusMessage}
-                            externalTracks={externalTracks}
-                            externalTracksLoading={externalTracksLoading}
+                            resource={collectionResource}
                             localSongs={surfaceProps.localSongs}
                             sourceActions={sourceActions}
                             theme={surfaceProps.theme}

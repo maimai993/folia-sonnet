@@ -292,12 +292,14 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             state.set({ status: 'loading' }, 'urgent');
             try {
                 const tracks = await loadAll();
-                if (disposed || generation !== loadGeneration) return;
+                if (disposed || generation !== loadGeneration) return false;
                 state.set({ status: 'ready', tracks }, 'urgent');
+                return true;
             } catch (error) {
-                if (disposed || generation !== loadGeneration) return;
+                if (disposed || generation !== loadGeneration) return false;
                 console.error('[LibraryUi] Failed to replace collection tracks:', error);
                 state.set({ status: 'ready' }, 'urgent');
+                return false;
             } finally {
                 if (generation === loadGeneration) loading = false;
             }

@@ -1,5 +1,6 @@
 import React from 'react';
 import GridView from '../../src/components/GridView';
+import { createStaticCollectionResource } from '../../src/services/libraryUi/staticCollectionResource';
 import { useCollectionMorphStore } from '../../src/components/collectionOpenMorph/collectionMorphStore';
 import type { ProbeDefinition } from './definition';
 // dev/probes/gridEntrancePerf.probe.tsx
@@ -62,6 +63,8 @@ const GridEntrancePerfProbe: React.FC = () => {
         () => Array.from({ length: trackCount }, (_, index) => makeTrack(index)),
         [trackCount],
     );
+    // 曲目从静态资源来（不发请求），与真实宿主给网格的形态一致。
+    const resource = React.useMemo(() => createStaticCollectionResource('probe:perf', tracks), [tracks]);
 
     const start = () => {
         setReading(null);
@@ -172,7 +175,7 @@ const GridEntrancePerfProbe: React.FC = () => {
                         title="Perf Playlist"
                         mode="tracks"
                         collection={PLAYLIST}
-                        externalTracks={tracks}
+                        resource={resource}
                         theme={THEME}
                         isDaylight={false}
                         isInteractive

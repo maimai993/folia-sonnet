@@ -71,6 +71,7 @@ export const createNavidromeCollectionResource = (
         },
         replaceAll: async (loadAll) => {
             state.set({ tracks: await loadAll() }, 'urgent');
+            return true;
         },
     };
 };
