@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { syncRemainingCollectionPages, type CollectionSyncPage } from '../../../src/components/folia-grid/onlineCollectionSync';
+import { syncRemainingCollectionPages, type CollectionSyncPage } from '../../../src/services/libraryUi/onlineCollectionSync';
 
-// test/unit/gridView/onlineCollectionSync.test.ts
+// test/unit/libraryUi/onlineCollectionSync.test.ts
 // 在线大歌单后台补齐：按上游 offset 收敛、单页失败重试、中断点可续传、作废后不再回调。
 
 type Item = { id: string };

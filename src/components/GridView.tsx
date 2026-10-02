@@ -13,6 +13,15 @@ import { colorWithAlpha } from './visualizer/colorMix';
 import { saveToCache, getFromCache, removeFromCache } from '../services/db';
 import { omni } from '../services/onlineMusic/omni';
 import { getProviderCacheKey, getProviderCacheWithLegacyMigration } from '../services/onlineMusic/providerStorage';
+import {
+    isCloudDriveCollection,
+    isOnlineTracksCacheValid,
+    parseCachedOnlineTracks,
+    readOnlineTracksCache,
+    resolveOnlineTracksCacheKey,
+    resolveOnlineTracksTargetTime,
+    writeOnlineTracksCache,
+} from '../services/libraryUi/onlineCollectionCache';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { PolaroidCard, type GridItem } from './folia-grid/PolaroidCard';
@@ -51,12 +60,13 @@ import { LocalTrackSortDirectionButton, LocalTrackSortMenu } from './shared/Loca
 import { CustomSelect } from './shared/CustomSelect';
 import { useGridCommandFilter } from '../hooks/useGridCommandFilter';
 import { openCommandFilter } from '../stores/useAppViewStore';
+import { deriveProgressiveLoadingState } from './folia-grid/progressiveGrid';
 import {
-    deriveProgressiveLoadingState,
-    GRID_BACKGROUND_BATCH_SIZE,
-    GRID_INITIAL_BATCH_SIZE,
-} from './folia-grid/progressiveGrid';
-import { syncRemainingCollectionPages, type CollectionSyncPage } from './folia-grid/onlineCollectionSync';
+    ONLINE_COLLECTION_BACKGROUND_PAGE_SIZE,
+    ONLINE_COLLECTION_FIRST_PAGE_SIZE,
+    syncRemainingCollectionPages,
+    type CollectionSyncPage,
+} from '../services/libraryUi/onlineCollectionSync';
 import { createCollectionTrackSnapshot, readCollectionTrackSnapshot } from './folia-grid/collectionTrackSnapshot';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
@@ -714,8 +724,8 @@ export const GridView: React.FC<GridViewProps> = ({
         ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
         : `playlist_tracks_${collection.id}`) : '';
     const CACHE_KEY = collection?.source === 'online'
-        ? getProviderCacheKey(collection.providerId, CACHE_SUFFIX)
-        : CACHE_SUFFIX;
+        ? resolveOnlineTracksCacheKey(collection, currentUserId)
+        : '';
 
     const flushPendingBackgroundTracks = useCallback(() => {
         const pendingTracks = pendingBackgroundTracksRef.current;
@@ -750,7 +760,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
         try {
             const currentOffset = reset ? 0 : offset;
-            const targetTime = collection.tracksUpdatedAt || collection.updatedAt || 0;
+            const targetTime = resolveOnlineTracksTargetTime(collection);
 
             if (reset) {
                 pendingBackgroundTracksRef.current = null;
@@ -786,7 +796,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     const items = await omni.getDailySongs();
                     initialPage = { items, nextOffset: items.length, hasMore: false };
                 } else {
-                    const page = await loadOnlineCollectionPage(GRID_INITIAL_BATCH_SIZE, 0);
+                    const page = await loadOnlineCollectionPage(ONLINE_COLLECTION_FIRST_PAGE_SIZE, 0);
                     initialPage = page;
                     if (typeof page.total === 'number' && page.total > 0) {
                         setCollectionDetail(previous => ({
@@ -864,7 +874,7 @@ export const GridView: React.FC<GridViewProps> = ({
             initialItems: initialTracks,
             startOffset,
             total: totalTracks,
-            fetchPage: pageOffset => loadOnlineCollectionPage(GRID_BACKGROUND_BATCH_SIZE, pageOffset),
+            fetchPage: pageOffset => loadOnlineCollectionPage(ONLINE_COLLECTION_BACKGROUND_PAGE_SIZE, pageOffset),
             getKey: song => getPlaybackSongKey(song),
             isCancelled,
             onPage: (nextTracks, nextOffset, hasMore) => {
@@ -906,7 +916,7 @@ export const GridView: React.FC<GridViewProps> = ({
         if (!collection || !backgroundLoadError) return;
         void fetchRemainingTracks(
             pendingBackgroundTracksRef.current ?? tracks,
-            collection.tracksUpdatedAt || collection.updatedAt || 0,
+            resolveOnlineTracksTargetTime(collection),
             undefined,
             backgroundLoadError.offset,
         );

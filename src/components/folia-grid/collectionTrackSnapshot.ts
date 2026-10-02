@@ -1,4 +1,4 @@
-import type { CollectionSyncPage } from './onlineCollectionSync';
+import type { CollectionSyncPage } from '../../services/libraryUi/onlineCollectionSync';
 
 // src/components/folia-grid/collectionTrackSnapshot.ts
 // Preserve upstream pagination separately from the number of visible, deduplicated tracks.

@@ -1,8 +1,5 @@
 // Shared progressive-grid state helpers for GridView and ArtistGridView.
 
-export const GRID_INITIAL_BATCH_SIZE = 150;
-export const GRID_BACKGROUND_BATCH_SIZE = 1000;
-
 export const deriveProgressiveLoadingState = (
     itemCount: number,
     initialSourcesLoading: boolean,
