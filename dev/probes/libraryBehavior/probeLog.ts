@@ -22,7 +22,11 @@ export type ProbeCallKind =
     | 'addNavidromeSongsToQueue'
     | 'refreshUser'
     | 'refreshLocalSongs'
-    | 'statusMessage';
+    | 'statusMessage'
+    // 以下几种只有首页探针会记：打开集合（宿主收到的描述）、经由探针替身的服务调用、搜索提交。
+    | 'openCollection'
+    | 'service'
+    | 'searchCommitted';
 
 export type ProbeCall = {
     seq: number;
@@ -32,6 +36,13 @@ export type ProbeCall = {
     /** playSong 的上下文队列。 */
     queueIds?: string[];
     text?: string;
+    /** statusMessage 的类型（success / info / error）；playSong 是否来自私人 FM。 */
+    status?: string;
+    isFm?: boolean;
+    /** openCollection：集合身份键；service：服务名。 */
+    key?: string;
+    /** openCollection 的描述摘要、service 的参数（都可 JSON 序列化）。 */
+    detail?: unknown;
 };
 
 type ProbeLogState = {

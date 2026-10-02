@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LocalPlaylist, LocalSong, SongResult } from '../../../src/types';
+import type { LocalPlaylist, LocalSong } from '../../../src/types';
 import type { ProviderCollection } from '../../../src/types/onlineMusic';
-import type { NavidromeSong } from '../../../src/types/navidrome';
 import type { HomeSurfaceProps } from '../../../src/components/app/home/homeSurfaceTypes';
 import {
     createLocalGridViewCollection,
@@ -19,7 +18,6 @@ import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librar
 import { useLibraryBrowseSessionStore } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
 import { unregisterOnlineMusicProvider } from '../../../src/services/onlineMusic/providerRegistry';
 import { DEFAULT_THEME } from '../../../src/services/baseThemes';
-import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 import {
     LOCAL_PLAYLIST_NAME,
     NAVIDROME_ALBUM_ID,
@@ -38,6 +36,7 @@ import { describeOnlineFixture, registerFakeProviders, resetFakeProviders } from
 import { IN_MEMORY_LOCAL_PLAYLIST, LOCAL_FIXTURE_SONGS, readLocalLibrary, seedLocalLibrary } from './localFixtures';
 import { installNavidromeShim, NAVIDROME_PROBE_CONFIG } from './navidromeShim';
 import { recordProbeCall } from './probeLog';
+import { PROBE_SURFACE_CALLBACKS } from './probeSurfaceCallbacks';
 import { probeRefreshGate, releaseAllProbeRefreshGates } from './probeGates';
 import { installLibraryProbeApi } from './libraryProbeApi';
 
@@ -67,8 +66,6 @@ const SANDBOX_ONLY: ReadonlySet<ProbeFixtureId> = new Set([
 export const isProbeSandbox = (): boolean => (
     Boolean(navigator.webdriver) || new URLSearchParams(window.location.search).has('sandbox')
 );
-
-const songKeys = (songs: SongResult[] | undefined) => (songs ?? []).map(getPlaybackSongKey);
 
 const STATIC_CATALOG: LocalLibraryCatalogSnapshot = {
     entities: [],
@@ -170,26 +167,13 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
     }, [sandbox]);
 
     const surfaceProps = useMemo<HomeSurfaceProps>(() => ({
-        onPlaySong: (song, queue) => recordProbeCall({ kind: 'playSong', ids: songKeys([song]), queueIds: songKeys(queue) }),
-        onPlayAll: songs => recordProbeCall({ kind: 'playAll', ids: songKeys(songs) }),
-        onAddAllToQueue: songs => {
-            recordProbeCall({ kind: 'addAllToQueue', ids: songKeys(songs) });
-            return songs.length;
-        },
-        onAddSongToQueue: song => recordProbeCall({ kind: 'addSongToQueue', ids: songKeys([song]) }),
-        onAddLocalSongToQueue: (song: LocalSong) => recordProbeCall({ kind: 'addLocalSongToQueue', ids: [song.id] }),
-        onAddNavidromeSongsToQueue: (songs: NavidromeSong[]) => recordProbeCall({
-            kind: 'addNavidromeSongsToQueue',
-            ids: songs.map(song => song.navidromeData?.id ?? String(song.id)),
-        }),
+        ...PROBE_SURFACE_CALLBACKS,
         onRefreshUser: async () => {
             recordProbeCall({ kind: 'refreshUser', ids: [] });
             await probeRefreshGate('refreshUser').wait();
             setPlaylists(buildPlaylistList());
         },
         onRefreshLocalSongs: refreshLocal,
-        onStatusMessage: message => recordProbeCall({ kind: 'statusMessage', ids: [], text: message.text }),
-        onBackToPlayer: () => {},
         user: { id: 'probe-user', nickname: 'Probe User' },
         playlists,
         localSongs,

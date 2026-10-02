@@ -8,6 +8,17 @@ import {
 } from '../../../src/types/onlineMusic';
 import { registerOnlineMusicProvider } from '../../../src/services/onlineMusic/providerRegistry';
 import {
+    HOME_CLOUD,
+    HOME_FAVORITE_ALBUM_COUNTS,
+    HOME_FM_COUNT,
+    HOME_FM_PREFIX,
+    HOME_PLAYLIST_FIXTURES,
+    HOME_RECOMMENDED_COUNTS,
+    homeFavoriteAlbumId,
+    homeFavoriteAlbumName,
+    homeRecommendedId,
+    homeRecommendedName,
+    range,
     hasAlias,
     hasGuestArtist,
     hasSecondAlbum,
@@ -144,6 +155,14 @@ export const resetFakeProviders = (): void => {
             ...(rule.isOwned ? { isOwned: true } : {}),
         });
     });
+    // 首页档的云盘曲目（集合详情档不会请求它）。
+    collections.set(cloudTarget(HOME_CLOUD.providerId), {
+        providerId: HOME_CLOUD.providerId,
+        type: 'cloud',
+        id: HOME_CLOUD.id,
+        name: HOME_CLOUD.name,
+        songs: range(HOME_CLOUD.count).map(index => makeOnlineSong(HOME_CLOUD.providerId, HOME_CLOUD.prefix, index)),
+    });
     collections.set(targetKey(PROBE_PROVIDER_A, 'album', PROBE_ALBUM.id), {
         providerId: PROBE_PROVIDER_A,
         type: 'album',
@@ -210,12 +229,12 @@ const run = async <T>(
     return result;
 };
 
-const pageOf = (songs: UnifiedSong[], limit: number, offset: number): ProviderPage<UnifiedSong> => {
-    const items = songs.slice(offset, offset + limit);
+const pageOf = <T>(all: T[], limit: number, offset: number): ProviderPage<T> => {
+    const items = all.slice(offset, offset + limit);
     return {
         items,
-        total: songs.length,
-        hasMore: offset + items.length < songs.length,
+        total: all.length,
+        hasMore: offset + items.length < all.length,
         nextOffset: offset + items.length,
     };
 };
@@ -235,7 +254,87 @@ const describe = (data: CollectionData | undefined, fallback?: ProviderCollectio
     };
 };
 
-const createFakeProvider = (providerId: string): OnlineMusicProvider => ({
+/**
+ * 假 provider 的两档：'collection' 是集合详情探针一直用的那一档（没有账户、没有用户曲库）；
+ * 'home' 在它之上补齐首页需要的账户与曲库接口（歌单列表、云盘、收藏专辑、私人 FM、推荐歌单），
+ * 能力里打开 auth / userLibrary / userAlbums，首页因此把它当成「已登录的 provider」。
+ */
+export type FakeProviderProfile = 'collection' | 'home';
+
+const cloudTarget = (providerId: string) => targetKey(providerId, 'cloud', HOME_CLOUD.id);
+
+const homeCloudCollection = (providerId: string): ProviderCollection | null => (
+    providerId === HOME_CLOUD.providerId
+        ? { providerId, id: HOME_CLOUD.id, name: HOME_CLOUD.name, type: 'cloud', trackCount: HOME_CLOUD.count }
+        : null
+);
+
+const homeFavoriteAlbums = (providerId: string): ProviderCollection[] => (
+    range(HOME_FAVORITE_ALBUM_COUNTS[providerId] ?? 0).map(index => ({
+        providerId,
+        id: homeFavoriteAlbumId(providerId, index),
+        name: homeFavoriteAlbumName(providerId, index),
+        type: 'album',
+        trackCount: 10,
+        artists: [{ id: 'ar-1', name: 'Album Artist' }],
+    }))
+);
+
+const homeRecommended = (providerId: string): ProviderCollection[] => (
+    range(HOME_RECOMMENDED_COUNTS[providerId] ?? 0).map(index => ({
+        providerId,
+        id: homeRecommendedId(providerId, index),
+        name: homeRecommendedName(providerId, index),
+        type: 'playlist',
+        trackCount: 20,
+        creator: { id: 'probe-curator', nickname: 'Probe Curator' },
+    }))
+);
+
+// 首页档额外的接口：每次调用照样经 run() 记账、可注入延迟与故障（target 见各接口）。
+const createHomeExtensions = (providerId: string) => ({
+    library: {
+        getUserPlaylists: (_userId: MediaId, limit: number, offset: number) => run(
+            providerId, 'userPlaylists', `${providerId}:userPlaylists`, { offset, limit },
+            () => pageOf((HOME_PLAYLIST_FIXTURES[providerId] ?? []).map(describeOnlineFixture), limit, offset),
+        ),
+        getUserAlbums: (_userId: MediaId, limit: number, offset: number) => run(
+            providerId, 'userAlbums', `${providerId}:userAlbums`, { offset, limit },
+            () => pageOf(homeFavoriteAlbums(providerId), limit, offset),
+        ),
+        getCloudCollection: () => run(providerId, 'cloudCollection', `${providerId}:cloud`, {}, () => homeCloudCollection(providerId)),
+    },
+    getCloudTracks: (limit: number, offset: number) => run(
+        providerId, 'cloudTracks', cloudTarget(providerId), { offset, limit },
+        () => pageOf(collections.get(cloudTarget(providerId))?.songs ?? [], limit, offset),
+    ),
+    getPersonalFm: () => run(providerId, 'personalFm', `${providerId}:fm`, {}, () => (
+        range(HOME_FM_COUNT).map(index => makeOnlineSong(providerId, HOME_FM_PREFIX, index))
+    )),
+    getRecommendedCollections: (limit: number) => run(
+        providerId, 'recommendedCollections', `${providerId}:recommended`, { limit },
+        () => homeRecommended(providerId).slice(0, limit),
+    ),
+});
+
+const createFakeProvider = (providerId: string, profile: FakeProviderProfile = 'collection'): OnlineMusicProvider => {
+    const base = createCollectionProvider(providerId);
+    if (profile === 'collection') return base;
+    const home = createHomeExtensions(providerId);
+    return {
+        ...base,
+        capabilities: { ...base.capabilities, auth: true, userLibrary: true, userAlbums: true },
+        library: home.library,
+        catalog: { ...base.catalog, getCloudTracks: home.getCloudTracks },
+        recommendations: {
+            ...base.recommendations,
+            getPersonalFm: home.getPersonalFm,
+            getRecommendedCollections: home.getRecommendedCollections,
+        },
+    };
+};
+
+const createCollectionProvider = (providerId: string): OnlineMusicProvider => ({
     id: providerId,
     displayName: `Probe ${providerId}`,
     shortName: providerId,
@@ -343,9 +442,9 @@ const createFakeProvider = (providerId: string): OnlineMusicProvider => ({
 });
 
 /** 注册两个假 provider。可重复调用：StrictMode 下挂载 effect 会先拆一次再装回来。 */
-export const registerFakeProviders = (): void => {
-    registerOnlineMusicProvider(createFakeProvider(PROBE_PROVIDER_A));
-    registerOnlineMusicProvider(createFakeProvider(PROBE_PROVIDER_B));
+export const registerFakeProviders = (profile: FakeProviderProfile = 'collection'): void => {
+    registerOnlineMusicProvider(createFakeProvider(PROBE_PROVIDER_A, profile));
+    registerOnlineMusicProvider(createFakeProvider(PROBE_PROVIDER_B, profile));
 };
 
 /** 把 fixture 规则转成首页「歌单列表」里的那条 ProviderCollection。 */

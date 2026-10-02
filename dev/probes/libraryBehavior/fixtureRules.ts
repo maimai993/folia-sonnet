@@ -191,3 +191,59 @@ export const NAVIDROME_PLAYLIST_SONGS = range(5, 11).map(index => `navi-song-${i
 /** 含重复条目的 Navidrome 歌单：navi-song-21 出现两次（原始下标 0 与 2）。 */
 export const NAVIDROME_DUPES_PLAYLIST_ID = 'navi-pl-2';
 export const NAVIDROME_DUPES_PLAYLIST_SONGS = ['navi-song-21', 'navi-song-22', 'navi-song-21', 'navi-song-23'];
+
+// ---- 首页（homeBehavior 探针）的在线数据 ----
+// 两个假 provider 在首页上各有一个已登录账户：歌单列表、云盘、收藏专辑（分页）、电台 feed（私人 FM、每日推荐、
+// 推荐歌单）。集合详情探针不注册这些接口（它的 provider 走 'collection' 档），这里的规则只给首页用。
+
+export const homeUserId = (providerId: string): string => `${providerId}-user`;
+export const homeUserName = (providerId: string): string => `User ${providerId}`;
+
+/** 首页歌单页签里每个 provider 的歌单（按上游顺序，云盘由账户 store 放到第二位）。 */
+export const HOME_PLAYLIST_FIXTURES: Readonly<Record<string, OnlineFixtureId[]>> = {
+    [PROBE_PROVIDER_A]: ['online-public', 'online-owned', 'online-big', 'collide-a'],
+    [PROBE_PROVIDER_B]: ['collide-b'],
+};
+
+/** 只有 probe-a 有云盘。 */
+export const HOME_CLOUD = { providerId: PROBE_PROVIDER_A, id: 'cloud', name: 'Probe Cloud', prefix: 'cloud', count: 4 } as const;
+
+/** 收藏专辑：probe-a 有 120 张（omni 每页 50，要翻三页），probe-b 有 7 张。 */
+export const HOME_FAVORITE_ALBUM_COUNTS: Readonly<Record<string, number>> = {
+    [PROBE_PROVIDER_A]: 120,
+    [PROBE_PROVIDER_B]: 7,
+};
+export const HOME_ALBUM_PAGE_SIZE = 50;
+export const homeFavoriteAlbumId = (providerId: string, index: number): string => `fav-${providerId}-${index}`;
+export const homeFavoriteAlbumName = (providerId: string, index: number): string => `Favorite ${providerId} ${index}`;
+export const homeFavoriteAlbumIds = (providerId: string): string[] => (
+    range(HOME_FAVORITE_ALBUM_COUNTS[providerId] ?? 0).map(index => homeFavoriteAlbumId(providerId, index))
+);
+
+/** 电台页签：推荐歌单与私人 FM 的歌。 */
+export const HOME_RECOMMENDED_COUNTS: Readonly<Record<string, number>> = {
+    [PROBE_PROVIDER_A]: 3,
+    [PROBE_PROVIDER_B]: 2,
+};
+export const homeRecommendedId = (providerId: string, index: number): string => `rec-${providerId}-${index}`;
+export const homeRecommendedName = (providerId: string, index: number): string => `Recommended ${providerId} ${index}`;
+export const HOME_FM_PREFIX = 'fm';
+export const HOME_FM_COUNT = 3;
+
+// ---- 首页（homeBehavior 探针）的 Navidrome 概览数据 ----
+
+/** 专辑列表（字母序即这个顺序）；第一张就是集合详情探针用的 navi-al-1。 */
+export const NAVIDROME_HOME_ALBUMS = [
+    { id: NAVIDROME_ALBUM_ID, name: 'Navi Album', songCount: NAVIDROME_ALBUM_SONGS.length },
+    { id: 'navi-al-3', name: 'Navi Beta Album', songCount: 4 },
+    { id: 'navi-al-4', name: 'Navi Gamma Album', songCount: 2 },
+] as const;
+/** 「最近添加」与「最近播放」各自的服务器顺序。 */
+export const NAVIDROME_NEWEST_ALBUM_IDS = ['navi-al-4', 'navi-al-3'];
+export const NAVIDROME_RECENT_ALBUM_IDS = ['navi-al-3'];
+export const NAVIDROME_HOME_ARTISTS = [
+    { id: 'navi-ar-1', name: 'Navi Artist', albumCount: 2 },
+    { id: 'navi-ar-2', name: 'Navi Second Artist', albumCount: 1 },
+] as const;
+export const NAVIDROME_RANDOM_SONGS = ['navi-song-31', 'navi-song-32', 'navi-song-33'];
+export const NAVIDROME_STARRED_SONGS = ['navi-song-41', 'navi-song-42'];
