@@ -5,7 +5,7 @@ import {
     resolveContextTracks,
     type LocalTrackSortContext,
 } from '@/library/core/model/collectionView';
-import { resolveGridViewContextTracks } from '@/components/folia-grid/gridViewContextActions';
+import { resolveGridViewContextTracks } from '@/library/suites/grid/collection/gridViewContextActions';
 import { buildLocalQueue } from '@/services/playbackAdapters';
 import { getPlaybackSongKey } from '@/utils/appPlaybackGuards';
 import type { LocalSong, SongResult, UnifiedSong } from '@/types';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import '../../src/i18n/config';
-import GridMapBatchPanel from '../../src/components/folia-grid/GridMapBatchPanel';
+import GridMapBatchPanel from '../../src/library/suites/grid/directory/GridMapBatchPanel';
 import type { ProbeDefinition } from './definition';
 
 // dev/probes/localFolderIgnore.probe.tsx

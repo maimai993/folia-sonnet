@@ -2,7 +2,7 @@ import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useLibraryRendererStore } from '../../../src/library/core/state/useLibraryRendererStore';
-import { switchLibraryRenderer } from '../../../src/components/app/home/switchLibraryRenderer';
+import { switchLibraryRenderer } from '../../../src/library/app/switchLibraryRenderer';
 import { collectionKey } from '../../../src/library/core/model/collectionIdentity';
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';

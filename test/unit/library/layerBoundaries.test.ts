@@ -138,10 +138,10 @@ describe('library core layer boundaries', () => {
     it('keeps the list renderer independent of the grid, its hex viewport and the open transition', () => {
         const FORBIDDEN = [
             /\/GridView$/, /\/Grid3D$/, /\/GridMap$/, /\/ArtistGridView$/,
-            /folia-grid\/(PolaroidCard|polaroidCardParts|hex\w*|useFoliaHexViewport)$/,
-            /collectionOpenMorph\//,
+            /(folia-grid|grid\/shared)\/(PolaroidCard|polaroidCardParts|hex\w*|useFoliaHexViewport)$/,
+            /(collectionOpenMorph|grid\/transitions)\//,
         ];
-        const tui = listSources('src/components/library-tui');
+        const tui = listSources('src/library/suites/tui');
         const offenders = tui.flatMap(file => importsOf(file)
             .filter(source => FORBIDDEN.some(pattern => pattern.test(source)))
             .map(source => `${file} -> ${source}`));

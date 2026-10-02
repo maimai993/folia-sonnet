@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHideableGridItem } from '@/components/folia-grid/gridItemVisibility';
+import { isHideableGridItem } from '@/library/suites/grid/directory/gridItemVisibility';
 
 // test/unit/gridView/gridItemVisibility.test.ts
 

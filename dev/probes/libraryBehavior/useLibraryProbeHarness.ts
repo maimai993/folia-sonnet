@@ -10,7 +10,7 @@ import {
     createOnlineGridViewCollection,
     type GridViewCollectionDescriptor,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
-import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGrid3DModel';
+import { buildLocalGrid3DGroups } from '../../../src/library/suites/grid/home/localGrid3DModel';
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';

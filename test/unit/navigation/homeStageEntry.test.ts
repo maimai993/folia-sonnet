@@ -126,7 +126,7 @@ describe('home stage entry source contracts', () => {
     });
 
     it('keeps the Grid3D desktop tabs rendering the stage entry button', async () => {
-        const content = await readRepoFile('src/components/Grid3D.tsx');
+        const content = await readRepoFile('src/library/suites/grid/home/Grid3D.tsx');
 
         expect(content).toContain('stageEnabled?: boolean;');
         expect(content).toContain('onOpenStagePlayer?: () => void;');

@@ -1,6 +1,6 @@
 import React from 'react';
-import Grid3D from '../Grid3D';
-import GridViewOverlayHost from './home/GridViewOverlayHost';
+import Grid3D from '../../library/suites/grid/home/Grid3D';
+import GridViewOverlayHost from '../../library/app/GridViewOverlayHost';
 import type { HomeViewModel } from './home/buildHomeModel';
 import { countRender } from '../../dev/renderCount';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LocalSong, SongResult } from '@/types';
-import { createLibraryPlaybackPort } from '@/components/app/home/createLibraryPlaybackPort';
+import { createLibraryPlaybackPort } from '@/library/app/createLibraryPlaybackPort';
 import { buildLocalQueue, buildNavidromeQueue } from '@/services/playbackAdapters';
 import type { NavidromeSong } from '@/types/navidrome';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import '../../src/i18n/config';
-import GridViewOverlayHost from '../../src/components/app/home/GridViewOverlayHost';
+import GridViewOverlayHost from '../../src/library/app/GridViewOverlayHost';
 import type { ProbeDefinition } from './definition';
 import { ProbeControlPanel } from './libraryBehavior/ProbeControlPanel';
 import { onProbeBackCollection, useLibraryProbeHarness } from './libraryBehavior/useLibraryProbeHarness';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesGridMapSearch } from '@/components/folia-grid/gridMapSearch';
+import { matchesGridMapSearch } from '@/library/suites/grid/directory/gridMapSearch';
 
 // test/unit/gridView/gridMapSearch.test.ts
 

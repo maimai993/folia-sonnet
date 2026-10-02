@@ -41,11 +41,11 @@ App.tsx
 | 功能 | 第一入口 | 继续看 |
 | --- | --- | --- |
 | 应用壳和窗口行为 | `components/app/AppShell.tsx` | `TitlebarDragZone.tsx`、`WindowControls.tsx` |
-| 首页 | `components/app/Home.tsx` | `home/buildHomeModel.ts`、`home/GridViewOverlayHost.tsx` |
+| 首页 | `components/app/Home.tsx` | `home/buildHomeModel.ts`、`library/app/GridViewOverlayHost.tsx` |
 | Player panel | `components/app/PlayerPanel.tsx` | `player-panel/buildPlayerPanelModel.ts`、`createQueueMutations.ts` |
 | overlays | `components/app/overlays/AppOverlays.tsx` | `buildAppOverlaysModel.ts`、`search/*` |
 | dialogs | `components/app/dialogs/AppDialogs.tsx` | `buildAppDialogsModel.ts`、`buildSettingsDialogModel.ts` |
-| Home 导航和 surface | `components/app/home/*` | `gridViewCollectionAdapters.ts`、`LocalGrid3DView.tsx`、`NavidromeGrid3DView.tsx` |
+| Home 导航和 surface | `components/app/home/*` | `gridViewCollectionAdapters.ts`；本地 / Navidrome 首页在 `library/suites/grid/home/` |
 | 播放恢复和 URL | `components/app/playback/*` | `restorePlaybackSource.ts`、`createOnlineRecoveryController.ts` |
 | 搜索 | `components/app/search/SearchWorkspace.tsx` | `SearchResultsList.tsx`、`searchTrackActions.ts` |
 | app-level 导航 | `components/app/navigation/*` | `createLocalLibraryNavigation.ts`、`createPanelNavigation.ts` |
@@ -55,8 +55,8 @@ App.tsx
 
 ### Components
 
-- 基础/遗留展示组件：`src/components/*.tsx`，例如 `Grid3D.tsx`、`GridView.tsx`、`UnifiedPanel.tsx`、`FloatingPlayerControls.tsx`。
-- 网格性能和导航：`src/components/folia-grid/*`。
+- 基础/遗留展示组件：`src/components/*.tsx`，例如 `UnifiedPanel.tsx`、`FloatingPlayerControls.tsx`。
+- 集合浏览（Library）：`src/library/`——`core/`（契约、纯变换、资源、状态、hooks）、`suites/grid/`（`Grid3D`、`GridView`、`GridMap`、`ArtistGridView`、hex 视口与卡片、打开转场）、`suites/tui/`、`app/`（集合宿主与端口）。
 - 本地库实体编辑：`src/components/local-library-entity/*`。
 - 命令面板：`src/components/command-palette/*`。
 - 设置和业务弹窗：`src/components/modal/*`、`src/components/modal/settings/*`。

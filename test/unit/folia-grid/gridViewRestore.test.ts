@@ -4,7 +4,7 @@ import {
     resolveGridRestoreIndex,
     resolveGridRestoreTarget,
     shouldApplyInitialGridFocus,
-} from '@/components/folia-grid/gridViewRestore';
+} from '@/library/suites/grid/shared/gridViewRestore';
 
 // test/unit/folia-grid/gridViewRestore.test.ts
 // 网格相机的两条规则：恢复时聚焦到哪张卡，以及初始定位什么时候才允许发生。

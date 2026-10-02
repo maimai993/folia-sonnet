@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, resolveNextGridMapDirectorySelectionTarget, type GridMapDirectoryNode } from '@/components/folia-grid/gridMapBatch';
-import type { GridMapItem } from '@/components/GridMap';
+import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapBatchContext, resolveGridMapDirectorySelection, resolveNextGridMapDirectorySelectionTarget, type GridMapDirectoryNode } from '@/library/suites/grid/directory/gridMapBatch';
+import type { GridMapItem } from '@/library/suites/grid/directory/GridMap';
 
 // test/unit/gridView/gridMapBatch.test.ts
 

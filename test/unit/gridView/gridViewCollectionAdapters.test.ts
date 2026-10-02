@@ -8,7 +8,7 @@ import {
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
-import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGrid3DModel';
+import { buildLocalGrid3DGroups } from '../../../src/library/suites/grid/home/localGrid3DModel';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../src/types/localLibrary';
 import { applyLocalLibraryEntityDisplay, applyLocalSongCoverDisplay } from '../../../src/services/playbackAdapters';

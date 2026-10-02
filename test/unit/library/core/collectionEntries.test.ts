@@ -5,7 +5,7 @@ import {
     findEntryIndex,
     formatEntryKey,
 } from '@/library/core/model/collectionEntries';
-import { createLazyGridItems } from '@/components/folia-grid/lazyGridItems';
+import { createLazyGridItems } from '@/library/suites/grid/collection/lazyGridItems';
 import { getPlaybackSongKey } from '@/utils/appPlaybackGuards';
 import type { SongResult } from '@/types';
 

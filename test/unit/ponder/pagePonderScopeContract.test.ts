@@ -9,14 +9,14 @@ const SRC = path.resolve(__dirname, '../../../src');
 
 const PAGE_SCOPE_OWNERS = {
     'grid-page': [
-        'components/Grid3D.tsx',
-        'components/folia-grid/DesktopGrid3DSurface.tsx',
+        'library/suites/grid/home/Grid3D.tsx',
+        'library/suites/grid/home/DesktopGrid3DSurface.tsx',
     ],
     'grid-view-page': [
-        'components/GridView.tsx',
-        'components/ArtistGridView.tsx',
+        'library/suites/grid/collection/GridView.tsx',
+        'library/suites/grid/artist/ArtistGridView.tsx',
     ],
-    'local-grid-map-page': ['components/GridMap.tsx'],
+    'local-grid-map-page': ['library/suites/grid/directory/GridMap.tsx'],
     'help-page': ['components/modal/SettingsModal.tsx'],
     'settings-page': ['components/modal/SettingsModal.tsx'],
 } as const;

@@ -83,8 +83,10 @@ node dev/mcp/ts-code-map/cli.mjs doctor    # 环境自检
   app、registry 和 `src/components`；suite 之间互不 import，也不直接用 `core/services`（资源与控制器
   由宿主创建后传入）；stores / services / utils / types 不 import suites 与 app；不建 barrel。
   这些规则同时写在 `codemap.mjs` 的 `BOUNDARY_RULES` 和 `test/unit/library/layerBoundaries.test.ts` 里。
-  （R2 之前网格与 TUI 还在 `components/` 下：`GridView`、`folia-grid/*`、`library-tui/*`、
-  `components/app/home/GridViewOverlayHost` 等，它们从 core 引用，方向是对的。）
+  网格 suite 按 surface 分子目录：`suites/grid/{home,collection,directory,artist,shared,transitions}`
+  （首页 `Grid3D` 与本地 / Navidrome 首页、集合详情 `GridView`、`GridMap` 与批量面板、歌手页、
+  hex 视口与卡片、打开转场）；TUI 在 `suites/tui/`；集合宿主 `GridViewOverlayHost` 与端口在 `app/`。
+  registry 落地之前，`components/app/Home.tsx` 还直接 import 网格的 `Grid3D`，宿主直接 import 两套 suite。
 - `App.tsx` 是历史遗留的装配缝，已经很大。新行为应该组装进相邻的 `components/app/*`、
   hooks、stores、services，而不是继续堆进去。参见 `skills/file-modularization/SKILL.md`。
 

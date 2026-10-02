@@ -12,7 +12,7 @@ import {
     resolveGrid3DLeapPlan,
     resolveGrid3DTransitionMode,
     resolveGrid3DWheelInput,
-} from '../../../src/components/folia-grid/Grid3DSlider';
+} from '../../../src/library/suites/grid/home/Grid3DSlider';
 
 // test/unit/gridView/grid3DSlider.test.ts
 // Verifies collection cards use real descriptions instead of a hard-coded symbol.

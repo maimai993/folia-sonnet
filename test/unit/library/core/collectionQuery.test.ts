@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getTrackSearchText, matchTrackIndexes } from '@/library/core/model/collectionQuery';
-import { shapeGridItem } from '@/components/folia-grid/lazyGridItems';
+import { shapeGridItem } from '@/library/suites/grid/collection/lazyGridItems';
 import type { SongResult } from '@/types';
 
 // test/unit/library/core/collectionQuery.test.ts
