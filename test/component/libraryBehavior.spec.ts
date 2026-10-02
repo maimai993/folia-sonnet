@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import type { GridSurfaceActionId } from '../../src/types/gridCommandSurface';
+import { GRID_SURFACE_ACTION_SOURCES } from '../../src/library/core/model/collectionSurface';
 import type { ProbeCallKind } from '../../dev/probes/libraryBehavior/probeLog';
 import type { ProbeFixtureId } from '../../dev/probes/libraryBehavior/fixtureRules';
 import {
@@ -45,6 +46,10 @@ const entrySelector = (itemKey: string, occurrence = 0) => (
     `${cardSelector(itemKey, occurrence)}, [data-library-entry="${itemKey}-${occurrence}"]`
 );
 
+/**
+ * 参数化用的 suite 列表（R3 之前叫 renderer）。Node 侧的用例 import 不了 registry（eager glob + React），
+ * 所以写成常量，由下面「suites」里的用例与探针页里真实 registry 的列表核对。
+ */
 const RENDERERS = ['grid', 'tui'] as const;
 type Renderer = typeof RENDERERS[number];
 
@@ -52,10 +57,13 @@ const mountProbe = async (mount: (id: string) => Promise<unknown>, page: Page, r
     await mount('libraryBehavior');
     await expect.poll(() => page.evaluate(() => window.__libraryProbe?.ready() ?? false)).toBe(true);
     if (renderer !== 'grid') {
-        await page.evaluate(id => window.__libraryProbe!.setRenderer(id), renderer);
+        await page.evaluate(id => window.__libraryProbe!.setSuite(id), renderer);
     }
 };
-const setRenderer = (page: Page, renderer: Renderer) => page.evaluate(id => window.__libraryProbe!.setRenderer(id), renderer);
+const setRenderer = (page: Page, renderer: Renderer) => page.evaluate(id => window.__libraryProbe!.setSuite(id), renderer);
+const waitForRenderer = (page: Page, renderer: Renderer) => (
+    expect(page.locator(`[data-library-renderer="${renderer}"]`)).toHaveCount(1)
+);
 
 const open = (page: Page, id: ProbeFixtureId) => page.evaluate(fixtureId => window.__libraryProbe!.open(fixtureId), id);
 const back = (page: Page) => page.evaluate(() => window.__libraryProbe!.back());
@@ -494,10 +502,6 @@ test.describe('navigation', () => {
 });
 
 test.describe('renderer switch', () => {
-    const waitForRenderer = (page: Page, renderer: Renderer) => (
-        expect(page.locator(`[data-library-renderer="${renderer}"]`)).toHaveCount(1)
-    );
-
     test('switching keeps the filter, the scope, the focused song and the play queue, and never refetches', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await open(page, 'online-big');
@@ -571,4 +575,60 @@ test.describe('renderer switch', () => {
         await expect(page.locator(`[data-tui-row="${total - 1}"]`)).toHaveAttribute('aria-selected', 'true');
         expect(await page.locator('[data-tui-row]').count()).toBeLessThan(80);
     });
+});
+
+test.describe('suites', () => {
+    test("the parameterised suite list is the registry's, and the old renderer names still work", async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        expect(await page.evaluate(() => window.__libraryProbe!.suites())).toEqual([...RENDERERS]);
+        await open(page, 'local-all');
+        await waitForRenderer(page, 'grid');
+        await page.evaluate(() => window.__libraryProbe!.setRenderer('tui'));
+        await waitForRenderer(page, 'tui');
+        expect(await page.evaluate(() => window.__libraryProbe!.renderer())).toBe('tui');
+        expect(await page.evaluate(() => window.__libraryProbe!.suite())).toBe('tui');
+    });
+
+    test('[tui] an artist page falls back to the grid, and going back returns to the TUI', async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await open(page, 'local-all');
+        await waitForRenderer(page, 'tui');
+        await waitForScope(page, 8);
+        expect(await page.evaluate(() => window.__libraryProbe!.resolveSurface('artist'))).toMatchObject({ suiteId: 'grid', isFallback: true });
+
+        expect(await page.evaluate(() => window.__libraryProbe!.pushArtist())).toBe(true);
+        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="grid"]')).toHaveCount(1);
+        await expect(page.locator('[data-library-renderer="tui"]')).toHaveCount(0);
+        expect(await page.evaluate(() => window.__libraryProbe!.suite())).toBe('tui');
+
+        await back(page);
+        await waitForRenderer(page, 'tui');
+        await expect(page.locator('[data-library-surface="artist"]')).toHaveCount(0);
+        await waitForScope(page, 8);
+        expect(await playFilteredIds(page)).toHaveLength(8);
+    });
+
+    for (const renderer of RENDERERS) {
+        test(`[${renderer}] the command surface offers only actions the suite declares`, async ({ mount, page }) => {
+            await mountProbe(mount, page, renderer);
+            await open(page, 'local-folder');
+            await waitForRenderer(page, renderer);
+            await expect.poll(async () => (await surface(page))?.availableActions.length ?? 0).toBeGreaterThan(0);
+
+            const { declaredActions } = await page.evaluate(() => window.__libraryProbe!.resolveSurface('collection'));
+            const available = (await surface(page))!.availableActions;
+            const undeclared = available.filter(action => {
+                const source = GRID_SURFACE_ACTION_SOURCES[action];
+                return 'action' in source
+                    ? !declaredActions.actions.includes(source.action)
+                    : !declaredActions.extraActions.includes(source.extra);
+            });
+            expect(undeclared).toEqual([]);
+            expect(available).toEqual(expect.arrayContaining(['play-filtered', 'enqueue-filtered', 'sort-file-name']));
+            // 本地文件夹在网格上有重扫、整理和两个面板；TUI 没声明它们，命令面板里也就没有。
+            const gridOnly: GridSurfaceActionId[] = ['resync-folder', 'organize-song-info', 'toggle-info-panel', 'toggle-track-list'];
+            if (renderer === 'grid') expect(available).toEqual(expect.arrayContaining(gridOnly));
+            else expect(available.filter(action => gridOnly.includes(action))).toEqual([]);
+        });
+    }
 });
