@@ -3,6 +3,7 @@ import { getSongCoverUrl } from '../../services/onlineMusic/songMetadata';
 import { formatSongName } from '../../utils/songNameFormatter';
 import type { GridItem } from './polaroidCardParts';
 import type { SongResult } from '../../types';
+import { formatEntryKey } from '../../utils/libraryUi/collectionEntries';
 
 // src/components/folia-grid/lazyGridItems.ts
 // 网格项的**惰性**塑形。抽出来是为了两件事：这一段的正确性很细（id 里的重复序号、增量缓存），
@@ -12,41 +13,13 @@ import type { SongResult } from '../../types';
 // 而网格一次只渲染视口附近的几十张卡；分页每来一页还会整表重算一次（累计 O(N²/Batch)），
 // 正好落在用户刚点开、转场还在飞的窗口里。
 
-/**
- * id 里的重复序号必须在使用前知道：同一首歌在歌单里出现两次时，第二个的 id 是 `<key>-1`。
- * 这需要一遍「key → 已出现次数」的扫描 —— 但它只做字符串比较与 Map 计数，比塑形整个对象便宜
- * 一个量级；而且前缀没变时可以复用上一次的结果（分页追加是最常见的情形）。
- */
-export interface DuplicateOccurrenceCache {
-    source: SongResult[];
-    seen: Map<string, number>;
-    occurrences: Map<number, number>;
-}
-
-export interface DuplicateOccurrences {
-    seen: Map<string, number>;
-    occurrences: Map<number, number>;
-}
-
-export const buildDuplicateOccurrences = (
-    tracks: SongResult[],
-    previous: DuplicateOccurrenceCache | null,
-): DuplicateOccurrences => {
-    const reusablePrefix = Boolean(previous)
-        && previous!.source.length <= tracks.length
-        && previous!.source.every((track, index) => track === tracks[index]);
-    const seen = reusablePrefix ? previous!.seen : new Map<string, number>();
-    const occurrences = reusablePrefix ? previous!.occurrences : new Map<number, number>();
-    for (let index = reusablePrefix ? previous!.source.length : 0; index < tracks.length; index += 1) {
-        const key = getPlaybackSongKey(tracks[index]);
-        const count = seen.get(key) ?? 0;
-        if (count > 0) {
-            occurrences.set(index, count);
-        }
-        seen.set(key, count + 1);
-    }
-    return { seen, occurrences };
-};
+// 重复序号的扫描与条目键属于集合本身而不是网格，搬到了 utils/libraryUi/collectionEntries；
+// 这里保留导出，旧的 import 路径照常可用。
+export {
+    buildDuplicateOccurrences,
+    type DuplicateOccurrenceCache,
+    type DuplicateOccurrences,
+} from '../../utils/libraryUi/collectionEntries';
 
 /** 一首曲目 → 一个网格项。与 GridView 早先的 eager 版本逐字段一致。 */
 export const shapeGridItem = (
@@ -54,7 +27,7 @@ export const shapeGridItem = (
     index: number,
     occurrence: number,
 ): GridItem => ({
-    id: `${getPlaybackSongKey(track)}-${occurrence}`,
+    id: formatEntryKey(getPlaybackSongKey(track), occurrence),
     name: formatSongName(track),
     searchText: [
         track.name,

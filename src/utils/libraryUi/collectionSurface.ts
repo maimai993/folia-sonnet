@@ -1,8 +1,9 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../types/gridCommandSurface';
-import type { LocalSongFolderSortDirection, LocalSongFolderSortField } from '../../utils/localSongSorting';
+import type { LocalSongFolderSortDirection, LocalSongFolderSortField } from '../localSongSorting';
 
-// src/components/folia-grid/gridSurfaceHandle.ts
-// Turns GridView's branch flags and handlers into the flat contract the command palette reads.
+// src/utils/libraryUi/collectionSurface.ts
+// Turns a collection view's branch flags and handlers into the flat contract the command palette reads.
+// (Moved from components/folia-grid/gridSurfaceHandle.ts: a list renderer publishes the same handle.)
 //
 // Pure on purpose: the branch rules are the same booleans the buttons are already gated on
 // (GridView's isLocalFolderCollection, supportsLocalTrackSorting, canEditPlaylist ...), so keeping
@@ -47,6 +48,52 @@ export type GridSurfaceParams = {
     toggleEditMode: () => void;
     reloadOnlineCollection: () => void;
 };
+
+/** 与渲染形态无关的那一部分：播放 / 入队筛选结果、本地排序、重新拉取在线集合。 */
+export type CoreSurfaceParams = Pick<
+    GridSurfaceParams,
+    | 'supportsLocalTrackSorting'
+    | 'canReloadOnlineCollection'
+    | 'filteredTrackCount'
+    | 'isFilterActive'
+    | 'sortField'
+    | 'sortDirection'
+    | 'playFiltered'
+    | 'enqueueFiltered'
+    | 'setSortField'
+    | 'setSortDirection'
+    | 'reloadOnlineCollection'
+>;
+
+const noop = () => {};
+
+/**
+ * 只有核心动作的 surface 参数：信息面板、曲目侧栏、编辑模式和来源维护动作一律不提供。
+ * 没有这些面板的 renderer 用它注册，命令面板就只会给出它真能做到的事。
+ */
+export const buildCoreSurfaceParams = (core: CoreSurfaceParams): GridSurfaceParams => ({
+    hasInfoPanel: false,
+    hasTrackList: false,
+    canResyncFolder: false,
+    canResyncAllFolders: false,
+    canOrganizeSongInfo: false,
+    canExportPlaylist: false,
+    canEditEntity: false,
+    canEditPlaylist: false,
+    isSourceActionPending: false,
+    isInfoPanelOpen: false,
+    isTrackListOpen: false,
+    isEditMode: false,
+    toggleInfoPanel: noop,
+    toggleTrackList: noop,
+    resyncFolder: noop,
+    resyncAllFolders: noop,
+    organizeSongInfo: noop,
+    exportPlaylist: noop,
+    editEntity: noop,
+    toggleEditMode: noop,
+    ...core,
+});
 
 const SORT_FIELD_BY_ACTION: Partial<Record<GridSurfaceActionId, LocalSongFolderSortField>> = {
     'sort-file-name': 'fileName',

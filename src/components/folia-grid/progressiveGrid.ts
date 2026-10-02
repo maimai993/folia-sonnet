@@ -12,18 +12,5 @@ export const deriveProgressiveLoadingState = (
     backgroundLoading: itemCount > 0 && (initialSourcesLoading || backgroundSourceLoading),
 });
 
-export const appendUniqueByKey = <T>(
-    current: readonly T[],
-    incoming: readonly T[],
-    getKey: (item: T, index: number) => string
-): T[] => {
-    const seen = new Set(current.map((item, index) => getKey(item, index)));
-    const next = [...current];
-    incoming.forEach((item, index) => {
-        const key = getKey(item, current.length + index);
-        if (seen.has(key)) return;
-        seen.add(key);
-        next.push(item);
-    });
-    return next;
-};
+// 分页去重属于集合数据本身，搬到了 utils/libraryUi/collectionPaging；保留旧导出。
+export { appendUniqueByKey } from '../../utils/libraryUi/collectionPaging';

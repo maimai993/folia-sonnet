@@ -60,9 +60,11 @@ import { syncRemainingCollectionPages, type CollectionSyncPage } from './folia-g
 import { createCollectionTrackSnapshot, readCollectionTrackSnapshot } from './folia-grid/collectionTrackSnapshot';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
-import { compareLocalFolderSongs, formatLocalAlbumTrackLabel, type LocalAlbumGroupKey, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
-import { resolveGridViewContextTracks } from './folia-grid/gridViewContextActions';
-import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from './folia-grid/gridSurfaceHandle';
+import { formatLocalAlbumTrackLabel, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
+import { matchTrackIndexes } from '../utils/libraryUi/collectionQuery';
+import { deriveDisplayTracks, derivePlayableTracks, resolveContextTracks } from '../utils/libraryUi/collectionView';
+import { resolveCollectionSyncCounts } from '../utils/libraryUi/collectionProgress';
+import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../utils/libraryUi/collectionSurface';
 import { useGridSurfaceRegistration } from '../hooks/useGridSurfaceRegistration';
 import { OmniError, type MediaId, type ProviderCollection } from '../types/onlineMusic';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
@@ -502,24 +504,6 @@ export const GridView: React.FC<GridViewProps> = ({
         && collection?.type !== 'playlist'
         && Boolean(sourceActions?.navidrome?.onAddToPlaylist || sourceActions?.navidrome?.onCreatePlaylist);
     const localSongsById = useMemo(() => new Map(localSongs?.map(song => [song.id, song])), [localSongs]);
-    // 专辑归属以本地曲库的专辑实体为准，不用文件里的专辑标签字面值：
-    // 用户重命名或合并实体后，显示轨道已经带上了实体的 entityId 和 displayName。
-    const localAlbumGroupBySongId = useMemo(() => {
-        const groups = new Map<string, LocalAlbumGroupKey>();
-        if (!supportsLocalTrackSorting) return groups;
-        baseDisplayTracks.forEach(track => {
-            const localRef = (track as UnifiedSong).localRef;
-            if (!localRef) return;
-            groups.set(localRef.songId, {
-                entityId: track.album?.entityId,
-                name: track.album?.name || '',
-            });
-        });
-        return groups;
-    }, [baseDisplayTracks, supportsLocalTrackSorting]);
-    const resolveLocalAlbumGroup = useCallback((song: LocalSong) => (
-        localAlbumGroupBySongId.get(song.id)
-    ), [localAlbumGroupBySongId]);
     // 只有能选专辑号排序的本地列表才挂轨道号；本地歌单等自定义顺序的列表不属于这个语境。
     const getAlbumTrackLabel = useCallback((track: SongResult): string | null => {
         if (!supportsLocalTrackSorting) return null;
@@ -528,37 +512,20 @@ export const GridView: React.FC<GridViewProps> = ({
         const localSong = localSongsById.get(localRef.songId);
         return localSong ? formatLocalAlbumTrackLabel(localSong) : null;
     }, [localSongsById, supportsLocalTrackSorting]);
-    const displayTracks = useMemo(() => {
-        const filteredTracks = baseDisplayTracks.filter((track, index) => (
-            !removedExternalTrackKeys.has(`${getPlaybackSongKey(track)}-${index}`)
-            && !removedExternalTrackKeys.has(getPlaybackSongKey(track))
-        ));
-        if (!supportsLocalTrackSorting || localSongsById.size === 0) {
-            return filteredTracks;
-        }
-
-        return [...filteredTracks].sort((left, right) => {
-            const leftLocalRef = (left as UnifiedSong).localRef;
-            const rightLocalRef = (right as UnifiedSong).localRef;
-            const leftLocalSong = leftLocalRef ? localSongsById.get(leftLocalRef.songId) : undefined;
-            const rightLocalSong = rightLocalRef ? localSongsById.get(rightLocalRef.songId) : undefined;
-            if (!leftLocalSong || !rightLocalSong) return 0;
-            return compareLocalFolderSongs(
-                leftLocalSong,
-                rightLocalSong,
-                localTrackSortField,
-                localTrackSortDirection,
-                resolveLocalAlbumGroup,
-            );
-        });
-    }, [
+    // 隐藏、本地排序的规则见 utils/libraryUi/collectionView（专辑归属以本地曲库的专辑实体为准）。
+    const displayTracks = useMemo(() => deriveDisplayTracks(
+        baseDisplayTracks,
+        removedExternalTrackKeys,
+        supportsLocalTrackSorting
+            ? { songsById: localSongsById, field: localTrackSortField, direction: localTrackSortDirection }
+            : null,
+    ), [
         baseDisplayTracks,
         supportsLocalTrackSorting,
         localSongsById,
         localTrackSortDirection,
         localTrackSortField,
         removedExternalTrackKeys,
-        resolveLocalAlbumGroup,
     ]);
 
     useEffect(() => {
@@ -640,7 +607,7 @@ export const GridView: React.FC<GridViewProps> = ({
         }
     }, [lastIndexStorageKey, navigationStorageKey]);
 
-    const playableTracks = useMemo(() => displayTracks.filter(track => !isSongUnavailable(track)), [displayTracks]);
+    const playableTracks = useMemo(() => derivePlayableTracks(displayTracks, isSongUnavailable), [displayTracks]);
     const handleSourceEditToggle = useCallback(async () => {
         if (!collection) return;
 
@@ -1212,7 +1179,15 @@ export const GridView: React.FC<GridViewProps> = ({
         return createLazyGridItems(displayTracks, occurrences);
     }, [mode, items, displayTracks]);
 
+    // 曲目模式按曲目本身做匹配，只取命中的网格项：不必为了筛选把整张歌单的卡片都塑形一遍。
+    const matchIndexes = useMemo(() => (
+        mode === 'tracks' ? matchTrackIndexes(displayTracks, deferredSearchQuery) : null
+    ), [deferredSearchQuery, displayTracks, mode]);
     const gridItems = useMemo(() => {
+        if (mode === 'tracks') {
+            return matchIndexes ? matchIndexes.map(index => allGridItems[index]) : allGridItems;
+        }
+        // 集合模式（目前没有调用方）沿用对网格项的匹配。
         const query = deferredSearchQuery.trim().toLowerCase();
         if (!query) return allGridItems;
 
@@ -1231,11 +1206,13 @@ export const GridView: React.FC<GridViewProps> = ({
 
             return searchableText.includes(query);
         });
-    }, [allGridItems, deferredSearchQuery]);
+    }, [allGridItems, deferredSearchQuery, matchIndexes, mode]);
     const hasSearchQuery = deferredSearchQuery.trim().length > 0;
-    const contextActionTracks = useMemo(() => (
-        resolveGridViewContextTracks(gridItems, playableTracks, hasSearchQuery)
-    ), [gridItems, hasSearchQuery, playableTracks]);
+    const contextActionTracks = useMemo(() => resolveContextTracks(
+        matchIndexes ? matchIndexes.map(index => displayTracks[index]) : null,
+        playableTracks,
+        isSongUnavailable,
+    ), [displayTracks, matchIndexes, playableTracks]);
     const shouldAnimateItemEntrance = useProgressiveItemEntrance(
         `${mode}:${collectionIdentity || title}`
     );
@@ -1923,9 +1900,7 @@ export const GridView: React.FC<GridViewProps> = ({
     const showLoading = progressiveLoading.initialLoading;
     // 大歌单要分几十页补齐，只写「加载中」用户会以为歌丢了；拿得到总数就把进度写出来。
     const backgroundSyncTotal = collectionDetail?.trackCount ?? collection?.trackCount;
-    const backgroundSyncCounts = typeof backgroundSyncTotal === 'number' && backgroundSyncTotal > 0
-        ? { loaded: tracks.length.toLocaleString(), total: backgroundSyncTotal.toLocaleString() }
-        : null;
+    const backgroundSyncCounts = resolveCollectionSyncCounts(tracks.length, backgroundSyncTotal);
     const backgroundSyncLabel = backgroundLoadError
         ? (backgroundSyncCounts ? t('playlist.syncInterruptedProgress', backgroundSyncCounts) : t('playlist.syncInterrupted'))
         : (backgroundSyncCounts ? t('playlist.syncProgress', backgroundSyncCounts) : t('playlist.loading'));
@@ -1938,7 +1913,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // Everything the palette is allowed to do to this grid, and the branch rules that decide which
     // of it applies. Declared next to the buttons it mirrors so the two cannot disagree; the actual
-    // gating and dispatch live in ./folia-grid/gridSurfaceHandle.
+    // gating and dispatch live in ../utils/libraryUi/collectionSurface.
     const gridSurfaceParams: GridSurfaceParams = {
         hasInfoPanel: hasCutInPanel,
         hasTrackList: mode === 'tracks' && displayTracks.length > 0,
