@@ -1,8 +1,64 @@
-import type { MediaId, ProviderCollection } from '../../../types/onlineMusic';
+import type { HomeViewTab, LocalLibraryGroup, SongResult } from '../../../types';
+import type { MediaId, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
+import type { LibraryCollectionDescriptor, NavidromeGridViewCollectionType } from './collection';
 
 // src/library/core/contracts/homeModel.ts
-// 首页模型的契约（P3.3 从网格的 Grid3D 里提出来）：在线首页数据（收藏专辑、电台 feed）的资源、
-// 首页卡片的视图模型。任何一套 suite 的首页都按这些类型拿数据，不依赖网格。只有类型。
+// 首页模型的契约（P3.3 从网格的 Grid3D 里提出来）：来源与页签、在线首页数据（收藏专辑、电台 feed）的资源、
+// 首页卡片的视图模型、首页动作（导入、私人 FM、打开卡片）的控制器与端口。任何一套 suite 的首页都按这些类型
+// 拿数据，不依赖网格。只有类型。
+
+/** 首页一级页签（与应用的 HomeViewTab 同一套）。 */
+export type LibraryHomeTabKey = HomeViewTab;
+/** 在线来源的三个页签。 */
+export type LibraryHomeOnlineTab = 'playlist' | 'radio' | 'albums';
+
+/** 待翻译的文案：core 只给 i18n key 与插值，翻译在绑定 / 端口里做（fallback 是翻译为空时的兜底）。 */
+export type LibraryHomeMessage = {
+    key: string;
+    values?: Record<string, string | number>;
+    fallback?: string;
+};
+
+/** 一个一级页签：不可用时带原因（按钮禁用，原因作提示）。 */
+export type LibraryHomeTab = {
+    key: LibraryHomeTabKey;
+    label: LibraryHomeMessage;
+    disabledReason?: LibraryHomeMessage;
+};
+
+/** 已翻译的页签（绑定交给 renderer 的形状）。 */
+export type LibraryHomeTabView = {
+    key: LibraryHomeTabKey;
+    label: string;
+    disabledReason?: string;
+};
+
+/** 在线 provider 的账户视图（规则见 core/model/onlineProviderAccountView）。 */
+export type LibraryHomeAccountView = 'resolving' | 'guest' | 'authenticated' | 'accountless';
+
+/** 当前在线来源：provider、账户、能用哪些页签。 */
+export type LibraryHomeOnlineSource = {
+    providerId: string;
+    providerLabel: string;
+    provider?: ProviderAccountSummary;
+    user: ProviderUser | null;
+    accountView: LibraryHomeAccountView;
+    /** 账户登录过期（provider 报 auth-required）。 */
+    needsRelogin: boolean;
+    /** 账户歌单页签的条目（含云盘）。 */
+    collections: ProviderCollection[];
+    canUsePlaylists: boolean;
+    canUseAlbums: boolean;
+    canUseRadio: boolean;
+    /** provider 支持私人 FM 模式（FM 卡的描述显示当前模式）。 */
+    hasPersonalFmModes: boolean;
+};
+
+/** 本地曲库能不能用（浏览器要安全上下文与文件系统 API）。 */
+export type LibraryHomeLocalAvailability = {
+    supported: boolean;
+    reason: 'insecure-http' | 'file-system-api-unavailable' | null;
+};
 
 /** 在线首页数据的归属：哪个 provider 的哪个账户。换了归属，旧数据与还在路上的应答都作废。 */
 export type LibraryHomeFeedOwner = {
@@ -47,6 +103,7 @@ export type LibraryHomeRadioFeed = {
 export type LibraryHomeResources = {
     favoriteAlbums: LibraryHomeFeedResource<ProviderCollection[]>;
     radioFeed: LibraryHomeFeedResource<LibraryHomeRadioFeed | null>;
+    actions: LibraryHomeActionsController;
 };
 
 /**
@@ -64,4 +121,92 @@ export type LibraryHomeCard = {
     trackIds?: string[];
     isVirtual?: boolean;
     raw?: unknown;
+    /** Navidrome 专辑卡的展示字段（交给集合描述）。 */
+    albumArtist?: string;
+    albumYear?: number;
+    albumGenre?: string;
+    albumDuration?: number;
+    /** Navidrome 自建歌单可编辑。 */
+    editable?: boolean;
 };
+
+/** 本地扫描进度（导入 / 重扫时曲库服务广播）。 */
+export type LibraryHomeScanProgress = {
+    active: boolean;
+    folderName: string;
+    totalSongs: number;
+    completedSongs: number;
+};
+
+/** 首页动作控制器的快照：哪个导入在进行、扫描进度。 */
+export type LibraryHomeActionsSnapshot = {
+    importingFolder: boolean;
+    refreshingFolders: boolean;
+    importingPlaylist: boolean;
+    scan: LibraryHomeScanProgress | null;
+};
+
+/** 首页动作的结果（存判别式；要显示的提示已经经端口发出）。 */
+export type LibraryHomeActionResult =
+    | { ok: true }
+    | { ok: false; reason: 'busy' | 'unsupported' | 'failed' };
+
+/** 歌单文件导入的结果（端口把曲库服务的结果压成这几个数）。 */
+export type LibraryHomePlaylistImportResult = {
+    /** 建出来的歌单名；一首都没匹配上时为 null（不建歌单）。 */
+    playlistName: string | null;
+    matchedCount: number;
+    /** 没匹配上或匹配到多首的路径数。 */
+    skippedCount: number;
+};
+
+/** 端口发出的提示：alert 是阻塞式提示框（原先的 window.alert），status 是应用内状态消息。 */
+export type LibraryHomeNotice =
+    | { kind: 'alert'; message: LibraryHomeMessage }
+    | { kind: 'status'; type: 'error' | 'info' | 'success'; message: LibraryHomeMessage };
+
+/** 打开集合的入口（宿主的 openGridView）。 */
+export type LibraryHomeOpenCollection = (collection: LibraryCollectionDescriptor) => void;
+
+/**
+ * 首页动作的副作用端口（宿主装配，见 library/app/createLibraryHomePort）：本地曲库服务、私人 FM 与播放、
+ * 集合描述工厂、提示的翻译与显示都在宿主一侧；core 只决定调哪些、按什么顺序、什么时候算忙。
+ */
+export interface LibraryHomePort {
+    localAvailability(): LibraryHomeLocalAvailability;
+    /** 选一个文件夹导入；返回新导入的歌曲数。 */
+    importFolder(): Promise<number>;
+    /** 重扫全部导入根；返回新导入的歌曲数。 */
+    resyncAllFolders(): Promise<number>;
+    /** 用宿主此刻的曲库匹配 m3u 文件里的路径并建歌单。 */
+    importPlaylistFile(file: File): Promise<LibraryHomePlaylistImportResult>;
+    /** 重新读取本地曲库。 */
+    refreshLocalSongs(): Promise<void> | void;
+    /** 订阅扫描进度；返回退订函数。 */
+    subscribeScanProgress(listener: (progress: LibraryHomeScanProgress | null) => void): () => void;
+    getPersonalFm(): Promise<SongResult[]>;
+    playPersonalFm(song: SongResult, queue: SongResult[]): void;
+    describeOnlineCollection(collection: Record<string, unknown>, providerId: string): LibraryCollectionDescriptor;
+    describeLocalGroup(group: LocalLibraryGroup): LibraryCollectionDescriptor;
+    describeNavidromeCard(card: LibraryHomeCard, type: NavidromeGridViewCollectionType): LibraryCollectionDescriptor;
+    notify(notice: LibraryHomeNotice): void;
+}
+
+/**
+ * 首页动作控制器（实现在 core/services/libraryHomeActions，宿主创建，经 homeResources 交给 suite）。
+ * 三个本地导入动作共用一个「忙」：任何一个在进行或扫描进行中时再提交返回 busy（歌单文件导入只看自己）。
+ */
+export interface LibraryHomeActionsController {
+    getSnapshot(): LibraryHomeActionsSnapshot;
+    /** 第一个订阅者到来时开始听扫描进度，最后一个离开时停。 */
+    subscribe(listener: () => void): () => void;
+    importFolder(): Promise<LibraryHomeActionResult>;
+    refreshFolders(): Promise<LibraryHomeActionResult>;
+    importPlaylistFile(file: File): Promise<LibraryHomeActionResult>;
+    /** 取私人 FM 并从第一首开始播放（取不到歌时什么都不做）。 */
+    playPersonalFm(): Promise<LibraryHomeActionResult>;
+    /** 打开在线卡片：私人 FM 直接播放，其余交给宿主打开集合。 */
+    openOnlineCard(card: LibraryHomeCard, providerId: string, open: LibraryHomeOpenCollection): Promise<LibraryHomeActionResult>;
+    openLocalGroup(group: LocalLibraryGroup, open: LibraryHomeOpenCollection): void;
+    openNavidromeCard(card: LibraryHomeCard, type: NavidromeGridViewCollectionType, open: LibraryHomeOpenCollection): void;
+}

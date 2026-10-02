@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Loader2, Settings, PanelsTopLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -9,25 +9,18 @@ import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type St
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
 import DesktopGrid3DSurface from './DesktopGrid3DSurface';
-import { createOnlineGridViewCollection } from '../../../../components/app/home/gridViewCollectionAdapters';
-import { importFolder, resyncAllFolders, LOCAL_MUSIC_SCAN_PROGRESS_EVENT } from '../../../../services/localMusicService';
-import { getLocalLibraryAvailability } from '../../../../services/localLibraryAvailability';
-import { importLocalPlaylistFile } from '../../../../services/localPlaylistFileService';
 import { useOnlineProviderQrLogin } from '../../../../hooks/useOnlineProviderQrLogin';
 import type { OnlineProviderPlatformState } from '../../../../hooks/useOnlineProviderPlatform';
 import { omni } from '../../../../services/onlineMusic/omni';
-import { getPersonalFmSelectionLabel } from '../../../../services/onlineMusic/fmModes';
-import { usePersonalFmModeStore } from '../../../../stores/usePersonalFmModeStore';
 import OnlineProviderSwitcher from '../../../../components/app/home/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from '../../../../components/app/home/OnlineProviderConnectPanel';
 import OnlineProviderAccountlessPanel from '../../../../components/app/home/OnlineProviderAccountlessPanel';
 import OnlineProviderLoginModal from '../../../../components/app/home/OnlineProviderLoginModal';
 import { buildQrLoginDiagnosticsProps } from '../../../../components/app/home/buildQrLoginDiagnosticsProps';
-import { canSwitchToProviderDirectly, resolveOnlineProviderAccountView } from '../../../../components/app/home/onlineProviderAccountView';
-import type { OmniProviderCapabilities, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
+import { canSwitchToProviderDirectly } from '../../../core/model/onlineProviderAccountView';
+import type { ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
 import qqIcon from '../../../../assets/providers/qq.svg';
 import wechatIcon from '../../../../assets/providers/wechat.svg';
-import { useHomeLayoutSettingsStore } from '../../../../stores/useHomeLayoutSettingsStore';
 import { useNeteaseApiStatusStore } from '../../../../stores/useNeteaseApiStatusStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';
@@ -35,8 +28,10 @@ import { onlineHiddenScope } from '../../../core/model/directoryVisibility';
 import { directoryKey } from '../../../core/model/directorySession';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 import type { LibraryHomeResources } from '../../../core/contracts/homeModel';
-import { useLibraryHomeOnlineFeeds } from '../../../core/bindings/useLibraryHomeOnlineFeeds';
-import { buildOnlineAlbumCards, buildOnlinePlaylistCards, buildOnlineRadioCards } from '../../../core/model/homeCards';
+import type { LibraryHomeCard } from '../../../core/contracts/homeModel';
+import { useLibraryHomeSources } from '../../../core/bindings/useLibraryHomeSources';
+import { useLibraryHomeOnline } from '../../../core/bindings/useLibraryHomeOnline';
+import { useLibraryHomeActions } from '../../../core/bindings/useLibraryHomeActions';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -49,30 +44,6 @@ const LOGIN_COPY_BY_PROVIDER: Record<string, { title: string; note: string }> = 
     bodian: { title: 'home.loginTitleBodian', note: 'home.loginNoteBodian' },
 };
 const NETEASE_LOGIN_COPY = { title: 'home.loginTitle', note: 'home.loginNote' };
-
-const NO_PROVIDER_CAPABILITIES: OmniProviderCapabilities = {
-    search: false,
-    playback: false,
-    lyrics: false,
-    auth: false,
-    userLibrary: false,
-    playlists: false,
-    albums: false,
-    artists: false,
-    recommendations: false,
-    mutations: false,
-    wordByWordLyrics: false,
-};
-
-// The platform only hands out registered provider ids, but a Folium mod can remove its provider at any
-// time; reading a provider that just went away must not throw during render and take the home view down.
-const readProviderCapabilities = (providerId: string): OmniProviderCapabilities => {
-    try {
-        return omni.getProviderCapabilities(providerId);
-    } catch {
-        return NO_PROVIDER_CAPABILITIES;
-    }
-};
 
 // provider 只声明 iconKey 字符串，静态资源的映射留在 UI 层，services 层不碰 .svg。
 const LOGIN_METHOD_ICONS: Record<string, string> = {
@@ -139,7 +110,6 @@ interface Grid3DProps {
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
     countRender('Grid3D');
     const {
-        onPlaySong,
         onBackToPlayer,
         onRefreshUser,
         user,
@@ -149,7 +119,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         localSongs,
         localLibraryCatalog,
         localPlaylists,
-        onRefreshLocalSongs,
         localMusicState,
         setLocalMusicState,
         navidromeFocusedAlbumIndex = 0,
@@ -162,7 +131,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         onOpenLattice,
         navidromeEnabled = false,
         onOpenGridView,
-        onStatusMessage,
         stageEnabled = false,
         stageIsActive = false,
         onOpenStagePlayer,
@@ -179,88 +147,42 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         isDaylight: state.isDaylight,
     })));
     const {
-        showHomeTabPlaylist,
-        showHomeTabRadio,
-        showHomeTabAlbums,
-        showHomeTabLocal,
-    } = useHomeLayoutSettingsStore(useShallow(state => ({
-        showHomeTabPlaylist: state.showHomeTabPlaylist,
-        showHomeTabRadio: state.showHomeTabRadio,
-        showHomeTabAlbums: state.showHomeTabAlbums,
-        showHomeTabLocal: state.showHomeTabLocal,
-    })));
-    const {
-        homeViewTab,
-        setHomeViewTab,
         searchQuery,
         setSearchQuery,
         isSearching,
         submitSearch,
     } = useSearchNavigationStore(useShallow(state => ({
-        homeViewTab: state.homeViewTab,
-        setHomeViewTab: state.setHomeViewTab,
         searchQuery: state.searchQuery,
         setSearchQuery: state.setSearchQuery,
         isSearching: state.isSearching,
         submitSearch: state.submitSearch,
     })));
 
-    const isOnlineTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
-    const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
-    const activeProviderSummary = onlineProviderPlatform?.activeProvider;
-    const activeProviderCapabilities = readProviderCapabilities(activeProviderId);
-    // The FM card doubles as the mode readout: the card is the only place the current mode shows
-    // up outside the player, and the picker can change it while this grid stays mounted.
-    const personalFmSelection = usePersonalFmModeStore(state => state.selection);
-    const personalFmModeLabel = activeProviderCapabilities.personalFmModes
-        ? getPersonalFmSelectionLabel(personalFmSelection, (key, fallback) => t(key, fallback ?? ''))
-        : '';
-    const activeProviderLabel = activeProviderSummary?.shortName
-        || activeProviderSummary?.displayName
-        || omni.getProviderLabel(activeProviderId);
-    const canUseOnlinePlaylists = activeProviderCapabilities.userLibrary && activeProviderCapabilities.playlists;
-    const canUseOnlineAlbums = activeProviderCapabilities.userLibrary && Boolean(activeProviderCapabilities.userAlbums);
-    const canUseOnlineRadio = activeProviderCapabilities.recommendations;
-    const playlistUnavailableReason = canUseOnlinePlaylists
-        ? undefined
-        : t('status.providerLibraryUnavailable', { provider: activeProviderLabel });
-    const albumsUnavailableReason = canUseOnlineAlbums
-        ? undefined
-        : t('status.providerUserAlbumsUnavailable', { provider: activeProviderLabel });
-    const radioUnavailableReason = canUseOnlineRadio
-        ? undefined
-        : t('status.providerRecommendationsUnavailable', { provider: activeProviderLabel });
-    const activeUser = activeProviderSummary?.user
-        || (activeProviderId === 'netease' ? user : null);
-    const activeAccountView = resolveOnlineProviderAccountView({
-        provider: activeProviderSummary,
-        hasUser: Boolean(activeUser),
-        platformAvailable: Boolean(onlineProviderPlatform),
+    // 来源、页签与在线列表都来自 Library Core 的首页模型（core/model/homeSources、homeCards 与首页资源）；
+    // 这里只剩展示：布局、二维码登录、更新徽标、扫描进度胶囊。
+    const homeSources = useLibraryHomeSources({
+        platform: onlineProviderPlatform,
+        user,
+        playlists,
+        cloudPlaylist,
+        navidromeEnabled,
     });
-    const activeCollections: ProviderCollection[] = activeProviderSummary?.collections || (activeProviderId === 'netease'
-        ? [
-            ...playlists,
-            ...(cloudPlaylist ? [cloudPlaylist] : []),
-        ]
-        : []);
-    const activeProviderNeedsRelogin = activeProviderSummary?.error === 'auth-required';
+    const { tab: homeViewTab, setTab: setHomeViewTab, isOnlineTab, online, tabs: homeTabs } = homeSources;
+    const activeProviderId = online.providerId;
+    const activeProviderSummary = online.provider;
+    const activeProviderLabel = online.providerLabel;
+    const activeUser = online.user;
+    const activeAccountView = online.accountView;
+    const activeProviderNeedsRelogin = online.needsRelogin;
+    const onlineList = useLibraryHomeOnline(homeResources, homeSources);
+    const homeActions = homeResources.actions;
+    const { snapshot: homeActionState, importBusy, scanPercent: scanProgressPercent } = useLibraryHomeActions(homeActions);
+    const scanProgress = homeActionState.scan;
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const gridRootRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
-    const [isLocalImporting, setIsLocalImporting] = useState(false);
-    const [isLocalPlaylistImporting, setIsLocalPlaylistImporting] = useState(false);
-    const [isLocalRefreshing, setIsLocalRefreshing] = useState(false);
-    const [scanProgress, setScanProgress] = useState<{
-        active: boolean;
-        folderName: string;
-        totalSongs: number;
-        completedSongs: number;
-    } | null>(null);
     const [scanDetailsExpanded, setScanDetailsExpanded] = useState(false);
-    const scanProgressPercent = scanProgress?.totalSongs
-        ? Math.min(100, Math.round((scanProgress.completedSongs / scanProgress.totalSongs) * 100))
-        : 0;
 
     const [updateStatus, setUpdateStatus] = useState<any>(null);
 
@@ -301,21 +223,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     useEffect(() => {
         setFocusedIndex(0);
     }, [homeViewTab]);
-
-    useEffect(() => {
-        const handleScanProgress = (event: Event) => {
-            const customEvent = event as CustomEvent<{
-                active: boolean;
-                folderName: string;
-                totalSongs: number;
-                completedSongs: number;
-            }>;
-            setScanProgress(customEvent.detail.active ? customEvent.detail : null);
-        };
-
-        window.addEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
-        return () => window.removeEventListener(LOCAL_MUSIC_SCAN_PROGRESS_EVENT, handleScanProgress as EventListener);
-    }, []);
 
     // Login QR State
     const [showLoginModal, setShowLoginModal] = useState(false);
@@ -398,140 +305,14 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         void startQrLogin(loginProviderId, methodId);
     };
 
-    // 在线首页数据（收藏专辑、电台 feed）是宿主创建的资源（core/services/onlineHomeFeeds）：归属随 provider / 账户换，
-    // 晚到的应答按 generation 丢掉；这里只订阅，并按 core/model/homeCards 组装卡片。
-    const { favoriteAlbums, radioFeed } = useLibraryHomeOnlineFeeds({
-        resources: homeResources,
-        tab: homeViewTab,
-        providerId: activeProviderId,
-        userId: activeUser?.id ?? null,
-        canUseAlbums: canUseOnlineAlbums,
-        canUseRadio: canUseOnlineRadio,
-    });
-    const loadingAlbums = favoriteAlbums.status === 'loading';
-    const loadingRadio = radioFeed.status === 'loading';
-
-    const isLoading =
-        (homeViewTab === 'playlist' && canUseOnlinePlaylists && activeCollections.length === 0 && activeUser !== null) ||
-        (homeViewTab === 'albums' && canUseOnlineAlbums && loadingAlbums) ||
-        (homeViewTab === 'radio' && canUseOnlineRadio && loadingRadio);
-
     useEffect(() => {
         setFocusedIndex(0);
     }, [activeProviderId, activeUser?.id]);
 
-    const playlistCards = useMemo(() => buildOnlinePlaylistCards(activeCollections, t), [activeCollections, t]);
-    const albumCards = useMemo(() => buildOnlineAlbumCards(favoriteAlbums.data, t), [favoriteAlbums.data, t]);
-    const radioCards = useMemo(
-        () => buildOnlineRadioCards(radioFeed.data, { t, personalFmModeLabel }),
-        [personalFmModeLabel, radioFeed.data, t],
-    );
-
-    // Active tab list items mapping
-    const currentDesktopItems = useMemo(() => {
-        if (homeViewTab === 'playlist') return playlistCards;
-        if (homeViewTab === 'albums') return albumCards;
-        if (homeViewTab === 'radio') return radioCards;
-        return [];
-    }, [homeViewTab, playlistCards, albumCards, radioCards]);
-    const currentOnlineTabUnavailableReason = homeViewTab === 'playlist'
-        ? playlistUnavailableReason
-        : (homeViewTab === 'albums' ? albumsUnavailableReason : radioUnavailableReason);
-
     // Delegate GridView opening to the app-level host so Grid3D remains only the home surface.
     // If Personal FM is clicked, it plays Personal FM directly instead of opening GridView.
-    const handleSelectCollectionCard = async (card: any) => {
-        if (card.id === 'personal_fm' || card.raw?.id === 'personal_fm') {
-            try {
-                const fmSongs = await omni.getPersonalFm();
-                if (fmSongs.length > 0) {
-                    onPlaySong(fmSongs[0], fmSongs, true);
-                }
-            } catch (e) {
-                console.error('[Grid3D] Failed to fetch and play Personal FM:', e);
-            }
-            return;
-        }
-
-        const collection = card.raw
-            ? { ...card.raw, type: card.type }
-            : card;
-        onOpenGridView?.(createOnlineGridViewCollection(collection, activeProviderId));
-    };
-
-    const handleFolderImport = async () => {
-        if (isLocalImporting || isLocalPlaylistImporting || isLocalRefreshing || scanProgress?.active) return;
-
-        const availability = getLocalLibraryAvailability();
-        if (!availability.supported) {
-            alert(t(availability.reason === 'insecure-http'
-                ? 'localMusic.insecureHttpDisabled'
-                : 'localMusic.importNotSupported'));
-            return;
-        }
-
-        setIsLocalImporting(true);
-        try {
-            const importedSongs = await importFolder();
-            if (importedSongs.length > 0) {
-                onRefreshLocalSongs();
-            }
-        } catch (error) {
-            console.error('[Grid3D] Failed to import local folder:', error);
-            alert(t('localMusic.importNotSupported'));
-        } finally {
-            setIsLocalImporting(false);
-        }
-    };
-
-    const handleRefreshFolders = async () => {
-        if (isLocalImporting || isLocalPlaylistImporting || isLocalRefreshing || scanProgress?.active) return;
-
-        setIsLocalRefreshing(true);
-        try {
-            const importedSongs = await resyncAllFolders();
-            if (importedSongs && importedSongs.length > 0) {
-                onRefreshLocalSongs();
-            }
-        } catch (error) {
-            console.error('[Grid3D] Failed to resync local folders:', error);
-        } finally {
-            setIsLocalRefreshing(false);
-        }
-    };
-
-    const handlePlaylistFileImport = async (file: File) => {
-        if (isLocalPlaylistImporting) return;
-
-        setIsLocalPlaylistImporting(true);
-        try {
-            const result = await importLocalPlaylistFile(file, localSongs);
-            if (!result.playlist) {
-                onStatusMessage?.({ type: 'error', text: t('localMusic.playlistImportNoMatches') });
-                return;
-            }
-
-            await onRefreshLocalSongs();
-            const skippedCount = result.unmatchedPaths.length + result.ambiguousPaths.length;
-            onStatusMessage?.({
-                type: skippedCount > 0 ? 'info' : 'success',
-                text: skippedCount > 0
-                    ? t('localMusic.playlistImportPartial', {
-                        name: result.playlist.name,
-                        count: result.matchedSongIds.length,
-                        skipped: skippedCount,
-                    })
-                    : t('localMusic.playlistImportSuccess', {
-                        name: result.playlist.name,
-                        count: result.matchedSongIds.length,
-                    }),
-            });
-        } catch (error) {
-            console.error('[Grid3D] Failed to import local playlist:', error);
-            onStatusMessage?.({ type: 'error', text: t('localMusic.playlistImportFailed') });
-        } finally {
-            setIsLocalPlaylistImporting(false);
-        }
+    const handleSelectCollectionCard = (card: LibraryHomeCard) => {
+        void homeActions.openOnlineCard(card, activeProviderId, collection => onOpenGridView?.(collection));
     };
 
     // Search committed callback
@@ -668,21 +449,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
                         <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                             <div className="inline-flex items-center gap-0">
-                                {[
-                                    ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists'), disabledReason: playlistUnavailableReason }] : []),
-                                    ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio'), disabledReason: radioUnavailableReason }] : []),
-                                    ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums'), disabledReason: albumsUnavailableReason }] : []),
-                                    ...(showHomeTabLocal ? [{
-                                        key: 'local',
-                                        label: t('localMusic.folder'),
-                                        disabledReason: getLocalLibraryAvailability().supported
-                                            ? undefined
-                                            : t(getLocalLibraryAvailability().reason === 'insecure-http'
-                                                ? 'localMusic.insecureHttpDisabled'
-                                                : 'localMusic.importNotSupported'),
-                                    }] : []),
-                                    ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome', disabledReason: undefined }] : []),
-                                ].map((tab) => {
+                                {homeTabs.map((tab) => {
                                     const isActive = homeViewTab === tab.key;
                                     return (
                                         <span
@@ -694,7 +461,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                 disabled={Boolean(tab.disabledReason)}
                                                 aria-label={tab.disabledReason || tab.label}
                                                 onClick={() => {
-                                                    setHomeViewTab(tab.key as any);
+                                                    setHomeViewTab(tab.key);
                                                     focusActiveSlider();
                                                 }}
                                                 className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-35 ${isActive ? activeTabBg : navPillInactiveText}`}
@@ -800,20 +567,14 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 ) : isOnlineTab ? (
                     <DesktopGrid3DSurface
                         focusMemoryScope={JSON.stringify(['online', activeProviderId, activeUser?.id ?? null, homeViewTab])}
-                        title={
-                            homeViewTab === 'playlist'
-                                ? t('home.playlists')
-                                : homeViewTab === 'albums'
-                                    ? t('home.albums')
-                                    : t('home.radio')
-                        }
+                        title={onlineList.title}
                         mapButtonLabel={t('home.allAlbums')}
-                        items={currentDesktopItems}
+                        items={onlineList.items}
                         focusedIndex={focusedIndex}
                         onFocusedIndexChange={setFocusedIndex}
-                        onSelect={handleSelectCollectionCard}
-                        isLoading={isLoading}
-                        emptyMessage={currentOnlineTabUnavailableReason || t('home.loadingLibrary')}
+                        onSelect={item => handleSelectCollectionCard(item as LibraryHomeCard)}
+                        isLoading={onlineList.isLoading}
+                        emptyMessage={onlineList.emptyMessage}
                         theme={theme}
                         isDaylight={isDaylight}
                         isInteractive={isInteractive}
@@ -840,14 +601,14 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
                             focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
                             setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
-                            onImportFolder={handleFolderImport}
-                            onImportPlaylistFile={handlePlaylistFileImport}
-                            onRefreshFolders={handleRefreshFolders}
-                            importButtonDisabled={isLocalImporting || isLocalPlaylistImporting || isLocalRefreshing || Boolean(scanProgress?.active)}
-                            isImporting={isLocalImporting}
-                            isRefreshing={isLocalRefreshing}
+                            onImportFolder={() => void homeActions.importFolder()}
+                            onImportPlaylistFile={file => homeActions.importPlaylistFile(file).then(() => undefined)}
+                            onRefreshFolders={() => void homeActions.refreshFolders()}
+                            importButtonDisabled={importBusy}
+                            isImporting={homeActionState.importingFolder}
+                            isRefreshing={homeActionState.refreshingFolders}
                             isScanInProgress={Boolean(scanProgress?.active)}
-                            isImportingPlaylist={isLocalPlaylistImporting}
+                            isImportingPlaylist={homeActionState.importingPlaylist}
                             theme={theme}
                             isDaylight={isDaylight}
                             isInteractive={isInteractive}

@@ -3,7 +3,7 @@ import { ChevronRight, LogIn, LogOut, UserRound } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
-import { canSwitchToProviderDirectly } from './onlineProviderAccountView';
+import { canSwitchToProviderDirectly } from '../../../library/core/model/onlineProviderAccountView';
 import { playerBottomBarLiveOffset } from '../../../stores/motionSignals';
 import {
     PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,

@@ -1,6 +1,8 @@
 import type { ProviderAccountSummary } from '../../../types/onlineMusic';
 
-// src/components/app/home/onlineProviderAccountView.ts
+// src/library/core/model/onlineProviderAccountView.ts
+// 在线 provider 的账户视图（纯规则）：首页与账户切换器共用。P3.3 从 components/app/home 挪进 core，
+// 任何 suite 的首页都按它决定显示列表、登录入口还是「无账户」面板。
 
 /** `accountless`: a provider with no account at all (a Folium mod source), so no library to show either. */
 export type OnlineProviderAccountView = 'resolving' | 'guest' | 'authenticated' | 'accountless';

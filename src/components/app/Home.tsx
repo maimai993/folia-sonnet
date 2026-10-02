@@ -22,8 +22,8 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
     const suiteId = useLibrarySuiteStore(state => state.suite);
     // 目录批量动作（本地文件夹 / 专辑 / 歌手的播放、入队、建歌单、删除、重扫）：首页一个控制器，不随渲染重建。
     const directoryActions = useLibraryDirectoryBatchController(model.surfaceProps);
-    // 首页资源（在线收藏专辑、电台 feed）：首页一份，任何 suite 的首页都订阅同一份。
-    const homeResources = useLibraryHomeResources();
+    // 首页资源（在线收藏专辑、电台 feed、导入与打开等首页动作）：首页一份，任何 suite 的首页都订阅同一份。
+    const homeResources = useLibraryHomeResources(model.surfaceProps);
     if (isHomeFullyHidden) {
         return null;
     }
