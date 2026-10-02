@@ -7,10 +7,13 @@ import ConfirmDialog from '../../../../components/shared/ConfirmDialog';
 import TextInputDialog from '../../../../components/shared/TextInputDialog';
 import GridMapBatchItemList from './GridMapBatchItemList';
 import type { GridMapBatchConfig, GridMapBatchContext, GridMapItem } from './GridMap';
-import type { LibraryDirectoryNode } from '../../../core/contracts/directory';
+import type { LibraryDirectoryBatchActionId, LibraryDirectoryNode } from '../../../core/contracts/directory';
 import { compactDirectoryTrees, filterDirectoryTreesByItems, flattenExpandedDirectoryNodes, resolveDirectoryNodeSelection, resolveNextDirectoryNodeSelectionTarget } from '../../../core/model/directoryBatch';
+import { useLibraryDirectoryActions } from '../../../core/bindings/useLibraryDirectoryActions';
 
 // src/library/suites/grid/directory/GridMapBatchPanel.tsx
+// GridMap 的批量面板：全选、目录树 / 条目清单的勾选、批量按钮与确认框。选择按 id 存在目录会话里，
+// 动作经 core 的批量控制器（useLibraryDirectoryActions）：按钮可用与否、哪一行在转圈都读它的能力与 pending。
 
 interface GridMapBatchPanelProps {
     title: string;
@@ -18,11 +21,15 @@ interface GridMapBatchPanelProps {
     totalItemCount: number;
     searchQuery: string;
     displayItems: GridMapItem[];
-    excludedItemIds: ReadonlySet<string>;
+    /** 选中的条目 id（目录会话里的批选）。 */
+    selectedItemIds: ReadonlySet<string>;
     config: GridMapBatchConfig;
     isDaylight: boolean;
     onToggleSelectAll: (selected: boolean) => void;
     onSetItemsSelected: (itemIds: string[], selected: boolean) => void;
+    /** 「从曲库删除」的确认框是否打开（由 GridMap 持有，命令面板的删除命令也只是打开它）。 */
+    isRemoveConfirmOpen: boolean;
+    onRemoveConfirmOpenChange: (open: boolean) => void;
 }
 
 interface DirectoryRowProps {
@@ -30,11 +37,11 @@ interface DirectoryRowProps {
     expandedIds: Set<string>;
     busyRootPath: string | null;
     displayItems: GridMapItem[];
-    excludedItemIds: ReadonlySet<string>;
+    selectedItemIds: ReadonlySet<string>;
     onToggleExpanded: (id: string) => void;
     onSetItemsSelected: GridMapBatchPanelProps['onSetItemsSelected'];
-    onRescanRoot?: GridMapBatchConfig['onRescanRoot'];
-    onClearFolderIgnore?: GridMapBatchConfig['onClearFolderIgnore'];
+    onRescanRoot?: (rootPath: string) => void;
+    onClearFolderIgnore?: (folderPath: string) => void;
     onRequestRemoveRoot?: (path: string) => void;
 }
 
@@ -46,7 +53,7 @@ const DirectoryRow = ({
     expandedIds,
     busyRootPath,
     displayItems,
-    excludedItemIds,
+    selectedItemIds,
     onToggleExpanded,
     onSetItemsSelected,
     onRescanRoot,
@@ -58,7 +65,7 @@ const DirectoryRow = ({
     const hasChildren = node.children.length > 0;
     const isRoot = node.depth === 0;
     const isBusy = busyRootPath === node.rootPath;
-    const selection = resolveDirectoryNodeSelection(node.path, displayItems, excludedItemIds);
+    const selection = resolveDirectoryNodeSelection(node.path, displayItems, selectedItemIds);
     const isSelectionDisabled = selection.itemIds.length === 0;
     const nextSelectionTarget = resolveNextDirectoryNodeSelectionTarget(selection);
 
@@ -123,7 +130,7 @@ const DirectoryRow = ({
                     <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => void onClearFolderIgnore(node.path)}
+                        onClick={() => onClearFolderIgnore(node.path)}
                         className="rounded-lg p-1.5 opacity-55 transition hover:opacity-100 disabled:opacity-20"
                         title={t('home.gridFolderClearIgnore')}
                         aria-label={t('home.gridFolderClearIgnore')}
@@ -135,7 +142,7 @@ const DirectoryRow = ({
                     <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => void onRescanRoot(node.rootPath)}
+                        onClick={() => onRescanRoot(node.rootPath)}
                         className="rounded-lg p-1.5 opacity-45 transition hover:opacity-100 disabled:opacity-20"
                         title={t('home.gridFolderRescanRoot')}
                     >
@@ -164,18 +171,23 @@ export const GridMapBatchPanel = ({
     totalItemCount,
     searchQuery,
     displayItems,
-    excludedItemIds,
+    selectedItemIds,
     config,
     isDaylight,
     onToggleSelectAll,
     onSetItemsSelected,
+    isRemoveConfirmOpen: confirmRemove,
+    onRemoveConfirmOpenChange: setConfirmRemove,
 }: GridMapBatchPanelProps) => {
     const { t } = useTranslation();
     const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
     const [isTreeExpanded, setIsTreeExpanded] = useState(false);
-    const [confirmRemove, setConfirmRemove] = useState(false);
     const [rootToRemove, setRootToRemove] = useState<string | null>(null);
-    const [busyAction, setBusyAction] = useState<string | null>(null);
+    // 能力与进行中的动作来自 core 的批量控制器（命令面板读同一份）。
+    const { capabilities, run } = useLibraryDirectoryActions(config, context);
+    const pending = capabilities?.pending ?? null;
+    const actions = capabilities?.actions ?? [];
+    const busyRootPath = pending?.rootPath ?? null;
     const [expandedIds, setExpandedIds] = useState<Set<string>>(
         () => new Set((config.directoryTrees || []).map(node => node.id)),
     );
@@ -201,7 +213,7 @@ export const GridMapBatchPanel = ({
             return next.size === current.size ? current : next;
         });
     }, [config.directoryTrees]);
-    const canUseTracks = context.trackIds.length > 0 && !busyAction;
+    const canUseTracks = Boolean(capabilities?.canUseTracks);
     const usesDirectoryTree = config.selectionType === 'folders';
     const allSelectionState = context.items.length === 0
         ? 'none'
@@ -210,13 +222,8 @@ export const GridMapBatchPanel = ({
             : 'partial';
     const dialogHost = typeof document === 'undefined' ? null : document.body;
 
-    const runAction = async (key: string, action: () => Promise<void> | void) => {
-        try {
-            setBusyAction(key);
-            await action();
-        } finally {
-            setBusyAction(null);
-        }
+    const runAction = (action: LibraryDirectoryBatchActionId, arg?: string) => {
+        void run(action, arg);
     };
 
     const actionClass = 'flex w-full items-center justify-center gap-2 rounded-full bg-zinc-800/10 py-2.5 text-xs font-semibold transition hover:bg-zinc-900 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-35 dark:bg-zinc-100/10 dark:hover:bg-zinc-100 dark:hover:text-zinc-900';
@@ -280,7 +287,7 @@ export const GridMapBatchPanel = ({
                     {!usesDirectoryTree ? (
                         <GridMapBatchItemList
                             items={displayItems}
-                            excludedItemIds={excludedItemIds}
+                            selectedItemIds={selectedItemIds}
                             onSetItemsSelected={onSetItemsSelected}
                         />
                     ) : directoryNodes.length > 0 ? (
@@ -291,22 +298,22 @@ export const GridMapBatchPanel = ({
                             rowProps={{
                                 nodes: directoryNodes,
                                 expandedIds,
-                                busyRootPath: busyAction?.startsWith('root:') ? busyAction.slice(5) : null,
+                                busyRootPath,
                                 displayItems,
-                                excludedItemIds,
+                                selectedItemIds,
                                 onToggleExpanded: id => setExpandedIds(current => {
                                     const next = new Set(current);
                                     if (next.has(id)) next.delete(id); else next.add(id);
                                     return next;
                                 }),
                                 onSetItemsSelected,
-                                onClearFolderIgnore: config.onClearFolderIgnore
-                                    ? folderPath => runAction(`root:${folderPath.split('/')[0]}`, () => config.onClearFolderIgnore?.(folderPath))
+                                onClearFolderIgnore: actions.includes('clear-ignore')
+                                    ? folderPath => runAction('clear-ignore', folderPath)
                                     : undefined,
-                                onRescanRoot: config.onRescanRoot
-                                    ? rootPath => runAction(`root:${rootPath}`, () => config.onRescanRoot?.(rootPath))
+                                onRescanRoot: actions.includes('rescan-root')
+                                    ? rootPath => runAction('rescan-root', rootPath)
                                     : undefined,
-                                onRequestRemoveRoot: config.onRemoveRoot ? setRootToRemove : undefined,
+                                onRequestRemoveRoot: actions.includes('remove-root') ? setRootToRemove : undefined,
                             }}
                             rowComponent={DirectoryRow}
                             className="custom-scrollbar"
@@ -323,21 +330,21 @@ export const GridMapBatchPanel = ({
                 <button
                     type="button"
                     disabled={!canUseTracks}
-                    onClick={() => void runAction('play', () => config.onPlay(context))}
+                    onClick={() => runAction('play')}
                     className={primaryActionClass}
                     style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-color)' }}
                 >
                     <Play size={14} fill="currentColor" />
                     {t('playlist.playFilteredTracks', { count: context.trackIds.length })}
                 </button>
-                <button type="button" disabled={!canUseTracks} onClick={() => void runAction('queue', () => config.onAddToQueue(context))} className={actionClass}>
+                <button type="button" disabled={!canUseTracks} onClick={() => runAction('enqueue')} className={actionClass}>
                     <ListPlus size={14} />
                     {t('playlist.addFilteredTracksToQueue', { count: context.trackIds.length })}
                 </button>
                 <button type="button" disabled={!canUseTracks} onClick={() => setShowPlaylistDialog(true)} className={actionClass}>
                     <Plus size={14} />{t('localMusic.createPlaylist')}
                 </button>
-                {config.onRemove && (
+                {actions.includes('remove') && (
                     <button type="button" disabled={!canUseTracks} onClick={() => setConfirmRemove(true)} className={`${actionClass} !text-red-500 hover:!bg-red-500 hover:!text-white`}>
                         <Trash2 size={14} />{t('home.gridFolderRemoveSelected')}
                     </button>
@@ -354,10 +361,14 @@ export const GridMapBatchPanel = ({
                         confirmLabel={t('localMusic.createPlaylist')}
                         isDaylight={isDaylight}
                         onClose={() => setShowPlaylistDialog(false)}
-                        onConfirm={name => runAction('playlist', () => config.onCreatePlaylist(name, context))}
+                        onConfirm={async name => {
+                            const result = await run('create-playlist', name);
+                            // 没做成就让对话框留着（与原先动作抛错时一样：对话框只在 onConfirm 正常返回后关闭）。
+                            if (!result.ok) throw new Error(result.message ?? result.reason);
+                        }}
                     />
 
-                    {config.onRemove && (
+                    {actions.includes('remove') && (
                         <ConfirmDialog
                             isOpen={confirmRemove}
                             title={t('home.gridFolderRemoveSelectedTitle')}
@@ -368,7 +379,7 @@ export const GridMapBatchPanel = ({
                             onClose={() => setConfirmRemove(false)}
                             onConfirm={() => {
                                 setConfirmRemove(false);
-                                void runAction('remove', () => config.onRemove?.(context));
+                                runAction('remove');
                             }}
                         />
                     )}
@@ -384,7 +395,7 @@ export const GridMapBatchPanel = ({
                         onConfirm={() => {
                             const rootPath = rootToRemove;
                             setRootToRemove(null);
-                            if (rootPath) void runAction(`root:${rootPath}`, () => config.onRemoveRoot?.(rootPath));
+                            if (rootPath) runAction('remove-root', rootPath);
                         }}
                     />
                 </>

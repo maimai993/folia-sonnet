@@ -7,13 +7,10 @@ import { GridViewCollectionDescriptor, createLocalGridViewCollection } from '../
 import { buildLocalGrid3DGroups } from './localGrid3DModel';
 import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
 import { useLocalLibraryCatalog } from '../../../../hooks/useLocalLibraryCatalog';
-import { buildLocalQueue } from '../../../../services/playbackAdapters';
-import { createLocalPlaylist } from '../../../../services/localPlaylistService';
-import { clearFolderIgnore, deleteFolderSongs, deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../../services/localMusicService';
 import { loadLocalLibraryDirectoryTrees } from '../../../../services/localLibraryDirectoryTree';
-import type { GridMapBatchConfig, GridMapBatchContext } from '../directory/GridMap';
-import type { LibraryDirectoryNode } from '../../../core/contracts/directory';
-import type { SongResult } from '../../../../types';
+import type { GridMapBatchConfig } from '../directory/GridMap';
+import type { LibraryDirectoryBatchController, LibraryDirectoryNode, LibraryDirectorySelectionType } from '../../../core/contracts/directory';
+import { directoryKey } from '../../../core/model/directorySession';
 
 // src/library/suites/grid/home/LocalGrid3DView.tsx
 // Desktop-only local music Grid3D overview that opens GridView instead of legacy carousel details.
@@ -42,9 +39,8 @@ interface LocalGrid3DViewProps {
     isScanInProgress?: boolean;
     isImportingPlaylist?: boolean;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
-    onPlayAll?: (songs: SongResult[]) => void;
-    onAddAllToQueue?: (songs: SongResult[]) => void;
-    onRefreshLocalSongs: () => Promise<void> | void;
+    /** 批量动作控制器（宿主创建；规则在 core/services/localDirectoryActions）。没有时 GridMap 不提供批量。 */
+    directoryActions?: LibraryDirectoryBatchController;
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
@@ -73,9 +69,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     isScanInProgress = false,
     isImportingPlaylist = false,
     onOpenGridView,
-    onPlayAll,
-    onAddAllToQueue,
-    onRefreshLocalSongs,
+    directoryActions,
     theme,
     isDaylight,
     hasFloatingPlayer = false,
@@ -170,65 +164,26 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 
     const activeSection = sections.find(section => section.row === activeRow) ?? sections[0];
 
-    const resolveBatchSongs = React.useCallback((context: GridMapBatchContext) => {
-        const songsById = new Map(localSongs.map(song => [song.id, song]));
-        return context.trackIds
-            .map(id => songsById.get(id))
-            .filter((song): song is LocalSong => Boolean(song));
-    }, [localSongs]);
-
+    // 批量配置只装配 section 与目录树；动作的规则（路径规则、刷新顺序、pending 与重复提交）在 core 的控制器里。
+    // 删除与恢复忽略目录之后重读目录树：目录树是这个视图的状态，所以由它在动作的 pending 期间补上。
     const localBatchConfig = useMemo<GridMapBatchConfig | undefined>(() => {
-        if (!['folders', 'albums', 'artists'].includes(activeSection.key)) return undefined;
-
-        const baseConfig: GridMapBatchConfig = {
-            selectionType: activeSection.key as 'folders' | 'albums' | 'artists',
-            ...(activeSection.key === 'folders' ? { directoryTrees } : {}),
-            onPlay: context => {
-                const queue = buildLocalQueue(resolveBatchSongs(context), undefined, catalog.ready ? catalog : undefined);
-                if (queue.length > 0) onPlayAll?.(queue);
-            },
-            onAddToQueue: context => {
-                const queue = buildLocalQueue(resolveBatchSongs(context), undefined, catalog.ready ? catalog : undefined);
-                if (queue.length > 0) onAddAllToQueue?.(queue);
-            },
-            onCreatePlaylist: async (name, context) => {
-                await createLocalPlaylist(name, resolveBatchSongs(context));
-                await onRefreshLocalSongs();
-            },
-        };
-
-        if (activeSection.key !== 'folders') return baseConfig;
+        if (!directoryActions || !['folders', 'albums', 'artists'].includes(activeSection.key)) return undefined;
+        const selectionType = activeSection.key as LibraryDirectorySelectionType;
+        if (selectionType !== 'folders') return { selectionType, controller: directoryActions };
 
         return {
-            ...baseConfig,
-            onRemove: async context => {
-                const selectedIds = new Set(context.trackIds);
-                // A direct-only selection must not ignore descendants that the user excluded.
-                // 虚拟条目（「全部歌曲」）不对应任何文件夹，不按文件夹删；它的歌照常按 id 删。
-                const folderPaths = context.items.filter(item => !item.isVirtual).map(item => item.path || item.name).filter(path =>
-                    localSongs.every(song => !(song.folderName === path || song.folderName?.startsWith(`${path}/`)) || selectedIds.has(song.id)));
-                for (const path of folderPaths.filter(path => !folderPaths.some(parent => path !== parent && path.startsWith(`${parent}/`)))) {
-                    await deleteFolderSongs(path);
+            selectionType,
+            directoryTrees,
+            controller: directoryActions,
+            afterAction: async action => {
+                if (action === 'remove') {
+                    await refreshDirectoryTrees();
+                } else if (action === 'clear-ignore') {
+                    setDirectoryTrees(await loadLocalLibraryDirectoryTrees());
                 }
-                await deleteSongsByIds(context.trackIds);
-                await onRefreshLocalSongs();
-                await refreshDirectoryTrees();
-            },
-            onClearFolderIgnore: async folderPath => {
-                await clearFolderIgnore(folderPath);
-                await onRefreshLocalSongs();
-                setDirectoryTrees(await loadLocalLibraryDirectoryTrees());
-            },
-            onRescanRoot: async rootPath => {
-                await resyncFolder(rootPath);
-                await onRefreshLocalSongs();
-            },
-            onRemoveRoot: async rootPath => {
-                await removeImportedRoot(rootPath);
-                await onRefreshLocalSongs();
             },
         };
-    }, [activeSection.key, catalog, directoryTrees, localSongs, onAddAllToQueue, onPlayAll, onRefreshLocalSongs, refreshDirectoryTrees, resolveBatchSongs]);
+    }, [activeSection.key, directoryActions, directoryTrees, refreshDirectoryTrees]);
 
     const tabs: DesktopGrid3DAction[] = sections.map(section => ({
         id: section.key,
@@ -325,6 +280,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 isInteractive={isInteractive}
                 hasFloatingPlayer={hasFloatingPlayer}
                 playlistVisibilityScope="local"
+                directoryKey={directoryKey({ source: 'local', section: activeSection.key })}
                 batchConfig={localBatchConfig}
                 ponderControls="local-grid-controls"
                 gridMapPonderScope="local-grid-map-page"

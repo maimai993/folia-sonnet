@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Map as MapIcon } from 'lucide-react';
 import GridMap, { type GridMapBatchConfig } from '../directory/GridMap';
@@ -8,6 +8,8 @@ import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
 import { filterDirectoryByVisibility, resolveSourceDirectoryIndex, resolveVisibleDirectoryIndex } from '../../../core/model/directoryVisibility';
 import type { LibraryHiddenScope } from '../../../core/contracts/directory';
 import { useHiddenCollections } from '../../../core/bindings/useHiddenCollections';
+import { DEFAULT_DIRECTORY_SESSION_ID } from '../../../core/model/directorySession';
+import { useLibraryDirectorySessionStore } from '../../../core/state/useLibraryDirectorySessionStore';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
 
 // src/library/suites/grid/home/DesktopGrid3DSurface.tsx
@@ -41,6 +43,8 @@ interface DesktopGrid3DSurfaceProps {
     hasFloatingPlayer?: boolean;
     /** 隐藏项的作用域（隐藏表与规则在 core：useHiddenCollectionsStore / directoryVisibility）。 */
     playlistVisibilityScope?: LibraryHiddenScope;
+    /** 这个列表的目录会话 key（core/model/directorySession 的 directoryKey）：GridMap 的筛选与批选存在这里。 */
+    directoryKey?: string;
     batchConfig?: GridMapBatchConfig;
     ponderControls?: 'local-grid-controls';
     gridMapPonderScope?: 'local-grid-map-page';
@@ -63,11 +67,29 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     isDaylight,
     hasFloatingPlayer = false,
     playlistVisibilityScope = 'default',
+    directoryKey = DEFAULT_DIRECTORY_SESSION_ID,
     batchConfig,
     ponderControls,
     gridMapPonderScope,
 }) => {
     const [showGridMap, setShowGridMap] = useState(false);
+    // 目录会话跟着地图：打开时从空会话开始，关掉（退场动画结束）后丢掉——与原先 GridMap 组件状态随卸载消失一致。
+    // 退场期间不清：地图还在淡出，筛选结果不能先跳回全部。关掉时的 key 记下来，退场期间换了 section 也清对的那个。
+    const closingDirectoryKeyRef = useRef<string | null>(null);
+    const openGridMap = useCallback(() => {
+        useLibraryDirectorySessionStore.getState().clearSession(directoryKey);
+        closingDirectoryKeyRef.current = null;
+        setShowGridMap(true);
+    }, [directoryKey]);
+    const closeGridMap = useCallback(() => {
+        closingDirectoryKeyRef.current = directoryKey;
+        setShowGridMap(false);
+    }, [directoryKey]);
+    const handleGridMapExitComplete = useCallback(() => {
+        const closedKey = closingDirectoryKeyRef.current;
+        closingDirectoryKeyRef.current = null;
+        if (closedKey) useLibraryDirectorySessionStore.getState().clearSession(closedKey);
+    }, []);
     const chrome = gridChromeClassesFor(isDaylight);
     const { hiddenIds: hiddenPlaylistIds, toggleHidden: togglePlaylistHidden } = useHiddenCollections(playlistVisibilityScope);
     const { focusedIndex, onFocusedIndexChange } = useHomeCardPosition(
@@ -109,7 +131,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             <GridViewTabs
                                 tabs={tabs}
                                 isDaylight={isDaylight}
-                                onOpenMap={isLoading ? undefined : () => setShowGridMap(true)}
+                                onOpenMap={isLoading ? undefined : openGridMap}
                                 mapLabel={mapButtonLabel}
                                 mapIcon={<MapIcon size={13} />}
                                 ponderId={ponderControls}
@@ -153,9 +175,10 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                 hasFloatingPlayer={hasFloatingPlayer}
             />
 
-            <AnimatePresence>
+            <AnimatePresence onExitComplete={handleGridMapExitComplete}>
                 {showGridMap && (
                     <GridMap
+                        directoryKey={directoryKey}
                         title={title}
                         items={items.map(item => ({
                             id: item.id,
@@ -176,13 +199,13 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             rawCollection: item,
                         }))}
                         initialFocusedIndex={focusedIndex}
-                        onBack={() => setShowGridMap(false)}
+                        onBack={closeGridMap}
                         onSelectCollection={(_, index) => {
-                            setShowGridMap(false);
+                            closeGridMap();
                             onFocusedIndexChange(index);
                         }}
                         onActivateCollection={(collection, index) => {
-                            setShowGridMap(false);
+                            closeGridMap();
                             onFocusedIndexChange(index);
                             onSelect(collection, index);
                         }}

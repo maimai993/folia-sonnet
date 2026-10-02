@@ -1,3 +1,6 @@
+import type { LocalSong } from '../../../types';
+import type { LibraryMutationResult } from './mutations';
+
 // src/library/core/contracts/directory.ts
 // 首页目录的契约：目录条目（任意 suite 展示的一张卡 / 一行的业务部分）、本地文件夹树节点、批量范围与批量动作。
 // 只有类型。条目里不放 ReactNode 之类的 UI 字段；网格需要随卡带回的原对象（rawCollection）由网格自己的
@@ -62,19 +65,71 @@ export interface LibraryDirectoryBatchContext<TItem extends LibraryDirectoryItem
 }
 
 /**
- * 一个目录 section 的批量能力与实现（宿主 / 首页视图装配）。可选回调缺省即该动作不可用；
- * 能用哪些动作由 core/model/directoryBatch 的 resolveDirectoryBatchActions 读出。
+ * 批量动作进行中的那一个（同一时间只允许一个，见 core/services/localDirectoryActions）。
+ * rootPath：落在某个导入根上的动作（重扫根、移除根、恢复忽略目录）——面板只让那一行显示忙。
+ */
+export interface LibraryDirectoryBatchPending {
+    action: LibraryDirectoryBatchActionId;
+    rootPath?: string;
+}
+
+/** 批量动作控制器的快照。 */
+export interface LibraryDirectoryBatchSnapshot {
+    pending: LibraryDirectoryBatchPending | null;
+}
+
+/** 控制器动作的可选收尾：在 pending 期间、曲库刷新之后执行（本地文件夹视图在这里重读目录树）。 */
+export interface LibraryDirectoryBatchRunOptions {
+    after?: () => Promise<void> | void;
+}
+
+/**
+ * 本地目录的批量动作控制器（实现在 core/services/localDirectoryActions，宿主装配端口后创建，
+ * 经首页 surface 交给 suite）。所有动作返回 LibraryMutationResult：进行中再提交返回 busy，
+ * 范围里没有歌返回 unsupported，抛错返回 failed；做成的动作之后都会刷新曲库。
+ */
+export interface LibraryDirectoryBatchController {
+    getSnapshot(): LibraryDirectoryBatchSnapshot;
+    subscribe(listener: () => void): () => void;
+    play(context: LibraryDirectoryBatchContext): Promise<LibraryMutationResult>;
+    enqueue(context: LibraryDirectoryBatchContext): Promise<LibraryMutationResult>;
+    createPlaylist(name: string, context: LibraryDirectoryBatchContext): Promise<LibraryMutationResult>;
+    /** 文件夹删除的路径规则见实现（「全部歌曲」不按文件夹删；整个文件夹都选中才删文件夹）。 */
+    remove(context: LibraryDirectoryBatchContext, options?: LibraryDirectoryBatchRunOptions): Promise<LibraryMutationResult>;
+    clearIgnore(folderPath: string, options?: LibraryDirectoryBatchRunOptions): Promise<LibraryMutationResult>;
+    rescanRoot(rootPath: string, options?: LibraryDirectoryBatchRunOptions): Promise<LibraryMutationResult>;
+    removeRoot(rootPath: string, options?: LibraryDirectoryBatchRunOptions): Promise<LibraryMutationResult>;
+}
+
+/**
+ * 批量动作的副作用端口（宿主装配，见 library/app/createLibraryDirectoryBatchPort）：播放 / 入队怎么建队列、
+ * 本地曲库服务怎么调，都在宿主一侧；core 只决定调哪些、按什么顺序。
+ */
+export interface LibraryDirectoryBatchPort {
+    /** 宿主此刻的本地曲库（批量范围的歌曲 id 按它解析；文件夹删除的路径规则读 folderName）。 */
+    getLocalSongs(): readonly LocalSong[];
+    playLocalSongs(songs: LocalSong[]): Promise<void> | void;
+    enqueueLocalSongs(songs: LocalSong[]): Promise<void> | void;
+    createLocalPlaylist(name: string, songs: LocalSong[]): Promise<void> | void;
+    deleteFolderSongs(folderPath: string): Promise<void> | void;
+    deleteSongsByIds(songIds: string[]): Promise<void> | void;
+    clearFolderIgnore(folderPath: string): Promise<void> | void;
+    resyncFolder(rootPath: string): Promise<void> | void;
+    removeImportedRoot(rootPath: string): Promise<void> | void;
+    /** 重新读取本地曲库（歌曲、歌单）。 */
+    refreshLibrary(): Promise<void> | void;
+}
+
+/**
+ * 一个目录 section 的批量配置（首页视图装配）：section 类型、文件夹树、动作控制器。
+ * 能用哪些动作由 core/model/directoryBatch 的 resolveDirectoryBatchActions 按 section 类型给出。
  */
 export interface LibraryDirectoryBatchConfig {
     selectionType: LibraryDirectorySelectionType;
     directoryTrees?: LibraryDirectoryNode[];
-    onPlay: (context: LibraryDirectoryBatchContext) => Promise<void> | void;
-    onAddToQueue: (context: LibraryDirectoryBatchContext) => Promise<void> | void;
-    onCreatePlaylist: (name: string, context: LibraryDirectoryBatchContext) => Promise<void> | void;
-    onRemove?: (context: LibraryDirectoryBatchContext) => Promise<void> | void;
-    onRescanRoot?: (rootPath: string) => Promise<void> | void;
-    onRemoveRoot?: (rootPath: string) => Promise<void> | void;
-    onClearFolderIgnore?: (folderPath: string) => Promise<void> | void;
+    controller: LibraryDirectoryBatchController;
+    /** 动作做成之后、仍在 pending 期间，视图要补的事（本地文件夹：删除、恢复忽略后重读目录树）。 */
+    afterAction?: (action: LibraryDirectoryBatchActionId) => Promise<void> | void;
 }
 
 /** 目录树上一个节点相对当前（已筛选）条目的选中状态。 */
@@ -107,3 +162,41 @@ export type LibraryHiddenCollections = Record<string, string[]>;
  * manage-hidden-only 只显示隐藏的。后两个是「管理隐藏」（网格里是 GridMap 的隐藏编辑模式）。
  */
 export type LibraryDirectoryVisibilityMode = 'browse' | 'manage' | 'manage-hidden-only';
+
+/**
+ * 首页上的一个目录：来源 + section。key 由 core/model/directorySession 的 directoryKey 算出
+ * （`home:local:folders`、`home:online:${providerId}:playlists`、`home:navidrome:${section}`）。
+ */
+export type LibraryDirectoryRef =
+    | { source: 'local'; section: string }
+    | { source: 'online'; providerId: string; section: string }
+    | { source: 'navidrome'; section: string };
+
+/**
+ * 目录的浏览会话（core/state/useLibraryDirectorySessionStore）：筛选词、批选、隐藏视图。按目录 key 分开，
+ * 跨 suite 共用（网格的 GridMap、以后的 TUI 目录读写同一份）。
+ * selectedIds 是稳定的条目 id（不是下标），按选中的先后存；批量范围按目录顺序重排，不按点击顺序。
+ */
+export interface LibraryDirectorySession {
+    query: string;
+    selectedIds: readonly string[];
+    visibilityMode: LibraryDirectoryVisibilityMode;
+}
+
+/** 批量范围的推导结果：可见（去隐藏）→ 筛选 → 选中（见 core/model/directoryBatch 的 resolveDirectoryBatchScope）。 */
+export interface LibraryDirectoryBatchScope<TItem extends LibraryDirectoryItem = LibraryDirectoryItem> {
+    /** 隐藏视图过滤之后的条目。 */
+    visibleItems: TItem[];
+    /** 再按筛选词过滤之后的条目（界面上显示的那些）。 */
+    displayItems: TItem[];
+    /** displayItems 里被选中的条目（目录顺序）与它们去重保序的歌。 */
+    context: LibraryDirectoryBatchContext<TItem>;
+}
+
+/** 批量能力（面板按钮与命令面板同源）：section 支持的动作、此刻能不能对选中的歌动手。 */
+export interface LibraryDirectoryBatchCapabilities {
+    actions: LibraryDirectoryBatchActionId[];
+    pending: LibraryDirectoryBatchPending | null;
+    /** 选中范围里有歌、且没有动作在进行：播放、入队、新建歌单、删除可用。 */
+    canUseTracks: boolean;
+}

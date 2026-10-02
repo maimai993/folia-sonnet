@@ -8,7 +8,8 @@ import type { GridMapItem } from './GridMap';
 
 interface GridMapBatchItemListProps {
     items: GridMapItem[];
-    excludedItemIds: ReadonlySet<string>;
+    /** 选中的条目 id（目录会话里的批选）。 */
+    selectedItemIds: ReadonlySet<string>;
     onSetItemsSelected: (itemIds: string[], selected: boolean) => void;
 }
 
@@ -19,13 +20,13 @@ const ItemRow = ({
     style,
     ariaAttributes,
     items,
-    excludedItemIds,
+    selectedItemIds,
     onSetItemsSelected,
 }: RowComponentProps<ItemRowProps>) => {
     const { t } = useTranslation();
     const item = items[index];
     const itemId = String(item.id);
-    const selected = !excludedItemIds.has(itemId);
+    const selected = selectedItemIds.has(itemId);
     const trackCount = item.trackIds?.length || 0;
 
     return (

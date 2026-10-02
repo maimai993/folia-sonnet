@@ -12,6 +12,7 @@ import {
 } from '../../../../components/app/home/gridViewCollectionAdapters';
 import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
 import { useNavidromeGridLibrary } from './useNavidromeGridLibrary';
+import { directoryKey } from '../../../core/model/directorySession';
 
 // src/library/suites/grid/home/NavidromeGrid3DView.tsx
 // Desktop-only Navidrome Grid3D overview that opens GridView instead of legacy collection views.
@@ -317,6 +318,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             isInteractive={isInteractive}
             hasFloatingPlayer={hasFloatingPlayer}
             playlistVisibilityScope="navidrome"
+            directoryKey={directoryKey({ source: 'navidrome', section })}
         />
     );
 };

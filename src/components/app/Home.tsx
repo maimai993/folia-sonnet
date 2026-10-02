@@ -2,6 +2,7 @@ import React from 'react';
 import GridViewOverlayHost from '../../library/app/GridViewOverlayHost';
 import { resolveLibrarySurface } from '../../library/registry';
 import { useLibrarySuiteStore } from '../../library/core/state/useLibrarySuiteStore';
+import { useLibraryDirectoryBatchController } from '../../library/app/useLibraryDirectoryBatchController';
 import type { HomeViewModel } from './home/buildHomeModel';
 import { countRender } from '../../dev/renderCount';
 
@@ -18,6 +19,8 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
     countRender('Home');
     // 只在切换 suite 时变（开发版浮层）；同一个回退结果是同一个组件，首页不会因此重新挂载。
     const suiteId = useLibrarySuiteStore(state => state.suite);
+    // 目录批量动作（本地文件夹 / 专辑 / 歌手的播放、入队、建歌单、删除、重扫）：首页一个控制器，不随渲染重建。
+    const directoryActions = useLibraryDirectoryBatchController(model.surfaceProps);
     if (isHomeFullyHidden) {
         return null;
     }
@@ -41,6 +44,7 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
                         onOpenGridView={openGridView}
                         isInteractive={isHomeGridInteractive}
                         declaredActions={homeSurface.declaredActions}
+                        directoryActions={directoryActions}
                     />
                 </React.Suspense>
             )}

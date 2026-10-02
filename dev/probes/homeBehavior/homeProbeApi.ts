@@ -8,10 +8,11 @@ import DesktopGrid3DSurface, { type DesktopGrid3DAction } from '../../../src/lib
 import { Grid3DSlider, type Grid3DSliderItem } from '../../../src/library/suites/grid/home/Grid3DSlider';
 import { GridViewTabs } from '../../../src/library/suites/grid/home/GridViewTabs';
 import LocalGrid3DView from '../../../src/library/suites/grid/home/LocalGrid3DView';
-import GridMap, { type GridMapBatchConfig, type GridMapBatchContext, type GridMapItem } from '../../../src/library/suites/grid/directory/GridMap';
+import GridMap, { type GridMapBatchConfig, type GridMapItem } from '../../../src/library/suites/grid/directory/GridMap';
 import GridMapBatchPanel from '../../../src/library/suites/grid/directory/GridMapBatchPanel';
 import type { LibraryDirectoryNode } from '../../../src/library/core/contracts/directory';
-import { resolveDirectoryBatchActions } from '../../../src/library/core/model/directoryBatch';
+import { resolveDirectoryBatchActions, resolveDirectoryBatchScope, runDirectoryBatchAction } from '../../../src/library/core/model/directoryBatch';
+import { getLibraryDirectorySession, useLibraryDirectorySessionStore } from '../../../src/library/core/state/useLibraryDirectorySessionStore';
 import { hiddenIdsOf, isDirectoryItemHidden, isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
 import { useHiddenCollectionsStore } from '../../../src/library/core/state/useHiddenCollectionsStore';
 import type { LibraryHiddenScope } from '../../../src/library/core/contracts/directory';
@@ -38,6 +39,8 @@ import {
 // 调的是这些 props 里的回调——与点击走同一个函数。只有两处没有 props 可调、只能点 DOM：GridMap 标题上
 // 打开侧面板的按钮，和隐藏管理面板里的两个开关（都在本文件里注明）。隐藏状态读的是 core 的隐藏 store
 // （按当前列表的作用域），不从组件 props 推断。
+// 目录的筛选词、批选、隐藏视图读写 core 的目录会话（GridMap 的 directoryKey 指向哪一个），批量范围用 core 的
+// resolveDirectoryBatchScope 现算，批量动作经 runDirectoryBatchAction 交给控制器——与面板按钮同一个入口。
 
 const HIDDEN_STORAGE_KEY = 'hidden_grid_playlists';
 
@@ -53,17 +56,14 @@ type SurfaceProps = {
 };
 type SliderProps = { items: Grid3DSliderItem[]; onSelect: (item: Grid3DSliderItem, index: number) => void };
 type GridMapProps = {
+    directoryKey?: string;
     items: GridMapItem[];
     onBack: () => void;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
     batchConfig?: GridMapBatchConfig;
 };
 type BatchPanelProps = {
-    context: GridMapBatchContext;
-    totalItemCount: number;
     config: GridMapBatchConfig;
-    onToggleSelectAll: (selected: boolean) => void;
-    onSetItemsSelected: (itemIds: string[], selected: boolean) => void;
 };
 
 const surfaceFiber = () => findPresentComponent(DesktopGrid3DSurface);
@@ -78,6 +78,9 @@ const mapDisplayItems = (): GridMapItem[] | null => {
     if (!map) return null;
     return propsOf<{ items: GridMapItem[] }>(findPresentComponent(SidePanelList, map))?.items ?? null;
 };
+
+/** GridMap 此刻读写的目录会话 key（地图没开时为 null）。 */
+const mapSessionId = (): string | null => gridMapProps()?.directoryKey ?? null;
 
 /** 当前列表作用域的隐藏 id（core 的隐藏 store；作用域缺省与 DesktopGrid3DSurface 一样落在 default）。 */
 const currentHiddenIds = () => hiddenIdsOf(
@@ -123,10 +126,25 @@ const panelButton = (labelKey: string): HTMLButtonElement | null => {
     const label = i18n.t(labelKey);
     return [...root.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === label) ?? null;
 };
+// 隐藏视图就是目录会话里的 visibilityMode（GridMap 的隐藏编辑模式读写它）。
 const readHiddenView = (): HomeHiddenView => {
-    if (panelButton('home.showAllPlaylists')) return 'manage-hidden-only';
-    if (panelButton('home.finishHidingPlaylists')) return 'manage';
-    return 'browse';
+    const sessionId = mapSessionId();
+    return sessionId ? getLibraryDirectorySession(sessionId).visibilityMode : 'browse';
+};
+
+/** 地图此刻的批量范围：可见 → 筛选 → 选中，全部从目录会话与 core 的纯规则现算。 */
+const currentBatchScope = () => {
+    const props = gridMapProps();
+    const sessionId = mapSessionId();
+    if (!props || !sessionId) return null;
+    const session = getLibraryDirectorySession(sessionId);
+    return resolveDirectoryBatchScope({
+        items: props.items,
+        hiddenIds: currentHiddenIds(),
+        visibilityMode: session.visibilityMode,
+        query: session.query,
+        selectedIds: new Set(session.selectedIds),
+    });
 };
 const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 const waitFor = async (check: () => boolean, frames = 60): Promise<boolean> => {
@@ -241,7 +259,11 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             filter.setQuery(query);
             return true;
         },
-        getQuery: () => useAppViewStore.getState().commandFilter?.getQuery() ?? null,
+        // 地图开着时读它的目录会话；地图关掉（会话已清）时为 null。
+        getQuery: () => {
+            const sessionId = mapSessionId();
+            return sessionId ? getLibraryDirectorySession(sessionId).query : null;
+        },
 
         batchAvailable: () => Boolean(surfaceProps()?.batchConfig),
         openPanel: () => {
@@ -259,55 +281,47 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             return true;
         },
         isBatchOpen: () => Boolean(batchPanelProps()),
+        // 批量面板开着才有范围（面板是否在场仍看组件树；范围本身从会话现算）。
         batchScope: (): HomeBatchScope | null => {
             const props = batchPanelProps();
-            if (!props) return null;
+            const scope = currentBatchScope();
+            if (!props || !scope) return null;
             return {
                 selectionType: props.config.selectionType,
-                itemIds: props.context.items.map(item => asId(item.id)),
-                trackIds: [...props.context.trackIds],
-                totalItemCount: props.totalItemCount,
+                itemIds: scope.context.items.map(item => asId(item.id)),
+                trackIds: [...scope.context.trackIds],
+                totalItemCount: scope.displayItems.length,
                 actions: resolveDirectoryBatchActions(props.config),
             };
         },
         batchSelect: (ids, selected = true) => {
-            const props = batchPanelProps();
-            if (!props) return false;
-            props.onSetItemsSelected(ids, selected);
+            const sessionId = mapSessionId();
+            if (!batchPanelProps() || !sessionId) return false;
+            useLibraryDirectorySessionStore.getState().setSelected(sessionId, ids, selected);
             return true;
         },
+        // 与面板的「全选」一样：选中的是当前筛选出的卡片。
         batchSelectAll: (selected = true) => {
-            const props = batchPanelProps();
-            if (!props) return false;
-            props.onToggleSelectAll(selected);
+            const sessionId = mapSessionId();
+            const scope = currentBatchScope();
+            if (!batchPanelProps() || !sessionId || !scope) return false;
+            useLibraryDirectorySessionStore.getState().replaceSelection(
+                sessionId,
+                selected ? scope.displayItems.map(item => asId(item.id)) : [],
+            );
             return true;
         },
         runBatch: async (action, arg) => {
             const props = batchPanelProps();
-            if (!props) return false;
-            const { config, context } = props;
-            switch (action) {
-                case 'play': await config.onPlay(context); return true;
-                case 'enqueue': await config.onAddToQueue(context); return true;
-                case 'create-playlist': await config.onCreatePlaylist(arg ?? 'Probe Playlist', context); return true;
-                case 'remove':
-                    if (!config.onRemove) return false;
-                    await config.onRemove(context);
-                    return true;
-                case 'rescan-root':
-                    if (!config.onRescanRoot || !arg) return false;
-                    await config.onRescanRoot(arg);
-                    return true;
-                case 'remove-root':
-                    if (!config.onRemoveRoot || !arg) return false;
-                    await config.onRemoveRoot(arg);
-                    return true;
-                case 'clear-ignore':
-                    if (!config.onClearFolderIgnore || !arg) return false;
-                    await config.onClearFolderIgnore(arg);
-                    return true;
-            }
-            return false;
+            const scope = currentBatchScope();
+            if (!props || !scope) return false;
+            const result = await runDirectoryBatchAction(
+                props.config,
+                action,
+                scope.context,
+                action === 'create-playlist' ? (arg ?? 'Probe Playlist') : arg,
+            );
+            return result.ok;
         },
         directoryNodes: () => flattenDirectory(batchPanelProps()?.config.directoryTrees ?? surfaceProps()?.batchConfig?.directoryTrees).map(node => ({
             path: node.path,

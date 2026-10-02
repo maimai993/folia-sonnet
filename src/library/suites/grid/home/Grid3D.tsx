@@ -37,6 +37,8 @@ import { useNeteaseApiStatusStore } from '../../../../stores/useNeteaseApiStatus
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';
 import { onlineHiddenScope } from '../../../core/model/directoryVisibility';
+import { directoryKey } from '../../../core/model/directorySession';
+import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -130,6 +132,8 @@ interface Grid3DProps {
     stageIsActive?: boolean;
     onOpenStagePlayer?: () => void;
     isInteractive?: boolean;
+    /** 本地目录的批量动作控制器（宿主创建，见 LibraryHomeSurfaceProps）。 */
+    directoryActions?: LibraryDirectoryBatchController;
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
@@ -159,13 +163,12 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         navidromeEnabled = false,
         onOpenGridView,
         onStatusMessage,
-        onPlayAll,
-        onAddAllToQueue,
         stageEnabled = false,
         stageIsActive = false,
         onOpenStagePlayer,
         onlineProviderPlatform,
         isInteractive = true,
+        directoryActions,
     } = props;
 
     const { t } = useTranslation();
@@ -943,6 +946,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         isInteractive={isInteractive}
                         hasFloatingPlayer={Boolean(currentTrack)}
                         playlistVisibilityScope={onlineHiddenScope(activeProviderId)}
+                        directoryKey={directoryKey({
+                            source: 'online',
+                            providerId: activeProviderId,
+                            section: homeViewTab === 'playlist' ? 'playlists' : homeViewTab,
+                        })}
                     />
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">
@@ -972,9 +980,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             isInteractive={isInteractive}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onOpenGridView={onOpenGridView}
-                            onPlayAll={onPlayAll}
-                            onAddAllToQueue={onAddAllToQueue}
-                            onRefreshLocalSongs={onRefreshLocalSongs}
+                            directoryActions={directoryActions}
                         />
                     </div>
                 ) : (

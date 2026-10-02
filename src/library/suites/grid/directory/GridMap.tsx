@@ -8,10 +8,13 @@ import { useFoliaHexViewport } from '../shared/useFoliaHexViewport';
 import { SidePanelList, CollectionListItem } from '../../../../components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../../components/shared/GridListSearchButton';
 import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
-import { matchesDirectorySearch } from '../../../core/model/directorySearch';
 import GridMapBatchPanel from './GridMapBatchPanel';
-import { resolveDirectoryBatchContext } from '../../../core/model/directoryBatch';
-import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem, LibraryDirectoryVisibilityMode } from '../../../core/contracts/directory';
+import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem } from '../../../core/contracts/directory';
+import { DEFAULT_DIRECTORY_SESSION_ID } from '../../../core/model/directorySession';
+import { useLibraryDirectoryQuery } from '../../../core/bindings/useLibraryDirectoryQuery';
+import { useLibraryDirectorySelection } from '../../../core/bindings/useLibraryDirectorySelection';
+import { useLibraryDirectoryVisibility } from '../../../core/bindings/useLibraryDirectoryVisibility';
+import { useLibraryDirectoryScope } from '../../../core/bindings/useLibraryDirectoryScope';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapEscapeAction,
@@ -20,7 +23,7 @@ import {
 } from './gridMapNavigation';
 import { resolveGridMapCardTitle, resolveGridMapFolderLabel } from './gridMapCardText';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
-import { filterDirectoryByVisibility, isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
+import { isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow, isTextEntryTarget } from '../../../../utils/keyboardTargets';
 
@@ -41,6 +44,8 @@ export type GridMapBatchConfig = LibraryDirectoryBatchConfig;
 export type GridMapBatchContext = LibraryDirectoryBatchContext<GridMapItem>;
 
 interface GridMapProps {
+    /** 目录会话 key（core/model/directorySession 的 directoryKey）：筛选词、批选、隐藏视图都存在会话里。 */
+    directoryKey?: string;
     title: string;
     subtitle?: string;
     items: GridMapItem[];
@@ -232,6 +237,7 @@ const MapCard = React.memo<{
 );
 
 export const GridMap: React.FC<GridMapProps> = ({
+    directoryKey = DEFAULT_DIRECTORY_SESSION_ID,
     title,
     subtitle,
     items = [],
@@ -259,12 +265,13 @@ export const GridMap: React.FC<GridMapProps> = ({
     const suppressSelectionRef = useRef(false);
     const wheelTargetRef = useRef({ x: 0, y: 0 });
 
-    const [searchQuery, setSearchQuery] = useState('');
+    // 筛选词、批选与隐藏视图在 core 的目录会话里（换 suite 不丢；关地图时由外层清掉）。
+    const { query: searchQuery, setQuery: setSearchQuery, port: queryPort } = useLibraryDirectoryQuery(directoryKey);
     // The filter box is the command palette now; this grid only says who owns typing and where the
     // box belongs. See useGridCommandFilter for why all three grids stopped carrying their own.
     const isFiltering = useGridCommandFilter({
         isInteractive,
-        port: { getQuery: () => searchQuery, setQuery: setSearchQuery },
+        port: queryPort,
         // The box was an absolutely positioned child of the canvas; it still is.
         anchorRef: containerRef,
     });
@@ -272,9 +279,24 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
-    const [isPlaylistEditMode, setIsPlaylistEditMode] = useState(false);
-    const [showHiddenPlaylistsOnly, setShowHiddenPlaylistsOnly] = useState(false);
-    const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<Set<string>>(new Set());
+    // 批量面板「从曲库删除」的确认框；放在这里而不是面板里，命令面板的删除命令也只是把它打开。
+    const [isRemoveConfirmOpen, setRemoveConfirmOpen] = useState(false);
+    const {
+        selectedIds: selectedBatchItemIds,
+        setSelected: setBatchItemsSelected,
+        toggleSelected: toggleBatchItemSelected,
+        replaceSelection: replaceBatchSelection,
+        resetSelection: resetBatchSelection,
+    } = useLibraryDirectorySelection(directoryKey);
+    // 隐藏编辑模式就是「管理隐藏」视图：显示全部并标出隐藏的（manage），或只看隐藏的（manage-hidden-only）。
+    const {
+        visibilityMode,
+        setVisibilityMode,
+        toggleManageHidden: togglePlaylistEditMode,
+        toggleHiddenOnly,
+    } = useLibraryDirectoryVisibility(directoryKey);
+    const isPlaylistEditMode = visibilityMode !== 'browse';
+    const showHiddenPlaylistsOnly = visibilityMode === 'manage-hidden-only';
     const hasHideableItems = useMemo(() => items.some(isHideableDirectoryItem), [items]);
     const hasCutInPanel = hasHideableItems || Boolean(batchConfig);
 
@@ -287,43 +309,26 @@ export const GridMap: React.FC<GridMapProps> = ({
         (onActivateCollection || onSelectCollection)(item.rawCollection || item, sourceIndex);
     }, [items, onActivateCollection, onSelectCollection]);
 
-    // 隐藏编辑模式就是「管理隐藏」视图：显示全部并标出隐藏的，或只看隐藏的；平时只看未隐藏的。
-    const visibilityMode: LibraryDirectoryVisibilityMode = !isPlaylistEditMode
-        ? 'browse'
-        : showHiddenPlaylistsOnly ? 'manage-hidden-only' : 'manage';
-    const visibleItems = useMemo(
-        () => filterDirectoryByVisibility(items, hiddenIds, visibilityMode),
-        [hiddenIds, items, visibilityMode],
-    );
+    // 范围 = 可见（隐藏视图）→ 筛选 → 选中；选中的按卡片顺序排（core/model/directoryBatch）。
+    const { displayItems, context: batchContext } = useLibraryDirectoryScope({
+        items,
+        hiddenIds,
+        visibilityMode,
+        query: deferredSearchQuery,
+        selectedIds: selectedBatchItemIds,
+    });
 
-    const displayItems = useMemo(() => {
-        if (!deferredSearchQuery.trim()) return visibleItems;
-        return visibleItems.filter(item => matchesDirectorySearch(item, deferredSearchQuery));
-    }, [visibleItems, deferredSearchQuery]);
-    const excludedBatchItemIds = useMemo(() => new Set(
-        displayItems
-            .map(item => String(item.id))
-            .filter(itemId => !selectedBatchItemIds.has(itemId)),
-    ), [displayItems, selectedBatchItemIds]);
-    const batchContext = useMemo(
-        () => resolveDirectoryBatchContext(displayItems, excludedBatchItemIds),
-        [displayItems, excludedBatchItemIds],
-    );
-
-    const togglePlaylistEditMode = useCallback(() => {
-        setIsPlaylistEditMode(previous => {
-            const next = !previous;
-            if (!next) setShowHiddenPlaylistsOnly(false);
-            return next;
-        });
-    }, []);
-
+    // 打开与关闭侧面板都从空选择、浏览视图开始（原先的组件状态语义）。
+    const openCutInPanel = useCallback(() => {
+        resetBatchSelection();
+        setRemoveConfirmOpen(false);
+        setShowCutInPanel(true);
+    }, [resetBatchSelection]);
     const closeCutInPanel = useCallback(() => {
         setShowCutInPanel(false);
-        setIsPlaylistEditMode(false);
-        setShowHiddenPlaylistsOnly(false);
-        setSelectedBatchItemIds(new Set());
-    }, []);
+        setRemoveConfirmOpen(false);
+        resetBatchSelection();
+    }, [resetBatchSelection]);
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {
@@ -614,12 +619,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                             // A drag may still emit a click on the card; suppress it before any batch toggle.
                             if (suppressSelectionRef.current) return;
                             if (batchConfig && showCutInPanel) {
-                                setSelectedBatchItemIds(current => {
-                                    const next = new Set(current);
-                                    const id = String(item.id);
-                                    if (next.has(id)) next.delete(id); else next.add(id);
-                                    return next;
-                                });
+                                toggleBatchItemSelected(String(item.id));
                                 return;
                             }
                             if (isPlaylistEditMode && isHideableDirectoryItem(item)) return;
@@ -639,6 +639,7 @@ export const GridMap: React.FC<GridMapProps> = ({
         batchConfig,
         showCutInPanel,
         selectedBatchItemIds,
+        toggleBatchItemSelected,
         onTogglePlaylistHidden,
         layoutConfig.cardWidth,
         layoutConfig.cardHeight,
@@ -883,8 +884,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                     closeCutInPanel();
                     break;
                 case 'exit-playlist-edit':
-                    setIsPlaylistEditMode(false);
-                    setShowHiddenPlaylistsOnly(false);
+                    setVisibilityMode('browse');
                     break;
                 case 'navigate-back':
                     onBack();
@@ -894,7 +894,7 @@ export const GridMap: React.FC<GridMapProps> = ({
 
         window.addEventListener('keydown', handleEscape);
         return () => window.removeEventListener('keydown', handleEscape);
-    }, [closeCutInPanel, isInteractive, isPlaylistEditMode, onBack, searchQuery, showCutInPanel, showSidePanel]);
+    }, [closeCutInPanel, isInteractive, isPlaylistEditMode, onBack, searchQuery, setSearchQuery, setVisibilityMode, showCutInPanel, showSidePanel]);
 
     return (
         <motion.div
@@ -929,8 +929,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                         if (showCutInPanel) {
                             closeCutInPanel();
                         } else {
-                            setSelectedBatchItemIds(new Set());
-                            setShowCutInPanel(true);
+                            openCutInPanel();
                         }
                     }}
                     className="group/grid-title text-center flex flex-col items-center select-none pointer-events-auto cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md disabled:cursor-default disabled:hover:scale-100"
@@ -1028,21 +1027,15 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 totalItemCount={displayItems.length}
                                 searchQuery={deferredSearchQuery}
                                 displayItems={displayItems}
-                                excludedItemIds={excludedBatchItemIds}
+                                selectedItemIds={selectedBatchItemIds}
                                 config={batchConfig}
                                 isDaylight={isDaylight}
-                                onToggleSelectAll={(selected) => setSelectedBatchItemIds(
-                                    selected ? new Set(displayItems.map(item => String(item.id))) : new Set(),
+                                onToggleSelectAll={(selected) => replaceBatchSelection(
+                                    selected ? displayItems.map(item => String(item.id)) : [],
                                 )}
-                                onSetItemsSelected={(itemIds, selected) => {
-                                    setSelectedBatchItemIds(current => {
-                                        const next = new Set(current);
-                                        itemIds.forEach(itemId => {
-                                            if (selected) next.add(itemId); else next.delete(itemId);
-                                        });
-                                        return next;
-                                    });
-                                }}
+                                onSetItemsSelected={setBatchItemsSelected}
+                                isRemoveConfirmOpen={isRemoveConfirmOpen}
+                                onRemoveConfirmOpenChange={setRemoveConfirmOpen}
                             />
                         ) : (
                             <>
@@ -1071,7 +1064,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                             {isPlaylistEditMode && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowHiddenPlaylistsOnly(previous => !previous)}
+                                    onClick={toggleHiddenOnly}
                                     className={`w-full rounded-full py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                                         showHiddenPlaylistsOnly
                                             ? 'bg-black/10 dark:bg-white/10'
