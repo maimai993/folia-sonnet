@@ -18,7 +18,7 @@ import {
     resolveGridMapSourceIndex,
     shouldSuppressGridMapSelection,
 } from './gridMapNavigation';
-import { formatGridMapFolderTitle } from '../../../../utils/gridMapFolderPath';
+import { resolveGridMapCardTitle, resolveGridMapFolderLabel } from './gridMapCardText';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { filterDirectoryByVisibility, isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
@@ -96,9 +96,9 @@ const MapCard = React.memo<{
     }) => {
         const { t } = useTranslation();
         const isPlaylistSelectionDisabled = isPlaylistEditMode && isHideableDirectoryItem(item);
-        const displayName = item.type === 'folder' && item.path
-            ? formatGridMapFolderTitle(item.path)
-            : item.name;
+        // 文件夹卡（含虚拟的「全部歌曲」）的标题、描述行数、「本目录 N 首」都按 folderLabel 判断，见 gridMapCardText。
+        const folderLabel = resolveGridMapFolderLabel(item);
+        const displayName = resolveGridMapCardTitle(item);
 
         return (
             <div
@@ -188,8 +188,8 @@ const MapCard = React.memo<{
                         </div>
                         {item.description && (
                             <div
-                                className={`text-[10px] opacity-55 max-w-full font-medium whitespace-normal break-words ${item.path ? 'line-clamp-2' : 'line-clamp-1'}`}
-                                title={item.path ? item.description : undefined}
+                                className={`text-[10px] opacity-55 max-w-full font-medium whitespace-normal break-words ${folderLabel ? 'line-clamp-2' : 'line-clamp-1'}`}
+                                title={folderLabel ? item.description : undefined}
                             >
                                 {item.description}
                             </div>
@@ -199,7 +199,7 @@ const MapCard = React.memo<{
                                 {compactDescription(item.summary)}
                             </div>
                         )}
-                        {item.type === 'folder' && item.path && typeof item.trackCount === 'number' && item.trackCount > 0 && (
+                        {folderLabel && typeof item.trackCount === 'number' && item.trackCount > 0 && (
                             <div className="text-[10px] leading-snug opacity-45 max-w-full font-medium">
                                 {t('home.gridFolderDirectTrackCount', { count: item.trackCount })}
                             </div>

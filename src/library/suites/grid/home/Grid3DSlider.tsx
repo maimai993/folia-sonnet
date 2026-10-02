@@ -42,8 +42,11 @@ const compactDescription = (description?: string, maxLength = 72) => {
 type Grid3DSliderTextItem = Pick<Grid3DSliderItem, 'type' | 'description' | 'summary'>
     & Partial<Pick<Grid3DSliderItem, 'name' | 'isVirtual'>>;
 
+// 文件夹卡片的第二行 / 信息行显示文件夹路径（= 名称）。虚拟的「全部歌曲」没有真实路径，但同一个位置照样
+// 显示它的名称（「All Songs / 全部歌曲」），不退回描述「Folder / 本地」：这是一直以来的可见文字，
+// test/ui 的 local-library 截图基线锁着它。isVirtual 只用于语义判断（批量删除不按文件夹删它）。
 const getLocalFolderPath = (item: Grid3DSliderTextItem): string => (
-    item.type === 'folder' && !item.isVirtual && typeof item.name === 'string'
+    item.type === 'folder' && typeof item.name === 'string'
         ? item.name
         : ''
 );

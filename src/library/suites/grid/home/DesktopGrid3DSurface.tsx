@@ -161,7 +161,10 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             id: item.id,
                             name: typeof item.name === 'string' || typeof item.name === 'number' ? String(item.name) : '',
                             coverUrl: item.coverUrl,
-                            description: item.type === 'folder' && !item.isVirtual
+                            // 文件夹卡的描述是它的名称（路径）——虚拟的「全部歌曲」也一样，标题下一行照旧是
+                            // 「All Songs / 全部歌曲」。path 只给真实文件夹（契约：虚拟条目没有路径）；GridMap 的卡片
+                            // 按 resolveGridMapFolderLabel 把虚拟文件夹的名称放在路径的位置（含「本目录 N 首」）。
+                            description: item.type === 'folder'
                                 ? String(item.name)
                                 : item.description,
                             summary: item.summary,

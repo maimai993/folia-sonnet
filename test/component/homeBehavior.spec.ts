@@ -478,6 +478,8 @@ test.describe(`[${suite}] directory filter`, () => {
         const allSongs = (await mapItems(page)).find(item => item.id === HOME_ALL_SONGS_ID);
         expect(allSongs?.isVirtual).toBe(true);
         expect(allSongs?.path).toBeUndefined();
+        // 可见文字不变：描述行仍是名称「All Songs」，不是「Folder」（local-library 截图基线锁着它）。
+        expect(allSongs?.description).toBe('All Songs');
 
         expect(await setQuery(page, 'alpha')).toBe(true);
         await expect.poll(() => mapIds(page)).toEqual([homeFolderId('Music/Alpha'), homeFolderId('Music/Alpha/Live')]);
@@ -872,6 +874,23 @@ test.describe(`[${suite}] imports`, () => {
 }
 
 test.describe('[grid-only] directory interactions', () => {
+    // P3.1 保留 isVirtual 后这张卡的第二行一度变成「Folder」、地图卡丢了「本目录 N 首」；这条把可见文字钉住。
+    test('the virtual All Songs card reads "All Songs" under its title on the slider and in the map', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        const infoTitle = page.locator('h3.text-2xl', { hasText: /^All Songs$/ });
+        await expect(infoTitle).toHaveCount(1);
+        await expect(infoTitle.locator('xpath=following-sibling::p[1]')).toHaveText(`${HOME_LOCAL_SONGS.length} Tracks • All Songs`);
+
+        await showMap(page);
+        const allSongsCard = page.locator('[data-ponder-page-scope="local-grid-map-page"] .theme-polaroid-card')
+            .filter({ hasText: `${HOME_LOCAL_SONGS.length} tracks in this folder` })
+            .filter({ hasText: 'All Songs' });
+        await expect(allSongsCard).toHaveCount(1);
+        expect((await allSongsCard.innerText()).split(/\r?\n/).map(line => line.trim()).filter(Boolean))
+            .toEqual(['All Songs', 'All Songs', `${HOME_LOCAL_SONGS.length} tracks in this folder`]);
+    });
+
     test('the map button opens GridMap; Escape clears the query before it closes the map', async ({ mount, page }) => {
         await mountHome(mount, page);
         await showList(page, 'local');
