@@ -89,6 +89,7 @@
 - `dev/probes/playerBottomBar.probe.tsx`
 - `dev/probes/ponderHint.probe.tsx`
 - `dev/probes/ponderPageSurfaces.probe.tsx`
+- `dev/probes/providerConnect.probe.tsx`
 - `dev/probes/settingsHelpActions.probe.tsx`
 - `dev/probes/settingsNavigation.probe.tsx`
 - `dev/probes/subtitleDualRow.probe.tsx`
