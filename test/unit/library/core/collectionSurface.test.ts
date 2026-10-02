@@ -8,6 +8,7 @@ import {
     type GridSurfaceParams,
 } from '@/library/core/model/collectionSurface';
 import { LIBRARY_ACTION_IDS } from '@/library/core/model/librarySuites';
+import { EMPTY_COLLECTION_MUTATION_SNAPSHOT } from '@/library/core/model/collectionMutationCapabilities';
 import type { LibraryDeclaredActions } from '@/library/core/contracts/suite';
 import { resolveCollectionSyncCounts } from '@/library/core/model/collectionProgress';
 
@@ -27,6 +28,8 @@ const core = (overrides: Partial<Parameters<typeof buildCoreSurfaceParams>[0]> =
     setSortField: vi.fn(),
     setSortDirection: vi.fn(),
     reloadOnlineCollection: vi.fn(),
+    mutationSnapshot: EMPTY_COLLECTION_MUTATION_SNAPSHOT,
+    mutations: null,
     ...overrides,
 });
 
@@ -64,8 +67,10 @@ const everything = (declaredActions?: LibraryDeclaredActions): GridSurfaceParams
     canExportPlaylist: true,
     canEditEntity: true,
     canEditPlaylist: true,
+    canToggleSubscribe: true,
     toggleInfoPanel: vi.fn(),
     resyncFolder: vi.fn(),
+    toggleSubscribe: vi.fn(),
     declaredActions,
 });
 
@@ -112,6 +117,14 @@ describe('suite-declared actions on the command surface', () => {
         expect(params.resyncFolder).not.toHaveBeenCalled();
         expect(params.toggleInfoPanel).not.toHaveBeenCalled();
         expect(params.playFiltered).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps toggle-subscribe to the subscribe action', () => {
+        expect(GRID_SURFACE_ACTION_SOURCES['toggle-subscribe']).toEqual({ action: 'subscribe' });
+        const declared: LibraryDeclaredActions = { actions: ['subscribe'], extraActions: [] };
+        expect(buildGridSurfaceState(everything(declared)).availableActions).toEqual(['toggle-subscribe']);
+        expect(buildGridSurfaceState(everything({ actions: ['play-scope'], extraActions: [] })).availableActions)
+            .not.toContain('toggle-subscribe');
     });
 
     it('lets a core-only surface pass its declaration through buildCoreSurfaceParams', () => {

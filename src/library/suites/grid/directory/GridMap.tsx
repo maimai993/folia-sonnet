@@ -261,8 +261,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     // box belongs. See useGridCommandFilter for why all three grids stopped carrying their own.
     const isFiltering = useGridCommandFilter({
         isInteractive,
-        query: searchQuery,
-        setQuery: setSearchQuery,
+        port: { getQuery: () => searchQuery, setQuery: setSearchQuery },
         // The box was an absolutely positioned child of the canvas; it still is.
         anchorRef: containerRef,
     });

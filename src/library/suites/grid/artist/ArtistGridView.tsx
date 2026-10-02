@@ -378,8 +378,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const rootRef = useRef<HTMLDivElement>(null);
     const isFiltering = useGridCommandFilter({
         isInteractive,
-        query: searchQuery,
-        setQuery: setSearchQuery,
+        port: { getQuery: () => searchQuery, setQuery: setSearchQuery },
         // The box was positioned against this component's root, not the drag canvas.
         anchorRef: rootRef,
     });

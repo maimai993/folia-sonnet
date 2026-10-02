@@ -564,6 +564,27 @@ test.describe('[grid] edits', () => {
         await expect(page.getByTitle('Unsubscribe Playlist')).toBeVisible();
         await expect.poll(() => calls(page, 'refreshUser')).not.toEqual([]);
     });
+
+    // 命令面板的 toggle-subscribe 与封面上的星标是同一个控制器动作：一次切换只发一次上游请求，状态随之翻转。
+    test('toggle-subscribe from the command surface goes upstream once and flips the state', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        await expect.poll(async () => (await surface(page))?.availableActions ?? []).toContain('toggle-subscribe');
+
+        expect(await runSurface(page, 'toggle-subscribe')).toBe(true);
+        await expect.poll(() => requests(page, 'subscribePlaylist')).toHaveLength(1);
+        expect(await runSurface(page, 'toggle-info-panel')).toBe(true);
+        await expect(page.getByTitle('Unsubscribe Playlist')).toBeVisible();
+        await expect.poll(() => calls(page, 'refreshUser')).not.toEqual([]);
+
+        // 再切一次回到未订阅：同样只发一次，前一次的请求不重发。
+        await expect.poll(async () => (await surface(page))?.availableActions ?? []).toContain('toggle-subscribe');
+        expect(await runSurface(page, 'toggle-subscribe')).toBe(true);
+        await expect.poll(() => requests(page, 'unsubscribePlaylist')).toHaveLength(1);
+        await expect(page.getByTitle('Subscribe Playlist')).toBeVisible();
+        expect(await requests(page, 'subscribePlaylist')).toHaveLength(1);
+    });
 });
 
 test.describe('navigation', () => {
@@ -735,4 +756,23 @@ test.describe('suites', () => {
             else expect(available.filter(action => gridOnly.includes(action))).toEqual([]);
         });
     }
+
+    // 同一个控制器（宿主持有，换 suite 不重建）：core 允许订阅，但 TUI 在 P2.4 声明 subscribe 之前不发布、
+    // 也不执行 toggle-subscribe；换回网格立刻出现。
+    test('[tui] toggle-subscribe stays off the TUI surface until the TUI declares subscribe', async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await open(page, 'online-public');
+        await waitForRenderer(page, 'tui');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+
+        const { declaredActions } = await page.evaluate(() => window.__libraryProbe!.resolveSurface('collection'));
+        expect(declaredActions.actions).not.toContain('subscribe');
+        expect((await surface(page))!.availableActions).not.toContain('toggle-subscribe');
+        expect(await runSurface(page, 'toggle-subscribe')).toBe(false);
+
+        await setRenderer(page, 'grid');
+        await waitForRenderer(page, 'grid');
+        await expect.poll(async () => (await surface(page))?.availableActions ?? []).toContain('toggle-subscribe');
+        expect(await requests(page, 'subscribePlaylist')).toEqual([]);
+    });
 });

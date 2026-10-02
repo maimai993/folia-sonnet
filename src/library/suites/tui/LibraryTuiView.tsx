@@ -9,7 +9,9 @@ import { useCollectionResourceState } from '../../core/bindings/useCollectionRes
 import { useCollectionView } from '../../core/bindings/useCollectionView';
 import { useCollectionActions } from '../../core/bindings/useCollectionActions';
 import { useCommittedQuery } from '../../core/bindings/useCommittedQuery';
-import { useLibrarySessionFilter } from '../../core/bindings/useLibrarySessionFilter';
+import { useLibrarySessionQuery } from '../../core/bindings/useLibrarySessionQuery';
+import { useCollectionMutationSnapshot } from '../../core/bindings/useCollectionMutations';
+import { useGridCommandFilter } from '../../../hooks/useGridCommandFilter';
 import { useGridSurfaceRegistration } from '../../../hooks/useGridSurfaceRegistration';
 import { useLocalTrackSortStore } from '../../core/state/useLocalTrackSortStore';
 import { colorWithAlpha } from '../../../components/visualizer/colorMix';
@@ -26,10 +28,12 @@ import { useLibraryTuiKeyboard } from './useLibraryTuiKeyboard';
 
 // 宿主交给任何 suite 的集合 surface 输入（core/contracts/suite）。TUI 目前只用其中的展示与播放部分；
 // 变更控制器在 P2.4 接入。
+// （P2.3 起变更控制器的快照已经接进命令面板的 surface：core 动作与网格同源，发布哪些由 entry.ts 的声明决定。）
 const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     collection,
     resource,
     playback: port,
+    mutations,
     localSongs,
     theme,
     isDaylight,
@@ -46,7 +50,15 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
 
     const { snapshot } = useCollectionResourceState(resource);
     const tracks = useMemo(() => snapshot?.tracks ?? [], [snapshot?.tracks]);
-    const { query, setQuery, isFiltering } = useLibrarySessionFilter({ sessionKey, isInteractive: isActive, anchorRef: listRegionRef });
+    const { query, setQuery, port: queryPort } = useLibrarySessionQuery(sessionKey);
+    // 筛选框贴在列表区域上；会话里已有筛选时首次可交互就把它带出来（与网格一致）。
+    const isFiltering = useGridCommandFilter({
+        isInteractive: isActive,
+        port: queryPort,
+        anchorRef: listRegionRef,
+        reopenIfFiltered: true,
+    });
+    const mutationSnapshot = useCollectionMutationSnapshot(mutations);
     const committedQuery = useCommittedQuery(query);
 
     // 与网格同一条规则：只有本地文件夹（含「全部歌曲」）按本地排序。
@@ -68,8 +80,8 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         return displayIndex === undefined ? undefined : view.displayTracks[displayIndex];
     };
 
-    // 命令面板能对这个集合做的事：只有核心动作（播放 / 入队范围、重新拉取、本地排序），
-    // 再按 entry.ts 的声明过滤。
+    // 命令面板能对这个集合做的事：只有核心动作（播放 / 入队范围、重新拉取、本地排序、来源维护、订阅），
+    // 与网格同一个构建函数、同一份控制器快照，再按 entry.ts 的声明过滤；TUI 没有 renderer 局部动作。
     const surfaceParams = buildCoreSurfaceParams({
         declaredActions,
         supportsLocalTrackSorting,
@@ -83,6 +95,8 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         setSortField,
         setSortDirection,
         reloadOnlineCollection: actions.reload,
+        mutationSnapshot,
+        mutations,
     });
     useGridSurfaceRegistration({
         isInteractive: isActive,

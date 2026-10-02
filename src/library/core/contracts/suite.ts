@@ -34,7 +34,7 @@ export type LibrarySuiteId = string;
  * | reload | useCollectionActions 的 reload | reload-online-collection |
  * | resume-sync | 资源的 sync 中断 | — |
  * | remove-entry | CollectionMutationCapabilities.removeEntry | — |
- * | subscribe | .subscribe | —（P2.3 加命令） |
+ * | subscribe | .subscribe | toggle-subscribe |
  * | rename | .rename | — |
  * | delete-collection | .deleteCollection | — |
  * | resync-folder | .resyncFolder | resync-folder |

@@ -487,6 +487,7 @@ export default {
       "grid-edit-entity": { "title": "Edit this album or artist", "description": "Open the local library entity editor for this collection" },
       "grid-toggle-edit-mode": { "title": "Toggle edit mode", "description": "Enter or leave the mode that lets you remove songs from this collection" },
       "grid-reload-online-collection": { "title": "Reload this collection", "description": "Skip the cache and load every song of this online collection again" },
+      "grid-toggle-subscribe": { "title": "Subscribe or unsubscribe", "description": "Save this online playlist or album to your library, or remove it if it is already there" },
       "settings-interaction": { "title": "Interaction settings", "description": "Open keyboard, shortcut and grid interaction settings" },
       "settings-custom-shortcut": { "title": "Custom shortcuts", "description": "Jump to the custom keyboard shortcut bindings" },
       "settings-grid-action-button": { "title": "Grid action button", "description": "Jump to what the grid action button slides to" },

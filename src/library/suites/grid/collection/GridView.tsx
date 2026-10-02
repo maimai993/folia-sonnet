@@ -49,7 +49,7 @@ import { useProgressiveItemEntrance } from '../shared/useProgressiveItemEntrance
 import { useLocalCoverPreloader } from '../../../../hooks/useLocalCoverPreloader';
 import { formatLocalAlbumTrackLabel } from '../../../../utils/localSongSorting';
 import { resolveCollectionSyncCounts } from '../../../core/model/collectionProgress';
-import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../../../core/model/collectionSurface';
+import { buildCoreSurfaceParams, buildGridSurfaceState, runGridSurfaceAction } from '../../../core/model/collectionSurface';
 import { useGridSurfaceRegistration } from '../../../../hooks/useGridSurfaceRegistration';
 import type { CollectionResource } from '../../../core/contracts/resource';
 import type { CollectionMutationController, LibraryMutationResult } from '../../../core/contracts/mutations';
@@ -62,7 +62,8 @@ import { useCollectionResourceState } from '../../../core/bindings/useCollection
 import { useCollectionMutationSnapshot } from '../../../core/bindings/useCollectionMutations';
 import { useCollectionView } from '../../../core/bindings/useCollectionView';
 import { useCommittedQuery } from '../../../core/bindings/useCommittedQuery';
-import { useLibrarySessionFilter } from '../../../core/bindings/useLibrarySessionFilter';
+import { useLibrarySessionQuery } from '../../../core/bindings/useLibrarySessionQuery';
+import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
 import {
     getLibraryBrowseSession,
     registerLibrarySessionFlush,
@@ -409,12 +410,14 @@ export const GridView: React.FC<GridViewProps> = ({
     const isActive = isInteractive && isPresent;
     // The filter box is the command palette now; this grid only says who owns typing and where the
     // box belongs. See useGridCommandFilter for why all three grids stopped carrying their own.
-    // 筛选词存在浏览会话里（见 useLibrarySessionFilter），换 renderer 不丢。
-    const { query: searchQuery, setQuery: setSearchQuery, isFiltering } = useLibrarySessionFilter({
-        sessionKey,
+    // 筛选词存在浏览会话里（见 useLibrarySessionQuery），换 renderer 不丢。
+    const { query: searchQuery, setQuery: setSearchQuery, port: searchQueryPort } = useLibrarySessionQuery(sessionKey);
+    const isFiltering = useGridCommandFilter({
         isInteractive: isActive,
+        port: searchQueryPort,
         // The box used to be an absolutely positioned child of the canvas; it still is.
         anchorRef: containerRef,
+        reopenIfFiltered: true,
     });
     const deferredSearchQuery = useCommittedQuery(searchQuery);
 
@@ -1385,42 +1388,34 @@ export const GridView: React.FC<GridViewProps> = ({
     // Everything the palette is allowed to do to this grid, and the branch rules that decide which
     // of it applies. Declared next to the buttons it mirrors so the two cannot disagree; the actual
     // gating and dispatch live in ../library/core/model/collectionSurface.
-    const gridSurfaceParams: GridSurfaceParams = {
-        hasInfoPanel: hasCutInPanel,
-        hasTrackList: mode === 'tracks' && displayTracks.length > 0,
-        supportsLocalTrackSorting,
-        canResyncFolder: mutationCapabilities.resyncFolder.supported,
-        canResyncAllFolders: mutationCapabilities.resyncAllFolders.supported,
-        canOrganizeSongInfo: mutationCapabilities.organizeSongInfo.supported,
-        canExportPlaylist: mutationCapabilities.exportPlaylist.supported,
-        canEditEntity: mutationCapabilities.editEntity.supported,
-        canEditPlaylist,
-        canReloadOnlineCollection: canReloadOnlineCollection && !loading,
-        isSourceActionPending,
+    // core 动作（播放范围、排序、重新拉取、来源维护、订阅）与 TUI 同一个构建函数、同一份控制器快照；
+    // 网格只补自己的信息面板、曲目侧栏与编辑模式。
+    const gridSurfaceParams = buildCoreSurfaceParams({
         declaredActions,
-
         filteredTrackCount: contextActionTracks.length,
         isFilterActive: hasSearchQuery,
+        supportsLocalTrackSorting,
         sortField: localTrackSortField,
         sortDirection: localTrackSortDirection,
+        setSortField: handleLocalTrackSortFieldChange,
+        setSortDirection: handleLocalTrackSortDirectionChange,
+        canReloadOnlineCollection: canReloadOnlineCollection && !loading,
+        playFiltered: () => onPlayAll?.(contextActionTracks),
+        enqueueFiltered: () => onAddAllToQueue?.(contextActionTracks),
+        reloadOnlineCollection,
+        mutationSnapshot,
+        mutations: mutations ?? null,
+    }, {
+        hasInfoPanel: hasCutInPanel,
+        hasTrackList: mode === 'tracks' && displayTracks.length > 0,
+        canEditPlaylist,
         isInfoPanelOpen: showCutInPanel,
         isTrackListOpen: showSidePanel,
         isEditMode,
-
-        playFiltered: () => onPlayAll?.(contextActionTracks),
-        enqueueFiltered: () => onAddAllToQueue?.(contextActionTracks),
-        setSortField: handleLocalTrackSortFieldChange,
-        setSortDirection: handleLocalTrackSortDirectionChange,
         toggleInfoPanel: () => setShowCutInPanel(current => !current),
         toggleTrackList: () => setShowSidePanel(current => !current),
-        resyncFolder: handleResyncLocalFolder,
-        resyncAllFolders: handleResyncAllLocalFolders,
-        organizeSongInfo: handleOrganizeSongInfo,
-        exportPlaylist: handleExportLocalPlaylist,
-        editEntity: handleEditEntity,
         toggleEditMode: handleEditModeToggle,
-        reloadOnlineCollection,
-    };
+    });
     useGridSurfaceRegistration({
         isInteractive: isActive,
         getState: () => buildGridSurfaceState(gridSurfaceParams),

@@ -7,3 +7,13 @@ export type LibraryBrowseSession = {
     query: string;
     focusedEntryKey: string | null;
 };
+
+/**
+ * 筛选词的读写端口：命令面板（筛选框）经它读写某个 surface 的筛选词。core 给出它（集合 surface 的筛选词在
+ * 浏览会话里），筛选框贴在哪个元素上（anchor）属于 renderer，由 renderer 注册时补上——core 不碰 DOM。
+ * getQuery 每次现读，不缓存。
+ */
+export type LibraryQueryPort = {
+    getQuery: () => string;
+    setQuery: (query: string) => void;
+};
