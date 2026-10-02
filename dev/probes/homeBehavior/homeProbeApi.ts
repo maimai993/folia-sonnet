@@ -8,16 +8,16 @@ import DesktopGrid3DSurface, { type DesktopGrid3DAction } from '../../../src/lib
 import { Grid3DSlider, type Grid3DSliderItem } from '../../../src/library/suites/grid/home/Grid3DSlider';
 import { GridViewTabs } from '../../../src/library/suites/grid/home/GridViewTabs';
 import LocalGrid3DView from '../../../src/library/suites/grid/home/LocalGrid3DView';
-import GridMap, { type GridMapItem } from '../../../src/library/suites/grid/directory/GridMap';
+import GridMap, { type GridMapBatchConfig, type GridMapBatchContext, type GridMapItem } from '../../../src/library/suites/grid/directory/GridMap';
 import GridMapBatchPanel from '../../../src/library/suites/grid/directory/GridMapBatchPanel';
-import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from '../../../src/library/suites/grid/directory/gridMapBatch';
-import { isHideableGridItem } from '../../../src/library/suites/grid/directory/gridItemVisibility';
+import type { LibraryDirectoryNode } from '../../../src/library/core/contracts/directory';
+import { resolveDirectoryBatchActions } from '../../../src/library/core/model/directoryBatch';
+import { isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
 import { SidePanelList } from '../../../src/components/shared/SidePanelList';
 import { addProbeFault, setProbeLatency } from '../libraryBehavior/fakeProviders';
 import { probeRefreshGate } from '../libraryBehavior/probeGates';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from '../libraryBehavior/probeLog';
 import type {
-    HomeBatchAction,
     HomeBatchScope,
     HomeHiddenView,
     HomeProbeApi,
@@ -104,19 +104,9 @@ const readTabs = (): HomeProbeTab[] => {
 
 const summarizeDescriptor = (detail: unknown): HomeProbeDescriptor => detail as HomeProbeDescriptor;
 
-const flattenDirectory = (nodes: GridMapDirectoryNode[] = []): GridMapDirectoryNode[] => (
+const flattenDirectory = (nodes: LibraryDirectoryNode[] = []): LibraryDirectoryNode[] => (
     nodes.flatMap(node => [node, ...flattenDirectory(node.children)])
 );
-
-const batchActionsOf = (config: GridMapBatchConfig): HomeBatchAction[] => [
-    'play',
-    'enqueue',
-    'create-playlist',
-    ...(config.onRemove ? ['remove' as const] : []),
-    ...(config.onRescanRoot ? ['rescan-root' as const] : []),
-    ...(config.onRemoveRoot ? ['remove-root' as const] : []),
-    ...(config.onClearFolderIgnore ? ['clear-ignore' as const] : []),
-];
 
 // ---- 隐藏管理面板（没有批量配置时 GridMap 侧面板里的两个开关）：只能点 DOM ----
 const panelButton = (labelKey: string): HTMLButtonElement | null => {
@@ -164,7 +154,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             if (!props) return [];
             const visible = new Set((sliderProps()?.items ?? []).map(item => asId(item.id)));
             return props.items.map(item => {
-                const hideable = isHideableGridItem(item);
+                const hideable = isHideableDirectoryItem(item);
                 return {
                     id: asId(item.id),
                     name: nameOf(item.name),
@@ -229,7 +219,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
                 path: item.path,
                 description: item.description,
                 trackIds: item.trackIds,
-                hidden: isHideableGridItem(item) && Boolean(props.isPlaylistHidden?.(item)),
+                hidden: isHideableDirectoryItem(item) && Boolean(props.isPlaylistHidden?.(item)),
             }));
         },
         setQuery: query => {
@@ -264,7 +254,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
                 itemIds: props.context.items.map(item => asId(item.id)),
                 trackIds: [...props.context.trackIds],
                 totalItemCount: props.totalItemCount,
-                actions: batchActionsOf(props.config),
+                actions: resolveDirectoryBatchActions(props.config),
             };
         },
         batchSelect: (ids, selected = true) => {
@@ -318,7 +308,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
         toggleHidden: id => {
             const props = gridMapProps();
             const item = props?.items.find(candidate => asId(candidate.id) === id);
-            if (!props?.onTogglePlaylistHidden || !item || !isHideableGridItem(item)) return false;
+            if (!props?.onTogglePlaylistHidden || !item || !isHideableDirectoryItem(item)) return false;
             props.onTogglePlaylistHidden(item);
             return true;
         },

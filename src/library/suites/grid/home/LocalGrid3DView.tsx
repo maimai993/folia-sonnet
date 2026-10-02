@@ -11,7 +11,8 @@ import { buildLocalQueue } from '../../../../services/playbackAdapters';
 import { createLocalPlaylist } from '../../../../services/localPlaylistService';
 import { clearFolderIgnore, deleteFolderSongs, deleteSongsByIds, removeImportedRoot, resyncFolder } from '../../../../services/localMusicService';
 import { loadLocalLibraryDirectoryTrees } from '../../../../services/localLibraryDirectoryTree';
-import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from '../directory/gridMapBatch';
+import type { GridMapBatchConfig, GridMapBatchContext } from '../directory/GridMap';
+import type { LibraryDirectoryNode } from '../../../core/contracts/directory';
 import type { SongResult } from '../../../../types';
 
 // src/library/suites/grid/home/LocalGrid3DView.tsx
@@ -82,7 +83,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const playlistFileInputRef = useRef<HTMLInputElement>(null);
-    const [directoryTrees, setDirectoryTrees] = useState<GridMapDirectoryNode[]>([]);
+    const [directoryTrees, setDirectoryTrees] = useState<LibraryDirectoryNode[]>([]);
     const [directoryTreesLoaded, setDirectoryTreesLoaded] = useState(false);
     const catalog = useLocalLibraryCatalog(localSongs);
 

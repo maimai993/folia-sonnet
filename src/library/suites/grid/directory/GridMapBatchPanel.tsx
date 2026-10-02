@@ -6,9 +6,9 @@ import { createPortal } from 'react-dom';
 import ConfirmDialog from '../../../../components/shared/ConfirmDialog';
 import TextInputDialog from '../../../../components/shared/TextInputDialog';
 import GridMapBatchItemList from './GridMapBatchItemList';
-import type { GridMapItem } from './GridMap';
-import type { GridMapBatchConfig, GridMapBatchContext, GridMapDirectoryNode } from './gridMapBatch';
-import { compactGridMapDirectoryTrees, filterGridMapDirectoryTreesByItems, flattenExpandedGridMapDirectories, resolveGridMapDirectorySelection, resolveNextGridMapDirectorySelectionTarget } from './gridMapBatch';
+import type { GridMapBatchConfig, GridMapBatchContext, GridMapItem } from './GridMap';
+import type { LibraryDirectoryNode } from '../../../core/contracts/directory';
+import { compactDirectoryTrees, filterDirectoryTreesByItems, flattenExpandedDirectoryNodes, resolveDirectoryNodeSelection, resolveNextDirectoryNodeSelectionTarget } from '../../../core/model/directoryBatch';
 
 // src/library/suites/grid/directory/GridMapBatchPanel.tsx
 
@@ -26,7 +26,7 @@ interface GridMapBatchPanelProps {
 }
 
 interface DirectoryRowProps {
-    nodes: GridMapDirectoryNode[];
+    nodes: LibraryDirectoryNode[];
     expandedIds: Set<string>;
     busyRootPath: string | null;
     displayItems: GridMapItem[];
@@ -58,9 +58,9 @@ const DirectoryRow = ({
     const hasChildren = node.children.length > 0;
     const isRoot = node.depth === 0;
     const isBusy = busyRootPath === node.rootPath;
-    const selection = resolveGridMapDirectorySelection(node.path, displayItems, excludedItemIds);
+    const selection = resolveDirectoryNodeSelection(node.path, displayItems, excludedItemIds);
     const isSelectionDisabled = selection.itemIds.length === 0;
-    const nextSelectionTarget = resolveNextGridMapDirectorySelectionTarget(selection);
+    const nextSelectionTarget = resolveNextDirectoryNodeSelectionTarget(selection);
 
     const cycleSelection = () => {
         if (nextSelectionTarget === 'none') {
@@ -181,17 +181,17 @@ export const GridMapBatchPanel = ({
     );
     const visibleDirectoryTrees = useMemo(
         () => searchQuery.trim()
-            ? filterGridMapDirectoryTreesByItems(config.directoryTrees || [], displayItems, searchQuery)
+            ? filterDirectoryTreesByItems(config.directoryTrees || [], displayItems, searchQuery)
             : config.directoryTrees || [],
         [config.directoryTrees, displayItems, searchQuery],
     );
-    const compactDirectoryTrees = useMemo(
-        () => compactGridMapDirectoryTrees(visibleDirectoryTrees),
+    const compactedDirectoryTrees = useMemo(
+        () => compactDirectoryTrees(visibleDirectoryTrees),
         [visibleDirectoryTrees],
     );
     const directoryNodes = useMemo(
-        () => flattenExpandedGridMapDirectories(compactDirectoryTrees, expandedIds),
-        [compactDirectoryTrees, expandedIds],
+        () => flattenExpandedDirectoryNodes(compactedDirectoryTrees, expandedIds),
+        [compactedDirectoryTrees, expandedIds],
     );
 
     useEffect(() => {

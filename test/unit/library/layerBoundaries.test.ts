@@ -164,6 +164,18 @@ describe('library core layer boundaries', () => {
         expect(offenders).toEqual([]);
     });
 
+    it('keeps the directory rules in core: the grid holds no copy of search, batch or visibility', () => {
+        expect(MODEL).toEqual(expect.arrayContaining([
+            `${CORE}/model/directoryBatch.ts`,
+            `${CORE}/model/directorySearch.ts`,
+            `${CORE}/model/directoryVisibility.ts`,
+        ]));
+        // 旧位置不留转发文件：网格直接用 core 的纯规则（契约旧名 GridMapItem / GridMapBatch* 在 GridMap.tsx 里是别名）。
+        expect(listSources('src/library/suites/grid/directory').filter(file => (
+            /\/(gridMapBatch|gridMapSearch|gridItemVisibility)\.ts$/.test(file)
+        ))).toEqual([]);
+    });
+
     it('keeps the mutation layer injectable: omni and the cache are wired in one place only', () => {
         expect(CORE_FILES).toEqual(expect.arrayContaining([
             `${CORE}/model/collectionMutationCapabilities.ts`,

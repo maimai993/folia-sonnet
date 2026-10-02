@@ -8,9 +8,10 @@ import { useFoliaHexViewport } from '../shared/useFoliaHexViewport';
 import { SidePanelList, CollectionListItem } from '../../../../components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../../components/shared/GridListSearchButton';
 import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
-import { matchesGridMapSearch } from './gridMapSearch';
+import { matchesDirectorySearch } from '../../../core/model/directorySearch';
 import GridMapBatchPanel from './GridMapBatchPanel';
-import { resolveGridMapBatchContext, type GridMapBatchConfig } from './gridMapBatch';
+import { resolveDirectoryBatchContext } from '../../../core/model/directoryBatch';
+import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem } from '../../../core/contracts/directory';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapEscapeAction,
@@ -19,7 +20,7 @@ import {
 } from './gridMapNavigation';
 import { formatGridMapFolderTitle } from '../../../../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
-import { isHideableGridItem } from './gridItemVisibility';
+import { isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow, isTextEntryTarget } from '../../../../utils/keyboardTargets';
 
@@ -27,18 +28,17 @@ import { hasBlockingWindow, isTextEntryTarget } from '../../../../utils/keyboard
 // Hexagonal honeycomb layout showing all collections (playlists, albums, radios).
 // Click on any collection card to select it and jump/center to it in Grid3D view.
 
-export interface GridMapItem {
-    id: string | number;
-    name: string;
-    coverUrl?: string;
-    description?: string;
-    summary?: string;
-    trackCount?: number;
-    type?: string;
-    path?: string;
-    trackIds?: string[];
-    rawCollection?: any;
+/**
+ * GridMap 的一张卡：目录条目的契约（core/contracts/directory）加上网格自己随卡带回的原对象。
+ * rawCollection 只在网格内部流转（点卡时原样交回 onSelectCollection），core 不认识它。
+ */
+export interface GridMapItem extends LibraryDirectoryItem {
+    rawCollection?: unknown;
 }
+
+/** 旧名：批量配置与批量范围的契约在 core/contracts/directory。 */
+export type GridMapBatchConfig = LibraryDirectoryBatchConfig;
+export type GridMapBatchContext = LibraryDirectoryBatchContext<GridMapItem>;
 
 interface GridMapProps {
     title: string;
@@ -92,7 +92,7 @@ const MapCard = React.memo<{
         cardHeight,
     }) => {
         const { t } = useTranslation();
-        const isPlaylistSelectionDisabled = isPlaylistEditMode && isHideableGridItem(item);
+        const isPlaylistSelectionDisabled = isPlaylistEditMode && isHideableDirectoryItem(item);
         const displayName = item.type === 'folder' && item.path
             ? formatGridMapFolderTitle(item.path)
             : item.name;
@@ -153,7 +153,7 @@ const MapCard = React.memo<{
                             <Disc size={48} className="opacity-20" style={{ color: 'var(--text-primary)' }} />
                         </div>
                     )}
-                    {isPlaylistEditMode && isHideableGridItem(item) && onTogglePlaylistHidden && (
+                    {isPlaylistEditMode && isHideableDirectoryItem(item) && onTogglePlaylistHidden && (
                         <button
                             type="button"
                             onClick={(event) => {
@@ -272,7 +272,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     const [isPlaylistEditMode, setIsPlaylistEditMode] = useState(false);
     const [showHiddenPlaylistsOnly, setShowHiddenPlaylistsOnly] = useState(false);
     const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<Set<string>>(new Set());
-    const hasHideableItems = useMemo(() => items.some(isHideableGridItem), [items]);
+    const hasHideableItems = useMemo(() => items.some(isHideableDirectoryItem), [items]);
     const hasCutInPanel = hasHideableItems || Boolean(batchConfig);
 
     const selectDisplayedItem = useCallback((item: GridMapItem, displayIndex: number) => {
@@ -286,17 +286,17 @@ export const GridMap: React.FC<GridMapProps> = ({
 
     const visibleItems = useMemo(() => {
         if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
-            return items.filter(item => isHideableGridItem(item) && isPlaylistHidden(item));
+            return items.filter(item => isHideableDirectoryItem(item) && isPlaylistHidden(item));
         }
 
         return isPlaylistEditMode
             ? items
-            : items.filter(item => !isHideableGridItem(item) || !isPlaylistHidden(item));
+            : items.filter(item => !isHideableDirectoryItem(item) || !isPlaylistHidden(item));
     }, [isPlaylistEditMode, isPlaylistHidden, items, showHiddenPlaylistsOnly]);
 
     const displayItems = useMemo(() => {
         if (!deferredSearchQuery.trim()) return visibleItems;
-        return visibleItems.filter(item => matchesGridMapSearch(item, deferredSearchQuery));
+        return visibleItems.filter(item => matchesDirectorySearch(item, deferredSearchQuery));
     }, [visibleItems, deferredSearchQuery]);
     const excludedBatchItemIds = useMemo(() => new Set(
         displayItems
@@ -304,7 +304,7 @@ export const GridMap: React.FC<GridMapProps> = ({
             .filter(itemId => !selectedBatchItemIds.has(itemId)),
     ), [displayItems, selectedBatchItemIds]);
     const batchContext = useMemo(
-        () => resolveGridMapBatchContext(displayItems, excludedBatchItemIds),
+        () => resolveDirectoryBatchContext(displayItems, excludedBatchItemIds),
         [displayItems, excludedBatchItemIds],
     );
 
@@ -603,7 +603,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                         isHidden={isPlaylistHidden(item)}
                         isBatchMode={Boolean(batchConfig && showCutInPanel)}
                         isBatchSelected={selectedBatchItemIds.has(String(item.id))}
-                        onTogglePlaylistHidden={isHideableGridItem(item) && onTogglePlaylistHidden
+                        onTogglePlaylistHidden={isHideableDirectoryItem(item) && onTogglePlaylistHidden
                             ? () => onTogglePlaylistHidden(item)
                             : undefined}
                         cardWidth={layoutConfig.cardWidth}
@@ -620,7 +620,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                                 });
                                 return;
                             }
-                            if (isPlaylistEditMode && isHideableGridItem(item)) return;
+                            if (isPlaylistEditMode && isHideableDirectoryItem(item)) return;
                             selectDisplayedItem(item, idx);
                         }}
                     />

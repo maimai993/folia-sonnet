@@ -1,6 +1,7 @@
 import type { ProbeFault } from '../libraryBehavior/fakeProviders';
 import type { ProbeRefreshKind } from '../libraryBehavior/probeGates';
 import type { ProbeCall, ProbeRequest } from '../libraryBehavior/probeLog';
+import type { LibraryDirectoryBatchActionId } from '../../../src/library/core/contracts/directory';
 
 // dev/probes/homeBehavior/probeApi.ts
 // 首页行为探针挂在 window 上的驱动接口。只有类型：component 用例 import 它不会把探针运行时带进 Node。
@@ -70,7 +71,8 @@ export type HomeBatchScope = {
     actions: HomeBatchAction[];
 };
 
-export type HomeBatchAction = 'play' | 'enqueue' | 'create-playlist' | 'remove' | 'rescan-root' | 'remove-root' | 'clear-ignore';
+/** 批量动作 id，与 core 的契约同一套（play、enqueue、create-playlist、remove、rescan-root、remove-root、clear-ignore）。 */
+export type HomeBatchAction = LibraryDirectoryBatchActionId;
 
 /** 目录树（本地文件夹的批量面板）里的一个节点。 */
 export type HomeDirectoryNode = {

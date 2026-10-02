@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Map as MapIcon } from 'lucide-react';
-import GridMap from '../directory/GridMap';
+import GridMap, { type GridMapBatchConfig } from '../directory/GridMap';
 import { Theme } from '../../../../types';
 import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
 import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
-import type { GridMapBatchConfig } from '../directory/gridMapBatch';
-import { isHideableGridItem } from '../directory/gridItemVisibility';
+import { isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
 
 // src/library/suites/grid/home/DesktopGrid3DSurface.tsx
@@ -98,7 +97,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
         [hiddenPlaylistsByScope, playlistVisibilityScope],
     );
     const visibleItems = useMemo(
-        () => items.filter(item => !isHideableGridItem(item) || !hiddenPlaylistIds.has(String(item.id))),
+        () => items.filter(item => !isHideableDirectoryItem(item) || !hiddenPlaylistIds.has(String(item.id))),
         [hiddenPlaylistIds, items],
     );
     const visibleFocusedIndex = useMemo(() => {
@@ -119,7 +118,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     };
 
     const togglePlaylistHidden = (item: Grid3DSliderItem) => {
-        if (!isHideableGridItem(item)) return;
+        if (!isHideableDirectoryItem(item)) return;
 
         const id = String(item.id);
         setHiddenPlaylistsByScope(previous => {
