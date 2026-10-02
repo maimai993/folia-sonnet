@@ -13,6 +13,7 @@ import {
     onlinePlaybackKey,
     onlineSongId,
     PROBE_ALBUM,
+    PROBE_FIRST_PAGE,
     PROBE_PROVIDER_A,
     PROBE_PROVIDER_B,
 } from '../../dev/probes/libraryBehavior/fixtureRules';
@@ -385,11 +386,17 @@ test.describe(`[${renderer}] filter, play and enqueue`, () => {
 }
 
 test.describe('[grid] edits', () => {
-    const removeFocusedCard = async (page: Page, itemKey: string) => {
+    const enterEditMode = async (page: Page) => {
         await expect.poll(async () => (await surface(page))?.availableActions.includes('toggle-edit-mode')).toBe(true);
         expect(await runSurface(page, 'toggle-edit-mode')).toBe(true);
         await expect.poll(async () => (await surface(page))?.isEditMode).toBe(true);
-        await page.locator(cardSelector(itemKey)).locator('button.bg-red-500').click();
+    };
+    const clickRemove = (page: Page, itemKey: string, occurrence = 0) => (
+        page.locator(cardSelector(itemKey, occurrence)).locator('button.bg-red-500').click()
+    );
+    const removeFocusedCard = async (page: Page, itemKey: string) => {
+        await enterEditMode(page);
+        await clickRemove(page, itemKey);
     };
 
     test('removing a song from an owned online playlist updates upstream, the grid and the cache', async ({ mount, page }) => {
@@ -435,6 +442,103 @@ test.describe('[grid] edits', () => {
         await expect.poll(() => requests(page, 'updatePlaylist')).toHaveLength(1);
         expect((await requests(page, 'updatePlaylist'))[0]?.ids).toEqual(['0']);
         await waitForScope(page, 4);
+    });
+
+    // P2.2 之前网格按显示下标删，并用 `${playbackKey}-${显示下标}` 藏卡片：删过一首之后显示下标与资源里的
+    // 原始下标错开，第二次删的卡藏不掉，第三次就把上游的另一首删了。
+    test('removing Navidrome entries one after another sends the current raw index each time', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'navi-playlist');
+        await waitForScope(page, 5);
+        await enterEditMode(page);
+
+        const removeAndSettle = async (songId: string, remaining: number) => {
+            await clickRemove(page, `navidrome:${songId}`);
+            await waitForScope(page, remaining);
+            await expect(page.locator(cardSelector(`navidrome:${songId}`))).toHaveCount(0);
+        };
+        await removeAndSettle('navi-song-11', 4);
+        await removeAndSettle('navi-song-13', 3);
+        await removeAndSettle('navi-song-14', 2);
+        expect((await requests(page, 'updatePlaylist')).map(request => request.ids)).toEqual([['0'], ['1'], ['1']]);
+
+        // 重新打开从服务器取：上游剩下的正是界面上剩下的。
+        await backAndSettle(page);
+        await open(page, 'navi-playlist');
+        await waitForScope(page, 2);
+        expect(await playFilteredIds(page)).toEqual(['navidrome:navi-song-12', 'navidrome:navi-song-15']);
+    });
+
+    // P1 的已知缺口：网格删本地歌单曲目之后，资源要等曲库刷新才变，TUI 在那之前还看得到它。
+    test('a local playlist removal made in the grid shows in the TUI at once', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await page.evaluate(() => window.__libraryProbe!.holdRefresh('refreshLocalSongs'));
+        await open(page, 'local-playlist');
+        await waitForScope(page, 6);
+        await removeFocusedCard(page, localKey(1));
+        // 删除确认、提交给资源之后才去刷新曲库；刷新被按住，资源是唯一的来源。
+        await expect.poll(() => calls(page, 'refreshLocalSongs')).not.toEqual([]);
+
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        await waitForScope(page, 5, 2_000);
+        await expect(page.locator(entrySelector(localKey(1)))).toHaveCount(0);
+        expect(await playFilteredIds(page)).not.toContain(localKey(1));
+
+        await page.evaluate(() => window.__libraryProbe!.releaseRefresh('refreshLocalSongs'));
+        await page.waitForTimeout(300);
+        expect(await scopeCount(page)).toBe(5);
+        expect(await playFilteredIds(page)).not.toContain(localKey(1));
+    });
+
+    test('a background page arriving during the removal animation does not bring the removed song back', async ({ mount, page }) => {
+        const rule = fixture['online-owned-dupes'];
+        const target = 'probe-a:playlist:owned-dupes';
+        const removedKey = onlinePlaybackKey(PROBE_PROVIDER_A, onlineSongId(rule.prefix, 0));
+        const expectedAfter = expectedPlayableIndexes(expectedLoadedIndexes(rule.rawIndexes).filter(index => index !== 0));
+
+        await mountProbe(mount, page);
+        // 后台分页在删除之前就按当时的上游生成（里面还有第一首的重复条目），删除之后才送达；
+        // 账户刷新也按住，免得在线集合因版本变化从第一页重拉，掩盖晚到的那一页。
+        await page.evaluate(() => window.__libraryProbe!.holdPages('online-owned-dupes'));
+        await page.evaluate(() => window.__libraryProbe!.holdRefresh('refreshUser'));
+        await open(page, 'online-owned-dupes');
+        await waitForScope(page, expectedPlayableIndexes(rule.rawIndexes.slice(0, PROBE_FIRST_PAGE)).length);
+        await expect.poll(async () => (await requests(page, 'playlistTracks', target)).some(request => request.offset === PROBE_FIRST_PAGE)).toBe(true);
+
+        await removeFocusedCard(page, removedKey);
+        await expect.poll(() => requests(page, 'updatePlaylistTracks:del', target)).toHaveLength(1);
+        // 退出动画还在播（展示被按住）时送达。
+        await page.evaluate(() => window.__libraryProbe!.releasePages('online-owned-dupes'));
+
+        await waitForScope(page, expectedAfter.length);
+        await expect(page.locator(cardSelector(removedKey))).toHaveCount(0);
+        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_A, rule.prefix, expectedAfter));
+
+        await page.evaluate(() => window.__libraryProbe!.releaseRefresh('refreshUser'));
+        await expect.poll(() => calls(page, 'refreshUser')).not.toEqual([]);
+        await page.waitForTimeout(500);
+        await waitForScope(page, expectedAfter.length);
+        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_A, rule.prefix, expectedAfter));
+    });
+
+    // 改名经变更控制器；宿主的集合描述（导航栈里那份）不再被就地改写，标题来自控制器记下的新名字。
+    test('renaming a Navidrome playlist goes upstream once and shows the new title', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'navi-playlist');
+        await waitForScope(page, 5);
+        expect(await runSurface(page, 'toggle-info-panel')).toBe(true);
+        await enterEditMode(page);
+        await clearLog(page);
+
+        const input = page.locator('.theme-glass-panel input');
+        await expect(input).toHaveValue('Navi Playlist');
+        await input.fill('Renamed Navi');
+        await input.press('Enter');
+        await expect.poll(async () => (await surface(page))?.isEditMode).toBe(false);
+        expect(await requests(page, 'updatePlaylist')).toHaveLength(1);
+        await expect(page.locator('h2', { hasText: 'Renamed Navi' })).toBeVisible();
+        expect(await stack(page)).toEqual(['Navi Playlist']);
     });
 
     test('disliking a daily recommendation replaces it in place', async ({ mount, page }) => {

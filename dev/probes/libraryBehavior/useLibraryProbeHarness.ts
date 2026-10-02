@@ -36,6 +36,7 @@ import { describeOnlineFixture, registerFakeProviders, resetFakeProviders } from
 import { IN_MEMORY_LOCAL_PLAYLIST, LOCAL_FIXTURE_SONGS, readLocalLibrary, seedLocalLibrary } from './localFixtures';
 import { installNavidromeShim, NAVIDROME_PROBE_CONFIG } from './navidromeShim';
 import { recordProbeCall } from './probeLog';
+import { probeRefreshGate, releaseAllProbeRefreshGates } from './probeGates';
 import { installLibraryProbeApi } from './libraryProbeApi';
 
 // dev/probes/libraryBehavior/useLibraryProbeHarness.ts
@@ -110,6 +111,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
     useEffect(() => {
         registerFakeProviders();
         resetFakeProviders();
+        releaseAllProbeRefreshGates();
         setPlaylists(buildPlaylistList());
         const previousProviderId = useOnlineProviderAccountStore.getState().activeProviderId;
         // 直接 setState，不走 setActiveProviderId：后者会写 localStorage，手动打开探针会改掉开发者自己的选择。
@@ -151,6 +153,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
 
     const refreshLocal = useCallback(async () => {
         recordProbeCall({ kind: 'refreshLocalSongs', ids: [] });
+        await probeRefreshGate('refreshLocalSongs').wait();
         if (!sandbox) return;
         const { songs, playlists: storedPlaylists } = await readLocalLibrary();
         setLocalSongs(songs);
@@ -170,8 +173,9 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
             kind: 'addNavidromeSongsToQueue',
             ids: songs.map(song => song.navidromeData?.id ?? String(song.id)),
         }),
-        onRefreshUser: () => {
+        onRefreshUser: async () => {
             recordProbeCall({ kind: 'refreshUser', ids: [] });
+            await probeRefreshGate('refreshUser').wait();
             setPlaylists(buildPlaylistList());
         },
         onRefreshLocalSongs: refreshLocal,

@@ -8,6 +8,8 @@ import type { LibrarySuiteId } from '../../../src/library/core/contracts/suite';
 import { collectionKey } from '../../../src/library/core/model/collectionIdentity';
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
+import { holdProbePaging, onlineFixtureTarget, releaseProbePaging } from './fakeProviders';
+import { probeRefreshGate } from './probeGates';
 
 // dev/probes/libraryBehavior/libraryProbeApi.ts
 // 把探针的驱动接口挂到 window 上。查询、动作都经由真实的注册点（命令筛选、grid surface），
@@ -49,6 +51,10 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
             const resolved = resolveLibrarySurface(surface, currentSuite());
             return { suiteId: resolved.suiteId, isFallback: resolved.isFallback, declaredActions: resolved.declaredActions };
         },
+        holdPages: fixtureId => holdProbePaging(onlineFixtureTarget(fixtureId)),
+        releasePages: fixtureId => releaseProbePaging(onlineFixtureTarget(fixtureId)),
+        holdRefresh: kind => probeRefreshGate(kind).hold(),
+        releaseRefresh: kind => probeRefreshGate(kind).release(),
         calls: () => getProbeLog().calls,
         requests: () => getProbeLog().requests,
         clearLog: () => {

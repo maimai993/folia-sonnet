@@ -5,15 +5,10 @@ import GridPanelToggleIndicator from '../shared/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { SongResult, type LocalSong, type StatusMessage, Theme, type UnifiedSong } from '../../../../types';
 import { isSongUnavailable } from '../../../../services/onlineMusic/songAvailability';
-import { getNavidromeConfig, navidromeApi } from '../../../../services/navidromeService';
 import { formatSongName } from '../../../../utils/songNameFormatter';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { getSongCoverUrl } from '../../../../services/onlineMusic/songMetadata';
 import { colorWithAlpha } from '../../../../components/visualizer/colorMix';
-import { removeFromCache } from '../../../../services/db';
-import { omni } from '../../../../services/onlineMusic/omni';
-import { getProviderCacheKey } from '../../../../services/onlineMusic/providerStorage';
-import { getPlaybackSongKey } from '../../../../utils/appPlaybackGuards';
 import { useFoliaHexViewport } from '../shared/useFoliaHexViewport';
 import { PolaroidCard, type GridItem } from '../shared/PolaroidCard';
 import { squareGridCardBox } from '../shared/gridCardLayout';
@@ -56,14 +51,15 @@ import { formatLocalAlbumTrackLabel } from '../../../../utils/localSongSorting';
 import { resolveCollectionSyncCounts } from '../../../core/model/collectionProgress';
 import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../../../core/model/collectionSurface';
 import { useGridSurfaceRegistration } from '../../../../hooks/useGridSurfaceRegistration';
-import type { MediaId } from '../../../../types/onlineMusic';
 import type { CollectionResource } from '../../../core/contracts/resource';
+import type { CollectionMutationController, LibraryMutationResult } from '../../../core/contracts/mutations';
 import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow } from '../../../../utils/keyboardTargets';
 import { useGridViewSettingsStore } from '../../../../stores/useGridViewSettingsStore';
-import { collectionKey, isCloudDriveCollection } from '../../../core/model/collectionIdentity';
+import { collectionKey } from '../../../core/model/collectionIdentity';
 import { useCollectionResourceState } from '../../../core/bindings/useCollectionResourceState';
+import { useCollectionMutationSnapshot } from '../../../core/bindings/useCollectionMutations';
 import { useCollectionView } from '../../../core/bindings/useCollectionView';
 import { useCommittedQuery } from '../../../core/bindings/useCommittedQuery';
 import { useLibrarySessionFilter } from '../../../core/bindings/useLibrarySessionFilter';
@@ -73,30 +69,6 @@ import {
     useLibraryBrowseSessionStore,
 } from '../../../core/state/useLibraryBrowseSessionStore';
 import { useLocalTrackSortStore } from '../../../core/state/useLocalTrackSortStore';
-
-export interface GridViewSourceActions {
-    local?: {
-        onRefresh?: () => Promise<void> | void;
-        onResyncFolder?: (collection: any) => Promise<void> | void;
-        onResyncAllFolders?: () => Promise<void> | void;
-        onDeleteFolder?: (collection: any) => Promise<void> | void;
-        onRenamePlaylist?: (playlistId: string, name: string) => Promise<void> | void;
-        onDeletePlaylist?: (playlistId: string) => Promise<void> | void;
-        onExportPlaylist?: (playlistId: string) => Promise<void> | void;
-        onRemovePlaylistSongs?: (playlistId: string, songIds: string[]) => Promise<void> | void;
-        onEditEntity?: (entityId: string) => Promise<void> | void;
-        onOrganizeFolderSongInfo?: (collection: any) => Promise<void> | void;
-        onMatchSong?: (songId: string) => Promise<void> | void;
-    };
-    navidrome?: {
-        availablePlaylists?: Array<{ id: string | number; name: string; description?: string; }>;
-        onAddToPlaylist?: (playlistId: string | number, songs: SongResult[]) => Promise<void> | void;
-        onCreatePlaylist?: (name: string, songs: SongResult[]) => Promise<void> | void;
-        onRenamePlaylist?: (playlistId: string, name: string) => Promise<void> | void;
-        onDeletePlaylist?: (playlistId: string) => Promise<void> | void;
-        onRemovePlaylistSongs?: (playlistId: string, songIndexes: number[]) => Promise<void> | void;
-    };
-}
 
 interface GridViewProps {
     title: string;
@@ -117,15 +89,17 @@ interface GridViewProps {
     onAddAllToQueue?: (songs: SongResult[]) => void;
     onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
     onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
-    currentUserId?: MediaId | null;
-    onPlaylistMutated?: () => Promise<void> | void;
     /**
      * 曲目的来源：加载、缓存、后台补页、错误与重新拉取都在资源里（见 library/core/services）。
      * 宿主持有它，切换 renderer 不会重新请求。
      */
     resource?: CollectionResource | null;
+    /**
+     * 集合的变更动作控制器（宿主按集合会话持有，见 library/core/services/collectionMutations）：删条目、订阅、
+     * 改名、删除、重扫、导出、加入歌单……都经它，按钮的可见与可点也读它的快照。没有时（性能探针）什么都不支持。
+     */
+    mutations?: CollectionMutationController | null;
     localSongs?: LocalSong[];
-    sourceActions?: GridViewSourceActions;
     onStatusMessage?: (message: StatusMessage) => void;
     isInteractive?: boolean;
     /**
@@ -257,11 +231,9 @@ export const GridView: React.FC<GridViewProps> = ({
     onAddAllToQueue,
     onSelectAlbum,
     onSelectArtist,
-    currentUserId,
-    onPlaylistMutated,
     resource = null,
+    mutations = null,
     localSongs,
-    sourceActions,
     onStatusMessage,
     isInteractive = true,
     morphPlan = null,
@@ -389,7 +361,13 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // 曲目来自集合资源：加载、缓存、后台补页、错误都在资源里。拖拽中到达的分页先暂存，松手再提交——
     // 整表更新会重算网格项并重渲染整个渲染环，不能和拖拽抢主线程。
-    const { snapshot: resourceSnapshot, flushHeld: flushHeldResourceSnapshot } = useCollectionResourceState(resource, {
+    // 删卡的退出动画也靠这道门：动画期间按住展示（holdPresentation），资源与变更控制器照常立即提交。
+    const {
+        snapshot: resourceSnapshot,
+        flushHeld: flushHeldResourceSnapshot,
+        holdPresentation,
+        releasePresentation,
+    } = useCollectionResourceState(resource, {
         holdBackground: () => isDraggingRef.current,
     });
     const tracks = resourceSnapshot?.tracks ?? EMPTY_TRACKS;
@@ -405,13 +383,14 @@ export const GridView: React.FC<GridViewProps> = ({
     // 存判别式而不是成品文案：翻译要在渲染时做，切换语言才能跟着变。
     const loadError = resourceSnapshot?.error ?? null;
     const collectionDetail = resourceSnapshot?.detail ?? null;
-    const [dailyRecommendationHistoryDates, setDailyRecommendationHistoryDates] = useState<string[]>([]);
-    const [selectedDailyRecommendationDate, setSelectedDailyRecommendationDate] = useState('');
-    const [dailyRecommendationDislikeLimitReached, setDailyRecommendationDislikeLimitReached] = useState(false);
-    const dailyRecommendationDislikePendingRef = useRef(false);
+    // 变更动作的状态（订阅、每日推荐的日期与次数、进行中标记、候选歌单）、来源分支与能力都在控制器里，
+    // 网格只订阅；按钮的可见 / 可点条件是原先 GridView 的分支布尔逐字搬过去的（见 collectionMutationCapabilities）。
+    const mutationSnapshot = useCollectionMutationSnapshot(mutations);
+    const { branches: mutationBranches, capabilities: mutationCapabilities } = mutationSnapshot;
+    const isSourceActionPending = mutationSnapshot.sourceActionPending;
     const [removingTrackKeys, setRemovingTrackKeys] = useState<Set<string>>(() => new Set());
     const trackRemovalTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-    const [removedExternalTrackKeys, setRemovedExternalTrackKeys] = useState<Set<string>>(() => new Set());
+    const trackRemovalSeqRef = useRef(0);
     // 本地排序选择跨 renderer 共用（见 useLocalTrackSortStore）。
     const localTrackSortField = useLocalTrackSortStore(state => state.field);
     const localTrackSortDirection = useLocalTrackSortStore(state => state.direction);
@@ -419,9 +398,6 @@ export const GridView: React.FC<GridViewProps> = ({
     const handleLocalTrackSortDirectionChange = useLocalTrackSortStore(state => state.setDirection);
     const [isEditMode, setIsEditMode] = useState(false);
     const [editableTitle, setEditableTitle] = useState(title);
-    const [isSourceActionPending, setIsSourceActionPending] = useState(false);
-    const [playlistSubscribed, setPlaylistSubscribed] = useState<boolean | null>(null);
-    const [isSubscribing, setIsSubscribing] = useState(false);
     const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = useState(false);
     const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
     const [isDeleteFolderOpen, setIsDeleteFolderOpen] = useState(false);
@@ -442,14 +418,22 @@ export const GridView: React.FC<GridViewProps> = ({
     });
     const deferredSearchQuery = useCommittedQuery(searchQuery);
 
-    // Keeps a successfully removed card mounted until its flip-and-fade transition finishes.
-    const commitAfterTrackRemovalAnimation = useCallback((trackKey: string, commit: () => void) => {
-        if (trackRemovalTimeoutsRef.current.has(trackKey)) return;
+    // 删除的结果可能在网格卸载之后才回来（控制器属于集合会话，不随网格卸载）：那时什么都不用做。
+    const isMountedRef = useRef(false);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
 
+    // Keeps a successfully removed card on screen until its flip-and-fade transition finishes: the resource
+    // has already dropped it, the held presentation keeps showing the frame from before until the release.
+    const playTrackRemovalAnimation = useCallback((trackKey: string, holdToken: string) => {
         setRemovingTrackKeys(current => new Set(current).add(trackKey));
         const timeout = setTimeout(() => {
             trackRemovalTimeoutsRef.current.delete(trackKey);
-            commit();
+            releasePresentation(holdToken);
             setRemovingTrackKeys(current => {
                 const next = new Set(current);
                 next.delete(trackKey);
@@ -457,7 +441,7 @@ export const GridView: React.FC<GridViewProps> = ({
             });
         }, TRACK_REMOVAL_ANIMATION_MS);
         trackRemovalTimeoutsRef.current.set(trackKey, timeout);
-    }, []);
+    }, [releasePresentation]);
 
     useEffect(() => () => {
         trackRemovalTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
@@ -475,15 +459,19 @@ export const GridView: React.FC<GridViewProps> = ({
         && isOnlineResource
         && !isDailyRecommendationsCollection
         && collection?.type !== 'radio';
-    const isLocalFolderCollection = isLocalCollection && collection?.type === 'folder' && !collection?.isVirtual;
-    const isLocalAllSongsCollection = isLocalCollection && collection?.type === 'folder' && Boolean(collection?.isVirtual);
-    const supportsLocalTrackSorting = isLocalFolderCollection || isLocalAllSongsCollection;
-    const isLocalPlaylistCollection = isLocalCollection && collection?.type === 'playlist' && Boolean(collection?.playlistId) && !collection?.isVirtual;
-    const isLocalEntityCollection = isLocalCollection && Boolean(collection?.entityId);
-    const isNavidromePlaylistCollection = isNavidromeCollection && collection?.type === 'playlist' && Boolean(collection?.editable);
-    const canAddNavidromeToPlaylist = isNavidromeCollection
-        && collection?.type !== 'playlist'
-        && Boolean(sourceActions?.navidrome?.onAddToPlaylist || sourceActions?.navidrome?.onCreatePlaylist);
+    // 本地排序只给文件夹（含虚拟的「全部歌曲」）：这是视图规则，不随变更能力走。
+    const supportsLocalTrackSorting = isLocalCollection && collection?.type === 'folder';
+    const {
+        isLocalFolderCollection,
+        canEditOwnedPlaylist,
+        canEditProviderPlaylist,
+        canEditPlaylist,
+        showSubscribeButton,
+        isOnlineAlbum,
+        canAddNavidromeToPlaylist,
+    } = mutationBranches;
+    // 改名成功、宿主的描述还没跟上时，显示控制器记下的新名字（不改描述本身，它可能是导航栈里共用的对象）。
+    const collectionName: string | undefined = mutationSnapshot.renamedTo ?? collection?.name;
     const localSongsById = useMemo(() => new Map(localSongs?.map(song => [song.id, song])), [localSongs]);
     // 只有能选专辑号排序的本地列表才挂轨道号；本地歌单等自定义顺序的列表不属于这个语境。
     const getAlbumTrackLabel = useCallback((track: SongResult): string | null => {
@@ -503,7 +491,6 @@ export const GridView: React.FC<GridViewProps> = ({
     const collectionView = useCollectionView({
         tracks,
         committedQuery: mode === 'tracks' ? deferredSearchQuery : '',
-        hiddenKeys: removedExternalTrackKeys,
         localSort: localSortContext,
     });
     const {
@@ -522,7 +509,6 @@ export const GridView: React.FC<GridViewProps> = ({
     useEffect(() => {
         setEditableTitle(title);
         setIsEditMode(false);
-        setRemovedExternalTrackKeys(new Set());
     }, [collection?.id, title]);
 
     useEffect(() => {
@@ -530,155 +516,57 @@ export const GridView: React.FC<GridViewProps> = ({
         pendingRestoreStateRef.current = initialRestoreTarget;
     }, [initialRestoreTarget]);
 
+    const canRename = mutationCapabilities.rename.supported;
+    const canMatchSong = mutationCapabilities.matchSong.supported;
     const handleSourceEditToggle = useCallback(async () => {
         if (!collection) return;
 
         if (!isEditMode) {
-            setEditableTitle(collection.name || title);
+            setEditableTitle(collectionName || title);
             setIsEditMode(true);
             return;
         }
 
-        const nextTitle = editableTitle.trim();
-        setIsSourceActionPending(true);
-        try {
-            if (nextTitle && nextTitle !== collection.name) {
-                if (isLocalPlaylistCollection && collection.playlistId) {
-                    await sourceActions?.local?.onRenamePlaylist?.(collection.playlistId, nextTitle);
-                } else if (isNavidromePlaylistCollection) {
-                    await sourceActions?.navidrome?.onRenamePlaylist?.(String(collection.id), nextTitle);
-                }
-                collection.name = nextTitle;
-            }
-            setIsEditMode(false);
-        } finally {
-            setIsSourceActionPending(false);
+        // 改名经控制器（空名字或没变时它直接返回 ok）；没改成就留在编辑模式。不能改名的集合（每日推荐）直接退出。
+        if (canRename && mutations) {
+            const result = await mutations.rename(editableTitle);
+            if (!result.ok) return;
         }
+        setIsEditMode(false);
     }, [
+        canRename,
         collection,
+        collectionName,
         editableTitle,
         isEditMode,
-        isLocalPlaylistCollection,
-        isNavidromePlaylistCollection,
-        sourceActions,
+        mutations,
         title,
     ]);
 
+    // 删除成功才返回上一层（文件夹先经确认对话框）。
     const handleDeleteSourceCollection = useCallback(async () => {
-        if (!collection) return;
+        const result = await mutations?.deleteCollection();
+        if (result?.ok) onBack();
+    }, [mutations, onBack]);
 
-        setIsSourceActionPending(true);
-        try {
-            if (isLocalFolderCollection) {
-                await sourceActions?.local?.onDeleteFolder?.(collection);
-            } else if (isLocalPlaylistCollection && collection.playlistId) {
-                await sourceActions?.local?.onDeletePlaylist?.(collection.playlistId);
-            } else if (isNavidromePlaylistCollection) {
-                await sourceActions?.navidrome?.onDeletePlaylist?.(String(collection.id));
-            }
-            onBack();
-        } finally {
-            setIsSourceActionPending(false);
-        }
-    }, [
-        collection,
-        isLocalFolderCollection,
-        isLocalPlaylistCollection,
-        isNavidromePlaylistCollection,
-        onBack,
-        sourceActions,
-    ]);
-
-    const handleResyncLocalFolder = useCallback(async () => {
-        if (!collection || !isLocalFolderCollection) return;
-
-        setIsSourceActionPending(true);
-        try {
-            await sourceActions?.local?.onResyncFolder?.(collection);
-        } finally {
-            setIsSourceActionPending(false);
-        }
-    }, [collection, isLocalFolderCollection, sourceActions]);
-
-    const handleResyncAllLocalFolders = useCallback(async () => {
-        if (!isLocalAllSongsCollection) return;
-
-        setIsSourceActionPending(true);
-        try {
-            await sourceActions?.local?.onResyncAllFolders?.();
-        } finally {
-            setIsSourceActionPending(false);
-        }
-    }, [isLocalAllSongsCollection, sourceActions]);
-
-    const handleExportLocalPlaylist = useCallback(async () => {
-        if (!collection?.playlistId || collection.source !== 'local' || collection.type !== 'playlist') return;
-
-        setIsSourceActionPending(true);
-        try {
-            await sourceActions?.local?.onExportPlaylist?.(collection.playlistId);
-        } finally {
-            setIsSourceActionPending(false);
-        }
-    }, [collection, sourceActions]);
+    const handleResyncLocalFolder = useCallback(() => void mutations?.resyncFolder(), [mutations]);
+    const handleResyncAllLocalFolders = useCallback(() => void mutations?.resyncAllFolders(), [mutations]);
+    const handleExportLocalPlaylist = useCallback(() => void mutations?.exportPlaylist(), [mutations]);
+    const handleOrganizeSongInfo = useCallback(() => void mutations?.organizeSongInfo(), [mutations]);
+    const handleEditEntity = useCallback(() => void mutations?.editEntity(), [mutations]);
 
     const handleAddNavidromeCollectionToPlaylist = useCallback(async (playlistId: string | number) => {
-        await sourceActions?.navidrome?.onAddToPlaylist?.(playlistId, playableTracks);
-    }, [playableTracks, sourceActions]);
+        await mutations?.addToPlaylist(playlistId, playableTracks);
+    }, [mutations, playableTracks]);
 
     const handleCreateNavidromePlaylist = useCallback(async (name: string) => {
-        await sourceActions?.navidrome?.onCreatePlaylist?.(name, playableTracks);
-        setIsCreatePlaylistOpen(false);
-    }, [playableTracks, sourceActions]);
-
-    const isCloudDrive = collection ? isCloudDriveCollection(collection) : false;
+        const result = await mutations?.createPlaylist(name, playableTracks);
+        if (result?.ok) setIsCreatePlaylistOpen(false);
+    }, [mutations, playableTracks]);
 
     // 续传、重新拉取都交给资源；资源负责作废晚到的旧结果。
     const resumeBackgroundSync = () => resource?.resumeSync();
     const reloadOnlineCollection = () => resource?.reload();
-
-    useEffect(() => {
-        if (!isDailyRecommendationsCollection) {
-            setDailyRecommendationHistoryDates([]);
-            setSelectedDailyRecommendationDate('');
-            setDailyRecommendationDislikeLimitReached(false);
-            return;
-        }
-
-        let active = true;
-        omni.getRecommendationHistoryDates()
-            .then(dates => {
-                if (active) setDailyRecommendationHistoryDates(dates || []);
-            })
-            .catch(error => console.error('Failed to load daily recommendation history dates', error));
-        return () => {
-            active = false;
-        };
-    }, [isDailyRecommendationsCollection]);
-
-    const canEditOnlineCollectionTracks = Boolean(
-        collectionSource === 'online'
-        && collection
-        && omni.canEditCollectionTracks(collection),
-    );
-    const canEditOwnedPlaylist = isOnlineResource
-        && collection
-        && collectionSource === 'online'
-        && collection.type === 'playlist'
-        && Boolean(currentUserId != null && collection.creator?.id === currentUserId)
-        && canEditOnlineCollectionTracks;
-    const canEditProviderPlaylist = isOnlineResource
-        && collectionSource === 'online'
-        && collection?.type === 'playlist'
-        && collection?.isOwned === true
-        && canEditOnlineCollectionTracks;
-    const canEditPlaylist = Boolean(
-        canEditOwnedPlaylist
-        || canEditProviderPlaylist
-        || (isDailyRecommendationsCollection && !selectedDailyRecommendationDate)
-        || isLocalPlaylistCollection
-        || isNavidromePlaylistCollection
-    );
 
     // An owned online playlist edits in place; a local or Navidrome one commits a rename on the way
     // out. Shared so the command palette and the panel button cannot end up meaning different things.
@@ -690,177 +578,62 @@ export const GridView: React.FC<GridViewProps> = ({
         void handleSourceEditToggle();
     }, [canEditOwnedPlaylist, canEditProviderPlaylist, handleSourceEditToggle]);
 
-    const isOnlinePlaylist = collectionSource === 'online' && collection?.type === 'playlist' && !isCloudDrive;
-    const isOnlineAlbum = collectionSource === 'online' && collection?.type === 'album' && !isCloudDrive;
-    const showSubscribeButton = Boolean(
-        collection
-        && omni.canSubscribeCollection(collection)
-        && ((isOnlinePlaylist && !canEditOwnedPlaylist && !canEditProviderPlaylist) || isOnlineAlbum),
-    );
-
-    useEffect(() => {
-        let active = true;
-
-        const fetchCollectionDetail = async () => {
-            if (isOnlinePlaylist) {
-                try {
-                    const subscribed = await omni.getSubscriptionStatus(collection);
-                    if (active && typeof subscribed === 'boolean') setPlaylistSubscribed(subscribed);
-                } catch (err) {
-                    console.warn("[GridView] Failed to fetch playlist dynamic status:", err);
-                }
-            } else if (isOnlineAlbum) {
-                try {
-                    const subscribed = await omni.getSubscriptionStatus(collection);
-                    if (active && typeof subscribed === 'boolean') setPlaylistSubscribed(subscribed);
-                } catch (err) {
-                    console.warn("[GridView] Failed to fetch album dynamic status:", err);
-                }
-            } else {
-                setPlaylistSubscribed(null);
-            }
-        };
-
-        void fetchCollectionDetail();
-
-        return () => {
-            active = false;
-        };
-    }, [collection?.id, isOnlinePlaylist, isOnlineAlbum]);
-
-    const handleToggleSubscribe = async () => {
-        if (!collection || isSubscribing) return;
-        setIsSubscribing(true);
-        try {
-            const nextSubscribed = !playlistSubscribed;
-            if (isOnlinePlaylist || isOnlineAlbum) {
-                await omni.subscribe(collection, nextSubscribed);
-                setPlaylistSubscribed(nextSubscribed);
-                if (isOnlineAlbum) {
-                    window.dispatchEvent(new CustomEvent('folia-refresh-favorite-albums'));
-                }
-                if (onPlaylistMutated) {
-                    void onPlaylistMutated();
-                }
-            } else {
-                console.error("Failed to toggle collection subscription");
-            }
-        } catch (e) {
-            console.error("Failed to toggle collection subscription", e);
-        } finally {
-            setIsSubscribing(false);
-        }
+    // 订阅状态在控制器第一次被订阅时取；进行中再点由控制器挡掉（按钮也禁用）。
+    const playlistSubscribed = mutationSnapshot.subscribed;
+    const handleToggleSubscribe = () => {
+        void mutations?.toggleSubscribe();
     };
 
     // Switches the virtual playlist between today's recommendations and a supported history date.
     const handleDailyRecommendationDateChange = useCallback(async (date: string, afresh = false) => {
-        if (!isDailyRecommendationsCollection || !resource) return;
+        if (!mutations || !mutationCapabilities.dailyDate.supported) return;
         setIsEditMode(false);
-        // 整表替换交给资源（加载中状态、作废晚到结果都在那里）；失败时保持原样，日期也不切。
-        const replaced = await resource.replaceAll(() => (
-            date ? omni.getRecommendationHistorySongs(date) : omni.getDailySongs(afresh)
-        ));
-        if (replaced) {
-            setSelectedDailyRecommendationDate(date);
-        }
-    }, [isDailyRecommendationsCollection, resource]);
+        // 整表替换经控制器交给资源（加载中状态、作废晚到结果都在那里）；失败时保持原样，日期也不切。
+        await mutations.setDailyDate(date, { afresh });
+    }, [mutationCapabilities.dailyDate.supported, mutations]);
 
-    const handleRemoveTrack = useCallback(async (track: SongResult, trackIndex: number, trackKey: string) => {
-        if (!collection) return;
-        if (trackRemovalTimeoutsRef.current.has(trackKey)) return;
+    // 删一个条目（每日推荐是「不喜欢并换一首」）：先按住展示，控制器在上游确认后立即提交给资源；成功就给卡片
+    // 打上 removing 播退出动画，动画结束再放开展示，失败立即放开。entryKey 就是卡片 id：重复序号在完整的
+    // 展示列表上算（不受筛选影响），控制器自己在资源里解出原始下标。
+    const handleRemoveTrack = useCallback(async (track: SongResult, entryKey: string) => {
+        if (!mutations || trackRemovalTimeoutsRef.current.has(entryKey)) return;
+        trackRemovalSeqRef.current += 1;
+        // 每次点击一个 token：同一张卡连点时，被挡掉（busy）的那一次只放开自己的，不会提前放开第一次的。
+        const holdToken = `remove:${entryKey}:${trackRemovalSeqRef.current}`;
+        holdPresentation(holdToken);
+        let result: LibraryMutationResult;
         try {
-            if (isDailyRecommendationsCollection) {
-                if (dailyRecommendationDislikeLimitReached) {
-                    onStatusMessage?.({
-                        type: 'info',
-                        text: t('home.noMoreDailyRecommendations'),
-                        nonce: Date.now(),
-                    });
-                    return;
-                }
-                if (dailyRecommendationDislikePendingRef.current) return;
-                dailyRecommendationDislikePendingRef.current = true;
-                try {
-                    const result = await omni.dislikeSong(track);
-                    if (result?.replacement) {
-                        commitAfterTrackRemovalAnimation(trackKey, () => {
-                            resource?.replaceTrackAt(trackIndex, getPlaybackSongKey(track), result.replacement!);
-                        });
-                    } else if (result?.limitReached) {
-                        setDailyRecommendationDislikeLimitReached(true);
-                        onStatusMessage?.({
-                            type: 'info',
-                            text: t('home.noMoreDailyRecommendations'),
-                            nonce: Date.now(),
-                        });
-                    } else {
-                        onStatusMessage?.({
-                            type: 'error',
-                            text: t('home.dislikeRecommendationFailed'),
-                            nonce: Date.now(),
-                        });
-                    }
-                } finally {
-                    dailyRecommendationDislikePendingRef.current = false;
-                }
-                return;
-            }
-
-            if (isLocalPlaylistCollection && collection.playlistId && sourceActions?.local?.onRemovePlaylistSongs) {
-                const localSongId = (track as UnifiedSong).localRef?.songId || String(track.id);
-                await sourceActions.local.onRemovePlaylistSongs(collection.playlistId, [localSongId]);
-                commitAfterTrackRemovalAnimation(trackKey, () => {
-                    const playbackKey = getPlaybackSongKey(track);
-                    setRemovedExternalTrackKeys(prev => new Set(prev).add(playbackKey).add(`${playbackKey}-${trackIndex}`));
-                    void sourceActions.local?.onRefresh?.();
-                });
-                return;
-            }
-
-            if (isNavidromePlaylistCollection && sourceActions?.navidrome?.onRemovePlaylistSongs) {
-                await sourceActions.navidrome.onRemovePlaylistSongs(String(collection.id), [trackIndex]);
-                commitAfterTrackRemovalAnimation(trackKey, () => {
-                    const playbackKey = getPlaybackSongKey(track);
-                    setRemovedExternalTrackKeys(prev => new Set(prev).add(`${playbackKey}-${trackIndex}`));
-                });
-                return;
-            }
-
-            const isLiked = collection.isLiked === true;
-            if (isLiked) {
-                await omni.likeSong(track, false);
-            } else {
-                await omni.updateCollectionTracks(collection, 'del', [track]);
-            }
-            // 资源立刻记下删除并让缓存失效（之后到达的分页不会把它带回来），卡片的退出动画走完再提交到界面。
-            const songPlaybackKey = getPlaybackSongKey(track);
-            await resource?.removeTracks(
-                candidate => getPlaybackSongKey(candidate) === songPlaybackKey,
-                commit => commitAfterTrackRemovalAnimation(trackKey, commit),
-            );
-            await removeFromCache(getProviderCacheKey(collection.providerId, `playlist_detail_${collection.id}`));
-            await onPlaylistMutated?.();
+            result = await mutations.removeEntry({ entryKey, track });
         } catch (error) {
             console.error('Failed to remove track in GridView', error);
-            if (isDailyRecommendationsCollection) {
-                onStatusMessage?.({
-                    type: 'error',
-                    text: t('home.dislikeRecommendationFailed'),
-                    nonce: Date.now(),
-                });
-            }
+            result = { ok: false, reason: 'failed' };
+        }
+        if (!isMountedRef.current) return;
+        if (result.ok) {
+            playTrackRemovalAnimation(entryKey, holdToken);
+            return;
+        }
+        releasePresentation(holdToken);
+        if (result.reason === 'limit-reached') {
+            onStatusMessage?.({
+                type: 'info',
+                text: t('home.noMoreDailyRecommendations'),
+                nonce: Date.now(),
+            });
+        } else if (result.reason === 'failed' && isDailyRecommendationsCollection) {
+            onStatusMessage?.({
+                type: 'error',
+                text: t('home.dislikeRecommendationFailed'),
+                nonce: Date.now(),
+            });
         }
     }, [
-        collection,
-        commitAfterTrackRemovalAnimation,
-        dailyRecommendationDislikeLimitReached,
-        isLocalPlaylistCollection,
+        holdPresentation,
         isDailyRecommendationsCollection,
-        isNavidromePlaylistCollection,
-        onPlaylistMutated,
+        mutations,
         onStatusMessage,
-        resource,
-        sourceActions,
+        playTrackRemovalAnimation,
+        releasePresentation,
         t,
     ]);
 
@@ -1349,7 +1122,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                 fullBleedCover={fullBleedCover}
                                 isEditMode={isEditMode}
                                 onRemoveTrack={isRemovingTrack ? undefined : () => {
-                                    if (item.rawTrack) handleRemoveTrack(item.rawTrack, item.rawTrackIndex ?? idx, trackKey);
+                                    if (item.rawTrack) void handleRemoveTrack(item.rawTrack, trackKey);
                                 }}
                                 onSelectArtist={onSelectArtist}
                                 onSelectAlbum={onSelectAlbum}
@@ -1357,9 +1130,10 @@ export const GridView: React.FC<GridViewProps> = ({
                                     persistNavigationState(idx);
                                 }}
                                 onEditLocalMetadata={(() => {
-                                    const songId = (item.rawTrack as UnifiedSong | undefined)?.localRef?.songId;
-                                    if (!songId || !sourceActions?.local?.onMatchSong) return undefined;
-                                    return () => void sourceActions.local?.onMatchSong?.(songId);
+                                    const track = item.rawTrack;
+                                    const songId = (track as UnifiedSong | undefined)?.localRef?.songId;
+                                    if (!track || !songId || !canMatchSong) return undefined;
+                                    return () => void mutations?.matchSong(track);
                                 })()}
                                 onSelect={() => {
                                     if (mode === 'tracks' && onSelectTrack && item.rawTrack) {
@@ -1417,7 +1191,8 @@ export const GridView: React.FC<GridViewProps> = ({
         onSelectArtist,
         onSelectAlbum,
         onAddTrackToQueue,
-        sourceActions,
+        canMatchSong,
+        mutations,
         handleRemoveTrack,
         removingTrackKeys,
         persistNavigationState,
@@ -1600,7 +1375,8 @@ export const GridView: React.FC<GridViewProps> = ({
         ? (backgroundSyncCounts ? t('playlist.syncInterruptedProgress', backgroundSyncCounts) : t('playlist.syncInterrupted'))
         : (backgroundSyncCounts ? t('playlist.syncProgress', backgroundSyncCounts) : t('playlist.loading'));
 
-    const infoCollection = collectionDetail ? { ...collection, ...collectionDetail } : collection;
+    const displayCollection = mutationSnapshot.renamedTo && collection ? { ...collection, name: mutationSnapshot.renamedTo } : collection;
+    const infoCollection = collectionDetail ? { ...displayCollection, ...collectionDetail } : displayCollection;
     const coverUrl = infoCollection?.coverUrl || '';
     const infoPanelCoverUrl = infoCollection?.coverUrl || '';
     // 只有 tracks 模式下的合集才有切入面板，没有面板时标题不做成可点控件
@@ -1613,14 +1389,11 @@ export const GridView: React.FC<GridViewProps> = ({
         hasInfoPanel: hasCutInPanel,
         hasTrackList: mode === 'tracks' && displayTracks.length > 0,
         supportsLocalTrackSorting,
-        canResyncFolder: isLocalFolderCollection && Boolean(sourceActions?.local?.onResyncFolder),
-        canResyncAllFolders: isLocalAllSongsCollection && Boolean(sourceActions?.local?.onResyncAllFolders),
-        canOrganizeSongInfo: isLocalFolderCollection && Boolean(sourceActions?.local?.onOrganizeFolderSongInfo),
-        canExportPlaylist: isLocalCollection
-            && collection?.type === 'playlist'
-            && Boolean(collection.playlistId)
-            && Boolean(sourceActions?.local?.onExportPlaylist),
-        canEditEntity: isLocalEntityCollection && Boolean(sourceActions?.local?.onEditEntity),
+        canResyncFolder: mutationCapabilities.resyncFolder.supported,
+        canResyncAllFolders: mutationCapabilities.resyncAllFolders.supported,
+        canOrganizeSongInfo: mutationCapabilities.organizeSongInfo.supported,
+        canExportPlaylist: mutationCapabilities.exportPlaylist.supported,
+        canEditEntity: mutationCapabilities.editEntity.supported,
         canEditPlaylist,
         canReloadOnlineCollection: canReloadOnlineCollection && !loading,
         isSourceActionPending,
@@ -1640,11 +1413,11 @@ export const GridView: React.FC<GridViewProps> = ({
         setSortDirection: handleLocalTrackSortDirectionChange,
         toggleInfoPanel: () => setShowCutInPanel(current => !current),
         toggleTrackList: () => setShowSidePanel(current => !current),
-        resyncFolder: () => void handleResyncLocalFolder(),
-        resyncAllFolders: () => void handleResyncAllLocalFolders(),
-        organizeSongInfo: () => { if (collection) void sourceActions?.local?.onOrganizeFolderSongInfo?.(collection); },
-        exportPlaylist: () => void handleExportLocalPlaylist(),
-        editEntity: () => { if (collection?.entityId) void sourceActions?.local?.onEditEntity?.(String(collection.entityId)); },
+        resyncFolder: handleResyncLocalFolder,
+        resyncAllFolders: handleResyncAllLocalFolders,
+        organizeSongInfo: handleOrganizeSongInfo,
+        exportPlaylist: handleExportLocalPlaylist,
+        editEntity: handleEditEntity,
         toggleEditMode: handleEditModeToggle,
         reloadOnlineCollection,
     };
@@ -1738,7 +1511,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 }}
             >
                 <h2 className="text-lg font-bold tracking-tight flex items-center gap-1.5 justify-center">
-                    {infoCollection?.name || collection?.name || title}
+                    {infoCollection?.name || collectionName || title}
                     {hasCutInPanel && <GridPanelToggleIndicator isOpen={showCutInPanel} />}
                 </h2>
                 {(infoCollection?.description || subtitle) && (
@@ -1853,14 +1626,14 @@ export const GridView: React.FC<GridViewProps> = ({
                                             e.stopPropagation();
                                             void handleToggleSubscribe();
                                         }}
-                                        disabled={isSubscribing}
+                                        disabled={mutationSnapshot.subscribing}
                                         className="absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-90 z-10 border border-white/10 hover:scale-105 cursor-pointer backdrop-blur-md"
                                         style={{
                                             backgroundColor: isDaylight ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.5)',
                                         }}
                                         title={playlistSubscribed ? (isOnlineAlbum ? t('options.unsubscribeAlbum') : t('options.unsubscribePlaylist')) : (isOnlineAlbum ? t('options.subscribeAlbum') : t('options.subscribePlaylist'))}
                                     >
-                                        {isSubscribing ? (
+                                        {mutationSnapshot.subscribing ? (
                                             <Loader2 size={18} className="animate-spin opacity-60" style={{ color: 'var(--text-primary)' }} />
                                         ) : (
                                             <Star
@@ -1876,7 +1649,7 @@ export const GridView: React.FC<GridViewProps> = ({
                             {/* Title & Creator */}
                             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar pr-1 space-y-4 text-left min-w-0">
                                 <div>
-                                    {(isLocalPlaylistCollection || isNavidromePlaylistCollection) && isEditMode ? (
+                                    {canRename && isEditMode ? (
                                         <input
                                             value={editableTitle}
                                             onChange={(event) => setEditableTitle(event.target.value)}
@@ -1893,8 +1666,8 @@ export const GridView: React.FC<GridViewProps> = ({
                                     ) : (
                                         <button
                                             type="button"
-                                            disabled={!isLocalEntityCollection || !sourceActions?.local?.onEditEntity}
-                                            onClick={() => void sourceActions?.local?.onEditEntity?.(String(collection.entityId))}
+                                            disabled={!mutationCapabilities.editEntity.supported}
+                                            onClick={handleEditEntity}
                                             className="text-left text-xl font-bold line-clamp-2 leading-snug disabled:cursor-default"
                                         >
                                             {infoCollection?.name || title}
@@ -1919,11 +1692,11 @@ export const GridView: React.FC<GridViewProps> = ({
                                             <div className="flex items-center gap-2">
                                                 <div className="min-w-0 flex-1">
                                                     <CustomSelect
-                                                        value={selectedDailyRecommendationDate}
+                                                        value={mutationSnapshot.dailyDate}
                                                         onChange={date => void handleDailyRecommendationDateChange(date)}
                                                         options={[
                                                             { value: '', label: t('home.todayRecommendations') },
-                                                            ...dailyRecommendationHistoryDates.map(date => ({ value: date, label: date })),
+                                                            ...mutationSnapshot.dailyHistoryDates.map(date => ({ value: date, label: date })),
                                                         ]}
                                                         placeholder={t('home.todayRecommendations')}
                                                         ariaLabel={t('home.recommendationDate')}
@@ -1935,7 +1708,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleDailyRecommendationDateChange('', true)}
-                                                    disabled={loading || Boolean(selectedDailyRecommendationDate)}
+                                                    disabled={loading || Boolean(mutationSnapshot.dailyDate)}
                                                     title={t('home.refreshRecommendations')}
                                                     aria-label={t('home.refreshRecommendations')}
                                                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-colors hover:bg-white/10 disabled:opacity-30"
@@ -2040,9 +1813,9 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {t('localMusic.addToPlaylist')}
                                     </button>
                                 )}
-                                {isLocalFolderCollection && sourceActions?.local?.onResyncFolder && (
+                                {mutationCapabilities.resyncFolder.supported && (
                                     <button
-                                        onClick={() => void handleResyncLocalFolder()}
+                                        onClick={handleResyncLocalFolder}
                                         disabled={isSourceActionPending}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                     >
@@ -2050,18 +1823,18 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {t('localMusic.reimport')}
                                     </button>
                                 )}
-                                {isLocalFolderCollection && sourceActions?.local?.onOrganizeFolderSongInfo && (
+                                {mutationCapabilities.organizeSongInfo.supported && (
                                     <button
-                                        onClick={() => void sourceActions.local?.onOrganizeFolderSongInfo?.(collection)}
+                                        onClick={handleOrganizeSongInfo}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
                                         <Tags size={14} />
                                         {t('localMusic.organizeSongInfo')}
                                     </button>
                                 )}
-                                {isLocalAllSongsCollection && sourceActions?.local?.onResyncAllFolders && (
+                                {mutationCapabilities.resyncAllFolders.supported && (
                                     <button
-                                        onClick={() => void handleResyncAllLocalFolders()}
+                                        onClick={handleResyncAllLocalFolders}
                                         disabled={isSourceActionPending}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                     >
@@ -2093,9 +1866,9 @@ export const GridView: React.FC<GridViewProps> = ({
                                             : (isEditMode ? t('localMusic.finishEditing') : t('localMusic.editPlaylist'))}
                                     </button>
                                 )}
-                                {isLocalCollection && collection?.type === 'playlist' && collection.playlistId && sourceActions?.local?.onExportPlaylist && (
+                                {mutationCapabilities.exportPlaylist.supported && (
                                     <button
-                                        onClick={() => void handleExportLocalPlaylist()}
+                                        onClick={handleExportLocalPlaylist}
                                         disabled={isSourceActionPending}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
                                     >
@@ -2103,9 +1876,9 @@ export const GridView: React.FC<GridViewProps> = ({
                                         {t('localMusic.exportPlaylist')}
                                     </button>
                                 )}
-                                {isLocalEntityCollection && sourceActions?.local?.onEditEntity && (
+                                {mutationCapabilities.editEntity.supported && (
                                     <button
-                                        onClick={() => void sourceActions.local?.onEditEntity?.(String(collection.entityId))}
+                                        onClick={handleEditEntity}
                                         className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                                     >
                                         <Pencil size={14} />
@@ -2116,7 +1889,7 @@ export const GridView: React.FC<GridViewProps> = ({
                                         })}
                                     </button>
                                 )}
-                                {(isLocalFolderCollection || isLocalPlaylistCollection || isNavidromePlaylistCollection) && (
+                                {mutationCapabilities.deleteCollection.supported && (
                                     <button
                                         onClick={() => isLocalFolderCollection ? setIsDeleteFolderOpen(true) : void handleDeleteSourceCollection()}
                                         disabled={isSourceActionPending}
@@ -2136,7 +1909,7 @@ export const GridView: React.FC<GridViewProps> = ({
             <PlaylistSelectionDialog
                 isOpen={isPlaylistPickerOpen}
                 title={t('localMusic.addToPlaylist')}
-                playlists={sourceActions?.navidrome?.availablePlaylists || []}
+                playlists={mutationSnapshot.availablePlaylists}
                 onClose={() => setIsPlaylistPickerOpen(false)}
                 onSelect={(playlistId) => {
                     void handleAddNavidromeCollectionToPlaylist(playlistId);
@@ -2188,7 +1961,7 @@ export const GridView: React.FC<GridViewProps> = ({
                 <SidePanelList
                     isOpen={showSidePanel}
                     onClose={() => setShowSidePanel(false)}
-                    title={collection?.name || title}
+                    title={collectionName || title}
                     items={displayTracks}
                     itemHeight={60}
                     isDaylight={isDaylight}

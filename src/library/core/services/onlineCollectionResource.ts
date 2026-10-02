@@ -270,12 +270,10 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             syncGeneration += 1;
             state.clear();
         },
-        removeTracks: async (match, schedule) => {
+        removeTracks: async (match) => {
             const removed = state.get().tracks.filter(match);
             removed.forEach(track => tombstones.add(getPlaybackSongKey(track)));
-            const commit = () => commitTracks(state.get().tracks.filter(track => !match(track)));
-            if (schedule) schedule(commit);
-            else commit();
+            commitTracks(state.get().tracks.filter(track => !match(track)));
             // 快照时间写成现在：与集合版本对不上，下次打开会重新拉取。
             await deps.writeCache(cacheKey(), state.get().tracks.filter(track => !match(track)), Date.now());
         },

@@ -341,17 +341,19 @@ describe('online collection resource: edit bridge', () => {
         expect(ids(resource.getSnapshot().tracks)).toEqual(['s-0', 's-99', 's-2', 's-3', 's-4']);
     });
 
-    it('lets the caller decide when a removal shows up', async () => {
+    it('commits a removal at once, as an urgent update', async () => {
         const h = harness(songs(5));
         const resource = createOnlineCollectionResource('k', h.deps);
         resource.ensure(playlist({ trackCount: 5 }), {});
         await settle();
 
-        let commit: (() => void) | undefined;
-        await resource.removeTracks(track => track.id === 's-0', next => { commit = next; });
-        expect(resource.getSnapshot().tracks).toHaveLength(5);
-        commit?.();
+        const hints: string[] = [];
+        resource.subscribe(() => hints.push(resource.getSnapshot().hint));
+        const removal = resource.removeTracks(track => track.id === 's-0');
+        // 不等缓存写完：调用的那一刻就提交了。
         expect(ids(resource.getSnapshot().tracks)).toEqual(['s-1', 's-2', 's-3', 's-4']);
+        expect(hints).toEqual(['urgent']);
+        await removal;
     });
 
     it('replaces the whole list from a loader and reports loading meanwhile', async () => {

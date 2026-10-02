@@ -25,6 +25,7 @@ import {
     PROBE_TRACKS_UPDATED_AT,
 } from './fixtureRules';
 import { recordProbeRequest } from './probeLog';
+import { createProbeGate, type ProbeGate } from './probeGates';
 
 // dev/probes/libraryBehavior/fakeProviders.ts
 // 两个内存里的假在线 provider（probe-a / probe-b）。走真实的 provider registry 和 omni，
@@ -53,8 +54,30 @@ const faults: ProbeFault[] = [];
 /** target → 每次请求的延迟；`first` 只作用于 offset 0。 */
 const latencies = new Map<string, { first?: number; rest?: number }>();
 let dislikeCounter = 0;
+/**
+ * target → 按住的后台分页（offset > 0）。按住的是应答而不是请求：页面在请求那一刻就按当时的上游数据
+ * 生成，放行时才送达，模拟「请求发出之后上游又变了」的晚到页。
+ */
+const pagingGates = new Map<string, ProbeGate>();
 
 const targetKey = (providerId: string, type: string, id: MediaId) => `${providerId}:${type}:${String(id)}`;
+
+/** 在线 fixture 在请求账里的 target。 */
+export const onlineFixtureTarget = (fixtureId: keyof typeof ONLINE_FIXTURES): string => {
+    const rule = ONLINE_FIXTURES[fixtureId];
+    return targetKey(rule.providerId, rule.type, rule.collectionId);
+};
+
+export const holdProbePaging = (target: string): void => {
+    const gate = pagingGates.get(target) ?? createProbeGate();
+    gate.hold();
+    pagingGates.set(target, gate);
+};
+
+export const releaseProbePaging = (target: string): void => {
+    pagingGates.get(target)?.release();
+    pagingGates.delete(target);
+};
 
 /** 生成一首在线歌：字段形状与 omni 归一化后的 UnifiedSong 一致，专辑带 catalogRef 以便嵌套导航。 */
 export const makeOnlineSong = (
@@ -90,6 +113,8 @@ export const resetFakeProviders = (): void => {
     subscriptions.clear();
     faults.length = 0;
     latencies.clear();
+    pagingGates.forEach(gate => gate.release());
+    pagingGates.clear();
     dislikeCounter = 0;
 
     Object.values(ONLINE_FIXTURES).forEach(rule => {
@@ -162,7 +187,10 @@ const run = async <T>(
     }
 
     recordProbeRequest({ provider: providerId, op, target, ...details, outcome: 'ok' });
-    return produce();
+    const result = produce();
+    const pagingGate = pagingGates.get(target);
+    if (pagingGate && op === 'playlistTracks' && (details.offset ?? 0) > 0) await pagingGate.wait();
+    return result;
 };
 
 const pageOf = (songs: UnifiedSong[], limit: number, offset: number): ProviderPage<UnifiedSong> => {

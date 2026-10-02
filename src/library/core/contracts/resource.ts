@@ -66,15 +66,11 @@ export interface CollectionResource {
     pause(): void;
     dispose(): void;
     /**
-     * P1 过渡期的编辑桥（P2 由正式的动作层取代）：
-     * 立即记下删除（后续分页不会再带回来）并让缓存失效；`schedule` 决定何时把结果提交给界面，
-     * 例如等卡片的退出动画结束。返回的 Promise 在缓存写完后完成。
-     *
-     * P2.1 起这是权威提交：变更动作层（core/services/collectionMutations）在上游确认后调用，
-     * 不传 `schedule`，删除立即提交并以 urgent 通知。`schedule` 只剩 P2.2 之前的 GridView 在用，
-     * 网格改由快照闸门保持展示之后删除这个参数。
+     * 权威提交：变更动作层（core/services/collectionMutations）在上游确认后调用。立即记下删除
+     * （后续分页不会再带回来）、立即提交并以 urgent 通知，并让缓存失效；返回的 Promise 在缓存写完后完成。
+     * 界面上的退出动画是 renderer 自己的事（网格用快照门的展示保持按住当前一帧），资源不等它。
      */
-    removeTracks(match: (track: SongResult) => boolean, schedule?: (commit: () => void) => void): Promise<void>;
+    removeTracks(match: (track: SongResult) => boolean): Promise<void>;
     /**
      * 只删第 index 个条目（重复条目里的这一个，例如 Navidrome 按原始下标删歌）；该位置已不是
      * expectedKey（playback key）时拒绝并返回 false。在线资源按歌去重、按墓碑过滤后续分页，

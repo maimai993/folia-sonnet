@@ -24,6 +24,9 @@ export const PROBE_TRANSLATED_NAME = '译名';
 /** 歌单里重复条目的位置：key 是上游原始位置，value 是那里实际放的歌。 */
 export const DUPE_POSITIONS: Readonly<Record<number, number>> = { 20: 5, 40: 6, 160: 10, 200: 170 };
 
+/** online-owned-dupes 里第一首歌再次出现的原始位置（在第一页之后）。 */
+export const OWNED_DUPE_POSITION = 160;
+
 export type OnlineFixtureId =
     | 'online-big'
     | 'online-dupes'
@@ -33,6 +36,7 @@ export type OnlineFixtureId =
     | 'online-private'
     | 'online-empty'
     | 'online-owned'
+    | 'online-owned-dupes'
     | 'online-public'
     | 'online-daily'
     | 'collide-a'
@@ -70,6 +74,16 @@ export const ONLINE_FIXTURES: Readonly<Record<OnlineFixtureId, OnlineFixtureRule
     'online-private': { providerId: PROBE_PROVIDER_A, collectionId: 'private', type: 'playlist', name: 'Private Playlist', prefix: 'private', rawIndexes: range(5) },
     'online-empty': { providerId: PROBE_PROVIDER_A, collectionId: 'empty', type: 'playlist', name: 'Empty Playlist', prefix: 'empty', rawIndexes: [] },
     'online-owned': { providerId: PROBE_PROVIDER_A, collectionId: 'owned', type: 'playlist', name: 'Owned Playlist', prefix: 'owned', rawIndexes: range(12), isOwned: true },
+    // 自己的歌单，第一首在后台分页里（原始位置 160）又出现一次：删掉它之后晚到的那一页不能把它带回来。
+    'online-owned-dupes': {
+        providerId: PROBE_PROVIDER_A,
+        collectionId: 'owned-dupes',
+        type: 'playlist',
+        name: 'Owned Duplicates',
+        prefix: 'odupes',
+        rawIndexes: range(220).map(position => (position === OWNED_DUPE_POSITION ? 0 : position)),
+        isOwned: true,
+    },
     'online-public': { providerId: PROBE_PROVIDER_A, collectionId: 'public', type: 'playlist', name: 'Public Playlist', prefix: 'public', rawIndexes: range(30) },
     'online-daily': { providerId: PROBE_PROVIDER_A, collectionId: 'daily_recommendations', type: 'daily_recommendations', name: 'Daily Picks', prefix: 'daily', rawIndexes: range(10) },
     'collide-a': { providerId: PROBE_PROVIDER_A, collectionId: 'same', type: 'playlist', name: 'Same Id (A)', prefix: 'ca', rawIndexes: range(5) },

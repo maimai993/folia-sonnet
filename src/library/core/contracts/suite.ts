@@ -3,7 +3,7 @@ import type { MediaId } from '../../../types/onlineMusic';
 import type { LibraryCollectionDescriptor } from './collection';
 import type { LibraryHomeData, LibraryOnlineProviderPlatform } from './home';
 import type { CollectionMutationController } from './mutations';
-import type { LibraryMutationPort, LibraryPlaybackPort } from './ports';
+import type { LibraryPlaybackPort } from './ports';
 import type { CollectionResource } from './resource';
 
 // src/library/core/contracts/suite.ts
@@ -120,13 +120,8 @@ export type LibraryCollectionSurfaceProps = LibrarySurfaceBaseProps & LibraryCol
     collection: LibraryCollectionDescriptor;
     resource: CollectionResource | null;
     playback: LibraryPlaybackPort;
-    /** 变更动作控制器（P2.1）；宿主创建、不订阅。P2.2 / P2.4 起 suite 经它删歌、订阅、改名…… */
+    /** 变更动作控制器（P2.1）；宿主创建、不订阅。suite 经它删歌、订阅、改名……（网格自 P2.2 起，TUI 在 P2.4）。 */
     mutations: CollectionMutationController | null;
-    /**
-     * 过渡输入：P2.2 之前网格仍按旧的 sourceActions 形状接收来源动作，由网格自己从端口转接。
-     * P2.2 网格改用 mutations 之后从契约删除。
-     */
-    mutationPort: LibraryMutationPort;
     localSongs: LocalSong[];
     theme: Theme;
     isDaylight: boolean;

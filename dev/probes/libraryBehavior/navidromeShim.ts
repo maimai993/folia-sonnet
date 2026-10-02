@@ -38,6 +38,7 @@ const makeSubsonicSong = (id: string, index: number, album: string, albumId: str
 });
 
 let playlistEntries: string[] = [];
+let playlistName = 'Navi Playlist';
 
 const respond = (body: unknown) => new Response(JSON.stringify({ 'subsonic-response': { status: 'ok', ...body as object } }), {
     status: 200,
@@ -81,7 +82,7 @@ const handle = (url: URL): Response => {
         return respond({
             playlist: {
                 id: NAVIDROME_PLAYLIST_ID,
-                name: 'Navi Playlist',
+                name: playlistName,
                 owner: 'probe',
                 songCount: playlistEntries.length,
                 duration: 1000,
@@ -92,13 +93,14 @@ const handle = (url: URL): Response => {
     if (endpoint === 'getPlaylists') {
         return respond({
             playlists: {
-                playlist: [{ id: NAVIDROME_PLAYLIST_ID, name: 'Navi Playlist', owner: 'probe', songCount: playlistEntries.length, duration: 1000 }],
+                playlist: [{ id: NAVIDROME_PLAYLIST_ID, name: playlistName, owner: 'probe', songCount: playlistEntries.length, duration: 1000 }],
             },
         });
     }
     if (endpoint === 'updatePlaylist') {
         const removingSet = new Set(removing);
         playlistEntries = playlistEntries.filter((_, index) => !removingSet.has(index));
+        playlistName = url.searchParams.get('name') ?? playlistName;
     }
     return respond({});
 };
@@ -106,6 +108,7 @@ const handle = (url: URL): Response => {
 /** 安装垫片，返回卸载函数。 */
 export const installNavidromeShim = (): (() => void) => {
     playlistEntries = [...NAVIDROME_PLAYLIST_SONGS];
+    playlistName = 'Navi Playlist';
     const originalFetch = window.fetch;
     window.fetch = async (input, init) => {
         const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;

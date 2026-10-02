@@ -113,6 +113,11 @@ export const createCollectionMutationController = (
     let dailyDatePending = false;
     let dailyLimitReached = false;
     let sourceActionPending = false;
+    /**
+     * 改名成功之后、宿主的描述还没跟上之前的新名字。描述本身不改（它可能是导航栈里共用的对象）；
+     * 宿主的描述一旦变了（刷新带回新名字，或者别处改了名），以宿主为准，这条记录作废。
+     */
+    let renamed: { from: string; to: string } | null = null;
     /** 进行中的删除：条目键 → 去重范围（同一首歌 / 整个集合）。 */
     const pendingRemovals = new Map<string, string>();
 
@@ -130,6 +135,8 @@ export const createCollectionMutationController = (
             port,
         });
     };
+
+    const currentRename = () => (renamed && inputs.descriptor.name === renamed.from ? renamed.to : null);
 
     const compute = (previous: CollectionMutationSnapshot | null): CollectionMutationSnapshot => {
         const branches = resolveBranches();
@@ -157,6 +164,7 @@ export const createCollectionMutationController = (
             sourceActionPending,
             dailyDate,
             dailyHistoryDates,
+            renamedTo: currentRename(),
             availablePlaylists: previous && sameList(previous.availablePlaylists, availablePlaylists) ? previous.availablePlaylists : availablePlaylists,
             branches: previous && sameShallow(previous.branches, branches) ? previous.branches : branches,
             capabilities: previous && sameCapabilities(previous.capabilities, capabilities) ? previous.capabilities : capabilities,
@@ -402,14 +410,19 @@ export const createCollectionMutationController = (
         const { descriptor, port } = inputs;
         if (!currentCapabilities().rename.supported) return fail('unsupported');
         const nextName = name.trim();
-        if (!nextName || nextName === descriptor.name) return OK;
-        return runSourceAction('rename', () => {
+        // 与当前显示的名字比：刚改过名、宿主还没跟上时，改回原名不是空操作。
+        if (!nextName || nextName === (currentRename() ?? descriptor.name)) return OK;
+        return runSourceAction('rename', async () => {
             if (descriptor.source === 'local' && descriptor.playlistId) {
-                return port.local?.renamePlaylist?.(descriptor.playlistId, nextName);
+                await port.local?.renamePlaylist?.(descriptor.playlistId, nextName);
+            } else if (descriptor.source === 'navidrome') {
+                await port.navidrome?.renamePlaylist?.(String(descriptor.id), nextName);
+            } else {
+                return;
             }
-            if (descriptor.source === 'navidrome') {
-                return port.navidrome?.renamePlaylist?.(String(descriptor.id), nextName);
-            }
+            // 按此刻宿主的描述记：请求期间宿主已经带回新名字的话就不用再记。
+            const hostName = inputs.descriptor.name;
+            renamed = hostName === nextName ? null : { from: hostName, to: nextName };
         });
     };
 
@@ -463,6 +476,8 @@ export const createCollectionMutationController = (
         update: (next) => {
             if (disposed) return;
             inputs = { ...inputs, ...next };
+            // 宿主的描述换了名字：记录作废（之后即使又变回旧名，也不再拿出来）。
+            if (renamed && inputs.descriptor.name !== renamed.from) renamed = null;
             emit();
             prefetch();
         },

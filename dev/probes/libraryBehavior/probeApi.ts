@@ -1,6 +1,7 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../src/types/gridCommandSurface';
 import type { LibraryDeclaredActions, LibrarySuiteId, LibrarySurfaceId } from '../../../src/library/core/contracts/suite';
-import type { ProbeFixtureId } from './fixtureRules';
+import type { OnlineFixtureId, ProbeFixtureId } from './fixtureRules';
+import type { ProbeRefreshKind } from './probeGates';
 import type { ProbeCall, ProbeRequest } from './probeLog';
 
 // dev/probes/libraryBehavior/probeApi.ts
@@ -36,6 +37,12 @@ export type LibraryProbeApi = {
     resolveSurface: (surface: LibrarySurfaceId) => { suiteId: LibrarySuiteId; isFallback: boolean; declaredActions: LibraryDeclaredActions };
     /** 从当前集合压入一个歌手页（本地 fixture 的第一个歌手，需要沙盒）；返回是否压入。 */
     pushArtist: () => boolean;
+    /** 按住这个在线集合的后台分页应答（页面按请求那一刻的上游数据生成），releasePages 时送达。 */
+    holdPages: (fixtureId: OnlineFixtureId) => void;
+    releasePages: (fixtureId: OnlineFixtureId) => void;
+    /** 按住宿主的刷新（回调照样记账，只是迟迟不完成），releaseRefresh 时继续。 */
+    holdRefresh: (kind: ProbeRefreshKind) => void;
+    releaseRefresh: (kind: ProbeRefreshKind) => void;
     calls: () => ProbeCall[];
     requests: () => ProbeRequest[];
     clearLog: () => void;

@@ -576,9 +576,45 @@ describe('source actions', () => {
         expect(port.local.matchSong).toHaveBeenCalledWith('a');
         expect(controller.getSnapshot().sourceActionPending).toBe(false);
 
-        expect(await controller.rename('Playlist')).toEqual({ ok: true });
+        // 空名字、与当前显示的名字相同（刚改成的那个）都是空操作。
+        expect(await controller.rename('New name ')).toEqual({ ok: true });
         expect(await controller.rename('   ')).toEqual({ ok: true });
         expect(port.local.renamePlaylist).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the new name until the host catches up, without touching the descriptor', async () => {
+        const resource = await navidromeResource([naviSong('a')]);
+        const descriptor = { ...naviPlaylist };
+        const { controller, port } = setup({ descriptor, resource });
+        expect(controller.getSnapshot().renamedTo).toBeNull();
+
+        expect(await controller.rename('Renamed')).toEqual({ ok: true });
+        expect(controller.getSnapshot().renamedTo).toBe('Renamed');
+        expect(descriptor.name).toBe('Navi');
+
+        // 改回原名不是空操作：上游现在叫 Renamed。
+        expect(await controller.rename('Navi')).toEqual({ ok: true });
+        expect(port.navidrome.renamePlaylist).toHaveBeenLastCalledWith('np', 'Navi');
+        expect(controller.getSnapshot().renamedTo).toBeNull();
+
+        expect(await controller.rename('Third')).toEqual({ ok: true });
+        expect(controller.getSnapshot().renamedTo).toBe('Third');
+        // 宿主带回了新名字（或者别处改了名）：以宿主为准。
+        controller.update({ descriptor: { ...naviPlaylist, name: 'Third' } });
+        expect(controller.getSnapshot().renamedTo).toBeNull();
+        controller.update({ descriptor: { ...naviPlaylist, name: 'Navi' } });
+        expect(controller.getSnapshot().renamedTo).toBeNull();
+    });
+
+    it('keeps the old name when the rename fails', async () => {
+        const resource = createStaticCollectionResource('k', [localSong('a')]);
+        const port = fakePort();
+        port.local.renamePlaylist = vi.fn(async () => { throw new Error('nope'); });
+        const { controller } = setup({ descriptor: localPlaylist, resource, port });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(await controller.rename('Other')).toEqual({ ok: false, reason: 'failed', message: 'nope' });
+        expect(controller.getSnapshot().renamedTo).toBeNull();
     });
 
     it('renames a Navidrome playlist through its own port', async () => {

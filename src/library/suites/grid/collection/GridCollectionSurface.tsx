@@ -1,32 +1,29 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import type { LibraryCollectionSurfaceProps } from '../../../core/contracts/suite';
 import { useGridMorphPlan } from '../transitions/useGridMorphPlan';
 import GridView from './GridView';
-import { toGridViewSourceActions } from './gridViewSourceActions';
 
 // src/library/suites/grid/collection/GridCollectionSurface.tsx
 // 网格的集合 surface：把宿主交给任何 suite 的同一份输入（core/contracts/suite 的 LibraryCollectionSurfaceProps）
-// 接到 GridView 的旧 props 上。网格专属的部分在这里补：移形换影的入场计划（自己从转场 store 读），
-// P2.2 之前的 sourceActions（从变更端口转接）。标题、副标题的取法原样搬自 GridViewOverlayHost。
+// 接到 GridView 的旧 props 上。网格专属的部分在这里补：移形换影的入场计划（自己从转场 store 读）。
+// 变更动作（删歌、订阅、改名……）经变更控制器（mutations）；标题、副标题的取法原样搬自 GridViewOverlayHost。
 
 const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
     collection,
     resource,
     playback,
-    mutationPort,
+    mutations,
     localSongs,
     theme,
     isDaylight,
     isInteractive,
     onStatusMessage,
-    currentUserId,
     declaredActions,
     onBack,
     onOpenAlbum,
     onOpenArtist,
 }) => {
     const morphPlan = useGridMorphPlan();
-    const sourceActions = useMemo(() => toGridViewSourceActions(mutationPort), [mutationPort]);
     const subtitle = (collection as any).creator?.nickname || (collection as any).artists?.[0]?.name || collection.description || '';
 
     return (
@@ -42,12 +39,10 @@ const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
             onAddAllToQueue={playback.enqueueAll}
             onSelectAlbum={onOpenAlbum}
             onSelectArtist={onOpenArtist}
-            currentUserId={currentUserId}
-            onPlaylistMutated={mutationPort.onCollectionMutated}
             onStatusMessage={onStatusMessage}
             resource={resource}
+            mutations={mutations}
             localSongs={localSongs}
-            sourceActions={sourceActions}
             theme={theme}
             isDaylight={isDaylight}
             isInteractive={isInteractive}

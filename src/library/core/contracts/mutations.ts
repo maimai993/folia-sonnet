@@ -84,6 +84,10 @@ export type CollectionMutationSnapshot = {
     /** 每日推荐当前看的日期，'' 表示今天。 */
     readonly dailyDate: string;
     readonly dailyHistoryDates: readonly string[];
+    /**
+     * 改名成功、但宿主的集合描述还带着旧名字时的新名字（renderer 显示它）；宿主的描述跟上或变了就回到 null。
+     */
+    readonly renamedTo: string | null;
     /** Navidrome「加入歌单」的候选歌单。 */
     readonly availablePlaylists: readonly LibraryPlaylistOption[];
     readonly branches: CollectionMutationBranches;
@@ -111,7 +115,7 @@ export interface CollectionMutationController {
     update(inputs: Partial<CollectionMutationInputs>): void;
     removeEntry(entry: LibraryEntryRef): Promise<LibraryMutationResult>;
     toggleSubscribe(): Promise<LibraryMutationResult>;
-    /** 名字去掉首尾空白；空或与当前相同时什么都不做并返回 ok。 */
+    /** 名字去掉首尾空白；空或与当前显示的名字（renamedTo ?? 描述的名字）相同时什么都不做并返回 ok。 */
     rename(name: string): Promise<LibraryMutationResult>;
     /** 成功后由 renderer 返回上一层。 */
     deleteCollection(): Promise<LibraryMutationResult>;

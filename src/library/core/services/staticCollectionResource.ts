@@ -22,10 +22,8 @@ export const createStaticCollectionResource = (key: string, tracks: SongResult[]
         canReuse: () => false,
         pause: () => {},
         dispose: state.clear,
-        removeTracks: async (match, schedule) => {
-            const commit = () => commitTracks(state.get().tracks.filter(track => !match(track)));
-            if (schedule) schedule(commit);
-            else commit();
+        removeTracks: async (match) => {
+            commitTracks(state.get().tracks.filter(track => !match(track)));
         },
         removeAt: (index, expectedKey) => {
             const current = state.get().tracks;

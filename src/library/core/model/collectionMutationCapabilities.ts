@@ -248,6 +248,7 @@ export const EMPTY_COLLECTION_MUTATION_SNAPSHOT: CollectionMutationSnapshot = {
     sourceActionPending: false,
     dailyDate: '',
     dailyHistoryDates: [],
+    renamedTo: null,
     availablePlaylists: [],
     branches: NO_BRANCHES,
     capabilities: resolveCollectionMutationCapabilities({ descriptor: null, branches: NO_BRANCHES, port: NO_PORT, state: IDLE_STATE }),

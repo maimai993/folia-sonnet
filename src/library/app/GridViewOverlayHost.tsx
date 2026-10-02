@@ -167,7 +167,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const [organizingFolder, setOrganizingFolder] = useState<LocalGridViewCollectionDescriptor | null>(null);
     const [matchingSongId, setMatchingSongId] = useState<string | null>(null);
     const selectedCollectionKey = collectionKey(selectedCollection);
-    const liveSelectedCollection = useMemo(() => {
+    const refreshedSelectedCollection = useMemo(() => {
         if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
             if (selectedCollection?.source !== 'online') return selectedCollection;
 
@@ -182,6 +182,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
         return resolveLiveLocalCollection(selectedCollection, surfaceProps, localLibraryCatalog);
     }, [surfaceProps.localPlaylists, surfaceProps.localSongs, surfaceProps.playlists, localLibraryCatalog, selectedCollection]);
+    // Navidrome 歌单的名字以刷新过的歌单列表为准：改名之后 refreshNavidromePlaylists 带回新名字，
+    // 不必就地改写导航栈里的描述（嵌套返回再进来也还是新名字）。单独一层 memo：别的来源不随歌单列表换新对象
+    // （本地集合的 effect 会清空这个列表，放进同一个 memo 会互相触发）。
+    const liveSelectedCollection = useMemo(() => {
+        const collection = refreshedSelectedCollection;
+        if (collection?.source !== 'navidrome' || collection.type !== 'playlist') return collection;
+        const listed = navidromePlaylistItems.find(item => String(item.id) === String(collection.id));
+        return listed && listed.name !== collection.name ? { ...collection, name: listed.name } : collection;
+    }, [navidromePlaylistItems, refreshedSelectedCollection]);
     const displaySelectedCollection = useMemo(() => {
         if (!liveSelectedCollection) {
             return null;
@@ -489,8 +498,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [refreshNavidromePlaylists, selectedCollection]);
 
 
-    // 来源动作（本地曲库、Navidrome、对话框、账户刷新）集中在变更端口里；网格在接入变更控制器之前
-    // 仍按旧形状接收，由网格自己从端口转接（suites/grid/collection/gridViewSourceActions）。
+    // 来源动作（本地曲库、Navidrome、对话框、账户刷新）集中在变更端口里，只交给变更控制器；
+    // suite 不直接拿端口，所有变更都经控制器（能力判定、进行中标记与重复提交保护在那里）。
     const mutationPort = useMemo(() => createLibraryMutationPort({
         surface: surfaceProps,
         t,
@@ -503,7 +512,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         refreshNavidromePlaylists,
     }), [surfaceProps, t, navidromePlaylistItems, refreshNavidromePlaylists]);
     // 变更动作控制器：宿主按集合会话创建与释放，自己不订阅快照（不会因进行中的状态重渲染首页）。
-    // 交给集合 surface；网格在 P2.2、TUI 在 P2.4 接入，在那之前没人订阅它，也就不会发出任何请求。
+    // 交给集合 surface：网格订阅它（P2.2 起），TUI 在 P2.4 接入。
     const collectionMutations = useCollectionMutations({
         descriptor: liveSelectedCollection && liveSelectedCollection.type !== 'artist' ? liveSelectedCollection : null,
         resource: collectionResource,
@@ -595,7 +604,6 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 resource={collectionResource}
                                 playback={playbackPort}
                                 mutations={collectionMutations}
-                                mutationPort={mutationPort}
                                 localSongs={surfaceProps.localSongs}
                                 theme={surfaceProps.theme}
                                 isDaylight={isDaylight}

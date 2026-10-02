@@ -58,10 +58,8 @@ export const createNavidromeCollectionResource = (
             generation += 1;
             state.clear();
         },
-        removeTracks: async (match, schedule) => {
-            const commit = () => state.set({ tracks: state.get().tracks.filter(track => !match(track)) }, 'urgent');
-            if (schedule) schedule(commit);
-            else commit();
+        removeTracks: async (match) => {
+            state.set({ tracks: state.get().tracks.filter(track => !match(track)) }, 'urgent');
         },
         removeAt: (index, expectedKey) => {
             const current = state.get().tracks;
