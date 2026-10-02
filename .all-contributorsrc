@@ -671,6 +671,15 @@
       "contributions": [
         "ideas"
       ]
+    },
+    {
+      "login": "Mintcolour",
+      "name": "mintcolor",
+      "avatar_url": "https://avatars.githubusercontent.com/u/43575730?v=4",
+      "profile": "https://github.com/Mintcolour",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "commit": false,

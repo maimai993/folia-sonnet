@@ -100,6 +100,7 @@ Thanks goes to these wonderful people. Issue reports, bug reports, ideas, docs, 
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/phyrevue"><img src="https://avatars.githubusercontent.com/u/61339488?v=4?s=100" width="100px;" alt="phyrevue"/><br /><sub><b>phyrevue</b></sub></a><br /><a href="#ideas-phyrevue" title="Ideas, Planning, & Feedback">🤔</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/lotuswu2580-dev"><img src="https://avatars.githubusercontent.com/u/319242891?v=4?s=100" width="100px;" alt="lotuswu2580-dev"/><br /><sub><b>lotuswu2580-dev</b></sub></a><br /><a href="#ideas-lotuswu2580-dev" title="Ideas, Planning, & Feedback">🤔</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Mintcolour"><img src="https://avatars.githubusercontent.com/u/43575730?v=4?s=100" width="100px;" alt="mintcolor"/><br /><sub><b>mintcolor</b></sub></a><br /><a href="https://github.com/chthollyphile/folia-major/commits?author=Mintcolour" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
