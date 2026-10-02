@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LibraryRendererId } from '../../../types/libraryUi';
-import { useLibraryRendererStore } from '../../../stores/useLibraryRendererStore';
+import type { LibraryRendererId } from '../../../library/core/contracts/session';
+import { useLibraryRendererStore } from '../../../library/core/state/useLibraryRendererStore';
 import { switchLibraryRenderer } from './switchLibraryRenderer';
 
 // src/components/app/home/DevLibraryRendererSwitch.tsx

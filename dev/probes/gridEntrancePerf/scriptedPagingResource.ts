@@ -1,6 +1,6 @@
 import type { SongResult } from '../../../src/types';
-import type { CollectionResource } from '../../../src/types/libraryUi';
-import { createCollectionResourceState } from '../../../src/services/libraryUi/collectionResourceState';
+import type { CollectionResource } from '../../../src/library/core/contracts/resource';
+import { createCollectionResourceState } from '../../../src/library/core/services/collectionResourceState';
 
 // dev/probes/gridEntrancePerf/scriptedPagingResource.ts
 // 按真实在线集合的节奏「分页到达」的资源：先给 150 首首页，之后每 100ms 一页 1000 首，全部作为

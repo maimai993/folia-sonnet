@@ -1,6 +1,6 @@
-import type { LibraryRendererId } from '../../../types/libraryUi';
-import { flushLibrarySession } from '../../../stores/useLibraryBrowseSessionStore';
-import { useLibraryRendererStore } from '../../../stores/useLibraryRendererStore';
+import type { LibraryRendererId } from '../../../library/core/contracts/session';
+import { flushLibrarySession } from '../../../library/core/state/useLibraryBrowseSessionStore';
+import { useLibraryRendererStore } from '../../../library/core/state/useLibraryRendererStore';
 import { useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
 
 // src/components/app/home/switchLibraryRenderer.ts

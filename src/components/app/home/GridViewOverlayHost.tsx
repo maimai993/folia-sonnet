@@ -19,7 +19,7 @@ import {
 } from './gridViewCollectionAdapters';
 import { createLibraryPlaybackPort } from './createLibraryPlaybackPort';
 import { createLibraryMutationPort, toGridViewSourceActions } from './createLibraryMutationPort';
-import { useCollectionResource } from '../../../hooks/libraryUi/useCollectionResource';
+import { useCollectionResource } from '../../../library/core/bindings/useCollectionResource';
 import type { LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../modal/LocalFolderSongInfoPanel';
@@ -33,7 +33,7 @@ import { CollectionMorphOverlay } from '../../collectionOpenMorph/CollectionMorp
 import { useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
 import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '../../collectionOpenMorph/morphProbes';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
-import { useLibraryRendererStore } from '../../../stores/useLibraryRendererStore';
+import { useLibraryRendererStore } from '../../../library/core/state/useLibraryRendererStore';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.

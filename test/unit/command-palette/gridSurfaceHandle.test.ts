@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../../../src/utils/libraryUi/collectionSurface';
+import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../../../src/library/core/model/collectionSurface';
 
 // test/unit/command-palette/gridSurfaceHandle.test.ts
 // 分支规则只写在这里一处，命令侧只问 availableActions。所以「哪个分支给哪些动作」必须由测试兜住：

@@ -1,8 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LibraryCollectionDescriptor } from '../../types/libraryCollection';
-import type { CollectionResourceSnapshot, LibraryCapability } from '../../types/libraryUi';
-import { resolveCollectionSyncCounts } from '../../utils/libraryUi/collectionProgress';
+import type { LibraryCollectionDescriptor } from '../../library/core/contracts/collection';
+import type { CollectionResourceSnapshot } from '../../library/core/contracts/resource';
+import type { LibraryCapability } from '../../library/core/contracts/capability';
+import { resolveCollectionSyncCounts } from '../../library/core/model/collectionProgress';
 
 // src/components/library-tui/LibraryTuiHeader.tsx
 // TUI 的状态栏：返回、集合名、来源、加载进度（中断时可续传）、重新拉取，以及当前筛选。

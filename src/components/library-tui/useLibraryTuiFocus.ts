@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CollectionView } from '../../hooks/libraryUi/useCollectionView';
+import type { CollectionView } from '../../library/core/bindings/useCollectionView';
 import {
     getLibraryBrowseSession,
     registerLibrarySessionFlush,
     useLibraryBrowseSessionStore,
-} from '../../stores/useLibraryBrowseSessionStore';
+} from '../../library/core/state/useLibraryBrowseSessionStore';
 
 // src/components/library-tui/useLibraryTuiFocus.ts
 // TUI 的焦点按条目键记，而不是按行号：筛选变了、分页追加了，同一首仍是同一首；

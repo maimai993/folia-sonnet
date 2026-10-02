@@ -3,7 +3,7 @@ import {
     getActiveGridViewCollection,
     useCollectionNavigationStore,
 } from '@/stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '@/types/libraryCollection';
+import type { GridViewCollectionDescriptor } from '@/library/core/contracts/collection';
 
 // test/unit/stores/collectionNavigationStore.test.ts
 // 导航栈「不许压一份当前层的副本」这条规则：详情页里的卡片带着自己所属集合的入口

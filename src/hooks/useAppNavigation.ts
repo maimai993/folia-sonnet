@@ -11,8 +11,8 @@ import {
     type CollectionNavigationSnapshot,
     useCollectionNavigationStore,
 } from '../stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '../types/libraryCollection';
-import { collectionHashPath } from '../utils/libraryUi/collectionIdentity';
+import type { GridViewCollectionDescriptor } from '../library/core/contracts/collection';
+import { collectionHashPath } from '../library/core/model/collectionIdentity';
 import { useAppViewStore } from '../stores/useAppViewStore';
 import type { AppView } from '../stores/useAppViewStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';

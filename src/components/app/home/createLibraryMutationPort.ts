@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { UnifiedSong } from '../../../types';
-import type { LocalGridViewCollectionDescriptor } from '../../../types/libraryCollection';
-import type { LibraryMutationPort, LibraryPlaylistOption } from '../../../types/libraryUi';
+import type { LocalGridViewCollectionDescriptor } from '../../../library/core/contracts/collection';
+import type { LibraryMutationPort, LibraryPlaylistOption } from '../../../library/core/contracts/ports';
 import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
 import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
 import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileService';

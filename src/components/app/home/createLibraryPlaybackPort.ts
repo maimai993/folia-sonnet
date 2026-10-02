@@ -1,5 +1,5 @@
 import type { SongResult, UnifiedSong } from '../../../types';
-import type { LibraryPlaybackPort } from '../../../types/libraryUi';
+import type { LibraryPlaybackPort } from '../../../library/core/contracts/ports';
 import { resolveNavidromePlaybackCarrier } from '../../../utils/appPlaybackGuards';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 

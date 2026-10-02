@@ -1,5 +1,5 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../src/types/gridCommandSurface';
-import type { LibraryRendererId } from '../../../src/types/libraryUi';
+import type { LibraryRendererId } from '../../../src/library/core/contracts/session';
 import type { ProbeFixtureId } from './fixtureRules';
 import type { ProbeCall, ProbeRequest } from './probeLog';
 

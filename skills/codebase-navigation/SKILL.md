@@ -74,6 +74,17 @@ node dev/mcp/ts-code-map/cli.mjs doctor    # 环境自检
   `isBuiltinVisualizerMode` / `isBuiltinVisualizerBackgroundMode`，不要 import registry。
   需要认 mod 投稿模式时才用 registry 的 `hasVisualizerMode`。模式清单由 registry 初始化时
   断言，漂移会抛错。
+- 集合浏览（Library）按 headless core 与 UI suite 分开，都在 `src/library/`：`core/` 里
+  `contracts`（只有类型：集合描述、资源、能力、端口、变更动作、会话）← `model`（纯变换，叶子：不读
+  store、不调 service、不 import react）← `services`（资源、registry、缓存、同步、变更控制器）/
+  `state`（zustand store，storeContract 一并扫描）← `bindings`（React hooks）。`suites/<id>/` 是
+  各套 UI（每套 `entry.ts` + 自己的整个文件夹），`registry.ts` 发现 suite 并按 surface 回退到默认的
+  grid，`app/` 是宿主装配（集合宿主、播放 / 变更端口、suite 切换）。规则：core 不 import suites、
+  app、registry 和 `src/components`；suite 之间互不 import，也不直接用 `core/services`（资源与控制器
+  由宿主创建后传入）；stores / services / utils / types 不 import suites 与 app；不建 barrel。
+  这些规则同时写在 `codemap.mjs` 的 `BOUNDARY_RULES` 和 `test/unit/library/layerBoundaries.test.ts` 里。
+  （R2 之前网格与 TUI 还在 `components/` 下：`GridView`、`folia-grid/*`、`library-tui/*`、
+  `components/app/home/GridViewOverlayHost` 等，它们从 core 引用，方向是对的。）
 - `App.tsx` 是历史遗留的装配缝，已经很大。新行为应该组装进相邻的 `components/app/*`、
   hooks、stores、services，而不是继续堆进去。参见 `skills/file-modularization/SKILL.md`。
 

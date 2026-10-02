@@ -13,7 +13,7 @@ import { colorWithAlpha } from './visualizer/colorMix';
 import { removeFromCache } from '../services/db';
 import { omni } from '../services/onlineMusic/omni';
 import { getProviderCacheKey } from '../services/onlineMusic/providerStorage';
-import { isCloudDriveCollection } from '../services/libraryUi/onlineCollectionCache';
+import { isCloudDriveCollection } from '../library/core/services/onlineCollectionCache';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { useFoliaHexViewport } from './folia-grid/useFoliaHexViewport';
 import { PolaroidCard, type GridItem } from './folia-grid/PolaroidCard';
@@ -54,25 +54,25 @@ import { deriveProgressiveLoadingState } from './folia-grid/progressiveGrid';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
 import { formatLocalAlbumTrackLabel } from '../utils/localSongSorting';
-import { resolveCollectionSyncCounts } from '../utils/libraryUi/collectionProgress';
-import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../utils/libraryUi/collectionSurface';
+import { resolveCollectionSyncCounts } from '../library/core/model/collectionProgress';
+import { buildGridSurfaceState, runGridSurfaceAction, type GridSurfaceParams } from '../library/core/model/collectionSurface';
 import { useGridSurfaceRegistration } from '../hooks/useGridSurfaceRegistration';
 import type { MediaId } from '../types/onlineMusic';
-import type { CollectionResource } from '../types/libraryUi';
+import type { CollectionResource } from '../library/core/contracts/resource';
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow } from '../utils/keyboardTargets';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
-import { collectionKey } from '../utils/libraryUi/collectionIdentity';
-import { useCollectionResourceState } from '../hooks/libraryUi/useCollectionResourceState';
-import { useCollectionView } from '../hooks/libraryUi/useCollectionView';
-import { useCommittedQuery } from '../hooks/libraryUi/useCommittedQuery';
-import { useLibrarySessionFilter } from '../hooks/libraryUi/useLibrarySessionFilter';
+import { collectionKey } from '../library/core/model/collectionIdentity';
+import { useCollectionResourceState } from '../library/core/bindings/useCollectionResourceState';
+import { useCollectionView } from '../library/core/bindings/useCollectionView';
+import { useCommittedQuery } from '../library/core/bindings/useCommittedQuery';
+import { useLibrarySessionFilter } from '../library/core/bindings/useLibrarySessionFilter';
 import {
     getLibraryBrowseSession,
     registerLibrarySessionFlush,
     useLibraryBrowseSessionStore,
-} from '../stores/useLibraryBrowseSessionStore';
-import { useLocalTrackSortStore } from '../stores/useLocalTrackSortStore';
+} from '../library/core/state/useLibraryBrowseSessionStore';
+import { useLocalTrackSortStore } from '../library/core/state/useLocalTrackSortStore';
 
 export interface GridViewSourceActions {
     local?: {
@@ -120,7 +120,7 @@ interface GridViewProps {
     currentUserId?: MediaId | null;
     onPlaylistMutated?: () => Promise<void> | void;
     /**
-     * 曲目的来源：加载、缓存、后台补页、错误与重新拉取都在资源里（见 services/libraryUi）。
+     * 曲目的来源：加载、缓存、后台补页、错误与重新拉取都在资源里（见 library/core/services）。
      * 宿主持有它，切换 renderer 不会重新请求。
      */
     resource?: CollectionResource | null;
@@ -487,7 +487,7 @@ export const GridView: React.FC<GridViewProps> = ({
         const localSong = localSongsById.get(localRef.songId);
         return localSong ? formatLocalAlbumTrackLabel(localSong) : null;
     }, [localSongsById, supportsLocalTrackSorting]);
-    // 隐藏、本地排序、筛选与操作范围的规则见 utils/libraryUi/collectionView（专辑归属以本地曲库的
+    // 隐藏、本地排序、筛选与操作范围的规则见 library/core/model/collectionView（专辑归属以本地曲库的
     // 专辑实体为准）；别的 renderer 用同一个 hook，所以同一个筛选在两边命中同一批歌。
     const localSortContext = useMemo(() => (
         supportsLocalTrackSorting
@@ -1602,7 +1602,7 @@ export const GridView: React.FC<GridViewProps> = ({
 
     // Everything the palette is allowed to do to this grid, and the branch rules that decide which
     // of it applies. Declared next to the buttons it mirrors so the two cannot disagree; the actual
-    // gating and dispatch live in ../utils/libraryUi/collectionSurface.
+    // gating and dispatch live in ../library/core/model/collectionSurface.
     const gridSurfaceParams: GridSurfaceParams = {
         hasInfoPanel: hasCutInPanel,
         hasTrackList: mode === 'tracks' && displayTracks.length > 0,

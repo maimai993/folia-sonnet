@@ -1,7 +1,7 @@
 import React from 'react';
 import GridView from '../../src/components/GridView';
-import { createStaticCollectionResource } from '../../src/services/libraryUi/staticCollectionResource';
-import type { CollectionResource } from '../../src/types/libraryUi';
+import { createStaticCollectionResource } from '../../src/library/core/services/staticCollectionResource';
+import type { CollectionResource } from '../../src/library/core/contracts/resource';
 import { createScriptedPagingResource } from './gridEntrancePerf/scriptedPagingResource';
 import { useCollectionMorphStore } from '../../src/components/collectionOpenMorph/collectionMorphStore';
 import type { ProbeDefinition } from './definition';

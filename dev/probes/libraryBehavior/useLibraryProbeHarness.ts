@@ -14,8 +14,8 @@ import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGr
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
-import { useLibraryRendererStore } from '../../../src/stores/useLibraryRendererStore';
-import { useLibraryBrowseSessionStore } from '../../../src/stores/useLibraryBrowseSessionStore';
+import { useLibraryRendererStore } from '../../../src/library/core/state/useLibraryRendererStore';
+import { useLibraryBrowseSessionStore } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
 import { unregisterOnlineMusicProvider } from '../../../src/services/onlineMusic/providerRegistry';
 import { DEFAULT_THEME } from '../../../src/services/baseThemes';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
