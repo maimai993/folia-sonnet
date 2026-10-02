@@ -81,6 +81,8 @@ export const matchesCommandScope = (scope: CommandScope | undefined, context?: C
             return context.scope.filter !== null;
         case 'grid-surface':
             return context.scope.grid !== null;
+        case 'directory-surface':
+            return context.scope.directory !== null;
         default:
             return true;
     }

@@ -101,6 +101,16 @@ const runBatch = (page: Page, action: HomeBatchAction, arg?: string) => (
     page.evaluate(([batchAction, value]) => window.__homeProbe!.runBatch(batchAction, value), [action, arg] as const)
 );
 const toggleHidden = (page: Page, id: string) => page.evaluate(itemId => window.__homeProbe!.toggleHidden(itemId), id);
+const hiddenView = (page: Page) => page.evaluate(() => window.__homeProbe!.hiddenView());
+const directoryCommands = (page: Page) => page.evaluate(() => window.__homeProbe!.directoryCommands());
+const runDirectoryCommand = (page: Page, id: string, input?: string) => (
+    page.evaluate(([commandId, value]) => window.__homeProbe!.runDirectoryCommand(commandId, value), [id, input] as const)
+);
+const BATCH_SELECTION_COMMANDS = [
+    'directory-play-selection',
+    'directory-enqueue-selection',
+    'directory-create-playlist',
+];
 const setHiddenView = (page: Page, view: HomeHiddenView) => page.evaluate(value => window.__homeProbe!.setHiddenView(value), view);
 const storedHidden = (page: Page) => page.evaluate(() => window.__homeProbe!.storedHidden());
 const switchProvider = (page: Page, providerId: string) => page.evaluate(id => window.__homeProbe!.switchProvider(id), providerId);
@@ -700,6 +710,96 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 });
 
+test.describe(`[${suite}] directory commands`, () => {
+    // 目录命令只在 GridMap 可交互时出现（GridMap 注册 directory surface），能不能做与批量面板的按钮同源。
+    test('directory commands exist only while the map is open and follow what the section supports', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        expect(await directoryCommands(page)).toEqual([]);
+        await showMap(page);
+        // 在线歌单没有批量，可隐藏：只有「管理隐藏」。
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+        await hideMap(page);
+        await expect.poll(() => directoryCommands(page)).toEqual([]);
+
+        await showList(page, 'local');
+        await showMap(page);
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-select-all']);
+        expect(await openPanel(page)).toBe(true);
+        await batchSelect(page, [homeFolderId('Extra')]);
+        await expect.poll(() => directoryCommands(page)).toEqual([
+            ...BATCH_SELECTION_COMMANDS,
+            'directory-remove-selection',
+            'directory-select-all',
+            'directory-clear-selection',
+        ]);
+        await hideMap(page);
+        await expect.poll(() => directoryCommands(page)).toEqual([]);
+
+        // 专辑：没有删除。
+        await showList(page, 'local', 'albums');
+        await showBatch(page);
+        const [firstAlbum] = await mapIds(page);
+        await batchSelect(page, [firstAlbum]);
+        await expect.poll(() => directoryCommands(page)).toEqual([
+            ...BATCH_SELECTION_COMMANDS,
+            'directory-select-all',
+            'directory-clear-selection',
+        ]);
+        await hideMap(page);
+
+        // 本地歌单：没有批量，可隐藏。
+        await showList(page, 'local', 'playlists');
+        await showMap(page);
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+    });
+
+    test('select-all from the palette opens the batch panel on the filtered cards; clear empties the selection', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        await showMap(page);
+        await setQuery(page, 'alpha');
+        await expect.poll(() => mapIds(page)).toEqual([homeFolderId('Music/Alpha'), homeFolderId('Music/Alpha/Live')]);
+
+        expect(await runDirectoryCommand(page, 'directory-select-all')).toBe(true);
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([homeFolderId('Music/Alpha'), homeFolderId('Music/Alpha/Live')]);
+        expect(await getQuery(page)).toBe('alpha');
+
+        expect(await runDirectoryCommand(page, 'directory-clear-selection')).toBe(true);
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([]);
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-select-all']);
+    });
+
+    test('create playlist from the palette takes the typed name and refuses an empty one', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        await showBatch(page);
+        await batchSelect(page, [homeFolderId('Music/Beta'), homeFolderId('Extra')]);
+        await expect.poll(() => directoryCommands(page)).toContain('directory-create-playlist');
+        await clearLog(page);
+
+        expect(await runDirectoryCommand(page, 'directory-create-playlist', '   ')).toBe(false);
+        expect(await runDirectoryCommand(page, 'directory-create-playlist', 'Palette Mix')).toBe(true);
+        await expect.poll(async () => (await localPlaylists(page)).find(playlist => playlist.name === 'Palette Mix')?.songIds)
+            .toEqual(homeLocalSongIds([...homeLocalSongsIn('Extra'), ...homeLocalSongsIn('Music/Beta')]));
+        expect(await calls(page, 'refreshLocalSongs')).toHaveLength(1);
+    });
+
+    test('manage hidden from the palette enters the hidden view and leaves it again', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showMap(page);
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+
+        expect(await runDirectoryCommand(page, 'directory-manage-hidden')).toBe(true);
+        await expect.poll(() => hiddenView(page)).toBe('manage');
+        expect(await toggleHidden(page, 'owned')).toBe(true);
+        await expect.poll(async () => (await mapItems(page)).find(item => item.id === 'owned')?.hidden).toBe(true);
+
+        expect(await runDirectoryCommand(page, 'directory-manage-hidden')).toBe(true);
+        await expect.poll(() => hiddenView(page)).toBe('browse');
+        await expect.poll(() => mapIds(page)).toEqual(['public', 'cloud', 'big', 'same']);
+    });
+});
+
 test.describe(`[${suite}] hidden items`, () => {
     test('a hidden playlist leaves the slider, the map and map search; unhiding restores it', async ({ mount, page }) => {
         await mountHome(mount, page);
@@ -950,6 +1050,44 @@ test.describe('[grid-only] directory interactions', () => {
         expect(await serviceCalls(page)).toEqual([]);
         await page.getByRole('button', { name: 'Remove imported root' }).last().click();
         await expect.poll(async () => (await serviceCalls(page))[0]).toEqual({ name: 'removeImportedRoot', args: ['Extra'] });
+    });
+
+    test('play from the palette reaches the playback port with the same songs as the panel button', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        await showMap(page);
+        await page.locator('button[class*="group/grid-title"]').click();
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([]);
+        await page.locator('button[role="checkbox"][title="Music/Beta"]').click();
+        await page.locator('[data-ponder-page-scope="local-grid-map-page"] .theme-polaroid-card', { hasText: 'Extra' }).dispatchEvent('click');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([homeFolderId('Extra'), homeFolderId('Music/Beta')]);
+        await clearLog(page);
+
+        expect(await runDirectoryCommand(page, 'directory-play-selection')).toBe(true);
+        await expect.poll(async () => (await calls(page, 'playAll')).length).toBe(1);
+        await page.getByRole('button', { name: 'Play 3 songs' }).click();
+        await expect.poll(async () => (await calls(page, 'playAll')).length).toBe(2);
+        const [fromPalette, fromPanel] = (await calls(page, 'playAll')).map(call => call.ids);
+        expect(fromPalette).toEqual(fromPanel);
+        expect(fromPalette).toEqual(localKeys([...homeLocalSongsIn('Extra'), ...homeLocalSongsIn('Music/Beta')]));
+    });
+
+    test('remove from the palette asks for the same confirmation as the panel button', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        await showBatch(page);
+        await page.locator('button[role="checkbox"][title="Music/Beta"]').click();
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([homeFolderId('Music/Beta')]);
+        await clearLog(page);
+
+        expect(await runDirectoryCommand(page, 'directory-remove-selection')).toBe(true);
+        await page.waitForTimeout(300);
+        expect(await serviceCalls(page)).toEqual([]);
+        await page.getByRole('button', { name: 'Remove from library' }).last().click();
+        await expect.poll(() => serviceCalls(page)).toEqual([
+            { name: 'deleteFolderSongs', args: ['Music/Beta'] },
+            { name: 'deleteSongsByIds', args: [homeLocalSongIds(homeLocalSongsIn('Music/Beta'))] },
+        ]);
     });
 
     test('the eye button on a card hides it while the hide editor is on', async ({ mount, page }) => {

@@ -15,6 +15,9 @@ import { useLibraryDirectoryQuery } from '../../../core/bindings/useLibraryDirec
 import { useLibraryDirectorySelection } from '../../../core/bindings/useLibraryDirectorySelection';
 import { useLibraryDirectoryVisibility } from '../../../core/bindings/useLibraryDirectoryVisibility';
 import { useLibraryDirectoryScope } from '../../../core/bindings/useLibraryDirectoryScope';
+import { useLibraryDirectoryActions } from '../../../core/bindings/useLibraryDirectoryActions';
+import { useLibraryDirectorySurfaceRegistration } from '../../../core/bindings/useLibraryDirectorySurfaceRegistration';
+import { resolveDirectorySurfaceActions } from '../../../core/model/directorySurface';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapEscapeAction,
@@ -329,6 +332,62 @@ export const GridMap: React.FC<GridMapProps> = ({
         setRemoveConfirmOpen(false);
         resetBatchSelection();
     }, [resetBatchSelection]);
+
+    // 命令面板的目录 surface：只在地图可交互时注册；动作能不能做读 core 的批量能力（与面板按钮同源）。
+    const { capabilities: batchCapabilities, run: runBatchAction } = useLibraryDirectoryActions(batchConfig, batchContext);
+    useLibraryDirectorySurfaceRegistration({
+        isInteractive,
+        getState: () => ({
+            directoryKey,
+            availableActions: resolveDirectorySurfaceActions({
+                capabilities: batchCapabilities,
+                context: batchContext,
+                displayItemCount: displayItems.length,
+                selectedItemCount: selectedBatchItemIds.size,
+                hasHideableItems,
+            }),
+            displayItemCount: displayItems.length,
+            selectedItemCount: selectedBatchItemIds.size,
+            selectedTrackCount: batchContext.trackIds.length,
+            visibilityMode,
+        }),
+        run: (action, input) => {
+            switch (action) {
+                case 'play-selection':
+                    void runBatchAction('play');
+                    return true;
+                case 'enqueue-selection':
+                    void runBatchAction('enqueue');
+                    return true;
+                case 'create-playlist': {
+                    const name = input?.trim();
+                    if (!name) return false;
+                    void runBatchAction('create-playlist', name);
+                    return true;
+                }
+                case 'remove-selection':
+                    // 与面板按钮一样先确认；确认框在批量面板里（有选中时面板一定开着）。
+                    setRemoveConfirmOpen(true);
+                    return true;
+                case 'select-all':
+                    if (!showCutInPanel) openCutInPanel();
+                    replaceBatchSelection(displayItems.map(item => String(item.id)));
+                    return true;
+                case 'clear-selection':
+                    replaceBatchSelection([]);
+                    return true;
+                case 'manage-hidden':
+                    if (!showCutInPanel) {
+                        openCutInPanel();
+                        setVisibilityMode('manage');
+                    } else {
+                        togglePlaylistEditMode();
+                    }
+                    return true;
+            }
+            return false;
+        },
+    });
 
     // Track responsive container size to scale grid card dimensions dynamically
     const [containerSize, setContainerSize] = useState(() => {

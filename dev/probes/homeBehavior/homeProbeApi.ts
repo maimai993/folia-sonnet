@@ -13,6 +13,10 @@ import GridMapBatchPanel from '../../../src/library/suites/grid/directory/GridMa
 import type { LibraryDirectoryNode } from '../../../src/library/core/contracts/directory';
 import { resolveDirectoryBatchActions, resolveDirectoryBatchScope, runDirectoryBatchAction } from '../../../src/library/core/model/directoryBatch';
 import { getLibraryDirectorySession, useLibraryDirectorySessionStore } from '../../../src/library/core/state/useLibraryDirectorySessionStore';
+import { useLibraryDirectorySurfaceStore } from '../../../src/library/core/state/useLibraryDirectorySurfaceStore';
+import { COMMAND_PALETTE_COMMANDS, isCommandPaletteCommandEnabled } from '../../../src/components/command-palette/commandRegistry';
+import type { CommandPaletteContext } from '../../../src/components/command-palette/types';
+import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { hiddenIdsOf, isDirectoryItemHidden, isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
 import { useHiddenCollectionsStore } from '../../../src/library/core/state/useHiddenCollectionsStore';
 import type { LibraryHiddenScope } from '../../../src/library/core/contracts/directory';
@@ -159,6 +163,18 @@ const titleButton = (): HTMLButtonElement | null => (
     firstHostElement(gridMapFiber())?.querySelector<HTMLButtonElement>('button[class*="group/grid-title"]') ?? null
 );
 const isPanelOpen = () => Boolean(batchPanelProps()) || Boolean(panelButton('home.hidePlaylists') || panelButton('home.finishHidingPlaylists'));
+
+// ---- 目录命令：真实的命令定义，配一个只有 scope 与 t 的 context（目录命令只用到这两样） ----
+const DIRECTORY_COMMANDS = COMMAND_PALETTE_COMMANDS.filter(command => command.scope === 'directory-surface');
+const directoryCommandContext = (): CommandPaletteContext => ({
+    scope: {
+        view: useAppViewStore.getState().view,
+        filter: useAppViewStore.getState().commandFilter,
+        grid: useGridSurfaceStore.getState().gridSurface,
+        directory: useLibraryDirectorySurfaceStore.getState().directorySurface,
+    },
+    shared: { t: (key: string, fallback?: string) => i18n.t(key, { defaultValue: fallback }) },
+}) as unknown as CommandPaletteContext;
 
 /** 安装 `window.__homeProbe`，返回卸载函数。 */
 export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => {
@@ -322,6 +338,17 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
                 action === 'create-playlist' ? (arg ?? 'Probe Playlist') : arg,
             );
             return result.ok;
+        },
+        directorySurface: () => useLibraryDirectorySurfaceStore.getState().directorySurface?.getState() ?? null,
+        directoryCommands: () => {
+            const context = directoryCommandContext();
+            return DIRECTORY_COMMANDS.filter(command => isCommandPaletteCommandEnabled(command, context)).map(command => command.id);
+        },
+        runDirectoryCommand: async (id, input = '') => {
+            const context = directoryCommandContext();
+            const command = DIRECTORY_COMMANDS.find(candidate => candidate.id === id);
+            if (!command || !isCommandPaletteCommandEnabled(command, context)) return false;
+            return Boolean(await command.execute(input, context));
         },
         directoryNodes: () => flattenDirectory(batchPanelProps()?.config.directoryTrees ?? surfaceProps()?.batchConfig?.directoryTrees).map(node => ({
             path: node.path,

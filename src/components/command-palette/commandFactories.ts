@@ -3,6 +3,7 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { GridSurfaceActionId } from '../../types/gridCommandSurface';
+import type { LibraryDirectorySurfaceActionId } from '../../library/core/contracts/directory';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { CommandPaletteCommand, CommandPaletteContext, CommandPaletteGroup } from './types';
 
@@ -111,6 +112,34 @@ export const createGridSurfaceCommand = (
         context.scope.grid?.run(action);
         return true;
     },
+});
+
+/**
+ * One action published by the home directory on screen (GridMap's batch selection and hidden view).
+ *
+ * Same contract as the grid surface: `isAvailable` asks the directory's own `availableActions`, which
+ * come from the same Library Core capabilities the batch panel's buttons obey. A command that needs
+ * text (a playlist name) passes the palette input through; `run` refuses an empty one.
+ */
+export const createDirectorySurfaceCommand = (
+    id: string,
+    title: string,
+    description: string,
+    keywords: string[],
+    action: LibraryDirectorySurfaceActionId,
+    icon?: CommandPaletteCommand['icon'],
+    options: Pick<CommandPaletteCommand, 'requiresInput' | 'placeholder'> = {},
+): CommandPaletteCommand => defineCommand({
+    id,
+    group: 'grid',
+    title,
+    description,
+    keywords,
+    icon,
+    ...options,
+    scope: 'directory-surface',
+    isAvailable: context => context?.scope.directory?.getState().availableActions.includes(action) ?? false,
+    execute: (input, context) => context.scope.directory?.run(action, input) ?? false,
 });
 
 export const createAppLanguageCommand = (

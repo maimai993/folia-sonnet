@@ -200,3 +200,33 @@ export interface LibraryDirectoryBatchCapabilities {
     /** 选中范围里有歌、且没有动作在进行：播放、入队、新建歌单、删除可用。 */
     canUseTracks: boolean;
 }
+
+/**
+ * 目录交给命令面板的动作（directory surface）。批量动作作用于选中范围；select-all 选中筛选出的全部条目
+ * （网格里会先打开批量面板）；remove-selection 只请求删除（网格里打开确认框）；manage-hidden 切换「管理隐藏」视图。
+ */
+export type LibraryDirectorySurfaceActionId =
+    | 'play-selection'
+    | 'enqueue-selection'
+    | 'create-playlist'
+    | 'remove-selection'
+    | 'select-all'
+    | 'clear-selection'
+    | 'manage-hidden';
+
+/** 命令面板问目录的状态；每次现读，不缓存。 */
+export interface LibraryDirectorySurfaceState {
+    directoryKey: string;
+    /** 此刻可用的动作（core/model/directorySurface 的 resolveDirectorySurfaceActions，与面板按钮同源）。 */
+    availableActions: readonly LibraryDirectorySurfaceActionId[];
+    displayItemCount: number;
+    selectedItemCount: number;
+    selectedTrackCount: number;
+    visibilityMode: LibraryDirectoryVisibilityMode;
+}
+
+/** 正在交互的目录发布给命令面板的句柄。run 返回动作是否被接下（create-playlist 没有名字时为 false）。 */
+export interface LibraryDirectorySurfaceHandle {
+    getState(): LibraryDirectorySurfaceState;
+    run(action: LibraryDirectorySurfaceActionId, input?: string): boolean;
+}

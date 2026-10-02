@@ -1,7 +1,7 @@
 import type { ProbeFault } from '../libraryBehavior/fakeProviders';
 import type { ProbeRefreshKind } from '../libraryBehavior/probeGates';
 import type { ProbeCall, ProbeRequest } from '../libraryBehavior/probeLog';
-import type { LibraryDirectoryBatchActionId, LibraryDirectoryVisibilityMode } from '../../../src/library/core/contracts/directory';
+import type { LibraryDirectoryBatchActionId, LibraryDirectorySurfaceState, LibraryDirectoryVisibilityMode } from '../../../src/library/core/contracts/directory';
 
 // dev/probes/homeBehavior/probeApi.ts
 // 首页行为探针挂在 window 上的驱动接口。只有类型：component 用例 import 它不会把探针运行时带进 Node。
@@ -146,6 +146,14 @@ export type HomeProbeApi = {
     /** 执行批量动作；create-playlist 的参数是歌单名，三个根目录动作的参数是路径。 */
     runBatch: (action: HomeBatchAction, arg?: string) => Promise<boolean>;
     directoryNodes: () => HomeDirectoryNode[];
+
+    // ---- 命令面板的目录 surface ----
+    /** 当前注册的目录 surface 的状态（没有正在交互的目录时为 null）。 */
+    directorySurface: () => LibraryDirectorySurfaceState | null;
+    /** 此刻可用的目录命令 id（用真实的命令定义与门控判断）。 */
+    directoryCommands: () => string[];
+    /** 像在命令面板里选中这条命令并回车一样执行它（input 是面板里输入的文字）。 */
+    runDirectoryCommand: (id: string, input?: string) => Promise<boolean>;
 
     // ---- 隐藏 ----
     /** 切换一张卡的隐藏（需要 GridMap 打开，与卡片上的眼睛按钮同一个回调）。 */
