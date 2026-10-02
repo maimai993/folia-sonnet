@@ -220,7 +220,8 @@ export const restorePlaybackSourceForSong = async (
 
     const audioResult = await loadOnlineSongAudioSource(song, audioQuality, null);
     if (audioResult.kind === 'unavailable') {
-        setStatusMsg({ type: 'error', text: i18n.t('status.playbackFailed') });
+        setStatusMsg({ type: 'error', text: i18n.t(audioResult.reason === 'preview-only' ? 'status.songPreviewOnly'
+            : audioResult.reason === 'auth-required' ? 'status.loginExpired' : 'status.playbackFailed') });
         return false;
     }
 

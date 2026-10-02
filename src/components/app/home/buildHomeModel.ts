@@ -110,7 +110,8 @@ export const buildHomeModel = ({
             onBackToPlayer: navigateToPlayer,
             onOpenLattice: navigateToLattice,
             onRefreshUser: () => refreshOnlineProviderPlaylists(),
-            user: onlineProviderPlatform?.activeProvider?.user ?? user,
+            // An anonymous selected provider must not inherit a different platform's account.
+            user: onlineProviderPlatform?.activeProvider ? onlineProviderPlatform.activeProvider.user : user,
             playlists: onlineProviderPlatform?.activeProvider?.collections.filter(collection => collection.type !== 'cloud') ?? playlists,
             cloudPlaylist: onlineProviderPlatform?.activeProvider?.collections.find(collection => collection.type === 'cloud') ?? cloudPlaylist,
             currentTrack: currentSong,

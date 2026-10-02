@@ -57,6 +57,7 @@ vi.mock('@/utils/blobGuards', () => ({
 import { loadOnlineSongAudioSource, loadOnlineSongLyrics } from '@/services/onlinePlayback';
 import { markOnlineLyricsPureMusic } from '@/utils/onlineLyricsState';
 import type { SongResult } from '@/types';
+import { OnlineProviderError } from '@/types/onlineMusic';
 
 // test/unit/onlinePlayback.test.ts
 
@@ -74,6 +75,12 @@ describe('online audio ReplayGain plumbing', () => {
         vi.clearAllMocks();
         cachedAudioMock.mockResolvedValue(null);
         isUrlValidMock.mockReturnValue(true);
+    });
+
+    it.each(['preview-only', 'region-restricted', 'auth-required'] as const)('preserves %s for the queue and does not cache audio', async reason => {
+        sourceMock.mockRejectedValueOnce(new OnlineProviderError(reason, 'Playback unavailable', 'bodian'));
+        await expect(loadOnlineSongAudioSource(song, 'high', null)).resolves.toEqual({ kind: 'unavailable', reason });
+        expect(updatePrefetchedAudioUrlMock).not.toHaveBeenCalled();
     });
 
     it('returns provider metadata and stores it with the prefetched URL', async () => {

@@ -784,6 +784,10 @@ declare global {
       restartNeteaseApi: () => Promise<ElectronNeteaseApiStatus>;
       onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       getKugouApiStatus: () => Promise<ElectronKugouApiStatus>;
+      bodianRequest: (
+        operation: import('./services/onlineMusic/bodianTransport').BodianOperation,
+        params?: import('./services/onlineMusic/bodianTransport').BodianParams,
+      ) => Promise<import('./services/onlineMusic/bodianTransport').BodianBridgeResult>;
       kugouRequest: (
         operation: ElectronKugouOperation,
         params?: Record<string, string | number | boolean | undefined>,
