@@ -3,7 +3,7 @@ import type { MediaId } from '@/types/onlineMusic';
 import type { LibraryCollectionDescriptor } from '@/library/core/contracts/collection';
 import type { CollectionResourceKind } from '@/library/core/contracts/resource';
 import type { LibraryMutationPort } from '@/library/core/contracts/ports';
-import { isCloudDriveCollection } from '@/library/core/services/onlineCollectionCache';
+import { isCloudDriveCollection } from '@/library/core/model/collectionIdentity';
 import {
     EMPTY_COLLECTION_MUTATION_SNAPSHOT,
     resolveCollectionMutationBranches,

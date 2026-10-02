@@ -1,4 +1,8 @@
-import type { LibraryCollectionDescriptor, LibraryCollectionIdentity } from '../contracts/collection';
+import type {
+    LibraryCollectionDescriptor,
+    LibraryCollectionIdentity,
+    OnlineGridViewCollectionDescriptor,
+} from '../contracts/collection';
 
 // src/library/core/model/collectionIdentity.ts
 // 集合身份的唯一真源。在线集合的身份必须带 provider：两个 provider 下的歌单 id 完全可能相同，
@@ -41,4 +45,9 @@ export const collectionRevision = (
     collection
         ? `${collection.tracksUpdatedAt ?? ''}|${collection.updatedAt ?? ''}|${collection.trackCount ?? ''}`
         : ''
+);
+
+/** 是不是云盘集合（类型为 cloud，或 id 为 -100）；缓存键、变更能力与网格都按它区分云盘。 */
+export const isCloudDriveCollection = (collection: Pick<OnlineGridViewCollectionDescriptor, 'type' | 'id'>): boolean => (
+    collection.type === 'cloud' || Number(collection.id) === -100
 );

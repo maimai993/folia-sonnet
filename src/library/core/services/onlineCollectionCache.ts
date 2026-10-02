@@ -1,6 +1,7 @@
 import type { SongResult } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
 import type { OnlineGridViewCollectionDescriptor } from '../contracts/collection';
+import { isCloudDriveCollection } from '../model/collectionIdentity';
 import { saveToCache } from '../../../services/db';
 import { getProviderCacheKey, getProviderCacheWithLegacyMigration } from '../../../services/onlineMusic/providerStorage';
 
@@ -23,10 +24,6 @@ export type OnlineTracksCacheEntry = {
 };
 
 type StoredOnlineTracks = { tracks: SongResult[]; snapshotTime: number; schemaVersion?: number } | SongResult[];
-
-export const isCloudDriveCollection = (collection: Pick<OnlineTracksCacheIdentity, 'type' | 'id'>): boolean => (
-    collection.type === 'cloud' || Number(collection.id) === -100
-);
 
 /** 缓存键的 provider 内部分（不含 provider 命名空间）。 */
 export const resolveOnlineTracksCacheSuffix = (

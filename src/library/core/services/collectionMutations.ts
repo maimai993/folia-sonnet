@@ -22,7 +22,7 @@ import {
     type CollectionEntryRemovalKind,
 } from '../model/collectionMutationCapabilities';
 import { getProviderCacheKey } from '../../../services/onlineMusic/providerStorage';
-import { isCloudDriveCollection } from './onlineCollectionCache';
+import { isCloudDriveCollection } from '../model/collectionIdentity';
 
 // src/library/core/services/collectionMutations.ts
 // 集合的变更动作层：删条目、订阅、改名、删除集合、重扫、导出、加入 / 新建 Navidrome 歌单、

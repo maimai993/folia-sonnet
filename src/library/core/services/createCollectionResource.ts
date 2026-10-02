@@ -1,9 +1,9 @@
 import type { MediaId } from '../../../types/onlineMusic';
 import type { LibraryCollectionDescriptor } from '../contracts/collection';
 import type { CollectionResource } from '../contracts/resource';
-import { collectionKey } from '../model/collectionIdentity';
+import { collectionKey, isCloudDriveCollection } from '../model/collectionIdentity';
 import { omni } from '../../../services/onlineMusic/omni';
-import { isCloudDriveCollection, readOnlineTracksCache, writeOnlineTracksCache } from './onlineCollectionCache';
+import { readOnlineTracksCache, writeOnlineTracksCache } from './onlineCollectionCache';
 import { createOnlineCollectionResource, type OnlineCollectionResourceDeps } from './onlineCollectionResource';
 import { createNavidromeCollectionResource } from './navidromeCollectionResource';
 import { resolveNavidromeServerScope } from './navidromeCollectionTracks';
