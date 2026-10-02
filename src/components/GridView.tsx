@@ -56,7 +56,8 @@ import {
     GRID_BACKGROUND_BATCH_SIZE,
     GRID_INITIAL_BATCH_SIZE,
 } from './folia-grid/progressiveGrid';
-import { syncRemainingCollectionPages } from './folia-grid/onlineCollectionSync';
+import { syncRemainingCollectionPages, type CollectionSyncPage } from './folia-grid/onlineCollectionSync';
+import { createCollectionTrackSnapshot, readCollectionTrackSnapshot } from './folia-grid/collectionTrackSnapshot';
 import { useProgressiveItemEntrance } from './folia-grid/useProgressiveItemEntrance';
 import { useLocalCoverPreloader } from '../hooks/useLocalCoverPreloader';
 import { compareLocalFolderSongs, formatLocalAlbumTrackLabel, type LocalAlbumGroupKey, type LocalSongFolderSortDirection, type LocalSongFolderSortField } from '../utils/localSongSorting';
@@ -738,8 +739,6 @@ export const GridView: React.FC<GridViewProps> = ({
         setIsCreatePlaylistOpen(false);
     }, [playableTracks, sourceActions]);
 
-    const CACHE_SCHEMA_VERSION = 5;
-
     const isCloudDrive = collection ? (collection.type === 'cloud' || Number(collection.id) === -100) : false;
     const CACHE_SUFFIX = collection ? (isCloudDrive
         ? `playlist_tracks_cloud_${currentUserId ?? 'anonymous'}`
@@ -789,52 +788,36 @@ export const GridView: React.FC<GridViewProps> = ({
                 const cached = bypassCache
                     ? null
                     : collection.source === 'online'
-                    ? await getProviderCacheWithLegacyMigration<{ tracks: SongResult[], snapshotTime: number; schemaVersion?: number; } | SongResult[]>(
+                    ? await getProviderCacheWithLegacyMigration<unknown>(
                         collection.providerId,
                         CACHE_SUFFIX,
                         [CACHE_SUFFIX],
                     )
-                    : await getFromCache<{ tracks: SongResult[], snapshotTime: number; schemaVersion?: number; } | SongResult[]>(CACHE_KEY);
+                    : await getFromCache<unknown>(CACHE_KEY);
 
-                let cachedTracks: SongResult[] = [];
-                let cachedTime = 0;
-                let cachedSchemaVersion = 0;
-
-                if (Array.isArray(cached)) {
-                    cachedTracks = cached;
-                } else if (cached && cached.tracks) {
-                    cachedTracks = cached.tracks;
-                    cachedTime = cached.snapshotTime;
-                    cachedSchemaVersion = cached.schemaVersion ?? 0;
-                }
-
-                if (cachedTracks.length > 0 && targetTime > 0 && cachedTime === targetTime && cachedSchemaVersion === CACHE_SCHEMA_VERSION) {
-                    setTracks(cachedTracks);
-                    setOffset(cachedTracks.length);
+                const snapshot = readCollectionTrackSnapshot<SongResult>(cached, targetTime);
+                if (snapshot) {
+                    setTracks(snapshot.tracks);
+                    setOffset(snapshot.nextOffset);
                     setLoading(false);
-                    const cachedHasMore = collection.trackCount !== undefined
-                        ? cachedTracks.length < collection.trackCount
-                        : true;
-                    setHasMore(cachedHasMore);
-                    if (cachedHasMore) {
-                        void fetchRemainingTracks(cachedTracks, targetTime, collection.trackCount);
+                    setHasMore(snapshot.hasMore);
+                    if (snapshot.hasMore) {
+                        void fetchRemainingTracks(snapshot.tracks, targetTime, snapshot.total ?? collection.trackCount, snapshot.nextOffset);
                     }
                     return;
                 }
 
-                let responseTracks: SongResult[] = [];
-                let hasMoreSync = false;
-                let totalTracksSync: number | undefined;
+                let initialPage: CollectionSyncPage<SongResult>;
 
                 if (collection.type === 'radio' && collection.id === 'personal_fm') {
-                    responseTracks = await omni.getPersonalFm();
+                    const items = await omni.getPersonalFm();
+                    initialPage = { items, nextOffset: items.length, hasMore: false };
                 } else if (isDailyRecommendationsCollection) {
-                    responseTracks = await omni.getDailySongs();
+                    const items = await omni.getDailySongs();
+                    initialPage = { items, nextOffset: items.length, hasMore: false };
                 } else {
                     const page = await loadOnlineCollectionPage(GRID_INITIAL_BATCH_SIZE, 0);
-                    responseTracks = page.items;
-                    hasMoreSync = page.hasMore;
-                    totalTracksSync = page.total;
+                    initialPage = page;
                     if (typeof page.total === 'number' && page.total > 0) {
                         setCollectionDetail(previous => ({
                             ...(previous || collection),
@@ -843,21 +826,22 @@ export const GridView: React.FC<GridViewProps> = ({
                     }
                 }
 
-                if (responseTracks.length > 0) {
+                const initialSnapshot = createCollectionTrackSnapshot(initialPage, targetTime);
+                if (initialSnapshot.tracks.length > 0 || initialSnapshot.hasMore) {
                     // 大歌单的整表更新一律走 transition：这首歌单可能有几千首，分页每 100ms 回来一次，
                     // 每次都要重算 gridItems（O(N)）并重渲染整个渲染环。用户点开的同时合成层还在飞 ——
                     // 把它降级成可打断的渲染，React 会在切片之间让浏览器提交帧，动画继续跑、交互不被堵，
                     // 观感是「列表在后面慢慢补齐」而不是「打开时卡一下」。
                     startTransition(() => {
-                        setTracks(responseTracks);
-                        setOffset(responseTracks.length);
-                        setHasMore(hasMoreSync);
+                        setTracks(initialSnapshot.tracks);
+                        setOffset(initialSnapshot.nextOffset);
+                        setHasMore(initialSnapshot.hasMore);
                     });
 
-                    saveToCache(CACHE_KEY, { tracks: responseTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+                    saveToCache(CACHE_KEY, initialSnapshot);
 
-                    if (hasMoreSync) {
-                        fetchRemainingTracks(responseTracks, targetTime, totalTracksSync);
+                    if (initialSnapshot.hasMore) {
+                        void fetchRemainingTracks(initialSnapshot.tracks, targetTime, initialSnapshot.total, initialSnapshot.nextOffset);
                     }
                 } else {
                     setHasMore(false);
@@ -870,7 +854,7 @@ export const GridView: React.FC<GridViewProps> = ({
                     if (page.items.length > 0) {
                         setTracks(prev => {
                             const combined = [...prev, ...page.items];
-                            saveToCache(CACHE_KEY, { tracks: combined, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+                            saveToCache(CACHE_KEY, createCollectionTrackSnapshot({ ...page, items: combined }, targetTime));
                             return combined;
                         });
                         setOffset(page.nextOffset);
@@ -894,8 +878,8 @@ export const GridView: React.FC<GridViewProps> = ({
     const fetchRemainingTracks = async (
         initialTracks: SongResult[],
         targetTime: number,
-        totalTracksOverride?: number,
-        startOffset = initialTracks.length,
+        totalTracksOverride: number | undefined,
+        startOffset: number,
     ) => {
         const generation = ++backgroundSyncGenerationRef.current;
         const isCancelled = () => backgroundSyncGenerationRef.current !== generation;
@@ -913,7 +897,7 @@ export const GridView: React.FC<GridViewProps> = ({
             fetchPage: pageOffset => loadOnlineCollectionPage(GRID_BACKGROUND_BATCH_SIZE, pageOffset),
             getKey: song => getPlaybackSongKey(song),
             isCancelled,
-            onPage: (nextTracks, nextOffset) => {
+            onPage: (nextTracks, nextOffset, hasMore) => {
                 if (isDraggingRef.current) {
                     pendingBackgroundTracksRef.current = nextTracks;
                     pendingBackgroundOffsetRef.current = nextOffset;
@@ -924,10 +908,16 @@ export const GridView: React.FC<GridViewProps> = ({
                         setOffset(nextOffset);
                     });
                 }
-                saveToCache(CACHE_KEY, { tracks: nextTracks, snapshotTime: targetTime, schemaVersion: CACHE_SCHEMA_VERSION });
+                saveToCache(CACHE_KEY, createCollectionTrackSnapshot({
+                    items: nextTracks, nextOffset, hasMore, total: totalTracks,
+                }, targetTime));
             },
         });
         if (result.status === 'cancelled') return;
+
+        saveToCache(CACHE_KEY, createCollectionTrackSnapshot({
+            items: result.items, nextOffset: result.offset, hasMore: result.status === 'failed', total: totalTracks,
+        }, targetTime));
 
         if (result.status === 'failed') {
             console.error("GridView background sync failed:", result.error);
@@ -1178,7 +1168,8 @@ export const GridView: React.FC<GridViewProps> = ({
             const songPlaybackKey = getPlaybackSongKey(track);
             const nextTracks = tracks.filter(candidate => getPlaybackSongKey(candidate) !== songPlaybackKey);
             commitAfterTrackRemovalAnimation(trackKey, () => setTracks(nextTracks));
-            await saveToCache(CACHE_KEY, { tracks: nextTracks, snapshotTime: Date.now(), schemaVersion: CACHE_SCHEMA_VERSION });
+            // Removing a track shifts server page boundaries; reload instead of resuming an old cursor.
+            await removeFromCache(CACHE_KEY);
             await removeFromCache(getProviderCacheKey(collection.providerId, `playlist_detail_${collection.id}`));
             await onPlaylistMutated?.();
         } catch (error) {

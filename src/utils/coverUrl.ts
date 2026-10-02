@@ -3,6 +3,10 @@
 const NON_RESIZABLE_COVER_PROTOCOLS = new Set(['blob:', 'data:', 'file:', 'filesystem:']);
 const KUGOU_COVER_HOST_PATTERN = /(?:^|\.)(?:kugou\.com|kgimg\.com)$/i;
 const KUGOU_COVER_PATH_PATTERN = /(\/stdmusic\/)(\d+)(\/)/;
+const KUWO_COVER_HOST_PATTERN = /^img\d*\.kuwo\.cn$/i;
+const KUWO_COVER_PATH_PATTERN = /^(\/star\/(?:albumcover|starheads)\/)(\d+)(\/)/;
+const KUWO_COVER_SMALL_SIZE = 240;
+const KUWO_COVER_LARGE_SIZE = 800;
 const QQ_COVER_HOSTNAMES = new Set(['y.gtimg.cn', 'y.qq.com']);
 const QQ_COVER_PATH_PATTERN = /(T00[12])(?:R(\d+)x\d+)?(M000)/;
 const QQ_COVER_SMALL_SIZE = 300;
@@ -29,6 +33,16 @@ const withKugouCoverSize = (url: URL, size: number): string => {
     return url.toString();
 };
 
+const isKuwoCoverUrl = (url: URL): boolean => (
+    KUWO_COVER_HOST_PATTERN.test(url.hostname) && KUWO_COVER_PATH_PATTERN.test(url.pathname)
+);
+
+// Bodian metadata supplies 240px thumbnails and 800px artwork, including its albumPic120 field.
+const withKuwoCoverSize = (url: URL, size: number): string => {
+    url.pathname = url.pathname.replace(KUWO_COVER_PATH_PATTERN, `$1${size}$3`);
+    return url.toString();
+};
+
 const isQqCoverUrl = (url: URL): boolean => (
     QQ_COVER_HOSTNAMES.has(url.hostname) && QQ_COVER_PATH_PATTERN.test(url.pathname)
 );
@@ -50,6 +64,10 @@ export const getOriginalCoverUrl = (url: string | null | undefined): string => {
 
     try {
         const urlObj = new URL(trimmedUrl);
+        if (isKuwoCoverUrl(urlObj)) {
+            const originalSize = Number(KUWO_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]);
+            return withKuwoCoverSize(urlObj, Math.max(KUWO_COVER_LARGE_SIZE, originalSize));
+        }
         return isQqCoverUrl(urlObj) ? withQqCoverSize(urlObj, null) : trimmedUrl;
     } catch {
         return trimmedUrl;
@@ -77,6 +95,13 @@ export const getSizedCoverUrl = (url: string | null | undefined, size: number): 
 
         if (isKugouCoverUrl(urlObj)) {
             return withKugouCoverSize(urlObj, normalizedSize);
+        }
+
+        if (isKuwoCoverUrl(urlObj)) {
+            // The shared smallest poster step is 256px; use the CDN's available 240px thumbnail.
+            if (normalizedSize <= 256) return withKuwoCoverSize(urlObj, KUWO_COVER_SMALL_SIZE);
+            if (normalizedSize <= KUWO_COVER_LARGE_SIZE) return withKuwoCoverSize(urlObj, KUWO_COVER_LARGE_SIZE);
+            return getOriginalCoverUrl(trimmedUrl);
         }
 
         if (isQqCoverUrl(urlObj)) {
@@ -114,7 +139,7 @@ export const getSizedCoverUrl = (url: string | null | undefined, size: number): 
 /**
  * Widths a card is allowed to ask for. The steps double, so a box has to change gear by a factor
  * of two before its artwork is refetched, and every one of them lands on something the providers
- * actually serve: QQ rounds 256 up to its own 300 bucket and 512 up to 800, local thumbnails are
+ * actually serve: QQ rounds 256 up to its own 300 bucket and 512 up to 800; Kuwo uses 240 and 800. Local thumbnails are
  * stored at exactly 512 and 1024, and Netease, KuGou and Navidrome resize to the number given.
  * Quantising also keeps the URL shared between cards showing the same song at similar sizes, which
  * is what lets the browser hand them all one decoded bitmap.
@@ -130,7 +155,7 @@ export const resolveCoverSizeStep = (size: number): number => (
     COVER_SIZE_STEPS.find(step => step >= size) ?? Number.POSITIVE_INFINITY
 );
 
-export type CoverProvider = 'netease' | 'kugou' | 'qq' | 'navidrome' | 'local' | 'other';
+export type CoverProvider = 'netease' | 'kugou' | 'kuwo' | 'qq' | 'navidrome' | 'local' | 'other';
 
 export interface CoverUrlDescription {
     provider: CoverProvider;
@@ -161,6 +186,9 @@ export const describeCoverUrl = (url: string | null | undefined): CoverUrlDescri
         }
         if (isKugouCoverUrl(urlObj)) {
             return { provider: 'kugou', requestedSize: parseSize(KUGOU_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
+        }
+        if (isKuwoCoverUrl(urlObj)) {
+            return { provider: 'kuwo', requestedSize: parseSize(KUWO_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
         }
         if (isQqCoverUrl(urlObj)) {
             return { provider: 'qq', requestedSize: parseSize(QQ_COVER_PATH_PATTERN.exec(urlObj.pathname)?.[2]) };
