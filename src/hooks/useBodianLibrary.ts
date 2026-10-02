@@ -40,6 +40,7 @@ export const useBodianLibrary = () => {
                     collections: matching?.collections || [], likedSongIds: matching?.likedSongIds || [],
                     hydration: 'ready', freshness: 'refreshing', lastUpdatedAt: matching?.savedAt, error: undefined });
             }
+            const likesBeforeRefresh = useOnlineProviderAccountStore.getState().accounts.bodian.likedSongIds;
             const collections: ProviderCollection[] = [];
             const capabilities = omni.getProviderCapabilities('bodian');
             let offset = 0;
@@ -52,16 +53,23 @@ export const useBodianLibrary = () => {
                     offset = page.nextOffset;
                 }
             }
-            const likedSongIds: MediaId[] = capabilities.likes ? await omni.getProviderLikedSongIds('bodian', user.id) : [];
+            const fetchedLikedSongIds: MediaId[] = capabilities.likes ? await omni.getProviderLikedSongIds('bodian', user.id) : [];
             if (generation.current !== current) return false;
-            const save = pendingSave.current.catch(() => {}).then(() => generation.current === current
-                ? saveProviderAccountSnapshot('bodian', { user, collections, likedSongIds }) : null);
+            const save = pendingSave.current.catch(() => {}).then(() => {
+                if (generation.current !== current) return null;
+                // Omni replaces this array after each like mutation; keep those newer changes.
+                const latestLikes = useOnlineProviderAccountStore.getState().accounts.bodian.likedSongIds;
+                const likedSongIds = latestLikes === likesBeforeRefresh ? fetchedLikedSongIds : latestLikes;
+                // Commit before saving so a mutation during persistence cannot be overwritten afterward.
+                store.updateAccount('bodian', { status: 'authenticated', user, collections, likedSongIds,
+                    hydration: 'ready', error: undefined });
+                return saveProviderAccountSnapshot('bodian', { user, collections, likedSongIds });
+            });
             pendingSave.current = save;
             const saved = await save;
             if (generation.current !== current) return false;
             if (!saved) return false;
-            store.updateAccount('bodian', { status: 'authenticated', user, collections, likedSongIds,
-                hydration: 'ready', freshness: 'fresh', lastUpdatedAt: saved.savedAt, error: undefined });
+            store.updateAccount('bodian', { freshness: 'fresh', lastUpdatedAt: saved.savedAt });
             return true;
         } catch (error) {
             if (generation.current !== current) return false;

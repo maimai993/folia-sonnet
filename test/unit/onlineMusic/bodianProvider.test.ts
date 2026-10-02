@@ -73,16 +73,21 @@ describe('Bodian provider', () => {
                 subTitle: '「为你量身打造的专属歌单」',
                 musicList: [track, { ...track, id: Number(params.index) + 1000, songName: 'Discover 歌曲' }],
             };
-            if (operation === 'recommendations') return { lists: [{ playLists: [{ id: 123, name: '普通推荐', musicCount: 8 }] }] };
+            if (operation === 'recommendations') return { lists: [{ playLists: [
+                { id: 123, name: '普通推荐', musicCount: 8 }, { id: 124, name: '另一推荐', musicCount: 6 },
+            ] }] };
             return {};
         });
         const collections = await bodianProvider.recommendations!.getRecommendedCollections!(10);
-        expect(collections).toHaveLength(3);
+        expect(collections).toHaveLength(4);
         expect(collections.slice(0, 2)).toMatchObject([
             { id: 'discover-0', name: '潮趣日推', trackCount: 2, providerData: { discoverIndex: 0 } },
             { id: 'discover-1', name: '新歌大赏', trackCount: 2, providerData: { discoverIndex: 1 } },
         ]);
-        expect(collections[2]).toMatchObject({ id: '123', name: '普通推荐' });
+        expect(collections.slice(2)).toMatchObject([
+            { id: '123', name: '普通推荐', type: 'playlist' },
+            { id: '124', name: '另一推荐', type: 'playlist' },
+        ]);
     });
 
     it('keeps ordinary recommendations when Discover loading fails', async () => {

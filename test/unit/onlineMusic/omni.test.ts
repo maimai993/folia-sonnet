@@ -21,6 +21,7 @@ vi.mock('@/services/onlineMusic/providerAccountCache', async importOriginal => (
 
 const providerId = 'omni-test';
 const otherProviderId = 'omni-resource-test';
+const missingProviderId = 'omni-missing-provider-test';
 const capabilities: ProviderCapabilities = {
     search: true, playback: true, lyrics: false, auth: false, userLibrary: false,
     playlists: false, albums: false, artists: false, recommendations: false,
@@ -56,11 +57,11 @@ afterEach(() => {
 
 describe('omni routing', () => {
     it('falls back from a persisted provider missing in the current build', () => {
-        useOnlineProviderAccountStore.getState().setActiveProviderId('bodian');
+        useOnlineProviderAccountStore.getState().setActiveProviderId(missingProviderId);
 
         expect(omni.getActiveProviderSummary()?.providerId).toBe('netease');
         expect(omni.getActiveCapabilities()).toEqual(omni.getProviderCapabilities('netease'));
-        expect(useOnlineProviderAccountStore.getState().activeProviderId).toBe('bodian');
+        expect(useOnlineProviderAccountStore.getState().activeProviderId).toBe(missingProviderId);
     });
 
     it('marks a provider without auth as one that needs no account', () => {
@@ -72,7 +73,7 @@ describe('omni routing', () => {
     });
 
     it('reports songs from unavailable providers as unplayable without routing them elsewhere', () => {
-        expect(omni.canPlaySong(song('bodian'))).toBe(false);
+        expect(omni.canPlaySong(song(missingProviderId))).toBe(false);
     });
 
     it('routes ordinary search through the active provider and resources through their owner', async () => {

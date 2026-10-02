@@ -109,7 +109,7 @@ export const bodianProvider: OnlineMusicProvider = {
         async getRecommendedCollections(limit) {
             const [regular, discover] = await Promise.all([
                 requestBodian<any>('recommendations').then(data => (
-                    (data.lists || []).flatMap((group: any) => group.playLists || []).map(normalizeBodianCollection)
+                    (data.lists || []).flatMap((group: any) => group.playLists || []).map((item: unknown) => normalizeBodianCollection(item))
                 )).catch(() => [] as ProviderCollection[]),
                 getBodianDiscoverCollections(),
             ]);
