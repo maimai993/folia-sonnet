@@ -89,3 +89,21 @@ export interface LibraryDirectoryNodeSelection {
 
 /** 点一次节点复选框后要变成的选择：全部取消、只选本层、选整棵子树。 */
 export type LibraryDirectoryNodeSelectionTarget = 'none' | 'direct' | 'all';
+
+/**
+ * 隐藏项的作用域：在线按 provider 分（`online:${providerId}`），本地曲库一个、Navidrome 一个；
+ * `default` 是没声明作用域的目录的兜底。同一个 id 在不同作用域互不影响。
+ */
+export type LibraryHiddenScope = `online:${string}` | 'local' | 'navidrome' | 'default';
+
+/**
+ * 隐藏表：作用域 → 隐藏的条目 id（按隐藏的先后）。就是 localStorage `hidden_grid_playlists` 里存的格式；
+ * 取消隐藏后作用域留一个空数组。
+ */
+export type LibraryHiddenCollections = Record<string, string[]>;
+
+/**
+ * 目录的隐藏视图：browse 只显示未隐藏的（浏览、筛选、批量都在这之上）；manage 显示全部并标出隐藏的；
+ * manage-hidden-only 只显示隐藏的。后两个是「管理隐藏」（网格里是 GridMap 的隐藏编辑模式）。
+ */
+export type LibraryDirectoryVisibilityMode = 'browse' | 'manage' | 'manage-hidden-only';

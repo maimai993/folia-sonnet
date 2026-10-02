@@ -5,7 +5,9 @@ import GridMap, { type GridMapBatchConfig } from '../directory/GridMap';
 import { Theme } from '../../../../types';
 import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
 import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
-import { isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
+import { filterDirectoryByVisibility, resolveSourceDirectoryIndex, resolveVisibleDirectoryIndex } from '../../../core/model/directoryVisibility';
+import type { LibraryHiddenScope } from '../../../core/contracts/directory';
+import { useHiddenCollections } from '../../../core/bindings/useHiddenCollections';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
 
 // src/library/suites/grid/home/DesktopGrid3DSurface.tsx
@@ -20,27 +22,6 @@ export interface DesktopGrid3DAction {
     disabled?: boolean;
     title?: string;
 }
-
-const HIDDEN_GRID_PLAYLISTS_STORAGE_KEY = 'hidden_grid_playlists';
-
-const readHiddenGridPlaylists = (): Record<string, string[]> => {
-    if (typeof window === 'undefined') return {};
-
-    try {
-        const stored = localStorage.getItem(HIDDEN_GRID_PLAYLISTS_STORAGE_KEY);
-        const parsed = stored ? JSON.parse(stored) : {};
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-
-        return Object.fromEntries(
-            Object.entries(parsed).map(([scope, ids]) => [
-                scope,
-                Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [],
-            ]),
-        );
-    } catch {
-        return {};
-    }
-};
 
 interface DesktopGrid3DSurfaceProps {
     focusMemoryScope?: string;
@@ -58,7 +39,8 @@ interface DesktopGrid3DSurfaceProps {
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
-    playlistVisibilityScope?: string;
+    /** 隐藏项的作用域（隐藏表与规则在 core：useHiddenCollectionsStore / directoryVisibility）。 */
+    playlistVisibilityScope?: LibraryHiddenScope;
     batchConfig?: GridMapBatchConfig;
     ponderControls?: 'local-grid-controls';
     gridMapPonderScope?: 'local-grid-map-page';
@@ -87,27 +69,22 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
 }) => {
     const [showGridMap, setShowGridMap] = useState(false);
     const chrome = gridChromeClassesFor(isDaylight);
-    const [hiddenPlaylistsByScope, setHiddenPlaylistsByScope] = useState(readHiddenGridPlaylists);
+    const { hiddenIds: hiddenPlaylistIds, toggleHidden: togglePlaylistHidden } = useHiddenCollections(playlistVisibilityScope);
     const { focusedIndex, onFocusedIndexChange } = useHomeCardPosition(
         focusMemoryScope, items, legacyFocusedIndex, onLegacyFocusedIndexChange, isLoading,
     );
 
-    const hiddenPlaylistIds = useMemo(
-        () => new Set(hiddenPlaylistsByScope[playlistVisibilityScope] || []),
-        [hiddenPlaylistsByScope, playlistVisibilityScope],
-    );
     const visibleItems = useMemo(
-        () => items.filter(item => !isHideableDirectoryItem(item) || !hiddenPlaylistIds.has(String(item.id))),
+        () => filterDirectoryByVisibility(items, hiddenPlaylistIds, 'browse'),
         [hiddenPlaylistIds, items],
     );
-    const visibleFocusedIndex = useMemo(() => {
-        const focusedItem = items[focusedIndex];
-        const nextIndex = focusedItem ? visibleItems.indexOf(focusedItem) : -1;
-        return nextIndex >= 0 ? nextIndex : 0;
-    }, [focusedIndex, items, visibleItems]);
+    const visibleFocusedIndex = useMemo(
+        () => resolveVisibleDirectoryIndex(items, visibleItems, focusedIndex),
+        [focusedIndex, items, visibleItems],
+    );
 
     const handleVisibleFocusedIndexChange = (index: number) => {
-        const sourceIndex = items.indexOf(visibleItems[index]);
+        const sourceIndex = resolveSourceDirectoryIndex(items, visibleItems, index);
         if (sourceIndex >= 0) onFocusedIndexChange(sourceIndex);
     };
 
@@ -115,28 +92,6 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
         const sourceIndex = items.indexOf(item);
         if (sourceIndex >= 0) onFocusedIndexChange(sourceIndex);
         onSelect(item, sourceIndex >= 0 ? sourceIndex : index);
-    };
-
-    const togglePlaylistHidden = (item: Grid3DSliderItem) => {
-        if (!isHideableDirectoryItem(item)) return;
-
-        const id = String(item.id);
-        setHiddenPlaylistsByScope(previous => {
-            const current = new Set(previous[playlistVisibilityScope] || []);
-            if (current.has(id)) {
-                current.delete(id);
-            } else {
-                current.add(id);
-            }
-
-            const next = { ...previous, [playlistVisibilityScope]: [...current] };
-            try {
-                localStorage.setItem(HIDDEN_GRID_PLAYLISTS_STORAGE_KEY, JSON.stringify(next));
-            } catch {
-                // Keep the visibility change for this session when storage is unavailable.
-            }
-            return next;
-        });
     };
 
     return (
@@ -214,6 +169,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             type: item.type,
                             path: item.type === 'folder' && !item.isVirtual ? String(item.name) : undefined,
                             trackIds: item.trackIds,
+                            isVirtual: item.isVirtual,
                             rawCollection: item,
                         }))}
                         initialFocusedIndex={focusedIndex}
@@ -230,7 +186,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                         isInteractive={isInteractive}
                         theme={theme}
                         isDaylight={isDaylight}
-                        isPlaylistHidden={(item) => hiddenPlaylistIds.has(String(item.id))}
+                        hiddenIds={hiddenPlaylistIds}
                         onTogglePlaylistHidden={togglePlaylistHidden}
                         batchConfig={batchConfig}
                         ponderPageScope={gridMapPonderScope}

@@ -11,7 +11,7 @@ import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
 import { matchesDirectorySearch } from '../../../core/model/directorySearch';
 import GridMapBatchPanel from './GridMapBatchPanel';
 import { resolveDirectoryBatchContext } from '../../../core/model/directoryBatch';
-import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem } from '../../../core/contracts/directory';
+import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem, LibraryDirectoryVisibilityMode } from '../../../core/contracts/directory';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapEscapeAction,
@@ -20,7 +20,7 @@ import {
 } from './gridMapNavigation';
 import { formatGridMapFolderTitle } from '../../../../utils/gridMapFolderPath';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
-import { isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
+import { filterDirectoryByVisibility, isHideableDirectoryItem } from '../../../core/model/directoryVisibility';
 import { useSidePanelBottomPx } from '../../../../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow, isTextEntryTarget } from '../../../../utils/keyboardTargets';
 
@@ -51,11 +51,14 @@ interface GridMapProps {
     theme: Theme;
     isDaylight: boolean;
     isInteractive?: boolean;
-    isPlaylistHidden?: (item: GridMapItem) => boolean;
+    /** 当前作用域里隐藏的条目 id（来自 core 的隐藏 store，由外层按作用域取好）。 */
+    hiddenIds?: ReadonlySet<string>;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
     batchConfig?: GridMapBatchConfig;
     ponderPageScope?: 'grid-page' | 'local-grid-map-page';
 }
+
+const NO_HIDDEN_IDS: ReadonlySet<string> = new Set();
 
 const compactDescription = (description?: string, maxLength = 72) => {
     if (!description) return '';
@@ -239,7 +242,7 @@ export const GridMap: React.FC<GridMapProps> = ({
     theme,
     isDaylight,
     isInteractive = true,
-    isPlaylistHidden = () => false,
+    hiddenIds = NO_HIDDEN_IDS,
     onTogglePlaylistHidden,
     batchConfig,
     ponderPageScope = 'grid-page',
@@ -284,15 +287,14 @@ export const GridMap: React.FC<GridMapProps> = ({
         (onActivateCollection || onSelectCollection)(item.rawCollection || item, sourceIndex);
     }, [items, onActivateCollection, onSelectCollection]);
 
-    const visibleItems = useMemo(() => {
-        if (isPlaylistEditMode && showHiddenPlaylistsOnly) {
-            return items.filter(item => isHideableDirectoryItem(item) && isPlaylistHidden(item));
-        }
-
-        return isPlaylistEditMode
-            ? items
-            : items.filter(item => !isHideableDirectoryItem(item) || !isPlaylistHidden(item));
-    }, [isPlaylistEditMode, isPlaylistHidden, items, showHiddenPlaylistsOnly]);
+    // 隐藏编辑模式就是「管理隐藏」视图：显示全部并标出隐藏的，或只看隐藏的；平时只看未隐藏的。
+    const visibilityMode: LibraryDirectoryVisibilityMode = !isPlaylistEditMode
+        ? 'browse'
+        : showHiddenPlaylistsOnly ? 'manage-hidden-only' : 'manage';
+    const visibleItems = useMemo(
+        () => filterDirectoryByVisibility(items, hiddenIds, visibilityMode),
+        [hiddenIds, items, visibilityMode],
+    );
 
     const displayItems = useMemo(() => {
         if (!deferredSearchQuery.trim()) return visibleItems;
@@ -600,7 +602,7 @@ export const GridMap: React.FC<GridMapProps> = ({
                         item={item}
                         isDaylight={isDaylight}
                         isPlaylistEditMode={isPlaylistEditMode}
-                        isHidden={isPlaylistHidden(item)}
+                        isHidden={hiddenIds.has(String(item.id))}
                         isBatchMode={Boolean(batchConfig && showCutInPanel)}
                         isBatchSelected={selectedBatchItemIds.has(String(item.id))}
                         onTogglePlaylistHidden={isHideableDirectoryItem(item) && onTogglePlaylistHidden
@@ -633,7 +635,7 @@ export const GridMap: React.FC<GridMapProps> = ({
         baseCoords,
         isDaylight,
         isPlaylistEditMode,
-        isPlaylistHidden,
+        hiddenIds,
         batchConfig,
         showCutInPanel,
         selectedBatchItemIds,

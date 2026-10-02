@@ -1,7 +1,7 @@
 import type { ProbeFault } from '../libraryBehavior/fakeProviders';
 import type { ProbeRefreshKind } from '../libraryBehavior/probeGates';
 import type { ProbeCall, ProbeRequest } from '../libraryBehavior/probeLog';
-import type { LibraryDirectoryBatchActionId } from '../../../src/library/core/contracts/directory';
+import type { LibraryDirectoryBatchActionId, LibraryDirectoryVisibilityMode } from '../../../src/library/core/contracts/directory';
 
 // dev/probes/homeBehavior/probeApi.ts
 // 首页行为探针挂在 window 上的驱动接口。只有类型：component 用例 import 它不会把探针运行时带进 Node。
@@ -27,9 +27,11 @@ export type HomeProbeItem = {
     trackCount?: number;
     trackIds?: string[];
     description?: string;
+    /** 虚拟条目（本地「全部歌曲」「我喜欢」、未知专辑 / 歌手）；不是虚拟条目时不出现。 */
+    isVirtual?: true;
     /** 这类条目能不能隐藏（歌单类）。 */
     hideable: boolean;
-    /** 隐藏了：在来源列表里，但不在滑条里。 */
+    /** 隐藏了：可隐藏，且在当前作用域的隐藏表里（core 的隐藏 store）。滑条上是否真的不见了看 visibleItems。 */
     hidden: boolean;
 };
 
@@ -41,6 +43,7 @@ export type HomeProbeMapItem = {
     path?: string;
     description?: string;
     trackIds?: string[];
+    isVirtual?: true;
     hidden: boolean;
 };
 
@@ -84,8 +87,8 @@ export type HomeDirectoryNode = {
     totalTrackCount: number;
 };
 
-/** 「管理隐藏」视图：browse 只看未隐藏的；manage 显示全部并标出隐藏的；manage-hidden-only 只看隐藏的。 */
-export type HomeHiddenView = 'browse' | 'manage' | 'manage-hidden-only';
+/** 「管理隐藏」视图：browse 只看未隐藏的；manage 显示全部并标出隐藏的；manage-hidden-only 只看隐藏的。与 core 的契约同一套。 */
+export type HomeHiddenView = LibraryDirectoryVisibilityMode;
 
 export type HomeProbeApi = {
     /** 种子、账户、Navidrome 垫片都就绪。 */
@@ -158,7 +161,7 @@ export type HomeProbeApi = {
     switchProvider: (providerId: string) => Promise<boolean>;
 
     // ---- 环境 ----
-    /** 重新挂载整个首页（宿主 + Grid3D），模拟重启后回到首页。 */
+    /** 重新挂载整个首页（宿主 + Grid3D），模拟重启后回到首页（隐藏 store 先从存储重读）。 */
     remount: () => void;
     localSongIds: () => string[];
     localPlaylists: () => { id: string; name: string; songIds: string[] }[];

@@ -36,6 +36,7 @@ import { useHomeLayoutSettingsStore } from '../../../../stores/useHomeLayoutSett
 import { useNeteaseApiStatusStore } from '../../../../stores/useNeteaseApiStatusStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';
+import { onlineHiddenScope } from '../../../core/model/directoryVisibility';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -941,7 +942,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         isDaylight={isDaylight}
                         isInteractive={isInteractive}
                         hasFloatingPlayer={Boolean(currentTrack)}
-                        playlistVisibilityScope={`online:${activeProviderId}`}
+                        playlistVisibilityScope={onlineHiddenScope(activeProviderId)}
                     />
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">

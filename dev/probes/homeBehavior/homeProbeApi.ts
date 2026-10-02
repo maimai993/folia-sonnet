@@ -12,7 +12,9 @@ import GridMap, { type GridMapBatchConfig, type GridMapBatchContext, type GridMa
 import GridMapBatchPanel from '../../../src/library/suites/grid/directory/GridMapBatchPanel';
 import type { LibraryDirectoryNode } from '../../../src/library/core/contracts/directory';
 import { resolveDirectoryBatchActions } from '../../../src/library/core/model/directoryBatch';
-import { isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
+import { hiddenIdsOf, isDirectoryItemHidden, isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
+import { useHiddenCollectionsStore } from '../../../src/library/core/state/useHiddenCollectionsStore';
+import type { LibraryHiddenScope } from '../../../src/library/core/contracts/directory';
 import { SidePanelList } from '../../../src/components/shared/SidePanelList';
 import { addProbeFault, setProbeLatency } from '../libraryBehavior/fakeProviders';
 import { probeRefreshGate } from '../libraryBehavior/probeGates';
@@ -34,7 +36,8 @@ import {
 // dev/probes/homeBehavior/homeProbeApi.ts
 // `window.__homeProbe` 的网格实现。读的是界面交给叶子组件的 props（见 reactFiberProbe.ts 的说明），
 // 调的是这些 props 里的回调——与点击走同一个函数。只有两处没有 props 可调、只能点 DOM：GridMap 标题上
-// 打开侧面板的按钮，和隐藏管理面板里的两个开关（都在本文件里注明）。
+// 打开侧面板的按钮，和隐藏管理面板里的两个开关（都在本文件里注明）。隐藏状态读的是 core 的隐藏 store
+// （按当前列表的作用域），不从组件 props 推断。
 
 const HIDDEN_STORAGE_KEY = 'hidden_grid_playlists';
 
@@ -45,14 +48,13 @@ type SurfaceProps = {
     tabs?: DesktopGrid3DAction[];
     actions?: DesktopGrid3DAction[];
     isLoading?: boolean;
-    playlistVisibilityScope?: string;
+    playlistVisibilityScope?: LibraryHiddenScope;
     batchConfig?: GridMapBatchConfig;
 };
 type SliderProps = { items: Grid3DSliderItem[]; onSelect: (item: Grid3DSliderItem, index: number) => void };
 type GridMapProps = {
     items: GridMapItem[];
     onBack: () => void;
-    isPlaylistHidden?: (item: GridMapItem) => boolean;
     onTogglePlaylistHidden?: (item: GridMapItem) => void;
     batchConfig?: GridMapBatchConfig;
 };
@@ -76,6 +78,12 @@ const mapDisplayItems = (): GridMapItem[] | null => {
     if (!map) return null;
     return propsOf<{ items: GridMapItem[] }>(findPresentComponent(SidePanelList, map))?.items ?? null;
 };
+
+/** 当前列表作用域的隐藏 id（core 的隐藏 store；作用域缺省与 DesktopGrid3DSurface 一样落在 default）。 */
+const currentHiddenIds = () => hiddenIdsOf(
+    useHiddenCollectionsStore.getState().hiddenByScope,
+    surfaceProps()?.playlistVisibilityScope ?? 'default',
+);
 
 const asId = (id: string | number) => String(id);
 const nameOf = (name: unknown) => (typeof name === 'string' || typeof name === 'number' ? String(name) : '');
@@ -138,6 +146,12 @@ const isPanelOpen = () => Boolean(batchPanelProps()) || Boolean(panelButton('hom
 export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => {
     const api: HomeProbeApi = {
         ...bindings,
+        // 模拟重启：隐藏 store 是模块级状态，重挂载不会重读存储；先从 localStorage 重读一遍，
+        // 「重启后仍隐藏」断言的才是持久化的那份。
+        remount: () => {
+            useHiddenCollectionsStore.getState().hydrate();
+            bindings.remount();
+        },
 
         tabs: readTabs,
         tab: () => useSearchNavigationStore.getState().homeViewTab as HomeTabKey,
@@ -152,20 +166,18 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
         items: () => {
             const props = surfaceProps();
             if (!props) return [];
-            const visible = new Set((sliderProps()?.items ?? []).map(item => asId(item.id)));
-            return props.items.map(item => {
-                const hideable = isHideableDirectoryItem(item);
-                return {
-                    id: asId(item.id),
-                    name: nameOf(item.name),
-                    type: item.type,
-                    trackCount: item.trackCount,
-                    trackIds: item.trackIds,
-                    description: item.description,
-                    hideable,
-                    hidden: hideable && !visible.has(asId(item.id)),
-                };
-            });
+            const hiddenIds = currentHiddenIds();
+            return props.items.map(item => ({
+                id: asId(item.id),
+                name: nameOf(item.name),
+                type: item.type,
+                trackCount: item.trackCount,
+                trackIds: item.trackIds,
+                description: item.description,
+                ...(item.isVirtual ? { isVirtual: true } : {}),
+                hideable: isHideableDirectoryItem(item),
+                hidden: isDirectoryItemHidden(item, hiddenIds),
+            }));
         },
         visibleItems: () => (sliderProps()?.items ?? []).map(item => asId(item.id)),
         scope: () => surfaceProps()?.playlistVisibilityScope ?? null,
@@ -209,9 +221,9 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
         },
         isMapOpen: () => Boolean(gridMapFiber()),
         mapItems: () => {
-            const props = gridMapProps();
             const items = mapDisplayItems();
-            if (!props || !items) return [];
+            if (!gridMapFiber() || !items) return [];
+            const hiddenIds = currentHiddenIds();
             return items.map(item => ({
                 id: asId(item.id),
                 name: item.name,
@@ -219,7 +231,8 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
                 path: item.path,
                 description: item.description,
                 trackIds: item.trackIds,
-                hidden: isHideableDirectoryItem(item) && Boolean(props.isPlaylistHidden?.(item)),
+                ...(item.isVirtual ? { isVirtual: true } : {}),
+                hidden: isDirectoryItemHidden(item, hiddenIds),
             }));
         },
         setQuery: query => {

@@ -334,6 +334,8 @@ test.describe(`[${suite}] local tab`, () => {
         const folders = await items(page);
         expect(folders.map(item => item.id)).toEqual(HOME_LOCAL_FOLDER_IDS);
         expect(folders.every(item => item.type === 'folder' && !item.hideable)).toBe(true);
+        // 「全部歌曲」作为虚拟条目交给目录（P3.1 起滑条条目保留 isVirtual，删除守卫按它判断）。
+        expect(folders.filter(item => item.isVirtual).map(item => item.id)).toEqual([HOME_ALL_SONGS_ID]);
         expect(folders[0].trackIds).toEqual(homeLocalSongIds(HOME_LOCAL_SONGS.map(song => song.index)));
         for (const folder of ['Extra', 'Music/Alpha', 'Music/Alpha/Live', 'Music/Beta']) {
             expect(folders.find(item => item.id === homeFolderId(folder))?.trackIds, folder).toEqual(homeLocalSongIds(homeLocalSongsIn(folder)));
@@ -366,6 +368,7 @@ test.describe(`[${suite}] local tab`, () => {
             ['Liked Songs', 'playlist', true],
             [HOME_LOCAL_PLAYLIST.name, 'playlist', true],
         ]);
+        expect(playlists.map(item => Boolean(item.isVirtual))).toEqual([true, false]);
         expect(playlists[0].trackIds).toEqual([]);
         expect(playlists[1].trackIds).toEqual(homeLocalSongIds(HOME_LOCAL_PLAYLIST.songs));
     });
@@ -471,6 +474,10 @@ test.describe(`[${suite}] directory filter`, () => {
         await showList(page, 'local');
         await showMap(page);
         expect(await mapIds(page)).toEqual(HOME_LOCAL_FOLDER_IDS);
+        // 虚拟的「全部歌曲」不是文件夹：地图上没有路径（不按路径匹配、不进目录树的路径规则）。
+        const allSongs = (await mapItems(page)).find(item => item.id === HOME_ALL_SONGS_ID);
+        expect(allSongs?.isVirtual).toBe(true);
+        expect(allSongs?.path).toBeUndefined();
 
         expect(await setQuery(page, 'alpha')).toBe(true);
         await expect.poll(() => mapIds(page)).toEqual([homeFolderId('Music/Alpha'), homeFolderId('Music/Alpha/Live')]);

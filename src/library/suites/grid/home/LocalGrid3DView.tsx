@@ -204,7 +204,8 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
             onRemove: async context => {
                 const selectedIds = new Set(context.trackIds);
                 // A direct-only selection must not ignore descendants that the user excluded.
-                const folderPaths = context.items.filter(item => item.id !== 'folder-__all-songs__').map(item => item.path || item.name).filter(path =>
+                // 虚拟条目（「全部歌曲」）不对应任何文件夹，不按文件夹删；它的歌照常按 id 删。
+                const folderPaths = context.items.filter(item => !item.isVirtual).map(item => item.path || item.name).filter(path =>
                     localSongs.every(song => !(song.folderName === path || song.folderName?.startsWith(`${path}/`)) || selectedIds.has(song.id)));
                 for (const path of folderPaths.filter(path => !folderPaths.some(parent => path !== parent && path.startsWith(`${parent}/`)))) {
                     await deleteFolderSongs(path);
@@ -305,6 +306,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                     description: item.description,
                     trackCount: item.trackCount,
                     type: item.type,
+                    isVirtual: item.isVirtual,
                     trackIds: item.songs.map((song: LocalSong) => song.id),
                 }))}
                 focusedIndex={activeSection.focusedIndex}

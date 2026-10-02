@@ -174,6 +174,9 @@ describe('library core layer boundaries', () => {
         expect(listSources('src/library/suites/grid/directory').filter(file => (
             /\/(gridMapBatch|gridMapSearch|gridItemVisibility)\.ts$/.test(file)
         ))).toEqual([]);
+        // 隐藏表只有一个持有者：core 的隐藏 store（网格滑条与 GridMap 都经它读写）。
+        expect(listSources('src').filter(file => read(file).includes("'hidden_grid_playlists'")))
+            .toEqual([`${CORE}/state/useHiddenCollectionsStore.ts`]);
     });
 
     it('keeps the mutation layer injectable: omni and the cache are wired in one place only', () => {
