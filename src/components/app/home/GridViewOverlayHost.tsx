@@ -1,13 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import GridView, { GridViewSourceActions } from '../../GridView';
+import GridView from '../../GridView';
 import ArtistGridView from '../../ArtistGridView';
 import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../../types';
-import { deleteFolderSongs, resyncAllFolders, resyncFolder } from '../../../services/localMusicService';
-import { deleteLocalPlaylist, removeSongsFromLocalPlaylist, updateLocalPlaylist } from '../../../services/localPlaylistService';
-import { downloadLocalPlaylistM3u8 } from '../../../services/localPlaylistFileService';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import {
@@ -21,6 +18,7 @@ import {
     resolveLocalGridViewTracks,
 } from './gridViewCollectionAdapters';
 import { createLibraryPlaybackPort } from './createLibraryPlaybackPort';
+import { createLibraryMutationPort, toGridViewSourceActions } from './createLibraryMutationPort';
 import { useCollectionResource } from '../../../hooks/libraryUi/useCollectionResource';
 import type { LocalLibraryCatalogSnapshot } from '../../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../modal/LocalLibraryEntityPanel';
@@ -504,106 +502,20 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [refreshNavidromePlaylists, selectedCollection]);
 
 
-    const sourceActions = useMemo<GridViewSourceActions>(() => ({
-        local: {
-            onRefresh: surfaceProps.onRefreshLocalSongs,
-            onEditEntity: async (entityId) => setEditingEntityId(entityId),
-            onOrganizeFolderSongInfo: async (collection) => {
-                if (isLocalGridViewCollection(collection) && collection.type === 'folder' && !collection.isVirtual) {
-                    setOrganizingFolder(collection);
-                }
-            },
-            onMatchSong: async (songId) => setMatchingSongId(songId),
-            onResyncFolder: async (collection) => {
-                const importedSongs = await resyncFolder(collection.name);
-                if (importedSongs !== null) {
-                    await surfaceProps.onRefreshLocalSongs();
-                }
-            },
-            onResyncAllFolders: async () => {
-                const importedSongs = await resyncAllFolders();
-                if (importedSongs !== null) {
-                    await surfaceProps.onRefreshLocalSongs();
-                }
-            },
-            onDeleteFolder: async (collection) => {
-                await deleteFolderSongs(collection.name);
-                surfaceProps.onRefreshLocalSongs();
-            },
-            onRenamePlaylist: async (playlistId, name) => {
-                await updateLocalPlaylist(playlistId, playlist => ({
-                    ...playlist,
-                    name: name.trim(),
-                }));
-                surfaceProps.onRefreshLocalSongs();
-            },
-            onDeletePlaylist: async (playlistId) => {
-                await deleteLocalPlaylist(playlistId);
-                surfaceProps.onRefreshLocalSongs();
-            },
-            onExportPlaylist: async (playlistId) => {
-                const playlist = surfaceProps.localPlaylists.find(item => item.id === playlistId);
-                if (!playlist) return;
-                downloadLocalPlaylistM3u8(playlist, surfaceProps.localSongs);
-                surfaceProps.onStatusMessage?.({
-                    type: 'success',
-                    text: t('localMusic.playlistExportSuccess', { name: playlist.name }),
-                });
-            },
-            onRemovePlaylistSongs: async (playlistId, songIds) => {
-                await removeSongsFromLocalPlaylist(playlistId, songIds);
-            },
+    // 来源动作（本地曲库、Navidrome、对话框、账户刷新）集中在变更端口里；网格在接入变更控制器之前
+    // 仍按旧形状接收，从端口原样转接。
+    const mutationPort = useMemo(() => createLibraryMutationPort({
+        surface: surfaceProps,
+        t,
+        dialogs: {
+            editEntity: setEditingEntityId,
+            organizeFolder: setOrganizingFolder,
+            matchSong: setMatchingSongId,
         },
-        navidrome: {
-            availablePlaylists: navidromePlaylistItems,
-            onAddToPlaylist: async (playlistId, songs) => {
-                const config = getNavidromeConfig();
-                if (!config) return;
-
-                await navidromeApi.updatePlaylist(config, String(playlistId), {
-                    songIdsToAdd: songs
-                        .map(song => (song as UnifiedSong).navidromeData?.id)
-                        .filter((id): id is string => Boolean(id)),
-                });
-                await refreshNavidromePlaylists();
-            },
-            onCreatePlaylist: async (name, songs) => {
-                const config = getNavidromeConfig();
-                if (!config) return;
-
-                await navidromeApi.createPlaylist(
-                    config,
-                    name,
-                    songs
-                        .map(song => (song as UnifiedSong).navidromeData?.id)
-                        .filter((id): id is string => Boolean(id))
-                );
-                await refreshNavidromePlaylists();
-            },
-            onRenamePlaylist: async (playlistId, name) => {
-                const config = getNavidromeConfig();
-                if (!config) return;
-
-                await navidromeApi.updatePlaylist(config, playlistId, { name });
-                await refreshNavidromePlaylists();
-            },
-            onDeletePlaylist: async (playlistId) => {
-                const config = getNavidromeConfig();
-                if (!config) return;
-
-                await navidromeApi.deletePlaylist(config, playlistId);
-                await refreshNavidromePlaylists();
-            },
-            onRemovePlaylistSongs: async (playlistId, songIndexes) => {
-                const config = getNavidromeConfig();
-                if (!config) return;
-
-                await navidromeApi.updatePlaylist(config, playlistId, {
-                    songIndexesToRemove: songIndexes,
-                });
-            },
-        },
-    }), [surfaceProps, navidromePlaylistItems, refreshNavidromePlaylists]);
+        navidromePlaylists: navidromePlaylistItems,
+        refreshNavidromePlaylists,
+    }), [surfaceProps, t, navidromePlaylistItems, refreshNavidromePlaylists]);
+    const sourceActions = useMemo(() => toGridViewSourceActions(mutationPort), [mutationPort]);
 
     const editingEntity = editingEntityId
         ? localLibraryCatalog.entities.find(entity => entity.id === editingEntityId)

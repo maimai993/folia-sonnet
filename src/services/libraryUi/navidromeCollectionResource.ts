@@ -63,6 +63,12 @@ export const createNavidromeCollectionResource = (
             if (schedule) schedule(commit);
             else commit();
         },
+        removeAt: (index, expectedKey) => {
+            const current = state.get().tracks;
+            if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;
+            state.set({ tracks: current.filter((_, position) => position !== index) }, 'urgent');
+            return true;
+        },
         replaceTrackAt: (index, expectedKey, next) => {
             const current = state.get().tracks;
             if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;

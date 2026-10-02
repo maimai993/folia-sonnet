@@ -27,6 +27,12 @@ export const createStaticCollectionResource = (key: string, tracks: SongResult[]
             if (schedule) schedule(commit);
             else commit();
         },
+        removeAt: (index, expectedKey) => {
+            const current = state.get().tracks;
+            if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;
+            commitTracks(current.filter((_, position) => position !== index));
+            return true;
+        },
         replaceTrackAt: (index, expectedKey, next) => {
             const current = state.get().tracks;
             if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;

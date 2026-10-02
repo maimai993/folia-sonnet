@@ -279,6 +279,18 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             // 快照时间写成现在：与集合版本对不上，下次打开会重新拉取。
             await deps.writeCache(cacheKey(), state.get().tracks.filter(track => !match(track)), Date.now());
         },
+        removeAt: (index, expectedKey) => {
+            const current = state.get().tracks;
+            if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;
+            // 墓碑按歌记：同一首还有别的条目时，记了会连它们一起藏掉，不记又会被补页带回来。
+            if (current.some((track, position) => position !== index && getPlaybackSongKey(track) === expectedKey)) return false;
+            tombstones.add(expectedKey);
+            const next = current.filter((_, position) => position !== index);
+            commitTracks(next);
+            deps.writeCache(cacheKey(), next, Date.now())
+                .catch(error => console.warn('[LibraryUi] Failed to invalidate collection tracks cache:', error));
+            return true;
+        },
         replaceTrackAt: (index, expectedKey, next) => {
             const current = state.get().tracks;
             if (!current[index] || getPlaybackSongKey(current[index]) !== expectedKey) return false;

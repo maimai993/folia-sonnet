@@ -42,6 +42,7 @@ export const createScriptedPagingResource = (key: string, tracks: SongResult[]):
             state.clear();
         },
         removeTracks: async () => {},
+        removeAt: () => false,
         replaceTrackAt: () => false,
         replaceAll: async () => false,
     };

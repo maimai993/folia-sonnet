@@ -27,6 +27,7 @@ const fakeResource = (key: string, kind: CollectionResourceKind = 'online'): Fak
         pause: vi.fn(() => { resource.paused += 1; }),
         dispose: vi.fn(() => { resource.disposed = true; }),
         removeTracks: vi.fn(async () => {}),
+        removeAt: vi.fn(() => false),
         replaceTrackAt: vi.fn(() => false),
         replaceAll: vi.fn(async () => true),
     } as unknown as FakeResource;
