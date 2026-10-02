@@ -54,6 +54,7 @@ commit.md
 scripts/*
 docs/TODO.md
 design/
+plan/
 
 # Model weights: fetched and hash-verified by build/fetchModels.mjs, shipped in the installer,
 # never committed - 83MB that never changes does not belong in every clone's history.
