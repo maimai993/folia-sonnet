@@ -1,7 +1,7 @@
 # 波点音乐桌面接入
 
 波点使用独立的 `bodian` provider。普通在线操作经过 Omni；renderer 通过受限 IPC 调用主进程，
-主进程使用固定版本的 [`bodian-music-api@0.1.1`](https://www.npmjs.com/package/bodian-music-api)。
+主进程使用固定版本的 [`bodian-music-api@0.1.2`](https://www.npmjs.com/package/bodian-music-api)。
 协议代码、请求签名、接口参数、分页游标和专用歌词解码在
 [独立仓库](https://github.com/Mintcolour/bodian-music-api) 维护。
 
@@ -27,8 +27,9 @@
 桌面端保留多级 Kuwo CDN 域名的 HTTP 封面和头像地址，避免其 HTTPS 证书不匹配。
 已知 `img*.kuwo.cn` 和 `img*.kwcdn.kuwo.cn` 图片响应支持跨域取色、流体背景和 Monet。
 
-收藏/取消收藏歌单和专辑的写入尚未实现；Web 与短信登录不支持。收藏列表的空结果曾完成验收，
-非空收藏专辑仍需手动验证。Hi-Res 当前回退普通 FLAC；试听不会作为完整歌曲进入缓存。
+收藏/取消收藏歌单和专辑的写入尚未实现；Web 与短信登录不支持。收藏专辑读取已使用《梦游计》
+完成后台只读联调，专辑详情与完整 10 首歌曲通过实际 adapter 读取，未混入收藏歌单。
+Hi-Res 当前回退普通 FLAC；试听不会作为完整歌曲进入缓存。
 
 ## 会话
 
@@ -44,6 +45,8 @@
 使用 Node 24，按锁文件执行 `npm ci`。Folia 保留 IPC、加密恢复、Omni、歌词适配和分页集成测试；
 HTTP、签名、扫码与写入协议单测在独立仓库运行。分页必须使用 `nextOffset`，不能用可见条数推算：
 稀疏首页返回 99 首时仍应从 100 继续，完成缓存保留 `hasMore=false`。
+收藏歌单与专辑来自混合分页；包分流后的一页可能为空，但 `hasMore=true` 时必须继续读取，
+不能把当前分类没有条目当作整个列表已结束。
 
 打包时核对独立包及其 `qrcode` 依赖已进入产物。真实账号和图形界面由用户手动验收，
 不把 Node 单测通过视为跨平台桌面验收完成。账号、会话、签名音频地址和证书不写入仓库。

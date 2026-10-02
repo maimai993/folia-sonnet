@@ -34,7 +34,8 @@ async function allPlaylists(userId: MediaId): Promise<ProviderCollection[]> {
         collected.forEach(item => seen.add(`${item.providerData?.source}:${item.id}`));
         items.push(...collected);
         const page = bodianPage(collected, data.collected?.total, offset, 100, data.collected?.bodianPagination);
-        if (!page.hasMore || page.nextOffset <= offset || seen.size === previousCount) break;
+        // A mixed upstream page may contain only albums; its filtered playlist page is empty but still advances.
+        if (!page.hasMore || page.nextOffset <= offset || (collected.length > 0 && seen.size === previousCount)) break;
         offset = page.nextOffset;
     }
     const unique = [...new Map(items.map(item => [`${item.providerData?.source}:${item.id}`, item])).values()];

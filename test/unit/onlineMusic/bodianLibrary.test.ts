@@ -9,6 +9,32 @@ import { bodianCollectionItems, bodianLibrary, clearBodianLibraryCache } from '@
 beforeEach(() => { request.mockReset(); clearBodianLibraryCache(); });
 
 describe('Bodian library adapter', () => {
+    it('continues after an album-only upstream page to find later collected playlists', async () => {
+        request.mockResolvedValueOnce({ liked: {}, owned: {}, collected: {
+            playLists: [], bodianPagination: { nextOffset: 100, hasMore: true },
+        } }).mockResolvedValueOnce({ liked: {}, owned: {}, collected: {
+            playLists: [{ id: 3, name: 'Later playlist', sourceType: 4 }],
+            bodianPagination: { nextOffset: 101, hasMore: false },
+        } });
+        const page = await bodianLibrary.getUserPlaylists('100', 50, 0);
+        expect(page.items.map(item => item.id)).toEqual(['3']);
+        expect(page.hasMore).toBe(false);
+        expect(request).toHaveBeenLastCalledWith('user_playlists', { limit: 100, offset: 100 });
+    });
+
+    it('preserves an empty album page cursor and normalizes album identity on the following page', async () => {
+        request.mockResolvedValueOnce({ albumList: [], bodianPagination: { nextOffset: 50, hasMore: true } })
+            .mockResolvedValueOnce({ albumList: [{ id: 999, albumId: 123, name: 'Album', artist: 'Artist', sourceType: 6,
+                musicCount: 10, pic: 'http://img1.kwcdn.kuwo.cn/album.jpg' }],
+            bodianPagination: { nextOffset: 51, hasMore: false } });
+        const first = await bodianLibrary.getUserAlbums!('100', 50, 0);
+        expect(first).toMatchObject({ items: [], nextOffset: 50, hasMore: true });
+        const last = await bodianLibrary.getUserAlbums!('100', 50, first.nextOffset);
+        expect(last.items[0]).toMatchObject({ providerId: 'bodian', id: '123', type: 'album', name: 'Album', trackCount: 10,
+            artists: [{ name: 'Artist' }], coverUrl: 'http://img1.kwcdn.kuwo.cn/album.jpg' });
+        expect(last).toMatchObject({ nextOffset: 51, hasMore: false });
+        expect(last.total).toBeUndefined();
+    });
     it('combines owned, liked and collected playlists once then pages the stable snapshot', async () => {
         request.mockResolvedValue({
             liked: { id: 1, name: '喜欢', sourceType: 5, isFond: 1 },
