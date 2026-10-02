@@ -917,7 +917,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             : t('home.guestPrompt')}
                         getActionLabel={provider => canSwitchToProviderDirectly(provider)
                             ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
-                            : t('home.connectProviderAccount', { provider: provider.shortName || provider.displayName })}
+                            : t('home.loginToProvider', { provider: provider.shortName || provider.displayName })}
                         onSelect={selectProvider}
                     />
                 ) : isOnlineTab ? (

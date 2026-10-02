@@ -1109,6 +1109,8 @@ export default {
     "switchToProvider": "Switch to {{provider}}",
     "pleaseLogin": "Please login to access your library",
     "connectAccount": "Connect Netease Account",
+    "connectPlatformAccounts": "Connect platform accounts",
+    "loginToProvider": "Log in to {{provider}}",
     "connectProviderAccount": "Connect {{provider}} Account",
     "loadingLibrary": "No content",
     "resultsFor": "Results for",

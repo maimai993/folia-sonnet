@@ -1102,6 +1102,8 @@ export default {
     "switchToProvider": "Ganti ke {{provider}}",
     "pleaseLogin": "Silakan login untuk mengakses perpustakaan Anda",
     "connectAccount": "Hubungkan Akun Netease",
+    "connectPlatformAccounts": "Hubungkan akun platform",
+    "loginToProvider": "Masuk ke {{provider}}",
     "connectProviderAccount": "Hubungkan Akun {{provider}}",
     "loadingLibrary": "Tidak ada konten",
     "resultsFor": "Hasil untuk",

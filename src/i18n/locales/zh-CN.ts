@@ -1108,6 +1108,8 @@ export default {
     "switchToProvider": "切换至{{provider}}",
     "pleaseLogin": "请登录以访问您的音乐库",
     "connectAccount": "连接网易云账户",
+    "connectPlatformAccounts": "连接平台账户",
+    "loginToProvider": "登录到 {{provider}}",
     "connectProviderAccount": "连接{{provider}}账户",
     "loadingLibrary": "暂无内容",
     "resultsFor": "搜索结果：",
