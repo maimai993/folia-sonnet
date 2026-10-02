@@ -558,10 +558,15 @@ export function usePlaybackQueueController({
             }
 
             if (preloadedOnlineAudioResult.kind === 'unavailable') {
-                if (preloadedOnlineAudioResult.reason === 'preview-only' || preloadedOnlineAudioResult.reason === 'auth-required') {
+                if (preloadedOnlineAudioResult.reason === 'preview-only' || preloadedOnlineAudioResult.reason === 'auth-required'
+                    || preloadedOnlineAudioResult.reason === 'region-restricted') {
+                    shouldAutoPlayRef.current = false;
+                    audioRef.current?.pause();
+                    setPlayerState(PlayerState.IDLE);
                     setIsLyricsLoading(false);
                     setStatusMsg({ type: 'error', text: t(preloadedOnlineAudioResult.reason === 'preview-only'
-                        ? 'status.songPreviewOnly' : 'status.loginExpired') });
+                        ? 'status.songPreviewOnly' : preloadedOnlineAudioResult.reason === 'region-restricted'
+                            ? 'status.songRegionRestricted' : 'status.loginExpired') });
                     return;
                 }
                 const nextSong = getNextPlayableQueueSong(queueContext, song);
@@ -696,6 +701,7 @@ export function usePlaybackQueueController({
         }
     }, [
         audioQuality,
+        audioRef,
         blobUrlRef,
         clearPendingUnavailableSkip,
         currentOnlineAudioUrlFetchedAtRef,

@@ -14,10 +14,6 @@ function createBodianApiBridge({ store, safeStorage, requestFactory, onAudioSour
         if (!BODIAN_OPERATIONS.includes(operation)) {
           return { ok: false, error: { code: 'unsupported', message: 'Unsupported Bodian operation' } };
         }
-        if (!params || typeof params !== 'object' || Array.isArray(params)
-          || Object.keys(params).length > 20 || Object.values(params).some(value => value !== undefined && !['string', 'number', 'boolean'].includes(typeof value))) {
-          return { ok: false, error: { code: 'invalid-response', message: 'Invalid Bodian request parameters' } };
-        }
         const result = await api.request(operation, params);
         if (result.ok && operation === 'audio' && result.data?.url) onAudioSource(result.data.url);
         return result;

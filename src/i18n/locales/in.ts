@@ -156,6 +156,7 @@ export default {
     "syncFailed": "Sinkronisasi gagal",
     "loginExpired": "Login kedaluwarsa. Silakan login lagi",
     "songPreviewOnly": "Hanya pratinjau tersedia. Masuk dengan akun yang dapat memutar lagu lengkap.",
+    "songRegionRestricted": "Pemutaran hanya tersedia di Tiongkok daratan. Periksa koneksi jaringan Anda.",
     "loggedOut": "Berhasil logout",
     "clickToPlay": "Klik putar untuk mulai",
     "liked": "Ditambahkan ke Lagu Disukai",

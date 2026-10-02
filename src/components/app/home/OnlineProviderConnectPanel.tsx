@@ -46,7 +46,7 @@ const OnlineProviderConnectPanel = ({
           */}
         {/* 四个平台在常规窗口使用两列，宽屏展开为四列，避免三加一的不对称换行。 */}
         <div className="grid grid-cols-1 min-[480px]:grid-cols-2 xl:grid-cols-4 items-center justify-center gap-3.5 max-w-3xl xl:max-w-6xl w-full pt-2">
-            {providers.map(provider => {
+            {providers.filter(provider => provider.availability.reason !== 'runtime-unavailable').map(provider => {
                 const configured = provider.availability.configured;
                 const isPrimaryProvider = provider.providerId === 'netease';
                 const badge = providerBadge(provider);

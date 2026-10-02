@@ -167,6 +167,10 @@ export const omni = {
         return requireOnlineMusicProvider(providerId).capabilities;
     },
 
+    supportsDailySongs(providerId: OmniProviderId): boolean {
+        return typeof requireOnlineMusicProvider(providerId).recommendations?.getDailySongs === 'function';
+    },
+
     getProviderAvailability(providerId: OmniProviderId) {
         return requireOnlineMusicProvider(providerId).getAvailability?.() ?? { configured: true };
     },
@@ -582,11 +586,23 @@ export const omni = {
         await this.updateCollectionTracks(playlist, 'add', [song]);
         try {
             await this.refreshProviderPlaylists(playlist.providerId);
-            if (playlist.isLiked === true && providerSupports(provider, 'likes')) {
+            // Netease owns its liked state in useNeteaseLibrary; avoid its cached /likelist here.
+            if (playlist.isLiked === true && playlist.providerId !== 'netease' && providerSupports(provider, 'likes')) {
                 const account = useOnlineProviderAccountStore.getState().accounts[playlist.providerId];
                 if (account?.user?.id !== undefined && account?.user?.id !== null) {
-                    const likedSongIds = await this.getProviderLikedSongIds(playlist.providerId, account.user.id);
-                    useOnlineProviderAccountStore.getState().updateAccount(playlist.providerId, { likedSongIds });
+                    const userId = account.user.id;
+                    // A full liked list may be large. Do not delay success or overwrite a newer account/mutation.
+                    void this.getProviderLikedSongIds(playlist.providerId, userId).then(async likedSongIds => {
+                        const latest = useOnlineProviderAccountStore.getState().accounts[playlist.providerId];
+                        if (latest?.user?.id !== userId || latest.likedSongIds !== account.likedSongIds) return;
+                        useOnlineProviderAccountStore.getState().updateAccount(playlist.providerId, { likedSongIds });
+                        await persistProviderLikedSongIds(playlist.providerId);
+                    }).catch(error => {
+                        console.warn('[Omni] Failed to refresh liked songs after playlist mutation', {
+                            providerId: playlist.providerId,
+                            name: error instanceof Error ? error.name : 'Error',
+                        });
+                    });
                 }
             }
         } catch (error) {

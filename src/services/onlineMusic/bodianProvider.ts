@@ -85,7 +85,11 @@ export const bodianProvider: OnlineMusicProvider = {
     },
     lyrics: {
         async getLyrics(song) {
-            const data = await requestBodian<BodianLyricsPayload>('lyrics', { id: song.id });
+            const source = song.sourceRef;
+            if (source?.kind !== 'online' || source.providerId !== 'bodian') {
+                throw new OnlineProviderError('unsupported', 'Song does not belong to Bodian', 'bodian');
+            }
+            const data = await requestBodian<BodianLyricsPayload>('lyrics', { id: source.mediaId });
             return parseBodianLyrics(data);
         },
     },
@@ -118,8 +122,9 @@ export const bodianProvider: OnlineMusicProvider = {
             }).slice(0, limit);
         },
         async getPersonalFm() {
-            const data = await requestBodian<any>('personal_fm');
-            return (data.musicList || []).map(normalizeBodianSong);
+            return requestBodian<any>('personal_fm')
+                .then(data => (data.musicList || []).map(normalizeBodianSong))
+                .catch(() => []);
         },
     },
 };

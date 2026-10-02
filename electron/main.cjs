@@ -2844,7 +2844,7 @@ function setupCorsBypassHandlers() {
         hostname === 'y.gtimg.cn' ||
         hostname === 'kugou.com' ||
         hostname.endsWith('.kugou.com') ||
-        // Bodian audio responses from this CDN can omit CORS headers required by the Web Audio player.
+        // Bodian audio and cover CDNs may omit CORS headers needed by Web Audio and canvas/WebGL.
         bodianMediaPolicy.allows(details) ||
         hostname === 'amll-ttml-db.stevexmh.net';
     } catch (error) {

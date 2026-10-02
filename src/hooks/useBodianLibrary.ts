@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { omni } from '../services/onlineMusic/omni';
-import { clearProviderAccountSnapshot, saveProviderAccountSnapshot } from '../services/onlineMusic/providerAccountCache';
+import { clearProviderAccountSnapshot, loadProviderAccountSnapshot, saveProviderAccountSnapshot } from '../services/onlineMusic/providerAccountCache';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { OnlineProviderError } from '../types/onlineMusic';
 import type { MediaId, ProviderCollection } from '../types/onlineMusic';
@@ -25,8 +25,20 @@ export const useBodianLibrary = () => {
             if (generation.current !== current) return false;
             if (!user) {
                 store.clearAccount('bodian');
+                await pendingSave.current.catch(() => {});
                 await clearProviderAccountSnapshot('bodian');
                 return false;
+            }
+            // Restore public metadata only after the main-process session identifies the same account.
+            const visibleUser = useOnlineProviderAccountStore.getState().accounts.bodian?.user;
+            if (!visibleUser || String(visibleUser.id) !== String(user.id)) {
+                store.clearAccount('bodian');
+                const snapshot = await loadProviderAccountSnapshot('bodian').catch(() => null);
+                if (generation.current !== current) return false;
+                const matching = snapshot && String(snapshot.user.id) === String(user.id) ? snapshot : null;
+                store.updateAccount('bodian', { status: 'authenticated', user,
+                    collections: matching?.collections || [], likedSongIds: matching?.likedSongIds || [],
+                    hydration: 'ready', freshness: 'refreshing', lastUpdatedAt: matching?.savedAt, error: undefined });
             }
             const collections: ProviderCollection[] = [];
             const capabilities = omni.getProviderCapabilities('bodian');
@@ -69,7 +81,7 @@ export const useBodianLibrary = () => {
         await Promise.all([omni.logout('bodian'), clearProviderAccountSnapshot('bodian')]);
     }, []);
     useEffect(() => {
-        // Historical snapshots have no verified identity binding; only a fresh session check may populate the account.
+        // Check the desktop session before displaying cached account metadata.
         useOnlineProviderAccountStore.getState().clearAccount('bodian');
         void refresh();
         return () => { generation.current++; };

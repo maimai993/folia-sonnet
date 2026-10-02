@@ -31,7 +31,7 @@ const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string
 const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {
     const badge = AVATAR_BADGE_BY_PROVIDER[provider.providerId];
     return provider.user?.avatarUrl
-        ? <img src={provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
+        ? <img src={typeof window !== 'undefined' && window.electron ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
         : (
             <span
                 aria-label={provider.displayName}
@@ -58,7 +58,8 @@ const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
     const rootRef = useRef<HTMLDivElement>(null);
     const baseBottomPxRef = useRef(16);
     const previousProviderIdRef = useRef(activeProviderId);
-    const activeProvider = providers.find(provider => provider.providerId === activeProviderId) || providers[0];
+    const visibleProviders = providers.filter(provider => provider.availability.reason !== 'runtime-unavailable');
+    const activeProvider = visibleProviders.find(provider => provider.providerId === activeProviderId) || visibleProviders[0];
     const surfaceClass = isDaylight ? 'bg-white text-zinc-900' : 'bg-zinc-950 text-white';
 
     /**
@@ -199,7 +200,7 @@ const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
                             <ChevronRight size={19} />
                             <span className="text-sm font-semibold">{t('home.backToPlayer')}</span>
                         </button>
-                        {providers.map(provider => {
+                        {visibleProviders.map(provider => {
                             const active = provider.providerId === activeProviderId;
                             const configured = provider.availability.configured;
                             return (

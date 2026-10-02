@@ -455,7 +455,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     summary: description,
                 };
             });
-            setRadioItems([fmItem, ...(dailySongs.length > 0 ? [{
+            setRadioItems([fmItem, ...(omni.supportsDailySongs(activeProviderId) ? [{
                 id: 'daily_recommendations',
                 name: t('home.dailyRecommendations'),
                 coverUrl: getSongCoverUrl(dailySongs[0], activeProviderId) || '',

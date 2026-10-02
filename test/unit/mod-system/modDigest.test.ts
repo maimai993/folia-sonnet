@@ -70,8 +70,7 @@ describe('computeModDigest', () => {
             files[`file-${index}.txt`] = String(index);
         }
         expect(computeModDigest(makeModDirectory(files))).toBeNull();
-        // Creating thousands of real files can exceed 5s on Windows under the full suite's disk load.
-    }, 20_000);
+    });
 });
 
 describe('shortDigest', () => {

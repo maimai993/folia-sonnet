@@ -24,12 +24,6 @@ function playlistId(playlist: MediaId | ProviderCollection): string {
     return String(playlist.id);
 }
 
-// The account library marks the built-in list explicitly. Do not use its display name as
-// an identity check: users are allowed to create a playlist with the same name.
-function isBodianLikedPlaylist(playlist: ProviderCollection): boolean {
-    return playlist.isLiked === true;
-}
-
 const likeSong = async (song: MediaId | SongResult, liked: boolean): Promise<void> => {
     try { await requestBodian('like_song', { id: songId(song), liked }); }
     finally { clearBodianLibraryCache(); }
@@ -40,12 +34,7 @@ export const bodianMutations: OnlineMutationProvider = {
     likeSong,
     async updatePlaylistTracks(operation, playlist, tracks) {
         if (!tracks.length) return;
-        // Bodian's built-in 我喜欢 list is backed by the like endpoint; the generic playlist
-        // mutation endpoint rejects that list even though it is returned with user playlists.
-        if (typeof playlist === 'object' && isBodianLikedPlaylist(playlist)) {
-            for (const track of tracks) await likeSong(track, operation === 'add');
-            return;
-        }
+        // The package verifies ownership, including the account's built-in liked playlist.
         if (tracks.length > 100) throw new OnlineProviderError('unsupported', 'Select at most 100 tracks per operation', 'bodian');
         const id = playlistId(playlist);
         const trackIds = tracks.map(songId).join(',');

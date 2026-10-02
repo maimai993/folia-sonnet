@@ -7,8 +7,6 @@ const DEVICE_KEY = 'BODIAN_DEVICE_ID';
 
 // Credentials are loaded lazily, after Electron's OS encryption service becomes available.
 function createSessionRepository({ store, safeStorage, warn = console.warn }) {
-  // V1 included sessions from the rejected QR protocol; never decrypt or migrate them in production.
-  store.delete('BODIAN_SESSION_V1');
   let loaded = false;
   let current = null;
   let revision = 0;

@@ -7,7 +7,7 @@ vi.mock('@/services/onlineMusic/bodianTransport', () => ({
     requestBodian: request, getBodianTransportAvailability: () => ({ configured: true }),
 }));
 import { bodianProvider } from '@/services/onlineMusic/bodianProvider';
-import { bodianPage, normalizeBodianCollection, normalizeBodianSong } from '@/services/onlineMusic/bodianNormalize';
+import { bodianPage, normalizeBodianCollection, normalizeBodianSong, normalizeBodianUser } from '@/services/onlineMusic/bodianNormalize';
 import { getPlaybackSongKey } from '@/utils/appPlaybackGuards';
 
 const track = { id: 228908, songName: '测试歌曲 (Live)', name: '测试歌曲', albumId: 1293, album: '测试专辑',
@@ -17,6 +17,36 @@ const track = { id: 228908, songName: '测试歌曲 (Live)', name: '测试歌曲
 beforeEach(() => request.mockReset());
 
 describe('Bodian provider', () => {
+    it.each([
+        ['http://img1.kuwo.cn/cover.jpg', 'https://img1.kuwo.cn/cover.jpg'],
+        ['http://img4.kuwo.cn/cover.jpg', 'https://img4.kuwo.cn/cover.jpg'],
+        ['http://img1.kwcdn.kuwo.cn/cover.jpg', 'http://img1.kwcdn.kuwo.cn/cover.jpg'],
+    ])('keeps a usable TLS scheme for covers and avatars: %s', (input, expected) => {
+        expect(normalizeBodianSong({ ...track, albumPic: input }).album.coverUrl).toBe(expected);
+        expect(normalizeBodianCollection({ id: '1', pic: input }).coverUrl).toBe(expected);
+        expect(normalizeBodianUser({ id: '1', avatarUrl: input }).avatarUrl).toBe(expected);
+    });
+
+    it('isolates an FM failure from Discover and ordinary recommendations', async () => {
+        request.mockImplementation(async (operation: string) => {
+            if (operation === 'personal_fm') throw new Error('FM unavailable');
+            if (operation === 'home_module') return { songList: [{ id: 0 }] };
+            if (operation === 'ai_playlist_detail') return { title: '潮趣日推', musicList: [track] };
+            return { lists: [{ playLists: [{ id: 123, name: '普通推荐' }] }] };
+        });
+        const [fm, collections] = await Promise.all([
+            bodianProvider.recommendations!.getPersonalFm!(),
+            bodianProvider.recommendations!.getRecommendedCollections!(10),
+        ]);
+        expect(fm).toEqual([]);
+        expect(collections.map(item => item.id)).toEqual(['discover-0', '123']);
+    });
+
+    it('uses the source media ID for lyrics even when the display ID differs', async () => {
+        request.mockResolvedValue({ mainText: '[00:01.00]歌词', wordByWordText: null });
+        await bodianProvider.lyrics!.getLyrics!({ ...normalizeBodianSong(track), id: 'display-id' });
+        expect(request).toHaveBeenCalledWith('lyrics', { id: '228908' });
+    });
     it('normalizes stable identity, duration and navigable catalog references idempotently', () => {
         const song = normalizeBodianSong(track);
         expect(song).toMatchObject({ id: '228908', durationMs: 269000, name: '测试歌曲 (Live)',

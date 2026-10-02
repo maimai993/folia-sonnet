@@ -158,6 +158,7 @@ export default {
     "syncFailed": "同步失败",
     "loginExpired": "登录状态已失效，请重新登录",
     "songPreviewOnly": "当前账号仅可试听此歌曲，请登录具有完整播放权限的账号",
+    "songRegionRestricted": "仅限中国大陆地区播放，请检查网络环境",
     "loggedOut": "已退出登录",
     "clickToPlay": "点击播放开始",
     "liked": "已添加到喜欢的音乐",

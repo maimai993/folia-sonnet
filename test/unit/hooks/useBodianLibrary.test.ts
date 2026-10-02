@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
     getProviderAvailability: vi.fn(),
     getProviderCapabilities: vi.fn(),
     getLoginStatus: vi.fn(),
+    getProviderUserPlaylists: vi.fn(),
+    getProviderLikedSongIds: vi.fn(),
+    logout: vi.fn(),
     loadProviderAccountSnapshot: vi.fn(),
     clearProviderAccountSnapshot: vi.fn(),
     saveProviderAccountSnapshot: vi.fn(),
@@ -29,6 +32,9 @@ describe('Bodian account identity restoration', () => {
         mocks.getProviderCapabilities.mockReturnValue({ auth: false });
         mocks.clearProviderAccountSnapshot.mockResolvedValue(undefined);
         mocks.loadProviderAccountSnapshot.mockResolvedValue({ user: { id: 'unverified', nickname: 'Old account' } });
+        mocks.getProviderUserPlaylists.mockResolvedValue({ items: [], hasMore: false, nextOffset: 0 });
+        mocks.getProviderLikedSongIds.mockResolvedValue([]);
+        mocks.saveProviderAccountSnapshot.mockResolvedValue({ savedAt: 2 });
         useOnlineProviderAccountStore.setState({ accounts: {} });
         useOnlineProviderAccountStore.getState().updateAccount('bodian', {
             status: 'authenticated', user: { id: 'unverified', nickname: 'Old account' },
@@ -73,5 +79,52 @@ describe('Bodian account identity restoration', () => {
         expect(useOnlineProviderAccountStore.getState().accounts.bodian).toMatchObject({
             status: 'error', user: null, collections: [], likedSongIds: [],
         });
+    });
+
+    it('hydrates a matching snapshot before a slow library refresh and retains it on network failure', async () => {
+        mocks.getProviderCapabilities.mockReturnValue({ auth: true, userLibrary: true });
+        mocks.getLoginStatus.mockResolvedValue({ id: '123', nickname: 'Current account' });
+        mocks.loadProviderAccountSnapshot.mockResolvedValue({ user: { id: '123' }, savedAt: 1,
+            collections: [{ providerId: 'bodian', type: 'playlist', id: 'cached', name: 'Cached' }], likedSongIds: ['1'] });
+        let rejectPage!: (error: Error) => void;
+        mocks.getProviderUserPlaylists.mockReturnValue(new Promise((_resolve, reject) => { rejectPage = reject; }));
+        const { refresh } = useBodianLibrary();
+        const pending = refresh();
+        await vi.waitFor(() => expect(mocks.getProviderUserPlaylists).toHaveBeenCalled());
+        expect(useOnlineProviderAccountStore.getState().accounts.bodian).toMatchObject({
+            user: { id: '123', nickname: 'Current account' }, collections: [{ id: 'cached' }],
+            likedSongIds: ['1'], freshness: 'refreshing',
+        });
+        rejectPage(new Error('network'));
+        await expect(pending).resolves.toBe(false);
+        expect(useOnlineProviderAccountStore.getState().accounts.bodian).toMatchObject({
+            status: 'authenticated', collections: [{ id: 'cached' }], likedSongIds: ['1'], freshness: 'error',
+        });
+    });
+
+    it('does not restore another account snapshot', async () => {
+        mocks.getProviderCapabilities.mockReturnValue({ auth: true });
+        mocks.getLoginStatus.mockResolvedValue({ id: '123', nickname: 'Current account' });
+        const { refresh } = useBodianLibrary();
+        await expect(refresh()).resolves.toBe(true);
+        expect(useOnlineProviderAccountStore.getState().accounts.bodian).toMatchObject({
+            user: { id: '123' }, collections: [], likedSongIds: [], freshness: 'fresh',
+        });
+        expect(mocks.saveProviderAccountSnapshot).toHaveBeenCalledWith('bodian', expect.objectContaining({ user: { id: '123', nickname: 'Current account' } }));
+    });
+
+    it('does not restore a late snapshot after logout', async () => {
+        mocks.getProviderCapabilities.mockReturnValue({ auth: true });
+        mocks.getLoginStatus.mockResolvedValue({ id: '123', nickname: 'Current account' });
+        let finish!: (value: unknown) => void;
+        mocks.loadProviderAccountSnapshot.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+        const { refresh, logout } = useBodianLibrary();
+        const pending = refresh();
+        await vi.waitFor(() => expect(mocks.loadProviderAccountSnapshot).toHaveBeenCalled());
+        await logout();
+        finish({ user: { id: '123' }, collections: [], likedSongIds: ['old'] });
+        await expect(pending).resolves.toBe(false);
+        expect(useOnlineProviderAccountStore.getState().accounts.bodian).toMatchObject({ user: null, likedSongIds: [] });
+        expect(mocks.saveProviderAccountSnapshot).not.toHaveBeenCalled();
     });
 });

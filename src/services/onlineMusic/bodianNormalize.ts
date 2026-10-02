@@ -9,7 +9,8 @@ export const bodianRecord = (value: unknown): BodianRecord => (
     value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 );
 const text = (value: unknown) => value == null ? '' : String(value);
-const cover = (value: unknown) => text(value).replace(/^http:\/\/(?=[\w.-]+\.kuwo\.cn\/)/, 'https://');
+// The *.kuwo.cn TLS certificate does not cover nested kwcdn hosts.
+const cover = (value: unknown) => text(value).replace(/^http:\/\/(?=[\w-]+\.kuwo\.cn\/)/, 'https://');
 const ref = (kind: 'album' | 'artist', id: unknown) => (
     id ? { providerId: 'bodian', kind, id: text(id) } : undefined
 );
