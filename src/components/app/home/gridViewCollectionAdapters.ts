@@ -5,90 +5,31 @@ import { LIST_ROW_COVER_SIZE, buildLocalQueue, buildNavidromeQueue } from '../..
 import { SubsonicSong } from '../../../types/navidrome';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
+import type { OnlineProviderId, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
 import type {
-    OnlineProviderId,
-    ProviderArtistSummary,
-    ProviderCollection,
-    ProviderUser,
-} from '../../../types/onlineMusic';
+    GridViewCollectionDescriptor,
+    LocalGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionType,
+    OnlineGridViewCollectionDescriptor,
+} from '../../../types/libraryCollection';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
 
-export type GridViewCollectionSource = 'online' | 'local' | 'navidrome';
-export type NavidromeGridViewCollectionType = 'album' | 'playlist' | 'artist' | 'random' | 'favorites';
-
-/**
- * 一个集合的稳定身份：来源 + 类型 + id。
- *
- * 两个用途共用它：作 GridView / ArtistGridView 的 React key，以及判断「这次 push 的目标
- * 是不是已经在看的那一层」。后者是必须的 —— 专辑详情里的曲目卡片带着自己的专辑入口，
- * 点它等于再压一层同一张专辑，返回要按很多次才能退出去；歌手页的曲目卡片带着同一张歌手
- * 的入口，同理。两处各写一份 key 迟早会分叉，所以放在这里。
- */
-export const collectionKey = (
-    collection: Pick<BaseGridViewCollectionDescriptor, 'source' | 'type' | 'id'> | null | undefined,
-): string => (
-    collection ? `${collection.source}:${collection.type}:${String(collection.id)}` : ''
-);
-
-export interface BaseGridViewCollectionDescriptor {
-    source: GridViewCollectionSource;
-    id: string | number;
-    name: string;
-    type: string;
-    coverUrl?: string;
-    description?: string;
-    trackCount?: number;
-    albumCount?: number;
-    isOwned?: boolean;
-    artists?: ProviderArtistSummary[];
-    aliases?: string[];
-    publishedAt?: number;
-    publisher?: string;
-    playCount?: number;
-    updatedAt?: number;
-    tracksUpdatedAt?: number;
-    isLiked?: boolean;
-    providerData?: ProviderCollection['providerData'];
-    creator?: ProviderUser;
-    albumArtist?: string;
-    albumYear?: number;
-    albumGenre?: string;
-    albumDuration?: number;
-    albumCompany?: string;
-    albumPublishTime?: number;
-}
-
-export interface LocalGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'local';
-    type: LocalLibraryGroup['type'];
-    id: string;
-    songIds: string[];
-    entityId?: string;
-    playlistId?: string;
-    isVirtual?: boolean;
-}
-
-export interface NavidromeGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'navidrome';
-    type: NavidromeGridViewCollectionType;
-    id: string;
-    editable?: boolean;
-}
-
-export interface OnlineGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'online';
-    providerId: OnlineProviderId;
-    raw?: any;
-}
-
-export type GridViewCollectionDescriptor =
-    | OnlineGridViewCollectionDescriptor
-    | LocalGridViewCollectionDescriptor
-    | NavidromeGridViewCollectionDescriptor;
+export type {
+    BaseGridViewCollectionDescriptor,
+    GridViewCollectionDescriptor,
+    GridViewCollectionSource,
+    LocalGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionType,
+    OnlineGridViewCollectionDescriptor,
+} from '../../../types/libraryCollection';
+// 集合身份搬到了 utils/libraryUi/collectionIdentity：store 与组件共用一份，在线集合带上 provider。
+export { collectionKey } from '../../../utils/libraryUi/collectionIdentity';
 
 const getDisplayName = (name: React.ReactNode) => (
     typeof name === 'string' || typeof name === 'number'

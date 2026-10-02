@@ -3,7 +3,7 @@ import {
     getActiveGridViewCollection,
     useCollectionNavigationStore,
 } from '@/stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '@/components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '@/types/libraryCollection';
 
 // test/unit/stores/collectionNavigationStore.test.ts
 // 导航栈「不许压一份当前层的副本」这条规则：详情页里的卡片带着自己所属集合的入口
@@ -65,6 +65,15 @@ describe('collection navigation store', () => {
             type: 'album',
         } as unknown as GridViewCollectionDescriptor);
         expect(useCollectionNavigationStore.getState().snapshot?.stack).toHaveLength(3);
+    });
+
+    // 两个 provider 下的歌单 id 可以相同；身份不带 provider 时，后一个会被当成「已经在看的那一层」。
+    it('treats the same type and id from another provider as a different collection', () => {
+        useCollectionNavigationStore.getState().openRoot(album('same'), 'home');
+        const fromOtherProvider = { ...album('same'), providerId: 'kugou' } as GridViewCollectionDescriptor;
+
+        expect(useCollectionNavigationStore.getState().push(fromOtherProvider)?.stack).toHaveLength(2);
+        expect(useCollectionNavigationStore.getState().push({ ...fromOtherProvider })).toBeNull();
     });
 
     // 有意只拦「当前这一层」：跳到栈里更早访问过的专辑仍然算一次正常导航，

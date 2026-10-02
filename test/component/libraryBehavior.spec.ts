@@ -439,9 +439,9 @@ test.describe('navigation', () => {
         expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
     });
 
-    // 已知缺陷：集合身份不含 provider，两个 provider 下同 id 的歌单共用一个网格实例，
-    // 后打开的那个显示的是前一个的曲目。P0.1 修复后转正。
-    test.fixme('two providers with the same playlist id never share tracks', async ({ mount, page }) => {
+    // P0.1 之前：集合身份不含 provider，两个 provider 下同 id 的歌单共用一个网格实例，
+    // 后打开的那个显示的是前一个的曲目。
+    test('two providers with the same playlist id never share tracks', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await open(page, 'collide-a');
         await waitForScope(page, 5);
@@ -449,6 +449,8 @@ test.describe('navigation', () => {
 
         await open(page, 'collide-b');
         await expect.poll(() => stack(page)).toEqual(['Same Id (B)']);
-        await expect.poll(() => playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_B, 'cb', fixture['collide-b'].rawIndexes));
+        await expect.poll(() => requests(page, 'playlistTracks', 'probe-b:playlist:same')).not.toEqual([]);
+        await waitForScope(page, 5);
+        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_B, 'cb', fixture['collide-b'].rawIndexes));
     });
 });

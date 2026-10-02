@@ -68,6 +68,7 @@ import { OmniError, type MediaId, type ProviderCollection } from '../types/onlin
 import { useSidePanelBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { hasBlockingWindow } from '../utils/keyboardTargets';
 import { useGridViewSettingsStore } from '../stores/useGridViewSettingsStore';
+import { collectionKey } from '../utils/libraryUi/collectionIdentity';
 
 export interface GridViewSourceActions {
     local?: {
@@ -375,17 +376,19 @@ export const GridView: React.FC<GridViewProps> = ({
         minCardScale,
     ]);
 
+    // 恢复记录按集合身份分开存：只用 id 时，不同来源、不同 provider 下同 id 的集合会互相恢复对方的焦点和筛选。
+    const collectionIdentity = collection?.source ? collectionKey(collection) : '';
     const navigationStorageKey = useMemo(() => {
         if (mode !== 'tracks' || !collection) return null;
-        const collectionId = collection.id ?? collection.name ?? title;
+        const collectionId = collectionIdentity || collection.name || title;
         return `${GRID_VIEW_NAVIGATION_PREFIX}_${collectionId}`;
-    }, [collection, mode, title]);
+    }, [collection, collectionIdentity, mode, title]);
 
     const lastIndexStorageKey = useMemo(() => {
         if (mode !== 'tracks' || !collection) return null;
-        const collectionId = collection.id ?? collection.name ?? title;
+        const collectionId = collectionIdentity || collection.name || title;
         return `${GRID_VIEW_LAST_INDEX_PREFIX}_${collectionId}`;
-    }, [collection, mode, title]);
+    }, [collection, collectionIdentity, mode, title]);
 
     // Self-loading track states for tracks mode
     const [tracks, setTracks] = useState<SongResult[]>([]);
@@ -1234,7 +1237,7 @@ export const GridView: React.FC<GridViewProps> = ({
         resolveGridViewContextTracks(gridItems, playableTracks, hasSearchQuery)
     ), [gridItems, hasSearchQuery, playableTracks]);
     const shouldAnimateItemEntrance = useProgressiveItemEntrance(
-        `${mode}:${String(collection?.source ?? '')}:${String(collection?.id ?? title)}`
+        `${mode}:${collectionIdentity || title}`
     );
 
     // Coordinate motion values mapping grid drags

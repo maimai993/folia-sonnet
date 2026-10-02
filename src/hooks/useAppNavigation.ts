@@ -11,7 +11,8 @@ import {
     type CollectionNavigationSnapshot,
     useCollectionNavigationStore,
 } from '../stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '../components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '../types/libraryCollection';
+import { collectionHashPath } from '../utils/libraryUi/collectionIdentity';
 import { useAppViewStore } from '../stores/useAppViewStore';
 import type { AppView } from '../stores/useAppViewStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
@@ -132,10 +133,6 @@ const getStartupView = (): ViewState => resolveStartupView({
     isFmMode: usePlaybackStore.getState().isFmMode,
     queueLength: usePlaybackStore.getState().playQueue.length,
 });
-
-const getCollectionHash = (collection: GridViewCollectionDescriptor) => (
-    `#collection/${collection.source}/${collection.type}/${encodeURIComponent(String(collection.id))}`
-);
 
 const LOCAL_MUSIC_LAST_ROW_KEY = 'folia_local_music_last_row';
 
@@ -337,7 +334,7 @@ export function useAppNavigation() {
         pushNavigationState({
             view: 'home',
             hash: collection?.stack.length
-                ? getCollectionHash(collection.stack[collection.stack.length - 1])
+                ? collectionHashPath(collection.stack[collection.stack.length - 1])
                 : '#home',
             search,
             collection,
@@ -462,7 +459,7 @@ export function useAppNavigation() {
         const search = origin === 'search' ? getSearchHistorySnapshot() : null;
         pushNavigationState({
             view: 'home',
-            hash: getCollectionHash(collection),
+            hash: collectionHashPath(collection),
             search,
             collection: snapshot,
         });
@@ -475,7 +472,7 @@ export function useAppNavigation() {
         }
         pushNavigationState({
             view: 'home',
-            hash: getCollectionHash(collection),
+            hash: collectionHashPath(collection),
             search: snapshot.origin === 'search' ? getSearchHistorySnapshot() : null,
             collection: snapshot,
         });

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { collectionKey, type GridViewCollectionDescriptor } from '../components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '../types/libraryCollection';
+import { collectionKey } from '../utils/libraryUi/collectionIdentity';
 
 // src/stores/useCollectionNavigationStore.ts
 
