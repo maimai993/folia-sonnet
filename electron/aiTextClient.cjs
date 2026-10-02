@@ -732,12 +732,11 @@ function validateAiConnectionTestInput(raw) {
  * Minimal chat body for the test: one user message, no system prompt, no JSON mode or schema.
  * The token cap key follows the same openai-vs-others rule as buildOpenAICompatibleRequestBody.
  */
-function buildOpenAICompatibleTestBody(model, provider, stream, extraParams = {}, maxTokens = AI_TEST_MAX_TOKENS) {
+function buildOpenAICompatibleTestBody(model, provider, stream) {
   return {
     model,
     messages: [{ role: 'user', content: AI_TEST_PROMPT }],
-    [provider === 'openai' ? 'max_completion_tokens' : 'max_tokens']: maxTokens,
-    ...extraParams,
+    [provider === 'openai' ? 'max_completion_tokens' : 'max_tokens']: AI_TEST_MAX_TOKENS,
     ...(stream ? { stream: true } : {}),
   };
 }
@@ -840,40 +839,23 @@ async function runAiConnectionTest(rawInput, { customFetch, timeoutMs = AI_TEST_
   const compatProvider = detectOpenAICompatibleProvider(apiUrl);
   console.log(`[ai-test] POST ${redactUrl(apiUrl)} model=${model} provider=${compatProvider}${stream ? ' stream=on' : ''}`);
 
-  // Same ladder the real features use when they want no reasoning (see runOpenAICompatibleCompletion):
-  // advance when the endpoint rejects the parameter or when reasoning ate the budget.
-  const { rejectsOpenAICompatibleParameter } = await import('../shared/openAICompatibleRequest.mjs');
-  const attempts = REASONING_SUPPRESSION_ATTEMPTS;
+  // Connectivity does not require reasoning suppression: always-thinking models reject it.
+  // A successful response with no answer is still reported below with an emptyReason.
   let result;
-  for (let index = 0; index < attempts.length; index += 1) {
-    const { params } = attempts[index];
-    const isLastAttempt = index === attempts.length - 1;
-    const reasoningParams = compatProvider === 'deepseek' ? { thinking: { type: 'disabled' }, ...params } : params;
-    // The last rung cannot switch reasoning off, so it gets room for the reasoning too.
-    const budget = isLastAttempt ? AI_TEST_MAX_TOKENS * 2 : AI_TEST_MAX_TOKENS;
-    try {
-      result = await sendOpenAICompatible({
-        apiUrl,
-        apiKey,
-        body: buildOpenAICompatibleTestBody(model, compatProvider, stream, reasoningParams, budget),
-        customFetch,
-        timeoutMs,
-      });
-    } catch (error) {
-      const message = (error instanceof Error ? error.message : String(error)).split(apiUrl).join(redactUrl(apiUrl));
-      return failure(message, { errorKind: /timed out/.test(message) ? 'timeout' : 'network' });
-    }
-    if (!result.ok) {
-      if (!isLastAttempt
-        && Object.keys(params).some((key) => rejectsOpenAICompatibleParameter(result.status, result.errorText, key))) {
-        continue;
-      }
-      return failure(result.errorText.split(apiUrl).join(redactUrl(apiUrl)), { status: result.status, errorKind: 'http' });
-    }
-    if (!result.content && !isLastAttempt && exhaustedByReasoning(result.choice, result.usage)) {
-      continue;
-    }
-    break;
+  try {
+    result = await sendOpenAICompatible({
+      apiUrl,
+      apiKey,
+      body: buildOpenAICompatibleTestBody(model, compatProvider, stream),
+      customFetch,
+      timeoutMs,
+    });
+  } catch (error) {
+    const message = (error instanceof Error ? error.message : String(error)).split(apiUrl).join(redactUrl(apiUrl));
+    return failure(message, { errorKind: /timed out/.test(message) ? 'timeout' : 'network' });
+  }
+  if (!result.ok) {
+    return failure(result.errorText.split(apiUrl).join(redactUrl(apiUrl)), { status: result.status, errorKind: 'http' });
   }
 
   const shownModel = result.model || model;

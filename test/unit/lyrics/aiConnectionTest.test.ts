@@ -52,7 +52,6 @@ describe('runAiConnectionTest (OpenAI compatible)', () => {
             model: 'my-model',
             messages: [{ role: 'user', content: 'hello' }],
             max_tokens: 512,
-            reasoning_effort: 'none',
         });
         expect(result).toMatchObject({ ok: true, status: 200, model: 'my-model-2026', text: 'Hi there!\nSecond line' });
         expect(typeof result.durationMs).toBe('number');
@@ -80,33 +79,30 @@ describe('runAiConnectionTest (OpenAI compatible)', () => {
         expect(result).toMatchObject({ ok: true, text: 'Hello', model: 'streamed-model' });
     });
 
-    it('walks the reasoning ladder when the endpoint rejects reasoning_effort', async () => {
-        const { calls, customFetch } = makeFetch((call) => call.body.reasoning_effort
-            ? json({ error: { message: "Unknown parameter: 'reasoning_effort'" } }, 400)
-            : json({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] }));
-        const result = await client.runAiConnectionTest(openai(), { customFetch });
-        expect(calls).toHaveLength(2);
-        expect(calls[1].body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    it.each([false, true])('accepts an always-thinking GLM model (stream=%s)', async (stream) => {
+        const { calls, customFetch } = makeFetch((call) => (
+            call.body.reasoning_effort !== undefined
+            || call.body.thinking !== undefined
+            || call.body.chat_template_kwargs !== undefined
+        )
+            ? json({ error: { message: '该模型始终思考，不支持关闭思考，请使用 low、high 或 max。' } }, 400)
+            : stream
+                ? sse({ choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] }, '[DONE]')
+                : json({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] }));
+        const result = await client.runAiConnectionTest(openai({
+            apiUrl: 'https://open.bigmodel.cn/api/paas/v4/', model: 'glm-5.3-flash', stream,
+        }), { customFetch });
+        expect(calls).toHaveLength(1);
+        expect(calls[0].url).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions');
         expect(result).toMatchObject({ ok: true, text: 'hi' });
     });
 
-    it('advances past a rung where reasoning ate the budget, ending on a larger budget', async () => {
-        const { calls, customFetch } = makeFetch((call) => call.body.max_tokens > 512
-            ? json({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] })
-            : json({
-                choices: [{ message: { content: '', reasoning_content: 'hmm' }, finish_reason: 'length' }],
-                usage: { completion_tokens_details: { reasoning_tokens: 512 } },
-            }));
-        const result = await client.runAiConnectionTest(openai(), { customFetch });
-        expect(calls).toHaveLength(3);
-        expect(calls[2].body.max_tokens).toBe(1024);
-        expect(result).toMatchObject({ ok: true, text: 'hi' });
-    });
-
-    it('disables DeepSeek thinking explicitly', async () => {
+    it('leaves DeepSeek thinking at the provider default', async () => {
         const { calls, customFetch } = makeFetch(() => json({ choices: [{ message: { content: 'hi' } }] }));
         await client.runAiConnectionTest(openai({ apiUrl: 'https://api.deepseek.com/v1' }), { customFetch });
-        expect(calls[0].body.thinking).toEqual({ type: 'disabled' });
+        expect(calls[0].body.thinking).toBeUndefined();
+        expect(calls[0].body.reasoning_effort).toBeUndefined();
+        expect(calls[0].body.chat_template_kwargs).toBeUndefined();
     });
 
     it('scrubs echoed Authorization, x-goog-api-key and key= values from errors', async () => {
@@ -119,12 +115,13 @@ describe('runAiConnectionTest (OpenAI compatible)', () => {
     });
 
     it('reports an empty reply caused by reasoning as a success with a reason', async () => {
-        const { customFetch } = makeFetch(() => json({
+        const { calls, customFetch } = makeFetch(() => json({
             choices: [{ message: { content: '', reasoning_content: 'thinking...' }, finish_reason: 'length' }],
             usage: { completion_tokens_details: { reasoning_tokens: 64 } },
         }));
         const result = await client.runAiConnectionTest(openai(), { customFetch });
         expect(result).toMatchObject({ ok: true, text: '', emptyReason: 'reasoning' });
+        expect(calls).toHaveLength(1);
     });
 
     it('reports a plain empty reply as a success with the generic reason', async () => {
