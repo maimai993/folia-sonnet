@@ -13,6 +13,8 @@ export const LIBRARY_TUI_ROW_HEIGHT = 28;
 export type LibraryTuiRowProps = {
     tracks: SongResult[];
     rowDisplayIndexes: number[];
+    /** 每行的条目键（与网格卡片 id 同一格式）。 */
+    rowKeys: string[];
     focusedRow: number;
     accentBackground: string;
     accentColor: string;
@@ -30,6 +32,7 @@ const LibraryTuiRow = ({
     style,
     tracks,
     rowDisplayIndexes,
+    rowKeys,
     focusedRow,
     accentBackground,
     accentColor,
@@ -50,6 +53,7 @@ const LibraryTuiRow = ({
             role="option"
             aria-selected={isFocused}
             data-tui-row={index}
+            data-library-entry={rowKeys[index]}
             style={{
                 ...style,
                 backgroundColor: isFocused ? accentBackground : undefined,

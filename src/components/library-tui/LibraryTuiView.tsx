@@ -124,15 +124,20 @@ const LibraryTuiView: React.FC<LibraryTuiViewProps> = ({
         onEscape: () => (query ? setQuery('') : onBack()),
     });
 
+    // 等 react-window 量好视口再定位：刚挂载（例如从网格切过来）时列表还没有高度。
     useEffect(() => {
         if (focus.focusedRow < 0) return;
-        listRef.current?.scrollToRow({ index: focus.focusedRow, align: 'smart', behavior: 'instant' });
-    }, [focus.focusedRow, listRef]);
+        const frame = window.requestAnimationFrame(() => {
+            listRef.current?.scrollToRow({ index: focus.focusedRow, align: 'smart', behavior: 'instant' });
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [focus.focusedRow, focus.rowDisplayIndexes.length, listRef]);
 
     const accentColor = theme.accentColor || 'currentColor';
     const rowProps = useMemo<LibraryTuiRowProps>(() => ({
         tracks: view.displayTracks,
         rowDisplayIndexes: focus.rowDisplayIndexes,
+        rowKeys: focus.rowKeys,
         focusedRow: focus.focusedRow,
         accentBackground: colorWithAlpha(accentColor, isDaylight ? 0.16 : 0.22),
         accentColor,
@@ -143,7 +148,7 @@ const LibraryTuiView: React.FC<LibraryTuiViewProps> = ({
         onEnqueueRow: enqueueRow,
     // playRow / enqueueRow 每次渲染都是新函数，但它们只读当前的 focus 与 view。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [accentColor, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, isDaylight, t, view.displayTracks]);
+    }), [accentColor, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, focus.rowKeys, isDaylight, t, view.displayTracks]);
 
     const isEmpty = focus.rowDisplayIndexes.length === 0;
     const isLoading = !snapshot || snapshot.status === 'idle' || snapshot.status === 'loading';

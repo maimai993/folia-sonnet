@@ -1,4 +1,5 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../src/types/gridCommandSurface';
+import type { LibraryRendererId } from '../../../src/types/libraryUi';
 import type { ProbeFixtureId } from './fixtureRules';
 import type { ProbeCall, ProbeRequest } from './probeLog';
 
@@ -23,6 +24,9 @@ export type LibraryProbeApi = {
     surface: () => GridSurfaceState | null;
     /** 经由当前注册的 grid surface 执行动作；不在 availableActions 里时返回 false。 */
     runSurface: (action: GridSurfaceActionId) => boolean;
+    /** 与开发版浮层同一条路径切换 renderer（先把焦点写回会话）。 */
+    setRenderer: (renderer: LibraryRendererId) => void;
+    renderer: () => LibraryRendererId;
     calls: () => ProbeCall[];
     requests: () => ProbeRequest[];
     clearLog: () => void;

@@ -14,6 +14,8 @@ import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGr
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
+import { useLibraryRendererStore } from '../../../src/stores/useLibraryRendererStore';
+import { useLibraryBrowseSessionStore } from '../../../src/stores/useLibraryBrowseSessionStore';
 import { unregisterOnlineMusicProvider } from '../../../src/services/onlineMusic/providerRegistry';
 import { DEFAULT_THEME } from '../../../src/services/baseThemes';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
@@ -112,6 +114,9 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         // 直接 setState，不走 setActiveProviderId：后者会写 localStorage，手动打开探针会改掉开发者自己的选择。
         useOnlineProviderAccountStore.setState({ activeProviderId: PROBE_PROVIDER_A });
         useCollectionNavigationStore.getState().clear();
+        // 每次挂载都从网格、空会话开始；用例需要 TUI 时自己切。
+        useLibraryRendererStore.setState({ renderer: 'grid' });
+        useLibraryBrowseSessionStore.setState({ sessions: {}, order: [] });
 
         let cancelled = false;
         let uninstallShim: (() => void) | undefined;

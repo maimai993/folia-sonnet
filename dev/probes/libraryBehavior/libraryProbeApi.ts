@@ -1,6 +1,9 @@
 import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
+import { useLibraryRendererStore } from '../../../src/stores/useLibraryRendererStore';
+import { switchLibraryRenderer } from '../../../src/components/app/home/switchLibraryRenderer';
+import { collectionKey } from '../../../src/utils/libraryUi/collectionIdentity';
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
 
@@ -29,6 +32,11 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
             surface.run(action);
             return true;
         },
+        setRenderer: (renderer) => {
+            const stack = useCollectionNavigationStore.getState().snapshot?.stack ?? [];
+            switchLibraryRenderer(collectionKey(stack[stack.length - 1]), renderer);
+        },
+        renderer: () => useLibraryRendererStore.getState().renderer,
         calls: () => getProbeLog().calls,
         requests: () => getProbeLog().requests,
         clearLog: () => {

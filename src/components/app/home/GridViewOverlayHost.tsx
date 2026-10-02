@@ -35,9 +35,14 @@ import { CollectionMorphOverlay } from '../../collectionOpenMorph/CollectionMorp
 import { useCollectionMorphStore } from '../../collectionOpenMorph/collectionMorphStore';
 import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '../../collectionOpenMorph/morphProbes';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
+import { useLibraryRendererStore } from '../../../stores/useLibraryRendererStore';
 
 // src/components/app/home/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
+
+// 开发版才有的第二个 renderer（TUI）与它的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响。
+const LibraryTuiView = import.meta.env.DEV ? React.lazy(() => import('../../library-tui/LibraryTuiView')) : null;
+const DevLibraryRendererSwitch = import.meta.env.DEV ? React.lazy(() => import('./DevLibraryRendererSwitch')) : null;
 
 type GridViewOverlayHostProps = {
     surfaceProps: HomeSurfaceProps;
@@ -129,11 +134,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const collectionSnapshot = useCollectionNavigationStore(state => state.snapshot);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const morphPlan = useCollectionMorphStore(state => state.plan);
-    // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
-    // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
-    const morphEnabled = !useReducedMotionFor('collectionMorph');
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
+    const renderer = useLibraryRendererStore(state => state.renderer);
+    // TUI 只接管曲目集合；歌手页仍由网格版展示。
+    const isTuiActive = Boolean(LibraryTuiView) && renderer === 'tui' && selectedCollection?.type !== 'artist';
+    // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
+    // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
+    // 移形换影也只属于网格：TUI 没有卡片可飞，开着只会让首页那张卡的残影盖在列表上。
+    const morphEnabled = !useReducedMotionFor('collectionMorph') && !isTuiActive;
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
@@ -669,9 +678,22 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                             isInteractive={isInteractive}
                             morphPlan={morphEnabled ? morphPlan : null}
                         />
+                    ) : isTuiActive && LibraryTuiView ? (
+                        <React.Suspense key={`tui:${selectedCollectionKey}`} fallback={null}>
+                            <LibraryTuiView
+                                collection={displaySelectedCollection}
+                                resource={collectionResource}
+                                port={playbackPort}
+                                localSongs={surfaceProps.localSongs}
+                                theme={surfaceProps.theme}
+                                isDaylight={isDaylight}
+                                isInteractive={isInteractive}
+                                onBack={handleBackCollection}
+                            />
+                        </React.Suspense>
                     ) : (
                         <GridView
-                            key={selectedCollectionKey}
+                            key={`grid:${selectedCollectionKey}`}
                             title={displaySelectedCollection.name}
                             subtitle={(displaySelectedCollection as any).creator?.nickname || (displaySelectedCollection as any).artists?.[0]?.name || displaySelectedCollection.description || ''}
                             collection={displaySelectedCollection}
@@ -697,6 +719,11 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     )
                 )}
             </AnimatePresence>
+            {DevLibraryRendererSwitch && displaySelectedCollection && displaySelectedCollection.type !== 'artist' && (
+                <React.Suspense fallback={null}>
+                    <DevLibraryRendererSwitch sessionKey={selectedCollectionKey} />
+                </React.Suspense>
+            )}
             {editingEntity && (
                 <LocalLibraryEntityPanel
                     entity={editingEntity}

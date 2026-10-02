@@ -919,8 +919,11 @@ export const GridView: React.FC<GridViewProps> = ({
         useLibraryBrowseSessionStore.getState().setFocusedEntry(sessionKey, focusedEntryKey ?? null);
     }, [dragX, dragY, gridItems, navigationStorageKey, sessionKey]);
 
-    // 切换 renderer 之前，切换器会让当前网格把焦点写回会话。
-    useEffect(() => registerLibrarySessionFlush(sessionKey, () => persistNavigationState(focusedIndexRef.current)), [
+    // 切换 renderer 之前，切换器会让当前网格把焦点写回会话。写的是已提交的焦点（Enter 播放的那张），
+    // 不是拖拽帧循环里的 focusedIndexRef：筛选刚变化时那个值可能还来自旧的渲染环。
+    const committedFocusIndexRef = useRef(focusedIndex);
+    committedFocusIndexRef.current = focusedIndex;
+    useEffect(() => registerLibrarySessionFlush(sessionKey, () => persistNavigationState(committedFocusIndexRef.current)), [
         persistNavigationState,
         sessionKey,
     ]);
@@ -1652,6 +1655,7 @@ export const GridView: React.FC<GridViewProps> = ({
     return (
         <motion.div
             data-ponder-page-scope="grid-view-page"
+            data-library-renderer="grid"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

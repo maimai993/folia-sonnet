@@ -44,5 +44,5 @@ export const useLibraryTuiFocus = (sessionKey: string, view: CollectionView) => 
 
     useEffect(() => registerLibrarySessionFlush(sessionKey, () => persistFocus()), [persistFocus, sessionKey]);
 
-    return { rowDisplayIndexes, focusedRow, moveFocus, focusRow, persistFocus };
+    return { rowDisplayIndexes, rowKeys, focusedRow, moveFocus, focusRow, persistFocus };
 };

@@ -25,6 +25,9 @@ import '../../dev/probes/libraryBehavior/probeApi';
 //
 // 探针页开着 StrictMode，挂载 effect 会跑两遍，所以首页请求可能出现两次：分页断言看「去重后的
 // offset 序列」，不数总次数。test.fixme 记录的是已知缺陷，修它的那一步把它转正。
+//
+// 与渲染形态无关的场景对网格和 TUI 各跑一遍（标题前缀 [grid] / [tui]）：两套 UI 共享同一份请求、
+// 结果、筛选和动作，这批用例就是验收。只有网格才有的交互（卡片按钮、侧栏、编辑、嵌套专辑）只跑网格。
 
 const fixture = ONLINE_FIXTURES;
 const keysOf = (providerId: string, prefix: string, indexes: number[]) => (
@@ -37,11 +40,22 @@ const bigKeys = (query = '') => keysOf(
 );
 const localKey = (index: number) => `local:${localSongId(index)}`;
 const cardSelector = (itemKey: string, occurrence = 0) => `[data-folia-grid-item-id="${itemKey}-${occurrence}"]`;
+/** 一个条目在任一 renderer 里的 DOM：网格卡片或 TUI 行（条目键是同一种格式）。 */
+const entrySelector = (itemKey: string, occurrence = 0) => (
+    `${cardSelector(itemKey, occurrence)}, [data-library-entry="${itemKey}-${occurrence}"]`
+);
 
-const mountProbe = async (mount: (id: string) => Promise<unknown>, page: Page) => {
+const RENDERERS = ['grid', 'tui'] as const;
+type Renderer = typeof RENDERERS[number];
+
+const mountProbe = async (mount: (id: string) => Promise<unknown>, page: Page, renderer: Renderer = 'grid') => {
     await mount('libraryBehavior');
     await expect.poll(() => page.evaluate(() => window.__libraryProbe?.ready() ?? false)).toBe(true);
+    if (renderer !== 'grid') {
+        await page.evaluate(id => window.__libraryProbe!.setRenderer(id), renderer);
+    }
 };
+const setRenderer = (page: Page, renderer: Renderer) => page.evaluate(id => window.__libraryProbe!.setRenderer(id), renderer);
 
 const open = (page: Page, id: ProbeFixtureId) => page.evaluate(fixtureId => window.__libraryProbe!.open(fixtureId), id);
 const back = (page: Page) => page.evaluate(() => window.__libraryProbe!.back());
@@ -84,7 +98,7 @@ const playFilteredIds = async (page: Page) => {
  */
 const backAndSettle = async (page: Page) => {
     await back(page);
-    await expect(page.locator('[data-ponder-page-scope="grid-view-page"]')).toHaveCount(0);
+    await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
 };
 
 /**
@@ -92,7 +106,7 @@ const backAndSettle = async (page: Page) => {
  * 随后「筛选变化回到第一张」又把焦点拉回去。以一张不在筛选结果里的卡消失为准。
  */
 const waitForFilteredGrid = async (page: Page, hiddenKey: string) => {
-    await expect(page.locator(cardSelector(hiddenKey))).toHaveCount(0);
+    await expect(page.locator(entrySelector(hiddenKey))).toHaveCount(0);
     await page.waitForTimeout(300);
 };
 
@@ -102,9 +116,10 @@ const pressOnGrid = async (page: Page, key: string) => {
     await page.keyboard.press(key);
 };
 
-test.describe('online paging and cache', () => {
+for (const renderer of RENDERERS) {
+test.describe(`[${renderer}] online paging and cache`, () => {
     test('opens with a 150-track first page and fills the rest in the background', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
 
@@ -114,7 +129,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('keeps first-page duplicates and de-duplicates later pages by playback key', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-dupes');
         const expected = keysOf(
             PROBE_PROVIDER_A,
@@ -126,7 +141,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('re-entering a cached playlist makes no track requests', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
         await backAndSettle(page);
@@ -139,7 +154,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('reload bypasses the cache and starts again from the first page', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
         await expect.poll(async () => (await surface(page))?.availableActions.includes('reload-online-collection')).toBe(true);
@@ -151,7 +166,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('a page that fails once is retried and the playlist completes', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-flaky');
         const expected = expectedPlayableIndexes(fixture['online-flaky'].rawIndexes);
         await waitForScope(page, expected.length);
@@ -161,13 +176,13 @@ test.describe('online paging and cache', () => {
     });
 
     test('an interrupted background sync shows a retry that resumes from the failed offset', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-broken');
         const firstPage = expectedPlayableIndexes(fixture['online-broken'].rawIndexes.slice(0, 150));
         await waitForScope(page, firstPage.length);
 
         // 1 次首发 + 3 次退避（0.5s / 1.5s / 4s）后才算中断。
-        const retry = page.getByRole('button', { name: /Interrupted at 150 \/ 400\s*Retry/ });
+        const retry = page.getByRole('button', { name: /Interrupted at 150 \/ 400.*Retry/ });
         await expect(retry).toBeVisible({ timeout: 15_000 });
         await clearLog(page);
 
@@ -179,7 +194,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('a private playlist says so instead of showing an empty grid; an empty one shows no error', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-private');
         await expect(page.getByText('This playlist is not public, so the current music source cannot read its contents')).toBeVisible();
         expect(await scopeCount(page)).toBe(0);
@@ -192,7 +207,7 @@ test.describe('online paging and cache', () => {
     });
 
     test('a slow first page from a closed playlist never lands in the next one', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-slow');
         await page.waitForTimeout(100);
         await back(page);
@@ -209,7 +224,7 @@ test.describe('online paging and cache', () => {
     // P1.3 之前：首页在网格卸载之后才返回时，补页循环自己换了一代，卸载时的取消拦不住它，
     // 关掉的歌单会在后台继续分页并写缓存。现在请求归属在资源上，释放即停。
     test('closing a playlist before its first page lands stops all further paging', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-slow');
         await page.waitForTimeout(300);
         await back(page);
@@ -219,9 +234,9 @@ test.describe('online paging and cache', () => {
     });
 });
 
-test.describe('filter, play and enqueue', () => {
+test.describe(`[${renderer}] filter, play and enqueue`, () => {
     test('the filter scope drives play-filtered and enqueue-filtered, and skips unavailable songs', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
 
@@ -243,7 +258,7 @@ test.describe('filter, play and enqueue', () => {
     });
 
     test('Enter plays the focused card with the filtered songs as the queue', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
         await setQuery(page, 'cedar');
@@ -257,8 +272,9 @@ test.describe('filter, play and enqueue', () => {
         expect(played?.queueIds).toEqual(bigKeys('cedar'));
     });
 
-    test('[grid] a side-panel row plays with the unfiltered playable list as the queue', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+    test('a side-panel row plays with the unfiltered playable list as the queue', async ({ mount, page }) => {
+        test.skip(renderer !== 'grid', 'only the grid has a track side panel');
+        await mountProbe(mount, page, renderer);
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
         await setQuery(page, 'cedar');
@@ -273,29 +289,39 @@ test.describe('filter, play and enqueue', () => {
         expect(played?.queueIds).toEqual(bigKeys());
     });
 
-    test('[grid] the card queue button routes online, local and Navidrome songs to their own enqueue path', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+    test('queueing the focused song routes online, local and Navidrome songs to their own enqueue path', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        // 网格点卡片上的入队按钮；TUI 对焦点行按 Shift+Enter。两者都落到同一个播放端口。
+        const enqueueFocused = async (entryKey: string) => {
+            if (renderer === 'grid') {
+                await page.locator(cardSelector(entryKey)).getByTitle('Add to Queue').click();
+            } else {
+                await expect(page.locator(entrySelector(entryKey))).toHaveAttribute('aria-selected', 'true');
+                await pressOnGrid(page, 'Shift+Enter');
+            }
+        };
+
         await open(page, 'online-big');
         await waitForScope(page, bigKeys().length);
         const onlineKey = onlinePlaybackKey(PROBE_PROVIDER_A, 'big-0');
-        await page.locator(cardSelector(onlineKey)).getByTitle('Add to Queue').click();
-        expect((await lastCall(page, 'addSongToQueue'))?.ids).toEqual([onlineKey]);
+        await enqueueFocused(onlineKey);
+        await expect.poll(async () => (await lastCall(page, 'addSongToQueue'))?.ids).toEqual([onlineKey]);
 
-        await back(page);
+        await backAndSettle(page);
         await open(page, 'local-all');
         await waitForScope(page, 8);
-        await page.locator(cardSelector(localKey(1))).getByTitle('Add to Queue').click();
-        expect((await lastCall(page, 'addLocalSongToQueue'))?.ids).toEqual([localSongId(1)]);
+        await enqueueFocused(localKey(1));
+        await expect.poll(async () => (await lastCall(page, 'addLocalSongToQueue'))?.ids).toEqual([localSongId(1)]);
 
-        await back(page);
+        await backAndSettle(page);
         await open(page, 'navi-album');
         await waitForScope(page, 6);
-        await page.locator(cardSelector('navidrome:navi-song-1')).getByTitle('Add to Queue').click();
-        expect((await lastCall(page, 'addNavidromeSongsToQueue'))?.ids).toEqual(['navi-song-1']);
+        await enqueueFocused('navidrome:navi-song-1');
+        await expect.poll(async () => (await lastCall(page, 'addNavidromeSongsToQueue'))?.ids).toEqual(['navi-song-1']);
     });
 
     test('local All Songs sorting changes the play order and persists the choice', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'local-all');
         await waitForScope(page, 8);
         const order = (indexes: readonly number[]) => indexes.map(localKey);
@@ -317,7 +343,7 @@ test.describe('filter, play and enqueue', () => {
     });
 
     test('local folder, album entity and Navidrome playlist load their own track sets', async ({ mount, page }) => {
-        await mountProbe(mount, page);
+        await mountProbe(mount, page, renderer);
         await open(page, 'local-folder');
         await waitForScope(page, 5);
         expect([...await playFilteredIds(page)].sort()).toEqual([1, 2, 3, 4, 5].map(localKey).sort());
@@ -332,7 +358,23 @@ test.describe('filter, play and enqueue', () => {
         await waitForScope(page, 5);
         expect(await requests(page, 'getPlaylist')).not.toEqual([]);
     });
+
+    // P0.1 之前：集合身份不含 provider，两个 provider 下同 id 的歌单共用一个视图实例，
+    // 后打开的那个显示的是前一个的曲目。
+    test('two providers with the same playlist id never share tracks', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        await open(page, 'collide-a');
+        await waitForScope(page, 5);
+        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_A, 'ca', fixture['collide-a'].rawIndexes));
+
+        await open(page, 'collide-b');
+        await expect.poll(() => stack(page)).toEqual(['Same Id (B)']);
+        await expect.poll(() => requests(page, 'playlistTracks', 'probe-b:playlist:same')).not.toEqual([]);
+        await waitForScope(page, 5);
+        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_B, 'cb', fixture['collide-b'].rawIndexes));
+    });
 });
+}
 
 test.describe('[grid] edits', () => {
     const removeFocusedCard = async (page: Page, itemKey: string) => {
@@ -449,19 +491,84 @@ test.describe('navigation', () => {
         await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
         expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
     });
+});
 
-    // P0.1 之前：集合身份不含 provider，两个 provider 下同 id 的歌单共用一个网格实例，
-    // 后打开的那个显示的是前一个的曲目。
-    test('two providers with the same playlist id never share tracks', async ({ mount, page }) => {
+test.describe('renderer switch', () => {
+    const waitForRenderer = (page: Page, renderer: Renderer) => (
+        expect(page.locator(`[data-library-renderer="${renderer}"]`)).toHaveCount(1)
+    );
+
+    test('switching keeps the filter, the scope, the focused song and the play queue, and never refetches', async ({ mount, page }) => {
         await mountProbe(mount, page);
-        await open(page, 'collide-a');
-        await waitForScope(page, 5);
-        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_A, 'ca', fixture['collide-a'].rawIndexes));
+        await open(page, 'online-big');
+        await waitForScope(page, bigKeys().length);
+        await setQuery(page, 'cedar');
+        await waitForScope(page, bigKeys('cedar').length);
+        await waitForFilteredGrid(page, onlinePlaybackKey(PROBE_PROVIDER_A, 'big-0'));
+        await pressOnGrid(page, 'ArrowRight');
+        await page.waitForTimeout(400);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        const focusedKey = (await lastCall(page, 'playSong'))!.ids[0];
+        expect(focusedKey).not.toBe(bigKeys('cedar')[0]);
+        await clearLog(page);
 
-        await open(page, 'collide-b');
-        await expect.poll(() => stack(page)).toEqual(['Same Id (B)']);
-        await expect.poll(() => requests(page, 'playlistTracks', 'probe-b:playlist:same')).not.toEqual([]);
-        await waitForScope(page, 5);
-        expect(await playFilteredIds(page)).toEqual(keysOf(PROBE_PROVIDER_B, 'cb', fixture['collide-b'].rawIndexes));
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        expect(await getQuery(page)).toBe('cedar');
+        await waitForScope(page, bigKeys('cedar').length);
+        expect(await playFilteredIds(page)).toEqual(bigKeys('cedar'));
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        expect(await lastCall(page, 'playSong')).toMatchObject({ ids: [focusedKey], queueIds: bigKeys('cedar') });
+
+        await setRenderer(page, 'grid');
+        await waitForRenderer(page, 'grid');
+        await expect(page.locator('[data-library-renderer="tui"]')).toHaveCount(0);
+        await page.waitForTimeout(400);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(2);
+        expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
+        expect(await requests(page, 'playlistTracks')).toEqual([]);
+    });
+
+    test('a local sort chosen in one renderer orders the other', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'local-all');
+        await waitForScope(page, 8);
+        await runSurface(page, 'sort-modified-date');
+        await expect.poll(() => playFilteredIds(page)).toEqual(LOCAL_SORT_ORDERS.modifiedAsc.map(localKey));
+
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        await expect.poll(() => playFilteredIds(page)).toEqual(LOCAL_SORT_ORDERS.modifiedAsc.map(localKey));
+        await expect(page.locator('[data-tui-row="0"]')).toHaveAttribute('data-library-entry', `${localKey(8)}-0`);
+    });
+
+    test('[tui] Escape clears the filter first, then leaves without a reverse transition', async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await open(page, 'online-big');
+        await waitForScope(page, bigKeys().length);
+        await setQuery(page, 'cedar');
+        await waitForScope(page, bigKeys('cedar').length);
+
+        await pressOnGrid(page, 'Escape');
+        await expect.poll(() => getQuery(page)).toBe('');
+        expect(await stack(page)).toEqual(['Big Playlist']);
+        await pressOnGrid(page, 'Escape');
+        await expect.poll(() => stack(page)).toEqual([]);
+        await expect(page.locator('[data-folia-collection-morph]')).toHaveCount(0);
+    });
+
+    test('[tui] keeps the DOM bounded on a big playlist and End reaches the last row', async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await open(page, 'online-slow');
+        const total = fixture['online-slow'].rawIndexes.length;
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-slow'].rawIndexes).length, 20_000);
+        expect(await page.locator('[data-tui-row]').count()).toBeLessThan(80);
+
+        await pressOnGrid(page, 'End');
+        await expect(page.locator(`[data-tui-row="${total - 1}"]`)).toHaveAttribute('aria-selected', 'true');
+        expect(await page.locator('[data-tui-row]').count()).toBeLessThan(80);
     });
 });
