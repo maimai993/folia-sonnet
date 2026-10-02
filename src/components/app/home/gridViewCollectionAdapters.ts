@@ -1,8 +1,6 @@
 import type React from 'react';
 import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
-import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeService';
-import { LIST_ROW_COVER_SIZE, buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
-import { SubsonicSong } from '../../../types/navidrome';
+import { LIST_ROW_COVER_SIZE, buildLocalQueue } from '../../../services/playbackAdapters';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
 import type { OnlineProviderId, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
@@ -250,37 +248,8 @@ export const resolveLocalGridViewCoverSource = (
     return getLocalGridViewCoverSource(orderedSongs);
 };
 
-// Loads Navidrome tracks for GridView without moving Navidrome service logic into GridView itself.
-export const resolveNavidromeGridViewTracks = async (
-    descriptor: NavidromeGridViewCollectionDescriptor
-): Promise<SongResult[]> => {
-    const config = getNavidromeConfig();
-    if (!config) {
-        return [];
-    }
-
-    let subsonicSongs: SubsonicSong[] = [];
-
-    if (descriptor.type === 'album') {
-        const albumDetail = await navidromeApi.getAlbum(config, descriptor.id);
-        subsonicSongs = albumDetail?.song || [];
-    } else if (descriptor.type === 'playlist') {
-        const playlistDetail = await navidromeApi.getPlaylist(config, descriptor.id);
-        subsonicSongs = playlistDetail?.entry || [];
-    } else if (descriptor.type === 'artist') {
-        const artistDetail = await navidromeApi.getArtist(config, descriptor.id);
-        const albums = artistDetail?.album || [];
-        const albumResults = await Promise.all(albums.map(album => navidromeApi.getAlbum(config, album.id)));
-        subsonicSongs = albumResults.flatMap(album => album?.song || []);
-    } else if (descriptor.type === 'random') {
-        subsonicSongs = await navidromeApi.getRandomSongs(config, 100);
-    } else if (descriptor.type === 'favorites') {
-        subsonicSongs = await navidromeApi.getStarred2(config);
-    }
-
-    const navidromeSongs = subsonicSongs.map(song => navidromeApi.toNavidromeSong(config, song));
-    return buildNavidromeQueue(navidromeSongs);
-};
+// Navidrome 曲目的加载搬到了 services/libraryUi/navidromeCollectionTracks；保留旧导出。
+export { resolveNavidromeGridViewTracks } from '../../../services/libraryUi/navidromeCollectionTracks';
 
 export const isLocalGridViewCollection = (
     collection: GridViewCollectionDescriptor
