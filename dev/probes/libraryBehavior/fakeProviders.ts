@@ -59,6 +59,21 @@ let dislikeCounter = 0;
  * 生成，放行时才送达，模拟「请求发出之后上游又变了」的晚到页。
  */
 const pagingGates = new Map<string, ProbeGate>();
+/**
+ * 按住上游变更（删歌、订阅、不喜欢……）的应答：请求照常记账，上游数据在放行时才改、应答才回来，
+ * 用来制造「删除请求还没回来」的窗口（重复提交、晚到、请求途中关掉集合）。
+ */
+const mutationGate = createProbeGate();
+const isMutationOp = (op: string) => (
+    op.startsWith('updatePlaylistTracks:')
+    || op === 'like'
+    || op === 'unlike'
+    || op === 'dislikeSong'
+    || /^(un)?subscribe(Playlist|Album)$/.test(op)
+);
+
+export const holdProbeMutations = (): void => mutationGate.hold();
+export const releaseProbeMutations = (): void => mutationGate.release();
 
 const targetKey = (providerId: string, type: string, id: MediaId) => `${providerId}:${type}:${String(id)}`;
 
@@ -115,6 +130,7 @@ export const resetFakeProviders = (): void => {
     latencies.clear();
     pagingGates.forEach(gate => gate.release());
     pagingGates.clear();
+    mutationGate.release();
     dislikeCounter = 0;
 
     Object.values(ONLINE_FIXTURES).forEach(rule => {
@@ -187,6 +203,7 @@ const run = async <T>(
     }
 
     recordProbeRequest({ provider: providerId, op, target, ...details, outcome: 'ok' });
+    if (isMutationOp(op)) await mutationGate.wait();
     const result = produce();
     const pagingGate = pagingGates.get(target);
     if (pagingGate && op === 'playlistTracks' && (details.offset ?? 0) > 0) await pagingGate.wait();

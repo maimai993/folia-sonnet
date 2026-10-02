@@ -8,7 +8,13 @@ import type { LibrarySuiteId } from '../../../src/library/core/contracts/suite';
 import { collectionKey } from '../../../src/library/core/model/collectionIdentity';
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
-import { holdProbePaging, onlineFixtureTarget, releaseProbePaging } from './fakeProviders';
+import {
+    holdProbeMutations,
+    holdProbePaging,
+    onlineFixtureTarget,
+    releaseProbeMutations,
+    releaseProbePaging,
+} from './fakeProviders';
 import { probeRefreshGate } from './probeGates';
 
 // dev/probes/libraryBehavior/libraryProbeApi.ts
@@ -55,6 +61,8 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
         releasePages: fixtureId => releaseProbePaging(onlineFixtureTarget(fixtureId)),
         holdRefresh: kind => probeRefreshGate(kind).hold(),
         releaseRefresh: kind => probeRefreshGate(kind).release(),
+        holdMutations: holdProbeMutations,
+        releaseMutations: releaseProbeMutations,
         calls: () => getProbeLog().calls,
         requests: () => getProbeLog().requests,
         clearLog: () => {

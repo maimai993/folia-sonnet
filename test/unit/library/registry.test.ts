@@ -40,10 +40,17 @@ describe('library suite registry', () => {
         expect([...resolveLibrarySurfaceActions('collection', 'grid').actions].sort()).toEqual([...LIBRARY_ACTION_IDS].sort());
         expect(resolveLibrarySurfaceActions('collection', 'grid').extraActions)
             .toEqual(['toggle-info-panel', 'toggle-track-list', 'toggle-edit-mode']);
+        // TUI 实现了除 Navidrome「加入歌单 / 新建歌单」以外的全部集合动作（那两个需要歌单选择器，只在网格里）。
         expect(resolveLibrarySurfaceActions('collection', 'tui')).toEqual({
-            actions: ['play', 'enqueue', 'play-scope', 'enqueue-scope', 'filter', 'sort', 'reload', 'resume-sync'],
+            actions: [
+                'play', 'enqueue', 'play-scope', 'enqueue-scope', 'filter', 'sort', 'reload', 'resume-sync',
+                'remove-entry', 'subscribe', 'rename', 'delete-collection', 'resync-folder', 'resync-all-folders',
+                'export-playlist', 'edit-entity', 'organize-song-info', 'match-song', 'daily-date',
+            ],
             extraActions: [],
         });
+        expect(LIBRARY_ACTION_IDS.filter(action => !resolveLibrarySurfaceActions('collection', 'tui').actions.includes(action)))
+            .toEqual(['add-to-playlist', 'create-playlist']);
     });
 
     it('only the grid brings a transition layer', () => {

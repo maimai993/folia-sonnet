@@ -139,7 +139,7 @@ describe('grid surface dispatch', () => {
 
 // ---- 同一份集合状态，两套 suite ----
 // core 动作由 buildCoreSurfaceParams 从同一份控制器快照构建：网格与 TUI 只差在各自的声明（registry 里的真实 entry）
-// 和网格补上的局部动作。P2.4 给 TUI 补声明之前，变更命令（重扫、订阅……）在 TUI 上一个都不该出现。
+// 和网格补上的局部动作。P2.4 起 TUI 声明了全部 core 命令（重扫、订阅……），两边发布的 core 动作相同。
 
 const READY: LibraryCapability = { supported: true, enabled: true, pending: false };
 
@@ -236,8 +236,8 @@ describe('core surface actions across suites', () => {
             'reload-online-collection',
             'toggle-subscribe',
         ]);
-        // TUI 是网格 core 动作的子集，差的正好是它还没声明的变更命令。
-        expect(tui).toEqual(gridCore.filter(action => action !== 'toggle-subscribe'));
+        // TUI 声明了全部 core 命令：同一份快照下两边发布的 core 动作完全相同，差的只是网格的局部动作。
+        expect(tui).toEqual(gridCore);
     });
 
     it('takes the source maintenance commands from the controller capabilities, gated by its pending flag', () => {
@@ -249,7 +249,8 @@ describe('core surface actions across suites', () => {
         });
         const { grid, tui } = publishBoth(coreInputs(snapshot, fakeController(snapshot), { canReloadOnlineCollection: false }));
         expect(grid).toEqual(expect.arrayContaining(['resync-folder', 'organize-song-info', 'export-playlist', 'edit-entity']));
-        expect(tui).toEqual(['play-filtered', 'enqueue-filtered']);
+        expect(tui).toEqual(grid.filter(action => !GRID_LOCAL_ACTIONS.includes(action)));
+        expect(tui).toEqual(expect.arrayContaining(['resync-folder', 'organize-song-info', 'export-playlist', 'edit-entity']));
 
         const busy = snapshotWith(snapshot.capabilities, { sourceActionPending: true });
         const whileBusy = publishBoth(coreInputs(busy, fakeController(busy), { canReloadOnlineCollection: false })).grid;
@@ -269,8 +270,8 @@ describe('core surface actions across suites', () => {
         const ready = snapshotWith({ subscribe: READY });
         const { grid, tui } = publishBoth(coreInputs(ready, fakeController(ready)));
         expect(grid).toContain('toggle-subscribe');
-        // TUI 在 P2.4 声明 subscribe 之前不发布它。
-        expect(tui).not.toContain('toggle-subscribe');
+        // TUI 自 P2.4 起声明 subscribe：与网格一样发布。
+        expect(tui).toContain('toggle-subscribe');
     });
 
     it('publishes no mutation command without a controller, whatever the snapshot says', () => {
@@ -292,13 +293,19 @@ describe('core surface actions across suites', () => {
         runGridSurfaceAction('toggle-subscribe', surface);
         runGridSurfaceAction('resync-folder', surface);
         runGridSurfaceAction('export-playlist', surface);
-        // 没声明的 suite（TUI）即使 core 允许也不执行。
+        // TUI 也声明了 subscribe：经它的 surface 执行的是同一个控制器动作。
         runGridSurfaceAction('toggle-subscribe', buildCoreSurfaceParams({
             ...coreInputs(snapshot, controller),
             declaredActions: resolveLibrarySurfaceActions('collection', 'tui'),
         }));
+        // 没声明 subscribe 的 suite 即使 core 允许也不执行。
+        const tuiActions = resolveLibrarySurfaceActions('collection', 'tui');
+        runGridSurfaceAction('toggle-subscribe', buildCoreSurfaceParams({
+            ...coreInputs(snapshot, controller),
+            declaredActions: { actions: tuiActions.actions.filter(action => action !== 'subscribe'), extraActions: [] },
+        }));
 
-        expect(controller.toggleSubscribe).toHaveBeenCalledTimes(1);
+        expect(controller.toggleSubscribe).toHaveBeenCalledTimes(2);
         expect(controller.resyncFolder).toHaveBeenCalledTimes(1);
         expect(controller.exportPlaylist).toHaveBeenCalledTimes(1);
     });

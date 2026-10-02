@@ -68,3 +68,26 @@ export const findEntryIndex = (
     }
     return -1;
 };
+
+/**
+ * 焦点所在的条目被删掉（或被替换，例如每日推荐「不喜欢」换上的新歌）之后，焦点该落在第几行：
+ * 原位置的下一行；删的是最后一行时落到新的最后一行（即上一行）；没有行了返回 -1。
+ *
+ * 不按条目键去找「下一行」：同一首歌的重复条目被删掉一个之后，后面那些的重复序号会前移，
+ * 键会变。改为数「被删那一行之前、仍然留在新列表里的行」——它们的键不受影响（重复序号只看前面），
+ * 这个数就是下一行在新列表里的位置。按歌删（在线 / 本地歌单删掉同一首的全部条目）时，
+ * 前面那些同歌条目也一起消失，结果照样正确。
+ */
+export const resolveRowAfterRemoval = (
+    previousRowKeys: readonly string[],
+    removedRow: number,
+    nextRowKeys: readonly string[],
+): number => {
+    if (nextRowKeys.length === 0) return -1;
+    const remaining = new Set(nextRowKeys);
+    let survivorsBefore = 0;
+    for (let row = 0; row < Math.min(removedRow, previousRowKeys.length); row += 1) {
+        if (remaining.has(previousRowKeys[row])) survivorsBefore += 1;
+    }
+    return Math.min(survivorsBefore, nextRowKeys.length - 1);
+};

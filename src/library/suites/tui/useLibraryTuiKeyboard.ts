@@ -4,12 +4,14 @@ import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 // src/library/suites/tui/useLibraryTuiKeyboard.ts
 // TUI 的按键。只用不可打印键：只要注册了命令筛选，单字符键都归命令面板（打字即筛选），
 // 空格又是全局的播放 / 暂停。守卫与网格一致：输入框和按钮里的按键不算，上层窗口打开时不抢，
-// Enter / Escape 不响应长按重复。
+// Enter / Escape / Delete 不响应长按重复（按住 Delete 不能一路删下去）。
 
 type LibraryTuiKeyboardHandlers = {
     isActive: boolean;
     /** 命令面板的筛选框正开着：Enter 归它。 */
     isFiltering: boolean;
+    /** 行内提示（改名、删除确认）开着：它自己处理 Enter / Escape，这里只让 Escape 关掉它，别的键都不抢。 */
+    isPromptOpen: boolean;
     rowCount: number;
     pageSize: number;
     moveFocus: (resolve: (current: number) => number) => void;
@@ -17,6 +19,8 @@ type LibraryTuiKeyboardHandlers = {
     onEnqueueFocused: () => void;
     onPlayScope: () => void;
     onEnqueueScope: () => void;
+    /** 删除（每日推荐是「不喜欢」）焦点条目；集合不支持时由调用方忽略。 */
+    onDeleteFocused: () => void;
     onEscape: () => void;
 };
 
@@ -47,7 +51,7 @@ export const useLibraryTuiKeyboard = (handlers: LibraryTuiKeyboardHandlers) => {
                 current.onEscape();
                 return;
             }
-            if (isControlTarget(event.target)) return;
+            if (current.isPromptOpen || isControlTarget(event.target)) return;
 
             const last = Math.max(current.rowCount - 1, 0);
             const clamp = (index: number) => Math.max(0, Math.min(index, last));
@@ -69,6 +73,10 @@ export const useLibraryTuiKeyboard = (handlers: LibraryTuiKeyboardHandlers) => {
                     break;
                 case 'End':
                     current.moveFocus(() => last);
+                    break;
+                case 'Delete':
+                    if (event.repeat || current.isFiltering) return;
+                    current.onDeleteFocused();
                     break;
                 case 'Enter':
                     if (event.repeat || current.isFiltering) return;

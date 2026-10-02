@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { installBaseState, localImportFixture, mockNeteaseApi, openApp } from './helpers/appFixtures';
+import {
+    installBaseState,
+    localImportFixture,
+    mockNavidromeApi,
+    mockNeteaseApi,
+    NAVIDROME_SERVER,
+    navidromeFixtures,
+    openApp,
+} from './helpers/appFixtures';
 
 // test/ui/libraryRendererSwitch.spec.ts
 // 完整应用里的 renderer 切换（开发版浮层）。行为探针已经在假宿主里把两套 UI 的语义对齐了；
@@ -85,4 +93,80 @@ test('Ctrl+Enter in the TUI plays the whole scope through the real playback port
 
     await expect.poll(async () => (await playbackSnapshot(page)).currentSongName).toBe('Midnight Train');
     expect((await playbackSnapshot(page)).queueLength).toBe(1);
+});
+
+// 真实应用里 TUI 的变更：Navidrome 歌单里按 Delete，经真实的变更端口（navidromeApi.updatePlaylist）
+// 发出按原始下标的删除，TUI 立即少一行、焦点落到下一行。歌单内容与删除由这里的路由应答（其余端点仍走 mockNavidromeApi）。
+test('Delete in the TUI removes a Navidrome playlist entry through the real mutation port', async ({ page }) => {
+    await installBaseState(page, { neteaseMode: 'logged-in', navidromeEnabled: true });
+    await mockNeteaseApi(page, 'logged-in');
+    await mockNavidromeApi(page);
+    let entries = ['tui-song-1', 'tui-song-2', 'tui-song-3'];
+    const removals: string[][] = [];
+    await page.route(`${NAVIDROME_SERVER}/rest/**`, async route => {
+        const url = new URL(route.request().url());
+        const endpoint = url.pathname.replace('/rest/', '');
+        const respond = (body: object) => route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ 'subsonic-response': { status: 'ok', ...body } }),
+        });
+        if (endpoint === 'getPlaylist') {
+            await respond({
+                playlist: {
+                    id: 'playlist-main',
+                    name: 'Workspace Rotation',
+                    owner: navidromeFixtures.config.username,
+                    songCount: entries.length,
+                    duration: 600,
+                    entry: entries.map((id, index) => ({
+                        id,
+                        isDir: false,
+                        title: `TUI Track ${id.slice(-1)}`,
+                        album: 'Aurora Echoes',
+                        albumId: 'album-aurora',
+                        artist: 'Test Ensemble',
+                        artistId: 'artist-1',
+                        track: index + 1,
+                        duration: 200,
+                        type: 'music',
+                    })),
+                },
+            });
+            return;
+        }
+        if (endpoint === 'updatePlaylist') {
+            const indexes = url.searchParams.getAll('songIndexToRemove');
+            removals.push(indexes);
+            const removing = new Set(indexes.map(Number));
+            entries = entries.filter((_, index) => !removing.has(index));
+            await respond({});
+            return;
+        }
+        await route.fallback();
+    });
+    await openApp(page);
+
+    await page.getByRole('button', { name: 'Navi' }).last().click();
+    await page.getByRole('tab', { name: 'Playlists' }).click();
+    // 第一下把卡片移到中间（焦点），第二下才打开。
+    await expect.poll(async () => {
+        await page.getByRole('heading', { name: 'Workspace Rotation' }).first().click();
+        return grid(page).count();
+    }, { timeout: 15_000 }).toBe(1);
+    await switchTo(page, 'tui');
+    await expect(tui(page).locator('[data-tui-row]')).toHaveCount(3);
+    await expect(tui(page).locator('footer')).toContainText('Del remove');
+
+    const second = tui(page).locator('[data-tui-row="1"]');
+    await expect(second).toContainText('TUI Track 2');
+    await second.click();
+    await expect(second).toHaveAttribute('aria-selected', 'true');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Delete');
+
+    await expect(tui(page).locator('[data-tui-row]')).toHaveCount(2);
+    expect(removals).toEqual([['1']]);
+    await expect(tui(page).getByText('TUI Track 2')).toHaveCount(0);
+    await expect(tui(page).locator('[data-tui-row][aria-selected="true"]')).toContainText('TUI Track 3');
 });

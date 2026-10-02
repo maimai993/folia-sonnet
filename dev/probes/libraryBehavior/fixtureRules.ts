@@ -27,6 +27,9 @@ export const DUPE_POSITIONS: Readonly<Record<number, number>> = { 20: 5, 40: 6, 
 /** online-owned-dupes 里第一首歌再次出现的原始位置（在第一页之后）。 */
 export const OWNED_DUPE_POSITION = 160;
 
+/** online-owned-twice 里第二首歌（序号 1）再次出现的原始位置（在第一页里）。 */
+export const OWNED_TWICE_POSITION = 6;
+
 export type OnlineFixtureId =
     | 'online-big'
     | 'online-dupes'
@@ -37,13 +40,14 @@ export type OnlineFixtureId =
     | 'online-empty'
     | 'online-owned'
     | 'online-owned-dupes'
+    | 'online-owned-twice'
     | 'online-public'
     | 'online-daily'
     | 'collide-a'
     | 'collide-b';
 
 export type LocalFixtureId = 'local-all' | 'local-folder' | 'local-playlist' | 'local-album';
-export type NavidromeFixtureId = 'navi-album' | 'navi-playlist';
+export type NavidromeFixtureId = 'navi-album' | 'navi-playlist' | 'navi-playlist-dupes';
 export type ProbeFixtureId = OnlineFixtureId | LocalFixtureId | NavidromeFixtureId;
 
 export type OnlineFixtureRule = {
@@ -82,6 +86,17 @@ export const ONLINE_FIXTURES: Readonly<Record<OnlineFixtureId, OnlineFixtureRule
         name: 'Owned Duplicates',
         prefix: 'odupes',
         rawIndexes: range(220).map(position => (position === OWNED_DUPE_POSITION ? 0 : position)),
+        isOwned: true,
+    },
+    // 自己的歌单，第二首在第一页里（原始位置 6）又出现一次：首页不去重，两个条目都在界面上。
+    // 删其中一个，上游按歌删，两个都没了。
+    'online-owned-twice': {
+        providerId: PROBE_PROVIDER_A,
+        collectionId: 'owned-twice',
+        type: 'playlist',
+        name: 'Owned Twice',
+        prefix: 'otwice',
+        rawIndexes: range(12).map(position => (position === OWNED_TWICE_POSITION ? 1 : position)),
         isOwned: true,
     },
     'online-public': { providerId: PROBE_PROVIDER_A, collectionId: 'public', type: 'playlist', name: 'Public Playlist', prefix: 'public', rawIndexes: range(30) },
@@ -173,3 +188,6 @@ export const NAVIDROME_ALBUM_ID = 'navi-al-1';
 export const NAVIDROME_PLAYLIST_ID = 'navi-pl-1';
 export const NAVIDROME_ALBUM_SONGS = range(6, 1).map(index => `navi-song-${index}`);
 export const NAVIDROME_PLAYLIST_SONGS = range(5, 11).map(index => `navi-song-${index}`);
+/** 含重复条目的 Navidrome 歌单：navi-song-21 出现两次（原始下标 0 与 2）。 */
+export const NAVIDROME_DUPES_PLAYLIST_ID = 'navi-pl-2';
+export const NAVIDROME_DUPES_PLAYLIST_SONGS = ['navi-song-21', 'navi-song-22', 'navi-song-21', 'navi-song-23'];

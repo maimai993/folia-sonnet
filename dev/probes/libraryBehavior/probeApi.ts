@@ -43,6 +43,9 @@ export type LibraryProbeApi = {
     /** 按住宿主的刷新（回调照样记账，只是迟迟不完成），releaseRefresh 时继续。 */
     holdRefresh: (kind: ProbeRefreshKind) => void;
     releaseRefresh: (kind: ProbeRefreshKind) => void;
+    /** 按住在线 provider 的变更应答（请求已记账，上游在放行时才改），releaseMutations 时送达。 */
+    holdMutations: () => void;
+    releaseMutations: () => void;
     calls: () => ProbeCall[];
     requests: () => ProbeRequest[];
     clearLog: () => void;

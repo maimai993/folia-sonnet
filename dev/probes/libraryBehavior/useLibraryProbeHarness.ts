@@ -24,6 +24,8 @@ import {
     LOCAL_PLAYLIST_NAME,
     NAVIDROME_ALBUM_ID,
     NAVIDROME_ALBUM_SONGS,
+    NAVIDROME_DUPES_PLAYLIST_ID,
+    NAVIDROME_DUPES_PLAYLIST_SONGS,
     NAVIDROME_PLAYLIST_ID,
     NAVIDROME_PLAYLIST_SONGS,
     ONLINE_FIXTURES,
@@ -52,8 +54,15 @@ const ALL_FIXTURES = [
     'local-album',
     'navi-album',
     'navi-playlist',
+    'navi-playlist-dupes',
 ] as ProbeFixtureId[];
-const SANDBOX_ONLY: ReadonlySet<ProbeFixtureId> = new Set(['local-playlist', 'local-album', 'navi-album', 'navi-playlist']);
+const SANDBOX_ONLY: ReadonlySet<ProbeFixtureId> = new Set([
+    'local-playlist',
+    'local-album',
+    'navi-album',
+    'navi-playlist',
+    'navi-playlist-dupes',
+]);
 
 export const isProbeSandbox = (): boolean => (
     Boolean(navigator.webdriver) || new URLSearchParams(window.location.search).has('sandbox')
@@ -222,6 +231,14 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
                 id: NAVIDROME_PLAYLIST_ID,
                 name: 'Navi Playlist',
                 trackCount: NAVIDROME_PLAYLIST_SONGS.length,
+                editable: true,
+            } as Parameters<typeof createNavidromeGridViewCollection>[0], 'playlist');
+        }
+        if (fixtureId === 'navi-playlist-dupes') {
+            return createNavidromeGridViewCollection({
+                id: NAVIDROME_DUPES_PLAYLIST_ID,
+                name: 'Navi Duplicates',
+                trackCount: NAVIDROME_DUPES_PLAYLIST_SONGS.length,
                 editable: true,
             } as Parameters<typeof createNavidromeGridViewCollection>[0], 'playlist');
         }

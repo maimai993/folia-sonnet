@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useIsPresent } from 'framer-motion';
 import { List, useListRef } from 'react-window';
 import { useTranslation } from 'react-i18next';
 import type { LibraryCollectionSurfaceProps } from '../../core/contracts/suite';
+import type { LibraryMutationResult } from '../../core/contracts/mutations';
+import { isLibraryActionDeclared } from '../../core/model/librarySuites';
 import { collectionKey } from '../../core/model/collectionIdentity';
 import { buildCoreSurfaceParams, buildGridSurfaceState, runGridSurfaceAction } from '../../core/model/collectionSurface';
 import { useCollectionResourceState } from '../../core/bindings/useCollectionResourceState';
@@ -16,7 +18,8 @@ import { useGridSurfaceRegistration } from '../../../hooks/useGridSurfaceRegistr
 import { useLocalTrackSortStore } from '../../core/state/useLocalTrackSortStore';
 import { colorWithAlpha } from '../../../components/visualizer/colorMix';
 import LibraryTuiHeader from './LibraryTuiHeader';
-import LibraryTuiRow, { LIBRARY_TUI_ROW_HEIGHT, type LibraryTuiRowProps } from './LibraryTuiRow';
+import LibraryTuiRow, { LIBRARY_TUI_COLUMNS, LIBRARY_TUI_ROW_HEIGHT, type LibraryTuiRowProps } from './LibraryTuiRow';
+import LibraryTuiPrompt, { type LibraryTuiPromptRequest } from './LibraryTuiPrompt';
 import { useLibraryTuiFocus } from './useLibraryTuiFocus';
 import { useLibraryTuiKeyboard } from './useLibraryTuiKeyboard';
 
@@ -26,9 +29,10 @@ import { useLibraryTuiKeyboard } from './useLibraryTuiKeyboard';
 // useCollectionActions），并向命令面板注册同一个 surface，只是没有信息面板、侧栏与编辑模式。
 // 这里不引用网格、六边形视口或转场的任何实现。
 
-// 宿主交给任何 suite 的集合 surface 输入（core/contracts/suite）。TUI 目前只用其中的展示与播放部分；
-// 变更控制器在 P2.4 接入。
-// （P2.3 起变更控制器的快照已经接进命令面板的 surface：core 动作与网格同源，发布哪些由 entry.ts 的声明决定。）
+// 宿主交给任何 suite 的集合 surface 输入（core/contracts/suite）。变更（删条目 / 不喜欢、订阅、改名、删除集合、
+// 每日推荐日期、手动匹配）都经宿主传来的变更控制器，与网格是同一个实例、同一份快照；TUI 只是换了入口：
+// Delete 键、状态栏上的 [★] / [改名] / [删除]、行上的 [i]，以及命令面板（core 动作与网格同源，
+// 发布哪些由 entry.ts 的声明决定）。按钮只在「声明 ∩ 控制器能力」时出现。
 const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     collection,
     resource,
@@ -39,6 +43,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     isDaylight,
     isInteractive,
     onBack,
+    onStatusMessage,
     declaredActions,
 }) => {
     const { t } = useTranslation();
@@ -74,7 +79,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
 
     const view = useCollectionView({ tracks, committedQuery, localSort });
     const actions = useCollectionActions({ resource, snapshot, view, port, collectionType: collection.type });
-    const focus = useLibraryTuiFocus(sessionKey, view);
+    const focus = useLibraryTuiFocus(sessionKey, view, committedQuery);
     const trackAtRow = (row: number) => {
         const displayIndex = focus.rowDisplayIndexes[row];
         return displayIndex === undefined ? undefined : view.displayTracks[displayIndex];
@@ -104,6 +109,82 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         run: action => runGridSurfaceAction(action, surfaceParams),
     });
 
+    // 变更动作：suite 声明了、控制器也说这个集合支持，才有入口。
+    const mutationCapabilities = mutationSnapshot.capabilities;
+    const offers = (action: Parameters<typeof isLibraryActionDeclared>[1], supported: boolean) => (
+        Boolean(mutations) && supported && isLibraryActionDeclared(declaredActions, action)
+    );
+    const canRemoveEntry = offers('remove-entry', mutationCapabilities.removeEntry.supported);
+    const isDailyRecommendations = mutationSnapshot.branches.isDailyRecommendationsCollection;
+    const displayTitle = mutationSnapshot.renamedTo ?? collection.name;
+    const pendingKeys = useMemo(() => new Set(mutationSnapshot.pendingEntryKeys), [mutationSnapshot.pendingEntryKeys]);
+    const [prompt, setPrompt] = useState<LibraryTuiPromptRequest | null>(null);
+
+    // 删除的结果可能在 TUI 卸载之后才回来（控制器属于集合会话）：那时什么都不用做。
+    const isMountedRef = useRef(false);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
+    // 删焦点条目（每日推荐是「不喜欢并换一首」）。控制器在上游确认后直接提交给资源，TUI 没有退出动画，
+    // 不需要按住展示；焦点在条目消失时落到原位置的下一行。进行中再按一次由控制器挡掉（busy，不发第二个请求）。
+    // 结果文案与网格一致：次数用完提示一次，每日推荐失败报错；其它失败由控制器经端口报出。
+    const removeFocused = useCallback(async () => {
+        if (!mutations || !canRemoveEntry) return;
+        const row = focus.focusedRow;
+        const entryKey = focus.rowKeys[row];
+        const displayIndex = focus.rowDisplayIndexes[row];
+        const track = displayIndex === undefined ? undefined : view.displayTracks[displayIndex];
+        if (!entryKey || !track) return;
+        focus.markRemoval(row);
+        let result: LibraryMutationResult;
+        try {
+            result = await mutations.removeEntry({ entryKey, track });
+        } catch (error) {
+            console.error('Failed to remove track in LibraryTuiView', error);
+            result = { ok: false, reason: 'failed' };
+        }
+        if (!isMountedRef.current || result.ok) return;
+        // busy：第一次的请求还在路上，它的焦点标记要留着。
+        if (result.reason !== 'busy') focus.clearRemoval(entryKey);
+        if (result.reason === 'limit-reached') {
+            onStatusMessage?.({ type: 'info', text: t('home.noMoreDailyRecommendations'), nonce: Date.now() });
+        } else if (result.reason === 'failed' && isDailyRecommendations) {
+            onStatusMessage?.({ type: 'error', text: t('home.dislikeRecommendationFailed'), nonce: Date.now() });
+        }
+    }, [canRemoveEntry, focus, isDailyRecommendations, mutations, onStatusMessage, t, view.displayTracks]);
+
+    const canMatchSong = offers('match-song', mutationCapabilities.matchSong.supported);
+    const matchRow = (row: number) => {
+        const track = trackAtRow(row);
+        if (track && canMatchSong) void mutations?.matchSong(track);
+    };
+
+    const isLocalFolder = mutationSnapshot.branches.isLocalFolderCollection;
+    const openRenamePrompt = () => setPrompt({ kind: 'rename', initialValue: displayTitle });
+    const openDeletePrompt = () => setPrompt({
+        kind: 'confirm-delete',
+        // 文件夹沿用网格确认框的说明（子文件夹与根文件夹的后果不同）。
+        message: isLocalFolder
+            ? t(collection.name.replace(/\\/g, '/').includes('/') ? 'localMusic.deleteSubfolderMessage' : 'localMusic.deleteRootFolderMessage', { folderName: collection.name })
+            : t('libraryTui.confirmDelete', { name: displayTitle }),
+    });
+    // 改名没改成就留在提示里（与网格留在编辑模式一致）；删除先收起提示，成功才返回上一层。
+    const submitPrompt = async (value: string) => {
+        if (!prompt || !mutations) return;
+        if (prompt.kind === 'rename') {
+            const result = await mutations.rename(value);
+            if (isMountedRef.current && result.ok) setPrompt(null);
+            return;
+        }
+        setPrompt(null);
+        const result = await mutations.deleteCollection();
+        if (isMountedRef.current && result.ok) onBack();
+    };
+
     const playRow = (row: number) => {
         const track = trackAtRow(row);
         if (!track) return;
@@ -126,8 +207,10 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         onEnqueueFocused: () => enqueueRow(focus.focusedRow),
         onPlayScope: actions.playScope,
         onEnqueueScope: actions.enqueueScope,
-        // 与网格一致：先撤掉筛选，再离开。
-        onEscape: () => (query ? setQuery('') : onBack()),
+        onDeleteFocused: () => void removeFocused(),
+        isPromptOpen: prompt !== null,
+        // 先收起行内提示；与网格一致：再撤掉筛选，最后离开。
+        onEscape: () => (prompt ? setPrompt(null) : query ? setQuery('') : onBack()),
     });
 
     // 等 react-window 量好视口再定位：刚挂载（例如从网格切过来）时列表还没有高度。
@@ -145,16 +228,19 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         rowDisplayIndexes: focus.rowDisplayIndexes,
         rowKeys: focus.rowKeys,
         focusedRow: focus.focusedRow,
+        pendingKeys,
         accentBackground: colorWithAlpha(accentColor, isDaylight ? 0.16 : 0.22),
         accentColor,
         enqueueLabel: t('libraryTui.enqueue'),
         unavailableLabel: t('status.songUnavailableTag'),
+        matchLabel: t('localMusic.manualMetadataMatch'),
         onFocusRow: focus.focusRow,
         onPlayRow: playRow,
         onEnqueueRow: enqueueRow,
-    // playRow / enqueueRow 每次渲染都是新函数，但它们只读当前的 focus 与 view。
+        onMatchRow: canMatchSong ? matchRow : undefined,
+    // playRow / enqueueRow / matchRow 每次渲染都是新函数，但它们只读当前的 focus、view 与控制器。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [accentColor, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, focus.rowKeys, isDaylight, t, view.displayTracks]);
+    }), [accentColor, canMatchSong, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, focus.rowKeys, isDaylight, pendingKeys, t, view.displayTracks]);
 
     const isEmpty = focus.rowDisplayIndexes.length === 0;
     const isLoading = !snapshot || snapshot.status === 'idle' || snapshot.status === 'loading';
@@ -173,7 +259,19 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         >
             <LibraryTuiHeader
                 collection={collection}
+                title={displayTitle}
                 snapshot={snapshot}
+                mutations={{
+                    snapshot: mutationSnapshot,
+                    showSubscribe: offers('subscribe', mutationCapabilities.subscribe.supported),
+                    showRename: offers('rename', mutationCapabilities.rename.supported),
+                    showDelete: offers('delete-collection', mutationCapabilities.deleteCollection.supported),
+                    showDailyDate: offers('daily-date', mutationCapabilities.dailyDate.supported),
+                    onToggleSubscribe: () => void mutations?.toggleSubscribe(),
+                    onRename: openRenamePrompt,
+                    onDelete: openDeletePrompt,
+                    onDailyDate: (date, afresh) => void mutations?.setDailyDate(date, { afresh }),
+                }}
                 query={query}
                 scopeCount={view.contextTracks.length}
                 reload={actions.capabilities.reload}
@@ -182,7 +280,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
                 onReload={actions.reload}
                 onResumeSync={actions.resumeSync}
             />
-            <div className="grid shrink-0 grid-cols-[2ch_6ch_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_6ch_4ch] gap-x-3 border-b border-current/10 px-4 py-1 text-[11px] uppercase tracking-wider opacity-45">
+            <div className={`grid shrink-0 ${LIBRARY_TUI_COLUMNS} gap-x-3 border-b border-current/10 px-4 py-1 text-[11px] uppercase tracking-wider opacity-45`}>
                 <span />
                 <span>{t('libraryTui.columnIndex')}</span>
                 <span>{t('libraryTui.columnTitle')}</span>
@@ -207,8 +305,19 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
                     />
                 )}
             </div>
+            {prompt && (
+                <LibraryTuiPrompt
+                    key={prompt.kind}
+                    request={prompt}
+                    pending={mutationSnapshot.sourceActionPending}
+                    accentColor={accentColor}
+                    onSubmit={value => void submitPrompt(value)}
+                    onCancel={() => setPrompt(null)}
+                />
+            )}
             <footer className="shrink-0 border-t border-current/10 px-4 py-1.5 text-[11px] opacity-50">
                 {t('libraryTui.hints')}
+                {canRemoveEntry && ` · ${t(isDailyRecommendations ? 'libraryTui.hintDislike' : 'libraryTui.hintRemove')}`}
             </footer>
         </div>
     );

@@ -1,12 +1,13 @@
 import React from 'react';
 import type { RowComponentProps } from 'react-window';
-import type { SongResult } from '../../../types';
+import type { SongResult, UnifiedSong } from '../../../types';
 import { isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { formatTime } from '../../../utils/appPlaybackHelpers';
 
 // src/library/suites/tui/LibraryTuiRow.tsx
-// TUI 的一行：序号、歌名、歌手、专辑、时长，等宽排列。单击移动焦点，双击播放，[+] 入队。
+// TUI 的一行：序号、歌名、歌手、专辑、时长，等宽排列。单击移动焦点，双击播放，[+] 入队；
+// 本地歌在集合支持时多一个 [i]（手动匹配在线信息，打开宿主挂载的对话框）。删除请求还没回来的行标 `~` 并变淡。
 
 export const LIBRARY_TUI_ROW_HEIGHT = 28;
 
@@ -16,14 +17,21 @@ export type LibraryTuiRowProps = {
     /** 每行的条目键（与网格卡片 id 同一格式）。 */
     rowKeys: string[];
     focusedRow: number;
+    /** 删除请求还没回来的条目键。 */
+    pendingKeys: ReadonlySet<string>;
     accentBackground: string;
     accentColor: string;
     enqueueLabel: string;
     unavailableLabel: string;
+    matchLabel: string;
     onFocusRow: (row: number) => void;
     onPlayRow: (row: number) => void;
     onEnqueueRow: (row: number) => void;
+    /** 集合支持手动匹配时才给；只对本地歌显示。 */
+    onMatchRow?: (row: number) => void;
 };
+
+export const LIBRARY_TUI_COLUMNS = 'grid-cols-[2ch_6ch_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_6ch_7ch]';
 
 const cell = 'truncate whitespace-pre';
 
@@ -34,13 +42,16 @@ const LibraryTuiRow = ({
     rowDisplayIndexes,
     rowKeys,
     focusedRow,
+    pendingKeys,
     accentBackground,
     accentColor,
     enqueueLabel,
     unavailableLabel,
+    matchLabel,
     onFocusRow,
     onPlayRow,
     onEnqueueRow,
+    onMatchRow,
 }: RowComponentProps<LibraryTuiRowProps>): React.ReactElement | null => {
     const displayIndex = rowDisplayIndexes[index];
     const track = displayIndex === undefined ? undefined : tracks[displayIndex];
@@ -48,22 +59,27 @@ const LibraryTuiRow = ({
 
     const isFocused = index === focusedRow;
     const unavailable = isSongUnavailable(track);
+    const entryKey = rowKeys[index];
+    const isPending = pendingKeys.has(entryKey);
+    const canMatch = Boolean(onMatchRow && (track as UnifiedSong).localRef?.songId);
     return (
         <div
             role="option"
             aria-selected={isFocused}
             data-tui-row={index}
-            data-library-entry={rowKeys[index]}
+            data-library-entry={entryKey}
+            data-tui-pending={isPending || undefined}
+            aria-busy={isPending || undefined}
             style={{
                 ...style,
                 backgroundColor: isFocused ? accentBackground : undefined,
-                opacity: unavailable ? 0.45 : undefined,
+                opacity: unavailable || isPending ? 0.45 : undefined,
             }}
             onClick={() => onFocusRow(index)}
             onDoubleClick={() => onPlayRow(index)}
-            className="grid cursor-default select-none grid-cols-[2ch_6ch_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_6ch_4ch] items-center gap-x-3 px-4 text-[13px]"
+            className={`grid cursor-default select-none ${LIBRARY_TUI_COLUMNS} items-center gap-x-3 px-4 text-[13px]`}
         >
-            <span style={{ color: isFocused ? accentColor : undefined }}>{isFocused ? '>' : ' '}</span>
+            <span style={{ color: isFocused ? accentColor : undefined }}>{isPending ? '~' : isFocused ? '>' : ' '}</span>
             <span className="tabular-nums opacity-50">{String(displayIndex + 1).padStart(4, '0')}</span>
             <span className={cell}>
                 {track.name}
@@ -72,19 +88,36 @@ const LibraryTuiRow = ({
             <span className={`${cell} opacity-70`}>{getSongArtistLabel(track)}</span>
             <span className={`${cell} opacity-55`}>{track.album?.name || ''}</span>
             <span className="tabular-nums opacity-55">{formatTime((track.durationMs || 0) / 1000)}</span>
-            <button
-                type="button"
-                title={enqueueLabel}
-                aria-label={enqueueLabel}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onEnqueueRow(index);
-                }}
-                className="opacity-50 hover:opacity-100 disabled:opacity-20"
-                disabled={unavailable}
-            >
-                [+]
-            </button>
+            <span className="flex gap-x-1">
+                {canMatch ? (
+                    <button
+                        type="button"
+                        title={matchLabel}
+                        aria-label={matchLabel}
+                        data-tui-match
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onMatchRow?.(index);
+                        }}
+                        className="opacity-50 hover:opacity-100"
+                    >
+                        [i]
+                    </button>
+                ) : <span className="w-[3ch]" />}
+                <button
+                    type="button"
+                    title={enqueueLabel}
+                    aria-label={enqueueLabel}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onEnqueueRow(index);
+                    }}
+                    className="opacity-50 hover:opacity-100 disabled:opacity-20"
+                    disabled={unavailable}
+                >
+                    [+]
+                </button>
+            </span>
         </div>
     );
 };

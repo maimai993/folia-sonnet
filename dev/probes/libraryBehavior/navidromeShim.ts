@@ -2,6 +2,8 @@ import type { SubsonicSong } from '../../../src/types/navidrome';
 import {
     NAVIDROME_ALBUM_ID,
     NAVIDROME_ALBUM_SONGS,
+    NAVIDROME_DUPES_PLAYLIST_ID,
+    NAVIDROME_DUPES_PLAYLIST_SONGS,
     NAVIDROME_PLAYLIST_ID,
     NAVIDROME_PLAYLIST_SONGS,
     NAVIDROME_PROBE_SERVER,
@@ -37,8 +39,17 @@ const makeSubsonicSong = (id: string, index: number, album: string, albumId: str
     isVideo: false,
 });
 
-let playlistEntries: string[] = [];
-let playlistName = 'Navi Playlist';
+type ShimPlaylist = { name: string; entries: string[] };
+
+/** 歌单 id → 名字与条目（含重复）。安装垫片时重置。 */
+let playlists = new Map<string, ShimPlaylist>();
+
+const resetPlaylists = () => {
+    playlists = new Map([
+        [NAVIDROME_PLAYLIST_ID, { name: 'Navi Playlist', entries: [...NAVIDROME_PLAYLIST_SONGS] }],
+        [NAVIDROME_DUPES_PLAYLIST_ID, { name: 'Navi Duplicates', entries: [...NAVIDROME_DUPES_PLAYLIST_SONGS] }],
+    ]);
+};
 
 const respond = (body: unknown) => new Response(JSON.stringify({ 'subsonic-response': { status: 'ok', ...body as object } }), {
     status: 200,
@@ -78,37 +89,43 @@ const handle = (url: URL): Response => {
             },
         });
     }
-    if (endpoint === 'getPlaylist' && id === NAVIDROME_PLAYLIST_ID) {
+    const playlist = id ? playlists.get(id) : undefined;
+    if (endpoint === 'getPlaylist' && id && playlist) {
         return respond({
             playlist: {
-                id: NAVIDROME_PLAYLIST_ID,
-                name: playlistName,
+                id,
+                name: playlist.name,
                 owner: 'probe',
-                songCount: playlistEntries.length,
+                songCount: playlist.entries.length,
                 duration: 1000,
-                entry: playlistEntries.map((songId, index) => makeSubsonicSong(songId, index, 'Navi Mixed', 'navi-al-2')),
+                entry: playlist.entries.map((songId, index) => makeSubsonicSong(songId, index, 'Navi Mixed', 'navi-al-2')),
             },
         });
     }
     if (endpoint === 'getPlaylists') {
         return respond({
             playlists: {
-                playlist: [{ id: NAVIDROME_PLAYLIST_ID, name: playlistName, owner: 'probe', songCount: playlistEntries.length, duration: 1000 }],
+                playlist: [...playlists].map(([playlistId, item]) => ({
+                    id: playlistId,
+                    name: item.name,
+                    owner: 'probe',
+                    songCount: item.entries.length,
+                    duration: 1000,
+                })),
             },
         });
     }
-    if (endpoint === 'updatePlaylist') {
+    if (endpoint === 'updatePlaylist' && playlist) {
         const removingSet = new Set(removing);
-        playlistEntries = playlistEntries.filter((_, index) => !removingSet.has(index));
-        playlistName = url.searchParams.get('name') ?? playlistName;
+        playlist.entries = playlist.entries.filter((_, index) => !removingSet.has(index));
+        playlist.name = url.searchParams.get('name') ?? playlist.name;
     }
     return respond({});
 };
 
 /** 安装垫片，返回卸载函数。 */
 export const installNavidromeShim = (): (() => void) => {
-    playlistEntries = [...NAVIDROME_PLAYLIST_SONGS];
-    playlistName = 'Navi Playlist';
+    resetPlaylists();
     const originalFetch = window.fetch;
     window.fetch = async (input, init) => {
         const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
