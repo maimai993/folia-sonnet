@@ -86,3 +86,13 @@ export const listLibrarySuiteOverlays = (): ReadonlyArray<{
         ? [{ suiteId: suite.id, Overlay: suite.transitions.Overlay as unknown as React.ComponentType<{ enabled: boolean }> }]
         : []
 ));
+
+/**
+ * 「完成」（返回按钮）时忘掉这一层的布局记录：问**每一套**可用的 suite，不只是正在渲染它的那套
+ * （在 TUI 里看完的集合，下次在网格里打开也从头开始）。没有布局记录的 suite 不声明 layout。
+ */
+export const forgetLibraryLayouts = (sessionKey: string): void => {
+    for (const suite of SUITE_INDEX.suites) {
+        suite.layout?.forget(sessionKey);
+    }
+};

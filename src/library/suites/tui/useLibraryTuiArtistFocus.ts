@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { artistEntryPane } from '../../core/model/artistSurface';
 import {
     getLibraryBrowseSession,
+    getLibrarySessionGeneration,
     registerLibrarySessionFlush,
     useLibraryBrowseSessionStore,
 } from '../../core/state/useLibraryBrowseSessionStore';
@@ -29,6 +30,8 @@ export const useLibraryTuiArtistFocus = (sessionKey: string, songKeys: readonly 
     focusedKeyRef.current = focusedKey;
     // 用户在这里动过焦点（或会话里本来就有）才写回：没动过就写第一行，会让网格回来时不再停在介绍卡上。
     const touchedRef = useRef(Boolean(initialKey));
+    /** 挂载时会话的代（见 core/state/useLibraryBrowseSessionStore）。 */
+    const mountGenerationRef = useRef(getLibrarySessionGeneration(sessionKey));
 
     /** 在当前栏里移动焦点（resolve 拿到当前行号，返回新行号）。 */
     const moveFocus = useCallback((resolve: (current: number) => number) => {
@@ -64,10 +67,12 @@ export const useLibraryTuiArtistFocus = (sessionKey: string, songKeys: readonly 
         if (key) touchedRef.current = true;
         useLibraryBrowseSessionStore.getState().setFocusedEntry(sessionKey, (key ?? focusedKeyRef.current) || null);
     }, [sessionKey]);
-    /** 冲刷与卸载时用：没动过焦点、或者还没有任何行（数据没到）时什么都不写。 */
+    /** 冲刷与卸载时用：没动过焦点、或者还没有任何行（数据没到）时什么都不写；挂载以来会话被清过（返回按钮 =
+     *  完成，宿主先清会话再返回）时也不写，否则卸载会把刚清掉的会话又写出来。 */
     const flushFocus = useCallback(() => {
+        if (getLibrarySessionGeneration(sessionKey) !== mountGenerationRef.current) return;
         if (touchedRef.current && focusedKeyRef.current) persistFocus();
-    }, [persistFocus]);
+    }, [persistFocus, sessionKey]);
 
     useEffect(() => registerLibrarySessionFlush(sessionKey, flushFocus), [flushFocus, sessionKey]);
     // 卸载时（压入下一层、返回、换 suite）也写一次：回来时焦点还在这一项上。

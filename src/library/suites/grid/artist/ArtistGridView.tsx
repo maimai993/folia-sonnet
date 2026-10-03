@@ -81,6 +81,8 @@ interface ArtistGridViewProps {
     /** 网格在歌手页上声明的动作（entry.ts）；入口与命令面板只给「声明 ∩ core 能力」。 */
     declaredActions: LibraryDeclaredActions;
     onBack: () => void;
+    /** 返回按钮：看完了（宿主清会话与布局记录再返回）。 */
+    onDone: () => void;
     onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
     onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
     theme: Theme;
@@ -313,6 +315,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     playback,
     declaredActions,
     onBack,
+    onDone,
     onSelectAlbum,
     onSelectArtist,
     theme,
@@ -1237,12 +1240,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             {/* Header Area */}
             <div className="absolute top-0 left-0 p-6 z-30 flex items-center gap-4">
                 <button
-                    onClick={() => {
-                        // 返回按钮表示看完了：网格布局与浏览会话一起清掉（Escape 与浏览器后退保留；P4.5 把这条语义收到宿主）。
-                        sessionStorage.removeItem(navigationStorageKey);
-                        useLibraryBrowseSessionStore.getState().clearSession(sessionKey);
-                        onBack();
-                    }}
+                    // 返回按钮表示看完了（onDone）：宿主清掉浏览会话、让每套 suite 忘掉布局记录，再返回
+                    // （Escape 与浏览器后退保留）。P4.5 起这条语义在宿主，不在这里清。
+                    onClick={onDone}
                     className={`w-10 h-10 rounded-full ${closeBtnBg} flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer`}
                     style={{ color: 'var(--text-primary)' }}
                 >

@@ -1,7 +1,7 @@
 import type { LocalSong, SongResult, StatusMessage, Theme } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
 import type { LibraryArtistResource } from './artist';
-import type { LibraryCollectionDescriptor } from './collection';
+import type { CollectionNavigationOrigin, LibraryCollectionDescriptor } from './collection';
 import type { LibraryDirectoryBatchController } from './directory';
 import type { LibraryHomeData, LibraryOnlineProviderPlatform } from './home';
 import type { LibraryHomeResources } from './homeModel';
@@ -157,9 +157,18 @@ export type LibraryDeclaredActions = {
  */
 export type LibrarySurfaceComponent<Props> = (props: Props) => unknown;
 
-/** 集合层的导航动作：宿主实现（压栈、返回、解析目录引用）。 */
+/**
+ * 集合层的导航动作：宿主实现（压栈、返回、解析目录引用）。
+ *
+ * 返回分两种，同一个手势在每套 suite 里含义相同（P4.5，由宿主执行，suite 只按手势选一个调用）：
+ * - onDone：显式的返回按钮 = 看完了。宿主清掉这一层的浏览会话（筛选、焦点），并让每套 suite 忘掉这一层的布局记录
+ *   （manifest 的 layout.forget），然后返回；下次打开从头开始。
+ * - onBack：离开但保留（Escape 阶梯的最后一步、删掉集合之后、宿主自己的自动返回）。浏览器后退同样保留，
+ *   它不经过 suite，由宿主在 popstate 弹栈前跑 suite 的 beforeBack。
+ */
 export type LibraryCollectionNavigation = {
     onBack: () => void;
+    onDone: () => void;
     /** album 是界面上已有的专辑摘要（名字、封面、目录引用），track 是触发它的那首歌（在线集合按它解析目录）。 */
     onOpenAlbum: (albumId: number | string, album?: LibraryCatalogLinkHint, track?: SongResult) => void;
     onOpenArtist: (artistId: number | string, artist?: LibraryCatalogLinkHint, track?: SongResult) => void;
@@ -244,7 +253,7 @@ export type LibraryNavigationContext = {
     /** 导航栈当前深度。 */
     depth: number;
     /** 根集合从哪里打开（'home' 时返回可以落回首页卡片）。 */
-    origin: string | null;
+    origin: CollectionNavigationOrigin | null;
     /** 当前顶层集合的类型。 */
     activeType: string | null;
 };
@@ -258,10 +267,22 @@ export type LibrarySuiteTransitions = {
     Overlay?: LibrarySurfaceComponent<{ enabled: boolean }>;
     /** 压入下一层之前。 */
     beforePush?: (context: LibraryNavigationContext) => void;
-    /** 返回上一层之前。 */
+    /**
+     * 返回上一层之前（界面与导航 store 都还是返回前的样子）。应用内返回（返回按钮、Escape）与浏览器后退都会调用
+     * （后者由宿主在 popstate 弹栈前调用，P4.5），一次返回只调用一次。
+     */
     beforeBack?: (context: LibraryNavigationContext) => void;
     /** 切换 suite 时：丢掉还没用掉的转场计划（它是给切换前那次入场准备的）。每套 suite 都会收到。 */
     reset?: () => void;
+};
+
+/**
+ * suite 自己的布局记录（滚动位置、坐标……，属于 suite，不进 core）。「完成」（返回按钮）时宿主让**每一套** suite
+ * 忘掉这一层的记录——不只是正在渲染它的那套：在 TUI 里点了返回，下次在网格里打开也该从头开始。
+ */
+export type LibrarySuiteLayout = {
+    /** 忘掉这一层（键是浏览会话的键：集合是 collectionKey，歌手页是导航栈那一层的 collectionKey）的布局记录。 */
+    forget: (sessionKey: string) => void;
 };
 
 export type LibrarySuiteManifest = {
@@ -272,4 +293,6 @@ export type LibrarySuiteManifest = {
     available?: boolean;
     surfaces: { readonly [Surface in LibrarySurfaceId]?: LibrarySurfaceDeclaration<LibrarySurfacePropsMap[Surface]> };
     transitions?: LibrarySuiteTransitions;
+    /** 有布局记录的 suite 才给（网格：集合与歌手页的 sessionStorage 记录）。 */
+    layout?: LibrarySuiteLayout;
 };

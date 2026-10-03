@@ -3,6 +3,7 @@ import type { CollectionView } from '../../core/bindings/useCollectionView';
 import { resolveRowAfterRemoval } from '../../core/model/collectionEntries';
 import {
     getLibraryBrowseSession,
+    getLibrarySessionGeneration,
     registerLibrarySessionFlush,
     useLibraryBrowseSessionStore,
 } from '../../core/state/useLibraryBrowseSessionStore';
@@ -67,6 +68,8 @@ export const useLibraryTuiFocus = (sessionKey: string, view: CollectionView, com
     currentKeyRef.current = focusedRow >= 0 ? rowKeys[focusedRow] || null : null;
     /** 用户在这里动过焦点（移动、点击、删除、播放 / 打开）。 */
     const touchedRef = useRef(false);
+    /** 挂载时会话的代（见 core/state/useLibraryBrowseSessionStore）。 */
+    const mountGenerationRef = useRef(getLibrarySessionGeneration(sessionKey));
 
     const moveFocus = useCallback((resolve: (current: number) => number) => {
         if (rowKeys.length === 0) return;
@@ -98,9 +101,11 @@ export const useLibraryTuiFocus = (sessionKey: string, view: CollectionView, com
         touchedRef.current = true;
         useLibraryBrowseSessionStore.getState().setFocusedEntry(sessionKey, key || null);
     }, [focusedRow, rowKeys, sessionKey]);
-    /** 冲刷（换 suite 之前）与卸载时用：没动过焦点、或者还没有任何行（数据没到）时什么都不写。 */
+    /** 冲刷（换 suite 之前）与卸载时用：没动过焦点、或者还没有任何行（数据没到）时什么都不写；
+     *  挂载以来会话被清过（用户点了返回按钮 = 完成，宿主先清会话再返回）时也不写。 */
     const flushFocus = useCallback(() => {
         if (!touchedRef.current || !currentKeyRef.current) return;
+        if (getLibrarySessionGeneration(sessionKey) !== mountGenerationRef.current) return;
         useLibraryBrowseSessionStore.getState().setFocusedEntry(sessionKey, currentKeyRef.current);
     }, [sessionKey]);
 

@@ -18,6 +18,7 @@ const GridArtistSurface: React.FC<LibraryArtistSurfaceProps> = ({
     declaredActions,
     onEditEntity,
     onBack,
+    onDone,
     onOpenAlbum,
     onOpenArtist,
 }) => {
@@ -30,6 +31,7 @@ const GridArtistSurface: React.FC<LibraryArtistSurfaceProps> = ({
             playback={playback}
             declaredActions={declaredActions}
             onBack={onBack}
+            onDone={onDone}
             onSelectAlbum={onOpenAlbum}
             onSelectArtist={onOpenArtist}
             theme={theme}

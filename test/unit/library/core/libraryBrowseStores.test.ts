@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     flushLibrarySession,
     getLibraryBrowseSession,
+    getLibrarySessionGeneration,
     registerLibrarySessionFlush,
     useLibraryBrowseSessionStore,
 } from '@/library/core/state/useLibraryBrowseSessionStore';
@@ -22,6 +23,18 @@ describe('library browse session store', () => {
 
         expect(getLibraryBrowseSession('a')).toEqual({ query: 'cedar', focusedEntryKey: 'online:p:1-0' });
         expect(getLibraryBrowseSession('b')).toEqual({ query: '', focusedEntryKey: null });
+    });
+
+    // P4.5：「完成」清会话时换代。正在离开的那一层（TUI）卸载时的写回带着挂载时的代，代变了就不写。
+    it('bumps the generation on every clear, even when there was no session to clear', () => {
+        const store = useLibraryBrowseSessionStore.getState();
+        const start = getLibrarySessionGeneration('gen');
+        store.clearSession('gen');
+        expect(getLibrarySessionGeneration('gen')).toBe(start + 1);
+        store.setQuery('gen', 'q');
+        store.clearSession('gen');
+        expect(getLibrarySessionGeneration('gen')).toBe(start + 2);
+        expect(getLibrarySessionGeneration('other')).toBe(0);
     });
 
     it('drops the least recently used session beyond 32', () => {

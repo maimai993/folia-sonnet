@@ -7,7 +7,8 @@ import { waitForAppMounted } from '../helpers/appState';
 // 行为探针只挂宿主，覆盖不到这一层——真实的 useAppNavigation（history state、hash）、搜索 / 播放器来源的返回落点。
 //
 // 数据是导入的本地曲库（一首「Test Artist - Midnight Train」，专辑「Fixture Album」）：不出网，歌手 / 专辑都有本地实体。
-// 「完成」语义（返回按钮 vs Escape vs 浏览器后退清不清会话）在 P4.5 才统一，这里只钉返回落点。
+// P4.5 起「完成」语义由宿主统一：返回按钮 = 完成（清会话），浏览器后退 = 离开但保留（文件末尾两套 suite 各一条）；
+// 浏览器后退也跑 suite 的 beforeBack（网格的反向移形换影，单独一条打开转场来看）。
 
 const collectionLayer = (page: Page) => page.locator('[data-library-renderer]');
 const grid = (page: Page) => page.locator('[data-library-renderer="grid"]');
@@ -21,10 +22,27 @@ const historyState = (page: Page) => page.evaluate(() => ({
     origin: (window.history.state as { collection?: { origin?: string } | null } | null)?.collection?.origin ?? null,
 }));
 const searchResult = (page: Page) => page.getByRole('button', { name: 'Play track' });
+/** 命令面板筛选框背后的同一个端口（当前可交互的集合层注册的那个）：读 / 写浏览会话里的筛选词。 */
+const readQuery = (page: Page) => page.evaluate(async () => {
+    const modulePath = '/src/stores/useAppViewStore.ts';
+    const { useAppViewStore } = await import(/* @vite-ignore */ modulePath);
+    return (useAppViewStore.getState().commandFilter?.getQuery() ?? null) as string | null;
+});
+const setQuery = (page: Page, query: string) => page.evaluate(async value => {
+    const modulePath = '/src/stores/useAppViewStore.ts';
+    const { useAppViewStore } = await import(/* @vite-ignore */ modulePath);
+    useAppViewStore.getState().commandFilter?.setQuery(value);
+}, query);
 
-/** 导入本地曲库，停在网格首页的本地页签上。 */
-const openLocalHome = async (page: Page) => {
+/**
+ * 导入本地曲库，停在网格首页的本地页签上。collectionMorph：打开歌单展开转场（基线把所有动效面都降级了，
+ * 这里在它的初始化脚本之后再撤掉这一面）。
+ */
+const openLocalHome = async (page: Page, options: { collectionMorph?: boolean } = {}) => {
     await installBaseState(page, { neteaseMode: 'guest', localImportFixture });
+    if (options.collectionMorph) {
+        await page.addInitScript(() => localStorage.removeItem('reduce_motion_collectionMorph'));
+    }
     await mockNeteaseApi(page, 'guest');
     await openApp(page);
     await page.getByRole('button', { name: 'Folder' }).last().click();
@@ -182,6 +200,64 @@ test('reloading with a collection open lands on the home without it', async ({ p
     await expect(collectionLayer(page)).toHaveCount(0);
     expect(await historyState(page)).toMatchObject({ view: 'home', stack: [] });
     expect((await historyState(page)).hash).not.toMatch(/^#collection/);
+});
+
+// P4.5：「完成」与「离开」由宿主统一，两套 suite 同一个手势同一个含义——显式的返回按钮 = 看完了（清掉这一层的
+// 浏览会话与网格的布局记录），浏览器后退 = 离开但保留（Escape 同样保留，探针里覆盖）。筛选词在浏览会话里，所以用它来看。
+for (const suite of ['grid', 'tui'] as const) {
+    test(`[${suite}] browser back keeps the filter, the Back button forgets it`, async ({ page }) => {
+        await openLocalHome(page);
+        await searchLocal(page, 'Midnight');
+        await selectSuite(page, suite);
+        const layer = suite === 'grid' ? grid(page) : tui(page);
+        const openAlbum = async () => {
+            await page.getByRole('button', { name: 'Fixture Album' }).click();
+            await expect(layer).toHaveAttribute('data-library-surface', 'collection');
+            await expect.poll(() => readQuery(page)).not.toBeNull();
+        };
+
+        await openAlbum();
+        await setQuery(page, 'midnight');
+        await expect.poll(() => readQuery(page)).toBe('midnight');
+
+        await page.goBack();
+        await expectSearchResults(page, 'Midnight');
+        await openAlbum();
+        await expect.poll(() => readQuery(page)).toBe('midnight');
+
+        if (suite === 'grid') await gridBack(page).click();
+        else await tui(page).locator('[data-tui-back]').click();
+        await expectSearchResults(page, 'Midnight');
+        await openAlbum();
+        await expect.poll(() => readQuery(page)).toBe('');
+    });
+}
+
+// P4.5：浏览器后退（popstate）与应用内返回一样先跑渲染这一层的 suite 的 beforeBack——网格的反向移形换影（嵌套返回时
+// hero 收回、卡片散开）。以前 popstate 绕过宿主，网格直接切走、没有转场。这一条要打开歌单展开转场（基线默认把动效全关了）。
+test('[grid] browser back from a nested album plays the reverse transition', async ({ page }) => {
+    await openLocalHome(page, { collectionMorph: true });
+    await page.getByRole('heading', { name: 'All Songs' }).first().click();
+    await expect(grid(page)).toHaveCount(1);
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+    await grid(page).getByText('Fixture Album', { exact: true }).first().dispatchEvent('click');
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Fixture Album']);
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+    await page.waitForTimeout(1500);
+
+    // 退场层只存在几百毫秒：用 MutationObserver 记下它出现过。
+    await page.evaluate(() => {
+        const flag = window as unknown as { __exitSeen?: boolean };
+        flag.__exitSeen = false;
+        new MutationObserver(() => {
+            if (document.querySelector('[data-folia-collection-morph="exit-backdrop"]')) flag.__exitSeen = true;
+        }).observe(document.body, { childList: true, subtree: true });
+    });
+    await page.goBack();
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs']);
+    await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __exitSeen?: boolean }).__exitSeen))).toBe(true);
+    await expect(page.locator('[data-folia-collection-morph="exit-backdrop"]')).toHaveCount(0, { timeout: 5_000 });
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
 });
 
 /**

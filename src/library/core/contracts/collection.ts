@@ -12,6 +12,12 @@ import type {
 // 放到 types 之后，组件、store、Library Core 都从这里取；R1 起随 Library Core 归到 core/contracts（原 src/types/libraryCollection.ts）。
 
 export type GridViewCollectionSource = 'online' | 'local' | 'navidrome';
+
+/**
+ * 根集合从哪里打开（导航栈的 origin）：首页卡片、搜索结果、播放器面板。返回到底时落回这里；
+ * 'home' 时网格的反向移形换影可以落回首页那张卡。原定义在 stores/useCollectionNavigationStore（那里仍转出）。
+ */
+export type CollectionNavigationOrigin = 'home' | 'search' | 'player';
 export type NavidromeGridViewCollectionType = 'album' | 'playlist' | 'artist' | 'random' | 'favorites';
 
 export interface BaseGridViewCollectionDescriptor {

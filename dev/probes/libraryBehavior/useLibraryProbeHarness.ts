@@ -12,7 +12,7 @@ import {
 import { buildLocalHomeGroups } from '../../../src/library/core/model/localHomeModel';
 import { getLocalCoverAssetUrl } from '../../../src/services/localCoverAssetUrl';
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
-import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
+import { notifyCollectionPop, useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
 import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librarySuites';
@@ -86,14 +86,19 @@ const buildPlaylistList = (): ProviderCollection[] => (
         .map(describeOnlineFixture)
 );
 
+// 等价于浏览器后退（popstate）：先发「将要弹栈」的通知（宿主据此让 suite 跑 beforeBack），再改 store。
+// 应用内返回（返回按钮、Escape）也落到这里，和真实应用里 backCollection 走 history.back() 一样。
 const popNavigation = () => {
     const store = useCollectionNavigationStore.getState();
     const snapshot = store.snapshot;
     if (!snapshot || snapshot.stack.length <= 1) {
+        notifyCollectionPop(null);
         store.clear();
         return;
     }
-    store.restore({ ...snapshot, stack: snapshot.stack.slice(0, -1) });
+    const next = { ...snapshot, stack: snapshot.stack.slice(0, -1) };
+    notifyCollectionPop(next);
+    store.restore(next);
 };
 
 export type LibraryProbeHarness = {

@@ -6,9 +6,19 @@ import type { LibraryBrowseSession } from '../contracts/session';
 // 筛选和「看到哪首」都还在。布局坐标（网格的拖拽位置）不在这里，由各 renderer 自己存。
 //
 // 只在内存里：页面刷新本来就不会恢复打开的集合（启动时会替换掉历史记录）。会话按集合身份分开，
-// 返回按钮会清掉它（与原先清掉网格恢复记录一致），Escape 与浏览器后退则保留。
+// 返回按钮会清掉它（与原先清掉网格恢复记录一致），Escape 与浏览器后退则保留。P4.5 起「返回按钮 = 完成」由宿主
+// 统一执行（library/app 的 GridViewOverlayHost：清会话 + 让每套 suite 忘掉布局记录），不再写在各 suite 的按钮里。
+//
+// 清掉之后，正在离开的那一层卸载时可能还想把焦点写回（TUI 的卸载写回）：每次清会话把这个键的「代」加一，
+// 离开时的写回带着挂载时的代（getLibrarySessionGeneration），代变了就不写，免得把刚清掉的会话又写出来。
 
 const MAX_SESSIONS = 32;
+
+/** 每个会话键被清过几次（「完成」一次加一）；只在内存里，不进 store 状态（不触发订阅者）。 */
+const sessionGenerations = new Map<string, number>();
+
+/** 这个会话键现在的代。离开时的写回先比一比：挂载以来被清过（用户点了返回按钮），就不写。 */
+export const getLibrarySessionGeneration = (sessionKey: string): number => sessionGenerations.get(sessionKey) ?? 0;
 const EMPTY_SESSION: LibraryBrowseSession = { query: '', focusedEntryKey: null };
 
 type LibraryBrowseSessionState = {
@@ -47,6 +57,8 @@ export const useLibraryBrowseSessionStore = create<LibraryBrowseSessionState>((s
         set(state => writeSession(state, sessionKey, { focusedEntryKey }));
     },
     clearSession: (sessionKey) => {
+        // 没有会话也要换代：正在离开的那一层可能马上就要写回焦点。
+        sessionGenerations.set(sessionKey, getLibrarySessionGeneration(sessionKey) + 1);
         if (!get().sessions[sessionKey]) return;
         set(state => {
             const sessions = { ...state.sessions };

@@ -4,6 +4,7 @@ import GridCollectionSurface from './collection/GridCollectionSurface';
 import GridArtistSurface from './artist/GridArtistSurface';
 import { CollectionMorphOverlay } from './transitions/CollectionMorphOverlay';
 import { gridHostTransitions } from './transitions/gridHostTransitions';
+import { gridLayout } from './gridLayout';
 
 // src/library/suites/grid/entry.ts
 // 网格 suite（默认 suite）：实现全部三个 surface，任何别的 suite 没实现的 surface 都由它渲染。
@@ -97,6 +98,8 @@ const grid: LibrarySuiteManifest = {
         Overlay: CollectionMorphOverlay,
         ...gridHostTransitions,
     },
+    // 「完成」时宿主让网格忘掉这一层的集合 / 歌手页布局记录（sessionStorage）。
+    layout: gridLayout,
 };
 
 export default grid;

@@ -8,6 +8,7 @@ import {
 import {
     type CollectionNavigationOrigin,
     type CollectionNavigationSnapshot,
+    notifyCollectionPop,
     useCollectionNavigationStore,
 } from '../stores/useCollectionNavigationStore';
 import type { GridViewCollectionDescriptor } from '../library/core/contracts/collection';
@@ -290,6 +291,9 @@ export function useAppNavigation() {
                 restoreHistoryState(fallbackState);
                 return;
             }
+            // 历史后退弹掉集合层时（浏览器后退，或应用内返回走的 history.back()），先在 store 变化之前通知：
+            // 集合宿主据此让渲染这一层的 suite 跑 beforeBack（网格的反向移形换影），和应用内返回一致。
+            notifyCollectionPop(state.collection ?? null);
             restoreHistoryState(state);
         };
 
@@ -487,9 +491,12 @@ export function useAppNavigation() {
 
         const nextStack = snapshot.stack.slice(0, -1);
         if (nextStack.length > 0) {
-            useCollectionNavigationStore.getState().restore({ ...snapshot, stack: nextStack });
+            const next = { ...snapshot, stack: nextStack };
+            notifyCollectionPop(next);
+            useCollectionNavigationStore.getState().restore(next);
             return;
         }
+        notifyCollectionPop(null);
         useCollectionNavigationStore.getState().clear();
         if (snapshot.origin === 'player') {
             setCurrentView('player');

@@ -197,6 +197,7 @@ const GridEntrancePerfProbe: React.FC = () => {
                         isDaylight={false}
                         isInteractive
                         onBack={() => {}}
+                        onDone={() => {}}
                         morphPlan={{ kind: 'morph' }}
                     />
                 ) : null}

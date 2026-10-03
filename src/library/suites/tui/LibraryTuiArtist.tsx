@@ -59,6 +59,7 @@ const LibraryTuiArtist: React.FC<LibraryArtistSurfaceProps> = ({
     declaredActions,
     onEditEntity,
     onBack,
+    onDone,
     onOpenAlbum,
     onOpenArtist,
 }) => {
@@ -225,7 +226,8 @@ const LibraryTuiArtist: React.FC<LibraryArtistSurfaceProps> = ({
                 isBioExpanded={isBioExpanded}
                 accentColor={accentColor}
                 onToggleBio={() => setIsBioExpanded(expanded => !expanded)}
-                onBack={onBack}
+                // [← Back] = 完成（宿主清会话与布局记录）；Esc 阶梯的最后一步走 onBack，离开但保留。
+                onBack={onDone}
                 onReload={actions.reload}
                 onRetryAlbums={actions.retryAlbums}
                 onEnqueueScope={() => void actions.enqueueScope()}

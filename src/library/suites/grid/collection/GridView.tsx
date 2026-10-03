@@ -77,6 +77,8 @@ interface GridViewProps {
     items?: GridItem[];
     mode: 'collection' | 'tracks';
     onBack: () => void;
+    /** 返回按钮：看完了（宿主清会话与布局记录再返回）。 */
+    onDone: () => void;
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onSelectCollection?: (item: any) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
@@ -221,6 +223,7 @@ export const GridView: React.FC<GridViewProps> = ({
     items = [],
     mode,
     onBack,
+    onDone,
     onSelectTrack,
     onSelectCollection,
     onAddTrackToQueue,
@@ -1459,14 +1462,9 @@ export const GridView: React.FC<GridViewProps> = ({
 
             {/* Back Button */}
             <button
-                onClick={() => {
-                    // 返回按钮表示看完了：网格布局与浏览会话一起清掉（Escape 与浏览器后退保留）。
-                    if (navigationStorageKey) {
-                        sessionStorage.removeItem(navigationStorageKey);
-                    }
-                    useLibraryBrowseSessionStore.getState().clearSession(sessionKey);
-                    onBack();
-                }}
+                // 返回按钮表示看完了（onDone）：宿主清掉浏览会话、让每套 suite 忘掉布局记录（网格的 sessionStorage
+                // 记录经 entry 的 layout.forget），再返回。Escape 与浏览器后退保留（onBack）。P4.5 起不在这里清。
+                onClick={onDone}
                 className="absolute left-6 top-5 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-105 active:scale-95 z-[70]"
                 style={{
                     backgroundColor: isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)',

@@ -20,6 +20,7 @@ const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
     onStatusMessage,
     declaredActions,
     onBack,
+    onDone,
     onOpenAlbum,
     onOpenArtist,
 }) => {
@@ -35,6 +36,7 @@ const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
             collection={collection}
             mode="tracks"
             onBack={onBack}
+            onDone={onDone}
             onSelectTrack={playback.playTrack}
             onAddTrackToQueue={playback.enqueueTrack}
             onPlayAll={playback.playAll}

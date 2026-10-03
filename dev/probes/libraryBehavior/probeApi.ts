@@ -53,8 +53,10 @@ export type LibraryProbeApi = {
     fixtures: () => ProbeFixtureId[];
     /** 等价于在首页点开这个集合。 */
     open: (fixtureId: ProbeFixtureId) => void;
-    /** 等价于浏览器后退：只弹栈，不清网格的恢复记录。 */
+    /** 等价于浏览器后退：先发「将要弹栈」的通知（宿主让 suite 跑 beforeBack），再弹栈；不清会话与布局记录。 */
     back: () => void;
+    /** 浏览会话里这个键的筛选词与焦点（没有会话时为 null）。 */
+    browseSession: (sessionKey: string) => { query: string; focusedEntryKey: string | null } | null;
     /** 导航栈里每一层的名字，自底向上。 */
     stack: () => string[];
     /** 经由当前注册的命令筛选写 query；没有注册者时返回 false。 */

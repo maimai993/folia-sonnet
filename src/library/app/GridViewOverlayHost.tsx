@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { getActiveGridViewCollection, useCollectionNavigationStore } from '../../stores/useCollectionNavigationStore';
+import {
+    getActiveGridViewCollection,
+    subscribeCollectionPop,
+    useCollectionNavigationStore,
+    type CollectionNavigationSnapshot,
+} from '../../stores/useCollectionNavigationStore';
 import { LocalSong, SongResult, UnifiedSong } from '../../types';
 import { getNavidromeConfig, navidromeApi } from '../../services/navidromeService';
 import { getLocalCoverAssetUrl } from '../../services/localCoverAssetUrl';
@@ -32,14 +37,21 @@ import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { countRender } from '../../dev/renderCount';
 import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
 import { useLibrarySuiteStore } from '../core/state/useLibrarySuiteStore';
+import { useLibraryBrowseSessionStore } from '../core/state/useLibraryBrowseSessionStore';
 import type { LibraryNavigationContext, LibrarySurfaceId } from '../core/contracts/suite';
-import { listLibrarySuiteOverlays, listLibrarySuites, resolveLibrarySurface } from '../registry';
+import { forgetLibraryLayouts, listLibrarySuiteOverlays, listLibrarySuites, resolveLibrarySurface } from '../registry';
 
 // src/library/app/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
 // R3 起集合层与歌手页经 registry 解析：当前选中的 suite 实现了就由它渲染，否则回退默认 suite（grid）。
 // 宿主只交出契约里的输入（core/contracts/suite）；网格专属的转场（移形换影的入场计划、返回时的测量、
 // 常驻的转场层）由网格 entry 的 transitions 提供，宿主不再直接 import 任何 suite。
+//
+// 返回的语义（P4.5，同一个手势在每套 suite 里含义相同）：
+// - 返回按钮 = 完成（onDone）：清掉这一层的浏览会话，让每套 suite 忘掉这一层的布局记录，再返回；
+// - Escape 与浏览器后退 = 离开但保留（onBack / popstate）。
+// 两条返回路径都只让渲染这一层的 suite 跑一次 beforeBack：应用内返回在这里先跑，再走历史后退；浏览器后退
+// 不经过这里，由导航 store 在 popstate 弹栈之前通知（subscribeCollectionPop），界面那时还是返回前的样子。
 
 // suite 的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响（生产构建里也只有一套 suite）。
 const DevLibraryRendererSwitch = import.meta.env.DEV ? React.lazy(() => import('./DevLibraryRendererSwitch')) : null;
@@ -252,10 +264,25 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         onPushCollection(col);
     }, [activeTransitions, onPushCollection]);
 
+    // 应用内返回已经跑过 beforeBack 的那次弹栈（弹栈前的快照）：随后 history.back() 的 popstate 再通知时认出它、不重跑。
+    // 快照每次导航都是新对象，按引用比较；没等来通知（例如返回被忽略）也无妨，下一次弹栈的快照不会是它。
+    const armedBackRef = useRef<CollectionNavigationSnapshot | null>(null);
     const handleBackCollection = useCallback(() => {
         activeTransitions?.beforeBack?.(readNavigationContext());
+        armedBackRef.current = useCollectionNavigationStore.getState().snapshot;
         onBackCollection();
     }, [activeTransitions, onBackCollection]);
+
+    // 浏览器后退（popstate 直接恢复历史里的栈，不经过上面的 handleBackCollection）：在 store 变化之前跑同一个
+    // beforeBack，网格的反向移形换影与卡片散开和应用内返回一样出现。
+    const activeTransitionsRef = useRef(activeTransitions);
+    activeTransitionsRef.current = activeTransitions;
+    useEffect(() => subscribeCollectionPop((from) => {
+        const armed = armedBackRef.current;
+        armedBackRef.current = null;
+        if (armed === from) return;
+        activeTransitionsRef.current?.beforeBack?.(readNavigationContext());
+    }), []);
 
     useEffect(() => {
         if (
@@ -497,6 +524,20 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     }, [refreshNavidromePlaylists, selectedCollection]);
 
 
+    // 「完成」（任意 suite 的返回按钮）：清掉这一层的浏览会话，让每套 suite 忘掉这一层的布局记录，再返回。
+    // 键与 suite 用的会话键一致：歌手页是导航栈那一层的 collectionKey（= 歌手资源的 key），集合是显示用描述的
+    // collectionKey（本地集合在 catalog 就绪后可能换 id，两个都清）。先清再返回：正在离开的 TUI 卸载时想写回焦点，
+    // 会被会话的「代」挡住（core/state/useLibraryBrowseSessionStore）。
+    const handleDoneCollection = useCallback(() => {
+        const keys = new Set([selectedCollectionKey, collectionKey(displaySelectedCollection)].filter(Boolean));
+        const sessions = useLibraryBrowseSessionStore.getState();
+        keys.forEach(key => {
+            forgetLibraryLayouts(key);
+            sessions.clearSession(key);
+        });
+        handleBackCollection();
+    }, [displaySelectedCollection, handleBackCollection, selectedCollectionKey]);
+
     // 来源动作（本地曲库、Navidrome、对话框、账户刷新）集中在变更端口里，只交给变更控制器；
     // suite 不直接拿端口，所有变更都经控制器（能力判定、进行中标记与重复提交保护在那里）。
     const mutationPort = useMemo(() => createLibraryMutationPort({
@@ -592,6 +633,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 onEditEntity={setEditingEntityId}
                                 declaredActions={artistSurface.declaredActions}
                                 onBack={handleBackCollection}
+                                onDone={handleDoneCollection}
                                 onOpenAlbum={handlePushAlbumCollection}
                                 onOpenArtist={handlePushArtistCollection}
                             />
@@ -611,6 +653,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 currentUserId={surfaceProps.user?.id}
                                 declaredActions={collectionSurface.declaredActions}
                                 onBack={handleBackCollection}
+                                onDone={handleDoneCollection}
                                 onOpenAlbum={handlePushAlbumCollection}
                                 onOpenArtist={handlePushArtistCollection}
                             />

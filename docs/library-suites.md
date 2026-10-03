@@ -82,11 +82,27 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 | 页面 | 主要输入 |
 | --- | --- |
-| collection | `collection`（描述）、`resource`（曲目资源）、`mutations`（变更控制器）、`playback`（播放端口）、导航（`onBack` / `onOpenAlbum` / `onOpenArtist`）、`declaredActions`、`isInteractive` |
-| artist | `collection`、`resource`（歌手资源：详情、热门歌曲、专辑）、`playback`、导航、`onEditEntity`、`declaredActions`、`isInteractive` |
+| collection | `collection`（描述）、`resource`（曲目资源）、`mutations`（变更控制器）、`playback`（播放端口）、导航（`onBack` / `onDone` / `onOpenAlbum` / `onOpenArtist`）、`declaredActions`、`isInteractive` |
+| artist | `collection`、`resource`（歌手资源：详情、热门歌曲、专辑）、`playback`、导航（同上）、`onEditEntity`、`declaredActions`、`isInteractive` |
 | home | 首页数据（账户、歌单、本地曲库……）、`homeResources`（收藏专辑、电台 feed、首页动作、Navidrome 概览、文件夹树）、`directoryActions`（目录批量动作）、`onOpenGridView`、`declaredActions`、`isInteractive` |
 
 `isInteractive` 为 false 时（例如另一层盖在上面、或正在退场），页面不要接键盘、不要往命令面板注册。
+
+## 返回：「完成」与「离开」
+
+同一个手势在每套 suite 里含义相同，执行在宿主（`src/library/app/GridViewOverlayHost.tsx`），suite 只按手势选一个回调：
+
+| 手势 | 回调 | 含义 | 宿主做什么 |
+| --- | --- | --- | --- |
+| 显式的返回按钮 | `onDone` | 看完了 | 清掉这一层的浏览会话（筛选、焦点）；让**每一套** suite 忘掉这一层的布局记录（manifest 的 `layout.forget`，网格丢掉 `folia_gridview_state:v2:` / `folia_artist_grid_state:v2:` 两份记录）；再返回 |
+| Escape 阶梯的最后一步 | `onBack` | 离开但保留 | 只返回 |
+| 浏览器后退 | —（不经过 suite） | 离开但保留 | popstate 弹栈之前由导航 store 通知（`subscribeCollectionPop`），宿主让渲染这一层的 suite 跑 `transitions.beforeBack` |
+
+要点：
+
+- 两条返回路径都只跑一次 `beforeBack`：应用内返回先跑，再走 `history.back()`；随后的弹栈通知认出这是同一次弹栈，不再跑。浏览器后退时 `beforeBack` 也是在界面与导航 store 都还没变的时候运行，网格的反向移形换影与卡片散开和点返回按钮一样出现。
+- 「完成」先清会话再返回。离开的那一层卸载时如果还想把焦点写回（TUI 会），要先比较会话的「代」（`getLibrarySessionGeneration`）：挂载以来被清过就不写，否则会把刚清掉的会话又写出来。
+- 布局记录不在 core 里，但「忘掉」要由宿主统一发起：在 TUI 里看完的集合，下次在网格里打开也应该从头开始。有布局记录的 suite 在 entry 里给 `layout: { forget(sessionKey) }`。
 
 ## 能力清单：哪些建议实现
 
@@ -167,7 +183,7 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 ## 写一套新 suite 的步骤
 
-1. 新建 `src/library/suites/<id>/entry.ts`，默认导出一个 `LibrarySuiteManifest`：`id`、显示名（`labelKey`）、`surfaces`（每个页面的组件 + 声明的动作）。组件必须用 `React.lazy` 引入（只有默认 suite 例外）。registry 会自动发现它，不需要在别处登记。
+1. 新建 `src/library/suites/<id>/entry.ts`，默认导出一个 `LibrarySuiteManifest`：`id`、显示名（`labelKey`）、`surfaces`（每个页面的组件 + 声明的动作），可选的 `transitions`（转场钩子）与 `layout`（「完成」时忘掉布局记录）。组件必须用 `React.lazy` 引入（只有默认 suite 例外）。registry 会自动发现它，不需要在别处登记。
 2. 先实现 `collection`。用 core 的 hooks 拿数据和动作：`useCollectionResourceState`（订阅资源）、`useCollectionView`（筛选与范围）、`useCollectionActions`（播放、入队、重拉）、`useCollectionMutationSnapshot`（变更能力与状态）、`useLibrarySessionQuery`（筛选词）。
 3. 向命令面板注册：集合页用 `useGridSurfaceRegistration` + `buildCoreSurfaceParams`（它会按你的声明过滤）；目录用 `useLibraryDirectorySurfaceRegistration`；歌手页用 `useLibraryArtistSurfaceRegistration`。只在 `isInteractive` 为真时注册。
 4. 键盘：可打印字符留给命令面板（它是筛选框），空格是全局的播放 / 暂停。你的页面只用方向键、Enter（可带修饰键）、Delete、Insert、Esc、功能键这类不可打印的键。
@@ -180,7 +196,8 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 - 不要 import 别的 suite（包括网格的卡片、六边形视口、转场）。需要共享的东西应放进 core。
 - 不要自己实现删歌、订阅、批量范围这类规则，用 core 的。否则两套 UI 会对同一个动作给出不同的结果。
 - 不要把筛选词、选中项、焦点存在组件 state 里。它们在会话 store 里，切换 suite 时才不会丢。
-- 布局相关的东西（滚动位置、坐标、展开状态）属于 suite 自己，不要放进 core。
+- 布局相关的东西（滚动位置、坐标、展开状态）属于 suite 自己，不要放进 core；但要在 `layout.forget` 里能按会话键丢掉它。
+- 不要在 suite 的返回按钮里自己清会话或布局记录：调 `onDone`，由宿主统一做（Escape 调 `onBack`）。
 
 ## 两套现有 suite 的对照
 
@@ -198,4 +215,5 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 - suite 发现与回退：`src/library/registry.ts`、`src/library/core/model/librarySuites.ts`
 - 两套 suite 的声明：`src/library/suites/grid/entry.ts`、`src/library/suites/tui/entry.ts`
 - 宿主：`src/library/app/GridViewOverlayHost.tsx`（集合与歌手页）、`src/components/app/Home.tsx`（首页）
+- 导航栈与弹栈通知：`src/stores/useCollectionNavigationStore.ts`（`notifyCollectionPop` / `subscribeCollectionPop`）、`src/hooks/useAppNavigation.ts`（popstate）
 - 分层规则：`skills/codebase-navigation/SKILL.md` 的 Boundaries 段、`test/unit/library/layerBoundaries.test.ts`

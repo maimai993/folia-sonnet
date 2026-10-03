@@ -1065,6 +1065,179 @@ test.describe('[tui-only] nested opens from the keyboard', () => {
     });
 });
 
+// P4.5：「完成」与「离开」由宿主统一，两套 suite 同一个手势同一个含义——返回按钮 = 完成（清掉这一层的浏览会话，
+// 每套 suite 忘掉这一层的布局记录）；Escape 与浏览器后退 = 离开但保留。
+const PUBLIC_SESSION_KEY = `online:${PROBE_PROVIDER_A}:playlist:public`;
+const browseSession = (page: Page, sessionKey = PUBLIC_SESSION_KEY) => (
+    page.evaluate(key => window.__libraryProbe!.browseSession(key), sessionKey)
+);
+const gridLayoutRecord = (page: Page, sessionKey = PUBLIC_SESSION_KEY) => (
+    page.evaluate(key => sessionStorage.getItem(`folia_gridview_state:v2:${key}`), sessionKey)
+);
+/** 显式的返回按钮：网格是左上角的圆形按钮，TUI 是状态栏的 [← Back]。 */
+const pressBackButton = async (page: Page, renderer: Renderer) => {
+    if (renderer === 'grid') {
+        await page.locator('[data-library-renderer="grid"] button').filter({ has: page.locator('svg.lucide-chevron-left') }).first().click();
+    } else {
+        await page.locator('[data-library-renderer="tui"] [data-tui-back]').click();
+    }
+};
+
+for (const renderer of RENDERERS) {
+test.describe(`[${renderer}] done and leave`, () => {
+    /** 打开公开歌单、筛选、把焦点挪离第一项并播放它（焦点写进会话）；返回焦点那一项的条目键。 */
+    const openFilteredAndFocus = async (page: Page, query: string | null) => {
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        if (query) {
+            await setQuery(page, query);
+            await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes, query).length);
+            await page.waitForTimeout(400);
+        }
+        await pressOnGrid(page, renderer === 'grid' ? 'ArrowRight' : 'ArrowDown');
+        await page.waitForTimeout(400);
+        await clearLog(page);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        const focusedKey = (await lastCall(page, 'playSong'))!.ids[0];
+        await expect.poll(async () => (await browseSession(page))?.focusedEntryKey).toBe(`${focusedKey}-0`);
+        return focusedKey;
+    };
+
+    test('browser back keeps the filter and the focus', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        const focusedKey = await openFilteredAndFocus(page, 'amber');
+        await backAndSettle(page);
+        expect(await browseSession(page)).toEqual({ query: 'amber', focusedEntryKey: `${focusedKey}-0` });
+
+        await open(page, 'online-public');
+        await expect.poll(() => getQuery(page)).toBe('amber');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes, 'amber').length);
+    });
+
+    test('Escape keeps the focus (the ladder only clears the filter first)', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        const focusedKey = await openFilteredAndFocus(page, null);
+        await pressOnGrid(page, 'Escape');
+        await expect.poll(() => stack(page)).toEqual([]);
+        await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        expect((await browseSession(page))?.focusedEntryKey).toBe(`${focusedKey}-0`);
+    });
+
+    test('the back button forgets the filter and the focus', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        await openFilteredAndFocus(page, 'amber');
+        await pressBackButton(page, renderer);
+        await expect.poll(() => stack(page)).toEqual([]);
+        await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        // TUI 卸载时会想把动过的焦点写回：会话的「代」挡住了它，清掉的会话不会被写出来。
+        expect(await browseSession(page)).toBeNull();
+        expect(await gridLayoutRecord(page)).toBeNull();
+
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        expect(await getQuery(page)).toBe('');
+    });
+});
+}
+
+test.describe('done clears every suite\'s layout records', () => {
+    test('[grid] the grid back button drops the grid layout record of that collection', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        await pressOnGrid(page, 'ArrowRight');
+        await page.waitForTimeout(400);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => gridLayoutRecord(page)).not.toBeNull();
+
+        await pressBackButton(page, 'grid');
+        await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        expect(await gridLayoutRecord(page)).toBeNull();
+    });
+
+    test('[tui] the TUI back button drops the grid record too, so the grid starts fresh next time', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        await pressOnGrid(page, 'ArrowRight');
+        await page.waitForTimeout(400);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        const focusedKey = (await lastCall(page, 'playSong'))!.ids[0];
+        await expect.poll(() => gridLayoutRecord(page)).not.toBeNull();
+
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        await pressBackButton(page, 'tui');
+        await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        expect(await gridLayoutRecord(page)).toBeNull();
+        expect(await browseSession(page)).toBeNull();
+
+        // 回到网格再打开：没有记录可恢复，焦点不再是上次那张。
+        await setRenderer(page, 'grid');
+        await open(page, 'online-public');
+        await waitForRenderer(page, 'grid');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        await page.waitForTimeout(600);
+        await clearLog(page);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        expect((await lastCall(page, 'playSong'))?.ids).not.toEqual([focusedKey]);
+    });
+});
+
+// 浏览器后退（探针的 back() 就是 popstate 那条路：先通知「将要弹栈」，再改 store）与应用内返回一样跑网格的 beforeBack：
+// 嵌套返回时 hero 收回、卡片散开（退场层 data-folia-collection-morph="exit-backdrop"）。P4.5 之前 popstate 绕过宿主，
+// 这一层直接切走、没有转场。
+test.describe('browser back and the suite transitions', () => {
+    const watchExitLayer = (page: Page) => page.evaluate(() => {
+        const flag = window as unknown as { __exitSeen?: number };
+        flag.__exitSeen = 0;
+        let present = false;
+        new MutationObserver(() => {
+            const now = Boolean(document.querySelector('[data-folia-collection-morph="exit-backdrop"]'));
+            if (now && !present) flag.__exitSeen = (flag.__exitSeen ?? 0) + 1;
+            present = now;
+        }).observe(document.body, { childList: true, subtree: true });
+    });
+    const exitLayersSeen = (page: Page) => page.evaluate(() => (window as unknown as { __exitSeen?: number }).__exitSeen ?? 0);
+    const openNestedAlbum = async (page: Page) => {
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        const songKey = onlinePlaybackKey(PROBE_PROVIDER_A, 'public-1');
+        await page.locator(cardSelector(songKey)).getByText(PROBE_ALBUM.name, { exact: true }).first().dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name]);
+        await waitForScope(page, PROBE_ALBUM.rawIndexes.length);
+        // 等嵌套层的级联入场落定，退场才有 hero 可量。
+        await page.waitForTimeout(1500);
+    };
+
+    test('[grid] browser back from a nested album plays the reverse transition', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openNestedAlbum(page);
+        await watchExitLayer(page);
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist']);
+        await expect.poll(() => exitLayersSeen(page)).toBe(1);
+        await expect(page.locator('[data-folia-collection-morph="exit-backdrop"]')).toHaveCount(0, { timeout: 5_000 });
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+    });
+
+    // 应用内返回先跑 beforeBack 再弹栈；随后的弹栈通知认出这次弹栈、不再跑第二遍。
+    test('[grid] Escape from a nested album still plays it', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openNestedAlbum(page);
+        await watchExitLayer(page);
+        await pressOnGrid(page, 'Escape');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist']);
+        await expect.poll(() => exitLayersSeen(page)).toBe(1);
+        await expect(page.locator('[data-folia-collection-morph="exit-backdrop"]')).toHaveCount(0, { timeout: 5_000 });
+        await page.waitForTimeout(300);
+        expect(await exitLayersSeen(page)).toBe(1);
+    });
+});
+
 test.describe('renderer switch', () => {
     test('switching keeps the filter, the scope, the focused song and the play queue, and never refetches', async ({ mount, page }) => {
         await mountProbe(mount, page);

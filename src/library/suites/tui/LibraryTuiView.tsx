@@ -45,6 +45,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     isDaylight,
     isInteractive,
     onBack,
+    onDone,
     onOpenAlbum,
     onOpenArtist,
     onStatusMessage,
@@ -311,7 +312,8 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
                 scopeCount={view.contextTracks.length}
                 reload={actions.capabilities.reload}
                 accentColor={accentColor}
-                onBack={onBack}
+                // 状态栏的 [← Back] 是显式的返回按钮 = 完成（宿主清会话与布局记录）；Esc 走 onBack，离开但保留。
+                onBack={onDone}
                 onReload={actions.reload}
                 onResumeSync={actions.resumeSync}
             />

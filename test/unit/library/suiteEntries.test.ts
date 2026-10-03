@@ -32,6 +32,8 @@ const DEFAULT_SUITE_EAGER_IMPORTS = [
     './artist/GridArtistSurface',
     './transitions/CollectionMorphOverlay',
     './transitions/gridHostTransitions',
+    // 「完成」时忘掉布局记录（P4.5）：只碰 sessionStorage，依赖的两个键函数所在的模块上面几项本来就即时加载。
+    './gridLayout',
 ];
 
 describe('library suite entries', () => {

@@ -3,6 +3,7 @@ import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
 import { useLibraryArtistSurfaceStore } from '../../../src/library/core/state/useLibraryArtistSurfaceStore';
+import { useLibraryBrowseSessionStore } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
 import { switchLibrarySuite } from '../../../src/library/app/switchLibrarySuite';
 import { listLibrarySuites, resolveLibrarySurface } from '../../../src/library/registry';
 import type { LibrarySuiteId } from '../../../src/library/core/contracts/suite';
@@ -54,6 +55,10 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
             return true;
         },
         getQuery: () => useAppViewStore.getState().commandFilter?.getQuery() ?? null,
+        browseSession: (sessionKey) => {
+            const session = useLibraryBrowseSessionStore.getState().sessions[sessionKey];
+            return session ? { query: session.query, focusedEntryKey: session.focusedEntryKey } : null;
+        },
         surface: () => useGridSurfaceStore.getState().gridSurface?.getState() ?? null,
         runSurface: (action) => {
             const surface = useGridSurfaceStore.getState().gridSurface;

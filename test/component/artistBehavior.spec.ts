@@ -36,8 +36,9 @@ import '../../dev/probes/libraryBehavior/probeApi';
 //
 // P4.3 起 TUI 也实现了歌手页：与渲染形态无关的场景在 `for (const suite of SUITES)` 里对 grid / tui 各跑一遍
 // （点卡片 / 行上的链接、Enter 播放这类入口按 suite 换成各自的 DOM 或按键）；只属于网格的 DOM（卡片上的按钮、
-// 专辑侧栏与信息面板、返回按钮清会话）标 [grid-only]，只属于 TUI 的按键标 [tui-only]；[switch] 是两套之间切换
+// 专辑侧栏与信息面板）标 [grid-only]，只属于 TUI 的按键标 [tui-only]；[switch] 是两套之间切换
 // （筛选与焦点保留、零新请求——歌手资源由宿主持有）。
+// P4.5 起「返回按钮 = 完成（清会话与每套 suite 的布局记录）、Escape / 浏览器后退 = 离开但保留」由宿主统一，两套都跑。
 // P4.0 记下的三个缺陷（Navidrome 晚到写回、本地 catalog 未就绪闪空态、加载失败无错误态）P4.1 已转正。
 //
 // 资源复用（P4.1）：离开的在线 / Navidrome 歌手留在一个有界的 LRU 里，详情已到、没有失败就直接复用——
@@ -52,6 +53,8 @@ type Suite = typeof SUITES[number];
 const main = ONLINE_ARTISTS['artist-main'];
 const guest = ONLINE_ARTISTS['artist-guest'];
 const mainTarget = onlineArtistTarget(main);
+/** 以根层打开的在线歌手页的浏览会话键（= 导航栈那一层的 collectionKey）。 */
+const mainSessionKey = `online:${main.providerId}:artist:${main.artistId}`;
 const guestTarget = onlineArtistTarget(guest);
 
 const topKeys = (rule: typeof main, playableOnly = false) => rule.topSongIndexes
@@ -464,6 +467,46 @@ for (const suite of SUITES) {
             await expect.poll(async () => (await artist(page))?.albumIds).toEqual(artistAlbumIdsMatching(main, 'cedar'));
         });
 
+        // P4.5：返回按钮 = 完成，由宿主执行（清会话、每套 suite 忘掉布局记录），两套 suite 同一个含义。
+        test('the back button clears the session', async ({ mount, page }) => {
+            await mountProbe(mount, page, suite);
+            await openArtist(page, 'artist-main');
+            await waitForArtist(page, main.albumCount);
+            expect(await setQuery(page, 'cedar')).toBe(true);
+            await expect.poll(async () => (await artist(page))?.query).toBe('cedar');
+            if (suite === 'tui') await pressOnPage(page, 'ArrowDown');
+
+            // 返回按钮（网格：页头最左边那个；TUI：状态栏的 [← Back]）表示看完了：筛选与焦点随会话一起清掉。
+            if (suite === 'grid') await artistLayer(page).locator('button').first().click();
+            else await artistLayer(page).locator('[data-tui-back]').click();
+            await expect(artistLayer(page)).toHaveCount(0);
+            expect(await page.evaluate(key => window.__libraryProbe!.browseSession(key), mainSessionKey)).toBeNull();
+            await openArtist(page, 'artist-main');
+            await waitForArtist(page, main.albumCount);
+            expect((await artist(page))!.query).toBe('');
+            expect((await artist(page))!.albumIds).toEqual(artistAlbumIds(main));
+        });
+
+        // Escape 阶梯的最后一步是「离开但保留」：会话里的焦点还在，回来时回到那一项（筛选在阶梯里先被撤掉）。
+        test('Escape keeps the session', async ({ mount, page }) => {
+            await mountProbe(mount, page, suite);
+            await openArtist(page, 'artist-main');
+            await waitForArtist(page, main.albumCount);
+            await playFocusedTopSong(page, suite);
+            await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+            const focusedSong = (await lastCall(page, 'playSong'))!.ids[0];
+            expect(await artistFocus(page)).toBe(`song:${focusedSong}`);
+
+            await pressOnPage(page, 'Escape');
+            await expect.poll(() => stack(page)).toEqual([]);
+            await expect(artistLayer(page)).toHaveCount(0);
+            expect((await page.evaluate(key => window.__libraryProbe!.browseSession(key), mainSessionKey))?.focusedEntryKey)
+                .toBe(`song:${focusedSong}`);
+            await openArtist(page, 'artist-main');
+            await waitForArtist(page, main.albumCount);
+            expect(await artistFocus(page)).toBe(`song:${focusedSong}`);
+        });
+
         test('the command surface publishes the top-song actions; queueing reports the accepted count', async ({ mount, page }) => {
             await mountProbe(mount, page, suite);
             await openArtist(page, 'artist-main');
@@ -656,22 +699,6 @@ test.describe('[grid-only] song cards and panels', () => {
         await expect(artistLayer(page)).toHaveCount(0);
     });
 
-    // 「完成」语义暂时还写在网格的返回按钮上（P4.5 收到宿主）：返回按钮清会话与网格布局，浏览器后退保留（上面的用例）。
-    test('the back button clears the session', async ({ mount, page }) => {
-        await mountProbe(mount, page);
-        await openArtist(page, 'artist-main');
-        await waitForArtist(page, main.albumCount);
-        expect(await setQuery(page, 'cedar')).toBe(true);
-        await expect.poll(async () => (await artist(page))?.query).toBe('cedar');
-
-        // 返回按钮（页头最左边那个）表示看完了：筛选随会话一起清掉。
-        await artistLayer(page).locator('button').first().click();
-        await expect(artistLayer(page)).toHaveCount(0);
-        await openArtist(page, 'artist-main');
-        await waitForArtist(page, main.albumCount);
-        expect((await artist(page))!.query).toBe('');
-        expect((await artist(page))!.albumIds).toEqual(artistAlbumIds(main));
-    });
 });
 
 // TUI 的歌手页（P4.3）：只用不可打印键——Tab 切热门歌曲 / 专辑两栏，Enter 播放 / 打开，Shift+Enter 入队焦点歌曲，
@@ -789,6 +816,24 @@ test.describe('[tui-only] artist page keys and header', () => {
 
 // 换 suite：歌手资源由宿主持有，两套订阅同一个；筛选词与焦点在浏览会话里，所以换过去都还在，而且不发任何新请求。
 test.describe('[switch] artist page between suites', () => {
+    // P4.5：在 TUI 里点了返回（完成），网格那份歌手页布局记录也一起忘掉——下次在网格里打开从头开始。
+    test('the TUI back button also drops the grid artist layout record', async ({ mount, page }) => {
+        const record = () => page.evaluate(key => sessionStorage.getItem(`folia_artist_grid_state:v2:${key}`), mainSessionKey);
+        await mountProbe(mount, page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        await playFocusedTopSong(page, 'grid');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        await expect.poll(record).not.toBeNull();
+
+        await setSuite(page, 'tui');
+        await waitForSuite(page, 'tui');
+        await artistLayer(page).locator('[data-tui-back]').click();
+        await expect(artistLayer(page)).toHaveCount(0);
+        expect(await record()).toBeNull();
+        expect(await page.evaluate(key => window.__libraryProbe!.browseSession(key), mainSessionKey)).toBeNull();
+    });
+
     test('a filter and a focused song in the grid survive the switch to the TUI, with no new requests', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await openArtist(page, 'artist-main');

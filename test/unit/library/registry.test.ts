@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_LIBRARY_SUITE_ID,
+    forgetLibraryLayouts,
     getLibrarySuite,
     hasLibrarySuite,
     listLibrarySuiteOverlays,
@@ -76,6 +77,22 @@ describe('library suite registry', () => {
         // 首页：两套都实现了全部首页动作（网格的焦点类动作在卡片与目录树的按钮上，TUI 的在命令面板与键盘上）。
         expect([...resolveLibrarySurfaceActions('home', 'grid').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
         expect([...resolveLibrarySurfaceActions('home', 'tui').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
+    });
+
+    // P4.5：「完成」时宿主让每套 suite 忘掉这一层的布局记录；网格的两份（集合、歌手页）都在 sessionStorage 里，TUI 没有。
+    it('forgets the grid layout records of one layer and leaves the others', () => {
+        const key = 'online:netease:playlist:1';
+        sessionStorage.setItem(`folia_gridview_state:v2:${key}`, '{}');
+        sessionStorage.setItem(`folia_artist_grid_state:v2:${key}`, '{}');
+        sessionStorage.setItem('folia_gridview_state:v2:online:netease:playlist:2', '{}');
+        expect(getLibrarySuite('grid')?.layout?.forget).toBeTypeOf('function');
+        expect(getLibrarySuite('tui')?.layout).toBeUndefined();
+
+        forgetLibraryLayouts(key);
+        expect(sessionStorage.getItem(`folia_gridview_state:v2:${key}`)).toBeNull();
+        expect(sessionStorage.getItem(`folia_artist_grid_state:v2:${key}`)).toBeNull();
+        expect(sessionStorage.getItem('folia_gridview_state:v2:online:netease:playlist:2')).toBe('{}');
+        sessionStorage.clear();
     });
 
     it('only the grid brings a transition layer', () => {
