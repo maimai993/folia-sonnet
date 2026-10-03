@@ -142,11 +142,10 @@ const localPlaylists = (page: Page) => page.evaluate(() => window.__homeProbe!.l
 
 /**
  * 关掉打开的集合，并等集合 surface 真正卸载（AnimatePresence 退场期间同一个 key 再进场会复用旧实例）。
- * 先等集合层挂上并稳定一小会儿：打开的同一帧里就关掉会留下一个卡住的透明集合层（见 fixme 用例）。
+ * 集合层一挂上就可以关（打开后马上关掉不会再留下卡住的透明层，见「closing a collection right after it opened」）。
  */
 const closeCollection = async (page: Page) => {
     await expect(page.locator('[data-library-renderer]')).toHaveCount(1);
-    await page.waitForTimeout(250);
     await page.evaluate(() => window.__homeProbe!.closeCollection());
     await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
 };
@@ -295,15 +294,47 @@ test.describe(`[${suite}] online tabs`, () => {
         expect(await stack(page)).toEqual([]);
     });
 
-    // 现状缺陷（不属于 P3 的某一步，宿主 / 网格转场；建议 P3.5 收尾时单独修）：从首页打开集合后，在集合层挂上的
-    // 同一帧里就关掉（导航栈刚出现就清掉），集合层的退场永远完成不了——它停在 opacity 0、仍是 fixed inset-0 z-[110]，
-    // 挡住首页中央的点击。稍等几十毫秒再关就正常（closeCollection 因此先等 250ms）。复现率与歌单有关（big 不复现）。
-    test.fixme('closing a collection in the frame it opened does not leave an invisible layer over the home', async ({ mount, page }) => {
+    // P3.0 记下的缺陷，P3.5 修复后转正：从首页打开集合后马上关掉（导航栈刚出现就清掉），首屏曲目的提交落在
+    // 退场开始之后，网格右下角的列表按钮（带 exit 的 motion 元素）在集合层退场中途才挂上；framer 把它登记为
+    // 「退场未完成」却不会给它播退场，集合层于是停在 opacity 0、仍是 fixed inset-0 z-[110]，挡住首页。
+    // 现在按钮在父层已退场时不挂（GridListSearchButton）。owned / public / cloud 原先必现，big 首屏慢、不复现；
+    // 本地歌手页（ArtistGridView，专辑到达后挂同一个按钮）也同样复现。
+    test('closing a collection right after it opened does not leave an invisible layer over the home', async ({ mount, page }) => {
         await mountHome(mount, page, suite);
-        expect(await open(page, 'owned')).toBe(true);
-        await expect.poll(() => stack(page)).toEqual(['Owned Playlist']);
-        await page.evaluate(() => window.__homeProbe!.closeCollection());
+        for (const id of ['owned', 'public', 'cloud', 'big']) {
+            expect(await open(page, id), id).toBe(true);
+            await expect.poll(async () => (await stack(page)).length, id).toBe(1);
+            await page.evaluate(() => window.__homeProbe!.closeCollection());
+            await expect(page.locator('[data-library-renderer]'), id).toHaveCount(0);
+            expect(await stack(page)).toEqual([]);
+        }
+        // 歌手页（ArtistGridView）同理：专辑到达后才挂列表按钮。
+        await showList(page, 'local', 'artists');
+        for (const { id } of (await items(page)).slice(0, 3)) {
+            expect(await open(page, id), id).toBe(true);
+            await expect.poll(async () => (await stack(page)).length, id).toBe(1);
+            await page.evaluate(() => window.__homeProbe!.closeCollection());
+            await expect(page.locator('[data-library-renderer]'), id).toHaveCount(0);
+        }
+        await setTab(page, 'playlist');
+        await expect.poll(() => itemIds(page)).toEqual(['public', 'cloud', 'owned', 'big', 'same']);
+        // 同一个任务里开了就关（集合层与导航栈同一帧出现又清掉）也一样。
+        await page.evaluate(() => {
+            window.__homeProbe!.open('owned');
+            window.__homeProbe!.closeCollection();
+        });
         await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        expect(await stack(page)).toEqual([]);
+        if (suite === 'grid') {
+            // 关掉后马上再打开同一个集合（AnimatePresence 复用正在退场的那层网格）：列表按钮照常在。
+            expect(await open(page, 'owned')).toBe(true);
+            await expect.poll(async () => (await stack(page)).length).toBe(1);
+            await page.evaluate(() => window.__homeProbe!.closeCollection());
+            expect(await open(page, 'owned')).toBe(true);
+            await expect(page.locator('[data-library-renderer]')).toHaveCount(1);
+            await expect(page.getByTestId('grid-list-search-button')).toHaveCount(1);
+            await closeCollection(page);
+        }
     });
 
     test('the same playlist id under two providers opens two different collections', async ({ mount, page }) => {
