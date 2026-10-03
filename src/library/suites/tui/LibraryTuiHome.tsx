@@ -160,6 +160,7 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
     return (
         <div
             data-library-home="tui"
+            data-ponder-page-scope="none"
             className={`relative flex h-full w-full flex-col overflow-hidden pt-8 font-mono ${devSwitchGutter}`}
             style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
         >

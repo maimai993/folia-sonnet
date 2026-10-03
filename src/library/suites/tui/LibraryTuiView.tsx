@@ -289,6 +289,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     return (
         <div
             data-library-renderer="tui"
+            data-ponder-page-scope="none"
             data-library-surface="collection"
             className="fixed inset-0 z-[110] flex flex-col overflow-hidden pt-8 font-mono"
             style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}

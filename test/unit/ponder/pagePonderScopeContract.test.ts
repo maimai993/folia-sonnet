@@ -28,4 +28,9 @@ describe('page Ponder scope contract', () => {
         expect(source).toContain('data-ponder-page-scope');
         expect(source.includes(`"${targetId}"`) || source.includes(`'${targetId}'`)).toBe(true);
     });
+
+    it.each(['LibraryTuiHome', 'LibraryTuiView', 'LibraryTuiArtist'])('%s explicitly has no page tutorial', owner => {
+        const source = readFileSync(path.join(SRC, `library/suites/tui/${owner}.tsx`), 'utf8');
+        expect(source).toContain('data-ponder-page-scope="none"');
+    });
 });

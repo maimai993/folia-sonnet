@@ -212,6 +212,7 @@ const LibraryTuiArtist: React.FC<LibraryArtistSurfaceProps> = ({
         <div
             ref={rootRef}
             data-library-renderer="tui"
+            data-ponder-page-scope="none"
             data-library-surface="artist"
             className="fixed inset-0 z-[110] flex flex-col overflow-hidden pt-8 font-mono"
             style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
