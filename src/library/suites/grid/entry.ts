@@ -68,6 +68,9 @@ const grid: LibrarySuiteManifest = {
                 'add-to-playlist',
                 'create-playlist',
                 'daily-date',
+                // 曲目卡片上的专辑名 / 歌手名：打开嵌套的专辑 / 歌手页。
+                'open-album',
+                'open-artist',
             ],
             extraActions: ['toggle-info-panel', 'toggle-track-list', 'toggle-edit-mode'],
         },

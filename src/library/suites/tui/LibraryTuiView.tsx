@@ -13,6 +13,8 @@ import { useCollectionActions } from '../../core/bindings/useCollectionActions';
 import { useCommittedQuery } from '../../core/bindings/useCommittedQuery';
 import { useLibrarySessionQuery } from '../../core/bindings/useLibrarySessionQuery';
 import { useCollectionMutationSnapshot } from '../../core/bindings/useCollectionMutations';
+import { resolveTrackAlbumLink, resolveTrackArtistLinks, type TrackArtistLink } from '../../core/model/trackLinks';
+import { canResolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
 import { useGridCommandFilter } from '../../../hooks/useGridCommandFilter';
 import { useGridSurfaceRegistration } from '../../../hooks/useGridSurfaceRegistration';
 import { useLocalTrackSortStore } from '../../core/state/useLocalTrackSortStore';
@@ -43,6 +45,8 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
     isDaylight,
     isInteractive,
     onBack,
+    onOpenAlbum,
+    onOpenArtist,
     onStatusMessage,
     declaredActions,
 }) => {
@@ -187,6 +191,29 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         if (isMountedRef.current && result.ok) onBack();
     };
 
+    // 行上的专辑 / 歌手：suite 声明了 open-album / open-artist、且这一行能解析出目录引用（core/model/trackLinks，
+    // 与网格卡片上的链接同一条规则）才能打开。压入下一层之前把焦点写回会话：返回时焦点回到这一行。
+    const canOpenAlbum = declaredActions.actions.includes('open-album');
+    const canOpenArtist = declaredActions.actions.includes('open-artist');
+    const openAlbumAt = (row: number) => {
+        const track = trackAtRow(row);
+        const link = track && canOpenAlbum ? resolveTrackAlbumLink(track, canResolveSongCatalogRef) : null;
+        if (!track || !link) return;
+        focus.focusRow(row);
+        focus.persistFocus(row);
+        onOpenAlbum(link.targetId, { ...link.album }, track);
+    };
+    const openArtistAt = (row: number, link?: TrackArtistLink) => {
+        const track = trackAtRow(row);
+        if (!track || !canOpenArtist) return;
+        // 键盘没有指定哪一位歌手：打开这一行上第一个能打开的。
+        const target = link ?? resolveTrackArtistLinks(track, canResolveSongCatalogRef).find(candidate => candidate.targetId !== undefined);
+        if (!target || target.targetId === undefined) return;
+        focus.focusRow(row);
+        focus.persistFocus(row);
+        onOpenArtist(target.targetId, { ...target.artist }, track);
+    };
+
     const playRow = (row: number) => {
         const track = trackAtRow(row);
         if (!track) return;
@@ -210,6 +237,8 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         onPlayScope: actions.playScope,
         onEnqueueScope: actions.enqueueScope,
         onDeleteFocused: () => void removeFocused(),
+        onOpenAlbumFocused: () => openAlbumAt(focus.focusedRow),
+        onOpenArtistFocused: () => openArtistAt(focus.focusedRow),
         isPromptOpen: prompt !== null,
         // 先收起行内提示；与网格一致：再撤掉筛选，最后离开。
         onEscape: () => (prompt ? setPrompt(null) : query ? setQuery('') : onBack()),
@@ -240,9 +269,11 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
         onPlayRow: playRow,
         onEnqueueRow: enqueueRow,
         onMatchRow: canMatchSong ? matchRow : undefined,
-    // playRow / enqueueRow / matchRow 每次渲染都是新函数，但它们只读当前的 focus、view 与控制器。
+        onOpenAlbumRow: canOpenAlbum ? openAlbumAt : undefined,
+        onOpenArtistRow: canOpenArtist ? openArtistAt : undefined,
+    // playRow / enqueueRow / matchRow / openAlbumAt / openArtistAt 每次渲染都是新函数，但它们只读当前的 focus、view 与控制器。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [accentColor, canMatchSong, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, focus.rowKeys, isDaylight, pendingKeys, t, view.displayTracks]);
+    }), [accentColor, canMatchSong, canOpenAlbum, canOpenArtist, focus.focusRow, focus.focusedRow, focus.rowDisplayIndexes, focus.rowKeys, isDaylight, pendingKeys, t, view.displayTracks]);
 
     const isEmpty = focus.rowDisplayIndexes.length === 0;
     const isLoading = !snapshot || snapshot.status === 'idle' || snapshot.status === 'loading';
@@ -322,6 +353,7 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
             <footer className="shrink-0 border-t border-current/10 px-4 py-1.5 text-[11px] opacity-50">
                 {t('libraryTui.hints')}
                 {canRemoveEntry && ` · ${t(isDailyRecommendations ? 'libraryTui.hintDislike' : 'libraryTui.hintRemove')}`}
+                {(canOpenAlbum || canOpenArtist) && ` · ${t('libraryTui.hintOpenLinks')}`}
             </footer>
         </div>
     );

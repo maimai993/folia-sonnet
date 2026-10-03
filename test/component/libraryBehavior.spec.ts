@@ -7,6 +7,9 @@ import type { ProbeFixtureId } from '../../dev/probes/libraryBehavior/fixtureRul
 import {
     expectedLoadedIndexes,
     expectedPlayableIndexes,
+    hasSecondAlbum,
+    LOCAL_ALBUM_NAMES,
+    LOCAL_ARTIST_NAME,
     LOCAL_SORT_ORDERS,
     localSongId,
     ONLINE_FIXTURES,
@@ -16,6 +19,8 @@ import {
     PROBE_FIRST_PAGE,
     PROBE_PROVIDER_A,
     PROBE_PROVIDER_B,
+    PROBE_SECOND_ALBUM,
+    PROBE_WORDS,
 } from '../../dev/probes/libraryBehavior/fixtureRules';
 import '../../dev/probes/libraryBehavior/probeApi';
 
@@ -69,6 +74,7 @@ const waitForRenderer = (page: Page, renderer: Renderer) => (
 const open = (page: Page, id: ProbeFixtureId) => page.evaluate(fixtureId => window.__libraryProbe!.open(fixtureId), id);
 const back = (page: Page) => page.evaluate(() => window.__libraryProbe!.back());
 const stack = (page: Page) => page.evaluate(() => window.__libraryProbe!.stack());
+const topDescriptor = async (page: Page) => (await page.evaluate(() => window.__libraryProbe!.stackDescriptors())).at(-1);
 const surface = (page: Page) => page.evaluate(() => window.__libraryProbe!.surface());
 const scopeCount = async (page: Page) => (await surface(page))?.filteredTrackCount ?? -1;
 const runSurface = (page: Page, action: GridSurfaceActionId) => (
@@ -400,7 +406,8 @@ const removeEntry = async (page: Page, renderer: Renderer, itemKey: string, occu
         return;
     }
     const row = page.locator(`[data-library-entry="${itemKey}-${occurrence}"]`);
-    await row.click();
+    // 点行首（焦点标记那一列）：P4.4 起行中间的歌手 / 专辑名是链接，点中会打开嵌套页。
+    await row.click({ position: { x: 6, y: 10 } });
     await expect(row).toHaveAttribute('aria-selected', 'true');
     await pressOnGrid(page, 'Delete');
 };
@@ -903,6 +910,158 @@ test.describe('navigation', () => {
         await pressOnGrid(page, 'Enter');
         await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
         expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
+    });
+});
+
+// P4.4：集合里曲目上的专辑 / 歌手链接（网格：卡片上的名字；TUI：行上的按钮）。core 的规则同一份（core/model/trackLinks），
+// 打开时压入的描述由宿主解析；压栈之前两套都把焦点写回会话，返回之后焦点回到那一项。
+for (const renderer of RENDERERS) {
+test.describe(`[${renderer}] nested opens from collection entries`, () => {
+    /** 一个条目上的歌手 / 专辑链接：网格是卡片上的名字（多位歌手时名字后面带逗号），TUI 是那一行上的按钮。 */
+    const entryLink = (page: Page, entryKey: string, name: string) => (
+        renderer === 'grid'
+            ? page.locator(cardSelector(entryKey)).getByText(new RegExp(`^${name},?$`)).first()
+            : page.locator(`[data-library-entry="${entryKey}-0"]`).getByRole('button', { name, exact: true })
+    );
+    /** 把焦点挪离第一项再播放它：返回这一项的条目键（同时把焦点写进了会话）。 */
+    const focusAwayFromFirst = async (page: Page) => {
+        await pressOnGrid(page, renderer === 'grid' ? 'ArrowRight' : 'ArrowDown');
+        await page.waitForTimeout(400);
+        await clearLog(page);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        return (await lastCall(page, 'playSong'))!.ids[0];
+    };
+    /** 返回上一层并确认焦点回到了那一项：Enter 播放的就是它。 */
+    const backToFocus = async (page: Page, rootName: string, scope: number, focusedKey: string) => {
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual([rootName]);
+        await waitForRenderer(page, renderer);
+        await waitForScope(page, scope);
+        await page.waitForTimeout(400);
+        await clearLog(page);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
+    };
+
+    test('an online track opens its provider album and artist, and going back restores the focus', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        await open(page, 'online-public');
+        const scope = expectedPlayableIndexes(fixture['online-public'].rawIndexes).length;
+        await waitForScope(page, scope);
+        const focusedKey = await focusAwayFromFirst(page);
+        const index = Number(focusedKey.split('-').at(-1));
+        const album = hasSecondAlbum(index) ? PROBE_SECOND_ALBUM : PROBE_ALBUM;
+
+        await entryLink(page, focusedKey, album.name).dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', album.name]);
+        expect(await topDescriptor(page)).toEqual({ source: 'online', providerId: PROBE_PROVIDER_A, type: 'album', id: album.id, name: album.name });
+        await backToFocus(page, 'Public Playlist', scope, focusedKey);
+
+        await entryLink(page, focusedKey, 'Probe Artist').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', 'Probe Artist']);
+        expect(await topDescriptor(page)).toEqual({ source: 'online', providerId: PROBE_PROVIDER_A, type: 'artist', id: 'ar-1', name: 'Probe Artist' });
+        await expect(page.locator(`[data-library-surface="artist"][data-library-renderer="${renderer}"]`)).toHaveCount(1);
+        await backToFocus(page, 'Public Playlist', scope, focusedKey);
+    });
+
+    test('a local track opens its album and artist entities', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        await open(page, 'local-all');
+        await waitForScope(page, 8);
+        const focusedKey = await focusAwayFromFirst(page);
+        const index = Number(focusedKey.split('-').at(-1));
+        const albumName = index <= 4 ? LOCAL_ALBUM_NAMES[0] : LOCAL_ALBUM_NAMES[1];
+
+        await entryLink(page, focusedKey, albumName).dispatchEvent('click');
+        await expect.poll(async () => (await topDescriptor(page))?.type).toBe('album');
+        expect(await topDescriptor(page)).toMatchObject({ source: 'local', type: 'album', name: albumName, entityId: expect.any(String) });
+        await expect.poll(() => scopeCount(page)).toBe(4);
+        await backToFocus(page, 'All Songs', 8, focusedKey);
+
+        await entryLink(page, focusedKey, LOCAL_ARTIST_NAME).dispatchEvent('click');
+        await expect.poll(async () => (await topDescriptor(page))?.type).toBe('artist');
+        expect(await topDescriptor(page)).toMatchObject({ source: 'local', type: 'artist', name: LOCAL_ARTIST_NAME, entityId: expect.any(String) });
+        await backToFocus(page, 'All Songs', 8, focusedKey);
+    });
+
+    test('a Navidrome track opens the Navidrome album and artist', async ({ mount, page }) => {
+        await mountProbe(mount, page, renderer);
+        await open(page, 'navi-playlist');
+        await waitForScope(page, 5);
+        const focusedKey = await focusAwayFromFirst(page);
+
+        await entryLink(page, focusedKey, 'Navi Mixed').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Navi Playlist', 'Navi Mixed']);
+        expect(await topDescriptor(page)).toEqual({ source: 'navidrome', type: 'album', id: 'navi-al-2', name: 'Navi Mixed' });
+        await backToFocus(page, 'Navi Playlist', 5, focusedKey);
+
+        await entryLink(page, focusedKey, 'Navi Artist').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Navi Playlist', 'Navi Artist']);
+        expect(await topDescriptor(page)).toEqual({ source: 'navidrome', type: 'artist', id: 'navi-ar-1', name: 'Navi Artist' });
+        await backToFocus(page, 'Navi Playlist', 5, focusedKey);
+    });
+});
+}
+
+// TUI 的键盘入口（P4.4）：Alt+Enter 打开焦点行的专辑、Alt+Shift+Enter 打开它的歌手（与歌手页歌曲栏同一组键）。
+// 只挪焦点、不播放：返回后焦点仍回到那一行，靠的是压栈前与卸载时把焦点写回会话。
+test.describe('[tui-only] nested opens from the keyboard', () => {
+    const focusedEntry = (page: Page) => page.locator('[data-library-entry][aria-selected="true"]');
+
+    test('Alt+Enter opens the focused row\'s album, Alt+Shift+Enter its artist, and the focus survives both round trips', async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await open(page, 'online-public');
+        const scope = expectedPlayableIndexes(fixture['online-public'].rawIndexes).length;
+        await waitForScope(page, scope);
+        const focusedKey = onlinePlaybackKey(PROBE_PROVIDER_A, 'public-2');
+        await pressOnGrid(page, 'ArrowDown');
+        await pressOnGrid(page, 'ArrowDown');
+        await expect(focusedEntry(page)).toHaveAttribute('data-library-entry', `${focusedKey}-0`);
+        await expect(page.locator('[data-library-renderer="tui"] footer')).toContainText('Alt+Enter album');
+
+        await pressOnGrid(page, 'Alt+Enter');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name]);
+        expect(await topDescriptor(page)).toMatchObject({ source: 'online', type: 'album', id: PROBE_ALBUM.id });
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist']);
+        await expect(focusedEntry(page)).toHaveAttribute('data-library-entry', `${focusedKey}-0`);
+
+        await pressOnGrid(page, 'Alt+Shift+Enter');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', 'Probe Artist']);
+        expect(await topDescriptor(page)).toMatchObject({ source: 'online', type: 'artist', id: 'ar-1' });
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist']);
+        await expect(focusedEntry(page)).toHaveAttribute('data-library-entry', `${focusedKey}-0`);
+        expect(await calls(page, 'playSong')).toEqual([]);
+    });
+
+    test('leaving without moving the focus leaves the session focus alone', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        const scope = expectedPlayableIndexes(fixture['online-public'].rawIndexes).length;
+        await waitForScope(page, scope);
+        // 网格里播放第二张：会话记下它。
+        await pressOnGrid(page, 'ArrowRight');
+        await page.waitForTimeout(400);
+        await pressOnGrid(page, 'Enter');
+        await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
+        const focusedKey = (await lastCall(page, 'playSong'))!.ids[0];
+        const index = Number(focusedKey.split('-').at(-1));
+        // 换到 TUI，筛掉那一首：TUI 的焦点落在第一行。不动焦点就离开——卸载时不写回，会话里还是网格记下的那首。
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        await setQuery(page, PROBE_WORDS[(index + 1) % PROBE_WORDS.length].toLowerCase());
+        await expect(page.locator(entrySelector(focusedKey))).toHaveCount(0);
+        await expect(focusedEntry(page)).toHaveCount(1);
+        await backAndSettle(page);
+
+        await open(page, 'online-public');
+        await waitForRenderer(page, 'tui');
+        await setQuery(page, '');
+        await waitForScope(page, scope);
+        await expect(focusedEntry(page)).toHaveAttribute('data-library-entry', `${focusedKey}-0`);
     });
 });
 

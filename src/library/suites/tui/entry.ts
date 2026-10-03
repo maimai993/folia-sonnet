@@ -45,7 +45,8 @@ const tui: LibrarySuiteManifest = {
                 component: LibraryTuiView,
                 // 与 LibraryTuiView 现在做得到的一致：播放 / 入队焦点行与范围、筛选、本地排序、重新拉取、续传；
                 // 变更动作：Delete 删焦点条目（每日推荐是不喜欢）、状态栏的订阅星标 / 改名 / 删除集合 / 每日推荐日期、
-                // 行上的手动匹配，来源维护（重扫、导出、编辑实体、整理）经命令面板。
+                // 行上的手动匹配，来源维护（重扫、导出、编辑实体、整理）经命令面板。行上的歌手 / 专辑名在能解析出目录引用时
+                // 是按钮（P4.4），Alt+Enter / Alt+Shift+Enter 打开焦点行的专辑 / 歌手（嵌套压栈，返回时焦点回到这一行）。
                 // 不声明 add-to-playlist / create-playlist：Navidrome 加入歌单要一个歌单选择器，TUI 还没有，
                 // 这两个动作只在网格里出现。
                 actions: [
@@ -68,6 +69,8 @@ const tui: LibrarySuiteManifest = {
                     'organize-song-info',
                     'match-song',
                     'daily-date',
+                    'open-album',
+                    'open-artist',
                 ],
             },
             artist: {

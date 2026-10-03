@@ -727,6 +727,29 @@ test.describe('[tui-only] artist page keys and header', () => {
         await expect(artistLayer(page).locator('[data-tui-pane="albums"]')).toHaveAttribute('aria-current', 'true');
     });
 
+    // P4.4：与集合视图同一组键。歌曲栏里 Alt+Enter 打开焦点歌曲的专辑；Alt+Shift+Enter 打开它的第一个歌手——
+    // 这里每首都是本歌手的歌，打开的就是当前这一层，宿主不再压栈。
+    test("Alt+Enter opens the focused song's album; Alt+Shift+Enter on this artist's own song stays put", async ({ mount, page }) => {
+        await mountProbe(mount, page, 'tui');
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        await pressOnPage(page, 'ArrowDown');
+        await pressOnPage(page, 'ArrowDown');
+        await expect(tuiSongRow(page, topKeys(main)[2])).toHaveAttribute('aria-selected', 'true');
+        await expect(artistLayer(page).locator('footer')).toContainText('Alt+Enter album');
+
+        await pressOnPage(page, 'Alt+Shift+Enter');
+        await page.waitForTimeout(300);
+        expect(await stack(page)).toEqual([main.name]);
+
+        await pressOnPage(page, 'Alt+Enter');
+        await expect.poll(() => stack(page)).toEqual([main.name, PROBE_ALBUM.name]);
+        expect(await topDescriptor(page)).toMatchObject({ source: 'online', providerId: PROBE_PROVIDER_A, type: 'album', id: PROBE_ALBUM.id });
+        await back(page);
+        await waitForArtist(page, main.albumCount);
+        await expect(tuiSongRow(page, topKeys(main)[2])).toHaveAttribute('aria-selected', 'true');
+    });
+
     test('Escape collapses the biography, then clears the filter, then leaves', async ({ mount, page }) => {
         await mountProbe(mount, page, 'tui');
         await openArtist(page, 'artist-main');

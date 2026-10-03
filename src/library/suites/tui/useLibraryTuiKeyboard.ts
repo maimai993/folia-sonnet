@@ -5,6 +5,8 @@ import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 // TUI 的按键。只用不可打印键：只要注册了命令筛选，单字符键都归命令面板（打字即筛选），
 // 空格又是全局的播放 / 暂停。守卫与网格一致：输入框和按钮里的按键不算，上层窗口打开时不抢，
 // Enter / Escape / Delete 不响应长按重复（按住 Delete 不能一路删下去）。
+// Enter 一族：Enter 播放、Shift+Enter 入队、Ctrl+Enter 播放全部、Ctrl+Shift+Enter 全部入队、
+// Alt+Enter 打开焦点行的专辑、Alt+Shift+Enter 打开焦点行的歌手（与歌手页歌曲栏同一组键）。
 
 type LibraryTuiKeyboardHandlers = {
     isActive: boolean;
@@ -21,6 +23,10 @@ type LibraryTuiKeyboardHandlers = {
     onEnqueueScope: () => void;
     /** 删除（每日推荐是「不喜欢」）焦点条目；集合不支持时由调用方忽略。 */
     onDeleteFocused: () => void;
+    /** Alt+Enter：打开焦点行的专辑（suite 没声明 open-album 或这一行打不开时由调用方忽略）。 */
+    onOpenAlbumFocused?: () => void;
+    /** Alt+Shift+Enter：打开焦点行上第一个能打开的歌手。 */
+    onOpenArtistFocused?: () => void;
     onEscape: () => void;
 };
 
@@ -80,7 +86,11 @@ export const useLibraryTuiKeyboard = (handlers: LibraryTuiKeyboardHandlers) => {
                     break;
                 case 'Enter':
                     if (event.repeat || current.isFiltering) return;
-                    if (event.ctrlKey || event.metaKey) {
+                    if (event.altKey) {
+                        if (event.ctrlKey || event.metaKey) return;
+                        if (event.shiftKey) current.onOpenArtistFocused?.();
+                        else current.onOpenAlbumFocused?.();
+                    } else if (event.ctrlKey || event.metaKey) {
                         if (event.shiftKey) current.onEnqueueScope();
                         else current.onPlayScope();
                     } else if (event.shiftKey) {

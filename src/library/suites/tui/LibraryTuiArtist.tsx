@@ -155,6 +155,18 @@ const LibraryTuiArtist: React.FC<LibraryArtistSurfaceProps> = ({
         onEnqueueScope: () => {
             if (offers('enqueue-scope')) actions.enqueueScope();
         },
+        // 歌曲栏里的 Alt+Enter / Alt+Shift+Enter：打开焦点歌曲的专辑 / 第一个能打开的歌手（与集合视图同一组键）。
+        onOpenAlbumFocused: () => {
+            const song = focus.pane === 'songs' ? songs[focus.songRow] : undefined;
+            if (song && canOpenAlbum) openSongAlbum(focus.songRow, song);
+        },
+        onOpenArtistFocused: () => {
+            const song = focus.pane === 'songs' ? songs[focus.songRow] : undefined;
+            const link = song && canOpenArtist
+                ? resolveTrackArtistLinks(song, canResolveSongCatalogRef).find(candidate => candidate.targetId !== undefined)
+                : undefined;
+            if (link) openSongArtist(focus.songRow, link);
+        },
         // 与集合视图一致的阶梯：先收起展开的简介，再撤掉筛选，最后离开。
         onEscape: () => (isBioExpanded ? setIsBioExpanded(false) : view.query ? view.setQuery('') : onBack()),
     });
@@ -294,6 +306,7 @@ const LibraryTuiArtist: React.FC<LibraryArtistSurfaceProps> = ({
             )}
             <footer className="shrink-0 border-t border-current/10 px-4 py-1.5 text-[11px] opacity-50">
                 {t('libraryTui.artistHints')}
+                {(canOpenAlbum || canOpenArtist) && ` · ${t('libraryTui.hintOpenLinks')}`}
             </footer>
         </div>
     );

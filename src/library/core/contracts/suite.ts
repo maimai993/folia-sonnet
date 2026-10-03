@@ -49,6 +49,7 @@ export type LibrarySuiteId = string;
  * | add-to-playlist | .addToPlaylist | — |
  * | create-playlist | .createPlaylist | — |
  * | daily-date | .dailyDate | — |
+ * | open-album / open-artist | 曲目上的专辑 / 歌手能解析出目录引用（core/model/trackLinks：resolveTrackAlbumLink / resolveTrackArtistLinks） | —（卡片 / 行上的链接，交给宿主的 onOpenAlbum / onOpenArtist） |
  *
  * CollectionMutationCapabilities.editCollection 不是动作：编辑模式属于 renderer，网格把它声明成自己的
  * 局部动作 `toggle-edit-mode`（同名命令）。映射的代码版本在 core/model/librarySuites 与 collectionSurface。
@@ -74,7 +75,9 @@ export type LibraryActionId =
     | 'match-song'
     | 'add-to-playlist'
     | 'create-playlist'
-    | 'daily-date';
+    | 'daily-date'
+    | 'open-album'
+    | 'open-artist';
 
 /**
  * 首页 surface 的语义动作（P3.4 补上；suite 在 entry 的 home 声明里列出自己实现了哪些）。目录（GridMap / TUI 的

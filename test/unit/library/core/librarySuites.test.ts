@@ -82,7 +82,8 @@ describe('library suite index', () => {
     });
 
     it('checks artist declarations against the artist action list (P4.2)', () => {
-        // 歌手页有自己的动作清单：open-album / open-artist 只属于歌手页，集合页的 sort 在歌手页上是未知动作。
+        // 每个页面有自己的动作清单：集合页的 sort 在歌手页上是未知动作，首页的 directory-filter 在集合页上也是
+        // （open-album / open-artist 两个页面都有：P4.4 起集合的曲目行 / 卡片上也能打开专辑 / 歌手）。
         expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
             surfaces: { artist: { component: component('x'), actions: ['play-scope', 'open-album', 'open-artist', 'resume-sync'] } },
         })])).not.toThrow();
@@ -90,8 +91,11 @@ describe('library suite index', () => {
             surfaces: { artist: { component: component('x'), actions: ['sort'] } },
         })])).toThrow(/unknown action "sort" on artist/);
         expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
-            surfaces: { collection: { component: component('x'), actions: ['open-album' as LibraryActionId] } },
-        })])).toThrow(/unknown action "open-album" on collection/);
+            surfaces: { collection: { component: component('x'), actions: ['open-album', 'open-artist'] } },
+        })])).not.toThrow();
+        expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
+            surfaces: { collection: { component: component('x'), actions: ['directory-filter' as LibraryActionId] } },
+        })])).toThrow(/unknown action "directory-filter" on collection/);
         expect(new Set(LIBRARY_ARTIST_ACTION_IDS).size).toBe(LIBRARY_ARTIST_ACTION_IDS.length);
     });
 

@@ -64,6 +64,7 @@ describe('library suite registry', () => {
                 'play', 'enqueue', 'play-scope', 'enqueue-scope', 'filter', 'sort', 'reload', 'resume-sync',
                 'remove-entry', 'subscribe', 'rename', 'delete-collection', 'resync-folder', 'resync-all-folders',
                 'export-playlist', 'edit-entity', 'organize-song-info', 'match-song', 'daily-date',
+                'open-album', 'open-artist',
             ],
             extraActions: [],
         });

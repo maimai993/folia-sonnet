@@ -5,7 +5,8 @@ import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 // TUI 歌手页的按键。与集合视图同一套约定：只用不可打印键（单字符键归命令面板，打字即筛选；空格是全局播放 / 暂停），
 // 输入框和按钮里的按键不算，上层窗口（宿主的实体编辑对话框等）打开时不抢，Enter / Escape 不响应长按重复。
 // Tab / Shift+Tab 在热门歌曲与专辑两栏之间切换；Enter 在歌曲栏播放、在专辑栏打开专辑；Shift+Enter 把焦点歌曲入队；
-// Ctrl+Enter 播放全部热门歌曲，Ctrl+Shift+Enter 把热门歌曲加入队列（两栏都可以）。
+// Ctrl+Enter 播放全部热门歌曲，Ctrl+Shift+Enter 把热门歌曲加入队列（两栏都可以）；歌曲栏里 Alt+Enter 打开焦点歌曲的专辑、
+// Alt+Shift+Enter 打开它的（第一个能打开的）歌手（与集合视图同一组键）。
 
 type LibraryTuiArtistKeyboardHandlers = {
     isActive: boolean;
@@ -21,6 +22,10 @@ type LibraryTuiArtistKeyboardHandlers = {
     onEnqueueFocused: () => void;
     onPlayScope: () => void;
     onEnqueueScope: () => void;
+    /** Alt+Enter：歌曲栏里打开焦点歌曲的专辑（专辑栏忽略）。 */
+    onOpenAlbumFocused?: () => void;
+    /** Alt+Shift+Enter：歌曲栏里打开焦点歌曲上第一个能打开的歌手。 */
+    onOpenArtistFocused?: () => void;
     onEscape: () => void;
 };
 
@@ -82,7 +87,11 @@ export const useLibraryTuiArtistKeyboard = (handlers: LibraryTuiArtistKeyboardHa
                     break;
                 case 'Enter':
                     if (event.repeat || current.isFiltering) return;
-                    if (event.ctrlKey || event.metaKey) {
+                    if (event.altKey) {
+                        if (event.ctrlKey || event.metaKey) return;
+                        if (event.shiftKey) current.onOpenArtistFocused?.();
+                        else current.onOpenAlbumFocused?.();
+                    } else if (event.ctrlKey || event.metaKey) {
                         if (event.shiftKey) current.onEnqueueScope();
                         else current.onPlayScope();
                     } else if (event.shiftKey) {

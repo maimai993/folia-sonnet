@@ -20,6 +20,7 @@ export default {
     "hints": "↑↓ pindah · PgUp/PgDn halaman · Home/End · Enter putar · Shift+Enter antre · Ctrl+Enter putar semua · Ctrl+Shift+Enter antre semua · Esc kembali",
     "hintRemove": "Del hapus",
     "hintDislike": "Del tidak suka",
+    "hintOpenLinks": "Alt+Enter buka album · Alt+Shift+Enter buka artis",
     "rename": "ganti nama",
     "renamePrompt": "ganti nama",
     "promptHint": "Enter konfirmasi · Esc batal",

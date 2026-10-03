@@ -44,6 +44,8 @@ export const LIBRARY_ACTION_IDS: readonly LibraryActionId[] = [
     'add-to-playlist',
     'create-playlist',
     'daily-date',
+    'open-album',
+    'open-artist',
 ];
 
 /** 首页 surface 的全部动作（与 LibraryHomeActionId 一一对应，单测核对）。 */

@@ -4,10 +4,14 @@ import type { SongResult, UnifiedSong } from '../../../types';
 import { isSongUnavailable } from '../../../services/onlineMusic/songAvailability';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { formatTime } from '../../../utils/appPlaybackHelpers';
+import { canResolveSongCatalogRef } from '../../../services/onlineMusic/catalogRefs';
+import { resolveTrackAlbumLink, resolveTrackArtistLinks, type TrackArtistLink } from '../../core/model/trackLinks';
 
 // src/library/suites/tui/LibraryTuiRow.tsx
 // TUI 的一行：序号、歌名、歌手、专辑、时长，等宽排列。单击移动焦点，双击播放，[+] 入队；
 // 本地歌在集合支持时多一个 [i]（手动匹配在线信息，打开宿主挂载的对话框）。删除请求还没回来的行标 `~` 并变淡。
+// 歌手名与专辑名在能解析出目录引用时是按钮（P4.4，规则与网格卡片同一份：core/model/trackLinks），点了打开嵌套的
+// 歌手页 / 专辑；样式与歌手页歌曲行上的链接一致（data-tui-link）。
 
 export const LIBRARY_TUI_ROW_HEIGHT = 28;
 
@@ -29,11 +33,16 @@ export type LibraryTuiRowProps = {
     onEnqueueRow: (row: number) => void;
     /** 集合支持手动匹配时才给；只对本地歌显示。 */
     onMatchRow?: (row: number) => void;
+    /** suite 声明了 open-album 才给：能解析出专辑目录引用的行把专辑名画成按钮。 */
+    onOpenAlbumRow?: (row: number) => void;
+    /** suite 声明了 open-artist 才给：能解析出目录引用的歌手名画成按钮。 */
+    onOpenArtistRow?: (row: number, link: TrackArtistLink) => void;
 };
 
 export const LIBRARY_TUI_COLUMNS = 'grid-cols-[2ch_6ch_minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_6ch_7ch]';
 
 const cell = 'truncate whitespace-pre';
+const linkClass = 'hover:underline hover:opacity-100';
 
 const LibraryTuiRow = ({
     index,
@@ -52,6 +61,8 @@ const LibraryTuiRow = ({
     onPlayRow,
     onEnqueueRow,
     onMatchRow,
+    onOpenAlbumRow,
+    onOpenArtistRow,
 }: RowComponentProps<LibraryTuiRowProps>): React.ReactElement | null => {
     const displayIndex = rowDisplayIndexes[index];
     const track = displayIndex === undefined ? undefined : tracks[displayIndex];
@@ -62,6 +73,10 @@ const LibraryTuiRow = ({
     const entryKey = rowKeys[index];
     const isPending = pendingKeys.has(entryKey);
     const canMatch = Boolean(onMatchRow && (track as UnifiedSong).localRef?.songId);
+    const artistLinks = onOpenArtistRow ? resolveTrackArtistLinks(track, canResolveSongCatalogRef) : [];
+    const hasArtistLink = artistLinks.some(link => link.targetId !== undefined);
+    const albumName = track.album?.name || '';
+    const canOpenAlbum = Boolean(onOpenAlbumRow && albumName && resolveTrackAlbumLink(track, canResolveSongCatalogRef));
     return (
         <div
             role="option"
@@ -85,8 +100,41 @@ const LibraryTuiRow = ({
                 {track.name}
                 {unavailable ? <span className="opacity-70">{`  (${unavailableLabel})`}</span> : null}
             </span>
-            <span className={`${cell} opacity-70`}>{getSongArtistLabel(track)}</span>
-            <span className={`${cell} opacity-55`}>{track.album?.name || ''}</span>
+            <span className={`${cell} opacity-70`}>
+                {hasArtistLink ? artistLinks.map((link, linkIndex) => (
+                    <React.Fragment key={`${link.artist.id ?? 'artist'}-${linkIndex}`}>
+                        {linkIndex > 0 ? ', ' : ''}
+                        {link.targetId !== undefined ? (
+                            <button
+                                type="button"
+                                data-tui-link="artist"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onOpenArtistRow?.(index, link);
+                                }}
+                                className={linkClass}
+                            >
+                                {link.artist.name}
+                            </button>
+                        ) : link.artist.name}
+                    </React.Fragment>
+                )) : getSongArtistLabel(track)}
+            </span>
+            <span className={`${cell} opacity-55`}>
+                {canOpenAlbum ? (
+                    <button
+                        type="button"
+                        data-tui-link="album"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenAlbumRow?.(index);
+                        }}
+                        className={linkClass}
+                    >
+                        {albumName}
+                    </button>
+                ) : albumName}
+            </span>
             <span className="tabular-nums opacity-55">{formatTime((track.durationMs || 0) / 1000)}</span>
             <span className="flex gap-x-1">
                 {canMatch ? (

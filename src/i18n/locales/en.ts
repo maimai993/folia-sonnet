@@ -20,6 +20,7 @@ export default {
     "hints": "↑↓ move · PgUp/PgDn page · Home/End · Enter play · Shift+Enter queue · Ctrl+Enter play all · Ctrl+Shift+Enter queue all · Esc back",
     "hintRemove": "Del remove",
     "hintDislike": "Del dislike",
+    "hintOpenLinks": "Alt+Enter album · Alt+Shift+Enter artist",
     "rename": "rename",
     "renamePrompt": "rename",
     "promptHint": "Enter confirm · Esc cancel",

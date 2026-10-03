@@ -20,6 +20,7 @@ export default {
     "hints": "↑↓ 移动 · PgUp/PgDn 翻页 · Home/End · Enter 播放 · Shift+Enter 入队 · Ctrl+Enter 播放全部 · Ctrl+Shift+Enter 全部入队 · Esc 返回",
     "hintRemove": "Del 删除",
     "hintDislike": "Del 不喜欢",
+    "hintOpenLinks": "Alt+Enter 打开专辑 · Alt+Shift+Enter 打开歌手",
     "rename": "改名",
     "renamePrompt": "改名",
     "promptHint": "Enter 确认 · Esc 取消",

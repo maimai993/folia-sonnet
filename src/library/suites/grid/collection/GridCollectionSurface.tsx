@@ -1,5 +1,5 @@
 import React from 'react';
-import type { LibraryCollectionSurfaceProps } from '../../../core/contracts/suite';
+import type { LibraryActionId, LibraryCollectionSurfaceProps } from '../../../core/contracts/suite';
 import { useGridMorphPlan } from '../transitions/useGridMorphPlan';
 import GridView from './GridView';
 
@@ -24,6 +24,8 @@ const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
     onOpenArtist,
 }) => {
     const morphPlan = useGridMorphPlan();
+    // 卡片上的专辑 / 歌手链接只在网格声明了 open-album / open-artist 时出现（声明 ∩ 曲目上能解析出的目录引用）。
+    const declares = (action: LibraryActionId) => declaredActions.actions.includes(action);
     const subtitle = (collection as any).creator?.nickname || (collection as any).artists?.[0]?.name || collection.description || '';
 
     return (
@@ -37,8 +39,8 @@ const GridCollectionSurface: React.FC<LibraryCollectionSurfaceProps> = ({
             onAddTrackToQueue={playback.enqueueTrack}
             onPlayAll={playback.playAll}
             onAddAllToQueue={playback.enqueueAll}
-            onSelectAlbum={onOpenAlbum}
-            onSelectArtist={onOpenArtist}
+            onSelectAlbum={declares('open-album') ? onOpenAlbum : undefined}
+            onSelectArtist={declares('open-artist') ? onOpenArtist : undefined}
             onStatusMessage={onStatusMessage}
             resource={resource}
             mutations={mutations}
