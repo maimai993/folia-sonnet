@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
-import type { LibraryDirectorySelectionType } from '../contracts/directory';
+import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchController, LibraryDirectoryNode, LibraryDirectorySelectionType } from '../contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../contracts/home';
 import type { LibraryHomeCard, LibraryLocalDirectoryTreesResource, LibraryLocalDirectoryTreesSnapshot } from '../contracts/homeModel';
 import {
@@ -103,3 +103,37 @@ export const useLocalDirectoryTrees = (
         reloadAll: () => resource.load(),
     }), [resource, snapshot]);
 };
+
+/**
+ * 本地 section 的批量配置（网格的 GridMap 与 TUI 的目录列表共用）：只装配 section 类型、文件夹树与动作控制器；
+ * 动作的规则（路径规则、刷新顺序、pending 与重复提交）在 core 的控制器里。删除与恢复忽略目录之后重读文件夹树
+ * （树是首页资源，在动作的 pending 期间补上）。没有控制器或 section 不支持批量时为 undefined。
+ */
+export const useLocalHomeBatchConfig = ({
+    controller,
+    selectionType,
+    trees,
+    reloadTrees,
+    reloadAllTrees,
+}: {
+    controller: LibraryDirectoryBatchController | undefined;
+    selectionType: LibraryDirectorySelectionType | null;
+    trees: LibraryDirectoryNode[];
+    reloadTrees: () => Promise<void>;
+    reloadAllTrees: () => Promise<void>;
+}): LibraryDirectoryBatchConfig | undefined => useMemo(() => {
+    if (!controller || !selectionType) return undefined;
+    if (selectionType !== 'folders') return { selectionType, controller };
+    return {
+        selectionType,
+        directoryTrees: trees,
+        controller,
+        afterAction: async action => {
+            if (action === 'remove') {
+                await reloadTrees();
+            } else if (action === 'clear-ignore') {
+                await reloadAllTrees();
+            }
+        },
+    };
+}, [controller, reloadAllTrees, reloadTrees, selectionType, trees]);

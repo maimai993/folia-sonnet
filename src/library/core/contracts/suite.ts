@@ -76,12 +76,47 @@ export type LibraryActionId =
     | 'daily-date';
 
 /**
+ * 首页 surface 的语义动作（P3.4 补上；suite 在 entry 的 home 声明里列出自己实现了哪些）。目录（GridMap / TUI 的
+ * 目录列表）是首页的一部分，目录命令面板的动作与它们一一对应（core/model/directorySurface 的
+ * DIRECTORY_SURFACE_ACTION_SOURCES）；首页列表右上角的动作（导入、刷新）对应 home-* 这几个。
+ *
+ * | LibraryHomeActionId | 目录 surface 动作 / 首页列表动作 |
+ * | --- | --- |
+ * | directory-filter | —（命令面板的筛选框，目录会话的 query） |
+ * | directory-select | select-all、clear-selection（以及 suite 自己的选择入口） |
+ * | directory-play-selection / directory-enqueue-selection | play-selection / enqueue-selection |
+ * | directory-create-playlist | create-playlist |
+ * | directory-remove-selection | remove-selection |
+ * | directory-rescan-root / directory-remove-root / directory-clear-ignore | rescan-root / remove-root / clear-ignore |
+ * | directory-manage-hidden / directory-toggle-hidden | manage-hidden / toggle-hidden |
+ * | home-import-folder / home-refresh-folders / home-import-playlist | 本地列表的 import-folder / refresh-folders / import-playlist |
+ * | home-refresh-navidrome | Navidrome 列表的 refresh |
+ */
+export type LibraryHomeActionId =
+    | 'directory-filter'
+    | 'directory-select'
+    | 'directory-play-selection'
+    | 'directory-enqueue-selection'
+    | 'directory-create-playlist'
+    | 'directory-remove-selection'
+    | 'directory-rescan-root'
+    | 'directory-remove-root'
+    | 'directory-clear-ignore'
+    | 'directory-manage-hidden'
+    | 'directory-toggle-hidden'
+    | 'home-import-folder'
+    | 'home-refresh-folders'
+    | 'home-import-playlist'
+    | 'home-refresh-navidrome';
+
+/**
  * 某个 surface 上实际渲染它的那套 suite 声明的动作：core 动作与 suite 自己的局部动作
  * （网格的 toggle-info-panel、toggle-track-list、toggle-edit-mode……）。宿主按 registry 解析后传给 surface，
  * surface 向命令面板发布时只发布这里有的（再与 core 能力取交集）。
  */
 export type LibraryDeclaredActions = {
-    readonly actions: readonly LibraryActionId[];
+    /** 集合 / 歌手 surface 是 LibraryActionId，首页 surface 是 LibraryHomeActionId。 */
+    readonly actions: readonly (LibraryActionId | LibraryHomeActionId)[];
     readonly extraActions: readonly string[];
 };
 
@@ -162,7 +197,8 @@ export type LibrarySurfacePropsMap = {
 export type LibrarySurfaceDeclaration<Props> = {
     /** 默认 suite 可以是即时组件；其它 suite 必须是 React.lazy（registry 用 eager glob 发现 entry）。 */
     component: LibrarySurfaceComponent<Props>;
-    actions: readonly LibraryActionId[];
+    /** 集合 / 歌手 surface 列 LibraryActionId，首页 surface 列 LibraryHomeActionId（建索引时按 surface 校验）。 */
+    actions: readonly (LibraryActionId | LibraryHomeActionId)[];
     /** suite 自己的动作（不在 core 的清单里），例如网格的信息面板、曲目侧栏、编辑模式。 */
     extraActions?: readonly string[];
 };

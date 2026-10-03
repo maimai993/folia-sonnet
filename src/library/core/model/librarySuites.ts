@@ -2,6 +2,7 @@ import type { CollectionMutationCapabilities } from '../contracts/mutations';
 import type {
     LibraryActionId,
     LibraryDeclaredActions,
+    LibraryHomeActionId,
     LibrarySuiteId,
     LibrarySuiteManifest,
     LibrarySurfaceDeclaration,
@@ -42,6 +43,25 @@ export const LIBRARY_ACTION_IDS: readonly LibraryActionId[] = [
     'add-to-playlist',
     'create-playlist',
     'daily-date',
+];
+
+/** 首页 surface 的全部动作（与 LibraryHomeActionId 一一对应，单测核对）。 */
+export const LIBRARY_HOME_ACTION_IDS: readonly LibraryHomeActionId[] = [
+    'directory-filter',
+    'directory-select',
+    'directory-play-selection',
+    'directory-enqueue-selection',
+    'directory-create-playlist',
+    'directory-remove-selection',
+    'directory-rescan-root',
+    'directory-remove-root',
+    'directory-clear-ignore',
+    'directory-manage-hidden',
+    'directory-toggle-hidden',
+    'home-import-folder',
+    'home-refresh-folders',
+    'home-import-playlist',
+    'home-refresh-navidrome',
 ];
 
 /**
@@ -110,7 +130,8 @@ export const buildLibrarySuiteIndex = (
             if (!LIBRARY_SURFACE_IDS.includes(surface)) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown surface "${surface}"`);
             }
-            const unknownAction = manifest.surfaces[surface]?.actions.find(action => !LIBRARY_ACTION_IDS.includes(action));
+            const known: readonly string[] = surface === 'home' ? LIBRARY_HOME_ACTION_IDS : LIBRARY_ACTION_IDS;
+            const unknownAction = manifest.surfaces[surface]?.actions.find(action => !known.includes(action));
             if (unknownAction) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown action "${unknownAction}" on ${surface}`);
             }
@@ -183,7 +204,7 @@ export const intersectDeclaredActions = (
 export const resolveDeclaredMutationActions = (
     declared: LibraryDeclaredActions,
     capabilities: CollectionMutationCapabilities,
-): LibraryActionId[] => declared.actions.filter(action => {
-    const key = LIBRARY_ACTION_MUTATION_CAPABILITY[action];
+): LibraryActionId[] => declared.actions.filter((action): action is LibraryActionId => {
+    const key = LIBRARY_ACTION_MUTATION_CAPABILITY[action as LibraryActionId];
     return key ? capabilities[key].supported : false;
 });

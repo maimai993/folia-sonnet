@@ -42,6 +42,8 @@ import { listLibrarySuiteOverlays, listLibrarySuites, resolveLibrarySurface } fr
 // suite 的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响（生产构建里也只有一套 suite）。
 const DevLibraryRendererSwitch = import.meta.env.DEV ? React.lazy(() => import('./DevLibraryRendererSwitch')) : null;
 const HAS_SUITE_CHOICE = listLibrarySuites().length > 1;
+/** 在首页上切 suite 时交给 switchLibrarySuite 的会话 key（首页没有集合浏览会话，冲刷什么都不做）。 */
+const HOME_SUITE_SESSION_KEY = 'home';
 // 声明了转场层的 suite：常驻渲染，只有当前负责集合层的那套收到 enabled。
 const SUITE_OVERLAYS = listLibrarySuiteOverlays();
 
@@ -619,9 +621,13 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     )
                 )}
             </AnimatePresence>
-            {DevLibraryRendererSwitch && HAS_SUITE_CHOICE && displaySelectedCollection && displaySelectedCollection.type !== 'artist' && (
+            {/* 首页上也有（切换的是首页 surface；没有集合会话要冲刷，用首页的固定 key）；歌手页两套都由网格渲染，不出现。 */}
+            {DevLibraryRendererSwitch && HAS_SUITE_CHOICE && displaySelectedCollection?.type !== 'artist' && (isInteractive || displaySelectedCollection) && (
                 <React.Suspense fallback={null}>
-                    <DevLibraryRendererSwitch sessionKey={selectedCollectionKey} />
+                    <DevLibraryRendererSwitch
+                        sessionKey={displaySelectedCollection ? selectedCollectionKey : HOME_SUITE_SESSION_KEY}
+                        placement={displaySelectedCollection ? 'collection' : 'home'}
+                    />
                 </React.Suspense>
             )}
             {editingEntity && (

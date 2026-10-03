@@ -86,8 +86,11 @@ node dev/mcp/ts-code-map/cli.mjs doctor    # 环境自检
   这些规则同时写在 `codemap.mjs` 的 `BOUNDARY_RULES` 和 `test/unit/library/layerBoundaries.test.ts` 里。
   网格 suite 按 surface 分子目录：`suites/grid/{home,collection,directory,artist,shared,transitions}`
   （首页 `Grid3D` 与本地 / Navidrome 首页、集合详情 `GridView`、`GridMap` 与批量面板、歌手页、
-  hex 视口与卡片、打开转场）；TUI 在 `suites/tui/`；集合宿主 `GridViewOverlayHost` 与端口在 `app/`。
-  能力契约在 `core/contracts/suite.ts`（surface：home / collection / artist；集合动作 `LibraryActionId`；
+  hex 视口与卡片、打开转场）；TUI 在 `suites/tui/`（实现首页 `LibraryTuiHome` 与集合 `LibraryTuiView`，歌手页回退网格）；
+  集合宿主 `GridViewOverlayHost` 与端口在 `app/`，首页资源（在线 feed、Navidrome 概览、文件夹树、首页动作）由
+  Home 外壳的 `app/useLibraryHomeResources` 持有，换 suite 不重新请求。
+  能力契约在 `core/contracts/suite.ts`（surface：home / collection / artist；集合动作 `LibraryActionId`、
+  首页动作 `LibraryHomeActionId`；
   每个 surface 的 props 契约；suite manifest），每套 suite 的 `entry.ts` 声明自己实现了哪些 surface 与动作。
   没实现的 surface 由默认 suite（grid）渲染，没声明的动作不进命令面板（`buildGridSurfaceState` 按声明过滤）。
   entry 里的组件必须是 `React.lazy`，只有默认 suite 例外（Grid3D 在首屏、移形换影要从第一次打开就在）；

@@ -42,6 +42,10 @@ describe('directory commands', () => {
             'directory-select-all',
             'directory-clear-selection',
             'directory-manage-hidden',
+            'directory-toggle-hidden',
+            'directory-rescan-root',
+            'directory-remove-root',
+            'directory-clear-ignore',
         ]);
     });
 
@@ -50,6 +54,12 @@ describe('directory commands', () => {
         expect(available(contextWith(handle(['play-selection', 'clear-selection']))))
             .toEqual(['directory-play-selection', 'directory-clear-selection']);
         expect(available(contextWith(handle(['manage-hidden'])))).toEqual(['directory-manage-hidden']);
+        expect(available(contextWith(handle(['toggle-hidden', 'rescan-root', 'remove-root', 'clear-ignore'])))).toEqual([
+            'directory-toggle-hidden',
+            'directory-rescan-root',
+            'directory-remove-root',
+            'directory-clear-ignore',
+        ]);
     });
 
     it('hand the action and the typed playlist name to the directory', async () => {

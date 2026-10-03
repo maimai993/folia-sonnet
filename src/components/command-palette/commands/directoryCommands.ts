@@ -1,4 +1,4 @@
-import { EyeOff, ListChecks, ListPlus, ListX, Play, Plus, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, FolderX, ListChecks, ListPlus, ListX, Play, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import { createDirectorySurfaceCommand } from '../commandFactories';
 import type { CommandPaletteCommand } from '../types';
 
@@ -8,6 +8,8 @@ import type { CommandPaletteCommand } from '../types';
 // 只在 GridMap 正在交互时出现（它注册 directory surface，见 core/state/useLibraryDirectorySurfaceStore），
 // 能不能做来自 core 的批量能力——与批量面板的按钮同一个来源，面板不可点的时候命令也不出现。
 // 都不带 executeShortcut：删除要确认，其余是只在地图上才有意义的上下文动作。
+// 后四条作用于目录里的焦点那一项（隐藏焦点歌单、重扫 / 移除焦点导入根、恢复焦点忽略目录），只有有焦点概念的目录
+// （TUI 的目录列表）发布它们；网格用卡片与批量面板目录树上的按钮做同样的事。移除导入根同样先确认。
 
 export const directoryCommands: CommandPaletteCommand[] = [
     createDirectorySurfaceCommand(
@@ -69,5 +71,37 @@ export const directoryCommands: CommandPaletteCommand[] = [
         ['hide playlists', 'unhide', 'hidden', '隐藏歌单', '管理隐藏', '取消隐藏'],
         'manage-hidden',
         EyeOff,
+    ),
+    createDirectorySurfaceCommand(
+        'directory-toggle-hidden',
+        'Hide or unhide the focused playlist',
+        'Hide the focused playlist from the home directory, or bring it back',
+        ['hide', 'unhide', 'hide playlist', '隐藏', '取消隐藏'],
+        'toggle-hidden',
+        Eye,
+    ),
+    createDirectorySurfaceCommand(
+        'directory-rescan-root',
+        'Rescan the focused imported folder',
+        'Scan the focused imported root folder again',
+        ['rescan', 'rescan folder', '重新扫描', '重扫'],
+        'rescan-root',
+        RefreshCw,
+    ),
+    createDirectorySurfaceCommand(
+        'directory-remove-root',
+        'Remove the focused imported folder',
+        'Ask to remove the focused imported root folder and its songs from the local library',
+        ['remove root', 'remove imported folder', '移除导入目录', '移除根目录'],
+        'remove-root',
+        FolderX,
+    ),
+    createDirectorySurfaceCommand(
+        'directory-clear-ignore',
+        'Restore the focused ignored folder',
+        'Stop ignoring the focused folder and scan it again',
+        ['restore folder', 'unignore', '恢复目录', '取消忽略'],
+        'clear-ignore',
+        RotateCcw,
     ),
 ];

@@ -9,15 +9,26 @@ import { switchLibrarySuite } from './switchLibrarySuite';
 // 用来验收 Library Core（换 UI 不重新请求、不丢筛选与焦点）。验收结束后删除，
 // 或改成正式设置项（届时按设置集成的规则接入导入导出与命令面板）。
 // 按钮列表来自 registry（R3 之前是写死的 grid / tui）；data-renderer 沿用旧名，e2e 用它定位。
+// P3.4 起首页上也出现（切换首页 surface）：首页上贴着左下角（bottom-2）——稍高一点的位置是 GridMap 批量面板的
+// 按钮，右下角是在线 provider 切换器，顶上是桌面版的标题栏与首页页头；集合层上仍在原来的位置。
 
-const DevLibraryRendererSwitch: React.FC<{ sessionKey: string }> = ({ sessionKey }) => {
+const PLACEMENT_CLASS = {
+    collection: 'bottom-12 left-4',
+    home: 'bottom-2 left-2',
+} as const;
+
+const DevLibraryRendererSwitch: React.FC<{ sessionKey: string; placement?: keyof typeof PLACEMENT_CLASS }> = ({
+    sessionKey,
+    placement = 'collection',
+}) => {
     const { t } = useTranslation();
     const activeSuite = useLibrarySuiteStore(state => state.suite);
 
     return (
         <div
             data-testid="dev-library-renderer-switch"
-            className="fixed bottom-12 left-4 z-[120] flex items-center gap-1 rounded-full border border-dashed border-current/30 px-2 py-1 font-mono text-[11px] backdrop-blur-md"
+            data-placement={placement}
+            className={`fixed ${PLACEMENT_CLASS[placement]} z-[120] flex items-center gap-1 rounded-full border border-dashed border-current/30 px-2 py-1 font-mono text-[11px] backdrop-blur-md`}
             style={{
                 backgroundColor: 'color-mix(in srgb, var(--bg-color) 80%, transparent)',
                 color: 'var(--text-primary)',

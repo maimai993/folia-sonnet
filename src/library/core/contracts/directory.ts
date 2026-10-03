@@ -203,7 +203,10 @@ export interface LibraryDirectoryBatchCapabilities {
 
 /**
  * 目录交给命令面板的动作（directory surface）。批量动作作用于选中范围；select-all 选中筛选出的全部条目
- * （网格里会先打开批量面板）；remove-selection 只请求删除（网格里打开确认框）；manage-hidden 切换「管理隐藏」视图。
+ * （网格里会先打开批量面板）；remove-selection 只请求删除（网格里打开确认框，TUI 里是行内确认）；manage-hidden
+ * 切换「管理隐藏」视图。后四个作用于目录里「当前焦点」那一项，只有有焦点概念的目录发布（TUI 的目录列表；网格的
+ * GridMap 用卡片上的按钮与批量面板目录树上的按钮做这些）：toggle-hidden 隐藏 / 取消隐藏焦点条目；rescan-root、
+ * remove-root 作用于焦点那个导入根（remove-root 先确认）；clear-ignore 恢复焦点那个被忽略的文件夹。
  */
 export type LibraryDirectorySurfaceActionId =
     | 'play-selection'
@@ -212,7 +215,21 @@ export type LibraryDirectorySurfaceActionId =
     | 'remove-selection'
     | 'select-all'
     | 'clear-selection'
-    | 'manage-hidden';
+    | 'manage-hidden'
+    | 'toggle-hidden'
+    | 'rescan-root'
+    | 'remove-root'
+    | 'clear-ignore';
+
+/** 目录里当前焦点那一项能做的事（只有有焦点概念的目录给出）。 */
+export interface LibraryDirectoryFocusedTarget {
+    /** 焦点条目可以隐藏（歌单类）。 */
+    hideable?: boolean;
+    /** 焦点是一个导入根（目录树的根节点）：它的根路径。 */
+    rootPath?: string;
+    /** 焦点是一个被忽略的文件夹：它的路径。 */
+    ignoredPath?: string;
+}
 
 /** 命令面板问目录的状态；每次现读，不缓存。 */
 export interface LibraryDirectorySurfaceState {

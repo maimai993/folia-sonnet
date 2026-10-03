@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileUp, FolderOpen, Loader2, Music, ListMusic, User, Disc3, RefreshCw } from 'lucide-react';
 import DesktopGrid3DSurface, { DesktopGrid3DAction } from './DesktopGrid3DSurface';
@@ -11,7 +11,7 @@ import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
 import type { LibraryHomeActionsController, LibraryHomeListState, LibraryLocalDirectoryTreesResource } from '../../../core/contracts/homeModel';
 import type { LocalHomeRow, LocalHomeSectionKey } from '../../../core/model/localHomeModel';
 import { resolveLocalHomeActions } from '../../../core/model/localHomeModel';
-import { useLibraryHomeLocal, useLocalDirectoryTrees } from '../../../core/bindings/useLibraryHomeLocal';
+import { useLibraryHomeLocal, useLocalDirectoryTrees, useLocalHomeBatchConfig } from '../../../core/bindings/useLibraryHomeLocal';
 import { useLibraryHomeActions } from '../../../core/bindings/useLibraryHomeActions';
 import { useLibraryHomeListRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
 
@@ -108,26 +108,15 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     const [activeFocusedIndex, setActiveFocusedIndex] = focus[activeSection.key];
 
     // 批量配置只装配 section 与目录树；动作的规则（路径规则、刷新顺序、pending 与重复提交）在 core 的控制器里。
-    // 删除与恢复忽略目录之后重读目录树：目录树是这个视图的状态，所以由它在动作的 pending 期间补上。
-    const { trees, reload: reloadTrees, reloadAll: reloadAllTrees } = directoryTrees;
-    const localBatchConfig = useMemo<GridMapBatchConfig | undefined>(() => {
-        const selectionType = local.batchSelectionType;
-        if (!directoryActions || !selectionType) return undefined;
-        if (selectionType !== 'folders') return { selectionType, controller: directoryActions };
-
-        return {
-            selectionType,
-            directoryTrees: trees,
-            controller: directoryActions,
-            afterAction: async action => {
-                if (action === 'remove') {
-                    await reloadTrees();
-                } else if (action === 'clear-ignore') {
-                    await reloadAllTrees();
-                }
-            },
-        };
-    }, [directoryActions, local.batchSelectionType, reloadAllTrees, reloadTrees, trees]);
+    // 删除与恢复忽略目录之后重读目录树（core/bindings 的 useLocalHomeBatchConfig，TUI 的目录列表用同一个）。
+    const { trees } = directoryTrees;
+    const localBatchConfig: GridMapBatchConfig | undefined = useLocalHomeBatchConfig({
+        controller: directoryActions,
+        selectionType: local.batchSelectionType,
+        trees,
+        reloadTrees: directoryTrees.reload,
+        reloadAllTrees: directoryTrees.reloadAll,
+    });
 
     const tabs: DesktopGrid3DAction[] = local.sections.map(section => ({
         id: section.key,

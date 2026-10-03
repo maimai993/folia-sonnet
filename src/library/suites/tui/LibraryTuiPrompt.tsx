@@ -5,10 +5,23 @@ import { useTranslation } from 'react-i18next';
 // TUI 的行内提示：一行等宽文字，贴在列表下方。改名是一个输入框（Enter 提交、Esc 取消），
 // 删除集合是一句确认（Enter 确认、Esc 取消，也可以点两个按钮）。按键在这里处理并截住，
 // 不会落到 TUI 的列表按键或命令面板上；进行中时禁用，结果由调用方决定是否关掉。
+// 首页的目录也用它：通用的文本输入（kind: 'text'，例如新建歌单的名字）与确认（kind: 'confirm'，例如从曲库删除
+// 选中的、移除导入根），id 写进 data-tui-prompt。
 
 export type LibraryTuiPromptRequest =
     | { kind: 'rename'; initialValue: string }
-    | { kind: 'confirm-delete'; message: string };
+    | { kind: 'confirm-delete'; message: string }
+    | { kind: 'text'; id: string; label: string; initialValue?: string }
+    | { kind: 'confirm'; id: string; message: string };
+
+const isTextPrompt = (request: LibraryTuiPromptRequest): request is Extract<LibraryTuiPromptRequest, { kind: 'rename' | 'text' }> => (
+    request.kind === 'rename' || request.kind === 'text'
+);
+
+/** data-tui-prompt 的值：集合视图沿用 rename / confirm-delete，首页的提示用调用方给的 id。 */
+const promptIdOf = (request: LibraryTuiPromptRequest) => (
+    request.kind === 'text' || request.kind === 'confirm' ? request.id : request.kind
+);
 
 type LibraryTuiPromptProps = {
     request: LibraryTuiPromptRequest;
@@ -20,18 +33,19 @@ type LibraryTuiPromptProps = {
 
 const LibraryTuiPrompt: React.FC<LibraryTuiPromptProps> = ({ request, pending, accentColor, onSubmit, onCancel }) => {
     const { t } = useTranslation();
-    const [value, setValue] = useState(request.kind === 'rename' ? request.initialValue : '');
+    const [value, setValue] = useState(isTextPrompt(request) ? request.initialValue ?? '' : '');
+    const textPrompt = isTextPrompt(request);
     const inputRef = useRef<HTMLInputElement>(null);
     const confirmRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (request.kind === 'rename') {
+        if (textPrompt) {
             inputRef.current?.focus();
             inputRef.current?.select();
         } else {
             confirmRef.current?.focus();
         }
-    }, [request.kind]);
+    }, [textPrompt]);
 
     // Enter / Escape 归提示本身：截住冒泡，window 上的 TUI 按键与命令面板都看不到。
     const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -48,15 +62,17 @@ const LibraryTuiPrompt: React.FC<LibraryTuiPromptProps> = ({ request, pending, a
         }
     };
 
-    if (request.kind === 'rename') {
+    if (isTextPrompt(request)) {
+        const inputId = `library-tui-${promptIdOf(request)}`;
+        const label = request.kind === 'text' ? request.label : t('libraryTui.renamePrompt');
         return (
             <div
-                data-tui-prompt="rename"
+                data-tui-prompt={promptIdOf(request)}
                 className="flex shrink-0 items-center gap-2 border-t border-current/15 px-4 py-1.5 text-[13px]"
             >
-                <label htmlFor="library-tui-rename" style={{ color: accentColor }}>{`${t('libraryTui.renamePrompt')}>`}</label>
+                <label htmlFor={inputId} style={{ color: accentColor }}>{`${label}>`}</label>
                 <input
-                    id="library-tui-rename"
+                    id={inputId}
                     ref={inputRef}
                     value={value}
                     disabled={pending}
@@ -78,7 +94,7 @@ const LibraryTuiPrompt: React.FC<LibraryTuiPromptProps> = ({ request, pending, a
             role="alertdialog"
             aria-label={request.message}
             tabIndex={-1}
-            data-tui-prompt="confirm-delete"
+            data-tui-prompt={promptIdOf(request)}
             onKeyDown={handleKeyDown}
             className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-current/15 px-4 py-1.5 text-[13px] outline-none"
         >

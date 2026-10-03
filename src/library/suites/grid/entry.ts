@@ -1,4 +1,4 @@
-import type { LibrarySuiteManifest } from '../../core/contracts/suite';
+import type { LibraryHomeActionId, LibrarySuiteManifest } from '../../core/contracts/suite';
 import Grid3D from './home/Grid3D';
 import GridCollectionSurface from './collection/GridCollectionSurface';
 import GridArtistSurface from './artist/GridArtistSurface';
@@ -17,12 +17,32 @@ import { gridHostTransitions } from './transitions/gridHostTransitions';
 // - registry 只被首页外壳（Home）、集合宿主和 suite 切换引用，而它们本来就静态 import 这些组件，
 //   即时 import 不会把网格拉进任何原本不含它的模块。
 
+// 首页：GridMap 的筛选、批量面板（批选、播放 / 入队、新建歌单、删除，目录树上的重扫根 / 移除根 / 恢复忽略目录）、
+// 隐藏管理（卡片上的眼睛按钮），以及本地 / Navidrome 列表右上角的导入与刷新。toggle-hidden 与三个根上的动作
+// 网格用卡片 / 目录树上的按钮做，不经命令面板（GridMap 没有焦点那一项，目录 surface 不发布它们）。
+const GRID_HOME_ACTIONS: readonly LibraryHomeActionId[] = [
+    'directory-filter',
+    'directory-select',
+    'directory-play-selection',
+    'directory-enqueue-selection',
+    'directory-create-playlist',
+    'directory-remove-selection',
+    'directory-rescan-root',
+    'directory-remove-root',
+    'directory-clear-ignore',
+    'directory-manage-hidden',
+    'directory-toggle-hidden',
+    'home-import-folder',
+    'home-refresh-folders',
+    'home-import-playlist',
+    'home-refresh-navidrome',
+];
+
 const grid: LibrarySuiteManifest = {
     id: 'grid',
     labelKey: 'libraryTui.rendererGrid',
     surfaces: {
-        // 首页的动作（目录批量、隐藏……）P3 再声明。
-        home: { component: Grid3D, actions: [] },
+        home: { component: Grid3D, actions: GRID_HOME_ACTIONS },
         collection: {
             component: GridCollectionSurface,
             actions: [

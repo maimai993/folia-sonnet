@@ -2,18 +2,44 @@ import React from 'react';
 import type { LibrarySuiteManifest } from '../../core/contracts/suite';
 
 // src/library/suites/tui/entry.ts
-// 终端风格的列表 suite（开发版专用的 PoC）。只实现集合 surface；首页与歌手页回退到网格。
+// 终端风格的列表 suite（开发版专用的 PoC）。实现集合与首页两个 surface；歌手页回退到网格。
 // 生产构建里 import.meta.env.DEV 是常量 false：组件那一行连同动态 import 一起被摇掉，不会产出 TUI 的 chunk，
 // registry 也因为 available: false 把它当作不存在（浮层不出现、选不到）。
 
 const LibraryTuiView = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiView')) : null;
+const LibraryTuiHome = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiHome')) : null;
 
 const tui: LibrarySuiteManifest = {
     id: 'tui',
     labelKey: 'libraryTui.rendererTui',
     available: import.meta.env.DEV,
-    surfaces: LibraryTuiView
+    surfaces: LibraryTuiView && LibraryTuiHome
         ? {
+            home: {
+                component: LibraryTuiHome,
+                // 首页（LibraryTuiHome）：命令面板筛选目录、Insert / Ctrl+A 批选、Ctrl+Enter 播放 / 入队选中的，
+                // 新建歌单（命令面板或行内输入）、从曲库删除选中的（行内确认），焦点在导入根 / 被忽略的文件夹上时
+                // 重扫根、移除根（行内确认）、恢复忽略目录，「管理隐藏」视图与焦点歌单的隐藏 / 取消隐藏；
+                // 本地的导入文件夹、刷新、导入歌单文件（隐藏的文件选择框）与 Navidrome 的刷新。
+                // 在线账户的登录（二维码）不在这里：未登录时只显示原因，登录仍在网格里完成。
+                actions: [
+                    'directory-filter',
+                    'directory-select',
+                    'directory-play-selection',
+                    'directory-enqueue-selection',
+                    'directory-create-playlist',
+                    'directory-remove-selection',
+                    'directory-rescan-root',
+                    'directory-remove-root',
+                    'directory-clear-ignore',
+                    'directory-manage-hidden',
+                    'directory-toggle-hidden',
+                    'home-import-folder',
+                    'home-refresh-folders',
+                    'home-import-playlist',
+                    'home-refresh-navidrome',
+                ],
+            },
             collection: {
                 component: LibraryTuiView,
                 // 与 LibraryTuiView 现在做得到的一致：播放 / 入队焦点行与范围、筛选、本地排序、重新拉取、续传；

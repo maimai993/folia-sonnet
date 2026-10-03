@@ -9,6 +9,7 @@ import { filterDirectoryByVisibility, resolveSourceDirectoryIndex, resolveVisibl
 import type { LibraryHiddenScope } from '../../../core/contracts/directory';
 import { useHiddenCollections } from '../../../core/bindings/useHiddenCollections';
 import { DEFAULT_DIRECTORY_SESSION_ID, hasDirectorySessionState } from '../../../core/model/directorySession';
+import { homeCardToDirectoryItem } from '../../../core/model/directoryItems';
 import { getLibraryDirectorySession, useLibraryDirectorySessionStore } from '../../../core/state/useLibraryDirectorySessionStore';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
 
@@ -199,22 +200,15 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                     <GridMap
                         directoryKey={directoryKey}
                         title={title}
+                        // 文件夹卡的描述是它的名称（路径）——虚拟的「全部歌曲」也一样，标题下一行照旧是
+                        // 「All Songs / 全部歌曲」。path 只给真实文件夹（契约：虚拟条目没有路径）；GridMap 的卡片
+                        // 按 resolveGridMapFolderLabel 把虚拟文件夹的名称放在路径的位置（含「本目录 N 首」）。
+                        // 规则在 core/model/directoryItems，TUI 的目录列表用同一条。
                         items={items.map(item => ({
-                            id: item.id,
-                            name: typeof item.name === 'string' || typeof item.name === 'number' ? String(item.name) : '',
-                            coverUrl: item.coverUrl,
-                            // 文件夹卡的描述是它的名称（路径）——虚拟的「全部歌曲」也一样，标题下一行照旧是
-                            // 「All Songs / 全部歌曲」。path 只给真实文件夹（契约：虚拟条目没有路径）；GridMap 的卡片
-                            // 按 resolveGridMapFolderLabel 把虚拟文件夹的名称放在路径的位置（含「本目录 N 首」）。
-                            description: item.type === 'folder'
-                                ? String(item.name)
-                                : item.description,
-                            summary: item.summary,
-                            trackCount: item.trackCount,
-                            type: item.type,
-                            path: item.type === 'folder' && !item.isVirtual ? String(item.name) : undefined,
-                            trackIds: item.trackIds,
-                            isVirtual: item.isVirtual,
+                            ...homeCardToDirectoryItem({
+                                ...item,
+                                name: typeof item.name === 'string' || typeof item.name === 'number' ? String(item.name) : '',
+                            }),
                             rawCollection: item,
                         }))}
                         initialFocusedIndex={focusedIndex}

@@ -190,3 +190,29 @@ export const resolveHomeDirectoryKey = ({
 export const resolveHomeHiddenScope = (tab: LibraryHomeTabKey, providerId: string): LibraryHiddenScope => (
     tab === 'local' ? 'local' : tab === 'navidrome' ? 'navidrome' : onlineHiddenScope(providerId)
 );
+
+/** 首页的一个来源：在线（歌单 / 电台 / 专辑三个页签）、本地、Navidrome。 */
+export type LibraryHomeSourceGroup = {
+    source: 'online' | 'local' | 'navidrome';
+    /** 这个来源下的页签（在线是三个，本地与 Navidrome 各一个），顺序同一级页签。 */
+    tabs: LibraryHomeTabView[];
+    /** 全部页签都不可用时为第一个页签的原因（来源整个不可用）。 */
+    disabledReason?: string;
+};
+
+/**
+ * 把一级页签按来源分组（列表形态的首页——TUI——用两级：来源、来源下的分区）。隐藏了的页签不在 tabs 里，
+ * 一个页签都没有的来源不出现。
+ */
+export const resolveHomeSourceGroups = (tabs: readonly LibraryHomeTabView[]): LibraryHomeSourceGroup[] => {
+    const groups: LibraryHomeSourceGroup[] = [];
+    const push = (source: LibraryHomeSourceGroup['source'], members: LibraryHomeTabView[]) => {
+        if (members.length === 0) return;
+        const enabled = members.some(tab => !tab.disabledReason);
+        groups.push({ source, tabs: members, ...(enabled ? {} : { disabledReason: members[0].disabledReason }) });
+    };
+    push('online', tabs.filter(tab => isOnlineHomeTab(tab.key)));
+    push('local', tabs.filter(tab => tab.key === 'local'));
+    push('navidrome', tabs.filter(tab => tab.key === 'navidrome'));
+    return groups;
+};

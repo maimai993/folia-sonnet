@@ -28,7 +28,8 @@ const openAllSongs = async (page: Page) => {
     await page.getByRole('button', { name: 'Folder' }).last().click();
     await page.getByRole('button', { name: 'Import Folder' }).last().click();
     await expect(page.getByText('All Songs').first()).toBeVisible();
-    await expect(rendererSwitch(page)).toHaveCount(0);
+    // P3.4 起开发版浮层在首页上也出现（切换的是首页 surface）。
+    await expect(rendererSwitch(page)).toHaveCount(1);
     await page.getByRole('heading', { name: 'All Songs' }).first().click();
     await expect(grid(page)).toHaveCount(1);
     await expect(page.getByText('Midnight Train').first()).toBeVisible();

@@ -137,8 +137,11 @@ describe('library core layer boundaries', () => {
     });
 
     it('keeps the list renderer independent of the grid, its hex viewport and the open transition', () => {
+        // P3.4 起 TUI 也有首页：网格首页的外壳、滑条、地图、批量面板同样不能被拉进来。
         const FORBIDDEN = [
             /\/GridView$/, /\/Grid3D$/, /\/GridMap$/, /\/ArtistGridView$/,
+            /\/(DesktopGrid3DSurface|Grid3DSlider|GridViewTabs|GridMapBatchPanel|GridMapBatchItemList|gridMapCardText|gridMapNavigation)$/,
+            /(^|\/)grid\/(home|directory|collection|artist|shared|transitions)\//,
             /(folia-grid|grid\/shared)\/(PolaroidCard|polaroidCardParts|hex\w*|useFoliaHexViewport)$/,
             /(collectionOpenMorph|grid\/transitions)\//,
         ];
