@@ -101,11 +101,20 @@ export type LibraryHomeRadioFeed = {
     recommended: ProviderCollection[];
 };
 
-/** 宿主（library/app）为首页创建、交给任何 suite 的资源与控制器。一个首页一份，切 suite 不重建。 */
+/**
+ * 宿主（library/app）为首页创建、交给任何 suite 的资源与控制器。一个首页一份，切 suite 不重建。
+ * 生命周期跟着「首页真的离开」（首页整个藏起或卸载），不跟某个 suite 的首页组件：换 suite 时新 suite 的首页
+ * 读到的是同一份数据、不重新请求；离开首页时宿主放掉在线数据的归属、让 Navidrome 概览与文件夹树作废，
+ * 回到首页再读（见 library/app/useLibraryHomeResources 与 core/services/libraryHomeLifetime）。
+ */
 export type LibraryHomeResources = {
     favoriteAlbums: LibraryHomeFeedResource<ProviderCollection[]>;
     radioFeed: LibraryHomeFeedResource<LibraryHomeRadioFeed | null>;
     actions: LibraryHomeActionsController;
+    /** Navidrome 页签的概览（进页签时 ensure；离开页签或首页时作废，下次进来重读）。 */
+    navidromeOverview: LibraryNavidromeHomeResource;
+    /** 本地文件夹树（本地页签 ensure；曲库变了重读；离开页签或首页时作废）。 */
+    localDirectoryTrees: LibraryLocalDirectoryTreesResource;
 };
 
 /**
@@ -249,6 +258,10 @@ export interface LibraryNavidromeHomeResource {
     getSnapshot(): LibraryNavidromeHomeSnapshot;
     subscribe(listener: () => void): () => void;
     load(): Promise<void>;
+    /** 作废之后还没读过就读一次（正在读或已经读过时什么都不做）。显示 Navidrome 页签的 surface 挂载时调。 */
+    ensure(): Promise<void>;
+    /** 让下一次 ensure 重新读（数据保留到新数据到达）。离开 Navidrome 页签或首页时由宿主调。 */
+    invalidate(): void;
 }
 
 export type LibraryLocalDirectoryTreesSnapshot = {
@@ -263,6 +276,10 @@ export interface LibraryLocalDirectoryTreesResource {
     subscribe(listener: () => void): () => void;
     /** songs 不给时由服务自己读曲库（恢复忽略目录之后用）。 */
     load(songs?: readonly LocalSong[]): Promise<void>;
+    /** 按这份曲库读过（同一个数组）且没作废时什么都不做，否则按它读。显示本地页签的 surface 挂载与曲库变化时调。 */
+    ensure(songs: readonly LocalSong[]): Promise<void>;
+    /** 让下一次 ensure 重新读（树保留到新树到达）。离开本地页签或首页时由宿主调。 */
+    invalidate(): void;
 }
 
 /**

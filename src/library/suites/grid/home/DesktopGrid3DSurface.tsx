@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Map as MapIcon } from 'lucide-react';
 import GridMap, { type GridMapBatchConfig } from '../directory/GridMap';
@@ -8,8 +8,8 @@ import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
 import { filterDirectoryByVisibility, resolveSourceDirectoryIndex, resolveVisibleDirectoryIndex } from '../../../core/model/directoryVisibility';
 import type { LibraryHiddenScope } from '../../../core/contracts/directory';
 import { useHiddenCollections } from '../../../core/bindings/useHiddenCollections';
-import { DEFAULT_DIRECTORY_SESSION_ID } from '../../../core/model/directorySession';
-import { useLibraryDirectorySessionStore } from '../../../core/state/useLibraryDirectorySessionStore';
+import { DEFAULT_DIRECTORY_SESSION_ID, hasDirectorySessionState } from '../../../core/model/directorySession';
+import { getLibraryDirectorySession, useLibraryDirectorySessionStore } from '../../../core/state/useLibraryDirectorySessionStore';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
 
 // src/library/suites/grid/home/DesktopGrid3DSurface.tsx
@@ -72,13 +72,32 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     ponderControls,
     gridMapPonderScope,
 }) => {
-    const [showGridMap, setShowGridMap] = useState(false);
-    // 目录会话跟着地图：打开时从空会话开始，关掉（退场动画结束）后丢掉——与原先 GridMap 组件状态随卸载消失一致。
-    // 退场期间不清：地图还在淡出，筛选结果不能先跳回全部。关掉时的 key 记下来，退场期间换了 section 也清对的那个。
+    // GridMap 就是网格里「打开着的目录」（core 的目录会话 store 记着打开的是哪个，见 useLibraryDirectorySessionStore）：
+    // 打开地图 = openDirectory，关掉地图 = closeDirectory（退场动画结束之后：地图还在淡出，筛选结果不能先跳回全部；
+    // 关掉时的 key 记下来，退场期间换了 section 也关对的那个）。挂载不算打开、卸载不算关闭——换 suite 卸载网格时
+    // 会话留给下一套 suite。挂载时这个目录若已经打开着、会话里有筛选 / 选择 / 管理隐藏视图（例如刚从 TUI 切过来），
+    // 地图直接开着把它们显示出来；打开着却是空会话就当它关了（网格里地图关着）。
+    const [showGridMap, setShowGridMap] = useState(() => {
+        const { openDirectoryKey } = useLibraryDirectorySessionStore.getState();
+        return openDirectoryKey === directoryKey && hasDirectorySessionState(getLibraryDirectorySession(directoryKey));
+    });
     const closingDirectoryKeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        const { openDirectoryKey, closeDirectory } = useLibraryDirectorySessionStore.getState();
+        if (!showGridMap && openDirectoryKey === directoryKey) closeDirectory(directoryKey);
+        // 只在挂载时对一次（之后的开关都经下面的回调）。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    // 地图开着时换了目录（切 section）：新目录成为打开着的那个（之前的随之关掉，与原先换 key 丢筛选一致）。
+    useEffect(() => {
+        if (showGridMap) useLibraryDirectorySessionStore.getState().openDirectory(directoryKey);
+    }, [directoryKey, showGridMap]);
     const openGridMap = useCallback(() => {
-        useLibraryDirectorySessionStore.getState().clearSession(directoryKey);
+        const store = useLibraryDirectorySessionStore.getState();
+        // 退场还没结束就重新打开：上一次的关闭照样算数（会话丢掉，新地图从空会话开始）。
+        if (closingDirectoryKeyRef.current) store.closeDirectory(closingDirectoryKeyRef.current);
         closingDirectoryKeyRef.current = null;
+        store.openDirectory(directoryKey);
         setShowGridMap(true);
     }, [directoryKey]);
     const closeGridMap = useCallback(() => {
@@ -88,7 +107,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     const handleGridMapExitComplete = useCallback(() => {
         const closedKey = closingDirectoryKeyRef.current;
         closingDirectoryKeyRef.current = null;
-        if (closedKey) useLibraryDirectorySessionStore.getState().clearSession(closedKey);
+        if (closedKey) useLibraryDirectorySessionStore.getState().closeDirectory(closedKey);
     }, []);
     const chrome = gridChromeClassesFor(isDaylight);
     const { hiddenIds: hiddenPlaylistIds, toggleHidden: togglePlaylistHidden } = useHiddenCollections(playlistVisibilityScope);

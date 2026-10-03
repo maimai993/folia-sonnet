@@ -5,7 +5,7 @@ import DesktopGrid3DSurface, { DesktopGrid3DAction } from './DesktopGrid3DSurfac
 import { Theme } from '../../../../types';
 import type { GridViewCollectionDescriptor } from '../../../../components/app/home/gridViewCollectionAdapters';
 import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
-import type { LibraryHomeActionsController, LibraryHomeCard, LibraryHomeListState } from '../../../core/contracts/homeModel';
+import type { LibraryHomeActionsController, LibraryHomeCard, LibraryHomeListState, LibraryNavidromeHomeResource } from '../../../core/contracts/homeModel';
 import { isNavidromeHomeSection, resolveNavidromeCollectionType, type NavidromeHomeSection } from '../../../core/model/navidromeHomeModel';
 import { useLibraryHomeNavidrome } from '../../../core/bindings/useLibraryHomeNavidrome';
 import { useLibraryHomeListRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
@@ -30,6 +30,8 @@ interface NavidromeGrid3DViewProps {
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
     /** 首页动作控制器（打开卡片；宿主创建）。 */
     homeActions: LibraryHomeActionsController;
+    /** Navidrome 概览（首页宿主持有，见 homeResources.navidromeOverview；换 suite 不重新请求）。 */
+    overview: LibraryNavidromeHomeResource;
     /** 首页模型算好的目录会话 key（core/model/homeSources 的 resolveHomeDirectoryKey）。 */
     directoryKey: string;
     theme: Theme;
@@ -44,6 +46,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     onOpenSettings,
     onOpenGridView,
     homeActions,
+    overview,
     directoryKey,
     theme,
     isDaylight,
@@ -56,7 +59,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     const [focusedArtistIndex, setFocusedArtistIndex] = useState(0);
     const [focusedRecentlyAddedIndex, setFocusedRecentlyAddedIndex] = useState(0);
     const [focusedRecentlyPlayedIndex, setFocusedRecentlyPlayedIndex] = useState(0);
-    const navidrome = useLibraryHomeNavidrome();
+    const navidrome = useLibraryHomeNavidrome(overview);
     const { config, section, setSection, isLoading } = navidrome;
 
     const focus: Record<NavidromeHomeSection, [number, (index: number) => void]> = {

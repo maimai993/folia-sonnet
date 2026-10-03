@@ -27,6 +27,11 @@ export const EMPTY_DIRECTORY_SESSION: LibraryDirectorySession = Object.freeze({
     visibilityMode: 'browse',
 });
 
+/** 会话里有没有要带给另一套 suite 看的东西（筛选词、选择或管理隐藏视图）。 */
+export const hasDirectorySessionState = (session: LibraryDirectorySession): boolean => (
+    session.query !== '' || session.selectedIds.length > 0 || session.visibilityMode !== 'browse'
+);
+
 /** 选中或取消一批条目；选中的追加在后（已选的保留原位置），取消的移除。没变化时返回原会话。 */
 export const setDirectorySelection = (
     session: LibraryDirectorySession,

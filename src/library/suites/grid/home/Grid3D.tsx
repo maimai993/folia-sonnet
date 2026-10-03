@@ -632,6 +632,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
                             setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
                             homeActions={homeActions}
+                            directoryTreesResource={homeResources.localDirectoryTrees}
                             directoryKey={directoryKey}
                             theme={theme}
                             isDaylight={isDaylight}
@@ -651,6 +652,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             setFocusedAlbumIndex={setNavidromeFocusedAlbumIndex ?? (() => { })}
                             hasFloatingPlayer={Boolean(currentTrack)}
                             homeActions={homeActions}
+                            overview={homeResources.navidromeOverview}
                             directoryKey={directoryKey}
                             onOpenSettings={() => onOpenSettings?.('help')}
                             onOpenGridView={onOpenGridView}

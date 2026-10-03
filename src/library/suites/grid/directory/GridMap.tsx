@@ -11,6 +11,7 @@ import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
 import GridMapBatchPanel from './GridMapBatchPanel';
 import type { LibraryDirectoryBatchConfig, LibraryDirectoryBatchContext, LibraryDirectoryItem } from '../../../core/contracts/directory';
 import { DEFAULT_DIRECTORY_SESSION_ID } from '../../../core/model/directorySession';
+import { getLibraryDirectorySession } from '../../../core/state/useLibraryDirectorySessionStore';
 import { useLibraryDirectoryQuery } from '../../../core/bindings/useLibraryDirectoryQuery';
 import { useLibraryDirectorySelection } from '../../../core/bindings/useLibraryDirectorySelection';
 import { useLibraryDirectoryVisibility } from '../../../core/bindings/useLibraryDirectoryVisibility';
@@ -281,7 +282,14 @@ export const GridMap: React.FC<GridMapProps> = ({
     const deferredSearchQuery = useDeferredValue(searchQuery);
 
     const [showSidePanel, setShowSidePanel] = useState(false);
-    const [showCutInPanel, setShowCutInPanel] = useState(false);
+    // 侧面板（批量面板或隐藏管理面板）一般从关着开始；但目录会话跨 suite 保留：会话里已经有选择或管理隐藏视图时
+    // （例如刚从 TUI 切过来），挂载时面板直接开着把它们显示出来——不是「打开面板」，所以不清选择。
+    // 用户自己打开 / 关闭面板时清掉选择与隐藏视图仍是网格的规则（openCutInPanel / closeCutInPanel）。
+    const [showCutInPanel, setShowCutInPanel] = useState(() => {
+        const session = getLibraryDirectorySession(directoryKey);
+        const restorable = session.selectedIds.length > 0 || session.visibilityMode !== 'browse';
+        return restorable && (Boolean(batchConfig) || items.some(isHideableDirectoryItem));
+    });
     // 批量面板「从曲库删除」的确认框；放在这里而不是面板里，命令面板的删除命令也只是把它打开。
     const [isRemoveConfirmOpen, setRemoveConfirmOpen] = useState(false);
     const {

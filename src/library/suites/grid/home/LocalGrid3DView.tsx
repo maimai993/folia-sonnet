@@ -8,7 +8,7 @@ import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
 import type { GridMapBatchConfig } from '../directory/GridMap';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
-import type { LibraryHomeActionsController, LibraryHomeListState } from '../../../core/contracts/homeModel';
+import type { LibraryHomeActionsController, LibraryHomeListState, LibraryLocalDirectoryTreesResource } from '../../../core/contracts/homeModel';
 import type { LocalHomeRow, LocalHomeSectionKey } from '../../../core/model/localHomeModel';
 import { resolveLocalHomeActions } from '../../../core/model/localHomeModel';
 import { useLibraryHomeLocal, useLocalDirectoryTrees } from '../../../core/bindings/useLibraryHomeLocal';
@@ -50,6 +50,8 @@ interface LocalGrid3DViewProps {
     setFocusedPlaylistIndex: (index: number) => void;
     /** 首页动作控制器（导入文件夹、刷新、导入歌单文件、打开分组；宿主创建）。 */
     homeActions: LibraryHomeActionsController;
+    /** 本地文件夹树（首页宿主持有，见 homeResources.localDirectoryTrees；换 suite 不重读）。 */
+    directoryTreesResource: LibraryLocalDirectoryTreesResource;
     /** 首页模型算好的目录会话 key（core/model/homeSources 的 resolveHomeDirectoryKey）。 */
     directoryKey: string;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
@@ -76,6 +78,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     focusedPlaylistIndex,
     setFocusedPlaylistIndex,
     homeActions,
+    directoryTreesResource,
     directoryKey,
     onOpenGridView,
     directoryActions,
@@ -86,7 +89,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const playlistFileInputRef = useRef<HTMLInputElement>(null);
-    const directoryTrees = useLocalDirectoryTrees(localSongs);
+    const directoryTrees = useLocalDirectoryTrees(directoryTreesResource, localSongs);
     const local = useLibraryHomeLocal({ localSongs, localPlaylists, catalog: localLibraryCatalog, activeRow });
     const { snapshot: actionState, importBusy } = useLibraryHomeActions(homeActions);
 
