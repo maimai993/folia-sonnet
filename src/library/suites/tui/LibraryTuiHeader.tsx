@@ -74,7 +74,7 @@ const LibraryTuiHeader: React.FC<LibraryTuiHeaderProps> = ({
     return (
         <header className="shrink-0 border-b border-current/15 px-4 py-2 text-[13px]">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <button type="button" onClick={onBack} className="opacity-70 hover:opacity-100">
+                <button type="button" onClick={onBack} className="opacity-70 hover:opacity-100" data-tui-back>
                     {`[← ${t('libraryTui.back')}]`}
                 </button>
                 <span className="font-bold" style={{ color: accentColor }} data-tui-title>{title}</span>

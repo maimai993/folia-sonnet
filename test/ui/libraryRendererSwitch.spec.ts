@@ -109,9 +109,16 @@ test('on the home the DEV switch brings up the TUI home; All Songs opens the TUI
     await expect(tui(page).locator('[data-tui-row="0"]')).toContainText('Midnight Train');
     await expect(rendererSwitch(page)).toHaveAttribute('data-placement', 'collection');
 
-    // 返回用 Esc（TUI 集合视图的键）：桌面版的标题栏拖拽区盖着视图最上面那一行，状态栏上的 [← Back] 在这里点不到。
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await page.keyboard.press('Escape');
+    // 返回点页头的 [← Back]：集合视图顶上让出了桌面版标题栏的拖拽区（h-8），按钮中心处命中的是按钮自己，
+    // 而不是盖在窗口最上面的拖拽区（P3.4 时它被盖住，只能用 Esc；Esc 返回由行为探针覆盖）。
+    const back = tui(page).locator('[data-tui-back]');
+    await expect(back).toBeVisible();
+    expect(await back.evaluate(button => {
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return Boolean(hit && button.contains(hit));
+    })).toBe(true);
+    await back.click();
     await expect(tui(page)).toHaveCount(0);
     await expect(home).toBeVisible();
     await expect(focusedRow).toHaveCount(1);

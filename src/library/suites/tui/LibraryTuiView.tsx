@@ -252,11 +252,13 @@ const LibraryTuiView: React.FC<LibraryCollectionSurfaceProps> = ({
             ? t('playlist.loading')
             : view.isFilterActive ? t('home.gridSearchNoResults') : t('home.loadingLibrary');
 
+    // 顶上让出桌面版自绘标题栏的拖拽区（h-8，z-[9999] 盖在整个窗口最上面），否则页头那一行（[← Back]、订阅、改名）
+    // 点不到；与 TUI 首页的 pt-8 一致（网格的集合页把按钮放在 top-5 往下，按钮中心同样避开了这一条）。
     return (
         <div
             data-library-renderer="tui"
             data-library-surface="collection"
-            className="fixed inset-0 z-[110] flex flex-col overflow-hidden font-mono"
+            className="fixed inset-0 z-[110] flex flex-col overflow-hidden pt-8 font-mono"
             style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
         >
             <LibraryTuiHeader
