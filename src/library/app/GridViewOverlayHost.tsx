@@ -23,7 +23,8 @@ import type { LocalLibraryCatalogSnapshot } from '../../hooks/useLocalLibraryCat
 import { LocalLibraryEntityPanel } from '../../components/modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../components/modal/LocalFolderSongInfoPanel';
 import { LocalSongMetadataMatchDialog } from '../../components/modal/LocalSongMetadataMatchDialog';
-import { buildLocalLibraryIndex, followEntityRedirect } from '../../utils/localLibraryIndex';
+import { followEntityRedirect } from '../../utils/localLibraryIndex';
+import { buildLocalCatalogIndex, resolveLocalCatalogLink } from '../core/model/localCatalogLinks';
 import { resolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from '../../components/app/home/homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
@@ -316,17 +317,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 coverUrl: albumCoverUrl,
             });
         } else if (source === 'local') {
-            const catalogIndex = buildLocalLibraryIndex(
-                localLibraryCatalog.entities,
-                localLibraryCatalog.assignments,
-            );
-            const activeEntityId = followEntityRedirect(String(albumId), catalogIndex.entitiesById);
-            const localAlbumEntity = activeEntityId
-                ? catalogIndex.entitiesById.get(activeEntityId)
-                : localLibraryCatalog.entities.find(entity => (
-                    entity.kind === 'album' && !entity.mergedInto && entity.displayName === album?.name
-                ));
-            if (localAlbumEntity?.kind !== 'album') return;
+            const catalogIndex = buildLocalCatalogIndex(localLibraryCatalog);
+            const link = resolveLocalCatalogLink(localLibraryCatalog, surfaceProps.localSongs, {
+                kind: 'album',
+                entityId: String(albumId),
+                name: album?.name,
+            }, catalogIndex);
+            if (!link) return;
+            const localAlbumEntity = link.entity;
             const selectedAlbumSourceId = selectedCollection.entityId
                 || (selectedCollection.type === 'album' ? String(selectedCollection.id) : undefined);
             const selectedAlbumEntityId = selectedAlbumSourceId
@@ -337,12 +335,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             }
             const localAlbumName = localAlbumEntity.displayName;
             const localCoverUrl = albumCoverUrl;
-            const memberIds = new Set(localLibraryCatalog.assignments
-                .filter(assignment => assignment.albumEntityId && (
-                    followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById) === localAlbumEntity.id
-                ))
-                .map(assignment => assignment.songId));
-            const albumSongs = surfaceProps.localSongs.filter(song => memberIds.has(song.id));
+            const albumSongs = link.songs;
             const albumArtist = resolveLocalAlbumArtistDisplay(
                 albumSongs.map(song => song.id),
                 localLibraryCatalog,
@@ -413,23 +406,14 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             return;
         }
 
-        const catalogIndex = buildLocalLibraryIndex(
-            localLibraryCatalog.entities,
-            localLibraryCatalog.assignments,
-        );
-        const activeEntityId = followEntityRedirect(String(artistId), catalogIndex.entitiesById);
-        const artistEntity = activeEntityId
-            ? catalogIndex.entitiesById.get(activeEntityId)
-            : localLibraryCatalog.entities.find(entity => (
-                entity.kind === 'artist' && !entity.mergedInto && entity.displayName === artistName
-            ));
-        if (!artistEntity) return;
-        const memberIds = new Set(localLibraryCatalog.assignments
-            .filter(assignment => assignment.artistEntityIds.some(entityId => (
-                followEntityRedirect(entityId, catalogIndex.entitiesById) === artistEntity.id
-            )))
-            .map(assignment => assignment.songId));
-        const artistSongs = surfaceProps.localSongs.filter(song => memberIds.has(song.id));
+        const link = resolveLocalCatalogLink(localLibraryCatalog, surfaceProps.localSongs, {
+            kind: 'artist',
+            entityId: String(artistId),
+            name: artistName,
+        });
+        if (!link) return;
+        const artistEntity = link.entity;
+        const artistSongs = link.songs;
         handlePushCollection({
             source: 'local',
             id: artistEntity.id,
