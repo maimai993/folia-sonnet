@@ -34,6 +34,11 @@ import {
     PROBE_SECOND_ALBUM,
     PROBE_TRANSLATED_NAME,
     PROBE_TRACKS_UPDATED_AT,
+    ONLINE_ARTISTS,
+    artistAlbumId,
+    artistAlbumName,
+    onlineArtistTarget,
+    type OnlineArtistRule,
 } from './fixtureRules';
 import { recordProbeRequest } from './probeLog';
 import { createProbeGate, type ProbeGate } from './probeGates';
@@ -87,6 +92,12 @@ export const holdProbeMutations = (): void => mutationGate.hold();
 export const releaseProbeMutations = (): void => mutationGate.release();
 
 const targetKey = (providerId: string, type: string, id: MediaId) => `${providerId}:${type}:${String(id)}`;
+/** 后台分页的接口：按住分页闸门时只按住它们 offset > 0 的应答。 */
+const PAGED_OPS: ReadonlySet<string> = new Set(['playlistTracks', 'artistAlbums']);
+
+const artistRuleOf = (providerId: string, id: MediaId): OnlineArtistRule | undefined => (
+    Object.values(ONLINE_ARTISTS).find(rule => rule.providerId === providerId && rule.artistId === String(id))
+);
 
 /** 在线 fixture 在请求账里的 target。 */
 export const onlineFixtureTarget = (fixtureId: keyof typeof ONLINE_FIXTURES): string => {
@@ -183,6 +194,13 @@ export const addProbeFault = (fault: ProbeFault): void => {
     faults.push(fault);
 };
 
+/** 撤掉故障注入（给 target 时只撤这个 target 的）。 */
+export const clearProbeFaults = (target?: string): void => {
+    const kept = faults.filter(fault => target !== undefined && fault.target !== target);
+    faults.length = 0;
+    faults.push(...kept);
+};
+
 export const setProbeLatency = (target: string, latency: { first?: number; rest?: number }): void => {
     latencies.set(target, latency);
 };
@@ -225,7 +243,7 @@ const run = async <T>(
     if (isMutationOp(op)) await mutationGate.wait();
     const result = produce();
     const pagingGate = pagingGates.get(target);
-    if (pagingGate && op === 'playlistTracks' && (details.offset ?? 0) > 0) await pagingGate.wait();
+    if (pagingGate && PAGED_OPS.has(op) && (details.offset ?? 0) > 0) await pagingGate.wait();
     return result;
 };
 
@@ -334,6 +352,57 @@ const createFakeProvider = (providerId: string, profile: FakeProviderProfile = '
     };
 };
 
+// 歌手页的三个接口（omni.getArtistDetail / getArtistSongs / getArtistAlbums 直通到这里）。三种请求的 target
+// 都是 `${providerId}:artist:${id}`，延迟与故障按 op（artistDetail / artistSongs / artistAlbums）区分。
+const createArtistCatalog = (providerId: string) => ({
+    getArtistDetail: (id: MediaId) => {
+        const target = targetKey(providerId, 'artist', id);
+        return run(providerId, 'artistDetail', target, {}, (): ProviderCollection | null => {
+            const rule = artistRuleOf(providerId, id);
+            return rule
+                ? {
+                    providerId,
+                    id: rule.artistId,
+                    name: rule.name,
+                    type: 'artist',
+                    coverUrl: rule.coverUrl,
+                    description: rule.description,
+                    trackCount: rule.topSongIndexes.length,
+                    albumCount: rule.albumCount,
+                }
+                : null;
+        });
+    },
+    getArtistSongs: (id: MediaId, limit: number, offset: number) => {
+        const target = targetKey(providerId, 'artist', id);
+        return run(providerId, 'artistSongs', target, { offset, limit }, () => {
+            const rule = artistRuleOf(providerId, id);
+            const songs = rule ? rule.topSongIndexes.map(index => makeOnlineSong(providerId, rule.topSongPrefix, index)) : [];
+            return pageOf(songs, limit, offset);
+        });
+    },
+    getArtistAlbums: (id: MediaId, limit: number, offset: number) => {
+        const target = targetKey(providerId, 'artist', id);
+        return run(providerId, 'artistAlbums', target, { offset, limit }, () => {
+            const rule = artistRuleOf(providerId, id);
+            const albums: ProviderCollection[] = rule
+                ? range(rule.albumCount).map(index => ({
+                    providerId,
+                    id: artistAlbumId(rule.albumPrefix, index),
+                    name: artistAlbumName(index),
+                    type: 'album',
+                    trackCount: 10,
+                    artists: [{ id: rule.artistId, name: rule.name }],
+                }))
+                : [];
+            return pageOf(albums, limit, offset);
+        });
+    },
+});
+
+/** 歌手 fixture 在请求账里的 target（导出给探针 API 用）。 */
+export const onlineArtistFixtureTarget = (fixtureId: keyof typeof ONLINE_ARTISTS): string => onlineArtistTarget(ONLINE_ARTISTS[fixtureId]);
+
 const createCollectionProvider = (providerId: string): OnlineMusicProvider => ({
     id: providerId,
     displayName: `Probe ${providerId}`,
@@ -392,6 +461,7 @@ const createCollectionProvider = (providerId: string): OnlineMusicProvider => ({
             const target = targetKey(providerId, type, id);
             return run(providerId, 'subscriptionStatus', target, {}, () => subscriptions.get(target) ?? false);
         },
+        ...createArtistCatalog(providerId),
     },
     recommendations: {
         getDailySongs: () => {

@@ -1,7 +1,5 @@
 import type { SubsonicSong } from '../../../src/types/navidrome';
 import {
-    NAVIDROME_ALBUM_ID,
-    NAVIDROME_ALBUM_SONGS,
     NAVIDROME_DUPES_PLAYLIST_ID,
     NAVIDROME_DUPES_PLAYLIST_SONGS,
     NAVIDROME_HOME_ALBUMS,
@@ -13,6 +11,8 @@ import {
     NAVIDROME_STARRED_SONGS,
     NAVIDROME_PLAYLIST_SONGS,
     NAVIDROME_PROBE_SERVER,
+    NAVIDROME_ALBUM_TRACKS,
+    NAVIDROME_ARTIST_ALBUMS,
 } from './fixtureRules';
 import { recordProbeRequest } from './probeLog';
 
@@ -26,14 +26,20 @@ export const NAVIDROME_PROBE_CONFIG = {
     passwordHash: 'probe-password',
 };
 
-const makeSubsonicSong = (id: string, index: number, album: string, albumId: string): SubsonicSong => ({
+const makeSubsonicSong = (
+    id: string,
+    index: number,
+    album: string,
+    albumId: string,
+    artist: { id: string; name: string } = { id: 'navi-ar-1', name: 'Navi Artist' },
+): SubsonicSong => ({
     id,
     isDir: false,
     title: `Navi ${id}`,
     album,
     albumId,
-    artist: 'Navi Artist',
-    artistId: 'navi-ar-1',
+    artist: artist.name,
+    artistId: artist.id,
     track: index + 1,
     size: 1024,
     contentType: 'audio/mpeg',
@@ -89,6 +95,50 @@ const handleOverview = (endpoint: string, url: URL): Response | null => {
 
 /** 歌单 id → 名字与条目（含重复）。安装垫片时重置。 */
 let playlists = new Map<string, ShimPlaylist>();
+/** 歌手 id → 名字（用例可以在上游改名，制造「请求发出之后上游变了」）。安装垫片时重置。 */
+let artistNames = new Map<string, string>();
+
+const artistOfAlbum = (albumId: string): { id: string; name: string } => {
+    const artistId = Object.keys(NAVIDROME_ARTIST_ALBUMS).find(candidate => NAVIDROME_ARTIST_ALBUMS[candidate].includes(albumId)) ?? 'navi-ar-1';
+    return { id: artistId, name: artistNames.get(artistId) ?? artistId };
+};
+
+/** 上游给歌手改名：之后的 getArtist / getAlbum 应答用新名字（已经发出的请求不受影响）。 */
+export const renameNavidromeArtist = (artistId: string, name: string): void => {
+    artistNames.set(artistId, name);
+};
+
+/**
+ * 按住某个端点的应答：应答在请求那一刻就按当时的上游数据生成，按住期间排队，放行时可以只放最新的一个
+ * （制造「后发的请求先回来、先发的晚到」），或者全部放行。
+ */
+const heldEndpoints = new Map<string, Array<() => void>>();
+
+export const holdNavidromeEndpoint = (endpoint: string): void => {
+    if (!heldEndpoints.has(endpoint)) heldEndpoints.set(endpoint, []);
+};
+
+/** 放行：'newest' 只放最后一个排队的应答（仍然按住），'all' 全部放行并解除按住。返回放行的个数。 */
+export const releaseNavidromeEndpoint = (endpoint: string, which: 'newest' | 'all' = 'all'): number => {
+    const queue = heldEndpoints.get(endpoint);
+    if (!queue) return 0;
+    if (which === 'newest') {
+        const next = queue.pop();
+        next?.();
+        return next ? 1 : 0;
+    }
+    heldEndpoints.delete(endpoint);
+    queue.forEach(resolve => resolve());
+    return queue.length;
+};
+
+/** 某个端点此刻排队等放行的应答数。 */
+export const heldNavidromeResponses = (endpoint: string): number => heldEndpoints.get(endpoint)?.length ?? 0;
+
+const resetArtists = () => {
+    artistNames = new Map(NAVIDROME_HOME_ARTISTS.map(artist => [artist.id, artist.name]));
+    [...heldEndpoints.keys()].forEach(endpoint => releaseNavidromeEndpoint(endpoint, 'all'));
+};
 
 const resetPlaylists = () => {
     playlists = new Map([
@@ -127,17 +177,37 @@ const handle = (url: URL): Response => {
     const overview = handleOverview(endpoint, url);
     if (overview) return overview;
 
-    if (endpoint === 'getAlbum' && id === NAVIDROME_ALBUM_ID) {
+    if (endpoint === 'getAlbum' && id && NAVIDROME_ALBUM_TRACKS[id]) {
+        const album = NAVIDROME_HOME_ALBUMS.find(candidate => candidate.id === id);
+        const owner = artistOfAlbum(id);
+        const name = album?.name ?? id;
         return respond({
             album: {
-                id: NAVIDROME_ALBUM_ID,
-                name: 'Navi Album',
-                artist: 'Navi Artist',
-                artistId: 'navi-ar-1',
-                songCount: NAVIDROME_ALBUM_SONGS.length,
+                id,
+                name,
+                artist: owner.name,
+                artistId: owner.id,
+                songCount: NAVIDROME_ALBUM_TRACKS[id].length,
                 duration: 1200,
                 created: '2026-01-01T00:00:00Z',
-                song: NAVIDROME_ALBUM_SONGS.map((songId, index) => makeSubsonicSong(songId, index, 'Navi Album', NAVIDROME_ALBUM_ID)),
+                song: NAVIDROME_ALBUM_TRACKS[id].map((songId, index) => makeSubsonicSong(songId, index, name, id, owner)),
+            },
+        });
+    }
+    if (endpoint === 'getArtist' && id && NAVIDROME_ARTIST_ALBUMS[id]) {
+        const owner = { id, name: artistNames.get(id) ?? id };
+        return respond({
+            artist: {
+                id,
+                name: owner.name,
+                albumCount: NAVIDROME_ARTIST_ALBUMS[id].length,
+                album: albumsById(NAVIDROME_ARTIST_ALBUMS[id]).map(album => ({
+                    ...album,
+                    artist: owner.name,
+                    artistId: owner.id,
+                    // 不带 coverArt：封面 URL 会让 <img> 绕过 fetch 垫片直接上网，探针保持封闭。
+                    year: 2020,
+                })),
             },
         });
     }
@@ -178,11 +248,16 @@ const handle = (url: URL): Response => {
 /** 安装垫片，返回卸载函数。 */
 export const installNavidromeShim = (): (() => void) => {
     resetPlaylists();
+    resetArtists();
     const originalFetch = window.fetch;
     window.fetch = async (input, init) => {
         const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
         if (raw.startsWith(`${NAVIDROME_PROBE_SERVER}/rest/`)) {
-            return handle(new URL(raw));
+            const url = new URL(raw);
+            const response = handle(url);
+            const queue = heldEndpoints.get(url.pathname.replace('/rest/', ''));
+            if (queue) await new Promise<void>(resolve => queue.push(resolve));
+            return response;
         }
         return originalFetch(input, init);
     };

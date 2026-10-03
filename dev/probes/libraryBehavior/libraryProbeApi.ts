@@ -9,19 +9,31 @@ import { collectionKey } from '../../../src/library/core/model/collectionIdentit
 import type { LibraryProbeApi } from './probeApi';
 import { clearProbeCalls, clearProbeRequests, getProbeLog } from './probeLog';
 import {
+    addProbeFault,
+    clearProbeFaults,
     holdProbeMutations,
     holdProbePaging,
+    onlineArtistFixtureTarget,
     onlineFixtureTarget,
     releaseProbeMutations,
     releaseProbePaging,
+    setProbeLatency,
 } from './fakeProviders';
 import { probeRefreshGate } from './probeGates';
+import {
+    heldNavidromeResponses,
+    holdNavidromeEndpoint,
+    releaseNavidromeEndpoint,
+    renameNavidromeArtist,
+} from './navidromeShim';
+import { seedProbeQueue } from './probeSurfaceCallbacks';
+import { openArtistAlbum, openArtistPanel, readArtistView } from './artistProbeView';
 
 // dev/probes/libraryBehavior/libraryProbeApi.ts
 // 把探针的驱动接口挂到 window 上。查询、动作都经由真实的注册点（命令筛选、grid surface），
 // 用的是命令面板同一条通道，所以它测到的就是命令面板能做到的事。
 
-type HarnessBindings = Pick<LibraryProbeApi, 'sandbox' | 'fixtures' | 'ready' | 'open' | 'back' | 'pushArtist'>;
+type HarnessBindings = Pick<LibraryProbeApi, 'sandbox' | 'fixtures' | 'ready' | 'open' | 'back' | 'pushArtist' | 'openArtist' | 'refreshLocal'>;
 
 const setSuite = (suite: LibrarySuiteId) => {
     const stack = useCollectionNavigationStore.getState().snapshot?.stack ?? [];
@@ -63,6 +75,28 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
         releaseRefresh: kind => probeRefreshGate(kind).release(),
         holdMutations: holdProbeMutations,
         releaseMutations: releaseProbeMutations,
+        stackDescriptors: () => (useCollectionNavigationStore.getState().snapshot?.stack ?? []).map(collection => ({
+            source: collection.source,
+            ...(collection.source === 'online' ? { providerId: collection.providerId } : {}),
+            type: collection.type,
+            id: String(collection.id),
+            name: collection.name,
+            ...(collection.source === 'local' && collection.entityId ? { entityId: collection.entityId } : {}),
+        })),
+        artist: readArtistView,
+        openArtistAlbum,
+        openArtistPanel,
+        artistTarget: onlineArtistFixtureTarget,
+        addFault: addProbeFault,
+        clearFaults: clearProbeFaults,
+        setLatency: setProbeLatency,
+        holdPagesOf: holdProbePaging,
+        releasePagesOf: releaseProbePaging,
+        holdNavidrome: holdNavidromeEndpoint,
+        releaseNavidrome: releaseNavidromeEndpoint,
+        heldNavidrome: heldNavidromeResponses,
+        renameNavidromeArtist,
+        seedQueue: seedProbeQueue,
         calls: () => getProbeLog().calls,
         requests: () => getProbeLog().requests,
         clearLog: () => {

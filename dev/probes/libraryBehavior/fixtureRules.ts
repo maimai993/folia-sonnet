@@ -247,3 +247,90 @@ export const NAVIDROME_HOME_ARTISTS = [
 ] as const;
 export const NAVIDROME_RANDOM_SONGS = ['navi-song-31', 'navi-song-32', 'navi-song-33'];
 export const NAVIDROME_STARRED_SONGS = ['navi-song-41', 'navi-song-42'];
+
+// ---- 歌手页（P4.0 起；artistBehavior 用例） ----
+// 在线歌手走 omni 的 getArtistDetail / getArtistSongs / getArtistAlbums（假 provider 的 catalog 上同名接口），
+// Navidrome 歌手走垫片的 getArtist / getAlbum，本地歌手就是本地 fixture 里的「Local Artist」实体。
+
+export type OnlineArtistFixtureId = 'artist-main' | 'artist-guest';
+export type ArtistFixtureId = OnlineArtistFixtureId | 'navi-artist' | 'navi-artist-2' | 'local-artist';
+
+export type OnlineArtistRule = {
+    providerId: string;
+    artistId: string;
+    name: string;
+    description: string;
+    /** data: URL：封面不出网（<img> 不经过任何垫片）。 */
+    coverUrl: string;
+    /** 热门歌曲：id = `${topSongPrefix}-${index}`，与 makeOnlineSong 同一条规则（index % 50 === 25 不可播放）。 */
+    topSongPrefix: string;
+    topSongIndexes: number[];
+    /** 专辑：id = `${albumPrefix}-${index}`，名字见 artistAlbumName。 */
+    albumPrefix: string;
+    albumCount: number;
+};
+
+const probeArtistCover = (fill: string): string => (
+    `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${fill}"/></svg>`)}`
+);
+
+/** omni 拉歌手专辑的页大小（ArtistGridView 写死 50）。 */
+export const ARTIST_ALBUM_PAGE_SIZE = 50;
+/** omni 拉热门歌曲的条数（ArtistGridView 写死 10）。 */
+export const ARTIST_TOP_SONG_LIMIT = 10;
+
+export const ONLINE_ARTISTS: Readonly<Record<OnlineArtistFixtureId, OnlineArtistRule>> = {
+    // 主歌手：10 首热门（20..29，其中 25 不可播放；21、28 带客座歌手 ar-2），130 张专辑 = 三页（0 / 50 / 100）。
+    'artist-main': {
+        providerId: PROBE_PROVIDER_A,
+        artistId: 'ar-1',
+        name: 'Probe Artist',
+        description: 'Probe Artist biography.',
+        coverUrl: probeArtistCover('#7c3aed'),
+        topSongPrefix: 'artop',
+        topSongIndexes: range(10, 20),
+        albumPrefix: 'ar1-al',
+        albumCount: 130,
+    },
+    // 客座歌手（曲目卡片上的歌手链接指向它）：3 首热门、4 张专辑（一页）。
+    'artist-guest': {
+        providerId: PROBE_PROVIDER_A,
+        artistId: 'ar-2',
+        name: 'Guest Singer',
+        description: 'Guest Singer biography.',
+        coverUrl: probeArtistCover('#0891b2'),
+        topSongPrefix: 'gtop',
+        topSongIndexes: range(3),
+        albumPrefix: 'ar2-al',
+        albumCount: 4,
+    },
+};
+
+export const artistAlbumId = (prefix: string, index: number): string => `${prefix}-${index}`;
+export const artistAlbumName = (index: number): string => `Artist Album ${index} ${PROBE_WORDS[index % PROBE_WORDS.length]}`;
+export const artistAlbumIds = (rule: OnlineArtistRule): string[] => (
+    range(rule.albumCount).map(index => artistAlbumId(rule.albumPrefix, index))
+);
+/** 按专辑名筛选（ArtistGridView 只筛专辑名，大小写不敏感）之后剩下的专辑 id。 */
+export const artistAlbumIdsMatching = (rule: OnlineArtistRule, query: string): string[] => {
+    const needle = query.trim().toLowerCase();
+    return range(rule.albumCount)
+        .filter(index => artistAlbumName(index).toLowerCase().includes(needle))
+        .map(index => artistAlbumId(rule.albumPrefix, index));
+};
+/** 歌手页在请求账里的 target（详情、热门歌曲、专辑三种请求共用）。 */
+export const onlineArtistTarget = (rule: OnlineArtistRule): string => `${rule.providerId}:artist:${rule.artistId}`;
+
+/** Navidrome 歌手 → 专辑（服务器顺序）；专辑 → 曲目。歌手页取前 5 张专辑的曲目，前 10 首当热门歌曲。 */
+export const NAVIDROME_ARTIST_ALBUMS: Readonly<Record<string, string[]>> = {
+    'navi-ar-1': [NAVIDROME_ALBUM_ID, 'navi-al-3'],
+    'navi-ar-2': ['navi-al-4'],
+};
+export const NAVIDROME_ALBUM_TRACKS: Readonly<Record<string, string[]>> = {
+    [NAVIDROME_ALBUM_ID]: NAVIDROME_ALBUM_SONGS,
+    'navi-al-3': range(4, 51).map(index => `navi-song-${index}`),
+    'navi-al-4': range(2, 61).map(index => `navi-song-${index}`),
+};
+/** 本地歌手：本地 fixture 的每首歌都是这个歌手，分在两张专辑里。 */
+export const LOCAL_ARTIST_NAME = 'Local Artist';
+export const LOCAL_ALBUM_NAMES = ['Alpha Album', 'Beta Album'] as const;

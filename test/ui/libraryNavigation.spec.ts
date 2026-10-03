@@ -1,0 +1,194 @@
+import { expect, test, type Page } from '@playwright/test';
+import { installBaseState, localImportFixture, mockNeteaseApi, openApp } from './helpers/appFixtures';
+import { waitForAppMounted } from '../helpers/appState';
+
+// test/ui/libraryNavigation.spec.ts
+// 真实应用里集合的入口与返回（P4.0 基线）：搜索结果、播放器面板的封面页、集合里嵌套打开，以及浏览器后退与刷新。
+// 行为探针只挂宿主，覆盖不到这一层——真实的 useAppNavigation（history state、hash）、搜索 / 播放器来源的返回落点。
+//
+// 数据是导入的本地曲库（一首「Test Artist - Midnight Train」，专辑「Fixture Album」）：不出网，歌手 / 专辑都有本地实体。
+// 「完成」语义（返回按钮 vs Escape vs 浏览器后退清不清会话）在 P4.5 才统一，这里只钉返回落点。
+
+const collectionLayer = (page: Page) => page.locator('[data-library-renderer]');
+const grid = (page: Page) => page.locator('[data-library-renderer="grid"]');
+const tui = (page: Page) => page.locator('[data-library-renderer="tui"]');
+const gridBack = (page: Page) => grid(page).locator('button').filter({ has: page.locator('svg.lucide-chevron-left') }).first();
+const historyState = (page: Page) => page.evaluate(() => ({
+    hash: window.location.hash,
+    view: (window.history.state as { view?: string } | null)?.view ?? null,
+    stack: ((window.history.state as { collection?: { stack: Array<{ name: string }> } | null } | null)?.collection?.stack ?? [])
+        .map(entry => entry.name),
+    origin: (window.history.state as { collection?: { origin?: string } | null } | null)?.collection?.origin ?? null,
+}));
+const searchResult = (page: Page) => page.getByRole('button', { name: 'Play track' });
+
+/** 导入本地曲库，停在网格首页的本地页签上。 */
+const openLocalHome = async (page: Page) => {
+    await installBaseState(page, { neteaseMode: 'guest', localImportFixture });
+    await mockNeteaseApi(page, 'guest');
+    await openApp(page);
+    await page.getByRole('button', { name: 'Folder' }).last().click();
+    await page.getByRole('button', { name: 'Import Folder' }).last().click();
+    await expect(page.getByText('All Songs').first()).toBeVisible();
+};
+
+/**
+ * 在本地页签的搜索框里搜。导入之后曲库的实体目录要晚一拍才就绪，那之前的结果不带实体（歌手 / 专辑链接是灰的），
+ * 所以搜到链接可点为止（重复提交是 replace，不会多压历史）。
+ */
+const searchLocal = async (page: Page, query: string) => {
+    const input = page.getByPlaceholder('Search local songs...');
+    await input.fill(query);
+    await expect.poll(async () => {
+        if (await searchResult(page).count() === 0) {
+            await input.press('Enter');
+        } else {
+            await page.keyboard.press('Enter');
+        }
+        await page.waitForTimeout(300);
+        return page.getByRole('button', { name: 'Fixture Album' }).isEnabled().catch(() => false);
+    }, { timeout: 15_000 }).toBe(true);
+    expect(await historyState(page)).toMatchObject({ hash: `#search/${query}`, view: 'home', stack: [] });
+};
+
+/** 搜索页还在、结果还在：返回落回的就是离开时的那一页。 */
+const expectSearchResults = async (page: Page, query: string) => {
+    await expect(collectionLayer(page)).toHaveCount(0);
+    await expect(page.getByPlaceholder('Search songs...')).toHaveValue(query);
+    await expect(searchResult(page)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Test Artist' })).toBeEnabled();
+    expect(await historyState(page)).toMatchObject({ hash: `#search/${query}`, view: 'home', stack: [] });
+};
+
+test.describe('search results', () => {
+    test('[grid] an album opens as a collection, and Back returns to the search with its results', async ({ page }) => {
+        await openLocalHome(page);
+        await searchLocal(page, 'Midnight');
+
+        await page.getByRole('button', { name: 'Fixture Album' }).click();
+        await expect(grid(page)).toHaveCount(1);
+        await expect(grid(page)).toHaveAttribute('data-library-surface', 'collection');
+        await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+        expect(await historyState(page)).toMatchObject({ view: 'home', stack: ['Fixture Album'], origin: 'search' });
+        expect((await historyState(page)).hash).toMatch(/^#collection\/local\/album\//);
+
+        await gridBack(page).click();
+        await expectSearchResults(page, 'Midnight');
+    });
+
+    test('[grid] an artist opens the artist page, and Back returns to the search with its results', async ({ page }) => {
+        await openLocalHome(page);
+        await searchLocal(page, 'Midnight');
+
+        await page.getByRole('button', { name: 'Test Artist' }).click();
+        await expect(grid(page)).toHaveAttribute('data-library-surface', 'artist');
+        await expect(grid(page).getByRole('heading', { name: 'Test Artist' })).toBeVisible();
+        expect(await historyState(page)).toMatchObject({ view: 'home', stack: ['Test Artist'], origin: 'search' });
+
+        await gridBack(page).click();
+        await expectSearchResults(page, 'Midnight');
+    });
+
+    test('[tui] with the TUI selected an album opens in the TUI, and Back returns to the search', async ({ page }) => {
+        await openLocalHome(page);
+        await searchLocal(page, 'Midnight');
+        await selectSuite(page, 'tui');
+
+        await page.getByRole('button', { name: 'Fixture Album' }).click();
+        await expect(tui(page)).toHaveCount(1);
+        await expect(tui(page).locator('[data-tui-title]')).toHaveText('Fixture Album');
+        await expect(tui(page).locator('[data-tui-row="0"]')).toContainText('Midnight Train');
+
+        await tui(page).locator('[data-tui-back]').click();
+        await expectSearchResults(page, 'Midnight');
+    });
+
+    test('[tui] with the TUI selected an artist still opens the grid artist page, and Back returns to the search', async ({ page }) => {
+        await openLocalHome(page);
+        await searchLocal(page, 'Midnight');
+        await selectSuite(page, 'tui');
+
+        await page.getByRole('button', { name: 'Test Artist' }).click();
+        await expect(grid(page)).toHaveAttribute('data-library-surface', 'artist');
+        await gridBack(page).click();
+        await expectSearchResults(page, 'Midnight');
+    });
+});
+
+test('the player panel Cover tab opens the album, and Back returns to the player', async ({ page }) => {
+    await openLocalHome(page);
+    await searchLocal(page, 'Midnight');
+    await searchResult(page).click();
+    await expect.poll(async () => (await historyState(page)).view).toBe('player');
+    await expect(page.getByTestId('panel-toggle')).toBeVisible();
+
+    await page.getByTestId('panel-toggle').locator('button').last().click();
+    // 封面页是面板的默认页：歌名下面是歌手与专辑，点专辑名打开它。
+    await page.getByText('Fixture Album', { exact: true }).last().click();
+    await expect(grid(page)).toHaveAttribute('data-library-surface', 'collection');
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+    expect(await historyState(page)).toMatchObject({ view: 'home', stack: ['Fixture Album'], origin: 'player' });
+
+    await gridBack(page).click();
+    await expect(collectionLayer(page)).toHaveCount(0);
+    await expect.poll(async () => (await historyState(page)).view).toBe('player');
+    expect(await historyState(page)).toMatchObject({ hash: '#player', stack: [] });
+    await expect(page.getByTestId('panel-toggle')).toBeVisible();
+});
+
+test('a nested album pops one level on browser back, and the next back leaves the collection', async ({ page }) => {
+    await openLocalHome(page);
+    await page.getByRole('heading', { name: 'All Songs' }).first().click();
+    await expect(grid(page)).toHaveCount(1);
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+    expect(await historyState(page)).toMatchObject({ view: 'home', stack: ['All Songs'], origin: 'home' });
+
+    // 曲目卡片上的专辑名：在集合里嵌套压入这张专辑。
+    await grid(page).getByText('Fixture Album', { exact: true }).first().dispatchEvent('click');
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Fixture Album']);
+    await expect(grid(page)).toHaveCount(1);
+
+    await page.goBack();
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs']);
+    await expect(grid(page)).toHaveCount(1);
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+
+    await page.goBack();
+    await expect(collectionLayer(page)).toHaveCount(0);
+    expect(await historyState(page)).toMatchObject({ view: 'home', stack: [] });
+    await expect(page.getByText('All Songs').first()).toBeVisible();
+});
+
+// 刷新后不恢复打开的集合：P4 决定维持现状（非目标），这里把它钉住，改变它要有意为之。
+test('reloading with a collection open lands on the home without it', async ({ page }) => {
+    await openLocalHome(page);
+    await page.getByRole('heading', { name: 'All Songs' }).first().click();
+    await expect(grid(page)).toHaveCount(1);
+    expect((await historyState(page)).hash).toMatch(/^#collection\/local\//);
+
+    await page.reload();
+    await waitForAppMounted(page);
+    // installBaseState 的初始化脚本在刷新时会再跑一次（localStorage 回到「歌单」页签），导入的曲库在 IndexedDB 里还在。
+    await expect(page.getByRole('button', { name: 'Folder' }).last()).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(collectionLayer(page)).toHaveCount(0);
+    expect(await historyState(page)).toMatchObject({ view: 'home', stack: [] });
+    expect((await historyState(page)).hash).not.toMatch(/^#collection/);
+});
+
+/**
+ * 切换 suite。搜索页盖住了开发版浮层（浮层在首页之上、搜索页之下），所以直接调浮层按钮背后的同一个函数
+ * （switchLibrarySuite：先冲刷会话、清网格转场，再写 suite store）。
+ */
+async function selectSuite(page: Page, suite: 'grid' | 'tui') {
+    await page.evaluate(async id => {
+        const modulePath = '/src/library/app/switchLibrarySuite.ts';
+        const { switchLibrarySuite } = await import(/* @vite-ignore */ modulePath);
+        switchLibrarySuite('home', id);
+    }, suite);
+    await expect.poll(() => page.evaluate(async () => {
+        const modulePath = '/src/library/core/state/useLibrarySuiteStore.ts';
+        const { useLibrarySuiteStore } = await import(/* @vite-ignore */ modulePath);
+        return useLibrarySuiteStore.getState().suite as string;
+    })).toBe(suite);
+}

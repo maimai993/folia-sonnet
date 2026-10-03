@@ -23,6 +23,8 @@ export type ProbeCallKind =
     | 'refreshUser'
     | 'refreshLocalSongs'
     | 'statusMessage'
+    // 全局 toast 通道（useStatusMessageStore）上出现的每一条：歌手页的入队提示、假队列自己的提示都走它。
+    | 'toast'
     // 以下几种只有首页探针会记：打开集合（宿主收到的描述）、经由探针替身的服务调用、搜索提交。
     | 'openCollection'
     | 'service'
@@ -39,6 +41,9 @@ export type ProbeCall = {
     /** statusMessage 的类型（success / info / error）；playSong 是否来自私人 FM。 */
     status?: string;
     isFm?: boolean;
+    /** addAllToQueue：调用方要求静默（不弹队列自己的 toast）；假队列实际收下的条数。 */
+    suppressToast?: boolean;
+    accepted?: number;
     /** openCollection：集合身份键；service：服务名。 */
     key?: string;
     /** openCollection 的描述摘要、service 的参数（都可 JSON 序列化）。 */

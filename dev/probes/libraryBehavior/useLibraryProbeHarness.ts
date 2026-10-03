@@ -27,9 +27,12 @@ import {
     NAVIDROME_DUPES_PLAYLIST_SONGS,
     NAVIDROME_PLAYLIST_ID,
     NAVIDROME_PLAYLIST_SONGS,
+    NAVIDROME_HOME_ARTISTS,
+    ONLINE_ARTISTS,
     ONLINE_FIXTURES,
     PROBE_PROVIDER_A,
     PROBE_PROVIDER_B,
+    type ArtistFixtureId,
     type OnlineFixtureId,
     type ProbeFixtureId,
 } from './fixtureRules';
@@ -37,7 +40,8 @@ import { describeOnlineFixture, registerFakeProviders, resetFakeProviders } from
 import { IN_MEMORY_LOCAL_PLAYLIST, LOCAL_FIXTURE_SONGS, readLocalLibrary, seedLocalLibrary } from './localFixtures';
 import { installNavidromeShim, NAVIDROME_PROBE_CONFIG } from './navidromeShim';
 import { recordProbeCall } from './probeLog';
-import { PROBE_SURFACE_CALLBACKS } from './probeSurfaceCallbacks';
+import { PROBE_SURFACE_CALLBACKS, resetProbeQueue } from './probeSurfaceCallbacks';
+import { useStatusMessageStore } from '../../../src/stores/useStatusMessageStore';
 import { probeRefreshGate, releaseAllProbeRefreshGates } from './probeGates';
 import { installLibraryProbeApi } from './libraryProbeApi';
 
@@ -118,7 +122,14 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
     useEffect(() => {
         registerFakeProviders();
         resetFakeProviders();
+        resetProbeQueue();
         releaseAllProbeRefreshGates();
+        // 全局 toast 通道上的每一条都记账（歌手页的入队提示走它，不经过 onStatusMessage）。
+        useStatusMessageStore.getState().setMessage(null);
+        const unsubscribeToasts = useStatusMessageStore.subscribe((state, previous) => {
+            if (!state.message || state.message === previous.message) return;
+            recordProbeCall({ kind: 'toast', ids: [], text: state.message.text, status: state.message.type });
+        });
         setPlaylists(buildPlaylistList());
         const previousProviderId = useOnlineProviderAccountStore.getState().activeProviderId;
         // 直接 setState，不走 setActiveProviderId：后者会写 localStorage，手动打开探针会改掉开发者自己的选择。
@@ -146,6 +157,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
 
         return () => {
             cancelled = true;
+            unsubscribeToasts();
             uninstallShim?.();
             if (sandbox) {
                 if (previousNavidromeConfig === null) localStorage.removeItem(NAVIDROME_CONFIG_KEY);
@@ -262,8 +274,29 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         return true;
     }, [localLibraryCatalog, localPlaylists, localSongs, onPushCollection, sandbox, t]);
 
-    const latestRef = useRef({ open, ready, pushArtist });
-    latestRef.current = { open, ready, pushArtist };
+    // 以根层打开一个歌手页。在线用搜索结果同款的描述（createSearchArtistCollection 解析出的形状），
+    // Navidrome 与本地用首页同款（本地走 Grid3D 的歌手分组）。
+    const openArtist = useCallback((fixtureId: ArtistFixtureId): boolean => {
+        if (fixtureId === 'artist-main' || fixtureId === 'artist-guest') {
+            const rule = ONLINE_ARTISTS[fixtureId];
+            onOpenCollection({ source: 'online', providerId: rule.providerId, id: rule.artistId, name: rule.name, type: 'artist' });
+            return true;
+        }
+        if (!sandbox) return false;
+        if (fixtureId === 'navi-artist' || fixtureId === 'navi-artist-2') {
+            const artist = NAVIDROME_HOME_ARTISTS[fixtureId === 'navi-artist' ? 0 : 1];
+            onOpenCollection({ source: 'navidrome', id: artist.id, name: artist.name, type: 'artist' });
+            return true;
+        }
+        const groups = buildLocalHomeGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined, getLocalCoverAssetUrl);
+        const artist = groups.artists.find(candidate => candidate.entityId);
+        if (!artist) return false;
+        onOpenCollection(createLocalGridViewCollection(artist));
+        return true;
+    }, [localLibraryCatalog, localPlaylists, localSongs, onOpenCollection, sandbox, t]);
+
+    const latestRef = useRef({ open, ready, pushArtist, openArtist, refreshLocal });
+    latestRef.current = { open, ready, pushArtist, openArtist, refreshLocal };
     useEffect(() => installLibraryProbeApi({
         sandbox,
         fixtures: () => ALL_FIXTURES,
@@ -271,6 +304,8 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         open: fixtureId => latestRef.current.open(fixtureId),
         back: popNavigation,
         pushArtist: () => latestRef.current.pushArtist(),
+        openArtist: fixtureId => latestRef.current.openArtist(fixtureId),
+        refreshLocal: () => latestRef.current.refreshLocal(),
     }), [sandbox]);
 
     return {
