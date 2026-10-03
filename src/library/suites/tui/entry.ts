@@ -2,18 +2,19 @@ import React from 'react';
 import type { LibrarySuiteManifest } from '../../core/contracts/suite';
 
 // src/library/suites/tui/entry.ts
-// 终端风格的列表 suite（开发版专用的 PoC）。实现集合与首页两个 surface；歌手页回退到网格。
+// 终端风格的列表 suite（开发版专用的 PoC）。实现首页、集合与歌手页三个 surface（P4.3 起歌手页不再回退网格）。
 // 生产构建里 import.meta.env.DEV 是常量 false：组件那一行连同动态 import 一起被摇掉，不会产出 TUI 的 chunk，
 // registry 也因为 available: false 把它当作不存在（浮层不出现、选不到）。
 
 const LibraryTuiView = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiView')) : null;
 const LibraryTuiHome = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiHome')) : null;
+const LibraryTuiArtist = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiArtist')) : null;
 
 const tui: LibrarySuiteManifest = {
     id: 'tui',
     labelKey: 'libraryTui.rendererTui',
     available: import.meta.env.DEV,
-    surfaces: LibraryTuiView && LibraryTuiHome
+    surfaces: LibraryTuiView && LibraryTuiHome && LibraryTuiArtist
         ? {
             home: {
                 component: LibraryTuiHome,
@@ -67,6 +68,25 @@ const tui: LibrarySuiteManifest = {
                     'organize-song-info',
                     'match-song',
                     'daily-date',
+                ],
+            },
+            artist: {
+                component: LibraryTuiArtist,
+                // 歌手页（LibraryTuiArtist）：Enter 播放焦点热门歌曲（以可播放的热门歌曲为队列）、Shift+Enter 入队，
+                // Ctrl+Enter 播放全部、Ctrl+Shift+Enter 加入热门歌曲（状态栏也有按钮，提示报队列实际收下的条数）；
+                // 命令面板筛选专辑；状态栏的重新加载与「重试」（加载失败从头、专辑分页失败从失败处续）；本地歌手的编辑
+                // （宿主的实体对话框）；Enter / 双击打开专辑，歌曲行上的歌手 / 专辑链接打开嵌套的歌手页 / 专辑。
+                actions: [
+                    'play',
+                    'enqueue',
+                    'play-scope',
+                    'enqueue-scope',
+                    'filter',
+                    'reload',
+                    'resume-sync',
+                    'edit-entity',
+                    'open-album',
+                    'open-artist',
                 ],
             },
         }

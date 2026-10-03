@@ -4,7 +4,7 @@ import { Disc, Play, Plus, X } from 'lucide-react';
 import type { SongResult, UnifiedSong } from '../../../../types';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { canResolveSongCatalogRef } from '../../../../services/onlineMusic/catalogRefs';
-import { resolveGridTrackArtistTargetId } from './gridTrackNavigation';
+import { resolveTrackArtistTargetId } from '../../../core/model/trackLinks';
 
 // src/library/suites/grid/shared/polaroidCardParts.tsx
 // The pieces both PolaroidCard layouts share: the cover image with its spinner placeholder, the
@@ -134,7 +134,7 @@ export const PolaroidCardArtists: React.FC<{
     return (
         <span className="flex gap-1 flex-wrap">
             {item.rawTrack.artists.map((artist, idx, artists) => {
-                const artistTargetId = resolveGridTrackArtistTargetId(item.rawTrack, artist);
+                const artistTargetId = resolveTrackArtistTargetId(item.rawTrack, artist);
                 const canOpenArtist = Boolean(
                     artistTargetId !== undefined
                     && artistTargetId !== ''

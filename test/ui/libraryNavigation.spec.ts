@@ -103,14 +103,22 @@ test.describe('search results', () => {
         await expectSearchResults(page, 'Midnight');
     });
 
-    test('[tui] with the TUI selected an artist still opens the grid artist page, and Back returns to the search', async ({ page }) => {
+    // P4.3 起 TUI 自己渲染歌手页（以前回退到网格歌手页）。
+    test('[tui] with the TUI selected an artist opens the TUI artist page, and Back returns to the search', async ({ page }) => {
         await openLocalHome(page);
         await searchLocal(page, 'Midnight');
         await selectSuite(page, 'tui');
 
         await page.getByRole('button', { name: 'Test Artist' }).click();
-        await expect(grid(page)).toHaveAttribute('data-library-surface', 'artist');
-        await gridBack(page).click();
+        await expect(tui(page)).toHaveAttribute('data-library-surface', 'artist');
+        await expect(grid(page)).toHaveCount(0);
+        await expect(tui(page).locator('[data-tui-title]')).toHaveText('Test Artist');
+        await expect(tui(page).locator('[data-tui-artist-songs]')).toContainText('Midnight Train');
+        await expect(tui(page).locator('[data-tui-artist-albums]')).toContainText('Fixture Album');
+        expect(await historyState(page)).toMatchObject({ view: 'home', stack: ['Test Artist'], origin: 'search' });
+
+        // 真点返回：页头在桌面版自绘标题栏的拖拽区之下（根节点 pt-8），点得到。
+        await tui(page).locator('[data-tui-back]').click();
         await expectSearchResults(page, 'Midnight');
     });
 });

@@ -54,7 +54,17 @@ export default {
     "accountless": "{{provider}} 没有账户曲库，请用搜索找歌。",
     "createPlaylistPrompt": "新建歌单",
     "confirmRemoveSelection": "从本地曲库删除这 {{count}} 首歌？",
-    "confirmRemoveRoot": "从曲库移除导入目录「{{path}}」？"
+    "confirmRemoveRoot": "从曲库移除导入目录「{{path}}」？",
+    "artistSongsPane": "热门歌曲",
+    "artistAlbumsPane": "专辑",
+    "artistCounts": "{{songs}} 首热门 · {{albums}} 张专辑",
+    "artistAlbumsLoading": "专辑加载中…",
+    "artistAlbumsInterrupted": "专辑加载中断",
+    "artistEdit": "编辑",
+    "bioMore": "展开",
+    "bioLess": "收起",
+    "columnYear": "年份",
+    "artistHints": "↑↓ 移动 · Tab 歌曲/专辑 · Enter 播放/打开 · Shift+Enter 入队 · Ctrl+Enter 全部播放 · Ctrl+Shift+Enter 热门歌曲入队 · Esc 返回"
   },
   "notifications": {
     "coverColorAdded": "添加封面色彩",

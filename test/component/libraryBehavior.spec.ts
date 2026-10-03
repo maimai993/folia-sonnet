@@ -994,16 +994,18 @@ test.describe('suites', () => {
         expect(await page.evaluate(() => window.__libraryProbe!.suite())).toBe('tui');
     });
 
-    test('[tui] an artist page falls back to the grid, and going back returns to the TUI', async ({ mount, page }) => {
+    // P4.3 起 TUI 自己渲染歌手页（回退规则本身由 test/unit/library/registry.test.ts 用一套没有歌手页的假 suite 守着）。
+    test('[tui] the TUI renders the artist page itself, and going back returns to the TUI collection', async ({ mount, page }) => {
         await mountProbe(mount, page, 'tui');
         await open(page, 'local-all');
         await waitForRenderer(page, 'tui');
         await waitForScope(page, 8);
-        expect(await page.evaluate(() => window.__libraryProbe!.resolveSurface('artist'))).toMatchObject({ suiteId: 'grid', isFallback: true });
+        expect(await page.evaluate(() => window.__libraryProbe!.resolveSurface('artist'))).toMatchObject({ suiteId: 'tui', isFallback: false });
 
         expect(await page.evaluate(() => window.__libraryProbe!.pushArtist())).toBe(true);
-        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="grid"]')).toHaveCount(1);
-        await expect(page.locator('[data-library-renderer="tui"]')).toHaveCount(0);
+        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="tui"]')).toHaveCount(1);
+        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="grid"]')).toHaveCount(0);
+        await expect(page.locator('[data-library-surface="collection"]')).toHaveCount(0);
         expect(await page.evaluate(() => window.__libraryProbe!.suite())).toBe('tui');
 
         await back(page);

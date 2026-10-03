@@ -54,7 +54,17 @@ export default {
     "accountless": "{{provider}} tidak punya pustaka akun. Gunakan pencarian untuk mencari musik.",
     "createPlaylistPrompt": "playlist baru",
     "confirmRemoveSelection": "Hapus {{count}} lagu dari pustaka lokal?",
-    "confirmRemoveRoot": "Hapus folder impor “{{path}}” dari pustaka?"
+    "confirmRemoveRoot": "Hapus folder impor “{{path}}” dari pustaka?",
+    "artistSongsPane": "lagu populer",
+    "artistAlbumsPane": "album",
+    "artistCounts": "{{songs}} lagu populer · {{albums}} album",
+    "artistAlbumsLoading": "memuat album…",
+    "artistAlbumsInterrupted": "pemuatan album terhenti",
+    "artistEdit": "edit",
+    "bioMore": "lebih",
+    "bioLess": "ringkas",
+    "columnYear": "Tahun",
+    "artistHints": "↑↓ pindah · Tab lagu/album · Enter putar/buka · Shift+Enter antrekan · Ctrl+Enter putar semua · Ctrl+Shift+Enter antrekan lagu populer · Esc kembali"
   },
   "notifications": {
     "coverColorAdded": "Warna sampul ditambahkan",

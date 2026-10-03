@@ -90,12 +90,16 @@ export type LibraryProbeApi = {
     stackDescriptors: () => ProbeDescriptor[];
     /** 当前在场歌手页的语义视图；没有歌手页时为 null。 */
     artist: () => ProbeArtistView | null;
-    /** 从歌手页的专辑侧栏打开一张专辑（与点那一行同一个回调）。 */
+    /** 打开歌手页上的一张专辑（网格：专辑侧栏那一行的回调；TUI：双击那一行）。 */
     openArtistAlbum: (albumId: string) => boolean;
     /** 打开歌手页的专辑侧栏 / 信息面板。 */
     openArtistPanel: (panel: 'side' | 'cut-in') => boolean;
     /** 让在场歌手页的资源从头重新加载（错误态「重试」的同一入口）；没有歌手页时返回 false。 */
     reloadArtist: () => boolean;
+    /** 在场歌手页在浏览会话里的语义焦点（条目键 song:… / album:…）；没有歌手页时为 null。 */
+    artistFocus: () => string | null;
+    /** 网格歌手页此刻聚焦的卡的条目键（头像 / 简介卡或不是网格时为 null）。 */
+    artistGridFocus: () => string | null;
     /** 当前注册的歌手页命令面板 surface 的状态（P4.2）；没有时为 null。 */
     artistSurface: () => LibraryArtistSurfaceState | null;
     /** 经由当前注册的歌手页 surface 执行动作（命令面板同一条通道）；不可用时返回 false。 */

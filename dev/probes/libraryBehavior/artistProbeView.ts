@@ -3,7 +3,9 @@ import { SidePanelList } from '../../../src/components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../src/components/shared/GridListSearchButton';
 import { listLibrarySuites, resolveLibrarySurface } from '../../../src/library/registry';
 import { getLibraryBrowseSession } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
-import { artistSessionKey } from '../../../src/library/core/model/artistSurface';
+import { artistAlbumEntryKey, artistSessionKey, artistSongEntryKey } from '../../../src/library/core/model/artistSurface';
+import { PolaroidCard } from '../../../src/library/suites/grid/shared/PolaroidCard';
+import type { SongResult } from '../../../src/types';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 import { isSongUnavailable } from '../../../src/services/onlineMusic/songAvailability';
 import type { LibraryArtistResource, LibraryArtistSnapshot } from '../../../src/library/core/contracts/artist';
@@ -104,11 +106,31 @@ type SidePanelProps = {
     renderItem: (item: GridItemLike, index: number, style: Record<string, unknown>) => { props: { onClick?: () => void } };
 };
 
-/** 从专辑侧栏打开一张专辑（与点侧栏那一行同一个回调：先把相机挪过去，320ms 后压栈）。 */
+/**
+ * 打开歌手页上的一张专辑。网格：与点专辑侧栏那一行同一个回调（先把相机挪过去，320ms 后压栈）。TUI：双击那一行
+ * （专辑列表是窗口化的，行不在 DOM 里时退回 surface 收到的 onOpenAlbum，链接提示用 core 的 artistAlbumLink——
+ * 与 TUI 自己打开专辑时交给宿主的同一份）。
+ */
 export const openArtistAlbum = (albumId: string): boolean => {
     const fiber = artistFiber();
+    if (!fiber) return false;
     const panel = propsOf<SidePanelProps>(findPresentComponent(SidePanelList, fiber));
-    if (!panel) return false;
+    if (!panel) {
+        const row = firstHostElement(fiber)?.querySelector<HTMLElement>(`[data-library-entry="${CSS.escape(artistAlbumEntryKey({ id: albumId }))}"]`);
+        if (row) {
+            row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+            return true;
+        }
+        const props = propsOf<ArtistViewProps & { onOpenAlbum?: (id: string | number, album?: unknown) => void }>(fiber);
+        const album = props?.resource?.getSnapshot().albums.find(candidate => String(candidate.id) === albumId);
+        if (!album || !props?.collection || !props.onOpenAlbum) return false;
+        const link = artistAlbumLink(album, {
+            source: props.collection.source,
+            providerId: props.collection.source === 'online' ? props.collection.providerId : undefined,
+        });
+        props.onOpenAlbum(link.id, link);
+        return true;
+    }
     const index = panel.items.findIndex(item => String(item.rawCollection?.id ?? item.id) === albumId);
     if (index < 0) return false;
     const row = panel.renderItem(panel.items[index], index, {});
@@ -117,7 +139,25 @@ export const openArtistAlbum = (albumId: string): boolean => {
     return true;
 };
 
-/** 打开歌手页的专辑侧栏或信息面板（侧栏按钮的回调；标题是一个可点的按钮）。 */
+/** 浏览会话里在场歌手页的语义焦点（条目键 song:… / album:…）；没有歌手页时为 null。 */
+export const readArtistFocus = (): string | null => {
+    const props = propsOf<ArtistViewProps>(artistFiber());
+    if (!props?.collection) return null;
+    return getLibraryBrowseSession(artistSessionKey(props.collection, props.resource)).focusedEntryKey;
+};
+
+/** 网格歌手页此刻聚焦的那张卡的条目键（头像 / 简介卡或不是网格时为 null）。 */
+export const readArtistGridFocus = (): string | null => {
+    const focused = findPresentComponents(PolaroidCard, artistFiber())
+        .map(card => propsOf<{ isFocused?: boolean; item?: { rawTrack?: SongResult; rawCollection?: { id: string | number } } }>(card))
+        .find(props => props?.isFocused);
+    if (!focused?.item) return null;
+    if (focused.item.rawTrack) return artistSongEntryKey(focused.item.rawTrack);
+    if (focused.item.rawCollection) return artistAlbumEntryKey(focused.item.rawCollection);
+    return null;
+};
+
+/** 打开网格歌手页的专辑侧栏或信息面板（侧栏按钮的回调；标题是一个可点的按钮）；TUI 没有这两个面板，返回 false。 */
 export const openArtistPanel = (panel: 'side' | 'cut-in'): boolean => {
     const fiber = artistFiber();
     if (!fiber) return false;

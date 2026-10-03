@@ -3,7 +3,7 @@ import { Pencil } from 'lucide-react';
 import type { SongResult, Theme, UnifiedSong } from '../../../../types';
 import { getSongUnavailableLabel, isSongUnavailable } from '../../../../services/onlineMusic/songAvailability';
 import { canResolveSongCatalogRef } from '../../../../services/onlineMusic/catalogRefs';
-import { resolveGridTrackAlbumTargetId } from './gridTrackNavigation';
+import { resolveTrackAlbumTargetId } from '../../../core/model/trackLinks';
 import { CARD_TITLE_ATTR } from '../transitions/gridMorphContract';
 import {
     formatCardDuration,
@@ -79,7 +79,7 @@ export const PolaroidCard = React.memo<PolaroidCardProps>(
             ? getSongUnavailableLabel(item.rawTrack, t('status.songUnavailableTag'))
             : '';
         const trackAlbum = item.rawTrack?.album;
-        const albumTargetId = resolveGridTrackAlbumTargetId(item.rawTrack);
+        const albumTargetId = resolveTrackAlbumTargetId(item.rawTrack);
         const canOpenAlbum = Boolean(
             onSelectAlbum
             && item.rawTrack

@@ -54,7 +54,17 @@ export default {
     "accountless": "{{provider}} has no account library. Use search to find music.",
     "createPlaylistPrompt": "new playlist",
     "confirmRemoveSelection": "Remove {{count}} songs from the local library?",
-    "confirmRemoveRoot": "Remove the imported folder “{{path}}” from the library?"
+    "confirmRemoveRoot": "Remove the imported folder “{{path}}” from the library?",
+    "artistSongsPane": "top songs",
+    "artistAlbumsPane": "albums",
+    "artistCounts": "{{songs}} top songs · {{albums}} albums",
+    "artistAlbumsLoading": "loading albums…",
+    "artistAlbumsInterrupted": "albums interrupted",
+    "artistEdit": "edit",
+    "bioMore": "more",
+    "bioLess": "less",
+    "columnYear": "Year",
+    "artistHints": "↑↓ move · Tab songs/albums · Enter play/open · Shift+Enter queue · Ctrl+Enter play all · Ctrl+Shift+Enter queue top songs · Esc back"
   },
   "notifications": {
     "coverColorAdded": "Cover color added",

@@ -152,7 +152,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const localLibraryCatalog = surfaceProps.localLibraryCatalog;
     const selectedCollection = getActiveGridViewCollection(collectionSnapshot);
     const suiteId = useLibrarySuiteStore(state => state.suite);
-    // 歌手页 TUI 没实现，回退网格；集合层由选中的 suite 渲染（它没实现时同样回退网格）。
+    // 集合层与歌手页都由选中的 suite 渲染（它没实现那个 surface 时回退网格；P4.3 起 TUI 也实现了歌手页）。
     const collectionSurface = resolveLibrarySurface('collection', suiteId);
     const artistSurface = resolveLibrarySurface('artist', suiteId);
     // 转场属于渲染集合层的那套 suite：已经打开的看它所在的 surface；还在首页时看「将要打开的集合」由谁渲染
@@ -618,12 +618,13 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                     )
                 )}
             </AnimatePresence>
-            {/* 首页上也有（切换的是首页 surface；没有集合会话要冲刷，用首页的固定 key）；歌手页两套都由网格渲染，不出现。 */}
-            {DevLibraryRendererSwitch && HAS_SUITE_CHOICE && displaySelectedCollection?.type !== 'artist' && (isInteractive || displaySelectedCollection) && (
+            {/* 首页上也有（切换的是首页 surface；没有集合会话要冲刷，用首页的固定 key）；歌手页上也有（P4.3 起 TUI 实现了歌手页，
+                冲刷的是这一层歌手页的会话——键与歌手资源的 key 相同）。 */}
+            {DevLibraryRendererSwitch && HAS_SUITE_CHOICE && (isInteractive || displaySelectedCollection) && (
                 <React.Suspense fallback={null}>
                     <DevLibraryRendererSwitch
                         sessionKey={displaySelectedCollection ? selectedCollectionKey : HOME_SUITE_SESSION_KEY}
-                        placement={displaySelectedCollection ? 'collection' : 'home'}
+                        placement={displaySelectedCollection ? (displaySelectedCollection.type === 'artist' ? 'artist' : 'collection') : 'home'}
                     />
                 </React.Suspense>
             )}
