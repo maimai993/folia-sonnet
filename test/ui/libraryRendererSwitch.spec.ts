@@ -35,6 +35,17 @@ const openAllSongs = async (page: Page) => {
     await expect(page.getByText('Midnight Train').first()).toBeVisible();
 };
 
+/** 导入本地曲库，停在网格首页的本地页签上（还没打开任何集合）。 */
+const openLocalHome = async (page: Page) => {
+    await installBaseState(page, { neteaseMode: 'guest', localImportFixture });
+    await mockNeteaseApi(page, 'guest');
+    await openApp(page);
+
+    await page.getByRole('button', { name: 'Folder' }).last().click();
+    await page.getByRole('button', { name: 'Import Folder' }).last().click();
+    await expect(page.getByText('All Songs').first()).toBeVisible();
+};
+
 const switchTo = async (page: Page, renderer: 'grid' | 'tui') => {
     await rendererSwitch(page).locator(`[data-renderer="${renderer}"]`).click();
 };
@@ -68,6 +79,46 @@ test('the DEV switch moves the open collection into the TUI and back', async ({ 
     await expect(grid(page)).toHaveCount(1);
     await expect(tui(page)).toHaveCount(0);
     await expect(page.getByText('Midnight Train').first()).toBeVisible();
+});
+
+// P3.4：首页也是一个 surface。首页上的 DEV 浮层把首页换成 TUI 的目录列表；从那里打开「全部歌曲」进的是 TUI 的
+// 集合视图（suite 是 TUI），返回落回 TUI 首页、焦点还在「全部歌曲」那一行，键盘接着能用。
+test('on the home the DEV switch brings up the TUI home; All Songs opens the TUI collection and Back keeps the focus', async ({ page }) => {
+    await openLocalHome(page);
+    const home = page.locator('[data-library-home="tui"]');
+    const rows = home.locator('[data-tui-home-row]');
+    const focusedRow = home.locator('[data-tui-home-row][aria-selected="true"]');
+
+    await expect(rendererSwitch(page)).toHaveAttribute('data-placement', 'home');
+    await switchTo(page, 'tui');
+    await expect(home).toHaveCount(1);
+    await expect(home.locator('[data-tui-source="local"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(rows.first()).toContainText('All Songs');
+    expect(await rows.count()).toBeGreaterThan(1);
+
+    // 先把焦点移开再点回「全部歌曲」，确认回来时落的是记住的那一行，而不是默认的第一行碰巧对上。
+    await rows.nth(1).click();
+    await expect(rows.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await rows.first().click();
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Enter');
+
+    await expect(tui(page)).toHaveCount(1);
+    await expect(tui(page).locator('[data-tui-title]')).toHaveText('All Songs');
+    await expect(tui(page).locator('[data-tui-row="0"]')).toContainText('Midnight Train');
+    await expect(rendererSwitch(page)).toHaveAttribute('data-placement', 'collection');
+
+    // 返回用 Esc（TUI 集合视图的键）：桌面版的标题栏拖拽区盖着视图最上面那一行，状态栏上的 [← Back] 在这里点不到。
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Escape');
+    await expect(tui(page)).toHaveCount(0);
+    await expect(home).toBeVisible();
+    await expect(focusedRow).toHaveCount(1);
+    await expect(focusedRow).toContainText('All Songs');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('ArrowDown');
+    await expect(rows.nth(1)).toHaveAttribute('aria-selected', 'true');
 });
 
 test('typing filters the TUI through the command palette, and --play reaches the real player', async ({ page }) => {

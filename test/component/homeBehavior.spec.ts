@@ -41,14 +41,16 @@ import '../../dev/probes/homeBehavior/probeApi';
 // 首页与目录（GridMap）的行为回归闸门（Library Core P3 期间每一步都跑，和 libraryBehavior 一起）。
 //
 // 断言的是语义：宿主收到的集合描述（provider-aware key）、上游请求账、播放 / 入队回调、本地曲库服务调用账
-// （经 serviceStubModule 的转接模块记下）、隐藏表。探针接口（window.__homeProbe）按语义命名，当前由网格实现；
-// P3.4 给 TUI 首页实现同一套接口后，标题前缀为 `[grid]` 的那批用例改为对两个 suite 参数化。
-// `[grid-only]` 的用例点的是网格专属的 DOM（地图按钮、卡片、批量面板按钮、确认框、Escape 阶梯）。
+// （经 serviceStubModule 的转接模块记下）、隐藏表。探针接口（window.__homeProbe）按语义命名，网格与 TUI 首页
+// 各实现一套（网格专属概念——地图、批量面板——在 TUI 上的对应见 dev/probes/homeBehavior/homeProbeApi.ts 的文件头）；
+// 标题前缀为 `[grid]` / `[tui]` 的那批用例对两个 suite 各跑一遍。`[grid-only]` 的用例点的是网格专属的 DOM
+// （地图按钮、卡片、批量面板按钮、确认框、Escape 阶梯），`[tui-only]` 的按 TUI 的键；`[switch]` 的在两套之间切换。
 //
 // 探针页开着 StrictMode：首页挂载时的请求会出现两次，分页断言看去重后的 offset 序列。
 // test.fixme 记录的是现状缺陷，注释里写明由哪一步转正。
 
-const SUITES = ['grid'] as const;
+const SUITES = ['grid', 'tui'] as const;
+type Suite = (typeof SUITES)[number];
 const A = PROBE_PROVIDER_A;
 const B = PROBE_PROVIDER_B;
 
@@ -59,7 +61,7 @@ const localFilePath = (index: number) => {
     return `${rule.folder}/${String(index).padStart(2, '0')} - ${localSongTitle(index)}.mp3`;
 };
 
-const mountHome = async (mount: (id: string) => Promise<unknown>, page: Page) => {
+const mountHome = async (mount: (id: string) => Promise<unknown>, page: Page, suite: Suite = 'grid') => {
     // 本地曲库服务换成转接模块：需要目录句柄的函数走探针替身，其余放行到真实现（都记账）。
     await page.route(LOCAL_MUSIC_SERVICE_ROUTE, route => route.fulfill({
         contentType: 'text/javascript',
@@ -68,6 +70,14 @@ const mountHome = async (mount: (id: string) => Promise<unknown>, page: Page) =>
     await mount('homeBehavior');
     await expect.poll(() => page.evaluate(() => window.__homeProbe?.ready() ?? false), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => itemIds(page)).toEqual(['public', 'cloud', 'owned', 'big', 'same']);
+    if (suite !== 'grid') await setSuite(page, suite);
+};
+
+/** 换 suite（与首页上 DEV 浮层同一条路径），等新 suite 的首页挂上、列表交给首页 surface 句柄。 */
+const setSuite = async (page: Page, suite: Suite) => {
+    await page.evaluate(id => window.__homeProbe!.setSuite(id), suite);
+    await expect.poll(() => page.evaluate(() => window.__homeProbe!.homeSuite())).toBe(suite);
+    await expect(page.locator('[data-library-home="tui"]')).toHaveCount(suite === 'tui' ? 1 : 0);
 };
 
 const setTab = (page: Page, tab: HomeTabKey) => page.evaluate(key => window.__homeProbe!.setTab(key), tab);
@@ -163,15 +173,35 @@ const showBatch = async (page: Page) => {
     await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([]);
 };
 
+/**
+ * 关闭目录：网格是关掉 GridMap（地图退场、会话丢掉，getQuery 变成 null）；TUI 的目录视图一直开着，
+ * 关闭就是丢掉会话再打开一个空的（getQuery 是 ''）。
+ */
 const hideMap = async (page: Page) => {
     expect(await closeMap(page)).toBe(true);
-    await expect.poll(() => isMapOpen(page)).toBe(false);
+    await expectDirectoryClosed(page);
 };
+const expectDirectoryClosed = async (page: Page) => {
+    if (await page.evaluate(() => window.__homeProbe!.homeSuite()) === 'tui') {
+        await expect.poll(() => getQuery(page)).toBe('');
+        expect(await isMapOpen(page)).toBe(true);
+        return;
+    }
+    await expect.poll(() => isMapOpen(page)).toBe(false);
+    await expect.poll(() => getQuery(page)).toBeNull();
+};
+
+/**
+ * 只作用于焦点那一项的目录命令（隐藏焦点歌单、导入根上的重扫 / 移除、恢复忽略目录）：只有有焦点的目录（TUI）
+ * 发布，取决于焦点落在哪一行。语义用例比的是其余的命令（两套 suite 一样）。
+ */
+const FOCUSED_DIRECTORY_COMMANDS = ['directory-toggle-hidden', 'directory-rescan-root', 'directory-remove-root', 'directory-clear-ignore'];
+const scopeCommands = async (page: Page) => (await directoryCommands(page)).filter(id => !FOCUSED_DIRECTORY_COMMANDS.includes(id));
 
 for (const suite of SUITES) {
 test.describe(`[${suite}] online tabs`, () => {
     test('the playlist tab lists the account playlists with the cloud drive second', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         const list = await items(page);
         expect(list.map(item => [item.id, item.type])).toEqual([
             ['public', 'playlist'],
@@ -194,7 +224,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('favorite albums load every page in upstream order', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'albums');
         await expect.poll(() => itemIds(page)).toEqual(homeFavoriteAlbumIds(A));
         expect(HOME_FAVORITE_ALBUM_COUNTS[A]).toBe(120);
@@ -203,7 +233,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('the favorite-albums refresh event re-reads the list from the first page', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'albums');
         await expect.poll(() => itemIds(page)).toEqual(homeFavoriteAlbumIds(A));
         await clearLog(page);
@@ -214,7 +244,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('the radio tab puts Personal FM and Daily Recommendations ahead of the recommended playlists', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'radio');
         const expected = [
             ['personal_fm', 'radio'],
@@ -229,7 +259,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('opening a playlist, an album and the daily recommendations hands the host provider-aware descriptors', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         expect(await open(page, 'owned')).toBe(true);
         await expect.poll(async () => (await lastOpened(page))?.key).toBe(`online:${A}:playlist:owned`);
         expect(await lastOpened(page)).toMatchObject({ source: 'online', providerId: A, type: 'playlist', id: 'owned', name: 'Owned Playlist' });
@@ -251,7 +281,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('Personal FM plays straight away and opens no collection', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'radio');
         await expect.poll(() => itemIds(page)).toContain('personal_fm');
         await clearLog(page);
@@ -269,7 +299,7 @@ test.describe(`[${suite}] online tabs`, () => {
     // 同一帧里就关掉（导航栈刚出现就清掉），集合层的退场永远完成不了——它停在 opacity 0、仍是 fixed inset-0 z-[110]，
     // 挡住首页中央的点击。稍等几十毫秒再关就正常（closeCollection 因此先等 250ms）。复现率与歌单有关（big 不复现）。
     test.fixme('closing a collection in the frame it opened does not leave an invisible layer over the home', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         expect(await open(page, 'owned')).toBe(true);
         await expect.poll(() => stack(page)).toEqual(['Owned Playlist']);
         await page.evaluate(() => window.__homeProbe!.closeCollection());
@@ -277,7 +307,7 @@ test.describe(`[${suite}] online tabs`, () => {
     });
 
     test('the same playlist id under two providers opens two different collections', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         expect(await open(page, 'same')).toBe(true);
         await expect.poll(async () => (await lastOpened(page))?.key).toBe(`online:${A}:playlist:same`);
         await closeCollection(page);
@@ -293,7 +323,7 @@ test.describe(`[${suite}] online tabs`, () => {
 
 test.describe(`[${suite}] provider switch`, () => {
     test('a slow favorite-albums response from the previous provider never lands in the new list', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await page.evaluate(target => window.__homeProbe!.setLatency(target, { first: 1500 }), `${A}:userAlbums`);
         await setTab(page, 'albums');
         await page.waitForTimeout(200);
@@ -310,7 +340,7 @@ test.describe(`[${suite}] provider switch`, () => {
     // 判断 `favoriteAlbums.length === 0` 时读到的还是上一个 provider 的列表，于是不加载，新 provider 的收藏专辑
     // 一直不出现。现在两份数据是首页资源（core/services/onlineHomeFeeds），绑定在同一个 effect 里先换归属再 ensure。
     test('switching provider after the albums tab has loaded shows the new provider\'s albums', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'albums');
         await expect.poll(() => itemIds(page)).toEqual(homeFavoriteAlbumIds(A));
 
@@ -320,7 +350,7 @@ test.describe(`[${suite}] provider switch`, () => {
 
     // 同一个缺陷的电台版本（P3.3 修复后转正）。
     test('switching provider after the radio tab has loaded shows the new provider\'s feed', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await setTab(page, 'radio');
         await expect.poll(() => itemIds(page)).toContain(homeRecommendedId(A, 0));
 
@@ -332,7 +362,7 @@ test.describe(`[${suite}] provider switch`, () => {
 
 test.describe(`[${suite}] local tab`, () => {
     test('the four sections list folders (with the virtual All Songs), albums, artists and playlists', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         expect(await page.evaluate(() => window.__homeProbe!.sections())).toEqual([
             { id: 'folders', active: true },
@@ -385,7 +415,7 @@ test.describe(`[${suite}] local tab`, () => {
     });
 
     test('opening local entries hands the host local descriptors (All Songs is virtual)', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         expect(await open(page, HOME_ALL_SONGS_ID)).toBe(true);
         await expect.poll(async () => (await lastOpened(page))?.key).toBe(`local:folder:${HOME_ALL_SONGS_ID}`);
@@ -419,7 +449,7 @@ test.describe(`[${suite}] local tab`, () => {
 
 test.describe(`[${suite}] navidrome tab`, () => {
     test('sections come from the overview requests, with virtual Random and Favorites playlists', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'navidrome');
         expect(await activeSection(page)).toBe('albums');
         expect(await scope(page)).toBe('navidrome');
@@ -453,7 +483,7 @@ test.describe(`[${suite}] navidrome tab`, () => {
     });
 
     test('opening Navidrome entries resolves album, random, favorites, playlist and artist descriptors', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'navidrome');
         const openAndClose = async (id: string, key: string) => {
             expect(await open(page, id)).toBe(true);
@@ -471,7 +501,7 @@ test.describe(`[${suite}] navidrome tab`, () => {
     });
 
     test('the last section is remembered under folia_navidrome_last_section across remounts', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'navidrome', 'playlists');
         expect(await page.evaluate(() => localStorage.getItem('folia_navidrome_last_section'))).toBe('playlists');
 
@@ -483,7 +513,7 @@ test.describe(`[${suite}] navidrome tab`, () => {
 
 test.describe(`[${suite}] directory filter`, () => {
     test('the query filters the map by name or path; every term has to match; empty shows all', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showMap(page);
         expect(await mapIds(page)).toEqual(HOME_LOCAL_FOLDER_IDS);
@@ -507,13 +537,12 @@ test.describe(`[${suite}] directory filter`, () => {
     });
 
     test('closing the map drops the query; reopening starts unfiltered', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         expect(await setQuery(page, 'owned')).toBe(true);
         await expect.poll(() => mapIds(page)).toEqual(['owned']);
 
         await hideMap(page);
-        await expect.poll(() => getQuery(page)).toBeNull();
         await showMap(page);
         expect(await mapIds(page)).toEqual(['public', 'cloud', 'owned', 'big', 'same']);
     });
@@ -521,7 +550,7 @@ test.describe(`[${suite}] directory filter`, () => {
 
 test.describe(`[${suite}] directory batch`, () => {
     test('the batch scope starts empty and follows card order, not click order', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         expect(await batchScope(page)).toMatchObject({
@@ -549,7 +578,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('overlapping selections are de-duplicated and keep the first occurrence', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Music/Alpha'), HOME_ALL_SONGS_ID]);
@@ -562,7 +591,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('select-all takes only the filtered cards, and the selection outlives the query', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await setQuery(page, 'alpha');
@@ -584,7 +613,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('create playlist writes a local playlist with the scope\'s songs in order', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Music/Beta'), homeFolderId('Extra')]);
@@ -602,7 +631,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('albums and artists offer play, enqueue and create playlist only; playlists have no batch', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         for (const section of ['albums', 'artists'] as const) {
             await showList(page, 'local', section);
             await showBatch(page);
@@ -620,7 +649,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('removing a folder whose subfolders are not selected deletes only its own songs', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Music/Alpha')]);
@@ -635,7 +664,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('removing a folder together with all its subfolders removes the top folder', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Music/Alpha'), homeFolderId('Music/Alpha/Live')]);
@@ -654,7 +683,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('All Songs is never removed as a folder; its songs are removed by id', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [HOME_ALL_SONGS_ID]);
@@ -669,7 +698,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('a fully selected top-level folder is removed through its root path', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Extra')]);
@@ -687,7 +716,7 @@ test.describe(`[${suite}] directory batch`, () => {
     });
 
     test('rescan root, remove root and clear ignore reach their services and refresh the library', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         expect((await page.evaluate(() => window.__homeProbe!.directoryNodes())).filter(node => node.depth === 0).map(node => node.path))
@@ -714,36 +743,38 @@ test.describe(`[${suite}] directory batch`, () => {
 });
 
 test.describe(`[${suite}] directory commands`, () => {
-    // 目录命令只在 GridMap 可交互时出现（GridMap 注册 directory surface），能不能做与批量面板的按钮同源。
-    test('directory commands exist only while the map is open and follow what the section supports', async ({ mount, page }) => {
-        await mountHome(mount, page);
-        expect(await directoryCommands(page)).toEqual([]);
+    // 目录命令只在目录可交互时出现（网格：GridMap 打开时注册 directory surface；TUI 的目录列表一直注册），
+    // 能不能做与批量面板的按钮同源。
+    test('directory commands exist only while the directory is open and follow what the section supports', async ({ mount, page }) => {
+        await mountHome(mount, page, suite);
+        const closedCommands = suite === 'grid' ? [] : ['directory-manage-hidden'];
+        await expect.poll(() => scopeCommands(page)).toEqual(closedCommands);
         await showMap(page);
         // 在线歌单没有批量，可隐藏：只有「管理隐藏」。
-        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+        await expect.poll(() => scopeCommands(page)).toEqual(['directory-manage-hidden']);
         await hideMap(page);
-        await expect.poll(() => directoryCommands(page)).toEqual([]);
+        await expect.poll(() => scopeCommands(page)).toEqual(closedCommands);
 
         await showList(page, 'local');
         await showMap(page);
-        await expect.poll(() => directoryCommands(page)).toEqual(['directory-select-all']);
+        await expect.poll(() => scopeCommands(page)).toEqual(['directory-select-all']);
         expect(await openPanel(page)).toBe(true);
         await batchSelect(page, [homeFolderId('Extra')]);
-        await expect.poll(() => directoryCommands(page)).toEqual([
+        await expect.poll(() => scopeCommands(page)).toEqual([
             ...BATCH_SELECTION_COMMANDS,
             'directory-remove-selection',
             'directory-select-all',
             'directory-clear-selection',
         ]);
         await hideMap(page);
-        await expect.poll(() => directoryCommands(page)).toEqual([]);
+        await expect.poll(() => scopeCommands(page)).toEqual(suite === 'grid' ? [] : ['directory-select-all']);
 
         // 专辑：没有删除。
         await showList(page, 'local', 'albums');
         await showBatch(page);
         const [firstAlbum] = await mapIds(page);
         await batchSelect(page, [firstAlbum]);
-        await expect.poll(() => directoryCommands(page)).toEqual([
+        await expect.poll(() => scopeCommands(page)).toEqual([
             ...BATCH_SELECTION_COMMANDS,
             'directory-select-all',
             'directory-clear-selection',
@@ -753,11 +784,11 @@ test.describe(`[${suite}] directory commands`, () => {
         // 本地歌单：没有批量，可隐藏。
         await showList(page, 'local', 'playlists');
         await showMap(page);
-        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+        await expect.poll(() => scopeCommands(page)).toEqual(['directory-manage-hidden']);
     });
 
     test('select-all from the palette opens the batch panel on the filtered cards; clear empties the selection', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showMap(page);
         await setQuery(page, 'alpha');
@@ -769,11 +800,11 @@ test.describe(`[${suite}] directory commands`, () => {
 
         expect(await runDirectoryCommand(page, 'directory-clear-selection')).toBe(true);
         await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([]);
-        await expect.poll(() => directoryCommands(page)).toEqual(['directory-select-all']);
+        await expect.poll(() => scopeCommands(page)).toEqual(['directory-select-all']);
     });
 
     test('create playlist from the palette takes the typed name and refuses an empty one', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await showBatch(page);
         await batchSelect(page, [homeFolderId('Music/Beta'), homeFolderId('Extra')]);
@@ -788,9 +819,9 @@ test.describe(`[${suite}] directory commands`, () => {
     });
 
     test('manage hidden from the palette enters the hidden view and leaves it again', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
-        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden']);
+        await expect.poll(() => scopeCommands(page)).toEqual(['directory-manage-hidden']);
 
         expect(await runDirectoryCommand(page, 'directory-manage-hidden')).toBe(true);
         await expect.poll(() => hiddenView(page)).toBe('manage');
@@ -805,7 +836,7 @@ test.describe(`[${suite}] directory commands`, () => {
 
 test.describe(`[${suite}] hidden items`, () => {
     test('a hidden playlist leaves the slider, the map and map search; unhiding restores it', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         expect(await toggleHidden(page, 'owned')).toBe(true);
 
@@ -824,7 +855,7 @@ test.describe(`[${suite}] hidden items`, () => {
     });
 
     test('a hidden card cannot be opened from the slider', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         await toggleHidden(page, 'owned');
         await expect.poll(() => visibleIds(page)).not.toContain('owned');
@@ -834,7 +865,7 @@ test.describe(`[${suite}] hidden items`, () => {
     });
 
     test('the manage view shows everything with hidden flags, or only the hidden ones', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         await toggleHidden(page, 'owned');
         await toggleHidden(page, 'big');
@@ -855,7 +886,7 @@ test.describe(`[${suite}] hidden items`, () => {
     });
 
     test('hidden ids are scoped per provider, local library and Navidrome', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         await toggleHidden(page, 'same');
         await expect.poll(() => visibleIds(page)).not.toContain('same');
@@ -892,7 +923,7 @@ test.describe(`[${suite}] hidden items`, () => {
     });
 
     test('hiding survives a remount; folders, albums and artists cannot be hidden', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showMap(page);
         await toggleHidden(page, 'owned');
         await expect.poll(() => visibleIds(page)).not.toContain('owned');
@@ -913,7 +944,7 @@ test.describe(`[${suite}] hidden items`, () => {
     });
 
     test('batch-capable sections have nothing hideable and hideable lists have no batch', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         expect(await page.evaluate(() => window.__homeProbe!.batchAvailable())).toBe(false);
         for (const section of ['folders', 'albums', 'artists']) {
             await showList(page, 'local', section);
@@ -927,7 +958,7 @@ test.describe(`[${suite}] hidden items`, () => {
 
 test.describe(`[${suite}] imports`, () => {
     test('folder import calls the import service and refreshes the library', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await clearLog(page);
 
@@ -938,7 +969,7 @@ test.describe(`[${suite}] imports`, () => {
     });
 
     test('refresh re-syncs all roots and refreshes the library', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local');
         await clearLog(page);
 
@@ -948,7 +979,7 @@ test.describe(`[${suite}] imports`, () => {
     });
 
     test('a playlist file import creates a playlist from matching paths and reports the result', async ({ mount, page }) => {
-        await mountHome(mount, page);
+        await mountHome(mount, page, suite);
         await showList(page, 'local', 'playlists');
         await clearLog(page);
         const importFile = (name: string, lines: string[]) => page.evaluate(
@@ -1101,5 +1132,217 @@ test.describe('[grid-only] directory interactions', () => {
         await expect.poll(() => storedHidden(page)).toEqual({ [`online:${A}`]: ['owned'] });
         await expect.poll(async () => (await mapItems(page)).find(item => item.id === 'owned')?.hidden).toBe(true);
         expect(await visibleIds(page)).not.toContain('owned');
+    });
+});
+
+// ---- 在两套 suite 之间切换（P3.4） ----
+// 首页数据与目录会话的寿命跟语义走：换 suite 不重新请求；目录会话（筛选词、选择、管理隐藏视图）跟着
+// 「目录打开 / 关闭」，换 suite 不丢，关闭目录在两套里都丢掉会话。
+const tuiHome = (page: Page) => page.locator('[data-library-home="tui"]');
+const tuiRows = (page: Page) => tuiHome(page).locator('[data-tui-home-row]');
+const tuiRowOf = (page: Page, itemId: string) => tuiHome(page).locator(`[data-library-entry="${itemId}"]`);
+const focusedTuiRow = (page: Page) => tuiHome(page).locator('[data-tui-home-row][aria-selected="true"]');
+const blur = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+const playAllIds = async (page: Page) => (await calls(page, 'playAll')).map(call => call.ids);
+const ALPHA = homeFolderId('Music/Alpha');
+const LIVE = homeFolderId('Music/Alpha/Live');
+const BETA = homeFolderId('Music/Beta');
+const EXTRA = homeFolderId('Extra');
+
+test.describe('[switch] grid and TUI share the home', () => {
+    test('filter and selection made in GridMap carry over to the TUI and back; batch play is the same; nothing is refetched', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        await showList(page, 'local');
+        await showMap(page);
+        expect(await setQuery(page, 'music')).toBe(true);
+        await expect.poll(() => mapIds(page)).toEqual([ALPHA, LIVE, BETA]);
+        expect(await openPanel(page)).toBe(true);
+        await batchSelect(page, [BETA, ALPHA]);
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([ALPHA, BETA]);
+        await clearLog(page);
+        expect(await runBatch(page, 'play')).toBe(true);
+        const gridPlay = await playAllIds(page);
+        expect(gridPlay).toEqual([localKeys([...homeLocalSongsIn('Music/Alpha'), ...homeLocalSongsIn('Music/Beta')])]);
+        await clearLog(page);
+
+        await setSuite(page, 'tui');
+        await expect.poll(() => getQuery(page)).toBe('music');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([ALPHA, BETA]);
+        expect(await mapIds(page)).toEqual([ALPHA, LIVE, BETA]);
+        await expect(tuiHome(page).locator('[data-tui-filter]')).toContainText('music');
+        expect(await runBatch(page, 'play')).toBe(true);
+        // TUI 的键：Ctrl+Enter 播放选中的范围，与网格的面板按钮同一份歌。
+        await blur(page);
+        await page.keyboard.press('Control+Enter');
+        await expect.poll(() => playAllIds(page)).toEqual([...gridPlay, ...gridPlay]);
+        expect(await page.evaluate(() => window.__homeProbe!.requests())).toEqual([]);
+        expect(await serviceCalls(page)).toEqual([]);
+
+        await setSuite(page, 'grid');
+        // 网格挂载时目录还开着、会话有筛选与选择：GridMap 与批量面板直接开着把它们显示出来。
+        await expect.poll(() => isMapOpen(page)).toBe(true);
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([ALPHA, BETA]);
+        expect(await getQuery(page)).toBe('music');
+        expect(await mapIds(page)).toEqual([ALPHA, LIVE, BETA]);
+        expect(await page.evaluate(() => window.__homeProbe!.requests())).toEqual([]);
+    });
+
+    test('switching suites on the home requests nothing again: favorite albums, radio feed, Navidrome overview', async ({ mount, page }) => {
+        await mountHome(mount, page);
+        for (const tab of ['albums', 'radio', 'navidrome'] as const) {
+            await showList(page, tab);
+            await expect.poll(() => page.evaluate(() => window.__homeProbe!.isLoading())).toBe(false);
+            const before = await itemIds(page);
+            await page.waitForTimeout(200);
+            await clearLog(page);
+
+            await setSuite(page, 'tui');
+            await expect.poll(() => itemIds(page)).toEqual(before);
+            await setSuite(page, 'grid');
+            await expect.poll(() => itemIds(page)).toEqual(before);
+            await page.waitForTimeout(200);
+            expect(await page.evaluate(() => window.__homeProbe!.requests()), tab).toEqual([]);
+        }
+    });
+
+    test('closing the directory drops the query and the selection in both suites', async ({ mount, page }) => {
+        await mountHome(mount, page, 'tui');
+        await showList(page, 'local');
+        expect(await setQuery(page, 'alpha')).toBe(true);
+        await expect.poll(() => mapIds(page)).toEqual([ALPHA, LIVE]);
+        await batchSelect(page, [ALPHA]);
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([ALPHA]);
+        await hideMap(page);
+        expect((await batchScope(page))?.itemIds).toEqual([]);
+
+        // 关掉之后还是空会话：切到网格时地图不会自己打开。
+        await setSuite(page, 'grid');
+        await page.waitForTimeout(200);
+        expect(await isMapOpen(page)).toBe(false);
+
+        await showMap(page);
+        expect(await setQuery(page, 'beta')).toBe(true);
+        await expect.poll(() => mapIds(page)).toEqual([BETA]);
+        await hideMap(page);
+        await setSuite(page, 'tui');
+        await expect.poll(() => getQuery(page)).toBe('');
+        expect(await mapIds(page)).toEqual(HOME_LOCAL_FOLDER_IDS);
+    });
+});
+
+test.describe('[tui-only] directory keys', () => {
+    test('Insert selects and moves down, Ctrl+A selects the filtered rows, Ctrl+Enter plays the selection or the focused row', async ({ mount, page }) => {
+        await mountHome(mount, page, 'tui');
+        await showList(page, 'local');
+        await expect(tuiRowOf(page, EXTRA)).toHaveCount(1);
+        await tuiRowOf(page, EXTRA).click();
+        await expect(tuiRowOf(page, EXTRA)).toHaveAttribute('aria-selected', 'true');
+        await blur(page);
+
+        await page.keyboard.press('Insert');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([EXTRA]);
+        // 下一行是没有直属歌曲的 Music：Insert 选中它下面显示着的全部文件夹。
+        await expect(focusedTuiRow(page)).toHaveAttribute('data-tui-home-key', /^node:/);
+        await page.keyboard.press('Insert');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([EXTRA, ALPHA, LIVE, BETA]);
+
+        await clearLog(page);
+        await page.keyboard.press('Control+Enter');
+        await expect.poll(() => playAllIds(page)).toEqual([localKeys([
+            ...homeLocalSongsIn('Extra'), ...homeLocalSongsIn('Music/Alpha'), ...homeLocalSongsIn('Music/Alpha/Live'), ...homeLocalSongsIn('Music/Beta'),
+        ])]);
+
+        await page.keyboard.press('Control+a');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual(HOME_LOCAL_FOLDER_IDS);
+
+        // Esc（没有筛选词时）关闭目录：选择丢掉。之后 Ctrl+Enter 播放焦点那一行，Ctrl+Shift+Enter 入队。
+        await page.keyboard.press('Escape');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([]);
+        await tuiRowOf(page, BETA).click();
+        await blur(page);
+        await clearLog(page);
+        await page.keyboard.press('Control+Enter');
+        await expect.poll(() => playAllIds(page)).toEqual([localKeys(homeLocalSongsIn('Music/Beta'))]);
+        // 批量动作同一时间只做一个：等播放做完（批量控制器不再忙）再入队。
+        await expect(tuiHome(page).locator('[data-tui-busy]')).toHaveCount(0);
+        await page.keyboard.press('Control+Shift+Enter');
+        await expect.poll(async () => (await calls(page, 'addAllToQueue')).map(call => call.ids)).toEqual([localKeys(homeLocalSongsIn('Music/Beta'))]);
+    });
+
+    test('the folder tree folds with arrows; Enter opens the TUI collection and Back returns with the focus kept', async ({ mount, page }) => {
+        await mountHome(mount, page, 'tui');
+        await showList(page, 'local');
+        await tuiRowOf(page, ALPHA).click();
+        await blur(page);
+        await page.keyboard.press('ArrowLeft');
+        await expect(tuiRowOf(page, LIVE)).toHaveCount(0);
+        await page.keyboard.press('ArrowRight');
+        await expect(tuiRowOf(page, LIVE)).toHaveCount(1);
+
+        await page.keyboard.press('Enter');
+        await expect.poll(async () => (await lastOpened(page))?.key).toBe(`local:folder:${ALPHA}`);
+        await expect(page.locator('[data-library-renderer="tui"]')).toHaveCount(1);
+        await page.waitForTimeout(250);
+        await page.locator('[data-library-renderer="tui"]').getByRole('button', { name: /Back/ }).click();
+        await expect(page.locator('[data-library-renderer]')).toHaveCount(0);
+        await expect(focusedTuiRow(page)).toHaveAttribute('data-library-entry', ALPHA);
+        await blur(page);
+        await page.keyboard.press('ArrowDown');
+        await expect(focusedTuiRow(page)).toHaveAttribute('data-library-entry', LIVE);
+    });
+
+    test('commands on the focused row: hide a playlist, rescan or remove a root, restore an ignored folder; removals ask first', async ({ mount, page }) => {
+        await mountHome(mount, page, 'tui');
+        await tuiRowOf(page, 'owned').click();
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-manage-hidden', 'directory-toggle-hidden']);
+        expect(await runDirectoryCommand(page, 'directory-toggle-hidden')).toBe(true);
+        await expect.poll(() => storedHidden(page)).toEqual({ [`online:${A}`]: ['owned'] });
+        await expect(tuiRowOf(page, 'owned')).toHaveCount(0);
+
+        await showList(page, 'local');
+        const musicRow = tuiHome(page).locator('[data-tui-home-key^="node:"]', { hasText: 'Music' }).first();
+        await musicRow.click();
+        await expect.poll(() => directoryCommands(page)).toEqual(['directory-select-all', 'directory-rescan-root', 'directory-remove-root']);
+        await clearLog(page);
+        expect(await runDirectoryCommand(page, 'directory-rescan-root')).toBe(true);
+        await expect.poll(() => serviceCalls(page)).toEqual([{ name: 'resyncFolder', args: ['Music'] }]);
+
+        await tuiRows(page).filter({ hasText: 'Hidden' }).click();
+        await expect.poll(() => directoryCommands(page)).toContain('directory-clear-ignore');
+        await clearLog(page);
+        expect(await runDirectoryCommand(page, 'directory-clear-ignore')).toBe(true);
+        await expect.poll(() => serviceCalls(page)).toEqual([{ name: 'clearFolderIgnore', args: [HOME_LOCAL_IGNORED_FOLDER] }]);
+
+        // 新建歌单的行内输入；从曲库删除选中的先确认。
+        await tuiRowOf(page, BETA).click();
+        await blur(page);
+        await page.keyboard.press('Insert');
+        await expect.poll(async () => (await batchScope(page))?.itemIds).toEqual([BETA]);
+        await tuiHome(page).locator('[data-tui-create-playlist]').click();
+        await page.locator('[data-tui-prompt="create-playlist"] input').fill('Inline Mix');
+        await page.keyboard.press('Enter');
+        await expect.poll(async () => (await localPlaylists(page)).find(playlist => playlist.name === 'Inline Mix')?.songIds)
+            .toEqual(homeLocalSongIds(homeLocalSongsIn('Music/Beta')));
+        await expect(page.locator('[data-tui-prompt]')).toHaveCount(0);
+
+        await clearLog(page);
+        expect(await runDirectoryCommand(page, 'directory-remove-selection')).toBe(true);
+        await expect(page.locator('[data-tui-prompt="remove-selection"]')).toBeFocused();
+        await page.waitForTimeout(200);
+        expect(await serviceCalls(page)).toEqual([]);
+        await page.keyboard.press('Enter');
+        await expect.poll(() => serviceCalls(page)).toEqual([
+            { name: 'deleteFolderSongs', args: ['Music/Beta'] },
+            { name: 'deleteSongsByIds', args: [homeLocalSongIds(homeLocalSongsIn('Music/Beta'))] },
+        ]);
+
+        await tuiRowOf(page, EXTRA).click();
+        await expect.poll(() => directoryCommands(page)).toContain('directory-remove-root');
+        await clearLog(page);
+        expect(await runDirectoryCommand(page, 'directory-remove-root')).toBe(true);
+        await expect(page.locator('[data-tui-prompt="remove-root:Extra"]')).toBeFocused();
+        expect(await serviceCalls(page)).toEqual([]);
+        await page.keyboard.press('Enter');
+        await expect.poll(async () => (await serviceCalls(page))[0]).toEqual({ name: 'removeImportedRoot', args: ['Extra'] });
     });
 });

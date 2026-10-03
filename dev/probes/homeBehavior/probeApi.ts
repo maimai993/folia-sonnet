@@ -6,8 +6,8 @@ import type { LibraryDirectoryBatchActionId, LibraryDirectorySurfaceState, Libra
 // dev/probes/homeBehavior/probeApi.ts
 // 首页行为探针挂在 window 上的驱动接口。只有类型：component 用例 import 它不会把探针运行时带进 Node。
 //
-// 接口按语义命名（条目、打开、筛选、批选、隐藏、provider），与渲染形态无关；P3.4 给 TUI 首页实现同一套
-// 签名，用例就能对两套 suite 参数化。当前的网格实现见 homeProbeApi.ts。
+// 接口按语义命名（条目、打开、筛选、批选、隐藏、provider），与渲染形态无关；P3.4 起网格与 TUI 首页实现同一套
+// 签名（homeProbeApi.ts，网格专属概念在 TUI 上的对应写在那里的文件头），用例对两套 suite 参数化。
 
 export type HomeTabKey = 'playlist' | 'radio' | 'albums' | 'local' | 'navidrome';
 
@@ -167,6 +167,15 @@ export type HomeProbeApi = {
     providers: () => string[];
     activeProvider: () => string;
     switchProvider: (providerId: string) => Promise<boolean>;
+
+    // ---- suite ----
+    /** 选中的 suite（core/state/useLibrarySuiteStore）。 */
+    suite: () => string;
+    /** 此刻渲染首页的 suite（选中的 suite 没实现首页时是网格）。 */
+    homeSuite: () => string;
+    suites: () => string[];
+    /** 与首页上 DEV 浮层的按钮同一条路径（switchLibrarySuite）。 */
+    setSuite: (suiteId: string) => void;
 
     // ---- 环境 ----
     /** 重新挂载整个首页（宿主 + Grid3D），模拟重启后回到首页（隐藏 store 先从存储重读）。 */
