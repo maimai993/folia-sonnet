@@ -680,6 +680,15 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "UndefinedFons",
+      "name": "Fons",
+      "avatar_url": "https://avatars.githubusercontent.com/u/190753033?v=4",
+      "profile": "http://fonstage.space",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "commit": false,
