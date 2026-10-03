@@ -4,14 +4,16 @@ import { ChevronLeft, Disc, ListPlus, Loader2, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from '../shared/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
 import { SongResult, Theme } from '../../../../types';
-import { LocalSong } from '../../../../types';
-import { applyLocalSongCoverDisplay, buildLocalQueue } from '../../../../services/playbackAdapters';
-import { getNavidromeConfig, navidromeApi } from '../../../../services/navidromeService';
-import { omni } from '../../../../services/onlineMusic/omni';
-import { createCoverPlaceholder } from '../../../../utils/coverPlaceholders';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { getSongCoverUrl } from '../../../../services/onlineMusic/songMetadata';
-import { getLocalCoverAssetUrl } from '../../../../services/localCoverAssetUrl';
+import type { LibraryArtistResource } from '../../../core/contracts/artist';
+import { useArtistResourceState } from '../../../core/bindings/useArtistResourceState';
+import {
+    artistAlbumCoverUrl,
+    artistAlbumLink,
+    filterArtistAlbums,
+    toHttpsCoverUrl,
+} from '../../../core/model/artistModel';
 import { PolaroidCard } from '../shared/PolaroidCard';
 import { HEX_CARD_CENTER_SCALE } from '../shared/hexCardTransform';
 import { squareGridCardBox } from '../shared/gridCardLayout';
@@ -39,10 +41,8 @@ import { GridListSearchButton } from '../../../../components/shared/GridListSear
 import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
 import { hasBlockingWindow } from '../../../../utils/keyboardTargets';
 import { closeCommandFilter, openCommandFilter } from '../../../../stores/useAppViewStore';
-import { appendUniqueByKey, deriveProgressiveLoadingState } from '../shared/progressiveGrid';
+import { deriveProgressiveLoadingState } from '../shared/progressiveGrid';
 import { useProgressiveItemEntrance } from '../shared/useProgressiveItemEntrance';
-import { useLocalLibraryCatalog } from '../../../../hooks/useLocalLibraryCatalog';
-import { buildLocalLibraryIndex, followEntityRedirect } from '../../../../utils/localLibraryIndex';
 import { ArtistGridInfoCutInPanel } from './ArtistGridInfoCutInPanel';
 import { isSongUnavailable } from '../../../../services/onlineMusic/songAvailability';
 import { addArtistTopSongsToQueue } from '../../../../utils/artistTopSongsQueue';
@@ -55,10 +55,15 @@ import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
  * It uses an infinite draggable and zoomable canvas representing the artist details.
  * Specifically, the artist avatar and editorial newspaper biography card are placed at custom central grid coordinates,
  * while popular tracks and albums are automatically distributed in the nearest and outer hexagonal cells.
+ *
+ * P4.1 起数据来自宿主持有的歌手资源（core/services/artistResource，经 useArtistResourceState 订阅）：
+ * 详情、热门歌曲、专辑与专辑的后台分页、失败与重试都在资源里；这里只负责展示与交互。
  */
 
 interface ArtistGridViewProps {
     collection: any; // GridViewCollectionDescriptor
+    /** 宿主持有的歌手资源（没有时按加载中处理）。 */
+    resource: LibraryArtistResource | null;
     onBack: () => void;
     onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
     onAddTrackToQueue?: (track: SongResult) => void;
@@ -68,7 +73,6 @@ interface ArtistGridViewProps {
     onAddAllToQueue?: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     theme: Theme;
     isDaylight: boolean;
-    localSongs?: LocalSong[];
     onEditEntity?: (entityId: string) => void;
     isInteractive?: boolean;
     /**
@@ -197,27 +201,6 @@ export const buildArtistGridCoords = (
 
 const getLowResCoverUrl = (url: string): string => getSizedCoverUrl(url, 150);
 
-const toHttps = (url?: string): string => {
-    if (!url) return '';
-    if (
-        url.startsWith('http:') &&
-        !url.includes('/rest/') &&
-        !url.includes('localhost') &&
-        !url.includes('127.0.0.1') &&
-        !url.includes('192.168.') &&
-        !url.includes('10.') &&
-        !url.includes('172.')
-    ) {
-        return url.replace('http:', 'https:');
-    }
-    return url;
-};
-
-export const getArtistGridAlbumCoverUrl = (album: any): string | undefined => {
-    const coverUrl = album?.coverUrl;
-    return typeof coverUrl === 'string' && coverUrl ? toHttps(coverUrl) : undefined;
-};
-
 // Card box, hex spacing and the sizes of the artist wall's own avatar and bio cards, per
 // container-width breakpoint. Lifted out of the component so the memo shows only the choice
 // between the plain box and the squared one.
@@ -281,8 +264,12 @@ const resolveArtistGridCardBox = (width: number) => {
     }
 };
 
+const EMPTY_TOP_SONGS: SongResult[] = [];
+const EMPTY_ALBUMS: never[] = [];
+
 const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     collection,
+    resource,
     onBack,
     onSelectTrack,
     onAddTrackToQueue,
@@ -291,7 +278,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     onSelectArtist,
     theme,
     isDaylight,
-    localSongs = [],
     onEditEntity,
     isInteractive = true,
     morphPlan = null,
@@ -302,7 +288,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const squareCards = useGridViewSettingsStore(state => state.gridViewSquareCards) && fullBleedCover;
     const minCardScale = useGridViewSettingsStore(state => state.gridViewMinCardScale);
     const minCardOpacity = useGridViewSettingsStore(state => state.gridViewMinCardOpacity);
-    const localLibraryCatalog = useLocalLibraryCatalog(localSongs);
     const closeBtnBg = isDaylight ? 'bg-black/5 hover:bg-black/10 text-black/60' : 'bg-black/20 hover:bg-white/10 text-white/60';
     const cardBg = isDaylight ? 'bg-white/60 border border-white/30' : 'bg-zinc-900/60 border border-white/10';
 
@@ -361,13 +346,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         Math.ceil(renderRadius / Math.min(layoutConfig.spacingX, layoutConfig.spacingY)) + 1
     ), [layoutConfig.spacingX, layoutConfig.spacingY, renderRadius]);
 
-    // Load Data States
-    const [artistInfo, setArtistInfo] = useState<any>(null);
-    const [topSongs, setTopSongs] = useState<SongResult[]>([]);
-    const [albums, setAlbums] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [backgroundLoading, setBackgroundLoading] = useState(false);
-    const [backgroundLoadFailed, setBackgroundLoadFailed] = useState(false);
     const [showFullBio, setShowFullBio] = useState(false);
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
@@ -382,13 +360,26 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         // The box was positioned against this component's root, not the drag canvas.
         anchorRef: rootRef,
     });
-    const loadGenerationRef = useRef(0);
 
     // Coordinate motion values mapping grid drags
     const dragX = useMotionValue(0);
     const dragY = useMotionValue(0);
     const dragControls = useDragControls();
     const isDraggingRef = useRef(false);
+
+    // 歌手数据：宿主的歌手资源。专辑的后台分页在拖拽中先暂存，松手后提交（与集合网格同一道门）。
+    const { snapshot, flushHeld } = useArtistResourceState(resource, { holdBackground: () => isDraggingRef.current });
+    const artistInfo = snapshot?.detail ?? null;
+    const topSongs = snapshot?.topSongs ?? EMPTY_TOP_SONGS;
+    const albums = snapshot?.albums ?? EMPTY_ALBUMS;
+    const status = snapshot?.status ?? 'idle';
+    const loading = status === 'idle' || status === 'loading';
+    const albumSync = snapshot?.albumSync;
+    // 被暂停的分页（资源刚被复用、ensure 马上会续上）按「还在加载」显示。
+    const backgroundLoading = albumSync?.state === 'syncing'
+        || (albumSync?.state === 'interrupted' && albumSync.reason === 'paused');
+    const backgroundLoadFailed = albumSync?.state === 'interrupted' && albumSync.reason === 'failed';
+    const loadError = status === 'error' ? snapshot?.error ?? 'load-failed' : null;
     const wheelTargetRef = useRef({ x: 0, y: 0 });
     const focusedIndexRef = useRef(0);
     const [focusedIndex, setFocusedIndex] = useState(0);
@@ -418,181 +409,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             sessionStorage.removeItem(navigationStorageKey);
         }
     }, [navigationStorageKey]);
-
-    const resolveLocalSongCoverUrl = useCallback((song: LocalSong) => {
-        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 512);
-        return song.useOnlineCover
-            ? (song.onlineMetadata?.coverUrl || localCoverUrl)
-            : localCoverUrl;
-    }, []);
-
-    // Appends online provider album pages without replacing already rendered artist content.
-    const loadOnlineAlbumPages = async (artistId: string | number, generation: number, startOffset = 0) => {
-        setBackgroundLoading(true);
-        setBackgroundLoadFailed(false);
-        try {
-            for (let offset = startOffset; offset < 10000; offset += 50) {
-                const response = await omni.getArtistAlbums(collection, { limit: 50, offset });
-                if (generation !== loadGenerationRef.current) return;
-                const pageAlbums = response?.items || [];
-                setAlbums(current => appendUniqueByKey(current, pageAlbums, album => String(album.id)));
-                if (!response?.hasMore || pageAlbums.length === 0) break;
-                await new Promise(resolve => setTimeout(resolve, 60));
-            }
-        } catch (error) {
-            console.error('[ArtistGridView] Failed to progressively load albums', error);
-            if (generation === loadGenerationRef.current) setBackgroundLoadFailed(true);
-        } finally {
-            if (generation === loadGenerationRef.current) setBackgroundLoading(false);
-        }
-    };
-
-    // Fetch and sync artist details
-    const loadArtistData = async () => {
-        const generation = ++loadGenerationRef.current;
-        setLoading(true);
-        setBackgroundLoading(false);
-        setBackgroundLoadFailed(false);
-        setArtistInfo(null);
-        setTopSongs([]);
-        setAlbums([]);
-        try {
-            const artistId = collection.id;
-            const source = collection.source;
-
-            if (source === 'online') {
-                const [detail, topSongsPage] = await Promise.all([
-                    omni.getArtistDetail(collection),
-                    omni.getArtistSongs(collection, { limit: 10, offset: 0 }),
-                ]);
-                if (generation !== loadGenerationRef.current) return;
-                if (detail) {
-                    setArtistInfo({
-                        id: detail.id,
-                        name: detail.name,
-                        cover: detail.coverUrl,
-                        description: detail.description,
-                        trackCount: detail.trackCount,
-                        albumCount: detail.albumCount,
-                        aliases: detail.aliases,
-                    });
-                }
-                if (topSongsPage?.items) {
-                    setTopSongs(topSongsPage.items.slice(0, 10));
-                }
-                setLoading(false);
-                await loadOnlineAlbumPages(artistId, generation);
-            } else if (source === 'navidrome') {
-                const config = getNavidromeConfig();
-                if (config) {
-                    const artistDetail = await navidromeApi.getArtist(config, String(artistId));
-                    const albumsList = artistDetail?.album || [];
-
-                    setArtistInfo({
-                        name: artistDetail?.name || collection.name,
-                        cover: albumsList[0]?.coverArt ? navidromeApi.getCoverArtUrl(config, albumsList[0].coverArt, 600) : undefined,
-                        description: t('navidrome.artists') || 'Artists',
-                        trackCount: 0,
-                        albumCount: albumsList.length,
-                    });
-
-                    const mappedAlbums = albumsList.map(alb => ({
-                        id: alb.id,
-                        name: alb.name,
-                        coverUrl: alb.coverArt ? navidromeApi.getCoverArtUrl(config, alb.coverArt, 600) : undefined,
-                        publishedAt: alb.year ? new Date(alb.year, 0, 1).getTime() : undefined,
-                    }));
-
-                    // Load songs from first few albums to form the topSongs list
-                    const albumsForSongs = albumsList.slice(0, 5);
-                    const albumDetails = await Promise.all(albumsForSongs.map(alb => navidromeApi.getAlbum(config, alb.id)));
-                    const subsonicSongs = albumDetails.flatMap(d => d?.song || []);
-                    const naviSongs = subsonicSongs.map(song => navidromeApi.toNavidromeSong(config, song));
-                    if (generation !== loadGenerationRef.current) return;
-                    setTopSongs(naviSongs.slice(0, 10));
-                    setAlbums(mappedAlbums);
-                }
-            } else if (source === 'local') {
-                if (!localLibraryCatalog.ready) return;
-                const catalogIndex = buildLocalLibraryIndex(
-                    localLibraryCatalog.entities,
-                    localLibraryCatalog.assignments,
-                );
-                const artistEntityId = followEntityRedirect(
-                    String(collection.entityId || collection.id),
-                    catalogIndex.entitiesById,
-                );
-                const artistEntity = artistEntityId ? catalogIndex.entitiesById.get(artistEntityId) : undefined;
-                if (!artistEntity || artistEntity.kind !== 'artist') return;
-                const artistName = artistEntity.displayName;
-                const artistAssignments = localLibraryCatalog.assignments.filter(assignment => (
-                    assignment.artistEntityIds.includes(artistEntity.id)
-                ));
-                const artistSongIds = new Set(artistAssignments.map(assignment => assignment.songId));
-                const artistSongs = localSongs.filter(song => artistSongIds.has(song.id));
-
-                const albumMap = new Map<string, { id: string, name: string, coverUrl?: string, publishedAt?: number; }>();
-                artistSongs.forEach(song => {
-                    const assignment = catalogIndex.assignmentsBySongId.get(song.id);
-                    const albumEntityId = assignment?.albumEntityId
-                        ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
-                        : undefined;
-                    const albumEntity = albumEntityId ? catalogIndex.entitiesById.get(albumEntityId) : undefined;
-                    const albumKey = albumEntity?.id || '__unknown-album__';
-                    const albumName = albumEntity?.displayName || t('localMusic.unknownAlbum');
-                    const coverUrl = resolveLocalSongCoverUrl(song);
-                    if (!albumMap.has(albumKey)) {
-                        albumMap.set(albumKey, {
-                            id: albumKey,
-                            name: albumName,
-                            coverUrl: coverUrl || undefined,
-                            publishedAt: undefined,
-                        });
-                    } else if (coverUrl && !albumMap.get(albumKey)?.coverUrl) {
-                        albumMap.get(albumKey)!.coverUrl = coverUrl;
-                    }
-                });
-
-                const albumsList = Array.from(albumMap.values());
-                const topLocalSongs = artistSongs.slice(0, 10);
-                const formattedTopSongs = buildLocalQueue(
-                    topLocalSongs,
-                    undefined,
-                    localLibraryCatalog,
-                ).map((track, index) => {
-                    const localSong = topLocalSongs[index];
-                    const assignment = catalogIndex.assignmentsBySongId.get(localSong.id);
-                    const albumEntityId = assignment?.albumEntityId
-                        ? followEntityRedirect(assignment.albumEntityId, catalogIndex.entitiesById)
-                        : undefined;
-                    const albumKey = albumEntityId || '__unknown-album__';
-                    const coverUrl = resolveLocalSongCoverUrl(localSong) || albumMap.get(albumKey)?.coverUrl;
-                    return coverUrl ? applyLocalSongCoverDisplay(track, coverUrl) : track;
-                }) as SongResult[];
-
-                setArtistInfo({
-                    name: artistName,
-                    cover: albumsList[0]?.coverUrl || undefined,
-                    description: t('artistGrid.localArtist', { artistName }),
-                    trackCount: artistSongs.length,
-                    albumCount: albumsList.length,
-                });
-                setTopSongs(formattedTopSongs);
-                setAlbums(albumsList);
-            }
-        } catch (error) {
-            console.error('[ArtistGridView] Failed to load artist grid data', error);
-        } finally {
-            if (generation === loadGenerationRef.current) setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        void loadArtistData();
-        return () => {
-            loadGenerationRef.current++;
-        };
-    }, [collection.id, collection.source, localLibraryCatalog, resolveLocalSongCoverUrl]);
 
     useEffect(() => {
         if (!isInteractive) return;
@@ -627,30 +443,16 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         return () => window.removeEventListener('keydown', handleEscape);
     }, [isInteractive, onBack, searchQuery, showCutInPanel, showSidePanel]);
 
-    const filteredAlbums = useMemo(() => {
-        const query = deferredSearchQuery.trim().toLowerCase();
-        if (!query) return albums;
-        return albums.filter((album) => String(album.name || '').toLowerCase().includes(query));
-    }, [albums, deferredSearchQuery]);
+    const filteredAlbums = useMemo(() => filterArtistAlbums(albums, deferredSearchQuery), [albums, deferredSearchQuery]);
 
-    const albumGridItems = useMemo<GridItem[]>(() => filteredAlbums.map((album) => {
-        const coverUrl = getArtistGridAlbumCoverUrl(album);
-        return {
-            id: album.id,
-            name: album.name,
-            coverUrl,
-            description: album.publishedAt ? new Date(album.publishedAt).getFullYear().toString() : '',
-            rawCollection: {
-                ...album,
-                id: album.id,
-                name: album.name,
-                coverUrl,
-                type: 'album',
-                source: collection.source,
-                providerId: album.providerId || collection.providerId,
-            },
-        };
-    }), [collection.providerId, collection.source, filteredAlbums]);
+    // 专辑卡带着打开专辑时交给宿主的链接提示（来源与 provider 取自歌手页，见 artistAlbumLink）。
+    const albumGridItems = useMemo<GridItem[]>(() => filteredAlbums.map((album) => ({
+        id: album.id,
+        name: album.name,
+        coverUrl: artistAlbumCoverUrl(album),
+        description: album.publishedAt ? new Date(album.publishedAt).getFullYear().toString() : '',
+        rawCollection: artistAlbumLink(album, collection),
+    })), [collection, filteredAlbums]);
 
     // Mapping items:
     // Index 0: Avatar
@@ -666,14 +468,14 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         itemsList.push({
             id: '__artist_avatar__',
             name: '',
-            coverUrl: artistInfo.cover,
+            coverUrl: artistInfo.coverUrl,
         });
 
         // 2. Bio Card
         itemsList.push({
             id: '__artist_bio__',
             name: artistInfo.name,
-            coverUrl: artistInfo.cover,
+            coverUrl: artistInfo.coverUrl,
             description: artistInfo.description,
             subtitle: artistInfo.aliases?.[0] || '',
         });
@@ -1369,7 +1171,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     style={{ opacity: isDaylight ? 0.18 : 0.12 }}
                 >
                     <img
-                        src={toHttps(getLowResCoverUrl(backgroundCoverUrl))}
+                        src={toHttpsCoverUrl(getLowResCoverUrl(backgroundCoverUrl))}
                         alt=""
                         className="w-full h-full object-cover scale-110 filter blur-[30px]"
                     />
@@ -1431,7 +1233,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             <ArtistGridInfoCutInPanel
                 isOpen={showCutInPanel}
                 artistName={artistInfo?.name || collection.name}
-                coverUrl={artistInfo?.cover}
+                coverUrl={artistInfo?.coverUrl}
                 description={artistInfo?.description}
                 trackCount={artistInfo?.trackCount}
                 albumCount={artistInfo?.albumCount}
@@ -1444,20 +1246,20 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             />
 
 
-            {(progressiveLoading.backgroundLoading || backgroundLoadFailed) && (
+            {(progressiveLoading.backgroundLoading || backgroundLoadFailed || loadError) && (
                 <button
                     type="button"
                     onClick={() => {
-                        if (!backgroundLoadFailed || collection.source !== 'online') return;
-                        const generation = ++loadGenerationRef.current;
-                        void loadOnlineAlbumPages(collection.id, generation, albums.length);
+                        // 加载失败：从头重新加载；专辑分页失败：从失败的那一页续（详情与热门歌曲不重新请求）。
+                        if (loadError) resource?.reload();
+                        else if (backgroundLoadFailed) resource?.retryAlbums();
                     }}
                     className="absolute right-6 top-5 z-[70] flex items-center gap-2 rounded-full px-3 py-2 text-xs backdrop-blur-md"
                     style={{ backgroundColor: 'color-mix(in srgb, var(--bg-color) 65%, transparent)' }}
                     title={t('playlist.loading')}
                 >
                     <RefreshCw size={14} className={progressiveLoading.backgroundLoading ? 'animate-spin' : ''} />
-                    {backgroundLoadFailed ? t('ui.retry') : t('playlist.loading')}
+                    {backgroundLoadFailed || loadError ? t('ui.retry') : t('playlist.loading')}
                 </button>
             )}
 
@@ -1478,6 +1280,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         <Loader2 className="animate-spin" size={32} />
                         <span className="text-sm font-semibold">{t('playlist.loading') || 'Loading...'}</span>
                     </div>
+                ) : loadError && gridItems.length === 0 ? (
+                    // 失败用集合页同一句文案（「加载失败：…」），重试在右上角的按钮上。
+                    <div className="opacity-40 text-sm">
+                        {t('playlist.loadFailed', {
+                            error: loadError === 'source-unavailable' ? t('search.sourceNavidrome') : (collection.name || ''),
+                        })}
+                    </div>
                 ) : gridItems.length === 0 ? (
                     <div className="opacity-40 text-sm">{t('home.loadingLibrary') || 'No items found'}</div>
                 ) : (
@@ -1494,6 +1303,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         onDragEnd={() => {
                             setTimeout(() => {
                                 isDraggingRef.current = false;
+                                // 拖拽期间暂存的专辑分页现在提交。
+                                flushHeld();
                             }, 50);
                         }}
                         style={{ x: dragX, y: dragY, background: 'rgba(0,0,0,0)', touchAction: 'none' }}

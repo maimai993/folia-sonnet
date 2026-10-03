@@ -1,5 +1,6 @@
 import type { LocalSong, SongResult, StatusMessage, Theme } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
+import type { LibraryArtistResource } from './artist';
 import type { LibraryCollectionDescriptor } from './collection';
 import type { LibraryDirectoryBatchController } from './directory';
 import type { LibraryHomeData, LibraryOnlineProviderPlatform } from './home';
@@ -166,11 +167,15 @@ export type LibraryCollectionSurfaceProps = LibrarySurfaceBaseProps & LibraryCol
     currentUserId?: MediaId | null;
 };
 
-/** 歌手页 surface：歌手页自己加载（不经资源），播放仍走播放端口。 */
+/**
+ * 歌手页 surface：宿主按 collectionKey 持有歌手资源（P4.1 起；详情、热门歌曲、专辑与专辑分页都在资源里，
+ * 本地歌手由宿主的 catalog 派生），suite 只订阅。播放仍走播放端口。
+ */
 export type LibraryArtistSurfaceProps = LibrarySurfaceBaseProps & LibraryCollectionNavigation & {
     collection: LibraryCollectionDescriptor;
+    /** 歌手资源；宿主创建、不订阅（换 suite 不重新请求）。 */
+    resource: LibraryArtistResource | null;
     playback: LibraryPlaybackPort;
-    localSongs: LocalSong[];
     theme: Theme;
     isDaylight: boolean;
     /** 本地歌手实体的编辑对话框（宿主挂载）。 */

@@ -171,7 +171,7 @@ describe('albums: paging, filter, cover and link hint', () => {
         expect(toHttpsCoverUrl('http://music.example.com/rest/getCoverArt')).toBe('http://music.example.com/rest/getCoverArt');
         expect(toHttpsCoverUrl(undefined)).toBe('');
         expect(artistAlbumCoverUrl({ coverUrl: 'http://cdn.example.com/a.jpg' })).toBe('https://cdn.example.com/a.jpg');
-        expect(artistAlbumCoverUrl({ picUrl: 'legacy.jpg' } as { coverUrl?: unknown })).toBeUndefined();
+        expect(artistAlbumCoverUrl({ picUrl: 'legacy.jpg' })).toBeUndefined();
     });
 
     it('builds the link hint the host pushes with: source and provider from the artist page', () => {

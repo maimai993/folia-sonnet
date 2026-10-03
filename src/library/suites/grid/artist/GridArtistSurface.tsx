@@ -5,12 +5,13 @@ import ArtistGridView from './ArtistGridView';
 
 // src/library/suites/grid/artist/GridArtistSurface.tsx
 // 网格的歌手页 surface：把宿主的契约输入（LibraryArtistSurfaceProps）接到 ArtistGridView 的旧 props 上，
-// 移形换影的入场计划由网格自己读。歌手页还没向命令面板发布动作，declaredActions 暂时不用。
+// 移形换影的入场计划由网格自己读。歌手数据是宿主交来的歌手资源（P4.1）。歌手页还没向命令面板发布动作，
+// declaredActions 暂时不用。
 
 const GridArtistSurface: React.FC<LibraryArtistSurfaceProps> = ({
     collection,
+    resource,
     playback,
-    localSongs,
     theme,
     isDaylight,
     isInteractive,
@@ -24,6 +25,7 @@ const GridArtistSurface: React.FC<LibraryArtistSurfaceProps> = ({
     return (
         <ArtistGridView
             collection={collection}
+            resource={resource}
             onBack={onBack}
             onSelectTrack={playback.playTrack}
             onAddTrackToQueue={playback.enqueueTrack}
@@ -33,7 +35,6 @@ const GridArtistSurface: React.FC<LibraryArtistSurfaceProps> = ({
             onSelectArtist={onOpenArtist}
             theme={theme}
             isDaylight={isDaylight}
-            localSongs={localSongs}
             onEditEntity={onEditEntity}
             isInteractive={isInteractive}
             morphPlan={morphPlan}

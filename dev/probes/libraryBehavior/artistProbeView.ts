@@ -1,5 +1,3 @@
-import i18n from '../../../src/i18n/config';
-import type { SongResult } from '../../../src/types';
 import ArtistGridView from '../../../src/library/suites/grid/artist/ArtistGridView';
 import { ArtistGridInfoCutInPanel } from '../../../src/library/suites/grid/artist/ArtistGridInfoCutInPanel';
 import { SidePanelList } from '../../../src/components/shared/SidePanelList';
@@ -7,105 +5,92 @@ import { GridListSearchButton } from '../../../src/components/shared/GridListSea
 import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 import { isSongUnavailable } from '../../../src/services/onlineMusic/songAvailability';
+import type { LibraryArtistResource, LibraryArtistSnapshot } from '../../../src/library/core/contracts/artist';
+import type { LibraryCollectionDescriptor } from '../../../src/library/core/contracts/collection';
+import { artistAlbumLink, filterArtistAlbums } from '../../../src/library/core/model/artistModel';
 import { findPresentComponent, firstHostElement, propsOf, type ProbeFiber } from '../homeBehavior/reactFiberProbe';
 import type { ProbeArtistAlbum, ProbeArtistView } from './probeApi';
 
 // dev/probes/libraryBehavior/artistProbeView.ts
-// 歌手页的语义视图（`__libraryProbe.artist()`）与几个歌手页动作。P4.0 时歌手页还没有 core 资源：数据是
-// ArtistGridView 组件里的 state，所以这里从已提交的 fiber 上读——找到 ArtistGridView 的 gridItems（useMemo，
-// 第一项固定是 id 为 `__artist_avatar__` 的头像），状态再从它的 DOM 里分辨（初次加载的转圈、空态文案、
-// 后台分页的「加载中 / 重试」按钮）。P4.1 有了宿主持有的歌手资源之后，artist() 改读资源快照，签名不变。
+// 歌手页的语义视图（`__libraryProbe.artist()`）与几个歌手页动作。P4.1 起歌手数据在宿主持有的歌手资源里：
+// artist() 找到在场（不在退场中）的歌手页，读它收到的资源（`resource` prop，宿主交给 surface 的同一个对象）
+// 的快照，再按当前的命令筛选用 core 的 filterArtistAlbums 算出「当前显示的专辑」，专辑的链接提示用 core 的
+// artistAlbumLink（网格专辑卡带的就是它）。面板开合仍从组件树上读。签名与 P4.0 相同，status 多了 error。
 
-type GridItemLike = {
-    id: string | number;
-    name?: unknown;
-    coverUrl?: string;
-    description?: string;
-    rawTrack?: SongResult;
-    rawCollection?: Record<string, unknown> & { id: string | number; name?: string };
-};
-
-type HookNode = { memoizedState: unknown; next: HookNode | null };
-
-const AVATAR_ID = '__artist_avatar__';
-const BIO_ID = '__artist_bio__';
+/** 歌手页（ArtistGridView）上探针要读的两个 prop。 */
+type ArtistViewProps = { collection?: LibraryCollectionDescriptor; resource?: LibraryArtistResource | null };
 
 /** 在场（不在退场中）的歌手页实例。 */
 const artistFiber = (): ProbeFiber | null => findPresentComponent(ArtistGridView);
 
-// 沿 hook 链找 gridItems：useMemo 的 memoizedState 是 [value, deps]，value 的第一项是头像卡。
-const readGridItems = (fiber: ProbeFiber): GridItemLike[] => {
-    let hook = (fiber as unknown as { memoizedState: HookNode | null }).memoizedState;
-    while (hook) {
-        const state = hook.memoizedState;
-        if (Array.isArray(state) && state.length === 2 && Array.isArray(state[0])) {
-            const value = state[0] as GridItemLike[];
-            if (value[0]?.id === AVATAR_ID) return value;
-        }
-        hook = hook.next;
-    }
-    return [];
-};
-
-const buttonTexts = (root: HTMLElement | null): string[] => (
-    root ? [...root.querySelectorAll('button')].map(button => (button.textContent ?? '').trim()) : []
+/** 在场歌手页的资源（宿主持有的那一个）。 */
+export const presentArtistResource = (): LibraryArtistResource | null => (
+    propsOf<ArtistViewProps>(artistFiber())?.resource ?? null
 );
 
-const toAlbum = (item: GridItemLike): ProbeArtistAlbum => ({
-    id: String(item.rawCollection!.id),
-    name: String(item.rawCollection!.name ?? item.name ?? ''),
-    link: {
-        source: item.rawCollection!.source as string | undefined,
-        providerId: item.rawCollection!.providerId as string | undefined,
-        type: item.rawCollection!.type as string | undefined,
-    },
-});
+const statusOf = (snapshot: LibraryArtistSnapshot): ProbeArtistView['status'] => {
+    if (snapshot.status === 'idle' || snapshot.status === 'loading') return 'loading';
+    if (snapshot.status === 'error') return 'error';
+    if (!snapshot.detail) return 'empty';
+    const sync = snapshot.albumSync;
+    if (sync.state === 'syncing' || (sync.state === 'interrupted' && sync.reason === 'paused')) return 'syncing';
+    if (sync.state === 'interrupted') return 'interrupted';
+    return 'ready';
+};
 
 /** 当前在场歌手页的语义视图；没有歌手页时为 null。 */
 export const readArtistView = (): ProbeArtistView | null => {
     const fiber = artistFiber();
     if (!fiber) return null;
-    const root = firstHostElement(fiber);
-    const items = readGridItems(fiber);
-    const avatar = items.find(item => item.id === AVATAR_ID);
-    const bio = items.find(item => item.id === BIO_ID);
-    const songs = items.filter(item => item.rawTrack).map(item => item.rawTrack!);
-    const albums = items.filter(item => item.rawCollection).map(toAlbum);
-    const texts = buttonTexts(root);
-    const rootText = root?.textContent ?? '';
-
-    let status: ProbeArtistView['status'];
-    if (items.length === 0) {
-        status = rootText.includes(i18n.t('home.loadingLibrary')) ? 'empty' : 'loading';
-    } else if (texts.includes(i18n.t('ui.retry'))) {
-        status = 'interrupted';
-    } else if (texts.includes(i18n.t('playlist.loading'))) {
-        status = 'syncing';
-    } else {
-        status = 'ready';
-    }
+    const props = propsOf<ArtistViewProps>(fiber);
+    const collection = props?.collection;
+    const snapshot = props?.resource?.getSnapshot() ?? null;
+    const query = useAppViewStore.getState().commandFilter?.getQuery() ?? null;
+    const detail = snapshot?.status === 'ready' ? snapshot.detail : null;
+    const songs = detail ? snapshot!.topSongs : [];
+    // 网格只在有详情时摆卡片；专辑按当前筛选。
+    const shownAlbums = detail ? filterArtistAlbums(snapshot!.albums, query ?? '') : [];
+    const albums: ProbeArtistAlbum[] = shownAlbums.map(album => {
+        const link = artistAlbumLink(album, {
+            source: collection?.source ?? 'online',
+            providerId: collection?.source === 'online' ? collection.providerId : undefined,
+        });
+        return {
+            id: String(link.id),
+            name: String(link.name ?? ''),
+            link: { source: link.source, providerId: link.providerId, type: link.type },
+        };
+    });
 
     const cutIn = propsOf<{ isOpen: boolean }>(findPresentComponent(ArtistGridInfoCutInPanel, fiber));
     const sidePanel = propsOf<{ isOpen: boolean }>(findPresentComponent(SidePanelList, fiber));
-    const collection = propsOf<{ collection: { name: string } }>(fiber)?.collection;
 
     return {
         name: collection?.name ?? '',
-        status,
-        detail: bio
-            ? {
-                name: typeof bio.name === 'string' ? bio.name : String(bio.name ?? ''),
-                cover: avatar?.coverUrl ?? null,
-                hasBio: Boolean(bio.description),
-            }
+        status: snapshot ? statusOf(snapshot) : 'loading',
+        detail: detail
+            ? { name: detail.name, cover: detail.coverUrl ?? null, hasBio: Boolean(detail.description) }
             : null,
         topSongIds: songs.map(getPlaybackSongKey),
         playableTopSongIds: songs.filter(song => !isSongUnavailable(song)).map(getPlaybackSongKey),
         albumIds: albums.map(album => album.id),
         albums,
-        query: useAppViewStore.getState().commandFilter?.getQuery() ?? null,
+        query,
         panels: { sidePanel: Boolean(sidePanel?.isOpen), cutIn: Boolean(cutIn?.isOpen) },
     };
+};
+
+/** 让在场歌手页的资源从头重新加载（与错误态的重试同一个入口）；没有歌手页时返回 false。 */
+export const reloadArtist = (): boolean => {
+    const resource = presentArtistResource();
+    if (!resource) return false;
+    resource.reload();
+    return true;
+};
+
+type GridItemLike = {
+    id: string | number;
+    rawCollection?: Record<string, unknown> & { id: string | number; name?: string };
 };
 
 type SidePanelProps = {

@@ -27,7 +27,7 @@ import {
     renameNavidromeArtist,
 } from './navidromeShim';
 import { seedProbeQueue } from './probeSurfaceCallbacks';
-import { openArtistAlbum, openArtistPanel, readArtistView } from './artistProbeView';
+import { openArtistAlbum, openArtistPanel, readArtistView, reloadArtist } from './artistProbeView';
 
 // dev/probes/libraryBehavior/libraryProbeApi.ts
 // 把探针的驱动接口挂到 window 上。查询、动作都经由真实的注册点（命令筛选、grid surface），
@@ -86,6 +86,7 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
         artist: readArtistView,
         openArtistAlbum,
         openArtistPanel,
+        reloadArtist,
         artistTarget: onlineArtistFixtureTarget,
         addFault: addProbeFault,
         clearFaults: clearProbeFaults,

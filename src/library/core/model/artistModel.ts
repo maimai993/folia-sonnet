@@ -50,7 +50,7 @@ export const toHttpsCoverUrl = (url?: string): string => {
 };
 
 /** 专辑卡用的封面：只认 coverUrl（不再读旧的 picUrl），并升到 https。 */
-export const artistAlbumCoverUrl = (album: { coverUrl?: unknown } | null | undefined): string | undefined => {
+export const artistAlbumCoverUrl = (album: { readonly coverUrl?: unknown; readonly [field: string]: unknown } | null | undefined): string | undefined => {
     const coverUrl = album?.coverUrl;
     return typeof coverUrl === 'string' && coverUrl ? toHttpsCoverUrl(coverUrl) : undefined;
 };

@@ -26,18 +26,22 @@ import {
 import '../../dev/probes/libraryBehavior/probeApi';
 
 // test/component/artistBehavior.spec.ts
-// 歌手页与它的嵌套入口的行为基线（P4.0；P4.1 起把歌手数据挪进宿主持有的 core 资源，这批用例就是验收）。
+// 歌手页与它的嵌套入口的行为基线（P4.0 建立；P4.1 把歌手数据挪进宿主按 collectionKey 持有的 core 歌手资源，
+// 这批用例就是验收）。
 //
 // 用的是 libraryBehavior 探针页（同一个假宿主、假 provider、Navidrome 垫片、本地 fixture），驱动接口是
-// window.__libraryProbe 上的歌手页部分：openArtist / artist() / openArtistAlbum / openArtistPanel，以及故障、
-// 延迟、按住应答。artist() 现在从网格歌手页的已提交组件树上读（见 dev/probes/libraryBehavior/artistProbeView.ts），
-// 断言只用它给出的语义字段，所以 P4.1 换数据源、P4.3 加 TUI 歌手页之后同一批断言原样成立。
+// window.__libraryProbe 上的歌手页部分：openArtist / artist() / openArtistAlbum / openArtistPanel / reloadArtist，
+// 以及故障、延迟、按住应答。artist() 读在场歌手页收到的歌手资源的快照（见 dev/probes/libraryBehavior/artistProbeView.ts），
+// 断言只用它给出的语义字段，所以 P4.3 加 TUI 歌手页之后同一批断言原样成立。
 //
 // 目前只有网格实现了歌手页（TUI 回退网格，那两条回退用例在 libraryBehavior.spec.ts 里），所以用例标 [grid]。
-// test.fixme 记录的是已知缺陷（P4.1 转正）。
+// P4.0 记下的三个缺陷（Navidrome 晚到写回、本地 catalog 未就绪闪空态、加载失败无错误态）P4.1 已转正。
 //
-// 探针页开着 StrictMode，而且歌手页自己的本地曲库 catalog 就绪时会再加载一遍：同一个请求可能出现多次，
-// 分页断言看「去重后的 offset 序列」。
+// 资源复用（P4.1）：离开的在线 / Navidrome 歌手留在一个有界的 LRU 里，详情已到、没有失败就直接复用——
+// 从专辑返回歌手页不重新请求详情与热门歌曲，被暂停的专辑分页从停下的 offset 续上；首屏没加载完就离开的
+// 不复用（重开时从头加载）。
+//
+// 探针页开着 StrictMode：同一个请求理论上可能出现多次，分页断言看「去重后的 offset 序列」。
 
 const main = ONLINE_ARTISTS['artist-main'];
 const guest = ONLINE_ARTISTS['artist-guest'];
@@ -169,8 +173,21 @@ test.describe('[grid] online artist', () => {
         expect(view.topSongIds).toEqual(topKeys(guest));
         expect(view.albumIds).toEqual(artistAlbumIds(guest));
         expect(await stack(page)).toEqual([guest.name]);
-        // 离开的歌手不再翻专辑页。
+        // 离开的歌手不再翻专辑页：它的资源在离开时被暂停，晚到的应答被丢掉，没有续页。
         expect((await requests(page, 'artistAlbums', mainTarget)).filter(request => (request.offset ?? 0) > 0)).toEqual([]);
+
+        // 重开 A：被暂停时首屏还没到，宿主不复用那个资源，从头加载，内容完整且是 A 的。
+        await clearLog(page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount, 30_000);
+        const reopened = (await artist(page))!;
+        expect(reopened.detail?.name).toBe(main.name);
+        expect(reopened.topSongIds).toEqual(topKeys(main));
+        expect(reopened.albumIds).toEqual(artistAlbumIds(main));
+        expect(await requests(page, 'artistDetail', mainTarget)).not.toEqual([]);
+        expect(await distinctAlbumOffsets(page, mainTarget)).toEqual(
+            range(Math.ceil(main.albumCount / ARTIST_ALBUM_PAGE_SIZE)).map(index => `${index * ARTIST_ALBUM_PAGE_SIZE}+${ARTIST_ALBUM_PAGE_SIZE}`),
+        );
     });
 
     test('album pages of an artist left for a nested one never land in it', async ({ mount, page }) => {
@@ -194,11 +211,21 @@ test.describe('[grid] online artist', () => {
         expect(view.detail?.name).toBe(guest.name);
         expect(view.albumIds).toEqual(artistAlbumIds(guest));
 
-        // 返回落回 A：A 的歌手页重新加载完整（现状：没有缓存，重新请求）。
+        // 返回落回 A：宿主复用 A 的资源（详情已到），不重新请求详情与热门歌曲；离开时被暂停的专辑分页
+        // 从停下的那一页（第二页）续上，放行之后晚到的那一页没有被记进去（不重复、不缺）。
+        await clearLog(page);
         await back(page);
         await expect.poll(() => stack(page)).toEqual([main.name]);
         await waitForArtist(page, main.albumCount);
-        expect((await artist(page))!.detail?.name).toBe(main.name);
+        const resumed = (await artist(page))!;
+        expect(resumed.detail?.name).toBe(main.name);
+        expect(resumed.topSongIds).toEqual(topKeys(main));
+        expect(resumed.albumIds).toEqual(artistAlbumIds(main));
+        expect(await requests(page, 'artistDetail', mainTarget)).toEqual([]);
+        expect(await requests(page, 'artistSongs', mainTarget)).toEqual([]);
+        expect(await distinctAlbumOffsets(page, mainTarget)).toEqual(
+            range(Math.ceil(main.albumCount / ARTIST_ALBUM_PAGE_SIZE)).slice(1).map(index => `${index * ARTIST_ALBUM_PAGE_SIZE}+${ARTIST_ALBUM_PAGE_SIZE}`),
+        );
     });
 });
 
@@ -234,7 +261,7 @@ test.describe('[grid] Navidrome and local artists', () => {
         expect(view.topSongIds).toEqual(range(8, 1).map(localKey));
     });
 
-    // 加载期间不出现空态：在线与 Navidrome 现在就是这样（本地那一闪是已知缺陷，见文件末尾的 fixme）。
+    // 加载期间不出现空态（本地歌手的同一条在文件末尾，P4.0 时它是已知缺陷）。
     for (const [id, albums] of [['artist-main', main.albumCount], ['navi-artist', NAVIDROME_ARTIST_ALBUMS['navi-ar-1'].length]] as const) {
         test(`${id} never shows the empty state while it loads`, async ({ mount, page }) => {
             await mountProbe(mount, page);
@@ -332,10 +359,14 @@ test.describe('[grid] nested opens', () => {
         await expect(artistLayer(page)).toHaveCount(0);
         await expect.poll(() => requests(page, 'albumTracks', `${PROBE_PROVIDER_A}:album:${album.id}`)).not.toEqual([]);
 
+        // 返回歌手页：复用宿主持有的资源，不重新请求。
+        await clearLog(page);
         await back(page);
         await expect.poll(() => stack(page)).toEqual([main.name]);
         await waitForArtist(page, main.albumCount);
         expect((await artist(page))!.detail?.name).toBe(main.name);
+        expect(await requests(page, 'artistDetail', mainTarget)).toEqual([]);
+        expect(await requests(page, 'artistAlbums', mainTarget)).toEqual([]);
     });
 
     test('a song card\'s album link opens that album with its tracks', async ({ mount, page }) => {
@@ -432,11 +463,13 @@ test.describe('[grid] artist page panels', () => {
     });
 });
 
-// 已知缺陷（P4 现状速记），P4.1 的 core 歌手资源修掉之后转正。每条都在当前代码上确认过会失败。
-test.describe('[grid] known artist page defects', () => {
-    // ArtistGridView 的 Navidrome 分支在 getArtist 回来之后直接 setArtistInfo，没有比对 generation：
-    // 同一个歌手页重新加载（本地曲库刷新会让它重载）时，先发出、晚回来的那次会把旧的详情写回来。
-    test.fixme('a late Navidrome artist response from a superseded load does not overwrite the current detail', async ({ mount, page }) => {
+// P4.0 记下的已知缺陷（P4 现状速记），P4.1 的 core 歌手资源修掉之后转正。
+test.describe('[grid] former artist page defects', () => {
+    // 原先 ArtistGridView 的 Navidrome 分支在 getArtist 回来之后直接 setArtistInfo，没有比对 generation：
+    // 同一个歌手页重新加载时，先发出、晚回来的那次会把旧的详情写回来。P4.0 靠本地曲库刷新让歌手页自己的 catalog
+    // 重载来触发重新加载；P4.1 起歌手页不再自带 catalog（Navidrome 歌手也不随本地曲库重载），改用资源的 reload
+    // （错误态「重试」的同一个入口）。资源每次加载领一张票，被取代的加载不写快照。
+    test('a late Navidrome artist response from a superseded load does not overwrite the current detail', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await openArtist(page, 'navi-artist');
         await waitForArtist(page, NAVIDROME_ARTIST_ALBUMS['navi-ar-1'].length);
@@ -445,12 +478,12 @@ test.describe('[grid] known artist page defects', () => {
         await page.evaluate(() => window.__libraryProbe!.holdNavidrome('getArtist'));
         await clearLog(page);
         // 第一次重载：请求按改名前的上游生成，被按住。
-        await page.evaluate(() => window.__libraryProbe!.refreshLocal());
+        expect(await page.evaluate(() => window.__libraryProbe!.reloadArtist())).toBe(true);
         await expect.poll(() => page.evaluate(() => window.__libraryProbe!.heldNavidrome('getArtist'))).toBeGreaterThan(0);
         const staleCount = await page.evaluate(() => window.__libraryProbe!.heldNavidrome('getArtist'));
         // 上游改名，第二次重载：它的应答先放行。
         await page.evaluate(name => window.__libraryProbe!.renameNavidromeArtist('navi-ar-1', name), renamed);
-        await page.evaluate(() => window.__libraryProbe!.refreshLocal());
+        expect(await page.evaluate(() => window.__libraryProbe!.reloadArtist())).toBe(true);
         await expect.poll(() => page.evaluate(() => window.__libraryProbe!.heldNavidrome('getArtist'))).toBeGreaterThan(staleCount);
         await page.evaluate(() => window.__libraryProbe!.releaseNavidrome('getArtist', 'newest'));
         await expect.poll(async () => (await artist(page))?.detail?.name).toBe(renamed);
@@ -462,9 +495,9 @@ test.describe('[grid] known artist page defects', () => {
         expect((await artist(page))?.detail?.name).toBe(renamed);
     });
 
-    // 本地歌手页用自己的 catalog 实例，catalog 就绪之前那次加载直接返回，页面先显示空态（「No content」），
-    // 就绪后才出内容。正确的表现是加载中，而不是先说「没有内容」。（在线、Navidrome 没有这一闪，见下一条。）
-    test.fixme('a local artist never shows the empty state while its catalog is still loading', async ({ mount, page }) => {
+    // 原先本地歌手页用自己的 catalog 实例，catalog 就绪之前那次加载直接返回，页面先显示空态（「No content」），
+    // 就绪后才出内容。P4.1 起本地歌手由宿主的 catalog 派生，未就绪时资源保持 loading（单测覆盖未就绪的分支）。
+    test('a local artist never shows the empty state while its catalog is still loading', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await watchEmptyState(page);
         await openArtist(page, 'local-artist');
@@ -472,14 +505,22 @@ test.describe('[grid] known artist page defects', () => {
         expect(await emptyStateSeen(page)).toBe(false);
     });
 
-    // 详情请求失败时只打 console，页面落到空态（「No content」，即 home.loadingLibrary），没有错误态，也没有重试。
-    test.fixme('a failed artist load shows an error state with a retry instead of the empty text', async ({ mount, page }) => {
+    // 原先详情请求失败时只打 console，页面落到空态（「No content」，即 home.loadingLibrary），没有错误态，也没有重试。
+    // P4.1 起资源记为 error：页面显示集合页同一句失败文案，右上角的「重试」从头重新加载。
+    test('a failed artist load shows an error state with a retry instead of the empty text', async ({ mount, page }) => {
         await mountProbe(mount, page);
         await addFault(page, { op: 'artistDetail', target: mainTarget, remaining: 99 });
         await openArtist(page, 'artist-main');
         await expect.poll(async () => (await artist(page))?.status, { timeout: 10_000 }).toBe('error');
         await expect(artistLayer(page).getByText('No content')).toHaveCount(0);
+        await expect(artistLayer(page).getByText(`Failed to load: ${main.name}`)).toBeVisible();
         await expect(artistLayer(page).getByRole('button', { name: 'Retry' })).toBeVisible();
+
+        // 故障清掉之后重试：完整加载。
+        await clearFaults(page, mainTarget);
+        await artistLayer(page).getByRole('button', { name: 'Retry' }).click();
+        await waitForArtist(page, main.albumCount);
+        expect((await artist(page))!.detail?.name).toBe(main.name);
     });
 });
 

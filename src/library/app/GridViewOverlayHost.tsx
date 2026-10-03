@@ -19,6 +19,7 @@ import { createLibraryPlaybackPort } from './createLibraryPlaybackPort';
 import { createLibraryMutationPort } from './createLibraryMutationPort';
 import { useCollectionResource } from '../core/bindings/useCollectionResource';
 import { useCollectionMutations } from '../core/bindings/useCollectionMutations';
+import { useArtistResource } from '../core/bindings/useArtistResource';
 import type { LocalLibraryCatalogSnapshot } from '../../hooks/useLocalLibraryCatalog';
 import { LocalLibraryEntityPanel } from '../../components/modal/LocalLibraryEntityPanel';
 import { LocalFolderSongInfoPanel } from '../../components/modal/LocalFolderSongInfoPanel';
@@ -219,11 +220,23 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             : undefined
     ), [liveSelectedCollection, localLibraryCatalog, surfaceProps.localSongs]);
     // 宿主持有集合资源，网格（以及别的 renderer）只订阅它：切换 renderer 不会重新请求。
-    // 宿主自己不订阅快照，所以分页到达不会让首页这棵大树重渲染。歌手页仍是自己加载。
+    // 宿主自己不订阅快照，所以分页到达不会让首页这棵大树重渲染。歌手页同理，见下面的 artistResource。
     const collectionResource = useCollectionResource({
         descriptor: liveSelectedCollection && liveSelectedCollection.type !== 'artist' ? liveSelectedCollection : null,
         currentUserId: surfaceProps.user?.id,
         localTracks,
+    });
+    // 歌手资源：宿主按导航栈里那一层的 collectionKey 持有（本地描述的 id 会在 catalog 就绪后改写，不拿它算 key），
+    // 本地歌手由宿主这一份 catalog 派生（歌手页不再自带第二个 catalog 实例）。宿主同样不订阅它的快照。
+    const artistLocalLibrary = useMemo(() => ({
+        catalog: localLibraryCatalog,
+        songs: surfaceProps.localSongs,
+    }), [localLibraryCatalog, surfaceProps.localSongs]);
+    const isArtistSelected = selectedCollection?.type === 'artist';
+    const artistResource = useArtistResource({
+        key: isArtistSelected ? selectedCollectionKey : null,
+        descriptor: isArtistSelected ? liveSelectedCollection : null,
+        local: artistLocalLibrary,
     });
     // 播放与入队的语义集中在端口里，网格与别的 renderer 共用。
     const playbackPort = useMemo(() => createLibraryPlaybackPort(surfaceProps), [surfaceProps]);
@@ -571,8 +584,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                         <React.Suspense key={`${artistSurface.suiteId}:${selectedCollectionKey}`} fallback={null}>
                             <ArtistSurface
                                 collection={displaySelectedCollection}
+                                resource={artistResource}
                                 playback={playbackPort}
-                                localSongs={surfaceProps.localSongs}
                                 theme={surfaceProps.theme}
                                 isDaylight={isDaylight}
                                 isInteractive={isInteractive}

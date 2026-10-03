@@ -17,7 +17,7 @@ export type ProbeArtistAlbum = {
 
 /**
  * 歌手页的语义视图。status：loading（初次加载）/ empty（没有任何内容，空态文案）/ syncing（专辑还在后台分页）/
- * interrupted（后台分页失败，有重试）/ ready；P4.1 起由 core 资源给出，并会多出 error。
+ * interrupted（后台分页失败，有重试）/ ready / error（加载失败，有重试）；P4.1 起由宿主的歌手资源快照给出。
  */
 export type ProbeArtistView = {
     /** 导航栈里这一层的名字（描述上的名字）。 */
@@ -93,6 +93,8 @@ export type LibraryProbeApi = {
     openArtistAlbum: (albumId: string) => boolean;
     /** 打开歌手页的专辑侧栏 / 信息面板。 */
     openArtistPanel: (panel: 'side' | 'cut-in') => boolean;
+    /** 让在场歌手页的资源从头重新加载（错误态「重试」的同一入口）；没有歌手页时返回 false。 */
+    reloadArtist: () => boolean;
     /** 在线歌手在请求账里的 target。 */
     artistTarget: (fixtureId: OnlineArtistFixtureId) => string;
     /** 故障注入与延迟（假 provider）；clearFaults 不给 target 时清空全部。 */

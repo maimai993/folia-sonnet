@@ -197,6 +197,21 @@ describe('library core layer boundaries', () => {
             .toEqual([`${CORE}/state/useNavidromeHomeSectionStore.ts`]);
     });
 
+    it('keeps the artist data in core: the grid artist page loads nothing itself', () => {
+        // P4.1：歌手页的数据是宿主持有的歌手资源（core/services/artistResource），本地歌手由宿主的 catalog 派生；
+        // 网格歌手页不再自己调 omni / Navidrome，也不再自带第二个本地曲库 catalog。
+        const ARTIST_VIEWS = listSources('src/library/suites/grid/artist');
+        const offenders = offendersOf(ARTIST_VIEWS, target => (
+            /^src\/services\/(onlineMusic\/omni|navidromeService|localCoverAssetUrl|playbackAdapters)$/.test(target)
+            || /^src\/hooks\/useLocalLibraryCatalog$/.test(target)
+        ), allSpecifiersOf);
+        expect(ARTIST_VIEWS).toContain('src/library/suites/grid/artist/ArtistGridView.tsx');
+        expect(offenders).toEqual([]);
+        // 歌手资源同样只用注入的上游：默认装配集中在 artistResourceDeps。
+        expect(importsOf(`${CORE}/services/artistResource.ts`)
+            .filter(source => /onlineMusic\/omni$|navidromeService$|\/stores\/|\/core\/state\//.test(source))).toEqual([]);
+    });
+
     it('keeps the mutation layer injectable: omni and the cache are wired in one place only', () => {
         expect(CORE_FILES).toEqual(expect.arrayContaining([
             `${CORE}/model/collectionMutationCapabilities.ts`,
