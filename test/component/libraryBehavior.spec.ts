@@ -1013,6 +1013,26 @@ test.describe('suites', () => {
         expect(await playFilteredIds(page)).toHaveLength(8);
     });
 
+    // 上一条用例自 R3 起偶发失败（约 1/3）：返回之后歌手页停在 0 透明度、计数仍为 1。根因与 P3.5 修掉的
+    // 「打开集合后马上关掉」相同——本地歌手页的专辑在退场开始之后才到，列表按钮在退场中途挂上，宿主的
+    // AnimatePresence 等不到它完成。这里把时机固定下来：压入歌手页后不等它的数据，立刻返回。
+    for (const renderer of RENDERERS) {
+        test(`[${renderer}] going back from an artist page right after it opened leaves no artist layer behind`, async ({ mount, page }) => {
+            await mountProbe(mount, page, renderer);
+            await open(page, 'local-all');
+            await waitForRenderer(page, renderer);
+            await waitForScope(page, 8);
+            for (let round = 0; round < 3; round += 1) {
+                expect(await page.evaluate(() => window.__libraryProbe!.pushArtist())).toBe(true);
+                await back(page);
+                await expect(page.locator('[data-library-surface="artist"]'), `round ${round}`).toHaveCount(0);
+                await waitForRenderer(page, renderer);
+            }
+            await waitForScope(page, 8);
+            expect(await playFilteredIds(page)).toHaveLength(8);
+        });
+    }
+
     for (const renderer of RENDERERS) {
         test(`[${renderer}] the command surface offers only actions the suite declares`, async ({ mount, page }) => {
             await mountProbe(mount, page, renderer);
