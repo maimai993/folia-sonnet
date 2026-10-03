@@ -69,8 +69,6 @@ const createBaseParams = () => {
         onMatchNavidromeSong: vi.fn(),
         navidromeFocusedAlbumIndex: 0,
         setNavidromeFocusedAlbumIndex: vi.fn(),
-        pendingNavidromeSelection: null,
-        setPendingNavidromeSelection: vi.fn(),
         stageSource: 'stage-api' as const,
         activePlaybackContext: 'stage' as const,
         openStagePlayer,

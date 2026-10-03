@@ -1,47 +1,50 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Clock3, Disc3, ListMusic, Loader2, RefreshCw, Settings2, Sparkles, User } from 'lucide-react';
 import DesktopGrid3DSurface, { DesktopGrid3DAction } from './DesktopGrid3DSurface';
 import { Theme } from '../../../../types';
-import { navidromeApi } from '../../../../services/navidromeService';
-import { createCoverPlaceholder, pickRandomSongCoverUrl } from '../../../../utils/coverPlaceholders';
-import {
-    createNavidromeGridViewCollection,
-    GridViewCollectionDescriptor,
-    NavidromeGridViewCollectionType,
-} from '../../../../components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '../../../../components/app/home/gridViewCollectionAdapters';
 import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
-import { useNavidromeGridLibrary } from './useNavidromeGridLibrary';
-import { directoryKey } from '../../../core/model/directorySession';
+import type { LibraryHomeActionsController, LibraryHomeCard, LibraryHomeListState } from '../../../core/contracts/homeModel';
+import { isNavidromeHomeSection, resolveNavidromeCollectionType, type NavidromeHomeSection } from '../../../core/model/navidromeHomeModel';
+import { useLibraryHomeNavidrome } from '../../../core/bindings/useLibraryHomeNavidrome';
+import { useLibraryHomeListRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
 
 // src/library/suites/grid/home/NavidromeGrid3DView.tsx
 // Desktop-only Navidrome Grid3D overview that opens GridView instead of legacy collection views.
+// 概览请求、section 记忆、卡片（含带 isVirtual 的「随机」「收藏」）与打开时的集合类型都来自 Library Core
+// （core/bindings/useLibraryHomeNavidrome、core/model/navidromeHomeModel）；这里只剩图标与各 section 的焦点。
 
-type NaviSection = 'albums' | 'recently-added' | 'recently-played' | 'playlists' | 'artists';
+const SECTION_ICONS: Record<NavidromeHomeSection, React.ReactNode> = {
+    albums: <Disc3 size={13} />,
+    'recently-added': <Sparkles size={13} />,
+    'recently-played': <Clock3 size={13} />,
+    playlists: <ListMusic size={13} />,
+    artists: <User size={13} />,
+};
 
 interface NavidromeGrid3DViewProps {
     focusedAlbumIndex: number;
     setFocusedAlbumIndex: (index: number) => void;
-    externalSelection?: any;
-    onExternalSelectionHandled?: () => void;
     onOpenSettings?: () => void;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
+    /** 首页动作控制器（打开卡片；宿主创建）。 */
+    homeActions: LibraryHomeActionsController;
+    /** 首页模型算好的目录会话 key（core/model/homeSources 的 resolveHomeDirectoryKey）。 */
+    directoryKey: string;
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
     isInteractive?: boolean;
 }
 
-const RANDOM_PLAYLIST_ID = '__navi_random__';
-const FAVORITES_PLAYLIST_ID = '__navi_favorites__';
-const NAVIDROME_LAST_SECTION_KEY = 'folia_navidrome_last_section';
 export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     focusedAlbumIndex,
     setFocusedAlbumIndex,
-    externalSelection = null,
-    onExternalSelectionHandled,
     onOpenSettings,
     onOpenGridView,
+    homeActions,
+    directoryKey,
     theme,
     isDaylight,
     hasFloatingPlayer = false,
@@ -49,220 +52,64 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
 }) => {
     const { t } = useTranslation();
     const [localAlbumIndex, setLocalAlbumIndex] = useDebouncedFocusSync(focusedAlbumIndex, setFocusedAlbumIndex);
-    const [section, setSection] = useState<NaviSection>(() => {
-        try {
-            const saved = localStorage.getItem(NAVIDROME_LAST_SECTION_KEY);
-            if (
-                saved === 'albums'
-                || saved === 'recently-added'
-                || saved === 'recently-played'
-                || saved === 'playlists'
-                || saved === 'artists'
-            ) {
-                return saved;
-            }
-        } catch (e) {
-            console.warn('[NavidromeGrid3DView] Failed to restore navidrome last section:', e);
-        }
-        return 'albums';
-    });
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [focusedArtistIndex, setFocusedArtistIndex] = useState(0);
     const [focusedRecentlyAddedIndex, setFocusedRecentlyAddedIndex] = useState(0);
     const [focusedRecentlyPlayedIndex, setFocusedRecentlyPlayedIndex] = useState(0);
-    const {
-        albums,
-        artists,
-        config,
-        favoriteSongs,
-        fetchLibrary,
-        isLoading,
-        playlists,
-        randomSongs,
-        recentlyAddedAlbums,
-        recentlyPlayedAlbums,
-    } = useNavidromeGridLibrary();
+    const navidrome = useLibraryHomeNavidrome();
+    const { config, section, setSection, isLoading } = navidrome;
 
-    useEffect(() => {
-        try {
-            localStorage.setItem(NAVIDROME_LAST_SECTION_KEY, section);
-        } catch (e) {
-            console.warn('[NavidromeGrid3DView] Failed to save navidrome last section:', e);
-        }
-    }, [section]);
-
-    const createAlbumItems = (sourceAlbums: typeof albums) => {
-        if (!config) return [];
-        return sourceAlbums.map(album => ({
-            id: album.id,
-            name: album.name,
-            coverUrl: album.coverArt ? navidromeApi.getCoverArtUrl(config, album.coverArt, 600) : createCoverPlaceholder(album.name, 'playlist'),
-            description: album.artist,
-            trackCount: album.songCount,
-            albumArtist: album.artist,
-            albumYear: album.year,
-            albumGenre: album.genre,
-            albumDuration: album.duration,
-        }));
+    const focus: Record<NavidromeHomeSection, [number, (index: number) => void]> = {
+        albums: [localAlbumIndex, setLocalAlbumIndex],
+        'recently-added': [focusedRecentlyAddedIndex, setFocusedRecentlyAddedIndex],
+        'recently-played': [focusedRecentlyPlayedIndex, setFocusedRecentlyPlayedIndex],
+        playlists: [focusedPlaylistIndex, setFocusedPlaylistIndex],
+        artists: [focusedArtistIndex, setFocusedArtistIndex],
     };
+    const [focusedIndex, setFocusedIndex] = focus[section];
 
-    const albumItems = useMemo(() => createAlbumItems(albums), [albums, config]);
-    const recentlyAddedItems = useMemo(
-        () => createAlbumItems(recentlyAddedAlbums),
-        [config, recentlyAddedAlbums],
-    );
-    const recentlyPlayedItems = useMemo(
-        () => createAlbumItems(recentlyPlayedAlbums),
-        [config, recentlyPlayedAlbums],
-    );
+    const tabs: DesktopGrid3DAction[] = navidrome.sections.map(entry => ({
+        id: entry.key,
+        label: entry.label,
+        icon: SECTION_ICONS[entry.key],
+        active: entry.active,
+        onClick: () => setSection(entry.key),
+    }));
 
-    const playlistItems = useMemo(() => {
-        if (!config) return [];
-        const getCoverArtUrl = (coverArtId: string, size?: number) => navidromeApi.getCoverArtUrl(config, coverArtId, size);
-        const randomCover = pickRandomSongCoverUrl(randomSongs, getCoverArtUrl);
-        const favoritesCover = pickRandomSongCoverUrl(favoriteSongs, getCoverArtUrl);
+    const actions: DesktopGrid3DAction[] = navidrome.actions.map(action => ({
+        id: action.id,
+        label: t(action.labelKey) || action.fallbackLabel,
+        icon: action.pending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />,
+        disabled: action.disabled,
+        onClick: () => void navidrome.refresh(),
+        title: t(action.titleKey ?? action.labelKey) || action.fallbackLabel,
+    }));
 
-        return [
-            {
-                id: RANDOM_PLAYLIST_ID,
-                name: t('navidrome.random') || 'Random',
-                coverUrl: randomCover || createCoverPlaceholder(t('navidrome.random') || 'Random', 'playlist'),
-                description: t('navidrome.randomDesc'),
-                trackCount: randomSongs.length,
-                type: 'playlist' as const,
-            },
-            {
-                id: FAVORITES_PLAYLIST_ID,
-                name: t('navidrome.favorites') || 'Favorites',
-                coverUrl: favoritesCover || createCoverPlaceholder(t('navidrome.favorites') || 'Favorites', 'playlist'),
-                description: t('navidrome.favorites'),
-                trackCount: favoriteSongs.length,
-                type: 'playlist' as const,
-            },
-            ...playlists.map(playlist => ({
-                id: playlist.id,
-                name: playlist.name,
-                coverUrl: playlist.coverArt ? navidromeApi.getCoverArtUrl(config, playlist.coverArt, 600) : createCoverPlaceholder(playlist.name, 'playlist'),
-                description: playlist.owner || t('home.playlists'),
-                trackCount: playlist.songCount,
-                editable: true,
-                type: 'playlist' as const,
-            })),
-        ];
-    }, [config, favoriteSongs, playlists, randomSongs, t]);
-
-    const artistItems = useMemo(() => {
-        if (!config) return [];
-        return artists.map(artist => ({
-            id: artist.id,
-            name: artist.name,
-            coverUrl: artist.coverArt
-                ? navidromeApi.getCoverArtUrl(config, artist.coverArt, 600)
-                : artist.artistImageUrl || createCoverPlaceholder(artist.name, 'artist'),
-            description: t('navidrome.artists'),
-            trackCount: artist.albumCount,
-        }));
-    }, [artists, config, t]);
-
-    useEffect(() => {
-        if (!externalSelection || !onOpenGridView) return;
-
-        if (externalSelection.albumId) {
-            const album = albumItems.find(item => item.id === externalSelection.albumId);
-            if (album) {
-                onOpenGridView(createNavidromeGridViewCollection(album, 'album'));
-                onExternalSelectionHandled?.();
-            }
-        } else if (externalSelection.artistId) {
-            const artist = artistItems.find(item => item.id === externalSelection.artistId);
-            if (artist) {
-                onOpenGridView(createNavidromeGridViewCollection(artist, 'artist'));
-                onExternalSelectionHandled?.();
-            }
-        }
-    }, [albumItems, artistItems, externalSelection, onExternalSelectionHandled, onOpenGridView]);
-
-    const currentItems = section === 'albums'
-        ? albumItems
-        : section === 'recently-added'
-            ? recentlyAddedItems
-            : section === 'recently-played'
-                ? recentlyPlayedItems
-                : section === 'playlists'
-                    ? playlistItems
-                    : artistItems;
-    const focusedIndex = section === 'albums'
-        ? localAlbumIndex
-        : section === 'recently-added'
-            ? focusedRecentlyAddedIndex
-            : section === 'recently-played'
-                ? focusedRecentlyPlayedIndex
-                : section === 'playlists'
-                    ? focusedPlaylistIndex
-                    : focusedArtistIndex;
-    const setFocusedIndex = section === 'albums'
-        ? setLocalAlbumIndex
-        : section === 'recently-added'
-            ? setFocusedRecentlyAddedIndex
-            : section === 'recently-played'
-                ? setFocusedRecentlyPlayedIndex
-                : section === 'playlists'
-                    ? setFocusedPlaylistIndex
-                    : setFocusedArtistIndex;
-    const emptyMessage = section === 'playlists'
-        ? t('navidrome.noPlaylistsFound')
-        : section === 'artists'
-            ? t('navidrome.noArtistsFound')
-            : t('navidrome.noAlbumsFound');
-
-    const tabs: DesktopGrid3DAction[] = [
-        {
-            id: 'albums',
-            label: t('navidrome.albums'),
-            icon: <Disc3 size={13} />,
-            active: section === 'albums',
-            onClick: () => setSection('albums'),
+    // 首页模型交给 core 的首页 surface 句柄（探针与以后的命令面板读它，不读组件树）。
+    useLibraryHomeListRegistration({
+        enabled: Boolean(config),
+        getState: (): LibraryHomeListState => ({
+            tab: 'navidrome',
+            directoryKey,
+            hiddenScope: 'navidrome',
+            sections: navidrome.sections.map(entry => ({ id: entry.key, label: entry.label, active: entry.active })),
+            items: navidrome.items,
+            isLoading,
+            actions: navidrome.actions.map(action => ({ id: action.id, label: t(action.labelKey) || action.fallbackLabel || '', disabled: action.disabled })),
+            batchSelectionType: null,
+        }),
+        setSection: id => {
+            if (!isNavidromeHomeSection(id)) return false;
+            setSection(id);
+            return true;
         },
-        {
-            id: 'recently-added',
-            label: t('navidrome.recentlyAdded'),
-            icon: <Sparkles size={13} />,
-            active: section === 'recently-added',
-            onClick: () => setSection('recently-added'),
+        runAction: id => {
+            const action = navidrome.actions.find(candidate => candidate.id === id);
+            if (!action || action.disabled) return false;
+            void navidrome.refresh();
+            return true;
         },
-        {
-            id: 'recently-played',
-            label: t('navidrome.recents'),
-            icon: <Clock3 size={13} />,
-            active: section === 'recently-played',
-            onClick: () => setSection('recently-played'),
-        },
-        {
-            id: 'playlists',
-            label: t('home.playlists'),
-            icon: <ListMusic size={13} />,
-            active: section === 'playlists',
-            onClick: () => setSection('playlists'),
-        },
-        {
-            id: 'artists',
-            label: t('navidrome.artists'),
-            icon: <User size={13} />,
-            active: section === 'artists',
-            onClick: () => setSection('artists'),
-        },
-    ];
-
-    const actions: DesktopGrid3DAction[] = [
-        {
-            id: 'refresh',
-            label: t('options.audioOutputRefresh') || 'Refresh',
-            icon: isLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />,
-            disabled: isLoading,
-            onClick: () => void fetchLibrary(),
-            title: t('options.audioOutputRefresh') || 'Refresh',
-        },
-    ];
+    });
 
     if (!config) {
         return (
@@ -282,43 +129,29 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     return (
         <DesktopGrid3DSurface
             focusMemoryScope={JSON.stringify(['navidrome', config?.serverUrl, config?.username, section])}
-            title={section === 'albums'
-                ? t('navidrome.albums')
-                : section === 'recently-added'
-                    ? t('navidrome.recentlyAdded')
-                    : section === 'recently-played'
-                        ? t('navidrome.recents')
-                        : section === 'playlists'
-                            ? t('home.playlists')
-                            : t('navidrome.artists')}
+            title={navidrome.title}
             mapButtonLabel={t('home.allAlbums')}
-            items={currentItems}
+            items={navidrome.items}
             focusedIndex={focusedIndex}
             onFocusedIndexChange={setFocusedIndex}
             onSelect={(item) => {
-                const descriptorType: NavidromeGridViewCollectionType = section === 'albums'
-                    || section === 'recently-added'
-                    || section === 'recently-played'
-                    ? 'album'
-                    : section === 'artists'
-                        ? 'artist'
-                        : item.id === RANDOM_PLAYLIST_ID
-                            ? 'random'
-                            : item.id === FAVORITES_PLAYLIST_ID
-                                ? 'favorites'
-                                : 'playlist';
-                onOpenGridView?.(createNavidromeGridViewCollection(item, descriptorType));
+                const card = item as LibraryHomeCard;
+                homeActions.openNavidromeCard(
+                    card,
+                    resolveNavidromeCollectionType(section, card.id),
+                    collection => onOpenGridView?.(collection),
+                );
             }}
             tabs={tabs}
             actions={actions}
             isLoading={isLoading}
-            emptyMessage={emptyMessage}
+            emptyMessage={navidrome.emptyMessage}
             theme={theme}
             isDaylight={isDaylight}
             isInteractive={isInteractive}
             hasFloatingPlayer={hasFloatingPlayer}
             playlistVisibilityScope="navidrome"
-            directoryKey={directoryKey({ source: 'navidrome', section })}
+            directoryKey={directoryKey}
         />
     );
 };

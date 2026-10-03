@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Search, Loader2, Settings, PanelsTopLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../../../../stores/useSearchNavigationStore';
-import type { LocalLibraryCatalogSnapshot } from '../../../../hooks/useLocalLibraryCatalog';
 import { useShallow } from 'zustand/react/shallow';
 import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type StatusMessage } from '../../../../types';
 import LocalGrid3DView from './LocalGrid3DView';
@@ -24,14 +23,15 @@ import wechatIcon from '../../../../assets/providers/wechat.svg';
 import { useNeteaseApiStatusStore } from '../../../../stores/useNeteaseApiStatusStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';
-import { onlineHiddenScope } from '../../../core/model/directoryVisibility';
-import { directoryKey } from '../../../core/model/directorySession';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
+import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
 import type { LibraryHomeResources } from '../../../core/contracts/homeModel';
-import type { LibraryHomeCard } from '../../../core/contracts/homeModel';
+import type { LibraryHomeCard, LibraryHomeListState } from '../../../core/contracts/homeModel';
 import { useLibraryHomeSources } from '../../../core/bindings/useLibraryHomeSources';
 import { useLibraryHomeOnline } from '../../../core/bindings/useLibraryHomeOnline';
 import { useLibraryHomeActions } from '../../../core/bindings/useLibraryHomeActions';
+import { useLibraryHomeDirectory } from '../../../core/bindings/useLibraryHomeDirectory';
+import { useLibraryHomeListRegistration, useLibraryHomeTabsRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -61,7 +61,7 @@ interface Grid3DProps {
     cloudPlaylist?: ProviderCollection | null;
     currentTrack?: SongResult | null;
     localSongs: LocalSong[];
-    localLibraryCatalog: LocalLibraryCatalogSnapshot;
+    localLibraryCatalog: LibraryLocalCatalogSnapshot;
     localPlaylists: LocalPlaylist[];
     onRefreshLocalSongs: () => Promise<void> | void;
     localMusicState: {
@@ -86,8 +86,6 @@ interface Grid3DProps {
     }>>;
     navidromeFocusedAlbumIndex?: number;
     setNavidromeFocusedAlbumIndex?: (index: number) => void;
-    pendingNavidromeSelection?: any;
-    onPendingNavidromeSelectionHandled?: () => void;
     onSearchCommitted: (query: string, sourceTab: any, replace?: boolean) => void;
     theme: Theme;
     onOpenSettings?: (initialTab?: 'help' | 'options') => void;
@@ -123,8 +121,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         setLocalMusicState,
         navidromeFocusedAlbumIndex = 0,
         setNavidromeFocusedAlbumIndex,
-        pendingNavidromeSelection = null,
-        onPendingNavidromeSelectionHandled,
         onSearchCommitted,
         theme,
         onOpenSettings,
@@ -176,8 +172,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const activeProviderNeedsRelogin = online.needsRelogin;
     const onlineList = useLibraryHomeOnline(homeResources, homeSources);
     const homeActions = homeResources.actions;
-    const { snapshot: homeActionState, importBusy, scanPercent: scanProgressPercent } = useLibraryHomeActions(homeActions);
+    const { snapshot: homeActionState, scanPercent: scanProgressPercent } = useLibraryHomeActions(homeActions);
     const scanProgress = homeActionState.scan;
+    // 当前列表的目录会话 key 与隐藏作用域只在首页模型里算一次（core/model/homeSources），交给三个列表视图。
+    const { directoryKey, hiddenScope } = useLibraryHomeDirectory({
+        tab: homeViewTab,
+        providerId: activeProviderId,
+        localRow: localMusicState.activeRow,
+    });
+    // 在线列表只在账户已就绪时显示（无账户 / 解析中 / 未登录各有面板）。
+    const showOnlineList = isOnlineTab
+        && activeAccountView !== 'accountless'
+        && activeAccountView !== 'resolving'
+        && activeAccountView !== 'guest';
 
     const [focusedIndex, setFocusedIndex] = useState(0);
     const gridRootRef = useRef<HTMLDivElement>(null);
@@ -314,6 +321,32 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const handleSelectCollectionCard = (card: LibraryHomeCard) => {
         void homeActions.openOnlineCard(card, activeProviderId, collection => onOpenGridView?.(collection));
     };
+
+    // 首页模型交给 core 的首页 surface 句柄：页签条，以及在线页签的列表（本地与 Navidrome 由各自的视图注册）。
+    useLibraryHomeTabsRegistration({
+        getState: () => ({ active: homeViewTab, tabs: homeTabs }),
+        setTab: tab => {
+            const target = homeTabs.find(candidate => candidate.key === tab);
+            if (!target || target.disabledReason) return false;
+            setHomeViewTab(tab);
+            return true;
+        },
+    });
+    useLibraryHomeListRegistration({
+        enabled: showOnlineList,
+        getState: (): LibraryHomeListState => ({
+            tab: homeViewTab,
+            directoryKey,
+            hiddenScope,
+            sections: [],
+            items: onlineList.items,
+            isLoading: onlineList.isLoading,
+            actions: [],
+            batchSelectionType: null,
+        }),
+        setSection: () => false,
+        runAction: () => false,
+    });
 
     // Search committed callback
     const handleSearch = async (e?: React.FormEvent) => {
@@ -564,7 +597,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             : t('home.loginToProvider', { provider: provider.shortName || provider.displayName })}
                         onSelect={selectProvider}
                     />
-                ) : isOnlineTab ? (
+                ) : showOnlineList ? (
                     <DesktopGrid3DSurface
                         focusMemoryScope={JSON.stringify(['online', activeProviderId, activeUser?.id ?? null, homeViewTab])}
                         title={onlineList.title}
@@ -579,18 +612,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         isDaylight={isDaylight}
                         isInteractive={isInteractive}
                         hasFloatingPlayer={Boolean(currentTrack)}
-                        playlistVisibilityScope={onlineHiddenScope(activeProviderId)}
-                        directoryKey={directoryKey({
-                            source: 'online',
-                            providerId: activeProviderId,
-                            section: homeViewTab === 'playlist' ? 'playlists' : homeViewTab,
-                        })}
+                        playlistVisibilityScope={hiddenScope}
+                        directoryKey={directoryKey}
                     />
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">
                         <LocalGrid3DView
                             localSongs={localSongs}
                             localPlaylists={localPlaylists}
+                            localLibraryCatalog={localLibraryCatalog}
                             activeRow={localMusicState.activeRow}
                             setActiveRow={(row) => setLocalMusicState(prev => ({ ...prev, activeRow: row }))}
                             focusedFolderIndex={localMusicState.focusedFolderIndex}
@@ -601,14 +631,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             setFocusedArtistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedArtistIndex: index }))}
                             focusedPlaylistIndex={localMusicState.focusedPlaylistIndex}
                             setFocusedPlaylistIndex={(index) => setLocalMusicState(prev => ({ ...prev, focusedPlaylistIndex: index }))}
-                            onImportFolder={() => void homeActions.importFolder()}
-                            onImportPlaylistFile={file => homeActions.importPlaylistFile(file).then(() => undefined)}
-                            onRefreshFolders={() => void homeActions.refreshFolders()}
-                            importButtonDisabled={importBusy}
-                            isImporting={homeActionState.importingFolder}
-                            isRefreshing={homeActionState.refreshingFolders}
-                            isScanInProgress={Boolean(scanProgress?.active)}
-                            isImportingPlaylist={homeActionState.importingPlaylist}
+                            homeActions={homeActions}
+                            directoryKey={directoryKey}
                             theme={theme}
                             isDaylight={isDaylight}
                             isInteractive={isInteractive}
@@ -625,9 +649,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             isInteractive={isInteractive}
                             focusedAlbumIndex={navidromeFocusedAlbumIndex}
                             setFocusedAlbumIndex={setNavidromeFocusedAlbumIndex ?? (() => { })}
-                            externalSelection={pendingNavidromeSelection}
                             hasFloatingPlayer={Boolean(currentTrack)}
-                            onExternalSelectionHandled={onPendingNavidromeSelectionHandled}
+                            homeActions={homeActions}
+                            directoryKey={directoryKey}
                             onOpenSettings={() => onOpenSettings?.('help')}
                             onOpenGridView={onOpenGridView}
                         />

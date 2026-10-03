@@ -11,7 +11,10 @@ import type {
     LibraryHomeTabKey,
     LibraryHomeTabView,
 } from '../contracts/homeModel';
+import type { LibraryHiddenScope } from '../contracts/directory';
 import { resolveOnlineProviderAccountView } from './onlineProviderAccountView';
+import { directoryKey } from './directorySession';
+import { onlineHiddenScope } from './directoryVisibility';
 
 // src/library/core/model/homeSources.ts
 // 首页的来源与页签（纯规则，原样搬自 Grid3D）：当前在线 provider 的账户、歌单与能力；一级页签的列表、顺序与
@@ -161,4 +164,29 @@ export const homeScanPercent = (scan: LibraryHomeScanProgress | null): number =>
     scan?.totalSongs
         ? Math.min(100, Math.round((scan.completedSongs / scan.totalSongs) * 100))
         : 0
+);
+
+/**
+ * 首页当前列表的目录会话 key（GridMap / TUI 目录的筛选与批选按它分开）。原先三个首页视图各自在 JSX 里算，
+ * 现在只在这里：在线按 provider 与页签（歌单页签记作 playlists），本地与 Navidrome 按 section。
+ */
+export const resolveHomeDirectoryKey = ({
+    tab,
+    providerId,
+    localSection,
+    navidromeSection,
+}: {
+    tab: LibraryHomeTabKey;
+    providerId: string;
+    localSection: string;
+    navidromeSection: string;
+}): string => {
+    if (tab === 'local') return directoryKey({ source: 'local', section: localSection });
+    if (tab === 'navidrome') return directoryKey({ source: 'navidrome', section: navidromeSection });
+    return directoryKey({ source: 'online', providerId, section: tab === 'playlist' ? 'playlists' : tab });
+};
+
+/** 首页当前列表的隐藏作用域：在线按 provider，本地与 Navidrome 各一个。 */
+export const resolveHomeHiddenScope = (tab: LibraryHomeTabKey, providerId: string): LibraryHiddenScope => (
+    tab === 'local' ? 'local' : tab === 'navidrome' ? 'navidrome' : onlineHiddenScope(providerId)
 );

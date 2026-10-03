@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LocalLibraryGroup } from '../types';
-import type { NavidromeViewSelection } from '../types/navidrome';
 import {
     type SearchReturnView,
     type SearchSource,
@@ -150,7 +149,6 @@ export function useAppNavigation() {
     const isFmMode = usePlaybackStore(state => state.isFmMode);
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
-    const [pendingNavidromeSelection, setPendingNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
     const [localMusicState, setLocalMusicState] = useState<LocalMusicNavigationState>(() => {
         let savedRow = 0;
         try {
@@ -221,7 +219,6 @@ export function useAppNavigation() {
     }, [restoreHistoryState]);
 
     const resetLocalNavigationContext = useCallback(() => {
-        setPendingNavidromeSelection(null);
         setLocalMusicState(prev => ({
             ...prev,
             activeRow: 0,
@@ -505,8 +502,6 @@ export function useAppNavigation() {
         setFocusedPlaylistIndex,
         navidromeFocusedAlbumIndex,
         setNavidromeFocusedAlbumIndex,
-        pendingNavidromeSelection,
-        setPendingNavidromeSelection,
         localMusicState,
         setLocalMusicState,
         navigateToPlayer,

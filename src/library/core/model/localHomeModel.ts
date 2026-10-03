@@ -1,17 +1,25 @@
 import type { TFunction } from 'i18next';
-import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../../types';
-import { sortLocalAlbumSongs, sortLocalFolderSongs } from '../../../../utils/localSongSorting';
-import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../../types/localLibrary';
-import { getActiveEntities } from '../../../../utils/localLibraryIndex';
-import { getLocalCoverAssetUrl } from '../../../../services/localCoverAssetUrl';
+import { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
+import { sortLocalAlbumSongs, sortLocalFolderSongs } from '../../../utils/localSongSorting';
+import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
+import { getActiveEntities } from '../../../utils/localLibraryIndex';
+import type { LibraryDirectorySelectionType } from '../contracts/directory';
+import type { LibraryHomeActionsSnapshot, LibraryHomeCard, LibraryHomeListAction } from '../contracts/homeModel';
+import { isHomeImportBusy } from './homeSources';
 
-// src/library/suites/grid/home/localGrid3DModel.ts
+// src/library/core/model/localHomeModel.ts
 // Builds local-library overview groups for the desktop Grid3D surface.
+// P3.3 起放在 core（原 suites/grid/home/localGrid3DModel.ts）：本地页签的分组（文件夹含虚拟「全部歌曲」、专辑、
+// 歌手、歌单）、四个 section 的定义、卡片视图模型、批量 section、右上角三个导入动作——任何 suite 的首页共用。
+// 本地封面的 URL 由调用方注入（解析封面资源要看运行环境，属于 service），这里保持纯函数。
 
-const getLocalCoverUrl = (songs: LocalSong[]): string | undefined => {
+/** 本地封面资源 id → URL（services/localCoverAssetUrl 的 getLocalCoverAssetUrl）。 */
+export type LocalCoverAssetUrlResolver = (assetId: string | undefined, size?: number) => string | null;
+
+const getLocalCoverUrl = (songs: LocalSong[], coverAssetUrl: LocalCoverAssetUrlResolver): string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => {
-        const hasEmbeddedCover = Boolean(getLocalCoverAssetUrl(song.localCoverAssetId));
+        const hasEmbeddedCover = Boolean(coverAssetUrl(song.localCoverAssetId));
         if (song.useOnlineCover) {
             return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
@@ -20,7 +28,7 @@ const getLocalCoverUrl = (songs: LocalSong[]): string | undefined => {
 
     if (!preferredSong) return undefined;
 
-    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId, 512) || undefined;
+    const localCoverUrl = coverAssetUrl(preferredSong.localCoverAssetId, 512) || undefined;
     if (preferredSong.useOnlineCover) {
         return preferredSong.onlineMetadata?.coverUrl || localCoverUrl;
     }
@@ -32,12 +40,15 @@ const sortByName = <T extends { name: string }>(items: T[]) => (
     items.sort((a, b) => a.name.localeCompare(b.name))
 );
 
-export const buildLocalGrid3DGroups = (
+/** 本地页签的四组条目。catalog（曲库实体）读好之前按歌曲的原始标签分专辑 / 歌手。 */
+export const buildLocalHomeGroups = (
     localSongs: LocalSong[],
     localPlaylists: LocalPlaylist[],
     t: TFunction,
-    catalog?: { entities: LocalLibraryEntity[]; assignments: LocalLibraryAssignment[]; },
+    catalog: { entities: LocalLibraryEntity[]; assignments: LocalLibraryAssignment[]; } | undefined,
+    coverAssetUrl: LocalCoverAssetUrlResolver,
 ) => {
+    const getLocalCoverUrlOf = (songs: LocalSong[]) => getLocalCoverUrl(songs, coverAssetUrl);
     const folders: Record<string, LocalSong[]> = {};
     const albums: Record<string, LocalSong[]> = {};
     const artists: Record<string, LocalSong[]> = {};
@@ -66,7 +77,7 @@ export const buildLocalGrid3DGroups = (
         type: 'folder' as const,
         name,
         songs: sortLocalFolderSongs(songs),
-        coverUrl: getLocalCoverUrl(songs),
+        coverUrl: getLocalCoverUrlOf(songs),
         id: `folder-${name}`,
         trackCount: songs.length,
         description: t('localMusic.folder'),
@@ -77,7 +88,7 @@ export const buildLocalGrid3DGroups = (
             type: 'folder',
             name: t('localMusic.allSongs') || 'All Songs',
             songs: sortLocalFolderSongs(localSongs),
-            coverUrl: getLocalCoverUrl(localSongs),
+            coverUrl: getLocalCoverUrlOf(localSongs),
             id: 'folder-__all-songs__',
             isVirtual: true,
             trackCount: localSongs.length,
@@ -92,7 +103,7 @@ export const buildLocalGrid3DGroups = (
             type: 'album' as const,
             name: albumName,
             songs: sortLocalAlbumSongs(songs),
-            coverUrl: getLocalCoverUrl(songs),
+            coverUrl: getLocalCoverUrlOf(songs),
             id: `album-${key}`,
             trackCount: songs.length,
             description: firstSong?.onlineMetadata?.artists.map(artist => artist.name).join(', ')
@@ -106,7 +117,7 @@ export const buildLocalGrid3DGroups = (
         type: 'artist' as const,
         name,
         songs,
-        coverUrl: getLocalCoverUrl(songs),
+        coverUrl: getLocalCoverUrlOf(songs),
         id: `artist-${name}`,
         trackCount: songs.length,
         description: t('localMusic.artists'),
@@ -132,7 +143,7 @@ export const buildLocalGrid3DGroups = (
                 type: 'album' as const,
                 name: entity.displayName,
                 songs: sortLocalAlbumSongs(songs),
-                coverUrl: getLocalCoverUrl(songs),
+                coverUrl: getLocalCoverUrlOf(songs),
                 id: entity.id,
                 entityId: entity.id,
                 trackCount: songs.length,
@@ -148,7 +159,7 @@ export const buildLocalGrid3DGroups = (
                 type: 'artist' as const,
                 name: entity.displayName,
                 songs,
-                coverUrl: getLocalCoverUrl(songs),
+                coverUrl: getLocalCoverUrlOf(songs),
                 id: entity.id,
                 entityId: entity.id,
                 trackCount: songs.length,
@@ -170,7 +181,7 @@ export const buildLocalGrid3DGroups = (
             id: 'album-__unknown__',
             name: t('localMusic.unknownAlbum'),
             songs: sortLocalAlbumSongs(unknownAlbumSongs),
-            coverUrl: getLocalCoverUrl(unknownAlbumSongs),
+            coverUrl: getLocalCoverUrlOf(unknownAlbumSongs),
             trackCount: unknownAlbumSongs.length,
             isVirtual: true,
         });
@@ -181,7 +192,7 @@ export const buildLocalGrid3DGroups = (
             id: 'artist-__unknown__',
             name: t('localMusic.unknownArtist'),
             songs: unknownArtistSongs,
-            coverUrl: getLocalCoverUrl(unknownArtistSongs),
+            coverUrl: getLocalCoverUrlOf(unknownArtistSongs),
             trackCount: unknownArtistSongs.length,
             isVirtual: true,
         });
@@ -198,7 +209,7 @@ export const buildLocalGrid3DGroups = (
             type: 'playlist' as const,
             name: playlist.name,
             songs: playlistSongs,
-            coverUrl: getLocalCoverUrl(playlistSongs),
+            coverUrl: getLocalCoverUrlOf(playlistSongs),
             id: `playlist-${playlist.id}`,
             playlistId: playlist.id,
             trackCount: playlistSongs.length,
@@ -213,4 +224,78 @@ export const buildLocalGrid3DGroups = (
         artists: artistList,
         playlists: playlistList,
     };
+};
+
+export type LocalHomeGroups = ReturnType<typeof buildLocalHomeGroups>;
+
+/** 本地页签的 section（顺序即 activeRow 0–3）。 */
+export type LocalHomeSectionKey = 'folders' | 'albums' | 'artists' | 'playlists';
+export type LocalHomeRow = 0 | 1 | 2 | 3;
+
+export type LocalHomeSectionDefinition = {
+    key: LocalHomeSectionKey;
+    row: LocalHomeRow;
+    labelKey: string;
+    /** labelKey 翻译为空时改用的 key。 */
+    fallbackLabelKey?: string;
+    emptyKey: string;
+};
+
+export const LOCAL_HOME_SECTIONS: readonly LocalHomeSectionDefinition[] = [
+    { key: 'folders', row: 0, labelKey: 'localMusic.foldersAndPlaylists', emptyKey: 'localMusic.noFoldersFound' },
+    { key: 'albums', row: 1, labelKey: 'localMusic.albums', emptyKey: 'localMusic.noAlbumsFound' },
+    { key: 'artists', row: 2, labelKey: 'localMusic.artists', emptyKey: 'localMusic.noArtistsFound' },
+    { key: 'playlists', row: 3, labelKey: 'localMusic.customPlaylists', fallbackLabelKey: 'home.playlists', emptyKey: 'localMusic.noPlaylistsFound' },
+];
+
+/** activeRow 对应的 section（越界时回到 folders）。 */
+export const localHomeSectionOfRow = (row: number): LocalHomeSectionDefinition => (
+    LOCAL_HOME_SECTIONS.find(section => section.row === row) ?? LOCAL_HOME_SECTIONS[0]
+);
+
+/** 本地分组 → 首页卡片（带歌曲 id，批量范围按它去重保序；raw 是分组本身，打开集合时用）。 */
+export const buildLocalHomeCards = (groups: readonly LocalLibraryGroup[]): LibraryHomeCard[] => groups.map(group => ({
+    id: group.id,
+    name: group.name,
+    coverUrl: typeof group.coverUrl === 'string' ? group.coverUrl : undefined,
+    description: group.description,
+    trackCount: group.trackCount,
+    type: group.type,
+    isVirtual: group.isVirtual,
+    trackIds: group.songs.map(song => song.id),
+    raw: group,
+}));
+
+/** 支持批量的本地 section（文件夹、专辑、歌手）；歌单没有批量。 */
+export const localBatchSelectionType = (section: LocalHomeSectionKey): LibraryDirectorySelectionType | null => (
+    section === 'folders' || section === 'albums' || section === 'artists' ? section : null
+);
+
+/** 本地页签右上角的三个导入动作：文案随进行中的动作变，任何一个在进行或扫描中时都禁用。 */
+export const resolveLocalHomeActions = (snapshot: LibraryHomeActionsSnapshot): LibraryHomeListAction[] => {
+    const busy = isHomeImportBusy(snapshot);
+    const scanning = Boolean(snapshot.scan?.active) || snapshot.refreshingFolders;
+    return [
+        {
+            id: 'import-folder',
+            labelKey: snapshot.importingFolder ? 'localMusic.importing' : 'localMusic.importFolder',
+            titleKey: 'localMusic.importFolder',
+            pending: snapshot.importingFolder,
+            disabled: busy,
+        },
+        {
+            id: 'refresh-folders',
+            labelKey: scanning ? 'options.scanning' : 'options.refresh',
+            titleKey: 'options.refresh',
+            pending: scanning,
+            disabled: busy,
+        },
+        {
+            id: 'import-playlist',
+            labelKey: snapshot.importingPlaylist ? 'localMusic.importingPlaylist' : 'localMusic.importPlaylist',
+            titleKey: 'localMusic.importPlaylist',
+            pending: snapshot.importingPlaylist,
+            disabled: busy || snapshot.importingPlaylist,
+        },
+    ];
 };

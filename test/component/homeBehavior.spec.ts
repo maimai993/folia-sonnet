@@ -440,6 +440,8 @@ test.describe(`[${suite}] navidrome tab`, () => {
             ['navi-pl-1', 'playlist', true],
             ['navi-pl-2', 'playlist', true],
         ]);
+        // 「随机」「收藏」是虚拟歌单（P3.3 起带 isVirtual），服务器上的歌单不是。
+        expect(playlists.map(item => Boolean(item.isVirtual))).toEqual([true, true, false, false]);
         expect(playlists[0].trackCount).toBe(NAVIDROME_RANDOM_SONGS.length);
         expect(playlists[1].trackCount).toBe(NAVIDROME_STARRED_SONGS.length);
 

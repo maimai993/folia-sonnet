@@ -10,7 +10,7 @@ import type {
     Theme,
 } from '../../../types';
 import type { OnlineProviderId, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
-import type { NavidromeSong, NavidromeViewSelection } from '../../../types/navidrome';
+import type { NavidromeSong } from '../../../types/navidrome';
 
 // src/library/core/contracts/home.ts
 // 首页 surface 的数据契约：应用的首页模型（buildHomeModel）交给任何一套 suite 的同一份输入——账户与在线歌单、
@@ -73,8 +73,6 @@ export interface LibraryHomeData {
     onAddNavidromeSongsToQueue?: (songs: NavidromeSong[]) => void;
     navidromeFocusedAlbumIndex?: number;
     setNavidromeFocusedAlbumIndex?: (index: number) => void;
-    pendingNavidromeSelection?: NavidromeViewSelection | null;
-    onPendingNavidromeSelectionHandled?: () => void;
     onSearchCommitted: (query: string, sourceTab: HomeViewTab, replace?: boolean) => void;
     stageEnabled?: boolean;
     stageIsActive?: boolean;

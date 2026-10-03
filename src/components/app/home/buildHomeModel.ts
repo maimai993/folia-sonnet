@@ -1,4 +1,3 @@
-import type React from 'react';
 import type { SongResult, StageSource } from '../../../types';
 import type { GridViewCollectionDescriptor } from './gridViewCollectionAdapters';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
@@ -45,8 +44,6 @@ export type HomeModelDeps = {
     onAddNavidromeSongsToQueue?: HomeSurfaceProps['onAddNavidromeSongsToQueue'];
     navidromeFocusedAlbumIndex?: HomeSurfaceProps['navidromeFocusedAlbumIndex'];
     setNavidromeFocusedAlbumIndex?: HomeSurfaceProps['setNavidromeFocusedAlbumIndex'];
-    pendingNavidromeSelection?: HomeSurfaceProps['pendingNavidromeSelection'];
-    setPendingNavidromeSelection: React.Dispatch<React.SetStateAction<any>>;
     stageSource?: StageSource | null;
     openStagePlayer: () => Promise<void>;
     theme: HomeSurfaceProps['theme'];
@@ -85,8 +82,6 @@ export const buildHomeModel = ({
     onAddNavidromeSongsToQueue,
     navidromeFocusedAlbumIndex,
     setNavidromeFocusedAlbumIndex,
-    pendingNavidromeSelection,
-    setPendingNavidromeSelection,
     stageSource,
     activePlaybackContext,
     openStagePlayer,
@@ -135,8 +130,6 @@ export const buildHomeModel = ({
             onAddNavidromeSongsToQueue,
             navidromeFocusedAlbumIndex,
             setNavidromeFocusedAlbumIndex,
-            pendingNavidromeSelection,
-            onPendingNavidromeSelectionHandled: () => setPendingNavidromeSelection(null),
             stageEnabled: Boolean(stageSource),
             stageIsActive: activePlaybackContext === 'stage',
             onOpenStagePlayer: () => {

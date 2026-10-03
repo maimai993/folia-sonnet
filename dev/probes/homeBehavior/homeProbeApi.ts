@@ -3,11 +3,9 @@ import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useSearchNavigationStore } from '../../../src/stores/useSearchNavigationStore';
 import type { HomeViewTab } from '../../../src/types';
-import Grid3D from '../../../src/library/suites/grid/home/Grid3D';
-import DesktopGrid3DSurface, { type DesktopGrid3DAction } from '../../../src/library/suites/grid/home/DesktopGrid3DSurface';
+import DesktopGrid3DSurface from '../../../src/library/suites/grid/home/DesktopGrid3DSurface';
 import { Grid3DSlider, type Grid3DSliderItem } from '../../../src/library/suites/grid/home/Grid3DSlider';
 import { GridViewTabs } from '../../../src/library/suites/grid/home/GridViewTabs';
-import LocalGrid3DView from '../../../src/library/suites/grid/home/LocalGrid3DView';
 import GridMap, { type GridMapBatchConfig, type GridMapItem } from '../../../src/library/suites/grid/directory/GridMap';
 import GridMapBatchPanel from '../../../src/library/suites/grid/directory/GridMapBatchPanel';
 import type { LibraryDirectoryNode } from '../../../src/library/core/contracts/directory';
@@ -19,7 +17,8 @@ import type { CommandPaletteContext } from '../../../src/components/command-pale
 import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { hiddenIdsOf, isDirectoryItemHidden, isHideableDirectoryItem } from '../../../src/library/core/model/directoryVisibility';
 import { useHiddenCollectionsStore } from '../../../src/library/core/state/useHiddenCollectionsStore';
-import type { LibraryHiddenScope } from '../../../src/library/core/contracts/directory';
+import { useLibraryHomeSurfaceStore } from '../../../src/library/core/state/useLibraryHomeSurfaceStore';
+import { useNavidromeHomeSectionStore } from '../../../src/library/core/state/useNavidromeHomeSectionStore';
 import { SidePanelList } from '../../../src/components/shared/SidePanelList';
 import { addProbeFault, setProbeLatency } from '../libraryBehavior/fakeProviders';
 import { probeRefreshGate } from '../libraryBehavior/probeGates';
@@ -39,8 +38,11 @@ import {
 } from './reactFiberProbe';
 
 // dev/probes/homeBehavior/homeProbeApi.ts
-// `window.__homeProbe` 的网格实现。读的是界面交给叶子组件的 props（见 reactFiberProbe.ts 的说明），
-// 调的是这些 props 里的回调——与点击走同一个函数。只有两处没有 props 可调、只能点 DOM：GridMap 标题上
+// `window.__homeProbe` 的实现。页签、当前列表的条目 / section / 动作 / 加载态 / 隐藏作用域 / 批量类型 / 目录树
+// 读的是 Library Core 的首页模型：首页注册在 core/state/useLibraryHomeSurfaceStore 里的句柄（任何 suite 的首页
+// 都注册它），切页签、切 section、点动作、导入歌单文件也经这些句柄——与界面上的按钮同一个函数。
+// 仍读网格组件树的（见 reactFiberProbe.ts 的说明）只剩网格专属的部分：滑条上实际显示 / 能打开的卡、地图按钮、
+// GridMap 的条目与目录会话 key、批量面板是否在场。只有两处没有 props 可调、只能点 DOM：GridMap 标题上
 // 打开侧面板的按钮，和隐藏管理面板里的两个开关（都在本文件里注明）。隐藏状态读的是 core 的隐藏 store
 // （按当前列表的作用域），不从组件 props 推断。
 // 目录的筛选词、批选、隐藏视图读写 core 的目录会话（GridMap 的 directoryKey 指向哪一个），批量范围用 core 的
@@ -50,14 +52,6 @@ const HIDDEN_STORAGE_KEY = 'hidden_grid_playlists';
 
 type HarnessBindings = Pick<HomeProbeApi, 'sandbox' | 'ready' | 'remount' | 'localSongIds' | 'localPlaylists' | 'providers' | 'activeProvider' | 'switchProvider'>;
 
-type SurfaceProps = {
-    items: Grid3DSliderItem[];
-    tabs?: DesktopGrid3DAction[];
-    actions?: DesktopGrid3DAction[];
-    isLoading?: boolean;
-    playlistVisibilityScope?: LibraryHiddenScope;
-    batchConfig?: GridMapBatchConfig;
-};
 type SliderProps = { items: Grid3DSliderItem[]; onSelect: (item: Grid3DSliderItem, index: number) => void };
 type GridMapProps = {
     directoryKey?: string;
@@ -71,7 +65,10 @@ type BatchPanelProps = {
 };
 
 const surfaceFiber = () => findPresentComponent(DesktopGrid3DSurface);
-const surfaceProps = () => propsOf<SurfaceProps>(surfaceFiber());
+/** 首页模型：页签条与当前列表的句柄（没有显示列表时为 null）。 */
+const homeTabs = () => useLibraryHomeSurfaceStore.getState().tabs;
+const homeList = () => useLibraryHomeSurfaceStore.getState().list;
+const listState = () => homeList()?.getState() ?? null;
 const sliderProps = () => propsOf<SliderProps>(findPresentComponent(Grid3DSlider, surfaceFiber()));
 const gridMapFiber = () => findPresentComponent(GridMap, surfaceFiber());
 const gridMapProps = () => propsOf<GridMapProps>(gridMapFiber());
@@ -86,36 +83,22 @@ const mapDisplayItems = (): GridMapItem[] | null => {
 /** GridMap 此刻读写的目录会话 key（地图没开时为 null）。 */
 const mapSessionId = (): string | null => gridMapProps()?.directoryKey ?? null;
 
-/** 当前列表作用域的隐藏 id（core 的隐藏 store；作用域缺省与 DesktopGrid3DSurface 一样落在 default）。 */
+/** 当前列表作用域的隐藏 id（core 的隐藏 store；作用域取首页模型的当前列表，没有列表时落在 default）。 */
 const currentHiddenIds = () => hiddenIdsOf(
     useHiddenCollectionsStore.getState().hiddenByScope,
-    surfaceProps()?.playlistVisibilityScope ?? 'default',
+    listState()?.hiddenScope ?? 'default',
 );
 
 const asId = (id: string | number) => String(id);
 const nameOf = (name: unknown) => (typeof name === 'string' || typeof name === 'number' ? String(name) : '');
 
-const TAB_LABEL_KEYS: Record<HomeTabKey, string> = {
-    playlist: 'home.playlists',
-    radio: 'home.radio',
-    albums: 'home.albums',
-    local: 'localMusic.folder',
-    navidrome: 'navidrome.title',
-};
-
-// 首页一级页签写在 Grid3D 的 JSX 里，没有 props 可读：按文案认出按钮（每个按钮外面包着带 title 的 span）。
-const readTabs = (): HomeProbeTab[] => {
-    const root = firstHostElement(findPresentComponent(Grid3D));
-    if (!root) return [];
-    const byLabel = new Map((Object.keys(TAB_LABEL_KEYS) as HomeTabKey[]).map(key => [i18n.t(TAB_LABEL_KEYS[key]), key]));
-    return [...root.querySelectorAll<HTMLButtonElement>('span.inline-flex[title] > button')].flatMap(button => {
-        const label = button.textContent?.trim() ?? '';
-        const key = byLabel.get(label);
-        if (!key) return [];
-        const ariaLabel = button.getAttribute('aria-label') ?? label;
-        return [{ key, label, disabled: button.disabled, ...(ariaLabel !== label ? { reason: ariaLabel } : {}) }];
-    });
-};
+// 首页一级页签来自首页模型（core/model/homeSources 的 resolveHomeTabs，已翻译）。
+const readTabs = (): HomeProbeTab[] => (homeTabs()?.getState().tabs ?? []).map(tab => ({
+    key: tab.key as HomeTabKey,
+    label: tab.label,
+    disabled: Boolean(tab.disabledReason),
+    ...(tab.disabledReason ? { reason: tab.disabledReason } : {}),
+}));
 
 const summarizeDescriptor = (detail: unknown): HomeProbeDescriptor => detail as HomeProbeDescriptor;
 
@@ -184,24 +167,20 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
         // 「重启后仍隐藏」断言的才是持久化的那份。
         remount: () => {
             useHiddenCollectionsStore.getState().hydrate();
+            useNavidromeHomeSectionStore.getState().hydrate();
             bindings.remount();
         },
 
         tabs: readTabs,
         tab: () => useSearchNavigationStore.getState().homeViewTab as HomeTabKey,
         setTab: tab => useSearchNavigationStore.getState().setHomeViewTab(tab as HomeViewTab),
-        sections: () => (surfaceProps()?.tabs ?? []).map(tab => ({ id: tab.id, active: Boolean(tab.active) })),
-        setSection: id => {
-            const tab = surfaceProps()?.tabs?.find(candidate => candidate.id === id);
-            if (!tab) return false;
-            tab.onClick();
-            return true;
-        },
+        sections: () => (listState()?.sections ?? []).map(section => ({ id: section.id, active: section.active })),
+        setSection: id => homeList()?.setSection(id) ?? false,
         items: () => {
-            const props = surfaceProps();
-            if (!props) return [];
+            const state = listState();
+            if (!state) return [];
             const hiddenIds = currentHiddenIds();
-            return props.items.map(item => ({
+            return state.items.map(item => ({
                 id: asId(item.id),
                 name: nameOf(item.name),
                 type: item.type,
@@ -214,19 +193,19 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             }));
         },
         visibleItems: () => (sliderProps()?.items ?? []).map(item => asId(item.id)),
-        scope: () => surfaceProps()?.playlistVisibilityScope ?? null,
-        isLoading: () => Boolean(surfaceProps()?.isLoading),
-        actions: () => (surfaceProps()?.actions ?? []).map(action => ({ id: action.id, disabled: Boolean(action.disabled) })),
+        scope: () => listState()?.hiddenScope ?? null,
+        isLoading: () => Boolean(listState()?.isLoading),
+        actions: () => (listState()?.actions ?? []).map(action => ({ id: action.id, disabled: action.disabled })),
         runAction: id => {
-            const action = surfaceProps()?.actions?.find(candidate => candidate.id === id);
+            const action = listState()?.actions.find(candidate => candidate.id === id);
             if (!action || action.disabled) return false;
-            action.onClick();
-            return true;
+            return homeList()?.runAction(id) ?? false;
         },
+        // 与在文件选择框里选中这个文件一样：经本地列表的句柄交给首页动作控制器（结果不影响返回值，提示看回调账）。
         importPlaylistFile: async (fileName, text) => {
-            const props = propsOf<{ onImportPlaylistFile?: (file: File) => Promise<void> | void }>(findPresentComponent(LocalGrid3DView));
-            if (!props?.onImportPlaylistFile) return false;
-            await props.onImportPlaylistFile(new File([text], fileName, { type: 'audio/x-mpegurl' }));
+            const importPlaylistFile = homeList()?.importPlaylistFile;
+            if (!importPlaylistFile) return false;
+            await importPlaylistFile(new File([text], fileName, { type: 'audio/x-mpegurl' }));
             return true;
         },
 
@@ -281,7 +260,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             return sessionId ? getLibraryDirectorySession(sessionId).query : null;
         },
 
-        batchAvailable: () => Boolean(surfaceProps()?.batchConfig),
+        batchAvailable: () => Boolean(listState()?.batchSelectionType),
         openPanel: () => {
             if (isPanelOpen()) return true;
             const button = titleButton();
@@ -350,7 +329,7 @@ export const installHomeProbeApi = (bindings: HarnessBindings): (() => void) => 
             if (!command || !isCommandPaletteCommandEnabled(command, context)) return false;
             return Boolean(await command.execute(input, context));
         },
-        directoryNodes: () => flattenDirectory(batchPanelProps()?.config.directoryTrees ?? surfaceProps()?.batchConfig?.directoryTrees).map(node => ({
+        directoryNodes: () => flattenDirectory(listState()?.directoryTrees).map(node => ({
             path: node.path,
             rootPath: node.rootPath,
             depth: node.depth,

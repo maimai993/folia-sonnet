@@ -1,6 +1,8 @@
-import type { HomeViewTab, LocalLibraryGroup, SongResult } from '../../../types';
+import type { HomeViewTab, LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import type { MediaId, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
+import type { NavidromeConfig, SubsonicAlbum, SubsonicArtist, SubsonicPlaylist, SubsonicSong } from '../../../types/navidrome';
 import type { LibraryCollectionDescriptor, NavidromeGridViewCollectionType } from './collection';
+import type { LibraryDirectoryNode, LibraryDirectorySelectionType, LibraryHiddenScope } from './directory';
 
 // src/library/core/contracts/homeModel.ts
 // 首页模型的契约（P3.3 从网格的 Grid3D 里提出来）：来源与页签、在线首页数据（收藏专辑、电台 feed）的资源、
@@ -209,4 +211,95 @@ export interface LibraryHomeActionsController {
     openOnlineCard(card: LibraryHomeCard, providerId: string, open: LibraryHomeOpenCollection): Promise<LibraryHomeActionResult>;
     openLocalGroup(group: LocalLibraryGroup, open: LibraryHomeOpenCollection): void;
     openNavidromeCard(card: LibraryHomeCard, type: NavidromeGridViewCollectionType, open: LibraryHomeOpenCollection): void;
+}
+
+/** 列表右上角的一个动作（本地：导入文件夹、刷新、导入歌单文件；Navidrome：刷新）。 */
+export type LibraryHomeListAction = {
+    id: string;
+    labelKey: string;
+    /** labelKey 翻译为空时的兜底文字。 */
+    fallbackLabel?: string;
+    /** 悬停提示的 key（不给时用 labelKey）。 */
+    titleKey?: string;
+    /** 这个动作正在进行（按钮显示转圈）。 */
+    pending: boolean;
+    disabled: boolean;
+};
+
+/** Navidrome 首页概览的数据（一次读完：全部专辑按字母序、最近添加 / 播放、歌单、歌手、随机与收藏的歌）。 */
+export type LibraryNavidromeHomeData = {
+    albums: SubsonicAlbum[];
+    recentlyAddedAlbums: SubsonicAlbum[];
+    recentlyPlayedAlbums: SubsonicAlbum[];
+    playlists: SubsonicPlaylist[];
+    artists: SubsonicArtist[];
+    randomSongs: SubsonicSong[];
+    favoriteSongs: SubsonicSong[];
+};
+
+export type LibraryNavidromeHomeSnapshot = {
+    /** 读取时的服务器配置；没有配置时为 null（首页显示「去设置」）。 */
+    config: NavidromeConfig | null;
+    isLoading: boolean;
+    data: LibraryNavidromeHomeData;
+};
+
+/** Navidrome 首页概览资源（实现在 core/services/navidromeHomeLibrary）。每次 load 重新读配置，晚到的旧读取丢掉。 */
+export interface LibraryNavidromeHomeResource {
+    getSnapshot(): LibraryNavidromeHomeSnapshot;
+    subscribe(listener: () => void): () => void;
+    load(): Promise<void>;
+}
+
+export type LibraryLocalDirectoryTreesSnapshot = {
+    trees: LibraryDirectoryNode[];
+    /** 至少读完过一次（空曲库的「导入文件夹」提示要等它）。 */
+    loaded: boolean;
+};
+
+/** 本地文件夹树资源（实现在 core/services/localDirectoryTrees）：按曲库读导入根的快照建树，晚到的旧读取丢掉。 */
+export interface LibraryLocalDirectoryTreesResource {
+    getSnapshot(): LibraryLocalDirectoryTreesSnapshot;
+    subscribe(listener: () => void): () => void;
+    /** songs 不给时由服务自己读曲库（恢复忽略目录之后用）。 */
+    load(songs?: readonly LocalSong[]): Promise<void>;
+}
+
+/**
+ * 首页此刻挂着的列表（任何 suite 的首页注册，见 core/state/useLibraryHomeSurfaceStore）：当前页签 / section 的
+ * 全部条目（隐藏的也在）、目录会话 key、隐藏作用域、section 与动作。行为探针与以后的命令面板从这里读，不碰组件树。
+ */
+export type LibraryHomeListState = {
+    tab: LibraryHomeTabKey;
+    directoryKey: string;
+    hiddenScope: LibraryHiddenScope;
+    sections: { id: string; label: string; active: boolean }[];
+    items: LibraryHomeCard[];
+    isLoading: boolean;
+    actions: { id: string; label: string; disabled: boolean }[];
+    /** 这个列表支持的批量类型（没有批量时为 null）。 */
+    batchSelectionType: LibraryDirectorySelectionType | null;
+    /** 本地文件夹的目录树（只有本地 folders 有）。 */
+    directoryTrees?: LibraryDirectoryNode[];
+};
+
+export interface LibraryHomeListHandle {
+    getState(): LibraryHomeListState;
+    /** 切到某个 section；没有这个 section 时返回 false。 */
+    setSection(id: string): boolean;
+    /** 等价于点右上角的这个动作（禁用或不存在时返回 false）。 */
+    runAction(id: string): boolean;
+    /** 用这个文件导入歌单（只有本地列表有）。 */
+    importPlaylistFile?(file: File): Promise<boolean>;
+}
+
+export type LibraryHomeTabsState = {
+    active: LibraryHomeTabKey;
+    tabs: LibraryHomeTabView[];
+};
+
+export interface LibraryHomeTabsHandle {
+    getState(): LibraryHomeTabsState;
+    /** 切页签（不存在或不可用时返回 false）。 */
+    setTab(tab: LibraryHomeTabKey): boolean;
 }

@@ -9,7 +9,8 @@ import {
     createOnlineGridViewCollection,
     type GridViewCollectionDescriptor,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
-import { buildLocalGrid3DGroups } from '../../../src/library/suites/grid/home/localGrid3DModel';
+import { buildLocalHomeGroups } from '../../../src/library/core/model/localHomeModel';
+import { getLocalCoverAssetUrl } from '../../../src/services/localCoverAssetUrl';
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
@@ -226,7 +227,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
                 editable: true,
             } as Parameters<typeof createNavidromeGridViewCollection>[0], 'playlist');
         }
-        const groups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined);
+        const groups = buildLocalHomeGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined, getLocalCoverAssetUrl);
         const group = fixtureId === 'local-all'
             ? groups.folders.find(candidate => candidate.isVirtual)
             : fixtureId === 'local-folder'
@@ -254,7 +255,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
     // 直接写导航 store，与真实界面里点歌手名之后宿主做的压栈是同一个动作（只是没有转场）。
     const pushArtist = useCallback((): boolean => {
         if (!sandbox) return false;
-        const groups = buildLocalGrid3DGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined);
+        const groups = buildLocalHomeGroups(localSongs, localPlaylists, t, localLibraryCatalog.ready ? localLibraryCatalog : undefined, getLocalCoverAssetUrl);
         const artist = groups.artists.find(candidate => candidate.entityId) ?? groups.artists[0];
         if (!artist || !useCollectionNavigationStore.getState().snapshot) return false;
         onPushCollection(createLocalGridViewCollection(artist));

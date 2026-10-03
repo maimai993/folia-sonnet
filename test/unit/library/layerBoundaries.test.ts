@@ -179,6 +179,21 @@ describe('library core layer boundaries', () => {
             .toEqual([`${CORE}/state/useHiddenCollectionsStore.ts`]);
     });
 
+    it('keeps the home orchestration in core: the grid home views call no library or Navidrome service', () => {
+        // P3.3：来源 / 页签、在线首页数据、导入、Navidrome 概览、文件夹树都在 core（model / services / bindings），
+        // 网格的首页视图只做展示（omni 只剩 Grid3D 的二维码登录与账户切换在用）。
+        const HOME_VIEWS = ['Grid3D.tsx', 'LocalGrid3DView.tsx', 'NavidromeGrid3DView.tsx'].map(name => `src/library/suites/grid/home/${name}`);
+        const offenders = offendersOf(HOME_VIEWS, target => (
+            /^src\/services\/(localMusicService|localPlaylistFileService|localLibraryDirectoryTree|localLibraryAvailability|navidromeService)$/.test(target)
+            || /^src\/hooks\/useLocalLibraryCatalog$/.test(target)
+        ), allSpecifiersOf);
+        expect(offenders).toEqual([]);
+        expect(listSources('src/library/suites/grid/home').filter(file => /\/(localGrid3DModel|useNavidromeGridLibrary)\.ts$/.test(file))).toEqual([]);
+        // Navidrome section 记忆只有一个持有者：core 的 store。
+        expect(listSources('src').filter(file => read(file).includes("'folia_navidrome_last_section'")))
+            .toEqual([`${CORE}/state/useNavidromeHomeSectionStore.ts`]);
+    });
+
     it('keeps the mutation layer injectable: omni and the cache are wired in one place only', () => {
         expect(CORE_FILES).toEqual(expect.arrayContaining([
             `${CORE}/model/collectionMutationCapabilities.ts`,
