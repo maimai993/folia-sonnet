@@ -130,6 +130,12 @@
       }
     ],
     "mac": {
+      "extraResources": [
+        {
+          "from": "build/koffi/darwin_${arch}",
+          "to": "koffi/darwin_${arch}"
+        }
+      ],
       "target": [
         {
           "target": "dmg",
