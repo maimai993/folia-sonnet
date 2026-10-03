@@ -73,8 +73,21 @@ const grid: LibrarySuiteManifest = {
         },
         artist: {
             component: GridArtistSurface,
-            // 歌手页：播放 / 入队单曲与热门歌曲、筛选、编辑本地歌手实体。
-            actions: ['play', 'enqueue', 'play-scope', 'enqueue-scope', 'filter', 'edit-entity'],
+            // 歌手页：播放 / 入队单曲（卡片）与热门歌曲（「加入热门歌曲」按钮；播放全部只经命令面板）、筛选专辑、
+            // 错误态与专辑分页失败的「重试」（重新加载 / 续页）、编辑本地歌手实体（信息面板），专辑卡与歌曲卡上的
+            // 专辑 / 歌手链接。
+            actions: [
+                'play',
+                'enqueue',
+                'play-scope',
+                'enqueue-scope',
+                'filter',
+                'reload',
+                'resume-sync',
+                'edit-entity',
+                'open-album',
+                'open-artist',
+            ],
         },
     },
     transitions: {

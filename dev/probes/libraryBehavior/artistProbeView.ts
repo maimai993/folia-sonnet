@@ -1,27 +1,33 @@
-import ArtistGridView from '../../../src/library/suites/grid/artist/ArtistGridView';
 import { ArtistGridInfoCutInPanel } from '../../../src/library/suites/grid/artist/ArtistGridInfoCutInPanel';
 import { SidePanelList } from '../../../src/components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../src/components/shared/GridListSearchButton';
-import { useAppViewStore } from '../../../src/stores/useAppViewStore';
+import { listLibrarySuites, resolveLibrarySurface } from '../../../src/library/registry';
+import { getLibraryBrowseSession } from '../../../src/library/core/state/useLibraryBrowseSessionStore';
+import { artistSessionKey } from '../../../src/library/core/model/artistSurface';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 import { isSongUnavailable } from '../../../src/services/onlineMusic/songAvailability';
 import type { LibraryArtistResource, LibraryArtistSnapshot } from '../../../src/library/core/contracts/artist';
 import type { LibraryCollectionDescriptor } from '../../../src/library/core/contracts/collection';
 import { artistAlbumLink, filterArtistAlbums } from '../../../src/library/core/model/artistModel';
-import { findPresentComponent, firstHostElement, propsOf, type ProbeFiber } from '../homeBehavior/reactFiberProbe';
+import { findPresentComponent, findPresentComponents, firstHostElement, propsOf, type ProbeFiber } from '../homeBehavior/reactFiberProbe';
 import type { ProbeArtistAlbum, ProbeArtistView } from './probeApi';
 
 // dev/probes/libraryBehavior/artistProbeView.ts
 // 歌手页的语义视图（`__libraryProbe.artist()`）与几个歌手页动作。P4.1 起歌手数据在宿主持有的歌手资源里：
-// artist() 找到在场（不在退场中）的歌手页，读它收到的资源（`resource` prop，宿主交给 surface 的同一个对象）
-// 的快照，再按当前的命令筛选用 core 的 filterArtistAlbums 算出「当前显示的专辑」，专辑的链接提示用 core 的
-// artistAlbumLink（网格专辑卡带的就是它）。面板开合仍从组件树上读。签名与 P4.0 相同，status 多了 error。
+// artist() 找到在场（不在退场中）的歌手页 surface——任何一套 suite 的（registry 里各 suite 解析出的 artist 组件，
+// lazy 组件按 elementType 认）——读宿主交给它的资源（`resource` prop）的快照，再按浏览会话里的筛选词
+// （P4.2 起歌手页的 query 在会话里，键是资源的 key）用 core 的 filterArtistAlbums 算出「当前显示的专辑」，
+// 专辑的链接提示用 core 的 artistAlbumLink（网格专辑卡带的就是它）。网格的面板开合仍从组件树上读（TUI 没有这两个
+// 面板，恒为 false）。签名与 P4.0 相同，status 多了 error。
 
-/** 歌手页（ArtistGridView）上探针要读的两个 prop。 */
+/** 歌手页 surface 上探针要读的两个 prop（宿主交给任何 suite 的同一份契约输入）。 */
 type ArtistViewProps = { collection?: LibraryCollectionDescriptor; resource?: LibraryArtistResource | null };
 
-/** 在场（不在退场中）的歌手页实例。 */
-const artistFiber = (): ProbeFiber | null => findPresentComponent(ArtistGridView);
+/** 在场（不在退场中）的歌手页 surface 实例，不论哪套 suite 渲染。 */
+const artistFiber = (): ProbeFiber | null => {
+    const components = [...new Set(listLibrarySuites().map(suite => resolveLibrarySurface('artist', suite.id).component))];
+    return components.flatMap(component => findPresentComponents(component))[0] ?? null;
+};
 
 /** 在场歌手页的资源（宿主持有的那一个）。 */
 export const presentArtistResource = (): LibraryArtistResource | null => (
@@ -45,7 +51,7 @@ export const readArtistView = (): ProbeArtistView | null => {
     const props = propsOf<ArtistViewProps>(fiber);
     const collection = props?.collection;
     const snapshot = props?.resource?.getSnapshot() ?? null;
-    const query = useAppViewStore.getState().commandFilter?.getQuery() ?? null;
+    const query = collection ? getLibraryBrowseSession(artistSessionKey(collection, props?.resource)).query : '';
     const detail = snapshot?.status === 'ready' ? snapshot.detail : null;
     const songs = detail ? snapshot!.topSongs : [];
     // 网格只在有详情时摆卡片；专辑按当前筛选。

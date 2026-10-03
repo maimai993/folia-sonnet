@@ -1,5 +1,5 @@
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue, animate, AnimatePresence, useDragControls } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useMotionValue, animate, AnimatePresence, useDragControls, useIsPresent } from 'framer-motion';
 import { ChevronLeft, Disc, ListPlus, Loader2, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from '../shared/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
@@ -7,13 +7,22 @@ import { SongResult, Theme } from '../../../../types';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { getSongCoverUrl } from '../../../../services/onlineMusic/songMetadata';
 import type { LibraryArtistResource } from '../../../core/contracts/artist';
+import type { LibraryPlaybackPort } from '../../../core/contracts/ports';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import { useArtistResourceState } from '../../../core/bindings/useArtistResourceState';
+import { useArtistView } from '../../../core/bindings/useArtistView';
+import { useLibraryArtistSurfaceRegistration } from '../../../core/bindings/useLibraryArtistSurfaceRegistration';
+import {
+    getLibraryBrowseSession,
+    registerLibrarySessionFlush,
+    useLibraryBrowseSessionStore,
+} from '../../../core/state/useLibraryBrowseSessionStore';
 import {
     artistAlbumCoverUrl,
     artistAlbumLink,
-    filterArtistAlbums,
     toHttpsCoverUrl,
 } from '../../../core/model/artistModel';
+import { artistAlbumEntryKey, artistSongEntryKey } from '../../../core/model/artistSurface';
 import { PolaroidCard } from '../shared/PolaroidCard';
 import { HEX_CARD_CENTER_SCALE } from '../shared/hexCardTransform';
 import { squareGridCardBox } from '../shared/gridCardLayout';
@@ -40,12 +49,10 @@ import { CollectionListItem, SidePanelList } from '../../../../components/shared
 import { GridListSearchButton } from '../../../../components/shared/GridListSearchButton';
 import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
 import { hasBlockingWindow } from '../../../../utils/keyboardTargets';
-import { closeCommandFilter, openCommandFilter } from '../../../../stores/useAppViewStore';
+import { closeCommandFilter } from '../../../../stores/useAppViewStore';
 import { deriveProgressiveLoadingState } from '../shared/progressiveGrid';
 import { useProgressiveItemEntrance } from '../shared/useProgressiveItemEntrance';
 import { ArtistGridInfoCutInPanel } from './ArtistGridInfoCutInPanel';
-import { isSongUnavailable } from '../../../../services/onlineMusic/songAvailability';
-import { addArtistTopSongsToQueue } from '../../../../utils/artistTopSongsQueue';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
 
 /*
@@ -58,19 +65,24 @@ import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
  *
  * P4.1 起数据来自宿主持有的歌手资源（core/services/artistResource，经 useArtistResourceState 订阅）：
  * 详情、热门歌曲、专辑与专辑的后台分页、失败与重试都在资源里；这里只负责展示与交互。
+ *
+ * P4.2 起筛选词与「看到哪一项」（条目键：song:… / album:…）在浏览会话里（core/bindings/useArtistView），
+ * 换 suite 不丢；这里另存的 sessionStorage 记录只放网格自己的布局（相机位置与焦点卡的下标），键带版本与完整的
+ * collectionKey（folia_artist_grid_state:v2:<key>），旧版只按来源与 id 存的记录不再读取。
+ * 动作的能力来自 core（声明 ∩ 能力），并作为 artist surface 发布到命令面板。
  */
 
 interface ArtistGridViewProps {
     collection: any; // GridViewCollectionDescriptor
     /** 宿主持有的歌手资源（没有时按加载中处理）。 */
     resource: LibraryArtistResource | null;
+    /** 播放端口：单曲播放 / 入队、播放全部与静默整批入队（「加入热门歌曲」）。 */
+    playback: LibraryPlaybackPort;
+    /** 网格在歌手页上声明的动作（entry.ts）；入口与命令面板只给「声明 ∩ core 能力」。 */
+    declaredActions: LibraryDeclaredActions;
     onBack: () => void;
-    onSelectTrack?: (track: SongResult, queue: SongResult[]) => void;
-    onAddTrackToQueue?: (track: SongResult) => void;
     onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
     onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
-    onPlayAll?: (songs: SongResult[]) => void;
-    onAddAllToQueue?: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     theme: Theme;
     isDaylight: boolean;
     onEditEntity?: (entityId: string) => void;
@@ -97,15 +109,46 @@ interface GridItem {
     rawCollection?: any;
 }
 
+/** 网格自己的布局记录：相机位置与当时焦点卡的下标（语义焦点在浏览会话里）。 */
 type StoredArtistGridNavigationState = {
     focusedIndex: number;
-    focusedAlbumId?: string | number;
     dragX: number;
     dragY: number;
-    searchQuery: string;
 };
 
-const ARTIST_GRID_NAVIGATION_PREFIX = 'folia_artist_grid_state';
+/** 挂载时定下的恢复目标：会话里的条目键优先，其次是布局记录里的下标；相机位置只在两者指向同一张卡时沿用。 */
+type ArtistGridRestoreTarget = {
+    entryKey: string | null;
+    stored: StoredArtistGridNavigationState | null;
+};
+
+export const ARTIST_GRID_STATE_STORAGE_PREFIX = 'folia_artist_grid_state:v2:';
+
+export const artistGridStateStorageKey = (sessionKey: string): string => `${ARTIST_GRID_STATE_STORAGE_PREFIX}${sessionKey}`;
+
+const readStoredArtistGridState = (storageKey: string): StoredArtistGridNavigationState | null => {
+    try {
+        const saved = sessionStorage.getItem(storageKey);
+        if (!saved) return null;
+        const parsed = JSON.parse(saved) as Partial<StoredArtistGridNavigationState>;
+        return {
+            focusedIndex: Number.isFinite(parsed.focusedIndex) ? Number(parsed.focusedIndex) : 1,
+            dragX: Number.isFinite(parsed.dragX) ? Number(parsed.dragX) : NaN,
+            dragY: Number.isFinite(parsed.dragY) ? Number(parsed.dragY) : NaN,
+        };
+    } catch {
+        sessionStorage.removeItem(storageKey);
+        return null;
+    }
+};
+
+/** 网格项在浏览会话里的条目键（头像与简介卡没有）。 */
+const gridItemEntryKey = (item: GridItem | undefined): string | null => {
+    if (!item) return null;
+    if (item.rawTrack) return artistSongEntryKey(item.rawTrack);
+    if (item.rawCollection) return artistAlbumEntryKey(item.rawCollection);
+    return null;
+};
 
 // Custom coordinate generator for Artist Grid
 // Computes baseX/baseY for hexagons, reserving specific spots for Avatar and Bio.
@@ -264,16 +307,12 @@ const resolveArtistGridCardBox = (width: number) => {
     }
 };
 
-const EMPTY_TOP_SONGS: SongResult[] = [];
-const EMPTY_ALBUMS: never[] = [];
-
 const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     collection,
     resource,
+    playback,
+    declaredActions,
     onBack,
-    onSelectTrack,
-    onAddTrackToQueue,
-    onAddAllToQueue,
     onSelectAlbum,
     onSelectArtist,
     theme,
@@ -294,11 +333,37 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     // Viewport Size Observer
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ width: 1024, height: 768 });
-    const navigationStorageKey = useMemo(
-        () => `${ARTIST_GRID_NAVIGATION_PREFIX}_${collection.source}_${collection.id}`,
-        [collection.id, collection.source]
-    );
-    const pendingRestoreStateRef = useRef<StoredArtistGridNavigationState | null>(null);
+    // 退场动画期间旧歌手页仍挂着：只有在场的那一个接筛选框与命令面板。
+    const isPresent = useIsPresent();
+    const isActive = isInteractive && isPresent;
+    // Coordinate motion values mapping grid drags
+    const dragX = useMotionValue(0);
+    const dragY = useMotionValue(0);
+    const dragControls = useDragControls();
+    const isDraggingRef = useRef(false);
+
+    // 歌手数据：宿主的歌手资源。专辑的后台分页在拖拽中先暂存，松手后提交（与集合网格同一道门）。
+    const { snapshot, flushHeld } = useArtistResourceState(resource, { holdBackground: () => isDraggingRef.current });
+    // 筛选词、专辑筛选、能力与动作：与 TUI 歌手页同一份 core 绑定。
+    const artistView = useArtistView({
+        collection,
+        resource,
+        snapshot,
+        playback,
+        declaredActions,
+        onEditEntity,
+        onOpenAlbum: onSelectAlbum,
+        setStatus: setStatusMessage,
+    });
+    const { sessionKey, offers, actions: artistActions, capabilities } = artistView;
+    const navigationStorageKey = useMemo(() => artistGridStateStorageKey(sessionKey), [sessionKey]);
+    // 恢复目标在挂载时定下（歌手页按 collectionKey 挂载）：会话里的语义焦点 + 网格自己的布局记录。
+    const [initialRestoreTarget] = useState<ArtistGridRestoreTarget | null>(() => {
+        const stored = readStoredArtistGridState(navigationStorageKey);
+        const entryKey = getLibraryBrowseSession(sessionKey).focusedEntryKey;
+        return stored || entryKey ? { entryKey, stored } : null;
+    });
+    const pendingRestoreStateRef = useRef<ArtistGridRestoreTarget | null>(initialRestoreTarget);
     const hasRestoredNavigationRef = useRef(false);
     // 初始定位只做一次：专辑列表是分页追加的，只看 items.length 会在数据落地时把相机从用户
     // 已经移过去的那张卡上拽回介绍卡。判据见 shouldApplyInitialGridFocus。
@@ -349,29 +414,28 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const [showFullBio, setShowFullBio] = useState(false);
     const [showSidePanel, setShowSidePanel] = useState(false);
     const [showCutInPanel, setShowCutInPanel] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const deferredSearchQuery = useDeferredValue(searchQuery);
+    // 筛选词在浏览会话里（换 suite 不丢）；会话里已有筛选时首次可交互就把筛选框带出来。
+    const searchQuery = artistView.query;
+    const setSearchQuery = artistView.setQuery;
     // The filter box is the command palette now; this grid only says who owns typing and where the
     // box belongs. See useGridCommandFilter for why all three grids stopped carrying their own.
     const rootRef = useRef<HTMLDivElement>(null);
     const isFiltering = useGridCommandFilter({
-        isInteractive,
-        port: { getQuery: () => searchQuery, setQuery: setSearchQuery },
+        isInteractive: isActive,
+        port: artistView.queryPort,
         // The box was positioned against this component's root, not the drag canvas.
         anchorRef: rootRef,
+        reopenIfFiltered: true,
+    });
+    // 命令面板的歌手页动作（播放 / 入队热门歌曲、重新加载、续专辑、编辑本地歌手）：声明 ∩ core 能力。
+    useLibraryArtistSurfaceRegistration({
+        isInteractive: isActive,
+        getState: artistView.surfaceState,
+        run: artistView.runSurface,
     });
 
-    // Coordinate motion values mapping grid drags
-    const dragX = useMotionValue(0);
-    const dragY = useMotionValue(0);
-    const dragControls = useDragControls();
-    const isDraggingRef = useRef(false);
-
-    // 歌手数据：宿主的歌手资源。专辑的后台分页在拖拽中先暂存，松手后提交（与集合网格同一道门）。
-    const { snapshot, flushHeld } = useArtistResourceState(resource, { holdBackground: () => isDraggingRef.current });
     const artistInfo = snapshot?.detail ?? null;
-    const topSongs = snapshot?.topSongs ?? EMPTY_TOP_SONGS;
-    const albums = snapshot?.albums ?? EMPTY_ALBUMS;
+    const topSongs = artistView.topSongs;
     const status = snapshot?.status ?? 'idle';
     const loading = status === 'idle' || status === 'loading';
     const albumSync = snapshot?.albumSync;
@@ -385,30 +449,6 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
     const [focusedIndex, setFocusedIndex] = useState(0);
     const lastUpdateRef = useRef(0);
     const pendingTimeoutRef = useRef<any>(null);
-
-    useEffect(() => {
-        hasRestoredNavigationRef.current = false;
-        pendingRestoreStateRef.current = null;
-        try {
-            const saved = sessionStorage.getItem(navigationStorageKey);
-            if (!saved) return;
-            const parsed = JSON.parse(saved) as Partial<StoredArtistGridNavigationState>;
-            pendingRestoreStateRef.current = {
-                focusedIndex: Number.isFinite(parsed.focusedIndex) ? Number(parsed.focusedIndex) : 1,
-                focusedAlbumId: parsed.focusedAlbumId,
-                dragX: Number.isFinite(parsed.dragX) ? Number(parsed.dragX) : 0,
-                dragY: Number.isFinite(parsed.dragY) ? Number(parsed.dragY) : 0,
-                searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
-            };
-            if (pendingRestoreStateRef.current.searchQuery) {
-                setSearchQuery(pendingRestoreStateRef.current.searchQuery);
-                // 恢复出来的筛选也要把框带回来，否则网格是筛过的、屏幕上却没有任何说明。
-                openCommandFilter();
-            }
-        } catch {
-            sessionStorage.removeItem(navigationStorageKey);
-        }
-    }, [navigationStorageKey]);
 
     useEffect(() => {
         if (!isInteractive) return;
@@ -443,7 +483,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         return () => window.removeEventListener('keydown', handleEscape);
     }, [isInteractive, onBack, searchQuery, showCutInPanel, showSidePanel]);
 
-    const filteredAlbums = useMemo(() => filterArtistAlbums(albums, deferredSearchQuery), [albums, deferredSearchQuery]);
+    const filteredAlbums = artistView.shownAlbums;
 
     // 专辑卡带着打开专辑时交给宿主的链接提示（来源与 provider 取自歌手页，见 artistAlbumLink）。
     const albumGridItems = useMemo<GridItem[]>(() => filteredAlbums.map((album) => ({
@@ -498,11 +538,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
 
         return itemsList;
     }, [albumGridItems, artistInfo, topSongs]);
-    // Queue context for track selection: unavailable tracks are excluded so playback matches the playlist/album surfaces.
-    const playableTopSongs = useMemo(
-        () => topSongs.filter(song => !isSongUnavailable(song)),
-        [topSongs]
-    );
+    // Queue context for track selection: unavailable tracks are excluded so playback matches the playlist/album
+    // surfaces (useArtistView's playSong uses the playable top songs as the queue).
+    const canPlaySong = offers('play');
+    const canEnqueueSong = offers('enqueue');
+    const canOpenAlbum = offers('open-album');
+    const handleSelectArtist = offers('open-artist') ? onSelectArtist : undefined;
+    const handleSelectAlbumLink = offers('open-album') ? onSelectAlbum : undefined;
     const shouldAnimateItemEntrance = useProgressiveItemEntrance(
         `${String(collection.source)}:${String(collection.id)}`
     );
@@ -552,18 +594,17 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         };
     }, [baseCoords, containerSize, layoutConfig.spacingX, layoutConfig.spacingY]);
 
+    // 「看到哪一项」以条目键写进浏览会话（TUI 也认），网格自己的布局另存一份。
     const persistNavigationState = useCallback((index: number) => {
         const safeIndex = Math.max(0, Math.min(index, Math.max(gridItems.length - 1, 0)));
-        const focusedItem = gridItems[safeIndex];
         const state: StoredArtistGridNavigationState = {
             focusedIndex: safeIndex,
-            focusedAlbumId: focusedItem?.rawCollection?.id,
             dragX: dragX.get(),
             dragY: dragY.get(),
-            searchQuery,
         };
         sessionStorage.setItem(navigationStorageKey, JSON.stringify(state));
-    }, [dragX, dragY, gridItems, navigationStorageKey, searchQuery]);
+        useLibraryBrowseSessionStore.getState().setFocusedEntry(sessionKey, gridItemEntryKey(gridItems[safeIndex]));
+    }, [dragX, dragY, gridItems, navigationStorageKey, sessionKey]);
 
     const centerOnIndex = (index: number, snap = true) => {
         if (index < 0 || index >= baseCoords.length) return;
@@ -606,16 +647,18 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         if (hasRestoredNavigationRef.current) return;
         const pending = pendingRestoreStateRef.current;
         if (!pending || gridItems.length === 0 || baseCoords.length === 0) return;
-        if (pending.searchQuery && deferredSearchQuery !== pending.searchQuery) return;
 
-        const albumIndex = pending.focusedAlbumId === undefined
-            ? -1
-            : gridItems.findIndex((item) => String(item.rawCollection?.id) === String(pending.focusedAlbumId));
-        const restoredIndex = albumIndex >= 0
-            ? albumIndex
-            : Math.max(0, Math.min(pending.focusedIndex, gridItems.length - 1));
-        const restoredX = Number.isFinite(pending.dragX) ? pending.dragX : -baseCoords[restoredIndex].baseX;
-        const restoredY = Number.isFinite(pending.dragY) ? pending.dragY : -baseCoords[restoredIndex].baseY;
+        // 会话里的条目键优先（另一个 suite 可能改过它），找不到再用布局记录里的下标。
+        const entryIndex = pending.entryKey
+            ? gridItems.findIndex(item => gridItemEntryKey(item) === pending.entryKey)
+            : -1;
+        const storedIndex = pending.stored ? pending.stored.focusedIndex : 1;
+        const restoredIndex = Math.max(0, Math.min(entryIndex >= 0 ? entryIndex : storedIndex, gridItems.length - 1));
+        // 相机位置只在布局记录指向的就是这张卡时沿用，否则把这张卡居中。
+        const stored = pending.stored;
+        const keepsStoredCamera = stored !== null && stored.focusedIndex === restoredIndex;
+        const restoredX = keepsStoredCamera && Number.isFinite(stored.dragX) ? stored.dragX : -baseCoords[restoredIndex].baseX;
+        const restoredY = keepsStoredCamera && Number.isFinite(stored.dragY) ? stored.dragY : -baseCoords[restoredIndex].baseY;
 
         focusedIndexRef.current = restoredIndex;
         setFocusedIndex(restoredIndex);
@@ -625,7 +668,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         updateRenderedIndexesForViewport(restoredX, restoredY, true);
         hasRestoredNavigationRef.current = true;
         pendingRestoreStateRef.current = null;
-    }, [baseCoords, deferredSearchQuery, dragX, dragY, gridItems, updateRenderedIndexesForViewport]);
+    }, [baseCoords, dragX, dragY, gridItems, updateRenderedIndexesForViewport]);
 
     useEffect(() => {
         const syncWheelTarget = () => {
@@ -799,10 +842,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 if (focusedIndex === 1) {
                     e.preventDefault();
                     setShowFullBio(true);
-                } else if (focusedItem.rawTrack && onSelectTrack) {
+                } else if (focusedItem.rawTrack && canPlaySong) {
                     e.preventDefault();
-                    onSelectTrack(focusedItem.rawTrack, playableTopSongs);
-                } else if (focusedItem.rawCollection && onSelectAlbum) {
+                    persistNavigationState(focusedIndex);
+                    artistActions.playSong(focusedItem.rawTrack);
+                } else if (focusedItem.rawCollection && onSelectAlbum && canOpenAlbum) {
                     e.preventDefault();
                     persistNavigationState(focusedIndex);
                     onSelectAlbum(focusedItem.rawCollection.id, focusedItem.rawCollection);
@@ -853,13 +897,22 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         gridItems,
         isInteractive,
         onSelectAlbum,
-        onSelectTrack,
+        artistActions,
+        canPlaySong,
+        canOpenAlbum,
         persistNavigationState,
         showCutInPanel,
         isFiltering,
         showFullBio,
         showSidePanel,
-        playableTopSongs,
+    ]);
+
+    // 切换 suite 之前，切换器会让当前歌手页把焦点写回会话。写的是已提交的焦点，不是拖拽帧循环里的值。
+    const committedFocusIndexRef = useRef(focusedIndex);
+    committedFocusIndexRef.current = focusedIndex;
+    useEffect(() => registerLibrarySessionFlush(sessionKey, () => persistNavigationState(committedFocusIndexRef.current)), [
+        persistNavigationState,
+        sessionKey,
     ]);
 
     // 「移形换影」artist-page entrance: with a morph plan the avatar + bio stay
@@ -1093,9 +1146,10 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         openWhenFocusedOnCardClick={!isSongCard}
                         isFocused={focusedIndex === idx}
                         onSelect={() => {
-                            if (isSongCard && onSelectTrack && item.rawTrack) {
-                                onSelectTrack(item.rawTrack, playableTopSongs);
-                            } else if (!isSongCard && onSelectAlbum && item.rawCollection) {
+                            if (isSongCard && canPlaySong && item.rawTrack) {
+                                persistNavigationState(idx);
+                                artistActions.playSong(item.rawTrack);
+                            } else if (!isSongCard && onSelectAlbum && canOpenAlbum && item.rawCollection) {
                                 persistNavigationState(idx);
                                 onSelectAlbum(item.rawCollection.id, item.rawCollection);
                             }
@@ -1104,11 +1158,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             if (isDraggingRef.current) return;
                             centerOnIndex(idx, true);
                         }}
-                        onSelectArtist={onSelectArtist}
-                        onSelectAlbum={onSelectAlbum}
+                        onSelectArtist={handleSelectArtist}
+                        onSelectAlbum={handleSelectAlbumLink}
                         onAddQueue={() => {
-                            if (isSongCard && onAddTrackToQueue && item.rawTrack) {
-                                onAddTrackToQueue(item.rawTrack);
+                            if (isSongCard && canEnqueueSong && item.rawTrack) {
+                                artistActions.enqueueSong(item.rawTrack);
                             }
                         }}
                     />
@@ -1132,11 +1186,13 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
         minCardScale,
         focusedIndex,
         artistInfo,
-        playableTopSongs,
-        onSelectTrack,
+        artistActions,
+        canPlaySong,
+        canEnqueueSong,
+        canOpenAlbum,
         onSelectAlbum,
-        onSelectArtist,
-        onAddTrackToQueue,
+        handleSelectArtist,
+        handleSelectAlbumLink,
         persistNavigationState,
         shouldAnimateItemEntrance,
         morphPlan,
@@ -1182,7 +1238,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             <div className="absolute top-0 left-0 p-6 z-30 flex items-center gap-4">
                 <button
                     onClick={() => {
+                        // 返回按钮表示看完了：网格布局与浏览会话一起清掉（Escape 与浏览器后退保留；P4.5 把这条语义收到宿主）。
                         sessionStorage.removeItem(navigationStorageKey);
+                        useLibraryBrowseSessionStore.getState().clearSession(sessionKey);
                         onBack();
                     }}
                     className={`w-10 h-10 rounded-full ${closeBtnBg} flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer`}
@@ -1190,11 +1248,11 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 >
                     <ChevronLeft size={20} />
                 </button>
-                {onAddAllToQueue && (
+                {offers('enqueue-scope') && (
                     <button
                         type="button"
-                        onClick={() => addArtistTopSongsToQueue({ songs: topSongs, addAllToQueue: onAddAllToQueue, setStatus: setStatusMessage, t })}
-                        disabled={playableTopSongs.length === 0}
+                        onClick={() => artistActions.enqueueScope()}
+                        disabled={!capabilities['enqueue-scope'].enabled}
                         className={`h-10 w-10 sm:w-auto sm:px-4 rounded-full ${closeBtnBg} flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors backdrop-blur-md cursor-pointer disabled:opacity-40 disabled:cursor-default`}
                         style={{ color: 'var(--text-primary)' }}
                         title={t('artistGrid.addTopSongsToQueue')}
@@ -1239,9 +1297,9 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                 albumCount={artistInfo?.albumCount}
                 entityId={collection.source === 'local' ? collection.entityId : undefined}
                 onClose={() => setShowCutInPanel(false)}
-                onEditEntity={onEditEntity ? (entityId) => {
+                onEditEntity={offers('edit-entity') ? () => {
                     setShowCutInPanel(false);
-                    onEditEntity(entityId);
+                    artistActions.editEntity();
                 } : undefined}
             />
 
@@ -1251,8 +1309,8 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     type="button"
                     onClick={() => {
                         // 加载失败：从头重新加载；专辑分页失败：从失败的那一页续（详情与热门歌曲不重新请求）。
-                        if (loadError) resource?.reload();
-                        else if (backgroundLoadFailed) resource?.retryAlbums();
+                        if (loadError) artistActions.reload();
+                        else if (backgroundLoadFailed) artistActions.retryAlbums();
                     }}
                     className="absolute right-6 top-5 z-[70] flex items-center gap-2 rounded-full px-3 py-2 text-xs backdrop-blur-md"
                     style={{ backgroundColor: 'color-mix(in srgb, var(--bg-color) 65%, transparent)' }}
@@ -1373,7 +1431,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             centerOnIndex(gridIndex, true);
                             setShowSidePanel(false);
                             window.setTimeout(() => {
-                                if (item.rawCollection) {
+                                if (item.rawCollection && canOpenAlbum) {
                                     persistNavigationState(gridIndex);
                                     onSelectAlbum?.(item.rawCollection.id, item.rawCollection);
                                 }

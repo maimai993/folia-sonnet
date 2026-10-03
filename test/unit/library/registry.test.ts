@@ -8,7 +8,7 @@ import {
     resolveLibrarySurface,
     resolveLibrarySurfaceActions,
 } from '@/library/registry';
-import { LIBRARY_ACTION_IDS, LIBRARY_HOME_ACTION_IDS } from '@/library/core/model/librarySuites';
+import { LIBRARY_ACTION_IDS, LIBRARY_ARTIST_ACTION_IDS, LIBRARY_HOME_ACTION_IDS } from '@/library/core/model/librarySuites';
 
 // test/unit/library/registry.test.ts
 // 真实的 suite 注册表（eager glob 发现 suites/*/entry.ts）。vitest 里 import.meta.env.DEV 为 true，
@@ -53,6 +53,8 @@ describe('library suite registry', () => {
         });
         expect(LIBRARY_ACTION_IDS.filter(action => !resolveLibrarySurfaceActions('collection', 'tui').actions.includes(action)))
             .toEqual(['add-to-playlist', 'create-playlist']);
+        // 歌手页（P4.2）：网格实现了全部歌手页动作（播放全部只经命令面板）。
+        expect([...resolveLibrarySurfaceActions('artist', 'grid').actions].sort()).toEqual([...LIBRARY_ARTIST_ACTION_IDS].sort());
         // 首页：两套都实现了全部首页动作（网格的焦点类动作在卡片与目录树的按钮上，TUI 的在命令面板与键盘上）。
         expect([...resolveLibrarySurfaceActions('home', 'grid').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
         expect([...resolveLibrarySurfaceActions('home', 'tui').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());

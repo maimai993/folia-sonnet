@@ -4,6 +4,7 @@ import type { PanelTab } from '../UnifiedPanel';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { GridSurfaceActionId } from '../../types/gridCommandSurface';
 import type { LibraryDirectorySurfaceActionId } from '../../library/core/contracts/directory';
+import type { LibraryArtistSurfaceActionId } from '../../library/core/contracts/artist';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { CommandPaletteCommand, CommandPaletteContext, CommandPaletteGroup } from './types';
 
@@ -140,6 +141,31 @@ export const createDirectorySurfaceCommand = (
     scope: 'directory-surface',
     isAvailable: context => context?.scope.directory?.getState().availableActions.includes(action) ?? false,
     execute: (input, context) => context.scope.directory?.run(action, input) ?? false,
+});
+
+/**
+ * One action published by the artist page on screen (its top songs, reload, album retry, entity editing).
+ *
+ * Same contract as the other library surfaces: `isAvailable` asks the page's own `availableActions`,
+ * which are the Library Core artist capabilities intersected with what the rendering suite declares.
+ */
+export const createArtistSurfaceCommand = (
+    id: string,
+    title: string,
+    description: string,
+    keywords: string[],
+    action: LibraryArtistSurfaceActionId,
+    icon?: CommandPaletteCommand['icon'],
+): CommandPaletteCommand => defineCommand({
+    id,
+    group: 'grid',
+    title,
+    description,
+    keywords,
+    icon,
+    scope: 'artist-surface',
+    isAvailable: context => context?.scope.artist?.getState().availableActions.includes(action) ?? false,
+    execute: (_input, context) => context.scope.artist?.run(action) ?? false,
 });
 
 export const createAppLanguageCommand = (

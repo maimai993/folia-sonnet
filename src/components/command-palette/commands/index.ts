@@ -3,6 +3,7 @@ import type { CommandPaletteCommand } from '../types';
 import { filterViewCommand } from './filterViewCommand';
 import { gridCommands } from './gridCommands';
 import { directoryCommands } from './directoryCommands';
+import { artistCommands } from './artistCommands';
 import { searchCommands } from './searchCommands';
 import { playbackCommands } from './playbackCommands';
 import { settingsCommands } from './settingsCommands';
@@ -78,6 +79,7 @@ export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecu
     filterViewCommand,
     ...gridCommands,
     ...directoryCommands,
+    ...artistCommands,
     ...searchCommands,
     ...playbackCommands,
     ...settingsCommands,

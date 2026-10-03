@@ -6,6 +6,7 @@ import { useSearchNavigationStore } from '../stores/useSearchNavigationStore';
 import { setIsPanelOpen, setPanelTab, useAppViewStore } from '../stores/useAppViewStore';
 import { useGridSurfaceStore } from '../stores/useGridSurfaceStore';
 import { useLibraryDirectorySurfaceStore } from '../library/core/state/useLibraryDirectorySurfaceStore';
+import { useLibraryArtistSurfaceStore } from '../library/core/state/useLibraryArtistSurfaceStore';
 import { useShallow } from 'zustand/react/shallow';
 import type { CommandPaletteContext } from '../components/command-palette/types';
 import {
@@ -155,6 +156,8 @@ export const useCommandPaletteContext = (
     const gridSurface = useGridSurfaceStore(state => state.gridSurface);
     // The home directory's batch and hidden-view actions, published by GridMap while it is interactive.
     const directorySurface = useLibraryDirectorySurfaceStore(state => state.directorySurface);
+    // The artist page's top-song, reload and entity actions, published while it is interactive.
+    const artistSurface = useLibraryArtistSurfaceStore(state => state.artistSurface);
     // Subscribed, not read through getState: the segmentation surface and the panel chip both show
     // whether the current song has a saved split, so the context has to be rebuilt when it changes.
     const lyricSegmentationRecord = useLyricSegmentationStore(state => state.record);
@@ -189,7 +192,7 @@ export const useCommandPaletteContext = (
             & typeof ambient;
         return {
             shared: buildSharedCommandContext(stableDeps),
-            scope: { view, filter: commandFilter, grid: gridSurface, directory: directorySurface },
+            scope: { view, filter: commandFilter, grid: gridSurface, directory: directorySurface, artist: artistSurface },
             search: buildSearchCommandContext(stableDeps),
             playback: buildPlaybackCommandContext(stableDeps),
             navigation: buildNavigationCommandContext(stableDeps),
@@ -204,7 +207,7 @@ export const useCommandPaletteContext = (
         queuePaletteKeepOpen,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, latticeSignals, audioSignals, visualizerSignals,
-        lyricStaffPolicy, lyricStaffAbsorbMode, personalFmSelection, view, commandFilter, gridSurface, directorySurface, canAddCurrentSongToPlaylist,
+        lyricStaffPolicy, lyricStaffAbsorbMode, personalFmSelection, view, commandFilter, gridSurface, directorySurface, artistSurface, canAddCurrentSongToPlaylist,
         lyricSegmentationRecord, lyricSegmentationActions, latticeFocusAction,
     ]);
 };

@@ -463,6 +463,105 @@ test.describe('[grid] artist page panels', () => {
     });
 });
 
+// P4.2：歌手页的筛选词与「看到哪一项」在浏览会话里（键是宿主那一层的 collectionKey），动作经 artist surface 发布到
+// 命令面板（core 能力 ∩ suite 声明）。返回按钮 = 看完了（清会话与网格布局），Escape / 浏览器后退 = 离开但保留。
+const artistSurface = (page: Page) => page.evaluate(() => window.__libraryProbe!.artistSurface());
+const runArtistSurface = (page: Page, action: Parameters<NonNullable<typeof window.__libraryProbe>['runArtistSurface']>[0]) => (
+    page.evaluate(value => window.__libraryProbe!.runArtistSurface(value), action)
+);
+
+test.describe('[grid] artist session and command surface', () => {
+    test('the filter lives in the browse session: an album opened and closed comes back filtered', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        expect(await setQuery(page, 'cedar')).toBe(true);
+        const filtered = artistAlbumIdsMatching(main, 'cedar');
+        await expect.poll(async () => (await artist(page))?.albumIds).toEqual(filtered);
+
+        expect(await page.evaluate(() => window.__libraryProbe!.openArtistPanel('side'))).toBe(true);
+        expect(await page.evaluate(id => window.__libraryProbe!.openArtistAlbum(id), filtered[0])).toBe(true);
+        await expect.poll(() => stack(page)).toHaveLength(2);
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual([main.name]);
+        await expect.poll(async () => (await artist(page))?.albumIds).toEqual(filtered);
+        expect((await artist(page))!.query).toBe('cedar');
+        expect(await getQuery(page)).toBe('cedar');
+    });
+
+    test('browser back keeps the session; the back button clears it', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        expect(await setQuery(page, 'cedar')).toBe(true);
+        await expect.poll(async () => (await artist(page))?.query).toBe('cedar');
+
+        await back(page);
+        await expect(artistLayer(page)).toHaveCount(0);
+        await openArtist(page, 'artist-main');
+        await expect.poll(async () => (await artist(page))?.query).toBe('cedar');
+        await expect.poll(async () => (await artist(page))?.albumIds).toEqual(artistAlbumIdsMatching(main, 'cedar'));
+
+        // 返回按钮（页头最左边那个）表示看完了：筛选随会话一起清掉。
+        await artistLayer(page).locator('button').first().click();
+        await expect(artistLayer(page)).toHaveCount(0);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        expect((await artist(page))!.query).toBe('');
+        expect((await artist(page))!.albumIds).toEqual(artistAlbumIds(main));
+    });
+
+    test('the command surface publishes the top-song actions; queueing reports the accepted count', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        const playable = topKeys(main, true);
+        await expect.poll(async () => (await artistSurface(page))?.availableActions).toEqual(['play-top-songs', 'enqueue-top-songs', 'reload']);
+        expect(await artistSurface(page)).toMatchObject({ playableTopSongCount: playable.length, albumCount: main.albumCount, isFilterActive: false });
+
+        await clearLog(page);
+        expect(await runArtistSurface(page, 'play-top-songs')).toBe(true);
+        await expect.poll(() => calls(page, 'playAll')).toHaveLength(1);
+        expect((await lastCall(page, 'playAll'))?.ids).toEqual(playable);
+
+        await page.evaluate(keys => window.__libraryProbe!.seedQueue(keys), playable.slice(0, 3));
+        await clearLog(page);
+        expect(await runArtistSurface(page, 'enqueue-top-songs')).toBe(true);
+        await expect.poll(() => calls(page, 'addAllToQueue')).toHaveLength(1);
+        expect(await lastCall(page, 'addAllToQueue')).toMatchObject({ ids: playable, suppressToast: true, accepted: playable.length - 3 });
+        await expect.poll(async () => (await calls(page, 'toast')).map(call => call.text)).toEqual([
+            `Added ${playable.length - 3} top songs to the play queue`,
+        ]);
+        // 不在 availableActions 里的动作被拒绝（在线歌手没有实体可编辑）。
+        expect(await runArtistSurface(page, 'edit-entity')).toBe(false);
+
+        await back(page);
+        await expect.poll(() => artistSurface(page)).toBeNull();
+    });
+
+    test('a local artist publishes entity editing (not reload), and running it opens the host dialog', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openArtist(page, 'local-artist');
+        await waitForArtist(page, LOCAL_ALBUM_NAMES.length);
+        await expect.poll(async () => (await artistSurface(page))?.availableActions).toEqual(['play-top-songs', 'enqueue-top-songs', 'edit-entity']);
+        expect(await runArtistSurface(page, 'edit-entity')).toBe(true);
+        await expect(page.getByRole('dialog')).toBeVisible();
+    });
+
+    test('a failed album page publishes the album retry, and running it resumes from the failed offset', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await addFault(page, { op: 'artistAlbums', target: mainTarget, offset: ARTIST_ALBUM_PAGE_SIZE, remaining: 99 });
+        await openArtist(page, 'artist-main');
+        await expect.poll(async () => (await artistSurface(page))?.availableActions ?? []).toContain('retry-albums');
+        await clearFaults(page, mainTarget);
+        await clearLog(page);
+        expect(await runArtistSurface(page, 'retry-albums')).toBe(true);
+        await waitForArtist(page, main.albumCount);
+        expect(await distinctAlbumOffsets(page, mainTarget)).toEqual([`${ARTIST_ALBUM_PAGE_SIZE}+50`, `${ARTIST_ALBUM_PAGE_SIZE * 2}+50`]);
+        expect((await artistSurface(page))?.availableActions).not.toContain('retry-albums');
+    });
+});
+
 // P4.0 记下的已知缺陷（P4 现状速记），P4.1 的 core 歌手资源修掉之后转正。
 test.describe('[grid] former artist page defects', () => {
     // 原先 ArtistGridView 的 Navidrome 分支在 getArtist 回来之后直接 setArtistInfo，没有比对 generation：

@@ -15,7 +15,7 @@ type CommandPaletteContextOverrides = {
 const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
     const base: CommandPaletteContext = {
         // The palette's original and still most common surface; the home cases say so explicitly.
-        scope: { view: 'player', filter: null, grid: null, directory: null },
+        scope: { view: 'player', filter: null, grid: null, directory: null, artist: null },
         shared: {
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),

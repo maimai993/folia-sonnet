@@ -1,6 +1,8 @@
 import type { LocalSong, SongResult } from '../../../types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
+import type { LibraryCapability } from './capability';
 import type { LibraryCollectionDescriptor } from './collection';
+import type { LibraryArtistActionId } from './suite';
 
 // src/library/core/contracts/artist.ts
 // 歌手页的契约：宿主按 collectionKey 持有的歌手资源（详情、热门歌曲、专辑与专辑的后台分页）。
@@ -108,4 +110,43 @@ export interface LibraryArtistResource {
     dispose(): void;
     /** 宿主再次打开同一个歌手时能否直接复用（详情已到、没有失败）。 */
     canReuse(descriptor: LibraryCollectionDescriptor): boolean;
+}
+
+/**
+ * 歌手页每个语义动作此刻的能力（core/model/artistSurface 的 resolveArtistCapabilities，纯规则，只看歌手资源的
+ * 快照与描述）。按钮、键位与命令面板共用同一份：suite 只在「声明 ∩ supported」时给入口，enabled 决定能不能点。
+ */
+export type LibraryArtistCapabilities = { readonly [Action in LibraryArtistActionId]: LibraryCapability };
+
+/**
+ * 歌手页交给命令面板的动作（artist surface）。与语义动作的对应见 core/model/artistSurface 的
+ * ARTIST_SURFACE_ACTION_SOURCES：play-top-songs → play-scope、enqueue-top-songs → enqueue-scope、
+ * reload → reload、retry-albums → resume-sync、edit-entity → edit-entity。单曲播放 / 入队、打开专辑 / 歌手
+ * 作用于某一项，不进命令面板（与集合 surface 的 play / enqueue 一样）。
+ */
+export type LibraryArtistSurfaceActionId =
+    | 'play-top-songs'
+    | 'enqueue-top-songs'
+    | 'reload'
+    | 'retry-albums'
+    | 'edit-entity';
+
+/** 命令面板问歌手页的状态；每次现读，不缓存。 */
+export interface LibraryArtistSurfaceState {
+    /** 歌手资源的 key（= 浏览会话的键）。 */
+    artistKey: string;
+    /** 此刻可用的动作（能力 enabled ∩ suite 的声明）。 */
+    availableActions: readonly LibraryArtistSurfaceActionId[];
+    playableTopSongCount: number;
+    queueableTopSongCount: number;
+    /** 全部专辑数与筛选后显示的专辑数。 */
+    albumCount: number;
+    shownAlbumCount: number;
+    isFilterActive: boolean;
+}
+
+/** 正在交互的歌手页发布给命令面板的句柄。run 返回动作是否被接下（不可用时为 false）。 */
+export interface LibraryArtistSurfaceHandle {
+    getState(): LibraryArtistSurfaceState;
+    run(action: LibraryArtistSurfaceActionId): boolean;
 }

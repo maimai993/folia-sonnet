@@ -1,5 +1,6 @@
 import type { GridSurfaceActionId, GridSurfaceState } from '../../../src/types/gridCommandSurface';
 import type { LibraryDeclaredActions, LibrarySuiteId, LibrarySurfaceId } from '../../../src/library/core/contracts/suite';
+import type { LibraryArtistSurfaceActionId, LibraryArtistSurfaceState } from '../../../src/library/core/contracts/artist';
 import type { ArtistFixtureId, OnlineArtistFixtureId, OnlineFixtureId, ProbeFixtureId } from './fixtureRules';
 import type { ProbeFault } from './fakeProviders';
 import type { ProbeRefreshKind } from './probeGates';
@@ -95,6 +96,10 @@ export type LibraryProbeApi = {
     openArtistPanel: (panel: 'side' | 'cut-in') => boolean;
     /** 让在场歌手页的资源从头重新加载（错误态「重试」的同一入口）；没有歌手页时返回 false。 */
     reloadArtist: () => boolean;
+    /** 当前注册的歌手页命令面板 surface 的状态（P4.2）；没有时为 null。 */
+    artistSurface: () => LibraryArtistSurfaceState | null;
+    /** 经由当前注册的歌手页 surface 执行动作（命令面板同一条通道）；不可用时返回 false。 */
+    runArtistSurface: (action: LibraryArtistSurfaceActionId) => boolean;
     /** 在线歌手在请求账里的 target。 */
     artistTarget: (fixtureId: OnlineArtistFixtureId) => string;
     /** 故障注入与延迟（假 provider）；clearFaults 不给 target 时清空全部。 */

@@ -111,13 +111,40 @@ export type LibraryHomeActionId =
     | 'home-refresh-navidrome';
 
 /**
+ * 歌手页 surface 的语义动作（P4.2）。能力由 core/model/artistSurface 从歌手资源的快照判定（纯规则），
+ * suite 在 entry 的 artist 声明里列出自己实现了哪些，两者取交集才出现在那套 UI 与命令面板里。
+ *
+ * | LibraryArtistActionId | core 能力 | 命令面板（LibraryArtistSurfaceActionId） |
+ * | --- | --- | --- |
+ * | play / enqueue | 有可播放的热门歌曲（单曲，卡片 / 行上的动作） | — |
+ * | play-scope | 可播放的热门歌曲 > 0（以它们为队列从第一首播） | play-top-songs |
+ * | enqueue-scope | 可入队的热门歌曲 > 0（静默整批入队，歌手页报实际收下的条数） | enqueue-top-songs |
+ * | filter | 总是可用（浏览会话的 query，只筛专辑名） | —（命令面板的筛选框） |
+ * | reload | 在线 / Navidrome 歌手（或任何加载失败的歌手）不在加载中 | reload |
+ * | resume-sync | 专辑分页失败中断 | retry-albums |
+ * | edit-entity | 本地歌手且描述带实体 id | edit-entity |
+ * | open-album / open-artist | 有专辑 / 有热门歌曲（专辑卡、歌曲上的歌手 / 专辑链接） | — |
+ */
+export type LibraryArtistActionId =
+    | 'play'
+    | 'enqueue'
+    | 'play-scope'
+    | 'enqueue-scope'
+    | 'filter'
+    | 'reload'
+    | 'resume-sync'
+    | 'edit-entity'
+    | 'open-album'
+    | 'open-artist';
+
+/**
  * 某个 surface 上实际渲染它的那套 suite 声明的动作：core 动作与 suite 自己的局部动作
  * （网格的 toggle-info-panel、toggle-track-list、toggle-edit-mode……）。宿主按 registry 解析后传给 surface，
  * surface 向命令面板发布时只发布这里有的（再与 core 能力取交集）。
  */
 export type LibraryDeclaredActions = {
-    /** 集合 / 歌手 surface 是 LibraryActionId，首页 surface 是 LibraryHomeActionId。 */
-    readonly actions: readonly (LibraryActionId | LibraryHomeActionId)[];
+    /** 集合 surface 是 LibraryActionId，首页 surface 是 LibraryHomeActionId，歌手 surface 是 LibraryArtistActionId。 */
+    readonly actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId)[];
     readonly extraActions: readonly string[];
 };
 
@@ -169,7 +196,8 @@ export type LibraryCollectionSurfaceProps = LibrarySurfaceBaseProps & LibraryCol
 
 /**
  * 歌手页 surface：宿主按 collectionKey 持有歌手资源（P4.1 起；详情、热门歌曲、专辑与专辑分页都在资源里，
- * 本地歌手由宿主的 catalog 派生），suite 只订阅。播放仍走播放端口。
+ * 本地歌手由宿主的 catalog 派生），suite 只订阅。播放仍走播放端口。筛选词与「看到哪一项」在浏览会话里
+ * （键是 resource.key，即导航栈那一层的 collectionKey），换 suite 不丢（P4.2）。
  */
 export type LibraryArtistSurfaceProps = LibrarySurfaceBaseProps & LibraryCollectionNavigation & {
     collection: LibraryCollectionDescriptor;
@@ -202,8 +230,8 @@ export type LibrarySurfacePropsMap = {
 export type LibrarySurfaceDeclaration<Props> = {
     /** 默认 suite 可以是即时组件；其它 suite 必须是 React.lazy（registry 用 eager glob 发现 entry）。 */
     component: LibrarySurfaceComponent<Props>;
-    /** 集合 / 歌手 surface 列 LibraryActionId，首页 surface 列 LibraryHomeActionId（建索引时按 surface 校验）。 */
-    actions: readonly (LibraryActionId | LibraryHomeActionId)[];
+    /** 集合 surface 列 LibraryActionId，首页 LibraryHomeActionId，歌手 LibraryArtistActionId（建索引时按 surface 校验）。 */
+    actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId)[];
     /** suite 自己的动作（不在 core 的清单里），例如网格的信息面板、曲目侧栏、编辑模式。 */
     extraActions?: readonly string[];
 };

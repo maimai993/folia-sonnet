@@ -1,6 +1,7 @@
 import type { CollectionMutationCapabilities } from '../contracts/mutations';
 import type {
     LibraryActionId,
+    LibraryArtistActionId,
     LibraryDeclaredActions,
     LibraryHomeActionId,
     LibrarySuiteId,
@@ -62,6 +63,20 @@ export const LIBRARY_HOME_ACTION_IDS: readonly LibraryHomeActionId[] = [
     'home-refresh-folders',
     'home-import-playlist',
     'home-refresh-navidrome',
+];
+
+/** 歌手页 surface 的全部动作（与 LibraryArtistActionId 一一对应，单测核对）。 */
+export const LIBRARY_ARTIST_ACTION_IDS: readonly LibraryArtistActionId[] = [
+    'play',
+    'enqueue',
+    'play-scope',
+    'enqueue-scope',
+    'filter',
+    'reload',
+    'resume-sync',
+    'edit-entity',
+    'open-album',
+    'open-artist',
 ];
 
 /**
@@ -130,7 +145,9 @@ export const buildLibrarySuiteIndex = (
             if (!LIBRARY_SURFACE_IDS.includes(surface)) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown surface "${surface}"`);
             }
-            const known: readonly string[] = surface === 'home' ? LIBRARY_HOME_ACTION_IDS : LIBRARY_ACTION_IDS;
+            const known: readonly string[] = surface === 'home'
+                ? LIBRARY_HOME_ACTION_IDS
+                : surface === 'artist' ? LIBRARY_ARTIST_ACTION_IDS : LIBRARY_ACTION_IDS;
             const unknownAction = manifest.surfaces[surface]?.actions.find(action => !known.includes(action));
             if (unknownAction) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown action "${unknownAction}" on ${surface}`);

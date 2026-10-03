@@ -5,6 +5,7 @@ import {
     intersectDeclaredActions,
     LIBRARY_ACTION_IDS,
     LIBRARY_ACTION_MUTATION_CAPABILITY,
+    LIBRARY_ARTIST_ACTION_IDS,
     LIBRARY_SURFACE_IDS,
     resolveDeclaredMutationActions,
 } from '@/library/core/model/librarySuites';
@@ -78,6 +79,20 @@ describe('library suite index', () => {
         expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
             surfaces: { search: { component: component('x'), actions: [] } } as unknown as LibrarySuiteManifest['surfaces'],
         })])).toThrow(/unknown surface "search"/);
+    });
+
+    it('checks artist declarations against the artist action list (P4.2)', () => {
+        // 歌手页有自己的动作清单：open-album / open-artist 只属于歌手页，集合页的 sort 在歌手页上是未知动作。
+        expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
+            surfaces: { artist: { component: component('x'), actions: ['play-scope', 'open-album', 'open-artist', 'resume-sync'] } },
+        })])).not.toThrow();
+        expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
+            surfaces: { artist: { component: component('x'), actions: ['sort'] } },
+        })])).toThrow(/unknown action "sort" on artist/);
+        expect(() => buildLibrarySuiteIndex([gridLike(), listLike({
+            surfaces: { collection: { component: component('x'), actions: ['open-album' as LibraryActionId] } },
+        })])).toThrow(/unknown action "open-album" on collection/);
+        expect(new Set(LIBRARY_ARTIST_ACTION_IDS).size).toBe(LIBRARY_ARTIST_ACTION_IDS.length);
     });
 
     it('knows the three surfaces', () => {

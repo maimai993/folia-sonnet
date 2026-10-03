@@ -2,6 +2,7 @@ import { useAppViewStore } from '../../../src/stores/useAppViewStore';
 import { useGridSurfaceStore } from '../../../src/stores/useGridSurfaceStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
+import { useLibraryArtistSurfaceStore } from '../../../src/library/core/state/useLibraryArtistSurfaceStore';
 import { switchLibrarySuite } from '../../../src/library/app/switchLibrarySuite';
 import { listLibrarySuites, resolveLibrarySurface } from '../../../src/library/registry';
 import type { LibrarySuiteId } from '../../../src/library/core/contracts/suite';
@@ -87,6 +88,8 @@ export const installLibraryProbeApi = (bindings: HarnessBindings): (() => void) 
         openArtistAlbum,
         openArtistPanel,
         reloadArtist,
+        artistSurface: () => useLibraryArtistSurfaceStore.getState().artistSurface?.getState() ?? null,
+        runArtistSurface: action => useLibraryArtistSurfaceStore.getState().artistSurface?.run(action) ?? false,
         artistTarget: onlineArtistFixtureTarget,
         addFault: addProbeFault,
         clearFaults: clearProbeFaults,
