@@ -34,7 +34,7 @@ import '../../dev/probes/libraryBehavior/probeApi';
 // 断言只用它给出的语义字段，所以 P4.1 换数据源、P4.3 加 TUI 歌手页之后同一批断言原样成立。
 //
 // 目前只有网格实现了歌手页（TUI 回退网格，那两条回退用例在 libraryBehavior.spec.ts 里），所以用例标 [grid]。
-// test.fixme 记录的是已知缺陷（P4.1 转正）；test.fail 记录的是本分支引入、下一个提交修掉的回归。
+// test.fixme 记录的是已知缺陷（P4.1 转正）。
 //
 // 探针页开着 StrictMode，而且歌手页自己的本地曲库 catalog 就绪时会再加载一遍：同一个请求可能出现多次，
 // 分页断言看「去重后的 offset 序列」。
@@ -300,9 +300,8 @@ test.describe('[grid] filter, play and enqueue', () => {
 
     // 正确行为（main 369c34e6：歌手页直接拿应用的 addAllToQueue）：歌手页要求静默，队列不弹自己的提示；
     // 歌手页的提示报的是队列真正收下的条数（队列里已有的不算）。b0bea643 起播放端口的 enqueueAll 丢了
-    // { suppressToast: true } 和返回的数量——下一个提交修复，届时去掉 test.fail。
+    // { suppressToast: true } 和返回的数量，P4.0 的修复提交把它们接了回来。
     test('queueing the top songs asks the queue to stay quiet and reports how many it took', async ({ mount, page }) => {
-        test.fail(true, 'regression since b0bea643: LibraryPlaybackPort.enqueueAll drops suppressToast and the accepted count');
         await mountProbe(mount, page);
         await openArtist(page, 'artist-main');
         await waitForArtist(page, main.albumCount);

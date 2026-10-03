@@ -87,7 +87,7 @@ interface GridViewProps {
     // Optional self-contained collection props
     collection?: any;
     onPlayAll?: (songs: SongResult[]) => void;
-    onAddAllToQueue?: (songs: SongResult[]) => void;
+    onAddAllToQueue?: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     onSelectAlbum?: (albumId: number | string, album?: any, track?: SongResult) => void;
     onSelectArtist?: (artistId: number | string, artist?: any, track?: SongResult) => void;
     /**

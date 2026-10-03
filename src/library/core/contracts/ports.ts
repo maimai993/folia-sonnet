@@ -10,8 +10,15 @@ export interface LibraryPlaybackPort {
     playTrack(track: SongResult, queue: SongResult[]): void;
     playAll(tracks: SongResult[]): void;
     enqueueTrack(track: SongResult): void;
-    enqueueAll(tracks: SongResult[]): void;
+    /**
+     * 整批入队。`suppressToast` 让队列不弹自己的「已加入」提示（调用方要报自己的，例如歌手页的「已加入 N 首热门歌曲」）；
+     * 返回队列真正收下的条数（已在队列里的不算），宿主不报数时为 void。
+     */
+    enqueueAll(tracks: SongResult[], options?: LibraryEnqueueOptions): number | void;
 }
+
+/** 整批入队的选项（与应用播放控制器 addOnlineSongsToQueue 的同名选项一致）。 */
+export type LibraryEnqueueOptions = { suppressToast?: boolean };
 
 /** 「加入歌单」选择器里的一项。 */
 export type LibraryPlaylistOption = { id: string | number; name: string; description?: string };
