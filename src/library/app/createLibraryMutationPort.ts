@@ -8,6 +8,7 @@ import { downloadLocalPlaylistM3u8 } from '../../services/localPlaylistFileServi
 import { getNavidromeConfig, navidromeApi } from '../../services/navidromeService';
 import { isLocalGridViewCollection } from '../../components/app/home/gridViewCollectionAdapters';
 import type { HomeSurfaceProps } from '../../components/app/home/homeSurfaceTypes';
+import { FAVORITE_ALBUMS_CHANGED_EVENT } from './useLibraryHomeResources';
 
 // src/library/app/createLibraryMutationPort.ts
 // 把首页 surface 上的来源动作装配成 Library Core 的变更端口：本地曲库与 Navidrome 的读写、
@@ -143,6 +144,6 @@ export const createLibraryMutationPort = ({
     onCollectionMutated: surface.onRefreshUser,
     statusMessage: surface.onStatusMessage,
     notifyFavoriteAlbumsChanged: () => {
-        window.dispatchEvent(new CustomEvent('folia-refresh-favorite-albums'));
+        window.dispatchEvent(new CustomEvent(FAVORITE_ALBUMS_CHANGED_EVENT));
     },
 });
