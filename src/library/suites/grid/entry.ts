@@ -20,6 +20,7 @@ import { gridHostTransitions } from './transitions/gridHostTransitions';
 // 首页：GridMap 的筛选、批量面板（批选、播放 / 入队、新建歌单、删除，目录树上的重扫根 / 移除根 / 恢复忽略目录）、
 // 隐藏管理（卡片上的眼睛按钮），以及本地 / Navidrome 列表右上角的导入与刷新。toggle-hidden 与三个根上的动作
 // 网格用卡片 / 目录树上的按钮做，不经命令面板（GridMap 没有焦点那一项，目录 surface 不发布它们）。
+// 这份声明经宿主传到 GridMap：目录 surface 发布的命令 = core 判定 ∩ 这里的声明（与 TUI 的目录同一条规则）。
 const GRID_HOME_ACTIONS: readonly LibraryHomeActionId[] = [
     'directory-filter',
     'directory-select',

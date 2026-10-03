@@ -18,7 +18,8 @@ import { useLibraryDirectoryVisibility } from '../../../core/bindings/useLibrary
 import { useLibraryDirectoryScope } from '../../../core/bindings/useLibraryDirectoryScope';
 import { useLibraryDirectoryActions } from '../../../core/bindings/useLibraryDirectoryActions';
 import { useLibraryDirectorySurfaceRegistration } from '../../../core/bindings/useLibraryDirectorySurfaceRegistration';
-import { resolveDirectorySurfaceActions } from '../../../core/model/directorySurface';
+import { filterDeclaredDirectorySurfaceActions, resolveDirectorySurfaceActions } from '../../../core/model/directorySurface';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import {
     resolveGridMapDisplayIndex,
     resolveGridMapEscapeAction,
@@ -50,6 +51,11 @@ export type GridMapBatchContext = LibraryDirectoryBatchContext<GridMapItem>;
 interface GridMapProps {
     /** 目录会话 key（core/model/directorySession 的 directoryKey）：筛选词、批选、隐藏视图都存在会话里。 */
     directoryKey?: string;
+    /**
+     * 网格 suite 在 entry 里声明的首页动作。目录 surface 发布的命令 = core 判定 ∩ 声明（与 TUI 的目录相同）；
+     * 不给时（单独挂 GridMap 的地方）只按 core 判定。
+     */
+    declaredHomeActions?: LibraryDeclaredActions;
     title: string;
     subtitle?: string;
     items: GridMapItem[];
@@ -242,6 +248,7 @@ const MapCard = React.memo<{
 
 export const GridMap: React.FC<GridMapProps> = ({
     directoryKey = DEFAULT_DIRECTORY_SESSION_ID,
+    declaredHomeActions,
     title,
     subtitle,
     items = [],
@@ -341,24 +348,30 @@ export const GridMap: React.FC<GridMapProps> = ({
         resetBatchSelection();
     }, [resetBatchSelection]);
 
-    // 命令面板的目录 surface：只在地图可交互时注册；动作能不能做读 core 的批量能力（与面板按钮同源）。
+    // 命令面板的目录 surface：只在地图可交互时注册；动作能不能做读 core 的批量能力（与面板按钮同源），
+    // 再与网格 suite 声明的首页动作取交集（与 TUI 的目录同一条规则：没声明的动作不出现在命令面板里）。
     const { capabilities: batchCapabilities, run: runBatchAction } = useLibraryDirectoryActions(batchConfig, batchContext);
     useLibraryDirectorySurfaceRegistration({
         isInteractive,
-        getState: () => ({
-            directoryKey,
-            availableActions: resolveDirectorySurfaceActions({
+        getState: () => {
+            const coreActions = resolveDirectorySurfaceActions({
                 capabilities: batchCapabilities,
                 context: batchContext,
                 displayItemCount: displayItems.length,
                 selectedItemCount: selectedBatchItemIds.size,
                 hasHideableItems,
-            }),
-            displayItemCount: displayItems.length,
-            selectedItemCount: selectedBatchItemIds.size,
-            selectedTrackCount: batchContext.trackIds.length,
-            visibilityMode,
-        }),
+            });
+            return {
+                directoryKey,
+                availableActions: declaredHomeActions
+                    ? filterDeclaredDirectorySurfaceActions(coreActions, declaredHomeActions)
+                    : coreActions,
+                displayItemCount: displayItems.length,
+                selectedItemCount: selectedBatchItemIds.size,
+                selectedTrackCount: batchContext.trackIds.length,
+                visibilityMode,
+            };
+        },
         run: (action, input) => {
             switch (action) {
                 case 'play-selection':

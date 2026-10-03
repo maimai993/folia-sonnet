@@ -26,6 +26,7 @@ import { countRender } from '../../../../dev/renderCount';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
 import type { LibraryHomeResources } from '../../../core/contracts/homeModel';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import type { LibraryHomeCard, LibraryHomeListState } from '../../../core/contracts/homeModel';
 import { useLibraryHomeSources } from '../../../core/bindings/useLibraryHomeSources';
 import { useLibraryHomeOnline } from '../../../core/bindings/useLibraryHomeOnline';
@@ -103,6 +104,8 @@ interface Grid3DProps {
     directoryActions?: LibraryDirectoryBatchController;
     /** 首页资源（在线收藏专辑、电台 feed；宿主创建，见 library/app/useLibraryHomeResources）。 */
     homeResources: LibraryHomeResources;
+    /** 网格 suite 在 entry 里声明的首页动作（宿主经 registry 传入）：GridMap 的目录 surface 只发布声明 ∩ core 判定。 */
+    declaredActions?: LibraryDeclaredActions;
 }
 
 export const Grid3D: React.FC<Grid3DProps> = (props) => {
@@ -134,6 +137,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         isInteractive = true,
         directoryActions,
         homeResources,
+        declaredActions,
     } = props;
 
     const { t } = useTranslation();
@@ -614,6 +618,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         hasFloatingPlayer={Boolean(currentTrack)}
                         playlistVisibilityScope={hiddenScope}
                         directoryKey={directoryKey}
+                        declaredHomeActions={declaredActions}
                     />
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">
@@ -640,6 +645,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             hasFloatingPlayer={Boolean(currentTrack)}
                             onOpenGridView={onOpenGridView}
                             directoryActions={directoryActions}
+                            declaredHomeActions={declaredActions}
                         />
                     </div>
                 ) : (
@@ -654,6 +660,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             homeActions={homeActions}
                             overview={homeResources.navidromeOverview}
                             directoryKey={directoryKey}
+                            declaredHomeActions={declaredActions}
                             onOpenSettings={() => onOpenSettings?.('help')}
                             onOpenGridView={onOpenGridView}
                         />

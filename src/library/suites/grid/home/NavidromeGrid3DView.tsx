@@ -6,6 +6,7 @@ import { Theme } from '../../../../types';
 import type { GridViewCollectionDescriptor } from '../../../../components/app/home/gridViewCollectionAdapters';
 import { useDebouncedFocusSync } from '../../../../hooks/useDebouncedFocusSync';
 import type { LibraryHomeActionsController, LibraryHomeCard, LibraryHomeListState, LibraryNavidromeHomeResource } from '../../../core/contracts/homeModel';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import { isNavidromeHomeSection, resolveNavidromeCollectionType, type NavidromeHomeSection } from '../../../core/model/navidromeHomeModel';
 import { useLibraryHomeNavidrome } from '../../../core/bindings/useLibraryHomeNavidrome';
 import { useLibraryHomeListRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
@@ -34,6 +35,8 @@ interface NavidromeGrid3DViewProps {
     overview: LibraryNavidromeHomeResource;
     /** 首页模型算好的目录会话 key（core/model/homeSources 的 resolveHomeDirectoryKey）。 */
     directoryKey: string;
+    /** 网格 suite 声明的首页动作（交给 GridMap 的目录 surface 取交集）。 */
+    declaredHomeActions?: LibraryDeclaredActions;
     theme: Theme;
     isDaylight: boolean;
     hasFloatingPlayer?: boolean;
@@ -48,6 +51,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
     homeActions,
     overview,
     directoryKey,
+    declaredHomeActions,
     theme,
     isDaylight,
     hasFloatingPlayer = false,
@@ -155,6 +159,7 @@ export const NavidromeGrid3DView: React.FC<NavidromeGrid3DViewProps> = ({
             hasFloatingPlayer={hasFloatingPlayer}
             playlistVisibilityScope="navidrome"
             directoryKey={directoryKey}
+            declaredHomeActions={declaredHomeActions}
         />
     );
 };

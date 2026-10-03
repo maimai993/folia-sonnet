@@ -9,6 +9,7 @@ import type { GridMapBatchConfig } from '../directory/GridMap';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
 import type { LibraryHomeActionsController, LibraryHomeListState, LibraryLocalDirectoryTreesResource } from '../../../core/contracts/homeModel';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import type { LocalHomeRow, LocalHomeSectionKey } from '../../../core/model/localHomeModel';
 import { resolveLocalHomeActions } from '../../../core/model/localHomeModel';
 import { useLibraryHomeLocal, useLocalDirectoryTrees, useLocalHomeBatchConfig } from '../../../core/bindings/useLibraryHomeLocal';
@@ -54,6 +55,8 @@ interface LocalGrid3DViewProps {
     directoryTreesResource: LibraryLocalDirectoryTreesResource;
     /** 首页模型算好的目录会话 key（core/model/homeSources 的 resolveHomeDirectoryKey）。 */
     directoryKey: string;
+    /** 网格 suite 声明的首页动作（交给 GridMap 的目录 surface 取交集）。 */
+    declaredHomeActions?: LibraryDeclaredActions;
     onOpenGridView?: (collection: GridViewCollectionDescriptor) => void;
     /** 批量动作控制器（宿主创建；规则在 core/services/localDirectoryActions）。没有时 GridMap 不提供批量。 */
     directoryActions?: LibraryDirectoryBatchController;
@@ -80,6 +83,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
     homeActions,
     directoryTreesResource,
     directoryKey,
+    declaredHomeActions,
     onOpenGridView,
     directoryActions,
     theme,
@@ -226,6 +230,7 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
                 hasFloatingPlayer={hasFloatingPlayer}
                 playlistVisibilityScope="local"
                 directoryKey={directoryKey}
+                declaredHomeActions={declaredHomeActions}
                 batchConfig={localBatchConfig}
                 ponderControls="local-grid-controls"
                 gridMapPonderScope="local-grid-map-page"

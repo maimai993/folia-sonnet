@@ -7,6 +7,7 @@ import { Grid3DSlider, Grid3DSliderItem } from './Grid3DSlider';
 import { GridViewTabs, gridChromeClassesFor } from './GridViewTabs';
 import { filterDirectoryByVisibility, resolveSourceDirectoryIndex, resolveVisibleDirectoryIndex } from '../../../core/model/directoryVisibility';
 import type { LibraryHiddenScope } from '../../../core/contracts/directory';
+import type { LibraryDeclaredActions } from '../../../core/contracts/suite';
 import { useHiddenCollections } from '../../../core/bindings/useHiddenCollections';
 import { DEFAULT_DIRECTORY_SESSION_ID, hasDirectorySessionState } from '../../../core/model/directorySession';
 import { homeCardToDirectoryItem } from '../../../core/model/directoryItems';
@@ -46,6 +47,8 @@ interface DesktopGrid3DSurfaceProps {
     playlistVisibilityScope?: LibraryHiddenScope;
     /** 这个列表的目录会话 key（core/model/directorySession 的 directoryKey）：GridMap 的筛选与批选存在这里。 */
     directoryKey?: string;
+    /** 网格 suite 声明的首页动作（交给 GridMap 的目录 surface 取交集）。 */
+    declaredHomeActions?: LibraryDeclaredActions;
     batchConfig?: GridMapBatchConfig;
     ponderControls?: 'local-grid-controls';
     gridMapPonderScope?: 'local-grid-map-page';
@@ -69,6 +72,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     hasFloatingPlayer = false,
     playlistVisibilityScope = 'default',
     directoryKey = DEFAULT_DIRECTORY_SESSION_ID,
+    declaredHomeActions,
     batchConfig,
     ponderControls,
     gridMapPonderScope,
@@ -199,6 +203,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                 {showGridMap && (
                     <GridMap
                         directoryKey={directoryKey}
+                        declaredHomeActions={declaredHomeActions}
                         title={title}
                         // 文件夹卡的描述是它的名称（路径）——虚拟的「全部歌曲」也一样，标题下一行照旧是
                         // 「All Songs / 全部歌曲」。path 只给真实文件夹（契约：虚拟条目没有路径）；GridMap 的卡片
