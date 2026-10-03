@@ -124,7 +124,13 @@ const pressOnPage = async (page: Page, key: string) => {
 };
 
 const artistLayer = (page: Page) => page.locator('[data-library-surface="artist"]');
-const waitForSuite = (page: Page, suite: Suite) => expect(artistLayer(page)).toHaveAttribute('data-library-renderer', suite);
+/** 切换期间旧层仍在退场：先等它卸载，再对唯一的在场层校验 suite。单元素断言遇到双层会立即抛 strict mode。 */
+const waitForSuite = async (page: Page, suite: Suite) => {
+    // lazy 的目标层还没揭示时旧层也只有一个；先等目标出现，避免把旧层误当成已经落定。
+    await expect(page.locator(`[data-library-surface="artist"][data-library-renderer="${suite}"]`)).toHaveCount(1);
+    await expect(artistLayer(page)).toHaveCount(1);
+    await expect(artistLayer(page)).toHaveAttribute('data-library-renderer', suite);
+};
 
 /** 记下歌手页上是否出现过空态文案（「No content」）：MutationObserver 能看到只存在一帧的状态。 */
 const watchEmptyState = (page: Page) => page.evaluate(() => {
@@ -816,6 +822,41 @@ test.describe('[tui-only] artist page keys and header', () => {
 
 // 换 suite：歌手资源由宿主持有，两套订阅同一个；筛选词与焦点在浏览会话里，所以换过去都还在，而且不发任何新请求。
 test.describe('[switch] artist page between suites', () => {
+    test('the grid exits when switching just as a filtered album action enters', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await openArtist(page, 'artist-main');
+        await waitForArtist(page, main.albumCount);
+        // 通过真实切换预热 lazy surface：再次切到 TUI 时无需等待首次 Suspense 揭示，两个层会短暂重叠。
+        await setSuite(page, 'tui');
+        await waitForSuite(page, 'tui');
+        await setSuite(page, 'grid');
+        await waitForSuite(page, 'grid');
+        expect(await setQuery(page, 'track')).toBe(true);
+        await expect(artistLayer(page).getByTestId('grid-list-search-button')).toHaveCount(0);
+
+        // 在按钮刚挂到 DOM 的提交中切换：不要等它的入场动画落定，覆盖筛选/分页晚一帧提交的真实时序。
+        const overlaps = await page.evaluate(() => new Promise<boolean>(resolve => {
+            let switched = false;
+            const observer = new MutationObserver(() => {
+                if (!switched && document.querySelector('[data-library-renderer="grid"] [data-testid="grid-list-search-button"]')) {
+                    switched = true;
+                    window.__libraryProbe!.setSuite('tui');
+                }
+                if (document.querySelector('[data-library-surface="artist"][data-library-renderer="tui"]')) {
+                    observer.disconnect();
+                    resolve(Boolean(document.querySelector('[data-library-surface="artist"][data-library-renderer="grid"]')));
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+            window.__libraryProbe!.setQuery('cedar');
+        }));
+        expect(overlaps).toBe(true);
+        await waitForSuite(page, 'tui');
+        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="tui"]')).toHaveCount(1);
+        await expect(page.locator('[data-library-surface="artist"][data-library-renderer="grid"]')).toHaveCount(0);
+        expect((await artist(page))!.query).toBe('cedar');
+    });
+
     // P4.5：在 TUI 里点了返回（完成），网格那份歌手页布局记录也一起忘掉——下次在网格里打开从头开始。
     test('the TUI back button also drops the grid artist layout record', async ({ mount, page }) => {
         const record = () => page.evaluate(key => sessionStorage.getItem(`folia_artist_grid_state:v2:${key}`), mainSessionKey);
