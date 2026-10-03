@@ -1,6 +1,7 @@
 import type { LibrarySuiteTransitions } from '../../../core/contracts/suite';
 import { useCollectionMorphStore } from './collectionMorphStore';
 import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from './morphProbes';
+import { gridBackdrop } from './gridBackdrop';
 
 // src/library/suites/grid/transitions/gridHostTransitions.ts
 // 网格交给集合宿主的转场钩子（移形换影）：压栈前给新网格一个级联入场计划，返回前量好 hero 与卡片、
@@ -9,6 +10,7 @@ import { probeArtistIntroTargets, probeGridSquadRects, probeHeroTargets } from '
 // 且没关闭动态效果时调用（见 core/contracts/suite 的 LibrarySuiteTransitions）。
 
 export const gridHostTransitions: Omit<LibrarySuiteTransitions, 'Overlay'> = {
+    backdrop: gridBackdrop,
     beforePush: ({ depth }) => {
         // Nested open (album/artist inside a playlist): no home card was clicked,
         // so instead of the hero morph, hand the incoming grid a fly-in plan —

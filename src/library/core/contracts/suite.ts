@@ -258,11 +258,34 @@ export type LibraryNavigationContext = {
     activeType: string | null;
 };
 
+/** 背景板单段淡入或淡出的时长（秒）与贝塞尔曲线。 */
+export type LibraryBackdropTween = {
+    duration: number;
+    ease: [number, number, number, number];
+};
+
+/** 背景板与本套转场的状态；快照对象在设置未变化时必须稳定。 */
+export type LibraryBackdropSnapshot = {
+    /** 是否调用本套 beforePush / beforeBack、启用 Overlay。未声明 backdrop 时默认 true。 */
+    enabled: boolean;
+    enter: LibraryBackdropTween;
+    /** 缺省时退场沿用 enter（中性背景板）。 */
+    exit?: LibraryBackdropTween;
+};
+
+/** suite 自己解析动效设置，宿主只订阅已解析结果，不知道 suite 的设置名。 */
+export type LibrarySuiteBackdrop = {
+    getSnapshot: () => LibraryBackdropSnapshot;
+    subscribe: (listener: () => void) => () => void;
+};
+
 /**
  * suite 自带的集合层转场（网格的移形换影）。宿主只在「渲染当前集合层的就是这套 suite」且未关闭动态效果时调用，
  * 其它情况下 Overlay 收到 enabled=false。
  */
 export type LibrarySuiteTransitions = {
+    /** 不声明则使用中性背景板，并保持本套转场钩子可用。 */
+    backdrop?: LibrarySuiteBackdrop;
     /** 常驻在集合层之上的转场层；需要从挂载起就在（例如捕获首页卡片的点击）。 */
     Overlay?: LibrarySurfaceComponent<{ enabled: boolean }>;
     /** 压入下一层之前。 */

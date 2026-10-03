@@ -35,7 +35,7 @@ import { resolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
 import type { HomeSurfaceProps } from '../../components/app/home/homeSurfaceTypes';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { countRender } from '../../dev/renderCount';
-import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
+import { useLibraryBackdrop } from './useLibraryBackdrop';
 import { useLibrarySuiteStore } from '../core/state/useLibrarySuiteStore';
 import { useLibraryBrowseSessionStore } from '../core/state/useLibraryBrowseSessionStore';
 import type { LibraryNavigationContext, LibrarySurfaceId } from '../core/contracts/suite';
@@ -171,12 +171,9 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     // （选中 TUI 时，首页卡片点开的集合是 TUI，不该起飞移形换影）。
     const transitionSurface: LibrarySurfaceId = selectedCollection?.type === 'artist' ? 'artist' : 'collection';
     const transitionOwner = transitionSurface === 'artist' ? artistSurface : collectionSurface;
-    // 「降低动态效果」的这一面。关掉之后转场完全不出现（不藏 hero、不飞卡片、背景板按原来的
-    // 0.18s 淡入），而不是缩短成一次更快的飞行 —— 转场是纯装饰，降级就该是原来的行为。
-    // 移形换影也只属于网格：TUI 没有卡片可飞，开着只会让首页那张卡的残影盖在列表上。
-    // （网格以外的 suite 不声明 transitions，于是它渲染集合层时转场关闭。）
-    const morphEnabled = !useReducedMotionFor('collectionMorph') && Boolean(transitionOwner.transitions);
-    const activeTransitions = morphEnabled ? transitionOwner.transitions : undefined;
+    // 背景板和转场启用状态由实际渲染这一层的 suite 解析；未声明背景板时使用中性淡入淡出。
+    const backdrop = useLibraryBackdrop(transitionOwner.transitions?.backdrop);
+    const activeTransitions = backdrop.enabled ? transitionOwner.transitions : undefined;
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
@@ -598,24 +595,21 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             <AnimatePresence initial={false}>
                 {selectedCollection && (
                     <motion.div
-                        key="grid-transition-backdrop"
+                        key="library-transition-backdrop"
+                        data-library-backdrop=""
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        // 时长只在降级时回到官方原版的 0.18s：移形换影关闭后不该还留着
-                        // 一段为飞行准备的慢淡入。开着的时候维持作者调的 0.62s / 0.28s。
-                        exit={morphEnabled
-                            ? { opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }
+                        exit={backdrop.exit
+                            ? { opacity: 0, transition: backdrop.exit }
                             : { opacity: 0 }}
-                        transition={morphEnabled
-                            ? { duration: 0.62, ease: [0.22, 1, 0.36, 1] }
-                            : { duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                        transition={backdrop.enter}
                         className="fixed inset-0 z-[49] pointer-events-none"
                         style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                 )}
             </AnimatePresence>
             {SUITE_OVERLAYS.map(({ suiteId: overlaySuiteId, Overlay }) => (
-                <Overlay key={overlaySuiteId} enabled={morphEnabled && transitionOwner.suiteId === overlaySuiteId} />
+                <Overlay key={overlaySuiteId} enabled={backdrop.enabled && transitionOwner.suiteId === overlaySuiteId} />
             ))}
             <AnimatePresence initial={false}>
                 {displaySelectedCollection && (

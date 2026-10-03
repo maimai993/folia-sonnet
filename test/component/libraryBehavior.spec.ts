@@ -1190,6 +1190,45 @@ test.describe('done clears every suite\'s layout records', () => {
 // 浏览器后退（探针的 back() 就是 popstate 那条路：先通知「将要弹栈」，再改 store）与应用内返回一样跑网格的 beforeBack：
 // 嵌套返回时 hero 收回、卡片散开（退场层 data-folia-collection-morph="exit-backdrop"）。P4.5 之前 popstate 绕过宿主，
 // 这一层直接切走、没有转场。
+test.describe('suite backdrop', () => {
+    test('the host follows grid motion settings and uses a neutral TUI backdrop', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        // 读真实 motion 元素的 props，避免用测试专属 data 属性复述契约而漏掉宿主接线。
+        const readBackdrop = () => page.evaluate(async () => {
+            const modulePath = '/dev/probes/homeBehavior/reactFiberProbe.ts';
+            const { currentRootFiber, findFibers } = await import(/* @vite-ignore */ modulePath);
+            const props = findFibers(currentRootFiber(), (fiber: { memoizedProps?: Record<string, unknown> }) => (
+                fiber.memoizedProps?.['data-library-backdrop'] === '' && Boolean(fiber.memoizedProps?.transition)
+            ))[0]?.memoizedProps;
+            return props ? { enter: props.transition, exit: props.exit } : null;
+        });
+        await expect.poll(readBackdrop).toEqual({
+            enter: { duration: 0.62, ease: [0.22, 1, 0.36, 1] },
+            exit: { opacity: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } },
+        });
+        const setReduced = (enabled: boolean) => page.evaluate(async value => {
+            const modulePath = '/src/stores/useMotionSettingsStore.ts';
+            const { useMotionSettingsStore } = await import(/* @vite-ignore */ modulePath);
+            useMotionSettingsStore.getState().handleToggleReducedMotionSurface('collectionMorph', value);
+        }, enabled);
+        const neutral = { enter: { duration: 0.18, ease: [0.16, 1, 0.3, 1] }, exit: { opacity: 0 } };
+        await setReduced(true);
+        await expect.poll(readBackdrop).toEqual(neutral);
+        await setReduced(false);
+        await expect.poll(async () => (await readBackdrop())?.enter).toEqual({ duration: 0.62, ease: [0.22, 1, 0.36, 1] });
+        await setRenderer(page, 'tui');
+        await waitForRenderer(page, 'tui');
+        await expect.poll(readBackdrop).toEqual(neutral);
+        await setReduced(true);
+        await expect.poll(readBackdrop).toEqual(neutral);
+        await setRenderer(page, 'grid');
+        await waitForRenderer(page, 'grid');
+        await expect.poll(readBackdrop).toEqual(neutral);
+    });
+});
+
 test.describe('browser back and the suite transitions', () => {
     const watchExitLayer = (page: Page) => page.evaluate(() => {
         const flag = window as unknown as { __exitSeen?: number };
