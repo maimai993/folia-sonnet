@@ -7,7 +7,7 @@
 1. 音乐库浏览（首页、集合详情、歌手页）的代码怎么分成「core」和「UI suite」，它们之间怎么配合；
 2. 想写一套新的 UI 时，core 提供了哪些能力、哪些建议实现、哪些可以不做。
 
-代码都在 `src/library/` 下。现状以 `headless-library-p0p1` 分支为准（目前有两套 suite：默认的 `grid`，以及只在开发版出现的 `tui`）。
+代码都在 `src/library/` 下。目前提供默认的 `grid`，以及默认关闭、需显式启用的开发验证 suite `tui`。
 
 ## 一句话
 
@@ -45,6 +45,34 @@ core 内部再分五层，依赖只能从上往下：
 | bindings | `core/bindings/` | React hooks：订阅资源、读写会话、拿到动作 |
 
 这些依赖规则由 `test/unit/library/layerBoundaries.test.ts` 和 `dev/mcp/ts-code-map/codemap.mjs` 检查，违反会直接报错。
+
+## 环境与依赖注入
+
+契约、纯计算和资源 / 动作 controller 不依赖 React、组件、DOM 几何、CSS 或 framer-motion；React 生命周期与订阅在 `core/bindings/`，Zustand 状态在 `core/state/`。`core/contracts/suite.ts` 是宿主与视图之间的结构化装配协议：`Theme`、`isDaylight` 等展示输入不参与资源或 controller 的业务规则，组件类型也没有引入 React。
+
+默认装配复用 Folia 现有环境服务。需要在其他运行环境中复用 controller 时，应注入对应依赖，而不是从 suite 直接访问这些服务；当前整个 `src/library/` 没有独立 npm 包、跨框架或服务端运行承诺。
+
+| 默认装配入口 | 环境依赖 |
+| --- | --- |
+| `core/services/createCollectionResource.ts` | Omni、应用缓存 / IndexedDB、当前 Navidrome 账号与服务器作用域；本地集合接收宿主已解析的曲目 |
+| `core/services/navidromeCollectionTracks.ts` | Navidrome 配置存储、Subsonic 请求、现有播放队列转换 |
+| `core/services/collectionMutationDeps.ts` | Omni 变更、应用数据库的缓存失效 |
+| `core/services/artistResourceDeps.ts` | Omni / Navidrome、本地封面与队列转换、翻译与等待端口 |
+| `core/services/onlineHomeFeedDeps.ts` / `onlineHomeProvider.ts` | 当前 provider、账户与 feed、封面 metadata |
+| `core/services/navidromeHomeLibraryDeps.ts` / `localDirectoryTreesDeps.ts` | 当前 Navidrome 配置与概览、本地导入根快照 |
+| `app/createLibrary*Port.ts` / `useLibraryHomeResources.ts` | 播放与导航 store、导入导出、对话框、状态提示、收藏专辑刷新事件 |
+
+## 兼容接口与迁移结束点
+
+P5 收尾后，首页、集合与歌手业务的真源统一为 core 资源、会话与 controller。旧 libraryUi 目录和无消费者的业务转出已移除；新增 suite 不再从旧组件位置获取业务实现，也不增加第二套加载或缓存流程。
+
+以下接口仍有应用消费者，保留在适配边界：
+
+- `components/app/home/gridViewCollectionAdapters.ts` 将现有应用输入转换成 core 描述，并解析本地曲目、封面和排序；来源通用适配及 `GridView*` 类型别名继续供导航、搜索与播放器入口使用。
+- `homeSurfaceTypes.ts` 的契约别名、grid 的 collection / artist surface 展示适配、命令面板的 Grid 命令 ID 映射继续使用；业务能力和操作范围仍由 core 判定。
+- 收藏专辑刷新事件、旧浏览恢复记录的读取 / 单向迁移、隐藏歌单的存储 key 和格式保留。布局记录属于各 suite，显式完成页面时由宿主统一清除。刷新后恢复打开的集合仍不在本次范围内。
+
+资源 registry 有界保留已释放资源并回收孤立实例；suite resolver 按实际解析的 suite、surface 与回退状态共享结果，未知或当前构建禁用的 ID 不再扩张缓存。未知 ID 仍沿用默认 suite 的现有解析标记；已注册 suite 缺少某 surface 时 `isFallback` 为 true。
 
 ## 一次「打开歌单并删一首歌」是怎么走的
 
@@ -236,7 +264,7 @@ npx cross-env VITE_LIBRARY_TUI=true npm run dev:probe
 
 启用后，开发浮层可以在两套之间切换；切换不重新请求，筛选、选中、焦点与当前播放队列都保留。Vitest 的 `test.env` 和 Playwright 的 `webServer.command` 自动显式启用该 flag，参数化回归继续覆盖两套消费者；跑 Playwright 前应保持 4173 端口空闲，避免复用没有开启 TUI 的手动服务器。
 
-entry 用同一个 `import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true'` 条件门控三套 lazy surface 与 `available`。生产构建的 DEV 为 false，即使 flag 误设为 true 仍不可用；关闭或未知 suite id 经真实 registry 回到同一个 grid 解析结果。启用/关闭/生产行为矩阵在 `test/unit/library/tuiAvailability.test.ts`，生产产物排除仍需实际构建核验。
+entry 用同一个 `import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true'` 条件门控三套 lazy surface 与 `available`。生产构建的 DEV 为 false，即使 flag 误设为 true 仍不可用；关闭或未知 suite id 经真实 registry 回到同一个 grid 解析结果。启用/关闭/生产行为矩阵在 `test/unit/library/tuiAvailability.test.ts`，P5 已用显式 flag=true 的实际 Web 生产构建与浏览器预览确认排除，并核对 App / grid 模块作为正对照；以后修改 entry 时仍应核验实际产物。
 
 ## 相关文件
 
@@ -248,3 +276,18 @@ entry 用同一个 `import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 
 - 页面教程解析与回归：`src/services/ponder/pagePonderTarget.ts`、`test/component/pagePonder.spec.ts`
 - 导航栈与弹栈通知：`src/stores/useCollectionNavigationStore.ts`（`notifyCollectionPop` / `subscribeCollectionPop`）、`src/hooks/useAppNavigation.ts`（popstate）
 - 分层规则：`skills/codebase-navigation/SKILL.md` 的 Boundaries 段、`test/unit/library/layerBoundaries.test.ts`
+
+## 验收入口
+
+P5 的六项结构与行为条件可由以下入口复查。行为用例同时驱动 grid 与显式启用的 TUI；支持范围以各 suite 声明为准，不要求开发验证 UI 补齐产品界面。
+
+| 条件 | 验证入口 |
+| --- | --- |
+| 第二 UI 独立于 grid / hex / morph 完成浏览与支持的动作 | `test/unit/library/layerBoundaries.test.ts`；`libraryBehavior` / `homeBehavior` / `artistBehavior` 组件用例 |
+| 业务契约、纯规则、controller 无展示依赖，环境依赖明确 | 分层测试与本页「环境与依赖注入」；React 订阅在 bindings |
+| 按钮、命令与 suite 能力 / 范围一致 | `collectionMutationCapabilities`、`collectionSurface`、`directorySurface`、`artistSurface` 单测与参数化行为用例 |
+| 切 suite 保持会话与队列，布局隔离 | 三组行为探针；真实应用 `libraryRendererSwitch.spec.ts` 的播放引用身份回归；`registry.test.ts` 的布局清理 |
+| Grid 视觉、500 / 5000 首性能与有界资源寿命 | `app.screenshot.spec.ts`；`gridEntrancePerf.spec.ts`；`npm run test:render`；资源 registry 与 suite resolver 单测 |
+| 同业务新 UI 只新增视图、展示适配与注册 | TUI 三 surface 与 entry；本页新增 suite 步骤；生产构建的 manifest / retained modules 检查 |
+
+开发行为与截图分别验证。正式三张首页截图基线属于 Linux；Windows 上的同机截图比较不能替代 Linux / CI 基线。生产门控应以实际 Web 构建确认，而不是仅依赖 entry 注释：即使构建环境设置 `VITE_LIBRARY_TUI=true`，产物仍不得包含 TUI 组件、其键盘 / 焦点实现或 `DevLibraryRendererSwitch`。通用 locale 中保留 TUI 文案不表示其 UI 被加载。
