@@ -293,7 +293,9 @@ export const useCommandPalette = ({
             const didExecute = await match.command.execute(input, context);
             if (didExecute) {
                 recordRecentCommand(resolveRecentCommandToRecord(match.command, activeCommand));
-                close();
+                if (match.command.closeAfterExecute !== false) {
+                    close();
+                }
             }
             return didExecute;
         } finally {
@@ -315,7 +317,9 @@ export const useCommandPalette = ({
             const didExecute = await command.execute('', context);
             if (didExecute) {
                 recordRecentCommand(command);
-                close();
+                if (command.closeAfterExecute !== false) {
+                    close();
+                }
             }
             return didExecute;
         } finally {
@@ -354,12 +358,11 @@ export const useCommandPalette = ({
         }
         return executeMatch(activeIndex);
     }, [activeIndex, close, commitQuery, context, executeCommand, executeMatch, isExecuting, matches, query, surface]);
-
-
-
+    // Surface match lists use live input, so their selection must reset with that same query.
+    const selectionQuery = surface?.buildMatches || surface?.useLiveQuery ? query : matchQuery;
     useEffect(() => {
         setActiveIndex(0);
-    }, [matchQuery]);
+    }, [selectionQuery]);
 
     // A surface can ask the palette for something without knowing anything about it — a grid
     // restoring a view it had filtered, a click that used to dismiss the box, a button pointed at
@@ -468,7 +471,8 @@ export const useCommandPalette = ({
 
     useEffect(() => {
         if (activeIndex >= matches.length) {
-            setActiveIndex(Math.max(0, matches.length - 1));
+            // Preserve a query reset already queued by the effect above before clamping the index.
+            setActiveIndex(current => Math.min(current, Math.max(0, matches.length - 1)));
         }
     }, [activeIndex, matches.length]);
 

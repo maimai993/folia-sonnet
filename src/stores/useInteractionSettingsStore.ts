@@ -13,6 +13,7 @@ export type GridActionButtonSlideTarget = 'filter' | 'command-palette';
 
 const SLIDE_TARGET_KEY = 'grid_action_button_slide_target';
 const PALETTE_HOTKEY_KEY = 'grid_command_palette_hotkey';
+const QUEUE_PALETTE_KEEP_OPEN_KEY = 'queue_palette_keep_open';
 const CUSTOM_SHORTCUT_LETTER_KEY = 'custom_shortcut_letter';
 const CUSTOM_SHORTCUT_COMMAND_KEY = 'custom_shortcut_command';
 
@@ -45,12 +46,15 @@ export type InteractionSettingsState = {
      * listener who wants the other meaning is the one who should have to ask for it.
      */
     gridCommandPaletteHotkey: boolean;
+    /** Keep the queue surface and its query after choosing a song. */
+    queuePaletteKeepOpen: boolean;
     /** Alt + this letter runs `customShortcutCommandId`. Null means no shortcut is defined. */
     customShortcutLetter: string | null;
     customShortcutCommandId: string | null;
 
     setGridActionButtonSlideTarget: (target: GridActionButtonSlideTarget) => void;
     handleToggleGridCommandPaletteHotkey: (enable: boolean) => void;
+    setQueuePaletteKeepOpen: (enable: boolean) => void;
     setCustomShortcutLetter: (letter: string | null) => void;
     setCustomShortcutCommandId: (commandId: string | null) => void;
 };
@@ -58,6 +62,7 @@ export type InteractionSettingsState = {
 export const useInteractionSettingsStore = create<InteractionSettingsState>((set) => ({
     gridActionButtonSlideTarget: readSlideTarget(),
     gridCommandPaletteHotkey: getStoredBoolean(PALETTE_HOTKEY_KEY, false),
+    queuePaletteKeepOpen: getStoredBoolean(QUEUE_PALETTE_KEEP_OPEN_KEY, false),
     customShortcutLetter: readShortcutLetter(),
     customShortcutCommandId: getStoredString(CUSTOM_SHORTCUT_COMMAND_KEY, '') || null,
 
@@ -68,6 +73,10 @@ export const useInteractionSettingsStore = create<InteractionSettingsState>((set
     handleToggleGridCommandPaletteHotkey: (enable) => {
         setStoredBoolean(PALETTE_HOTKEY_KEY, enable);
         set({ gridCommandPaletteHotkey: enable });
+    },
+    setQueuePaletteKeepOpen: (enable) => {
+        setStoredBoolean(QUEUE_PALETTE_KEEP_OPEN_KEY, enable);
+        set({ queuePaletteKeepOpen: enable });
     },
     setCustomShortcutLetter: (letter) => {
         const normalised = letter && /^[a-z]$/i.test(letter) ? letter.toLowerCase() : null;

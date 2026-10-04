@@ -41,6 +41,7 @@ const seedApp = async (page: import('@playwright/test').Page, openPlayerOnLaunch
         localStorage.setItem('open_player_on_launch', String(onLaunch));
         localStorage.setItem('visualizer_mode', 'classic');
         localStorage.setItem('static_mode', 'true');
+        localStorage.setItem('auto_use_best_lyric', 'false');
         localStorage.setItem(guideKey, version);
     }, [APP_VERSION, GUIDE_VERSION_STORAGE_KEY, openPlayerOnLaunch] as const);
     await page.route('**/__mock_netease__/**', async (route) => {
@@ -175,6 +176,86 @@ test('queue command parses the batch syntax and stages a preview', async ({ page
     await page.keyboard.press('Escape');
     await expect(paletteInput(page)).toHaveValue('@artist:Alpha');
     await expect(palette(page)).toBeVisible();
+});
+
+/** Mock playable audio so queue interaction tests exercise the real playback path without a provider. */
+const mockQueueAudio = async (page: import('@playwright/test').Page) => {
+    const samples = 8_000 * 60;
+    const wav = Buffer.alloc(44 + samples * 2);
+    wav.write('RIFF', 0);
+    wav.writeUInt32LE(wav.length - 8, 4);
+    wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(8_000, 24);
+    wav.writeUInt32LE(16_000, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(samples * 2, 40);
+
+    await page.route('**/__queue_audio__.wav', route => route.fulfill({ contentType: 'audio/wav', body: wav }));
+    await page.route('**/song/url/v1?*', route => route.fulfill({
+        json: { code: 200, data: [{
+            id: Number(new URL(route.request().url()).searchParams.get('id')),
+            url: new URL('/__queue_audio__.wav', page.url()).href,
+            code: 200,
+            type: 'wav',
+            expi: 3600,
+        }] },
+    }));
+    await page.route('**/lyric/new?*', route => route.fulfill({ json: { code: 200, lrc: { lyric: '' } } }));
+};
+
+test('queue song selection closes the palette by default', async ({ page }) => {
+    await openPlayerPage(page);
+    await mockQueueAudio(page);
+    await pressUntilPaletteOpens(page, 'Control+P');
+
+    await expect(palette(page).getByRole('checkbox', { name: '切歌后保持打开' })).not.toBeChecked();
+    await palette(page).getByRole('button').filter({ hasText: 'Same Artist' }).click();
+    await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(2);
+    await expect(palette(page)).toBeHidden();
+});
+
+test('queue keep-open preserves filtering for mouse and keyboard song changes', async ({ page }) => {
+    await openPlayerPage(page);
+    await mockQueueAudio(page);
+    await pressUntilPaletteOpens(page, 'Control+P');
+    const keepOpen = () => palette(page).getByRole('checkbox', { name: '切歌后保持打开' });
+
+    await keepOpen().check();
+    await expect(paletteInput(page)).toBeFocused();
+    await palette(page).screenshot({ path: test.info().outputPath('queue-keep-open.png'), animations: 'disabled' });
+    await paletteInput(page).fill('Same');
+    await expect(palette(page).locator('button[data-active]')).toHaveCount(2);
+    await palette(page).getByRole('button').filter({ hasText: 'Same Artist' }).click();
+    await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(2);
+    await expect(palette(page)).toBeVisible();
+    await expect(paletteInput(page)).toHaveValue('Same');
+    await expect(paletteInput(page)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(3);
+    await expect(paletteInput(page)).toHaveValue('Same');
+    await expect(palette(page).locator('button[data-active="true"]')).toContainText('Same Album');
+
+    await page.keyboard.press('Escape');
+    await expect(palette(page)).toBeHidden();
+    await pressUntilPaletteOpens(page, 'Control+P');
+    await expect(keepOpen()).toBeChecked();
+    expect(await page.evaluate(() => localStorage.getItem('queue_palette_keep_open'))).toBe('true');
+
+    await keepOpen().uncheck();
+    await paletteInput(page).fill('Other');
+    await expect(palette(page).locator('button[data-active]').first()).toContainText('#4');
+    await expect(palette(page).locator('[class~="group/queue-row"][class~="bg-white/10"]')).toContainText('#4');
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(4);
+    await expect(palette(page)).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem('queue_palette_keep_open'))).toBe('false');
 });
 
 /**

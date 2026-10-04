@@ -49,6 +49,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             next: vi.fn(),
             prev: vi.fn(),
             queue: [],
+            queuePaletteKeepOpen: false,
+            setQueuePaletteKeepOpen: vi.fn(),
             playSong: vi.fn(),
             shuffleQueue: vi.fn(),
             clearQueue: vi.fn(),

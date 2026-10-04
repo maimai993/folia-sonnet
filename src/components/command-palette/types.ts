@@ -80,6 +80,8 @@ export type CommandPaletteCommand = {
      * find that section.
      */
     settingsTarget?: { subview: SettingsSubviewId; anchorId?: SettingsAnchorId };
+    /** Successful execution closes the palette unless the command opts out. */
+    closeAfterExecute?: boolean;
     execute: (input: string, context: CommandPaletteContext) => Promise<boolean> | boolean;
 };
 
@@ -139,6 +141,8 @@ export type CommandPalettePlaybackContext = {
     next: () => void;
     prev: () => void;
     queue: SongResult[];
+    queuePaletteKeepOpen: boolean;
+    setQueuePaletteKeepOpen: (enable: boolean) => void;
     playSong: (song: SongResult, queue?: SongResult[]) => void | Promise<void>;
     shuffleQueue: () => void;
     clearQueue: () => void;

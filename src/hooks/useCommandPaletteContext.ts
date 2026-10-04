@@ -32,6 +32,7 @@ import { useTypographySettingsStore } from '../stores/useTypographySettingsStore
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useLyricSegmentationStore } from '../stores/useLyricSegmentationStore';
 import { useLatticeSettingsStore } from '../stores/useLatticeSettingsStore';
+import { useInteractionSettingsStore } from '../stores/useInteractionSettingsStore';
 import type { LyricSegmentationActions } from '../components/app/playback/createLyricSegmentationActions';
 
 // src/hooks/useCommandPaletteContext.ts
@@ -73,6 +74,7 @@ export const useCommandPaletteContext = (
     const currentSong = usePlaybackStore(state => state.currentSong);
     const queue = usePlaybackStore(state => state.playQueue);
     const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const queuePaletteKeepOpen = useInteractionSettingsStore(state => state.queuePaletteKeepOpen);
     const setHomeViewTab = useSearchNavigationStore(state => state.setHomeViewTab);
     // What is on screen, transitions included: surfaces that publish lyrics (the mod runtime
     // snapshot) must send the rendered ones, not a guess rebuilt from the song's stored state.
@@ -196,6 +198,7 @@ export const useCommandPaletteContext = (
     }, [
         ...valueDeps,
         ambient,
+        queuePaletteKeepOpen,
         settingsSignals, chromeSignals, desktopSignals, automixSignals,
         sleepTimerSignals, latticeSignals, audioSignals, visualizerSignals,
         lyricStaffPolicy, lyricStaffAbsorbMode, personalFmSelection, view, commandFilter, gridSurface, canAddCurrentSongToPlaylist,

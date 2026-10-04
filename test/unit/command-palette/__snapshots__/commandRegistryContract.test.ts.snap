@@ -22,6 +22,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "search-netease",
   "execute-mode",
   "queue",
+  "queue-keep-open",
   "playback-volume",
   "playback-fm-mode",
   "playback-replaygain-off",

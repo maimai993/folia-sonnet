@@ -10,6 +10,9 @@ import type { QueueBatchAction, QueueFacetKind } from './queueQuery';
 
 type CommandPaletteQueueViewProps = CommandPaletteQueueListProps & {
     evaluation: QueueSearchEvaluation;
+    accentColor: string;
+    keepOpenOnSongChange: boolean;
+    onKeepOpenOnSongChange: (enable: boolean) => void;
     onAcceptSuggestion: (suggestion: QueueSearchSuggestion) => void;
     onClearAction: () => void;
     onClearFacet: () => void;
@@ -35,6 +38,9 @@ const facetLabelKey: Record<QueueFacetKind, string> = {
 
 const CommandPaletteQueueView: React.FC<CommandPaletteQueueViewProps> = ({
     evaluation,
+    accentColor,
+    keepOpenOnSongChange,
+    onKeepOpenOnSongChange,
     isDaylight,
     isExecuting,
     onAcceptSuggestion,
@@ -58,6 +64,27 @@ const CommandPaletteQueueView: React.FC<CommandPaletteQueueViewProps> = ({
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-2" data-testid="command-palette-queue-view">
+            <div className="flex shrink-0 items-start justify-between gap-3 px-3 py-1 text-[11px]">
+                <div className="min-w-0 flex-1 opacity-40" data-testid="command-palette-queue-syntax-hint">
+                    {!parsed.action && parsed.actionDraft === null && parsed.facetDraft === null && !parsed.text
+                        ? t('commandPalette.queueSyntaxHint')
+                        : null}
+                </div>
+                <label
+                    className="flex shrink-0 cursor-pointer items-center gap-1.5 opacity-65 hover:opacity-100"
+                    title={t('commandPalette.queueKeepOpenHint')}
+                >
+                    <span>{t('commandPalette.queueKeepOpen')}</span>
+                    <input
+                        type="checkbox"
+                        checked={keepOpenOnSongChange}
+                        disabled={isExecuting}
+                        onChange={event => onKeepOpenOnSongChange(event.target.checked)}
+                        className="h-3.5 w-3.5 cursor-pointer disabled:cursor-wait"
+                        style={{ accentColor }}
+                    />
+                </label>
+            </div>
             {(parsed.action || parsed.actionDraft !== null || parsed.facetDraft !== null) && (
                 <div className="flex flex-wrap items-center gap-1.5 px-1">
                     {parsed.action && ActionIcon && (
@@ -120,12 +147,6 @@ const CommandPaletteQueueView: React.FC<CommandPaletteQueueViewProps> = ({
                             </button>
                         );
                     })}
-                </div>
-            )}
-
-            {!parsed.action && parsed.actionDraft === null && parsed.facetDraft === null && !parsed.text && (
-                <div className="shrink-0 px-3 py-1 text-[11px] opacity-40" data-testid="command-palette-queue-syntax-hint">
-                    {t('commandPalette.queueSyntaxHint')}
                 </div>
             )}
 

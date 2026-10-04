@@ -31,6 +31,7 @@ const createQueueSongCommand = (
     keywords: [`#${index + 1}`],
     queueIndex: index,
     queueSong: song,
+    closeAfterExecute: !context.playback.queuePaletteKeepOpen,
     execute: async (_input, commandContext) => {
         await commandContext.playback.playSong(song, commandContext.playback.queue);
         return true;
