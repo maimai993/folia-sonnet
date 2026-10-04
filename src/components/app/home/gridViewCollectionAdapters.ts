@@ -3,7 +3,7 @@ import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
 import { LIST_ROW_COVER_SIZE, buildLocalQueue } from '../../../services/playbackAdapters';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
-import type { OnlineProviderId, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
+import type { OnlineProviderId } from '../../../types/onlineMusic';
 import type {
     GridViewCollectionDescriptor,
     LocalGridViewCollectionDescriptor,
@@ -33,12 +33,6 @@ const getDisplayName = (name: React.ReactNode) => (
     typeof name === 'string' || typeof name === 'number'
         ? String(name)
         : ''
-);
-
-export const createNeteaseProviderUser = (user: ProviderUser | null | undefined): ProviderUser | null => user || null;
-
-export const createNeteaseGridViewCollection = (collection: ProviderCollection): GridViewCollectionDescriptor => (
-    createOnlineGridViewCollection(collection, 'netease')
 );
 
 export const createOnlineGridViewCollection = (
@@ -237,8 +231,7 @@ export const resolveLocalGridViewCoverSource = (
     return getLocalGridViewCoverSource(orderedSongs);
 };
 
-// Navidrome 曲目的加载搬到了 library/core/services/navidromeCollectionTracks；保留旧导出。
-export { resolveNavidromeGridViewTracks } from '../../../library/core/services/navidromeCollectionTracks';
+// Navidrome 曲目的加载搬到了 library/core/services/navidromeCollectionTracks；资源直接使用它，这里只适配集合描述与本地数据。
 
 export const isLocalGridViewCollection = (
     collection: GridViewCollectionDescriptor
@@ -247,7 +240,3 @@ export const isLocalGridViewCollection = (
 export const isNavidromeGridViewCollection = (
     collection: GridViewCollectionDescriptor
 ): collection is NavidromeGridViewCollectionDescriptor => collection.source === 'navidrome';
-
-export const isNeteaseGridViewCollection = (
-    collection: GridViewCollectionDescriptor
-) => collection.source === 'online' && collection.providerId === 'netease';

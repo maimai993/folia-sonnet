@@ -14,12 +14,7 @@ import { formatEntryKey } from '../../../core/model/collectionEntries';
 // 正好落在用户刚点开、转场还在飞的窗口里。
 
 // 重复序号的扫描与条目键属于集合本身而不是网格，搬到了 library/core/model/collectionEntries；
-// 这里保留导出，旧的 import 路径照常可用。
-export {
-    buildDuplicateOccurrences,
-    type DuplicateOccurrenceCache,
-    type DuplicateOccurrences,
-} from '../../../core/model/collectionEntries';
+// 调用方直接引用 core 的规则，这里只接收扫描结果并按需塑形网格项。
 
 /** 一首曲目 → 一个网格项。与 GridView 早先的 eager 版本逐字段一致。 */
 export const shapeGridItem = (

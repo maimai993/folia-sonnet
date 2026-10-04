@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-    buildDuplicateOccurrences,
     createLazyGridItems,
     shapeGridItem,
-    type DuplicateOccurrenceCache,
 } from '@/library/suites/grid/collection/lazyGridItems';
+import { buildDuplicateOccurrences, type DuplicateOccurrenceCache } from '@/library/core/model/collectionEntries';
 import { getPlaybackSongKey } from '@/utils/appPlaybackGuards';
 import { formatSongName } from '@/utils/songNameFormatter';
 import { getSongCoverUrl } from '@/services/onlineMusic/songMetadata';

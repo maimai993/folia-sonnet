@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { appendUniqueByKey, deriveProgressiveLoadingState } from '../../../src/library/suites/grid/shared/progressiveGrid';
+import { deriveProgressiveLoadingState } from '../../../src/library/suites/grid/shared/progressiveGrid';
+import { appendUniqueByKey } from '../../../src/library/core/model/collectionPaging';
 import { buildArtistGridCoords } from '../../../src/library/suites/grid/artist/ArtistGridView';
 import { artistAlbumCoverUrl as getArtistGridAlbumCoverUrl } from '../../../src/library/core/model/artistModel';
 

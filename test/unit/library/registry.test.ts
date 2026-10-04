@@ -55,6 +55,16 @@ describe('library suite registry', () => {
         expect(resolveLibrarySurfaceActions('artist', 'tui')).toBe(resolveLibrarySurfaceActions('artist', 'tui'));
     });
 
+    it.each(['home', 'collection', 'artist'] as const)('shares the default %s result across unknown suite ids', surface => {
+        const defaultSurface = resolveLibrarySurface(surface, DEFAULT_LIBRARY_SUITE_ID);
+        for (let index = 0; index < 1000; index += 1) {
+            // 输入可以任意变化；解析后的组件、动作与转场相同，就不应分配无限多份缓存对象。
+            const unknownSurface = resolveLibrarySurface(surface, `unknown-suite-${index}`);
+            expect(unknownSurface).toBe(defaultSurface);
+            expect(unknownSurface.isFallback).toBe(false);
+        }
+    });
+
     it('declares what each suite implements today', () => {
         expect([...resolveLibrarySurfaceActions('collection', 'grid').actions].sort()).toEqual([...LIBRARY_ACTION_IDS].sort());
         expect(resolveLibrarySurfaceActions('collection', 'grid').extraActions)

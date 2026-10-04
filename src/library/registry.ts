@@ -49,17 +49,18 @@ const resolvedCache = new Map<string, ResolvedLibrarySurface<LibrarySurfaceId>>(
 
 /**
  * 这个 surface 由谁渲染：选中的 suite 实现了就用它，否则（或 id 未知、在这个构建里不可用）回退默认 suite。
- * 结果按 (surface, suite) 缓存，组件引用稳定——在两个都回退到网格的 suite 之间切换不会让网格重新挂载。
+ * 结果按 (surface, 实际 suite, 回退状态) 缓存，组件引用稳定——在两个都回退到网格的 suite 之间切换不会让网格重新挂载。
  */
 export const resolveLibrarySurface = <Surface extends LibrarySurfaceId>(
     surface: Surface,
     suiteId: string,
 ): ResolvedLibrarySurface<Surface> => {
-    const cacheKey = `${surface}\u0000${suiteId}`;
+    const resolved = SUITE_INDEX.resolve(surface, suiteId);
+    // 未知或当前构建不可用的 id 共用解析结果；缓存大小由有限的 surface / suite 组合决定。
+    const cacheKey = `${surface}\u0000${resolved.suite.id}\u0000${resolved.isFallback}`;
     const cached = resolvedCache.get(cacheKey);
     if (cached) return cached as unknown as ResolvedLibrarySurface<Surface>;
 
-    const resolved = SUITE_INDEX.resolve(surface, suiteId);
     const result: ResolvedLibrarySurface<Surface> = {
         suiteId: resolved.suite.id,
         // 契约里的组件只是结构化的最小类型；entry 里放的都是 React 组件（即时或 lazy），这里还原。

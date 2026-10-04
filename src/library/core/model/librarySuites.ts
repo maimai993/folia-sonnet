@@ -203,10 +203,6 @@ export const buildLibrarySuiteIndex = (
     };
 };
 
-export const isLibraryActionDeclared = (declared: LibraryDeclaredActions, action: LibraryActionId): boolean => (
-    declared.actions.includes(action)
-);
-
 /**
  * 声明 ∩ core 能力：available 是 core 此刻认为能做的动作，只留下 suite 也声明了的，顺序按 available。
  */
