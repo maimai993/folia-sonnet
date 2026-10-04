@@ -2,18 +2,20 @@ import React from 'react';
 import type { LibrarySuiteManifest } from '../../core/contracts/suite';
 
 // src/library/suites/tui/entry.ts
-// 终端风格的列表 suite（开发版专用的 PoC）。实现首页、集合与歌手页三个 surface（P4.3 起歌手页不再回退网格）。
+// 终端风格的列表 suite（开发验证专用，默认关闭）。显式设置 VITE_LIBRARY_TUI=true 才在开发版启用；
+// 实现首页、集合与歌手页三个 surface（P4.3 起歌手页不再回退网格）。
 // 生产构建里 import.meta.env.DEV 是常量 false：组件那一行连同动态 import 一起被摇掉，不会产出 TUI 的 chunk，
 // registry 也因为 available: false 把它当作不存在（浮层不出现、选不到）。
 
-const LibraryTuiView = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiView')) : null;
-const LibraryTuiHome = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiHome')) : null;
-const LibraryTuiArtist = import.meta.env.DEV ? React.lazy(() => import('./LibraryTuiArtist')) : null;
+const ENABLE_TUI = import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true';
+const LibraryTuiView = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiView')) : null;
+const LibraryTuiHome = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiHome')) : null;
+const LibraryTuiArtist = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiArtist')) : null;
 
 const tui: LibrarySuiteManifest = {
     id: 'tui',
     labelKey: 'libraryTui.rendererTui',
-    available: import.meta.env.DEV,
+    available: ENABLE_TUI,
     surfaces: LibraryTuiView && LibraryTuiHome && LibraryTuiArtist
         ? {
             home: {

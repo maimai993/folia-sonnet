@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 //   否则一个开发版专用的 suite 会把它的整套 UI 拉进首页外壳；
 // - 默认 suite（grid）是唯一的例外（首屏与移形换影，理由写在 grid/entry.ts），而且只限下面这份清单：
 //   新加的组件要么 lazy，要么有意识地加进清单；
-// - 开发版专用的 TUI 用 import.meta.env.DEV 门控组件与可用性，生产构建里组件连同动态 import 一起被摇掉。
+// - 开发验证 TUI 用 DEV 与 VITE_LIBRARY_TUI=true 同时门控组件与可用性，生产构建里组件连同动态 import 一起被摇掉。
+//   启用/关闭与真实 registry 回退的行为矩阵在 tuiAvailability.test.ts。
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SUITES_DIR = 'src/library/suites';
@@ -58,8 +59,11 @@ describe('library suite entries', () => {
 
     it('keeps the TUI out of production builds', () => {
         const source = read(entryOf('tui'));
-        expect(source).toMatch(/=\s*import\.meta\.env\.DEV\s*\?\s*React\.lazy\(\(\)\s*=>\s*import\('\.\/LibraryTuiView'\)\)\s*:\s*null;/);
-        expect(source).toContain('available: import.meta.env.DEV,');
+        expect(source).toContain("const ENABLE_TUI = import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true';");
+        for (const component of ['LibraryTuiView', 'LibraryTuiHome', 'LibraryTuiArtist']) {
+            expect(source).toContain(`const ${component} = ENABLE_TUI ? React.lazy(() => import('./${component}')) : null;`);
+        }
+        expect(source).toContain('available: ENABLE_TUI,');
     });
 
     it('has no barrel files that would pull a suite in sideways', () => {

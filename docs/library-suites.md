@@ -221,13 +221,22 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 ## 两套现有 suite 的对照
 
-| 页面 | grid（默认） | tui（开发版） |
+| 页面 | grid（默认） | tui（开发验证） |
 | --- | --- | --- |
 | home | 全部 | 全部；二维码登录除外（未登录只显示原因） |
 | collection | 全部，另有信息面板、曲目侧栏、编辑模式三个局部动作 | 除 `add-to-playlist` / `create-playlist` 外全部（P4.4 起行上的歌手 / 专辑可打开，Alt+Enter / Alt+Shift+Enter） |
 | artist | 全部 | 全部（P4.3 起；之前回退到网格） |
 
-开发版左下角的浮层可以在两套之间切换；切换不重新请求，筛选、选中和焦点都保留。
+TUI 保留为 Library Core 的第二消费者和开发验证 suite。普通开发默认关闭，只注册 grid，切换浮层也不出现；不增加正式用户设置。要手动验证，显式启用：
+
+```sh
+npx cross-env VITE_LIBRARY_TUI=true npm run dev
+npx cross-env VITE_LIBRARY_TUI=true npm run dev:probe
+```
+
+启用后，开发浮层可以在两套之间切换；切换不重新请求，筛选、选中、焦点与当前播放队列都保留。Vitest 的 `test.env` 和 Playwright 的 `webServer.command` 自动显式启用该 flag，参数化回归继续覆盖两套消费者；跑 Playwright 前应保持 4173 端口空闲，避免复用没有开启 TUI 的手动服务器。
+
+entry 用同一个 `import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true'` 条件门控三套 lazy surface 与 `available`。生产构建的 DEV 为 false，即使 flag 误设为 true 仍不可用；关闭或未知 suite id 经真实 registry 回到同一个 grid 解析结果。启用/关闭/生产行为矩阵在 `test/unit/library/tuiAvailability.test.ts`，生产产物排除仍需实际构建核验。
 
 ## 相关文件
 

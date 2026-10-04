@@ -94,7 +94,8 @@ node dev/mcp/ts-code-map/cli.mjs doctor    # 环境自检
   每个 surface 的 props 契约；suite manifest），每套 suite 的 `entry.ts` 声明自己实现了哪些 surface 与动作。
   没实现的 surface 由默认 suite（grid）渲染，没声明的动作不进命令面板（`buildGridSurfaceState` 按声明过滤）。
   entry 里的组件必须是 `React.lazy`，只有默认 suite 例外（Grid3D 在首屏、移形换影要从第一次打开就在）；
-  开发版专用的 suite（tui）用 `import.meta.env.DEV` 门控。网格专属的转场（移形换影）经 entry 的
+  开发验证专用的 suite（tui）默认关闭，只有 `import.meta.env.DEV` 且显式 `VITE_LIBRARY_TUI=true` 时启用；测试配置自动开启。
+  网格专属的转场（移形换影）经 entry 的
   `transitions` 交给宿主，宿主与 `switchLibrarySuite` 不直接 import 网格。
 - `App.tsx` 是历史遗留的装配缝，已经很大。新行为应该组装进相邻的 `components/app/*`、
   hooks、stores、services，而不是继续堆进去。参见 `skills/file-modularization/SKILL.md`。

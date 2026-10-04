@@ -8,6 +8,7 @@ import {
     navidromeFixtures,
     openApp,
 } from './helpers/appFixtures';
+import type { SongResult } from '../../src/types';
 
 // test/ui/libraryRendererSwitch.spec.ts
 // 完整应用里的 renderer 切换（开发版浮层）。行为探针已经在假宿主里把两套 UI 的语义对齐了；
@@ -79,6 +80,84 @@ test('the DEV switch moves the open collection into the TUI and back', async ({ 
     await expect(grid(page)).toHaveCount(1);
     await expect(tui(page)).toHaveCount(0);
     await expect(page.getByText('Midnight Train').first()).toBeVisible();
+});
+
+test('grid to TUI and back preserves the playing queue and current song identities', async ({ page }) => {
+    await installBaseState(page, { neteaseMode: 'logged-in', navidromeEnabled: true });
+    await mockNeteaseApi(page, 'logged-in');
+    await mockNavidromeApi(page);
+    // 服务器歌词由真实 loader 解析；避免这条身份回归走在线自动匹配与外部请求。
+    await page.route(`${NAVIDROME_SERVER}/rest/getLyrics?**`, route => route.fulfill({
+        json: { 'subsonic-response': { status: 'ok', lyrics: { value: '[00:00.00]Starboard Lights\n[00:04.00]Fixture lyrics' } } },
+    }));
+    await openApp(page);
+    await page.getByRole('button', { name: 'Navi' }).last().click();
+    await page.getByRole('tab', { name: 'Playlists' }).click();
+    const favoritesCard = page.locator('[data-grid3d-index="1"]');
+    await expect(favoritesCard.getByRole('heading', { name: 'Favorites', exact: true })).toBeVisible();
+    await favoritesCard.click();
+    // 首页卡片先聚焦再打开；等标题与实际卡片位置都提交，再只发出一次打开（与 homeCardPosition 的居中判据一致）。
+    await expect(page.locator('[data-grid3d-slider] + div h3')).toHaveText('Favorites');
+    await expect.poll(() => favoritesCard.evaluate(card => {
+        const viewport = card.closest('[data-grid3d-slider]')!.getBoundingClientRect();
+        const bounds = card.getBoundingClientRect();
+        return Math.abs(bounds.x + bounds.width / 2 - viewport.x - viewport.width / 2);
+    })).toBeLessThan(5);
+    await favoritesCard.click();
+    await expect(grid(page)).toHaveCount(1);
+    await expect(grid(page).getByText('Starboard Lights').first()).toBeVisible();
+
+    await typeUntilFilterOpens(page, 's');
+    await filterInput(page).fill('starboard --play');
+    await page.keyboard.press('Enter');
+    // Navidrome 播放先完成歌词/元数据加载，再一次提交歌曲、队列与播放页导航；不把加载期替换误算作 suite 切换。
+    await expect.poll(async () => page.evaluate(async () => {
+        const playbackPath = '/src/stores/usePlaybackStore.ts';
+        const viewPath = '/src/stores/useAppViewStore.ts';
+        const { usePlaybackStore } = await import(/* @vite-ignore */ playbackPath);
+        const { useAppViewStore } = await import(/* @vite-ignore */ viewPath);
+        const state = usePlaybackStore.getState();
+        return state.currentSong?.name === 'Starboard Lights'
+            && state.playQueue.length === 1
+            && state.lyrics !== null
+            && state.audioSrc?.includes('/rest/stream') === true
+            && useAppViewStore.getState().view === 'player';
+    })).toBe(true);
+    await page.goBack();
+    await expect(grid(page)).toBeVisible();
+    await expect(rendererSwitch(page)).toHaveAttribute('data-placement', 'collection');
+
+    // 引用留在页面内；跨进程序列化队列内容会丢掉身份，无法发现等长的新数组或同内容的新歌曲。
+    const playing = await page.evaluateHandle(async () => {
+        const playbackPath = '/src/stores/usePlaybackStore.ts';
+        const guardsPath = '/src/utils/appPlaybackGuards.ts';
+        const { usePlaybackStore } = await import(/* @vite-ignore */ playbackPath);
+        const { getPlaybackSongKey } = await import(/* @vite-ignore */ guardsPath);
+        const { playQueue, currentSong } = usePlaybackStore.getState();
+        const queueIndexOf = (state: { currentSong: SongResult | null; playQueue: SongResult[] }) => state.currentSong
+            ? state.playQueue.findIndex(song => getPlaybackSongKey(song) === getPlaybackSongKey(state.currentSong))
+            : -1;
+        const queueIndex = queueIndexOf(usePlaybackStore.getState());
+        return {
+            queueIndex,
+            read: () => {
+                const state = usePlaybackStore.getState();
+                return {
+                    sameQueue: state.playQueue === playQueue,
+                    sameSong: state.currentSong === currentSong,
+                    queueIndex: queueIndexOf(state),
+                };
+            },
+        };
+    });
+    expect(await playing.evaluate(snapshot => snapshot.queueIndex)).toBe(0);
+    for (const renderer of ['tui', 'grid'] as const) {
+        await switchTo(page, renderer);
+        await expect(renderer === 'tui' ? tui(page) : grid(page)).toBeVisible();
+        await expect(renderer === 'tui' ? grid(page) : tui(page)).toHaveCount(0);
+        expect(await playing.evaluate(snapshot => snapshot.read())).toEqual({ sameQueue: true, sameSong: true, queueIndex: 0 });
+    }
+    await playing.dispose();
 });
 
 // P3.4：首页也是一个 surface。首页上的 DEV 浮层把首页换成 TUI 的目录列表；从那里打开「全部歌曲」进的是 TUI 的

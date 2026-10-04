@@ -5,9 +5,9 @@ import { listLibrarySuites } from '../registry';
 import { switchLibrarySuite } from './switchLibrarySuite';
 
 // src/library/app/DevLibraryRendererSwitch.tsx
-// 【PoC 临时组件】只在开发版出现的浮层：在各套 UI suite 之间切换当前打开的集合，
-// 用来验收 Library Core（换 UI 不重新请求、不丢筛选与焦点）。验收结束后删除，
-// 或改成正式设置项（届时按设置集成的规则接入导入导出与命令面板）。
+// 开发验证浮层：在各套 UI suite 之间切换当前打开的集合，
+// 用来验收 Library Core（换 UI 不重新请求、不丢筛选与焦点）。保留作开发验证入口，默认关闭；
+// 只有开发版显式启用额外 suite 时才装配（TUI 使用 VITE_LIBRARY_TUI=true），不作为正式设置项。
 // 按钮列表来自 registry（R3 之前是写死的 grid / tui）；data-renderer 沿用旧名，e2e 用它定位。
 // P3.4 起首页上也出现（切换首页 surface）：首页上贴着左下角（bottom-2）——稍高一点的位置是 GridMap 批量面板的
 // 按钮，右下角是在线 provider 切换器，顶上是桌面版的标题栏与首页页头；集合层上仍在原来的位置。

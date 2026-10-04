@@ -13,8 +13,8 @@ import { buildLibrarySuiteIndex, LIBRARY_ACTION_IDS, LIBRARY_ARTIST_ACTION_IDS, 
 import type { LibrarySuiteManifest } from '@/library/core/contracts/suite';
 
 // test/unit/library/registry.test.ts
-// 真实的 suite 注册表（eager glob 发现 suites/*/entry.ts）。vitest 里 import.meta.env.DEV 为 true，
-// 所以开发版专用的 TUI 也在。纯规则的边界情况在 core/librarySuites.test.ts。
+// 真实的 suite 注册表（eager glob 发现 suites/*/entry.ts）。Vitest 的 DEV 为 true，且测试配置显式
+// 启用 VITE_LIBRARY_TUI=true，所以开发验证 TUI 也在。纯规则的边界情况在 core/librarySuites.test.ts。
 
 describe('library suite registry', () => {
     it('discovers the grid (default, first) and the dev-only TUI', () => {
