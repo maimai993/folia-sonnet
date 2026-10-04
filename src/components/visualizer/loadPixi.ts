@@ -1,3 +1,5 @@
+import { installPixiFilterPoolCompat } from './pixiFilterPoolCompat';
+
 // src/components/visualizer/loadPixi.ts
 // The single place a visualizer pulls Pixi in, so the shader precision default is raised before
 // the first program is compiled.
@@ -32,5 +34,6 @@ type PixiModule = typeof import('pixi.js');
 export const loadPixi = async (): Promise<PixiModule> => {
     const pixi = await import('pixi.js');
     pixi.GlProgram.defaultOptions.preferredFragmentPrecision = 'highp';
+    installPixiFilterPoolCompat(pixi);
     return pixi;
 };
