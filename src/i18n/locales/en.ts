@@ -2670,6 +2670,33 @@ export default {
         "description": "When signed in, your own private playlists now load their songs, with real paging. Self-hosted backends must run qq-music-api 3.1.2 or later; older backends fall back automatically, and a playlist that cannot be read now says it is not public instead of silently showing as empty."
       }
     },
+    "v0_7_13": {
+      "intro": "0.7.13 adds Bodian Music on desktop, a platform login switcher, an option to keep the queue open after changing songs, and a Lumiere trail toggle, with better FLAC compatibility and lyric segmentation imports.",
+      "bodian": {
+        "title": "Bodian Music on Desktop",
+        "description": "Scan to log in, search, play, view word-by-word lyrics, browse your library, like songs, and edit tracks in your own playlists. Desktop only; playback requires a mainland China network. Saving playlists and albums is not supported yet, and Hi-Res falls back to standard FLAC."
+      },
+      "providerLogin": {
+        "title": "Platform Login Switcher",
+        "description": "The home login area now uses expandable pill buttons. The selected platform shows its full name, letting you switch platforms and log in from the same place."
+      },
+      "queueKeepOpen": {
+        "title": "Keep the Queue Open",
+        "description": "Choose to keep the command palette queue open after changing songs, preserving your filter for consecutive selections and smoothly centering the playing song. It still closes after selection by default."
+      },
+      "flacCompatibility": {
+        "title": "Better Local FLAC Compatibility",
+        "description": "Fixes tag, cover, and playback failures caused by malformed cover metadata, including image format labels that do not match the embedded picture. Your original music files stay unchanged."
+      },
+      "segmentationImport": {
+        "title": "More Flexible Segmentation Imports",
+        "description": "Pasted segmentation accepts JSON in code fences, lines objects, and results containing only nonblank lyric lines, with better blank-line and punctuation alignment. The panel also works when lyrics arrive after opening."
+      },
+      "lumiereTrails": {
+        "title": "Hide Lumiere Lyric Trails",
+        "description": "A new Lumiere setting hides lyric trail lines while keeping the text's flight paths."
+      }
+    },
     "v0_7_12": {
       "intro": "0.7.12 adds fade on pause and resume, bilingual sub-captions, close-to-tray, one-tap queueing of an artist's top songs, easier AI provider setup, and a smarter startup view.",
       "playbackFade": {

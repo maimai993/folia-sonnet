@@ -2557,6 +2557,33 @@ export default {
         "description": "Setelah masuk, playlist pribadi buatan Anda kini dapat memuat lagu dengan paging sungguhan. Backend yang di-host sendiri harus memakai qq-music-api 3.1.2 atau lebih baru; backend lama beralih otomatis, dan playlist yang tidak dapat dibaca kini menjelaskan bahwa playlist itu tidak publik, alih-alih tampil kosong tanpa keterangan."
       }
     },
+    "v0_7_13": {
+      "intro": "0.7.13 menambahkan Bodian Music di desktop, pemilih platform login, opsi agar antrean tetap terbuka setelah mengganti lagu, dan sakelar jejak Lumiere, serta meningkatkan kompatibilitas FLAC dan impor segmentasi lirik.",
+      "bodian": {
+        "title": "Bodian Music di Desktop",
+        "description": "Pindai untuk login, cari dan putar lagu, lihat lirik per kata, jelajahi pustaka, sukai lagu, serta tambah atau hapus lagu di playlist buatan sendiri. Hanya desktop; pemutaran memerlukan jaringan Tiongkok daratan. Penyimpanan playlist dan album belum didukung, dan Hi-Res menggunakan FLAC standar."
+      },
+      "providerLogin": {
+        "title": "Pemilih Platform Login",
+        "description": "Area login beranda kini memakai tombol kapsul yang dapat diperluas. Platform yang dipilih menampilkan nama lengkap, sehingga Anda dapat berpindah platform dan login dari tempat yang sama."
+      },
+      "queueKeepOpen": {
+        "title": "Biarkan Antrean Tetap Terbuka",
+        "description": "Antrean di palet perintah dapat tetap terbuka setelah mengganti lagu, mempertahankan filter untuk pilihan berikutnya dan menggulir dengan halus ke lagu yang diputar. Secara default, palet tetap ditutup setelah memilih lagu."
+      },
+      "flacCompatibility": {
+        "title": "Kompatibilitas FLAC Lokal Lebih Baik",
+        "description": "Memperbaiki kegagalan membaca tag, sampul, dan pemutaran akibat metadata sampul yang rusak, termasuk label format yang tidak cocok dengan gambar. Berkas musik asli tetap tidak berubah."
+      },
+      "segmentationImport": {
+        "title": "Impor Segmentasi Lebih Fleksibel",
+        "description": "Segmentasi yang ditempel menerima JSON dalam blok kode, objek lines, dan hasil yang hanya memuat baris lirik tidak kosong, dengan penyelarasan baris kosong dan tanda baca yang lebih baik. Panel juga berfungsi saat lirik dimuat setelah dibuka."
+      },
+      "lumiereTrails": {
+        "title": "Sembunyikan Jejak Lirik Lumiere",
+        "description": "Pengaturan Lumiere baru menyembunyikan garis jejak lirik sambil mempertahankan jalur terbang teks."
+      }
+    },
     "v0_7_12": {
       "intro": "0.7.12 menghadirkan fade saat jeda dan lanjut, subtitle dwibaris, tutup ke tray, antrean lagu populer artis sekali ketuk, pengaturan penyedia AI yang lebih mudah, dan tampilan awal yang lebih cerdas.",
       "playbackFade": {
