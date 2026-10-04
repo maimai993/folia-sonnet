@@ -97,6 +97,7 @@ export const toLumiereSceneTuning = (
         lineArt: tuning.lineArt,
         frontBokeh: tuning.frontBokeh,
         trails: tuning.trails,
+        hideTrails: tuning.hideTrails,
         overlayFrame: tuning.overlayFrame,
         textOnly: tuning.textOnly,
         keywordColors: tuning.keywordColors,
@@ -116,6 +117,7 @@ export const LUMIERE_LIVE_SCENE_KEYS = [
     'darkField',
     'unlitOpacity',
     'fogOctaves',
+    'hideTrails',
 ] as const satisfies readonly (keyof LumiereSceneTuning)[];
 
 /**

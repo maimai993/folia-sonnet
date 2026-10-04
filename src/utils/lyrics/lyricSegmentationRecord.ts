@@ -5,6 +5,7 @@ import {
     type LyricSegmentationSource,
 } from '../../types/lyricSegmentation';
 import { isValidWordSegmentation, segmentLyricWords } from './wordSegmentation';
+import { realignSegmentsToText } from '../../../shared/lyricSegmentationPrompt.mjs';
 
 // src/utils/lyrics/lyricSegmentationRecord.ts
 // Pure transforms between a saved LyricSegmentationRecord, the LyricData it applies to, and the
@@ -133,46 +134,62 @@ const parseJsonRows = (text: string): string[][] => {
         throw new SegmentationImportError('invalid-json');
     }
 
-    if (!Array.isArray(parsed) || !parsed.every(row => Array.isArray(row))) {
+    const rows = Array.isArray(parsed) ? parsed : (parsed as { lines?: unknown } | null)?.lines;
+    if (!Array.isArray(rows) || !rows.every(row => Array.isArray(row) && row.every(segment => typeof segment === 'string'))) {
         throw new SegmentationImportError('invalid-json-shape');
     }
 
-    return (parsed as unknown[][]).map(row => row.map(segment => String(segment)));
+    return rows as string[][];
 };
 
 /**
  * Parses pasted segmentation against the lyrics it is meant for. Format is sniffed rather than
- * configured: a leading `[` means JSON, anything else is the delimiter format. Row count must
- * match the lyrics exactly and every row must rebuild its line's text — a silent partial import
+ * configured: a leading `[` or `{` means JSON, anything else is the delimiter format. Code fences
+ * are accepted, and rows may cover all lyrics or only the nonblank lines in the copied prompt.
+ * Every row must rebuild its line's text — a silent partial import
  * would leave the user with a mix of their edits and the default split, with no way to tell which
  * line got which.
  */
 export const parseSegmentationImport = (text: string, lyrics: LyricData): SegmentationImportResult => {
-    const trimmed = text.trim();
+    const normalized = text.replace(/\r\n?/g, '\n');
+    const trimmed = normalized.trim();
     if (!trimmed) {
         throw new SegmentationImportError('empty');
     }
 
-    const rows = trimmed.startsWith('[') ? parseJsonRows(trimmed) : parseDelimitedRows(trimmed);
-
-    if (rows.length !== lyrics.lines.length) {
+    const fenced = /^```[^\n]*\n([\s\S]*?)\n?```$/.exec(trimmed);
+    const content = fenced ? fenced[1] : normalized;
+    const isJson = /^[\[{]/.test(content.trimStart());
+    let rows = isJson ? parseJsonRows(content.trim()) : parseDelimitedRows(content);
+    const segmentableLines = lyrics.lines.filter(line => Boolean(line.fullText));
+    const coversKnownLines = () => rows.length === lyrics.lines.length || rows.length === segmentableLines.length;
+    // Preserve blank rows in exported lyrics first; extra blank rows in a pasted response may
+    // then be discarded without changing which nonblank lyric each row belongs to.
+    if (!isJson && !coversKnownLines()) {
+        const nonblankRows = rows.filter(row => row.join('').trim() !== '');
+        if (nonblankRows.length === segmentableLines.length) rows = nonblankRows;
+    }
+    if (!coversKnownLines()) {
         throw new SegmentationImportError('line-count-mismatch');
     }
+    const targetLines = rows.length === lyrics.lines.length ? lyrics.lines : segmentableLines;
 
     const lines: Record<string, string[]> = {};
     let appliedCount = 0;
 
     rows.forEach((boundaries, index) => {
-        const line = lyrics.lines[index];
+        const line = targetLines[index];
         // Blank lyric lines round-trip as empty rows; keeping them out of the record leaves them
         // on the default split instead of storing an empty override.
         if (!line.fullText) {
+            if (boundaries.join('')) throw new SegmentationImportError('line-text-mismatch', index + 1);
             return;
         }
-        if (!isValidWordSegmentation(line.fullText, boundaries)) {
+        const realigned = realignSegmentsToText(boundaries, line.fullText);
+        if (!realigned || !isValidWordSegmentation(line.fullText, realigned)) {
             throw new SegmentationImportError('line-text-mismatch', index + 1);
         }
-        lines[getLyricLineSegmentationKey(line)] = boundaries;
+        lines[getLyricLineSegmentationKey(line)] = realigned;
         appliedCount += 1;
     });
 

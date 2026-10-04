@@ -3,6 +3,8 @@ import { DEFAULT_LUMIERE_TUNING, type LumiereTuning } from '@/types';
 import { normalizeLumiereTuning } from '@/utils/lumiereTuning';
 import { compressConfig, decompressConfig } from '@/utils/appearanceCodec';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
+import { buildVisualSettingsConfig } from '@/services/obs/visualSettingsConfig';
+import { buildSyncedVisualSettings, readSyncableSettingsState } from '@/services/sync/settingsSnapshot';
 
 // test/unit/visualizer/lumiereSettings.test.ts
 // Verifies 绘光 tuning normalization, its appearance short-code round trip and the store setter/reset.
@@ -36,6 +38,7 @@ const NON_DEFAULT_TUNING: LumiereTuning = {
     lineArt: false,
     frontBokeh: false,
     trails: false,
+    hideTrails: true,
     seamlessTransitions: false,
     overlayFrame: false,
     textOnly: true,
@@ -122,6 +125,19 @@ describe('Lumiere appearance codec', () => {
         expect(decoded.lumiereTuning).toEqual({ ...NON_DEFAULT_TUNING, textOnly: false });
     });
 
+    it('preserves legacy trajectory visibility and validates the new hiding switch', () => {
+        const { hideTrails: _omitted, ...oldTuning } = NON_DEFAULT_TUNING;
+        expect(normalizeLumiereTuning(oldTuning).hideTrails).toBe(false);
+        expect(normalizeLumiereTuning({ hideTrails: 'true' }).hideTrails).toBe(false);
+        expect(normalizeLumiereTuning({ hideTrails: true }).hideTrails).toBe(true);
+        const prefix = 'folia-theme://';
+        const legacy = JSON.parse(atob(compressConfig({ lumiereTuning: NON_DEFAULT_TUNING }).slice(prefix.length)));
+        expect(legacy.lmt.ht).toBe(true);
+        delete legacy.lmt.ht;
+        expect(decompressConfig(`${prefix}${btoa(JSON.stringify(legacy))}`).lumiereTuning)
+            .toEqual({ ...NON_DEFAULT_TUNING, hideTrails: false });
+    });
+
     it('clamps themeColorMix and fills it with the default for old tunings / short codes', () => {
         expect(normalizeLumiereTuning({ themeColorMix: 1.6 }).themeColorMix).toBe(1);
         expect(normalizeLumiereTuning({ themeColorMix: -1 }).themeColorMix).toBe(0);
@@ -156,6 +172,7 @@ describe('Lumiere appearance codec', () => {
 
 describe('Lumiere store tuning', () => {
     afterEach(() => {
+        useVisualizerSettingsStore.setState({ lumiereTuning: { ...DEFAULT_LUMIERE_TUNING } });
         vi.unstubAllGlobals();
     });
 
@@ -165,14 +182,31 @@ describe('Lumiere store tuning', () => {
         vi.stubGlobal('window', { localStorage: storage });
         useVisualizerSettingsStore.setState({ lumiereTuning: { ...DEFAULT_LUMIERE_TUNING } });
 
-        useVisualizerSettingsStore.getState().handleSetLumiereTuning({ renderQuality: 'low', unlitOpacity: 5 });
+        useVisualizerSettingsStore.getState().handleSetLumiereTuning({ renderQuality: 'low', unlitOpacity: 5, hideTrails: true });
         const next = useVisualizerSettingsStore.getState().lumiereTuning;
         expect(next.renderQuality).toBe('low');
         expect(next.unlitOpacity).toBe(0.6);
+        expect(next.hideTrails).toBe(true);
         expect(JSON.parse(storage.getItem('lumiere_tuning') ?? '{}').renderQuality).toBe('low');
+        expect(JSON.parse(storage.getItem('lumiere_tuning') ?? '{}').hideTrails).toBe(true);
 
         useVisualizerSettingsStore.getState().handleResetLumiereTuning();
         expect(useVisualizerSettingsStore.getState().lumiereTuning).toEqual(DEFAULT_LUMIERE_TUNING);
+    });
+
+    it('carries hidden trajectories through appearance / OBS and sync tuning bundles', () => {
+        useVisualizerSettingsStore.setState({ lumiereTuning: NON_DEFAULT_TUNING });
+        const appearance = buildVisualSettingsConfig();
+        const synced = buildSyncedVisualSettings(readSyncableSettingsState());
+        for (const config of [appearance, synced]) {
+            expect(config.lumiereTuning).toEqual(NON_DEFAULT_TUNING);
+            expect(config.visualizerTunings).toMatchObject({ lumiere: NON_DEFAULT_TUNING });
+        }
+        const decoded = decompressConfig(compressConfig(appearance));
+        expect(decoded.visualizerTunings?.lumiere).toEqual(NON_DEFAULT_TUNING);
+        useVisualizerSettingsStore.getState().handleSetLumiereTuning({ hideTrails: false });
+        useVisualizerSettingsStore.getState().handleSetLumiereTuning(decoded.visualizerTunings.lumiere);
+        expect(useVisualizerSettingsStore.getState().lumiereTuning.hideTrails).toBe(true);
     });
 
     it('imports an old JSON tuning without darkField and keeps the current dark field', () => {

@@ -214,6 +214,7 @@ export const createLumiereCredits = (pixi: PixiModule, options: {
             litColor: palette.lit,
             unlitColor: palette.unlit,
             unlitAlpha: tuning.unlitOpacity,
+            hideTrails: tuning.hideTrails,
             intensity: smooth((time - 0.4) / 0.8),
         });
         details.forEach(({ label, delay }) => {

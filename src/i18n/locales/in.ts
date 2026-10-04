@@ -776,9 +776,9 @@ export default {
     "importError": {
       "empty": "Tidak ada yang bisa diimpor",
       "invalid-json": "Bukan JSON yang valid",
-      "invalid-json-shape": "JSON harus berupa array dari array string",
+      "invalid-json-shape": "JSON harus berisi array string, sebagai array atau objek \"lines\"",
       "line-count-mismatch": "Jumlah baris tidak cocok dengan lirik ini",
-      "line-text-mismatch": "Ada baris yang tidak sama dengan teks lirik aslinya"
+      "line-text-mismatch": "Baris {{row}} tidak sama dengan teks lirik aslinya"
     }
   },
   "mods": {
@@ -1919,6 +1919,8 @@ export default {
     "sonnetPostProcessVignette": "Vignette",
     "sonnetToggleOn": "Aktif",
     "sonnetToggleOff": "Nonaktif",
+    "lumiereHideTrails": "Sembunyikan garis lintasan",
+    "lumiereHideTrailsHint": "Menyembunyikan semua garis lintasan lirik, termasuk tata letak silang dan perubahan orientasi. Lirik tetap terbang mengikuti lintasan yang sama dan transisi mulus tetap berjalan.",
     "decorNone": "Tidak Ada",
     "decorSubtle": "Halus",
     "decorFull": "Penuh",

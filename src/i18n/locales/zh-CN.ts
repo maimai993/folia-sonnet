@@ -780,9 +780,9 @@ export default {
     "importError": {
       "empty": "没有可导入的内容",
       "invalid-json": "不是合法的 JSON",
-      "invalid-json-shape": "JSON 必须是字符串数组的数组",
+      "invalid-json-shape": "JSON 必须是字符串数组的数组，或包含 lines 数组的对象",
       "line-count-mismatch": "行数与当前歌词不一致",
-      "line-text-mismatch": "有一行拼回来和原歌词对不上"
+      "line-text-mismatch": "粘贴结果第 {{row}} 行拼回来和原歌词对不上"
     }
   },
   "mods": {
@@ -2041,8 +2041,10 @@ export default {
     "lumiereTextOnly": "仅显示歌词文字",
     "lumiereTextOnlyHint": "仅显示歌词文字：只画歌词和字上的点亮、光晕、闪点等效果，光源、烟雾、星空、线稿、浮尘、背景歌词、主题图标与画框都不画。字的明暗仍随（不可见的）光束变化。",
     "lumiereTrails": "所有换位都走轨迹线",
+    "lumiereHideTrails": "隐藏轨迹线",
+    "lumiereHideTrailsHint": "隐藏所有歌词换位的轨迹线，包括纵横交错和横竖切换。字仍沿原路径飞行，轨迹过渡照常生效。",
     "lumiereSeamlessTransitions": "轨迹过渡",
-    "lumiereSeamlessTransitionsHint": "轨迹过渡：段落之间也像段内换镜头一样在同一束光里交接（光束摆到新角度、线稿擦除重描、字沿轨迹飞到新位置），不再熄灯、闪白或交叉渐变。「所有换位都走轨迹线」只决定每次换行时字是否拖出轨迹线。",
+    "lumiereSeamlessTransitionsHint": "轨迹过渡：段落之间也像段内换镜头一样在同一束光里交接（光束摆到新角度、线稿擦除重描、字沿轨迹飞到新位置），不再熄灯、闪白或交叉渐变。「所有换位都走轨迹线」让字在每次换行时都沿曲线飞行；是否显示轨迹线由「隐藏轨迹线」决定。",
     "lumiereThemeColorMix": "主题色占比",
     "lumiereThemeColorMixHint": "主题色占比：0 是绘光原本的香槟金光；调高后光束、烟雾与线稿跟随主题强调色，点亮的字跟随主色，未唱的字跟随次色。",
     "lumiereKeywordColors": "关键字着色",

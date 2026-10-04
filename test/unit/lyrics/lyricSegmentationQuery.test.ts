@@ -49,12 +49,16 @@ describe('looksLikeSegmentationPaste', () => {
         expect(looks('我/想要/说')).toBe(true);                 // delimiter, single line
         expect(looks('[["我","想要"]]')).toBe(true);            // JSON
         expect(looks('  \n [["a"]] ')).toBe(true);              // JSON with surrounding space
+        expect(looks('{"lines":[["我","想要"]]}')).toBe(true); // prompt's single-line object
+        expect(looks('```json\n{"lines":[["我"]]}\n```')).toBe(true);
+        expect(looks('{"lines":')).toBe(true);                // malformed responses need feedback
+        expect(looks('some words')).toBe(true);                // unrecognised model response
     });
 
-    it('leaves ordinary typing and flags alone, so a paste of those still behaves normally', () => {
+    it('leaves flags and empty pastes alone, so command shortcuts still behave normally', () => {
         expect(looks('--ai')).toBe(false);
         expect(looks('--copy-prompt')).toBe(false);
-        expect(looks('some words')).toBe(false);
+        expect(looks('--co')).toBe(false);
         expect(looks('   ')).toBe(false);
         expect(looks('')).toBe(false);
     });

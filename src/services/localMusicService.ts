@@ -32,7 +32,7 @@ import { isLocalFolderIgnored, normalizeLocalFolderPath, runLocalFolderMutation,
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
 
-export const EMBEDDED_METADATA_VERSION = 5;
+export const EMBEDDED_METADATA_VERSION = 6;
 
 interface ImportPreparationMetrics {
     getFileMs: number;

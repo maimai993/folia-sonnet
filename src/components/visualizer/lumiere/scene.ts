@@ -490,6 +490,7 @@ export const createLumiereScene = (pixi: PixiModule, options: LumiereSceneOption
             unlitColor: palette.unlit,
             unlitAlpha: tuning.unlitOpacity,
             intensity: smooth(local / 0.6) * exit,
+            hideTrails: tuning.hideTrails,
         });
     };
 

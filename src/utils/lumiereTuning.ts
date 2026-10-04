@@ -37,6 +37,7 @@ export const normalizeLumiereTuning = (value: unknown): LumiereTuning => {
         lineArt: pickBoolean(raw.lineArt, d.lineArt),
         frontBokeh: pickBoolean(raw.frontBokeh, d.frontBokeh),
         trails: pickBoolean(raw.trails, d.trails),
+        hideTrails: pickBoolean(raw.hideTrails, d.hideTrails),
         seamlessTransitions: pickBoolean(raw.seamlessTransitions, d.seamlessTransitions),
         overlayFrame: pickBoolean(raw.overlayFrame, d.overlayFrame),
         textOnly: pickBoolean(raw.textOnly, d.textOnly),

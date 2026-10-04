@@ -734,6 +734,8 @@ export interface LumiereTuning {
   frontBokeh: boolean;
   /** 所有换位都走轨迹线. */
   trails: boolean;
+  /** 隐藏所有歌词换位的轨迹线，保留字的飞行与轨迹过渡. */
+  hideTrails: boolean;
   /**
    * 轨迹过渡：段落之间也和段内换镜头一样在同一个光场里交接（整首歌编成一个场景单元），
    * 没有熄灯 / 闪白 / 拉焦 / 交叉渐变。改它会重新编译程序.
@@ -772,6 +774,7 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   lineArt: true,
   frontBokeh: true,
   trails: true,
+  hideTrails: false,
   seamlessTransitions: true,
   overlayFrame: true,
   textOnly: false,

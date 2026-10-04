@@ -781,9 +781,9 @@ export default {
     "importError": {
       "empty": "Nothing to import",
       "invalid-json": "That is not valid JSON",
-      "invalid-json-shape": "JSON must be an array of string arrays",
+      "invalid-json-shape": "JSON must contain string arrays, as an array or a \"lines\" object",
       "line-count-mismatch": "The number of lines does not match these lyrics",
-      "line-text-mismatch": "A line does not reproduce the original lyric text"
+      "line-text-mismatch": "Line {{row}} does not reproduce the original lyric text"
     }
   },
   "mods": {
@@ -2040,8 +2040,10 @@ export default {
     "lumiereTextOnly": "Lyrics only",
     "lumiereTextOnlyHint": "Lyrics only: draws just the lyrics and their own effects (lighting up, glow, sparkles). Light sources, smoke, stars, line art, dust, background lyrics, theme icons and the frame are hidden. Lyrics still brighten and dim with the (now invisible) beams.",
     "lumiereTrails": "Trace every move",
+    "lumiereHideTrails": "Hide trajectory lines",
+    "lumiereHideTrailsHint": "Hides every lyric trajectory line, including crossed layouts and orientation changes. Lyrics keep flying along the same paths and seamless transitions keep working.",
     "lumiereSeamlessTransitions": "Seamless transitions",
-    "lumiereSeamlessTransitionsHint": "Seamless transitions: paragraph changes hand over inside the same light, like shot changes within a paragraph (beams swing to the new angle, line art redraws, lyrics fly to their new places) instead of a blackout, flare or cross-fade. Trace every move only decides whether lyrics leave a trail on every line change.",
+    "lumiereSeamlessTransitionsHint": "Seamless transitions: paragraph changes hand over inside the same light, like shot changes within a paragraph (beams swing to the new angle, line art redraws, lyrics fly to their new places) instead of a blackout, flare or cross-fade. Trace every move makes lyrics fly on every line change; Hide trajectory lines controls whether their trails are visible.",
     "lumiereThemeColorMix": "Theme colour share",
     "lumiereThemeColorMixHint": "Theme colour share: 0 keeps Lumiere's own champagne-gold light; higher values tint beams, smoke and line art with the theme accent, lit lyrics with the primary colour and unsung lyrics with the secondary colour.",
     "lumiereKeywordColors": "Keyword colours",

@@ -57,5 +57,7 @@ describe('placeholder interpolation', () => {
         expect(section.appliedCount).toContain('{{count}}');
         expect(section.partialFailure).toContain('{{count}}');
         expect(section.skippedLines).toContain('{{count}}');
+        const errors = LOCALES[localeName].lyricSegmentation as { importError: Record<string, string> };
+        expect(errors.importError['line-text-mismatch']).toContain('{{row}}');
     });
 });
