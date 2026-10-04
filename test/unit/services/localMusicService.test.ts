@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseBlob } from 'music-metadata';
 import {
     deleteFolderSongs,
     clearFolderIgnore,
@@ -6,6 +7,8 @@ import {
     deleteSongsByIds,
     deleteLocalSong as deleteLocalMusicSong,
     extractMetadataFromFilename,
+    getAudioFromFile,
+    getAudioFromLocalSong,
     importFolder,
     resyncAllFolders,
     resyncFolder,
@@ -32,6 +35,7 @@ import { DEFAULT_LOCAL_LYRIC_FORMAT_ORDER } from '@/utils/lyrics/localLyricForma
 import { applyUploadedLocalLyrics } from '@/utils/lyrics/localLyricsUpload';
 import { setLocalFolderIgnored } from '@/services/localLibraryFolderIgnore';
 import type { LocalLibrarySnapshot, LocalSong } from '@/types';
+import { audio, block, flac, jpeg, picture } from '../utils/flacMetadataFixtures';
 
 // test/unit/services/localMusicService.test.ts
 // Covers local folder import root reuse and subfolder resync routing.
@@ -60,7 +64,7 @@ class FakeFileHandle {
     name: string;
     private readonly file: File;
 
-    constructor(name: string, options: { content?: string; lastModified?: number; type?: string; } = {}) {
+    constructor(name: string, options: { content?: BlobPart; lastModified?: number; type?: string; } = {}) {
         this.name = name;
         this.file = new File([options.content ?? 'audio'], name, {
             type: options.type ?? 'audio/mpeg',
@@ -243,6 +247,56 @@ describe('localMusicService', () => {
         });
         vi.stubGlobal('CustomEvent', class {
             constructor(public type: string, public init?: CustomEventInit) {}
+        });
+    });
+
+    describe('local audio playback input', () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        it.each(['accessible', 'persisted', 'stale'] as const)('repairs FLAC playback from a %s file handle', async route => {
+            const source = flac([block(6, picture({ mime: '', image: jpeg }), true)]);
+            const handle = new FakeFileHandle('Cover.flac', { content: source, type: 'audio/flac' });
+            const file = await handle.getFile();
+            const original = new Uint8Array(await file.arrayBuffer());
+            const stale = new FakeFileHandle('Cover.flac');
+            vi.spyOn(stale, 'getFile').mockRejectedValue(new Error('Stale handle'));
+            vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            vi.mocked(getDirHandles).mockResolvedValue({
+                Music: new FakeDirectoryHandle('Music', [handle]) as unknown as FileSystemDirectoryHandle,
+            });
+            const song = createSong({
+                id: `flac-playback-${route}`,
+                fileName: 'Cover.flac',
+                filePath: 'Music/Cover.flac',
+                folderName: 'Music',
+                fileHandle: route === 'persisted' ? undefined : (route === 'stale' ? stale : handle) as unknown as FileSystemFileHandle,
+            });
+            const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:repaired-local-flac');
+
+            expect(await getAudioFromLocalSong(song)).toBe('blob:repaired-local-flac');
+            const playbackInput = createUrl.mock.calls[0][0] as Blob;
+            expect(playbackInput).not.toBe(file);
+            expect(await playbackInput.slice(54, 64).text()).toBe('image/jpeg');
+            expect((await parseBlob(playbackInput)).common.picture?.[0].data).toEqual(jpeg);
+            expect(new Uint8Array(await playbackInput.slice(-audio.length).arrayBuffer())).toEqual(audio);
+            expect(new Uint8Array(await file.arrayBuffer())).toEqual(original);
+        });
+
+        it('repairs direct file input before creating the playback URL', async () => {
+            const file = new File([flac([block(6, picture({ mime: '', image: jpeg }), true)])], 'Cover.flac');
+            const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:repaired-direct-file');
+            expect(await getAudioFromFile(file)).toBe('blob:repaired-direct-file');
+            expect(await (createUrl.mock.calls[0][0] as Blob).slice(54, 64).text()).toBe('image/jpeg');
+        });
+
+        it.each([
+            ['valid FLAC', flac([block(6, picture(), true)])],
+            ['MP3', new Blob(['ID3 mp3 audio'], { type: 'audio/mpeg' })],
+        ])('uses the original File for %s without creating a replacement Blob', async (_, source) => {
+            const file = new File([source], 'Valid audio', { type: source.type });
+            const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:unchanged-file');
+            expect(await getAudioFromFile(file)).toBe('blob:unchanged-file');
+            expect(createUrl).toHaveBeenCalledWith(file);
         });
     });
 

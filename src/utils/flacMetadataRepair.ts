@@ -2,6 +2,7 @@ import { repairFlacPicture, repairFlacPictureComments } from './flacPictureRepai
 
 // src/utils/flacMetadataRepair.ts
 // Creates a repaired parsing input for local FLAC files, preserving the original media.
+// The same metadata-only Blob is used for native playback so malformed pictures cannot break demuxing.
 
 /** Reads metadata only; unchanged files and all audio data stay in their original Blob. */
 export async function repairFlacMetadata(source: Blob, includeCover: boolean): Promise<Blob> {
@@ -32,7 +33,7 @@ export async function repairFlacMetadata(source: Blob, includeCover: boolean): P
         if (end > source.size || type === 127) return source;
         if (type === 6 || type === 4) {
             const bytes = new Uint8Array(await source.slice(offset + 4, end).arrayBuffer());
-            const repaired = type === 6 ? repairFlacPicture(bytes) : repairFlacPictureComments(bytes);
+            const repaired = type === 6 ? await repairFlacPicture(bytes) : await repairFlacPictureComments(bytes);
             if (repaired !== bytes) {
                 parts.push(source.slice(copiedUntil, offset));
                 const repairedLength = repaired?.length ?? length;

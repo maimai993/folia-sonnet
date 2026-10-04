@@ -5,6 +5,7 @@ import { parseEmbeddedMetadataAsync, type EmbeddedMetadataResult } from '../util
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { normalizeLyricMatchText } from '../utils/lyrics/matchScore';
 import { createSafeObjectUrl } from '../utils/blobGuards';
+import { repairFlacMetadata } from '../utils/flacMetadataRepair';
 import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat } from '../utils/lyrics/formatDetection';
 import { applyMatchedMetadata } from './localLibraryCatalogService';
 import { buildLyricSearchQuery } from '../utils/lyrics/searchQuery';
@@ -248,9 +249,10 @@ export function extractMetadataFromFilename(fileName: string): { title?: string;
 
 // Get audio duration from file
 async function getAudioDuration(file: File): Promise<number> {
+    const playbackInput = await repairFlacMetadata(file, true);
     return new Promise((resolve) => {
         const audio = new Audio();
-        const url = createSafeObjectUrl(file);
+        const url = createSafeObjectUrl(playbackInput);
         if (!url) {
             resolve(0);
             return;
@@ -1598,7 +1600,7 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     if (fileHandle) {
         try {
             const file = await fileHandle.getFile();
-            return createSafeObjectUrl(file);
+            return await getAudioFromFile(file);
         } catch (error) {
             console.error('[LocalMusic] Failed to get file from handle:', error);
             // File may have been moved or the stored handle may have become stale.
@@ -1610,7 +1612,7 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     if (recoveredHandle) {
         try {
             const file = await recoveredHandle.getFile();
-            return createSafeObjectUrl(file);
+            return await getAudioFromFile(file);
         } catch (error) {
             console.error('[LocalMusic] Failed to get file from recovered directory handle:', error);
             fileHandleMap.delete(song.id);
@@ -1728,7 +1730,7 @@ export async function ensureLocalSongCoverAsset(song: LocalSong): Promise<LocalS
 
 // Get audio blob from File object (for file input imports)
 export async function getAudioFromFile(file: File): Promise<string> {
-    const url = createSafeObjectUrl(file);
+    const url = createSafeObjectUrl(await repairFlacMetadata(file, true));
     if (!url) throw new TypeError('Local audio source must be a File or Blob');
     return url;
 }

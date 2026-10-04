@@ -1,55 +1,13 @@
 import { parseBlob } from 'music-metadata';
 import { describe, expect, it, vi } from 'vitest';
 import { repairFlacMetadata } from '../../../src/utils/flacMetadataRepair';
+import { repairFlacPicture } from '../../../src/utils/flacPictureRepair';
+import { audio, block, comments, flac, jpeg, picture, png, webp } from './flacMetadataFixtures';
 
 // test/unit/utils/flacMetadataRepair.test.ts
 // Exercises malformed local FLAC metadata against the real music-metadata parser.
 
-const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='), character => character.charCodeAt(0));
-const audio = new Uint8Array([0xff, 0xf8, 0x69, 0x18, 0x00, 0x00, 0x23, 0x42]);
 const encoder = new TextEncoder();
-
-function block(type: number, data: Uint8Array, last = false): Blob {
-    return new Blob([new Uint8Array([(last ? 128 : 0) | type, data.length >>> 16, data.length >>> 8, data.length]), data as Uint8Array<ArrayBuffer>]);
-}
-
-function picture(options: { type?: number; mime?: string; dataLength?: number } = {}): Uint8Array {
-    const mime = encoder.encode(options.mime ?? 'image/png');
-    const bytes = new Uint8Array(32 + mime.length + png.length);
-    const view = new DataView(bytes.buffer);
-    view.setUint32(0, options.type ?? 3);
-    view.setUint32(4, mime.length);
-    bytes.set(mime, 8);
-    view.setUint32(12 + mime.length, 1);
-    view.setUint32(16 + mime.length, 1);
-    view.setUint32(20 + mime.length, 32);
-    view.setUint32(28 + mime.length, options.dataLength ?? png.length);
-    bytes.set(png, 32 + mime.length);
-    return bytes;
-}
-
-function comments(entries: string[]): Uint8Array {
-    const encoded = entries.map(entry => encoder.encode(entry));
-    const bytes = new Uint8Array(8 + encoded.reduce((total, entry) => total + 4 + entry.length, 0));
-    const view = new DataView(bytes.buffer);
-    view.setUint32(4, entries.length, true);
-    let offset = 8;
-    for (const entry of encoded) {
-        view.setUint32(offset, entry.length, true);
-        bytes.set(entry, offset + 4);
-        offset += 4 + entry.length;
-    }
-    return bytes;
-}
-
-function flac(metadata: Blob[]): Blob {
-    const streamInfo = new Uint8Array(34);
-    const view = new DataView(streamInfo.buffer);
-    view.setUint16(0, 4096);
-    view.setUint16(2, 4096);
-    view.setBigUint64(10, (44100n << 44n) | (1n << 41n) | (15n << 36n) | 441000n);
-    return new Blob([encoder.encode('fLaC'), block(0, streamInfo, metadata.length === 0), ...metadata, audio], { type: 'audio/flac' });
-}
 
 const tags = () => comments(['TITLE=Recovered Title', 'ARTIST=Local Artist', 'ALBUM=Local Album', 'LYRICS=[00:01.00]Recovered lyric', 'REPLAYGAIN_TRACK_GAIN=-6.5 dB']);
 const metadataWithPicture = (data: Uint8Array) => flac([block(6, data), block(4, tags(), true)]);
@@ -81,9 +39,54 @@ describe('repairFlacMetadata', () => {
         expect((await parsedCover(source)).common.picture?.[0].data).toEqual(png);
     });
 
-    it('lets music-metadata infer a malformed MIME from the actual image payload', async () => {
+    it('repairs a malformed MIME from the actual image payload', async () => {
         const source = metadataWithPicture(picture({ mime: 'not-a-mime', type: 250 }));
         expect((await parsedCover(source)).common.picture?.[0]).toMatchObject({ format: 'image/png', type: 'Other', data: png });
+    });
+
+    it.each([
+        ['JPEG', jpeg, 'image/jpeg'],
+        ['PNG', png, 'image/png'],
+        ['WebP', webp, 'image/webp'],
+    ] as const)('fills an empty MIME with the actual %s type and updates both block lengths', async (_, image, mime) => {
+        const source = metadataWithPicture(picture({ mime: '', image }));
+        const original = new Uint8Array(await source.arrayBuffer());
+        const repaired = await repairFlacMetadata(source, true);
+        const bytes = new Uint8Array(await repaired.arrayBuffer());
+        const view = new DataView(bytes.buffer);
+        expect(view.getUint32(50)).toBe(mime.length);
+        expect(new TextDecoder().decode(bytes.subarray(54, 54 + mime.length))).toBe(mime);
+        expect(bytes[43] * 65536 + bytes[44] * 256 + bytes[45]).toBe(32 + mime.length + image.length);
+        expect(view.getUint32(74 + mime.length)).toBe(image.length);
+        expect((await parseBlob(repaired)).common.picture?.[0]).toMatchObject({ format: mime, data: image });
+        expect(new Uint8Array(await repaired.slice(-audio.length).arrayBuffer())).toEqual(audio);
+        expect(new Uint8Array(await source.arrayBuffer())).toEqual(original);
+        expect(await repairFlacMetadata(repaired, true)).toBe(repaired);
+    });
+
+    it('corrects a valid-looking MIME that disagrees with the image bytes', async () => {
+        const source = metadataWithPicture(picture({ mime: 'image/jpeg', image: webp }));
+        const repaired = await repairFlacMetadata(source, true);
+        expect(await repaired.slice(54, 64).text()).toBe('image/webp');
+        expect((await parseBlob(repaired)).common.picture?.[0]).toMatchObject({ format: 'image/webp', data: webp });
+    });
+
+    it.each([
+        ['unknown', new Uint8Array([1, 2, 3, 4])],
+        ['truncated PNG', png.subarray(0, 12)],
+        ['non-image', encoder.encode('%PDF-1.7\n')],
+    ] as const)('skips an unidentifiable %s cover while retaining tags and audio', async (_, image) => {
+        const source = metadataWithPicture(picture({ mime: '', image }));
+        const repaired = await repairFlacMetadata(source, true);
+        const parsed = await parseBlob(repaired);
+        expect(parsed.common.picture).toBeUndefined();
+        expect(parsed.common.title).toBe('Recovered Title');
+        expect(new Uint8Array(await repaired.slice(-audio.length).arrayBuffer())).toEqual(audio);
+    });
+
+    it('preserves linked pictures without trying to identify a URL as image bytes', async () => {
+        const source = picture({ mime: '-->', image: encoder.encode('https://example.com/cover.png') });
+        expect(await repairFlacPicture(source)).toBe(source);
     });
 
     it.each(['mime', 'description'])('skips a picture with an unrecoverable %s boundary and retains following metadata/audio', async field => {
@@ -121,6 +124,25 @@ describe('repairFlacMetadata', () => {
         expect(parsed.common.title).toBe('Comment Title');
         expect(parsed.common.artist).toBe('Retained Artist');
         expect(parsed.common.picture?.[0]).toMatchObject({ type: 'Other', data: png });
+    });
+
+    it.each([
+        ['image/jpeg', jpeg],
+        ['image/png', png],
+        ['image/webp', webp],
+    ] as const)('populates %s MIME inside base64 picture comments', async (mime, image) => {
+        const pictureComment = btoa(String.fromCharCode(...picture({ mime: '', image })));
+        const source = flac([block(4, comments([`METADATA_BLOCK_PICTURE=${pictureComment}`, 'TITLE=Retained']), true)]);
+        const repaired = await repairFlacMetadata(source, true);
+        const bytes = new Uint8Array(await repaired.slice(46).arrayBuffer());
+        const commentLength = new DataView(bytes.buffer).getUint32(8, true);
+        const comment = new TextDecoder().decode(bytes.subarray(12, 12 + commentLength));
+        const repairedPicture = Uint8Array.from(atob(comment.slice(comment.indexOf('=') + 1)), character => character.charCodeAt(0));
+        expect(new DataView(repairedPicture.buffer).getUint32(4)).toBe(mime.length);
+        expect(new TextDecoder().decode(repairedPicture.subarray(8, 8 + mime.length))).toBe(mime);
+        const parsed = await parseBlob(repaired);
+        expect(parsed.common.picture?.[0]).toMatchObject({ format: mime, data: image });
+        expect(parsed.common.title).toBe('Retained');
     });
 
     it('uses skipCovers without reading or repairing cover payloads', async () => {

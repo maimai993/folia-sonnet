@@ -1,10 +1,13 @@
+import { fileTypeFromBuffer } from 'file-type/core';
+
 // src/utils/flacPictureRepair.ts
 // Repairs bounded FLAC PICTURE fields without changing the embedded image bytes.
 
 const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
 
-/** Returns null when field boundaries cannot safely identify the image payload. */
-export function repairFlacPicture(bytes: Uint8Array): Uint8Array | null {
+/** Returns null when field boundaries or image detection cannot safely identify the cover. */
+export async function repairFlacPicture(bytes: Uint8Array): Promise<Uint8Array | null> {
     if (bytes.length < 32) return null;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const mimeLength = view.getUint32(4);
@@ -17,25 +20,39 @@ export function repairFlacPicture(bytes: Uint8Array): Uint8Array | null {
     if (availableDataLength === 0) return null;
 
     const mime = textDecoder.decode(bytes.subarray(8, descriptionOffset));
-    const validMime = mime === '-->' || /^image\/[a-z0-9!#$&^_.+\-]+$/i.test(mime);
+    let detectedMime = mime;
+    // Linked pictures contain a URL rather than image bytes; preserve that valid FLAC representation.
+    if (mime !== '-->') {
+        try {
+            const detected = await fileTypeFromBuffer(bytes.subarray(dataLengthOffset + 4));
+            if (!detected?.mime.startsWith('image/')) return null;
+            detectedMime = detected.mime;
+        } catch {
+            // A truncated/unknown cover must not prevent decoding the surrounding audio and tags.
+            return null;
+        }
+    }
     const invalidType = view.getUint32(0) > 20;
     const invalidLength = view.getUint32(dataLengthOffset) !== availableDataLength;
-    if (!invalidType && !invalidLength && (validMime || mimeLength === 0)) return bytes;
+    if (!invalidType && !invalidLength && mime === detectedMime) return bytes;
 
     // An empty MIME lets music-metadata infer the image format from its payload.
-    const removedMimeLength = validMime ? 0 : mimeLength;
-    const repaired = new Uint8Array(bytes.length - removedMimeLength);
+    // Native playback also needs the populated field, inferred from bytes rather than a filename or label.
+    const repairedMime = textEncoder.encode(detectedMime);
+    const mimeLengthDelta = repairedMime.length - mimeLength;
+    const repaired = new Uint8Array(bytes.length + mimeLengthDelta);
     repaired.set(bytes.subarray(0, 8));
-    repaired.set(bytes.subarray(8 + removedMimeLength), 8);
+    repaired.set(repairedMime, 8);
+    repaired.set(bytes.subarray(descriptionOffset), 8 + repairedMime.length);
     const repairedView = new DataView(repaired.buffer);
     if (invalidType) repairedView.setUint32(0, 0); // Reserved types become "Other".
-    if (removedMimeLength) repairedView.setUint32(4, 0);
-    repairedView.setUint32(dataLengthOffset - removedMimeLength, availableDataLength);
+    repairedView.setUint32(4, repairedMime.length);
+    repairedView.setUint32(dataLengthOffset + mimeLengthDelta, availableDataLength);
     return repaired;
 }
 
 /** Fixes picture comments individually so one bad cover cannot discard other tags. */
-export function repairFlacPictureComments(bytes: Uint8Array): Uint8Array {
+export async function repairFlacPictureComments(bytes: Uint8Array): Promise<Uint8Array> {
     if (bytes.length < 8) return bytes;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const vendorLength = view.getUint32(0, true);
@@ -57,7 +74,7 @@ export function repairFlacPictureComments(bytes: Uint8Array): Uint8Array {
         if (separator > 0 && decoded.slice(0, separator).toUpperCase() === 'METADATA_BLOCK_PICTURE') {
             try {
                 const picture = Uint8Array.from(atob(decoded.slice(separator + 1)), character => character.charCodeAt(0));
-                const repaired = repairFlacPicture(picture);
+                const repaired = await repairFlacPicture(picture);
                 if (repaired !== picture) {
                     changed = true;
                     let binary = '';

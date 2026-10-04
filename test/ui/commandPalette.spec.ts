@@ -178,7 +178,7 @@ test('queue command parses the batch syntax and stages a preview', async ({ page
     await expect(palette(page)).toBeVisible();
 });
 
-/** Mock playable audio so queue interaction tests exercise the real playback path without a provider. */
+/** Seed playable audio and lyrics so queue tests exercise playback without a configured provider. */
 const mockQueueAudio = async (page: import('@playwright/test').Page) => {
     const samples = 8_000 * 60;
     const wav = Buffer.alloc(44 + samples * 2);
@@ -195,17 +195,22 @@ const mockQueueAudio = async (page: import('@playwright/test').Page) => {
     wav.write('data', 36);
     wav.writeUInt32LE(samples * 2, 40);
 
-    await page.route('**/__queue_audio__.wav', route => route.fulfill({ contentType: 'audio/wav', body: wav }));
-    await page.route('**/song/url/v1?*', route => route.fulfill({
-        json: { code: 200, data: [{
-            id: Number(new URL(route.request().url()).searchParams.get('id')),
-            url: new URL('/__queue_audio__.wav', page.url()).href,
-            code: 200,
-            type: 'wav',
-            expi: 3600,
-        }] },
-    }));
-    await page.route('**/lyric/new?*', route => route.fulfill({ json: { code: 200, lrc: { lyric: '' } } }));
+    await page.evaluate(async ({ header, length }) => {
+        const audioModule = '/src/services/audioCache.ts';
+        const dbModule = '/src/services/db.ts';
+        const keyModule = '/src/services/onlineMusic/resourceKeys.ts';
+        const [{ saveAudioBlob }, { saveToCache }, { getSongResourceCacheKey }] = await Promise.all([
+            import(audioModule), import(dbModule), import(keyModule),
+        ]);
+        const bytes = new Uint8Array(length);
+        bytes.set(header);
+        const blob = new Blob([bytes], { type: 'audio/wav' });
+        await Promise.all(Array.from({ length: 20 }, async (_, index) => {
+            const song = { id: index + 1 };
+            await saveAudioBlob(getSongResourceCacheKey('audio', song), blob);
+            await saveToCache(getSongResourceCacheKey('lyric', song), { lines: [] });
+        }));
+    }, { header: Array.from(wav.subarray(0, 44)), length: wav.length });
 };
 
 test('queue song selection closes the palette by default', async ({ page }) => {
@@ -256,6 +261,57 @@ test('queue keep-open preserves filtering for mouse and keyboard song changes', 
     await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(4);
     await expect(palette(page)).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem('queue_palette_keep_open'))).toBe('false');
+});
+
+test('queue smoothly centers the playing song after Enter', async ({ page }) => {
+    await openPlayerPage(page);
+    await mockQueueAudio(page);
+    await page.evaluate(async () => {
+        const modulePath = '/src/stores/usePlaybackStore.ts';
+        const { usePlaybackStore } = await import(modulePath);
+        const queue = Array.from({ length: 20 }, (_, index) => ({
+            id: index + 1,
+            name: `Queue Track ${index + 1}`,
+            artists: [{ id: 1, name: 'Artist' }],
+            album: { id: 1, name: 'Album' },
+            durationMs: 60_000,
+        }));
+        usePlaybackStore.setState({ currentSong: queue[0], playQueue: queue });
+    });
+    await pressUntilPaletteOpens(page, 'Control+P');
+    await palette(page).getByRole('checkbox', { name: '切歌后保持打开' }).check();
+    for (let index = 0; index < 5; index += 1) {
+        await page.keyboard.press('ArrowDown');
+    }
+    await expect(palette(page).locator('[class~="group/queue-row"][class~="bg-white/10"]')).toContainText('#6');
+
+    const scroller = palette(page).locator('.custom-scrollbar').first();
+    expect(await scroller.evaluate(node => node.scrollTop)).toBe(0);
+    // Native scroll events must include intermediate positions, not just the final centered offset.
+    await scroller.evaluate(node => {
+        const element = node as HTMLElement;
+        const positions: number[] = [];
+        element.addEventListener('scroll', () => {
+            positions.push(element.scrollTop);
+            element.dataset.scrollPositions = JSON.stringify(positions);
+        });
+        element.addEventListener('scrollend', () => {
+            element.dataset.scrollComplete = 'true';
+        }, { once: true });
+    });
+    await page.keyboard.press('Enter');
+    await expect.poll(async () => (await readStore(page, 'currentSong') as { id: number })?.id).toBe(6);
+    await expect(scroller).toHaveAttribute('data-scroll-complete', 'true');
+    const { finalTop, positions } = await scroller.evaluate(node => ({
+        finalTop: node.scrollTop,
+        positions: JSON.parse((node as HTMLElement).dataset.scrollPositions || '[]') as number[],
+    }));
+    expect(finalTop).toBeGreaterThan(0);
+    expect(positions.some(top => top > 0 && top < finalTop)).toBe(true);
+    const viewport = (await scroller.boundingBox())!;
+    const playingRow = (await palette(page).locator('button[data-active="true"]').boundingBox())!;
+    expect(Math.abs(playingRow.y + playingRow.height / 2 - viewport.y - viewport.height / 2)).toBeLessThan(60);
+    await expect(palette(page)).toBeVisible();
 });
 
 /**
