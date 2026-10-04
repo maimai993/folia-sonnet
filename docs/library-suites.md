@@ -74,6 +74,8 @@ P5 收尾后，首页、集合与歌手业务的真源统一为 core 资源、�
 
 资源 registry 有界保留已释放资源并回收孤立实例；suite resolver 按实际解析的 suite、surface 与回退状态共享结果，未知或当前构建禁用的 ID 不再扩张缓存。未知 ID 仍沿用默认 suite 的现有解析标记；已注册 suite 缺少某 surface 时 `isFallback` 为 true。
 
+在线曲目缓存沿用 main 的 schema 7，保留原始 `nextOffset`、`hasMore` 与 `total`。混合分页的可见歌曲数可能少于上游位置，不能按行数恢复；旧快照缺少安全游标时重新读取，已完成快照也不按集合估计总数继续补页。日推卡片由首页 feed 的 provider 能力决定，空结果与不支持分别表达。
+
 ## 一次「打开歌单并删一首歌」是怎么走的
 
 1. 用户在首页点开一个歌单。首页只调用 `onOpenGridView(歌单描述)`，导航 store 记下「现在打开的是它」。

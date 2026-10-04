@@ -12,6 +12,7 @@ import {
     resolveOnlineTracksCacheKey,
     resolveOnlineTracksTargetTime,
     type OnlineTracksCacheEntry,
+    type OnlineTracksCacheProgress,
 } from './onlineCollectionCache';
 import {
     ONLINE_COLLECTION_BACKGROUND_PAGE_SIZE,
@@ -31,7 +32,7 @@ export type OnlineCollectionResourceDeps = {
     getPersonalFm: () => Promise<SongResult[]>;
     getDailySongs: () => Promise<SongResult[]>;
     readCache: (collection: OnlineGridViewCollectionDescriptor, currentUserId?: MediaId | null) => Promise<OnlineTracksCacheEntry>;
-    writeCache: (cacheKey: string, tracks: SongResult[], snapshotTime: number) => Promise<void>;
+    writeCache: (cacheKey: string, tracks: SongResult[], snapshotTime: number, progress?: OnlineTracksCacheProgress) => Promise<void>;
     /** 补页间隔与重试退避用的等待；单测里换成立即返回。 */
     wait?: (ms: number) => Promise<void>;
 };
@@ -106,15 +107,19 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             fetchPage: pageOffset => deps.getCollectionTracks(collection, { limit: ONLINE_COLLECTION_BACKGROUND_PAGE_SIZE, offset: pageOffset }),
             getKey: song => getPlaybackSongKey(song),
             isCancelled,
-            onPage: (nextTracks, nextOffset) => {
+            onPage: (nextTracks, nextOffset, hasMore) => {
                 const visible = withoutTombstones(nextTracks);
                 upstreamOffset = nextOffset;
                 state.set({ tracks: visible }, 'background');
-                void deps.writeCache(cacheKey(), visible, targetTime);
+                void deps.writeCache(cacheKey(), visible, tombstones.size ? 0 : targetTime, { nextOffset, hasMore, total: totalTracks });
             },
             ...(deps.wait ? { wait: deps.wait } : {}),
         });
         if (result.status === 'cancelled' || isCancelled()) return;
+
+        void deps.writeCache(cacheKey(), withoutTombstones(result.items), tombstones.size ? 0 : targetTime, {
+            nextOffset: result.offset, hasMore: result.status === 'failed', total: totalTracks,
+        });
 
         if (result.status === 'failed') {
             console.error('[LibraryUi] Background collection sync failed:', result.error);
@@ -154,12 +159,11 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
 
             if (isOnlineTracksCacheValid(cached, targetTime)) {
                 const tracks = withoutTombstones(cached.tracks);
-                upstreamOffset = cached.tracks.length;
+                upstreamOffset = cached.nextOffset!;
                 loading = false;
                 state.set({ status: 'ready', tracks }, 'urgent');
-                const cachedHasMore = collection.trackCount !== undefined ? cached.tracks.length < collection.trackCount : true;
-                if (cachedHasMore) {
-                    void startSync(tracks, targetTime, collection.trackCount, upstreamOffset);
+                if (cached.hasMore) {
+                    void startSync(tracks, targetTime, cached.total ?? collection.trackCount, upstreamOffset);
                 }
                 return;
             }
@@ -185,7 +189,7 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
                 state.set({ detail: { ...(state.get().detail ?? collection), trackCount: total } }, 'urgent');
             }
             loading = false;
-            if (responseTracks.length === 0) {
+            if (responseTracks.length === 0 && !hasMore) {
                 state.set({ status: 'ready', tracks: [] }, 'urgent');
                 return;
             }
@@ -194,7 +198,7 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             const tracks = withoutTombstones(responseTracks);
             upstreamOffset = nextOffset || responseTracks.length;
             state.set({ status: 'ready', tracks }, 'background');
-            void deps.writeCache(cacheKey(), tracks, targetTime);
+            void deps.writeCache(cacheKey(), tracks, targetTime, { nextOffset: upstreamOffset, hasMore, total });
             if (hasMore) {
                 void startSync(tracks, targetTime, total, upstreamOffset);
             }
@@ -274,8 +278,9 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             const removed = state.get().tracks.filter(match);
             removed.forEach(track => tombstones.add(getPlaybackSongKey(track)));
             commitTracks(state.get().tracks.filter(track => !match(track)));
-            // 快照时间写成现在：与集合版本对不上，下次打开会重新拉取。
-            await deps.writeCache(cacheKey(), state.get().tracks.filter(track => !match(track)), Date.now());
+            // 快照时间写成 0：与集合版本对不上，下次打开会重新拉取。
+            // Removing a track shifts server page boundaries; reload instead of resuming an old cursor.
+            await deps.writeCache(cacheKey(), state.get().tracks.filter(track => !match(track)), 0);
         },
         removeAt: (index, expectedKey) => {
             const current = state.get().tracks;
@@ -285,7 +290,7 @@ export const createOnlineCollectionResource = (key: string, deps: OnlineCollecti
             tombstones.add(expectedKey);
             const next = current.filter((_, position) => position !== index);
             commitTracks(next);
-            deps.writeCache(cacheKey(), next, Date.now())
+            deps.writeCache(cacheKey(), next, 0)
                 .catch(error => console.warn('[LibraryUi] Failed to invalidate collection tracks cache:', error));
             return true;
         },

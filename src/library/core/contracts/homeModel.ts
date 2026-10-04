@@ -98,6 +98,8 @@ export type LibraryHomeRadioFeed = {
     personalFmCoverUrl?: string;
     dailyCoverUrl: string;
     dailyCount: number;
+    /** 未声明时沿用旧 feed 的支持语义；默认环境装配会明确提供实际 provider 能力。 */
+    supportsDailySongs?: boolean;
     recommended: ProviderCollection[];
 };
 

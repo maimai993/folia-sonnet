@@ -87,9 +87,9 @@ const harness = (
 };
 
 describe('online collection resource: loading', () => {
-    it('uses a valid cache without asking for the first page, then fills the rest from the cached length', async () => {
+    it('uses a valid cache without asking for the first page, then fills the rest from the cached cursor', async () => {
         const all = songs(300);
-        const h = harness(all, {}, { tracks: all.slice(0, 200), snapshotTime: TARGET_TIME, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION });
+        const h = harness(all, {}, { tracks: all.slice(0, 200), snapshotTime: TARGET_TIME, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION, nextOffset: 200, hasMore: true, total: 300 });
         const resource = createOnlineCollectionResource('k', h.deps);
         const hints: string[] = [];
         resource.subscribe(() => hints.push(resource.getSnapshot().hint));

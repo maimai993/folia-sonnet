@@ -1,6 +1,7 @@
 import React, { useId } from 'react';
 import { motion } from 'framer-motion';
 import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
+import { pillChromeClassesFor as gridChromeClassesFor } from '../../../../components/shared/pillChrome';
 
 // src/library/suites/grid/home/GridViewTabs.tsx
 // The second level of the home header's view capsule: centred right under it, a smaller capsule
@@ -9,20 +10,8 @@ import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
 // active one shows its label, the rest shrink to their icon. It used to collapse to the active
 // type behind a small chevron, styled like the action buttons, and listeners never found the rest.
 
-/**
- * The look of the controls row under the home header. Pill and text colours come from the header's
- * own tab switcher (Grid3D: navPillBg, navPillInactiveText) so the row reads as part of the same
- * chrome. The active option deliberately does not reuse the header's white pill: that marks the
- * page, and a second one of equal weight right below it made the two levels impossible to tell
- * apart.
- */
-export const gridChromeClassesFor = (isDaylight: boolean) => ({
-    pill: isDaylight ? 'bg-black/5' : 'bg-white/10',
-    softText: isDaylight ? 'text-black/60 hover:text-black' : 'text-white/60 hover:text-white',
-    strongText: isDaylight ? 'text-black/85' : 'text-white/90',
-    activePill: isDaylight ? 'bg-black/10' : 'bg-white/15',
-    divider: isDaylight ? 'bg-black/10' : 'bg-white/15',
-});
+// 保留网格现有导出名；平台连接入口从共享配色模块读取，不反向 import suite。
+export { pillChromeClassesFor as gridChromeClassesFor } from '../../../../components/shared/pillChrome';
 
 export type GridViewTab = {
     id: string;

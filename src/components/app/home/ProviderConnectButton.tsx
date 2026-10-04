@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
-import { gridChromeClassesFor } from '../../folia-grid/GridViewTabs';
+import { pillChromeClassesFor as gridChromeClassesFor } from '../../shared/pillChrome';
 import type { ProviderAccountSummary } from '../../../types/onlineMusic';
 
 // src/components/app/home/ProviderConnectButton.tsx

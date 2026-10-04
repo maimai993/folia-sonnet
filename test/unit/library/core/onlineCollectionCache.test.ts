@@ -61,20 +61,22 @@ describe('online tracks cache entries', () => {
         expect(parseCachedOnlineTracks(null)).toEqual({ tracks: [], snapshotTime: 0, schemaVersion: 0 });
     });
 
-    it('is valid only for a non-empty snapshot of the same version and schema', () => {
-        const entry = { tracks: [track('a')], snapshotTime: 5, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION };
+    it('is valid only for a snapshot of the same version and schema with a safe cursor', () => {
+        const entry = { tracks: [track('a')], snapshotTime: 5, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION, nextOffset: 150, hasMore: true };
         expect(isOnlineTracksCacheValid(entry, 5)).toBe(true);
         expect(isOnlineTracksCacheValid(entry, 6)).toBe(false);
         expect(isOnlineTracksCacheValid(entry, 0)).toBe(false);
         expect(isOnlineTracksCacheValid({ ...entry, schemaVersion: 4 }, 5)).toBe(false);
-        expect(isOnlineTracksCacheValid({ ...entry, tracks: [] }, 5)).toBe(false);
+        expect(isOnlineTracksCacheValid({ ...entry, nextOffset: 0 }, 5)).toBe(false);
+        expect(isOnlineTracksCacheValid({ ...entry, tracks: [], nextOffset: 0, hasMore: false }, 5)).toBe(true);
+        expect(isOnlineTracksCacheValid({ ...entry, schemaVersion: 5 }, 5)).toBe(false);
     });
 
     it('writes a snapshot that reads back valid under the provider namespace', async () => {
         const collection = { providerId: 'netease', type: 'playlist', id: 9 } as const;
         await writeOnlineTracksCache(resolveOnlineTracksCacheKey(collection), [track('a')], 123);
         expect(store.get('online_provider_netease_playlist_tracks_9'))
-            .toEqual({ tracks: [track('a')], snapshotTime: 123, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION });
+            .toEqual({ tracks: [track('a')], snapshotTime: 123, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION, nextOffset: 1, hasMore: false, total: undefined });
         expect(isOnlineTracksCacheValid(await readOnlineTracksCache(collection), 123)).toBe(true);
     });
 

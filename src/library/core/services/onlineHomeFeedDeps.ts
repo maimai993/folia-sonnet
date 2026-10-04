@@ -10,4 +10,5 @@ export const onlineHomeFeedDeps: OnlineHomeFeedDeps = {
     getUserAlbums: (userId, page) => omni.getUserAlbums(userId, page),
     getHomeFeed: limit => omni.getHomeFeed(limit),
     songCoverUrl: (song, providerId) => getSongCoverUrl(song, providerId),
+    supportsDailySongs: providerId => omni.supportsDailySongs(providerId),
 };

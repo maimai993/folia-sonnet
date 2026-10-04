@@ -246,6 +246,7 @@ describe('online home feeds', () => {
             personalFmCoverUrl: 'a:fm-0',
             dailyCoverUrl: 'a:daily-0',
             dailyCount: 4,
+            supportsDailySongs: true,
             recommended,
         });
     });
@@ -257,6 +258,6 @@ describe('online home feeds', () => {
         });
         feed.setOwner({ providerId: 'a', userId: 1 });
         await feed.ensure();
-        expect(feed.getSnapshot().data).toEqual({ personalFmCoverUrl: undefined, dailyCoverUrl: '', dailyCount: 0, recommended: [] });
+        expect(feed.getSnapshot().data).toEqual({ personalFmCoverUrl: undefined, dailyCoverUrl: '', dailyCount: 0, recommended: [], supportsDailySongs: true });
     });
 });

@@ -4,6 +4,12 @@ import type { OnlineGridViewCollectionDescriptor } from '../contracts/collection
 import { isCloudDriveCollection } from '../model/collectionIdentity';
 import { saveToCache } from '../../../services/db';
 import { getProviderCacheKey, getProviderCacheWithLegacyMigration } from '../../../services/onlineMusic/providerStorage';
+import {
+    COLLECTION_TRACK_SNAPSHOT_SCHEMA_VERSION,
+    createCollectionTrackSnapshot,
+    readCollectionTrackSnapshot,
+} from './collectionTrackSnapshot';
+import type { CollectionSyncPage } from './onlineCollectionSync';
 
 // src/library/core/services/onlineCollectionCache.ts
 // 在线集合曲目的本地缓存：键怎么拼、读回来怎么解析、什么时候算有效。原先散在 GridView 里。
@@ -13,7 +19,7 @@ import { getProviderCacheKey, getProviderCacheWithLegacyMigration } from '../../
 // 否则同一个 provider 下专辑与歌单同 id 时会互相覆盖。专辑没有曲目更新时间，原本就从不命中
 // 缓存，换键不丢任何东西。
 
-export const ONLINE_TRACKS_CACHE_SCHEMA_VERSION = 5;
+export const ONLINE_TRACKS_CACHE_SCHEMA_VERSION = COLLECTION_TRACK_SNAPSHOT_SCHEMA_VERSION;
 
 type OnlineTracksCacheIdentity = Pick<OnlineGridViewCollectionDescriptor, 'providerId' | 'type' | 'id'>;
 
@@ -21,9 +27,13 @@ export type OnlineTracksCacheEntry = {
     tracks: SongResult[];
     snapshotTime: number;
     schemaVersion: number;
+    nextOffset?: number;
+    hasMore?: boolean;
+    total?: number;
 };
 
-type StoredOnlineTracks = { tracks: SongResult[]; snapshotTime: number; schemaVersion?: number } | SongResult[];
+type StoredOnlineTracks = Partial<OnlineTracksCacheEntry> | SongResult[];
+export type OnlineTracksCacheProgress = Pick<CollectionSyncPage<SongResult>, 'nextOffset' | 'hasMore' | 'total'>;
 
 /** 缓存键的 provider 内部分（不含 provider 命名空间）。 */
 export const resolveOnlineTracksCacheSuffix = (
@@ -53,18 +63,15 @@ export const parseCachedOnlineTracks = (stored: StoredOnlineTracks | null | unde
     if (Array.isArray(stored)) {
         return { tracks: stored, snapshotTime: 0, schemaVersion: 0 };
     }
-    if (stored && stored.tracks) {
-        return { tracks: stored.tracks, snapshotTime: stored.snapshotTime, schemaVersion: stored.schemaVersion ?? 0 };
+    if (stored && Array.isArray(stored.tracks)) {
+        return { ...stored, tracks: stored.tracks, snapshotTime: stored.snapshotTime ?? 0, schemaVersion: stored.schemaVersion ?? 0 };
     }
     return { tracks: [], snapshotTime: 0, schemaVersion: 0 };
 };
 
 /** 只有快照时间与集合版本对得上、且结构版本是当前版本时，缓存才能直接用。 */
 export const isOnlineTracksCacheValid = (entry: OnlineTracksCacheEntry, targetTime: number): boolean => (
-    entry.tracks.length > 0
-    && targetTime > 0
-    && entry.snapshotTime === targetTime
-    && entry.schemaVersion === ONLINE_TRACKS_CACHE_SCHEMA_VERSION
+    readCollectionTrackSnapshot<SongResult>(entry, targetTime) !== null
 );
 
 export const readOnlineTracksCache = async (
@@ -77,6 +84,12 @@ export const readOnlineTracksCache = async (
 };
 
 /** 写一份快照。`snapshotTime` 与集合版本不一致的写入（例如本地删歌后）会让下次打开重新拉取。 */
-export const writeOnlineTracksCache = (cacheKey: string, tracks: SongResult[], snapshotTime: number): Promise<void> => (
-    saveToCache(cacheKey, { tracks, snapshotTime, schemaVersion: ONLINE_TRACKS_CACHE_SCHEMA_VERSION })
+// 原始游标与 hasMore 必须随页保存；可见行数可能已去重或过滤，不能用来推断续传位置。
+export const writeOnlineTracksCache = (
+    cacheKey: string,
+    tracks: SongResult[],
+    snapshotTime: number,
+    progress: OnlineTracksCacheProgress = { nextOffset: tracks.length, hasMore: false },
+): Promise<void> => (
+    saveToCache(cacheKey, createCollectionTrackSnapshot({ ...progress, items: tracks }, snapshotTime))
 );

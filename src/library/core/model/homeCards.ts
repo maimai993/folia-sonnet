@@ -78,7 +78,7 @@ export const buildOnlineRadioCards = (
             description: t('home.personalFm'),
             isFm: true,
         },
-        {
+        ...(feed.supportsDailySongs === false ? [] : [{
             id: DAILY_RECOMMENDATIONS_CARD_ID,
             name: t('home.dailyRecommendations'),
             coverUrl: feed.dailyCoverUrl,
@@ -86,7 +86,7 @@ export const buildOnlineRadioCards = (
             description: t('home.dailyRecommendationsDescription'),
             summary: t('home.dailyRecommendationsSummary'),
             isDailyRecommendations: true,
-        },
+        }]),
         ...feed.recommended.map(collection => {
             const description = collection.description || collection.creator?.nickname || '';
             return {
