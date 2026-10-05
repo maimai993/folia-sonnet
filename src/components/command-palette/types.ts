@@ -8,6 +8,8 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
 import type { GridSurfaceHandle } from '../../types/gridCommandSurface';
+import type { LibraryDirectorySurfaceHandle } from '../../library/core/contracts/directory';
+import type { LibraryArtistSurfaceHandle } from '../../library/core/contracts/artist';
 import { type SettingsModalInitialTab, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import type { SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
@@ -36,7 +38,7 @@ export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel'
  * only offer a global shortcut a command that works from anywhere, and anything else that asks
  * "would this be reachable if I were somewhere else".
  */
-export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice' | 'grid-surface';
+export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice' | 'grid-surface' | 'directory-surface' | 'artist-surface';
 
 export type CommandPaletteSearchSource = SearchSource;
 
@@ -373,6 +375,16 @@ export type CommandPaletteScopeContext = {
      * choice, its two panels — plus the collection maintenance its own branch allows.
      */
     grid: GridSurfaceHandle | null;
+    /**
+     * The home directory on screen (the grid's GridMap), if any: its batch selection and hidden view.
+     * Separate from `grid` — a directory selects cards, a track grid sorts and maintains a collection.
+     */
+    directory: LibraryDirectorySurfaceHandle | null;
+    /**
+     * The artist page on screen, if any: its top songs, reload / album retry and local entity editing.
+     * Separate from `grid` — an artist page has no track list to sort or maintain.
+     */
+    artist: LibraryArtistSurfaceHandle | null;
 };
 
 // Namespaces mirror CommandPaletteGroup one-to-one (plus `shared` and `scope`), so a command's

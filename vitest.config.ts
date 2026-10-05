@@ -15,6 +15,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // 第二消费者始终参与单测；test.env 与 vi.stubEnv 使用同一入口，可覆写验证关闭/生产边界。
+    env: { VITE_LIBRARY_TUI: 'true' },
     include: ['test/unit/**/*.test.ts']
   }
 });
