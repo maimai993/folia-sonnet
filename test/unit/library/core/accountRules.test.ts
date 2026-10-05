@@ -6,6 +6,8 @@ import {
     canLogoutProvider,
     canRetryLogin,
     canShowLoginDiagnostics,
+    describeAccountError,
+    describeLoginStateMessage,
     isAwaitingLoginMethod,
     isLoginDialogVisible,
     resolveActiveProviderId,
@@ -18,6 +20,7 @@ import {
     resolveLogoutEligibility,
     resolveProviderSelectLabel,
     resolveProviderSelection,
+    providerOwnsLoginFailureSummary,
     resolveProviderSwitchCopy,
     shouldResumeLoginAfterBackendRestart,
 } from '@/library/core/model/accountRules';
@@ -280,10 +283,24 @@ describe('login session derivations', () => {
     });
 
     it('offers diagnostics for any failure unless the backend is down', () => {
-        expect(canShowLoginDiagnostics({ failure: 'check-error', backend: OK_BACKEND })).toBe(true);
-        expect(canShowLoginDiagnostics({ failure: 'account-refresh-failed', backend: OK_BACKEND })).toBe(true);
-        expect(canShowLoginDiagnostics({ failure: null, backend: OK_BACKEND })).toBe(false);
-        expect(canShowLoginDiagnostics({ failure: 'start-error', backend: FAILED_BACKEND })).toBe(false);
+        expect(canShowLoginDiagnostics({ providerId: 'netease', failure: 'check-error', backend: OK_BACKEND })).toBe(true);
+        expect(canShowLoginDiagnostics({ providerId: 'kugou', failure: 'account-refresh-failed', backend: OK_BACKEND })).toBe(true);
+        expect(canShowLoginDiagnostics({ providerId: 'netease', failure: null, backend: OK_BACKEND })).toBe(false);
+        expect(canShowLoginDiagnostics({ providerId: 'netease', failure: 'start-error', backend: FAILED_BACKEND })).toBe(false);
+    });
+
+    it('never offers diagnostics for QQ, whose safe failure summary lives in the ordinary log', () => {
+        for (const failure of ['start-error', 'check-error', 'expired-after-scan', 'account-refresh-failed'] as const) {
+            expect(canShowLoginDiagnostics({ providerId: 'qq', failure, backend: OK_BACKEND }), failure).toBe(false);
+            // 其它 provider（含 mod 源这类未知 id）同一失败照样给入口。
+            for (const providerId of ['netease', 'kugou', 'bodian', 'folium.example']) {
+                expect(canShowLoginDiagnostics({ providerId, failure, backend: OK_BACKEND }), `${providerId} ${failure}`).toBe(true);
+            }
+        }
+        expect(providerOwnsLoginFailureSummary('qq')).toBe(true);
+        expect(providerOwnsLoginFailureSummary('netease')).toBe(false);
+        // 只认自有成员：原型链上的名字不算。
+        expect(providerOwnsLoginFailureSummary('constructor')).toBe(false);
     });
 
     it('shows the login dialog except while methods resolve and after the scan is confirmed', () => {
@@ -320,5 +337,25 @@ describe('login backend state', () => {
         expect(shouldResumeLoginAfterBackendRestart(health({ status: 'error' }))).toBe(false);
         expect(shouldResumeLoginAfterBackendRestart(health({ status: 'starting' }))).toBe(false);
         expect(shouldResumeLoginAfterBackendRestart(health({ status: null }))).toBe(false);
+    });
+});
+
+describe('account error descriptions', () => {
+    const secret = 'private-token https://private.example/?cookie=private-cookie';
+
+    it('keeps name and message for ordinary providers', () => {
+        const error = new TypeError(secret);
+        expect(describeAccountError('netease', error)).toEqual({ name: 'TypeError', message: secret });
+        expect(describeAccountError('folium.example', 'plain failure')).toEqual({ name: 'Error', message: 'plain failure' });
+        expect(describeLoginStateMessage('kugou', secret)).toEqual({ message: secret });
+        expect(describeLoginStateMessage('kugou', undefined)).toEqual({});
+    });
+
+    it('reduces QQ errors to a fixed category without the raw text or a custom name', () => {
+        const error = new Error(secret);
+        error.name = 'private-name';
+        expect(describeAccountError('qq', error)).toEqual({ reason: 'provider-error' });
+        expect(describeAccountError('qq', secret)).toEqual({ reason: 'provider-error' });
+        expect(describeLoginStateMessage('qq', secret)).toEqual({});
     });
 });

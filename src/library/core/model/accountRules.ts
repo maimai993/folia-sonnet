@@ -161,10 +161,54 @@ export const canRetryLogin = (session: LoginRetryState): boolean => (
     && !session.backend.failed
 );
 
-/** 诊断入口：有失败形态且后端没有故障（后端故障时界面只给原因与重启）。 */
+/**
+ * 诊断入口：有失败形态、后端没有故障（后端故障时界面只给原因与重启），且 provider 没有自己接管失败摘要
+ * （QQ 的安全摘要在普通日志面板里，登录界面不再给复制报告 / 反馈入口）。grid 的诊断区块与 TUI 的 F4 都看它。
+ */
 export const canShowLoginDiagnostics = (
-    session: Pick<LibraryLoginSessionSnapshot, 'failure'> & { backend: Pick<LibraryLoginBackendState, 'failed'> },
-): boolean => session.failure !== null && !session.backend.failed;
+    session: Pick<LibraryLoginSessionSnapshot, 'providerId' | 'failure'> & { backend: Pick<LibraryLoginBackendState, 'failed'> },
+): boolean => (
+    session.failure !== null
+    && !session.backend.failed
+    && !providerOwnsLoginFailureSummary(session.providerId)
+);
+
+// ─── 登录 / 账户错误的日志描述 ──────────────────────────────────────────
+
+// 自己写安全失败摘要的 provider：QQ 的 qqProvider 只把白名单过滤后的阶段、原因和状态码写进
+// [QQProvider] qr-login:failed（PR #495）。它的原始错误文字可能带上后端地址、会话或上游正文，
+// 通用层（扫码会话、账户 controller）对它只记固定类别，诊断入口也不给。
+const PROVIDERS_OWNING_LOGIN_FAILURE_SUMMARY: ReadonlySet<string> = new Set(['qq']);
+
+/** provider 是否自己接管扫码 / 账户失败的安全摘要（通用层不记它的原始错误文字、不给诊断入口）。 */
+export const providerOwnsLoginFailureSummary = (providerId: OnlineProviderId): boolean => (
+    PROVIDERS_OWNING_LOGIN_FAILURE_SUMMARY.has(providerId)
+);
+
+export type LibraryAccountErrorDetail =
+    | { name: string; message: string }
+    | { reason: 'provider-error' };
+
+/**
+ * 写进普通日志 / 诊断时间线的错误描述（扫码会话与账户 controller 共用）：一般 provider 记 name 与 message；
+ * 自己接管失败摘要的 provider（QQ）只记固定类别，原始文字与自定义 name 都不出现。
+ */
+export const describeAccountError = (providerId: OnlineProviderId, error: unknown): LibraryAccountErrorDetail => (
+    providerOwnsLoginFailureSummary(providerId)
+        ? { reason: 'provider-error' }
+        : {
+            name: error instanceof Error ? error.name : 'Error',
+            message: error instanceof Error ? error.message : String(error),
+        }
+);
+
+/** 轮询报 error 时附带的后端文字：自己接管失败摘要的 provider 不记（它的摘要另有出口）。 */
+export const describeLoginStateMessage = (
+    providerId: OnlineProviderId,
+    message: string | undefined,
+): { message: string } | Record<string, never> => (
+    message && !providerOwnsLoginFailureSummary(providerId) ? { message } : {}
+);
 
 /**
  * 登录后端的状态：只有网易登录、且 Electron 后端已知启动失败时算故障（web 构建 supported=false，永远不算）。

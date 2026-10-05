@@ -6,6 +6,7 @@ import type {
     LibraryLoginDiagnosticsEnvironment,
     LibraryTimerHandle,
 } from '../contracts/account';
+import { describeAccountError, describeLoginStateMessage } from '../model/accountRules';
 import {
     formatQrLoginDiagnosticReport,
     QR_LOGIN_TIMELINE_LIMIT,
@@ -20,6 +21,8 @@ import {
 // - 代次：每次 start / stop / TTL 到期都让代次前进，晚到的结果按代次作废；被取代的会话拿到 key 后照样 keyed 归还；
 // - 扫码确认后不再取消（后端要让在途轮询继续读到 803），确认回调（账户刷新）返回 false 记为 account-refresh-failed；
 // - 时间线 + provider 诊断生成报告（格式与 formatQrLoginDiagnosticReport 相同），同一条记录经日志端口打出。
+// - 写进日志与时间线的错误经 accountRules 的 describeAccountError / describeLoginStateMessage：自己接管失败摘要的
+//   provider（QQ）只记固定类别，不记原始错误文字与后端返回的 message。
 // 快照只放原始状态；文案、后端故障、可见性、能否重试由 A3 用 core/model/accountRules 派生。
 
 /** 两次轮询之间的间隔（上一个请求结算之后才开始计）。 */
@@ -111,11 +114,6 @@ const INITIAL_SNAPSHOT: ProviderLoginSessionSnapshot = Object.freeze({
     failure: null,
 });
 
-const describeError = (error: unknown) => ({
-    name: error instanceof Error ? error.name : 'Error',
-    message: error instanceof Error ? error.message : String(error),
-});
-
 const sameSnapshot = (a: ProviderLoginSessionSnapshot, b: ProviderLoginSessionSnapshot): boolean => (
     a.sessionId === b.sessionId
     && a.providerId === b.providerId
@@ -173,7 +171,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
     const releaseSession = (session: ActiveQrSession | null): void => {
         if (!session) return;
         const logCancelError = (error: unknown) => {
-            log('warn', 'cancel:error', { providerId: session.providerId, ...describeError(error) });
+            log('warn', 'cancel:error', { providerId: session.providerId, ...describeAccountError(session.providerId, error) });
         };
         try {
             void Promise.resolve(auth.cancelQrLogin(session.providerId, session.key)).catch(logCancelError);
@@ -237,7 +235,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
                         note('state', {
                             state: result.state,
                             polls,
-                            ...(result.state === 'error' && result.message ? { message: result.message } : {}),
+                            ...(result.state === 'error' ? describeLoginStateMessage(providerId, result.message) : {}),
                         }, result.state === 'error' ? 'warn' : 'info');
                     }
                     if (result.state === 'confirmed') {
@@ -262,7 +260,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
                     }
                 } catch (error) {
                     if (sessionId !== generation) return;
-                    note('check:error', { polls, scanned, ...describeError(error) }, 'warn');
+                    note('check:error', { polls, scanned, ...describeAccountError(providerId, error) }, 'warn');
                     update({ phase: 'error', failure: 'check-error' });
                     checkTimer = null;
                     ttlTimer = clearTimer(ttlTimer);
@@ -271,7 +269,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
             checkTimer = schedule(() => { void poll(); }, PROVIDER_LOGIN_POLL_INTERVAL_MS);
         } catch (error) {
             if (sessionId !== generation) return;
-            note('start:error', describeError(error), 'warn');
+            note('start:error', describeAccountError(providerId, error), 'warn');
             update({ phase: 'error', failure: 'start-error' });
         }
     };
