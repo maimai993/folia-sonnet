@@ -31,9 +31,24 @@ const resolveFocusedMethod = (view: LibraryLoginView | null, focusedId: string |
     return view?.session.selectedMethodId ?? options[0].id;
 };
 
-const LibraryTuiAccountConfirm: React.FC<{ view: LibraryProviderSwitchView; accentColor: string; onConfirm: () => void; onCancel: () => void }> = ({
+/**
+ * 方框（及嵌在上边框里的标题）的底色：跟随应用的 --bg-color，没定义时（例如探针页）回落到主题背景色，
+ * 否则底色透明，上边框会从标题文字中间穿过。
+ */
+const resolveTuiBoxBackground = (themeBackground: string | undefined) => (
+    themeBackground ? `var(--bg-color, ${themeBackground})` : 'var(--bg-color, Canvas)'
+);
+
+const LibraryTuiAccountConfirm: React.FC<{
+    view: LibraryProviderSwitchView;
+    accentColor: string;
+    boxBackground: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}> = ({
     view,
     accentColor,
+    boxBackground,
     onConfirm,
     onCancel,
 }) => {
@@ -46,9 +61,9 @@ const LibraryTuiAccountConfirm: React.FC<{ view: LibraryProviderSwitchView; acce
             data-tui-account-confirm={view.request.to}
             data-tui-confirm-reason={view.request.reason}
             className="relative w-full max-w-md border px-4 pb-3 pt-4 text-[13px]"
-            style={{ borderColor: accentColor, backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
+            style={{ borderColor: accentColor, backgroundColor: boxBackground, color: 'var(--text-primary)' }}
         >
-            <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: 'var(--bg-color)' }}>
+            <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: boxBackground }}>
                 {view.title}
             </h3>
             <p data-tui-confirm-message>{view.description}</p>
@@ -69,6 +84,7 @@ const LibraryTuiAccount: React.FC<LibraryAccountSurfaceProps> = ({ account, them
     const login = useLibraryAccountLogin(account);
     const pendingSwitch = useLibraryAccountPendingSwitch(account);
     const accentColor = theme.accentColor || 'currentColor';
+    const boxBackground = resolveTuiBoxBackground(theme.backgroundColor);
     const showDiagnostics = declaredActions.actions.includes('account-login-diagnostics');
     const showRestart = declaredActions.actions.includes('account-backend-restart');
     const containerRef = useRef<HTMLDivElement>(null);
@@ -186,6 +202,7 @@ const LibraryTuiAccount: React.FC<LibraryAccountSurfaceProps> = ({ account, them
                 <LibraryTuiAccountLogin
                     view={login}
                     accentColor={accentColor}
+                    boxBackground={boxBackground}
                     focusedMethodId={focusedMethod}
                     showDiagnostics={showDiagnostics}
                     showRestart={showRestart}
@@ -206,6 +223,7 @@ const LibraryTuiAccount: React.FC<LibraryAccountSurfaceProps> = ({ account, them
                     <LibraryTuiAccountConfirm
                         view={pendingSwitch}
                         accentColor={accentColor}
+                        boxBackground={boxBackground}
                         onConfirm={() => void account.confirmSwitch(pendingSwitch.request.id)}
                         onCancel={() => void account.cancelSwitch(pendingSwitch.request.id)}
                     />

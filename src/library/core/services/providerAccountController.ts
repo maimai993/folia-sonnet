@@ -228,7 +228,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
     };
 
     // 存的当前平台不可用（例如 mod 源被关掉）时写回网易：不经确认、不清理、不动那个平台的账户缓存
-    // （与 useOnlineProviderPlatform 的回落一致）。写回会再触发一次账户通知，那时已一致，不会循环。
+    // （与原 useOnlineProviderPlatform 的回落一致）。写回会再触发一次账户通知，那时已一致，不会循环。
     const reconcileStoredProvider = (): void => {
         if (disposed) return;
         const stored = accounts.getStoredActiveProviderId();

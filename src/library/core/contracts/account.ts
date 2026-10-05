@@ -19,7 +19,7 @@ import type { LibraryHomeMessage } from './homeModel';
 // ─── 快照 ───────────────────────────────────────────────────────────────
 
 /**
- * 登录会话的阶段（扫码状态机与 useOnlineProviderQrLogin 的 QrUiState 一一对应，外加登录方式的两步）：
+ * 登录会话的阶段（扫码状态机与原 useOnlineProviderQrLogin 的 QrUiState 一一对应，外加登录方式的两步）：
  * - resolving-methods：正在等 provider 的登录方式发现（`resolveQrLoginMethods`），界面还不显示（与现状一致）；
  * - choosing-method：provider 声明了多种方式、还没选，不向后端要码（QQ 两步式的第一步）；
  * - loading：正在要二维码；waiting / scanned / confirmed / expired / error：后端报的状态（`QrLoginState`）。
@@ -89,7 +89,7 @@ export type LibraryAccountLogoutState = {
     status: 'idle' | 'pending';
 };
 
-/** 扫码确认之后的结局（与 useOnlineProviderPlatform 的 ProviderLoginOutcome 同一套）。 */
+/** 扫码确认之后的结局（与原 useOnlineProviderPlatform 的 ProviderLoginOutcome 同一套）。 */
 export type LibraryLoginOutcome = 'completed' | 'refresh-failed' | 'activation-declined';
 
 /**

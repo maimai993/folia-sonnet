@@ -43,7 +43,7 @@ export const resolveProviderSelectLabel = (provider: ProviderAccountSummary): Li
 
 // ─── 当前平台 ───────────────────────────────────────────────────────────
 
-/** 存的当前平台不在 provider 列表里（例如 mod 源被关掉）时回落到网易；账户缓存不动（useOnlineProviderPlatform）。 */
+/** 存的当前平台不在 provider 列表里（例如 mod 源被关掉）时回落到网易；账户缓存不动（原 useOnlineProviderPlatform）。 */
 export const resolveActiveProviderId = (
     providers: readonly ProviderAccountSummary[],
     storedProviderId: OnlineProviderId,
@@ -61,7 +61,7 @@ export const resolveActiveProviderSummary = (
 
 // ─── 切换确认 ───────────────────────────────────────────────────────────
 
-/** 切换确认框的文案（App.tsx 的 providerSwitchConfirmDialog）；平台名由调用方经账户端口的 getProviderLabel 取。 */
+/** 切换确认框的文案（原 App.tsx 的 providerSwitchConfirmDialog）；平台名由调用方经账户端口的 getProviderLabel 取。 */
 export const resolveProviderSwitchCopy = (providerLabel: string): { title: LibraryHomeMessage; description: LibraryHomeMessage } => ({
     title: { key: 'home.switchOnlineProvider' },
     description: { key: 'home.confirmOnlineProviderSwitch', values: { provider: providerLabel } },
@@ -116,7 +116,7 @@ const LOGIN_STATUS_KEY_BY_PHASE: Readonly<Partial<Record<LibraryLoginPhase, stri
     error: 'home.loginError',
 };
 
-/** 阶段对应的状态行（useOnlineProviderQrLogin 的 getQrStatusText，返回 key）；还没开始要码的两步没有状态行。 */
+/** 阶段对应的状态行（原 useOnlineProviderQrLogin 的 getQrStatusText，返回 key）；还没开始要码的两步没有状态行。 */
 export const resolveLoginStatusMessage = (phase: LibraryLoginPhase): LibraryHomeMessage | null => {
     const key = LOGIN_STATUS_KEY_BY_PHASE[phase];
     return key ? { key } : null;

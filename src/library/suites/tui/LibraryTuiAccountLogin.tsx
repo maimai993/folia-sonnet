@@ -13,6 +13,8 @@ export type LibraryTuiDiagnosticsCopyState = 'idle' | 'working' | 'copied' | 'fa
 type LibraryTuiAccountLoginProps = {
     view: LibraryLoginView;
     accentColor: string;
+    /** 方框与嵌在边框上的标题 / 关闭按钮的底色（带回落值，由 account surface 给出）。 */
+    boxBackground: string;
     /** 方向键高亮着的登录方式（多方式时）。 */
     focusedMethodId: string | null;
     /** suite 声明了 account-login-diagnostics。 */
@@ -31,6 +33,7 @@ type LibraryTuiAccountLoginProps = {
 const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
     view,
     accentColor,
+    boxBackground,
     focusedMethodId,
     showDiagnostics,
     showRestart,
@@ -71,9 +74,9 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
             data-tui-account-login={session.providerId}
             data-tui-login-phase={session.phase}
             className="relative w-full max-w-md border px-4 pb-3 pt-4 text-[13px]"
-            style={{ borderColor: accentColor, backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}
+            style={{ borderColor: accentColor, backgroundColor: boxBackground, color: 'var(--text-primary)' }}
         >
-            <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: 'var(--bg-color)' }}>
+            <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: boxBackground }}>
                 {view.title}
             </h3>
             <button
@@ -81,7 +84,7 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
                 onClick={onClose}
                 aria-label={view.closeLabel}
                 className="absolute -top-2.5 right-3 px-1 opacity-60 hover:opacity-100"
-                style={{ backgroundColor: 'var(--bg-color)' }}
+                style={{ backgroundColor: boxBackground }}
             >
                 [x]
             </button>
