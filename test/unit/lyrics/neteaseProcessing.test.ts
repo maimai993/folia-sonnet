@@ -76,6 +76,19 @@ describe('neteaseProcessing', () => {
         expect(parseLyricsAsyncMock).not.toHaveBeenCalled();
     });
 
+    it.each([
+        '[00:00.00]纯音乐请欣赏',
+        '[00:00.00]纯音乐,请欣赏',
+        '[00:00.00] 纯音乐 请欣赏',
+        '[00:00.00] 作曲 : 某某\n[00:01.00]纯音乐，请欣赏',
+    ])('recognises the unflagged notice variant %j as pure music', async lyric => {
+        const result = await processNeteaseLyrics({ type: 'netease', lrc: { lyric } });
+
+        expect(result.isPureMusic).toBe(true);
+        expect(result.lyrics).toBeNull();
+        expect(parseLyricsAsyncMock).not.toHaveBeenCalled();
+    });
+
     it('returns null when no usable lyric text exists', async () => {
         const result = await processNeteaseLyrics({
             type: 'netease',

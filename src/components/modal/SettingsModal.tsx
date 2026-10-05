@@ -40,6 +40,7 @@ import SettingsSidebarWide from './settings/navigation/SettingsSidebarWide';
 import { settingsAnchorSubview } from './settings/navigation/settingsAnchorModel';
 import SettingsSectionHeader from './settings/SettingsSectionHeader';
 import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
+import { isSettingsSectionSubview, resolveInitialSettingsSection, sectionForSettingsSubview, writeLastSettingsSection } from './settings/navigation/settingsLastSection';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
 import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
@@ -135,6 +136,9 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
             ? 'internal'
             : 'realeco';
 
+// Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
+const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
+
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
     initialTab = 'help',
@@ -200,18 +204,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
     const {
         minimizeToTray,
+        closeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
+        hideRemoteControlTitlebar,
+        remoteControlClickThrough,
         wallpaperMode,
         handleToggleWallpaperMode: onToggleWallpaperMode,
         wallpaperMacAutohideDock,
         handleToggleWallpaperMacAutohideDock: onToggleWallpaperMacAutohideDock,
         openPlayerOnLaunch,
         handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleCloseToTray: onToggleCloseToTray,
         handleToggleVoiceInputPause: onToggleVoiceInputPause,
         handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
         handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
+        handleToggleHideRemoteControlTitlebar: onToggleHideRemoteControlTitlebar,
+        handleToggleRemoteControlClickThrough: onToggleRemoteControlClickThrough,
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
     } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
     const {
@@ -397,7 +407,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setTabDirection(tab === 'options' ? 'left' : 'right');
         setActiveTab(tab);
     };
-    const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>('appearance');
+    // A bare open (no subview, no anchor) restores the last section the user entered; any named target wins.
+    const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => resolveInitialSettingsSection({
+        initialSubview,
+        hasInitialAnchor: initialAnchor !== null,
+        isElectron: hasElectronBridge(),
+    }));
+    const handleSelectSettingsSection = (section: SettingsSectionId) => {
+        setActiveSettingsSection(section);
+        writeLastSettingsSection(section, { isElectron: hasElectronBridge() });
+    };
     const contentScrollRef = useRef<HTMLDivElement>(null);
     // Matches the md:flex-row split below; the two sidebars are different enough to render separately.
     const isWideSettingsLayout = useMediaQuery('(min-width: 768px)');
@@ -423,23 +442,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowLyricFilterSettings(initialSubview === 'lyricFilter');
         setShowGlobalLyricOffset(initialSubview === 'globalLyricOffset');
 
-        if (
-            initialSubview === 'appearance' ||
-            initialSubview === 'general' ||
-            initialSubview === 'playback' ||
-            initialSubview === 'interaction' ||
-            initialSubview === 'integration' ||
-            initialSubview === 'storage' ||
-            initialSubview === 'desktop' ||
-            initialSubview === 'graphics' ||
-            initialSubview === 'mods' ||
-            initialSubview === 'lab' ||
-            initialSubview === 'globalLyricOffset' ||
-            initialSubview === 'lyricFilter'
-        ) {
+        const targetSection = sectionForSettingsSubview(initialSubview);
+        if (targetSection) {
             // 这两个是播放页歌词区里的二级面板，关掉后应该落回它们的入口所在分区。
-            const isPlaybackSubview = initialSubview === 'globalLyricOffset' || initialSubview === 'lyricFilter';
-            setActiveSettingsSection(isPlaybackSubview ? 'playback' : initialSubview);
+            setActiveSettingsSection(targetSection);
+            // 只有真正进入某个分区页才记忆；二级面板和调参台不算「进入」分区。
+            if (isSettingsSectionSubview(initialSubview)) {
+                writeLastSettingsSection(targetSection, { isElectron: hasElectronBridge() });
+            }
         } else {
             setActiveSettingsSection(prev => prev || 'appearance');
         }
@@ -458,13 +468,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [isCleaning, setIsCleaning] = useState<string | null>(null);
 
     // Electron Settings State
-    const [isElectron, setIsElectron] = useState(false);
+    // Seeded synchronously so a remembered desktop/mods section has its title on the first frame; the effect below still confirms it.
+    const [isElectron, setIsElectron] = useState(hasElectronBridge);
     const [electronSettings, setElectronSettings] = useState({
         GEMINI_API_KEY: '',
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
         OPENAI_API_MODEL: '',
         OPENAI_API_TEMPERATURE: DEFAULT_OPENAI_TEMPERATURE,
+        OPENAI_API_STREAM: false,
         AI_PROVIDER: 'gemini',
         USE_SYSTEM_PROXY_FOR_AI: false,
         ENABLE_UPDATE_CHECK: true,
@@ -632,6 +644,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
             await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
+            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM === true);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
@@ -1614,7 +1627,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <SettingsSidebarWide
                                         groups={settingsNavGroups}
                                         activeSectionId={activeSettingsSection}
-                                        onSelectSection={setActiveSettingsSection}
+                                        onSelectSection={handleSelectSettingsSection}
                                         activeAnchorId={activeAnchorId}
                                         onSelectAnchor={(sectionId, anchorId) => {
                                             if (sectionId === activeSettingsSection) {
@@ -1630,7 +1643,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <SettingsSidebarChips
                                         groups={settingsNavGroups}
                                         activeSectionId={activeSettingsSection}
-                                        onSelectSection={setActiveSettingsSection}
+                                        onSelectSection={handleSelectSettingsSection}
                                         isDaylight={isDaylight}
                                     />
                                 )}
@@ -1833,10 +1846,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 preferences={{
                                                     hideTaskbarIcon,
                                                     hideRemoteControlTaskbarIcon,
+                                                    hideRemoteControlTitlebar,
+                                                    remoteControlClickThrough,
                                                     minimizeToTray,
+                                                    closeToTray,
                                                     onToggleHideTaskbarIcon,
                                                     onToggleHideRemoteControlTaskbarIcon,
+                                                    onToggleHideRemoteControlTitlebar,
+                                                    onToggleRemoteControlClickThrough,
                                                     onToggleMinimizeToTray,
+                                                    onToggleCloseToTray,
                                                     onToggleOpenPlayerOnLaunch,
                                                     openPlayerOnLaunch,
                                                     wallpaperMode,

@@ -14,9 +14,9 @@ import { useTypographySettingsStore } from '@/stores/useTypographySettingsStore'
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 import { audioBands, audioPower, lyricCurrentTime } from '@/stores/motionSignals';
 import { NO_LYRIC_LINES } from '@/utils/lyrics/noLyricLines';
-import type { FoliumDisplay, FoliumStageLayerDef, FoliumStageSlot, FoliumSurface } from '../contract';
+import type { FoliumStageLayerDef, FoliumStageSlot, FoliumSurface } from '../contract';
 import { useFoliumRegistryEntries, type FoliumRegistryEntry } from '../registry';
-import { useFoliumStageContext } from '../stageContext';
+import { useFoliumStageContext, type FoliumStageInputs } from '../stageContext';
 import { FoliumMountHost, foliumThemeVars } from '../FoliumMountHost';
 import { toFoliumTheme } from '../dto';
 import { stageLayersRegistry } from './stageLayers';
@@ -41,7 +41,7 @@ const STAGE_AUDIO = Object.freeze({ audioPower, audioBands });
  * `hideTranslationSubtitle` is computed in App and has no store, so it stays at
  * its builtin default.
  */
-const useStageLayerDisplay = (): Partial<FoliumDisplay> => {
+const useStageLayerDisplay = (): FoliumStageInputs['display'] => {
     const typography = useTypographySettingsStore(useShallow((state) => ({
         lyricsFontScale: state.lyricsFontScale,
         subtitleFontScale: state.subtitleFontScale,

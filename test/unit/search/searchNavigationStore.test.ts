@@ -353,4 +353,27 @@ describe('useSearchNavigationStore', () => {
         expect(useSearchNavigationStore.getState().searchResults).toHaveLength(2);
         expect(useSearchNavigationStore.getState().hasMore).toBe(false);
     });
+
+    it('moves the online source to the active provider without clearing results', () => {
+        const results = [{ id: 1, name: 'Kept' }] as any;
+        useSearchNavigationStore.setState({ searchSourceTab: 'netease', searchResults: results, searchQuery: 'q' });
+
+        useSearchNavigationStore.getState().followOnlineProvider('folium.mod-a.source');
+
+        expect(useSearchNavigationStore.getState()).toMatchObject({
+            searchSourceTab: 'folium.mod-a.source',
+            searchResults: results,
+            searchQuery: 'q',
+        });
+    });
+
+    it('leaves a local or Navidrome source alone when the active provider changes', () => {
+        useSearchNavigationStore.setState({ searchSourceTab: 'local' });
+        useSearchNavigationStore.getState().followOnlineProvider('kugou');
+        expect(useSearchNavigationStore.getState().searchSourceTab).toBe('local');
+
+        useSearchNavigationStore.setState({ searchSourceTab: 'navidrome' });
+        useSearchNavigationStore.getState().followOnlineProvider('kugou');
+        expect(useSearchNavigationStore.getState().searchSourceTab).toBe('navidrome');
+    });
 });

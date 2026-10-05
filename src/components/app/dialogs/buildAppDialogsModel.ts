@@ -29,7 +29,7 @@ export type AppDialogsModel = {
     onlineLyricMatchDialog?: OnlineLyricMatchDialogProps | null;
     unavailableReplacementDialog?: UnavailableReplacementDialogProps | null;
     settingsDialog?: SettingsDialogProps | null;
-    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
+    wallpaperEntryConfirmDialog?: ConfirmDialogProps | null;
 };
 
 // What this file can read for itself, so the caller never names it. See useAppDialogsModel below.
@@ -37,6 +37,7 @@ type AppDialogsAmbient = {
     statusMsg: StatusMessage | null;
     isDaylight: boolean;
     currentSong: SongResult | null;
+    wallpaperEntryConfirmDialog: ConfirmDialogProps;
 };
 
 export type AppDialogsDeps = {
@@ -58,7 +59,6 @@ export type AppDialogsDeps = {
     setPendingUnavailableReplacement: React.Dispatch<React.SetStateAction<any>>;
     handleUnavailableReplacementConfirm: () => Promise<void>;
     settingsDialog?: SettingsDialogProps | null;
-    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
 
 type BuildAppDialogsModelParams = AppDialogsAmbient & AppDialogsDeps;
@@ -71,6 +71,7 @@ export const buildAppDialogsModel = ({
     showNaviLyricMatchModal,
     showOnlineLyricMatchModal,
     currentSong,
+    wallpaperEntryConfirmDialog,
     localSongs,
     setShowLyricMatchModal,
     setShowNaviLyricMatchModal,
@@ -82,7 +83,6 @@ export const buildAppDialogsModel = ({
     setPendingUnavailableReplacement,
     handleUnavailableReplacementConfirm,
     settingsDialog = null,
-    providerSwitchConfirmDialog = null,
 }: BuildAppDialogsModelParams): AppDialogsModel => ({
     statusToast: statusMsg
         ? {
@@ -128,5 +128,5 @@ export const buildAppDialogsModel = ({
         onConfirm: handleUnavailableReplacementConfirm,
     },
     settingsDialog,
-    providerSwitchConfirmDialog,
+    wallpaperEntryConfirmDialog,
 });

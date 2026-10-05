@@ -93,6 +93,40 @@ describe('parseSegmentationImport', () => {
         expect(lines[getLyricLineSegmentationKey(lyrics.lines[1])]).toEqual(['你', '听见', '了吗']);
     });
 
+    it('accepts the lines object requested by the copied AI prompt, including code fences', () => {
+        const response = JSON.stringify({ lines: [['我', '想要', '说', '的话'], ['你', '听见', '了吗']] });
+        expect(parseSegmentationImport(response, lyrics).appliedCount).toBe(2);
+        expect(parseSegmentationImport(`\`\`\`json\n${response}\n\`\`\``, lyrics).appliedCount).toBe(2);
+        expect(parseSegmentationImport('```text\n我/想要/说/的话\n你/听见/了吗\n```', lyrics).appliedCount).toBe(2);
+    });
+
+    it('maps prompt responses that skip blank lyrics without shifting their saved identities', () => {
+        const withBlanks: LyricData = { lines: [line('', 0), lyrics.lines[0], line('', 3), lyrics.lines[1], line('', 7)] };
+        const response = JSON.stringify({ lines: [['我', '想要', '说', '的话'], ['你', '听见', '了吗']] });
+        const { lines, appliedCount } = parseSegmentationImport(response, withBlanks);
+        expect(appliedCount).toBe(2);
+        expect(Object.keys(lines)).toEqual(lyrics.lines.map(getLyricLineSegmentationKey));
+        expect(parseSegmentationImport('我/想要/说/的话\n你/听见/了吗\n', withBlanks).lines).toEqual(lines);
+        expect(parseSegmentationImport(buildSegmentationExportText(withBlanks), withBlanks).appliedCount).toBe(2);
+        expect(parseSegmentationImport(`${buildSegmentationExportText(withBlanks)}\n`, withBlanks).appliedCount).toBe(2);
+    });
+
+    it('preserves all original whitespace when the model normalises it', () => {
+        const source: LyricData = { lines: [line(' Hello,  world　', 1)] };
+        for (const response of ['Hello,/world', '{"lines":[["Hello,", "world"]]}']) {
+            const { lines } = parseSegmentationImport(response, source);
+            const boundaries = lines[getLyricLineSegmentationKey(source.lines[0])];
+            expect(boundaries).toHaveLength(2);
+            expect(boundaries.join('')).toBe(source.lines[0].fullText);
+        }
+    });
+
+    it('does not discard content supplied for a blank lyric row', () => {
+        const source: LyricData = { lines: [line('', 0), lyrics.lines[0]] };
+        expect(() => parseSegmentationImport('{"lines":[["extra"],["我想要说的话"]]}', source))
+            .toThrow('line-text-mismatch');
+    });
+
     it('tolerates CRLF line endings from a pasted response', () => {
         expect(parseSegmentationImport('我/想要/说/的话\r\n你/听见/了吗', lyrics).appliedCount).toBe(2);
     });
@@ -117,6 +151,8 @@ describe('parseSegmentationImport', () => {
         expect(() => parseSegmentationImport('   ', lyrics)).toThrow('empty');
         expect(() => parseSegmentationImport('[not json', lyrics)).toThrow('invalid-json');
         expect(() => parseSegmentationImport('["flat"]', lyrics)).toThrow('invalid-json-shape');
+        expect(() => parseSegmentationImport('{"other":[]}', lyrics)).toThrow('invalid-json-shape');
+        expect(() => parseSegmentationImport('{"lines":[[1],[null]]}', lyrics)).toThrow('invalid-json-shape');
     });
 });
 

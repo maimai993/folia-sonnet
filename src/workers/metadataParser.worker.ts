@@ -1,4 +1,5 @@
 import { parseBlob } from 'music-metadata';
+import { repairFlacMetadata } from '../utils/flacMetadataRepair';
 
 interface ParsedLyricLine {
     text?: string;
@@ -151,7 +152,8 @@ function getDurationFromParsedMetadata(durationSeconds?: number): number {
 }
 
 async function extractEmbeddedMetadata(file: File, includeCover = false): Promise<EmbeddedMetadataResult> {
-    const parsed = await parseBlob(file, includeCover ? undefined : { skipCovers: true });
+    const parsingInput = await repairFlacMetadata(file, includeCover);
+    const parsed = await parseBlob(parsingInput, includeCover ? undefined : { skipCovers: true });
 
     let originalLyric: string | undefined;
     let translationLyric: string | undefined;

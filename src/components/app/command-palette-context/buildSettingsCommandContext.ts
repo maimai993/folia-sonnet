@@ -16,11 +16,13 @@ import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 import { useSleepTimerStore } from '../../../stores/useSleepTimerStore';
 import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
 import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorStore';
 import { usePlayerBottomBarLayoutStore } from '../../../stores/usePlayerBottomBarLayoutStore';
 import type { SongResult } from '../../../types';
+import { cycleSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 
 // src/components/app/command-palette-context/buildSettingsCommandContext.ts
 // The `settings` namespace of the palette context.
@@ -73,7 +75,7 @@ export const buildSettingsCommandContext = (
         ),
         subtitleContentMode: typography.subtitleContentMode,
         cycleSubtitleContentMode: () => typography.handleSetSubtitleContentMode(
-            useTypographySettingsStore.getState().subtitleContentMode === 'translation' ? 'romanization' : 'translation',
+            cycleSubtitleContentMode(useTypographySettingsStore.getState().subtitleContentMode),
         ),
         toggleSubtitleOverlayBackground: () => typography.handleToggleSubtitleOverlayBackground(
             !useTypographySettingsStore.getState().subtitleOverlayBackground,
@@ -145,6 +147,9 @@ export const buildSettingsCommandContext = (
         toggleTranscodeFallback: () => audio.handleToggleTranscodeFallback(
             !useAudioSettingsStore.getState().enableTranscodeFallback,
         ),
+        togglePlaybackFade: () => audio.handleTogglePlaybackFade(
+            !useAudioSettingsStore.getState().playbackFadeEnabled,
+        ),
         canAutoScanLocalLibrary: isLocalLibraryAutoScanSupported,
         toggleLocalLibraryAutoScan: () => useLocalLibrarySettingsStore.getState().toggleAutoScan(),
         canReportNeteasePlayback: isNeteaseScrobbleReady,
@@ -161,6 +166,16 @@ export const buildSettingsCommandContext = (
         ),
         toggleWallpaperMode: () => desktop.handleToggleWallpaperMode(
             !useDesktopSettingsStore.getState().wallpaperMode,
+        ),
+        toggleCloseToTray: () => desktop.handleToggleCloseToTray(
+            !useDesktopSettingsStore.getState().closeToTray,
+        ),
+        toggleHideRemoteControlTitlebar: () => desktop.handleToggleHideRemoteControlTitlebar(
+            !useDesktopSettingsStore.getState().hideRemoteControlTitlebar,
+        ),
+        unlockRemoteControl: () => desktop.handleToggleRemoteControlClickThrough(false),
+        toggleObsKeepMainWindowAnimation: () => useStageSettingsStore.getState().handleToggleObsKeepMainWindowAnimation(
+            !useStageSettingsStore.getState().obsKeepMainWindowAnimation,
         ),
         toggleWallpaperMacAutohideDock: () => desktop.handleToggleWallpaperMacAutohideDock(
             !useDesktopSettingsStore.getState().wallpaperMacAutohideDock,

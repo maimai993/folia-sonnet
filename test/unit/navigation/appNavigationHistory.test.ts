@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     blockLatticeNavigationInFm,
+    isStartupLatticeDeferred,
+    resolveStartupView,
     resolvePlayerCapsuleNavigationTarget,
     shouldNavigatePlayerBackThroughHistory,
     shouldReplacePlayerNavigation,
@@ -83,5 +85,36 @@ describe('player capsule navigation', () => {
 
     it('does not navigate away when the progress bar already belongs to Lattice', () => {
         expect(resolvePlayerCapsuleNavigationTarget('lattice', 'lattice', false)).toBeNull();
+    });
+});
+
+describe('startup view resolution', () => {
+    const base = { openPlayerOnLaunch: true, playbackEntryView: 'player' as const, isFmMode: false, queueLength: 3 };
+
+    it('opens home when the setting is off, whatever the entry preference is', () => {
+        expect(resolveStartupView({ ...base, openPlayerOnLaunch: false, playbackEntryView: 'lattice' })).toBe('home');
+    });
+
+    it('opens the player when the preference is player', () => {
+        expect(resolveStartupView(base)).toBe('player');
+    });
+
+    it('opens Lattice when the preference is Lattice and the queue has songs', () => {
+        expect(resolveStartupView({ ...base, playbackEntryView: 'lattice' })).toBe('lattice');
+    });
+
+    it('falls back to the player in FM mode', () => {
+        expect(resolveStartupView({ ...base, playbackEntryView: 'lattice', isFmMode: true })).toBe('player');
+    });
+
+    it('falls back to the player on an empty queue', () => {
+        expect(resolveStartupView({ ...base, playbackEntryView: 'lattice', queueLength: 0 })).toBe('player');
+    });
+
+    it('marks only a Lattice launch outside FM as deferrable', () => {
+        expect(isStartupLatticeDeferred({ openPlayerOnLaunch: true, playbackEntryView: 'lattice', isFmMode: false })).toBe(true);
+        expect(isStartupLatticeDeferred({ openPlayerOnLaunch: true, playbackEntryView: 'player', isFmMode: false })).toBe(false);
+        expect(isStartupLatticeDeferred({ openPlayerOnLaunch: false, playbackEntryView: 'lattice', isFmMode: false })).toBe(false);
+        expect(isStartupLatticeDeferred({ openPlayerOnLaunch: true, playbackEntryView: 'lattice', isFmMode: true })).toBe(false);
     });
 });

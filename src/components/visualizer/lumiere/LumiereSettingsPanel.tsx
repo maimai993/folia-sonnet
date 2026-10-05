@@ -47,6 +47,7 @@ const TEXT_CONTROLS_TAIL: ControlSpec[] = [
     slider('decay', 'options.lumiereDecay', 0, 2),
     slider('echo', 'options.lumiereEcho', 0, 2),
     toggle('trails', 'options.lumiereTrails'),
+    toggle('hideTrails', 'options.lumiereHideTrails'),
     toggle('seamlessTransitions', 'options.lumiereSeamlessTransitions'),
 ];
 
@@ -150,6 +151,7 @@ const LumiereSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 {TEXT_CONTROLS_TAIL.map(renderControl)}
                 {hint('options.lumiereTextOnlyHint')}
                 {hint('options.lumiereEchoHint')}
+                {hint('options.lumiereHideTrailsHint')}
                 {hint('options.lumiereSeamlessTransitionsHint')}
             </SettingsSection>
 

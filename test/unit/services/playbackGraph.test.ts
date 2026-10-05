@@ -119,6 +119,23 @@ describe('buildPlaybackGraph', () => {
         routes.forEach(route => expect(route).toContain(analyser as unknown as FakeNode));
     });
 
+    it('puts the transport fade node between the volume fader and the analyser, as its own node', () => {
+        const { graph, edges, analyser } = buildWith('flat');
+        const volume = graph.gainNode as unknown as FakeNode;
+        const fade = graph.fadeNode as unknown as FakeNode;
+
+        // Its own node: the volume node is rewritten on every volume change and track start.
+        expect(fade).not.toBe(volume);
+        routesToDestination(edges, volume).forEach(route => {
+            expect(route.indexOf(fade)).toBe(route.indexOf(volume) + 1);
+            expect(route.indexOf(analyser as unknown as FakeNode)).toBe(route.indexOf(fade) + 1);
+        });
+        // Nothing reaches the speakers around it.
+        const effectOutputs = edges.filter(([, to]) => to === volume).map(([from]) => from);
+        expect(effectOutputs.length).toBeGreaterThan(0);
+        edges.filter(([from]) => from === volume).forEach(([, to]) => expect(to).toBe(fade));
+    });
+
     it('reports a deck that failed to connect instead of throwing', () => {
         const { context } = createFakeContext();
         const analyser = context.createAnalyser();

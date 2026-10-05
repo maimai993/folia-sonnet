@@ -25,6 +25,8 @@ store 中平台共享的持久化键：
 
 平台专属键见各自章节。启动开关入口三平台一致：托盘「Wallpaper Mode」、设置卡片（`src/components/modal/settings/DesktopSettingsSubview.tsx`）与命令面板 `settings-wallpaper-mode` / `desktop-toggle-wallpaper-mode`，统一由 `isWallpaperModeSupportedPlatform()` 门控（darwin / win32 / linux）。
 
+**进入前确认**：用户主动的进入（设置卡片、命令面板、托盘）都会先弹一次确认（`useDesktopSettingsStore.handleToggleWallpaperMode` → `wallpaperEntryConfirmOpen` → `AppDialogs` 里的 `ConfirmDialog`），文案写明进入后的限制与托盘退出方式；托盘在主进程里，经 `wallpaper-entry-requested`（`electron/wallpaperEntryRequest.cjs`）请求渲染端弹同一个对话框，渲染端不可用时才直接进入。退出不确认。启动恢复、崩溃重载、降级等程序性路径不经过确认（渲染端走 `setDesktopPreferenceSnapshot`，主进程直接读 `wallpaper_mode`）。
+
 ### 3. 渲染端与命令门控
 
 - 壁纸模式下自绘标题栏整体禁用：`usesCustomWindowChrome = isElectronWindow && !wallpaperMode`，窗口控制按钮、拖拽区、穿透开关都不渲染。
@@ -172,4 +174,4 @@ Electron 主进程 (main.cjs)
 
 ### 5. 打包
 
-- mac 打包无需 helper 二进制；`koffi` 为纯 npm 依赖（darwin arm64/x64 由 `@koromix/koffi-*` 提供），已通过 `asarUnpack` 保证 `.node` 可 dlopen。
+- mac 打包无需 helper 二进制；`koffi` 的 `@koromix/koffi-*` 可选依赖按构建主机的 CPU 安装。`beforePack` 按目标架构取得与锁文件一致的原生包，校验完整性与 Mach-O CPU 类型，再通过 mac `extraResources` 放入 Koffi 支持的 `resources/koffi/darwin_<arch>/koffi.node` 查找路径；`afterPack` 检查实际产物，缺失或架构/版本错误时终止打包。实现入口为 [`prepareBundledKoffi` / `verifyBundledKoffi`](../packaging/macos/prepare-koffi.mjs)。

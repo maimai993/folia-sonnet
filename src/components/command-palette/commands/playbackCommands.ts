@@ -14,6 +14,14 @@ import { createToggleCommand, createReplayGainCommand, createSoundPresetCommand 
 export const playbackCommands: CommandPaletteCommand[] = [
     executeModeCommand,
     queueCommand,
+    createToggleCommand(
+        'queue-keep-open',
+        'playback',
+        'Keep queue palette open',
+        'Toggle keeping the command palette open after choosing a queue song',
+        ['stay open', 'keep queue open', '切歌不关闭', '队列保持打开'],
+        context => context.playback.setQueuePaletteKeepOpen(!context.playback.queuePaletteKeepOpen),
+    ),
     volumeCommand,
     fmModeCommand,
     createReplayGainCommand('off', 'Disable ReplayGain', 'Play audio without ReplayGain adjustment', ['replaygain off', 'audio gain off', '关闭音频增益', '关闭 replaygain', 'gbyyzy']),

@@ -5,6 +5,7 @@ import {
     buildLegacyObsBrowserSourceBackgroundConfig,
     downsampleObsSpectrum,
     ObsBrowserSourceConfigPublicationTracker,
+    resolveMainWindowVisualizerMode,
     resolveObsBrowserSourceClockTime,
     resolveObsBrowserSourceCoverUrl,
     resolveObsBrowserSourceImageAsset,
@@ -36,6 +37,21 @@ const buildObsConfig = (overrides: Partial<ObsBrowserSourceConfig> = {}): ObsBro
     seed: 'song-1',
     updatedAt: 1,
     ...overrides,
+});
+
+describe('resolveMainWindowVisualizerMode', () => {
+    it('drops the main window to still while OBS renders and the animation is not kept', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', true, false)).toBe('still');
+    });
+
+    it('keeps the chosen mode when the user opted to keep the main window animation', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', true, true)).toBe('cadenza');
+    });
+
+    it('never changes the mode when no OBS client is rendering', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', false, false)).toBe('cadenza');
+        expect(resolveMainWindowVisualizerMode('cadenza', false, true)).toBe('cadenza');
+    });
 });
 
 describe('obsBrowserSource utilities', () => {

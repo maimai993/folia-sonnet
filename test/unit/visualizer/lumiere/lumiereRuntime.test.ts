@@ -4,6 +4,7 @@ import { DEFAULT_LUMIERE_TUNING, type AudioBands } from '@/types';
 import { compileLumiereProgram } from '@/components/visualizer/lumiere/lumiereProgram';
 import {
     LUMIERE_QUALITY_PROFILES,
+    LUMIERE_LIVE_SCENE_KEYS,
     requiresLumiereSceneRebuild,
     resolveLumiereBloomLevelDrop,
     resolveLumiereGraphicsResolution,
@@ -34,6 +35,15 @@ describe('绘光 tuning → 场景 tuning', () => {
 
     it('不显示歌词时关掉背景歌词碎片', () => {
         expect(toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: false }).echo).toBe(0);
+    });
+
+    it('隐藏径迹实时传给场景，不重建也不影响飞行或轨迹过渡', () => {
+        const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true });
+        const hidden = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, hideTrails: true }, { showText: true });
+        expect(hidden).toEqual({ ...base, hideTrails: true });
+        expect(LUMIERE_LIVE_SCENE_KEYS).toContain('hideTrails');
+        expect(requiresLumiereSceneRebuild(base, hidden)).toBe(false);
+        expect(requiresLumiereSceneRebuild(hidden, base)).toBe(false);
     });
 
     it('画质档封顶倍频、低画质减浮尘', () => {

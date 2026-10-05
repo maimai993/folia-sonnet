@@ -174,6 +174,8 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis,
         setPlayerCapSticky,
         setWebStageSource,
+        obsKeepMainWindowAnimation,
+        handleToggleObsKeepMainWindowAnimation,
     } = useStageSettingsStore(useShallow(state => ({
         playerCapHost: state.playerCapHost,
         playerCapPlayer: state.playerCapPlayer,
@@ -184,6 +186,8 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis: state.setPlayerCapTimeBasis,
         setPlayerCapSticky: state.setPlayerCapSticky,
         setWebStageSource: state.setWebStageSource,
+        obsKeepMainWindowAnimation: state.obsKeepMainWindowAnimation,
+        handleToggleObsKeepMainWindowAnimation: state.handleToggleObsKeepMainWindowAnimation,
     })));
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const [playerCapHostDraft, setPlayerCapHostDraft] = useState(playerCapHost);
@@ -405,7 +409,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                     {t('options.enableObsBrowserSource') || 'Enable OBS browser source'}
                                 </div>
                                 <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.obsBrowserSourceDesc') || 'Renders the full lyrics animation in OBS without audio. When connected, the main window stops rendering the heavy visualizer.'}
+                                    {t('options.obsBrowserSourceDesc') || 'Renders the full lyrics animation in OBS without audio. By default, the main window stops rendering the heavy visualizer while OBS is connected.'}
                                 </div>
                             </div>
                             <button
@@ -457,6 +461,37 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                         </button>
                                     </div>
                                 </div>
+
+                                <div className={`rounded-xl border p-3 flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                            {t('options.obsKeepMainWindowAnimation') || 'Keep main window animation while OBS is connected'}
+                                        </div>
+                                        <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.obsKeepMainWindowAnimationDesc') || 'When on, the main window keeps rendering the lyrics animation while OBS is connected. The main window and OBS both render the heavy animation, which uses more GPU / CPU.'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleObsKeepMainWindowAnimation(!obsKeepMainWindowAnimation)}
+                                        className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!obsKeepMainWindowAnimation ? toggleOffBackgroundClass : ''}`}
+                                        style={{ backgroundColor: obsKeepMainWindowAnimation ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                        aria-label={t('options.obsKeepMainWindowAnimation') || 'Keep main window animation while OBS is connected'}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${obsKeepMainWindowAnimation ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <details className={`rounded-xl border p-3 ${settingsCardClass}`}>
+                                    <summary className="cursor-pointer select-none text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.obsBrowserSourceGuideTitle') || 'How to use'}
+                                    </summary>
+                                    <ol className="mt-3 pl-4 list-decimal space-y-1.5 text-[11px] opacity-60 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                        {[1, 2, 3, 4, 5, 6].map(step => (
+                                            <li key={step}>{t(`options.obsBrowserSourceGuideStep${step}`)}</li>
+                                        ))}
+                                    </ol>
+                                </details>
                             </div>
                         )}
                     </div>

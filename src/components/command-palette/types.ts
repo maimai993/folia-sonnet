@@ -8,6 +8,8 @@ import type { AppLanguagePreference } from '../../i18n/config';
 import type { PanelTab } from '../UnifiedPanel';
 import type { AppView, CommandFilterHandle } from '../../stores/useAppViewStore';
 import type { GridSurfaceHandle } from '../../types/gridCommandSurface';
+import type { LibraryDirectorySurfaceHandle } from '../../library/core/contracts/directory';
+import type { LibraryArtistSurfaceHandle } from '../../library/core/contracts/artist';
 import { type SettingsModalInitialTab, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import type { SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
@@ -36,7 +38,7 @@ export type CommandPaletteGroup = 'search' | 'settings' | 'navigation' | 'panel'
  * only offer a global shortcut a command that works from anywhere, and anything else that asks
  * "would this be reachable if I were somewhere else".
  */
-export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice' | 'grid-surface';
+export type CommandScope = 'player-surface' | 'filtering-surface' | 'lattice' | 'grid-surface' | 'directory-surface' | 'artist-surface';
 
 export type CommandPaletteSearchSource = SearchSource;
 
@@ -80,6 +82,8 @@ export type CommandPaletteCommand = {
      * find that section.
      */
     settingsTarget?: { subview: SettingsSubviewId; anchorId?: SettingsAnchorId };
+    /** Successful execution closes the palette unless the command opts out. */
+    closeAfterExecute?: boolean;
     execute: (input: string, context: CommandPaletteContext) => Promise<boolean> | boolean;
 };
 
@@ -139,6 +143,8 @@ export type CommandPalettePlaybackContext = {
     next: () => void;
     prev: () => void;
     queue: SongResult[];
+    queuePaletteKeepOpen: boolean;
+    setQueuePaletteKeepOpen: (enable: boolean) => void;
     playSong: (song: SongResult, queue?: SongResult[]) => void | Promise<void>;
     shuffleQueue: () => void;
     clearQueue: () => void;
@@ -242,6 +248,8 @@ export type CommandPaletteSettingsContext = {
     /** Lab switch: whether the restored session starts playing by itself on launch. */
     toggleAutoPlayOnLaunch: () => void;
     toggleTranscodeFallback: () => void;
+    /** Whether pause and resume fade the sound out and in. */
+    togglePlaybackFade: () => void;
     /**
      * Whether this build can watch the imported local folders at all. A getter because the answer
      * is a runtime API check (FileSystemObserver) rather than a stored value, and the settings
@@ -262,6 +270,14 @@ export type CommandPaletteSettingsContext = {
     toggleVoiceInputPause: () => void;
     togglePreventDisplaySleepDuringPlayback: () => void;
     toggleWallpaperMode: () => void;
+    /** Close button hides the main window to the tray instead of quitting (main process owns it). */
+    toggleCloseToTray: () => void;
+    /** Remote control window: hide the top floating window-control bar. */
+    toggleHideRemoteControlTitlebar: () => void;
+    /** Turns remote control click-through off (the way back into a click-through window). */
+    unlockRemoteControl: () => void;
+    /** OBS browser source: keep the main window's heavy animation while an OBS client is connected. */
+    toggleObsKeepMainWindowAnimation: () => void;
     /** macOS-only: the wallpaper-mode Dock auto-hide override (on by default). */
     toggleWallpaperMacAutohideDock: () => void;
     sleepTimerEnabled: boolean;
@@ -359,6 +375,16 @@ export type CommandPaletteScopeContext = {
      * choice, its two panels — plus the collection maintenance its own branch allows.
      */
     grid: GridSurfaceHandle | null;
+    /**
+     * The home directory on screen (the grid's GridMap), if any: its batch selection and hidden view.
+     * Separate from `grid` — a directory selects cards, a track grid sorts and maintains a collection.
+     */
+    directory: LibraryDirectorySurfaceHandle | null;
+    /**
+     * The artist page on screen, if any: its top songs, reload / album retry and local entity editing.
+     * Separate from `grid` — an artist page has no track list to sort or maintain.
+     */
+    artist: LibraryArtistSurfaceHandle | null;
 };
 
 // Namespaces mirror CommandPaletteGroup one-to-one (plus `shared` and `scope`), so a command's

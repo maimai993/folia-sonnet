@@ -1,16 +1,17 @@
-import type React from 'react';
 import type { SongResult, StageSource } from '../../../types';
 import type { GridViewCollectionDescriptor } from './gridViewCollectionAdapters';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { resolveSearchSource, type SearchSource } from '../../../stores/useSearchNavigationStore';
-import type { OnlineProviderPlatformState } from '../../../hooks/useOnlineProviderPlatform';
+import type { ProviderAccountSummary } from '../../../types/onlineMusic';
+import type { LibraryAccountController } from '../../../library/core/contracts/account';
 import { openSettings } from '../../../stores/useSettingsModalStore';
 
 // src/components/app/home/buildHomeModel.ts
 
 export type HomeViewModel = {
     surfaceProps: HomeSurfaceProps;
-    onlineProviderPlatform?: OnlineProviderPlatformState;
+    /** 在线账户 controller（App 持有，见 library/app/useLibraryAccountController），首页外壳交给首页 surface。 */
+    account: LibraryAccountController;
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
     onBackCollection: () => void;
@@ -24,7 +25,9 @@ type HomeModelAmbient = {
 };
 
 export type HomeModelDeps = {
-    onlineProviderPlatform?: OnlineProviderPlatformState;
+    account: LibraryAccountController;
+    /** controller 快照里的当前平台摘要（未变时身份稳定）；首页的账户与在线歌单优先取它。 */
+    activeProvider?: ProviderAccountSummary;
     playSong: HomeSurfaceProps['onPlaySong'];
     navigateToPlayer: HomeSurfaceProps['onBackToPlayer'];
     navigateToLattice: NonNullable<HomeSurfaceProps['onOpenLattice']>;
@@ -45,13 +48,11 @@ export type HomeModelDeps = {
     onAddNavidromeSongsToQueue?: HomeSurfaceProps['onAddNavidromeSongsToQueue'];
     navidromeFocusedAlbumIndex?: HomeSurfaceProps['navidromeFocusedAlbumIndex'];
     setNavidromeFocusedAlbumIndex?: HomeSurfaceProps['setNavidromeFocusedAlbumIndex'];
-    pendingNavidromeSelection?: HomeSurfaceProps['pendingNavidromeSelection'];
-    setPendingNavidromeSelection: React.Dispatch<React.SetStateAction<any>>;
     stageSource?: StageSource | null;
     openStagePlayer: () => Promise<void>;
     theme: HomeSurfaceProps['theme'];
     playAll: (songs: SongResult[]) => void;
-    addAllToQueue: (songs: SongResult[]) => void;
+    addAllToQueue: (songs: SongResult[], options?: { suppressToast?: boolean }) => number | void;
     addSongToQueue: (song: SongResult) => void;
     onStatusMessage?: HomeSurfaceProps['onStatusMessage'];
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
@@ -63,7 +64,8 @@ type BuildHomeModelParams = HomeModelAmbient & HomeModelDeps;
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
 export const buildHomeModel = ({
-    onlineProviderPlatform,
+    account,
+    activeProvider,
     playSong,
     navigateToPlayer,
     navigateToLattice,
@@ -85,8 +87,6 @@ export const buildHomeModel = ({
     onAddNavidromeSongsToQueue,
     navidromeFocusedAlbumIndex,
     setNavidromeFocusedAlbumIndex,
-    pendingNavidromeSelection,
-    setPendingNavidromeSelection,
     stageSource,
     activePlaybackContext,
     openStagePlayer,
@@ -101,7 +101,7 @@ export const buildHomeModel = ({
     onBackCollection,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
-        onlineProviderPlatform,
+        account,
         onOpenCollection,
         onPushCollection,
         onBackCollection,
@@ -110,9 +110,10 @@ export const buildHomeModel = ({
             onBackToPlayer: navigateToPlayer,
             onOpenLattice: navigateToLattice,
             onRefreshUser: () => refreshOnlineProviderPlaylists(),
-            user: onlineProviderPlatform?.activeProvider?.user ?? user,
-            playlists: onlineProviderPlatform?.activeProvider?.collections.filter(collection => collection.type !== 'cloud') ?? playlists,
-            cloudPlaylist: onlineProviderPlatform?.activeProvider?.collections.find(collection => collection.type === 'cloud') ?? cloudPlaylist,
+            // An anonymous selected provider must not inherit a different platform's account.
+            user: activeProvider ? activeProvider.user : user,
+            playlists: activeProvider?.collections.filter(collection => collection.type !== 'cloud') ?? playlists,
+            cloudPlaylist: activeProvider?.collections.find(collection => collection.type === 'cloud') ?? cloudPlaylist,
             currentTrack: currentSong,
             onPlayAll: playAll,
             onAddAllToQueue: addAllToQueue,
@@ -134,8 +135,6 @@ export const buildHomeModel = ({
             onAddNavidromeSongsToQueue,
             navidromeFocusedAlbumIndex,
             setNavidromeFocusedAlbumIndex,
-            pendingNavidromeSelection,
-            onPendingNavidromeSelectionHandled: () => setPendingNavidromeSelection(null),
             stageEnabled: Boolean(stageSource),
             stageIsActive: activePlaybackContext === 'stage',
             onOpenStagePlayer: () => {

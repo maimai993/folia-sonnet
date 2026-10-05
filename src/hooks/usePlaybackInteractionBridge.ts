@@ -2,11 +2,12 @@ import { useCallback, useEffect } from 'react';
 import type React from 'react';
 import type { MotionValue } from 'framer-motion';
 import { omni } from '../services/onlineMusic/omni';
+import { playbackFade } from '../services/playbackFade';
 import { PlayerState } from '../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../types';
 import { getReplayGainModeLabel } from '../utils/appPlaybackHelpers';
 import { isMacPlatform as isMac } from '../utils/platform';
-import { hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
+import { effectiveKeyCode, hasBlockingWindow, isTextEntryTarget } from '../utils/keyboardTargets';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
 import { setReplayGainMode } from '../stores/usePlaybackStore';
 import { useStableActionSurface } from './useStableCallbacks';
@@ -146,6 +147,13 @@ export function usePlaybackInteractionBridge({
             return;
         }
 
+        // The element is still playing while a pause fades out, so the check below would read it as
+        // playing and pause again. A second press during the fade is a resume.
+        if (playbackFade.isFadingOut()) {
+            startPlaybackFromInteraction();
+            return;
+        }
+
         if (isTransitionAudible?.()) {
             pausePlayback();
             return;
@@ -209,7 +217,7 @@ export function usePlaybackInteractionBridge({
             // Not gated on dev: the packaged desktop build has no DevTools to fall back on - the
             // window is frameless, so there is no menu to toggle them from and they only open
             // automatically under ELECTRON_DEV. This chord is the only console it has.
-            if (event.altKey && event.shiftKey && !event.repeat && event.code === 'KeyD') {
+            if (event.altKey && event.shiftKey && !event.repeat && effectiveKeyCode(event) === 'KeyD') {
                 event.preventDefault();
                 setIsDevDebugOverlayVisible(prev => !prev);
                 return;
@@ -218,13 +226,13 @@ export function usePlaybackInteractionBridge({
             // Its own window rather than a tab of the one above: the two are read together - a heap
             // that is flat while the working set climbs is the whole diagnosis - and a tab makes
             // that comparison impossible.
-            if (event.altKey && event.shiftKey && !event.repeat && event.code === 'KeyM') {
+            if (event.altKey && event.shiftKey && !event.repeat && effectiveKeyCode(event) === 'KeyM') {
                 event.preventDefault();
                 setIsMemoryMonitorVisible(prev => !prev);
                 return;
             }
 
-            switch (event.code) {
+            switch (effectiveKeyCode(event)) {
                 case 'Escape': {
                     const action = resolvePlayerEscapeAction({
                         currentView,

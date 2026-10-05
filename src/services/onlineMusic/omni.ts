@@ -29,9 +29,11 @@ import { saveSongReplayGain } from './resourceCache';
 import {
     getOnlineMusicProvider,
     getOnlineMusicProviderForSong,
+    getOnlineMusicProviderRegistryVersion,
     listOnlineMusicProviders,
     providerSupports,
     requireOnlineMusicProvider,
+    subscribeOnlineMusicProviderRegistry,
 } from './providerRegistry';
 import { saveProviderAccountSnapshot } from './providerAccountCache';
 import { applyOmniAudioHook, applyOmniLyricsHook } from '../hostExtensionHooks';
@@ -114,6 +116,16 @@ export const omni = {
     getActiveRequestGeneration(): number {
         return activeRequestGeneration;
     },
+
+    // The provider list changes at runtime (Folium mods). A useSyncExternalStore pair for the UI.
+    subscribeProviders(listener: () => void): () => void {
+        return subscribeOnlineMusicProviderRegistry(listener);
+    },
+
+    getProviderRegistryVersion(): number {
+        return getOnlineMusicProviderRegistryVersion();
+    },
+
     getProviderSummaries(): OmniProviderSummary[] {
         const accounts = useOnlineProviderAccountStore.getState().accounts;
         return listOnlineMusicProviders().map(provider => {
@@ -123,6 +135,7 @@ export const omni = {
                 displayName: provider.displayName,
                 shortName: provider.shortName || provider.displayName,
                 availability: provider.getAvailability?.() ?? { configured: true },
+                requiresAccount: provider.capabilities.auth,
                 status: account?.status || 'unknown',
                 user: account?.user || null,
                 collections: account?.collections || [],
@@ -169,6 +182,10 @@ export const omni = {
 
     getProviderCapabilities(providerId: OmniProviderId): OmniProviderCapabilities {
         return requireOnlineMusicProvider(providerId).capabilities;
+    },
+
+    supportsDailySongs(providerId: OmniProviderId): boolean {
+        return typeof requireOnlineMusicProvider(providerId).recommendations?.getDailySongs === 'function';
     },
 
     getProviderAvailability(providerId: OmniProviderId) {
@@ -586,6 +603,25 @@ export const omni = {
         await this.updateCollectionTracks(playlist, 'add', [song]);
         try {
             await this.refreshProviderPlaylists(playlist.providerId);
+            // Netease owns its liked state in useNeteaseLibrary; avoid its cached /likelist here.
+            if (playlist.isLiked === true && playlist.providerId !== 'netease' && providerSupports(provider, 'likes')) {
+                const account = useOnlineProviderAccountStore.getState().accounts[playlist.providerId];
+                if (account?.user?.id !== undefined && account?.user?.id !== null) {
+                    const userId = account.user.id;
+                    // A full liked list may be large. Do not delay success or overwrite a newer account/mutation.
+                    void this.getProviderLikedSongIds(playlist.providerId, userId).then(async likedSongIds => {
+                        const latest = useOnlineProviderAccountStore.getState().accounts[playlist.providerId];
+                        if (latest?.user?.id !== userId || latest.likedSongIds !== account.likedSongIds) return;
+                        useOnlineProviderAccountStore.getState().updateAccount(playlist.providerId, { likedSongIds });
+                        await persistProviderLikedSongIds(playlist.providerId);
+                    }).catch(error => {
+                        console.warn('[Omni] Failed to refresh liked songs after playlist mutation', {
+                            providerId: playlist.providerId,
+                            name: error instanceof Error ? error.name : 'Error',
+                        });
+                    });
+                }
+            }
         } catch (error) {
             console.warn('[Omni] Failed to refresh provider playlists after mutation', {
                 providerId: playlist.providerId,

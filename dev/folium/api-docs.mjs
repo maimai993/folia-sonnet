@@ -193,7 +193,7 @@ const SECTION_INFO = {
     'Shared helpers': {
         order: 6,
         title: '共享工具',
-        intro: '`folium.lyrics` 与 `folium.theme`：内置歌词动画使用的同一批纯函数，主窗口与导出窗口都可用。',
+        intro: '`folium.lyrics` 与 `folium.theme`：内置歌词动画使用的同一批函数，主窗口与导出窗口都可用。`folium.lyrics.parse`（1.4）是唯一的异步方法，走本地歌词文件的解析流程。',
     },
     Parameters: {
         order: 7,

@@ -62,6 +62,8 @@ export interface ProviderAccountSummary {
     displayName: string;
     shortName: string;
     availability: ProviderAvailability;
+    /** False for a provider with no account at all (a Folium mod source): it is used without signing in. Absent means true. */
+    requiresAccount?: boolean;
     status: 'unknown' | 'authenticated' | 'anonymous' | 'error';
     user: ProviderUser | null;
     collections: ProviderCollection[];
@@ -196,6 +198,8 @@ export type ProviderErrorCode =
     | 'not-public'
     | 'unavailable'
     | 'not-playable'
+    | 'preview-only'
+    | 'region-restricted'
     | 'network'
     | 'invalid-response';
 

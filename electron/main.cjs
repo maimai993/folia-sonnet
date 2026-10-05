@@ -9,12 +9,22 @@ const { createStageApi } = require('./stageApi.cjs');
 const { createModSystem } = require('./modSystem/modSystem.cjs');
 const { MOD_PROTOCOL_PRIVILEGED_SCHEME } = require('./modSystem/modProtocol.cjs');
 const { createWindowPlaybackHandoffStore } = require('./windowPlaybackHandoff.cjs');
+const {
+  REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY,
+  REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY,
+  readRemoteControlWindowSettings,
+  shouldShowRemoteUnlockTrayItem,
+  applyRemoteControlMouseIgnore,
+} = require('./remoteControlWindowSettings.cjs');
 const wallpaperWatchdogModule = require('./wallpaperWatchdog.cjs');
+const { requestWallpaperEntryConfirmation } = require('./wallpaperEntryRequest.cjs');
 const windowsWallpaperModule = require('./windowsWallpaperController.cjs');
 const { createWindowsWallpaperTargetResolver } = require('./windowsWallpaperTarget.cjs');
 const { createWindowsWallpaperMouseInjector } = require('./windowsWallpaperMouse.cjs');
 const macWallpaperModule = require('./macWallpaperController.cjs');
 const { createKugouApiBridge } = require('./kugouApiBridge.cjs');
+const { createBodianApiBridge } = require('./bodianApiBridge.cjs');
+const { createBodianMediaPolicy } = require('./bodian/mediaCors.cjs');
 const { createQqAuthSessionRepository } = require('./qqAuthSessionRepository.cjs');
 const { DEFAULT_DISCORD_APPLICATION_ID, createDiscordPresenceController } = require('./discordPresence.cjs');
 const { createVoiceInputPauseMonitor } = require('./voiceInputPause.cjs');
@@ -41,6 +51,7 @@ const { sanitizeDualTheme: sanitizeGeneratedDualTheme } = require('../shared/the
 const {
   detectOpenAICompatibleProvider,
   normalizeOpenAIChatCompletionsUrl,
+  runAiConnectionTest,
   runAiJsonCompletion,
 } = require('./aiTextClient.cjs');
 const {
@@ -182,6 +193,15 @@ const transcodeService = createTranscodeService({
 // KuGou credentials stay inside the main process and are encrypted lazily after Electron is ready.
 // The bridge refuses Linux's plaintext `basic_text` fallback and degrades to an in-memory session.
 const kugouApiBridge = createKugouApiBridge({ store, safeStorage });
+const bodianMediaPolicy = createBodianMediaPolicy();
+const bodianApiBridge = createBodianApiBridge({ store, safeStorage,
+  onAudioSource: url => bodianMediaPolicy.register(url),
+  requestFactory: (options, onResponse) => {
+    const request = electronNet.request(options);
+    request.on('response', onResponse);
+    return request;
+  },
+});
 const qqAuthSessionRepository = createQqAuthSessionRepository({ store, safeStorage });
 
 // --- Desktop wallpaper mode (Wayland layer-shell via windowtolayer / X11 desktop window) ---
@@ -1566,6 +1586,7 @@ const mainLocale = {
     trayShowWindow: '显示窗口',
     trayHideWindow: '隐藏窗口',
     trayOpenRemote: '遥控窗口',
+    trayUnlockRemote: '解锁遥控窗口',
     trayTransparentBackground: '透明背景',
     trayToggleClickThrough: '点击穿透',
     trayAlwaysOnTop: '窗口置顶',
@@ -1587,6 +1608,7 @@ const mainLocale = {
     trayShowWindow: 'Show Window',
     trayHideWindow: 'Hide Window',
     trayOpenRemote: 'Remote Window',
+    trayUnlockRemote: 'Unlock Remote Window',
     trayTransparentBackground: 'Transparent Background',
     trayToggleClickThrough: 'Click-Through',
     trayAlwaysOnTop: 'Always on Top',
@@ -1608,6 +1630,7 @@ const mainLocale = {
     trayShowWindow: 'Tampilkan Jendela',
     trayHideWindow: 'Sembunyikan Jendela',
     trayOpenRemote: 'Jendela Remote',
+    trayUnlockRemote: 'Buka Kunci Jendela Remote',
     trayTransparentBackground: 'Latar Belakang Transparan',
     trayToggleClickThrough: 'Click-Through',
     trayAlwaysOnTop: 'Selalu di Atas',
@@ -1758,6 +1781,8 @@ let latestObsBrowserSourceAudio = null;
 const obsBrowserSourceClients = new Set();
 let remoteControlAlwaysOnTop = false;
 let remoteControlSkipTaskbarEnabled = false;
+let remoteControlHideTitlebarEnabled = false;
+let remoteControlClickThroughEnabled = false;
 let mainWindowAlwaysOnTop = false;
 let mainWindowClickThroughEnabled = false;
 let mainWindowClickThroughUnlockHover = false;
@@ -1776,8 +1801,11 @@ let windowStateSaveTimer = null;
 let wallpaperModeRelaunchTimer = null;
 let wallpaperModeRelaunchGeneration = 0;
 const x11WallpaperWindows = new WeakSet();
+// Must match CLICK_THROUGH_UNLOCK_HOTSPOT in src/utils/clickThroughUnlockHotspot.ts (the renderer
+// runs the same hit test on mousemove). The width covers the unlock button both at right-[180px]
+// and at right-[224px] (titlebar showing the fullscreen button).
 const MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT = {
-  width: 48,
+  width: 84,
   height: 40,
   rightInset: 176,
   topInset: 4,
@@ -1804,6 +1832,7 @@ const OBS_BROWSER_SOURCE_PORT_SETTING_KEY = 'OBS_BROWSER_SOURCE_PORT';
 const LYRIC_API_ENABLED_SETTING_KEY = 'LYRIC_API_ENABLED';
 const DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY = 'DISCORD_RICH_PRESENCE_ENABLED';
 const MINIMIZE_TO_TRAY_SETTING_KEY = 'MINIMIZE_TO_TRAY';
+const CLOSE_TO_TRAY_SETTING_KEY = 'CLOSE_TO_TRAY';
 const HIDE_TASKBAR_ICON_SETTING_KEY = 'HIDE_TASKBAR_ICON';
 const REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY = 'REMOTE_CONTROL_ALWAYS_ON_TOP';
 const REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY = 'REMOTE_CONTROL_SKIP_TASKBAR';
@@ -1924,9 +1953,12 @@ function getPublicSettings() {
   return {
     ...store.store,
     [MINIMIZE_TO_TRAY_SETTING_KEY]: readStoredBoolean(MINIMIZE_TO_TRAY_SETTING_KEY, false),
+    [CLOSE_TO_TRAY_SETTING_KEY]: readStoredBoolean(CLOSE_TO_TRAY_SETTING_KEY, false),
     [HIDE_TASKBAR_ICON_SETTING_KEY]: readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false),
     [REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true),
     [REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY, false),
+    [REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY, false),
+    [REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY]: readStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY, false),
     [MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY]: readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false),
     [TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY]: readStoredBoolean(TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY, false),
     [DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY]: readStoredBoolean(DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY, false),
@@ -1998,6 +2030,11 @@ function broadcastObsBrowserSourceStatus() {
 mainWindowSkipTaskbarEnabled = readStoredBoolean(HIDE_TASKBAR_ICON_SETTING_KEY, false);
 remoteControlAlwaysOnTop = readStoredBoolean(REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY, true);
 remoteControlSkipTaskbarEnabled = readStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY, false);
+{
+  const remoteWindowSettings = readRemoteControlWindowSettings(readStoredBoolean);
+  remoteControlHideTitlebarEnabled = remoteWindowSettings.hideTitlebar;
+  remoteControlClickThroughEnabled = remoteWindowSettings.clickThrough;
+}
 mainWindowAlwaysOnTop = readStoredBoolean(MAIN_WINDOW_ALWAYS_ON_TOP_SETTING_KEY, false);
 
 const stageApi = createStageApi({
@@ -2408,6 +2445,38 @@ function applyRemoteControlSkipTaskbar(win) {
   return remoteControlSkipTaskbarEnabled;
 }
 
+function buildRemoteControlWindowSettings() {
+  return {
+    hideTitlebar: remoteControlHideTitlebarEnabled,
+    clickThrough: remoteControlClickThroughEnabled,
+  };
+}
+
+// Applies click-through to the remote window and tells its renderer about both switches.
+function applyRemoteControlWindowPresentation(win) {
+  if (!win || win.isDestroyed()) {
+    return false;
+  }
+
+  applyRemoteControlMouseIgnore(win, remoteControlClickThroughEnabled);
+  if (!win.webContents.isDestroyed()) {
+    win.webContents.send('remote-control-window-settings-changed', buildRemoteControlWindowSettings());
+  }
+  return true;
+}
+
+// Tray / command palette unlock path: persist, apply, and let the main renderer's store follow.
+function setRemoteControlClickThroughEnabled(enabled) {
+  remoteControlClickThroughEnabled = Boolean(enabled);
+  store.set(REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY, remoteControlClickThroughEnabled);
+  applyRemoteControlWindowPresentation(remoteControlWindow);
+  refreshTrayMenu();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('wallpaper-mode-changed', getPublicSettings());
+  }
+  return remoteControlClickThroughEnabled;
+}
+
 function applyMainWindowAlwaysOnTop() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return false;
@@ -2538,6 +2607,12 @@ function refreshTrayMenu() {
         }
       },
     },
+    ...(shouldShowRemoteUnlockTrayItem({ remoteOpen, clickThrough: remoteControlClickThroughEnabled }) ? [{
+      label: locale.trayUnlockRemote,
+      click: () => {
+        setRemoteControlClickThroughEnabled(false);
+      },
+    }] : []),
     { type: 'separator' },
     {
       label: locale.trayDesktopLyricMode,
@@ -2561,6 +2636,13 @@ function refreshTrayMenu() {
       checked: isWallpaperModeEnabled(),
       click: () => {
         const nextEnabled = !isWallpaperModeEnabled();
+        // Entering is a user-initiated switch, so the renderer asks for confirmation first and
+        // then enters through save-settings. Leaving never needs one.
+        if (nextEnabled && requestWallpaperEntryConfirmation({ mainWindow, focusMainWindow, isClickThroughActive: () => mainWindowClickThroughEnabled })) {
+          // The click already flipped the checkbox; nothing is entered until the user confirms.
+          refreshTrayMenu();
+          return;
+        }
         // NOTE: no Electron window calls here. Calling setAlwaysOnTop/setIgnoreMouseEvents
         // on the window right before the entry poisons the upcoming simple-full-screen
         // presentation (measured on-device: the content is presented 33pt low, leaving an
@@ -2833,6 +2915,8 @@ function setupCorsBypassHandlers() {
         hostname === 'y.gtimg.cn' ||
         hostname === 'kugou.com' ||
         hostname.endsWith('.kugou.com') ||
+        // Bodian audio and cover CDNs may omit CORS headers needed by Web Audio and canvas/WebGL.
+        bodianMediaPolicy.allows(details) ||
         hostname === 'amll-ttml-db.stevexmh.net';
     } catch (error) {
       isTargetDomain = false;
@@ -2847,6 +2931,8 @@ function setupCorsBypassHandlers() {
 
     callback({ cancel: false, responseHeaders });
   });
+
+  ses.webRequest.onBeforeRedirect(details => bodianMediaPolicy.followRedirect(details));
 
   ses.webRequest.onErrorOccurred({ urls: ['*://*.kugou.com/*'] }, details => {
     const requestInfo = getKugouMediaRequestInfo(details);
@@ -4693,6 +4779,7 @@ function createRemoteControlWindow() {
     remoteControlWindow.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(remoteControlWindow);
     applyRemoteControlSkipTaskbar(remoteControlWindow);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
     remoteControlWindow.show();
     remoteControlWindow.focus();
     broadcastPlaybackSyncBridgeStatus();
@@ -4739,11 +4826,13 @@ function createRemoteControlWindow() {
     win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
   });
   applyRemoteControlAlwaysOnTop(win);
+  applyRemoteControlMouseIgnore(win, remoteControlClickThroughEnabled);
   loadAppEntry(win, { remote: '1' });
 
   win.once('ready-to-show', () => {
     win.setTitle(REMOTE_CONTROL_WINDOW_TITLE);
     applyRemoteControlAlwaysOnTop(win);
+    applyRemoteControlWindowPresentation(win);
     if (latestRemoteControlSnapshot) {
       sendRemoteControlSnapshot(latestRemoteControlSnapshot);
     }
@@ -5609,9 +5698,12 @@ ipcMain.handle('save-settings', (event, key, value) => {
   }
   if (
     key === MINIMIZE_TO_TRAY_SETTING_KEY ||
+    key === CLOSE_TO_TRAY_SETTING_KEY ||
     key === HIDE_TASKBAR_ICON_SETTING_KEY ||
     key === REMOTE_CONTROL_ALWAYS_ON_TOP_SETTING_KEY ||
     key === REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY ||
+    key === REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY ||
+    key === REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY ||
     key === TRANSPARENT_PLAYER_BACKGROUND_SETTING_KEY ||
     key === DISCORD_RICH_PRESENCE_ENABLED_SETTING_KEY ||
     key === VOICE_INPUT_PAUSE_ENABLED_SETTING_KEY ||
@@ -5779,6 +5871,17 @@ ipcMain.handle('save-settings', (event, key, value) => {
   if (key === REMOTE_CONTROL_SKIP_TASKBAR_SETTING_KEY) {
     remoteControlSkipTaskbarEnabled = Boolean(nextValue);
     applyRemoteControlSkipTaskbar(remoteControlWindow);
+  }
+
+  if (key === REMOTE_CONTROL_HIDE_TITLEBAR_SETTING_KEY) {
+    remoteControlHideTitlebarEnabled = Boolean(nextValue);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
+  }
+
+  if (key === REMOTE_CONTROL_CLICK_THROUGH_SETTING_KEY) {
+    remoteControlClickThroughEnabled = Boolean(nextValue);
+    applyRemoteControlWindowPresentation(remoteControlWindow);
+    refreshTrayMenu();
   }
 
   if (key === STAGE_MODE_SOURCE_SETTING_KEY) {
@@ -6057,6 +6160,12 @@ ipcMain.handle('get-qq-api-status', () => qqApiStatus);
 
 ipcMain.handle('kugou-api-status', () => kugouApiBridge.getStatus());
 ipcMain.handle('kugou-api-request', (_event, operation, params) => kugouApiBridge.request(operation, params));
+ipcMain.handle('bodian-api-request', (event, operation, params) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return { ok: false, error: { code: 'unavailable', message: 'Untrusted Bodian request' } };
+  }
+  return bodianApiBridge.request(operation, params);
+});
 
 ipcMain.handle('window-minimize', () => {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -6118,6 +6227,12 @@ ipcMain.handle('window-close', () => {
   // Closing a wallpaper window is meaningless; exit goes through the wallpaper mode setting.
   if (isWallpaperModeEnabled()) {
     return false;
+  }
+
+  // Only the titlebar X hides to the tray. Alt+F4, the taskbar's Close window, logoff and
+  // app.quit() still emit a real 'close', so there is always a way to actually exit.
+  if (readStoredBoolean(CLOSE_TO_TRAY_SETTING_KEY, false) && appTray) {
+    return hideMainWindow();
   }
 
   mainWindow.close();
@@ -6464,6 +6579,14 @@ ipcMain.handle('remote-control-set-always-on-top', (event, nextAlwaysOnTop) => {
   return remoteControlAlwaysOnTop;
 });
 
+ipcMain.handle('remote-control-get-window-settings', (event) => {
+  if (!isTrustedRemoteControlContents(event.sender) && !isTrustedMainWindowContents(event.sender)) {
+    throw new Error('Untrusted renderer attempted to read remote control window settings.');
+  }
+
+  return buildRemoteControlWindowSettings();
+});
+
 ipcMain.handle('remote-control-publish-snapshot', (event, snapshot) => {
   if (!isTrustedMainWindowContents(event.sender)) {
     throw new Error('Untrusted renderer attempted to publish remote control state.');
@@ -6742,6 +6865,25 @@ ipcMain.handle('generate-theme', async (event, lyricsText, options = {}) => {
   } catch (e) {
     console.error(e);
     throw new Error(e instanceof Error ? e.message : String(e));
+  }
+});
+
+// "Test connection" button in AI settings: sends "hello" using the values currently in the form
+// (not the saved ones, nothing is persisted) over the same fetch/proxy path as real AI requests.
+// Never throws: a failed connection is returned as a displayable result, and the key is not echoed.
+ipcMain.handle('ai-test-connection', async (event, payload) => {
+  if (!isTrustedMainWindowContents(event.sender)) {
+    return { ok: false, durationMs: 0, errorKind: 'invalid', error: 'Untrusted caller.' };
+  }
+  try {
+    const useSystemProxy = payload && typeof payload === 'object' && typeof payload.useSystemProxy === 'boolean'
+      ? payload.useSystemProxy
+      : (store.get('USE_SYSTEM_PROXY_FOR_AI') || false);
+    const customFetch = (url, options) => fetchWithOptionalSystemProxy(url, options, useSystemProxy);
+    return await runAiConnectionTest(payload, { customFetch });
+  } catch (e) {
+    console.error('[ai-test] failed:', e instanceof Error ? e.message : String(e));
+    return { ok: false, durationMs: 0, errorKind: 'network', error: 'Connection test failed unexpectedly.' };
   }
 });
 

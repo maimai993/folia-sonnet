@@ -86,4 +86,16 @@ async function warnIfTargetHasNoBinary(binariesDir, targetPlatform, keptArchitec
   );
 }
 
-exports.default = pruneOnnxRuntimeBinaries;
+exports.default = async (context) => {
+  await pruneOnnxRuntimeBinaries(context);
+  if (context.electronPlatformName === 'darwin') {
+    const { verifyBundledKoffi } = await import('../packaging/macos/prepare-koffi.mjs');
+    await verifyBundledKoffi({
+      resourcesDir: context.packager.getResourcesDir(context.appOutDir),
+      arch: ARCH_NAMES[context.arch],
+      version: JSON.parse(await fs.readFile(
+        path.join(path.dirname(require.resolve('koffi')), 'package.json'), 'utf8',
+      )).version,
+    });
+  }
+};

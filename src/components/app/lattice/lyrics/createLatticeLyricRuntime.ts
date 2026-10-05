@@ -9,6 +9,7 @@ import { createLatticeEdgeFilter } from './latticeLyricFilters';
 import { createLatticeTimeline, stepLatticeSpring } from './latticeLyricTimeline';
 import { createLatticeLyricFrameLoop } from './latticeLyricFrameLoop';
 import type { LatticeLyricInput, LatticeLyricRuntime } from './types';
+import { resolveSingleTrackSubtitleMode } from '../../../../utils/lyrics/alternateText';
 
 // src/components/app/lattice/lyrics/createLatticeLyricRuntime.ts
 interface Track { view: LatticeLineView; y: number; vy: number; scale: number; vs: number;
@@ -80,8 +81,10 @@ function attachRuntime(pixi: typeof import('pixi.js'), app: import('pixi.js').Ap
         for (const entry of entries) {
             let track = tracks.get(entry.key);
             if (!track) {
+                // Lattice draws the translation row inside its own lyric scene, not the shared bottom subtitle, so it
+                // cannot stack two rows yet: the 'both' option falls back to translation only (phase 2 will add a track).
                 const layout = layoutLatticeLine(entry.line, typography, Math.max(1, width - typography.padding * 2), raster.measure,
-                    input.subtitleContentMode === 'romanization');
+                    resolveSingleTrackSubtitleMode(input.subtitleContentMode ?? 'translation') === 'romanization');
                 const view = createLatticeLineView(pixi, raster, stage, entry, layout, typography, input, resolution);
                 track = { view, y: height * 0.46 + (entry.offset >= 0 ? 34 : -34), vy: 0, scale: 0.7, vs: 0,
                     alpha: 0, blur: 5, fromAlpha: 0, fromBlur: 5, elapsed: 0, status: entry.status, offset: entry.offset, leaving: false };

@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     getActiveGridViewCollection,
+    isCollectionPop,
+    notifyCollectionPop,
+    subscribeCollectionPop,
     useCollectionNavigationStore,
 } from '@/stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '@/components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '@/library/core/contracts/collection';
 
 // test/unit/stores/collectionNavigationStore.test.ts
 // 导航栈「不许压一份当前层的副本」这条规则：详情页里的卡片带着自己所属集合的入口
@@ -67,6 +70,15 @@ describe('collection navigation store', () => {
         expect(useCollectionNavigationStore.getState().snapshot?.stack).toHaveLength(3);
     });
 
+    // 两个 provider 下的歌单 id 可以相同；身份不带 provider 时，后一个会被当成「已经在看的那一层」。
+    it('treats the same type and id from another provider as a different collection', () => {
+        useCollectionNavigationStore.getState().openRoot(album('same'), 'home');
+        const fromOtherProvider = { ...album('same'), providerId: 'kugou' } as GridViewCollectionDescriptor;
+
+        expect(useCollectionNavigationStore.getState().push(fromOtherProvider)?.stack).toHaveLength(2);
+        expect(useCollectionNavigationStore.getState().push({ ...fromOtherProvider })).toBeNull();
+    });
+
     // 有意只拦「当前这一层」：跳到栈里更早访问过的专辑仍然算一次正常导航，
     // 把它改成「弹回那一层」会连带丢掉中间层级，是另一件事。
     it('still allows navigating to a collection that sits deeper in the stack', () => {
@@ -78,5 +90,47 @@ describe('collection navigation store', () => {
 
     it('does nothing without an open root', () => {
         expect(useCollectionNavigationStore.getState().push(album('a1'))).toBeNull();
+    });
+});
+
+// P4.5：弹栈通知。浏览器后退（popstate）直接恢复历史里的栈、不经过集合宿主；宿主靠这个通知在 store 变化之前
+// 让 suite 跑 beforeBack。只有真正的弹栈才通知：压栈、换成别的集合、只换视图都不算。
+describe('collection pop notification', () => {
+    beforeEach(() => {
+        useCollectionNavigationStore.setState({ snapshot: null });
+    });
+
+    it('recognises a pop: closing, or the same root with fewer of the same layers', () => {
+        const from = { origin: 'home' as const, stack: [album(1), artist(2)] };
+        expect(isCollectionPop(from, null)).toBe(true);
+        expect(isCollectionPop(from, { origin: 'home', stack: [album(1)] })).toBe(true);
+        expect(isCollectionPop(from, { origin: 'home', stack: [album(1), artist(2), album(3)] })).toBe(false);
+        expect(isCollectionPop(from, { origin: 'home', stack: [album(9)] })).toBe(false);
+        expect(isCollectionPop(from, { origin: 'search', stack: [album(1)] })).toBe(false);
+        expect(isCollectionPop(from, from)).toBe(false);
+        expect(isCollectionPop(null, null)).toBe(false);
+    });
+
+    it('notifies with the snapshot before the store changes, and only for pops', () => {
+        const store = useCollectionNavigationStore.getState();
+        store.openRoot(album(1), 'home');
+        store.push(artist(2));
+        const before = useCollectionNavigationStore.getState().snapshot!;
+        const seen = vi.fn((from: unknown) => {
+            // 监听者运行时 store 还是弹栈前的样子。
+            expect(useCollectionNavigationStore.getState().snapshot).toBe(from);
+        });
+        const unsubscribe = subscribeCollectionPop(seen);
+
+        notifyCollectionPop({ ...before, stack: [...before.stack, album(3)] });
+        expect(seen).not.toHaveBeenCalled();
+        const next = { ...before, stack: [album(1)] };
+        notifyCollectionPop(next);
+        expect(seen).toHaveBeenCalledTimes(1);
+        expect(seen).toHaveBeenCalledWith(before, next);
+
+        unsubscribe();
+        notifyCollectionPop(null);
+        expect(seen).toHaveBeenCalledTimes(1);
     });
 });

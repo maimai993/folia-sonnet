@@ -73,6 +73,92 @@ const isDeviceVerificationRequired = (body: any): boolean => {
     return errorCode === 20028 || message.includes('本次请求需要验证');
 };
 
+// HTTP-like statuses that unambiguously mean the account session is no longer accepted.
+const KUGOU_AUTH_FAILURE_STATUSES: ReadonlySet<number> = new Set([401, 403]);
+
+// docs/ku-go-api-docs.md: an authenticated request without valid cookie credentials fails with error_code 152.
+// KuGouMusicApi reports every other upstream failure (including plain network errors) as status 502 with
+// no stable login-expired code, so anything outside this set must not be treated as a logout signal.
+const KUGOU_AUTH_FAILURE_ERROR_CODES: ReadonlySet<number> = new Set([152]);
+
+const BRIDGE_ERROR_PREFIX = /^Error invoking remote method '[^']*':\s*(?:\w*Error:\s*)?/;
+const BRIDGE_FIELDS = /KuGouApi\[([^\]]*)\](?::\s*(.*))?/;
+
+export type KugouFailureDetails = {
+    operation?: string;
+    status?: number;
+    errorCode?: number;
+    detail?: string;
+};
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+/**
+ * Reads operation/status/error_code from whatever an Electron `kugouRequest` rejection looks like:
+ * the bridge's `KuGouApi[operation=.. status=.. error_code=..]` error message (the only part of an
+ * Error that survives IPC), or a raw `{ status, body }` answer object from an unpatched main process.
+ */
+export const extractKugouFailureDetails = (error: unknown): KugouFailureDetails => {
+    if (error && typeof error === 'object' && !(error instanceof Error)) {
+        const answer = error as { status?: unknown; body?: { error_code?: unknown; errcode?: unknown } | null };
+        return {
+            status: toFiniteNumber(answer.status),
+            errorCode: toFiniteNumber(answer.body?.error_code ?? answer.body?.errcode),
+        };
+    }
+
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    const match = BRIDGE_FIELDS.exec(message);
+    if (!match) {
+        const detail = message.replace(BRIDGE_ERROR_PREFIX, '').trim();
+        return { detail: detail && detail !== '[object Object]' ? detail : undefined };
+    }
+    const fields = new Map(
+        match[1].split(/\s+/).filter(Boolean).map(entry => {
+            const separator = entry.indexOf('=');
+            return [entry.slice(0, separator), entry.slice(separator + 1)] as const;
+        }),
+    );
+    return {
+        operation: fields.get('operation'),
+        status: toFiniteNumber(fields.get('status')),
+        errorCode: toFiniteNumber(fields.get('error_code')),
+        detail: match[2]?.trim() || undefined,
+    };
+};
+
+/** Whether a KuGou failure means the session is really rejected, as opposed to a transient/unknown error. */
+export const isKugouAuthFailure = (details: Pick<KugouFailureDetails, 'status' | 'errorCode'>): boolean => (
+    (details.status !== undefined && KUGOU_AUTH_FAILURE_STATUSES.has(details.status))
+    || (details.errorCode !== undefined && KUGOU_AUTH_FAILURE_ERROR_CODES.has(details.errorCode))
+);
+
+/**
+ * Wraps an Electron IPC rejection into an OnlineProviderError so callers can tell a rejected login
+ * (`auth-required`) from everything else (`network`) instead of seeing "[object Object]".
+ */
+export const toKugouProviderError = (operation: KugouOperation, error: unknown): OnlineProviderError => {
+    if (error instanceof OnlineProviderError) return error;
+    const details = extractKugouFailureDetails(error);
+    const summary = [
+        `operation=${details.operation ?? operation}`,
+        details.status !== undefined ? `status=${details.status}` : '',
+        details.errorCode !== undefined ? `error_code=${details.errorCode}` : '',
+    ].filter(Boolean).join(' ');
+    const suffix = details.detail ? `: ${details.detail}` : '';
+    const authFailure = isKugouAuthFailure(details);
+    return new OnlineProviderError(
+        authFailure ? 'auth-required' : 'network',
+        `${authFailure ? 'KuGou login required' : 'KuGou request failed'} (${summary})${suffix}`,
+        'kugou',
+        error,
+    );
+};
+
 const getWebSessionCookie = (): string => {
     const values = new Map<string, string>();
     const storedCookie = readProviderSessionValue('kugou', 'cookie');
@@ -273,7 +359,12 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
         const electronParams = Object.fromEntries(
             Object.entries(params).filter(([key]) => !['token', 'dfid', 'cookie'].includes(key.toLowerCase())),
         );
-        const response = await window.electron.kugouRequest(operation, electronParams);
+        let response: unknown;
+        try {
+            response = await window.electron.kugouRequest(operation, electronParams);
+        } catch (error) {
+            throw toKugouProviderError(operation, error);
+        }
         persistElectronAccountHint(operation, response);
         return response as T;
     }
@@ -293,7 +384,11 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
 
         const response = await fetch(`${base}${ENDPOINTS[targetOperation]}?${query}`, { credentials: 'include' });
         if (!response.ok) {
-            throw new OnlineProviderError('network', `KuGouMusicApi request failed: ${response.status}`, 'kugou');
+            throw new OnlineProviderError(
+                KUGOU_AUTH_FAILURE_STATUSES.has(response.status) ? 'auth-required' : 'network',
+                `KuGouMusicApi request failed: ${response.status}`,
+                'kugou',
+            );
         }
         const responseBody = await response.json();
         persistWebSession(responseBody);

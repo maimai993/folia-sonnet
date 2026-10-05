@@ -6,8 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 // honours that as real fp16 - which overflows NoiseFilter's `dot(gl_FragCoord.xy * uSeed, ...)`
 // to NaN and paints a black wedge across the frame. Guard the flip so it cannot be dropped.
 const glProgram = { defaultOptions: {} as { preferredFragmentPrecision?: string } };
+const installCompat = vi.fn();
 
 vi.mock('pixi.js', () => ({ GlProgram: glProgram }));
+vi.mock('@/components/visualizer/pixiFilterPoolCompat', () => ({ installPixiFilterPoolCompat: installCompat }));
 
 describe('loadPixi', () => {
     it('raises the fragment shader precision default to highp', async () => {
@@ -19,5 +21,6 @@ describe('loadPixi', () => {
 
         expect(glProgram.defaultOptions.preferredFragmentPrecision).toBe('highp');
         expect(pixi.GlProgram).toBe(glProgram);
+        expect(installCompat).toHaveBeenCalledWith(pixi);
     });
 });

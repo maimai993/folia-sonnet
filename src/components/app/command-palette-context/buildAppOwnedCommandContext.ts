@@ -8,6 +8,7 @@ import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { usePersonalFmModeStore } from '../../../stores/usePersonalFmModeStore';
 import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 import { openAddToPlaylist, useAddToPlaylistStore } from '../../../stores/useAddToPlaylistStore';
+import { useInteractionSettingsStore } from '../../../stores/useInteractionSettingsStore';
 
 // src/components/app/command-palette-context/buildAppOwnedCommandContext.ts
 // The four namespaces whose state genuinely still lives in App.tsx: shared, playback, navigation
@@ -55,8 +56,11 @@ export const buildPlaybackCommandContext = (
     deps: PlaybackCommandContextDeps,
 ): CommandPaletteContext['playback'] => {
     const audio = useAudioSettingsStore.getState();
+    const interaction = useInteractionSettingsStore.getState();
     return {
         ...deps,
+        queuePaletteKeepOpen: interaction.queuePaletteKeepOpen,
+        setQueuePaletteKeepOpen: interaction.setQueuePaletteKeepOpen,
         // Queue selection follows the surface that owns playback at execution time.
         playSong: (song, queue) => deps.playSong(song, queue, false, {
             shouldNavigateToPlayer: useAppViewStore.getState().view !== 'lattice',

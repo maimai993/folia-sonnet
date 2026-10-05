@@ -182,21 +182,12 @@ const LyricSegmentationSurfaceView: React.FC<LyricSegmentationSurfaceViewProps> 
                 ? t(
                     `lyricSegmentation.importError.${importError.message}`,
                     importError.row ? `Line ${importError.row} does not match the lyrics` : 'Could not read that segmentation',
-                )
+                ).replace('{{row}}', String(importError.row ?? ''))
                 : String(importError));
         } finally {
             if (isMountedRef.current) setIsImporting(false);
         }
     };
-
-    if (!lyrics || segmentableLines.length === 0) {
-        return (
-            <div className="flex h-full flex-col items-center justify-center gap-2 opacity-50">
-                <WholeWord size={26} />
-                <div className="text-sm">{t('lyricSegmentation.noLyrics', 'No lyrics to segment')}</div>
-            </div>
-        );
-    }
 
     // One implementation behind both the buttons here and the palette input's flags/paste. Kept in
     // a ref-free effect so a re-render never leaves a stale closure registered.
@@ -213,12 +204,27 @@ const LyricSegmentationSurfaceView: React.FC<LyricSegmentationSurfaceViewProps> 
 
     const handleRef = useRef({ runAi, copyPrompt, copySegmentation, importText: runImport });
     handleRef.current = { runAi, copyPrompt, copySegmentation, importText: runImport };
-    useEffect(() => registerLyricSegmentationHandle({
-        runAi: () => handleRef.current.runAi(),
-        copyPrompt: () => { void handleRef.current.copyPrompt(); },
-        copySegmentation: () => { void handleRef.current.copySegmentation(); },
-        importText: (text: string) => { void handleRef.current.importText(text); },
-    }), []);
+    const hasSegmentableLyrics = segmentableLines.length > 0;
+    useEffect(() => {
+        // Before lyrics arrive, leave paste events to the input so their content is not swallowed.
+        if (!hasSegmentableLyrics) return;
+        return registerLyricSegmentationHandle({
+            runAi: () => handleRef.current.runAi(),
+            copyPrompt: () => { void handleRef.current.copyPrompt(); },
+            copySegmentation: () => { void handleRef.current.copySegmentation(); },
+            importText: (text: string) => { void handleRef.current.importText(text); },
+        });
+    }, [hasSegmentableLyrics]);
+
+    // All hooks also run in the empty state: lyrics can arrive after this surface mounts.
+    if (!lyrics || segmentableLines.length === 0) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center gap-2 opacity-50">
+                <WholeWord size={26} />
+                <div className="text-sm">{t('lyricSegmentation.noLyrics', 'No lyrics to segment')}</div>
+            </div>
+        );
+    }
 
     const statusText = record
         ? `${t(
@@ -247,7 +253,7 @@ const LyricSegmentationSurfaceView: React.FC<LyricSegmentationSurfaceViewProps> 
             />
 
             {error && (
-                <div className="shrink-0 rounded-lg bg-red-500/15 px-2 py-1.5 text-[11px] text-red-400">{error}</div>
+                <div role="alert" className="shrink-0 rounded-lg bg-red-500/15 px-2 py-1.5 text-[11px] text-red-400">{error}</div>
             )}
 
             {/* The one scroll region. Its height comes from flex against the palette's fixed body,

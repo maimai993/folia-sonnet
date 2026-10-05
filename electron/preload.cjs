@@ -82,6 +82,11 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.on('wallpaper-transparent-refused', listener);
         return () => ipcRenderer.removeListener('wallpaper-transparent-refused', listener);
     },
+    onWallpaperEntryRequested: (callback) => {
+        const listener = () => callback();
+        ipcRenderer.on('wallpaper-entry-requested', listener);
+        return () => ipcRenderer.removeListener('wallpaper-entry-requested', listener);
+    },
     onWallpaperInputMonitorRequested: (callback) => {
         const listener = () => callback();
         ipcRenderer.on('wallpaper-input-monitor-requested', listener);
@@ -123,6 +128,7 @@ contextBridge.exposeInMainWorld('electron', {
     clearLocalCoverAssets: () => ipcRenderer.invoke('clear-local-cover-assets'),
     generateTheme: (lyricsText, options) => ipcRenderer.invoke('generate-theme', lyricsText, options),
     segmentLyrics: (lines) => ipcRenderer.invoke('segment-lyrics', lines),
+    testAiConnection: (settings) => ipcRenderer.invoke('ai-test-connection', settings),
     fetchLyricProxy: (url, init) => ipcRenderer.invoke('lyric-proxy-fetch', url, init),
     getNeteasePort: () => ipcRenderer.invoke('get-netease-port'),
     getNeteaseApiStatus: () => ipcRenderer.invoke('get-netease-api-status'),
@@ -135,6 +141,7 @@ contextBridge.exposeInMainWorld('electron', {
     },
     getKugouApiStatus: () => ipcRenderer.invoke('kugou-api-status'),
     kugouRequest: (operation, params) => ipcRenderer.invoke('kugou-api-request', operation, params),
+    bodianRequest: (operation, params) => ipcRenderer.invoke('bodian-api-request', operation, params),
     getQqPort: () => ipcRenderer.invoke('get-qq-port'),
     getQqApiStatus: () => ipcRenderer.invoke('get-qq-api-status'),
     onQqApiStatusChanged: (callback) => {
@@ -223,6 +230,12 @@ contextBridge.exposeInMainWorld('electron', {
     closeRemoteControl: () => ipcRenderer.invoke('remote-control-close'),
     getRemoteControlAlwaysOnTop: () => ipcRenderer.invoke('remote-control-get-always-on-top'),
     setRemoteControlAlwaysOnTop: (alwaysOnTop) => ipcRenderer.invoke('remote-control-set-always-on-top', alwaysOnTop),
+    getRemoteControlWindowSettings: () => ipcRenderer.invoke('remote-control-get-window-settings'),
+    onRemoteControlWindowSettingsChanged: (callback) => {
+        const listener = (_event, settings) => callback(settings);
+        ipcRenderer.on('remote-control-window-settings-changed', listener);
+        return () => ipcRenderer.removeListener('remote-control-window-settings-changed', listener);
+    },
     publishRemoteControlSnapshot: (snapshot) => ipcRenderer.invoke('remote-control-publish-snapshot', snapshot),
     getRemoteControlSnapshot: () => ipcRenderer.invoke('remote-control-get-snapshot'),
     sendRemoteControlCommand: (command) => ipcRenderer.invoke('remote-control-send-command', command),

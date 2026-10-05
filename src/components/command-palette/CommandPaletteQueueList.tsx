@@ -41,6 +41,7 @@ const CommandPaletteQueueList: React.FC<CommandPaletteQueueListProps> = ({
 }) => {
     const { t } = useTranslation();
     const listRef = useListRef(null);
+    const hasPositionedRef = React.useRef(false);
     const currentSongKey = currentSong ? getPlaybackSongKey(currentSong) : null;
     const currentMatchIndex = React.useMemo(() => {
         if (!currentSong) {
@@ -66,20 +67,22 @@ const CommandPaletteQueueList: React.FC<CommandPaletteQueueListProps> = ({
 
         // Wait for react-window to measure its percentage-height viewport before positioning.
         const frame = window.requestAnimationFrame(() => {
-            const listApi = listRef.current;
-            const viewportHeight = listApi?.element?.clientHeight || ROW_HEIGHT * DEFAULT_VISIBLE_ROWS;
+            const element = listRef.current?.element;
+            if (!element) {
+                return;
+            }
+            const viewportHeight = element.clientHeight || ROW_HEIGHT * DEFAULT_VISIBLE_ROWS;
             const visibleRowCount = Math.max(1, Math.floor(viewportHeight / ROW_HEIGHT));
             const rowsAboveCurrent = Math.floor((visibleRowCount - 1) / 2);
             const topRowIndex = Math.max(0, currentMatchIndex - rowsAboveCurrent);
-            listApi?.scrollToRow({ index: topRowIndex, align: 'start', behavior: 'instant' });
-
-            const element = listApi?.element;
-            if (element) {
-                const alignedScrollTop = Math.floor(element.scrollTop / ROW_HEIGHT) * ROW_HEIGHT;
-                if (alignedScrollTop !== element.scrollTop) {
-                    element.scrollTo({ top: alignedScrollTop, behavior: 'instant' });
-                }
-            }
+            // Align the destination before scrolling so a correction cannot interrupt the animation.
+            const maxScrollTop = Math.max(0, element.scrollHeight - viewportHeight);
+            const targetScrollTop = Math.floor(Math.min(topRowIndex * ROW_HEIGHT, maxScrollTop) / ROW_HEIGHT) * ROW_HEIGHT;
+            element.scrollTo({
+                top: targetScrollTop,
+                behavior: hasPositionedRef.current ? 'smooth' : 'instant',
+            });
+            hasPositionedRef.current = true;
         });
         return () => window.cancelAnimationFrame(frame);
     }, [currentMatchIndex, listRef, onActiveIndexChange, query]);
@@ -88,8 +91,12 @@ const CommandPaletteQueueList: React.FC<CommandPaletteQueueListProps> = ({
         if (activeIndex < 0 || activeIndex >= matches.length) {
             return;
         }
+        // The playing row is already being centered; smart scrolling would cancel that animation.
+        if (!query && activeIndex === currentMatchIndex) {
+            return;
+        }
         listRef.current?.scrollToRow({ index: activeIndex, align: 'smart', behavior: 'auto' });
-    }, [activeIndex, listRef, matches.length]);
+    }, [activeIndex, currentMatchIndex, listRef, matches.length, query]);
 
     const rowProps = React.useMemo<CommandPaletteQueueRowProps>(() => ({
         activeIndex,

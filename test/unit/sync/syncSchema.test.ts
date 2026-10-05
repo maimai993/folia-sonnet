@@ -62,6 +62,17 @@ describe('sync schema parsing', () => {
         });
     });
 
+    it('accepts the dual-row subtitle content mode and rejects unknown ones', () => {
+        const parse = (subtitleContentMode: string) => parseSyncedSettingsRecord({
+            schemaVersion: 1,
+            updatedAt: '2026-07-08T00:00:00.000Z',
+            data: { subtitleContentMode },
+        })?.data.subtitleContentMode;
+
+        expect(parse('both')).toBe('both');
+        expect(parse('triple')).toBeUndefined();
+    });
+
     it('migrates the deprecated carousel home layout to grid', () => {
         const record = parseSyncedSettingsRecord({
             schemaVersion: 1,

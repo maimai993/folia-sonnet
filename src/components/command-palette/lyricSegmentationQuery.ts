@@ -37,15 +37,15 @@ export const parseLyricSegmentationQuery = (input: string): ParsedLyricSegmentat
 };
 
 /**
- * Whether pasted text is plausibly a segmentation rather than something the user meant to type.
+ * Whether pasted text should be imported rather than entered as a command flag.
  *
  * The palette input is shared with the flags above, so a paste has to be told apart from ordinary
- * typing before it is treated as an import. All three exchange shapes are recognisable on sight:
- * the JSON array starts with `[`, and the delimiter format is either multi-line or contains the
- * separator. Anything else is left to paste as plain text.
+ * typing before it is treated as an import. Any nonempty paste other than a single-line flag is
+ * sent to the parser, so malformed JSON and unrecognised model responses get visible feedback
+ * instead of silently sitting in a single-line input with their line breaks flattened.
  */
 export const looksLikeSegmentationPaste = (text: string, delimiter: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed) return false;
-    return trimmed.startsWith('[') || /[\r\n]/.test(trimmed) || trimmed.includes(delimiter);
+    return !trimmed.startsWith('--') || /[\r\n]/.test(trimmed) || trimmed.includes(delimiter);
 };

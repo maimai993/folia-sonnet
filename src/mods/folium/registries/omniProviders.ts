@@ -5,16 +5,18 @@ import {
     registerOnlineMusicProvider,
     unregisterOnlineMusicProvider,
 } from '@/services/onlineMusic/providerRegistry';
-import { parseLRC } from '@/utils/lyrics/parserCore';
 import type { FoliumOmniProviderDef, FoliumProviderSong } from '../contract';
+import { resolveFoliumLyricsResult } from '../lyricsSource';
 import { createFoliumRegistry } from '../registry';
 
 // src/mods/folium/registries/omniProviders.ts
 // EXPERIMENTAL `omni.providers`: a mod's online music source, adapted to the
 // host OnlineMusicProvider contract so Omni routes to it like to any built-in
-// provider (search, playback, lyrics; nothing account-related). Host provider
-// id is `folium.<modid>.<name>`: dots, because ':' already carries meaning in
-// other host ids, and a dot can never collide with a built-in provider id.
+// provider (search, playback, lyrics; nothing account-related). The lyrics
+// answer is the stable Folium 1.4 shape (lyricsSource.ts), even though this
+// registry itself is not. Host provider id is `folium.<modid>.<name>`: dots,
+// because ':' already carries meaning in other host ids, and a dot can never
+// collide with a built-in provider id.
 //
 // Songs keep the mod's own id as `sourceRef.mediaId`, so queues and history
 // that outlive the mod still name the song; they become unplayable, not
@@ -59,7 +61,8 @@ const buildProvider = (providerId: string, def: FoliumOmniProviderDef): OnlineMu
         artists: false,
         recommendations: false,
         mutations: false,
-        wordByWordLyrics: false,
+        // Folium 1.4 tracks can be word-timed. Declarative only: nothing in the host reads this flag.
+        wordByWordLyrics: typeof def.getLyrics === 'function',
     };
     return {
         id: providerId,
@@ -106,18 +109,7 @@ const buildProvider = (providerId: string, def: FoliumOmniProviderDef): OnlineMu
         } : {}),
         ...(capabilities.lyrics ? {
             lyrics: {
-                getLyrics: async (song) => {
-                    const result = await def.getLyrics!(toProviderSong(song));
-                    if (!result || typeof result.lrc !== 'string' || !result.lrc.trim()) {
-                        return { lyrics: null, isPureMusic: false };
-                    }
-                    return {
-                        lyrics: parseLRC(result.lrc, result.translationLrc ?? ''),
-                        mainText: result.lrc,
-                        translationText: result.translationLrc ?? null,
-                        isPureMusic: false,
-                    };
-                },
+                getLyrics: async (song) => resolveFoliumLyricsResult(await def.getLyrics!(toProviderSong(song)), providerId),
             },
         } : {}),
     };

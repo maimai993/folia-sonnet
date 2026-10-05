@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'module';
+import { FOLIUM_VERSION as CLIENT_FOLIUM_VERSION } from '@/mods/folium/contract';
 
 // test/unit/mod-system/manifest.test.ts
 // Focused unit coverage for the pure manifest validation and dependency
@@ -13,6 +14,7 @@ const {
     satisfiesRange,
     satisfiesHostRange,
     parseDependency,
+    FOLIUM_VERSION,
 } = require('../../../electron/modSystem/manifest.cjs');
 
 const validManifest = {
@@ -325,5 +327,13 @@ describe('resolveLoadPlan', () => {
         expect(plan.failures.has('leaf')).toBe(true);
         expect(plan.failures.has('middle')).toBe(true);
         expect(plan.failures.has('unrelated')).toBe(false);
+    });
+});
+
+describe('FOLIUM_VERSION', () => {
+    // The main process (api.host) and the client contract (folium.host) each declare the version; a mod
+    // probing for a feature must read the same minor from both entries.
+    it('matches the client contract', () => {
+        expect(FOLIUM_VERSION).toEqual(CLIENT_FOLIUM_VERSION);
     });
 });

@@ -26,7 +26,7 @@ const runBatch = (evaluation: QueueSearchEvaluation, context: CommandPaletteCont
     return didExecute;
 };
 
-const buildViewProps = ({ context, query, matches, activeIndex, setActiveIndex, setQuery, isDaylight, isExecuting, executeMatch, close }: CommandSurfaceRenderArgs) => {
+const buildViewProps = ({ context, query, matches, activeIndex, setActiveIndex, setQuery, isDaylight, theme, isExecuting, executeMatch, close }: CommandSurfaceRenderArgs) => {
     const evaluation = evaluateQueueForPalette(context, query);
     return {
         activeIndex,
@@ -34,6 +34,8 @@ const buildViewProps = ({ context, query, matches, activeIndex, setActiveIndex, 
         evaluation,
         isDaylight,
         isExecuting,
+        accentColor: theme.accentColor,
+        keepOpenOnSongChange: context.playback.queuePaletteKeepOpen,
         matches,
         query,
         onAcceptSuggestion: (suggestion: QueueSearchSuggestion) => acceptSuggestion(suggestion, setQuery),
@@ -42,6 +44,7 @@ const buildViewProps = ({ context, query, matches, activeIndex, setActiveIndex, 
         onClearFacet: () => setQuery(replaceQueueFacet(query, null)),
         onExecuteBatch: async () => runBatch(evaluation, context, close),
         onExecuteMatch: executeMatch,
+        onKeepOpenOnSongChange: context.playback.setQueuePaletteKeepOpen,
         onMoveSongToEnd: context.playback.moveQueueSongToEnd,
         onMoveSongToNext: context.playback.moveQueueSongToNext,
         onRemoveSong: context.playback.removeQueueSong,

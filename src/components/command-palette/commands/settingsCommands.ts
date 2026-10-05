@@ -152,6 +152,15 @@ export const settingsCommands: CommandPaletteCommand[] = [
     },
     createSettingsAnchorCommand('settings-discord-presence', 'Discord playback status', 'Open Discord Rich Presence settings', ['discord', 'rich presence', 'discord presence', 'playing status', '播放状态', 'discord状态', 'discordzhuangtai', 'dc'], 'discordRichPresence'),
     createSettingsAnchorCommand('settings-obs-browser-source', 'OBS browser source', 'Open OBS browser source settings', ['obs', 'browser source', 'live source', '直播源', '浏览器源'], 'obsBrowserSource'),
+    createToggleCommand(
+        'obs-toggle-keep-main-window-animation',
+        'settings',
+        'OBS: keep main window animation',
+        'Toggle whether the main window keeps its animation while OBS is connected',
+        ['obs keep animation', 'obs main window', 'browser source animation', 'obs 保持动画', 'obs 主窗口动画', '浏览器源主窗口动画', 'obs bcdh', 'obszckdh'],
+        context => context.settings.toggleObsKeepMainWindowAnimation(),
+        { platform: ['electron'] },
+    ),
     {
         id: 'desktop-toggle-lyric-api',
         platform: ['electron'],
@@ -300,6 +309,37 @@ export const settingsCommands: CommandPaletteCommand[] = [
         keywords: ['dock autohide', 'dock auto-hide', 'auto-hide the dock', 'hide the dock', '自动隐藏Dock', 'Dock自动隐藏', '隐藏Dock'],
         execute: (_input, context) => {
             context.settings.toggleWallpaperMacAutohideDock();
+            return true;
+        },
+    },
+    createToggleCommand(
+        'desktop-toggle-close-to-tray',
+        'settings',
+        'Close window to tray',
+        'Keep the app running in the tray when the main window is closed',
+        ['close to tray', 'hide on close', 'minimize on close', 'tray on close', 'quit on close', '关闭到托盘', '关闭窗口隐藏到托盘', '关闭按钮', '退出到托盘'],
+        context => context.settings.toggleCloseToTray(),
+        { platform: ['electron'] },
+    ),
+    createToggleCommand(
+        'desktop-toggle-remote-control-hide-titlebar',
+        'settings',
+        'Remote control: hide top floating bar',
+        'Toggle the remote control window top floating window-control bar',
+        ['remote control titlebar', 'remote window titlebar', 'hide remote titlebar', '遥控窗口悬浮栏', '隐藏遥控悬浮栏', '隐藏顶部悬浮栏'],
+        context => context.settings.toggleHideRemoteControlTitlebar(),
+        { platform: ['electron'] },
+    ),
+    {
+        // Pairs with the remote control click-through switch: while the window ignores the mouse this is the way back in.
+        id: 'desktop-unlock-remote-control',
+        platform: ['electron'],
+        group: 'settings',
+        title: 'Unlock remote control window',
+        description: 'Turn off remote control click-through so the window can be used and moved again',
+        keywords: ['unlock remote control', 'remote click through', 'remote window click-through', '解锁远程控制', '解锁遥控窗口', '遥控窗口点击穿透', '取消点击穿透'],
+        execute: (_input, context) => {
+            context.settings.unlockRemoteControl();
             return true;
         },
     },
@@ -542,6 +582,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-cursor-auto-hide', 'settings', 'Hide cursor with player controls', 'Toggle whether the mouse pointer disappears together with the auto-hidden player controls', ['cursor', 'mouse pointer', 'hide cursor', 'hide mouse', 'pointer', '鼠标', '鼠标指针', '隐藏鼠标', '隐藏指针', '指针自动隐藏'], context => context.settings.toggleAutoHideCursorWithPlayerChrome()),
     createToggleCommand('settings-toggle-auto-play-on-launch', 'settings', 'Auto-play on launch', 'Toggle whether opening the app resumes the last session by itself', ['autoplay', 'auto play', 'resume on open', 'play on startup', '自动播放', '启动自动播放', '进入应用自动播放', '续播'], context => context.settings.toggleAutoPlayOnLaunch()),
     createToggleCommand('settings-toggle-transcode-fallback', 'settings', 'Transcode unsupported audio', 'Toggle Electron recovery for local and Navidrome audio Chromium cannot decode', ['ffmpeg', 'unsupported audio', 'decode fallback', '无法解码', '转码恢复'], context => context.settings.toggleTranscodeFallback(), { platform: ['electron'] }),
+    createToggleCommand('settings-toggle-playback-fade', 'settings', 'Fade on pause and resume', 'Toggle the short fade when pausing and resuming playback', ['fade', 'fade in', 'fade out', 'pause fade', 'smooth pause', 'crossfade pause', '淡入淡出', '暂停淡出', '播放淡入', '渐入渐出'], context => context.settings.togglePlaybackFade()),
     createToggleCommand('settings-toggle-bottom-subtitle-overlay', 'settings', 'Toggle bottom subtitle overlay', 'Show or hide the whole bottom subtitle overlay', [
             'bottom subtitle overlay',
             'subtitle overlay',
@@ -557,7 +598,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '显示底部字幕',
             'zimu ceng',
         ], context => context.settings.toggleBottomSubtitleOverlay()),
-    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Switch between translation and romanization subtitle modes', [
+    createToggleCommand('settings-cycle-subtitle-content-mode', 'settings', 'Cycle subtitle content mode', 'Cycle subtitle content between translation, romanization, and romanization plus translation', [
             'subtitle translation',
             'translation subtitle',
             'show subtitle translation',
@@ -566,6 +607,8 @@ export const settingsCommands: CommandPaletteCommand[] = [
             'subtitle romanization',
             'romanized lyrics',
             'romaji',
+            'dual subtitle',
+            'bilingual subtitle',
             '字幕翻译',
             '显示翻译',
             '翻译字幕',
@@ -573,6 +616,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
             '切换翻译字幕',
             '罗马音',
             '罗马字',
+            '双行字幕',
             '副字幕',
         ], context => context.settings.cycleSubtitleContentMode()),
     createToggleCommand('settings-toggle-subtitle-background', 'settings', 'Toggle subtitle background', 'Show or hide the readability background behind visualizer subtitles', [

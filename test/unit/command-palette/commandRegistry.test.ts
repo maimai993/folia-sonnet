@@ -15,7 +15,7 @@ type CommandPaletteContextOverrides = {
 const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandPaletteContext => {
     const base: CommandPaletteContext = {
         // The palette's original and still most common surface; the home cases say so explicitly.
-        scope: { view: 'player', filter: null, grid: null },
+        scope: { view: 'player', filter: null, grid: null, directory: null, artist: null },
         shared: {
             t: (_key: string, fallback?: string) => fallback ?? '',
             setStatusMsg: vi.fn(),
@@ -49,6 +49,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             next: vi.fn(),
             prev: vi.fn(),
             queue: [],
+            queuePaletteKeepOpen: false,
+            setQueuePaletteKeepOpen: vi.fn(),
             playSong: vi.fn(),
             shuffleQueue: vi.fn(),
             clearQueue: vi.fn(),
@@ -117,6 +119,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleAlwaysShowTrackSwitchButtons: vi.fn(),
             toggleAutoPlayOnLaunch: vi.fn(),
             toggleTranscodeFallback: vi.fn(),
+            togglePlaybackFade: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
             toggleHideFullscreenButton: vi.fn(),
             toggleNativeMacFullscreenButton: vi.fn(),
@@ -130,6 +133,10 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleVoiceInputPause: vi.fn(),
             togglePreventDisplaySleepDuringPlayback: vi.fn(),
             toggleWallpaperMode: vi.fn(),
+            toggleCloseToTray: vi.fn(),
+            toggleHideRemoteControlTitlebar: vi.fn(),
+            unlockRemoteControl: vi.fn(),
+            toggleObsKeepMainWindowAnimation: vi.fn(),
             toggleWallpaperMacAutohideDock: vi.fn(),
             sleepTimerEnabled: false,
             setSleepTimerEnabled: vi.fn(),

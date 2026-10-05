@@ -100,6 +100,8 @@ export interface LumiereSceneTuning {
     frontBokeh: boolean;
     /** 所有换位都让字沿曲线飞、带径迹（默认只有纵横交错或横竖切换时飞）。 */
     trails: boolean;
+    /** 隐藏歌词径迹，字的飞行仍照常；每帧从共享 tuning 现读。 */
+    hideTrails: boolean;
     /** 画框装饰（取景器的四角、刻度与对位十字）。 */
     overlayFrame: boolean;
     /**
@@ -132,6 +134,7 @@ export const DEFAULT_LUMIERE_SCENE_TUNING: LumiereSceneTuning = {
     frontBokeh: true,
     overlayFrame: true,
     trails: false,
+    hideTrails: false,
     textOnly: false,
     keywordColors: true,
     themeIcons: true,
