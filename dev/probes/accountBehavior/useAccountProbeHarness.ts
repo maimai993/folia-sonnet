@@ -173,11 +173,6 @@ const LOGOUTS: Partial<Record<OnlineProviderId, () => Promise<void>>> = Object.f
     AUTH_PROVIDER_IDS.map(providerId => [providerId, () => logoutProbeAccount(providerId)]),
 );
 
-/** App 传给 UnifiedPanel → AccountTab 的 onLogout：网易的宿主登出。 */
-export const probeNeteaseLogout = (): void => {
-    void logoutProbeAccount(ACCOUNT_NETEASE);
-};
-
 const INITIAL_LOCAL_STATE: HomeLocalMusicState = {
     activeRow: 0,
     selectedGroup: null,

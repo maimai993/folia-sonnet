@@ -2219,7 +2219,7 @@ export default function App() {
         moveQueueSongToNext,
         saveCurrentQueueAsLocalPlaylist,
         user,
-        handleLogout,
+        accountController,
         cacheSize,
         handleClearCache,
         handleSyncData: handleActiveProviderSyncData,

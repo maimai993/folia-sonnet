@@ -491,9 +491,9 @@ test.describe('account tab', () => {
         await expect.poll(() => accountStatus(page, ACCOUNT_ALPHA)).toBe('anonymous');
     });
 
-    // 现状缺陷：AccountTab 的非网易登出直接 omni.logout + clearAccount，绕过了平台注入的 per-provider 登出
-    // （酷狗的 clearAuthState 等），与切换器的登出路径不一致。A4 让 AccountTab 改走账户 controller 的 logout 时转正。
-    test.fixme('[account-tab] non-NetEase logout runs that provider\'s injected logout, like the switcher', async ({ page }) => {
+    // A0 记下的缺陷：AccountTab 的非网易登出直接 omni.logout + clearAccount，绕过了平台注入的 per-provider 登出
+    // （酷狗的 clearAuthState 等），与切换器的登出路径不一致。A4 让 AccountTab 改走账户 controller 的 logout 后转正。
+    test('[account-tab] non-NetEase logout runs that provider\'s injected logout, like the switcher', async ({ page }) => {
         await page.evaluate(() => window.__accountProbe!.showAccountTab(true));
         await accountTab(page).getByRole('button', { name: 'Logout' }).click();
         await expect.poll(() => calls(page, 'host-logout')).toEqual([expect.objectContaining({ providerId: ACCOUNT_ALPHA })]);

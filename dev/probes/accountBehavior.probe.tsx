@@ -4,7 +4,8 @@ import Home from '../../src/components/app/Home';
 import AccountTab from '../../src/components/panelTab/AccountTab';
 import { useOnlineProviderAccountStore } from '../../src/stores/useOnlineProviderAccountStore';
 import type { ProbeDefinition } from './definition';
-import { probeNeteaseLogout, useAccountProbeEnvironment, useAccountProbeModel } from './accountBehavior/useAccountProbeHarness';
+import type { LibraryAccountController } from '../../src/library/core/contracts/account';
+import { useAccountProbeEnvironment, useAccountProbeModel } from './accountBehavior/useAccountProbeHarness';
 import { ACCOUNT_NETEASE } from './accountBehavior/accountFixtureRules';
 // dev/probes/accountBehavior.probe.tsx
 
@@ -20,13 +21,13 @@ import { ACCOUNT_NETEASE } from './accountBehavior/accountFixtureRules';
  *
  * 宿主区域套了一层 transform：首页里的 fixed 层（确认框、弹窗）以这块区域为包含块。
  */
-const AccountTabPanel: React.FC = () => {
+const AccountTabPanel: React.FC<{ account: LibraryAccountController }> = ({ account }) => {
     const neteaseUser = useOnlineProviderAccountStore(state => state.accounts[ACCOUNT_NETEASE]?.user ?? null);
     return (
         <div data-probe-account-tab className="absolute left-4 top-4 z-[150] w-80 rounded-2xl bg-zinc-900/95 p-4 text-white shadow-2xl">
             <AccountTab
                 user={neteaseUser}
-                onLogout={probeNeteaseLogout}
+                accountController={account}
                 audioQuality="high"
                 onAudioQualityChange={() => {}}
                 cacheSize="0 B"
@@ -40,11 +41,11 @@ const AccountTabPanel: React.FC = () => {
 };
 
 const AccountProbeStage: React.FC = () => {
-    const { model, accountTabVisible } = useAccountProbeModel();
+    const { model, account, accountTabVisible } = useAccountProbeModel();
     return (
         <>
             <Home model={model} />
-            {accountTabVisible && <AccountTabPanel />}
+            {accountTabVisible && <AccountTabPanel account={account} />}
         </>
     );
 };

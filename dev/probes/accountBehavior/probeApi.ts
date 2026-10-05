@@ -72,7 +72,7 @@ export type AccountProbeApi = {
     setBackendRestart: (outcome: 'running' | 'error', delayMs?: number) => void;
 
     // ---- 账户面板 ----
-    /** 按 UnifiedPanel 的方式挂上 / 撤下 AccountTab（onLogout 是网易的宿主登出，和 App 一样）。 */
+    /** 按 UnifiedPanel 的方式挂上 / 撤下 AccountTab（交给它同一个账户 controller，和 App 一样）。 */
     showAccountTab: (visible: boolean) => void;
 };
 
