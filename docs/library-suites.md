@@ -274,6 +274,8 @@ App 创建一个 controller（`app/useLibraryAccountController.ts`，App 卸载�
 
 单一在途登录：新的 `startLogin` 先停掉旧会话再解析方式（解析期间界面不显示），旧会话不会在后台替旧平台确认登录；解析方式期间又来一次 `startLogin`，前一次返回 `superseded`。
 
+日志：会话与 controller 里带 providerId 的错误（要码、轮询、取消、方式解析、确认后与切换后的刷新、登出）经 `accountRules` 的 `describeAccountError` 描述，轮询报 error 时附带的后端文字经 `describeLoginStateMessage`。QQ 自己在 `[QQProvider] qr-login:failed` 里写白名单过滤后的摘要，这两处对它只记 `reason: 'provider-error'`，不记原始文字。
+
 寿命：controller 属于 App，换 suite 不重建，登录会话与待确认切换都在 controller 里，所以登录进行中切换 suite，新 suite 接着显示同一个会话、同一个待确认请求。账户界面宿主 `app/LibraryAccountHost.tsx` 挂在首页外壳 `components/app/Home.tsx` 里，首页整个卸载时关闭登录、把待确认切换按取消结算——待确认切换的寿命随首页宿主。启动恢复会话时直接写当前平台，不经确认。
 
 ### account surface
@@ -287,7 +289,7 @@ App 创建一个 controller（`app/useLibraryAccountController.ts`，App 卸载�
 | `account-switch-confirm` | 确认 / 取消待确认切换 | 基础 | `useLibraryAccountPendingSwitch`；`confirmSwitch` / `cancelSwitch` |
 | `account-select` | 首页上的平台列表，选平台 | 推荐 | `useLibraryAccountProviders`；`selectProvider` |
 | `account-logout` | 首页上的登出入口 | 推荐 | `canLogoutProvider`；`logout` |
-| `account-login-diagnostics` | 失败后的诊断报告 | 可选 | 视图的 `diagnosticsPrompt`；`buildLoginDiagnosticReport` |
+| `account-login-diagnostics` | 失败后的诊断报告（QQ 不给：它的安全失败摘要在普通日志面板里，`canShowLoginDiagnostics` 对它恒为 false） | 可选 | 视图的 `diagnosticsPrompt`；`buildLoginDiagnosticReport` |
 | `account-backend-restart` | 网易本地后端故障时重启 | 可选 | 视图的 `backendFailure`；`restartLoginBackend` |
 
 `account-select` / `account-logout` 画在 home surface 上，但和其余账户动作一起声明在 entry 的 `surfaces.account` 里。
@@ -303,6 +305,7 @@ account surface 只在 `login` 可见或 `pendingSwitch` 非空时渲染内容�
 - 不要调 Omni 的扫码 / 登出接口，也不要读 `useOnlineProviderAccountStore`、`useNeteaseApiStatusStore`，数据和动作都来自 controller。
 - 确认框按下确认后立即收起：`confirmSwitch` 同步清掉 `pendingSwitch`，不要 `await confirmSwitch` 再关框（它要等清理与刷新走完）。
 - 登出入口的可用性用 `core/model/accountRules` 的 `canLogoutProvider`，且 `logout.status` 不是 `pending`；与 controller 的判定、网格切换器、AccountTab 一致。
+- 诊断入口（区块、按键、提示行）只看视图的 `diagnosticsPrompt` / `canShowDiagnostics`，不要自己按 provider 判断；哪些 provider 不给入口由 core 的 `canShowLoginDiagnostics` 决定（目前是 QQ）。
 - 键盘只在 `isInteractive` 为真且界面显示着时接。`isInteractive` 是首页外壳层的值，集合层打开时可能仍为真；登录与确认在最上层时，挂 `data-folia-keyboard-window` 让底下的页面按键与全局热键让路。
 
 ## 写一套新 suite 的步骤
