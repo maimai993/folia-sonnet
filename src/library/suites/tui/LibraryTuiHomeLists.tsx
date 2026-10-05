@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
+import type { LibraryAccountController } from '../../core/contracts/account';
 import type { LibraryCollectionDescriptor } from '../../core/contracts/collection';
 import type { LibraryDirectoryBatchController, LibraryHiddenScope } from '../../core/contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../../core/contracts/home';
@@ -22,6 +23,7 @@ import { useLibraryHomeNavidrome } from '../../core/bindings/useLibraryHomeNavid
 import { useLibraryHomeActions } from '../../core/bindings/useLibraryHomeActions';
 import { useLibraryHomeListRegistration } from '../../core/bindings/useLibraryHomeSurfaceRegistration';
 import LibraryTuiDirectory from './LibraryTuiDirectory';
+import LibraryTuiAccountList from './LibraryTuiAccountList';
 import type { LibraryTuiPromptRequest } from './LibraryTuiPrompt';
 
 // src/library/suites/tui/LibraryTuiHomeLists.tsx
@@ -29,7 +31,8 @@ import type { LibraryTuiPromptRequest } from './LibraryTuiPrompt';
 // Navidrome（五个 section）。每个来源只在显示时挂载（与网格的 LocalGrid3DView / NavidromeGrid3DView 一样），
 // 数据、section、动作与打开都来自 Library Core 的首页模型与首页资源；列表本身是 LibraryTuiDirectory。
 // 每个来源把自己的列表交给首页 surface 句柄（useLibraryHomeListRegistration），行为探针与以后的命令面板读它。
-// 在线账户未登录、无账户、Navidrome 未配置、本地曲库为空时只显示原因文字（登录仍在网格里完成）。
+// 在线账户未登录时在线页签是平台列表（LibraryTuiAccountList：选平台登录 / 切换），已登录时 F2 打开同一个列表；
+// 无账户、Navidrome 未配置、本地曲库为空时只显示原因文字。
 
 type LibraryTuiListCommonProps = {
     directoryKey: string;
@@ -80,9 +83,15 @@ export const LibraryTuiOnlineList: React.FC<LibraryTuiListCommonProps & {
     tab: LibraryHomeTabKey;
     online: LibraryHomeOnlineSource;
     list: LibraryHomeOnlineList;
-}> = ({ tab, online, list, homeActions, onOpenGridView, directoryKey, hiddenScope, ...common }) => {
+    account: LibraryAccountController;
+    /** F2 打开了平台列表（已登录、无账户、解析中时；未登录时列表总是显示）。 */
+    accountsOpen: boolean;
+    onCloseAccounts: () => void;
+}> = ({ tab, online, list, account, accountsOpen, onCloseAccounts, homeActions, onOpenGridView, directoryKey, hiddenScope, ...common }) => {
     const { t } = useTranslation();
-    const showList = online.accountView !== 'accountless' && online.accountView !== 'resolving' && online.accountView !== 'guest';
+    const isGuest = online.accountView === 'guest';
+    const showAccounts = isGuest || accountsOpen;
+    const showList = !showAccounts && online.accountView !== 'accountless' && online.accountView !== 'resolving';
 
     useLibraryHomeListRegistration({
         enabled: showList,
@@ -100,19 +109,37 @@ export const LibraryTuiOnlineList: React.FC<LibraryTuiListCommonProps & {
         runAction: () => false,
     });
 
+    if (showAccounts) {
+        // 未登录：原因 + 「选一个平台登录或切换」；F2 打开的：标题 + 关上的提示。
+        const heading = isGuest ? (
+            <div data-tui-home-status="guest" className="flex flex-col gap-0.5">
+                <span>{online.needsRelogin ? t('status.loginExpired') : t('home.guestTitle')}</span>
+                <span className="opacity-60">{t('libraryTui.accountsGuest', { provider: online.providerLabel })}</span>
+            </div>
+        ) : (
+            <span className="font-bold" style={{ color: common.accentColor }}>{t('libraryTui.accountsTitle')}</span>
+        );
+        return (
+            <LibraryTuiAccountList
+                account={account}
+                isInteractive={common.isInteractive}
+                accentColor={common.accentColor}
+                isDaylight={common.isDaylight}
+                heading={heading}
+                onClose={isGuest ? undefined : onCloseAccounts}
+            />
+        );
+    }
     if (online.accountView === 'accountless') {
-        return <StatusText status="accountless">{t('libraryTui.accountless', { provider: online.providerLabel })}</StatusText>;
+        return (
+            <StatusText status="accountless">
+                <span>{t('libraryTui.accountless', { provider: online.providerLabel })}</span>
+                <span className="opacity-60">{t('libraryTui.accountsOpenHint')}</span>
+            </StatusText>
+        );
     }
     if (online.accountView === 'resolving') {
         return <StatusText status="resolving"><span className="opacity-50">{t('home.loadingLibrary')}</span></StatusText>;
-    }
-    if (online.accountView === 'guest') {
-        return (
-            <StatusText status="guest">
-                <span>{online.needsRelogin ? t('status.loginExpired') : t('home.guestTitle')}</span>
-                <span className="opacity-60">{t('libraryTui.loginInGrid', { provider: online.providerLabel })}</span>
-            </StatusText>
-        );
     }
 
     return (

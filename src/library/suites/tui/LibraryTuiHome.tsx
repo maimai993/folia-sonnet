@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryHomeSurfaceProps } from '../../core/contracts/suite';
 import type { LibraryHomeTabKey } from '../../core/contracts/homeModel';
@@ -21,7 +21,8 @@ import { useLibraryTuiHomePageKeys } from './useLibraryTuiHomeKeyboard';
 // 首页模型）与来源下的分区（在线的歌单 / 电台 / 专辑，本地四个 section，Navidrome 五个 section）——下面是当前
 // 目录的列表（LibraryTuiDirectory）。来源、页签、在线列表、首页资源与动作都来自 Library Core（与网格的 Grid3D 用
 // 同一套绑定、同一份首页资源，所以切 suite 不重新请求）；页签条交给首页 surface 句柄（useLibraryHomeTabsRegistration）。
-// 二维码登录、更新徽标、搜索框、舞台入口属于网格的首页外观，这里不做（登录在网格里完成）。
+// 在线页签未登录时是平台列表（LibraryTuiAccountList），已登录时 F2 打开它（切换平台、登出）；扫码登录框与切换确认由
+// TUI 的 account surface（LibraryTuiAccount）画。更新徽标、搜索框、舞台入口属于网格的首页外观，这里不做。
 // 这里不引用网格的任何实现。
 
 type SectionTab = { key: string; label: string; active: boolean; disabledReason?: string };
@@ -55,6 +56,8 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const accentColor = theme.accentColor || 'currentColor';
     const [prompt, setPrompt] = useState<LibraryTuiPromptRequest | null>(null);
+    // 在线页签的平台列表（F2）：已登录时替换目录列表；未登录时列表总是显示，与这个开关无关。
+    const [accountsOpen, setAccountsOpen] = useState(false);
 
     // 与 Grid3D 同一套首页模型：来源与页签、在线列表（认领首页资源里的在线数据）、目录 key 与隐藏作用域。
     const sources = useLibraryHomeSources({ account, user, playlists, cloudPlaylist, navidromeEnabled });
@@ -73,6 +76,7 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
         const target = tabs.find(candidate => candidate.key === key);
         if (!target || target.disabledReason) return false;
         setPrompt(null);
+        if (key !== tab) setAccountsOpen(false);
         setTab(key);
         return true;
     };
@@ -127,6 +131,23 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
         }
     };
 
+    // 平台换了（确认切换之后）、或当前平台变成未登录（列表本来就是页签内容）时收起 F2 的平台列表，
+    // 之后登录成功回到的是新平台的内容，而不是一个还开着的列表。
+    const isGuest = online.accountView === 'guest';
+    useEffect(() => setAccountsOpen(false), [online.providerId, isGuest]);
+    const toggleAccounts = () => {
+        if (activeSource !== 'online') {
+            const onlineGroup = groups.find(group => group.source === 'online');
+            if (!onlineGroup || onlineGroup.disabledReason) return;
+            selectSource(onlineGroup);
+            setAccountsOpen(true);
+            return;
+        }
+        // 未登录时平台列表本来就是在线页签的内容，F2 不另开一层。
+        if (isGuest) return;
+        setAccountsOpen(open => !open);
+    };
+
     useLibraryTuiHomePageKeys({
         isActive: isInteractive,
         isPromptOpen: prompt !== null,
@@ -138,6 +159,7 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
             const next = cycleIndex(groups, groups.findIndex(group => group.source === activeSource), delta, group => !group.disabledReason);
             if (next >= 0) selectSource(groups[next]);
         },
+        onToggleAccounts: toggleAccounts,
     });
 
     const common = {
@@ -211,7 +233,15 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
             </header>
 
             {activeSource === 'online' ? (
-                <LibraryTuiOnlineList {...common} tab={tab} online={online} list={onlineList} />
+                <LibraryTuiOnlineList
+                    {...common}
+                    tab={tab}
+                    online={online}
+                    list={onlineList}
+                    account={account}
+                    accountsOpen={accountsOpen}
+                    onCloseAccounts={() => setAccountsOpen(false)}
+                />
             ) : activeSource === 'local' ? (
                 <LibraryTuiLocalList
                     {...common}
@@ -233,6 +263,7 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
 
             <footer className="shrink-0 border-t border-current/10 px-4 py-1.5 text-[11px] opacity-50" data-tui-home-hints>
                 {t('libraryTui.homeHints')}
+                {` · ${t('libraryTui.homeAccountsHint')}`}
                 {activeSource === 'local' && localSectionKey === 'folders' ? ` · ${t('libraryTui.homeTreeHints')}` : ''}
                 {showBatchHints ? ` · ${t('libraryTui.homeBatchHints')}` : ''}
             </footer>

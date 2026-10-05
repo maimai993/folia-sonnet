@@ -6,8 +6,8 @@ import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 // （打字即筛选目录），空格是全局的播放 / 暂停；输入框和按钮里的按键不算，上层窗口打开时不抢，
 // Enter / Escape / Insert 不响应长按重复。
 //
-// 两层：页面级（来源与分区的切换，状态文字页也要能切走）与目录级（列表上的移动、展开、打开、批选、播放），
-// 各自一个监听，只在可交互时装上。
+// 两层：页面级（来源与分区的切换、F2 平台列表，状态文字页也要能切走）与目录级（列表上的移动、展开、打开、批选、
+// 播放），各自一个监听，只在可交互时装上。在线页签的平台列表（A6）替换目录时用它自己的一层（useLibraryTuiAccountListKeys）。
 
 const isEditableTarget = (target: EventTarget | null) => (
     target instanceof HTMLElement
@@ -29,6 +29,8 @@ type LibraryTuiHomePageKeys = {
     onCycleSection: (delta: 1 | -1) => void;
     /** F6 / Shift+F6：下一个 / 上一个来源（在线、本地、Navidrome，跳过不可用的）。 */
     onCycleSource: (delta: 1 | -1) => void;
+    /** F2：打开 / 关上在线页签的平台列表（不在在线来源时先切过去）。 */
+    onToggleAccounts?: () => void;
 };
 
 export const useLibraryTuiHomePageKeys = (handlers: LibraryTuiHomePageKeys) => {
@@ -46,6 +48,10 @@ export const useLibraryTuiHomePageKeys = (handlers: LibraryTuiHomePageKeys) => {
             } else if (event.key === 'F6') {
                 event.preventDefault();
                 current.onCycleSource(event.shiftKey ? -1 : 1);
+            } else if (event.key === 'F2' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && current.onToggleAccounts) {
+                if (event.repeat) return;
+                event.preventDefault();
+                current.onToggleAccounts();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -147,6 +153,69 @@ export const useLibraryTuiDirectoryKeys = (handlers: LibraryTuiDirectoryKeys) =>
             event.preventDefault();
         };
 
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handlers.isActive]);
+};
+
+type LibraryTuiAccountListKeys = {
+    isActive: boolean;
+    rowCount: number;
+    moveFocus: (resolve: (current: number) => number) => void;
+    /** Enter：选焦点平台（切换或登录）。 */
+    onSelect: () => void;
+    /** Delete：登出焦点平台（只有当前且已登录的平台会被接受，由调用方判定）。 */
+    onLogout: () => void;
+    /** Escape：关上平台列表（未登录时列表就是页签内容，不给）。 */
+    onEscape?: () => void;
+};
+
+/** 在线页签的平台列表（A6）：↑↓ / Home / End 移动，Enter 选平台，Delete 登出，Esc 关上。守卫与目录同一套。 */
+export const useLibraryTuiAccountListKeys = (handlers: LibraryTuiAccountListKeys) => {
+    const latest = useRef(handlers);
+    latest.current = handlers;
+
+    useEffect(() => {
+        if (!handlers.isActive) return;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const current = latest.current;
+            if (!claimsKey(event)) return;
+            if (event.ctrlKey || event.altKey || event.metaKey) return;
+            if (event.key === 'Escape') {
+                if (event.repeat || !current.onEscape) return;
+                event.preventDefault();
+                current.onEscape();
+                return;
+            }
+            if (isControlTarget(event.target)) return;
+            const last = Math.max(current.rowCount - 1, 0);
+            const clamp = (index: number) => Math.max(0, Math.min(index, last));
+            switch (event.key) {
+                case 'ArrowDown':
+                    current.moveFocus(index => clamp(index + 1));
+                    break;
+                case 'ArrowUp':
+                    current.moveFocus(index => clamp(index - 1));
+                    break;
+                case 'Home':
+                    current.moveFocus(() => 0);
+                    break;
+                case 'End':
+                    current.moveFocus(() => last);
+                    break;
+                case 'Enter':
+                    if (event.repeat || event.shiftKey) return;
+                    current.onSelect();
+                    break;
+                case 'Delete':
+                    if (event.repeat) return;
+                    current.onLogout();
+                    break;
+                default:
+                    return;
+            }
+            event.preventDefault();
+        };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [handlers.isActive]);
