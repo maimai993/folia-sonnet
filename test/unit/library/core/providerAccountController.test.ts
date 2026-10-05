@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderAccountController } from '@/library/core/services/providerAccountController';
 import { PROVIDER_LOGIN_POLL_INTERVAL_MS } from '@/library/core/services/providerLoginSession';
-import { isLoginDialogVisible } from '@/library/core/model/accountRules';
+import { canShowLoginDiagnostics, isLoginDialogVisible } from '@/library/core/model/accountRules';
 import type {
     LibraryAccountAuthPort,
     LibraryAccountClock,
@@ -97,8 +97,8 @@ let manual: ReturnType<typeof createManualClock>;
 let log: ReturnType<typeof vi.fn<LibraryAccountLogger>>;
 
 /** 账户端口：每次 listProviders 都新建摘要对象（omni.getProviderSummaries 就是这样），用来验证快照身份的对齐。 */
-const createAccounts = (stored: OnlineProviderId = 'alpha') => {
-    let providers = initialProviders();
+const createAccounts = (stored: OnlineProviderId = 'alpha', extra: ProviderAccountSummary[] = []) => {
+    let providers = [...initialProviders(), ...extra];
     let storedId = stored;
     const listeners = new Set<() => void>();
     const notify = () => { for (const listener of [...listeners]) listener(); };
@@ -849,5 +849,90 @@ describe('providerAccountController · dispose', () => {
         expect(logoutPort).not.toHaveBeenCalled();
         expect(opsOf('set-active')).toEqual([]);
         expect(listener).not.toHaveBeenCalled();
+    });
+});
+
+// ─── QQ 的错误不进普通日志 ──────────────────────────────────────────────
+
+// PR #495：QQ 的扫码 / 账户失败由 qqProvider 写白名单过滤后的摘要。controller 里带 providerId 的错误日志
+// （登录方式解析、会话启动、确认后的账户刷新、切换后的刷新、登出）对 QQ 只记固定类别；原 hook 测试里
+// 「确认后账户刷新抛错」那一步在新架构下落到这里的 login:refresh-error。
+describe('providerAccountController · QQ failures stay out of ordinary logs', () => {
+    const secret = 'private-token https://private.example/?cookie=private-cookie';
+    const privateError = () => {
+        const error = new Error(secret);
+        error.name = 'private-name';
+        return error;
+    };
+    type Step = 'methods' | 'start' | 'refresh' | 'switch-refresh' | 'logout';
+    const EVENT: Record<Step, string> = {
+        methods: 'login:methods-error',
+        start: 'login:start-rejected',
+        refresh: 'login:refresh-error',
+        'switch-refresh': 'switch:refresh-error',
+        logout: 'logout:error',
+    };
+
+    /** 让 providerId 的某一步以私密内容抛错，返回那一步记下的日志条目。 */
+    const failAt = async (providerId: OnlineProviderId, step: Step) => {
+        accounts = createAccounts('alpha', [
+            summary('qq', { status: step === 'switch-refresh' ? 'authenticated' : 'anonymous' }),
+            summary('kugou', { status: step === 'switch-refresh' ? 'authenticated' : 'anonymous' }),
+        ]);
+        const controller = createController();
+        if (step === 'methods') {
+            auth.resolveQrLoginMethods.mockRejectedValueOnce(privateError());
+            await controller.startLogin(providerId);
+        } else if (step === 'start') {
+            auth.getProviderCapabilities.mockImplementationOnce(() => { throw privateError(); });
+            await controller.startLogin(providerId);
+            await manual.flush();
+        } else if (step === 'refresh') {
+            refresh.mockRejectedValueOnce(privateError());
+            await controller.startLogin(providerId);
+            await confirmNextPoll();
+            expect(controller.getSnapshot().login).toMatchObject({ providerId, phase: 'error', failure: 'account-refresh-failed' });
+        } else if (step === 'switch-refresh') {
+            refresh.mockRejectedValueOnce(privateError());
+            const switching = controller.requestSwitch(providerId);
+            await controller.confirmSwitch(controller.getSnapshot().pendingSwitch!.id);
+            await expect(switching).resolves.toMatchObject({ status: 'switched', providerId });
+        } else {
+            accounts.update(providerId, { status: 'authenticated' });
+            accounts.port.setActiveProviderId(providerId);
+            logoutPort.mockRejectedValueOnce(privateError());
+            await expect(controller.logout(providerId)).resolves.toMatchObject({ status: 'failed', providerId });
+        }
+        return log.mock.calls.find(([level, event]) => level === 'warn' && event === EVENT[step]);
+    };
+
+    it.each(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const)('logs only a fixed category for a QQ %s failure', async step => {
+        const entry = await failAt('qq', step);
+
+        expect(entry).toBeDefined();
+        expect(entry![2]).toEqual({ providerId: 'qq', reason: 'provider-error' });
+        expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-|https?:/);
+    });
+
+    it.each(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const)('keeps the raw %s failure for other providers', async step => {
+        const entry = await failAt('kugou', step);
+
+        expect(entry).toBeDefined();
+        expect(entry![2]).toEqual({ providerId: 'kugou', name: 'private-name', message: secret });
+    });
+
+    it('builds no QQ report through the UI rule, and a report built anyway carries no raw text', async () => {
+        accounts = createAccounts('alpha', [summary('qq')]);
+        const controller = createController();
+        auth.createQrLogin.mockRejectedValueOnce(privateError());
+        await controller.startLogin('qq');
+        await manual.flush();
+
+        const { login } = controller.getSnapshot();
+        expect(login).toMatchObject({ providerId: 'qq', phase: 'error', failure: 'start-error' });
+        expect(canShowLoginDiagnostics(login!)).toBe(false);
+        const report = await controller.buildLoginDiagnosticReport();
+        expect(report.status).toBe('ok');
+        expect(report.status === 'ok' && report.report).not.toMatch(/private-|https?:/);
     });
 });

@@ -382,14 +382,14 @@ describe('providerLoginSession', () => {
             .mockResolvedValueOnce({ state: 'scanned' })
             .mockRejectedValueOnce(new Error('socket hang up'));
         const session = createSession();
-        await session.start('qq').settled;
+        await session.start('kugou').settled;
 
         await manual.advance(2 * QR_POLL_INTERVAL_MS);
 
         expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error' });
         expect(manual.pendingTimers()).toBe(0);
         expect(log).toHaveBeenLastCalledWith('warn', 'check:error', expect.objectContaining({
-            providerId: 'qq', polls: 2, scanned: true, message: 'socket hang up',
+            providerId: 'kugou', polls: 2, scanned: true, message: 'socket hang up',
         }));
     });
 
@@ -480,20 +480,20 @@ describe('providerLoginSession', () => {
     it('logs the TTL expiry, the refresh failure and cancel errors as the old hook did', async () => {
         auth.cancelQrLogin.mockRejectedValue(new Error('gone'));
         const session = createSession();
-        await session.start('qq').settled;
+        await session.start('kugou').settled;
         await manual.advance(QR_TTL_MS);
 
         expect(log.mock.calls.slice(2)).toEqual([
-            ['info', 'state', { providerId: 'qq', state: 'expired', source: 'ttl', scanned: false, polls: 87, elapsedMs: QR_TTL_MS }],
-            ['warn', 'cancel:error', { providerId: 'qq', name: 'Error', message: 'gone' }],
+            ['info', 'state', { providerId: 'kugou', state: 'expired', source: 'ttl', scanned: false, polls: 87, elapsedMs: QR_TTL_MS }],
+            ['warn', 'cancel:error', { providerId: 'kugou', name: 'Error', message: 'gone' }],
         ]);
 
         log.mockClear();
         auth.checkQrLogin.mockResolvedValue({ state: 'confirmed' });
         onConfirmed.mockResolvedValue(false);
-        await session.start('qq').settled;
+        await session.start('kugou').settled;
         await manual.advance(QR_POLL_INTERVAL_MS);
-        expect(log).toHaveBeenLastCalledWith('warn', 'complete', { providerId: 'qq', completed: false, elapsedMs: 2000 });
+        expect(log).toHaveBeenLastCalledWith('warn', 'complete', { providerId: 'kugou', completed: false, elapsedMs: 2000 });
     });
 
     it('treats a throwing confirm callback as check-error (old behaviour, kept)', async () => {
@@ -536,5 +536,80 @@ describe('providerLoginSession', () => {
 
         expect(info).toHaveBeenCalledWith('[ProviderQrLogin] start', { providerId: 'qq', methodId: undefined, elapsedMs: 0 });
         info.mockRestore();
+    });
+});
+
+// QQ 的扫码失败由 qqProvider 写白名单过滤后的摘要（PR #495）；会话自己的日志与时间线对它只记固定类别。
+// 原 hook 测试里的「keeps raw QQ %s failures out of ordinary logs」迁到这里（确认后账户刷新抛错那一步在
+// controller 里，见 providerAccountController.test.ts）。
+describe('providerLoginSession · QQ failures stay out of ordinary logs', () => {
+    const secret = 'private-token https://private.example/?cookie=private-cookie';
+    const privateError = () => {
+        const error = new Error(secret);
+        error.name = 'private-name';
+        return error;
+    };
+    type Step = 'start' | 'check' | 'state' | 'confirm' | 'cancel';
+    const EVENT: Record<Step, [string, string]> = {
+        start: ['start:error', 'start-error'],
+        check: ['check:error', 'check-error'],
+        state: ['state', 'check-error'],
+        confirm: ['check:error', 'check-error'],
+        cancel: ['cancel:error', ''],
+    };
+
+    beforeEach(() => {
+        manual = createManualClock();
+        log = vi.fn<LibraryAccountLogger>();
+        onConfirmed = vi.fn<ProviderLoginConfirmedHandler>();
+        auth = {
+            resolveQrLoginMethods: vi.fn().mockResolvedValue([]),
+            getProviderCapabilities: vi.fn().mockReturnValue({ auth: true }),
+            createQrLogin: vi.fn().mockResolvedValue({ key: 'qr-key-1', imageUrl: 'qr-1.png' }),
+            checkQrLogin: vi.fn().mockResolvedValue({ state: 'waiting' } satisfies QrLoginState),
+            cancelQrLogin: vi.fn().mockResolvedValue(undefined),
+            getQrTtlMs: vi.fn().mockReturnValue(QR_TTL_MS),
+            getQrLoginDiagnostics: vi.fn().mockResolvedValue(['runtime: test']),
+        };
+    });
+
+    /** 让某一步以私密内容失败，返回那一步记下的日志条目与诊断报告。 */
+    const failAt = async (providerId: string, step: Step) => {
+        if (step === 'start') auth.createQrLogin.mockRejectedValueOnce(privateError());
+        if (step === 'check') auth.checkQrLogin.mockRejectedValueOnce(privateError());
+        if (step === 'state') auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', message: secret });
+        if (step === 'confirm') {
+            auth.checkQrLogin.mockResolvedValueOnce({ state: 'confirmed' });
+            onConfirmed.mockRejectedValueOnce(privateError());
+        }
+        if (step === 'cancel') auth.cancelQrLogin.mockRejectedValueOnce(privateError());
+        const session = createSession();
+        await session.start(providerId, 'wechat').settled;
+        if (step === 'cancel') session.stop();
+        else if (step !== 'start') await manual.advance(QR_POLL_INTERVAL_MS);
+        await manual.flush();
+        const [event, failure] = EVENT[step];
+        const entry = log.mock.calls.find(([level, name]) => level === 'warn' && name === event);
+        return { session, entry, failure, report: await session.buildDiagnosticReport() };
+    };
+
+    it.each(['start', 'check', 'state', 'confirm', 'cancel'] as const)('keeps raw QQ %s failures out of ordinary logs and the report', async step => {
+        const { session, entry, failure, report } = await failAt('qq', step);
+
+        // 那一步确实记了一条（不是因为没记才「干净」），只是不带原始内容。
+        expect(entry).toBeDefined();
+        expect(entry![2]).toMatchObject({ providerId: 'qq' });
+        if (step !== 'state') expect(entry![2]).toMatchObject({ reason: 'provider-error' });
+        expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-|https?:/);
+        expect(report).not.toMatch(/private-|https?:/);
+        if (failure) expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure });
+    });
+
+    it.each(['start', 'check', 'state', 'confirm', 'cancel'] as const)('still logs the raw %s failure for other providers', async step => {
+        const { entry } = await failAt('kugou', step);
+
+        expect(entry).toBeDefined();
+        expect(entry![2]).toMatchObject({ providerId: 'kugou', message: secret });
+        if (step !== 'state') expect(entry![2]).toMatchObject({ name: 'private-name' });
     });
 });

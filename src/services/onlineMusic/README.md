@@ -20,6 +20,8 @@ UI / hooks / stores / app services
 当前 registry 注册 `netease`、`kugou`、`qq` 和桌面端的 `bodian`。波点接入状态、接口与剩余验收见
 [`docs/bodian.md`](../../../docs/bodian.md)；支持喜欢与自建歌单歌曲增删，收藏写入尚未实现。Navidrome 是独立的 Subsonic 服务，入口是 `src/services/navidromeService.ts`，不属于 Omni provider。
 
+QQ 扫码的安全失败摘要由 `qqProvider.ts` 收集，写入普通日志的 `[QQProvider] qr-login:failed`，也可通过 `omni.getQrLoginDiagnostics` 读取。覆盖 key、图片、检查和确认后的账号加载，保留 HTTP 状态、固定原因、安全数字和退避来源；相同失败不因倒计时重复输出，上一轮晚回的诊断不会污染新尝试或日志。取消当前二维码（关窗、到期）与要新码一样结束这一轮；没扫过码的自然过期只记 info 级的 `qr-login:expired`，不算失败；确认后只有紧接着开始的那一次账号加载写进摘要，其余登录态检查照常记 `login-status:*`。Library Core 的扫码会话与账户 controller 对 QQ 不记原始错误文字（`core/model/accountRules.ts` 的 `describeAccountError`），登录界面（grid 的诊断区块与 TUI 的 F4）不给 QQ 诊断入口（`canShowLoginDiagnostics`）。
+
 ## Public contract
 
 调用前先看 `omni.ts` 的方法和 `src/types/onlineMusic.ts` 的类型。常用入口按能力分组：

@@ -23,6 +23,7 @@ import type {
 } from '../contracts/account';
 import {
     canRetryLogin,
+    describeAccountError,
     isAwaitingLoginMethod,
     resolveActiveProviderId,
     resolveLoginBackendState,
@@ -55,6 +56,8 @@ const consoleAccountLogger: LibraryAccountLogger = (level, event, detail) => {
     console[level](`[LibraryAccount] ${event}`, detail);
 };
 
+// 与 provider 无关的错误（切换清理、网易后端重启）照记原文；带 providerId 的登录 / 刷新 / 登出错误
+// 经 accountRules 的 describeAccountError，QQ 只记固定类别。
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
@@ -302,7 +305,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             try {
                 await providerAccounts.refresh(to);
             } catch (error) {
-                log('warn', 'switch:refresh-error', { providerId: to, message: describeError(error) });
+                log('warn', 'switch:refresh-error', { providerId: to, ...describeAccountError(to, error) });
             }
         }
         current.resolve({ status: 'switched', providerId: to, changed: true });
@@ -322,7 +325,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         batch(() => {
             const ticket = session.start(current.providerId, methodId ?? undefined);
             ticket.settled.catch(error => {
-                log('warn', 'login:start-rejected', { providerId: current.providerId, message: describeError(error) });
+                log('warn', 'login:start-rejected', { providerId: current.providerId, ...describeAccountError(current.providerId, error) });
             });
             login = { ...current, id, stage: 'session', selectedMethodId: methodId, sessionId: ticket.sessionId };
         });
@@ -351,7 +354,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             methods = await auth.resolveQrLoginMethods(providerId);
         } catch (error) {
             // 方式发现失败时按单步流程要码：要码失败会落到 start-error，界面能看到失败与诊断。
-            log('warn', 'login:methods-error', { providerId, message: describeError(error) });
+            log('warn', 'login:methods-error', { providerId, ...describeAccountError(providerId, error) });
             methods = NO_METHODS;
         }
         // 解析期间有更新的 startLogin、关窗或 dispose：这一轮作废（对应 Grid3D 的 loginAttemptIdRef）。
@@ -433,7 +436,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             try {
                 return await providerAccounts.refresh(event.providerId) !== false;
             } catch (error) {
-                log('warn', 'login:refresh-error', { providerId: event.providerId, message: describeError(error) });
+                log('warn', 'login:refresh-error', { providerId: event.providerId, ...describeAccountError(event.providerId, error) });
                 return false;
             }
         })();
@@ -481,7 +484,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             await providerAccounts.logout(providerId);
             return { status: 'logged-out', providerId };
         } catch (error) {
-            log('warn', 'logout:error', { providerId, message: describeError(error) });
+            log('warn', 'logout:error', { providerId, ...describeAccountError(providerId, error) });
             return { status: 'failed', providerId, message: describeError(error) };
         } finally {
             if (!disposed) batch(() => { logout = IDLE_LOGOUT; });
