@@ -9,7 +9,7 @@ import type {
     StatusMessage,
     Theme,
 } from '../../../types';
-import type { OnlineProviderId, ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
+import type { ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
 import type { NavidromeSong } from '../../../types/navidrome';
 
 // src/library/core/contracts/home.ts
@@ -39,17 +39,6 @@ export type LibraryLocalCatalogSnapshot = {
     assignments: LocalLibraryAssignment[];
     ready: boolean;
     reload: () => Promise<void>;
-};
-
-/** 在线 provider 的账户平台（与 hooks/useOnlineProviderPlatform 的 OnlineProviderPlatformState 同形）。 */
-export type LibraryOnlineProviderPlatform = {
-    providers: ProviderAccountSummary[];
-    activeProviderId: OnlineProviderId;
-    activeProvider: ProviderAccountSummary | undefined;
-    switchProvider: (providerId: OnlineProviderId) => Promise<boolean>;
-    refreshProvider: (providerId: OnlineProviderId) => Promise<unknown>;
-    logoutProvider: (providerId: OnlineProviderId) => Promise<void>;
-    completeLogin: (providerId: OnlineProviderId) => Promise<'completed' | 'refresh-failed' | 'activation-declined'>;
 };
 
 /** 首页模型给出的数据与回调（即原 HomeSurfaceProps）。集合宿主与端口也从这里取来源回调。 */

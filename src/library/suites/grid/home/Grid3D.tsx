@@ -8,21 +8,13 @@ import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type St
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
 import DesktopGrid3DSurface from './DesktopGrid3DSurface';
-import { useOnlineProviderQrLogin } from '../../../../hooks/useOnlineProviderQrLogin';
-import type { OnlineProviderPlatformState } from '../../../../hooks/useOnlineProviderPlatform';
-import { omni } from '../../../../services/onlineMusic/omni';
 import OnlineProviderSwitcher from '../../../../components/app/home/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from '../../../../components/app/home/OnlineProviderConnectPanel';
 import OnlineProviderAccountlessPanel from '../../../../components/app/home/OnlineProviderAccountlessPanel';
-import OnlineProviderLoginModal from '../../../../components/app/home/OnlineProviderLoginModal';
-import { buildQrLoginDiagnosticsProps } from '../../../../components/app/home/buildQrLoginDiagnosticsProps';
-import { canSwitchToProviderDirectly } from '../../../core/model/onlineProviderAccountView';
 import type { ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
-import qqIcon from '../../../../assets/providers/qq.svg';
-import wechatIcon from '../../../../assets/providers/wechat.svg';
-import { useNeteaseApiStatusStore } from '../../../../stores/useNeteaseApiStatusStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';
+import type { LibraryAccountController } from '../../../core/contracts/account';
 import type { LibraryDirectoryBatchController } from '../../../core/contracts/directory';
 import type { LibraryLocalCatalogSnapshot } from '../../../core/contracts/home';
 import type { LibraryHomeResources } from '../../../core/contracts/homeModel';
@@ -33,27 +25,19 @@ import { useLibraryHomeOnline } from '../../../core/bindings/useLibraryHomeOnlin
 import { useLibraryHomeActions } from '../../../core/bindings/useLibraryHomeActions';
 import { useLibraryHomeDirectory } from '../../../core/bindings/useLibraryHomeDirectory';
 import { useLibraryHomeListRegistration, useLibraryHomeTabsRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
+import { useLibraryAccountProviders } from '../../../core/bindings/useLibraryAccount';
+import { resolveProviderSelectLabel } from '../../../core/model/accountRules';
+import { translateHomeMessage } from '../../../core/model/homeSources';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
 // Supports cover sliding with auto-fading header controls and delegates GridView opening upward.
 
-// Each provider scans from its own app, so the modal copy is keyed here instead of nested in the JSX.
-const LOGIN_COPY_BY_PROVIDER: Record<string, { title: string; note: string }> = {
-    kugou: { title: 'home.loginTitleKugou', note: 'home.loginNoteKugou' },
-    qq: { title: 'home.loginTitleQq', note: 'home.loginNoteQq' },
-    bodian: { title: 'home.loginTitleBodian', note: 'home.loginNoteBodian' },
-};
-const NETEASE_LOGIN_COPY = { title: 'home.loginTitle', note: 'home.loginNote' };
-
-// provider 只声明 iconKey 字符串，静态资源的映射留在 UI 层，services 层不碰 .svg。
-const LOGIN_METHOD_ICONS: Record<string, string> = {
-    qq: qqIcon,
-    wechat: wechatIcon,
-};
-
 interface Grid3DProps {
-    onlineProviderPlatform?: OnlineProviderPlatformState;
+    /** 在线账户 controller（宿主创建，见 LibraryHomeSurfaceProps）：切换器与连接面板经它选平台、登出。 */
+    account: LibraryAccountController;
+    /** 账户界面（登录弹窗）的挂载点，接在平台切换器之前（见 LibraryHomeSurfaceProps）。 */
+    accountLayerRef?: (element: HTMLElement | null) => void;
     onPlaySong: (song: SongResult, playlistCtx?: SongResult[], isFmCall?: boolean) => void;
     onBackToPlayer: () => void;
     onRefreshUser: () => void;
@@ -112,7 +96,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     countRender('Grid3D');
     const {
         onBackToPlayer,
-        onRefreshUser,
         user,
         playlists,
         cloudPlaylist = null,
@@ -133,7 +116,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         stageEnabled = false,
         stageIsActive = false,
         onOpenStagePlayer,
-        onlineProviderPlatform,
+        account,
+        accountLayerRef,
         isInteractive = true,
         directoryActions,
         homeResources,
@@ -161,7 +145,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     // 来源、页签与在线列表都来自 Library Core 的首页模型（core/model/homeSources、homeCards 与首页资源）；
     // 这里只剩展示：布局、二维码登录、更新徽标、扫描进度胶囊。
     const homeSources = useLibraryHomeSources({
-        platform: onlineProviderPlatform,
+        account,
         user,
         playlists,
         cloudPlaylist,
@@ -235,85 +219,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         setFocusedIndex(0);
     }, [homeViewTab]);
 
-    // Login QR State
-    const [showLoginModal, setShowLoginModal] = useState(false);
-    const [loginProviderId, setLoginProviderId] = useState(activeProviderId);
-    // 泛型：provider 声明了多种扫码登录方式才走两步式，没声明的回空数组、维持单步流程。
-    const [selectedLoginMethodId, setSelectedLoginMethodId] = useState<string | null>(null);
-    const [loginMethodOptions, setLoginMethodOptions] = useState(() => omni.getQrLoginMethods(activeProviderId));
-    const loginAttemptIdRef = useRef(0);
-    const {
-        qrCodeImg,
-        qrState,
-        qrStatusText,
-        failure: qrLoginFailure,
-        buildDiagnosticReport: buildQrDiagnosticReport,
-        start: startQrLogin,
-        stop: stopQrLogin,
-    } = useOnlineProviderQrLogin({
-        providerId: loginProviderId,
-        t,
-        onConfirmed: async (confirmedProviderId) => {
-            setShowLoginModal(false);
-            if (!onlineProviderPlatform) {
-                onRefreshUser();
-                return true;
-            }
-            const outcome = await onlineProviderPlatform.completeLogin(confirmedProviderId);
-            // 扫码确认了却没拿到登录态：把弹窗重新打开，让用户看到失败和诊断入口，而不是静默停在未登录。
-            if (outcome === 'refresh-failed') {
-                setShowLoginModal(true);
-                return false;
-            }
-            return true;
-        },
-    });
-
-    const initLogin = async (providerId = activeProviderId) => {
-        const summary = onlineProviderPlatform?.providers.find(provider => provider.providerId === providerId);
-        if (summary && !summary.availability.configured) return;
-        const attemptId = ++loginAttemptIdRef.current;
-        // 等待远端能力发现，并把同一份结果同时用于流程分支与弹窗，避免异步结果让两者错位。
-        const methods = await omni.resolveQrLoginMethods(providerId);
-        if (attemptId !== loginAttemptIdRef.current) return;
-        setLoginProviderId(providerId);
-        setLoginMethodOptions(methods);
-        setShowLoginModal(true);
-        setSelectedLoginMethodId(null);
-        // 有多种登录方式时先停在步骤一，选定之前不向后端要二维码。
-        if (methods.length > 0) return;
-        await startQrLogin(providerId);
-    };
-
+    // 选平台、登出都交给账户 controller（选哪一支的规则、登录、切换确认都在 core；登录弹窗与确认框由账户宿主渲染）。
+    const { providers: accountProviders } = useLibraryAccountProviders(account);
     // Shared by the switcher and the connect panel: switch now when there is nothing to sign in to.
     const selectProvider = (provider: ProviderAccountSummary) => {
-        if (canSwitchToProviderDirectly(provider)) {
-            void onlineProviderPlatform?.switchProvider(provider.providerId);
-        } else {
-            void initLogin(provider.providerId);
-        }
-    };
-
-    // 网易云的本地后端起不来时，二维码请求必然失败；弹窗改为直接暴露原因和重启入口。
-    const neteaseApiSupported = useNeteaseApiStatusStore(state => state.supported);
-    const neteaseApiStatus = useNeteaseApiStatusStore(state => state.status);
-    const neteaseApiRestarting = useNeteaseApiStatusStore(state => state.restarting);
-    const restartNeteaseApi = useNeteaseApiStatusStore(state => state.restart);
-    const neteaseBackendFailed = neteaseApiSupported
-        && loginProviderId === 'netease'
-        && neteaseApiStatus?.status === 'error';
-
-    const handleRestartNeteaseApi = async () => {
-        await restartNeteaseApi();
-        // 重启成功后直接把二维码要回来，省掉一次手动刷新。
-        if (useNeteaseApiStatusStore.getState().status?.status === 'running') {
-            await startQrLogin('netease');
-        }
-    };
-
-    const selectLoginMethod = (methodId: string) => {
-        setSelectedLoginMethodId(methodId);
-        void startQrLogin(loginProviderId, methodId);
+        void account.selectProvider(provider.providerId);
     };
 
     useEffect(() => {
@@ -588,7 +498,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
                 ) : isOnlineTab && activeAccountView === 'guest' ? (
                     <OnlineProviderConnectPanel
-                        providers={onlineProviderPlatform?.providers || omni.getProviderSummaries()}
+                        providers={accountProviders}
                         isDaylight={isDaylight}
                         title={activeProviderNeedsRelogin ? t('status.loginExpired') : t('home.guestTitle')}
                         prompt={activeProviderNeedsRelogin
@@ -596,9 +506,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 provider: activeProviderSummary?.shortName || activeProviderSummary?.displayName || activeProviderId,
                             })
                             : t('home.guestPrompt')}
-                        getActionLabel={provider => canSwitchToProviderDirectly(provider)
-                            ? t('home.switchToProvider', { provider: provider.shortName || provider.displayName })
-                            : t('home.loginToProvider', { provider: provider.shortName || provider.displayName })}
+                        getActionLabel={provider => translateHomeMessage(t, resolveProviderSelectLabel(provider))}
                         onSelect={selectProvider}
                     />
                 ) : showOnlineList ? (
@@ -668,76 +576,19 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 )}
             </div>
 
-            {/* Login Modal */}
-            <AnimatePresence>
-                {showLoginModal && (
-                    <OnlineProviderLoginModal
-                        title={t((LOGIN_COPY_BY_PROVIDER[loginProviderId] || NETEASE_LOGIN_COPY).title)}
-                        note={t((LOGIN_COPY_BY_PROVIDER[loginProviderId] || NETEASE_LOGIN_COPY).note)}
-                        qrCodeImg={qrCodeImg}
-                        statusText={qrStatusText}
-                        state={qrState}
-                        retryLabel={t('home.retryQr')}
-                        closeLabel={t('home.closeLogin')}
-                        loginMethods={loginMethodOptions.length > 0
-                            ? {
-                                title: t('home.qqLoginMethodTitle'),
-                                hint: t('home.qqLoginMethodHint'),
-                                pendingText: t('home.qqLoginMethodPending'),
-                                currentText: selectedLoginMethodId
-                                    ? t('home.qqLoginMethodCurrent', {
-                                        method: t(loginMethodOptions.find(option => option.id === selectedLoginMethodId)?.labelKey || ''),
-                                    })
-                                    : '',
-                                options: loginMethodOptions.map(option => ({
-                                    id: option.id,
-                                    label: t(option.labelKey),
-                                    iconUrl: LOGIN_METHOD_ICONS[option.iconKey] || '',
-                                })),
-                                selectedId: selectedLoginMethodId,
-                                onSelect: selectLoginMethod,
-                            }
-                            : undefined}
-                        backendFailure={neteaseBackendFailed
-                            ? {
-                                title: t('home.loginBackendDown'),
-                                detail: neteaseApiStatus?.error ?? null,
-                                restartLabel: t('home.restartBackend'),
-                                restartingLabel: t('home.restartingBackend'),
-                                restarting: neteaseApiRestarting,
-                                onRestart: () => void handleRestartNeteaseApi(),
-                            }
-                            : undefined}
-                        diagnostics={qrLoginFailure
-                            ? buildQrLoginDiagnosticsProps({
-                                t,
-                                providerId: loginProviderId,
-                                failure: qrLoginFailure,
-                                buildReport: buildQrDiagnosticReport,
-                            })
-                            : undefined}
-                        // 刷新时保留已选的登录方式，否则用户会被踢回步骤一。
-                        onRetry={() => void startQrLogin(loginProviderId, selectedLoginMethodId ?? undefined)}
-                        onClose={() => {
-                            setShowLoginModal(false);
-                            stopQrLogin();
-                        }}
-                    />
-                )}
-            </AnimatePresence>
+            {/* 账户界面（登录弹窗）的挂载点：账户宿主把弹窗 portal 进来。放在切换器之前，切换器仍盖在弹窗之上。 */}
+            <div ref={accountLayerRef} data-library-account-layer="" className="contents" />
 
-            {onlineProviderPlatform && (
-                <OnlineProviderSwitcher
-                    providers={onlineProviderPlatform.providers}
-                    activeProviderId={activeProviderId}
-                    isDaylight={isDaylight}
-                    onBackToPlayer={onBackToPlayer}
-                    onSelect={selectProvider}
-                    onLogout={provider => {
-                        void onlineProviderPlatform.logoutProvider(provider.providerId);
-                    }}
-                />
-            )}
+            <OnlineProviderSwitcher
+                providers={accountProviders}
+                activeProviderId={activeProviderId}
+                isDaylight={isDaylight}
+                onBackToPlayer={onBackToPlayer}
+                onSelect={selectProvider}
+                onLogout={provider => {
+                    void account.logout(provider.providerId);
+                }}
+            />
 
         </div>
     );

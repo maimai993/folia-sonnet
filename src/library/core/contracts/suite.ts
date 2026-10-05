@@ -1,9 +1,10 @@
 import type { LocalSong, SongResult, StatusMessage, Theme } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
+import type { LibraryAccountController } from './account';
 import type { LibraryArtistResource } from './artist';
 import type { CollectionNavigationOrigin, LibraryCollectionDescriptor } from './collection';
 import type { LibraryDirectoryBatchController } from './directory';
-import type { LibraryHomeData, LibraryOnlineProviderPlatform } from './home';
+import type { LibraryHomeData } from './home';
 import type { LibraryHomeResources } from './homeModel';
 import type { CollectionMutationController } from './mutations';
 import type { LibraryPlaybackPort } from './ports';
@@ -224,7 +225,16 @@ export type LibraryArtistSurfaceProps = LibrarySurfaceBaseProps & LibraryCollect
 
 /** 首页 surface：首页模型的数据，加上打开集合的入口。 */
 export type LibraryHomeSurfaceProps = LibrarySurfaceBaseProps & LibraryHomeData & {
-    onlineProviderPlatform?: LibraryOnlineProviderPlatform;
+    /**
+     * 在线账户 controller（宿主创建、寿命与应用相同；见 library/app/useLibraryAccountController）：provider 列表与
+     * 当前平台来自它的快照，选平台、登出调它的动作。suite 只订阅，不创建、不 dispose。
+     */
+    account: LibraryAccountController;
+    /**
+     * 账户界面（登录弹窗）的挂载点：surface 可以把它接到自己层叠上下文里的一个元素上（ref 回调，身份不变），
+     * 宿主把登录弹窗 portal 进去；不接时宿主在首页外壳层渲染。网格把它放在平台切换器之前，切换器仍盖在弹窗之上。
+     */
+    accountLayerRef?: (element: HTMLElement | null) => void;
     onOpenGridView: (collection: LibraryCollectionDescriptor) => void;
     /** 本地目录的批量动作控制器（宿主装配端口后创建，见 library/app/useLibraryDirectoryBatchController）。 */
     directoryActions?: LibraryDirectoryBatchController;

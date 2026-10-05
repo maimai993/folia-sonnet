@@ -5,7 +5,10 @@ import type { HomeViewModel } from '../../../src/components/app/home/buildHomeMo
 import type { HomeLocalMusicState, HomeSurfaceProps } from '../../../src/components/app/home/homeSurfaceTypes';
 import type { GridViewCollectionDescriptor } from '../../../src/components/app/home/gridViewCollectionAdapters';
 import { useLocalLibraryCatalog } from '../../../src/hooks/useLocalLibraryCatalog';
-import { useOnlineProviderPlatform } from '../../../src/hooks/useOnlineProviderPlatform';
+import type { LibraryAccountController } from '../../../src/library/core/contracts/account';
+import { useLibraryAccountController, type LibraryAccountHostTables } from '../../../src/library/app/useLibraryAccountController';
+import { useLibraryAccountProviders } from '../../../src/library/core/bindings/useLibraryAccount';
+import { resolveActiveProviderSummary } from '../../../src/library/core/model/accountRules';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
@@ -32,7 +35,7 @@ import type { HomeProbeDescriptor } from './probeApi';
 // - useHomeProbeEnvironment：挂载时装好假 provider（首页档）、两个已登录账户、Navidrome 配置与垫片、
 //   本地曲库种子和服务钩子，卸载时全部拆掉；就绪前不渲染首页（平台 hook 要在 provider 注册之后才第一次跑，
 //   否则它会把选中的 provider 回退成 netease 并写进 localStorage）。
-// - useHomeProbeModel：按 App 的方式装出 HomeViewModel（真实的 useOnlineProviderPlatform、本地曲库状态、
+// - useHomeProbeModel：按 App 的方式装出 HomeViewModel（真实的账户 controller、本地曲库状态、
 //   只记账的播放回调），交给真实的 Home 组件；同时安装 window.__homeProbe。
 
 const NAVIDROME_CONFIG_KEY = 'navidrome_config';
@@ -130,9 +133,21 @@ const INITIAL_LOCAL_STATE: HomeLocalMusicState = {
     focusedPlaylistIndex: 0,
 };
 
-// 平台 hook 的刷新器 / 登出表：探针不做账户刷新，常量保证身份稳定。
-const NO_REFRESHERS = {};
-const NO_LOGOUTS = {};
+// 账户 controller 的宿主表：探针不做账户刷新、登出，切换时也不清播放（与原先不带 prepare 的平台一样），
+// 常量保证身份稳定。
+const PROBE_ACCOUNT_TABLES: LibraryAccountHostTables = {
+    refreshers: {},
+    logouts: {},
+    switchCleanup: { resetForProviderSwitch: () => {} },
+};
+
+/** 切换平台并当场确认（首页用例只关心切换之后的数据，不经确认框）；返回是否切了过去。 */
+const switchAndConfirm = async (account: LibraryAccountController, providerId: string): Promise<boolean> => {
+    const request = account.requestSwitch(providerId);
+    const pending = account.getSnapshot().pendingSwitch;
+    if (pending?.to === providerId) void account.confirmSwitch(pending.id);
+    return (await request).status === 'switched';
+};
 
 // 宿主收到的集合描述，只留可序列化、用例要断言的字段。
 const summarizeDescriptor = (collection: GridViewCollectionDescriptor): HomeProbeDescriptor => {
@@ -159,7 +174,9 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
     const [mountKey, setMountKey] = useState(0);
     const localLibraryCatalog = useLocalLibraryCatalog(localSongs);
-    const platform = useOnlineProviderPlatform(NO_REFRESHERS, undefined, NO_LOGOUTS);
+    const account = useLibraryAccountController(PROBE_ACCOUNT_TABLES);
+    const { providers, activeProviderId } = useLibraryAccountProviders(account);
+    const activeProvider = resolveActiveProviderSummary(providers, activeProviderId);
 
     const refreshLocal = useCallback(async () => {
         recordProbeCall({ kind: 'refreshLocalSongs', ids: [] });
@@ -184,12 +201,12 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
         useCollectionNavigationStore.getState().push(collection);
     }, []);
 
-    const activeCollections = platform.activeProvider?.collections;
+    const activeCollections = activeProvider?.collections;
     const surfaceProps = useMemo<HomeSurfaceProps>(() => ({
         ...PROBE_SURFACE_CALLBACKS,
         onRefreshUser: () => void refreshUser(),
         onRefreshLocalSongs: refreshLocal,
-        user: platform.activeProvider?.user ?? null,
+        user: activeProvider?.user ?? null,
         playlists: activeCollections?.filter(collection => collection.type !== 'cloud') ?? [],
         cloudPlaylist: activeCollections?.find(collection => collection.type === 'cloud') ?? null,
         localSongs,
@@ -210,21 +227,21 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
         localPlaylists,
         localSongs,
         navidromeFocusedAlbumIndex,
-        platform.activeProvider?.user,
+        activeProvider?.user,
         refreshLocal,
         refreshUser,
     ]);
 
     const model = useMemo<HomeViewModel>(() => ({
         surfaceProps,
-        onlineProviderPlatform: platform,
+        account,
         onOpenCollection,
         onPushCollection,
         onBackCollection: onProbeBackCollection,
-    }), [onOpenCollection, onPushCollection, platform, surfaceProps]);
+    }), [account, onOpenCollection, onPushCollection, surfaceProps]);
 
-    const latestRef = useRef({ platform, localSongs, localPlaylists });
-    latestRef.current = { platform, localSongs, localPlaylists };
+    const latestRef = useRef({ account, localSongs, localPlaylists });
+    latestRef.current = { account, localSongs, localPlaylists };
     useEffect(() => installHomeProbeApi({
         sandbox: true,
         ready: () => true,
@@ -235,9 +252,9 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
             name: playlist.name,
             songIds: [...playlist.songIds],
         })),
-        providers: () => latestRef.current.platform.providers.map(provider => provider.providerId),
-        activeProvider: () => latestRef.current.platform.activeProviderId,
-        switchProvider: providerId => latestRef.current.platform.switchProvider(providerId),
+        providers: () => latestRef.current.account.getSnapshot().providers.map(provider => provider.providerId),
+        activeProvider: () => latestRef.current.account.getSnapshot().activeProviderId,
+        switchProvider: providerId => switchAndConfirm(latestRef.current.account, providerId),
     }), []);
 
     return { model, mountKey };

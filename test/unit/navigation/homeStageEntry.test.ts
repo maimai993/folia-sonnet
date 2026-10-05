@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { describe, expect, it, vi } from 'vitest';
 import { PlayerState, type Theme } from '@/types';
 import { buildHomeModel } from '@/components/app/home/buildHomeModel';
+import type { LibraryAccountController } from '@/library/core/contracts/account';
 
 // test/unit/navigation/homeStageEntry.test.ts
 
@@ -28,6 +29,7 @@ const createBaseParams = () => {
     const openStagePlayer = vi.fn().mockResolvedValue(undefined);
 
     return {
+        account: {} as LibraryAccountController,
         playSong: vi.fn(),
         navigateToPlayer: vi.fn(),
         navigateToLattice: vi.fn(),

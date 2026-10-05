@@ -20,7 +20,7 @@ import '../../dev/probes/accountBehavior/probeApi';
 // 界面操作集中在下面的 grid 驱动函数里（切换器菜单、登录弹窗、App 同形的确认框）；A6 加 TUI 时按 suite 换一套驱动，
 // 用例本身不动。
 //
-// 时序：二维码每 2 秒轮询一次（useOnlineProviderQrLogin 的 QR_POLL_INTERVAL_MS），探针用真实时钟，所以
+// 时序：二维码每 2 秒轮询一次（core/services/providerLoginSession 的 PROVIDER_LOGIN_POLL_INTERVAL_MS），探针用真实时钟，所以
 // 编排的状态要在要码之前排好，每一步最多等一个轮询周期。
 // test.fixme 记录的是现状缺陷，注释里写明由哪一步转正。
 
@@ -377,19 +377,27 @@ test.describe('closing', () => {
         expect(await activeProvider(page)).toBe(ACCOUNT_ALPHA);
     });
 
-    test('[grid] the cancel is keyed to the provider that started the session', async ({ page }) => {
+    test('[grid] a new sign-in stops the previous session first, keyed to the provider that started it', async ({ page }) => {
         // 弹窗开着时切换器仍在上层可点：先给 gamma 要了码，再在菜单里选 quill（多方式，停在选方式、不要码）。
         await selectProvider(page, ACCOUNT_GAMMA);
         await expect(statusText(page, 'waiting')).toBeVisible();
         const key = await lastKey(page, ACCOUNT_GAMMA);
         await selectProvider(page, ACCOUNT_QUILL);
+        // A4 起（A3 的有意变化「单一在途登录」）：开始新的登录时先停掉旧会话——取消的是 gamma 的会话、交给 gamma，
+        // 而不是等到关窗；原先 gamma 的会话会在后台一直轮询，确认后替 gamma 登录。
+        await expect.poll(() => calls(page, 'cancel')).toEqual([expect.objectContaining({ providerId: ACCOUNT_GAMMA, key })]);
         await expect(loginDialog(page).getByText('Pick a sign-in method to generate the QR code')).toBeVisible();
         expect(await countCalls(page, 'create', ACCOUNT_QUILL)).toBe(0);
+        // 旧会话停了就不再轮询。
+        const checks = await countCalls(page, 'check', ACCOUNT_GAMMA);
+        await page.waitForTimeout(2_500);
+        expect(await countCalls(page, 'check', ACCOUNT_GAMMA)).toBe(checks);
 
-        // 关窗时取消的是 gamma 的会话、交给 gamma，而不是弹窗此刻显示的 quill。
+        // 关窗时没有活着的会话可取消：取消记录仍只有 gamma 那一条。
         await closeButton(page).click();
         await expect(loginDialog(page)).toHaveCount(0);
-        await expect.poll(() => calls(page, 'cancel')).toEqual([expect.objectContaining({ providerId: ACCOUNT_GAMMA, key })]);
+        await page.waitForTimeout(300);
+        expect(await calls(page, 'cancel')).toEqual([expect.objectContaining({ providerId: ACCOUNT_GAMMA, key })]);
     });
 });
 

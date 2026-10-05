@@ -3,7 +3,10 @@ import type { OnlineMusicProvider, OnlineProviderId } from '../../../src/types/o
 import type { HomeViewModel } from '../../../src/components/app/home/buildHomeModel';
 import type { HomeLocalMusicState, HomeSurfaceProps } from '../../../src/components/app/home/homeSurfaceTypes';
 import type { LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
-import { useOnlineProviderPlatform, type OnlineProviderPlatformState } from '../../../src/hooks/useOnlineProviderPlatform';
+import type { LibraryAccountController } from '../../../src/library/core/contracts/account';
+import { useLibraryAccountController } from '../../../src/library/app/useLibraryAccountController';
+import { useLibraryAccountProviders } from '../../../src/library/core/bindings/useLibraryAccount';
+import { resolveActiveProviderSummary } from '../../../src/library/core/model/accountRules';
 import { omni } from '../../../src/services/onlineMusic/omni';
 import {
     listOnlineMusicProviders,
@@ -12,7 +15,6 @@ import {
 } from '../../../src/services/onlineMusic/providerRegistry';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
 import { useNeteaseApiStatusStore } from '../../../src/stores/useNeteaseApiStatusStore';
-import { useLibraryStore } from '../../../src/stores/useLibraryStore';
 import { useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
 import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librarySuites';
@@ -37,7 +39,7 @@ import {
     setQrTtl,
     shouldFailRefresh,
 } from './fakeAuthProviders';
-import { prepareProbeProviderSwitch } from './ProbeProviderSwitch';
+import { probeSwitchCleanup } from './probeSwitchCleanup';
 import type { AccountProbeApi } from './probeApi';
 
 // dev/probes/accountBehavior/useAccountProbeHarness.ts
@@ -45,8 +47,9 @@ import type { AccountProbeApi } from './probeApi';
 // - useAccountProbeEnvironment：挂载时把内置 provider 换成六个假 provider、种好账户与当前平台、接管网易后端的
 //   状态与重启动作，卸载时全部还原；就绪前不渲染首页（平台 hook 第一次跑时 provider 必须已经注册，
 //   否则它会把当前平台回退成 netease 并写进 localStorage）。
-// - useAccountProbeModel：按 App 的方式装出 HomeViewModel——真实的 useOnlineProviderPlatform，刷新器 / 登出表 /
-//   prepareSwitch 与 App 同形（只记账），交给真实的 Home（registry 解析出的网格首页 Grid3D）；同时安装 window.__accountProbe。
+// - useAccountProbeModel：按 App 的方式装出 HomeViewModel——真实的账户 controller（useLibraryAccountController，
+//   刷新器 / 登出表与 App 同形、只记账，切换清理是应用的端口外包一层记账），交给真实的 Home（registry 解析出的
+//   网格首页 Grid3D；登录弹窗与切换确认框由 Home 里的账户宿主渲染）；同时安装 window.__accountProbe。
 
 const ACTIVE_PROVIDER_STORAGE_KEY = 'active_online_provider_id';
 
@@ -116,16 +119,12 @@ export const useAccountProbeEnvironment = (): boolean => {
 
         const previousNetease = useNeteaseApiStatusStore.getState();
         useNeteaseApiStatusStore.setState({ supported: false, status: null, restarting: false, restart: probeRestartNeteaseApi });
-        useLibraryStore.getState().providerSwitchPending?.resolve(false);
-        useLibraryStore.setState({ providerSwitchPending: null });
         useCollectionNavigationStore.getState().clear();
         useLibrarySuiteStore.setState({ suite: DEFAULT_LIBRARY_SUITE_ID });
         setReady(true);
 
         return () => {
             setReady(false);
-            useLibraryStore.getState().providerSwitchPending?.resolve(false);
-            useLibraryStore.setState({ providerSwitchPending: null });
             useNeteaseApiStatusStore.setState({
                 supported: previousNetease.supported,
                 status: previousNetease.status,
@@ -199,17 +198,21 @@ const EMPTY_CATALOG: LocalLibraryCatalogSnapshot = {
 
 const NO_OP = () => {};
 
+const PROBE_ACCOUNT_TABLES = { refreshers: REFRESHERS, logouts: LOGOUTS, switchCleanup: probeSwitchCleanup };
+
 export type AccountProbeModel = {
     model: HomeViewModel;
-    platform: OnlineProviderPlatformState;
+    account: LibraryAccountController;
     accountTabVisible: boolean;
 };
 
-/** 首页模型（交给真实的 Home）、平台状态与账户面板开关；同时安装 window.__accountProbe。 */
+/** 首页模型（交给真实的 Home）、账户 controller 与账户面板开关；同时安装 window.__accountProbe。 */
 export const useAccountProbeModel = (): AccountProbeModel => {
     const [localMusicState, setLocalMusicState] = useState<HomeLocalMusicState>(INITIAL_LOCAL_STATE);
     const [accountTabVisible, setAccountTabVisible] = useState(false);
-    const platform = useOnlineProviderPlatform(REFRESHERS, prepareProbeProviderSwitch, LOGOUTS);
+    const account = useLibraryAccountController(PROBE_ACCOUNT_TABLES);
+    const { providers, activeProviderId } = useLibraryAccountProviders(account);
+    const activeProvider = resolveActiveProviderSummary(providers, activeProviderId);
 
     const onOpenCollection = useCallback<HomeViewModel['onOpenCollection']>(collection => {
         useCollectionNavigationStore.getState().openRoot(collection, 'home');
@@ -218,12 +221,12 @@ export const useAccountProbeModel = (): AccountProbeModel => {
         useCollectionNavigationStore.getState().push(collection);
     }, []);
 
-    const activeCollections = platform.activeProvider?.collections;
+    const activeCollections = activeProvider?.collections;
     const surfaceProps = useMemo<HomeSurfaceProps>(() => ({
         ...PROBE_SURFACE_CALLBACKS,
         onRefreshUser: NO_OP,
         onRefreshLocalSongs: NO_OP,
-        user: platform.activeProvider?.user ?? null,
+        user: activeProvider?.user ?? null,
         playlists: activeCollections?.filter(collection => collection.type !== 'cloud') ?? [],
         cloudPlaylist: activeCollections?.find(collection => collection.type === 'cloud') ?? null,
         localSongs: [],
@@ -235,25 +238,25 @@ export const useAccountProbeModel = (): AccountProbeModel => {
         onSearchCommitted: NO_OP,
         onOpenSettings: NO_OP,
         theme: DEFAULT_THEME,
-    }), [activeCollections, localMusicState, platform.activeProvider?.user]);
+    }), [activeCollections, activeProvider?.user, localMusicState]);
 
     const model = useMemo<HomeViewModel>(() => ({
         surfaceProps,
-        onlineProviderPlatform: platform,
+        account,
         onOpenCollection,
         onPushCollection,
         onBackCollection: onProbeBackCollection,
-    }), [onOpenCollection, onPushCollection, platform, surfaceProps]);
+    }), [account, onOpenCollection, onPushCollection, surfaceProps]);
 
-    const platformRef = useRef(platform);
-    platformRef.current = platform;
+    const accountRef = useRef(account);
+    accountRef.current = account;
     useEffect(() => {
         const api: AccountProbeApi = {
             ready: () => true,
-            providers: () => platformRef.current.providers.map(provider => provider.providerId),
+            providers: () => accountRef.current.getSnapshot().providers.map(provider => provider.providerId),
             activeProvider: () => useOnlineProviderAccountStore.getState().activeProviderId,
             accountStatus: providerId => useOnlineProviderAccountStore.getState().accounts[providerId]?.status ?? 'unknown',
-            pendingSwitch: () => useLibraryStore.getState().providerSwitchPending?.nextProviderId ?? null,
+            pendingSwitch: () => accountRef.current.getSnapshot().pendingSwitch?.to ?? null,
             requestGeneration: () => omni.getActiveRequestGeneration(),
             calls: () => getAccountCalls(),
             clearLog: clearAccountCalls,
@@ -277,5 +280,5 @@ export const useAccountProbeModel = (): AccountProbeModel => {
         };
     }, []);
 
-    return { model, platform, accountTabVisible };
+    return { model, account, accountTabVisible };
 };

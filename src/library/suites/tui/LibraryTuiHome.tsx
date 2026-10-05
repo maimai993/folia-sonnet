@@ -37,7 +37,7 @@ const cycleIndex = <T,>(items: readonly T[], current: number, delta: 1 | -1, ena
 
 const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
     const {
-        onlineProviderPlatform,
+        account,
         user,
         playlists,
         cloudPlaylist,
@@ -57,7 +57,7 @@ const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
     const [prompt, setPrompt] = useState<LibraryTuiPromptRequest | null>(null);
 
     // 与 Grid3D 同一套首页模型：来源与页签、在线列表（认领首页资源里的在线数据）、目录 key 与隐藏作用域。
-    const sources = useLibraryHomeSources({ platform: onlineProviderPlatform, user, playlists, cloudPlaylist, navidromeEnabled });
+    const sources = useLibraryHomeSources({ account, user, playlists, cloudPlaylist, navidromeEnabled });
     const { tab, setTab, online, tabs } = sources;
     const onlineList = useLibraryHomeOnline(homeResources, sources);
     const { scanPercent, snapshot: actionState } = useLibraryHomeActions(homeResources.actions);

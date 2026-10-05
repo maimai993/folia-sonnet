@@ -4,14 +4,16 @@ import { useShallow } from 'zustand/react/shallow';
 import type { HomeViewTab } from '../../../types';
 import type { ProviderCollection, ProviderUser } from '../../../types/onlineMusic';
 import type { LibraryHomeOnlineSource, LibraryHomeTabView } from '../contracts/homeModel';
-import type { LibraryOnlineProviderPlatform } from '../contracts/home';
+import type { LibraryAccountController } from '../contracts/account';
 import { isOnlineHomeTab, resolveHomeOnlineSource, resolveHomeTabs, translateHomeTabs } from '../model/homeSources';
+import { resolveActiveProviderSummary } from '../model/accountRules';
 import { readOnlineProviderCapabilities, readOnlineProviderLabel } from '../services/onlineHomeProvider';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePersonalFmModeStore } from '../../../stores/usePersonalFmModeStore';
 import { getLocalLibraryAvailability } from '../../../services/localLibraryAvailability';
 import { getPersonalFmSelectionLabel } from '../../../services/onlineMusic/fmModes';
+import { useLibraryAccountProviders } from './useLibraryAccount';
 
 // src/library/core/bindings/useLibraryHomeSources.ts
 // 首页的来源与一级页签：当前页签（搜索导航 store 持有）、当前在线来源（provider、账户、能力）、
@@ -29,13 +31,14 @@ export type LibraryHomeSources = {
 };
 
 export const useLibraryHomeSources = ({
-    platform,
+    account,
     user,
     playlists,
     cloudPlaylist = null,
     navidromeEnabled = false,
 }: {
-    platform?: LibraryOnlineProviderPlatform;
+    /** 在线账户 controller：当前平台与它的账户摘要来自快照（未变时身份稳定）。 */
+    account: LibraryAccountController;
     /** 应用传入的旧账户与歌单（只有网易云在平台还没给出摘要时用）。 */
     user: ProviderUser | null;
     playlists: ProviderCollection[];
@@ -57,8 +60,8 @@ export const useLibraryHomeSources = ({
     // up outside the player, and the picker can change it while this grid stays mounted.
     const personalFmSelection = usePersonalFmModeStore(state => state.selection);
 
-    const providerId = platform?.activeProviderId || 'netease';
-    const provider = platform?.activeProvider;
+    const { providers, activeProviderId: providerId } = useLibraryAccountProviders(account);
+    const provider = useMemo(() => resolveActiveProviderSummary(providers, providerId), [providerId, providers]);
     const capabilities = readOnlineProviderCapabilities(providerId);
     const { userLibrary, playlists: canListPlaylists, userAlbums, recommendations, personalFmModes } = capabilities;
     const online = useMemo(() => resolveHomeOnlineSource({
@@ -69,11 +72,11 @@ export const useLibraryHomeSources = ({
         fallbackUser: user,
         fallbackPlaylists: playlists,
         fallbackCloud: cloudPlaylist,
-        platformAvailable: Boolean(platform),
+        platformAvailable: true,
     }), [
         // capabilities 每次读都是新对象：按用到的几个开关比较。
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        canListPlaylists, cloudPlaylist, personalFmModes, platform, playlists, provider, providerId, recommendations, user, userAlbums, userLibrary,
+        canListPlaylists, cloudPlaylist, personalFmModes, playlists, provider, providerId, recommendations, user, userAlbums, userLibrary,
     ]);
 
     const localAvailability = getLocalLibraryAvailability();

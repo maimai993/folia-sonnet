@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
 import { canSwitchToProviderDirectly } from '../../../library/core/model/onlineProviderAccountView';
+import { canLogoutProvider } from '../../../library/core/model/accountRules';
 import { playerBottomBarLiveOffset } from '../../../stores/motionSignals';
 import {
     PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,
@@ -247,7 +248,7 @@ const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({
                                         </span>
                                         {!active && !canSwitchToProviderDirectly(provider) ? <LogIn size={16} className="opacity-55" /> : null}
                                     </button>
-                                    {active && provider.status === 'authenticated' && (
+                                    {canLogoutProvider(provider, activeProviderId) && (
                                         <button
                                             type="button"
                                             onClick={() => {

@@ -1,5 +1,8 @@
+import type { TFunction } from 'i18next';
 import type { OnlineProviderId, QrLoginFailureKind } from '../../../types/onlineMusic';
 import { buildQrLoginIssueUrl } from '../../../utils/qrLoginDiagnosticReport';
+import { resolveLoginDiagnosticsPrompt } from '../../../library/core/model/accountRules';
+import { translateHomeMessage } from '../../../library/core/model/homeSources';
 import type { QrLoginDiagnosticsPromptProps } from './QrLoginDiagnosticsPrompt';
 
 // src/components/app/home/buildQrLoginDiagnosticsProps.ts
@@ -11,12 +14,12 @@ export const buildQrLoginDiagnosticsProps = ({
     failure,
     buildReport,
 }: {
-    t: (key: string) => string;
+    t: TFunction;
     providerId: OnlineProviderId;
     failure: QrLoginFailureKind;
     buildReport: () => Promise<string>;
 }): QrLoginDiagnosticsPromptProps => ({
-    prompt: t(failure === 'expired-after-scan' ? 'home.qrDiagnosticsPromptScanned' : 'home.qrDiagnosticsPrompt'),
+    prompt: translateHomeMessage(t, resolveLoginDiagnosticsPrompt(failure)),
     privacyNote: t('home.qrDiagnosticsPrivacy'),
     copyLabel: t('home.qrDiagnosticsCopy'),
     copiedLabel: t('home.qrDiagnosticsCopied'),

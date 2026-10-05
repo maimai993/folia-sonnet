@@ -2,14 +2,16 @@ import type { SongResult, StageSource } from '../../../types';
 import type { GridViewCollectionDescriptor } from './gridViewCollectionAdapters';
 import type { HomeSurfaceProps } from './homeSurfaceTypes';
 import { resolveSearchSource, type SearchSource } from '../../../stores/useSearchNavigationStore';
-import type { OnlineProviderPlatformState } from '../../../hooks/useOnlineProviderPlatform';
+import type { ProviderAccountSummary } from '../../../types/onlineMusic';
+import type { LibraryAccountController } from '../../../library/core/contracts/account';
 import { openSettings } from '../../../stores/useSettingsModalStore';
 
 // src/components/app/home/buildHomeModel.ts
 
 export type HomeViewModel = {
     surfaceProps: HomeSurfaceProps;
-    onlineProviderPlatform?: OnlineProviderPlatformState;
+    /** 在线账户 controller（App 持有，见 library/app/useLibraryAccountController），首页外壳交给首页 surface。 */
+    account: LibraryAccountController;
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
     onBackCollection: () => void;
@@ -23,7 +25,9 @@ type HomeModelAmbient = {
 };
 
 export type HomeModelDeps = {
-    onlineProviderPlatform?: OnlineProviderPlatformState;
+    account: LibraryAccountController;
+    /** controller 快照里的当前平台摘要（未变时身份稳定）；首页的账户与在线歌单优先取它。 */
+    activeProvider?: ProviderAccountSummary;
     playSong: HomeSurfaceProps['onPlaySong'];
     navigateToPlayer: HomeSurfaceProps['onBackToPlayer'];
     navigateToLattice: NonNullable<HomeSurfaceProps['onOpenLattice']>;
@@ -60,7 +64,8 @@ type BuildHomeModelParams = HomeModelAmbient & HomeModelDeps;
 
 // Builds the full Home model from raw app dependencies so App.tsx no longer assembles nested props inline.
 export const buildHomeModel = ({
-    onlineProviderPlatform,
+    account,
+    activeProvider,
     playSong,
     navigateToPlayer,
     navigateToLattice,
@@ -96,7 +101,7 @@ export const buildHomeModel = ({
     onBackCollection,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
-        onlineProviderPlatform,
+        account,
         onOpenCollection,
         onPushCollection,
         onBackCollection,
@@ -106,9 +111,9 @@ export const buildHomeModel = ({
             onOpenLattice: navigateToLattice,
             onRefreshUser: () => refreshOnlineProviderPlaylists(),
             // An anonymous selected provider must not inherit a different platform's account.
-            user: onlineProviderPlatform?.activeProvider ? onlineProviderPlatform.activeProvider.user : user,
-            playlists: onlineProviderPlatform?.activeProvider?.collections.filter(collection => collection.type !== 'cloud') ?? playlists,
-            cloudPlaylist: onlineProviderPlatform?.activeProvider?.collections.find(collection => collection.type === 'cloud') ?? cloudPlaylist,
+            user: activeProvider ? activeProvider.user : user,
+            playlists: activeProvider?.collections.filter(collection => collection.type !== 'cloud') ?? playlists,
+            cloudPlaylist: activeProvider?.collections.find(collection => collection.type === 'cloud') ?? cloudPlaylist,
             currentTrack: currentSong,
             onPlayAll: playAll,
             onAddAllToQueue: addAllToQueue,

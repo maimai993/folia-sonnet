@@ -21,7 +21,7 @@ export type AccountCallOp =
     | 'host-logout'
     /** 宿主注入给平台的 per-provider 账户刷新（App 的 onlineProviderRefreshers）。 */
     | 'refresh'
-    /** 切换确认后的宿主清理（App 的 handleConfirmProviderSwitch：清播放、搜索运行态、集合导航）。 */
+    /** 切换确认后的宿主清理（账户 controller 的切换清理端口，即应用的 createLibraryAccountSwitchCleanupPort）。 */
     | 'switch-cleanup'
     /** 网易本地后端的重启动作（useNeteaseApiStatusStore.restart）。 */
     | 'backend-restart';
@@ -44,7 +44,7 @@ export type AccountProbeApi = {
     activeProvider: () => string;
     /** 账户 store 里的状态（没有条目时 unknown）。 */
     accountStatus: (providerId: string) => string;
-    /** App 风格的待确认切换（useLibraryStore.providerSwitchPending）的目标；没有时为 null。 */
+    /** 账户 controller 快照里待确认切换（pendingSwitch）的目标；没有时为 null。 */
     pendingSwitch: () => string | null;
     /** omni 的活跃请求代次：切换事务提交前会作废一次。 */
     requestGeneration: () => number;
