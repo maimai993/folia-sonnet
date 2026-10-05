@@ -4,7 +4,9 @@ import { LogOut, SlidersHorizontal, HardDrive, Trash2, RefreshCw, Crown } from '
 import { useTranslation } from 'react-i18next';
 import type { AudioQualityPreference, ProviderUser } from '../../types/onlineMusic';
 import type { LibraryAccountController } from '../../library/core/contracts/account';
-import { useLibraryAccountProviders } from '../../library/core/bindings/useLibraryAccount';
+import type { LibraryAccountSnapshot } from '../../library/core/contracts/account';
+import { useLibraryAccountProviders, useLibraryAccountSelector } from '../../library/core/bindings/useLibraryAccount';
+import { canLogoutProvider } from '../../library/core/model/accountRules';
 import { useOnlineProviderAccountStore } from '../../stores/useOnlineProviderAccountStore';
 import { omni } from '../../services/onlineMusic/omni';
 
@@ -31,6 +33,8 @@ const AUDIO_QUALITY_OPTIONS: Array<{
     { value: 'hires', labelKey: 'account.qualityHires' },
 ];
 
+const selectLogoutPending = (snapshot: LibraryAccountSnapshot) => snapshot.logout.status === 'pending';
+
 const AccountTab: React.FC<AccountTabProps> = ({
     user,
     accountController,
@@ -44,9 +48,15 @@ const AccountTab: React.FC<AccountTabProps> = ({
 }) => {
     const { t } = useTranslation();
     // 当前平台取 controller 快照里回落过的那个，与登出的判定（只有当前且已登录的平台能登出）一致。
-    const { activeProviderId } = useLibraryAccountProviders(accountController);
+    const { providers, activeProviderId } = useLibraryAccountProviders(accountController);
     const providerAccount = useOnlineProviderAccountStore(state => state.accounts[activeProviderId]);
     const activeUser = providerAccount?.user || (activeProviderId === 'netease' ? user : null);
+    // 登出按钮只在 controller 会接受时可用：网易启动 / 首次刷新的窗口里 App 的 user 已经显示，账户 store 却还没写成
+    // authenticated，controller 会以 not-authenticated 拒绝——按钮这时不可用，而不是点了没反应；登出进行中同样不可用。
+    // 不放宽 controller 的判定：unknown 状态的平台还没有可登出的登录态（切换器的登出入口用的是同一条规则）。
+    const logoutPending = useLibraryAccountSelector(accountController, selectLogoutPending);
+    const canLogout = !logoutPending
+        && canLogoutProvider(providers.find(provider => provider.providerId === activeProviderId), activeProviderId);
 
     // 网易与其它平台同一条路径：controller 调宿主注入的 per-provider 登出（网易的会清登录态并提示已登出）。
     const handleLogout = async () => {
@@ -83,7 +93,8 @@ const AccountTab: React.FC<AccountTabProps> = ({
                     </div>
                     <button
                         onClick={() => void handleLogout()}
-                        className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors"
+                        disabled={!canLogout}
+                        className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent"
                         title={t('account.logout')}
                     >
                         <LogOut size={16} />
