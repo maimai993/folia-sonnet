@@ -212,6 +212,21 @@ describe('library core layer boundaries', () => {
             .filter(source => /onlineMusic\/omni$|navidromeService$|\/stores\/|\/core\/state\//.test(source))).toEqual([]);
     });
 
+    it('keeps the account services injectable: omni and the stores are wired in providerAccountDeps only', () => {
+        // A3：扫码会话与账户 controller 只经注入的端口工作；omni、账户 store 与网易后端 store 的默认装配集中在
+        // providerAccountDeps，单测不经过它。
+        expect(CORE_FILES).toEqual(expect.arrayContaining([
+            `${CORE}/services/providerLoginSession.ts`,
+            `${CORE}/services/providerAccountController.ts`,
+            `${CORE}/services/providerAccountDeps.ts`,
+        ]));
+        const offenders = [`${CORE}/services/providerLoginSession.ts`, `${CORE}/services/providerAccountController.ts`]
+            .flatMap(file => allSpecifiersOf(file)
+                .filter(source => /onlineMusic\/omni$|\/stores\/|\/core\/state\/|^react$/.test(source))
+                .map(source => `${file} -> ${source}`));
+        expect(offenders).toEqual([]);
+    });
+
     it('keeps the mutation layer injectable: omni and the cache are wired in one place only', () => {
         expect(CORE_FILES).toEqual(expect.arrayContaining([
             `${CORE}/model/collectionMutationCapabilities.ts`,
