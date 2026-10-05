@@ -219,8 +219,10 @@ describe('QQ QR ordinary failure logs', () => {
             fallbackMessage: 'qq_login_status_failed', clearAuthState: vi.fn(), updateAccount }));
         expect(warnings().filter(entry => entry.scope === 'QQProvider')).toHaveLength(1);
         expect(log()).toContain('account-refresh: transport=unknown');
-        expect(warnings()).toHaveLength(1);
-        expect(log()).not.toContain('[LoginStatus] failure');
+        // 账户失败本身照记（是否有缓存账号、是否鉴权失效），只是不带原始错误文字。
+        expect(warnings()).toHaveLength(2);
+        expect(log()).toContain('[LoginStatus] failure');
+        expect(log()).toContain('hadCachedAccount');
         expect(log()).not.toMatch(/private-|https?:|qqmusic_session/);
         expect(updateAccount).toHaveBeenCalledWith(expect.objectContaining({ status: 'error', freshness: 'error' }));
     });
