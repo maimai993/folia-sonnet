@@ -21,6 +21,22 @@ describe('QQ Music Web transport', () => {
         expect(error.cause).toEqual({ code: 123 });
         expect(new OnlineProviderError('network', 'request failed', 'kugou').httpStatus).toBeUndefined();
     });
+    // 429 退避的冷却时长交给调用方（core 的登录会话据此暂缓重试）：响应体的 retryAfterMs 优先，没有时读 Retry-After 秒数。
+    it.each([
+        ['the body', { code: 429, retryAfterMs: 24_999 }, {}, 24_999],
+        ['the Retry-After header', { code: 429 }, { 'Retry-After': '25' }, 25_000],
+        ['nowhere', { code: 429 }, {}, undefined],
+        ['a malformed header', { code: 429 }, { 'Retry-After': 'soon' }, undefined],
+    ])('reads the backend cooldown of a rejected request from %s', async (_source, body, headers, expected) => {
+        vi.stubGlobal('fetch', vi.fn(async () => Response.json(body, { status: 429, headers })));
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+        const error = await requestQq('login_qr_key').then(
+            () => null,
+            (failure: unknown) => failure as { httpStatus?: number; retryAfterMs?: number },
+        );
+        expect(error).toMatchObject({ httpStatus: 429 });
+        expect(error?.retryAfterMs).toBe(expected);
+    });
     beforeEach(() => {
         vi.resetModules();
         storage.clear();

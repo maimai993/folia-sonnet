@@ -36,6 +36,8 @@ type OnlineProviderLoginModalProps = {
     state: 'idle' | 'loading' | 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
     retryLabel: string;
     closeLabel: string;
+    /** 后端冷却中：重试按钮照常出现但不可点（状态行说明还要等多久），冷却结束后恢复。 */
+    retryDisabled?: boolean;
     loginMethods?: LoginMethodsProps;
     backendFailure?: BackendFailureProps;
     // 只在扫码登录失败时传入，出现在重试按钮下方。
@@ -52,6 +54,7 @@ const OnlineProviderLoginModal = ({
     state,
     retryLabel,
     closeLabel,
+    retryDisabled = false,
     loginMethods,
     backendFailure,
     diagnostics,
@@ -170,7 +173,7 @@ const OnlineProviderLoginModal = ({
                     </button>
                 )}
                 {canRetry && (
-                    <button type="button" onClick={onRetry} className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors">
+                    <button type="button" onClick={onRetry} disabled={retryDisabled} className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-white/10">
                         <RotateCcw size={13} />
                         {retryLabel}
                     </button>

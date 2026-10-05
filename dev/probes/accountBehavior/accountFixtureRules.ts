@@ -73,3 +73,6 @@ export const accountUser = (providerId: string) => ({
 export const qrKeyOf = (providerId: string, methodId: string | undefined, serial: number): string => (
     `${providerId}#${methodId ?? 'default'}#${serial}`
 );
+
+/** 手机上取消之后的后端冷却（探针缩短到 3 秒，真实后端是 30 秒）。 */
+export const ACCOUNT_CANCEL_COOLDOWN_MS = 3_000;

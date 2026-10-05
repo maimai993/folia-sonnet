@@ -6,7 +6,8 @@
 // A6 起用例按 suite 参数化：grid 驱动点网格的 DOM，tui 驱动按 TUI 的键（见 test/component/accountBehavior.spec.ts）。
 
 /** 二维码轮询时 checkQr 依次返回的状态；队列空了一律返回 waiting。 */
-export type AccountQrState = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
+/** canceled：用户在手机上取消，后端要求冷却 ACCOUNT_CANCEL_COOLDOWN_MS 之后才能再要码。 */
+export type AccountQrState = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error' | 'canceled';
 
 export type AccountCallOp =
     /** provider 的 resolveQrLoginMethods（只有声明了多种登录方式的 provider 会被问到）。 */

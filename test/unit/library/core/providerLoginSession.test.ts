@@ -192,12 +192,18 @@ describe('providerLoginSession', () => {
         const session = createSession();
 
         const superseded = session.start('qq');
-        await session.start('qq').settled;
+        const latest = session.start('qq');
+        await manual.flush();
+        // 第一轮的要码还在路上：第二轮先等它，不同时向后端要码（后端会以 409 session-busy 拒掉第二个）。
+        expect(auth.createQrLogin).toHaveBeenCalledTimes(1);
+
         first.resolve({ key: 'qr-key-1', imageUrl: 'qr-1.png' });
         await superseded.settled;
+        await latest.settled;
 
         // 连点刷新时第一轮的 key 从没成为活跃会话，不还回去就会一直占着后端到 TTL 到期。
         expect(auth.cancelQrLogin).toHaveBeenCalledExactlyOnceWith('qq', 'qr-key-1');
+        expect(auth.createQrLogin).toHaveBeenCalledTimes(2);
         expect(session.getSnapshot().qrImageUrl).toBe('qr-2.png');
     });
 
@@ -291,12 +297,13 @@ describe('providerLoginSession', () => {
     it('issues a new session id on every start and exposes the raw snapshot from loading on', async () => {
         const session = createSession();
         expect(session.getSnapshot()).toEqual({
-            sessionId: 0, providerId: null, methodId: null, phase: 'idle', qrImageUrl: '', failure: null,
+            sessionId: 0, providerId: null, methodId: null, phase: 'idle', qrImageUrl: '', failure: null, retryCooldownSeconds: null,
         });
 
         const first = session.start('qq', 'qq');
         expect(session.getSnapshot()).toEqual({
             sessionId: first.sessionId, providerId: 'qq', methodId: 'qq', phase: 'loading', qrImageUrl: '', failure: null,
+            retryCooldownSeconds: null,
         });
         await first.settled;
         expect(session.getSnapshot()).toMatchObject({ phase: 'waiting', qrImageUrl: 'qr-1.png' });
@@ -611,5 +618,84 @@ describe('providerLoginSession · QQ failures stay out of ordinary logs', () => 
         expect(entry).toBeDefined();
         expect(entry![2]).toMatchObject({ providerId: 'kugou', message: secret });
         if (step !== 'state') expect(entry![2]).toMatchObject({ name: 'private-name' });
+    });
+
+    // ─── 要码串行与冷却（PR #501 之后的修复） ───────────────────────────
+
+    it('sends only the latest of several quick starts, after the one already in flight settles', async () => {
+        const first = deferred<{ key: string; imageUrl: string }>();
+        auth.createQrLogin
+            .mockImplementationOnce(() => first.promise)
+            .mockResolvedValueOnce({ key: 'qr-key-3', imageUrl: 'qr-3.png' });
+        const session = createSession();
+
+        const a = session.start('qq', 'qq');
+        const b = session.start('qq', 'wechat');
+        const c = session.start('qq', 'qq');
+        await manual.flush();
+        expect(auth.createQrLogin.mock.calls).toEqual([['qq', 'qq']]);
+
+        first.resolve({ key: 'qr-key-1', imageUrl: 'qr-1.png' });
+        await Promise.all([a.settled, b.settled, c.settled]);
+
+        // b 在等待时已被 c 取代，不再要码；只有最后一轮真正发出请求。
+        expect(auth.createQrLogin.mock.calls).toEqual([['qq', 'qq'], ['qq', 'qq']]);
+        expect(auth.cancelQrLogin).toHaveBeenCalledExactlyOnceWith('qq', 'qr-key-1');
+        expect(session.getSnapshot()).toMatchObject({ sessionId: c.sessionId, phase: 'waiting', qrImageUrl: 'qr-3.png' });
+    });
+
+    it('waits for a failed request too, and a stop while waiting sends nothing', async () => {
+        const first = deferred<{ key: string; imageUrl: string }>();
+        auth.createQrLogin.mockImplementationOnce(() => first.promise);
+        const session = createSession();
+
+        const a = session.start('qq');
+        const b = session.start('qq');
+        session.stop();
+        first.reject(new Error('boom'));
+        await Promise.all([a.settled, b.settled]);
+
+        expect(auth.createQrLogin).toHaveBeenCalledTimes(1);
+        expect(auth.cancelQrLogin).not.toHaveBeenCalled();
+    });
+
+    it('marks a login canceled on the phone and holds the retry for the backend cooldown', async () => {
+        auth.checkQrLogin.mockResolvedValueOnce({
+            state: 'error', message: 'QR login failed', reason: 'canceled-on-device', retryAfterMs: 29_500,
+        } satisfies QrLoginState);
+        const session = createSession();
+        await session.start('qq', 'wechat').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({
+            phase: 'error', failure: 'canceled-on-device', retryCooldownSeconds: 30,
+        });
+
+        await manual.advance(29_499);
+        expect(session.getSnapshot().retryCooldownSeconds).toBe(30);
+        await manual.advance(1);
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'canceled-on-device', retryCooldownSeconds: null });
+    });
+
+    it('takes the cooldown of a rejected request, and a new start clears it', async () => {
+        auth.createQrLogin.mockRejectedValueOnce(Object.assign(new Error('backed off'), { retryAfterMs: 25_000 }));
+        const session = createSession();
+        await session.start('qq').settled;
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'start-error', retryCooldownSeconds: 25 });
+
+        await session.start('qq').settled;
+        expect(session.getSnapshot()).toMatchObject({ phase: 'waiting', failure: null, retryCooldownSeconds: null });
+        // 旧的冷却计时器随新一轮清掉，不会在之后把字段再改一次。
+        await manual.advance(25_000);
+        expect(session.getSnapshot().retryCooldownSeconds).toBeNull();
+    });
+
+    it('keeps an ordinary check error without a cooldown when the backend gives none', async () => {
+        auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', message: 'QR login failed' } satisfies QrLoginState);
+        const session = createSession();
+        await session.start('kugou').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error', retryCooldownSeconds: null });
     });
 });

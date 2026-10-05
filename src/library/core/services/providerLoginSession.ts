@@ -6,7 +6,7 @@ import type {
     LibraryLoginDiagnosticsEnvironment,
     LibraryTimerHandle,
 } from '../contracts/account';
-import { describeAccountError, describeLoginStateMessage } from '../model/accountRules';
+import { describeAccountError, describeLoginStateMessage, retryAfterMsOf } from '../model/accountRules';
 import {
     formatQrLoginDiagnosticReport,
     QR_LOGIN_TIMELINE_LIMIT,
@@ -19,6 +19,9 @@ import {
 // - 串行轮询：上一个 check 结算后才排下一次（2s），不会重叠；
 // - 前端 TTL：只有声明了二维码寿命的 provider 才计时，到期先停轮询并 keyed 取消会话，再报「已过期」；
 // - 代次：每次 start / stop / TTL 到期都让代次前进，晚到的结果按代次作废；被取代的会话拿到 key 后照样 keyed 归还；
+// - 要码串行：上一轮的要码请求还没回来时（拿到 key 之前 stop 取消不了它），新一轮先等它结算再发，
+//   等待期间又被取代就不发。后端同一时间只允许一个要码在建会话，并发的第二个会被拒（409 session-busy）；
+// - 冷却：失败带着后端要求的冷却时长时，快照记下秒数，冷却结束自动清空（重试在此之前不可用）；
 // - 扫码确认后不再取消（后端要让在途轮询继续读到 803），确认回调（账户刷新）返回 false 记为 account-refresh-failed；
 // - 时间线 + provider 诊断生成报告（格式与 formatQrLoginDiagnosticReport 相同），同一条记录经日志端口打出。
 // - 写进日志与时间线的错误经 accountRules 的 describeAccountError / describeLoginStateMessage：自己接管失败摘要的
@@ -43,6 +46,8 @@ export type ProviderLoginSessionSnapshot = Readonly<{
     qrImageUrl: string;
     /** 失败形态；没扫就过期、auth 能力缺失都不算失败，为 null。 */
     failure: QrLoginFailureKind | null;
+    /** 后端要求的冷却（秒，向上取整）；冷却结束自动回到 null。 */
+    retryCooldownSeconds: number | null;
 }>;
 
 /** 扫码确认时交给确认回调的事件。 */
@@ -112,6 +117,7 @@ const INITIAL_SNAPSHOT: ProviderLoginSessionSnapshot = Object.freeze({
     phase: 'idle',
     qrImageUrl: '',
     failure: null,
+    retryCooldownSeconds: null,
 });
 
 const sameSnapshot = (a: ProviderLoginSessionSnapshot, b: ProviderLoginSessionSnapshot): boolean => (
@@ -121,6 +127,7 @@ const sameSnapshot = (a: ProviderLoginSessionSnapshot, b: ProviderLoginSessionSn
     && a.phase === b.phase
     && a.qrImageUrl === b.qrImageUrl
     && a.failure === b.failure
+    && a.retryCooldownSeconds === b.retryCooldownSeconds
 );
 
 /** 建一个扫码登录会话；同一时间只有一轮在跑，再次 start 会先停掉上一轮。 */
@@ -141,6 +148,9 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
     let checkTimer: ScheduledTimer | null = null;
     let ttlTimer: ScheduledTimer | null = null;
     let activeSession: ActiveQrSession | null = null;
+    // 还在路上的要码请求（不论结果都会结算）。新一轮要码前先等它，同一时间只让一个要码请求到后端。
+    let pendingCreate: Promise<void> | null = null;
+    let cooldownTimer: ScheduledTimer | null = null;
     let lastLoggedPhase: ProviderLoginSessionPhase = 'idle';
     let disposed = false;
 
@@ -180,6 +190,17 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
         }
     };
 
+    // 记下后端要求的冷却；冷却结束只清这个字段，不动其余状态。新一轮开始（start）时重置。
+    const beginCooldown = (retryAfterMs: number | null): void => {
+        cooldownTimer = clearTimer(cooldownTimer);
+        if (retryAfterMs === null || retryAfterMs <= 0) return;
+        update({ retryCooldownSeconds: Math.ceil(retryAfterMs / 1000) });
+        cooldownTimer = schedule(() => {
+            cooldownTimer = null;
+            update({ retryCooldownSeconds: null });
+        }, retryAfterMs);
+    };
+
     const stop = (): void => {
         generation += 1;
         checkTimer = clearTimer(checkTimer);
@@ -200,7 +221,19 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
         }
 
         try {
-            const { key, imageUrl } = await auth.createQrLogin(providerId, methodId);
+            if (pendingCreate) {
+                await pendingCreate;
+                // 等的时候又被更新的 start（或 stop）取代：这一轮不再要码，交给更新的那一轮。
+                if (sessionId !== generation) return;
+            }
+            // 同步抛错由外层 catch 记成 start-error，此时没有在途请求，不必登记。
+            const request = Promise.resolve(auth.createQrLogin(providerId, methodId));
+            const settledRequest = request.then(() => undefined, () => undefined);
+            pendingCreate = settledRequest;
+            void settledRequest.then(() => {
+                if (pendingCreate === settledRequest) pendingCreate = null;
+            });
+            const { key, imageUrl } = await request;
             if (sessionId !== generation) {
                 // 这一轮已被更新的 start（或 stop）取代（例如连点刷新）：把刚拿到的会话还回去，
                 // 否则它会一直占着后端直到 TTL 到期。
@@ -253,8 +286,10 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
                         checkTimer = null;
                         // 终态不再轮询，留着 TTL 计时器只会在界面关掉后才触发。
                         ttlTimer = clearTimer(ttlTimer);
-                        if (result.state === 'error') update({ failure: 'check-error' });
-                        else if (scanned) update({ failure: 'expired-after-scan' });
+                        if (result.state === 'error') {
+                            update({ failure: result.reason === 'canceled-on-device' ? 'canceled-on-device' : 'check-error' });
+                            beginCooldown(result.retryAfterMs ?? null);
+                        } else if (scanned) update({ failure: 'expired-after-scan' });
                     } else {
                         checkTimer = schedule(() => { void poll(); }, PROVIDER_LOGIN_POLL_INTERVAL_MS);
                     }
@@ -262,6 +297,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
                     if (sessionId !== generation) return;
                     note('check:error', { polls, scanned, ...describeAccountError(providerId, error) }, 'warn');
                     update({ phase: 'error', failure: 'check-error' });
+                    beginCooldown(retryAfterMsOf(error));
                     checkTimer = null;
                     ttlTimer = clearTimer(ttlTimer);
                 }
@@ -271,12 +307,14 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
             if (sessionId !== generation) return;
             note('start:error', describeAccountError(providerId, error), 'warn');
             update({ phase: 'error', failure: 'start-error' });
+            beginCooldown(retryAfterMsOf(error));
         }
     };
 
     const start = (providerId: OnlineProviderId, methodId?: string): ProviderLoginStartTicket => {
         if (disposed) return { sessionId: snapshot.sessionId, settled: Promise.resolve() };
         stop();
+        cooldownTimer = clearTimer(cooldownTimer);
         const sessionId = generation;
         timeline = [];
         meta = { providerId, methodId: methodId ?? null, startedAt: clock.now() };
@@ -288,6 +326,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
             phase: 'loading',
             qrImageUrl: '',
             failure: null,
+            retryCooldownSeconds: null,
         });
         return { sessionId, settled: run(sessionId, providerId, methodId) };
     };
@@ -319,6 +358,7 @@ export const createProviderLoginSession = (deps: ProviderLoginSessionDeps): Prov
         buildDiagnosticReport,
         dispose: () => {
             stop();
+            cooldownTimer = clearTimer(cooldownTimer);
             disposed = true;
             listeners.clear();
         },

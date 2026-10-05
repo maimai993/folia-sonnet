@@ -180,7 +180,17 @@ export type QrLoginState =
     | { state: 'scanned' }
     | { state: 'confirmed' }
     | { state: 'expired' }
-    | { state: 'error'; message?: string };
+    | {
+        state: 'error';
+        message?: string;
+        /** 结构化的失败原因；provider 能确定时才给（例如用户在手机上取消了登录）。 */
+        reason?: QrLoginErrorReason;
+        /** 后端要求的冷却时长：这段时间内重新要码只会被拒（429），界面应先等它结束。 */
+        retryAfterMs?: number;
+    };
+
+/** 扫码失败的结构化原因。目前只有「在手机上取消」：它是用户自己的操作，不需要诊断入口。 */
+export type QrLoginErrorReason = 'canceled-on-device';
 
 // 扫码登录失败的几种形态，决定登录弹窗要不要给出「复制诊断信息」入口。
 // 没扫码就过期属于正常情况，不算失败；扫过码却过期，多半是手机端确认被拒。
@@ -188,7 +198,9 @@ export type QrLoginFailureKind =
     | 'start-error'
     | 'check-error'
     | 'expired-after-scan'
-    | 'account-refresh-failed';
+    | 'account-refresh-failed'
+    // 用户在手机上取消了这次登录：照常可以重试（可能要先等冷却），不给诊断入口。
+    | 'canceled-on-device';
 
 export type ProviderErrorCode =
     | 'auth-required'
@@ -211,6 +223,8 @@ export class OnlineProviderError extends Error {
         public readonly cause?: unknown,
         /** 非 2xx 响应的 HTTP 状态，与响应体里的 code 分开；只有按 HTTP 状态分流的 transport 会传。 */
         public readonly httpStatus?: number,
+        /** 后端要求的冷却时长（429 退避）；只有能读出它的 transport 会传。 */
+        public readonly retryAfterMs?: number,
     ) {
         super(message);
         this.name = 'OnlineProviderError';

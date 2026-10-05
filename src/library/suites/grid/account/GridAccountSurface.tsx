@@ -63,6 +63,7 @@ const buildLoginModalProps = (
         state: toModalState(session.phase),
         retryLabel: view.retryLabel,
         closeLabel: view.closeLabel,
+        retryDisabled: session.retryCooldownSeconds !== null,
         loginMethods: view.methodStep
             ? {
                 title: view.methodStep.title,

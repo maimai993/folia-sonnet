@@ -29,6 +29,7 @@ const errorSession = (providerId: string, failure: QrLoginFailureKind): LibraryL
         selectedMethodId: null,
         qrImageUrl: '',
         failure,
+        retryCooldownSeconds: null,
         backend: { failed: false, detail: null, restarting: false, canRestart: false },
     };
     return { ...base, copy: resolveLoginSessionCopy(base) };

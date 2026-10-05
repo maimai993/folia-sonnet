@@ -137,9 +137,9 @@ export const resolveLoginDiagnosticsPrompt = (failure: QrLoginFailureKind): Libr
 // ─── 登录会话的派生 ─────────────────────────────────────────────────────
 
 type LoginMethodState = Pick<LibraryLoginSessionSnapshot, 'methods' | 'selectedMethodId'>;
-type LoginRetryState = Pick<LibraryLoginSessionSnapshot, 'phase' | 'methods' | 'selectedMethodId'> & {
-    backend: Pick<LibraryLoginBackendState, 'failed'>;
-};
+type LoginRetryState = Pick<LibraryLoginSessionSnapshot, 'phase' | 'methods' | 'selectedMethodId'>
+    & Partial<Pick<LibraryLoginSessionSnapshot, 'retryCooldownSeconds'>>
+    & { backend: Pick<LibraryLoginBackendState, 'failed'> };
 
 /** 多方式且还没选：停在第一步，不向后端要码（登录弹窗的 awaitingMethod）。 */
 export const isAwaitingLoginMethod = ({ methods, selectedMethodId }: LoginMethodState): boolean => (
@@ -154,11 +154,17 @@ export const isLoginDialogVisible = (session: Pick<LibraryLoginSessionSnapshot, 
     session !== null && session.phase !== 'resolving-methods' && session.phase !== 'confirmed'
 );
 
-/** 重试可用：expired / error，且不在选方式的第一步、后端没有故障（与 OnlineProviderLoginModal 的 canRetry 一致）。 */
+/** 后端要求的冷却还没结束：这时重新要码只会被拒（429），重试先不给。 */
+export const isLoginRetryCoolingDown = (session: Partial<Pick<LibraryLoginSessionSnapshot, 'retryCooldownSeconds'>>): boolean => (
+    session.retryCooldownSeconds != null
+);
+
+/** 重试可用：expired / error，且不在选方式的第一步、后端没有故障、没有在冷却（grid 弹窗与 TUI 都看它）。 */
 export const canRetryLogin = (session: LoginRetryState): boolean => (
     (session.phase === 'expired' || session.phase === 'error')
     && !isAwaitingLoginMethod(session)
     && !session.backend.failed
+    && !isLoginRetryCoolingDown(session)
 );
 
 /**
@@ -169,6 +175,8 @@ export const canShowLoginDiagnostics = (
     session: Pick<LibraryLoginSessionSnapshot, 'providerId' | 'failure'> & { backend: Pick<LibraryLoginBackendState, 'failed'> },
 ): boolean => (
     session.failure !== null
+    // 在手机上取消是用户自己的操作，没有要排查的东西。
+    && session.failure !== 'canceled-on-device'
     && !session.backend.failed
     && !providerOwnsLoginFailureSummary(session.providerId)
 );
@@ -202,6 +210,12 @@ export const describeAccountError = (providerId: OnlineProviderId, error: unknow
         }
 );
 
+/** 错误里带的后端冷却时长（OnlineProviderError.retryAfterMs，429 退避）；读不出时为 null。 */
+export const retryAfterMsOf = (error: unknown): number | null => {
+    const value = error && typeof error === 'object' ? (error as { retryAfterMs?: unknown }).retryAfterMs : undefined;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+};
+
 /** 轮询报 error 时附带的后端文字：自己接管失败摘要的 provider 不记（它的摘要另有出口）。 */
 export const describeLoginStateMessage = (
     providerId: OnlineProviderId,
@@ -233,16 +247,35 @@ export const shouldResumeLoginAfterBackendRestart = (health: LibraryNeteaseBacke
 );
 
 /**
- * 登录会话的整套文案：标题与说明按 provider；状态行按阶段，但在选方式的第一步、后端故障时不显示
- * （弹窗在这两种情况下藏起状态行——关窗重开时上一轮的状态是过期信息）。
+ * 失败时的状态行：在手机上取消、以及要等后端冷却时，换成说明原因 / 剩余秒数的文案；其余按阶段。
+ * 秒数按失败那一刻算，不随时间倒数；冷却结束时快照清掉秒数，状态行回到普通文案、重试同时可用。
+ */
+const resolveLoginFailureStatus = (
+    session: Pick<LibraryLoginSessionSnapshot, 'phase'> & Partial<Pick<LibraryLoginSessionSnapshot, 'failure' | 'retryCooldownSeconds'>>,
+): LibraryHomeMessage | null => {
+    const seconds = session.retryCooldownSeconds ?? null;
+    if (session.failure === 'canceled-on-device') {
+        return seconds === null
+            ? { key: 'home.qrCanceledOnDevice' }
+            : { key: 'home.qrCanceledOnDeviceCooldown', values: { seconds } };
+    }
+    if (seconds !== null && (session.phase === 'error' || session.phase === 'expired')) {
+        return { key: 'home.qrRetryCooldown', values: { seconds } };
+    }
+    return resolveLoginStatusMessage(session.phase);
+};
+
+/**
+ * 登录会话的整套文案：标题与说明按 provider；状态行按阶段（失败原因与冷却见 resolveLoginFailureStatus），
+ * 但在选方式的第一步、后端故障时不显示（弹窗在这两种情况下藏起状态行——关窗重开时上一轮的状态是过期信息）。
  */
 export const resolveLoginSessionCopy = (
-    session: Pick<LibraryLoginSessionSnapshot, 'providerId' | 'phase' | 'methods' | 'selectedMethodId'> & {
-        backend: Pick<LibraryLoginBackendState, 'failed'>;
-    },
+    session: Pick<LibraryLoginSessionSnapshot, 'providerId' | 'phase' | 'methods' | 'selectedMethodId'>
+        & Partial<Pick<LibraryLoginSessionSnapshot, 'failure' | 'retryCooldownSeconds'>>
+        & { backend: Pick<LibraryLoginBackendState, 'failed'> },
 ): LibraryLoginCopy => ({
     ...resolveLoginCopy(session.providerId),
     status: isAwaitingLoginMethod(session) || session.backend.failed
         ? null
-        : resolveLoginStatusMessage(session.phase),
+        : resolveLoginFailureStatus(session),
 });

@@ -64,6 +64,11 @@ export type LibraryLoginSessionSnapshot = {
     qrImageUrl: string;
     /** 失败形态（决定要不要给诊断入口）；没扫就过期不算失败，为 null。 */
     failure: QrLoginFailureKind | null;
+    /**
+     * 后端要求的冷却（秒，向上取整，按失败那一刻算）：冷却结束前重新要码只会被拒（429），重试暂不可用。
+     * 冷却结束时自动回到 null。
+     */
+    retryCooldownSeconds: number | null;
     backend: LibraryLoginBackendState;
     copy: LibraryLoginCopy;
 };
@@ -159,7 +164,7 @@ export type LibrarySelectProviderResult =
  * - backend-failed：后端故障，要码只会再失败一次；
  * - not-retryable：阶段不是 expired / error（与登录弹窗的 canRetry 一致）。
  */
-export type LibraryLoginRejectReason = 'unknown-method' | 'method-required' | 'backend-failed' | 'not-retryable';
+export type LibraryLoginRejectReason = 'unknown-method' | 'method-required' | 'backend-failed' | 'cooling-down' | 'not-retryable';
 
 export type LibraryLoginRequestResult =
     | { status: 'requested'; sessionId: number }

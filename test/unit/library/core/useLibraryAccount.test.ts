@@ -54,6 +54,7 @@ const quillLogin: LibraryLoginSessionSnapshot = {
     selectedMethodId: 'wechat',
     qrImageUrl: 'qr.png',
     failure: 'expired-after-scan',
+    retryCooldownSeconds: null,
     backend: { failed: false, detail: null, restarting: false, canRestart: false },
     copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: { key: 'home.qrExpired' } },
 };

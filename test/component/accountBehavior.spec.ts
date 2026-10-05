@@ -3,6 +3,7 @@ import { expect, test } from './fixtures';
 import {
     ACCOUNT_ALPHA,
     ACCOUNT_BETA,
+    ACCOUNT_CANCEL_COOLDOWN_MS,
     ACCOUNT_GAMMA,
     ACCOUNT_MODO,
     ACCOUNT_NETEASE,
@@ -568,6 +569,30 @@ test.describe(`[${suite}] QQ diagnostics`, () => {
 
     // QQ 的扫码失败摘要写在普通日志面板里（PR #495），登录界面不给复制报告 / 反馈入口；grid 的诊断区块与
     // TUI 的诊断行和 F4 都看 core 的 canShowLoginDiagnostics。同一种失败在别的平台照样给入口（对照组 gamma）。
+    test(`[${suite}] a login canceled on the phone says so and holds the retry until the backend cooldown ends`, async ({ page }) => {
+        await scriptQr(page, ACCOUNT_GAMMA, ['canceled']);
+        await driver.selectProvider(page, ACCOUNT_GAMMA);
+        await expect(loginDialog(page).getByText(/^Login was canceled on your phone\. You can get a new QR code in \d+s\.$/)).toBeVisible();
+        // 用户自己取消的，没有要排查的东西。
+        await expect(diagnosticsButton(page)).toHaveCount(0);
+        // 冷却中：网格的重试按钮在但不能点；TUI 不给重试，Enter 不要码。
+        if (isGrid) {
+            await expect(retryButton(page)).toBeDisabled();
+        } else {
+            await expect(retryButton(page)).toHaveCount(0);
+            await page.keyboard.press('Enter');
+        }
+        expect(await countCalls(page, 'create', ACCOUNT_GAMMA)).toBe(1);
+
+        // 冷却结束：状态行换成不带秒数的文案，重试恢复。
+        await expect(loginDialog(page).getByText('Login was canceled on your phone. You can get a new QR code.', { exact: true }))
+            .toBeVisible({ timeout: ACCOUNT_CANCEL_COOLDOWN_MS + 2_000 });
+        await scriptQr(page, ACCOUNT_GAMMA, ['waiting']);
+        await driver.retry(page);
+        await expect.poll(() => countCalls(page, 'create', ACCOUNT_GAMMA)).toBe(2);
+        await expect(statusText(page, 'waiting')).toBeVisible();
+    });
+
     test(`[${suite}] a failed QQ sign-in offers retry but no diagnostics`, async ({ page }) => {
         await scriptQr(page, ACCOUNT_GAMMA, ['error']);
         await driver.selectProvider(page, ACCOUNT_GAMMA);

@@ -274,6 +274,10 @@ App 创建一个 controller（`app/useLibraryAccountController.ts`，App 卸载�
 
 单一在途登录：新的 `startLogin` 先停掉旧会话再解析方式（解析期间界面不显示），旧会话不会在后台替旧平台确认登录；解析方式期间又来一次 `startLogin`，前一次返回 `superseded`。
 
+要码串行：上一轮的要码请求还没回来时，新一轮先等它结算再发，等待期间又被取代就不发。后端同一时间只允许一个要码在建会话，连点刷新、快速换登录方式时并发的第二个会被拒（409 session-busy）。
+
+失败原因与冷却：provider 能确定用户在手机上取消时，轮询结果带 `reason: 'canceled-on-device'`，会话记为 `canceled-on-device`（不给诊断入口）；失败带着后端要求的冷却（轮询结果的 `retryAfterMs`，或要码错误 `OnlineProviderError.retryAfterMs`）时，登录快照的 `retryCooldownSeconds` 给出秒数，冷却结束自动回到 null。冷却期间 `canRetryLogin` 为 false、`retryLogin` 返回 `rejected`（`cooling-down`），状态行说明原因与秒数；suite 照常按视图的 `canRetry` 显示重试（grid 显示为禁用按钮，TUI 不给重试）。
+
 日志：会话与 controller 里带 providerId 的错误（要码、轮询、取消、方式解析、确认后与切换后的刷新、登出）经 `accountRules` 的 `describeAccountError` 描述，轮询报 error 时附带的后端文字经 `describeLoginStateMessage`。QQ 自己在 `[QQProvider] qr-login:failed` 里写白名单过滤后的摘要，这两处对它只记 `reason: 'provider-error'`，不记原始文字。
 
 寿命：controller 属于 App，换 suite 不重建，登录会话与待确认切换都在 controller 里，所以登录进行中切换 suite，新 suite 接着显示同一个会话、同一个待确认请求。账户界面宿主 `app/LibraryAccountHost.tsx` 挂在首页外壳 `components/app/Home.tsx` 里，首页整个卸载时关闭登录、把待确认切换按取消结算——待确认切换的寿命随首页宿主。启动恢复会话时直接写当前平台，不经确认。

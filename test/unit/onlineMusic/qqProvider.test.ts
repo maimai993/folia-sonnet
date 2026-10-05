@@ -345,14 +345,47 @@ describe('qqProvider', () => {
         await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({ state: 'scanned' });
         await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({ state: 'confirmed' });
         await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({ state: 'expired' });
-        // An upstream rejection is not an expired code; the unnamed safety number stays out of the state.
+        // An upstream rejection is not an expired code; the unnamed safety number stays out of the state,
+        // while the backend's cooldown is handed on so the login view can hold the retry until it ends.
         await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({
             state: 'error',
             message: 'QR login failed',
+            retryAfterMs: 31000,
         });
 
         expect(requestMock).toHaveBeenCalledWith('login_qr_check', { key: 'qr-key' });
         expect(writeSessionValueMock).toHaveBeenCalledExactlyOnceWith('qq', 'cookie', 'qqmusic_session=opaque-token');
+    });
+
+    it('hands a login canceled on the phone to core as a structured reason with the backend cooldown', async () => {
+        requestMock
+            .mockResolvedValueOnce({
+                code: 800,
+                message: 'QR code expired',
+                failureStage: 'qr-event',
+                failureReason: 'user-canceled',
+                retryAfterMs: 30000,
+            })
+            .mockResolvedValueOnce({
+                code: 800,
+                message: 'QR code expired',
+                failureStage: 'qr-event',
+                failureReason: 'login-rejected',
+                retryAfterMs: 30000,
+            });
+
+        await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({
+            state: 'error',
+            message: 'QR code expired',
+            reason: 'canceled-on-device',
+            retryAfterMs: 30000,
+        });
+        // 只有手机上取消才给结构化原因；其余被拒仍是普通失败，冷却照样交出。
+        await expect(qqProvider.auth!.checkQr!('qr-key')).resolves.toEqual({
+            state: 'error',
+            message: 'QR code expired',
+            retryAfterMs: 30000,
+        });
     });
 
     it('puts safe backend failure details into the copied QQ diagnostics and clears them for a new QR', async () => {

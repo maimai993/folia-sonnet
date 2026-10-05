@@ -638,7 +638,15 @@ const checkQr = async (key: string): Promise<QrLoginState> => {
         }
         // 800 also carries an upstream rejection; `upstreamCode` is the upstream safety number, left unnamed.
         if (response?.upstreamCode !== undefined || response?.retryAfterMs !== undefined) {
-            return { state: 'error', message: response?.message };
+            // 手机上取消是用户自己的操作，交给 core 的是结构化原因；冷却时长一并交出，界面据此暂缓重试。
+            const retryAfterMs = Number.isSafeInteger(response?.retryAfterMs) && response.retryAfterMs >= 0
+                ? response.retryAfterMs as number : undefined;
+            return {
+                state: 'error',
+                message: response?.message,
+                ...(response?.failureReason === 'user-canceled' ? { reason: 'canceled-on-device' as const } : {}),
+                ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+            };
         }
         return { state: 'expired' };
     }

@@ -23,6 +23,7 @@ import type {
 } from '../contracts/account';
 import {
     canRetryLogin,
+    isLoginRetryCoolingDown,
     describeAccountError,
     isAwaitingLoginMethod,
     resolveActiveProviderId,
@@ -120,11 +121,13 @@ const sameLoginSnapshot = (a: LibraryLoginSessionSnapshot, b: LibraryLoginSessio
     && a.selectedMethodId === b.selectedMethodId
     && a.qrImageUrl === b.qrImageUrl
     && a.failure === b.failure
+    && a.retryCooldownSeconds === b.retryCooldownSeconds
     && a.backend.failed === b.backend.failed
     && a.backend.detail === b.backend.detail
     && a.backend.restarting === b.backend.restarting
     && a.backend.canRestart === b.backend.canRestart
-    // copy 由 providerId / phase / methods / selectedMethodId / backend.failed 派生，上面都相等时它也相等。
+    // copy 由 providerId / phase / methods / selectedMethodId / failure / retryCooldownSeconds / backend.failed 派生，
+    // 上面都相等时它也相等。
 );
 
 /** 建在线账户 controller；寿命由宿主决定（首页外壳），dispose 之后的调用安全无效。 */
@@ -163,12 +166,14 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         let phase: LibraryLoginPhase = login.stage === 'session' ? 'loading' : login.stage;
         let qrImageUrl = '';
         let failure: LibraryLoginSessionSnapshot['failure'] = null;
+        let retryCooldownSeconds: number | null = null;
         if (login.stage === 'session') {
             const raw: ProviderLoginSessionSnapshot = session.getSnapshot();
             if (raw.sessionId === login.sessionId) {
                 phase = raw.phase === 'idle' ? 'loading' : raw.phase;
                 qrImageUrl = raw.qrImageUrl;
                 failure = raw.failure;
+                retryCooldownSeconds = raw.retryCooldownSeconds;
             }
         }
         const backend = resolveLoginBackendState(login.providerId, neteaseBackend.getHealth());
@@ -180,6 +185,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             selectedMethodId: login.selectedMethodId,
             qrImageUrl,
             failure,
+            retryCooldownSeconds,
             backend,
         };
         const next: LibraryLoginSessionSnapshot = { ...base, copy: resolveLoginSessionCopy(base) };
@@ -383,6 +389,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         const current = deriveLogin(null)!;
         if (isAwaitingLoginMethod(current)) return { status: 'rejected', reason: 'method-required' };
         if (current.backend.failed) return { status: 'rejected', reason: 'backend-failed' };
+        if (isLoginRetryCoolingDown(current)) return { status: 'rejected', reason: 'cooling-down' };
         if (!canRetryLogin(current)) return { status: 'rejected', reason: 'not-retryable' };
         // 保留已选的登录方式，否则用户会被踢回第一步。
         return { status: 'requested', sessionId: beginSession(++loginSeq, login, login.selectedMethodId) };

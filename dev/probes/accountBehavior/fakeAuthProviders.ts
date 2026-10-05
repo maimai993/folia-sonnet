@@ -1,7 +1,7 @@
 import type { UnifiedSong } from '../../../src/types';
 import type { OnlineMusicProvider } from '../../../src/types/onlineMusic';
 import { useNeteaseApiStatusStore } from '../../../src/stores/useNeteaseApiStatusStore';
-import { ACCOUNT_NETEASE, accountUser, qrKeyOf, type AccountProviderRule } from './accountFixtureRules';
+import { ACCOUNT_CANCEL_COOLDOWN_MS, ACCOUNT_NETEASE, accountUser, qrKeyOf, type AccountProviderRule } from './accountFixtureRules';
 import type { AccountCall, AccountQrState } from './probeApi';
 
 // dev/probes/accountBehavior/fakeAuthProviders.ts
@@ -127,6 +127,14 @@ export const createFakeAuthProvider = (rule: AccountProviderRule): OnlineMusicPr
                 const queue = qrQueues.get(providerId) ?? [];
                 const state = queue.shift() ?? 'waiting';
                 qrQueues.set(providerId, queue);
+                if (state === 'canceled') {
+                    return {
+                        state: 'error' as const,
+                        message: 'probe: canceled on device',
+                        reason: 'canceled-on-device' as const,
+                        retryAfterMs: ACCOUNT_CANCEL_COOLDOWN_MS,
+                    };
+                }
                 return state === 'error' ? { state, message: 'probe: check error' } : { state };
             },
             cancelQr: async (key: string) => {

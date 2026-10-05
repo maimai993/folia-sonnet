@@ -525,6 +525,26 @@ describe('providerAccountController · login flow', () => {
         expect(controller.getSnapshot().login).toMatchObject({ phase: 'waiting', selectedMethodId: 'wechat' });
     });
 
+    it('turns down a retry while the backend cooldown runs after a login canceled on the phone', async () => {
+        const controller = createController();
+        await controller.startLogin('netease');
+        await manual.flush();
+        auth.checkQrLogin.mockResolvedValueOnce({
+            state: 'error', message: 'QR login failed', reason: 'canceled-on-device', retryAfterMs: 30_000,
+        } satisfies QrLoginState);
+        await manual.advance(PROVIDER_LOGIN_POLL_INTERVAL_MS);
+
+        const canceled = controller.getSnapshot().login!;
+        expect(canceled).toMatchObject({ phase: 'error', failure: 'canceled-on-device', retryCooldownSeconds: 30 });
+        expect(canceled.copy.status).toEqual({ key: 'home.qrCanceledOnDeviceCooldown', values: { seconds: 30 } });
+        await expect(controller.retryLogin()).resolves.toEqual({ status: 'rejected', reason: 'cooling-down' });
+
+        await manual.advance(30_000);
+        expect(controller.getSnapshot().login).toMatchObject({ retryCooldownSeconds: null });
+        expect(controller.getSnapshot().login!.copy.status).toEqual({ key: 'home.qrCanceledOnDevice' });
+        await expect(controller.retryLogin()).resolves.toMatchObject({ status: 'requested' });
+    });
+
     it('lets the newest startLogin win when login-method discovery resolves out of order', async () => {
         const quillMethods = deferred<QrLoginMethod[]>();
         auth.resolveQrLoginMethods.mockImplementationOnce(() => quillMethods.promise);

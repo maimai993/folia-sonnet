@@ -6,6 +6,7 @@ import {
     canLogoutProvider,
     canRetryLogin,
     canShowLoginDiagnostics,
+    isLoginRetryCoolingDown,
     describeAccountError,
     describeLoginStateMessage,
     isAwaitingLoginMethod,
@@ -16,6 +17,7 @@ import {
     resolveLoginCopy,
     resolveLoginDiagnosticsPrompt,
     resolveLoginSessionCopy,
+    retryAfterMsOf,
     resolveLoginStatusMessage,
     resolveLogoutEligibility,
     resolveProviderSelectLabel,
@@ -357,5 +359,42 @@ describe('account error descriptions', () => {
         expect(describeAccountError('qq', error)).toEqual({ reason: 'provider-error' });
         expect(describeAccountError('qq', secret)).toEqual({ reason: 'provider-error' });
         expect(describeLoginStateMessage('qq', secret)).toEqual({});
+    });
+});
+
+describe('cancel on the phone and backend cooldown', () => {
+    const base = { providerId: 'qq', methods: [] as QrLoginMethod[], selectedMethodId: null, backend: OK_BACKEND };
+
+    it('holds the retry while the backend cooldown runs', () => {
+        expect(isLoginRetryCoolingDown({ retryCooldownSeconds: 30 })).toBe(true);
+        expect(isLoginRetryCoolingDown({ retryCooldownSeconds: null })).toBe(false);
+        expect(canRetryLogin({ ...base, phase: 'error', retryCooldownSeconds: 30 })).toBe(false);
+        expect(canRetryLogin({ ...base, phase: 'error', retryCooldownSeconds: null })).toBe(true);
+    });
+
+    it('offers no diagnostics for a login the user canceled on the phone', () => {
+        expect(canShowLoginDiagnostics({ providerId: 'netease', failure: 'canceled-on-device', backend: OK_BACKEND })).toBe(false);
+        expect(canShowLoginDiagnostics({ providerId: 'netease', failure: 'check-error', backend: OK_BACKEND })).toBe(true);
+    });
+
+    it('says why the login stopped and how long the retry waits', () => {
+        const status = (extra: object) => resolveLoginSessionCopy({ ...base, phase: 'error', ...extra }).status;
+        expect(status({ failure: 'canceled-on-device', retryCooldownSeconds: 30 }))
+            .toEqual({ key: 'home.qrCanceledOnDeviceCooldown', values: { seconds: 30 } });
+        expect(status({ failure: 'canceled-on-device', retryCooldownSeconds: null })).toEqual({ key: 'home.qrCanceledOnDevice' });
+        expect(status({ failure: 'start-error', retryCooldownSeconds: 25 }))
+            .toEqual({ key: 'home.qrRetryCooldown', values: { seconds: 25 } });
+        expect(status({ failure: 'check-error', retryCooldownSeconds: null })).toEqual({ key: 'home.loginError' });
+        for (const key of ['qrCanceledOnDevice', 'qrCanceledOnDeviceCooldown', 'qrRetryCooldown']) {
+            expect((en as unknown as { home: Record<string, unknown> }).home[key]).toBeTruthy();
+        }
+    });
+
+    it('reads a positive cooldown off an error and ignores anything else', () => {
+        expect(retryAfterMsOf(Object.assign(new Error('x'), { retryAfterMs: 25_000 }))).toBe(25_000);
+        expect(retryAfterMsOf(Object.assign(new Error('x'), { retryAfterMs: 0 }))).toBeNull();
+        expect(retryAfterMsOf(Object.assign(new Error('x'), { retryAfterMs: '25000' }))).toBeNull();
+        expect(retryAfterMsOf(new Error('x'))).toBeNull();
+        expect(retryAfterMsOf(null)).toBeNull();
     });
 });
