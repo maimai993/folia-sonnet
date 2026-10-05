@@ -24,7 +24,8 @@ type BackendFailureProps = {
     restartLabel: string;
     restartingLabel: string;
     restarting: boolean;
-    onRestart: () => void;
+    /** 不传就不显示重启按钮（suite 没声明 account-backend-restart 时），故障原因照样显示。 */
+    onRestart?: () => void;
 };
 
 type OnlineProviderLoginModalProps = {
@@ -155,7 +156,7 @@ const OnlineProviderLoginModal = ({
                 <p className={`text-xs font-medium mt-2 ${state === 'confirmed' ? 'text-green-400' : 'opacity-60'}`} style={{ color: state === 'confirmed' ? undefined : 'var(--text-secondary)' }}>
                     {awaitingMethod || backendFailure ? '' : statusText}
                 </p>
-                {backendFailure && (
+                {backendFailure?.onRestart && (
                     <button
                         type="button"
                         onClick={backendFailure.onRestart}

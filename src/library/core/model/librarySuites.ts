@@ -1,3 +1,4 @@
+import type { LibraryAccountActionId } from '../contracts/account';
 import type { CollectionMutationCapabilities } from '../contracts/mutations';
 import type {
     LibraryActionId,
@@ -15,11 +16,13 @@ import type {
 // suite 清单的纯规则：建索引（去重、默认 suite 必须实现全部 surface、丢掉不可用的）、按 surface 解析
 // 「由哪套 suite 渲染」（没实现就回退默认 suite）、声明的动作与 core 能力取交集。
 // registry.ts 只负责用 glob 发现 entry，再把清单交给这里；单测直接喂假清单。
+// account surface（A5）同样整体回退：选中的 suite 没声明它就由网格的登录弹窗与确认框答复；声明了就必须列全
+// 基础动作（LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS），缺了在建索引时抛错。
 
 /** 默认 suite：任何 suite 没实现的 surface 都由它渲染，所以它必须实现全部 surface。 */
 export const DEFAULT_LIBRARY_SUITE_ID: LibrarySuiteId = 'grid';
 
-export const LIBRARY_SURFACE_IDS: readonly LibrarySurfaceId[] = ['home', 'collection', 'artist'];
+export const LIBRARY_SURFACE_IDS: readonly LibrarySurfaceId[] = ['home', 'collection', 'artist', 'account'];
 
 /** 集合 surface 的全部动作（与 LibraryActionId 一一对应，单测核对）。 */
 export const LIBRARY_ACTION_IDS: readonly LibraryActionId[] = [
@@ -81,6 +84,37 @@ export const LIBRARY_ARTIST_ACTION_IDS: readonly LibraryArtistActionId[] = [
     'open-artist',
 ];
 
+/** 账户 surface 的全部动作（与 LibraryAccountActionId 一一对应，单测核对）。 */
+export const LIBRARY_ACCOUNT_ACTION_IDS: readonly LibraryAccountActionId[] = [
+    'account-login',
+    'account-login-method',
+    'account-switch-confirm',
+    'account-select',
+    'account-logout',
+    'account-login-diagnostics',
+    'account-backend-restart',
+];
+
+/**
+ * 声明了 account surface 就必须实现的基础动作：登录（二维码、状态、重试、关闭）、多方式 provider 的选方式、
+ * 切换确认。它们会阻塞流程（必须有人答复），所以 account surface 不按动作逐项回退——少一个就是清单错误，
+ * 建索引时抛错（与未知动作同样在启动时暴露），而不是悄悄把整个 surface 交回网格、让作者以为自己的界面在用。
+ * 推荐动作（account-select / account-logout，首页账户列表）与可选动作（诊断、后端重启）没声明时那一项不显示。
+ */
+export const LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS: readonly LibraryAccountActionId[] = [
+    'account-login',
+    'account-login-method',
+    'account-switch-confirm',
+];
+
+/** 每个 surface 的动作清单（建索引时按 surface 校验声明）。 */
+const KNOWN_ACTIONS_BY_SURFACE: { readonly [Surface in LibrarySurfaceId]: readonly string[] } = {
+    home: LIBRARY_HOME_ACTION_IDS,
+    collection: LIBRARY_ACTION_IDS,
+    artist: LIBRARY_ARTIST_ACTION_IDS,
+    account: LIBRARY_ACCOUNT_ACTION_IDS,
+};
+
 /**
  * 由变更控制器判定的动作 → 它在 CollectionMutationCapabilities 里的能力键。没列出的动作（播放、范围、筛选、
  * 排序、重新拉取、续传）的能力来自资源与 useCollectionActions。editCollection 不对应动作：编辑模式属于
@@ -133,6 +167,7 @@ const toDeclaredActions = (declaration: LibrarySurfaceDeclaration<unknown>): Lib
 /**
  * 建 suite 索引。清单有问题就在启动时抛错（而不是等到某个 surface 渲染时才发现）：重复 id、
  * 默认 suite 缺失或没实现全部 surface、声明了清单之外的动作。available === false 的 suite 被丢掉。
+ * account surface 另要列全基础动作（LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS）。
  */
 export const buildLibrarySuiteIndex = (
     manifests: readonly LibrarySuiteManifest[],
@@ -147,12 +182,17 @@ export const buildLibrarySuiteIndex = (
             if (!LIBRARY_SURFACE_IDS.includes(surface)) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown surface "${surface}"`);
             }
-            const known: readonly string[] = surface === 'home'
-                ? LIBRARY_HOME_ACTION_IDS
-                : surface === 'artist' ? LIBRARY_ARTIST_ACTION_IDS : LIBRARY_ACTION_IDS;
-            const unknownAction = manifest.surfaces[surface]?.actions.find(action => !known.includes(action));
+            const known = KNOWN_ACTIONS_BY_SURFACE[surface];
+            const declared: readonly string[] = manifest.surfaces[surface]?.actions ?? [];
+            const unknownAction = declared.find(action => !known.includes(action));
             if (unknownAction) {
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares unknown action "${unknownAction}" on ${surface}`);
+            }
+            const missingRequired = surface === 'account'
+                ? LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS.filter(action => !declared.includes(action))
+                : [];
+            if (missingRequired.length > 0) {
+                throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares the account surface without the required action(s) ${missingRequired.join(', ')}`);
             }
         }
         if (manifest.available !== false) byId.set(manifest.id, manifest);

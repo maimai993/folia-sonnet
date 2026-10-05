@@ -6,6 +6,7 @@ import type { LibrarySuiteManifest } from '../../core/contracts/suite';
 // 实现首页、集合与歌手页三个 surface（P4.3 起歌手页不再回退网格）。
 // 生产构建里 import.meta.env.DEV 是常量 false：组件那一行连同动态 import 一起被摇掉，不会产出 TUI 的 chunk，
 // registry 也因为 available: false 把它当作不存在（浮层不出现、选不到）。
+// 还没有 account surface（A6 再做）：TUI 选中时登录弹窗与切换确认框由 registry 整体回退到网格的 GridAccountSurface。
 
 const ENABLE_TUI = import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true';
 const LibraryTuiView = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiView')) : null;

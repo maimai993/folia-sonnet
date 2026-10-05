@@ -52,6 +52,10 @@ const setAccount = (page: Page, providerId: string, status: 'authenticated' | 'a
     [providerId, status] as const,
 );
 const setActive = (page: Page, providerId: string) => page.evaluate(id => window.__accountProbe!.setActive(id), providerId);
+const setSuite = (page: Page, suiteId: string) => page.evaluate(id => window.__accountProbe!.setSuite(id), suiteId);
+const startLogin = (page: Page, providerId: string) => page.evaluate(id => window.__accountProbe!.startLogin(id), providerId);
+const requestSwitch = (page: Page, providerId: string) => page.evaluate(id => window.__accountProbe!.requestSwitch(id), providerId);
+const switchResult = (page: Page) => page.evaluate(() => window.__accountProbe!.switchResult());
 
 const mountAccount = async (mount: (id: string) => Promise<unknown>, page: Page) => {
     await mount('accountBehavior');
@@ -469,6 +473,87 @@ test.describe('logout', () => {
         await openSwitcher(page);
         await expect(logoutButtons(page)).toHaveCount(0);
         await closeSwitcher(page);
+    });
+});
+
+// A5：account surface 整体回退。TUI 还没有自己的 account surface（A6 再做），选中 TUI 时登录弹窗与切换确认框由 registry
+// 解析出的网格 GridAccountSurface 渲染；TUI 首页没有账户入口，用探针直接调 controller 的 startLogin / requestSwitch。
+test.describe('suite fallback', () => {
+    const tuiHome = (page: Page) => page.locator('[data-library-home="tui"]');
+
+    test('[switch] with the TUI selected, the grid account surface answers a sign-in and a switch request', async ({ page }) => {
+        await setSuite(page, 'tui');
+        await expect(tuiHome(page)).toBeVisible();
+        await expect(switcher(page)).toHaveCount(0);
+
+        // 登录：网格的登录弹窗照常出现（没有网格首页交上来的账户层，就地渲染），扫码确认后问要不要激活。
+        await scriptQr(page, ACCOUNT_GAMMA, ['scanned', 'confirmed']);
+        expect(await startLogin(page, ACCOUNT_GAMMA)).toBe('started');
+        await expect(loginDialog(page)).toBeVisible();
+        await expect(loginDialog(page)).toHaveAccessibleName('Scan with Netease App');
+        await expectQrKey(page, await lastKey(page, ACCOUNT_GAMMA));
+        await expect(statusText(page, 'scanned')).toBeVisible();
+        await expectConfirmFor(page, ACCOUNT_GAMMA);
+        await expect(loginDialog(page)).toHaveCount(0);
+        await answerConfirm(page, 'Confirm');
+        await expect.poll(() => activeProvider(page)).toBe(ACCOUNT_GAMMA);
+        expect((await calls(page, 'switch-cleanup')).map(call => call.providerId)).toEqual([ACCOUNT_GAMMA]);
+        expect(await accountStatus(page, ACCOUNT_GAMMA)).toBe('authenticated');
+
+        // 切换：网格的确认框照常出现；取消保持原平台，确认切过去并清理一次。
+        await requestSwitch(page, ACCOUNT_ALPHA);
+        await expectConfirmFor(page, ACCOUNT_ALPHA);
+        await answerConfirm(page, 'Cancel');
+        await expect.poll(() => switchResult(page)).toBe('declined:cancelled');
+        expect(await activeProvider(page)).toBe(ACCOUNT_GAMMA);
+
+        await requestSwitch(page, ACCOUNT_ALPHA);
+        await expectConfirmFor(page, ACCOUNT_ALPHA);
+        await answerConfirm(page, 'Confirm');
+        await expect.poll(() => switchResult(page)).toBe('switched');
+        expect(await activeProvider(page)).toBe(ACCOUNT_ALPHA);
+        expect((await calls(page, 'switch-cleanup')).map(call => call.providerId)).toEqual([ACCOUNT_GAMMA, ACCOUNT_ALPHA]);
+        await expect(tuiHome(page)).toBeVisible();
+    });
+
+    test('[switch] the QQ-style two-step sign-in works from the TUI through the grid fallback', async ({ page }) => {
+        await setSuite(page, 'tui');
+        await expect(tuiHome(page)).toBeVisible();
+
+        expect(await startLogin(page, ACCOUNT_QUILL)).toBe('started');
+        await expect(loginDialog(page)).toBeVisible();
+        // 第一步：还没选方式，不要码。
+        expect(await countCalls(page, 'create', ACCOUNT_QUILL)).toBe(0);
+        await methodButton(page, 'WeChat scan').click();
+        await expect.poll(() => calls(page, 'create', ACCOUNT_QUILL)).toEqual([
+            expect.objectContaining({ methodId: 'wechat' }),
+        ]);
+        await expectQrKey(page, await lastKey(page, ACCOUNT_QUILL));
+        await closeButton(page).click();
+        await expect(loginDialog(page)).toHaveCount(0);
+        await expect.poll(() => countCalls(page, 'cancel', ACCOUNT_QUILL)).toBe(1);
+    });
+
+    test('[switch] a sign-in started on the grid keeps its session when the TUI takes over', async ({ page }) => {
+        await selectProvider(page, ACCOUNT_GAMMA);
+        await expect(loginDialog(page)).toBeVisible();
+        await expect.poll(() => countCalls(page, 'create', ACCOUNT_GAMMA)).toBe(1);
+        const key = await lastKey(page, ACCOUNT_GAMMA);
+
+        // 换到 TUI：网格首页卸载（账户层随之撤下），弹窗改为就地渲染，同一个二维码会话，不取消、不重新要码。
+        await setSuite(page, 'tui');
+        await expect(tuiHome(page)).toBeVisible();
+        await expect(loginDialog(page)).toBeVisible();
+        await expectQrKey(page, key);
+        expect(await countCalls(page, 'cancel', ACCOUNT_GAMMA)).toBe(0);
+        expect(await countCalls(page, 'create', ACCOUNT_GAMMA)).toBe(1);
+
+        // 回到网格：弹窗回到网格首页的账户层里，会话仍是同一个。
+        await setSuite(page, 'grid');
+        await expect(switcher(page)).toBeVisible();
+        await expect(loginDialog(page)).toBeVisible();
+        await expectQrKey(page, key);
+        expect(await countCalls(page, 'cancel', ACCOUNT_GAMMA)).toBe(0);
     });
 });
 

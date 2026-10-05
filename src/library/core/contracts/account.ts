@@ -338,9 +338,10 @@ export type LibraryAccountControllerDeps = {
 // ─── account surface ────────────────────────────────────────────────────
 
 /**
- * account surface 的语义动作（A5 起 suite 在 entry 里声明；LibrarySurfaceId 届时再加 'account'）。
+ * account surface 的语义动作（A5 起 suite 在 entry 的 `surfaces.account` 里声明，LibrarySurfaceId 含 'account'）。
  * 登录与确认会阻塞流程，account surface 整体回退：当前 suite 没有它就用 grid 的；声明了 surface 但没声明的
- * 可选动作那一项不显示。
+ * 可选动作那一项不显示。基础动作缺一个就是清单错误：建 suite 索引时抛错（core/model/librarySuites 的
+ * LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS），不会悄悄回退——半套登录界面会让用户卡在某一步（例如 QQ 选方式）。
  *
  * | LibraryAccountActionId | 分级 | 说明 |
  * | --- | --- | --- |
@@ -366,6 +367,16 @@ export type LibraryAccountDeclaredActions = {
     readonly extraActions: readonly string[];
 };
 
+/**
+ * 首页 surface 交上来的账户层（宿主持有，见 library/app/libraryAccountLayer）：首页 surface 经
+ * LibraryHomeSurfaceProps.accountLayerRef 把自己层叠上下文里的一个元素接上来，account surface 订阅它，
+ * 自己决定什么界面 portal 进去（网格：登录弹窗进层，确认框进 body）。没接元素时 getElement 为 null。
+ */
+export type LibraryAccountLayerSource = {
+    getElement(): HTMLElement | null;
+    subscribe(listener: () => void): () => void;
+};
+
 /** account surface 的输入：只在 login 或 pendingSwitch 非空时渲染内容。 */
 export type LibraryAccountSurfaceProps = {
     account: LibraryAccountController;
@@ -374,4 +385,6 @@ export type LibraryAccountSurfaceProps = {
     /** 只有用户正看着的那一层可交互（键盘）。 */
     isInteractive: boolean;
     declaredActions: LibraryAccountDeclaredActions;
+    /** 首页 surface 交上来的账户层；portal 位置由 suite 自己决定。 */
+    layer: LibraryAccountLayerSource;
 };

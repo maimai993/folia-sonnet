@@ -31,6 +31,8 @@ const DEFAULT_SUITE_EAGER_IMPORTS = [
     './home/Grid3D',
     './collection/GridCollectionSurface',
     './artist/GridArtistSurface',
+    // 账户 surface（A5）：登录弹窗与切换确认框，A4 时首页外壳里的账户宿主本来就即时 import 它们。
+    './account/GridAccountSurface',
     './transitions/CollectionMorphOverlay',
     './transitions/gridHostTransitions',
     // 「完成」时忘掉布局记录（P4.5）：只碰 sessionStorage，依赖的两个键函数所在的模块上面几项本来就即时加载。

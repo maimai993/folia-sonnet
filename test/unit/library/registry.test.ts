@@ -9,7 +9,13 @@ import {
     resolveLibrarySurface,
     resolveLibrarySurfaceActions,
 } from '@/library/registry';
-import { buildLibrarySuiteIndex, LIBRARY_ACTION_IDS, LIBRARY_ARTIST_ACTION_IDS, LIBRARY_HOME_ACTION_IDS } from '@/library/core/model/librarySuites';
+import {
+    buildLibrarySuiteIndex,
+    LIBRARY_ACCOUNT_ACTION_IDS,
+    LIBRARY_ACTION_IDS,
+    LIBRARY_ARTIST_ACTION_IDS,
+    LIBRARY_HOME_ACTION_IDS,
+} from '@/library/core/model/librarySuites';
 import type { LibrarySuiteManifest } from '@/library/core/contracts/suite';
 
 // test/unit/library/registry.test.ts
@@ -31,6 +37,18 @@ describe('library suite registry', () => {
             expect(resolveLibrarySurface(surface, 'tui').component).not.toBe(resolveLibrarySurface(surface, 'grid').component);
         }
         expect(resolveLibrarySurface('collection', 'nope').suiteId).toBe('grid');
+    });
+
+    it('answers the TUI account surface with the grid one as a whole (A5; the TUI has none until A6)', () => {
+        const grid = resolveLibrarySurface('account', 'grid');
+        const tui = resolveLibrarySurface('account', 'tui');
+        expect(grid).toMatchObject({ suiteId: 'grid', isFallback: false });
+        expect(tui).toMatchObject({ suiteId: 'grid', isFallback: true });
+        // 同一个组件与同一份声明（含可选的诊断与后端重启）：换到 TUI 时登录弹窗不重新挂载，那两项照样显示。
+        expect(tui.component).toBe(grid.component);
+        expect(tui.declaredActions).toBe(grid.declaredActions);
+        expect(getLibrarySuite('tui')?.surfaces.account).toBeUndefined();
+        expect(resolveLibrarySurface('account', 'tui')).toBe(tui);
     });
 
     it('still falls back to the grid artist page for a suite that does not implement it', () => {
@@ -55,7 +73,7 @@ describe('library suite registry', () => {
         expect(resolveLibrarySurfaceActions('artist', 'tui')).toBe(resolveLibrarySurfaceActions('artist', 'tui'));
     });
 
-    it.each(['home', 'collection', 'artist'] as const)('shares the default %s result across unknown suite ids', surface => {
+    it.each(['home', 'collection', 'artist', 'account'] as const)('shares the default %s result across unknown suite ids', surface => {
         const defaultSurface = resolveLibrarySurface(surface, DEFAULT_LIBRARY_SUITE_ID);
         for (let index = 0; index < 1000; index += 1) {
             // 输入可以任意变化；解析后的组件、动作与转场相同，就不应分配无限多份缓存对象。
@@ -87,6 +105,9 @@ describe('library suite registry', () => {
         // 首页：两套都实现了全部首页动作（网格的焦点类动作在卡片与目录树的按钮上，TUI 的在命令面板与键盘上）。
         expect([...resolveLibrarySurfaceActions('home', 'grid').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
         expect([...resolveLibrarySurfaceActions('home', 'tui').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
+        // 账户（A5）：网格实现全部 7 个账户动作；TUI 没有 account surface，回退网格的那一份。
+        expect(resolveLibrarySurface('account', 'grid').declaredActions).toEqual({ actions: LIBRARY_ACCOUNT_ACTION_IDS, extraActions: [] });
+        expect(resolveLibrarySurfaceActions('account', 'tui')).toBe(resolveLibrarySurfaceActions('account', 'grid'));
     });
 
     // P4.5：「完成」时宿主让每套 suite 忘掉这一层的布局记录；网格的两份（集合、歌手页）都在 sessionStorage 里，TUI 没有。

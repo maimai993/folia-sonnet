@@ -61,7 +61,12 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
                 )}
             </GridViewOverlayHost>
             {/* 登录弹窗与切换确认框：寿命与首页 surface 相同（首页整个藏起时卸载），换 suite 不卸载。 */}
-            <LibraryAccountHost account={model.account} layer={accountLayer} />
+            <LibraryAccountHost
+                account={model.account}
+                layer={accountLayer}
+                theme={model.surfaceProps.theme}
+                isInteractive={isInteractive}
+            />
         </>
     );
 };

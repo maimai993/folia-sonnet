@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
 import type {
     LibraryAccountController,
+    LibraryAccountLayerSource,
     LibraryAccountSnapshot,
     LibraryLoginSessionSnapshot,
     LibraryProviderSwitchRequest,
@@ -175,3 +176,11 @@ export const useLibraryAccount = (controller: LibraryAccountController): Library
     const pendingSwitch = useLibraryAccountPendingSwitch(controller);
     return useMemo(() => ({ snapshot, login, pendingSwitch }), [login, pendingSwitch, snapshot]);
 };
+
+/**
+ * account surface 订阅首页 surface 交上来的账户层（A5）：返回此刻接上的元素（没接时 null）。suite 拿它决定
+ * portal 位置；元素换了只让订阅它的 account surface 重渲染。
+ */
+export const useLibraryAccountLayerElement = (layer: LibraryAccountLayerSource): HTMLElement | null => (
+    useSyncExternalStore(layer.subscribe, layer.getElement, layer.getElement)
+);

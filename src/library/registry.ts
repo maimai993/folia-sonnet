@@ -39,8 +39,11 @@ export type ResolvedLibrarySurface<Surface extends LibrarySurfaceId> = {
     /** 实际渲染这个 surface 的 suite（回退时是默认 suite）。 */
     suiteId: LibrarySuiteId;
     component: React.ComponentType<LibrarySurfacePropsMap[Surface]>;
-    /** 这套 suite 在这个 surface 上声明的动作；同一组输入总是同一个对象，可以直接当 props 传。 */
-    declaredActions: LibraryDeclaredActions;
+    /**
+     * 这套 suite 在这个 surface 上声明的动作；同一组输入总是同一个对象，可以直接当 props 传。
+     * 类型按 surface 收窄（账户 surface 是 LibraryAccountDeclaredActions）：建索引时已按 surface 校验过动作清单。
+     */
+    declaredActions: LibrarySurfacePropsMap[Surface]['declaredActions'];
     transitions: LibrarySuiteTransitions | undefined;
     isFallback: boolean;
 };
@@ -65,7 +68,7 @@ export const resolveLibrarySurface = <Surface extends LibrarySurfaceId>(
         suiteId: resolved.suite.id,
         // 契约里的组件只是结构化的最小类型；entry 里放的都是 React 组件（即时或 lazy），这里还原。
         component: resolved.declaration.component as unknown as React.ComponentType<LibrarySurfacePropsMap[Surface]>,
-        declaredActions: resolved.declaredActions,
+        declaredActions: resolved.declaredActions as LibrarySurfacePropsMap[Surface]['declaredActions'],
         transitions: resolved.suite.transitions,
         isFallback: resolved.isFallback,
     };

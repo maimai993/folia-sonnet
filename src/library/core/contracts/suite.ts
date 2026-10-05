@@ -1,6 +1,6 @@
 import type { LocalSong, SongResult, StatusMessage, Theme } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
-import type { LibraryAccountController } from './account';
+import type { LibraryAccountActionId, LibraryAccountController, LibraryAccountSurfaceProps } from './account';
 import type { LibraryArtistResource } from './artist';
 import type { CollectionNavigationOrigin, LibraryCollectionDescriptor } from './collection';
 import type { LibraryDirectoryBatchController } from './directory';
@@ -17,8 +17,11 @@ import type { CollectionResource } from './resource';
 // 两者取交集）。发现与解析在 src/library/registry.ts，纯规则在 core/model/librarySuites。
 // 这里只有类型；对 React 组件只用一个结构化的最小类型（契约不 import react）。
 
-/** 目录 / GridMap 属于 home；以后有 search 再加。 */
-export type LibrarySurfaceId = 'home' | 'collection' | 'artist';
+/**
+ * 目录 / GridMap 属于 home；以后有 search 再加。account（A5）是登录弹窗与切换确认框：它不是一页，叠在首页之上，
+ * 由首页外壳里的账户宿主按当前 suite 解析（契约见 ./account）。
+ */
+export type LibrarySurfaceId = 'home' | 'collection' | 'artist' | 'account';
 
 /**
  * suite 的标识，由 registry 从 `suites/<id>/entry.ts` 发现（开发版才有 tui）。用字符串而不是写死的联合：
@@ -147,8 +150,11 @@ export type LibraryArtistActionId =
  * surface 向命令面板发布时只发布这里有的（再与 core 能力取交集）。
  */
 export type LibraryDeclaredActions = {
-    /** 集合 surface 是 LibraryActionId，首页 surface 是 LibraryHomeActionId，歌手 surface 是 LibraryArtistActionId。 */
-    readonly actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId)[];
+    /**
+     * 集合 surface 是 LibraryActionId，首页 surface 是 LibraryHomeActionId，歌手 surface 是 LibraryArtistActionId，
+     * 账户 surface 是 LibraryAccountActionId（它的 props 里收窄成 LibraryAccountDeclaredActions）。
+     */
+    readonly actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId | LibraryAccountActionId)[];
     readonly extraActions: readonly string[];
 };
 
@@ -246,14 +252,18 @@ export type LibrarySurfacePropsMap = {
     home: LibraryHomeSurfaceProps;
     collection: LibraryCollectionSurfaceProps;
     artist: LibraryArtistSurfaceProps;
+    account: LibraryAccountSurfaceProps;
 };
 
 /** suite 对一个 surface 的实现与声明。 */
 export type LibrarySurfaceDeclaration<Props> = {
     /** 默认 suite 可以是即时组件；其它 suite 必须是 React.lazy（registry 用 eager glob 发现 entry）。 */
     component: LibrarySurfaceComponent<Props>;
-    /** 集合 surface 列 LibraryActionId，首页 LibraryHomeActionId，歌手 LibraryArtistActionId（建索引时按 surface 校验）。 */
-    actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId)[];
+    /**
+     * 集合 surface 列 LibraryActionId，首页 LibraryHomeActionId，歌手 LibraryArtistActionId，账户 LibraryAccountActionId
+     * （建索引时按 surface 校验；账户 surface 还必须列全基础动作）。
+     */
+    actions: readonly (LibraryActionId | LibraryHomeActionId | LibraryArtistActionId | LibraryAccountActionId)[];
     /** suite 自己的动作（不在 core 的清单里），例如网格的信息面板、曲目侧栏、编辑模式。 */
     extraActions?: readonly string[];
 };

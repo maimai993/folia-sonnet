@@ -246,6 +246,7 @@ export const useAccountProbeModel = (): AccountProbeModel => {
     const accountRef = useRef(account);
     accountRef.current = account;
     useEffect(() => {
+        let switchResult: string | null = null;
         const api: AccountProbeApi = {
             ready: () => true,
             providers: () => accountRef.current.getSnapshot().providers.map(provider => provider.providerId),
@@ -267,6 +268,16 @@ export const useAccountProbeModel = (): AccountProbeModel => {
             setBackendRestart: (outcome, delayMs = 300) => {
                 restartPlan = { outcome, delayMs };
             },
+            suite: () => useLibrarySuiteStore.getState().suite,
+            setSuite: suiteId => useLibrarySuiteStore.getState().setSuite(suiteId),
+            startLogin: async providerId => (await accountRef.current.startLogin(providerId)).status,
+            requestSwitch: providerId => {
+                switchResult = null;
+                void accountRef.current.requestSwitch(providerId).then(result => {
+                    switchResult = result.status === 'declined' ? `declined:${result.reason}` : result.status;
+                });
+            },
+            switchResult: () => switchResult,
             showAccountTab: setAccountTabVisible,
         };
         window.__accountProbe = api;

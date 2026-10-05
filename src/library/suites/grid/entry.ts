@@ -1,13 +1,15 @@
+import type { LibraryAccountActionId } from '../../core/contracts/account';
 import type { LibraryHomeActionId, LibrarySuiteManifest } from '../../core/contracts/suite';
 import Grid3D from './home/Grid3D';
 import GridCollectionSurface from './collection/GridCollectionSurface';
 import GridArtistSurface from './artist/GridArtistSurface';
+import GridAccountSurface from './account/GridAccountSurface';
 import { CollectionMorphOverlay } from './transitions/CollectionMorphOverlay';
 import { gridHostTransitions } from './transitions/gridHostTransitions';
 import { gridLayout } from './gridLayout';
 
 // src/library/suites/grid/entry.ts
-// 网格 suite（默认 suite）：实现全部三个 surface，任何别的 suite 没实现的 surface 都由它渲染。
+// 网格 suite（默认 suite）：实现全部 surface（首页、集合、歌手页与 A5 起的账户），任何别的 suite 没实现的 surface 都由它渲染。
 //
 // 这里的组件是即时 import，不是 React.lazy——这是默认 suite 唯一的例外（别的 entry 必须 lazy，
 // test/unit/library/suiteEntries.test.ts 检查）：
@@ -17,6 +19,8 @@ import { gridLayout } from './gridLayout';
 //   集合层或转场层 lazy 的话，第一次打开集合时它们还没加载，第一次转场就会丢；
 // - registry 只被首页外壳（Home）、集合宿主和 suite 切换引用，而它们本来就静态 import 这些组件，
 //   即时 import 不会把网格拉进任何原本不含它的模块。
+// - 账户 surface（登录弹窗与切换确认框）在 A4 时由首页外壳里的账户宿主即时 import；改由 registry 解析后仍然即时，
+//   登录弹窗第一次出现不必等 chunk。
 
 // 首页：GridMap 的筛选、批量面板（批选、播放 / 入队、新建歌单、删除，目录树上的重扫根 / 移除根 / 恢复忽略目录）、
 // 隐藏管理（卡片上的眼睛按钮），以及本地 / Navidrome 列表右上角的导入与刷新。toggle-hidden 与三个根上的动作
@@ -38,6 +42,18 @@ const GRID_HOME_ACTIONS: readonly LibraryHomeActionId[] = [
     'home-refresh-folders',
     'home-import-playlist',
     'home-refresh-navidrome',
+];
+
+// 账户：登录弹窗（二维码、QQ 两步选方式、重试、关闭、失败诊断、网易后端重启）与切换确认框（GridAccountSurface），
+// 以及首页切换器 / 连接面板上的选平台与登出（Grid3D 经账户 controller 调用）。全部 7 个动作都实现。
+const GRID_ACCOUNT_ACTIONS: readonly LibraryAccountActionId[] = [
+    'account-login',
+    'account-login-method',
+    'account-switch-confirm',
+    'account-select',
+    'account-logout',
+    'account-login-diagnostics',
+    'account-backend-restart',
 ];
 
 const grid: LibrarySuiteManifest = {
@@ -93,6 +109,7 @@ const grid: LibrarySuiteManifest = {
                 'open-artist',
             ],
         },
+        account: { component: GridAccountSurface, actions: GRID_ACCOUNT_ACTIONS },
     },
     transitions: {
         Overlay: CollectionMorphOverlay,

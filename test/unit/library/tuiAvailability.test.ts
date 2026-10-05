@@ -45,5 +45,12 @@ describe('TUI development validation availability', () => {
                 }
             }
         }
+        // account surface（A5）：TUI 没有它，启用时整体回退网格（isFallback），关闭时与网格共用同一个解析结果。
+        const gridAccount = registry.resolveLibrarySurface('account', 'grid');
+        const tuiAccount = registry.resolveLibrarySurface('account', 'tui');
+        expect(tuiAccount.component).toBe(gridAccount.component);
+        expect(tuiAccount.suiteId).toBe('grid');
+        expect(tuiAccount.isFallback).toBe(enabled);
+        if (!enabled) expect(tuiAccount).toBe(gridAccount);
     });
 });

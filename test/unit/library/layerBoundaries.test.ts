@@ -160,6 +160,15 @@ describe('library core layer boundaries', () => {
         expect(offenders).toEqual([]);
     });
 
+    it('keeps the account host suite-agnostic: it resolves the account surface through the registry (A5)', () => {
+        // 登录弹窗、确认框与它们的展示组件属于渲染 account surface 的那套 suite；宿主只经 registry 解析，
+        // 不 import 任何组件（包括通用对话框与 provider 图标）。
+        const HOST = 'src/library/app/LibraryAccountHost.tsx';
+        const specifiers = allSpecifiersOf(HOST).map(specifier => resolveSpecifier(HOST, specifier));
+        expect(specifiers).toContain('src/library/registry');
+        expect(specifiers.filter(target => /^src\/(components|assets)\//.test(target) || target === 'framer-motion')).toEqual([]);
+    });
+
     it('keeps the registry to discovery: only core contracts, pure rules and React types', () => {
         const offenders = offendersOf(['src/library/registry.ts'], target => (
             !/^(react|src\/library\/core\/(contracts|model)\/)/.test(target)

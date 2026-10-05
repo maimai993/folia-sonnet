@@ -71,6 +71,21 @@ export type AccountProbeApi = {
     /** 下一次重启的结果与耗时。 */
     setBackendRestart: (outcome: 'running' | 'error', delayMs?: number) => void;
 
+    // ---- suite 与 controller 直驱（A5） ----
+    /** 当前选中的 suite（useLibrarySuiteStore）。 */
+    suite: () => string;
+    /** 换 suite（与 DEV 浮层同一个 store；首页上没有打开的集合，不需要转场重置）。 */
+    setSuite: (suiteId: string) => void;
+    /**
+     * 直接调账户 controller 的 startLogin，返回结果的 status。给还没有账户入口的 suite（A5 时的 TUI）用：
+     * 登录界面由 registry 解析出的 account surface 渲染。
+     */
+    startLogin: (providerId: string) => Promise<string>;
+    /** 直接调 controller 的 requestSwitch；不等用户答复，结局经 switchResult 读。 */
+    requestSwitch: (providerId: string) => void;
+    /** 最近一次 requestSwitch 的结局（status，declined 时带 reason，例如 `declined:cancelled`）；还没答复为 null。 */
+    switchResult: () => string | null;
+
     // ---- 账户面板 ----
     /** 按 UnifiedPanel 的方式挂上 / 撤下 AccountTab（交给它同一个账户 controller，和 App 一样）。 */
     showAccountTab: (visible: boolean) => void;
