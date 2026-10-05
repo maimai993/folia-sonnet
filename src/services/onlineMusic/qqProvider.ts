@@ -105,6 +105,10 @@ let ownedPlaylistRouteMissing = false;
 
 export const resetQqProviderRuntimeCache = (): void => {
     ownedPlaylistRouteMissing = false;
+    lastQrDiagnostics = [];
+    qrAwaitingAccount = false;
+    qrDiagnosticAttempt += 1;
+    qrLoggedFailures.clear();
 };
 
 /**
@@ -341,30 +345,41 @@ const getLyrics = async (song: SongResult): Promise<ProviderLyricsResult> => {
 };
 
 const getLoginStatus = async (): Promise<ProviderUser | null> => {
+    const attempt = qrDiagnosticAttempt;
+    const isQrAccountRefresh = qrAwaitingAccount;
     // No opaque backend session means the account cannot be authenticated, so the startup request is skipped.
-    if (!hasQqSession()) return null;
+    if (!hasQqSession()) {
+        recordQrAccountResult('missing-session', attempt);
+        return null;
+    }
 
     try {
         const response = await requestQq<any>('login_status');
         const profile = response?.data?.profile;
         if (!profile) {
-            console.info('[QQProvider] login-status:anonymous');
+            recordQrAccountResult('anonymous', attempt);
+            if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:anonymous');
             return null;
         }
         const user = normalizeQqUser(profile);
+        recordQrAccountResult('profile-present', attempt);
         // The acceptance test account returned a profile without a display name, so the profile itself is the signal.
-        console.info('[QQProvider] login-status:profile', {
+        if (attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:profile', {
             hasUserId: Boolean(user.id),
             hasNickname: Boolean(user.nickname),
         });
         return user;
     } catch (error) {
+        if (isQrAccountRefresh) recordQrTransportFailure('account-refresh', error, attempt);
         // Missing, expired, rejected, or non-persisted backend sessions all arrive as 401.
         if (error instanceof OnlineProviderError && error.code === 'auth-required') {
-            console.info('[QQProvider] login-status:auth-required');
+            if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:auth-required');
             return null;
         }
-        console.warn('[QQProvider] login-status:error', errorFields(error));
+        if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.warn('[QQProvider] login-status:error', {
+            transport: error instanceof OnlineProviderError ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown',
+            httpStatus: error instanceof OnlineProviderError ? safeQrHttpStatus((error as OnlineProviderError & { httpStatus?: unknown }).httpStatus) : 'unavailable',
+        });
         throw error;
     }
 };
@@ -464,28 +479,131 @@ const getAvailability = (): ReturnType<typeof getQqTransportAvailability> => {
 // 二维码失效时用户看到的是可重试的「已过期」，而不是一个还在轮询的死码。
 const QQ_QR_TTL_MS = 175_000;
 
+// Diagnostics may be shared from the log panel. Accept only fixed categories from the API.
+const QR_FAILURE_STAGES = new Set([
+    'qr-key', 'device-bootstrap', 'session-bootstrap',
+    'qr-create', 'mqtt-listener', 'qr-poll', 'qr-event', 'credential-payload',
+    'credential-exchange', 'credential-validation', 'session-issue',
+]);
+const QR_FAILURE_REASONS = new Set([
+    'local-backoff', 'session-busy', 'upstream-http-error',
+    'upstream-rejected', 'mqtt-websocket-error', 'mqtt-websocket-closed',
+    'mqtt-packet-timeout', 'mqtt-handshake-timeout', 'mqtt-handshake-failed',
+    'missing-credential', 'network-timeout', 'dns-error', 'connection-reset',
+    'connection-refused', 'network-error', 'login-rejected', 'user-canceled',
+    'qr-timeout', 'unexpected-error',
+]);
+const QR_TRANSPORT_CODES = new Set([
+    'auth-required', 'unsupported', 'unavailable', 'network', 'invalid-response',
+]);
+let lastQrDiagnostics: string[] = [];
+let qrAwaitingAccount = false;
+let qrDiagnosticAttempt = 0;
+let qrDiagnosticMethod = 'qq';
+const qrLoggedFailures = new Set<string>();
+
+const safeQrCategory = (value: unknown, allowed: Set<string>): string =>
+    typeof value === 'string' && allowed.has(value) ? value : 'unavailable';
+
+const safeQrNumber = (value: unknown, signed = false): string =>
+    typeof value === 'number' && Number.isSafeInteger(value) && (signed || value >= 0)
+        ? String(value) : 'unavailable';
+
+const safeQrHttpStatus = (value: unknown): string =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599
+        ? String(value) : 'unavailable';
+
+const qrFailureSummary = (response: any): string => {
+    const stage = safeQrCategory(response?.failureStage, QR_FAILURE_STAGES);
+    const reason = response?.message === 'QR code expired' && response?.failureReason === undefined
+        ? 'qr-expired' : safeQrCategory(response?.failureReason, QR_FAILURE_REASONS);
+    const summary = `stage=${stage} reason=${reason} upstreamCode=${safeQrNumber(response?.upstreamCode, true)} retryAfterMs=${safeQrNumber(response?.retryAfterMs)}`;
+    const extra = [
+        ...(response?.upstreamHttpStatus === undefined ? [] : [`upstreamHttpStatus=${safeQrHttpStatus(response.upstreamHttpStatus)}`]),
+        ...(response?.upstreamGlobalCode === undefined ? [] : [`upstreamGlobalCode=${safeQrNumber(response.upstreamGlobalCode, true)}`]),
+        ...(response?.upstreamSubCode === undefined ? [] : [`upstreamSubCode=${safeQrNumber(response.upstreamSubCode, true)}`]),
+    ];
+    return [summary, ...extra].join(' ');
+};
+
+const qrFailureLines = (details: string, body?: any): string[] => {
+    const lines = [details];
+    if (body?.lastFailure && typeof body.lastFailure === 'object' && !Array.isArray(body.lastFailure))
+        lines.push(`last-failure: ${qrFailureSummary(body.lastFailure)}`);
+    return lines;
+};
+
+// Only filtered summaries reach console; a shrinking cooldown is still the same failure.
+const logQrFailure = (lines: string[], attempt: number): void => {
+    if (attempt !== qrDiagnosticAttempt) return;
+    const summary = lines.join(' | ');
+    const signature = summary.replace(/retryAfterMs=\d+/g, 'retryAfterMs=countdown');
+    if (qrLoggedFailures.has(signature)) return;
+    qrLoggedFailures.add(signature);
+    console.warn('[QQProvider] qr-login:failed', `method=${qrDiagnosticMethod} ${summary}`);
+};
+
+const recordQrAccountResult = (reason: 'missing-session' | 'anonymous' | 'profile-present', attempt: number): void => {
+    if (!qrAwaitingAccount || attempt !== qrDiagnosticAttempt) return;
+    lastQrDiagnostics.push(`account-refresh: reason=${reason}`);
+    if (reason !== 'profile-present') logQrFailure(lastQrDiagnostics, attempt);
+    qrAwaitingAccount = false;
+};
+
+const recordQrTransportFailure = (step: 'qr-key' | 'qr-create' | 'qr-check' | 'account-refresh', error: unknown, attempt: number): void => {
+    if (attempt !== qrDiagnosticAttempt) return;
+    const code = error instanceof OnlineProviderError
+        ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown';
+    const status = error instanceof OnlineProviderError
+        ? safeQrHttpStatus((error as OnlineProviderError & { httpStatus?: unknown }).httpStatus) : 'unavailable';
+    const response = error instanceof OnlineProviderError ? error.cause : undefined;
+    const body = response && typeof response === 'object' && !Array.isArray(response) ? response as Record<string, unknown> : undefined;
+    const details = `${step}: transport=${code}${status === 'unavailable' ? '' : ` httpStatus=${status}`}${body || status !== 'unavailable' ? ` ${qrFailureSummary(body)}` : ''}`;
+    const lines = qrFailureLines(details, body);
+    lastQrDiagnostics = step === 'account-refresh' ? [...lastQrDiagnostics, ...lines] : lines;
+    logQrFailure(lastQrDiagnostics, attempt);
+    qrAwaitingAccount = false;
+};
+
 const checkQr = async (key: string): Promise<QrLoginState> => {
-    const response = await requestQq<any>('login_qr_check', { key });
+    const attempt = qrDiagnosticAttempt;
+    let response: any;
+    try {
+        response = await requestQq<any>('login_qr_check', { key });
+    } catch (error) {
+        recordQrTransportFailure('qr-check', error, attempt);
+        throw error;
+    }
     const code = Number(response?.code);
     if (code === 801) return { state: 'waiting' };
     if (code === 802) return { state: 'scanned' };
     if (code === 803) {
+        const hasCookie = typeof response?.cookie === 'string' && Boolean(response.cookie);
         // Idempotent with the transport, which already stored the opaque session string on this response.
         if (typeof response?.cookie === 'string' && response.cookie) {
             writeProviderSessionValue('qq', 'cookie', response.cookie);
         }
+        if (attempt === qrDiagnosticAttempt) {
+            lastQrDiagnostics = [`qr-check: result=confirmed hasSession=${hasQqSession()} hasCookie=${hasCookie}`];
+            qrAwaitingAccount = true;
+        }
         return { state: 'confirmed' };
     }
     if (code === 800) {
+        const diagnostic = `qr-check: ${qrFailureSummary(response)}`;
+        if (attempt === qrDiagnosticAttempt) {
+            lastQrDiagnostics = qrFailureLines(diagnostic, response);
+            logQrFailure(lastQrDiagnostics, attempt);
+        }
         // 800 also carries an upstream rejection; `upstreamCode` is the upstream safety number, left unnamed.
         if (response?.upstreamCode !== undefined || response?.retryAfterMs !== undefined) {
-            console.warn('[QQProvider] qr-check:upstream-rejected', {
-                upstreamCode: response?.upstreamCode,
-                retryAfterMs: response?.retryAfterMs,
-            });
             return { state: 'error', message: response?.message };
         }
         return { state: 'expired' };
+    }
+    if (attempt === qrDiagnosticAttempt) {
+        lastQrDiagnostics = [`qr-check: unexpected-code=${safeQrNumber(response?.code)}`];
+        logQrFailure(lastQrDiagnostics, attempt);
     }
     return { state: 'error', message: response?.message };
 };
@@ -730,24 +848,53 @@ export const qqProvider: OnlineMusicProvider = {
         getQrLoginMethods,
         resolveQrLoginMethods,
         async getQrKey(methodId) {
-            const response = await requestQq<any>('login_qr_key', {
-                channel: resolveQrLoginMethodId(methodId),
-            });
-            return String(response?.data?.unikey || '');
+            const attempt = ++qrDiagnosticAttempt;
+            lastQrDiagnostics = [];
+            qrAwaitingAccount = false;
+            qrLoggedFailures.clear();
+            const channel = resolveQrLoginMethodId(methodId);
+            qrDiagnosticMethod = safeQrCategory(channel, new Set(['qq', 'wechat']));
+            try {
+                const response = await requestQq<any>('login_qr_key', {
+                    channel,
+                });
+                const key = String(response?.data?.unikey || '');
+                if (!key.trim() && attempt === qrDiagnosticAttempt) {
+                    lastQrDiagnostics = ['qr-key: reason=missing-key'];
+                    logQrFailure(lastQrDiagnostics, attempt);
+                }
+                return key;
+            } catch (error) {
+                recordQrTransportFailure('qr-key', error, attempt);
+                throw error;
+            }
         },
         async createQr(key) {
-            const response = await requestQq<any>('login_qr_create', { key });
-            return String(response?.data?.qrimg || '');
+            const attempt = qrDiagnosticAttempt;
+            try {
+                const response = await requestQq<any>('login_qr_create', { key });
+                const image = String(response?.data?.qrimg || '');
+                if (!image.trim() && attempt === qrDiagnosticAttempt) {
+                    lastQrDiagnostics = ['qr-create: reason=missing-image'];
+                    logQrFailure(lastQrDiagnostics, attempt);
+                }
+                return image;
+            } catch (error) {
+                recordQrTransportFailure('qr-create', error, attempt);
+                throw error;
+            }
         },
         checkQr,
+        async getQrLoginDiagnostics() {
+            return [...lastQrDiagnostics];
+        },
         getQrTtlMs: () => QQ_QR_TTL_MS,
         async cancelQr(key) {
             // 后端对未知 key 也回 200，所以失败只可能是网络层。调用方在关窗时 fire-and-forget，
             // 抛出去只会让 UI 卡在一个用户无从处理的错误上，而残留会话最迟 3 分钟后自己过期。
             await requestQq('login_qr_cancel', { key }).catch(error => {
                 console.warn('[QQProvider] qr-cancel:failed', {
-                    name: error instanceof Error ? error.name : 'Error',
-                    message: error instanceof Error ? error.message : String(error),
+                    transport: error instanceof OnlineProviderError ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown',
                 });
             });
         },
