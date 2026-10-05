@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { LocalLibraryGroup } from '../types';
-import type { NavidromeViewSelection } from '../types/navidrome';
 import {
     type SearchReturnView,
     type SearchSource,
@@ -9,9 +8,11 @@ import {
 import {
     type CollectionNavigationOrigin,
     type CollectionNavigationSnapshot,
+    notifyCollectionPop,
     useCollectionNavigationStore,
 } from '../stores/useCollectionNavigationStore';
-import type { GridViewCollectionDescriptor } from '../components/app/home/gridViewCollectionAdapters';
+import type { GridViewCollectionDescriptor } from '../library/core/contracts/collection';
+import { collectionHashPath } from '../library/core/model/collectionIdentity';
 import { useAppViewStore } from '../stores/useAppViewStore';
 import type { AppView } from '../stores/useAppViewStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
@@ -133,10 +134,6 @@ const getStartupView = (): ViewState => resolveStartupView({
     queueLength: usePlaybackStore.getState().playQueue.length,
 });
 
-const getCollectionHash = (collection: GridViewCollectionDescriptor) => (
-    `#collection/${collection.source}/${collection.type}/${encodeURIComponent(String(collection.id))}`
-);
-
 const LOCAL_MUSIC_LAST_ROW_KEY = 'folia_local_music_last_row';
 
 export const blockLatticeNavigationInFm = (): boolean => {
@@ -153,7 +150,6 @@ export function useAppNavigation() {
     const isFmMode = usePlaybackStore(state => state.isFmMode);
     const [focusedPlaylistIndex, setFocusedPlaylistIndex] = useState(0);
     const [navidromeFocusedAlbumIndex, setNavidromeFocusedAlbumIndex] = useState(0);
-    const [pendingNavidromeSelection, setPendingNavidromeSelection] = useState<NavidromeViewSelection | null>(null);
     const [localMusicState, setLocalMusicState] = useState<LocalMusicNavigationState>(() => {
         let savedRow = 0;
         try {
@@ -224,7 +220,6 @@ export function useAppNavigation() {
     }, [restoreHistoryState]);
 
     const resetLocalNavigationContext = useCallback(() => {
-        setPendingNavidromeSelection(null);
         setLocalMusicState(prev => ({
             ...prev,
             activeRow: 0,
@@ -296,6 +291,9 @@ export function useAppNavigation() {
                 restoreHistoryState(fallbackState);
                 return;
             }
+            // 历史后退弹掉集合层时（浏览器后退，或应用内返回走的 history.back()），先在 store 变化之前通知：
+            // 集合宿主据此让渲染这一层的 suite 跑 beforeBack（网格的反向移形换影），和应用内返回一致。
+            notifyCollectionPop(state.collection ?? null);
             restoreHistoryState(state);
         };
 
@@ -337,7 +335,7 @@ export function useAppNavigation() {
         pushNavigationState({
             view: 'home',
             hash: collection?.stack.length
-                ? getCollectionHash(collection.stack[collection.stack.length - 1])
+                ? collectionHashPath(collection.stack[collection.stack.length - 1])
                 : '#home',
             search,
             collection,
@@ -462,7 +460,7 @@ export function useAppNavigation() {
         const search = origin === 'search' ? getSearchHistorySnapshot() : null;
         pushNavigationState({
             view: 'home',
-            hash: getCollectionHash(collection),
+            hash: collectionHashPath(collection),
             search,
             collection: snapshot,
         });
@@ -475,7 +473,7 @@ export function useAppNavigation() {
         }
         pushNavigationState({
             view: 'home',
-            hash: getCollectionHash(collection),
+            hash: collectionHashPath(collection),
             search: snapshot.origin === 'search' ? getSearchHistorySnapshot() : null,
             collection: snapshot,
         });
@@ -493,9 +491,12 @@ export function useAppNavigation() {
 
         const nextStack = snapshot.stack.slice(0, -1);
         if (nextStack.length > 0) {
-            useCollectionNavigationStore.getState().restore({ ...snapshot, stack: nextStack });
+            const next = { ...snapshot, stack: nextStack };
+            notifyCollectionPop(next);
+            useCollectionNavigationStore.getState().restore(next);
             return;
         }
+        notifyCollectionPop(null);
         useCollectionNavigationStore.getState().clear();
         if (snapshot.origin === 'player') {
             setCurrentView('player');
@@ -508,8 +509,6 @@ export function useAppNavigation() {
         setFocusedPlaylistIndex,
         navidromeFocusedAlbumIndex,
         setNavidromeFocusedAlbumIndex,
-        pendingNavidromeSelection,
-        setPendingNavidromeSelection,
         localMusicState,
         setLocalMusicState,
         navigateToPlayer,
