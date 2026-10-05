@@ -3,6 +3,7 @@
 //
 // 这里只放「环境」：假 auth provider 的编排、账户与当前平台的种子、网易本地后端、调用账。登录弹窗、切换器、
 // 确认框这些界面由用例按 suite 的 DOM 去点（A0 只有网格），探针不替界面做动作，否则钉不住真实交互。
+// A6 起用例按 suite 参数化：grid 驱动点网格的 DOM，tui 驱动按 TUI 的键（见 test/component/accountBehavior.spec.ts）。
 
 /** 二维码轮询时 checkQr 依次返回的状态；队列空了一律返回 waiting。 */
 export type AccountQrState = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
@@ -78,7 +79,8 @@ export type AccountProbeApi = {
     setSuite: (suiteId: string) => void;
     /**
      * 直接调账户 controller 的 startLogin，返回结果的 status。给还没有账户入口的 suite（A5 时的 TUI）用：
-     * 登录界面由 registry 解析出的 account surface 渲染。
+     * 登录界面由 registry 解析出的 account surface 渲染。A6 起 TUI 有了自己的平台列表与 account surface，
+     * `[switch]` 用例仍用它绕开首页入口、直接验证「选中的 suite 由自己的 account surface 答复」。
      */
     startLogin: (providerId: string) => Promise<string>;
     /** 直接调 controller 的 requestSwitch；不等用户答复，结局经 switchResult 读。 */

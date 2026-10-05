@@ -25,7 +25,7 @@ describe('TUI development validation availability', () => {
         const registry = await import('@/library/registry');
 
         expect(tui.available).toBe(enabled);
-        expect(Object.keys(tui.surfaces).sort()).toEqual(enabled ? ['artist', 'collection', 'home'] : []);
+        expect(Object.keys(tui.surfaces).sort()).toEqual(enabled ? ['account', 'artist', 'collection', 'home'] : []);
         expect(registry.listLibrarySuites().map(suite => suite.id)).toEqual(enabled ? ['grid', 'tui'] : ['grid']);
         expect(registry.hasLibrarySuite('tui')).toBe(enabled);
 
@@ -45,12 +45,18 @@ describe('TUI development validation availability', () => {
                 }
             }
         }
-        // account surface（A5）：TUI 没有它，启用时整体回退网格（isFallback），关闭时与网格共用同一个解析结果。
+        // account surface：A6 起 TUI 有自己的（启用时解析到 TUI，不是回退）；关闭时与网格共用同一个解析结果。
         const gridAccount = registry.resolveLibrarySurface('account', 'grid');
         const tuiAccount = registry.resolveLibrarySurface('account', 'tui');
-        expect(tuiAccount.component).toBe(gridAccount.component);
-        expect(tuiAccount.suiteId).toBe('grid');
-        expect(tuiAccount.isFallback).toBe(enabled);
-        if (!enabled) expect(tuiAccount).toBe(gridAccount);
+        if (enabled) {
+            expect(tuiAccount.suiteId).toBe('tui');
+            expect(tuiAccount.isFallback).toBe(false);
+            expect(tuiAccount.component).toBe(tui.surfaces.account!.component);
+            expect(tuiAccount.component).not.toBe(gridAccount.component);
+        } else {
+            expect(tuiAccount).toBe(gridAccount);
+            expect(tuiAccount.suiteId).toBe('grid');
+            expect(tuiAccount.isFallback).toBe(false);
+        }
     });
 });

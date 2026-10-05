@@ -62,7 +62,7 @@ describe('library suite entries', () => {
     it('keeps the TUI out of production builds', () => {
         const source = read(entryOf('tui'));
         expect(source).toContain("const ENABLE_TUI = import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true';");
-        for (const component of ['LibraryTuiView', 'LibraryTuiHome', 'LibraryTuiArtist']) {
+        for (const component of ['LibraryTuiView', 'LibraryTuiHome', 'LibraryTuiArtist', 'LibraryTuiAccount']) {
             expect(source).toContain(`const ${component} = ENABLE_TUI ? React.lazy(() => import('./${component}')) : null;`);
         }
         expect(source).toContain('available: ENABLE_TUI,');

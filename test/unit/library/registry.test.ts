@@ -39,16 +39,32 @@ describe('library suite registry', () => {
         expect(resolveLibrarySurface('collection', 'nope').suiteId).toBe('grid');
     });
 
-    it('answers the TUI account surface with the grid one as a whole (A5; the TUI has none until A6)', () => {
+    it('renders the TUI account surface itself (A6) and declares all seven account actions', () => {
         const grid = resolveLibrarySurface('account', 'grid');
         const tui = resolveLibrarySurface('account', 'tui');
         expect(grid).toMatchObject({ suiteId: 'grid', isFallback: false });
-        expect(tui).toMatchObject({ suiteId: 'grid', isFallback: true });
-        // 同一个组件与同一份声明（含可选的诊断与后端重启）：换到 TUI 时登录弹窗不重新挂载，那两项照样显示。
-        expect(tui.component).toBe(grid.component);
-        expect(tui.declaredActions).toBe(grid.declaredActions);
-        expect(getLibrarySuite('tui')?.surfaces.account).toBeUndefined();
+        expect(tui).toMatchObject({ suiteId: 'tui', isFallback: false });
+        expect(tui.component).not.toBe(grid.component);
+        expect(tui.component).toBe(getLibrarySuite('tui')?.surfaces.account?.component);
+        expect([...tui.declaredActions.actions].sort()).toEqual([...LIBRARY_ACCOUNT_ACTION_IDS].sort());
         expect(resolveLibrarySurface('account', 'tui')).toBe(tui);
+    });
+
+    it('still answers a suite without an account surface with the grid one as a whole', () => {
+        // TUI 有了 account surface 之后，真实注册表里没有回退的例子：用真实的网格清单加一套只有首页的假 suite 验证。
+        const grid = getLibrarySuite('grid')!;
+        const homeOnly: LibrarySuiteManifest = {
+            id: 'home-only',
+            labelKey: 'home-only',
+            surfaces: { home: { component: () => null, actions: [] } },
+        };
+        const index = buildLibrarySuiteIndex([grid, homeOnly]);
+        const account = index.resolve('account', 'home-only');
+        expect(account).toMatchObject({ isFallback: true });
+        expect(account.suite.id).toBe('grid');
+        expect(account.declaration.component).toBe(grid.surfaces.account!.component);
+        // 同一份声明（含可选的诊断与后端重启）：回退时那两项照样显示。
+        expect(account.declaredActions).toBe(index.resolve('account', 'grid').declaredActions);
     });
 
     it('still falls back to the grid artist page for a suite that does not implement it', () => {
@@ -105,9 +121,9 @@ describe('library suite registry', () => {
         // 首页：两套都实现了全部首页动作（网格的焦点类动作在卡片与目录树的按钮上，TUI 的在命令面板与键盘上）。
         expect([...resolveLibrarySurfaceActions('home', 'grid').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
         expect([...resolveLibrarySurfaceActions('home', 'tui').actions].sort()).toEqual([...LIBRARY_HOME_ACTION_IDS].sort());
-        // 账户（A5）：网格实现全部 7 个账户动作；TUI 没有 account surface，回退网格的那一份。
+        // 账户（A5 / A6）：两套都实现全部 7 个账户动作（TUI 的诊断只复制报告，后端重启是 Enter）。
         expect(resolveLibrarySurface('account', 'grid').declaredActions).toEqual({ actions: LIBRARY_ACCOUNT_ACTION_IDS, extraActions: [] });
-        expect(resolveLibrarySurfaceActions('account', 'tui')).toBe(resolveLibrarySurfaceActions('account', 'grid'));
+        expect([...resolveLibrarySurfaceActions('account', 'tui').actions].sort()).toEqual([...LIBRARY_ACCOUNT_ACTION_IDS].sort());
     });
 
     // P4.5：「完成」时宿主让每套 suite 忘掉这一层的布局记录；网格的两份（集合、歌手页）都在 sessionStorage 里，TUI 没有。

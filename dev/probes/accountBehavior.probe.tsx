@@ -15,6 +15,8 @@ import { ACCOUNT_NETEASE } from './accountBehavior/accountFixtureRules';
  * 账户状态来自真实的账户 controller（useLibraryAccountController），刷新器 / 登出表与 App 同形，切换清理是应用的
  * 端口外包一层记账（accountBehavior/probeSwitchCleanup.ts）。账户面板（AccountTab）按 UnifiedPanel 的方式可选挂上。
  *
+ * A6 起选中 TUI 时首页是 TUI 首页（在线页签的平台列表），登录框与切换确认由 TUI 的 account surface 渲染。
+ *
  * 它是 Library v2 账户重构（A0 起）的回归闸门：test/component/accountBehavior.spec.ts 通过 window.__accountProbe
  * 编排假 auth provider、网易本地后端与账户种子，读调用账（要码 / 轮询 / 取消 / 刷新 / 登出 / 切换清理）。
  * 不写 IndexedDB，不需要沙盒模式。

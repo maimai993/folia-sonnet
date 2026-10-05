@@ -1,23 +1,42 @@
 import React from 'react';
+import type { LibraryAccountActionId } from '../../core/contracts/account';
 import type { LibrarySuiteManifest } from '../../core/contracts/suite';
 
 // src/library/suites/tui/entry.ts
 // 终端风格的列表 suite（开发验证专用，默认关闭）。显式设置 VITE_LIBRARY_TUI=true 才在开发版启用；
-// 实现首页、集合与歌手页三个 surface（P4.3 起歌手页不再回退网格）。
+// 实现首页、集合、歌手页与账户四个 surface（P4.3 起歌手页不再回退网格，A6 起账户不再回退网格）。
 // 生产构建里 import.meta.env.DEV 是常量 false：组件那一行连同动态 import 一起被摇掉，不会产出 TUI 的 chunk，
 // registry 也因为 available: false 把它当作不存在（浮层不出现、选不到）。
-// 还没有 account surface（A6 再做）：TUI 选中时登录弹窗与切换确认框由 registry 整体回退到网格的 GridAccountSurface。
+// A6 起有自己的 account surface（LibraryTuiAccount）：扫码登录框与切换确认不再回退网格的 GridAccountSurface。
 
 const ENABLE_TUI = import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 'true';
 const LibraryTuiView = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiView')) : null;
 const LibraryTuiHome = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiHome')) : null;
 const LibraryTuiArtist = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiArtist')) : null;
+const LibraryTuiAccount = ENABLE_TUI ? React.lazy(() => import('./LibraryTuiAccount')) : null;
+
+// 账户（LibraryTuiAccount 与首页在线页签的平台列表）：全部 7 个动作都实现。
+// - account-login / account-login-method / account-switch-confirm：方框里的二维码与状态行、↑↓ 选登录方式、Enter 主动作
+//   （选方式 / 重试 / 重启后端）、Esc 关闭；切换确认 Enter / Esc。
+// - account-select / account-logout：首页在线页签的平台列表（未登录时就是页签内容，已登录时 F2 打开），Enter 选平台、
+//   Delete 登出当前且已登录的平台。
+// - account-login-diagnostics：失败后 F4（或点按钮）把诊断报告复制到剪贴板；不带「去 GitHub 反馈」的入口。
+// - account-backend-restart：网易本地后端故障时 Enter（或点按钮）重启，恢复后自动要码。
+const TUI_ACCOUNT_ACTIONS: readonly LibraryAccountActionId[] = [
+    'account-login',
+    'account-login-method',
+    'account-switch-confirm',
+    'account-select',
+    'account-logout',
+    'account-login-diagnostics',
+    'account-backend-restart',
+];
 
 const tui: LibrarySuiteManifest = {
     id: 'tui',
     labelKey: 'libraryTui.rendererTui',
     available: ENABLE_TUI,
-    surfaces: LibraryTuiView && LibraryTuiHome && LibraryTuiArtist
+    surfaces: LibraryTuiView && LibraryTuiHome && LibraryTuiArtist && LibraryTuiAccount
         ? {
             home: {
                 component: LibraryTuiHome,
@@ -25,7 +44,7 @@ const tui: LibrarySuiteManifest = {
                 // 新建歌单（命令面板或行内输入）、从曲库删除选中的（行内确认），焦点在导入根 / 被忽略的文件夹上时
                 // 重扫根、移除根（行内确认）、恢复忽略目录，「管理隐藏」视图与焦点歌单的隐藏 / 取消隐藏；
                 // 本地的导入文件夹、刷新、导入歌单文件（隐藏的文件选择框）与 Navidrome 的刷新。
-                // 在线账户的登录（二维码）不在这里：未登录时只显示原因，登录仍在网格里完成。
+                // 在线账户的平台列表（选平台、登出）也在首页上，但它的动作声明在 account surface 里（见 TUI_ACCOUNT_ACTIONS）。
                 actions: [
                     'directory-filter',
                     'directory-select',
@@ -94,6 +113,10 @@ const tui: LibrarySuiteManifest = {
                     'open-album',
                     'open-artist',
                 ],
+            },
+            account: {
+                component: LibraryTuiAccount,
+                actions: TUI_ACCOUNT_ACTIONS,
             },
         }
         : {},
