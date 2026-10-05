@@ -2,7 +2,7 @@ import { AlertTriangle, Check, Loader2, RotateCcw, ServerCog, X } from 'lucide-r
 import { motion } from 'framer-motion';
 import QrLoginDiagnosticsPrompt, { type QrLoginDiagnosticsPromptProps } from './QrLoginDiagnosticsPrompt';
 
-// src/components/app/home/OnlineProviderLoginModal.tsx
+// src/library/suites/grid/account/OnlineProviderLoginModal.tsx
 
 // 可选的登录方式选择（两步式）。provider 不声明就不传，弹窗完全维持原本的单步外观。
 // 所有文案都由调用方翻译好再传进来，与 title / statusText 的既有做法一致。

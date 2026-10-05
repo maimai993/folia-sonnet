@@ -15,8 +15,8 @@ import {
     useLibraryAccountPendingSwitch,
     type LibraryLoginView,
 } from '../../../core/bindings/useLibraryAccount';
-import OnlineProviderLoginModal from '../../../../components/app/home/OnlineProviderLoginModal';
-import { buildQrLoginDiagnosticsProps } from '../../../../components/app/home/buildQrLoginDiagnosticsProps';
+import OnlineProviderLoginModal from './OnlineProviderLoginModal';
+import { buildQrLoginDiagnosticsProps } from './buildQrLoginDiagnosticsProps';
 import ConfirmDialog from '../../../../components/shared/ConfirmDialog';
 import qqIcon from '../../../../assets/providers/qq.svg';
 import wechatIcon from '../../../../assets/providers/wechat.svg';

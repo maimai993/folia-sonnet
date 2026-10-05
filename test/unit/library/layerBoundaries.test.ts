@@ -141,7 +141,7 @@ describe('library core layer boundaries', () => {
         const FORBIDDEN = [
             /\/GridView$/, /\/Grid3D$/, /\/GridMap$/, /\/ArtistGridView$/,
             /\/(DesktopGrid3DSurface|Grid3DSlider|GridViewTabs|GridMapBatchPanel|GridMapBatchItemList|gridMapCardText|gridMapNavigation)$/,
-            /(^|\/)grid\/(home|directory|collection|artist|shared|transitions)\//,
+            /(^|\/)grid\/(home|directory|collection|artist|account|shared|transitions)\//,
             /(folia-grid|grid\/shared)\/(PolaroidCard|polaroidCardParts|hex\w*|useFoliaHexViewport)$/,
             /(collectionOpenMorph|grid\/transitions)\//,
         ];

@@ -2,16 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, LogIn, LogOut, UserRound } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
-import { canSwitchToProviderDirectly } from '../../../library/core/model/onlineProviderAccountView';
-import { canLogoutProvider } from '../../../library/core/model/accountRules';
-import { playerBottomBarLiveOffset } from '../../../stores/motionSignals';
+import type { OnlineProviderId, ProviderAccountSummary } from '../../../../types/onlineMusic';
+import { canSwitchToProviderDirectly } from '../../../core/model/onlineProviderAccountView';
+import { canLogoutProvider } from '../../../core/model/accountRules';
+import { playerBottomBarLiveOffset } from '../../../../stores/motionSignals';
 import {
     PLAYER_BOTTOM_BAR_BASE_OFFSET_PX,
     resolvePlayerBottomComponentBottomPx,
-} from '../../../utils/playerBottomBarLayout';
+} from '../../../../utils/playerBottomBarLayout';
 
-// src/components/app/home/OnlineProviderSwitcher.tsx
+// src/library/suites/grid/account/OnlineProviderSwitcher.tsx
 
 type OnlineProviderSwitcherProps = {
     providers: ProviderAccountSummary[];

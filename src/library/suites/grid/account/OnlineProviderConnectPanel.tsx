@@ -1,8 +1,8 @@
 import { User } from 'lucide-react';
 import ProviderConnectButton from './ProviderConnectButton';
-import type { ProviderAccountSummary } from '../../../types/onlineMusic';
+import type { ProviderAccountSummary } from '../../../../types/onlineMusic';
 
-// src/components/app/home/OnlineProviderConnectPanel.tsx
+// src/library/suites/grid/account/OnlineProviderConnectPanel.tsx
 
 type OnlineProviderConnectPanelProps = {
     providers: ProviderAccountSummary[];

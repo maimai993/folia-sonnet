@@ -8,9 +8,9 @@ import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type St
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
 import DesktopGrid3DSurface from './DesktopGrid3DSurface';
-import OnlineProviderSwitcher from '../../../../components/app/home/OnlineProviderSwitcher';
-import OnlineProviderConnectPanel from '../../../../components/app/home/OnlineProviderConnectPanel';
-import OnlineProviderAccountlessPanel from '../../../../components/app/home/OnlineProviderAccountlessPanel';
+import OnlineProviderSwitcher from '../account/OnlineProviderSwitcher';
+import OnlineProviderConnectPanel from '../account/OnlineProviderConnectPanel';
+import OnlineProviderAccountlessPanel from '../account/OnlineProviderAccountlessPanel';
 import type { ProviderAccountSummary, ProviderCollection, ProviderUser } from '../../../../types/onlineMusic';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { countRender } from '../../../../dev/renderCount';

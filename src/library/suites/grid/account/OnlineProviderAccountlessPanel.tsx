@@ -1,7 +1,7 @@
 import { LibraryBig, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-// src/components/app/home/OnlineProviderAccountlessPanel.tsx
+// src/library/suites/grid/account/OnlineProviderAccountlessPanel.tsx
 
 type OnlineProviderAccountlessPanelProps = {
     providerLabel: string;

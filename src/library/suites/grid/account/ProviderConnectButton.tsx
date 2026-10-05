@@ -1,11 +1,11 @@
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
-import { pillChromeClassesFor as gridChromeClassesFor } from '../../shared/pillChrome';
-import type { ProviderAccountSummary } from '../../../types/onlineMusic';
+import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
+import { pillChromeClassesFor as gridChromeClassesFor } from '../../../../components/shared/pillChrome';
+import type { ProviderAccountSummary } from '../../../../types/onlineMusic';
 
-// src/components/app/home/ProviderConnectButton.tsx
+// src/library/suites/grid/account/ProviderConnectButton.tsx
 // 与 GridViewTabs 同款的胶囊切换：所有平台常驻为徽章，只有选中的一个展开显示操作文案。
 // 悬停和点击都能切换展开项；点击已展开的平台才执行登录/切换，所以鼠标是“悬停 + 一次点击”，触屏是两次点按。
 // 胶囊宽度一变，其余徽章会滑到静止的指针下：悬停只认真实的指针移动（pointermove），

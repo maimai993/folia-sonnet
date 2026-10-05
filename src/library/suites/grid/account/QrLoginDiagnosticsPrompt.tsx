@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, ClipboardCopy, ExternalLink, Loader2 } from 'lucide-react';
 
-// src/components/app/home/QrLoginDiagnosticsPrompt.tsx
+// src/library/suites/grid/account/QrLoginDiagnosticsPrompt.tsx
 // 扫码登录失败后出现在登录弹窗底部：复制诊断报告，或带着报告去 GitHub 开 issue。
 // 报告要等用户点了才生成——里面有一次对主进程的 IPC，失败时自动生成没有意义。
 
