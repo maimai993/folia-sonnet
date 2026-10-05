@@ -4,7 +4,7 @@
 
 这份文档讲清楚两件事：
 
-1. 音乐库浏览（首页、集合详情、歌手页）的代码怎么分成「core」和「UI suite」，它们之间怎么配合；
+1. 音乐库浏览（首页、集合详情、歌手页）与在线账户（扫码登录、选平台、切换确认、登出）的代码怎么分成「core」和「UI suite」，它们之间怎么配合；
 2. 想写一套新的 UI 时，core 提供了哪些能力、哪些建议实现、哪些可以不做。
 
 代码都在 `src/library/` 下。目前提供默认的 `grid`，以及默认关闭、需显式启用的开发验证 suite `tui`。
@@ -29,9 +29,9 @@ flowchart LR
 
 | 角色 | 位置 | 做什么 | 不做什么 |
 | --- | --- | --- | --- |
-| core | `src/library/core/` | 定义能力；加载、缓存、分页；判定「此刻能不能做」；执行删歌、订阅等动作；保存筛选词、选中项、焦点 | 不知道任何 UI 长什么样，不 import 任何 suite 或组件 |
-| suite | `src/library/suites/<id>/` | 把 core 的数据画出来，把按键 / 点击映射成 core 的动作；声明自己实现了哪些能力 | 不自己请求数据，不直接调 Omni / Navidrome / 本地曲库服务，不 import 别的 suite |
-| 宿主 | `src/library/app/` | 为当前打开的页面创建资源和控制器，接好播放、编辑等端口，挂载共用的对话框，通过 registry 渲染当前 suite | 不画具体界面 |
+| core | `src/library/core/` | 定义能力；加载、缓存、分页；判定「此刻能不能做」；执行删歌、订阅等动作；保存筛选词、选中项、焦点；持有在线账户的扫码登录、待确认切换与登出流程 | 不知道任何 UI 长什么样，不 import 任何 suite 或组件 |
+| suite | `src/library/suites/<id>/` | 把 core 的数据画出来，把按键 / 点击映射成 core 的动作；声明自己实现了哪些能力 | 不自己请求数据，不直接调 Omni / Navidrome / 本地曲库服务，不读账户 store，不 import 别的 suite |
+| 宿主 | `src/library/app/` | 为当前打开的页面创建资源和控制器，接好播放、编辑等端口，挂载共用的对话框，通过 registry 渲染当前 suite；创建在线账户 controller（`useLibraryAccountController.ts`），接好切换清理端口（`createLibraryAccountPort.ts`），在首页外壳里按 suite 渲染账户界面（`LibraryAccountHost.tsx`） | 不画具体界面 |
 | registry | `src/library/registry.ts` | 自动发现 `suites/*/entry.ts`；给定「哪个页面 + 用户选了哪套 suite」，返回该渲染的组件和它声明的动作 | — |
 
 core 内部再分五层，依赖只能从上往下：
@@ -39,8 +39,8 @@ core 内部再分五层，依赖只能从上往下：
 | 层 | 目录 | 内容 |
 | --- | --- | --- |
 | contracts | `core/contracts/` | 只有类型：能力清单、各页面的 props、资源快照、端口接口 |
-| model | `core/model/` | 纯函数：筛选、条目身份、批量范围、能力判定 |
-| services | `core/services/` | 资源（加载、分页、缓存、作废晚到结果）、动作控制器 |
+| model | `core/model/` | 纯函数：筛选、条目身份、批量范围、能力判定、账户规则（选平台、可登出、登录文案） |
+| services | `core/services/` | 资源（加载、分页、缓存、作废晚到结果）、动作控制器、账户 controller 与扫码登录会话 |
 | state | `core/state/` | zustand store：浏览会话、目录会话、隐藏项、当前 suite |
 | bindings | `core/bindings/` | React hooks：订阅资源、读写会话、拿到动作 |
 
@@ -61,6 +61,10 @@ core 内部再分五层，依赖只能从上往下：
 | `core/services/onlineHomeFeedDeps.ts` / `onlineHomeProvider.ts` | 当前 provider、账户与 feed、封面 metadata |
 | `core/services/navidromeHomeLibraryDeps.ts` / `localDirectoryTreesDeps.ts` | 当前 Navidrome 配置与概览、本地导入根快照 |
 | `app/createLibrary*Port.ts` / `useLibraryHomeResources.ts` | 播放与导航 store、导入导出、对话框、状态提示、收藏专辑刷新事件 |
+| `core/services/providerAccountDeps.ts` | Omni 的扫码 auth（建码、轮询、取消、TTL、登录方式、诊断）与 provider 注册表、`useOnlineProviderAccountStore`（provider 列表与当前平台）、`useNeteaseApiStatusStore`（网易本地后端状态与重启）、window 定时器、`__APP_VERSION__` / `navigator` |
+| `app/useLibraryAccountController.ts` / `createLibraryAccountPort.ts` | App 的 per-provider 账户刷新与登出；切换清理时的播放 store、播放器句柄、歌词、prefetch / track profile 运行态、搜索与集合导航 store |
+
+`core/services/providerAccountController.ts` 与 `providerLoginSession.ts` 本身只经端口工作（auth、账户读写、刷新 / 登出、切换清理、网易后端、时钟、诊断环境），不 import Omni、store、`core/state` 或 React，分层测试检查这一点；单测注入假端口与手动时钟。账户真源仍是 `useOnlineProviderAccountStore`，controller 不建第二份账户状态。
 
 ## 兼容接口与迁移结束点
 
@@ -92,7 +96,7 @@ P5 收尾后，首页、集合与歌手业务的真源统一为 core 资源、�
 
 core 把能力分成两级：
 
-- **surface（页面）**：`home`（首页与目录）、`collection`（集合详情）、`artist`（歌手页）。
+- **surface（页面）**：`home`（首页与目录）、`collection`（集合详情）、`artist`（歌手页），以及叠在首页之上的 `account`（登录框与切换确认，见「账户」一节）。
 - **动作**：每个 surface 上的语义动作，例如集合页的 `play-scope`（播放当前筛选范围）、`remove-entry`（删掉一个条目）。
 
 一个动作最终出现在 UI 和命令面板里，要同时满足两条：
@@ -114,7 +118,8 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 | --- | --- |
 | collection | `collection`（描述）、`resource`（曲目资源）、`mutations`（变更控制器）、`playback`（播放端口）、导航（`onBack` / `onDone` / `onOpenAlbum` / `onOpenArtist`）、`declaredActions`、`isInteractive` |
 | artist | `collection`、`resource`（歌手资源：详情、热门歌曲、专辑）、`playback`、导航（同上）、`onEditEntity`、`declaredActions`、`isInteractive` |
-| home | 首页数据（账户、歌单、本地曲库……）、`homeResources`（收藏专辑、电台 feed、首页动作、Navidrome 概览、文件夹树）、`directoryActions`（目录批量动作）、`onOpenGridView`、`declaredActions`、`isInteractive` |
+| home | 首页数据（歌单、本地曲库……）、`account`（在线账户 controller：provider 列表、当前平台、选平台、登出）、可选的 `accountLayerRef`（账户层挂载点）、`homeResources`（收藏专辑、电台 feed、首页动作、Navidrome 概览、文件夹树）、`directoryActions`（目录批量动作）、`onOpenGridView`、`declaredActions`、`isInteractive` |
+| account | `account`（同一个 controller）、`layer`（首页 surface 交上来的账户层）、`theme`、`isDaylight`、`declaredActions`（账户动作）、`isInteractive`（首页外壳层的值） |
 
 `isInteractive` 为 false 时（例如另一层盖在上面、或正在退场），页面不要接键盘、不要往命令面板注册。
 
@@ -213,7 +218,7 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 隐藏项的规则由 core 统一：只有「歌单类」条目能隐藏；隐藏按来源分作用域；隐藏的条目不出现在浏览、筛选和任何批量范围里，只在「管理隐藏」视图里能看到。UI 只负责显示和切换。
 
-在线账户的登录（二维码）目前只有网格提供。别的 suite 在未登录时显示原因即可。
+在线账户的平台列表（选平台、登出）也在首页上，但它的动作声明在 account surface 里，见下面「账户」一节。
 
 ### 歌手页（`artist`）
 
@@ -231,6 +236,75 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 歌手资源的状态：`idle` / `loading` 显示加载中；`ready` 但没有 `detail` 是空态；`error` 显示加载失败。
 
+## 账户：登录、选择与切换确认
+
+在线账户的全部流程在 core 的账户 controller 里（`core/services/providerAccountController.ts`，契约 `core/contracts/account.ts`，纯规则 `core/model/accountRules.ts`）：扫码登录状态机、选平台规则、待确认切换、登出。每套 suite 只画自己的平台列表、登录界面和确认界面，经同一个 controller 驱动。
+
+### controller 的快照与动作
+
+App 创建一个 controller（`app/useLibraryAccountController.ts`，App 卸载时 `dispose`），经首页 props 的 `account` 交给 home surface，经 account surface 的 `account` 交给登录与确认界面，也交给播放器面板的 AccountTab。suite 只订阅、调动作，不创建也不销毁。
+
+快照（`getSnapshot` / `subscribe`，没有变化时保持身份）：
+
+| 字段 | 内容 |
+| --- | --- |
+| `providers` / `activeProviderId` | provider 列表 × 账户 store；当前平台已回落（存的平台不在列表里时是 netease） |
+| `login` | 当前登录会话，同一时间最多一个：`phase`（`resolving-methods` / `choosing-method` / `loading` / `waiting` / `scanned` / `confirmed` / `expired` / `error`）、`methods` 与 `selectedMethodId`、`qrImageUrl`、`failure`、`backend`（网易本地后端故障与重启）、`copy`（i18n key） |
+| `pendingSwitch` | 待确认切换 `{ id, from, to, reason }`，`reason` 是 `switch` 或 `activate-after-login` |
+| `logout` | 登出进度，同一时间最多一个在途 |
+| `lastLoginCompletion` | 最近一次扫码确认的结局（`completed` / `refresh-failed` / `activation-declined`） |
+
+动作全部返回判别式结果，文案由 UI 翻译（绑定 `core/bindings/useLibraryAccount.ts` 的 `useLibraryAccountLogin` / `useLibraryAccountPendingSwitch` / `useLibraryAccountProviders` 给出翻译好的视图）：
+
+| 动作 | 语义 | 结果 |
+| --- | --- | --- |
+| `selectProvider(id)` | 选平台：未配置或不在列表 → 不可用；能直接切（已登录 / 无需登录）→ `requestSwitch`；否则 `startLogin` | `unavailable` / `switch` / `login`，后两支带各自的结果 |
+| `requestSwitch(id)` | 同平台直接 `switched`（`changed: false`）；否则生成 `pendingSwitch` 等用户答复，已有的待确认请求按 `declined`（`superseded`）结算 | 用户答复后才 resolve：`switched` / `declined`（`cancelled` / `superseded` / `disposed`）/ `unavailable` |
+| `confirmSwitch(requestId)` / `cancelSwitch(requestId)` | 按请求 id 结算 | `confirmed` / `cancelled`；过期的 id 返回 `stale` |
+| `startLogin(id)` | 先停掉旧会话；解析登录方式（带竞态代次），单方式直接要码，多方式停在 `choosing-method` | `started`（`step` 为 `choosing-method` 或 `qr`）/ `superseded` / `unavailable` |
+| `selectLoginMethod(methodId)` / `retryLogin()` | 在当前会话里重新要码，旧会话的 key 单独取消；重试保留已选的方式 | `requested` / `no-session` / `rejected`（`unknown-method` / `method-required` / `backend-failed` / `not-retryable`） |
+| `closeLogin()` | 停轮询、取消会话、清快照（同步） | `closed` / `no-session` |
+| `restartLoginBackend()` | 只在 `backend.canRestart` 时；恢复运行后自动要码 | `resumed` / `still-down` / `no-session` / `rejected` |
+| `buildLoginDiagnosticReport()` | 诊断报告文本 | `ok` / `no-session` |
+| `logout(id)` | 只对当前且已登录的平台；走宿主注入的 per-provider logout | `logged-out` / `rejected`（`unknown-provider` / `not-active` / `not-authenticated`）/ `busy` / `failed` |
+
+确认切换后的顺序：清掉 `pendingSwitch` → 宿主端口 `resetForProviderSwitch(next, previous)`（清 automix 尾音、audio、队列、歌词、prefetch、track profile、搜索运行态与集合导航；抛错只记日志，照样切换）→ 作废上一个平台的在途请求（默认装配是 `omni.invalidateActiveRequests()`）→ 写当前平台 → `reason` 为 `switch` 时刷新新账户。`requestSwitch` 的 Promise 在刷新之后才 resolve。
+
+扫码确认后的链路：会话的确认回调只刷新账户。刷新返回 `false` 或抛错 → 会话回到 `error`，`failure` 为 `account-refresh-failed`，界面重新显示；成功且登录的不是当前平台 → 回调结束后发起 `reason: 'activate-after-login'` 的待确认切换；用户拒绝时结局是 `activation-declined`，登录本身仍成功。刷新期间登录被关掉或换了，不再发起激活确认。
+
+单一在途登录：新的 `startLogin` 先停掉旧会话再解析方式（解析期间界面不显示），旧会话不会在后台替旧平台确认登录；解析方式期间又来一次 `startLogin`，前一次返回 `superseded`。
+
+寿命：controller 属于 App，换 suite 不重建，登录会话与待确认切换都在 controller 里，所以登录进行中切换 suite，新 suite 接着显示同一个会话、同一个待确认请求。账户界面宿主 `app/LibraryAccountHost.tsx` 挂在首页外壳 `components/app/Home.tsx` 里，首页整个卸载时关闭登录、把待确认切换按取消结算——待确认切换的寿命随首页宿主。启动恢复会话时直接写当前平台，不经确认。
+
+### account surface
+
+登录与确认会阻塞流程，必须有人答复，所以 account surface **整体回退**：当前 suite 没有 `account` surface 就由 grid 的 `GridAccountSurface` 答复；声明了 `account` surface 就必须列全三个基础动作，缺一个时建 suite 索引直接抛错（`core/model/librarySuites.ts` 的 `LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS`），不会悄悄回退出半套登录界面。推荐与可选动作没声明时，那一项不显示。
+
+| 动作 | 是什么 | 分级 | 用到的 core |
+| --- | --- | --- | --- |
+| `account-login` | 显示二维码与状态、重试、关闭 | 基础 | `useLibraryAccountLogin`；`retryLogin` / `closeLogin` |
+| `account-login-method` | 多方式 provider（QQ）先选方式再要码 | 基础（有多方式的 provider 才用到） | 视图的 `methodStep`；`selectLoginMethod` |
+| `account-switch-confirm` | 确认 / 取消待确认切换 | 基础 | `useLibraryAccountPendingSwitch`；`confirmSwitch` / `cancelSwitch` |
+| `account-select` | 首页上的平台列表，选平台 | 推荐 | `useLibraryAccountProviders`；`selectProvider` |
+| `account-logout` | 首页上的登出入口 | 推荐 | `canLogoutProvider`；`logout` |
+| `account-login-diagnostics` | 失败后的诊断报告 | 可选 | 视图的 `diagnosticsPrompt`；`buildLoginDiagnosticReport` |
+| `account-backend-restart` | 网易本地后端故障时重启 | 可选 | 视图的 `backendFailure`；`restartLoginBackend` |
+
+`account-select` / `account-logout` 画在 home surface 上，但和其余账户动作一起声明在 entry 的 `surfaces.account` 里。
+
+account surface 只在 `login` 可见或 `pendingSwitch` 非空时渲染内容。它不是一页，叠在首页之上，挂载位置由 layer 决定：
+
+- 宿主持有一个账户层（`app/libraryAccountLayer.ts`）。home surface 可以经 `accountLayerRef` 把自己层叠上下文里的一个元素交上来，宿主经 `layer` 把它交给 account surface（`useLibraryAccountLayerElement` 订阅）。
+- grid：Grid3D 把 `<div data-library-account-layer>` 放在平台切换器之前，登录弹窗 portal 进这个层，切换器仍盖在弹窗之上、弹窗开着时也能点；确认框 portal 到 `body`（fixed，z-200，盖住首页与切换器）。没接层时登录弹窗就地渲染。
+- 不接 layer 的 suite 就地渲染自己的层，例如 TUI 用 fixed 全屏层（z-200）。
+
+写 account surface（以及首页上的平台列表）时：
+
+- 不要调 Omni 的扫码 / 登出接口，也不要读 `useOnlineProviderAccountStore`、`useNeteaseApiStatusStore`，数据和动作都来自 controller。
+- 确认框按下确认后立即收起：`confirmSwitch` 同步清掉 `pendingSwitch`，不要 `await confirmSwitch` 再关框（它要等清理与刷新走完）。
+- 登出入口的可用性用 `core/model/accountRules` 的 `canLogoutProvider`，且 `logout.status` 不是 `pending`；与 controller 的判定、网格切换器、AccountTab 一致。
+- 键盘只在 `isInteractive` 为真且界面显示着时接。`isInteractive` 是首页外壳层的值，集合层打开时可能仍为真；登录与确认在最上层时，挂 `data-folia-keyboard-window` 让底下的页面按键与全局热键让路。
+
 ## 写一套新 suite 的步骤
 
 1. 新建 `src/library/suites/<id>/entry.ts`，默认导出一个 `LibrarySuiteManifest`：`id`、显示名（`labelKey`）、`surfaces`（每个页面的组件 + 声明的动作），可选的 `transitions`（转场钩子与背景板订阅）与 `layout`（「完成」时忘掉布局记录）。组件必须用 `React.lazy` 引入（只有默认 suite 例外）。registry 会自动发现它，不需要在别处登记。
@@ -238,7 +312,8 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 3. 向命令面板注册：集合页用 `useGridSurfaceRegistration` + `buildCoreSurfaceParams`（它会按你的声明过滤）；目录用 `useLibraryDirectorySurfaceRegistration`；歌手页用 `useLibraryArtistSurfaceRegistration`。只在 `isInteractive` 为真时注册。
 4. 键盘：可打印字符留给命令面板（它是筛选框），空格是全局的播放 / 暂停。你的页面只用方向键、Enter（可带修饰键）、Delete、Insert、Esc、功能键这类不可打印的键。
 5. 在 `entry.ts` 里如实声明你做了哪些动作。没把握的先别声明：它会自动在命令面板里消失，用户切回网格就能做。
-6. 测试：`test/component/libraryBehavior.spec.ts`、`homeBehavior.spec.ts`、`artistBehavior.spec.ts` 里的语义用例按 suite 参数化。把你的 suite 加进去，同一批场景会对它再跑一遍。
+6. 账户：不做 `account` surface 时登录与确认由网格答复；要做就列全三个基础动作，按上面「账户」一节的规则写。
+7. 测试：`test/component/libraryBehavior.spec.ts`、`homeBehavior.spec.ts`、`artistBehavior.spec.ts`、`accountBehavior.spec.ts` 里的语义用例按 suite 参数化。把你的 suite 加进去，同一批场景会对它再跑一遍。
 
 ## 规则（写 suite 时不要做的事）
 
@@ -253,9 +328,20 @@ suite 还可以有自己的「局部动作」（`extraActions`），它们不属
 
 | 页面 | grid（默认） | tui（开发验证） |
 | --- | --- | --- |
-| home | 全部 | 全部；二维码登录除外（未登录只显示原因） |
+| home | 全部；在线平台切换器与连接面板 | 全部；在线页签是可操作的平台列表（未登录时即页签内容，已登录时 F2 打开） |
 | collection | 全部，另有信息面板、曲目侧栏、编辑模式三个局部动作 | 除 `add-to-playlist` / `create-playlist` 外全部（P4.4 起行上的歌手 / 专辑可打开，Alt+Enter / Alt+Shift+Enter） |
 | artist | 全部 | 全部（P4.3 起；之前回退到网格） |
+| account | 全部 7 个动作：登录弹窗（portal 进首页账户层）、通用确认框（portal 到 body） | 全部 7 个动作：fixed 全屏层里的登录方框与确认方框；诊断只复制到剪贴板，没有反馈入口 |
+
+TUI 的账户按键：
+
+| 位置 | 按键 |
+| --- | --- |
+| 首页 | F2 打开 / 关上在线页签的平台列表（不在在线来源时先切过去）；列表里 ↑↓ / Home / End 移动，Enter 选平台（`selectProvider`），Delete 登出当前且已登录的平台，Esc 或 F2 关掉（未登录时列表就是页签内容，不关） |
+| 登录框 | ↑↓ / ←→ 移动登录方式的高亮；Enter 是此刻的主动作（选高亮的方式 → 重试 → 重启后端）；Esc 关闭；F4 复制诊断报告 |
+| 切换确认 | Enter 确认，Esc 取消；与登录框同时存在时确认在上面，按键归确认 |
+
+账户层的按键在 window 的捕获阶段独占：不带修饰键的按键一律截住，底下的 TUI 页面、命令面板的打字即筛选和全局空格都收不到；带 Ctrl / Alt / Meta 的组合键与 Tab 放过。账户层可交互时挂 `data-folia-keyboard-window`，只在层显示着且首页外壳 `isInteractive` 为真时装监听。
 
 TUI 保留为 Library Core 的第二消费者和开发验证 suite。普通开发默认关闭，只注册 grid，切换浮层也不出现；不增加正式用户设置。要手动验证，显式启用：
 
@@ -274,6 +360,8 @@ entry 用同一个 `import.meta.env.DEV && import.meta.env.VITE_LIBRARY_TUI === 
 - suite 发现与回退：`src/library/registry.ts`、`src/library/core/model/librarySuites.ts`
 - 两套 suite 的声明：`src/library/suites/grid/entry.ts`、`src/library/suites/tui/entry.ts`
 - 宿主：`src/library/app/GridViewOverlayHost.tsx`（集合与歌手页）、`src/components/app/Home.tsx`（首页）
+- 账户：契约 `src/library/core/contracts/account.ts`；规则 `core/model/accountRules.ts`；服务 `core/services/providerAccountController.ts`、`providerLoginSession.ts`、`providerAccountDeps.ts`；绑定 `core/bindings/useLibraryAccount.ts`；宿主 `src/library/app/useLibraryAccountController.ts`、`createLibraryAccountPort.ts`、`libraryAccountLayer.ts`、`LibraryAccountHost.tsx`；grid `suites/grid/account/`；TUI `suites/tui/LibraryTuiAccount*.tsx`、`useLibraryTuiAccountKeys.ts`
+- 账户回归：探针 `dev/probes/accountBehavior*` + `test/component/accountBehavior.spec.ts`（`window.__accountProbe`，按 suite 参数化，另有 `[grid-only]`、`[switch]` 与 AccountTab 用例）；单测 `test/unit/library/core/accountRules.test.ts`、`providerLoginSession.test.ts`、`providerAccountController.test.ts`、`useLibraryAccount.test.ts`，`test/unit/library/app/useLibraryAccountController.test.ts`、`libraryAccountPort.test.ts`；account surface 的回退与基础动作校验在 `test/unit/library/core/librarySuites.test.ts`、`test/unit/library/registry.test.ts`
 - 背景板订阅与网格设置解析：`src/library/app/useLibraryBackdrop.ts`、`src/library/suites/grid/transitions/gridBackdrop.ts`
 - 页面教程解析与回归：`src/services/ponder/pagePonderTarget.ts`、`test/component/pagePonder.spec.ts`
 - 导航栈与弹栈通知：`src/stores/useCollectionNavigationStore.ts`（`notifyCollectionPop` / `subscribeCollectionPop`）、`src/hooks/useAppNavigation.ts`（popstate）
@@ -292,4 +380,16 @@ P5 的六项结构与行为条件可由以下入口复查。行为用例同时�
 | Grid 视觉、500 / 5000 首性能与有界资源寿命 | `app.screenshot.spec.ts`；`gridEntrancePerf.spec.ts`；`npm run test:render`；资源 registry 与 suite resolver 单测 |
 | 同业务新 UI 只新增视图、展示适配与注册 | TUI 三 surface 与 entry；本页新增 suite 步骤；生产构建的 manifest / retained modules 检查 |
 
-开发行为与截图分别验证。正式三张首页截图基线属于 Linux；Windows 上的同机截图比较不能替代 Linux / CI 基线。生产门控应以实际 Web 构建确认，而不是仅依赖 entry 注释：即使构建环境设置 `VITE_LIBRARY_TUI=true`，产物仍不得包含 TUI 组件、其键盘 / 焦点实现或 `DevLibraryRendererSwitch`。通用 locale 中保留 TUI 文案不表示其 UI 被加载。
+账户流程进入 core 的验收入口：
+
+| 条件 | 验证入口 |
+| --- | --- |
+| suite 不直接调扫码 / 登出接口、不读账户与网易后端 store | `src/library/suites/` 下 rg 无 Omni 扫码 / 登出调用与这两个 store 的引用；`layerBoundaries.test.ts` 钉住 suite 不用 `core/services`、账户服务只经端口 |
+| 切换确认由 controller 持有，确认后的清理是宿主端口 | `providerAccountController.test.ts`；`libraryAccountPort.test.ts`；`accountBehavior` 的切换用例 |
+| 两套 suite 完成扫码登录（含 QQ 两步）、切换（含确认）、登出 | `accountBehavior.spec.ts` 的 grid / tui 参数化用例 |
+| 登录进行中切 suite，会话与待确认切换保持 | `accountBehavior` 的 `[switch]` 用例 |
+| account surface 整体回退、基础动作缺失时报错 | `test/unit/library/core/librarySuites.test.ts`、`registry.test.ts` |
+| 扫码状态机、竞态与选平台规则 | `providerLoginSession.test.ts`、`providerAccountController.test.ts`、`accountRules.test.ts` |
+| 网格的登录弹窗、切换器、确认框不变 | `accountBehavior` grid 用例；`providerConnect` 组件用例；`app.screenshot.spec.ts` 三张首页基线 |
+
+开发行为与截图分别验证。正式三张首页截图基线属于 Linux；Windows 上的同机截图比较不能替代 Linux / CI 基线。生产门控应以实际 Web 构建确认，而不是仅依赖 entry 注释：即使构建环境设置 `VITE_LIBRARY_TUI=true`，产物仍不得包含 TUI 组件（含账户层 `LibraryTuiAccount*`）、其键盘 / 焦点实现（含 `useLibraryTuiAccountKeys`）或 `DevLibraryRendererSwitch`；grid 的 `GridAccountSurface` 应在产物里。通用 locale 中保留 TUI 文案不表示其 UI 被加载。
