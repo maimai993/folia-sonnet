@@ -108,6 +108,7 @@ export const resetQqProviderRuntimeCache = (): void => {
     lastQrDiagnostics = [];
     qrAwaitingAccount = false;
     qrDiagnosticAttempt += 1;
+    qrCurrentKey = null;
     qrLoggedFailures.clear();
 };
 
@@ -345,11 +346,12 @@ const getLyrics = async (song: SongResult): Promise<ProviderLyricsResult> => {
 };
 
 const getLoginStatus = async (): Promise<ProviderUser | null> => {
-    const attempt = qrDiagnosticAttempt;
-    const isQrAccountRefresh = qrAwaitingAccount;
+    // 扫码确认后的第一次账号加载认领这次刷新（记下确认时的尝试代次）；其余加载都是普通登录态检查，照常记日志。
+    const qrRefreshAttempt = claimQrAccountRefresh();
+    const isQrAccountRefresh = qrRefreshAttempt !== null;
     // No opaque backend session means the account cannot be authenticated, so the startup request is skipped.
     if (!hasQqSession()) {
-        recordQrAccountResult('missing-session', attempt);
+        recordQrAccountResult('missing-session', qrRefreshAttempt);
         return null;
     }
 
@@ -357,26 +359,26 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
         const response = await requestQq<any>('login_status');
         const profile = response?.data?.profile;
         if (!profile) {
-            recordQrAccountResult('anonymous', attempt);
-            if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:anonymous');
+            recordQrAccountResult('anonymous', qrRefreshAttempt);
+            if (!isQrAccountRefresh) console.info('[QQProvider] login-status:anonymous');
             return null;
         }
         const user = normalizeQqUser(profile);
-        recordQrAccountResult('profile-present', attempt);
+        recordQrAccountResult('profile-present', qrRefreshAttempt);
         // The acceptance test account returned a profile without a display name, so the profile itself is the signal.
-        if (attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:profile', {
+        console.info('[QQProvider] login-status:profile', {
             hasUserId: Boolean(user.id),
             hasNickname: Boolean(user.nickname),
         });
         return user;
     } catch (error) {
-        if (isQrAccountRefresh) recordQrTransportFailure('account-refresh', error, attempt);
+        if (qrRefreshAttempt !== null) recordQrTransportFailure('account-refresh', error, qrRefreshAttempt);
         // Missing, expired, rejected, or non-persisted backend sessions all arrive as 401.
         if (error instanceof OnlineProviderError && error.code === 'auth-required') {
-            if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.info('[QQProvider] login-status:auth-required');
+            if (!isQrAccountRefresh) console.info('[QQProvider] login-status:auth-required');
             return null;
         }
-        if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.warn('[QQProvider] login-status:error', {
+        if (!isQrAccountRefresh) console.warn('[QQProvider] login-status:error', {
             transport: error instanceof OnlineProviderError ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown',
             httpStatus: error instanceof OnlineProviderError ? safeQrHttpStatus(error.httpStatus) : 'unavailable',
         });
@@ -500,6 +502,9 @@ let lastQrDiagnostics: string[] = [];
 let qrAwaitingAccount = false;
 let qrDiagnosticAttempt = 0;
 let qrDiagnosticMethod = 'qq';
+// 当前这一轮的 key。取消它（关窗、TTL 到期、换方式前停掉旧会话）和要新码一样推进尝试代次，
+// 晚于这条边界回来的结果不记失败、不改摘要、不等账号加载。会话自己的代次在 core，这里只护住模块状态。
+let qrCurrentKey: string | null = null;
 const qrLoggedFailures = new Set<string>();
 
 const safeQrCategory = (value: unknown, allowed: Set<string>): string =>
@@ -543,11 +548,25 @@ const logQrFailure = (lines: string[], attempt: number): void => {
     console.warn('[QQProvider] qr-login:failed', `method=${qrDiagnosticMethod} ${summary}`);
 };
 
-const recordQrAccountResult = (reason: 'missing-session' | 'anonymous' | 'profile-present', attempt: number): void => {
-    if (!qrAwaitingAccount || attempt !== qrDiagnosticAttempt) return;
+// 扫码确认后只把下一次开始的账号加载当作「确认后的刷新」，认领后立即清掉标记，
+// 之后（或之前已在途）的登录态检查都按普通检查处理。返回确认时的尝试代次，没有待认领的刷新时为 null。
+const claimQrAccountRefresh = (): number | null => {
+    if (!qrAwaitingAccount) return null;
+    qrAwaitingAccount = false;
+    return qrDiagnosticAttempt;
+};
+
+// 结束当前一轮：推进代次，在途请求晚回时按旧一轮处理。摘要保留，便于读取上一轮的结果。
+const retireQrAttempt = (): void => {
+    qrDiagnosticAttempt += 1;
+    qrCurrentKey = null;
+    qrAwaitingAccount = false;
+};
+
+const recordQrAccountResult = (reason: 'missing-session' | 'anonymous' | 'profile-present', attempt: number | null): void => {
+    if (attempt === null || attempt !== qrDiagnosticAttempt) return;
     lastQrDiagnostics.push(`account-refresh: reason=${reason}`);
     if (reason !== 'profile-present') logQrFailure(lastQrDiagnostics, attempt);
-    qrAwaitingAccount = false;
 };
 
 const recordQrTransportFailure = (step: 'qr-key' | 'qr-create' | 'qr-check' | 'account-refresh', error: unknown, attempt: number): void => {
@@ -859,6 +878,7 @@ export const qqProvider: OnlineMusicProvider = {
                     channel,
                 });
                 const key = String(response?.data?.unikey || '');
+                if (attempt === qrDiagnosticAttempt && key.trim()) qrCurrentKey = key;
                 if (!key.trim() && attempt === qrDiagnosticAttempt) {
                     lastQrDiagnostics = ['qr-key: reason=missing-key'];
                     logQrFailure(lastQrDiagnostics, attempt);
@@ -890,6 +910,8 @@ export const qqProvider: OnlineMusicProvider = {
         },
         getQrTtlMs: () => QQ_QR_TTL_MS,
         async cancelQr(key) {
+            // 只有取消当前这把 key 才结束这一轮；被新码顶替后才补发的旧 key 取消不影响新一轮。
+            if (key === qrCurrentKey) retireQrAttempt();
             // 后端对未知 key 也回 200，所以失败只可能是网络层。调用方在关窗时 fire-and-forget，
             // 抛出去只会让 UI 卡在一个用户无从处理的错误上，而残留会话最迟 3 分钟后自己过期。
             await requestQq('login_qr_cancel', { key }).catch(error => {
