@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     DEFAULT_LIBRARY_SUITE_ID,
     forgetLibraryLayouts,
@@ -91,6 +91,14 @@ describe('library suite registry', () => {
 
     // P4.5：「完成」时宿主让每套 suite 忘掉这一层的布局记录；网格的两份（集合、歌手页）都在 sessionStorage 里，TUI 没有。
     it('forgets the grid layout records of one layer and leaves the others', () => {
+        // 测试环境是 node：Node 25 自带 Web Storage，CI 的 Node 24 没有，所以用内存实现顶上。
+        const values = new Map<string, string>();
+        vi.stubGlobal('sessionStorage', {
+            getItem: (name: string) => values.get(name) ?? null,
+            setItem: (name: string, value: string) => { values.set(name, value); },
+            removeItem: (name: string) => { values.delete(name); },
+            clear: () => values.clear(),
+        });
         const key = 'online:netease:playlist:1';
         sessionStorage.setItem(`folia_gridview_state:v2:${key}`, '{}');
         sessionStorage.setItem(`folia_artist_grid_state:v2:${key}`, '{}');
@@ -102,7 +110,7 @@ describe('library suite registry', () => {
         expect(sessionStorage.getItem(`folia_gridview_state:v2:${key}`)).toBeNull();
         expect(sessionStorage.getItem(`folia_artist_grid_state:v2:${key}`)).toBeNull();
         expect(sessionStorage.getItem('folia_gridview_state:v2:online:netease:playlist:2')).toBe('{}');
-        sessionStorage.clear();
+        vi.unstubAllGlobals();
     });
 
     it('only the grid brings a transition layer', () => {
