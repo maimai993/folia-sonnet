@@ -109,6 +109,7 @@ export const resetQqProviderRuntimeCache = (): void => {
     qrAwaitingAccount = false;
     qrDiagnosticAttempt += 1;
     qrCurrentKey = null;
+    qrScanned = false;
     qrLoggedFailures.clear();
 };
 
@@ -505,6 +506,8 @@ let qrDiagnosticMethod = 'qq';
 // 当前这一轮的 key。取消它（关窗、TTL 到期、换方式前停掉旧会话）和要新码一样推进尝试代次，
 // 晚于这条边界回来的结果不记失败、不改摘要、不等账号加载。会话自己的代次在 core，这里只护住模块状态。
 let qrCurrentKey: string | null = null;
+// 这一轮是否报过 802：扫过码之后才过期多半是手机端没确认或被拒，仍算失败。
+let qrScanned = false;
 const qrLoggedFailures = new Set<string>();
 
 const safeQrCategory = (value: unknown, allowed: Set<string>): string =>
@@ -520,8 +523,7 @@ const safeQrHttpStatus = (value: unknown): string =>
 
 const qrFailureSummary = (response: any): string => {
     const stage = safeQrCategory(response?.failureStage, QR_FAILURE_STAGES);
-    const reason = response?.message === 'QR code expired' && response?.failureReason === undefined
-        ? 'qr-expired' : safeQrCategory(response?.failureReason, QR_FAILURE_REASONS);
+    const reason = safeQrCategory(response?.failureReason, QR_FAILURE_REASONS);
     const summary = `stage=${stage} reason=${reason} upstreamCode=${safeQrNumber(response?.upstreamCode, true)} retryAfterMs=${safeQrNumber(response?.retryAfterMs)}`;
     const extra = [
         ...(response?.upstreamHttpStatus === undefined ? [] : [`upstreamHttpStatus=${safeQrHttpStatus(response.upstreamHttpStatus)}`]),
@@ -530,6 +532,13 @@ const qrFailureSummary = (response: any): string => {
     ];
     return [summary, ...extra].join(' ');
 };
+
+// 自然过期只认结构化字段：3.1.3 的 failureReason=qr-timeout，或会话已被清掉（过期、取消）时后端回的、
+// 不带任何失败字段的 800。不比对后端文案；旧后端带退避却没有原因的 800 仍按失败记。
+const isQrNaturalExpiry = (response: any): boolean => (
+    response?.failureReason === 'qr-timeout'
+    || ['failureStage', 'failureReason', 'upstreamCode', 'retryAfterMs'].every(field => response?.[field] === undefined)
+);
 
 const qrFailureLines = (details: string, body?: any): string[] => {
     const lines = [details];
@@ -595,7 +604,10 @@ const checkQr = async (key: string): Promise<QrLoginState> => {
     }
     const code = Number(response?.code);
     if (code === 801) return { state: 'waiting' };
-    if (code === 802) return { state: 'scanned' };
+    if (code === 802) {
+        if (attempt === qrDiagnosticAttempt) qrScanned = true;
+        return { state: 'scanned' };
+    }
     if (code === 803) {
         const hasCookie = typeof response?.cookie === 'string' && Boolean(response.cookie);
         // Idempotent with the transport, which already stored the opaque session string on this response.
@@ -609,6 +621,16 @@ const checkQr = async (key: string): Promise<QrLoginState> => {
         return { state: 'confirmed' };
     }
     if (code === 800) {
+        // 没扫过码的自然过期不算失败（与 core 会话一致），按 info 记一条；扫过码后才过期仍按失败记。
+        // 两种都回 expired，core 据自己记下的 scanned 区分 expired-after-scan。
+        if (isQrNaturalExpiry(response)) {
+            if (attempt === qrDiagnosticAttempt) {
+                lastQrDiagnostics = [`qr-check: result=${qrScanned ? 'expired-after-scan' : 'expired'} ${qrFailureSummary(response)}`];
+                if (qrScanned) logQrFailure(lastQrDiagnostics, attempt);
+                else console.info('[QQProvider] qr-login:expired', `method=${qrDiagnosticMethod} ${lastQrDiagnostics[0]}`);
+            }
+            return { state: 'expired' };
+        }
         const diagnostic = `qr-check: ${qrFailureSummary(response)}`;
         if (attempt === qrDiagnosticAttempt) {
             lastQrDiagnostics = qrFailureLines(diagnostic, response);
@@ -870,6 +892,7 @@ export const qqProvider: OnlineMusicProvider = {
             const attempt = ++qrDiagnosticAttempt;
             lastQrDiagnostics = [];
             qrAwaitingAccount = false;
+            qrScanned = false;
             qrLoggedFailures.clear();
             const channel = resolveQrLoginMethodId(methodId);
             qrDiagnosticMethod = safeQrCategory(channel, new Set(['qq', 'wechat']));

@@ -94,12 +94,64 @@ describe('QQ QR ordinary failure logs', () => {
         expect(log()).not.toMatch(/private-|https?:/);
     });
 
-    it.each([800, 999])('logs numeric QR terminal code %s safely', async code => {
+    it('logs an unknown numeric QR terminal code safely', async () => {
         const { auth, warnings, log } = await setup();
-        fetchMock.mockResolvedValueOnce(Response.json({ code, message: 'QR code expired' }));
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 999, message: 'QR code expired' }));
         await auth.checkQr!('private-key');
         expect(warnings()).toHaveLength(1);
-        expect(log()).toContain(code === 800 ? 'reason=qr-expired' : 'unexpected-code=999');
+        expect(log()).toContain('unexpected-code=999');
+    });
+
+    // 3.1.3 的自然过期带 failureReason=qr-timeout；会话已被清掉（过期或取消）时后端只回一个不带任何失败字段的 800。
+    // 判定只看这些结构化字段，不比对后端文案。
+    const naturalExpiries = [
+        ['qr-timeout event', { code: 800, message: 'QR code expired', failureStage: 'qr-event', failureReason: 'qr-timeout', retryAfterMs: 30000 }],
+        ['dropped session', { code: 800, message: 'private-message' }],
+    ] as const;
+
+    it.each(naturalExpiries)('records a natural expiry before any scan as info, not a failure (%s)', async (_label, body) => {
+        const { auth, warnings, log, buffer } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 801 }));
+        await auth.checkQr!('key');
+        fetchMock.mockResolvedValueOnce(Response.json(body));
+        await expect(auth.checkQr!('key')).resolves.toEqual({ state: 'expired' });
+        expect(warnings()).toEqual([]);
+        const expired = buffer.getConsoleLogEntries().filter(entry => entry.level === 'info' && entry.scope === 'QQProvider');
+        expect(expired).toHaveLength(1);
+        expect(log()).toContain('qr-login:expired');
+        expect(log()).toContain('method=qq');
+        expect(log()).not.toContain('qr-login:failed');
+        expect(log()).not.toMatch(/private-/);
+        expect((await auth.getQrLoginDiagnostics!())[0]).toMatch(/^qr-check: result=expired stage=/);
+    });
+
+    it.each(naturalExpiries)('still counts an expiry after a scan as a failure (%s)', async (label, body) => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('wechat');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 802 }));
+        await auth.checkQr!('key');
+        fetchMock.mockResolvedValueOnce(Response.json(body));
+        await expect(auth.checkQr!('key')).resolves.toEqual({ state: 'expired' });
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('qr-login:failed');
+        expect(log()).toContain('method=wechat qr-check: result=expired-after-scan');
+        expect(log()).toContain(label === 'qr-timeout event' ? 'stage=qr-event reason=qr-timeout' : 'stage=unavailable reason=unavailable');
+        expect(log()).not.toMatch(/private-/);
+    });
+
+    it('does not take the backend message as proof of expiry', async () => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, message: 'QR code expired', failureStage: 'qr-event',
+            failureReason: 'login-rejected', retryAfterMs: 30000 }));
+        await expect(auth.checkQr!('key')).resolves.toMatchObject({ state: 'error' });
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('stage=qr-event reason=login-rejected');
+        expect(log()).not.toContain('qr-login:expired');
     });
 
     it.each([false, true])('filters invalid categories and numbers in HTTP success=%s', async ok => {
