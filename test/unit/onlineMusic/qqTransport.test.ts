@@ -13,6 +13,14 @@ describe('QQ Music Web transport', () => {
         const { requestQq } = await import('@/services/onlineMusic/qqTransport');
         await expect(requestQq('login_qr_key')).rejects.toMatchObject({ httpStatus: status, cause: { code: 123 } });
     });
+    // httpStatus 是 OnlineProviderError 自己的可选字段：构造时传入，别的 provider 不传就是 undefined。
+    it('takes the HTTP status through the OnlineProviderError constructor', async () => {
+        const { OnlineProviderError } = await import('@/types/onlineMusic');
+        const error = new OnlineProviderError('network', 'request failed', 'qq', { code: 123 }, 502);
+        expect(error.httpStatus).toBe(502);
+        expect(error.cause).toEqual({ code: 123 });
+        expect(new OnlineProviderError('network', 'request failed', 'kugou').httpStatus).toBeUndefined();
+    });
     beforeEach(() => {
         vi.resetModules();
         storage.clear();

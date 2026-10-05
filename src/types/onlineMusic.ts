@@ -209,6 +209,8 @@ export class OnlineProviderError extends Error {
         message: string,
         public readonly providerId?: OnlineProviderId,
         public readonly cause?: unknown,
+        /** 非 2xx 响应的 HTTP 状态，与响应体里的 code 分开；只有按 HTTP 状态分流的 transport 会传。 */
+        public readonly httpStatus?: number,
     ) {
         super(message);
         this.name = 'OnlineProviderError';

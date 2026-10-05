@@ -378,7 +378,7 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
         }
         if (!isQrAccountRefresh && attempt === qrDiagnosticAttempt) console.warn('[QQProvider] login-status:error', {
             transport: error instanceof OnlineProviderError ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown',
-            httpStatus: error instanceof OnlineProviderError ? safeQrHttpStatus((error as OnlineProviderError & { httpStatus?: unknown }).httpStatus) : 'unavailable',
+            httpStatus: error instanceof OnlineProviderError ? safeQrHttpStatus(error.httpStatus) : 'unavailable',
         });
         throw error;
     }
@@ -555,7 +555,7 @@ const recordQrTransportFailure = (step: 'qr-key' | 'qr-create' | 'qr-check' | 'a
     const code = error instanceof OnlineProviderError
         ? safeQrCategory(error.code, QR_TRANSPORT_CODES) : 'unknown';
     const status = error instanceof OnlineProviderError
-        ? safeQrHttpStatus((error as OnlineProviderError & { httpStatus?: unknown }).httpStatus) : 'unavailable';
+        ? safeQrHttpStatus(error.httpStatus) : 'unavailable';
     const response = error instanceof OnlineProviderError ? error.cause : undefined;
     const body = response && typeof response === 'object' && !Array.isArray(response) ? response as Record<string, unknown> : undefined;
     const details = `${step}: transport=${code}${status === 'unavailable' ? '' : ` httpStatus=${status}`}${body || status !== 'unavailable' ? ` ${qrFailureSummary(body)}` : ''}`;

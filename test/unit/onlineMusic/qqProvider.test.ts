@@ -408,7 +408,7 @@ describe('qqProvider', () => {
                 upstreamHttpStatus: 200, upstreamCode: -30002, upstreamSubCode: -99 },
             token: 'private-token', cookie: 'private-cookie', ip: '192.0.2.1', uin: 'private-account',
         };
-        requestMock.mockRejectedValueOnce(Object.assign(new OnlineProviderError('network', 'private-message', 'qq', body), { httpStatus: 429 }));
+        requestMock.mockRejectedValueOnce(new OnlineProviderError('network', 'private-message', 'qq', body, 429));
         const auth = qqProvider.auth!;
         await (step === 'qr-key' ? auth.getQrKey!('qq') : step === 'qr-create' ? auth.createQr!('private-key') : auth.checkQr!('private-key')).catch(() => undefined);
         const lines = await auth.getQrLoginDiagnostics!();
@@ -423,7 +423,7 @@ describe('qqProvider', () => {
     });
 
     it('reports HTTP 429 from an older backend without inferring its cause', async () => {
-        requestMock.mockRejectedValueOnce(Object.assign(new OnlineProviderError('network', 'QQMusicApi request failed: 429', 'qq'), { httpStatus: 429 }));
+        requestMock.mockRejectedValueOnce(new OnlineProviderError('network', 'QQMusicApi request failed: 429', 'qq', undefined, 429));
         await qqProvider.auth!.getQrKey!('qq').catch(() => undefined);
         const lines = await qqProvider.auth!.getQrLoginDiagnostics!();
         expect(lines[0]).toContain('httpStatus=429 stage=unavailable reason=unavailable');
@@ -444,7 +444,7 @@ describe('qqProvider', () => {
         requestMock.mockResolvedValueOnce({ code: 803 });
         await qqProvider.auth!.checkQr!('key');
         if (reason === 'anonymous') requestMock.mockResolvedValueOnce({ code: 200, data: {} });
-        else requestMock.mockRejectedValueOnce(Object.assign(new OnlineProviderError(reason === 'auth-required' ? reason : 'network', 'private-token', 'qq'), { httpStatus: reason === 'auth-required' ? 401 : 502 }));
+        else requestMock.mockRejectedValueOnce(new OnlineProviderError(reason === 'auth-required' ? reason : 'network', 'private-token', 'qq', undefined, reason === 'auth-required' ? 401 : 502));
         await qqProvider.auth!.getLoginStatus().catch(() => undefined);
         const lines = await qqProvider.auth!.getQrLoginDiagnostics!();
         expect(lines[0]).toContain('qr-check: result=confirmed');
