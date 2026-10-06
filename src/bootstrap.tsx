@@ -73,7 +73,30 @@ const bootFolium = async () => {
     restoreSavedFoliumSelections();
 };
 
+// 启动链上的每一步都是 await 串起来的，而 #app-splash 遮罩要等 renderApp 跑完才移除。
+// 只要其中任何一步不 settle（WebView 里的 serviceWorker.ready、Dexie 打开、某个 host
+// 桥调用），遮罩就会永久停在首屏动画上，而且控制台可能一条错误都没有——比崩溃更难排查。
+// 这里给整条链套一个兜底超时：先渲染出界面，迟到的初始化结果被忽略。
+const BOOT_RENDER_FALLBACK_MS = 8_000;
+let hasRendered = false;
+const renderOnce = () => {
+    if (hasRendered) return;
+    hasRendered = true;
+    renderApp();
+};
+const bootFallbackTimer = setTimeout(renderOnce, BOOT_RENDER_FALLBACK_MS);
+// 正常路径下这个定时器必然会被 renderOnce 抢跑或在同一轮事件循环里失效，不必留着。
 void bootFolium()
+    .catch((error) => {
+        console.error('[bootstrap] Folium initialization failed; continuing to render.', error);
+    })
     .finally(() => {
-        void initializeLocalCoverRuntime().finally(renderApp);
+        void initializeLocalCoverRuntime()
+            .catch((error) => {
+                console.error('[bootstrap] Local cover runtime failed; continuing to render.', error);
+            })
+            .finally(() => {
+                clearTimeout(bootFallbackTimer);
+                renderOnce();
+            });
     });
