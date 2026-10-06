@@ -1,6 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { sanitizeDualTheme } from "../shared/themeSanitizer.mjs";
 // 当前文件：Vercel Google GenAI 主题生成函数的 TypeScript 源文件。
+const CAPACITOR_ANDROID_ORIGIN = 'https://localhost';
+const applyCapacitorCorsHeaders = (req, res) => {
+    if (req.headers?.origin !== CAPACITOR_ANDROID_ORIGIN)
+        return;
+    res.setHeader('Access-Control-Allow-Origin', CAPACITOR_ANDROID_ORIGIN);
+    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Vary', 'Origin');
+};
 const THEME_GENERATION_PROMPT_PREFIX = `Analyze the mood of the provided song source text and generate TWO visual theme configurations for a music player - one for LIGHT mode and one for DARK mode.
 
 DUAL THEME REQUIREMENTS:
@@ -58,6 +67,10 @@ const buildThemeSourcePrompt = (snippet, isPureMusic, songTitle) => `Pure instru
 ${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
 ${snippet}`;
 export default async function handler(req, res) {
+    applyCapacitorCorsHeaders(req, res);
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }

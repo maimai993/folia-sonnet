@@ -1,6 +1,15 @@
 /// <reference types="vite/client" />
 
 declare global {
+  // 当前文件：Folia 构建常量、Vite 环境变量与宿主桥接类型声明。
+  interface ImportMetaEnv {
+    readonly VITE_FOLIA_API_BASE?: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+
   const __COMMIT_HASH__: string;
   const __GIT_BRANCH__: string;
   const __APP_VERSION__: string;

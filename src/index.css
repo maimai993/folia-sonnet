@@ -28,6 +28,19 @@ body {
   --scrollbar-track: #18181b;
   --scrollbar-thumb: #3f3f46;
   --scrollbar-thumb-hover: #52525b;
+  --folia-safe-area-top: env(safe-area-inset-top, 0px);
+  --folia-safe-area-right: env(safe-area-inset-right, 0px);
+  --folia-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --folia-safe-area-left: env(safe-area-inset-left, 0px);
+}
+
+html[data-runtime='capacitor-android'] .fixed.inset-0 {
+  top: var(--folia-safe-area-top);
+  right: var(--folia-safe-area-right);
+  bottom: var(--folia-safe-area-bottom);
+  left: var(--folia-safe-area-left);
+  width: auto;
+  height: auto;
 }
 
 /* Custom scrollbar */

@@ -9,6 +9,7 @@ import {
 } from '../services/playbackAdapters';
 import { omni } from '../services/onlineMusic/omni';
 import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
+import { supportsLocalMusicImport } from '../platform/runtime';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
@@ -170,7 +171,11 @@ const getInitialHomeViewTab = (): HomeViewTab => {
         return 'playlist';
     }
     const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
-    return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio'
+    return savedTab === 'playlist'
+        || (savedTab === 'local' && supportsLocalMusicImport())
+        || savedTab === 'albums'
+        || savedTab === 'navidrome'
+        || savedTab === 'radio'
         ? savedTab
         : 'playlist';
 };
@@ -192,10 +197,11 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
     scrollTop: 0,
     searchCache: {},
     setHomeViewTab: (tab) => {
+        const resolvedTab = tab === 'local' && !supportsLocalMusicImport() ? 'playlist' : tab;
         if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
+            localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, resolvedTab);
         }
-        set({ homeViewTab: tab });
+        set({ homeViewTab: resolvedTab });
     },
     setSearchQuery: (query) => set({ searchQuery: query }),
     setSearchScrollTop: (scrollTop) => set(state => {

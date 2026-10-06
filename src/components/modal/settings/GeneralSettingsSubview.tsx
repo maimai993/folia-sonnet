@@ -7,6 +7,7 @@ import type { AppLanguagePreference } from '../../../i18n/config';
 import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
+import { supportsLocalMusicImport } from '../../../platform/runtime';
 
 // src/components/modal/settings/GeneralSettingsSubview.tsx
 // Global app preferences that should stay independent from playback and desktop-only settings.
@@ -155,20 +156,22 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-between p-4">
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.showHomeTabLocal')}
+                    {supportsLocalMusicImport() && (
+                        <div className="flex items-center justify-between p-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.showHomeTabLocal')}
+                                </div>
                             </div>
+                            <button
+                                onClick={() => handleToggleHomeTabLocal(!showHomeTabLocal)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!showHomeTabLocal ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: showHomeTabLocal ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showHomeTabLocal ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
                         </div>
-                        <button
-                            onClick={() => handleToggleHomeTabLocal(!showHomeTabLocal)}
-                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!showHomeTabLocal ? toggleOffBackgroundClass : ''}`}
-                            style={{ backgroundColor: showHomeTabLocal ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showHomeTabLocal ? 'translate-x-6' : 'translate-x-0'}`} />
-                        </button>
-                    </div>
+                    )}
                 </div>
             </section>
 

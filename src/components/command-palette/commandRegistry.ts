@@ -12,11 +12,18 @@ import type {
 import type { SearchSource } from '../../stores/useSearchNavigationStore';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
 import { ListMusic, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward } from 'lucide-react';
+import { supportsLocalMusicImport } from '../../platform/runtime';
 
 // src/components/command-palette/commandRegistry.ts
 // Defines command palette entries and the lightweight matching used for autocomplete.
 
 const MAX_COMMAND_MATCHES = 10;
+const LOCAL_MUSIC_COMMAND_IDS = new Set([
+    'search-local',
+    'settings-local-lyrics-priority',
+    'home-local',
+    'panel-local',
+]);
 
 const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -769,6 +776,10 @@ export const COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = [
 ];
 
 export const getAvailableCommandPaletteCommands = (context?: CommandPaletteContext) => COMMAND_PALETTE_COMMANDS.filter(command => {
+    if (!supportsLocalMusicImport() && LOCAL_MUSIC_COMMAND_IDS.has(command.id)) {
+        return false;
+    }
+
     if (command.id === 'settings-desktop' || command.id === 'settings-update-channel' || command.id.startsWith('desktop-')) {
         const isWebBrowser = typeof window !== 'undefined';
         const isElectron = isWebBrowser && Boolean((window as any).electron);

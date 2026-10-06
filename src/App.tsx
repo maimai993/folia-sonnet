@@ -55,6 +55,7 @@ import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
+import { useCapacitorSystemBars } from './hooks/useCapacitorSystemBars';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from './hooks/usePlaybackInteractionBridge';
@@ -417,6 +418,7 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
+    useCapacitorSystemBars(isDaylight);
 
     const visualizerTunings = useMemo(() => ({
         classic: classicTuning,

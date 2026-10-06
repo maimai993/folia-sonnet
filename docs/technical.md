@@ -120,6 +120,7 @@ vercel env pull .env.local
 | --- | --- | --- |
 | `VITE_NETEASE_API_BASE` | 网易云音乐 API 实例地址 | 是 |
 | `VITE_KUGOU_API_BASE` | Web 版的 KuGouMusicApi 实例地址；Electron 不使用此项 | 否，默认留空 |
+| `VITE_FOLIA_API_BASE` | 自行托管的 Folia AI/歌词代理 API 根地址；Android 使用相关功能时必须为 HTTPS | 否，默认留空 |
 | `VITE_AI_PROVIDER` | AI 提供商，`google` 或 `openai` | 是 |
 | `GEMINI_API_KEY` | Gemini API Key | 使用 Gemini 时需要 |
 | `OPENAI_API_KEY` | OpenAI 兼容 API Key | 使用 OpenAI兼容接口 时需要 |
@@ -134,6 +135,7 @@ Gemini 示例：
 ```env
 VITE_NETEASE_API_BASE=http://localhost:3000
 VITE_KUGOU_API_BASE=
+VITE_FOLIA_API_BASE=
 VITE_AI_PROVIDER=google
 GEMINI_API_KEY=your_google_gemini_api_key
 ```
@@ -170,12 +172,61 @@ OPENAI_API_TEMPERATURE=0.7
 vercel dev
 ```
 
+## Android（Capacitor 8）
+
+Android 应用位于仓库的 `android/`，内置 `dist/` 中的 Vite 产物；application ID 固定为 `top.izuna.foliamajor`，最低支持 Android 7 / API 24。Android 构建不会注册 PWA Service Worker，本地音乐入口因为不支持因此也会隐藏。
+
+### 本地工具链
+
+- 最新稳定版 Android Studio，并使用它自带的 JDK。
+- Android SDK Platform 36.1、最新 Build Tools 36.x、Platform Tools。
+- 模拟器建议使用 API 36.1 系统镜像。
+- 工程固定使用 Capacitor 8 模板的 AGP 8.13.x 与 Gradle Wrapper 8.14.3。
+
+首次准备：
+
+```bash
+npm ci --allow-remote=root
+npm run cap:assets:android
+npm run cap:sync:android
+```
+
+`cap:assets:android` 以 `android/img/icon.png`、`android/img/splash-light.png` 和 `android/img/splash-dark.png` 为唯一源图，重新生成 adaptive/round/legacy 图标及浅色、深色纵横屏启动图；源图不会被修改。
+
+`build:capacitor` 不再内置任何 API 地址。若要在 Android 中使用 AI 主题或歌词代理，请在 `.env.local` 中提供自行托管的 HTTPS `VITE_FOLIA_API_BASE`；不配置时这些功能会在运行时提示不可用。Web 未配置时仍使用同源 `/api/*`。AI Key 只能配置在你的服务端，禁止放入 `VITE_*`、APK 或 Android 日志。
+
+### 构建与运行
+
+```bash
+npm run cap:open:android
+npm run cap:run:android
+npm run build:android:debug
+npm run build:android:bundle
+```
+
+- 调试 APK：`android/app/build/outputs/apk/debug/app-debug.apk`
+- 发布 AAB：`android/app/build/outputs/bundle/release/app-release.aab`
+- 每次 Web 代码变化后先执行 `npm run cap:sync:android`，确保 APK 内资源已更新。
+
+### 发布签名
+
+Android `versionName` 自动读取 `package.json`；`versionCode` 从 1 开始，每次发布到应用商店前必须严格递增。复制 `android/keystore.properties.example` 为 `android/keystore.properties`，填写本机 keystore 的相对路径、密码和 alias。真实 `keystore.properties`、`*.jks`、`*.keystore`、APK/AAB 与 Gradle 缓存均被 Git 忽略；缺少本地签名配置时仍可检查 unsigned release bundle。
+
+首版只承诺前台播放，不包含本地音乐扫描、Android 前台媒体服务、可靠后台/锁屏连续播放或 Play 商店正式上架。Navidrome 服务必须使用 HTTPS。
+
 ## 常用脚本
 
 | 命令 | 说明 |
 | --- | --- |
 | `npm run dev` | 启动 Vite 开发服务器 |
 | `npm run build` | 构建 Web 版本 |
+| `npm run build:capacitor` | 构建不含 PWA Service Worker 的 Android Web 产物 |
+| `npm run cap:assets:android` | 从 `android/img` 的三张源图重新生成 Android 图标和启动图 |
+| `npm run cap:sync:android` | 构建 Web 产物并同步到 Android 工程 |
+| `npm run cap:open:android` | 使用 Android Studio 打开 Android 工程 |
+| `npm run cap:run:android` | 构建并运行到已连接设备或模拟器 |
+| `npm run build:android:debug` | 同步资源并生成调试 APK |
+| `npm run build:android:bundle` | 同步资源并生成发布 AAB |
 | `npm run preview` | 预览构建结果 |
 | `npm run dev:electron` | 启动 Electron 开发模式 |
 | `npm run dev:electron:dist` | 构建后以桌面模式运行 |

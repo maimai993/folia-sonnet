@@ -25,6 +25,7 @@ import OnlineProviderConnectPanel from './app/home/OnlineProviderConnectPanel';
 import OnlineProviderLoginModal from './app/home/OnlineProviderLoginModal';
 import { resolveOnlineProviderAccountView } from './app/home/onlineProviderAccountView';
 import type { MediaId, ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { supportsLocalMusicImport } from '../platform/runtime';
 
 // src/components/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -153,6 +154,13 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         isSearching: state.isSearching,
         submitSearch: state.submitSearch,
     })));
+    const localMusicAvailable = supportsLocalMusicImport();
+
+    useEffect(() => {
+        if (!localMusicAvailable && homeViewTab === 'local') {
+            setHomeViewTab('playlist');
+        }
+    }, [homeViewTab, localMusicAvailable, setHomeViewTab]);
 
     const isOnlineTab = homeViewTab === 'playlist' || homeViewTab === 'albums' || homeViewTab === 'radio';
     const activeProviderId = onlineProviderPlatform?.activeProviderId || 'netease';
@@ -619,7 +627,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     ...(showHomeTabPlaylist ? [{ key: 'playlist', label: t('home.playlists') }] : []),
                                     ...(showHomeTabRadio ? [{ key: 'radio', label: t('home.radio') }] : []),
                                     ...(showHomeTabAlbums ? [{ key: 'albums', label: t('home.albums') }] : []),
-                                    ...(showHomeTabLocal ? [{ key: 'local', label: t('localMusic.folder') }] : []),
+                                    ...(showHomeTabLocal && localMusicAvailable ? [{ key: 'local', label: t('localMusic.folder') }] : []),
                                     ...(navidromeEnabled ? [{ key: 'navidrome', label: t('navidrome.title') || 'Navidrome' }] : []),
                                 ].map((tab) => {
                                     const isActive = homeViewTab === tab.key;
@@ -669,7 +677,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             )}
                             <input
                                 type="text"
-                                placeholder={homeViewTab === 'local' ? t('home.searchLocal') : homeViewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
+                                placeholder={homeViewTab === 'local' && localMusicAvailable ? t('home.searchLocal') : homeViewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40 select-text`}
@@ -730,7 +738,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         hasFloatingPlayer={Boolean(currentTrack)}
                         playlistVisibilityScope={`online:${activeProviderId}`}
                     />
-                ) : homeViewTab === 'local' ? (
+                ) : homeViewTab === 'local' && localMusicAvailable ? (
                     <div className="w-full h-full flex-1">
                         <LocalGrid3DView
                             localSongs={localSongs}

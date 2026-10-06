@@ -52,4 +52,5 @@ TODO.MD
 commit.md
 .codebuff-ai/reasson/conf.jsonc
 scripts/*
+!scripts/generate-android-assets.mjs
 docs/TODO.md

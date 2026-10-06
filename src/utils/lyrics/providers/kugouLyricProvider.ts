@@ -13,6 +13,7 @@ import { krcDecrypt } from './krcDecrypt';
 import { applyDetectedChorusEffects, applyNeteaseChorusByTime } from '../chorusEffects';
 import type { NeteaseChorusRange } from '../chorusEffects';
 import { buildKugouLyricSearchQuery } from '../searchQuery';
+import { resolveFoliaApiUrl } from '../../../services/webApi';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electron;
 type KugouLyricFormat = 'lrc' | 'enhanced-lrc' | 'vtt' | 'krc';
@@ -115,7 +116,7 @@ async function requestKugou(url: string, params: Record<string, any>, module: st
   });
 
   const finalUrl = urlObj.toString();
-  const requestUrl = isElectron ? finalUrl : `/api/lyric-proxy?url=${encodeURIComponent(finalUrl)}`;
+  const requestUrl = isElectron ? finalUrl : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(finalUrl)}`);
 
   const finalHeaders = {
     'User-Agent': `Android14-1070-11070-201-0-${module}-wifi`,
@@ -231,7 +232,7 @@ async function searchKugouLyricsOld(keyword: string, page = 1, pageSize = 20): P
   });
 
   const finalUrl = urlObj.toString();
-  const requestUrl = isElectron ? finalUrl : `/api/lyric-proxy?url=${encodeURIComponent(finalUrl)}`;
+  const requestUrl = isElectron ? finalUrl : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(finalUrl)}`);
 
   try {
     const response = await fetch(requestUrl, {

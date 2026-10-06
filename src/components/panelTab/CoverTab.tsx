@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, UnifiedSong } from '../../types';
 import { canResolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
 import { getProviderSongMetadata, getProviderSongPageUrl } from '../../services/onlineMusic/songMetadata';
+import { openExternalUrl } from '../../utils/openExternalUrl';
 
 interface CoverTabProps {
     currentSong: SongResult | null;
@@ -75,11 +76,7 @@ const CoverTab: React.FC<CoverTabProps> = ({
             return;
         }
 
-        const openSongPage = window.electron?.openExternalUrl
-            ? window.electron.openExternalUrl(songPageUrl)
-            : Promise.resolve(Boolean(window.open(songPageUrl, '_blank', 'noopener,noreferrer')));
-
-        void openSongPage.catch((error) => {
+        void openExternalUrl(songPageUrl).catch((error) => {
             console.error('Failed to open provider song page:', error);
         });
     };

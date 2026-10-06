@@ -636,10 +636,9 @@ export const Grid3DSlider: React.FC<Grid3DSliderProps> = ({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUpOrLeave}
                 onMouseLeave={handleMouseUpOrLeave}
-                className={`w-full flex items-center overflow-x-auto overflow-y-hidden py-24 custom-scrollbar focus:outline-none ${
+                className={`w-full flex items-center overflow-x-auto overflow-y-hidden py-24 hide-scrollbar focus:outline-none ${
                     isInteractive ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
                 }`}
-                style={{ scrollbarWidth: 'none' }}
             >
                 <div className="flex gap-12" style={{ paddingInline: edgePadding }}>
                     {isLoading ? (

@@ -25,6 +25,7 @@ import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettin
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 import { getWebAiProvider } from '../../services/runtimeConfig';
+import { openExternalUrl } from '../../utils/openExternalUrl';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
@@ -607,12 +608,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleOpenChinaDownload = async () => {
-        if (window.electron?.openExternalUrl) {
-            await window.electron.openExternalUrl(QUARK_DOWNLOAD_URL);
-            return;
-        }
-
-        window.open(QUARK_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+        await openExternalUrl(QUARK_DOWNLOAD_URL);
     };
 
     // Navidrome Settings State

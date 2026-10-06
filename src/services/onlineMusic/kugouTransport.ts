@@ -1,6 +1,7 @@
 import md5 from 'blueimp-md5';
 import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
+import { resolveFoliaApiUrl } from '../webApi';
 
 // src/services/onlineMusic/kugouTransport.ts
 
@@ -135,7 +136,7 @@ export const requestKugouAnonymousSearch = async (
     Object.entries(params).forEach(([key, value]) => targetUrl.searchParams.set(key, String(value)));
     const requestUrl = typeof window !== 'undefined' && window.electron
         ? targetUrl.toString()
-        : `/api/lyric-proxy?url=${encodeURIComponent(targetUrl.toString())}`;
+        : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl.toString())}`);
     const response = await fetch(requestUrl, {
         method: 'GET',
         credentials: 'omit',

@@ -10,6 +10,28 @@ const DEFAULT_OPENAI_MODEL = 'gpt-4o';
 const DEFAULT_OPENAI_TEMPERATURE = 0.7;
 const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
 const THEME_JSON_SCHEMA_NAME = 'dual_theme';
+const CAPACITOR_ANDROID_ORIGIN = 'https://localhost';
+
+const buildCorsHeaders = (req: Request): Record<string, string> => (
+    req.headers.get('origin') === CAPACITOR_ANDROID_ORIGIN
+        ? {
+            'Access-Control-Allow-Origin': CAPACITOR_ANDROID_ORIGIN,
+            'Access-Control-Allow-Methods': 'POST,OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Vary': 'Origin',
+        }
+        : {}
+);
+
+const jsonResponse = (req: Request, body: unknown, status: number): Response => (
+    new Response(JSON.stringify(body), {
+        status,
+        headers: {
+            'Content-Type': 'application/json',
+            ...buildCorsHeaders(req),
+        },
+    })
+);
 
 const THEME_JSON_SCHEMA = {
     type: 'object',
@@ -321,21 +343,22 @@ const extractResponseContentText = (message: { content?: unknown; refusal?: unkn
 };
 
 export default async function handler(req: Request) {
-    if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json' },
+    if (req.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: buildCorsHeaders(req),
         });
+    }
+
+    if (req.method !== 'POST') {
+        return jsonResponse(req, { error: 'Method Not Allowed' }, 405);
     }
 
     try {
         const { lyricsText, isPureMusic = false, songTitle } = await req.json();
 
         if (!lyricsText) {
-            return new Response(JSON.stringify({ error: 'Missing lyricsText' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return jsonResponse(req, { error: 'Missing lyricsText' }, 400);
         }
 
         const apiKey = process.env.OPENAI_API_KEY;
@@ -349,10 +372,7 @@ export default async function handler(req: Request) {
 
         if (!apiKey) {
             console.error("OpenAI API Key is missing in server environment.");
-            return new Response(JSON.stringify({ error: 'Server configuration error' }), {
-                status: 500,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return jsonResponse(req, { error: 'Server configuration error' }, 500);
         }
 
         // Limit text to avoid token limits if lyrics are huge
@@ -404,17 +424,11 @@ export default async function handler(req: Request) {
         dualTheme.dark.fontStyle = 'sans';
         dualTheme.dark.provider = 'OpenAI Compatible';
 
-        return new Response(JSON.stringify(dualTheme), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return jsonResponse(req, dualTheme, 200);
 
     } catch (error) {
         console.error("Error generating theme:", error);
         const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
-        return new Response(JSON.stringify({ error: errorMessage }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return jsonResponse(req, { error: errorMessage }, 500);
     }
 }
