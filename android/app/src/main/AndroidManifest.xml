@@ -57,6 +57,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- 歌词动态壁纸。BIND_WALLPAPER 权限 + 这个 intent-filter 是系统认领动态壁纸的
+             硬性要求，缺任一个它都不会出现在壁纸选择器里。 -->
+        <service
+            android:name=".wallpaper.LyricsWallpaperService"
+            android:exported="true"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/lyrics_wallpaper" />
+        </service>
+
         <!-- 崩溃取证界面：开发机上没有 adb 设备，只能让 App 自己把栈显示出来 -->
         <activity
             android:name=".CrashActivity"

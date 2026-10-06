@@ -45,6 +45,7 @@ public class MainActivity extends BridgeActivity {
         // 放在 super 之后就太晚了：Bridge 已经建好，这个插件永远不会被实例化，
         // JS 侧调用会静默失败 —— 播放通知因此完全不出现。
         registerPlugin(FoliaPlaybackPlugin.class);
+        registerPlugin(FoliaWallpaperPlugin.class);
 
         super.onCreate(savedInstanceState);
 

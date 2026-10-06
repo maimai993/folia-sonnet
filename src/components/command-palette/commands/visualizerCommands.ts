@@ -4,6 +4,7 @@ import { LayoutGrid, Wallpaper } from 'lucide-react';
 import type { CommandPaletteCommand } from '../types';
 import { createToggleCommand, createVisualizerCommand } from '../commandFactories';
 import { lyricSegmentationCommand } from './lyricSegmentationCommand';
+import { openLyricsWallpaperPicker } from '../../../platform/foliaWallpaper';
 
 // src/components/command-palette/commands/visualizerCommands.ts
 // Commands in the `visualizer` group: switching lyric animation modes and background layouts.
@@ -35,6 +36,19 @@ export const visualizerCommands: CommandPaletteCommand[] = [
         surface: backgroundPickerSurface,
         placeholder: context => context.shared.t('commandPalette.pickerFilterPlaceholder', 'Type to filter, then click or press Enter'),
         execute: () => false,
+    }),
+    defineCommand({
+        id: 'lyrics-wallpaper',
+        group: 'visualizer',
+        title: 'Lyrics as the system wallpaper',
+        description: 'Open the Android live wallpaper picker to apply the lyrics wallpaper',
+        keywords: ['wallpaper', 'live wallpaper', 'lyrics wallpaper', 'system wallpaper', '壁纸', '动态壁纸', '歌词壁纸', '系统壁纸', '设置壁纸'],
+        icon: Wallpaper,
+        execute: () => {
+            // 原生侧会直接定位到 Folia 的歌词壁纸，用户确认即可生效。
+            void openLyricsWallpaperPicker();
+            return false;
+        },
     }),
     createVisualizerCommand('sonnet', 'Visualizer: Sonnet', 'Switch to Sonnet visualizer', ['sonnet', '商籁', '文字 pv', 'mg pv', 'vocaloid']),
     createVisualizerCommand('tempera', 'Visualizer: Tempera', 'Switch to Tempera visualizer', ['tempera', '凝彩', 'dancai', 'dc', '色块 pv', 'block pv']),

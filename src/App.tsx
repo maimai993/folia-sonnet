@@ -82,6 +82,7 @@ import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlayb
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { useCapacitorSystemBars } from './hooks/useCapacitorSystemBars';
 import { useCapacitorPlaybackBridge } from './hooks/useCapacitorPlaybackBridge';
+import { useLyricsWallpaperFeed } from './hooks/useLyricsWallpaperFeed';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useTranscodeFallback } from './hooks/useTranscodeFallback';
@@ -1443,6 +1444,18 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+    });
+
+    // Capacitor Android 专有：把当前行与行内进度喂给原生歌词动态壁纸。
+    // 壁纸是另一个组件，读不到 React 状态，只能由这里主动推过去。
+    useLyricsWallpaperFeed({
+        lyrics,
+        currentLineIndex,
+        getCurrentTime: () => currentTime.get(),
+        title: displaySong?.name ?? null,
+        artist: displaySong ? getSongArtistLabel(displaySong) : null,
+        coverUrl: displayCoverUrl ?? cachedCoverUrl,
+        playerState: displayPlayerState,
     });
 
     const {
