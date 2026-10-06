@@ -422,6 +422,7 @@ export default function App() {
         subtitleFontFallbackFamilies,
         lyricsCustomFontFamily,
     } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
+    useCapacitorSystemBars(isDaylight);
     const {
         globalLyricTimelineOffsetMs,
         lyricFilterPattern,
@@ -431,9 +432,6 @@ export default function App() {
         lyricStaffAbsorbMode,
         lyricStaffPattern,
         handleSetLyricFilterPattern,
-    } = appPreferences;
-    useCapacitorSystemBars(isDaylight);
-    const {
         handleSetLyricFilterEnabled,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
