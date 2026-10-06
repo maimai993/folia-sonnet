@@ -42,12 +42,32 @@ public class FoliaPlaybackService extends android.app.Service {
     private MediaSessionCompat mediaSession;
     private NotificationManager notificationManager;
 
+    // 通知内容缓存：metadata 与 playbackState 是两次独立更新，
+    // 每次都基于这些字段重建整条通知，而不是互相覆盖。
+    private String cachedTitle = "";
+    private String cachedArtist = "";
+    private String cachedAlbum = "";
+    private Bitmap cachedArtwork;
+    private int cachedState = PlaybackStateCompat.STATE_NONE;
+
     @Override
     public void onCreate() {
         super.onCreate();
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         createNotificationChannel();
+        ensureMediaSession();
+    }
 
+    /**
+     * 建立/重建 MediaSession。
+     *
+     * 抽成方法是因为进程被杀后 START_STICKY 只会重跑 onStartCommand，
+     * 不会经过 onCreate，MediaSession 会是 null（通知上的控制项也就没了）。
+     */
+    private void ensureMediaSession() {
+        if (mediaSession != null) {
+            return;
+        }
         mediaSession = new MediaSessionCompat(this, "FoliaPlayback");
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
@@ -109,10 +129,23 @@ public class FoliaPlaybackService extends android.app.Service {
                 case ACTION_STOP_FOREGROUND:
                     stopForegroundCompat();
                     stopSelf();
-                    break;
+                    return START_NOT_STICKY;
                 default:
                     break;
             }
+
+            // 只要服务还活着就必须占住前台。
+            //
+            // Android 要求 startForegroundService() 之后 5 秒内调用 startForeground()，
+            // 否则抛 ForegroundServiceDidNotStartInTimeException（Android 12+）
+            // 或直接判定服务未启动。之前只在 state=playing 时才前台化，
+            // 于是「切歌 → update 先发、state 后到」或「当前是 paused」的情况下，
+            // 服务压根没拿到前台优先级 —— 后台照样被节流，切下一首依旧拿不到地址。
+            startForeground(NOTIFICATION_ID, buildForegroundNotification());
+
+            // 重建 MediaSession：进程被杀后 START_STICKY 只会重跑 onStartCommand，
+            // 不会走 onCreate 的初始化路径。
+            ensureMediaSession();
         }
         // START_STICKY：进程被系统回收后（仍处于播放状态）尽量重建服务。
         return START_STICKY;
@@ -154,23 +187,30 @@ public class FoliaPlaybackService extends android.app.Service {
         String artworkBase64 = intent.getStringExtra(EXTRA_ARTWORK);
         long durationMs = intent.getLongExtra(EXTRA_DURATION, 0L);
 
+        // 先更新缓存，再重建通知：metadata 与 state 是两次独立调用，
+        // 任何一次都要能拿到完整的通知内容。
+        if (title != null) cachedTitle = title;
+        if (artist != null) cachedArtist = artist;
+        if (album != null) cachedAlbum = album;
+        Bitmap artwork = decodeArtwork(artworkBase64);
+        if (artwork != null) {
+            cachedArtwork = artwork;
+        }
+
         MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title == null ? "" : title)
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist == null ? "" : artist)
-                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album == null ? "" : album);
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, cachedTitle)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, cachedArtist)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, cachedAlbum);
         if (durationMs > 0) {
             builder.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs);
         }
-
-        Bitmap artwork = decodeArtwork(artworkBase64);
-        if (artwork != null) {
-            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artwork);
+        if (cachedArtwork != null) {
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, cachedArtwork);
         }
 
         if (mediaSession != null) {
             mediaSession.setMetadata(builder.build());
         }
-        refreshNotification(title, artist, artwork, null);
     }
 
     private void updatePlaybackState(Intent intent) {
@@ -200,12 +240,7 @@ public class FoliaPlaybackService extends android.app.Service {
             mediaSession.setPlaybackState(builder.build());
         }
 
-        // 播放中才占前台；暂停时降级为普通通知，避免无谓地占用前台服务名额。
-        if (playing) {
-            refreshNotification(null, null, null, PlaybackStateCompat.STATE_PLAYING);
-        } else {
-            refreshNotification(null, null, null, compatState);
-        }
+        cachedState = compatState;
     }
 
     private Bitmap decodeArtwork(String base64) {
@@ -241,17 +276,19 @@ public class FoliaPlaybackService extends android.app.Service {
     }
 
     /**
-     * 重建通知。
+     * 用当前缓存的字段重建整条通知。
      *
-     * 单独抽出来是因为 metadata 与 playbackState 是两次独立更新，
-     * 每次都从 Service 内部缓存的字段重���整条通知，而不是互相覆盖。
+     * metadata 与 playbackState 是两次独立的调用，所以通知内容必须从缓存整体重建，
+     * 否则后到的那次会把先到的字段抹成空。
      */
-    private void refreshNotification(String title, String artist, Bitmap artwork, Integer state) {
+    private Notification buildForegroundNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOnlyAlertOnce(true);
+                .setOnlyAlertOnce(true)
+                // 通知属于前台服务，用户无法手动划掉它（划掉就等于杀掉播放）。
+                .setOngoing(true);
 
         MediaSessionCompat.Token token = mediaSession == null ? null : mediaSession.getSessionToken();
         if (token != null) {
@@ -260,14 +297,16 @@ public class FoliaPlaybackService extends android.app.Service {
                     .setShowActionsInCompactView(0, 1, 2));
         }
 
-        if (title != null) {
-            builder.setContentTitle(title);
+        if (!cachedTitle.isEmpty()) {
+            builder.setContentTitle(cachedTitle);
+        } else {
+            builder.setContentTitle("Folia");
         }
-        if (artist != null) {
-            builder.setContentText(artist);
+        if (!cachedArtist.isEmpty()) {
+            builder.setContentText(cachedArtist);
         }
-        if (artwork != null) {
-            builder.setLargeIcon(artwork);
+        if (cachedArtwork != null) {
+            builder.setLargeIcon(cachedArtwork);
         }
 
         // 点击通知栏本体回到应用。getLaunchIntentForPackage 返回的是 Intent，
@@ -281,13 +320,7 @@ public class FoliaPlaybackService extends android.app.Service {
             builder.setContentIntent(contentIntent);
         }
 
-        Notification notification = builder.build();
-
-        if (state != null && state == PlaybackStateCompat.STATE_PLAYING) {
-            startForeground(NOTIFICATION_ID, notification);
-        } else {
-            notificationManager.notify(NOTIFICATION_ID, notification);
-        }
+        return builder.build();
     }
 
     private void stopForegroundCompat() {
