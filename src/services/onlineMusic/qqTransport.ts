@@ -1,5 +1,6 @@
 import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 // src/services/onlineMusic/qqTransport.ts
 
@@ -241,7 +242,7 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     // Same-origin serverless calls must retain deployment-protection cookies; external qq-music-api instances
     // answer with `Access-Control-Allow-Origin: *`, so those requests still omit browser credentials.
     const credentials: RequestCredentials = isSameOriginBase(base) ? 'same-origin' : 'omit';
-    const response = await fetch(`${base}${endpoint.path}?${query}`, { credentials, headers });
+    const response = await fetchWithTimeout(`${base}${endpoint.path}?${query}`, { credentials, headers });
     if (!response.ok) {
         const failure = await readJsonBody(response);
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.

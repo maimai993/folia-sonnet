@@ -50,11 +50,22 @@ body {
   --folia-safe-area-left: env(safe-area-inset-left, 0px);
 }
 
+/*
+ * Capacitor Android 下的全屏铺底。
+ *
+ * 原生侧（MainActivity）用 WindowInsetsControllerCompat 隐藏了状态栏与导航栏，
+ * WebView 因此已经是整屏尺寸，fixed.inset-0 直接铺满即可，不需要再按安全区收缩——
+ * 之前这里加 safe-area 偏移，是因为那时系统栏还可见、内容需要避让；
+ * 真沉浸下再偏移就会让四周露出一条与背景不一致的空隙，正是「看起来空」的来源。
+ *
+ * env() 在这条规则里返回 0（WebView 铺满全屏，viewport 不再被系统栏内缩），
+ * 保留它只是为了刘海/挖孔机型在极端情况下不把内容压到遮挡区。
+ */
 html[data-runtime='capacitor-android'] .fixed.inset-0 {
-  top: var(--folia-safe-area-top);
-  right: var(--folia-safe-area-right);
-  bottom: var(--folia-safe-area-bottom);
-  left: var(--folia-safe-area-left);
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
   width: auto;
   height: auto;
 }

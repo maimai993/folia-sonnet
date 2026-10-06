@@ -29,9 +29,33 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 后台播放的前台服务：进程拿到前台优先级后，WebView 里的 fetch 才不会被
+             后台节流挂住（自动切下一首拿不到歌曲地址的根因）。
+             foregroundServiceType="mediaPlayback" 是 Android 14+ 的强制要求。 -->
+        <service
+            android:name=".FoliaPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- 让 MediaSession 的控制按钮（通知栏、锁屏、蓝牙耳机）能把应用唤到前台 -->
+        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 前台服务 + 通知：后台播放时占住前台优先级并在通知栏显示播放控制 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>

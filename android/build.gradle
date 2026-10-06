@@ -22,6 +22,16 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    // 关掉 Lint：它解析依赖时会联网向 Google 的 Maven 索引请求 package manifests，
+    // 本机到 dl.google.com 不通，卡在 "Still waiting for package manifests to be
+    // fetched remotely." 上二三十分钟不动，release 构建因此永远出不来。
+    // Lint 只做静态检查，不影响产物正确性；需要检查时加 -PenableLint 单独跑。
+    tasks.configureEach {
+        if (name.startsWith("lint")) {
+            enabled = project.hasProperty("enableLint")
+        }
+    }
 }
 
 task clean(type: Delete) {

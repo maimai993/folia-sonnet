@@ -2,6 +2,7 @@ import md5 from 'blueimp-md5';
 import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 import { resolveFoliaApiUrl } from '../webApi';
+import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 
 // src/services/onlineMusic/kugouTransport.ts
 
@@ -228,7 +229,7 @@ export const requestKugouAnonymousSearch = async (
     const requestUrl = typeof window !== 'undefined' && window.electron
         ? targetUrl.toString()
         : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl.toString())}`);
-    const response = await fetch(requestUrl, {
+    const response = await fetchWithTimeout(requestUrl, {
         method: 'GET',
         credentials: 'omit',
         headers: {
@@ -286,8 +287,8 @@ export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => 
 
     const requestUrl = typeof window !== 'undefined' && window.electron
         ? targetUrlString
-        : `/api/lyric-proxy?url=${encodeURIComponent(targetUrlString)}`;
-    const response = await fetch(requestUrl, {
+        : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrlString)}`);
+    const response = await fetchWithTimeout(requestUrl, {
         method: 'GET',
         credentials: 'omit',
         headers: {
@@ -383,7 +384,7 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
         if (cookie) query.set('cookie', cookie);
         query.set('timestamp', String(Date.now()));
 
-        const response = await fetch(`${base}${ENDPOINTS[targetOperation]}?${query}`, { credentials: 'include' });
+        const response = await fetchWithTimeout(`${base}${ENDPOINTS[targetOperation]}?${query}`, { credentials: 'include' });
         if (!response.ok) {
             throw new OnlineProviderError(
                 KUGOU_AUTH_FAILURE_STATUSES.has(response.status) ? 'auth-required' : 'network',

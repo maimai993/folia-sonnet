@@ -81,6 +81,7 @@ import { useElectronVideoExportController } from './hooks/useElectronVideoExport
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { useCapacitorSystemBars } from './hooks/useCapacitorSystemBars';
+import { useCapacitorPlaybackBridge } from './hooks/useCapacitorPlaybackBridge';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useTranscodeFallback } from './hooks/useTranscodeFallback';
@@ -1429,6 +1430,19 @@ export default function App() {
         mediaSessionPrevRef,
         mediaSessionNextRef,
         isNowPlayingControlDisabledRef,
+    });
+
+    // Capacitor Android 专有：把播放状态接到原生前台服务，换通知栏媒体控制，
+    // 并让进程拿到前台优先级 —— 否则应用切到后台时 WebView 的 fetch 会被节流挂住，
+    // 自动切下一首就拿不到歌曲地址。非 Android 平台直接空转。
+    useCapacitorPlaybackBridge({
+        currentSong: displaySong,
+        cachedCoverUrl: displayCoverUrl ?? cachedCoverUrl,
+        playerState: displayPlayerState,
+        mediaSessionPlayRef,
+        mediaSessionPauseRef,
+        mediaSessionPrevRef,
+        mediaSessionNextRef,
     });
 
     const {
