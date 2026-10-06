@@ -26,9 +26,13 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      overlaysWebView: true,
+      // 不要开 overlaysWebView：插件内部用废弃的 setSystemUiVisibility 实现，
+      // 只覆盖状态栏、不覆盖导航栏，且会冲掉 MainActivity 的全沉浸设置。
+      // 铺满与隐藏现在由原生侧统一负责。
+      // 注意：不写这项也不行 —— StatusBarConfig 的默认值就是 true，
+      // 插件构造时会自动应用，必须显式关掉。
+      overlaysWebView: false,
       style: 'LIGHT',
-      backgroundColor: '#09090b',
     },
   },
 };

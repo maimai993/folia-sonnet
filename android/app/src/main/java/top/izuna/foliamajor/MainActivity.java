@@ -59,13 +59,37 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // 必须在 super.onCreate() **之前**注册。
+        //
+        // registerPlugin 只是往 bridgeBuilder 里登记类，而真正创建 Bridge
+        // （bridgeBuilder.create()）是在 BridgeActivity.onCreate() 内部完成的。
+        // 放在 super 之后就太晚了：Bridge 已经建好，这个插件永远不会被实例化，
+        // JS 侧调用会静默失败 —— 播放通知因此完全不出现。
+        registerPlugin(FoliaPlaybackPlugin.class);
+
         super.onCreate(savedInstanceState);
+
         applyImmersiveMode();
         // 播放时屏幕常亮（不阻止熄屏睡眠，因此不额外耗电）。
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        // 后台播放所需的插件必须显式注册，Capacitor 不会自动发现 app 模块里的插件。
-        registerPlugin(FoliaPlaybackPlugin.class);
         requestNotificationPermissionIfNeeded();
+        // StatusBar 插件是在 Bridge 创建时（super 里）加载并应用配置的，
+        // 可能在我们之后才动到 systemUiVisibility；多压几次确保沉浸态最终生效。
+        scheduleImmersiveReapply();
+    }
+
+    /**
+     * 延后重复压几次沉浸态。
+     *
+     * StatusBar 插件的 setOverlaysWebView 走废弃的 setSystemUiVisibility，
+     * 会覆盖 WindowInsetsControllerCompat 的 hide 结果；它在 Bridge 创建时执行，
+     * 与我们这里的调用存在竞态。几拍之后内容也加载完了，压最后一次即可收口。
+     */
+    private void scheduleImmersiveReapply() {
+        View decorView = getWindow().getDecorView();
+        for (long delay : new long[] { 150L, 500L, 1200L }) {
+            decorView.postDelayed(this::applyImmersiveMode, delay);
+        }
     }
 
     /**
