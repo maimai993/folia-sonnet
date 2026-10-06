@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { GenerateAIThemeOptions, GenerateAIThemeResult } from './useThemeController';
 import type { LyricData, SongResult } from '../types';
+import type { ThemeGenerationSource } from '../services/themePreferences';
 import { getCachedThemeStateForSong } from '../services/themeCache';
 import {
     getSongThemeAutoGenerationKey,
@@ -8,6 +9,7 @@ import {
     isSongThemeGenerationStillCurrent,
     shouldRequestSongThemeAutoGeneration,
 } from '../utils/songThemeAutoGeneration';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
 
 // src/hooks/useSongThemeAutoGeneration.ts
 // Coordinates delayed AI theme generation for the real current playback song.
@@ -19,10 +21,11 @@ type GenerateAITheme = (
 ) => Promise<GenerateAIThemeResult>;
 
 type UseSongThemeAutoGenerationParams = {
+
     enabled: boolean;
-    currentSong: SongResult | null;
-    lyrics: LyricData | null;
     isLyricsLoading: boolean;
+    // 'cover' generates from the artwork alone, so it does not wait for a lyric prompt source.
+    themeGenerationSource: ThemeGenerationSource;
     generateAITheme: GenerateAITheme;
 };
 
@@ -30,11 +33,14 @@ const AUTO_GENERATE_DELAY_MS = 650;
 
 export function useSongThemeAutoGeneration({
     enabled,
-    currentSong,
-    lyrics,
     isLyricsLoading,
+    themeGenerationSource,
     generateAITheme,
 }: UseSongThemeAutoGenerationParams) {
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const lyrics = usePlaybackStore(state => state.lyrics);
+
+    const requiresPromptSource = themeGenerationSource !== 'cover';
     const latestSongKeyRef = useRef<string | null>(null);
     const latestEnabledRef = useRef(enabled);
     const latestGenerationInputRef = useRef({ currentSong, lyrics });
@@ -75,6 +81,7 @@ export function useSongThemeAutoGeneration({
             isLyricsLoading,
             hasAttempted: attemptedSongKeysRef.current.has(songKey),
             hasCachedTheme: false,
+            requiresPromptSource,
         })) {
             return;
         }
@@ -112,6 +119,7 @@ export function useSongThemeAutoGeneration({
                     isLyricsLoading: false,
                     hasAttempted: attemptedSongKeysRef.current.has(targetSongKey),
                     hasCachedTheme: cachedTheme.kind !== 'none',
+                    requiresPromptSource,
                 })) {
                     attemptedSongKeysRef.current.add(targetSongKey);
                     return;
@@ -133,5 +141,5 @@ export function useSongThemeAutoGeneration({
             cancelled = true;
             window.clearTimeout(timeoutId);
         };
-    }, [enabled, hasPromptSource, isLyricsLoading, songKey]);
+    }, [enabled, hasPromptSource, isLyricsLoading, requiresPromptSource, songKey]);
 }

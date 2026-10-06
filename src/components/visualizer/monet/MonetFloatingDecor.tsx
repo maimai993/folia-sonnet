@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import * as LucideIcons from 'lucide-react';
 import type { Theme } from '../../../types';
 import { colorWithAlpha } from '../colorMix';
+import { resolveLucideIcon } from '../../../utils/lucideIconResolver';
 
 // src/components/visualizer/monet/MonetFloatingDecor.tsx
 // Renders gentle floating decorative particles for the Monet visualizer.
@@ -80,13 +80,9 @@ const MonetFloatingDecor: React.FC<MonetFloatingDecorProps> = ({
 
     /** Resolves the visual element for a single particle. */
     const renderParticleContent = (p: FloatingParticle) => {
-        if (p.iconName) {
-            const Icon = LucideIcons[p.iconName as keyof typeof LucideIcons] as
-                | LucideIcons.LucideIcon
-                | undefined;
-            if (Icon) {
-                return <Icon size={p.size} strokeWidth={1} absoluteStrokeWidth color={theme.secondaryColor} />;
-            }
+        const Icon = resolveLucideIcon(p.iconName);
+        if (Icon) {
+            return <Icon size={p.size} strokeWidth={1} absoluteStrokeWidth color={theme.secondaryColor} />;
         }
         return <SakuraPetal size={p.size} color={petalColor} />;
     };

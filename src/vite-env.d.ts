@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+import type { ModExportProgress, ModFfmpegStatus, ModLogEntry, ModRuntimeInfo, ModRuntimeSnapshot } from './mods/types';
+
 declare global {
   // 当前文件：Folia 构建常量、Vite 环境变量与宿主桥接类型声明。
   interface ImportMetaEnv {
@@ -21,6 +23,28 @@ declare global {
     __FOLIA_RUNTIME_CONFIG__?: {
       aiProvider?: 'gemini' | 'openai';
     };
+  }
+
+  /** Unsaved AI settings sent by the "test connection" button. */
+  interface AiConnectionTestPayload {
+    provider: 'gemini' | 'openai';
+    apiKey: string;
+    apiUrl?: string;
+    model?: string;
+    stream?: boolean;
+    useSystemProxy?: boolean;
+  }
+
+  interface AiConnectionTestResult {
+    ok: boolean;
+    status?: number;
+    durationMs: number;
+    model?: string;
+    text?: string;
+    /** Set when the connection worked but no text came back. */
+    emptyReason?: 'reasoning' | 'empty';
+    error?: string;
+    errorKind?: 'invalid' | 'config' | 'timeout' | 'network' | 'http';
   }
 
   interface ElectronCacheDirectoryResult {
@@ -57,8 +81,55 @@ declare global {
     updatedAt: number;
   }
 
+  // 主进程记录的网易登录诊断（electron/neteaseLoginDiagnostics.cjs），只含可公开贴出的字段。
+  interface ElectronNeteaseLoginRequestRecord {
+    at: number;
+    uri: string;
+    crypto: string;
+    ipHeader: 'none' | 'random-cn' | 'client' | 'real-ip';
+    deviceIdTail: string;
+    hasMusicU: boolean;
+    hasMusicA: boolean;
+    durationMs: number | null;
+    outcome: {
+      settled: 'pending' | 'resolved' | 'rejected';
+      status: number | null;
+      code: number | string | null;
+      message: string;
+    };
+  }
+
+  interface ElectronNeteaseLoginDiagnostics {
+    app: { version: string; electron: string; platform: string; arch: string; osRelease: string };
+    apiStatus: { status: ElectronNeteaseApiStatus['status']; port: number | null; error: string | null };
+    capturedAt: number;
+    startup: {
+      anonymousTokenAtLoad?: 'present' | 'empty';
+      runtimeInitializedAt?: number;
+      xeapiKeySource?: 'network' | 'cache';
+      xeapiKeyVersion?: string;
+      anonymousTokenRefreshed?: boolean;
+      listenHost?: string;
+      listenPort?: number;
+    };
+    network: {
+      interfaces: Array<{ name: string; ipv4: boolean; globalIpv6: boolean }>;
+      globalIpv6Count: number;
+    };
+    requests: ElectronNeteaseLoginRequestRecord[];
+  }
+
+  // `unavailable` means the packaged build shipped without the bundled qq-music-api.
+  interface ElectronQqApiStatus {
+    status: 'starting' | 'running' | 'error' | 'unavailable';
+    port: number | null;
+    error: string | null;
+    updatedAt: number;
+  }
+
   interface ElectronKugouApiStatus {
     available: boolean;
+    authenticated: boolean;
     error: string | null;
   }
 
@@ -78,6 +149,7 @@ declare global {
     | { type: 'previous' }
     | { type: 'next' }
     | { type: 'seek'; time: number }
+    | { type: 'cycle-loop-mode' }
     | { type: 'resize-main-window'; width: number; height: number }
     | { type: 'set-main-window-border-visible'; visible: boolean }
     | { type: 'set-main-window-click-through'; enabled: boolean }
@@ -133,14 +205,25 @@ declare global {
 
   interface ElectronRemoteControlSnapshot {
     hasTrack: boolean;
+    trackKey: string | null;
     title: string | null;
     artist: string | null;
     coverUrl: string | null;
     currentTime: number;
     duration: number;
     playerState: string;
+    loopMode: 'off' | 'all' | 'one';
     canGoPrevious: boolean;
     canGoNext: boolean;
+    prevTrackKey: string | null;
+    prevTrackTitle: string | null;
+    prevTrackArtist: string | null;
+    prevTrackCoverUrl: string | null;
+    nextTrackKey: string | null;
+    nextTrackTitle: string | null;
+    nextTrackArtist: string | null;
+    nextTrackCoverUrl: string | null;
+    trackTransition: import('./types/remoteControl').RemoteTrackTransition | null;
     controlsDisabled: boolean;
     isStageActive: boolean;
     transparentModeEnabled: boolean;
@@ -153,6 +236,8 @@ declare global {
     isDaylight?: boolean;
     lyrics?: import('./types').LyricData | null;
     isLiked?: boolean;
+    canLike?: boolean;
+    likeUnavailableProvider?: string;
     updatedAt: number;
     mainWindowWidth?: number;
     mainWindowHeight?: number;
@@ -218,6 +303,8 @@ declare global {
     platform?: string;
     updateCheckEnabled: boolean;
     autoUpdateEnabled: boolean;
+    autoUpdateSupported: boolean;
+    autoUpdateSupportReason?: 'system' | 'channel' | null;
     currentVersion: string;
     availableVersion: string | null;
     updateUrl: string | null;
@@ -466,10 +553,197 @@ declare global {
     result?: unknown;
   }
 
+  /**
+   * One downloadable as the settings page sees it. `path` is null when it is not installed.
+   *
+   * Not all of them are models: `runtime` is the Python separation runs in, which is a different
+   * archive per platform and unpacks to a directory rather than landing as a file. It is in the
+   * same list because everything the page does with it - size, progress, install, remove - is the
+   * same, and the two differences it does have are the two fields below.
+   */
+  interface ElectronAutomixModelEntry {
+    name: string;
+    /** null on a platform with no build, where there is no archive to name. */
+    file: string | null;
+    bytes: number;
+    /** Which capability this buys: the beat grid, or the stems. */
+    enables: 'beatGrid' | 'stems';
+    license: string;
+    /**
+     * False only for `runtime`, and only where no build exists for this OS and architecture -
+     * today that is Intel Macs. The row is still drawn; it offers no download.
+     */
+    supported: boolean;
+    path: string | null;
+    downloading: boolean;
+  }
+
+  interface ElectronAutomixModelStatus {
+    /**
+     * The netdisk routes, offered only once every mirror has failed. An empty list = not offered.
+     * The extraction code belongs to the link rather than to the block: the two disks have
+     * different ones, and a code shown beside the wrong link is worse than no code.
+     */
+    manual: { links: Array<{ label: string; url: string; code?: string }>; note: string };
+    downloadDir: string;
+    models: ElectronAutomixModelEntry[];
+  }
+
+  /** A verified copy of a model found somewhere on this machine. Matched by hash, not by name. */
+  interface ElectronAutomixModelFound {
+    name: string;
+    file: string;
+    path: string;
+    bytes: number;
+  }
+
+  interface ElectronAutomixModelProgress {
+    name: string;
+    status: 'downloading' | 'ready' | 'failed';
+    received: number;
+    total: number;
+    /** Which mirror is answering, or null before one has been reached. */
+    host: string | null;
+  }
+
+  /** One process's share of a memory sample. Sizes are whole megabytes; see electron/debug/memoryMonitor.cjs. */
+  interface DebugMemoryProcess {
+    pid: number;
+    /** `Browser`, `Tab`, `GPU`, `Utility/folia-analysis` and so on - the type plus its service name. */
+    type: string;
+    workingSetMB: number;
+    /** This process's OWN high-water mark, reached whenever. Never summed across processes. */
+    peakWorkingSetMB: number;
+    /**
+     * Windows via the metrics table, any platform for a process that answered for itself; null
+     * where neither applies (GPU, utility), never 0 as a stand-in.
+     */
+    privateMB: number | null;
+    /** Memory shared with other processes. Self-reported, so renderer and main only. */
+    sharedMB: number | null;
+    /** This process's V8 heap. Self-reported; null for the ones that cannot be asked. */
+    heapMB: number | null;
+    /** Blink's own allocations - DOM, CSS, decoded images. Renderer processes only. */
+    blinkMB: number | null;
+    cpuPercent: number;
+    /** Open file descriptors. Linux only (counted from /proc); null elsewhere. */
+    fdCount: number | null;
+  }
+
+  /** One tick of the memory monitor: the whole app at one instant, plus the session's figures so far. */
+  interface DebugMemorySample {
+    at: string;
+    uptimeSec: number;
+    totalWorkingSetMB: number;
+    totalPrivateMB: number | null;
+    cpuPercent: number;
+    processCount: number;
+    /** Peak / floor / mean of the SIMULTANEOUS total, over this monitoring run. */
+    peakMB: number;
+    floorMB: number;
+    avgMB: number;
+    samples: number;
+    mainHeapUsedMB: number | null;
+    mainHeapTotalMB: number | null;
+    /** The renderer's heap - the one that separates leaked JS objects from native growth. */
+    rendererHeapUsedMB: number | null;
+    /**
+     * The renderer's own private memory. Needs no summing, so unlike `totalPrivateMB` it exists on
+     * every platform - and the renderer is the largest process in this app anyway.
+     */
+    rendererPrivateMB: number | null;
+    /** Open fds of the renderer / GPU process. Linux only; a steady climb is the shm fd leak. */
+    rendererFdCount: number | null;
+    gpuFdCount: number | null;
+    systemFreeMB: number | null;
+    systemTotalMB: number | null;
+    processes: DebugMemoryProcess[];
+  }
+
+  /** Whether each log is recording, how it opens its file, and where the files are. */
+  interface DebugModuleState {
+    runtimeLogEnabled: boolean;
+    runtimeLogMode: 'append' | 'overwrite';
+    memoryMonitorEnabled: boolean;
+    memoryLogEnabled: boolean;
+    memoryLogMode: 'append' | 'overwrite';
+    memoryIntervalMs: number;
+    logsRoot: string;
+    runtimeFile: string | null;
+    memoryFile: string | null;
+  }
+
   interface Window {
     electron?: {
+      webUtils?: {
+        /** Resolves the OS path of a dropped File (File.path was removed in modern Electron). */
+        getPathForFile: (file: File) => string;
+      };
+      /** Beat This! inference in the main process. Null when the weights or runtime are absent. */
+      runBeatThis?: (
+        chunks: Array<{ data: Float32Array; frames: number }>,
+      ) => Promise<{ beat: Float32Array[]; downbeat: Float32Array[] } | null>;
+      /**
+       * htdemucs separation in the main process, for one window of one track at 44.1kHz.
+       * `other` is not returned - it is derived by subtraction so the stems sum to the mix exactly.
+       */
+      separateStems?: (
+        request: { left: Float32Array<ArrayBuffer>; right: Float32Array<ArrayBuffer> },
+      ) => Promise<Record<
+        'drums' | 'bass' | 'vocals',
+        // Never shared memory: this crosses the IPC boundary by structured clone, which always
+        // reconstitutes a plain ArrayBuffer on this side.
+        { left: Float32Array<ArrayBuffer>; right: Float32Array<ArrayBuffer> }
+      > | null>;
+      /**
+       * Which model files are on disk, answered without loading them.
+       *
+       * Absent in the browser build, which is why every reader treats a missing function as "no
+       * weights" rather than as "unknown".
+       */
+      getAutomixModelsPresent?: () => Promise<{ beat_this: boolean; htdemucs: boolean }>;
+      chooseModelsDirectory?: () => Promise<{ canceled: boolean }>;
+      resetModelsDirectory?: () => Promise<void>;
+      getAutomixModelStatus?: () => Promise<ElectronAutomixModelStatus>;
+      downloadAutomixModel?: (name: string) => Promise<{ ok: boolean; skipped?: string[]; path?: string }>;
+      cancelAutomixModelDownload?: (name: string) => Promise<boolean>;
+      scanForAutomixModels?: () => Promise<{ found: ElectronAutomixModelFound[]; scanned: number }>;
+      installAutomixModel?: (name: string, source: string) => Promise<{ ok: boolean; reason?: string }>;
+      /**
+       * Deletes every copy of every model the app can reach, plus any `.part` leftovers.
+       * `failed` is non-empty when a copy could not be removed - typically one inside the
+       * installer's own read-only directory, which stays installed and is reported as such.
+       */
+      removeAllAutomixModels?: () => Promise<{
+        ok: boolean;
+        removed: string[];
+        freed: number;
+        failed: Array<{ name: string; reason: string }>;
+      }>;
+      onAutomixModelProgress?: (
+        callback: (progress: ElectronAutomixModelProgress) => void,
+      ) => () => void;
+      /** Developer debug module. Absent in the browser build, where every caller no-ops. */
+      debugGetState?: () => Promise<DebugModuleState>;
+      debugSetState?: (patch: Partial<Pick<DebugModuleState, 'runtimeLogEnabled' | 'runtimeLogMode' | 'memoryMonitorEnabled' | 'memoryLogEnabled' | 'memoryLogMode' | 'memoryIntervalMs'>>) => Promise<DebugModuleState>;
+      debugOpenLogs?: (which?: 'runtime' | 'memory') => Promise<boolean>;
+      debugWriteRuntimeLines?: (lines: Array<{ at: number; level: string; tag: string | null; text: string }>) => void;
+      /** What this process can say about itself that the metrics table cannot see from outside. */
+      debugRendererMemory?: () => Promise<{ pid: number; privateKB: number; sharedKB: number; blinkAllocatedKB: number } | null>;
+      debugReportRendererMemory?: (report: { pid: number; privateKB?: number; sharedKB?: number; blinkAllocatedKB?: number; heapUsedKB?: number }) => void;
+      onDebugMemorySample?: (callback: (sample: DebugMemorySample) => void) => () => void;
+      /** One-way stage marks from the automix session into the runtime log. */
+      diagMark?: (text: string) => void;
+      platform: string;
+      isLinuxX11: boolean;
       getSettings: () => Promise<any>;
       saveSettings: (key: string, value: any) => Promise<any>;
+      onWallpaperModeChanged?: (callback: (settings: Record<string, unknown>) => void) => () => void;
+      onWallpaperTransparentRefused?: (callback: (settings: Record<string, unknown>) => void) => () => void;
+      /** The tray asked to enter wallpaper mode; the renderer shows the confirmation before entering. */
+      onWallpaperEntryRequested?: (callback: () => void) => () => void;
+      onWallpaperInputMonitorRequested?: (callback: () => void) => () => void;
+      setPlaybackDisplaySleepBlockingActive: (active: boolean) => Promise<boolean>;
       setAppLocale: (localeKey: 'en' | 'zh-CN' | 'in') => Promise<string>;
       getCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       chooseCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
@@ -484,16 +758,27 @@ declare global {
       onUpdateStatusChanged: (callback: (status: ElectronUpdateStatus) => void) => () => void;
       getAudioCache: (cacheKey: string) => Promise<ElectronAudioCacheEntry>;
       hasAudioCache: (cacheKey: string) => Promise<boolean>;
-      saveAudioCache: (cacheKey: string, data: ArrayBuffer, mimeType?: string) => Promise<boolean>;
+      /** `limitBytes` is the cache ceiling to prune down to afterwards; 0 means no ceiling. */
+      saveAudioCache: (cacheKey: string, data: ArrayBuffer, mimeType?: string, limitBytes?: number) => Promise<boolean>;
       getAudioCacheUsage: () => Promise<number>;
       getAudioCacheStats: () => Promise<ElectronAudioCacheStats>;
       clearAudioCache: () => Promise<boolean>;
+      requestTranscodeFallback?: (request: import('./types/playbackRecovery').TranscodeFallbackRequest) => Promise<import('./types/playbackRecovery').TranscodeFallbackResult>;
+      cancelTranscodeFallback?: (requestId: string) => Promise<boolean>;
       getCoverCache: (cacheKey: string) => Promise<ElectronAudioCacheEntry>;
       saveCoverCache: (cacheKey: string, data: ArrayBuffer, mimeType?: string) => Promise<boolean>;
       removeCoverCache: (cacheKey: string) => Promise<boolean>;
       getCoverCacheUsage: () => Promise<number>;
       clearCoverCache: () => Promise<boolean>;
+      hasLocalCoverAsset: (assetId: string) => Promise<boolean>;
+      saveLocalCoverAsset: (assetId: string, data: ArrayBuffer, mimeType: string) => Promise<boolean>;
+      removeLocalCoverAsset: (assetId: string) => Promise<boolean>;
+      clearLocalCoverAssets: () => Promise<boolean>;
       generateTheme: (lyricsText: string, options?: { isPureMusic?: boolean; songTitle?: string }) => Promise<any>;
+      /** Word-segments lyric lines with the user's configured model. Resolves to one boundary array per line. */
+      segmentLyrics: (lines: string[]) => Promise<string[][]>;
+      /** Sends "hello" with the unsaved AI settings from the form and reports the reply. Never rejects on connection failures. */
+      testAiConnection: (settings: AiConnectionTestPayload) => Promise<AiConnectionTestResult>;
       fetchLyricProxy: (
         url: string,
         init?: {
@@ -504,17 +789,29 @@ declare global {
       ) => Promise<ElectronLyricProxyResponse>;
       getNeteasePort: () => Promise<number>;
       getNeteaseApiStatus: () => Promise<ElectronNeteaseApiStatus>;
+      getNeteaseLoginDiagnostics?: () => Promise<ElectronNeteaseLoginDiagnostics>;
+      restartNeteaseApi: () => Promise<ElectronNeteaseApiStatus>;
       onNeteaseApiStatusChanged: (callback: (status: ElectronNeteaseApiStatus) => void) => () => void;
       getKugouApiStatus: () => Promise<ElectronKugouApiStatus>;
+      bodianRequest: (
+        operation: import('./services/onlineMusic/bodianTransport').BodianOperation,
+        params?: import('./services/onlineMusic/bodianTransport').BodianParams,
+      ) => Promise<import('./services/onlineMusic/bodianTransport').BodianBridgeResult>;
       kugouRequest: (
         operation: ElectronKugouOperation,
         params?: Record<string, string | number | boolean | undefined>,
       ) => Promise<unknown>;
+      getQqPort: () => Promise<number | null>;
+      getQqApiStatus: () => Promise<ElectronQqApiStatus>;
+      onQqApiStatusChanged: (callback: (status: ElectronQqApiStatus) => void) => () => void;
       minimizeWindow: () => Promise<boolean>;
       toggleMaximizeWindow: () => Promise<boolean>;
       toggleFullscreenWindow: () => Promise<boolean>;
       closeWindow: () => Promise<boolean>;
+      quitApp: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
+      isWindowFullscreen: () => Promise<boolean>;
+      onWindowFullscreenChanged: (callback: (fullscreen: boolean) => void) => () => void;
       getWindowTransparentMode: () => Promise<boolean>;
       setWindowTransparentMode: (
         enabled: boolean,
@@ -541,6 +838,10 @@ declare global {
       publishObsBrowserSourceConfig: (config: ElectronObsBrowserSourceConfig) => Promise<boolean>;
       publishObsBrowserSourceClock: (clock: ElectronObsBrowserSourceClock) => Promise<boolean>;
       publishObsBrowserSourceAudio: (audio: ElectronObsBrowserSourceAudio) => Promise<boolean>;
+      getLyricApiStatus: () => Promise<import('./types/lyricApi').LyricApiStatus>;
+      setLyricApiEnabled: (enabled: boolean) => Promise<import('./types/lyricApi').LyricApiStatus>;
+      publishLyricApiData: (lyrics: import('./types').LyricData | null, offset: number) => Promise<boolean>;
+      onLyricApiStatusChanged: (callback: (status: import('./types/lyricApi').LyricApiStatus) => void) => () => void;
       getDiscordPresenceStatus: () => Promise<ElectronDiscordPresenceStatus>;
       publishDiscordPresenceSnapshot: (snapshot: ElectronDiscordPresenceSnapshot) => Promise<ElectronDiscordPresenceStatus>;
       getPlaybackSyncBridgeStatus: () => Promise<ElectronPlaybackSyncBridgeStatus>;
@@ -556,6 +857,8 @@ declare global {
       closeRemoteControl: () => Promise<boolean>;
       getRemoteControlAlwaysOnTop: () => Promise<boolean>;
       setRemoteControlAlwaysOnTop: (alwaysOnTop: boolean) => Promise<boolean>;
+      getRemoteControlWindowSettings: () => Promise<{ hideTitlebar: boolean; clickThrough: boolean }>;
+      onRemoteControlWindowSettingsChanged: (callback: (settings: { hideTitlebar: boolean; clickThrough: boolean }) => void) => () => void;
       publishRemoteControlSnapshot: (snapshot: ElectronRemoteControlSnapshot) => Promise<boolean>;
       getRemoteControlSnapshot: () => Promise<ElectronRemoteControlSnapshot | null>;
       sendRemoteControlCommand: (command: ElectronRemoteControlCommand) => Promise<boolean>;
@@ -566,8 +869,10 @@ declare global {
         extension?: 'mp4' | 'webm',
         displayName?: string,
       ) => Promise<ElectronSaveDialogResult>;
+      reportDevicePixelRatio: (ratio: number) => Promise<void>;
       getMainWindowCaptureSource: () => Promise<ElectronWindowCaptureSource | null>;
-      prepareVideoExportWindow: (size: { width: number; height: number }) => Promise<boolean>;
+      // Returns `false` when the resize could not be prepared, otherwise the resolved DPR.
+      prepareVideoExportWindow: (size: { width: number; height: number }) => Promise<false | { success: boolean; dpr: number }>;
       restoreVideoExportWindow: () => Promise<boolean>;
       writeVideoExportFile: (filePath: string, data: ArrayBuffer) => Promise<boolean>;
       getStageStatus: () => Promise<StageStatus>;
@@ -583,6 +888,25 @@ declare global {
       onStageExternalPlayRequest: (callback: (request: StageExternalPlayRequest) => void) => () => void;
       onStagePlayerControlRequest: (callback: (request: StagePlayerControlRequest) => void) => () => void;
       onStagePlayerQueueRequest: (callback: (request: StagePlayerQueueRequest) => void) => () => void;
+      mods?: {
+        listMods: () => Promise<{ mods: ModRuntimeInfo[]; ffmpeg: ModFfmpegStatus; directories: string[] }>;
+        setModEnabled: (modId: string, enabled: boolean) => Promise<{ ok: boolean; error?: string; mods: ModRuntimeInfo[] }>;
+        reloadMods: () => Promise<{ mods: ModRuntimeInfo[] }>;
+        cancelExport: () => Promise<{ ok: boolean }>;
+        invokeModRpc: (modId: string, name: string, args: unknown[]) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        invokeModStorage: (modId: string, operation: string, key?: string, value?: unknown) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        invokeModNetFetch: (modId: string, url: string, init: unknown) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        invokeModPickFile: (modId: string, accept: string, persist?: boolean) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        invokeModRestoreFile: (modId: string, grantId: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        invokeModReleaseFile: (modId: string, grantId: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+        pushRuntimeSnapshot: (snapshot: ModRuntimeSnapshot) => Promise<{ ok: boolean }>;
+        getFfmpegStatus: () => Promise<{ ffmpeg: ModFfmpegStatus }>;
+        openModsDirectory: () => Promise<{ ok: boolean; directory?: string; error?: string }>;
+        installModFromZip: (zipPath: string) => Promise<{ ok: boolean; id?: string; error?: string }>;
+        onModsStateChanged: (callback: (mods: ModRuntimeInfo[]) => void) => () => void;
+        onExportProgress: (callback: (progress: ModExportProgress) => void) => () => void;
+        onModLog: (callback: (entry: ModLogEntry) => void) => () => void;
+      };
     };
   }
 }

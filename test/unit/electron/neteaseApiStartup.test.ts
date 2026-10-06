@@ -5,13 +5,20 @@ import { describe, expect, it, vi } from 'vitest';
 const {
     refreshAnonymousToken,
     resolveXeapiPublicKey,
+    withoutImplicitClientIp,
 } = require('../../../electron/neteaseApiStartup.cjs') as {
+    withoutImplicitClientIp: (
+        request: (uri: string, data: unknown, options: Record<string, unknown>) => unknown,
+    ) => (uri: string, data: unknown, options?: Record<string, unknown>) => unknown;
     refreshAnonymousToken: (options: Record<string, unknown>) => Promise<boolean>;
     resolveXeapiPublicKey: (options: Record<string, unknown>) => Promise<{
         publicKey: Record<string, unknown>;
         refreshed: boolean;
     }>;
 };
+
+// 上游 axios 请求没有超时，网络黑洞时会一直挂住；这里用一个永不 settle 的 promise 模拟。
+const neverSettles = () => new Promise(() => {});
 
 const quietLogger = {
     warn: vi.fn(),
@@ -158,5 +165,55 @@ describe('NetEase API startup recovery', () => {
         expect(refreshed).toBe(false);
         expect(registerAnonymous).toHaveBeenCalledTimes(3);
         expect(persistToken).not.toHaveBeenCalled();
+    });
+
+    it('times out a hung xeapi refresh instead of stalling startup', async () => {
+        const cachedKey = { sk: 'cached-key', version: '1' };
+        const getXeapiPublicKey = vi.fn(neverSettles);
+
+        const result = await resolveXeapiPublicKey({
+            currentPublicKey: cachedKey,
+            deviceId: 'device-id',
+            getXeapiPublicKey,
+            logger: quietLogger,
+            retryOptions: immediateRetryOptions(),
+            timeoutMs: 5,
+        });
+
+        expect(result).toEqual({ publicKey: cachedKey, refreshed: false });
+        expect(getXeapiPublicKey).toHaveBeenCalledTimes(3);
+    });
+
+    it('times out a hung anonymous registration instead of stalling startup', async () => {
+        const registerAnonymous = vi.fn(neverSettles);
+        const persistToken = vi.fn();
+
+        const refreshed = await refreshAnonymousToken({
+            registerAnonymous,
+            cookieToJson: vi.fn(),
+            persistToken,
+            logger: quietLogger,
+            retryOptions: immediateRetryOptions(),
+            timeoutMs: 5,
+        });
+
+        expect(refreshed).toBe(false);
+        expect(registerAnonymous).toHaveBeenCalledTimes(3);
+        expect(persistToken).not.toHaveBeenCalled();
+    });
+});
+
+describe('NetEase API client IP policy', () => {
+    it('drops the implicit client IP so NetEase sees the real egress address', () => {
+        const request = vi.fn();
+        withoutImplicitClientIp(request)('/api/login/qrcode/client/login', { key: 'k' }, { ip: '116.1.2.3', cookie: 'c' });
+        expect(request).toHaveBeenCalledWith('/api/login/qrcode/client/login', { key: 'k' }, { ip: '', cookie: 'c' });
+    });
+
+    it('keeps the random CN IP when a request opts into randomCNIP', () => {
+        const request = vi.fn();
+        const options = { ip: '116.1.2.3', randomCNIP: true };
+        withoutImplicitClientIp(request)('/api/song/enhance/player/url/v1', {}, options);
+        expect(request).toHaveBeenCalledWith('/api/song/enhance/player/url/v1', {}, options);
     });
 });

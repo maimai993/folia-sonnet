@@ -17,6 +17,8 @@ interface CustomSelectProps {
     value: string;
     onChange: (value: string) => void;
     options: CustomSelectOption[];
+    /** Fired right before the menu opens, so callers can populate `options` on first demand. */
+    onOpen?: () => void;
     placeholder?: string;
     ariaLabel?: string;
     disabled?: boolean;
@@ -33,6 +35,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     value,
     onChange,
     options,
+    onOpen,
     placeholder = 'Select...',
     ariaLabel,
     disabled = false,
@@ -89,9 +92,14 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
     // Toggle the dropdown menu visibility
     const handleToggle = () => {
-        if (!disabled) {
-            setIsOpen(!isOpen);
+        if (disabled) {
+            return;
         }
+
+        if (!isOpen) {
+            onOpen?.();
+        }
+        setIsOpen(!isOpen);
     };
 
     // Close the dropdown when clicking outside of the container

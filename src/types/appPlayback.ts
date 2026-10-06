@@ -17,10 +17,25 @@ export type PlaybackNavigationOptions = {
     shouldNavigateToPlayer?: boolean;
     unavailableSkipCount?: number;
     unifiedQueue?: SongResult[];
+    /**
+     * Set only by the automix blend's own advance. That play skips extension `beforePlay` hooks:
+     * the blend starts the arriving track on a fixed schedule, and its cancel paths assume the
+     * advance has already moved playback to that track.
+     */
+    isAutomixAdvance?: boolean;
 };
 
 export type NextTrackOptions = PlaybackNavigationOptions & {
     allowStopOnMissing?: boolean;
+    /**
+     * The track to step from, when it is deliberately NOT the one the listener can see.
+     *
+     * Next/previous normally step from the displayed track, because during a blend the queue has
+     * already advanced and `currentSong` names the song arriving rather than the one being heard.
+     * Two callers really do mean the internal one: the blend's own advance, and skipping a track
+     * that failed to play - that failure belongs to the active deck, not to what is on screen.
+     */
+    fromSong?: SongResult;
 };
 
 export type UnavailableReplacementRequest = {
@@ -62,7 +77,7 @@ export type NowPlayingClockState = {
 };
 
 export type WindowPlaybackHandoffUiState = {
-    currentView: 'home' | 'player';
+    currentView: 'home' | 'player' | 'lattice';
     playerChromeHidden: boolean;
     mainWindowBorderVisible: boolean;
     transparentModeEnabled: boolean;

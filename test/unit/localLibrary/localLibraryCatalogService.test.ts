@@ -305,6 +305,44 @@ describe('localLibraryCatalogService', () => {
         expect(await appDatabase.local_library_entities.count()).toBe(0);
     });
 
+    it('keeps a shared cover asset until its final song reference is deleted', async () => {
+        const assetId = `sha256:${'c'.repeat(64)}`;
+        const cover = new Blob(['shared-cover'], { type: 'image/png' });
+        await appDatabase.local_cover_assets.put({
+            id: assetId,
+            blob: cover,
+            mimeType: cover.type,
+            size: cover.size,
+            createdAt: 1,
+        });
+        await assignImportedSongs([
+            song('one', { localCoverAssetId: assetId, localCoverSource: 'embedded' }),
+            song('two', { localCoverAssetId: assetId, localCoverSource: 'embedded' }),
+        ]);
+
+        await deleteSongAssignment('one');
+        expect(await appDatabase.local_cover_assets.get(assetId)).toBeTruthy();
+
+        await deleteSongAssignment('two');
+        expect(await appDatabase.local_cover_assets.get(assetId)).toBeUndefined();
+    });
+
+    it('cleans the previous asset when a song changes to a different cover reference', async () => {
+        const oldAssetId = `sha256:${'d'.repeat(64)}`;
+        const newAssetId = `sha256:${'e'.repeat(64)}`;
+        const cover = new Blob(['cover'], { type: 'image/png' });
+        await appDatabase.local_cover_assets.bulkPut([
+            { id: oldAssetId, blob: cover, mimeType: cover.type, size: cover.size, createdAt: 1 },
+            { id: newAssetId, blob: cover, mimeType: cover.type, size: cover.size, createdAt: 2 },
+        ]);
+        await assignImportedSongs([song('changing-cover', { localCoverAssetId: oldAssetId })]);
+
+        await assignImportedSongs([song('changing-cover', { localCoverAssetId: newAssetId })]);
+
+        expect(await appDatabase.local_cover_assets.get(oldAssetId)).toBeUndefined();
+        expect(await appDatabase.local_cover_assets.get(newAssetId)).toBeTruthy();
+    });
+
     it('removes orphaned merged entity families after bulk song deletion', async () => {
         await assignImportedSongs([
             song('one', { artist: 'First' }),

@@ -38,6 +38,8 @@ export const getLyricsBackgroundVocals = (lines: Line[]): LyricBackgroundVocal[]
         .flatMap(line => getLineBackgroundVocals(line))
         .sort((left, right) => left.startTime - right.startTime || left.endTime - right.endTime);
 
+// The top harmony overlay keeps a single alternate row; under the 'both' option
+// resolveLyricAlternateText collapses to translation, same as the single-track modes.
 export const resolveHarmonyAlternateText = (
     vocal: LyricBackgroundVocal,
     subtitleContentMode: SubtitleContentMode | undefined,

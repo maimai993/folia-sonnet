@@ -56,6 +56,7 @@ const LyricsTimelineModal: React.FC<LyricsTimelineModalProps> = ({
     const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const userScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isAutoScrolling = useRef(false);
+    const windowRef = useRef<HTMLDivElement>(null);
 
     // Track active line
     useMotionValueEvent(currentTime, "change", (latest) => {
@@ -70,6 +71,27 @@ const LyricsTimelineModal: React.FC<LyricsTimelineModalProps> = ({
     useEffect(() => {
         setActiveLineIndex(-1);
     }, [lyrics]);
+
+    // Close on Escape key
+    useEffect(() => {
+        if (!isOpen) return undefined;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape' || event.repeat) return;
+            // The command palette can open above the timeline; its Escape is its own.
+            const target = event.target;
+            if (target instanceof Element) {
+                const owner = target.closest('[data-folia-keyboard-window="true"]');
+                if (owner && owner !== windowRef.current) return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            onClose();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
 
     // Handle user scroll
     const handleScroll = () => {
@@ -194,6 +216,7 @@ const LyricsTimelineModal: React.FC<LyricsTimelineModalProps> = ({
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    ref={windowRef}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}

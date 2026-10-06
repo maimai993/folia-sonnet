@@ -1,10 +1,11 @@
+import { detectOpenAICompatibleProvider, sendOpenAICompatibleRequest, } from '../shared/openAICompatibleRequest.mjs';
 import { sanitizeDualTheme } from "../shared/themeSanitizer.mjs";
 // 当前文件：Vercel OpenAI 兼容主题生成函数的 TypeScript 源文件。
 export const config = {
     runtime: 'edge', // Use edge runtime for fetch support
 };
 const DEFAULT_OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_OPENAI_MODEL = 'gpt-4o';
+const DEFAULT_OPENAI_MODEL = 'gpt-5.6-luna';
 const DEFAULT_OPENAI_TEMPERATURE = 0.7;
 const DEEPSEEK_DEFAULT_MODEL = 'deepseek-v4-flash';
 const THEME_JSON_SCHEMA_NAME = 'dual_theme';
@@ -24,6 +25,8 @@ const jsonResponse = (req, body, status) => (new Response(JSON.stringify(body), 
         ...buildCorsHeaders(req),
     },
 }));
+
+const THEME_MAX_OUTPUT_TOKENS = 4096;
 const THEME_JSON_SCHEMA = {
     type: 'object',
     additionalProperties: false,
@@ -58,7 +61,7 @@ const THEME_JSON_SCHEMA = {
                     items: { type: 'string' }
                 }
             },
-            required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons']
+            required: ['name', 'description', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons']
         },
         dark: {
             type: 'object',
@@ -90,7 +93,7 @@ const THEME_JSON_SCHEMA = {
                     items: { type: 'string' }
                 }
             },
-            required: ['name', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons']
+            required: ['name', 'description', 'backgroundColor', 'primaryColor', 'accentColor', 'secondaryColor', 'wordColors', 'lyricsIcons']
         }
     },
     required: ['light', 'dark']
@@ -133,28 +136,6 @@ const resolveOpenAICompatibleModel = (apiUrl, configuredModel) => {
         // Fall back to the generic OpenAI default when URL parsing fails.
     }
     return DEFAULT_OPENAI_MODEL;
-};
-const detectOpenAICompatibleProvider = (apiUrl, model) => {
-    const normalizedModel = model.trim().toLowerCase();
-    if (normalizedModel.startsWith('deepseek-')) {
-        return 'deepseek';
-    }
-    try {
-        const hostname = new URL(apiUrl).hostname.toLowerCase();
-        if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
-            return 'deepseek';
-        }
-        if (hostname === 'api.openai.com' || hostname.endsWith('.openai.com')) {
-            return 'openai';
-        }
-    }
-    catch {
-        // Fall through to generic provider handling.
-    }
-    if (/^(gpt|o[1-9]|o[1-9]-|chatgpt-)/.test(normalizedModel)) {
-        return 'openai';
-    }
-    return 'generic';
 };
 const providerSupportsStructuredOutputs = (provider) => provider === 'openai';
 const extractProviderErrorMessage = (payload) => {
@@ -259,6 +240,7 @@ const buildOpenAICompatibleRequestBody = (model, provider, systemPrompt, sourceP
             model,
             messages,
             temperature,
+            max_completion_tokens: THEME_MAX_OUTPUT_TOKENS,
             response_format: {
                 type: 'json_schema',
                 json_schema: {
@@ -273,6 +255,7 @@ const buildOpenAICompatibleRequestBody = (model, provider, systemPrompt, sourceP
         model,
         messages,
         temperature,
+        max_tokens: 8192,
         response_format: { type: 'json_object' }
     };
 };
@@ -318,7 +301,7 @@ export default async function handler(req) {
         const temperature = Number.isFinite(configuredTemperature) && configuredTemperature >= 0 && configuredTemperature <= 2
             ? configuredTemperature
             : DEFAULT_OPENAI_TEMPERATURE;
-        const provider = detectOpenAICompatibleProvider(apiUrl, model);
+        const provider = detectOpenAICompatibleProvider(apiUrl);
         if (!apiKey) {
             console.error("OpenAI API Key is missing in server environment.");
             return jsonResponse(req, { error: 'Server configuration error' }, 500);
@@ -327,13 +310,18 @@ export default async function handler(req) {
         const snippet = lyricsText.slice(0, 2000);
         const systemPrompt = buildThemeSystemPrompt(true);
         const sourcePrompt = buildThemeSourcePrompt(snippet, isPureMusic, songTitle);
-        const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`,
+        const response = await sendOpenAICompatibleRequest({
+            apiUrl,
+            provider,
+            body: buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature),
+            init: {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`,
+                },
+                signal: AbortSignal.timeout(120_000),
             },
-            body: JSON.stringify(buildOpenAICompatibleRequestBody(model, provider, systemPrompt, sourcePrompt, temperature)),
         });
         if (!response.ok) {
             const errorMessage = await formatOpenAICompatibleError(response);

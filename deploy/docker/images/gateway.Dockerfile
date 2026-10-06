@@ -5,12 +5,13 @@ WORKDIR /app
 ARG VCS_REF=local
 ARG STACK_VERSION=local
 ARG REQUIRE_COMMIT_NAME=false
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 COPY . .
 ENV VITE_NETEASE_API_BASE=/netease
 ENV VITE_KUGOU_API_BASE=/kugou
+ENV VITE_QQ_API_BASE=/qq
 ENV VITE_AI_PROVIDER=google
 ENV VERCEL_GIT_COMMIT_SHA=${VCS_REF}
 ENV VERCEL_GIT_COMMIT_REF=docker

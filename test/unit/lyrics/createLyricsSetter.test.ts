@@ -6,6 +6,28 @@ import type { MutableRefObject } from 'react';
 // test/unit/lyrics/createLyricsSetter.test.ts
 
 describe('createLyricsSetter', () => {
+    it('runs the user filter first and the staff policy on what survives', () => {
+        const setLyricsStateMock = vi.fn();
+        const setter = createLyricsSetter(setLyricsStateMock, '^赞助', undefined, {
+            policy: 'smart',
+            minDwellSeconds: 1.5,
+        });
+
+        const lyrics: LyricData = {
+            lines: [
+                { fullText: '赞助商：某某', startTime: 0, endTime: 0.2, words: [] },
+                { fullText: '作词 : A', startTime: 0.2, endTime: 0.4, words: [] },
+                { fullText: '作曲 : B', startTime: 0.4, endTime: 0.6, words: [] },
+                { fullText: '第一句歌词', startTime: 2, endTime: 4, words: [] },
+            ],
+        };
+
+        setter(lyrics);
+
+        const result = setLyricsStateMock.mock.calls[0][0] as LyricData;
+        expect(result.lines.map(line => line.fullText).filter(text => text !== '......')).toEqual(['第一句歌词']);
+    });
+
     it('applies text-based chorus detection if no chorus lines exist', () => {
         const setLyricsStateMock = vi.fn();
         const lyricFilterPattern = '';
@@ -144,5 +166,42 @@ describe('createLyricsSetter', () => {
         const result = setLyricsStateMock.mock.calls[1][0] as LyricData;
         // Should use text-based detection fallback or nothing, not Song A's cached ranges
         expect(result.lines[1].isChorus).toBeUndefined(); // 'Normal line B' is unique and not repeated, so it shouldn't be chorus
+    });
+
+    it('treats lyrics that are only the pure music notice as no lyrics', () => {
+        const setLyricsStateMock = vi.fn();
+        const setter = createLyricsSetter(setLyricsStateMock, '');
+
+        setter({ lines: [{ fullText: '纯音乐 请欣赏', startTime: 0, endTime: 5, words: [] }] });
+
+        expect(setLyricsStateMock).toHaveBeenCalledWith(null);
+    });
+
+    it('keeps a normal song whose lines merely mention pure music', () => {
+        const setLyricsStateMock = vi.fn();
+        const setter = createLyricsSetter(setLyricsStateMock, '');
+
+        setter({
+            lines: [
+                { fullText: '作词 : A', startTime: 0, endTime: 1, words: [] },
+                { fullText: '我只听纯音乐，请欣赏', startTime: 2, endTime: 4, words: [] },
+                { fullText: '第二句歌词', startTime: 5, endTime: 8, words: [] },
+            ],
+        });
+
+        const result = setLyricsStateMock.mock.calls[0][0] as LyricData;
+        expect(result.lines.map(line => line.fullText)).toContain('我只听纯音乐，请欣赏');
+    });
+
+    it('hands the visualizer an empty line set when the user filter removes every line', () => {
+        const setLyricsStateMock = vi.fn();
+        const setter = createLyricsSetter(setLyricsStateMock, '纯音乐');
+
+        // A notice variant no provider recognised: it was parsed as an ordinary line, and the
+        // user filtered it out. What reaches the visualizer is the empty set, not the old text.
+        setter({ lines: [{ fullText: '纯音乐，敬请欣赏本曲', startTime: 0, endTime: 5, words: [] }] });
+
+        const result = setLyricsStateMock.mock.calls[0][0] as LyricData;
+        expect(result.lines).toEqual([]);
     });
 });

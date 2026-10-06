@@ -1,5 +1,12 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { MotionValue, useMotionValueEvent } from 'framer-motion';
+import { FoliumControlButtonSlot, FoliumProgressLayers, useFoliumProgressContext } from '../mods/folium/registries/progress';
+
+// Folium public parts (mods/README.md): `data-folium-part` marks what mod CSS may
+// restyle — progress.root / track / fill / thumb / time / duration. Colors come
+// in as CSS custom properties rather than inline colors, so a mod stylesheet in
+// `@layer folium-mods` can override them without !important. Everything else
+// about this markup is not API.
 
 interface ProgressBarProps {
     currentTime: MotionValue<number>;
@@ -11,6 +18,9 @@ interface ProgressBarProps {
     secondaryColor?: string;
     trackColor?: string;
     disabled?: boolean;
+    edgeStyle?: 'rounded' | 'square';
+    /** The collapsed floating capsule: mod buttons with hideWhenCollapsed stay out. */
+    collapsed?: boolean;
 }
 
 
@@ -31,8 +41,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     secondaryColor = 'rgba(255,255,255,0.5)',
     trackColor = 'rgba(255,255,255,0.1)',
     disabled = false,
+    edgeStyle = 'rounded',
+    collapsed = false,
 }) => {
     const progressRef = useRef<HTMLDivElement>(null);
+    const thumbRef = useRef<HTMLDivElement>(null);
     const timeRef = useRef<HTMLSpanElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isDraggingRef = useRef(false);
@@ -47,10 +60,23 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         const clampedValue = duration > 0 ? Math.min(safeValue, duration) : safeValue;
         const displayedSecond = Math.floor(clampedValue);
 
-        if (progressRef.current) {
-            const progress = duration > 0 ? Math.min(1, clampedValue / duration) : 0;
+        // Nothing is painted without a duration, and that is the fix for the flash at the start of
+        // a blend: the app switches to the incoming track the moment the overlap begins, but its
+        // duration arrives a beat later - automix logs the same gap as `no duration for this track
+        // yet`. Treating unknown as zero drew one frame of empty bar and then snapped back, which
+        // reads as the bar being re-created. Holding the last fill for those few frames is the only
+        // honest option: the fraction is genuinely unknown until the denominator exists.
+        if (progressRef.current && duration > 0) {
+            const progress = Math.min(1, clampedValue / duration);
             const hiddenPercent = ((1 - progress) * 100).toFixed(4);
-            progressRef.current.style.clipPath = `inset(0 ${hiddenPercent}% 0 0 round 999px)`;
+            progressRef.current.style.clipPath = edgeStyle === 'square'
+                ? `inset(0 ${hiddenPercent}% 0 0)`
+                : `inset(0 ${hiddenPercent}% 0 0 round 999px)`;
+            // The thumb is invisible unless a mod styles it. Its full-width carrier moves by
+            // translateX (percent of its own width = the track), so this stays compositor-only.
+            if (thumbRef.current) {
+                thumbRef.current.style.transform = `translateX(${(progress * 100).toFixed(4)}%)`;
+            }
         }
 
         if (timeRef.current && (force || lastDisplayedSecondRef.current !== displayedSecond)) {
@@ -62,7 +88,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
             inputRef.current.value = clampedValue.toString();
             lastInputSecondRef.current = displayedSecond;
         }
-    }, [duration]);
+    }, [duration, edgeStyle]);
 
     useLayoutEffect(() => {
         updateUI(currentTime.get(), true);
@@ -109,27 +135,60 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         onSeekEnd?.();
     };
 
+    const foliumCtx = useFoliumProgressContext({
+        currentTime,
+        duration,
+        onSeek,
+        disabled,
+        colors: { fill: primaryColor, track: trackColor, text: secondaryColor },
+    });
+
     return (
-        <div className="flex items-center gap-3 w-full select-none">
+        <div
+            className="flex items-center gap-3 w-full select-none"
+            data-folium-part="progress.root"
+            style={{
+                '--folium-progress-fill': primaryColor,
+                '--folium-progress-track': trackColor,
+                '--folium-progress-text': secondaryColor,
+            } as React.CSSProperties}
+        >
+            <FoliumControlButtonSlot slot="progress.leading" ctx={foliumCtx} collapsed={collapsed} />
+
             <span
                 ref={timeRef}
-                className="text-[10px] font-mono font-medium opacity-60 w-8 text-right"
-                style={{ color: secondaryColor }}
+                className="text-[10px] font-mono font-medium opacity-60 w-8 text-right text-[var(--folium-progress-text)]"
+                data-folium-part="progress.time"
             >
                 00:00
             </span>
 
-            <div className={`relative h-1.5 flex-1 rounded-sm md:rounded-full flex items-center group ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`} style={{ backgroundColor: trackColor }}>
+            <div
+                className={`relative h-1.5 flex-1 flex items-center group bg-[var(--folium-progress-track)] ${edgeStyle === 'rounded' ? 'rounded-sm md:rounded-full' : ''} ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                data-folium-part="progress.track"
+            >
                 <div
                     ref={progressRef}
-                    className="absolute top-0 left-0 h-full rounded-sm md:rounded-full pointer-events-none"
+                    className={`absolute top-0 left-0 h-full pointer-events-none bg-[var(--folium-progress-fill)] ${edgeStyle === 'rounded' ? 'rounded-sm md:rounded-full' : ''}`}
+                    data-folium-part="progress.fill"
                     style={{
                         width: '100%',
-                        backgroundColor: primaryColor,
-                        clipPath: 'inset(0 100% 0 0 round 999px)',
+                        clipPath: edgeStyle === 'square'
+                            ? 'inset(0 100% 0 0)'
+                            : 'inset(0 100% 0 0 round 999px)',
                         willChange: 'clip-path',
                     }}
                 />
+                <div
+                    ref={thumbRef}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ transform: 'translateX(0%)', willChange: 'transform' }}
+                >
+                    <div
+                        className="absolute top-1/2 left-0 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 bg-[var(--folium-progress-fill)]"
+                        data-folium-part="progress.thumb"
+                    />
+                </div>
                 <input
                     ref={inputRef}
                     type="range"
@@ -145,11 +204,17 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                     onClick={(e) => e.stopPropagation()}
                     className={`absolute inset-0 w-full h-full opacity-0 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 />
+                <FoliumProgressLayers ctx={foliumCtx} />
             </div>
 
-            <span className="text-[10px] font-mono font-medium opacity-60 w-8" style={{ color: secondaryColor }}>
+            <span
+                className="text-[10px] font-mono font-medium opacity-60 w-8 text-[var(--folium-progress-text)]"
+                data-folium-part="progress.duration"
+            >
                 {formatTime(duration)}
             </span>
+
+            <FoliumControlButtonSlot slot="progress.trailing" ctx={foliumCtx} collapsed={collapsed} />
         </div>
     );
 };

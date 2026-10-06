@@ -11,6 +11,7 @@ import {
     readStoredLastAppliedThemePointer,
     readStoredThemeAutoGenerateEnabled,
     readStoredThemeAutoSwitchEnabled,
+    readStoredThemeGenerationSource,
     resolveCustomThemePreferenceChange,
     resolveSongThemeAutoGenerateChange,
     resolveSongThemeAutoSwitchChange,
@@ -18,6 +19,8 @@ import {
     saveStoredLastAppliedThemePointer,
     saveStoredThemeAutoGenerateEnabled,
     saveStoredThemeAutoSwitchEnabled,
+    saveStoredThemeGenerationSource,
+    type ThemeGenerationSource,
     type ThemePreferenceSwitchState,
 } from '../services/themePreferences';
 import { FALLBACK_AI_DUAL_THEME, sanitizeDualTheme, sanitizeTheme } from '../services/themeSanitizer';
@@ -31,6 +34,8 @@ import {
     resolveBgModeTheme,
 } from './themeControllerState';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { useStableCallbacks } from './useStableCallbacks';
 
 type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 export type GenerateAIThemeOptions = {
@@ -127,7 +132,6 @@ export function useThemeController({
     daylightTheme,
     isDaylight,
     setDaylightPreference,
-    setStatusMsg,
     coverUrl,
     t,
 }: {
@@ -135,7 +139,6 @@ export function useThemeController({
     daylightTheme: Theme;
     isDaylight: boolean;
     setDaylightPreference: (enabled: boolean) => void;
-    setStatusMsg: StatusSetter;
     coverUrl?: string | null;
     t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -169,6 +172,7 @@ export function useThemeController({
     const [isCustomThemePreferred, setIsCustomThemePreferred] = useState(initialThemePreferenceState.isCustomThemePreferred);
     const [songThemeAutoSwitchEnabled, setSongThemeAutoSwitchEnabled] = useState(initialThemePreferenceState.songThemeAutoSwitchEnabled);
     const [songThemeAutoGenerateEnabled, setSongThemeAutoGenerateEnabled] = useState(initialThemePreferenceState.songThemeAutoGenerateEnabled);
+    const [themeGenerationSource, setThemeGenerationSource] = useState<ThemeGenerationSource>(() => readStoredThemeGenerationSource());
     const [bgMode, setBgMode] = useState<ThemeMode>(() => (
         initialCustomTheme && initialThemePreferenceState.isCustomThemePreferred ? 'custom' : 'default'
     ));
@@ -237,6 +241,10 @@ export function useThemeController({
     useEffect(() => {
         saveStoredThemeAutoGenerateEnabled(songThemeAutoGenerateEnabled);
     }, [songThemeAutoGenerateEnabled]);
+
+    useEffect(() => {
+        saveStoredThemeGenerationSource(themeGenerationSource);
+    }, [themeGenerationSource]);
 
     useEffect(() => {
         const pointer = bgMode === 'custom' && customTheme
@@ -469,6 +477,14 @@ export function useThemeController({
         });
     };
 
+    const handleThemeGenerationSourceChange = (source: ThemeGenerationSource) => {
+        setThemeGenerationSource(source);
+        setStatusMsg({
+            type: 'info',
+            text: t(source === 'cover' ? 'notifications.themeSourceCover' : 'notifications.themeSourceAi'),
+        });
+    };
+
     const restoreThemeFromLastAppliedPointer = async () => {
         const pointer = readStoredLastAppliedThemePointer();
 
@@ -548,6 +564,47 @@ export function useThemeController({
         return 'none' as const;
     };
 
+    // Cover-derived theme: the no-AI path. Shared by the "cover" generation source the user can
+    // pick and by the fallback taken when the AI call fails for a missing API key.
+    const applyCoverDerivedTheme = async (
+        currentSong: SongResult | null,
+        shouldApply: () => boolean,
+        origin: 'chosen' | 'fallback',
+    ): Promise<GenerateAIThemeResult> => {
+        const coverColors = coverUrl ? await extractColors(coverUrl, 5) : [];
+        const coverTheme = applyStoredAnimationIntensityToDualTheme(buildBuiltinDualTheme({ coverColors }));
+
+        if (currentSong) {
+            await saveToCache(`dual_theme_${getPlaybackSongKey(currentSong)}`, coverTheme);
+            saveSyncedThemeWithoutBlocking(currentSong, coverTheme, 'fallback');
+            setCurrentSongHasLocalAiTheme(true);
+        }
+
+        if (!shouldApply()) {
+            return { status: 'generated', applied: false };
+        }
+
+        applyDualTheme(coverTheme);
+        const customPreferred = bgMode === 'custom' && customTheme;
+        setStatusMsg(origin === 'fallback'
+            ? {
+                type: 'info',
+                text: customPreferred
+                    ? t('notifications.aiThemeGeneratedCustomPreferred')
+                    : t('status.aiFallbackThemeUsed'),
+            }
+            : {
+                type: 'success',
+                text: customPreferred
+                    ? t('notifications.aiThemeUpdatedCustomPreferred')
+                    : t('status.coverThemeApplied', {
+                        themeName: getSelectedDualTheme(coverTheme, isDaylight).name,
+                    }),
+            });
+
+        return { status: 'generated', applied: true };
+    };
+
     const generateAITheme = async (
         lyrics: LyricData | null,
         currentSong: SongResult | null,
@@ -563,6 +620,16 @@ export function useThemeController({
         beginThemeGeneration();
         setStatusMsg({ type: 'info', text: t('status.generatingTheme') });
         try {
+            // The cover source never touches the model, so it also never needs a lyric prompt:
+            // an instrumental with no title still gets a theme from its artwork.
+            if (themeGenerationSource === 'cover') {
+                return await applyCoverDerivedTheme(
+                    currentSong,
+                    () => options.shouldApply?.() ?? true,
+                    'chosen',
+                );
+            }
+
             const allText = lyrics?.lines.map(line => line.fullText).join('\n').trim() || '';
             const songTitle = currentSong?.name?.trim() || lyrics?.title?.trim() || '';
             const isPureMusic = Boolean(currentSong?.isPureMusic) || isPureMusicLyricText(allText);
@@ -604,59 +671,39 @@ export function useThemeController({
             return { status: 'generated', applied: true };
         } catch (error: unknown) {
             console.error(error);
-            const shouldApply = options.shouldApply?.() ?? true;
             if (isMissingAiApiKeyError(error)) {
-                const coverColors = coverUrl ? await extractColors(coverUrl, 5) : [];
-                const fallbackTheme = applyStoredAnimationIntensityToDualTheme(buildBuiltinDualTheme({ coverColors }));
-
-                if (currentSong) {
-                    await saveToCache(`dual_theme_${getPlaybackSongKey(currentSong)}`, fallbackTheme);
-                    saveSyncedThemeWithoutBlocking(currentSong, fallbackTheme, 'fallback');
-                }
-
-                if (!shouldApply) {
-                    return { status: 'generated', applied: false };
-                }
-
-                applyDualTheme(fallbackTheme);
-                setStatusMsg({
-                    type: 'info',
-                    text: bgMode === 'custom' && customTheme
-                        ? t('notifications.aiThemeGeneratedCustomPreferred')
-                        : t('status.aiFallbackThemeUsed'),
-                });
-                return { status: 'generated', applied: true };
-            } else {
-                if (shouldApply) {
-                    setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
-                }
-                return { status: 'failed' };
+                return await applyCoverDerivedTheme(
+                    currentSong,
+                    () => options.shouldApply?.() ?? true,
+                    'fallback',
+                );
             }
+
+            if (options.shouldApply?.() ?? true) {
+                setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
+            }
+            return { status: 'failed' };
         } finally {
             themeGenerationSongKeysRef.current.delete(songKey);
             endThemeGeneration();
         }
     };
 
-    return {
-        theme,
-        setTheme: (nextTheme: Theme) => {
-            if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {
-                saveStoredAnimationIntensity(nextTheme.animationIntensity);
-            }
-            setTheme(applyStoredAnimationIntensityToTheme(nextTheme));
-        },
-        aiTheme,
+    const setThemeWithStoredIntensity = (nextTheme: Theme) => {
+        if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {
+            saveStoredAnimationIntensity(nextTheme.animationIntensity);
+        }
+        setTheme(applyStoredAnimationIntensityToTheme(nextTheme));
+    };
+
+    // Every one of these is invoked from an event, an effect or async work - never read during
+    // render for its identity - so a permanent identity is safe here and is what lets the five
+    // build*Model memos in App.tsx hold. Before this they changed on every render of this hook,
+    // which cascaded into playSong and from there into all four view models.
+    const actions = useStableCallbacks({
+        setTheme: setThemeWithStoredIntensity,
         setAiTheme,
-        customTheme,
-        hasCustomTheme: Boolean(customTheme),
-        themeSourceModel,
-        isCustomThemePreferred,
-        songThemeAutoSwitchEnabled,
-        songThemeAutoGenerateEnabled,
-        bgMode,
         setBgMode,
-        isGeneratingTheme,
         handleToggleDaylight,
         handleBgModeChange,
         handleResetTheme,
@@ -673,5 +720,21 @@ export function useThemeController({
         handleCustomThemePreferenceChange,
         handleSongThemeAutoSwitchChange,
         handleSongThemeAutoGenerateChange,
+        handleThemeGenerationSourceChange,
+    });
+
+    return {
+        theme,
+        aiTheme,
+        customTheme,
+        hasCustomTheme: Boolean(customTheme),
+        themeSourceModel,
+        isCustomThemePreferred,
+        songThemeAutoSwitchEnabled,
+        songThemeAutoGenerateEnabled,
+        themeGenerationSource,
+        bgMode,
+        isGeneratingTheme,
+        ...actions,
     };
 }

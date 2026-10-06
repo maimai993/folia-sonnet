@@ -8,17 +8,18 @@ import { appDatabase } from '../appDatabase';
 
 export const sanitizeLocalSongForStorage = (song: LocalSong): LocalSong => {
   const normalizedSong = migrateMatchedLyricsCarrierRenderHints(song).value ?? song;
-  const { fileHandle, embeddedCover, ...persistedSong } = normalizedSong;
-  return isBlob(embeddedCover) ? { ...persistedSong, embeddedCover } : persistedSong;
+  const { fileHandle, embeddedCover: _legacyCover, ...persistedSong } = normalizedSong as LocalSong & {
+    embeddedCover?: unknown;
+  };
+  return persistedSong;
 };
 
 const normalizeLocalSongFromStorage = (song: LocalSong): { value: LocalSong; changed: boolean } => {
-  if (song.embeddedCover === undefined || isBlob(song.embeddedCover)) {
-    return { value: song, changed: false };
-  }
-
-  const { embeddedCover: _embeddedCover, ...normalizedSong } = song;
-  return { value: normalizedSong, changed: true };
+  const legacySong = song as LocalSong & { embeddedCover?: unknown };
+  if (legacySong.embeddedCover === undefined) return { value: song, changed: false };
+  const { embeddedCover, ...normalizedSong } = legacySong;
+  // A valid legacy Blob remains in IndexedDB until the background migrator commits external storage.
+  return { value: normalizedSong, changed: !isBlob(embeddedCover) };
 };
 
 export const putLocalSong = async (song: LocalSong): Promise<void> => {

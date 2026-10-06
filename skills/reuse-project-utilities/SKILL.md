@@ -22,11 +22,15 @@ description: Use when implementing, refactoring, or reviewing code in this repos
 
 - 歌词解析、时序、render end：`src/utils/lyrics/*`
 - visualizer 运行时、背景、颜色：`src/components/visualizer/*`
-- 设置 UI、导入导出、命令面板：`src/components/modal/settings/*`、`src/stores/useSettingsUiStore.ts`、`src/components/command-palette/*`
+- 设置 UI、导入导出、命令面板：`src/components/modal/settings/*`、`src/stores/useSettingsModalStore.ts`（弹窗 UI 状态）、按领域拆分的 `src/stores/use*SettingsStore.ts`（设置值）、`src/components/command-palette/*`
 - 同步配置、主题同步和本地导出：`src/services/sync/*`、`src/components/modal/settings/StorageSettingsSection.tsx`
 - 字体栈和自定义字体：`src/utils/fontStacks.ts`、`src/services/customLyricsFont.ts`
 - 播放队列、播放适配：`src/services/playbackAdapters.ts`、`src/utils/appPlaybackHelpers.ts`
-- 网易云 / Navidrome / 本地音乐 API：`src/services/*`
+- 播放身份与去重：`src/utils/appPlaybackGuards.ts`、`src/utils/appPlaybackHelpers.ts`
+- 在线歌曲统一入口：`src/services/onlineMusic/omni.ts`、`src/types/onlineMusic.ts`
+- 本地库索引与命名：`src/utils/localLibraryIndex.ts`、`localLibraryNames.ts`、`localLibraryResolver.ts`
+- Stage / OBS / PlayerCap 数据转换：`src/utils/appStageHelpers.ts`、`src/utils/stageClientDemo.ts`、`src/utils/stagePlayerSnapshot.ts`、`src/utils/obs*.ts`、`src/utils/playerCap*.ts`
+- 网易云 / Navidrome / 本地音乐 API：`src/services/netease.ts`、`navidromeService.ts`、`localMusicService.ts`
 - 主题、封面、取色、缓存：`src/hooks/themeControllerState.ts`、`src/utils/colorExtractor.ts`、`src/services/themeCache.ts`、`src/services/coverCache.ts`
 - UI 图标、动画、弹窗、选择器：`lucide-react`、`framer-motion`、`components/shared/*`
 
@@ -61,6 +65,47 @@ const width = layout.lines[0]?.width ?? fallbackWidth;
 - 需要和 CJK / grapheme 排版更接近真实浏览器表现的场景
 
 不要手写 `text.length * fontSize` 作为主测量逻辑；只能作为 fallback。
+
+#### 测量必须和真实渲染结构一致
+
+`prepareWithSegments(fullText, fontSpec)` 把整行当成一个可任意断开的字符串。只有当 DOM 里这行文本
+也是一个普通的 inline 文本流时，这个假设才成立。
+
+如果渲染时把每个词/token 包成了 `display: inline-block`（逐字扫光、per-word 上色、chip、mention 都会这么做），
+那它就是**原子行内盒，内部不允许断行**，浏览器只能在 token 之间断。中日文尤其明显：词间没有空格，
+pretext 会在任意字之间断，浏览器只能在 token 边界断，实测行数可以差 1~2 行。行数算少了，
+预留高度就不够，多出来的行会从 padding 里漏出去压到下一个区块（Monet 歌词压到翻译行就是这么来的）。
+
+这种情况用 rich-inline helper，把原子 token 标成 `break: 'never'`：
+
+```ts
+import { measureRichInlineStats, prepareRichInline, type RichInlineItem } from '@chenglou/pretext/rich-inline';
+
+const items: RichInlineItem[] = tokens.map(token => ({
+    text: token.text,
+    font: fontSpec,
+    break: token.timed ? 'never' : 'normal',   // 'never' == inline-block 原子盒
+}));
+const { lineCount } = measureRichInlineStats(prepareRichInline(items), maxWidthPx);
+```
+
+实测（Chromium，对照真实 DOM 行数）：token 都放得进列宽时，`break: 'never'` 154 组用例**零误差**，
+而按整串测量错 14 组。参考实现见 `measureLyricLineCount`（`src/components/visualizer/monet/monetLyricsModel.ts`）。
+
+其它容易踩的对齐点：
+
+- **`whiteSpace`**：`prepare()` / `prepareWithSegments()` 默认按 `white-space: normal` 处理。DOM 上写了
+  `whitespace-pre-wrap` 就必须传 `{ whiteSpace: 'pre-wrap' }`，否则连续空格被折叠，行数算少。
+- **`letterSpacing` / `wordBreak`**：CSS 上有 `letter-spacing`、`word-break: keep-all` 时，同样要作为 options 传进去。
+- **零宽字符不是断行控制手段**：U+2060 WORD JOINER、U+FEFF 都不会阻止 pretext 断行（宽度为 0，断点照旧），
+  别指望靠插入零宽字符来表达"不可断"。要原子性就用 rich-inline 的 `break: 'never'`。
+- **超宽 token 仍不精确**：token 自然宽度超过列宽时，Blink 对 `inline-block` 的 shrink-to-fit 行为
+  （`overflow-wrap: break-word` 不参与 min-content 计算，结果是溢出而不是内部换行）rich-inline 没有建模，
+  实测仍有偏差。这种极端情形不要依赖测量值兜底，改用内容自撑高度。
+- **`system-ui` 在 macOS 上不可靠**：pretext README 明确说明 `layout()` 精度对 `system-ui` 不保证，字体栈里
+  优先落到具名字体。
+- **单测要 mock 子路径**：`vi.mock('@chenglou/pretext')` 不会覆盖 `@chenglou/pretext/rich-inline`，
+  两个都要 mock，否则 node 环境下会抛 `Text measurement requires OffscreenCanvas or a DOM canvas context.`。
 
 ### Visualizer Runtime
 
@@ -102,6 +147,22 @@ CJK 语义分组、sticky 标点、英文 contraction 已有布局工具：
 位置：`src/utils/lyrics/cjkSemanticLayout.ts`
 
 新增按词/按块 visualizer 时，优先使用 layout units。不要在组件里临时拼接标点、撇号、CJK 字符。
+
+### Word Segmentation
+
+歌词按词分词只有一个入口：`src/utils/lyrics/wordSegmentation.ts`
+
+- `segmentLyricWords(line)` —— 有用户保存的精细分词就用它，否则 `Intl.Segmenter`
+- `segmentTextWords(text)` —— 没有 `Line` 时的无覆盖版本
+- `segmentsFromBoundaries(boundaries)`、`isValidWordSegmentation(text, boundaries)`
+
+**不要再写 `new Intl.Segmenter(..., { granularity: 'word' })`。** 这里原本有三份各自为政的实现
+（`cjkSemanticLayout`、`sonnetSemantic`、`temperaProgram`，后两份逐字重复），用户的精细分词
+（命令 `lyric-segmentation`）就没法一次覆盖到所有模式。`granularity: 'grapheme'` 是另一回事，
+走 `graphemeTiming.ts`，与这里无关。
+
+新增按词排版的 visualizer 时，在它的 `entry.tsx` 上标 `usesWordSegmentation: true`，
+面板快捷按钮和命令的可用性都从注册表读这个字段。
 
 ### Grapheme Timing
 
@@ -175,7 +236,7 @@ const { t } = useTranslation();
 
 - 视觉相关设置必须进入 `AppearanceSettingsSubview.tsx` 的导入导出链路。
 - 功能性设置或可执行动作必须注册到 `src/components/command-palette/commandRegistry.ts`。
-- 设置状态优先复用 `src/stores/useSettingsUiStore.ts`，不要在组件里另起一套 localStorage 读写。
+- 设置状态优先复用已有 store：弹窗 UI 状态在 `src/stores/useSettingsModalStore.ts`，设置值在对应领域的 `use*SettingsStore`（`useAudioSettingsStore`、`useLyricSettingsStore`、`useThemeSettingsStore`、`useTypographySettingsStore` 等）。不要在组件里另起一套 localStorage 读写。
 
 ### Long Lists
 
@@ -203,6 +264,8 @@ const { t } = useTranslation();
 - React 生命周期和用户动作编排放 hook 或 app-level builder。
 - 纯计算、映射、格式化放 util。
 - 展示和交互结构放 component。
+- 普通在线歌曲调用必须走 `onlineMusic/omni.ts`；不要在 component/hook/store 中直接调用 provider adapter 或 transport。
+- app-level props、导航和动作组装优先查 `src/components/app/*/build*.ts` / `create*.ts`，不要在 `App.tsx` 重新复制一套映射。
 
 ## Extension Rule
 
@@ -224,6 +287,8 @@ const { t } = useTranslation();
 - 是否直接使用 `line.endTime`，但应该使用 `getLineRenderEndTime`？
 - 是否手写 SVG，而 lucide 已有图标？
 - 是否新建了 service 请求逻辑，但已有 service 已经封装同类 API？
+- 是否绕过 `onlineMusic/omni.ts`，或丢失 `sourceRef/providerId` 造成跨 provider 误去重？
+- 是否复制了本地库索引、播放身份、Stage/OBS/PlayerCap 的现有转换 helper？
 - 是否绕过 `src/services/sync/*`，直接对同步服务发 fetch，或直接读写主题同步 registry / IndexedDB？
 - 是否对大量列表使用普通 `.map()` 而不是虚拟列表？
 - 是否新增硬编码文案却没有更新 i18n 字典？
@@ -231,6 +296,7 @@ const { t } = useTranslation();
 - 是否新增固定颜色却没有从 `Theme` / `DualTheme` 动态派生并检查明暗两套表现？
 - 是否硬编码歌词或字幕字重，而没有使用 `resolveThemeFontWeight` 和模式 fallback？
 - DOM、Canvas、pretext、光栅化的最终字重以及布局缓存键是否一致？
+- pretext 测量的文本结构是否和实际渲染结构一致？渲染成 `inline-block` token 时要用 rich-inline 的 `break: 'never'`，DOM 上是 `whitespace-pre-wrap` 时要传 `{ whiteSpace: 'pre-wrap' }`。
 - 是否创建了相似 helper，却没有搜索已有实现或测试？
 
 ## Validation

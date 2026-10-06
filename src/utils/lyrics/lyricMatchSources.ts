@@ -4,6 +4,7 @@ import { calculateMatchScore, calculateMatchScoreDetails } from './matchScore';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
 import { fetchAmllDbLyrics } from './providers/amllDbProvider';
 import { applyNeteaseChorusByTime } from './chorusEffects';
+import { hasRenderableLyrics } from './validity';
 
 // src/utils/lyrics/lyricMatchSources.ts
 
@@ -94,7 +95,7 @@ export async function searchAmllDbLyricCandidates(
         }
 
         const lyrics = await fetchAmllDbLyrics(platform, candidate.id);
-        return lyrics ? candidate : null;
+        return hasRenderableLyrics(lyrics) ? candidate : null;
     });
 
     const results = await Promise.all(probes);
@@ -131,27 +132,32 @@ export async function fetchLyricsForMatchSource(
         const result = await getOnlineMusicProvider('netease')?.lyrics?.getLyrics(selectedResult);
         if (!result) return null;
         return {
-            lyrics: result.lyrics,
+            lyrics: hasRenderableLyrics(result.lyrics) ? result.lyrics : null,
             isPureMusic: result.isPureMusic,
         };
     }
     if (source === 'qq') {
+        const lyrics = await fetchQQLyrics(selectedResult);
         return {
-            lyrics: await fetchQQLyrics(selectedResult),
+            lyrics: hasRenderableLyrics(lyrics) ? lyrics : null,
             isPureMusic: false,
         };
     }
     if (source === 'kugou') {
         const result = await getOnlineMusicProvider('kugou')?.lyrics?.getLyrics(selectedResult);
         if (!result) return null;
-        return { lyrics: result.lyrics, isPureMusic: result.isPureMusic };
+        return {
+            lyrics: hasRenderableLyrics(result.lyrics) ? result.lyrics : null,
+            isPureMusic: result.isPureMusic,
+        };
     }
 
     const platform = selectedResult.amllDbPlatform;
     if (!platform) {
         return null;
     }
-    const lyrics = await fetchAmllDbLyrics(platform, selectedResult.id);
+    const fetchedLyrics = await fetchAmllDbLyrics(platform, selectedResult.id);
+    const lyrics = hasRenderableLyrics(fetchedLyrics) ? fetchedLyrics : null;
     const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
         ? await getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(selectedResult.id) ?? []
         : [];

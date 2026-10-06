@@ -1,7 +1,5 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { UserGuideTipCard } from './UserGuideTipCard';
 import { UserGuideFeatureCard } from './UserGuideFeatureCard';
 import { NEW_FEATURES_RELEASE } from './newFeaturesRelease';
 
@@ -21,28 +19,15 @@ export type NewFeaturesIntroProps = {
 export const NewFeaturesIntro: React.FC<NewFeaturesIntroProps> = ({ isDaylight, classes }) => {
     const { t } = useTranslation();
     const { textPrimary, textSecondary, tipCardBg, iconTileBg, cardBg } = classes;
-    const tipCardClasses = { iconTileBg, tipCardBg, textPrimary, textSecondary };
     const featureCardClasses = { iconTileBg, cardBg, textPrimary, textSecondary };
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex justify-center mb-6 mt-4 shrink-0">
-                <div className={`relative w-20 h-20 rounded-full flex items-center justify-center ${isDaylight ? 'bg-blue-50 shadow-inner' : 'bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]'}`}>
-                    <Sparkles size={32} className={isDaylight ? 'text-blue-500' : 'text-blue-400'} />
-                </div>
-            </div>
+        <div className="flex flex-col">
+            <p className={`p-5 rounded-2xl text-sm leading-relaxed ${tipCardBg} ${textSecondary}`}>
+                {t(`${NEW_FEATURES_RELEASE.i18nKey}.intro`)}
+            </p>
 
-            <div className="shrink-0">
-                <UserGuideTipCard
-                    {...tipCardClasses}
-                    icon={Sparkles}
-                    iconClassName={isDaylight ? 'text-blue-500' : 'text-blue-400'}
-                    title={t('userGuide.title', '欢迎使用 Folia')}
-                    description={t(`${NEW_FEATURES_RELEASE.i18nKey}.intro`)}
-                />
-            </div>
-
-            <div className="mt-5 grid min-h-0 max-h-[min(50vh,32rem)] flex-1 grid-cols-2 gap-3 overflow-y-auto custom-scrollbar pr-2 pb-2">
+            <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3 pb-2">
                 {NEW_FEATURES_RELEASE.features.map((feature) => (
                     <UserGuideFeatureCard
                         key={feature.id}

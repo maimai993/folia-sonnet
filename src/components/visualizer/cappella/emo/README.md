@@ -2,9 +2,9 @@
 
 此文件夹内存放供 Cappella 使用的内置聊天表情图片。
 
-运行时会通过 Vite `import.meta.glob` 自动加载目录中的图片文件（png、jpg、jpeg、gif、webp、svg），文件名去掉扩展名后作为图片名称和稳定 id 的一部分。当前内置资源包括 `happy1`、`love1`、`normal1`、`sleepy1`、`sleepy2`、`sleepy3`、`vibe1`、`vibe2`、`vibe3` 等；当前版本会随机选择图片，文件名前缀暂时只为未来的 emotion hint 筛选预留。
+运行时由上级 `../emoImages.ts` 通过 Vite `import.meta.glob` 自动加载目录中的图片文件（png、jpg、jpeg、gif、webp、svg），文件名去掉扩展名后作为名称，并生成 `builtin-*` id。当前内置资源包括 `happy1`、`love1`、`normal1`、`sleepy1`、`sleepy2`、`sleepy3`、`vibe1`、`vibe2`、`vibe3` 等；`pickRandomEmoImage()` 当前会从全集随机选择，`emotionHint` 仅作为未来筛选接口。
 
-用户上传的自定义表情包不放入此目录，而是由 `services/cappellaEmojiPack.ts` 保存到 IndexedDB，并通过 Cappella 设置面板选择或清空。
+用户上传的自定义表情包不放入此目录，而是由 `src/services/cappellaEmojiPack.ts` 经 `src/services/db.ts` 保存到 IndexedDB，并通过 Cappella 设置面板选择或清空。
 
 # disclaimer
 

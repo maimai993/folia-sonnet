@@ -1,4 +1,3 @@
-import type React from 'react';
 import type LyricMatchModal from '../../modal/LyricMatchModal';
 import type NaviLyricMatchModal from '../../modal/NaviLyricMatchModal';
 import type OnlineLyricMatchModal from '../../modal/OnlineLyricMatchModal';
@@ -7,6 +6,7 @@ import type SettingsModal from '../../modal/SettingsModal';
 import type ConfirmDialog from '../../shared/ConfirmDialog';
 import type { StatusMessage, SongResult, LocalSong } from '../../../types';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../../../utils/appPlaybackGuards';
+import type React from 'react';
 
 // src/components/app/dialogs/buildAppDialogsModel.ts
 
@@ -29,16 +29,21 @@ export type AppDialogsModel = {
     onlineLyricMatchDialog?: OnlineLyricMatchDialogProps | null;
     unavailableReplacementDialog?: UnavailableReplacementDialogProps | null;
     settingsDialog?: SettingsDialogProps | null;
-    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
+    wallpaperEntryConfirmDialog?: ConfirmDialogProps | null;
 };
 
-type BuildAppDialogsModelParams = {
+// What this file can read for itself, so the caller never names it. See useAppDialogsModel below.
+type AppDialogsAmbient = {
     statusMsg: StatusMessage | null;
     isDaylight: boolean;
+    currentSong: SongResult | null;
+    wallpaperEntryConfirmDialog: ConfirmDialogProps;
+};
+
+export type AppDialogsDeps = {
     showLyricMatchModal: boolean;
     showNaviLyricMatchModal: boolean;
     showOnlineLyricMatchModal: boolean;
-    currentSong: SongResult | null;
     localSongs: LocalSong[];
     setShowLyricMatchModal: React.Dispatch<React.SetStateAction<boolean>>;
     setShowNaviLyricMatchModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -54,8 +59,9 @@ type BuildAppDialogsModelParams = {
     setPendingUnavailableReplacement: React.Dispatch<React.SetStateAction<any>>;
     handleUnavailableReplacementConfirm: () => Promise<void>;
     settingsDialog?: SettingsDialogProps | null;
-    providerSwitchConfirmDialog?: ConfirmDialogProps | null;
 };
+
+type BuildAppDialogsModelParams = AppDialogsAmbient & AppDialogsDeps;
 
 // Builds the centralized dialog model for toast, lyric matching, and unavailable-song replacement.
 export const buildAppDialogsModel = ({
@@ -65,6 +71,7 @@ export const buildAppDialogsModel = ({
     showNaviLyricMatchModal,
     showOnlineLyricMatchModal,
     currentSong,
+    wallpaperEntryConfirmDialog,
     localSongs,
     setShowLyricMatchModal,
     setShowNaviLyricMatchModal,
@@ -76,7 +83,6 @@ export const buildAppDialogsModel = ({
     setPendingUnavailableReplacement,
     handleUnavailableReplacementConfirm,
     settingsDialog = null,
-    providerSwitchConfirmDialog = null,
 }: BuildAppDialogsModelParams): AppDialogsModel => ({
     statusToast: statusMsg
         ? {
@@ -122,5 +128,5 @@ export const buildAppDialogsModel = ({
         onConfirm: handleUnavailableReplacementConfirm,
     },
     settingsDialog,
-    providerSwitchConfirmDialog,
+    wallpaperEntryConfirmDialog,
 });

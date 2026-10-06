@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { PlayerState } from '../../types';
 import type { ObsBrowserSourceAudio, ObsBrowserSourceClock, ObsBrowserSourceConfig } from '../../types/obsBrowserSource';
 import { findLatestActiveLineIndex } from '../../utils/appPlaybackHelpers';
-import { resolveObsBrowserSourceClockTime } from '../../utils/obsBrowserSource';
+import { buildObsBrowserSourceConfigSignature, resolveObsBrowserSourceClockTime } from '../../utils/obsBrowserSource';
 
 // src/components/obs/ObsBrowserSourceApp.tsx
 // Read-only OBS browser source renderer driven by Folia's main playback clock.
@@ -33,6 +34,7 @@ const ObsBrowserSourceApp: React.FC = () => {
     const currentLineIndexRef = useRef(-1);
     const clockRef = useRef<ObsBrowserSourceClock | null>(null);
     const configRef = useRef<ObsBrowserSourceConfig | null>(null);
+    const configSignatureRef = useRef<string | null>(null);
     const currentTime = useMotionValue(0);
     const audioPower = useMotionValue(0);
     const bass = useMotionValue(0);
@@ -115,6 +117,9 @@ const ObsBrowserSourceApp: React.FC = () => {
         eventSource.onerror = () => setConnected(false);
         eventSource.addEventListener('config', event => {
             const nextConfig = JSON.parse((event as MessageEvent).data) as ObsBrowserSourceConfig;
+            const nextSignature = buildObsBrowserSourceConfigSignature(nextConfig);
+            if (nextSignature === configSignatureRef.current) return;
+            configSignatureRef.current = nextSignature;
             setConfig(nextConfig);
         });
         eventSource.addEventListener('clock', event => {
@@ -185,7 +190,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 visualizerTunings={config.visualizerTunings}
                 currentTime={currentTime}
                 currentLineIndex={currentLineIndex}
-                lines={config.lyrics?.lines ?? []}
+                lines={config.lyrics?.lines ?? NO_LYRIC_LINES}
                 theme={config.theme}
                 subtitleTheme={config.subtitleTheme}
                 isDaylight={config.isDaylight}
@@ -202,8 +207,12 @@ const ObsBrowserSourceApp: React.FC = () => {
                 visualizerOpacity={config.visualizerOpacity}
                 background={config.background}
                 lyricsFontScale={config.lyricsFontScale}
+                subtitleFontScale={config.subtitleFontScale}
                 subtitleOverlayOpacity={config.subtitleOverlayOpacity}
                 subtitleOverlayBackground={config.subtitleOverlayBackground ?? true}
+                subtitleUpcomingLyricsBlur={config.subtitleUpcomingLyricsBlur ?? true}
+                showHarmonySubtitle={config.showHarmonySubtitle ?? true}
+                harmonySubtitleBackground={config.harmonySubtitleBackground ?? true}
                 isPlayerChromeHidden={true}
                 hideTranslationSubtitle={config.hideTranslationSubtitle}
                 showSubtitleTranslation={config.showSubtitleTranslation ?? true}
@@ -211,6 +220,7 @@ const ObsBrowserSourceApp: React.FC = () => {
                 cappellaCustomEmojiImages={config.cappellaCustomEmojiImages}
                 cappellaCustomAvatarImages={config.cappellaCustomAvatarImages}
                 monetPortraitImage={config.monetPortraitImage}
+                temperaLayerImageAssets={config.temperaLayerImageAssets}
             />
         </div>
     );

@@ -1,102 +1,38 @@
 import type React from 'react';
 import { LocalLibraryGroup, LocalSong, SongResult } from '../../../types';
-import { navidromeApi, getNavidromeConfig } from '../../../services/navidromeService';
-import { buildLocalQueue, buildNavidromeQueue } from '../../../services/playbackAdapters';
-import { SubsonicSong } from '../../../types/navidrome';
-import { isBlob } from '../../../utils/blobGuards';
+import { LIST_ROW_COVER_SIZE, buildLocalQueue } from '../../../services/playbackAdapters';
 import { sortLocalFolderSongs } from '../../../utils/localSongSorting';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../types/localLibrary';
+import type { OnlineProviderId } from '../../../types/onlineMusic';
 import type {
-    OnlineProviderId,
-    ProviderArtistSummary,
-    ProviderCollection,
-    ProviderUser,
-} from '../../../types/onlineMusic';
+    GridViewCollectionDescriptor,
+    LocalGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionType,
+    OnlineGridViewCollectionDescriptor,
+} from '../../../library/core/contracts/collection';
 import { buildLocalLibraryIndex, followEntityRedirect } from '../../../utils/localLibraryIndex';
+import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 
 // src/components/app/home/gridViewCollectionAdapters.ts
 // Converts home-surface collections into small GridView descriptors and resolves non-Netease tracks outside GridView.
 
-export type GridViewCollectionSource = 'online' | 'local' | 'navidrome';
-export type NavidromeGridViewCollectionType = 'album' | 'playlist' | 'artist' | 'random' | 'favorites';
-
-export interface BaseGridViewCollectionDescriptor {
-    source: GridViewCollectionSource;
-    id: string | number;
-    name: string;
-    type: string;
-    coverUrl?: string;
-    description?: string;
-    trackCount?: number;
-    albumCount?: number;
-    isOwned?: boolean;
-    artists?: ProviderArtistSummary[];
-    aliases?: string[];
-    publishedAt?: number;
-    publisher?: string;
-    playCount?: number;
-    updatedAt?: number;
-    tracksUpdatedAt?: number;
-    isLiked?: boolean;
-    providerData?: ProviderCollection['providerData'];
-    creator?: ProviderUser;
-    albumArtist?: string;
-    albumYear?: number;
-    albumGenre?: string;
-    albumDuration?: number;
-    albumCompany?: string;
-    albumPublishTime?: number;
-}
-
-export interface LocalGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'local';
-    type: LocalLibraryGroup['type'];
-    id: string;
-    songIds: string[];
-    entityId?: string;
-    playlistId?: string;
-    isVirtual?: boolean;
-}
-
-export interface NavidromeGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'navidrome';
-    type: NavidromeGridViewCollectionType;
-    id: string;
-    editable?: boolean;
-}
-
-export interface OnlineGridViewCollectionDescriptor extends BaseGridViewCollectionDescriptor {
-    source: 'online';
-    providerId: OnlineProviderId;
-    raw?: any;
-}
-
-export type GridViewCollectionDescriptor =
-    | OnlineGridViewCollectionDescriptor
-    | LocalGridViewCollectionDescriptor
-    | NavidromeGridViewCollectionDescriptor;
+export type {
+    BaseGridViewCollectionDescriptor,
+    GridViewCollectionDescriptor,
+    GridViewCollectionSource,
+    LocalGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionDescriptor,
+    NavidromeGridViewCollectionType,
+    OnlineGridViewCollectionDescriptor,
+} from '../../../library/core/contracts/collection';
+// 集合身份搬到了 library/core/model/collectionIdentity：store 与组件共用一份，在线集合带上 provider。
+export { collectionKey } from '../../../library/core/model/collectionIdentity';
 
 const getDisplayName = (name: React.ReactNode) => (
     typeof name === 'string' || typeof name === 'number'
         ? String(name)
         : ''
-);
-
-// Returns the provider-normalized artist label used by collection overview cards.
-export const getProviderCollectionArtistLabel = (
-    collection: Pick<ProviderCollection, 'artists' | 'creator'> | null | undefined,
-): string => {
-    const artists = collection?.artists
-        ?.map(artist => artist.name.trim())
-        .filter(Boolean)
-        .join(', ');
-    return artists || collection?.creator?.nickname || '';
-};
-
-export const createNeteaseProviderUser = (user: ProviderUser | null | undefined): ProviderUser | null => user || null;
-
-export const createNeteaseGridViewCollection = (collection: ProviderCollection): GridViewCollectionDescriptor => (
-    createOnlineGridViewCollection(collection, 'netease')
 );
 
 export const createOnlineGridViewCollection = (
@@ -257,13 +193,14 @@ export const resolveLocalGridViewTracks = (
         .map(songId => songsById.get(songId))
         .filter((song): song is LocalSong => Boolean(song));
 
-    return buildLocalQueue(orderedSongs, undefined, catalog) as SongResult[];
+    // Row-sized covers: GridView renders these as list thumbnails, never full-bleed.
+    return buildLocalQueue(orderedSongs, undefined, catalog, LIST_ROW_COVER_SIZE) as SongResult[];
 };
 
-const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefined => {
+const getLocalGridViewCoverSource = (songs: LocalSong[]): string | undefined => {
     const sortedSongs = [...songs].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     const preferredSong = sortedSongs.find(song => {
-        const hasEmbeddedCover = isBlob(song.embeddedCover);
+        const hasEmbeddedCover = Boolean(getLocalCoverAssetUrl(song.localCoverAssetId));
         if (song.useOnlineCover) {
             return song.onlineMetadata?.coverUrl || hasEmbeddedCover;
         }
@@ -274,18 +211,18 @@ const getLocalGridViewCoverSource = (songs: LocalSong[]): Blob | string | undefi
         return undefined;
     }
 
-    const embeddedCover = isBlob(preferredSong.embeddedCover) ? preferredSong.embeddedCover : undefined;
+    const localCoverUrl = getLocalCoverAssetUrl(preferredSong.localCoverAssetId, 512) || undefined;
     if (preferredSong.useOnlineCover) {
-        return preferredSong.onlineMetadata?.coverUrl || embeddedCover;
+        return preferredSong.onlineMetadata?.coverUrl || localCoverUrl;
     }
 
-    return embeddedCover || preferredSong.onlineMetadata?.coverUrl;
+    return localCoverUrl || preferredSong.onlineMetadata?.coverUrl;
 };
 
 export const resolveLocalGridViewCoverSource = (
     descriptor: LocalGridViewCollectionDescriptor,
     localSongs: LocalSong[]
-): Blob | string | undefined => {
+): string | undefined => {
     const songsById = new Map(localSongs.map(song => [song.id, song]));
     const orderedSongs = descriptor.songIds
         .map(songId => songsById.get(songId))
@@ -294,37 +231,7 @@ export const resolveLocalGridViewCoverSource = (
     return getLocalGridViewCoverSource(orderedSongs);
 };
 
-// Loads Navidrome tracks for GridView without moving Navidrome service logic into GridView itself.
-export const resolveNavidromeGridViewTracks = async (
-    descriptor: NavidromeGridViewCollectionDescriptor
-): Promise<SongResult[]> => {
-    const config = getNavidromeConfig();
-    if (!config) {
-        return [];
-    }
-
-    let subsonicSongs: SubsonicSong[] = [];
-
-    if (descriptor.type === 'album') {
-        const albumDetail = await navidromeApi.getAlbum(config, descriptor.id);
-        subsonicSongs = albumDetail?.song || [];
-    } else if (descriptor.type === 'playlist') {
-        const playlistDetail = await navidromeApi.getPlaylist(config, descriptor.id);
-        subsonicSongs = playlistDetail?.entry || [];
-    } else if (descriptor.type === 'artist') {
-        const artistDetail = await navidromeApi.getArtist(config, descriptor.id);
-        const albums = artistDetail?.album || [];
-        const albumResults = await Promise.all(albums.map(album => navidromeApi.getAlbum(config, album.id)));
-        subsonicSongs = albumResults.flatMap(album => album?.song || []);
-    } else if (descriptor.type === 'random') {
-        subsonicSongs = await navidromeApi.getRandomSongs(config, 100);
-    } else if (descriptor.type === 'favorites') {
-        subsonicSongs = await navidromeApi.getStarred2(config);
-    }
-
-    const navidromeSongs = subsonicSongs.map(song => navidromeApi.toNavidromeSong(config, song));
-    return buildNavidromeQueue(navidromeSongs);
-};
+// Navidrome 曲目的加载搬到了 library/core/services/navidromeCollectionTracks；资源直接使用它，这里只适配集合描述与本地数据。
 
 export const isLocalGridViewCollection = (
     collection: GridViewCollectionDescriptor
@@ -333,7 +240,3 @@ export const isLocalGridViewCollection = (
 export const isNavidromeGridViewCollection = (
     collection: GridViewCollectionDescriptor
 ): collection is NavidromeGridViewCollectionDescriptor => collection.source === 'navidrome';
-
-export const isNeteaseGridViewCollection = (
-    collection: GridViewCollectionDescriptor
-) => collection.source === 'online' && collection.providerId === 'netease';

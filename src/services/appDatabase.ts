@@ -1,10 +1,11 @@
 import Dexie, { type Table } from 'dexie';
 import type { LocalSong } from '../types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
+import type { LocalCoverAsset } from '../types/localCover';
 import { migrateLegacyLocalSongRecords } from './localLibraryV8Migration';
 
 // src/services/appDatabase.ts
-// Owns the complete typed Dexie schema for the existing native v6 database and entity v7.
+// Owns the complete typed Dexie schema for local songs, entities, and content-addressed cover assets.
 
 export const APP_DATABASE_NAME = 'KineticPlayerDB';
 export const APP_DATABASE_VERSION_CHANGE_EVENT = 'folia-database-version-change';
@@ -32,6 +33,7 @@ export class AppDatabase extends Dexie {
   theme_registry!: Table<ThemeRegistryRecord, string>;
   local_library_entities!: Table<LocalLibraryEntity, string>;
   local_library_assignments!: Table<LocalLibraryAssignment, string>;
+  local_cover_assets!: Table<LocalCoverAsset, string>;
 
   constructor(name = APP_DATABASE_NAME) {
     super(name);
@@ -80,6 +82,19 @@ export class AppDatabase extends Dexie {
           transaction.table('local_library_assignments').bulkPut(migrated.assignments)
         )),
       ]);
+    });
+
+    this.version(0.9).stores({
+      session: '',
+      api_cache: 'key',
+      user_cache: 'key',
+      media_cache: 'key',
+      metadata_cache: 'key',
+      local_music: 'id, localCoverAssetId',
+      theme_registry: 'fingerprint',
+      local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
+      local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
+      local_cover_assets: 'id',
     });
 
     this.on('versionchange', event => {

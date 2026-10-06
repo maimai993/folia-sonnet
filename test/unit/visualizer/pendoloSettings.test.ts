@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PENDOLO_TUNING } from '@/types';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 
 // test/unit/visualizer/pendoloSettings.test.ts
 // Verifies the Pendolo glow preference survives the settings store and local persistence boundary.
@@ -26,7 +26,7 @@ describe('Pendolo settings', () => {
         storage = createLocalStorageMock();
         vi.stubGlobal('localStorage', storage);
         vi.stubGlobal('window', { localStorage: storage });
-        useSettingsUiStore.setState({ pendoloTuning: { ...DEFAULT_PENDOLO_TUNING } });
+        useVisualizerSettingsStore.setState({ pendoloTuning: { ...DEFAULT_PENDOLO_TUNING } });
     });
 
     afterEach(() => {
@@ -34,14 +34,14 @@ describe('Pendolo settings', () => {
     });
 
     it('updates and persists the line glow preference', () => {
-        useSettingsUiStore.getState().handleSetPendoloTuning({ enableLineGlow: true });
+        useVisualizerSettingsStore.getState().handleSetPendoloTuning({ enableLineGlow: true });
 
-        expect(useSettingsUiStore.getState().pendoloTuning.enableLineGlow).toBe(true);
+        expect(useVisualizerSettingsStore.getState().pendoloTuning.enableLineGlow).toBe(true);
         expect(JSON.parse(storage.getItem('pendolo_tuning') ?? '{}').enableLineGlow).toBe(true);
 
-        useSettingsUiStore.getState().handleSetPendoloTuning({ enableLineGlow: false });
+        useVisualizerSettingsStore.getState().handleSetPendoloTuning({ enableLineGlow: false });
 
-        expect(useSettingsUiStore.getState().pendoloTuning.enableLineGlow).toBe(false);
+        expect(useVisualizerSettingsStore.getState().pendoloTuning.enableLineGlow).toBe(false);
         expect(JSON.parse(storage.getItem('pendolo_tuning') ?? '{}').enableLineGlow).toBe(false);
     });
 });

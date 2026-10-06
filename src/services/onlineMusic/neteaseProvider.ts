@@ -1,4 +1,5 @@
 import type { SongResult, UnifiedSong } from '../../types';
+import { OnlineProviderError } from '../../types/onlineMusic';
 import type {
     AudioQualityPreference,
     MediaId,
@@ -10,10 +11,13 @@ import type {
     ProviderArtistSummary,
     ProviderUser,
 } from '../../types/onlineMusic';
+import { getPersonalFmRequestOptions } from '../../stores/usePersonalFmModeStore';
 import { parseNeteaseChorusRanges, processNeteaseLyrics } from '../../utils/lyrics/neteaseProcessing';
+import { toFiniteNumber } from '../../utils/replayGain';
 import { createProviderSongMetadata } from '../../utils/songMetadata';
 import { isSongMarkedUnavailable, neteaseApi } from '../netease';
 import { writeProviderSessionValue } from './providerStorage';
+import { collectNeteaseLoginDiagnostics } from './neteaseLoginDiagnostics';
 
 // src/services/onlineMusic/neteaseProvider.ts
 
@@ -28,6 +32,20 @@ const mapQuality = (quality: AudioQualityPreference): string => {
     if (quality === 'high') return 'exhigh';
     return quality;
 };
+
+/**
+ * The `level`/`bitrate` pair the listening report carries, which is NetEase's own client vocabulary
+ * and therefore stays inside this adapter. Defaults match the documented ones for `/scrobble/v1`.
+ */
+const mapScrobbleQuality = (quality?: AudioQualityPreference): { level: string; bitrate: number } => {
+    if (quality === 'standard') return { level: 'standard', bitrate: 128 };
+    if (quality === 'lossless') return { level: 'lossless', bitrate: 999 };
+    if (quality === 'hires') return { level: 'hires', bitrate: 1999 };
+    return { level: 'exhigh', bitrate: 320 };
+};
+
+/** This provider's normalized view of a song, shared by `songMetadata` and the listening report. */
+const getNeteaseSongMetadata = (song: SongResult) => createProviderSongMetadata(normalizeNeteaseSong(song));
 
 const normalizeUser = (raw: any): ProviderUser => ({
     id: raw?.userId ?? raw?.id ?? 0,
@@ -226,6 +244,7 @@ export const neteaseProvider: OnlineMusicProvider = {
         artists: true,
         recommendations: true,
         mutations: true,
+        personalFmModes: true,
         wordByWordLyrics: true,
         userCloud: true,
         historyRecommendations: true,
@@ -233,14 +252,13 @@ export const neteaseProvider: OnlineMusicProvider = {
         playlistTrackMutations: true,
         likes: true,
         userAlbums: true,
+        playbackReports: true,
     },
     normalizeSong: normalizeNeteaseSong,
     normalizeUser,
     normalizeCollection,
     songMetadata: {
-        getSongMetadata(song) {
-            return createProviderSongMetadata(normalizeNeteaseSong(song));
-        },
+        getSongMetadata: getNeteaseSongMetadata,
     },
     getSongPageUrl(song) {
         return song.id ? `https://music.163.com/#/song?id=${encodeURIComponent(String(song.id))}` : null;
@@ -261,12 +279,15 @@ export const neteaseProvider: OnlineMusicProvider = {
         },
         async getAudioSource(song, quality) {
             const response = await neteaseApi.getSongUrl(toNeteaseId(song.id), mapQuality(quality));
-            const rawUrl = response?.data?.[0]?.url;
+            const raw = response?.data?.[0];
+            const rawUrl = raw?.url;
             if (!rawUrl) return null;
+            const trackGain = toFiniteNumber(raw?.gain);
             return {
                 url: String(rawUrl).replace(/^http:/, 'https:'),
                 fetchedAt: Date.now(),
                 quality,
+                ...(trackGain === undefined ? {} : { replayGain: { trackGain } }),
             };
         },
         getAvailability(song): ProviderSongAvailability {
@@ -285,6 +306,35 @@ export const neteaseProvider: OnlineMusicProvider = {
                 song: normalizeNeteaseSong(replacement.replacementSong),
                 label: replacement.typeDesc,
             };
+        },
+    },
+    playbackReports: {
+        async reportPlayback(song, report) {
+            const metadata = getNeteaseSongMetadata(song);
+            const { level, bitrate } = mapScrobbleQuality(report.quality);
+            const response = await neteaseApi.scrobbleV1({
+                id: toNeteaseId(song.id),
+                time: Math.round(report.playedSeconds),
+                name: song.name || undefined,
+                artist: metadata.artists.map(artist => artist.name).filter(Boolean).join(', ') || undefined,
+                level,
+                bitrate,
+                ...(report.totalSeconds ? { total: Math.round(report.totalSeconds) } : {}),
+            });
+            // Absence of a status code is a failure, not a success. `fetchWithCreds` does not check
+            // `res.ok`, so a gateway error page or an API build without this route comes back as
+            // perfectly valid JSON with no `code` at all - and defaulting that to 200 would print
+            // "reported a play" for a play that no server ever accepted.
+            const code = Number(response?.code);
+            if (!Number.isFinite(code)) {
+                throw new OnlineProviderError('unavailable', 'NetEase returned no status code for the listening report', 'netease');
+            }
+            if ([301, 401, 403].includes(code)) {
+                throw new OnlineProviderError('auth-required', 'NetEase rejected the listening report: not signed in', 'netease');
+            }
+            if (code !== 200) {
+                throw new OnlineProviderError('unavailable', `NetEase rejected the listening report: code ${code}`, 'netease');
+            }
         },
     },
     lyrics: { getLyrics, getChorusRanges: getNeteaseChorusRanges },
@@ -329,8 +379,10 @@ export const neteaseProvider: OnlineMusicProvider = {
                 return { state: 'confirmed' };
             }
             if (response?.code === 801) return { state: 'waiting' };
-            return { state: 'error', message: response?.message };
+            // 带上原始状态码：只剩 state 的话，风控（8821 等）和后端吞错后的 404 在日志里无从区分。
+            return { state: 'error', message: `code ${response?.code ?? 'none'}: ${response?.message || response?.msg || 'no message'}` };
         },
+        getQrLoginDiagnostics: collectNeteaseLoginDiagnostics,
     },
     library: {
         async getUserPlaylists(userId, limit, offset) {
@@ -340,7 +392,17 @@ export const neteaseProvider: OnlineMusicProvider = {
         },
         async getLikedSongIds(userId) {
             const response = await neteaseApi.getLikedSongs(toNeteaseId(userId));
-            return response?.ids || [];
+            // The API layer hands error bodies back instead of throwing. Answering one with [] would
+            // tell the caller the account likes nothing: useNeteaseLibrary would clear every heart and
+            // save that empty list into the account snapshot until the next good refresh.
+            const code = Number(response?.code);
+            if ([301, 401, 403].includes(code)) {
+                throw new OnlineProviderError('auth-required', 'NetEase rejected the liked-songs request: not signed in', 'netease');
+            }
+            if (code !== 200 || !Array.isArray(response?.ids)) {
+                throw new OnlineProviderError('unavailable', `NetEase returned no liked-songs list (code ${response?.code})`, 'netease');
+            }
+            return response.ids;
         },
         async getUserAlbums(_userId, limit, offset) {
             const response = await neteaseApi.getFavoriteAlbums(limit, offset);
@@ -438,8 +500,10 @@ export const neteaseProvider: OnlineMusicProvider = {
             const response = await neteaseApi.getDailyRecommendedSongs(refresh);
             return (response?.songs || []).map(normalizeNeteaseSong);
         },
-        async getPersonalFm() {
-            const response = await neteaseApi.getPersonalFm();
+        async getPersonalFm(options) {
+            // Falling back to the stored selection keeps callers that predate FM modes — the home
+            // card, the radio grid, the queue refill — on whatever mode the user picked.
+            const response = await neteaseApi.getPersonalFm(options ?? getPersonalFmRequestOptions());
             return (response?.data || []).map(normalizeNeteaseSong);
         },
         async getRecommendedCollections(limit) {

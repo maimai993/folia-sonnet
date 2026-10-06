@@ -1,15 +1,134 @@
 import { describe, expect, it } from 'vitest';
-import { PlayerState } from '../../src/types';
+import { DEFAULT_SONNET_TUNING, PlayerState } from '../../src/types';
 import {
+    buildObsBrowserSourceConfigSignature,
     buildLegacyObsBrowserSourceBackgroundConfig,
     downsampleObsSpectrum,
+    ObsBrowserSourceConfigPublicationTracker,
+    resolveMainWindowVisualizerMode,
     resolveObsBrowserSourceClockTime,
     resolveObsBrowserSourceCoverUrl,
     resolveObsBrowserSourceImageAsset,
     resolveObsBrowserSourceImageAssets,
 } from '../../src/utils/obsBrowserSource';
+import type { ObsBrowserSourceConfig } from '../../src/types/obsBrowserSource';
+import { DEFAULT_THEME } from '../../src/services/baseThemes';
+
+const buildObsConfig = (overrides: Partial<ObsBrowserSourceConfig> = {}): ObsBrowserSourceConfig => ({
+    activePlaybackContext: 'main',
+    stageSource: null,
+    hasTrack: true,
+    song: { id: 1, name: 'Song' },
+    songArtist: 'Artist',
+    songAlbum: 'Album',
+    coverUrl: null,
+    lyrics: {
+        lines: [{ fullText: 'Line', startTime: 0, endTime: 1, words: [] }],
+    },
+    theme: DEFAULT_THEME,
+    isDaylight: false,
+    visualizerMode: 'sonnet',
+    background: { mode: 'common', transparent: true },
+    lyricsFontScale: 1,
+    visualizerOpacity: 1,
+    subtitleOverlayOpacity: 1,
+    staticMode: false,
+    hideTranslationSubtitle: false,
+    seed: 'song-1',
+    updatedAt: 1,
+    ...overrides,
+});
+
+describe('resolveMainWindowVisualizerMode', () => {
+    it('drops the main window to still while OBS renders and the animation is not kept', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', true, false)).toBe('still');
+    });
+
+    it('keeps the chosen mode when the user opted to keep the main window animation', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', true, true)).toBe('cadenza');
+    });
+
+    it('never changes the mode when no OBS client is rendering', () => {
+        expect(resolveMainWindowVisualizerMode('cadenza', false, false)).toBe('cadenza');
+        expect(resolveMainWindowVisualizerMode('cadenza', false, true)).toBe('cadenza');
+    });
+});
 
 describe('obsBrowserSource utilities', () => {
+    it('signs visual configuration semantically instead of by timestamp or object identity', () => {
+        const first = buildObsConfig();
+        const sameContent = buildObsConfig({
+            background: { transparent: true, mode: 'common' },
+            updatedAt: 2,
+        });
+
+        expect(buildObsBrowserSourceConfigSignature(sameContent))
+            .toBe(buildObsBrowserSourceConfigSignature(first));
+    });
+
+    it('changes the OBS configuration signature for visual and playback-content changes', () => {
+        const baseSignature = buildObsBrowserSourceConfigSignature(buildObsConfig());
+        const variants = [
+            buildObsConfig({ song: { id: 2, name: 'Other song' } }),
+            buildObsConfig({ lyrics: { lines: [{ fullText: 'Other line', startTime: 0, endTime: 1, words: [] }] } }),
+            buildObsConfig({ theme: { ...DEFAULT_THEME, primaryColor: '#ff0000' } }),
+            buildObsConfig({ visualizerTunings: { sonnet: { ...DEFAULT_SONNET_TUNING, cameraIntensity: 0.5 } } }),
+            buildObsConfig({ background: { mode: 'common', transparent: false } }),
+            // Subtitle scale and the harmony toggles were published (or, for the harmony pair, not
+            // published at all) without the config contract declaring them, so the OBS page had no
+            // typed way to read them and silently rendered its own defaults. These overrides are typed
+            // as Partial<ObsBrowserSourceConfig>, so dropping a field from the contract fails the
+            // typecheck here, and the signature assertion pins that changing one still reaches OBS.
+            buildObsConfig({ subtitleFontScale: 1.3 }),
+            buildObsConfig({ showHarmonySubtitle: false }),
+            buildObsConfig({ harmonySubtitleBackground: false }),
+        ];
+
+        variants.forEach(config => {
+            expect(buildObsBrowserSourceConfigSignature(config)).not.toBe(baseSignature);
+        });
+    });
+
+    // The signature memoises heavy nodes by identity and keeps a one-slot cache for long strings, so
+    // republishing an unchanged inlined asset never re-reads megabytes of base64. These pin the two
+    // ways that can go wrong: a stale cache hit, or a real difference being missed.
+    const buildLargeDataUrl = (fill: string) => `data:image/png;base64,${fill.repeat(5000)}`;
+
+    it('separates configs that differ only inside a large inlined asset', () => {
+        const buildPortrait = (fill: string) => ({ id: 'portrait', name: 'portrait.png', url: buildLargeDataUrl(fill) });
+
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait('A') })))
+            .not.toBe(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait('B') })));
+    });
+
+    it('signs equal inlined assets identically across distinct objects', () => {
+        const buildPortrait = () => ({ id: 'portrait', name: 'portrait.png', url: buildLargeDataUrl('A') });
+
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait() })))
+            .toBe(buildObsBrowserSourceConfigSignature(buildObsConfig({ monetPortraitImage: buildPortrait() })));
+    });
+
+    it('does not reuse a cached long-string signature when the cover alternates', () => {
+        const first = buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('A') }));
+        const second = buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('B') }));
+
+        expect(second).not.toBe(first);
+        expect(buildObsBrowserSourceConfigSignature(buildObsConfig({ coverUrl: buildLargeDataUrl('A') }))).toBe(first);
+    });
+
+    it('deduplicates pending and published configs and republishes after re-enabling OBS', () => {
+        const tracker = new ObsBrowserSourceConfigPublicationTracker();
+        const config = buildObsConfig();
+        const first = tracker.prepare(true, config);
+
+        expect(first).not.toBeNull();
+        expect(tracker.prepare(true, { ...config, updatedAt: 2 })).toBeNull();
+        tracker.markPublished(first!.signature);
+        expect(tracker.prepare(true, { ...config, updatedAt: 3 })).toBeNull();
+        expect(tracker.prepare(false, config)).toBeNull();
+        expect(tracker.prepare(true, { ...config, updatedAt: 4 })).not.toBeNull();
+    });
+
     it('keeps the pre-registry OBS background protocol in sync with nested config', () => {
         const customImage = {
             id: 'background',
@@ -38,6 +157,9 @@ describe('obsBrowserSource utilities', () => {
                     backgroundHalfPaneOffsetX: 0,
                     backgroundWashColorMode: 'theme',
                     backgroundWashCustomColor: '#8fb7ff',
+                    backgroundDriftEnabled: true,
+                    backgroundDriftStrength: 0.5,
+                    backgroundStreaksEnabled: true,
                 },
             },
             url: {

@@ -1,4 +1,4 @@
-import type { LyricData, SongResult, UnifiedSong } from '../types';
+import type { LyricData, ReplayGainInfo, SongResult, UnifiedSong } from '../types';
 
 // src/types/onlineMusic.ts
 
@@ -39,6 +39,8 @@ export interface ProviderCapabilities {
     artists: boolean;
     recommendations: boolean;
     mutations: boolean;
+    /** Personal FM can be steered by mode/scene, i.e. `getPersonalFm` honours PersonalFmRequestOptions. */
+    personalFmModes?: boolean;
     wordByWordLyrics: boolean;
     userCloud?: boolean;
     historyRecommendations?: boolean;
@@ -46,6 +48,8 @@ export interface ProviderCapabilities {
     playlistTrackMutations?: boolean;
     likes?: boolean;
     userAlbums?: boolean;
+    /** The provider accepts a listening report for a track the user actually played. */
+    playbackReports?: boolean;
 }
 
 export interface ProviderAvailability {
@@ -58,6 +62,8 @@ export interface ProviderAccountSummary {
     displayName: string;
     shortName: string;
     availability: ProviderAvailability;
+    /** False for a provider with no account at all (a Folium mod source): it is used without signing in. Absent means true. */
+    requiresAccount?: boolean;
     status: 'unknown' | 'authenticated' | 'anonymous' | 'error';
     user: ProviderUser | null;
     collections: ProviderCollection[];
@@ -79,6 +85,7 @@ export interface ProviderAudioSource {
     fetchedAt: number;
     expiresAt?: number;
     quality: AudioQualityPreference;
+    replayGain?: ReplayGainInfo;
 }
 
 export type ProviderSongAvailabilityState = 'playable' | 'unavailable' | 'unknown';
@@ -173,13 +180,38 @@ export type QrLoginState =
     | { state: 'scanned' }
     | { state: 'confirmed' }
     | { state: 'expired' }
-    | { state: 'error'; message?: string };
+    | {
+        state: 'error';
+        message?: string;
+        /** 结构化的失败原因；provider 能确定时才给（例如用户在手机上取消了登录）。 */
+        reason?: QrLoginErrorReason;
+        /** 后端要求的冷却时长：这段时间内重新要码只会被拒（429），界面应先等它结束。 */
+        retryAfterMs?: number;
+    };
+
+/** 扫码失败的结构化原因。目前只有「在手机上取消」：它是用户自己的操作，不需要诊断入口。 */
+export type QrLoginErrorReason = 'canceled-on-device';
+
+// 扫码登录失败的几种形态，决定登录弹窗要不要给出「复制诊断信息」入口。
+// 没扫码就过期属于正常情况，不算失败；扫过码却过期，多半是手机端确认被拒。
+export type QrLoginFailureKind =
+    | 'start-error'
+    | 'check-error'
+    | 'expired-after-scan'
+    | 'account-refresh-failed'
+    // 用户在手机上取消了这次登录：照常可以重试（可能要先等冷却），不给诊断入口。
+    | 'canceled-on-device';
 
 export type ProviderErrorCode =
     | 'auth-required'
     | 'unsupported'
+    // 集合设为不公开，当前这条读取路径没资格读它。与 `unsupported`（这个后端或 provider 没有这项能力）
+    // 分开，界面才能只在这种情况下给出「不是公开歌单」的解释。
+    | 'not-public'
     | 'unavailable'
     | 'not-playable'
+    | 'preview-only'
+    | 'region-restricted'
     | 'network'
     | 'invalid-response';
 
@@ -189,6 +221,10 @@ export class OnlineProviderError extends Error {
         message: string,
         public readonly providerId?: OnlineProviderId,
         public readonly cause?: unknown,
+        /** 非 2xx 响应的 HTTP 状态，与响应体里的 code 分开；只有按 HTTP 状态分流的 transport 会传。 */
+        public readonly httpStatus?: number,
+        /** 后端要求的冷却时长（429 退避）；只有能读出它的 transport 会传。 */
+        public readonly retryAfterMs?: number,
     ) {
         super(message);
         this.name = 'OnlineProviderError';
@@ -206,6 +242,24 @@ export interface OnlinePlaybackProvider {
     getReplacement?(song: SongResult): Promise<ProviderSongReplacement | null>;
 }
 
+/**
+ * One finished listening report, in the only two units a provider can be told the truth in:
+ * how many seconds of this track were really rendered, and how long the track is.
+ *
+ * `playedSeconds` is never a position on the progress bar - a listener who drags to the end has
+ * not listened to the song. Callers must hand over accumulated playback and must already have
+ * capped it at `totalSeconds`; nothing downstream can tell an inflated number from a real one.
+ */
+export interface ProviderPlaybackReport {
+    playedSeconds: number;
+    totalSeconds?: number;
+    quality?: AudioQualityPreference;
+}
+
+export interface OnlinePlaybackReportProvider {
+    reportPlayback(song: SongResult, report: ProviderPlaybackReport): Promise<void>;
+}
+
 export interface OnlineLyricsProvider {
     getLyrics(song: SongResult, context?: { userId?: MediaId | null }): Promise<ProviderLyricsResult>;
     getChorusRanges?(songId: MediaId): Promise<ChorusRange[]>;
@@ -215,17 +269,38 @@ export interface OnlineSongMetadataProvider {
     getSongMetadata(song: SongResult): ProviderSongMetadata;
 }
 
+// provider 自行声明它支持哪几种扫码登录方式；不声明即代表只有单一方式，UI 维持单步流程。
+export interface QrLoginMethod {
+    id: string;          // 传给后端的识别值（QQ: 'qq' | 'wechat'）
+    labelKey: string;    // i18n key，由 UI 层翻译
+    iconKey: string;     // 图标识别值，由 UI 层映射到静态资源
+}
+
 export interface OnlineAuthProvider {
     getLoginStatus(): Promise<ProviderUser | null>;
     logout(): Promise<void>;
-    getQrKey?(): Promise<string>;
+    getQrLoginMethods?(): QrLoginMethod[];
+    // 需要远端能力发现的 provider 在这里等待结果；UI 用同一份返回值决定单步或多步流程。
+    resolveQrLoginMethods?(): Promise<QrLoginMethod[]>;
+    getQrKey?(methodId?: string): Promise<string>;
     createQr?(key: string): Promise<string>;
     checkQr?(key: string): Promise<QrLoginState>;
+    // 只释放这一把 key 的会话，实现必须是幂等的：调用方在关窗时 fire-and-forget，
+    // 未知或已过期的 key 也算成功。没有会话概念的 provider 不必实现。
+    cancelQr?(key: string): Promise<void>;
+    // 二维码的有效期。声明了它，UI 才会自己计时并在到点时停止轮询、给出重试；
+    // 不声明就沿用原本的做法——只认后端报出的过期状态。
+    getQrTtlMs?(): number;
+    // 扫码登录失败后附进诊断报告的 provider 专属信息，每项一行、已格式化好。
+    // 只能返回可以公开贴出来的内容：不含 cookie、token、IP 或账号信息。
+    getQrLoginDiagnostics?(): Promise<string[]>;
 }
 
 export interface OnlineLibraryProvider {
     getUserPlaylists(userId: MediaId, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
     getLikedSongIds?(userId: MediaId): Promise<MediaId[]>;
+    /** Full liked-track records, used when a provider needs more than the song id (e.g. KuGou fileId). */
+    getLikedSongs?(userId: MediaId): Promise<UnifiedSong[]>;
     getUserAlbums?(userId: MediaId, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
     getCloudCollection?(user?: ProviderUser): Promise<ProviderCollection | null>;
 }
@@ -244,9 +319,18 @@ export interface OnlineCatalogProvider {
     getSubscriptionStatus?(type: 'playlist' | 'album', id: MediaId, collection?: ProviderCollection): Promise<boolean>;
 }
 
+/**
+ * Personal FM tuning, provider-neutral on purpose: only NetEase's `/personal/fm/mode` understands
+ * these, and a provider without the concept ignores them rather than failing the call.
+ */
+export interface PersonalFmRequestOptions {
+    mode?: string;
+    submode?: string | null;
+}
+
 export interface OnlineRecommendationProvider {
     getDailySongs?(refresh?: boolean): Promise<UnifiedSong[]>;
-    getPersonalFm?(): Promise<UnifiedSong[]>;
+    getPersonalFm?(options?: PersonalFmRequestOptions): Promise<UnifiedSong[]>;
     getRecommendedCollections?(limit: number): Promise<ProviderCollection[]>;
     getHistoryEntries?(): Promise<ProviderHistoryEntry[]>;
     getHistoryDates?(): Promise<string[]>;
@@ -256,7 +340,11 @@ export interface OnlineRecommendationProvider {
 
 export interface OnlineMutationProvider {
     canAddToPlaylist?(playlist: ProviderCollection): boolean;
-    likeSong?(song: MediaId | SongResult, liked: boolean): Promise<void>;
+    likeSong?(
+        song: MediaId | SongResult,
+        liked: boolean,
+        context?: { likedFileId?: MediaId },
+    ): Promise<void>;
     updatePlaylistTracks?(
         operation: 'add' | 'del',
         playlist: MediaId | ProviderCollection,
@@ -279,6 +367,7 @@ export interface OnlineMusicProvider {
     getSongPageUrl?(song: SongResult): string | null;
     search?: OnlineSearchProvider;
     playback?: OnlinePlaybackProvider;
+    playbackReports?: OnlinePlaybackReportProvider;
     lyrics?: OnlineLyricsProvider;
     auth?: OnlineAuthProvider;
     library?: OnlineLibraryProvider;
@@ -300,6 +389,7 @@ export type OmniAudioSource = ProviderAudioSource;
 export type OmniSongAvailability = ProviderSongAvailability;
 export type OmniSongReplacement = ProviderSongReplacement;
 export type OmniLyricsResult = ProviderLyricsResult;
+export type OmniPlaybackReport = ProviderPlaybackReport;
 export type OmniChorusRange = ChorusRange;
 export type OmniAlbum = ProviderAlbumSummary;
 export type OmniArtist = ProviderArtistSummary;

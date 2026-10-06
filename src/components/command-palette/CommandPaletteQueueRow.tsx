@@ -19,6 +19,8 @@ export type CommandPaletteQueueRowProps = {
         playNext: string;
         remove: string;
         unavailable: string;
+        artist: string;
+        album: string;
     };
     matches: CommandPaletteMatch[];
     onActiveIndexChange: (index: number) => void;
@@ -92,6 +94,18 @@ const CommandPaletteQueueRow = ({
                             )}
                         </span>
                         <span className="block truncate text-xs opacity-45">{getSongArtistLabel(song)}</span>
+                        {match.queueReasons && match.queueReasons.length > 0 && (
+                            <span className="absolute bottom-1.5 right-[7.5rem] flex gap-1">
+                                {match.queueReasons.map(reason => (
+                                    <span
+                                        key={reason}
+                                        className="rounded-full border border-current/10 px-1.5 py-0.5 text-[9px] opacity-55"
+                                    >
+                                        {reason === 'artist' ? labels.artist : labels.album}
+                                    </span>
+                                ))}
+                            </span>
+                        )}
                     </span>
                 </button>
                 <span

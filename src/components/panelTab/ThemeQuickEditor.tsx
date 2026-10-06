@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Moon, Palette, RotateCcw, Sun, X, Copy, ArrowLeft, Download } from 'lucide-react';
-import { HexColorPicker } from 'react-colorful';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { DualTheme, SongResult } from '../../types';
 import type { ThemeCacheSongKey } from '../../services/themeCache';
-import { FALLBACK_AI_DUAL_THEME, normalizeThemeHexColor, sanitizeDualTheme } from '../../services/themeSanitizer';
+import { FALLBACK_AI_DUAL_THEME, sanitizeDualTheme } from '../../services/themeSanitizer';
+import { BASE_DUAL_THEME } from '../../services/baseThemes';
 import { extractColors } from '../../utils/colorExtractor';
 import { THEME_GENERATION_PROMPT_PREFIX, buildThemeSourcePrompt, parseAiThemeJsonInput } from '../../utils/aiThemePrompts';
 import { useThemeQuickEditorStore, type ThemeQuickEditorKind } from '../../stores/useThemeQuickEditorStore';
+import { buildRecommendedColors } from '../../utils/themeEditorPalette';
+import FastColorPicker from '../shared/FastColorPicker';
 
 // src/components/panelTab/ThemeQuickEditor.tsx
 // Lightweight theme color editor launched from the player controls tab.
@@ -29,66 +31,6 @@ const COLOR_FIELDS: ColorField[] = [
     { key: 'accentColor', labelKey: 'options.aiThemeQuickEditAccent', fallbackLabel: 'Accent' },
     { key: 'secondaryColor', labelKey: 'options.aiThemeQuickEditSecondary', fallbackLabel: 'Secondary' },
 ];
-
-const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-const normalizeColor = (color: string, fallback = '#ffffff') => normalizeThemeHexColor(color, fallback);
-
-const normalizePaletteColor = (color: string) => {
-    const trimmed = color.trim();
-    if (!HEX_COLOR_PATTERN.test(trimmed)) {
-        return null;
-    }
-    const hex = trimmed.slice(1).toLowerCase();
-    return hex.length === 3
-        ? `#${hex.split('').map(char => `${char}${char}`).join('')}`
-        : `#${hex}`;
-};
-
-const collectThemeColors = (theme: DualTheme) => ([
-    theme.light.backgroundColor,
-    theme.light.primaryColor,
-    theme.light.accentColor,
-    theme.light.secondaryColor,
-    theme.dark.backgroundColor,
-    theme.dark.primaryColor,
-    theme.dark.accentColor,
-    theme.dark.secondaryColor,
-]);
-
-const buildRecommendedColors = (theme: DualTheme, coverColors: string[]) => {
-    const seen = new Set<string>();
-    return [...coverColors, ...collectThemeColors(theme)].flatMap(color => {
-        const normalized = normalizePaletteColor(color);
-        if (!normalized || seen.has(normalized)) {
-            return [];
-        }
-        seen.add(normalized);
-        return [normalized];
-    }).slice(0, 12);
-};
-
-// --- FastColorPicker 隔离子组件 ---
-// 作用：将 react-colorful 的 60fps 拖拽渲染限制在本地组件内部，防止它导致整个 ThemeQuickEditor 跟着 60fps 重新渲染。
-const FastColorPicker = ({ color, onChange, onPointerDown }: { color: string, onChange: (c: string) => void, onPointerDown: () => void; }) => {
-    const [localColor, setLocalColor] = useState(color);
-
-    // 当外部色值由于切换 mode 或 key 发生变化时，同步到内部
-    useEffect(() => {
-        setLocalColor(color);
-    }, [color]);
-
-    const handleChange = (newColor: string) => {
-        setLocalColor(newColor); // 60fps 本地拇指移动
-        onChange(newColor);      // 将新值外传供节流使用
-    };
-
-    return (
-        <div onPointerDown={onPointerDown} className="w-full h-full">
-            <HexColorPicker color={localColor} onChange={handleChange} style={{ width: '100%', height: 236 }} />
-        </div>
-    );
-};
 
 type ThemeQuickEditorProps = {
     kind: ThemeQuickEditorKind;
@@ -286,6 +228,30 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
     };
 
     const handleReset = () => {
+        if (throttleTimeoutRef.current) {
+            clearTimeout(throttleTimeoutRef.current);
+            throttleTimeoutRef.current = null;
+        }
+        if (kind === 'custom') {
+            setDraftTheme(previous => ({
+                ...previous,
+                light: {
+                    ...previous.light,
+                    backgroundColor: BASE_DUAL_THEME.light.backgroundColor,
+                    primaryColor: BASE_DUAL_THEME.light.primaryColor,
+                    accentColor: BASE_DUAL_THEME.light.accentColor,
+                    secondaryColor: BASE_DUAL_THEME.light.secondaryColor,
+                },
+                dark: {
+                    ...previous.dark,
+                    backgroundColor: BASE_DUAL_THEME.dark.backgroundColor,
+                    primaryColor: BASE_DUAL_THEME.dark.primaryColor,
+                    accentColor: BASE_DUAL_THEME.dark.accentColor,
+                    secondaryColor: BASE_DUAL_THEME.dark.secondaryColor,
+                },
+            }));
+            return;
+        }
         setDraftTheme(normalizedInitialTheme);
         setThemeNames({
             light: normalizedInitialTheme.light.name || '',
@@ -586,7 +552,7 @@ const ThemeQuickEditor: React.FC<ThemeQuickEditorProps> = ({
                                                 e.currentTarget.style.borderColor = borderColor;
                                                 e.currentTarget.style.boxShadow = 'none';
                                             }}
-                                            placeholder="Enter theme name..."
+                                            placeholder={t('ui.enterThemeName')}
                                             spellCheck={false}
                                         />
                                     </label>

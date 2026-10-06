@@ -3,28 +3,27 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { getFromCache, getLocalSongs } from '../services/db';
 import { getLocalLibraryCatalogSnapshot } from '../services/localLibraryEntityRepository';
 import { buildLocalQueue } from '../services/playbackAdapters';
+import { prefetchNearbySongs } from '../services/prefetchService';
 import type { ThemeCacheSongKey } from '../services/themeCache';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { restorePlaybackSourceForSong } from '../components/app/playback/restorePlaybackSource';
 import { getPlaybackSongKey, isStagePlaybackSong, normalizePlaybackSongSource } from '../utils/appPlaybackGuards';
 import type { LyricData, SongResult, StatusMessage } from '../types';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
+import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
+import { setCurrentSong, setPlayQueue } from '../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { omni } from '../services/onlineMusic/omni';
 
 // src/hooks/useSessionRestoreController.ts
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseSessionRestoreControllerParams = {
-    audioQuality: AudioQualityPreference;
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
-    setPlayQueue: SetState<SongResult[]>;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setStatusMsg: SetState<StatusMessage | null>;
     restoreCachedThemeForSong: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
@@ -34,27 +33,29 @@ type UseSessionRestoreControllerParams = {
     loadLocalSongs: () => Promise<void>;
     loadLocalPlaylists: () => Promise<void>;
     canRestoreSession?: boolean;
+    /**
+     * The autoplay intent the audio bridge spends when a source lands. Restore normally leaves it
+     * alone so the session comes back paused; the lab switch below is the only thing that arms it.
+     */
+    shouldAutoPlayRef: MutableRefObject<boolean>;
 };
 
 // Restores the main playback session without pushing more boot logic into App.tsx.
 export function useSessionRestoreController({
-    audioQuality,
     userId,
     blobUrlRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setCurrentSong,
-    setPlayQueue,
-    setCachedCoverUrl,
-    setAudioSrc,
     setLyrics,
-    setStatusMsg,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
     clearPersistedStagePlaybackCache,
     loadLocalSongs,
     loadLocalPlaylists,
     canRestoreSession = true,
+    shouldAutoPlayRef,
 }: UseSessionRestoreControllerParams) {
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+
     const hasInitializedRef = useRef(false);
     const hasLoadedLocalLibraryRef = useRef(false);
 
@@ -95,6 +96,10 @@ export function useSessionRestoreController({
                     return;
                 }
 
+                // Leave unsupported sessions cached for a build that registers their provider.
+                if (lastSong.sourceRef?.kind === 'online' && !omni.canPlaySong(lastSong)) return;
+                lastQueue = lastQueue?.filter(song => song.sourceRef?.kind !== 'online' || omni.canPlaySong(song)) ?? null;
+
                 const containsLocalSnapshot = [lastSong, ...(lastQueue || [])].some(song => (
                     Boolean((song as any).isLocal)
                     || Boolean((song as any).localRef?.songId)
@@ -134,24 +139,40 @@ export function useSessionRestoreController({
                 setCurrentSong(lastSong);
                 setPlayQueue(lastQueue && lastQueue.length > 0 ? lastQueue : [lastSong]);
 
+                // Read at restore time rather than subscribed: this effect runs once, and the
+                // switch only ever has to answer for this one launch.
+                const autoPlayOnLaunch = useAudioSettingsStore.getState().autoPlayOnLaunch;
+                if (autoPlayOnLaunch) {
+                    // Arm before the source lands. The bridge's autoplay effect fires on the commit
+                    // that gives the deck its src, and it spends this flag there; setting it after
+                    // would miss that run and leave the deck buffered in silence.
+                    shouldAutoPlayRef.current = true;
+                }
+
                 try {
                     await restorePlaybackSourceForSong(lastSong, {
                         audioQuality,
                         userId,
                         blobUrlRef,
                         currentOnlineAudioUrlFetchedAtRef,
-                        setCurrentSong,
-                        setCachedCoverUrl,
-                        setAudioSrc,
                         setLyrics,
-                        setStatusMsg,
                         restoreCachedThemeForSong,
                         persistLastPlaybackCache,
                         queue: lastQueue || [lastSong],
                     });
                 } catch (error) {
+                    // No source ever landed, so the intent was never spent. Left standing it would
+                    // fire on whatever the listener plays next, which they did not ask for.
+                    shouldAutoPlayRef.current = false;
                     console.warn('Failed to restore audio/lyrics for last session', error);
                 }
+
+                // Restoring a session sets up the current song and stops, so until the listener
+                // changes track nothing around it has been fetched: the next song's URL and lyrics
+                // are cold, and neither track has been measured for automix. That makes the first
+                // song change of every session the slowest one and the only one that blends blind.
+                // Every other entry into playback prefetches; this one was simply never wired to.
+                void prefetchNearbySongs(lastSong, lastQueue || [lastSong], audioQuality, userId);
             } catch (error) {
                 console.error('Session restore failed', error);
             }

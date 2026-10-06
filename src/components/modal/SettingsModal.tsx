@@ -1,33 +1,77 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Command, MousePointer2, Keyboard, Settings2, Trash2, Database, Monitor, PlayCircle, Loader2, Server, Check, AlertCircle, FlaskConical, ChevronLeft, ChevronRight, RefreshCw, Download, ExternalLink, Sparkles, Palette, CircleHelp, Languages, Moon, Sun } from 'lucide-react';
+import type { MotionValue } from 'framer-motion';
+import { X, Keyboard, Loader2, Check, AlertCircle, ChevronLeft, Download, ExternalLink, CircleHelp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory, clearAllData } from '../../services/db';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
+import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type CadenzaTuning, type CappellaEmojiImage, type CappellaTuning, type FumeTuning, type NowPlayingConnectionStatus, type PartitaTuning, type ReplayGainMode, type TiltTuning, type StoredCustomLyricsFont, type VisualizerMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, isNavidromeEnabled, setNavidromeEnabled, getCachedNavidromeServerProfile, refreshNavidromeServerProfile } from '../../services/navidromeService';
 import { NavidromeConfig, NavidromeServerProfile } from '../../types/navidrome';
 import VisPlayground from '../visualizer/VisPlayground';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel } from '../visualizer/registry';
 import ThemePark from './ThemePark';
 import LyricFilterSettingsModal from './LyricFilterSettingsModal';
+import type { LyricFilterDraft } from './LyricFilterSettingsModal';
+import GlobalLyricOffsetModal from './settings/GlobalLyricOffsetModal';
+import { settingsCardClassFor, settingsToggleOffClassFor } from './settings/settingsCardClasses';
 import AppearanceSettingsSubview from './settings/AppearanceSettingsSubview';
 import DesktopSettingsSubview from './settings/DesktopSettingsSubview';
 import GeneralSettingsSubview from './settings/GeneralSettingsSubview';
 import IntegrationSettingsSubview from './settings/IntegrationSettingsSubview';
 import type { PlayerCapConnectionStatus } from '../../types/playerCap';
 import LabSettingsModal from './settings/LabSettingsModal';
+import GraphicsSettingsSubview from './settings/GraphicsSettingsSubview';
+import ModsSettingsSubview from './settings/ModsSettingsSubview';
+import DeveloperSettingsSubview from './settings/DeveloperSettingsSubview';
 import PlaybackSettingsSubview from './settings/PlaybackSettingsSubview';
+import InteractionSettingsSubview from './settings/InteractionSettingsSubview';
 import StorageSettingsSection from './settings/StorageSettingsSection';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
+import SettingsHelpActions from './SettingsHelpActions';
+import { openPonderNavigation } from '../../services/ponder/pagePonderTarget';
+import ReleaseNotesDialog from './ReleaseNotesDialog';
+import { discordIconUrl, openDiscordInvite } from '../shared/discordCommunity';
 import meowImageUrl from '../../../build/miao.png';
 import type { LyricData } from '../../types';
-import { selectSettingsUiSnapshot, type SettingsSubviewId, type VisualizerSettingsSection, useSettingsUiStore } from '../../stores/useSettingsUiStore';
+import { type SettingsModalState, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
+import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
+import SettingsSidebarChips from './settings/navigation/SettingsSidebarChips';
+import SettingsSidebarWide from './settings/navigation/SettingsSidebarWide';
+import { settingsAnchorSubview } from './settings/navigation/settingsAnchorModel';
+import SettingsSectionHeader from './settings/SettingsSectionHeader';
+import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
+import { isSettingsSectionSubview, resolveInitialSettingsSection, sectionForSettingsSubview, writeLastSettingsSection } from './settings/navigation/settingsLastSection';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
+import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
+import { useSettingsInitialAnchor } from '../../hooks/useSettingsInitialAnchor';
 import { useShallow } from 'zustand/react/shallow';
 import type { ObsBrowserSourceStatus } from '../../types/obsBrowserSource';
 import { getWebAiProvider } from '../../services/runtimeConfig';
 import { openExternalUrl } from '../../utils/openExternalUrl';
+import { isCapacitorAndroid } from '../../platform/runtime';
+import type { LyricApiStatus } from '../../types/lyricApi';
+import type { SongResult } from '../../types';
+import type { ThemeCacheSongKey } from '../../services/themeCache';
+import type { ThemeGenerationSource } from '../../services/themePreferences';
+import { isMacPlatform as isMac } from '../../utils/platform';
+import { HELP_TAB_PRIMARY_SHORTCUTS } from './userGuideContent';
+import { openCurrentPagePonder } from '../../services/ponder/pagePonderTarget';
+import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { selectVisualizerAssetSnapshot, useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
+import { selectLyricSettingsSnapshot, useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
+import { selectTypographySettingsSnapshot, useTypographySettingsStore } from '../../stores/useTypographySettingsStore';
+import { selectPlayerChromeSettingsSnapshot, usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
+import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
+import { selectStageSettingsSnapshot, useStageSettingsStore } from '../../stores/useStageSettingsStore';
+import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
+import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { selectHomeLayoutSettingsSnapshot, useHomeLayoutSettingsStore } from '../../stores/useHomeLayoutSettingsStore';
+import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
+const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/folia-major-bin';
 const VERSION_INFO = __DOCKER_STACK_VERSION__
     ? `${__APP_VERSION_LABEL__} v${__APP_VERSION__} · Stack ${__DOCKER_STACK_VERSION__} · ${__COMMIT_HASH__}`
     : `${__APP_VERSION_LABEL__} v${__APP_VERSION__} - ${__GIT_BRANCH__} - ${__COMMIT_HASH__}`;
@@ -37,6 +81,8 @@ interface SettingsModalProps {
     initialTab?: 'help' | 'options';
     initialSubview?: SettingsSubviewId | null;
     initialVisualizerSection?: VisualizerSettingsSection | null;
+    /** A section inside the subview to land on, rather than its top. */
+    initialAnchor?: SettingsModalState['initialAnchor'];
     theme?: Theme;
     bgMode: ThemeMode;
     onApplyDefaultTheme: () => void;
@@ -46,14 +92,19 @@ interface SettingsModalProps {
     songThemeAutoSwitchEnabled: boolean;
     songThemeAutoGenerateEnabled: boolean;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
+    onSaveAiTheme: (dualTheme: DualTheme, song: SongResult | null, songKey: ThemeCacheSongKey | null) => void;
     onApplyCustomTheme: () => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
+    themeGenerationSource: ThemeGenerationSource;
+    onChangeThemeGenerationSource: (source: ThemeGenerationSource) => void;
     onToggleSongThemeAutoGenerate: (enabled: boolean) => void;
     onToggleNavidrome?: (enabled: boolean) => void;
     loadLyricFilterPreview: () => Promise<LyricData | null>;
+    currentLyrics: LyricData | null;
+    lyricCurrentTime: MotionValue<number>;
     currentSongTitle?: string | null;
-    onSaveLyricFilterPattern: (pattern: string) => Promise<void> | void;
+    onSaveLyricFilterPattern: (draft: LyricFilterDraft) => Promise<void> | void;
     stageStatus?: StageStatus | null;
     stageSource?: StageSource | null;
     onToggleStageMode?: (enabled: boolean) => Promise<void> | void;
@@ -67,13 +118,18 @@ interface SettingsModalProps {
     obsBrowserSourceStatus?: ObsBrowserSourceStatus | null;
     onToggleObsBrowserSource?: (enabled: boolean) => Promise<void> | void;
     onRegenerateObsBrowserSourceToken?: () => Promise<void> | void;
+    lyricApiStatus?: LyricApiStatus | null;
+    onToggleLyricApi?: (enabled: boolean) => Promise<void> | void;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    replayGainMode: ReplayGainMode;
+    onReplayGainModeChange: (mode: ReplayGainMode) => void;
     onToggleTransparentPlayerBackground?: (enabled: boolean) => Promise<void> | void;
     aiTheme?: DualTheme | null;
     customTheme?: DualTheme | null;
 }
 
 const QUARK_DOWNLOAD_URL = 'https://pan.quark.cn/s/6e4c6fa3bc6f';
+const BAIDU_DOWNLOAD_URL = 'https://pan.baidu.com/s/1f0x3g-8PMcNCO-TJ5z1rPw?pwd=flia';
 const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_RELEASE_CHANNEL__ === 'limo'
     ? 'limo'
     : __APP_RELEASE_CHANNEL__ === 'cielo'
@@ -82,11 +138,15 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
             ? 'internal'
             : 'realeco';
 
+// Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
+const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
+
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
     initialTab = 'help',
     initialSubview = null,
     initialVisualizerSection = null,
+    initialAnchor = null,
     theme,
     bgMode,
     onApplyDefaultTheme,
@@ -96,12 +156,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     songThemeAutoSwitchEnabled,
     songThemeAutoGenerateEnabled,
     onSaveCustomTheme,
+    onSaveAiTheme,
     onApplyCustomTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
+    themeGenerationSource,
+    onChangeThemeGenerationSource,
     onToggleSongThemeAutoGenerate,
     onToggleNavidrome,
     loadLyricFilterPreview,
+    currentLyrics,
+    lyricCurrentTime,
     currentSongTitle,
     onSaveLyricFilterPattern,
     stageStatus = null,
@@ -117,7 +182,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     obsBrowserSourceStatus = null,
     onToggleObsBrowserSource,
     onRegenerateObsBrowserSourceToken,
+    lyricApiStatus = null,
+    onToggleLyricApi,
     onAudioOutputDeviceChange,
+    replayGainMode,
+    onReplayGainModeChange,
     onToggleTransparentPlayerBackground,
     aiTheme,
     customTheme,
@@ -126,95 +195,127 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Track the press origin per overlay so nested subview backdrops do not overwrite each other.
     const overlayMouseDownTargetsRef = useRef(new WeakSet<HTMLDivElement>());
     const {
-        useCoverColorBg,
-        staticMode,
-        disableHomeDynamicBackground,
-        hidePlayerProgressBar,
-        hidePlayerTranslationSubtitle,
-        showSubtitleTranslation,
-        subtitleContentMode,
-        hidePlayerRightPanelButton,
-        transparentPlayerBackground,
-        autoHidePlayerChrome,
-        disableVisualizerVignette,
-        disableVisualizerGeometricBackground,
+        grid3dCardStyle,
+        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
+    } = useHomeLayoutSettingsStore(useShallow(selectHomeLayoutSettingsSnapshot));
+    const {
+        enableMediaCache,
+        mediaCacheLimitGb,
+        handleToggleMediaCache: onToggleMediaCache,
+        handleSetMediaCacheLimitGb: onSetMediaCacheLimitGb,
+    } = useAudioSettingsStore(useShallow(selectAudioSettingsSnapshot));
+    const {
         minimizeToTray,
+        closeToTray,
         voiceInputPauseEnabled,
         hideTaskbarIcon,
         hideRemoteControlTaskbarIcon,
+        hideRemoteControlTitlebar,
+        remoteControlClickThrough,
+        wallpaperMode,
+        handleToggleWallpaperMode: onToggleWallpaperMode,
+        wallpaperMacAutohideDock,
+        handleToggleWallpaperMacAutohideDock: onToggleWallpaperMacAutohideDock,
         openPlayerOnLaunch,
-        enableMediaCache,
-        backgroundOpacity,
+        handleToggleMinimizeToTray: onToggleMinimizeToTray,
+        handleToggleCloseToTray: onToggleCloseToTray,
+        handleToggleVoiceInputPause: onToggleVoiceInputPause,
+        handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
+        handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
+        handleToggleHideRemoteControlTitlebar: onToggleHideRemoteControlTitlebar,
+        handleToggleRemoteControlClickThrough: onToggleRemoteControlClickThrough,
+        handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
+    } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
+    const {
+        stageTrackPillMode,
+        stageTrackPillTimeoutSec,
+        stageTrackPillOnHome,
+        handleSetStageTrackPillMode: onChangeStageTrackPillMode,
+        handleSetStageTrackPillTimeoutSec: onChangeStageTrackPillTimeoutSec,
+        handleToggleStageTrackPillOnHome: onToggleStageTrackPillOnHome,
+    } = useStageSettingsStore(useShallow(selectStageSettingsSnapshot));
+    const {
+        useCoverColorBg,
+        staticMode,
+        disableHomeDynamicBackground,
+        isDaylight,
+        followSystemTheme,
+        setDaylightPreference: onSetDaylightPreference,
+        setFollowSystemTheme: onSetFollowSystemTheme,
+        handleToggleCoverColorBg: onToggleCoverColorBg,
+        handleToggleStaticMode: onToggleStaticMode,
+        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
+    } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
+    const {
+        hidePlayerProgressBar,
+        hidePlayerRightPanelButton,
+        transparentPlayerBackground,
+        autoHidePlayerChrome,
+        autoHideCursorWithPlayerChrome,
+        showOpenPanelCloseButton,
+        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
+        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
+        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
+        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
+        handleToggleAutoHideCursorWithPlayerChrome: onToggleAutoHideCursorWithPlayerChrome,
+        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
+    } = usePlayerChromeSettingsStore(useShallow(selectPlayerChromeSettingsSnapshot));
+    const {
+        lyricsCustomFontFamily,
+        lyricsCustomFontLabel,
+    } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
+    const {
+        hidePlayerTranslationSubtitle,
+        showSubtitleTranslation,
+        subtitleContentMode,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
         showHarmonySubtitle,
         harmonySubtitleBackground,
-        visualizerOpacity,
-        visualizerBackgroundMode,
-        isDaylight,
-        setDaylightPreference: onSetDaylightPreference,
-        visualizerMode,
-        grid3dCardStyle,
-        classicTuning,
-        cadenzaTuning,
-        partitaTuning,
-        fumeTuning,
-        claddaghTuning,
-        cappellaTuning,
-        tiltTuning,
-        dioramaTuning,
-        monetBackgroundTuning,
-        nomandBackgroundTuning,
-        latentBackgroundTuning,
-        monetTuning,
-        pendoloTuning,
-        cappellaCustomEmojiImages,
-        isLoadingCappellaCustomEmojiPack,
-        cappellaCustomAvatarImages,
-        isLoadingCappellaCustomAvatarPack,
-        monetBackgroundImage,
-        isLoadingMonetBackgroundImage,
-        monetPortraitImage,
-        isLoadingMonetPortraitImage,
-        urlBackgroundList,
-        urlBackgroundSelectedId,
         lyricsFontStyle,
         lyricsFontScale,
         subtitleFontScale,
         lyricsFontWeight,
-        lyricsCustomFontFamily,
-        lyricsCustomFontLabel,
         lyricsFontFallbackFamilies,
         subtitleFontInheritsLyrics,
         subtitleFontStyle,
         subtitleFontWeight,
         subtitleFontFamily,
         subtitleFontFallbackFamilies,
-        lyricFilterPattern,
-        showOpenPanelCloseButton,
-        handleToggleCoverColorBg: onToggleCoverColorBg,
-        handleToggleStaticMode: onToggleStaticMode,
-        handleToggleDisableHomeDynamicBackground: onToggleDisableHomeDynamicBackground,
-        handleToggleHidePlayerProgressBar: onToggleHidePlayerProgressBar,
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation: onToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: onSubtitleContentModeChange,
-        handleToggleHidePlayerRightPanelButton: onToggleHidePlayerRightPanelButton,
-        handleToggleTransparentPlayerBackground: onToggleTransparentPlayerBackgroundFromStore,
-        handleToggleAutoHidePlayerChrome: onToggleAutoHidePlayerChrome,
-        handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
-        handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
-        handleToggleMinimizeToTray: onToggleMinimizeToTray,
-        handleToggleVoiceInputPause: onToggleVoiceInputPause,
-        handleToggleHideTaskbarIcon: onToggleHideTaskbarIcon,
-        handleToggleHideRemoteControlTaskbarIcon: onToggleHideRemoteControlTaskbarIcon,
-        handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
-        handleToggleMediaCache: onToggleMediaCache,
-        handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
+        handleToggleSubtitleUpcomingLyricsBlur: onToggleSubtitleUpcomingLyricsBlur,
         handleToggleShowHarmonySubtitle: onToggleShowHarmonySubtitle,
         handleToggleHarmonySubtitleBackground: onToggleHarmonySubtitleBackground,
+        handleSetLyricsFontStyle: onLyricsFontStyleChange,
+        handleSetLyricsFontScale: onLyricsFontScaleChange,
+        handleSetSubtitleFontScale: onSubtitleFontScaleChange,
+        handleSetLyricsFontWeight: onLyricsFontWeightChange,
+        handleSetLyricsCustomFont: onLyricsCustomFontChange,
+        handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
+        handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
+        handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
+        handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
+        handleSetSubtitleFontWeight: onSubtitleFontWeightChange,
+        handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
+        handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
+    } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
+    const {
+        lyricFilterPattern,
+        lyricFilterEnabled,
+        lyricStaffPolicy,
+        lyricStaffMinDwellSeconds,
+        lyricStaffAbsorbMode,
+        lyricStaffPattern,
+    } = useLyricSettingsStore(useShallow(selectLyricSettingsSnapshot));
+    const {
+        handleToggleDisableVisualizerVignette: onToggleDisableVisualizerVignette,
+        handleToggleDisableVisualizerGeometricBackground: onToggleDisableVisualizerGeometricBackground,
+        handleSetBackgroundOpacity: setBackgroundOpacity,
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
         handleSetVisualizerMode: onVisualizerModeChange,
@@ -238,10 +339,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleResetNomandBackgroundTuning: onResetNomandBackgroundTuning,
         handleSetLatentBackgroundTuning: onLatentBackgroundTuningChange,
         handleResetLatentBackgroundTuning: onResetLatentBackgroundTuning,
+        handleSetSoraBackgroundTuning: onSoraBackgroundTuningChange,
+        handleResetSoraBackgroundTuning: onResetSoraBackgroundTuning,
         handleSetMonetTuning: onMonetTuningChange,
         handleResetMonetTuning: onResetMonetTuning,
         handleSetPendoloTuning: onPendoloTuningChange,
         handleResetPendoloTuning: onResetPendoloTuning,
+        handleSetSonnetTuning: onSonnetTuningChange,
+        handleResetSonnetTuning: onResetSonnetTuning,
+        handleSetTemperaTuning: onTemperaTuningChange,
+        handleResetTemperaTuning: onResetTemperaTuning,
+        handleSetLumiereTuning: onLumiereTuningChange,
+        handleResetLumiereTuning: onResetLumiereTuning,
         handleUploadMonetBackgroundImage: onUploadMonetBackgroundImage,
         handleClearMonetBackgroundImage: onClearMonetBackgroundImage,
         handleUploadMonetPortraitImage: onUploadMonetPortraitImage,
@@ -254,72 +363,74 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleClearCustomCappellaEmojiPack: onClearCappellaCustomEmojiPack,
         handleImportCustomCappellaAvatar: onImportCappellaCustomAvatar,
         handleClearCustomCappellaAvatar: onClearCappellaCustomAvatar,
-        handleSetLyricsFontStyle: onLyricsFontStyleChange,
-        handleSetLyricsFontScale: onLyricsFontScaleChange,
-        handleSetSubtitleFontScale: onSubtitleFontScaleChange,
-        handleSetLyricsFontWeight: onLyricsFontWeightChange,
-        handleSetLyricsCustomFont: onLyricsCustomFontChange,
-        handleUploadLyricsCustomFont: onLyricsCustomFontUpload,
-        handleSetLyricsFontFallbackFamilies: onLyricsFontFallbackFamiliesChange,
-        handleSetSubtitleFontInheritsLyrics: onSubtitleFontInheritsLyricsChange,
-        handleSetSubtitleFontStyle: onSubtitleFontStyleChange,
-        handleSetSubtitleFontWeight: onSubtitleFontWeightChange,
-        handleSetSubtitleFontFamily: onSubtitleFontFamilyChange,
-        handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
-        handleToggleOpenPanelCloseButton: onToggleOpenPanelCloseButton,
-        handleSetGrid3dCardStyle: onChangeGrid3dCardStyle,
-    } = useSettingsUiStore(useShallow(selectSettingsUiSnapshot));
+    } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
+    const {
+        disableVisualizerVignette,
+        disableVisualizerGeometricBackground,
+        backgroundOpacity,
+        visualizerOpacity,
+        visualizerBackgroundMode,
+        visualizerMode,
+        classicTuning,
+        cadenzaTuning,
+        partitaTuning,
+        fumeTuning,
+        claddaghTuning,
+        cappellaTuning,
+        tiltTuning,
+        dioramaTuning,
+        monetBackgroundTuning,
+        nomandBackgroundTuning,
+        latentBackgroundTuning,
+        soraBackgroundTuning,
+        monetTuning,
+        pendoloTuning,
+        sonnetTuning,
+        temperaTuning,
+        lumiereTuning,
+        urlBackgroundList,
+        urlBackgroundSelectedId,
+    } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
+    const {
+        cappellaCustomEmojiImages,
+        isLoadingCappellaCustomEmojiPack,
+        cappellaCustomAvatarImages,
+        isLoadingCappellaCustomAvatarPack,
+        monetBackgroundImage,
+        isLoadingMonetBackgroundImage,
+        monetPortraitImage,
+        isLoadingMonetPortraitImage,
+    } = useVisualizerAssetStore(useShallow(selectVisualizerAssetSnapshot));
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
-    const setIsSubSettingsViewOpen = useSettingsUiStore(state => state.setIsSubSettingsViewOpen);
-    const setIsUserGuideModalOpen = useSettingsUiStore(state => state.setIsUserGuideModalOpen);
+    const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
     const [tabDirection, setTabDirection] = useState<'left' | 'right'>('right');
     const handleTabChange = (tab: 'help' | 'options') => {
         setTabDirection(tab === 'options' ? 'left' : 'right');
         setActiveTab(tab);
     };
-    const [activeSettingsSection, setActiveSettingsSection] = useState<string>('appearance');
-
-    // Drag to scroll logic for mobile pill tabs
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [startX, setStartX] = useState(0);
-    const [scrollLeft, setScrollLeft] = useState(0);
-    const hasDraggedRef = useRef(false);
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!scrollContainerRef.current) return;
-        setIsDragging(true);
-        hasDraggedRef.current = false;
-        setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
-        setScrollLeft(scrollContainerRef.current.scrollLeft);
+    // A bare open (no subview, no anchor) restores the last section the user entered; any named target wins.
+    const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => resolveInitialSettingsSection({
+        initialSubview,
+        hasInitialAnchor: initialAnchor !== null,
+        isElectron: hasElectronBridge(),
+    }));
+    const handleSelectSettingsSection = (section: SettingsSectionId) => {
+        setActiveSettingsSection(section);
+        writeLastSettingsSection(section, { isElectron: hasElectronBridge() });
     };
-
-    const handleMouseLeave = () => {
-        setIsDragging(false);
-    };
-
-    const handleMouseUp = () => {
-        setIsDragging(false);
-    };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDragging || !scrollContainerRef.current) return;
-        e.preventDefault();
-        const x = e.pageX - scrollContainerRef.current.offsetLeft;
-        const walk = (x - startX) * 1.5;
-        if (Math.abs(walk) > 5) {
-            hasDraggedRef.current = true;
-        }
-        scrollContainerRef.current.scrollLeft = scrollLeft - walk;
-    };
-
-
+    const contentScrollRef = useRef<HTMLDivElement>(null);
+    // Matches the md:flex-row split below; the two sidebars are different enough to render separately.
+    const isWideSettingsLayout = useMediaQuery('(min-width: 768px)');
+    const settingsAnchorStore = useSettingsAnchorStore();
+    const settingsAnchors = useSettingsAnchorList(settingsAnchorStore);
 
     const [showVisPlayground, setShowVisPlayground] = useState(false);
     const [showThemePark, setShowThemePark] = useState(false);
     const [showLyricFilterSettings, setShowLyricFilterSettings] = useState(false);
+    const [showGlobalLyricOffset, setShowGlobalLyricOffset] = useState(false);
     const [showAiHelpPrompt, setShowAiHelpPrompt] = useState(false);
+    const [showReleaseNotes, setShowReleaseNotes] = useState(false);
     const [versionCopied, setVersionCopied] = useState(false);
     const [stageAddressCopied, setStageAddressCopied] = useState(false);
     const [authorClickCount, setAuthorClickCount] = useState(0);
@@ -331,17 +442,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowVisPlayground(initialSubview === 'visualizer');
         setShowThemePark(initialSubview === 'themePark');
         setShowLyricFilterSettings(initialSubview === 'lyricFilter');
+        setShowGlobalLyricOffset(initialSubview === 'globalLyricOffset');
 
-        if (
-            initialSubview === 'appearance' ||
-            initialSubview === 'general' ||
-            initialSubview === 'playback' ||
-            initialSubview === 'integration' ||
-            initialSubview === 'storage' ||
-            initialSubview === 'desktop' ||
-            initialSubview === 'lab'
-        ) {
-            setActiveSettingsSection(initialSubview);
+        const targetSection = sectionForSettingsSubview(initialSubview);
+        if (targetSection) {
+            // 这两个是播放页歌词区里的二级面板，关掉后应该落回它们的入口所在分区。
+            setActiveSettingsSection(targetSection);
+            // 只有真正进入某个分区页才记忆；二级面板和调参台不算「进入」分区。
+            if (isSettingsSectionSubview(initialSubview)) {
+                writeLastSettingsSection(targetSection, { isElectron: hasElectronBridge() });
+            }
         } else {
             setActiveSettingsSection(prev => prev || 'appearance');
         }
@@ -353,19 +463,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         playlist: '0 B',
         lyrics: '0 B',
         cover: '0 B',
-        media: '0 B'
+        media: '0 B',
+        analysis: '0 B'
     });
     const [mediaCount, setMediaCount] = useState(0);
     const [isCleaning, setIsCleaning] = useState<string | null>(null);
 
     // Electron Settings State
-    const [isElectron, setIsElectron] = useState(false);
+    // Seeded synchronously so a remembered desktop/mods section has its title on the first frame; the effect below still confirms it.
+    const [isElectron, setIsElectron] = useState(hasElectronBridge);
     const [electronSettings, setElectronSettings] = useState({
         GEMINI_API_KEY: '',
         OPENAI_API_KEY: '',
         OPENAI_API_URL: '',
         OPENAI_API_MODEL: '',
         OPENAI_API_TEMPERATURE: DEFAULT_OPENAI_TEMPERATURE,
+        OPENAI_API_STREAM: false,
         AI_PROVIDER: 'gemini',
         USE_SYSTEM_PROXY_FOR_AI: false,
         ENABLE_UPDATE_CHECK: true,
@@ -373,6 +486,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         UPDATE_CHANNEL: DEFAULT_UPDATE_CHANNEL,
         STAGE_MODE_SOURCE: 'stage-api',
         DISCORD_RICH_PRESENCE_ENABLED: false,
+    });
+    const [electronSettingsLoaded, setElectronSettingsLoaded] = useState(false);
+    const [savedElectronAiCredentials, setSavedElectronAiCredentials] = useState({
+        AI_PROVIDER: 'gemini',
+        GEMINI_API_KEY: '',
+        OPENAI_API_KEY: '',
     });
     const [electronSaveStatus, setElectronSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [updateStatus, setUpdateStatus] = useState<ElectronUpdateStatus | null>(null);
@@ -382,8 +501,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
     const [stageActionStatus, setStageActionStatus] = useState<'idle' | 'regenerating'>('idle');
     const configuredAiProvider = isElectron ? electronSettings.AI_PROVIDER : getWebAiProvider();
-    const aiServiceLabel = configuredAiProvider === 'openai' ? 'OpenAI Compatible' : 'Google Gemini';
+    const aiServiceLabel = configuredAiProvider === 'openai' ? t('options.otherCompatibleApi') : 'Google Gemini';
+    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
+    const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
+        ? savedElectronAiCredentials.OPENAI_API_KEY
+        : savedElectronAiCredentials.GEMINI_API_KEY;
+    const aiApiKeyStatus: 'loading' | 'configured' | 'missing' = !isElectronRuntime
+        ? 'configured'
+        : !electronSettingsLoaded
+            ? 'loading'
+            : savedAiApiKey.trim()
+                ? 'configured'
+                : 'missing';
     const showQuarkDownload = electronSettings.UPDATE_CHANNEL === 'realeco';
+
+    useEffect(() => {
+        if (aiApiKeyStatus === 'missing' && themeGenerationSource === 'ai') {
+            onChangeThemeGenerationSource('cover');
+        }
+    }, [aiApiKeyStatus, onChangeThemeGenerationSource, themeGenerationSource]);
+
     useEffect(() => {
         if ((window as any).electron) {
             setIsElectron(true);
@@ -394,8 +531,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         ...settings,
                         OPENAI_API_TEMPERATURE: String(settings.OPENAI_API_TEMPERATURE ?? '').trim() || DEFAULT_OPENAI_TEMPERATURE,
                     }));
+                    setSavedElectronAiCredentials({
+                        AI_PROVIDER: settings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                        GEMINI_API_KEY: String(settings.GEMINI_API_KEY ?? ''),
+                        OPENAI_API_KEY: String(settings.OPENAI_API_KEY ?? ''),
+                    });
                 }
-            });
+            }).finally(() => setElectronSettingsLoaded(true));
             (window as any).electron.getCacheDirectory().then((result: ElectronCacheDirectoryResult) => {
                 if (result?.path) {
                     setCacheDirectory(result.path);
@@ -504,12 +646,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
             await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
+            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM === true);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
             await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
             await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
             await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
             await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
             await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            setSavedElectronAiCredentials({
+                AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
+                GEMINI_API_KEY: electronSettings.GEMINI_API_KEY,
+                OPENAI_API_KEY: electronSettings.OPENAI_API_KEY,
+            });
             setElectronSaveStatus('saved');
             setTimeout(() => setElectronSaveStatus('idle'), 2000);
         }
@@ -553,7 +701,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleToggleAutoUpdate = async () => {
-        if (!window.electron?.saveSettings || !electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.supported) {
+        if (!window.electron?.saveSettings || !electronSettings.ENABLE_UPDATE_CHECK || !updateStatus?.autoUpdateSupported) {
             return;
         }
 
@@ -581,7 +729,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
 
-    const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
     const isWin = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('win');
 
 
@@ -607,12 +754,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         await window.electron?.quitAndInstallUpdate?.();
     };
 
-    const handleOpenChinaDownload = async () => {
-        await openExternalUrl(QUARK_DOWNLOAD_URL);
+    const handleOpenDownloadUrl = async (url: string) => {
+        // Capacitor 没有 window.open 的可用落点，统一交给 openExternalUrl 走系统浏览器。
+        if (isCapacitorAndroid()) {
+            await openExternalUrl(url);
+            return;
+        }
+
+        if (window.electron?.openExternalUrl) {
+            await window.electron.openExternalUrl(url);
+            return;
+        }
+
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
+    const handleOpenChinaDownload = () => handleOpenDownloadUrl(QUARK_DOWNLOAD_URL);
+    const handleOpenBaiduDownload = () => handleOpenDownloadUrl(BAIDU_DOWNLOAD_URL);
+
     // Navidrome Settings State
-    const [navidromeEnabled, setNavidromeEnabledState] = useState(false);
+    // One truth: this used to be a second copy kept in step with App.tsx's by hand.
+    const navidromeEnabled = useLibraryStore(state => state.navidromeEnabled);
     const [navidromeUrl, setNavidromeUrl] = useState('');
     const [navidromeUsername, setNavidromeUsername] = useState('');
     const [navidromePassword, setNavidromePassword] = useState('');
@@ -622,7 +784,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
     // Load Navidrome config on mount
     useEffect(() => {
-        setNavidromeEnabledState(isNavidromeEnabled());
         const config = getNavidromeConfig();
         if (config) {
             setNavidromeUrl(config.serverUrl);
@@ -696,7 +857,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             playlist: formatBytes(usage.playlist),
             lyrics: formatBytes(usage.lyrics),
             cover: formatBytes(usage.cover),
-            media: formatBytes(usage.media)
+            media: formatBytes(usage.media),
+            analysis: formatBytes(usage.analysis)
         });
         setMediaCount(usage.mediaCount);
     };
@@ -707,7 +869,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     }, [activeTab]);
 
-    const handleClear = async (category: 'playlist' | 'lyrics' | 'cover' | 'media') => {
+    const handleClear = async (category: 'playlist' | 'lyrics' | 'cover' | 'media' | 'analysis') => {
         setIsCleaning(category);
         await clearCacheByCategory(category);
         await fetchCacheUsage();
@@ -826,11 +988,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const errorTextColor = isDaylight ? 'text-red-600' : 'text-red-400';
     const errorBgColor = isDaylight ? 'bg-red-500/10' : 'bg-red-500/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
-    const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
+    const toggleOffBackgroundClass = settingsToggleOffClassFor(isDaylight);
     const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
-    const settingsCardClass = isDaylight
-        ? 'bg-black/[0.025] border-black/10'
-        : 'bg-white/5 border-white/5';
+    const settingsCardClass = settingsCardClassFor(isDaylight);
     const settingsCardInteractiveClass = isDaylight
         ? 'bg-black/[0.025] border-black/10 hover:bg-black/[0.055]'
         : 'bg-white/5 border-white/5 hover:bg-white/8';
@@ -906,7 +1066,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const isAnySubviewOpen = showVisPlayground
         || showThemePark
         || showLyricFilterSettings
-        || showAiHelpPrompt;
+        || showGlobalLyricOffset
+        || showAiHelpPrompt
+        || showReleaseNotes;
 
     const closeAllSubviews = () => {
         if (shouldCloseModalOnSubviewBack) {
@@ -916,7 +1078,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setShowVisPlayground(false);
         setShowThemePark(false);
         setShowLyricFilterSettings(false);
+        setShowGlobalLyricOffset(false);
         setShowAiHelpPrompt(false);
+        setShowReleaseNotes(false);
     };
 
     useEffect(() => {
@@ -1086,28 +1250,48 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const updateBadgeIcon = updateStatus?.status === 'checking'
         ? <Loader2 size={13} className="animate-spin" />
         : updateStatus?.availableVersion
-            ? <Download size={13} />
+            ? updateStatus.autoUpdateSupported
+                ? <Download size={13} />
+                : <ExternalLink size={13} />
             : updateStatus?.status === 'error'
                 ? <AlertCircle size={13} />
                 : <Check size={13} />;
     const canDownloadUpdate = Boolean(
         electronSettings.ENABLE_UPDATE_CHECK &&
-        updateStatus?.supported &&
+        updateStatus?.autoUpdateSupported &&
         updateStatus?.availableVersion &&
         updateStatus.status !== 'downloading' &&
         updateStatus.status !== 'downloaded'
     );
-    const canEnableAutoUpdate = Boolean(electronSettings.ENABLE_UPDATE_CHECK && updateStatus?.supported);
+    const canEnableAutoUpdate = Boolean(electronSettings.ENABLE_UPDATE_CHECK && updateStatus?.autoUpdateSupported);
 
-    const SETTINGS_SECTIONS = [
-        { id: 'appearance', icon: Sparkles, label: t('options.visualSettings') },
-        { id: 'general', icon: Languages, label: t('options.generalSettings') },
-        { id: 'playback', icon: PlayCircle, label: t('options.playbackSettings') },
-        { id: 'integration', icon: Server, label: t('options.integrationSettings') },
-        { id: 'storage', icon: Database, label: t('options.storageSettings') },
-        ...(isElectron ? [{ id: 'desktop', icon: Command, label: t('options.desktopSettings') }] : []),
-        { id: 'lab', icon: FlaskConical, label: t('options.labSettings') }
-    ];
+    const settingsNavGroups = useMemo(
+        () => buildSettingsNavGroups(t, { isElectron }),
+        [t, isElectron],
+    );
+    const activeSettingsNavItem = findSettingsNavItem(settingsNavGroups, activeSettingsSection);
+    const prefersReducedMotion = useReducedMotionFor('settingsScroll');
+    const { activeAnchorId, scrollToAnchor } = useSettingsScrollSpy({
+        containerRef: contentScrollRef,
+        anchors: settingsAnchors,
+        enabled: isWideSettingsLayout && activeTab === 'options',
+        reducedMotion: prefersReducedMotion,
+    });
+
+    // Switching section swaps the whole column; keeping the old offset would land mid-content and
+    // leave the table of contents highlighting a section that is no longer on screen.
+    useEffect(() => {
+        if (contentScrollRef.current) {
+            contentScrollRef.current.scrollTop = 0;
+        }
+    }, [activeSettingsSection]);
+
+    // A command can ask for one section inside the page, not just the page itself; the scroll waits
+    // for that section to register, which is the only moment it exists to scroll to. It runs after
+    // the reset above on purpose — that reset fires on the same commit the section changes on, and
+    // a scrollTop write would abort the smooth scroll this starts.
+    useSettingsInitialAnchor(initialAnchor, settingsAnchors, scrollToAnchor);
+
 
     return (
         <motion.div
@@ -1116,6 +1300,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
+            data-ponder-page-scope={activeTab === 'help' ? 'help-page' : 'settings-page'}
             className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-8 sm:px-5 sm:py-12"
             style={{ backgroundColor: overlayBackground }}
             onMouseDown={handleOverlayMouseDown}
@@ -1185,7 +1370,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden relative z-10">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative z-10">
                     <AnimatePresence mode="popLayout" initial={false}>
                         {activeTab === 'help' ? (
                             <motion.div
@@ -1196,8 +1381,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 animate="center"
                                 exit="exit"
                                 transition={shellTransition}
-                                className="space-y-6 select-none h-full overflow-y-auto custom-scrollbar pr-2 pb-4"
+                                className="space-y-6 select-none flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2 pb-4"
                             >
+                                <SettingsHelpActions
+                                    onOpenReleaseNotes={() => setShowReleaseNotes(true)}
+                                    onOpenPonder={openPonderNavigation}
+                                />
+
                                 {/* Navigation - REMOVED requested items */}
                                 {/* 
                                 Removed:
@@ -1225,13 +1415,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <Keyboard size={14} /> {t('help.keyboardShortcuts')}
                                     </h3>
                                     <ul className="space-y-2 text-sm" style={{ color: 'var(--text-primary)' }}>
-                                        <li className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                            <span>{t('help.navigatePlaylists')}</span>
-                                            <div className="flex gap-1">
-                                                <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">←</kbd>
-                                                <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">→</kbd>
-                                            </div>
-                                        </li>
+                                        {HELP_TAB_PRIMARY_SHORTCUTS.map(shortcut => (
+                                            <li key={shortcut.id} className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
+                                                <span>{t(shortcut.titleKey, shortcut.fallback)}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">{isMac ? 'Cmd' : 'Ctrl'}</kbd>
+                                                    <span className="text-xs opacity-50">+</span>
+                                                    <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono">{shortcut.key}</kbd>
+                                                </div>
+                                            </li>
+                                        ))}
                                     </ul>
                                 </div>
 
@@ -1264,17 +1457,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 {/* User Guide Button */}
                                 <div className="mt-6 flex flex-wrap justify-center gap-3">
                                     <button
-                                        onClick={() => {
-                                            setIsUserGuideModalOpen(true);
-                                            onClose();
-                                        }}
-                                        className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
-                                        style={{ color: 'var(--text-primary)' }}
-                                    >
-                                        <Command size={16} />
-                                        {t('userGuide.showGuide', 'Show User Guide')}
-                                    </button>
-                                    <button
                                         type="button"
                                         onClick={() => setShowAiHelpPrompt(true)}
                                         className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
@@ -1282,6 +1464,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                     >
                                         <CircleHelp size={16} />
                                         {t('aiHelp.openButton', 'Need help?')}
+                                    </button>
+                                    {/* 一排单色胶囊里唯一带颜色的那颗，靠色彩而不是体积被看见。 */}
+                                    <button
+                                        type="button"
+                                        onClick={openDiscordInvite}
+                                        className="px-6 py-2 bg-[#5865F2]/15 hover:bg-[#5865F2]/25 ring-1 ring-inset ring-[#5865F2]/30 transition-colors rounded-full text-sm font-medium flex items-center gap-2"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        <img src={discordIconUrl} alt="" aria-hidden className="h-[18px] w-[18px] rounded-[5px]" />
+                                        {t('help.joinDiscord', 'Join our Discord')}
                                     </button>
                                 </div>
 
@@ -1294,9 +1486,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 onClick={handleAuthorLabelClick}
                                                 className="hover:opacity-100 transition-opacity"
                                                 style={{ color: 'inherit' }}
-                                                aria-label="meow"
+                                                aria-label={t('help.madeBy')}
                                             >
-                                                {t('help.madeBy') || "Made by"}
+                                                {t('help.madeBy')}
                                             </button>{' '}
                                             <a href="https://github.com/chthollyphile/folia-major" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors underline decoration-white/30 hover:decoration-white">chthollyphile/folia-major</a>
                                         </p>
@@ -1316,72 +1508,101 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 : VERSION_INFO}
                                         </button>
 
-                                        {/* 第二行：发现新版本与操作按钮 */}
+                                        {/* 第二行：版本状态与安装操作 */}
                                         {updateStatus?.availableVersion && (
-                                            <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 mt-0.5">
-                                                <span className="text-amber-500 font-semibold">
-                                                    {t('options.newVersionFound', { version: updateStatus.availableVersion })}
-                                                </span>
-
-                                                {updateStatus.status === 'downloaded' ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={handleInstallUpdate}
-                                                        className="text-green-400 font-bold hover:underline ml-1"
-                                                    >
-                                                        {t('options.restartToInstallUpdate')}
-                                                    </button>
-                                                ) : updateStatus.status === 'downloading' ? (
-                                                    <span className="text-zinc-300 opacity-80 ml-1">
-                                                        {t('options.downloadingProgress', { percent: Math.round(updateStatus.downloadProgress?.percent || 0) })}
+                                            <>
+                                                <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 mt-0.5">
+                                                    <span className="text-amber-500 font-semibold">
+                                                        {t('options.newVersionFound', { version: updateStatus.availableVersion })}
                                                     </span>
-                                                ) : (
-                                                    !electronSettings.ENABLE_AUTO_UPDATE && (
+
+                                                    {updateStatus.autoUpdateSupported && updateStatus.status === 'downloaded' ? (
                                                         <button
                                                             type="button"
-                                                            onClick={handleDownloadUpdate}
-                                                            disabled={!canDownloadUpdate}
-                                                            className="text-zinc-100 hover:text-white font-bold flex items-center justify-center transition-colors disabled:opacity-40 ml-1"
-                                                            title="立即下载"
-                                                            aria-label="立即下载"
+                                                            onClick={handleInstallUpdate}
+                                                            className="text-green-400 font-bold hover:underline"
                                                         >
-                                                            <Download size={13} />
+                                                            {t('options.restartToInstallUpdate')}
                                                         </button>
-                                                    )
-                                                )}
+                                                    ) : updateStatus.autoUpdateSupported && updateStatus.status === 'downloading' ? (
+                                                        <span className="text-zinc-300 opacity-80">
+                                                            {t('options.downloadingProgress', { percent: Math.round(updateStatus.downloadProgress?.percent || 0) })}
+                                                        </span>
+                                                    ) : (
+                                                        updateStatus.autoUpdateSupported && !electronSettings.ENABLE_AUTO_UPDATE && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleDownloadUpdate}
+                                                                disabled={!canDownloadUpdate}
+                                                                className="text-zinc-100 hover:text-white font-bold inline-flex items-center gap-1 transition-colors disabled:opacity-40"
+                                                            >
+                                                                <Download size={12} />
+                                                                {t('options.downloadUpdate')}
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
 
-                                                {showQuarkDownload && updateStatus.platform !== 'linux' && (
-                                                    <>
-                                                        <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
-
+                                                {/* 下载入口独立成可换行的小组，避免与版本状态挤在同一行。 */}
+                                                <div
+                                                    className="mt-1 flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.035] p-1"
+                                                    aria-label={t('options.downloadSources')}
+                                                >
+                                                    <span className="px-1.5 opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                                                        {t('options.downloadSources')}
+                                                    </span>
+                                                    {showQuarkDownload && updateStatus.platform !== 'linux' && (
                                                         <button
                                                             type="button"
                                                             onClick={handleOpenChinaDownload}
-                                                            className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
+                                                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 opacity-65 transition-colors hover:bg-white/10 hover:opacity-100"
                                                             style={{ color: 'var(--text-secondary)' }}
                                                         >
-                                                            {t('options.downloadChina')}
+                                                            <ExternalLink size={11} />
+                                                            {t('options.quarkDrive')}
                                                         </button>
-                                                    </>
-                                                )}
-
-                                                <span className="opacity-25 select-none" style={{ color: 'var(--text-secondary)' }}>|</span>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
-                                                    className="opacity-55 hover:opacity-100 transition-opacity hover:underline"
-                                                    style={{ color: 'var(--text-secondary)' }}
-                                                >
-                                                    {t('options.goToGithubRelease')}
-                                                </button>
-                                            </div>
+                                                    )}
+                                                    {showQuarkDownload && updateStatus.platform !== 'linux' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenDownloadUrl(BAIDU_DOWNLOAD_URL)}
+                                                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 opacity-65 transition-colors hover:bg-white/10 hover:opacity-100"
+                                                            style={{ color: 'var(--text-secondary)' }}
+                                                        >
+                                                            <ExternalLink size={11} />
+                                                            {t('options.baiduDrive')}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => window.electron?.openUpdateReleasePage(updateStatus.availableVersion)}
+                                                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 opacity-65 transition-colors hover:bg-white/10 hover:opacity-100"
+                                                        style={{ color: 'var(--text-secondary)' }}
+                                                    >
+                                                        <ExternalLink size={11} />
+                                                        {updateStatus.autoUpdateSupported
+                                                            ? t('options.githubRelease')
+                                                            : t('options.fullInstallerGithub')}
+                                                    </button>
+                                                    {updateStatus.platform === 'linux' && electronSettings.UPDATE_CHANNEL === 'realeco' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenDownloadUrl(AUR_PACKAGE_URL)}
+                                                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 opacity-65 transition-colors hover:bg-white/10 hover:opacity-100"
+                                                            style={{ color: 'var(--text-secondary)' }}
+                                                        >
+                                                            <ExternalLink size={11} />
+                                                            {t('options.aurPackage')}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </>
                                         )}
 
                                         {/* 第三行：多平台网络与手动下载提醒小字 */}
                                         {updateStatus?.availableVersion && (
                                             <div className="text-xs opacity-60 mt-0.5 space-y-0.5" style={{ color: 'var(--text-secondary)' }}>
-                                                {(updateStatus.platform === 'darwin' || updateStatus.platform === 'linux' || !updateStatus.supported) && (
+                                                {!updateStatus.autoUpdateSupported && (
                                                     <div>
                                                         {updateStatus.platform === 'darwin'
                                                             ? t('options.macManualUpdateNotice')
@@ -1409,76 +1630,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 transition={shellTransition}
                                 className="flex flex-col md:flex-row gap-4 md:gap-6 h-full"
                             >
-                                <div
-                                    ref={scrollContainerRef}
-                                    onMouseDown={handleMouseDown}
-                                    onMouseLeave={handleMouseLeave}
-                                    onMouseUp={handleMouseUp}
-                                    onMouseMove={handleMouseMove}
-                                    className={`w-full md:w-1/3 md:max-w-[240px] shrink-0 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto mobile-hide-scrollbar custom-scrollbar pr-0 md:pr-3 flex flex-row md:flex-col space-x-2 md:space-x-0 space-y-0 md:space-y-2 border-b md:border-b-0 md:border-r border-white/10 pb-3 md:pb-4 mb-2 md:mb-0 items-center md:items-stretch ${isDragging ? 'cursor-grabbing select-none' : 'cursor-default'}`}
-                                >
-                                    {SETTINGS_SECTIONS.map((section) => {
-                                        const Icon = section.icon;
-                                        const isActive = activeSettingsSection === section.id;
-                                        return (
-                                            <button
-                                                key={section.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    if (hasDraggedRef.current) return;
-                                                    setActiveSettingsSection(section.id);
-                                                }}
-                                                className={`shrink-0 w-auto md:w-full p-2 md:p-3 rounded-xl border transition-colors flex items-center justify-center md:justify-between gap-2 md:gap-3 text-left ${isActive ? (isDaylight ? 'border-zinc-300/70 bg-white/80' : 'border-white/20 bg-white/10') : (isDaylight ? 'border-transparent hover:bg-white/50' : 'border-transparent hover:bg-white/5')}`}
-                                            >
-                                                <div className="flex items-center gap-2 md:gap-3">
-                                                    <div className="opacity-70" style={{ color: 'var(--text-primary)' }}>
-                                                        <Icon size={18} />
-                                                    </div>
-                                                    <div className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
-                                                        {section.label}
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar pl-1 md:pl-2 pr-2 md:pr-4 relative pb-4">
-                                    <div className="mb-4 md:mb-6 border-b border-white/10 pb-3 md:pb-4">
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div>
-                                                <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                                    {activeSettingsSection === 'appearance' && (t('options.visualSettings') || "Visual Settings")}
-                                                    {activeSettingsSection === 'general' && (t('options.generalSettings') || "General Settings")}
-                                                    {activeSettingsSection === 'playback' && (t('options.playbackSettings') || "Playback Settings")}
-                                                    {activeSettingsSection === 'integration' && (t('options.integrationSettings') || "Integration Settings")}
-                                                    {activeSettingsSection === 'storage' && (t('options.storageSettings') || "Storage Settings")}
-                                                    {activeSettingsSection === 'desktop' && (t('options.desktopSettings') || "Desktop Settings")}
-                                                    {activeSettingsSection === 'lab' && (t('options.labSettings') || "Lab Settings")}
-                                                </h2>
-                                                <p className="text-xs opacity-50 mt-1" style={{ color: 'var(--text-secondary)' }}>
-                                                    {activeSettingsSection === 'appearance' && (t('options.visualSettingsPanelDesc') || "Customize the look and feel of Folia.")}
-                                                    {activeSettingsSection === 'general' && (t('options.generalSettingsDesc') || "Basic application preferences.")}
-                                                    {activeSettingsSection === 'playback' && (t('options.playbackSettingsPanelDesc') || "Audio output and playback behavior.")}
-                                                    {activeSettingsSection === 'integration' && (t('options.integrationSettingsDesc') || "Connect with external services.")}
-                                                    {activeSettingsSection === 'storage' && (t('options.storageSettingsPanelDesc') || "Manage cache and local data.")}
-                                                    {activeSettingsSection === 'desktop' && (t('options.desktopSettingsPanelDesc') || "System integration and updates.")}
-                                                    {activeSettingsSection === 'lab' && (t('options.labSettingsDesc') || "Experimental features.")}
-                                                </p>
-                                            </div>
-                                            {activeSettingsSection === 'appearance' && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onSetDaylightPreference(!isDaylight)}
-                                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${utilityGhostButtonClass} ${isDaylight ? 'text-amber-500' : 'text-blue-300'}`}
-                                                    title={t('options.daylightMode')}
-                                                    aria-label={t('options.daylightMode')}
-                                                    aria-pressed={isDaylight}
-                                                >
-                                                    {isDaylight ? <Sun size={17} /> : <Moon size={17} />}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
+                                <SettingsAnchorProvider store={settingsAnchorStore}>
+                                {isWideSettingsLayout ? (
+                                    <SettingsSidebarWide
+                                        groups={settingsNavGroups}
+                                        activeSectionId={activeSettingsSection}
+                                        onSelectSection={handleSelectSettingsSection}
+                                        activeAnchorId={activeAnchorId}
+                                        onSelectAnchor={(sectionId, anchorId) => {
+                                            if (sectionId === activeSettingsSection) {
+                                                scrollToAnchor(anchorId);
+                                                return;
+                                            }
+                                            useSettingsModalStore.getState().openSettings('options', settingsAnchorSubview(anchorId), null, anchorId);
+                                        }}
+                                        isDaylight={isDaylight}
+                                        theme={theme}
+                                    />
+                                ) : (
+                                    <SettingsSidebarChips
+                                        groups={settingsNavGroups}
+                                        activeSectionId={activeSettingsSection}
+                                        onSelectSection={handleSelectSettingsSection}
+                                        isDaylight={isDaylight}
+                                    />
+                                )}
+                                <div ref={contentScrollRef} className="flex-1 overflow-y-auto custom-scrollbar pl-1 md:pl-2 pr-2 md:pr-4 relative pb-4">
+                                    <SettingsSectionHeader
+                                        title={activeSettingsNavItem?.label ?? ''}
+                                        description={activeSettingsNavItem?.description ?? ''}
+                                        showDaylightToggle={activeSettingsSection === 'appearance'}
+                                        isDaylight={isDaylight}
+                                        onSetDaylightPreference={onSetDaylightPreference}
+                                        daylightLabel={t('options.daylightMode')}
+                                        utilityGhostButtonClass={utilityGhostButtonClass}
+                                    />
                                     <div className="space-y-8">
                                         {activeSettingsSection === 'appearance' && (
                                             <AppearanceSettingsSubview
@@ -1487,15 +1673,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 hasCustomTheme={hasCustomTheme}
                                                 isCustomThemePreferred={isCustomThemePreferred}
                                                 isDaylight={isDaylight}
+                                                followSystemTheme={followSystemTheme}
                                                 onApplyCustomTheme={onApplyCustomTheme}
                                                 onApplyDefaultTheme={onApplyDefaultTheme}
                                                 onOpenThemePark={() => setShowThemePark(true)}
                                                 onOpenVisPlayground={() => setShowVisPlayground(true)}
                                                 onToggleSongThemeAutoGenerate={onToggleSongThemeAutoGenerate}
+                                                onToggleFollowSystemTheme={onSetFollowSystemTheme}
                                                 onToggleCustomThemePreferred={onToggleCustomThemePreferred}
                                                 onToggleSongThemeAutoSwitch={onToggleSongThemeAutoSwitch}
+                                                themeGenerationSource={themeGenerationSource}
+                                                onChangeThemeGenerationSource={onChangeThemeGenerationSource}
+                                                aiApiKeyStatus={aiApiKeyStatus}
+                                                onOpenAiSettings={() => useSettingsModalStore.getState().openSettings('options', 'desktop', null, 'electronSettings')}
                                                 onToggleTransparentPlayerBackground={resolvedToggleTransparentPlayerBackground}
                                                 onToggleAutoHidePlayerChrome={onToggleAutoHidePlayerChrome}
+                                                onToggleAutoHideCursorWithPlayerChrome={onToggleAutoHideCursorWithPlayerChrome}
                                                 onSaveCustomTheme={onSaveCustomTheme}
                                                 settingsCardClass={settingsCardClass}
                                                 songThemeAutoSwitchEnabled={songThemeAutoSwitchEnabled}
@@ -1505,6 +1698,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 toggleOffBackgroundClass={toggleOffBackgroundClass}
                                                 transparentPlayerBackground={transparentPlayerBackground}
                                                 autoHidePlayerChrome={autoHidePlayerChrome}
+                                                autoHideCursorWithPlayerChrome={autoHideCursorWithPlayerChrome}
+                                                stageTrackPillMode={stageTrackPillMode}
+                                                stageTrackPillTimeoutSec={stageTrackPillTimeoutSec}
+                                                stageTrackPillOnHome={stageTrackPillOnHome}
+                                                onChangeStageTrackPillMode={onChangeStageTrackPillMode}
+                                                onChangeStageTrackPillTimeoutSec={onChangeStageTrackPillTimeoutSec}
+                                                onToggleStageTrackPillOnHome={onToggleStageTrackPillOnHome}
                                                 utilityGhostButtonClass={utilityGhostButtonClass}
                                                 grid3dCardStyle={grid3dCardStyle}
                                                 onChangeGrid3dCardStyle={onChangeGrid3dCardStyle}
@@ -1517,16 +1717,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 isDaylight={isDaylight}
                                                 settingsCardClass={settingsCardClass}
                                                 theme={theme}
+                                                utilityGhostButtonClass={utilityGhostButtonClass}
                                             />
                                         )}
                                         {activeSettingsSection === 'playback' && (
                                             <PlaybackSettingsSubview
-                                                isOpen={true}
                                                 isDaylight={isDaylight}
                                                 onAudioOutputDeviceChange={onAudioOutputDeviceChange}
+                                                onOpenGlobalLyricOffsetSettings={() => setShowGlobalLyricOffset(true)}
+                                                onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
+                                                replayGainMode={replayGainMode}
+                                                onReplayGainModeChange={onReplayGainModeChange}
                                                 settingsCardClass={settingsCardClass}
                                                 theme={theme}
                                                 utilityGhostButtonClass={utilityGhostButtonClass}
+                                            />
+                                        )}
+                                        {activeSettingsSection === 'interaction' && (
+                                            <InteractionSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                theme={theme}
                                             />
                                         )}
                                         {activeSettingsSection === 'integration' && (
@@ -1562,6 +1773,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onToggle: handleToggleDiscordPresence,
                                                     status: discordPresenceStatus,
                                                 }}
+                                                lyricApi={{
+                                                    status: lyricApiStatus,
+                                                    onToggle: onToggleLyricApi,
+                                                }}
                                                 stage={{
                                                     nowPlayingConnectionStatus,
                                                     playerCapConnectionStatus,
@@ -1591,11 +1806,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 enableMediaCache={enableMediaCache}
                                                 errorTextColor={errorTextColor}
                                                 isCleaning={isCleaning}
+                                                isDaylight={isDaylight}
                                                 isElectron={isElectron}
+                                                mediaCacheLimitGb={mediaCacheLimitGb}
                                                 mediaCount={mediaCount}
                                                 onChooseCacheDirectory={handleChooseCacheDirectory}
                                                 onClear={handleClear}
                                                 onClearAll={handleClearAllCache}
+                                                onSetMediaCacheLimitGb={onSetMediaCacheLimitGb}
                                                 onToggleMediaCache={onToggleMediaCache}
                                                 settingsCardClass={settingsCardClass}
                                                 settingsIconClass={settingsIconClass}
@@ -1607,11 +1825,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         {activeSettingsSection === 'desktop' && isElectron && (
                                             <DesktopSettingsSubview
                                                 chrome={{
-                                                    borderColor,
                                                     isDaylight,
                                                     isElectron,
                                                     settingsCardClass,
-                                                    settingsIconClass,
                                                     successTextColor,
                                                     theme,
                                                     toggleOffBackgroundClass,
@@ -1624,6 +1840,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                     onCheckForUpdates: handleCheckForUpdates,
                                                     onDownloadUpdate: handleDownloadUpdate,
                                                     onInstallUpdate: handleInstallUpdate,
+                                                    onOpenBaiduDownload: handleOpenBaiduDownload,
                                                     onOpenChinaDownload: handleOpenChinaDownload,
                                                     onUpdateChannelChange: handleUpdateChannelChange,
                                                     onSaveElectronSettings: saveElectronSettings,
@@ -1637,20 +1854,42 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 preferences={{
                                                     hideTaskbarIcon,
                                                     hideRemoteControlTaskbarIcon,
+                                                    hideRemoteControlTitlebar,
+                                                    remoteControlClickThrough,
                                                     minimizeToTray,
+                                                    closeToTray,
                                                     onToggleHideTaskbarIcon,
                                                     onToggleHideRemoteControlTaskbarIcon,
+                                                    onToggleHideRemoteControlTitlebar,
+                                                    onToggleRemoteControlClickThrough,
                                                     onToggleMinimizeToTray,
+                                                    onToggleCloseToTray,
                                                     onToggleOpenPlayerOnLaunch,
                                                     openPlayerOnLaunch,
+                                                    wallpaperMode,
+                                                    onToggleWallpaperMode,
+                                                    wallpaperMacAutohideDock,
+                                                    onToggleWallpaperMacAutohideDock,
                                                 }}
                                             />
+                                        )}
+                                        {activeSettingsSection === 'graphics' && (
+                                            <GraphicsSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                toggleOffBackgroundClass={toggleOffBackgroundClass}
+                                                utilityGhostButtonClass={utilityGhostButtonClass}
+                                                rangeInputClass={rangeInputClass}
+                                                theme={theme}
+                                            />
+                                        )}
+                                        {activeSettingsSection === 'mods' && isElectron && (
+                                            <ModsSettingsSubview isDaylight={isDaylight} theme={theme} />
                                         )}
                                         {activeSettingsSection === 'lab' && (
                                             <LabSettingsModal
                                                 isOpen={true}
                                                 onClose={() => { }}
-                                                onOpenLyricFilterSettings={() => setShowLyricFilterSettings(true)}
                                                 theme={theme}
                                                 embedded={true}
                                                 voiceInputPause={{
@@ -1660,8 +1899,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 }}
                                             />
                                         )}
+                                        {activeSettingsSection === 'developer' && (
+                                            <DeveloperSettingsSubview
+                                                isDaylight={isDaylight}
+                                                settingsCardClass={settingsCardClass}
+                                                theme={theme}
+                                                toggleOffBackgroundClass={toggleOffBackgroundClass}
+                                            />
+                                        )}
                                     </div>
                                 </div>
+                                </SettingsAnchorProvider>
                             </motion.div>
 
                         )}
@@ -1711,6 +1959,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             monet: { tuning: monetBackgroundTuning },
                             nomand: { tuning: nomandBackgroundTuning },
                             latent: { tuning: latentBackgroundTuning },
+                            sora: { tuning: soraBackgroundTuning },
                             url: {
                                 items: urlBackgroundList,
                                 selectedId: urlBackgroundSelectedId,
@@ -1741,6 +1990,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 onTuningChange: onLatentBackgroundTuningChange,
                                 onResetTuning: onResetLatentBackgroundTuning,
                             },
+                            sora: {
+                                onTuningChange: onSoraBackgroundTuningChange,
+                                onResetTuning: onResetSoraBackgroundTuning,
+                            },
                             url: {
                                 onAdd: onAddUrlBackgroundItem,
                                 onUpdate: onUpdateUrlBackgroundItem,
@@ -1753,6 +2006,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         subtitleContentMode={subtitleContentMode}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         subtitleOverlayBackground={subtitleOverlayBackground}
+                        subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                         showHarmonySubtitle={showHarmonySubtitle}
                         harmonySubtitleBackground={harmonySubtitleBackground}
                         classicTuning={classicTuning}
@@ -1765,6 +2019,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         dioramaTuning={dioramaTuning}
                         monetTuning={monetTuning}
                         pendoloTuning={pendoloTuning}
+                        sonnetTuning={sonnetTuning}
+                        temperaTuning={temperaTuning}
+                        lumiereTuning={lumiereTuning}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                         monetPortraitImage={monetPortraitImage}
@@ -1799,6 +2056,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onSubtitleContentModeChange={onSubtitleContentModeChange}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
+                        onToggleSubtitleUpcomingLyricsBlur={onToggleSubtitleUpcomingLyricsBlur}
                         onToggleShowHarmonySubtitle={onToggleShowHarmonySubtitle}
                         onToggleHarmonySubtitleBackground={onToggleHarmonySubtitleBackground}
                         onClassicTuningChange={onClassicTuningChange}
@@ -1819,6 +2077,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         onResetMonetTuning={onResetMonetTuning}
                         onPendoloTuningChange={onPendoloTuningChange}
                         onResetPendoloTuning={onResetPendoloTuning}
+                        onSonnetTuningChange={onSonnetTuningChange}
+                        onResetSonnetTuning={onResetSonnetTuning}
+                        onTemperaTuningChange={onTemperaTuningChange}
+                        onResetTemperaTuning={onResetTemperaTuning}
+                        onLumiereTuningChange={onLumiereTuningChange}
+                        onResetLumiereTuning={onResetLumiereTuning}
                         onUploadMonetPortraitImage={onUploadMonetPortraitImage}
                         onClearMonetPortraitImage={onClearMonetPortraitImage}
                         isLoadingMonetPortraitImage={isLoadingMonetPortraitImage}
@@ -1849,6 +2113,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             diorama: dioramaTuning,
                             monet: monetTuning,
                             pendolo: pendoloTuning,
+                            sonnet: sonnetTuning,
+                            tempera: temperaTuning,
+                            lumiere: lumiereTuning,
                         }}
                         staticMode={staticMode}
                         visualizerOpacity={visualizerOpacity}
@@ -1864,6 +2131,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             monet: { tuning: monetBackgroundTuning },
                             nomand: { tuning: nomandBackgroundTuning },
                             latent: { tuning: latentBackgroundTuning },
+                            sora: { tuning: soraBackgroundTuning },
                             url: {
                                 items: urlBackgroundList,
                                 selectedId: urlBackgroundSelectedId,
@@ -1878,8 +2146,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         lyricsFontScale={lyricsFontScale}
                         lyricsFontWeight={lyricsFontWeight}
                         lyricsCustomFontFamily={lyricsCustomFontFamily}
-                        onSaveTheme={(dualTheme) => {
+                        onSaveCustomTheme={(dualTheme) => {
                             onSaveCustomTheme(dualTheme);
+                            setShowThemePark(false);
+                        }}
+                        onSaveAiTheme={(dualTheme, song, songKey) => {
+                            onSaveAiTheme(dualTheme, song, songKey);
                             setShowThemePark(false);
                         }}
                         onClose={() => closeSubviewOrModal(() => setShowThemePark(false))}
@@ -1892,9 +2164,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isDaylight={isDaylight}
                 currentSongTitle={currentSongTitle}
                 initialPattern={lyricFilterPattern}
+                initialFilterEnabled={lyricFilterEnabled}
+                initialStaffPolicy={lyricStaffPolicy}
+                initialStaffMinDwellSeconds={lyricStaffMinDwellSeconds}
+                initialStaffAbsorbMode={lyricStaffAbsorbMode}
+                initialStaffPattern={lyricStaffPattern}
                 loadPreviewLyrics={loadLyricFilterPreview}
                 onClose={() => closeSubviewOrModal(() => setShowLyricFilterSettings(false))}
                 onSave={onSaveLyricFilterPattern}
+            />
+            <GlobalLyricOffsetModal
+                isOpen={showGlobalLyricOffset}
+                isDaylight={isDaylight}
+                lyrics={currentLyrics}
+                lyricCurrentTime={lyricCurrentTime}
+                onClose={() => closeSubviewOrModal(() => setShowGlobalLyricOffset(false))}
             />
             <AiHelpPromptModal
                 isOpen={showAiHelpPrompt}
@@ -1902,6 +2186,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 theme={theme}
                 onClose={() => setShowAiHelpPrompt(false)}
                 onCopyText={copyText}
+            />
+            <ReleaseNotesDialog
+                isOpen={showReleaseNotes}
+                isDaylight={isDaylight}
+                theme={theme}
+                onClose={() => setShowReleaseNotes(false)}
             />
         </motion.div>
     );

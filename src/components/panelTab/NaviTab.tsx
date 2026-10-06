@@ -4,6 +4,7 @@ import { ReplayGainMode, SongResult } from '../../types';
 import { RefreshCw, FileText, Cloud } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
+import LyricFileButton from './LyricFileButton';
 import { getLyricProviderLabel } from '../../utils/lyrics/lyricSourceLabels';
 import { resolveNavidromePlaybackCarrier } from '../../utils/appPlaybackGuards';
 import ReplayGainControl from './ReplayGainControl';
@@ -93,13 +94,16 @@ const NaviTab: React.FC<NaviTabProps> = ({
                     <h3 className="text-sm font-semibold opacity-50 uppercase tracking-wider flex items-center gap-2">
                         <FileText size={14} /> {t('localMusic.lyrics')}
                     </h3>
-                    <button
-                        onClick={onMatchOnline}
-                        className="px-3 py-1 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors rounded-lg text-xs font-medium flex items-center gap-1.5"
-                    >
-                        <RefreshCw size={12} />
-                        {t('localMusic.matchOnline')}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        <LyricFileButton isDaylight={isDaylight} buttonClassName="p-1.5 hover:bg-white/10 rounded-md transition-colors" />
+                        <button
+                            onClick={onMatchOnline}
+                            className="px-3 py-1 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors rounded-lg text-xs font-medium flex items-center gap-1.5"
+                        >
+                            <RefreshCw size={12} />
+                            {t('localMusic.matchOnline')}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Status Indicator */}

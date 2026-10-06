@@ -4,15 +4,17 @@ import { applyQueueAddBehavior } from '../../../utils/queueAddBehavior';
 import type { NavidromeSong } from '../../../types/navidrome';
 import type { QueueAddBehavior, SongResult, StatusMessage } from '../../../types';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
+import { applyQueueBatchOperation as transformQueueBatch } from '../../../utils/queueBatchOperations';
+import type { QueueBatchAction } from '../../command-palette/queueQuery';
+import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setPlayQueue } from '../../../stores/usePlaybackStore';
 
 // src/components/app/player-panel/createQueueMutations.ts
 
 type CreateQueueMutationsParams = {
     currentSong: SongResult | null;
     playQueue: SongResult[];
-    setPlayQueue: Dispatch<SetStateAction<SongResult[]>>;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
-    setStatusMsg: Dispatch<SetStateAction<StatusMessage | null>>;
     t: (key: string) => string;
     queueAddBehavior: QueueAddBehavior;
 };
@@ -21,9 +23,7 @@ type CreateQueueMutationsParams = {
 export const createQueueMutations = ({
     currentSong,
     playQueue,
-    setPlayQueue,
     persistLastPlaybackCache,
-    setStatusMsg,
     t,
     queueAddBehavior,
 }: CreateQueueMutationsParams) => {
@@ -85,8 +85,37 @@ export const createQueueMutations = ({
         updateQueueOrder(nextQueue);
     };
 
+    const applyQueueBatchOperation = (action: QueueBatchAction, targetIndices: number[]) => {
+        const result = transformQueueBatch({
+            queue: playQueue,
+            targetIndices,
+            currentSong,
+            action,
+        });
+        if (result.affectedCount === 0) {
+            return false;
+        }
+
+        if (result.changed) {
+            updateQueueOrder(result.nextQueue);
+        }
+        const statusKey = action === 'remove'
+            ? 'status.queueBatchRemoved'
+            : action === 'next'
+                ? 'status.queueBatchMovedNext'
+                : 'status.queueBatchMovedEnd';
+        setStatusMsg({
+            type: 'success',
+            text: t(statusKey).replace('{{count}}', String(result.affectedCount)),
+            nonce: Date.now(),
+            durationMs: 1600,
+        });
+        return true;
+    };
+
     return {
         addNavidromeSongsToQueue,
+        applyQueueBatchOperation,
         removeQueueSong,
         moveQueueSongToEnd,
         moveQueueSongToNext,

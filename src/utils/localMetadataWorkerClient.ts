@@ -6,6 +6,7 @@ export interface EmbeddedMetadataResult {
     trackNumber?: number;
     discNumber?: number;
     cover?: Blob;
+    coverAssetId?: string;
     bitrate?: number;
     lyrics?: string;
     translationLyrics?: string;
@@ -17,9 +18,14 @@ export interface EmbeddedMetadataResult {
     duration?: number;
 }
 
+export interface HashedLocalCoverResult {
+    cover: Blob;
+    coverAssetId: string;
+}
+
 let metadataWorker: Worker | null = null;
 let workerRequestId = 0;
-const workerCallbacks = new Map<string, (result: EmbeddedMetadataResult | null) => void>();
+const workerCallbacks = new Map<string, (result: unknown | null) => void>();
 
 export const initMetadataWorker = (): Worker => {
     if (!metadataWorker) {
@@ -52,7 +58,16 @@ export const parseEmbeddedMetadataAsync = (
     return new Promise((resolve) => {
         const worker = initMetadataWorker();
         const requestId = `meta_req_${++workerRequestId}`;
-        workerCallbacks.set(requestId, resolve);
+        workerCallbacks.set(requestId, result => resolve(result as EmbeddedMetadataResult | null));
         worker.postMessage({ type: 'parse-metadata', file, includeCover, requestId });
+    });
+};
+
+export const hashLocalCoverBlobAsync = (cover: Blob): Promise<HashedLocalCoverResult | null> => {
+    return new Promise((resolve) => {
+        const worker = initMetadataWorker();
+        const requestId = `cover_hash_req_${++workerRequestId}`;
+        workerCallbacks.set(requestId, result => resolve(result as HashedLocalCoverResult | null));
+        worker.postMessage({ type: 'hash-cover', cover, requestId });
     });
 };

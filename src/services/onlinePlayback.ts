@@ -1,36 +1,50 @@
-import { LyricData, OnlineLyricsState, SongResult } from '../types';
+import { LyricData, OnlineLyricsState, ReplayGainInfo, SongResult } from '../types';
 import { saveToCache } from './db';
 import { PrefetchedSongData, isUrlValid, updatePrefetchedAudioUrl } from './prefetchService';
 import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../utils/lyrics/renderHints';
-import { loadOnlineLyricsState, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
-import { useSettingsUiStore } from '../stores/useSettingsUiStore';
+import { loadOnlineLyricsState, markOnlineLyricsPureMusic, resolveOnlineLyrics, resolveOnlineLyricsPureMusic, saveOnlineLyricsState } from '../utils/onlineLyricsState';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
+import { OnlineProviderError, type ProviderErrorCode } from '../types/onlineMusic';
 import { omni } from './onlineMusic/omni';
 import { getSongResourceCacheKey } from './onlineMusic/resourceKeys';
-import { getCachedSongAudioBlob, getSongCacheWithLegacyMigration } from './onlineMusic/resourceCache';
-import { toSafeRemoteUrl } from '../utils/appPlaybackHelpers';
+import { getCachedSongAudioBlob, getCachedSongReplayGain, getSongCacheWithLegacyMigration } from './onlineMusic/resourceCache';
+import { toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { saveLyricCacheSongMetadata } from './lyricExport/lyricCacheMetadata';
 
 export async function loadOnlineSongAudioSource(
     song: SongResult,
     audioQuality: AudioQualityPreference,
     prefetched: PrefetchedSongData | null
 ): Promise<
-    | { kind: 'ok'; audioSrc: string; blobUrl?: string }
-    | { kind: 'unavailable' }
+    | { kind: 'ok'; audioSrc: string; blobUrl?: string; replayGain?: ReplayGainInfo }
+    | { kind: 'unavailable'; reason?: ProviderErrorCode }
 > {
-    const audioCacheKey = getSongResourceCacheKey('audio', song);
     const cachedAudioBlob = await getCachedSongAudioBlob(song);
     if (cachedAudioBlob) {
         const blobUrl = createSafeObjectUrl(cachedAudioBlob);
-        if (blobUrl) return { kind: 'ok', audioSrc: blobUrl, blobUrl };
+        if (blobUrl) {
+            // Nothing on this path ever asks the provider again, so the stored gain is the only
+            // one a cached track can have. Without it every cached track reaches the fader at 0dB.
+            let replayGain = song.replayGain ?? prefetched?.replayGain;
+            if (!replayGain) {
+                replayGain = await getCachedSongReplayGain(song);
+                if (replayGain) console.log(`[Cache] ReplayGain recovered for "${song.name}" from the store, not the provider`);
+            }
+            return { kind: 'ok', audioSrc: blobUrl, blobUrl, replayGain };
+        }
     }
 
     if (prefetched?.audioUrl && prefetched.audioUrl !== 'CACHED_IN_DB' && isUrlValid(prefetched.audioUrlFetchedAt)) {
-        return { kind: 'ok', audioSrc: prefetched.audioUrl };
+        return {
+            kind: 'ok',
+            audioSrc: prefetched.audioUrl,
+            replayGain: song.replayGain ?? prefetched.replayGain,
+        };
     }
 
     let source = null;
@@ -38,16 +52,24 @@ export async function loadOnlineSongAudioSource(
         source = await omni.getAudioSource(song, audioQuality);
     } catch (error) {
         console.warn('[OnlinePlayback] Provider audio source is temporarily unavailable', error);
-        return { kind: 'unavailable' };
+        return { kind: 'unavailable', ...(error instanceof OnlineProviderError ? { reason: error.code } : {}) };
     }
-    const url = toSafeRemoteUrl(source?.url);
+    const url = toSafePlaybackUrl(source?.url);
     if (!url) {
         return { kind: 'unavailable' };
     }
 
-    updatePrefetchedAudioUrl(song, url, audioQuality);
-    return { kind: 'ok', audioSrc: url };
+    const replayGain = applyOnlineAudioSourceMetadata(song, source?.replayGain).replayGain;
+    updatePrefetchedAudioUrl(song, url, audioQuality, replayGain);
+    return { kind: 'ok', audioSrc: url, replayGain };
 }
+
+export const applyOnlineAudioSourceMetadata = (
+    song: SongResult,
+    replayGain?: ReplayGainInfo,
+): SongResult => replayGain
+    ? { ...song, replayGain: { ...song.replayGain, ...replayGain } }
+    : song;
 
 export async function loadOnlineSongLyrics(
     song: SongResult,
@@ -65,7 +87,7 @@ export async function loadOnlineSongLyrics(
     const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onAutoMatchStart, onDone } = callbacks;
     const lyricCacheKey = getSongResourceCacheKey('lyric', song);
     const onlineLyricsState = await loadOnlineLyricsState(song);
-    const initialSettings = useSettingsUiStore.getState();
+  const initialSettingsLyricSettings = useLyricSettingsStore.getState();
 
     if (!isCurrent()) return;
     onStateChange?.(onlineLyricsState);
@@ -75,20 +97,16 @@ export async function loadOnlineSongLyrics(
     const preferredCachedLyrics = resolveOnlineLyrics(onlineLyricsState, cachedLyrics);
     const hasAuthoritativeLyricsSelection = onlineLyricsState?.lyricsSource === 'imported'
         || Boolean(onlineLyricsState?.hasOnlineOverride);
-    if (preferredCachedLyrics && (hasAuthoritativeLyricsSelection || !initialSettings.autoUseBestLyric)) {
+    if (preferredCachedLyrics && (hasAuthoritativeLyricsSelection || !initialSettingsLyricSettings.autoUseBestLyric)) {
         const cachedText = preferredCachedLyrics.lines.map(line => line.fullText).join('\n');
-        onPureMusicChange?.(
-            onlineLyricsState?.lyricsSource === 'online' && typeof onlineLyricsState.matchedIsPureMusic === 'boolean'
-                ? onlineLyricsState.matchedIsPureMusic
-                : isPureMusicLyricText(cachedText)
-        );
+        onPureMusicChange?.(resolveOnlineLyricsPureMusic(onlineLyricsState, cachedText));
         onLyrics(preferredCachedLyrics);
         onDone();
         return;
     }
 
     if (prefetched?.lyricRaw?.isPureMusic && !prefetched.lyrics
-        && (hasAuthoritativeLyricsSelection || !initialSettings.autoUseBestLyric)) {
+        && (hasAuthoritativeLyricsSelection || !initialSettingsLyricSettings.autoUseBestLyric)) {
         onPureMusicChange?.(true);
         onLyrics(null);
         onDone();
@@ -99,8 +117,8 @@ export async function loadOnlineSongLyrics(
         const preferredPrefetchedLyrics = resolveOnlineLyrics(onlineLyricsState, prefetched.lyrics);
         const effectiveLyrics = preferredPrefetchedLyrics ?? prefetched.lyrics;
 
-        const settings = useSettingsUiStore.getState();
-        const shouldAutoMatch = settings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
+  const settingsLyricSettings = useLyricSettingsStore.getState();
+        const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
 
         if (!shouldAutoMatch) {
             const effectiveText = effectiveLyrics?.lines.map(line => line.fullText).join('\n') ?? '';
@@ -111,6 +129,7 @@ export async function loadOnlineSongLyrics(
             );
             onLyrics(effectiveLyrics);
             saveToCache(lyricCacheKey, prefetched.lyrics);
+            saveLyricCacheSongMetadata(song);
             onDone();
             return;
         }
@@ -143,21 +162,31 @@ export async function loadOnlineSongLyrics(
     let resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
     let finalState = onlineLyricsState;
 
-    const settings = useSettingsUiStore.getState();
-    const shouldAutoMatch = settings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
+  const settingsLyricSettings = useLyricSettingsStore.getState();
+    const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
 
     if (shouldAutoMatch) {
+        // The lyrics in hand are already displayable, so hand them over and report done BEFORE the
+        // search below. `onDone` is what releases the audio: playback waits on it, and this search
+        // asks every provider for a better lyric file - seconds when it finds none, which is
+        // exactly what an instrumental interlude does. Holding the audio for an OPTIONAL upgrade
+        // is what turned a song change into several seconds of silence, and with blended changes
+        // the outgoing track has already ended by then, so the silence is all the listener gets.
+        // A better match, if one turns up, replaces these below.
+        if (resolvedLyrics) onLyrics(resolvedLyrics);
+        onDone();
+
         try {
             onAutoMatchStart?.();
             const metadata = getProviderSongMetadata(song);
             const artistName = metadata.artists.map(a => a.name).join(', ');
             const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
                 album: metadata.album?.name,
-                preferredSource: settings.preferredAlternativeLyricSource,
+                preferredSource: settingsLyricSettings.preferredAlternativeLyricSource,
                 providerCandidate: song.sourceRef?.kind === 'online'
-                    && (song.sourceRef.providerId === 'netease' || song.sourceRef.providerId === 'kugou')
+                    && (song.sourceRef.providerId === 'netease' || song.sourceRef.providerId === 'kugou' || song.sourceRef.providerId === 'qq')
                     ? {
-                        providerId: song.sourceRef.providerId as 'netease' | 'kugou',
+                        providerId: song.sourceRef.providerId as 'netease' | 'kugou' | 'qq',
                         song,
                         lyricsResult: {
                             lyrics: parsedLyrics,
@@ -184,9 +213,16 @@ export async function loadOnlineSongLyrics(
                 resolvedLyrics = bestMatch.lyrics;
                 finalState = overrideState;
                 onStateChange?.(overrideState);
-            } else if (bestMatch && 'isPureMusic' in bestMatch) {
+            } else if (bestMatch?.isPureMusic) {
+                // Checked against `true`, not with `in`: a MATCH object also carries
+                // `isPureMusic: false`, so `'isPureMusic' in bestMatch` was true for it too - and
+                // a best match from the track's own provider (which fails the branch above) then
+                // landed here and had its perfectly good lyrics thrown away as instrumental.
+                const pureMusic = markOnlineLyricsPureMusic(onlineLyricsState);
+                await saveOnlineLyricsState(song, pureMusic);
                 resolvedLyrics = null;
-                onPureMusicChange?.(true);
+                finalState = pureMusic;
+                onStateChange?.(pureMusic);
             }
         } catch (error) {
             console.warn('[OnlinePlayback] Failed to auto-match best lyric:', error);
@@ -210,5 +246,6 @@ export async function loadOnlineSongLyrics(
 
     onLyrics(resolvedLyrics);
     saveToCache(lyricCacheKey, resolvedLyrics);
+    saveLyricCacheSongMetadata(song);
     onDone();
 }

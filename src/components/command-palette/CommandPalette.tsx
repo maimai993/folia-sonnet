@@ -1,12 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, CircleHelp, Command, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { SongResult, Theme } from '../../types';
-import type { CommandPaletteMatch, CommandPaletteCommand } from './types';
+import type { Theme } from '../../types';
+import type { CommandPaletteContext, CommandPaletteMatch, CommandPaletteCommand } from './types';
+import type { CommandPaletteSurface, CommandSurfaceRenderArgs } from './surfaces/types';
+import CommandPaletteSyntaxHints from './CommandPaletteSyntaxHints';
+import CommandPaletteInlineFrame from './CommandPaletteInlineFrame';
+import { parseCommandQuery } from './syntax/parse';
+import { buildFlagSuggestions, type SyntaxSuggestion } from './syntax/suggest';
 import { getCommandDescription, getCommandTitle } from './commandText';
+import { getCommandPrimaryTerm } from './search/commandSearchIndex';
+import { isTextEntryTarget } from './useCommandPalette';
 import PinnedCommandRow from './PinnedCommandRow';
-import CommandPaletteQueueList from './CommandPaletteQueueList';
+import CommandPaletteAllCommandsList from './CommandPaletteAllCommandsList';
+import { setIsCommandFilterOpen } from '../../stores/useAppViewStore';
+import { isGridFilterSyntaxAvailable, resolveGridFilterAction } from './gridFilterQuery';
+import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -16,7 +26,7 @@ type CommandPaletteProps = {
     activePreview: string | null;
     activeCommand: CommandPaletteCommand | null;
     availableCommands: CommandPaletteCommand[];
-    currentSong: SongResult | null;
+    context: CommandPaletteContext;
     isDaylight: boolean;
     isComposing: boolean;
     isExecuting: boolean;
@@ -33,10 +43,27 @@ type CommandPaletteProps = {
     onExecuteActive: () => Promise<boolean>;
     onExecuteMatch: (index: number) => Promise<boolean>;
     onExecutePinnedCommand: (command: CommandPaletteCommand) => Promise<boolean>;
-    onMoveSongToEnd: (index: number) => void;
-    onMoveSongToNext: (index: number) => void;
     onQueryChange: (query: string) => void;
-    onRemoveSong: (index: number) => void;
+    /** Writes query and matchQuery together, bypassing the debounce. */
+    onQueryCommit: (query: string) => void;
+};
+
+// React.lazy identities must be stable across renders, so each surface descriptor keeps one.
+const surfaceComponentCache = new WeakMap<CommandPaletteSurface, React.ComponentType<any>>();
+
+const resolveSurfaceComponent = (surface: CommandPaletteSurface) => {
+    if (!surface.load) {
+        return null;
+    }
+
+    const cached = surfaceComponentCache.get(surface);
+    if (cached) {
+        return cached;
+    }
+
+    const component = React.lazy(surface.load);
+    surfaceComponentCache.set(surface, component);
+    return component;
 };
 
 const groupLabelKey: Record<string, string> = {
@@ -46,6 +73,7 @@ const groupLabelKey: Record<string, string> = {
     panel: 'commandPalette.groupPanel',
     playback: 'commandPalette.groupPlayback',
     visualizer: 'commandPalette.groupVisualizer',
+    grid: 'commandPalette.groupGrid',
 };
 
 const IDLE_PLACEHOLDER_COUNT = 5;
@@ -61,7 +89,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     activePreview,
     activeCommand,
     availableCommands,
-    currentSong,
+    context,
     isDaylight,
     isComposing,
     isExecuting,
@@ -78,16 +106,128 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
     onExecuteActive,
     onExecuteMatch,
     onExecutePinnedCommand,
-    onMoveSongToEnd,
-    onMoveSongToNext,
     onQueryChange,
-    onRemoveSong,
+    onQueryCommit,
 }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [idlePlaceholderIndex, setIdlePlaceholderIndex] = useState(() => Math.floor(Math.random() * IDLE_PLACEHOLDER_COUNT));
     const [isShowingAllCommands, setIsShowingAllCommands] = useState(false);
-    const panelBg = isDaylight ? 'bg-white/70 text-zinc-950' : 'bg-zinc-950/70 text-white';
+    const surface = activeCommand?.surface ?? null;
+    const surfaceArgs = useMemo<CommandSurfaceRenderArgs>(() => ({
+        context,
+        query,
+        setQuery: onQueryCommit,
+        matches,
+        activeIndex,
+        setActiveIndex: onActiveIndexChange,
+        isExecuting,
+        isDaylight,
+        theme,
+        executeMatch: onExecuteMatch,
+        executeCommand: onExecutePinnedCommand,
+        close: onClose,
+    }), [activeIndex, context, isDaylight, isExecuting, matches, onActiveIndexChange, onClose, onExecuteMatch, onExecutePinnedCommand, onQueryCommit, query, theme]);
+    const surfaceBody = surface ? resolveSurfaceComponent(surface) : null;
+
+    // Generic `--` completions for any command that declares flags. Built from the live query, not
+    // the debounced one: a completion list that lags the caret by 120ms feels broken.
+    const syntaxSuggestions = useMemo<SyntaxSuggestion[]>(() => {
+        if (!activeCommand?.syntax) {
+            return [];
+        }
+        // The filter's flags run the track grid's own buttons; the other filtering surfaces have
+        // none. Withheld here rather than in the strip, so the keyboard does not silently complete
+        // a flag that is not on screen.
+        if (activeCommand.id === FILTER_VIEW_COMMAND_ID && !isGridFilterSyntaxAvailable(context)) {
+            return [];
+        }
+        return buildFlagSuggestions(activeCommand.syntax, parseCommandQuery(activeCommand.syntax, query));
+    }, [activeCommand, context, query]);
+    const [syntaxIndex, setSyntaxIndex] = useState(0);
+    // The list changes as the draft is typed, so the highlight has to come back into range.
+    useEffect(() => {
+        setSyntaxIndex(index => (index < syntaxSuggestions.length ? index : 0));
+    }, [syntaxSuggestions]);
+
+    // What `--play` / `--add` would do, for the inline box that has no preview row to say so.
+    // Null whenever no flag is typed, which is also every command that is not the filter.
+    const inlineAction = useMemo(() => (
+        surface?.presentation === 'inline' ? resolveGridFilterAction(query, context) : null
+    ), [context, query, surface]);
+
+    const acceptSyntaxSuggestion = useCallback((suggestion: SyntaxSuggestion) => {
+        onQueryCommit(suggestion.replacement);
+        window.requestAnimationFrame(() => inputRef.current?.focus());
+    }, [onQueryCommit]);
+    // An inline surface draws itself where the control it replaces used to sit, so it needs a host
+    // element from the surface that registered. Without one there is nowhere to put it, and the
+    // overlay is the honest fallback rather than a box floating at a guessed offset.
+    const liveFilterAnchor = surface?.presentation === 'inline'
+        ? context.scope.filter?.getAnchor() ?? null
+        : null;
+    // Closing drops isOpen and the active command in one commit, so reading the live anchor alone
+    // would swap branches mid-close and the box would vanish instead of animating out. Remember the
+    // host until the palette has finished leaving it.
+    const lastFilterAnchorRef = useRef<HTMLElement | null>(null);
+    if (liveFilterAnchor) {
+        lastFilterAnchorRef.current = liveFilterAnchor;
+    }
+    const filterAnchor = isOpen ? liveFilterAnchor : lastFilterAnchorRef.current;
+    const isInlineFrame = Boolean(filterAnchor);
+    // One input, two frames. The overlay's row and the inline pill differ only in dress: the
+    // composition handling, the surface's own inputProps and the executing lock have to be
+    // identical, so they are written once.
+    const renderQueryInput = (className: string) => (
+        <input
+            ref={inputRef}
+            type="text"
+            {...(surface?.inputProps?.(surfaceArgs) ?? {})}
+            value={query}
+            onChange={(event) => {
+                setIsShowingAllCommands(false);
+                onQueryChange(event.target.value);
+            }}
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
+            placeholder={
+                activeCommand
+                    ? (activeCommand.placeholder?.(context) || getCommandDescription(activeCommand, t))
+                    : t(`commandPalette.idlePlaceholders.${idlePlaceholderIndex}`, 'Type anything — there are plenty of commands to try')
+            }
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            name="folia-command-palette-query"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={matches.length > 0}
+            disabled={isExecuting}
+            className={className}
+            style={{ color: 'var(--text-primary)' }}
+        />
+    );
+
+    /**
+     * The short mono hint shown on a row, and the text a click on the all-commands list types
+     * back into the box.
+     *
+     * This used to be `command.keywords[0]`, which only worked while every command carried a
+     * hand-written English alias first in its array. Keywords are synonyms now — some commands
+     * have none, and the first one is not guaranteed to be Latin — so the search index resolves
+     * a primary term instead (first ASCII trigger, else the English title's first word, else id).
+     */
+    const primaryTermOf = useMemo(() => (
+        (command: CommandPaletteCommand) => getCommandPrimaryTerm(availableCommands, command, i18n.language)
+    ), [availableCommands, i18n.language]);
+
+    // A live-preview surface asks for an unblurred backdrop so its own effect stays visible behind
+    // the palette; the panel then has to carry its own legibility, hence the denser fill.
+    const hasClearBackdrop = surface?.backdrop === 'clear';
+    const panelBg = hasClearBackdrop
+        ? (isDaylight ? 'bg-white/95 text-zinc-950' : 'bg-zinc-950/95 text-white')
+        : (isDaylight ? 'bg-white/70 text-zinc-950' : 'bg-zinc-950/70 text-white');
     const itemActiveBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const itemIdleBg = isDaylight ? 'hover:bg-black/5' : 'hover:bg-white/5';
 
@@ -102,7 +242,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         });
 
         return () => window.cancelAnimationFrame(frame);
-    }, [isOpen]);
+        // Switching between the two frames remounts the input, so the focus has to be taken again:
+        // picking `filter-view` out of the overlay's list leaves the caret nowhere otherwise. Every
+        // other surface keeps the overlay's own input, so this is the one crossing that needs it.
+    }, [isOpen, isInlineFrame]);
+
+    // The grid that handed over its keyboard still has to know the box is up — it used to read its
+    // own `showSearchPanel` to keep Enter from opening a card while the listener was typing.
+    const isFilterOpen = isOpen && Boolean(liveFilterAnchor);
+    useEffect(() => {
+        setIsCommandFilterOpen(isFilterOpen);
+        return () => setIsCommandFilterOpen(false);
+    }, [isFilterOpen]);
 
     useEffect(() => {
         if (!isOpen || query !== '' || activeCommand) {
@@ -129,6 +280,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                     setIsShowingAllCommands(false);
                     return;
                 }
+                if (surface?.onEscape?.(surfaceArgs)) {
+                    return;
+                }
                 onClose();
                 return;
             }
@@ -145,12 +299,38 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                 return;
             }
 
-            if (event.key === 'Backspace' && query === '' && activeCommand) {
+            if (event.key === 'Backspace' && query === '' && activeCommand && !isTextEntryTarget(event.target)) {
                 event.preventDefault();
-                const firstKw = activeCommand.keywords[0] || '';
+                const firstKw = primaryTermOf(activeCommand);
                 onActiveCommandChange(null);
                 onQueryChange(firstKw);
                 onActiveIndexChange(0);
+                return;
+            }
+
+            // The `--` completion list owns the keyboard while it is up, ahead of the surface. It
+            // only exists for a half-typed flag, which is a moment the surface has nothing to do
+            // with, and Enter there has to complete the flag rather than run a spent command.
+            if (syntaxSuggestions.length > 0) {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const step = event.key === 'ArrowDown' ? 1 : -1;
+                    setSyntaxIndex(index => (
+                        (index + step + syntaxSuggestions.length) % syntaxSuggestions.length
+                    ));
+                    return;
+                }
+                if (event.key === 'Enter' || event.key === 'Tab') {
+                    event.preventDefault();
+                    acceptSyntaxSuggestion(syntaxSuggestions[syntaxIndex] ?? syntaxSuggestions[0]);
+                    return;
+                }
+            }
+
+            // Surfaces get first refusal on keys: a grid needs different arrow semantics than
+            // the default one-per-step list, and only the surface knows its own layout.
+            if (surface?.onKeyDown?.(event, surfaceArgs)) {
+                event.preventDefault();
                 return;
             }
 
@@ -174,15 +354,41 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [activeIndex, isOpen, isShowingAllCommands, matches.length, onActiveIndexChange, onClose, onExecuteActive, query, activeCommand, onActiveCommandChange, onQueryChange, isExecuting, isComposing]);
+    }, [acceptSyntaxSuggestion, activeIndex, activeCommand, isComposing, isExecuting, isOpen, isShowingAllCommands, matches.length, onActiveCommandChange, onActiveIndexChange, onClose, onExecuteActive, onQueryChange, query, surface, surfaceArgs, syntaxIndex, syntaxSuggestions]);
+
+    if (filterAnchor) {
+        return (
+            <CommandPaletteInlineFrame
+                anchor={filterAnchor}
+                isOpen={isOpen}
+                query={query}
+                renderInput={renderQueryInput}
+                onQueryCommit={onQueryCommit}
+                onClose={onClose}
+                focusInput={() => inputRef.current?.focus()}
+                suggestions={syntaxSuggestions}
+                syntaxIndex={syntaxIndex}
+                onAcceptSuggestion={acceptSyntaxSuggestion}
+                onHoverSuggestion={setSyntaxIndex}
+                pendingAction={inlineAction}
+                isDaylight={isDaylight}
+                theme={theme}
+                t={t}
+            />
+        );
+    }
 
     return (
         <AnimatePresence>
             {isOpen && (
                 <motion.div
                     data-folia-keyboard-window="true"
-                    className="fixed inset-0 z-[150] flex items-start justify-center px-4 pt-[18vh] backdrop-blur-md"
-                    style={{ backgroundColor: isDaylight ? 'rgba(250,250,249,0.46)' : 'rgba(0,0,0,0.48)' }}
+                    className={`fixed inset-0 z-[150] flex items-start justify-center px-4 pt-[18vh] ${hasClearBackdrop ? '' : 'backdrop-blur-md'}`}
+                    style={{
+                        backgroundColor: hasClearBackdrop
+                            ? (isDaylight ? 'rgba(250,250,249,0.12)' : 'rgba(0,0,0,0.16)')
+                            : (isDaylight ? 'rgba(250,250,249,0.46)' : 'rgba(0,0,0,0.48)'),
+                    }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -237,39 +443,13 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                             onActiveIndexChange(0);
                                         }}
                                         className="hover:opacity-100 opacity-60 transition-opacity disabled:opacity-30 disabled:pointer-events-none"
-                                        aria-label="Clear active command"
+                                        aria-label={t('ui.clearActiveCommand')}
                                     >
                                         <X size={12} />
                                     </button>
                                 </div>
                             )}
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={query}
-                                onChange={(event) => {
-                                    setIsShowingAllCommands(false);
-                                    onQueryChange(event.target.value);
-                                }}
-                                onCompositionStart={onCompositionStart}
-                                onCompositionEnd={(event) => onCompositionEnd(event.currentTarget.value)}
-                                placeholder={
-                                    activeCommand
-                                        ? (activeCommand.placeholder || getCommandDescription(activeCommand, t))
-                                        : t(`commandPalette.idlePlaceholders.${idlePlaceholderIndex}`, 'Type anything — there are plenty of commands to try')
-                                }
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                spellCheck={false}
-                                name="folia-command-palette-query"
-                                role="combobox"
-                                aria-autocomplete="list"
-                                aria-expanded={matches.length > 0}
-                                disabled={isExecuting}
-                                className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50"
-                                style={{ color: 'var(--text-primary)' }}
-                            />
+                            {renderQueryInput('min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:opacity-45 disabled:opacity-50')}
                             <button
                                 type="button"
                                 onClick={() => setIsShowingAllCommands(current => !current)}
@@ -291,87 +471,58 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 
                         {/* Removed activePreview top panel, it is now shown inline in the list items description */}
 
+                        {/* The palette doubles as a canvas for UI-bearing commands, so this box is the
+                            one fixed dimension every surface renders into. It must stay CSS-resolved:
+                            no measurement, no content-driven height. commandPaletteSizing.spec.ts guards it. */}
                         <div
+                            data-testid="command-palette-body"
                             className="h-[min(496px,50vh)] overflow-y-auto p-2"
                             onTouchStart={() => inputRef.current?.blur()}
                         >
+                            <CommandPaletteSyntaxHints
+                                suggestions={syntaxSuggestions}
+                                activeIndex={syntaxIndex}
+                                onAccept={acceptSyntaxSuggestion}
+                                onHover={setSyntaxIndex}
+                                isDaylight={isDaylight}
+                                theme={theme}
+                                t={t}
+                            />
                             {isShowingAllCommands ? (
-                                <div>
-                                    <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium opacity-60">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsShowingAllCommands(false)}
-                                            className={`rounded-full p-1 transition-colors ${isDaylight ? 'hover:bg-black/10' : 'hover:bg-white/10'}`}
-                                            aria-label={t('commandPalette.backToSearch') || 'Back to search'}
-                                        >
-                                            <ArrowLeft size={14} />
-                                        </button>
-                                        <span>{t('commandPalette.allCommands') || 'All commands'}</span>
-                                        <span className="ml-auto tabular-nums opacity-60">{availableCommands.length}</span>
-                                    </div>
-                                    {availableCommands.map(command => {
-                                        const groupLabel = t(groupLabelKey[command.group] || 'commandPalette.groupOther') || command.group;
-                                        const title = getCommandTitle(command, t);
-                                        const description = getCommandDescription(command, t);
-                                        const Icon = command.icon ?? Command;
-                                        return (
-                                            <button
-                                                key={command.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    onQueryChange(command.keywords[0] ?? command.title);
-                                                    onActiveIndexChange(0);
-                                                    setIsShowingAllCommands(false);
-                                                    window.requestAnimationFrame(() => inputRef.current?.focus());
-                                                }}
-                                                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors ${itemIdleBg}`}
-                                            >
-                                                <div
-                                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border"
-                                                    style={{
-                                                        borderColor: isDaylight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.12)',
-                                                        color: theme.accentColor,
-                                                    }}
-                                                >
-                                                    <Icon size={16} />
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="truncate text-sm font-medium">{title}</span>
-                                                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] opacity-50">{groupLabel}</span>
-                                                    </div>
-                                                    <div className="mt-0.5 truncate text-xs opacity-50">{description}</div>
-                                                </div>
-                                            </button>
-                                        );
+                                <CommandPaletteAllCommandsList
+                                    commands={availableCommands}
+                                    groupLabelKey={groupLabelKey}
+                                    isDaylight={isDaylight}
+                                    itemIdleBg={itemIdleBg}
+                                    theme={theme}
+                                    t={t}
+                                    onBack={() => setIsShowingAllCommands(false)}
+                                    onPick={(command) => {
+                                        onQueryChange(primaryTermOf(command));
+                                        onActiveIndexChange(0);
+                                        setIsShowingAllCommands(false);
+                                        window.requestAnimationFrame(() => inputRef.current?.focus());
+                                    }}
+                                />
+                            ) : surfaceBody ? (
+                                <Suspense fallback={<div className="flex h-full items-center justify-center opacity-40"><Loader2 size={20} className="animate-spin" /></div>}>
+                                    {React.createElement(surfaceBody, {
+                                        ...surface?.mapProps?.(surfaceArgs),
+                                        refocusInput: () => window.requestAnimationFrame(() => inputRef.current?.focus()),
                                     })}
-                                </div>
+                                </Suspense>
                             ) : matches.length === 0 ? (
                                 <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center opacity-50">
                                     <Command size={26} />
                                     <div className="text-sm">{t('commandPalette.empty') || 'No matching command'}</div>
                                 </div>
-                            ) : activeCommand?.id === 'queue' ? (
-                                <CommandPaletteQueueList
-                                    activeIndex={activeIndex}
-                                    currentSong={currentSong}
-                                    isDaylight={isDaylight}
-                                    isExecuting={isExecuting}
-                                    matches={matches}
-                                    query={query}
-                                    onActiveIndexChange={onActiveIndexChange}
-                                    onExecuteMatch={onExecuteMatch}
-                                    onMoveSongToEnd={onMoveSongToEnd}
-                                    onMoveSongToNext={onMoveSongToNext}
-                                    onRemoveSong={onRemoveSong}
-                                />
                             ) : (
                                 matches.map((match, index) => {
                                     const isActive = index === activeIndex;
                                     const groupLabel = t(groupLabelKey[match.command.group] || 'commandPalette.groupOther') || match.command.group;
                                     const title = getCommandTitle(match.command, t);
                                     const displayDescription = match.previewText || getCommandDescription(match.command, t);
-                                    const commandHint = match.command.keywords[0] ?? match.command.id;
+                                    const commandHint = primaryTermOf(match.command);
                                     const Icon = match.command.icon ?? Command;
                                     return (
                                         <button

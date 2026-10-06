@@ -1,42 +1,47 @@
-import React, { useEffect, useState } from 'react';
-import { Monitor, PlayCircle, RefreshCw, Settings2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { AudioLines, ChevronRight, ListFilter, Monitor, PlayCircle, Radio, RefreshCw, Settings2, Timer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { LocalLyricsPriority, QueueAddBehavior, Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import type { LocalLyricsPriority, QueueAddBehavior, ReplayGainMode, Theme } from '../../../types';
+import { useAudioOutputDevices } from '../../../hooks/useAudioOutputDevices';
 import { CustomSelect } from '../../shared/CustomSelect';
 import { LYRIC_MATCH_SOURCES } from '../../../utils/lyrics/lyricMatchSources';
 import { getLyricProviderPreferenceLabel } from '../../../utils/lyrics/lyricSourceLabels';
+import TransitionSettingsSection from './TransitionSettingsSection';
+import LocalLyricFormatOrderSetting from './LocalLyricFormatOrderSetting';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { isNeteaseScrobbleReady } from '../../../services/onlineMusic/playbackReportGate';
 
 // src/components/modal/settings/PlaybackSettingsSubview.tsx
 // Playback behavior and output-device settings extracted from the global settings modal.
-
-interface AudioOutputDeviceOption {
-    deviceId: string;
-    label: string;
-}
 
 interface MediaDevicesWithAudioOutput extends MediaDevices {
     selectAudioOutput?: (options?: { deviceId?: string; }) => Promise<{ deviceId: string; label?: string; }>;
 }
 
 type PlaybackSettingsSubviewProps = {
-    isOpen: boolean;
     isDaylight: boolean;
     onAudioOutputDeviceChange: (deviceId: string) => Promise<boolean> | boolean;
+    onOpenGlobalLyricOffsetSettings: () => void;
+    onOpenLyricFilterSettings: () => void;
+    replayGainMode: ReplayGainMode;
+    onReplayGainModeChange: (mode: ReplayGainMode) => void;
     settingsCardClass: string;
     theme?: Theme;
     utilityGhostButtonClass: string;
 };
 
-const stopMediaStream = (stream: MediaStream | null) => {
-    stream?.getTracks().forEach(track => track.stop());
-};
-
 const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
-    isOpen,
     isDaylight,
     onAudioOutputDeviceChange,
+    onOpenGlobalLyricOffsetSettings,
+    onOpenLyricFilterSettings,
+    replayGainMode,
+    onReplayGainModeChange,
     settingsCardClass,
     theme,
     utilityGhostButtonClass,
@@ -44,42 +49,72 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
     const { t } = useTranslation();
     const {
         audioOutputDeviceId,
+        enableTranscodeFallback,
+        neteaseScrobbleEnabled,
+        playbackFadeEnabled,
+        queueAddBehavior,
+        onToggleTranscodeFallback,
+        onToggleNeteaseScrobble,
+        onTogglePlaybackFade,
+        onQueueAddBehaviorChange,
+    } = useAudioSettingsStore(useShallow(state => ({
+        audioOutputDeviceId: state.audioOutputDeviceId,
+        enableTranscodeFallback: state.enableTranscodeFallback,
+        neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
+        playbackFadeEnabled: state.playbackFadeEnabled,
+        queueAddBehavior: state.queueAddBehavior,
+        onToggleTranscodeFallback: state.handleToggleTranscodeFallback,
+        onToggleNeteaseScrobble: state.handleToggleNeteaseScrobble,
+        onTogglePlaybackFade: state.handleTogglePlaybackFade,
+        onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
+    })));
+    // Subscribed to rather than read once: the panel has to grey out the moment the NetEase account
+    // signs out. `isNeteaseScrobbleReady` is the same predicate the command palette gates on, so the
+    // two can never disagree about whether the toggle may be flipped.
+    useOnlineProviderAccountStore(state => state.accounts.netease?.status);
+    const canReportNeteasePlayback = isNeteaseScrobbleReady();
+    const {
         autoUseBestLyric,
         preferredAlternativeLyricSource,
         localLyricsPriority,
-        queueAddBehavior,
+        globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange,
         onLocalLyricsPriorityChange,
-        onQueueAddBehaviorChange,
-    } = useSettingsUiStore(useShallow(state => ({
-        audioOutputDeviceId: state.audioOutputDeviceId,
+    } = useLyricSettingsStore(useShallow(state => ({
         autoUseBestLyric: state.autoUseBestLyric,
         preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
         localLyricsPriority: state.localLyricsPriority,
-        queueAddBehavior: state.queueAddBehavior,
+        globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
         onToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
         onPreferredAlternativeLyricSourceChange: state.handleSetPreferredAlternativeLyricSource,
         onLocalLyricsPriorityChange: state.handleSetLocalLyricsPriority,
-        onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
-    const [audioOutputDevices, setAudioOutputDevices] = useState<AudioOutputDeviceOption[]>([]);
-    const [isAudioOutputDevicesLoading, setIsAudioOutputDevicesLoading] = useState(false);
-    const [audioOutputDevicesError, setAudioOutputDevicesError] = useState<string | null>(null);
+    const {
+        devices: audioOutputDevices,
+        ensureLoaded: ensureAudioOutputDevicesLoaded,
+        errorKey: audioOutputDevicesErrorKey,
+        hasLoaded: hasLoadedAudioOutputDevices,
+        isLoading: isAudioOutputDevicesLoading,
+        isSupported: supportsAudioOutputSelection,
+        refresh: refreshAudioOutputDevices,
+        selectedDeviceLabel: selectedAudioOutputLabel,
+        setErrorKey: setAudioOutputDevicesErrorKey,
+    } = useAudioOutputDevices(audioOutputDeviceId);
     const [isSelectingAudioOutput, setIsSelectingAudioOutput] = useState(false);
     const mediaDevicesWithAudioOutput = navigator.mediaDevices as MediaDevicesWithAudioOutput | undefined;
-    const supportsAudioOutputSelection = typeof window !== 'undefined'
-        && typeof navigator !== 'undefined'
-        && typeof navigator.mediaDevices?.enumerateDevices === 'function'
-        && 'setSinkId' in HTMLMediaElement.prototype;
     const accentOutlineColor = theme?.accentColor || (isDaylight ? '#44403c' : '#f4f4f5');
     const toggleOffBackgroundClass = isDaylight ? 'bg-zinc-300/90' : 'bg-white/10';
 
-    const renderToggle = (checked: boolean, onChange: () => void) => (
+    // `disabled` rather than a `pointer-events-none` wrapper: that only stops the mouse, leaving the
+    // button in the tab order and still operable with Enter or Space. Same shape as the one in
+    // DesktopSettingsSubview.
+    const renderToggle = (checked: boolean, onChange: () => void, disabled?: boolean) => (
         <button
             type="button"
             onClick={onChange}
-            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${checked ? '' : toggleOffBackgroundClass}`}
+            disabled={disabled}
+            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-40 ${checked ? '' : toggleOffBackgroundClass}`}
             style={{ backgroundColor: checked ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
             aria-pressed={checked}
         >
@@ -100,50 +135,8 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
             }
     );
 
-    const loadAudioOutputDevices = async () => {
-        if (!supportsAudioOutputSelection) {
-            setAudioOutputDevices([]);
-            setAudioOutputDevicesError(t('options.audioOutputUnsupported'));
-            return;
-        }
-
-        setIsAudioOutputDevicesLoading(true);
-        setAudioOutputDevicesError(null);
-
-        let permissionProbeStream: MediaStream | null = null;
-
-        try {
-            let devices = await navigator.mediaDevices.enumerateDevices();
-            const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
-            const hasMissingLabels = audioOutputs.some(device => !device.label?.trim());
-
-            if (hasMissingLabels && typeof navigator.mediaDevices.getUserMedia === 'function') {
-                try {
-                    permissionProbeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    devices = await navigator.mediaDevices.enumerateDevices();
-                } catch (permissionError) {
-                    console.warn('[PlaybackSettingsSubview] Audio permission probe failed', permissionError);
-                }
-            }
-
-            const outputs = devices
-                .filter(device => device.kind === 'audiooutput')
-                .map((device, index) => ({
-                    deviceId: device.deviceId,
-                    label: device.label || `${t('options.audioOutputUnnamed')} ${index + 1}`,
-                }));
-            setAudioOutputDevices(outputs);
-        } catch (error) {
-            console.error('[PlaybackSettingsSubview] Failed to enumerate audio output devices', error);
-            setAudioOutputDevicesError(t('options.audioOutputLoadFailed'));
-        } finally {
-            stopMediaStream(permissionProbeStream);
-            setIsAudioOutputDevicesLoading(false);
-        }
-    };
-
     const handleSelectAudioOutputDevice = async (deviceId: string) => {
-        setAudioOutputDevicesError(null);
+        setAudioOutputDevicesErrorKey(null);
 
         if (!deviceId) {
             await onAudioOutputDeviceChange('');
@@ -160,33 +153,39 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
             const selected = await mediaDevicesWithAudioOutput.selectAudioOutput({ deviceId });
             const applied = await onAudioOutputDeviceChange(selected.deviceId);
             if (applied) {
-                await loadAudioOutputDevices();
+                await refreshAudioOutputDevices();
             } else {
-                setAudioOutputDevicesError(t('options.audioOutputSelectFailed'));
+                setAudioOutputDevicesErrorKey('options.audioOutputSelectFailed');
             }
         } catch (error) {
             console.error('[PlaybackSettingsSubview] Failed to select audio output device', error);
-            setAudioOutputDevicesError(t('options.audioOutputSelectFailed'));
+            setAudioOutputDevicesErrorKey('options.audioOutputSelectFailed');
         } finally {
             setIsSelectingAudioOutput(false);
         }
     };
 
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
+    const audioOutputOptions = [
+        { value: '', label: t('options.audioOutputDefault') },
+        ...audioOutputDevices.map((device, index) => ({
+            value: device.deviceId,
+            label: device.label || `${t('options.audioOutputUnnamed')} ${index + 1}`,
+        })),
+    ];
 
-        void loadAudioOutputDevices();
-    }, [isOpen]);
+    // The list is enumerated on demand, so a device saved in an earlier session needs its own entry
+    // until then; without it the picker would look empty while a non-default output is active.
+    if (audioOutputDeviceId && !audioOutputDevices.some(device => device.deviceId === audioOutputDeviceId)) {
+        audioOutputOptions.push({
+            value: audioOutputDeviceId,
+            label: selectedAudioOutputLabel || t('options.audioOutputUnnamed'),
+        });
+    }
 
     return (
         <div className="space-y-5">
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <PlayCircle size={14} />                    {t('options.queueSettings')}
-
-                </h3>
+            <SettingsAnchor anchorId="queueSettings" label={t('options.queueSettings')}>
+                <SettingsSectionHeading icon={PlayCircle} label={t('options.queueSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -221,12 +220,73 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         })}
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.lyrics')}
-                </h3>
+            <SettingsAnchor anchorId="scrobbleSettings" label={t('options.scrobbleSettings')}>
+                <SettingsSectionHeading icon={Radio} label={t('options.scrobbleSettings')} />
+                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.neteaseScrobble')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.neteaseScrobbleDesc')}
+                            </div>
+                            {!canReportNeteasePlayback && (
+                                <div className="text-[11px] max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.neteaseScrobbleSignInHint')}
+                                </div>
+                            )}
+                        </div>
+                        {renderToggle(
+                            neteaseScrobbleEnabled,
+                            () => onToggleNeteaseScrobble(!neteaseScrobbleEnabled),
+                            !canReportNeteasePlayback,
+                        )}
+                    </div>
+                </div>
+            </SettingsAnchor>
+
+            <TransitionSettingsSection
+                isDaylight={isDaylight}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
+            />
+
+            <SettingsAnchor anchorId="replayGainSettings" label={t('options.replayGainSettings')}>
+                <SettingsSectionHeading icon={AudioLines} label={t('options.replayGainSettings')} />
+                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="space-y-1">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {t('options.replayGainMode')}
+                        </div>
+                        <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.replayGainModeDesc')}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        {([
+                            { value: 'off', label: t('localMusic.replayGainOff') },
+                            { value: 'track', label: t('localMusic.replayGainTrack') },
+                            { value: 'album', label: t('localMusic.replayGainAlbum') },
+                        ] as Array<{ value: ReplayGainMode; label: string }>).map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => onReplayGainModeChange(option.value)}
+                                className="rounded-xl border px-3 py-2.5 text-center text-sm font-medium transition-colors"
+                                style={getAccentOptionStyle(replayGainMode === option.value)}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </SettingsAnchor>
+
+            <SettingsAnchor anchorId="lyrics" label={t('options.lyrics')}>
+                <SettingsSectionHeading icon={Settings2} label={t('options.lyrics')} />
                 <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
                     <div className="p-4 flex items-center justify-between gap-4">
                         <div className="space-y-1">
@@ -274,6 +334,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                             })}
                         </div>
                     </div>
+                    <LocalLyricFormatOrderSetting getOptionStyle={getAccentOptionStyle} />
                     <div className="p-4 space-y-3 border-t" style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}>
                             <div className="space-y-1">
                                 <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -303,14 +364,79 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 })}
                             </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={onOpenGlobalLyricOffsetSettings}
+                        className="w-full p-4 border-t text-left transition-colors hover:bg-white/8"
+                        style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <Timer size={14} />
+                                    {t('options.globalLyricTimelineOffset')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.globalLyricTimelineOffsetDesc')}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono text-xs opacity-70" style={{ color: 'var(--text-primary)' }}>
+                                    {globalLyricTimelineOffsetMs > 0 ? `+${globalLyricTimelineOffsetMs}` : globalLyricTimelineOffsetMs}ms
+                                </span>
+                                <ChevronRight size={18} className="opacity-60" style={{ color: 'var(--text-primary)' }} />
+                            </div>
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onOpenLyricFilterSettings}
+                        className="w-full p-4 border-t text-left transition-colors hover:bg-white/8"
+                        style={{ borderColor: 'var(--border-primary, rgba(255,255,255,0.06))' }}
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <ListFilter size={14} />
+                                    {t('options.lyricFilterRegex')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.lyricFilterRegexDesc')}
+                                </div>
+                            </div>
+                            <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
+                        </div>
+                    </button>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.audioOutputSettings')}
-                </h3>
+            <SettingsAnchor anchorId="audioOutputSettings" label={t('options.audioOutputSettings')}>
+                <SettingsSectionHeading icon={Monitor} label={t('options.audioOutputSettings')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.playbackFade')}
+                            </div>
+                            <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.playbackFadeDesc')}
+                            </div>
+                        </div>
+                        {renderToggle(playbackFadeEnabled, () => onTogglePlaybackFade(!playbackFadeEnabled))}
+                    </div>
+                    {window.electron?.requestTranscodeFallback && (
+                        <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.transcodeFallback')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.transcodeFallbackDesc')}
+                                </div>
+                            </div>
+                            {renderToggle(enableTranscodeFallback, () => onToggleTranscodeFallback(!enableTranscodeFallback))}
+                        </div>
+                    )}
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -322,7 +448,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         </div>
                         <button
                             type="button"
-                            onClick={() => void loadAudioOutputDevices()}
+                            onClick={() => void refreshAudioOutputDevices()}
                             disabled={!supportsAudioOutputSelection || isAudioOutputDevicesLoading || isSelectingAudioOutput}
                             className={`shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs transition-colors ${utilityGhostButtonClass} disabled:cursor-not-allowed disabled:opacity-45`}
                             style={{ color: 'var(--text-primary)' }}
@@ -343,14 +469,9 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                 onChange={(val) => {
                                     void handleSelectAudioOutputDevice(val);
                                 }}
-                                options={[
-                                    { value: '', label: t('options.audioOutputDefault') },
-                                    ...audioOutputDevices.map((device, index) => ({
-                                        value: device.deviceId,
-                                        label: device.label || `${t('options.audioOutputUnnamed')} ${index + 1}`,
-                                    })),
-                                ]}
-                                disabled={isAudioOutputDevicesLoading || isSelectingAudioOutput}
+                                options={audioOutputOptions}
+                                onOpen={ensureAudioOutputDevicesLoaded}
+                                disabled={isSelectingAudioOutput}
                                 isDaylight={isDaylight}
                                 theme={theme}
                             />
@@ -363,13 +484,13 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                                         : (t('options.audioOutputDefaultDesc'))}
                             </div>
 
-                            {audioOutputDevicesError && (
+                            {audioOutputDevicesErrorKey && (
                                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                    {audioOutputDevicesError}
+                                    {t(audioOutputDevicesErrorKey)}
                                 </div>
                             )}
 
-                            {!isAudioOutputDevicesLoading && audioOutputDevices.length === 0 && !audioOutputDevicesError && (
+                            {hasLoadedAudioOutputDevices && !isAudioOutputDevicesLoading && audioOutputDevices.length === 0 && !audioOutputDevicesErrorKey && (
                                 <div className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                                     {t('options.audioOutputEmpty')}
                                 </div>
@@ -377,7 +498,7 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         </div>
                     )}
                 </div>
-            </section>
+            </SettingsAnchor>
         </div>
     );
 };

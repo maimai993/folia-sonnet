@@ -7,7 +7,17 @@ import {
     resolveBgModeTheme
 } from '@/hooks/themeControllerState';
 import { FALLBACK_AI_DUAL_THEME } from '@/services/themeSanitizer';
+import { getContrastRatio, getHueDistance, hexToHsl } from '@/utils/themeColorMath';
 import type { DualTheme, Theme } from '@/types';
+
+// Deterministic stand-in for Math.random so the generated theme is reproducible in assertions.
+const createSequenceRandom = (seed: number) => {
+    let state = seed;
+    return () => {
+        state = (state * 16807) % 2147483647;
+        return state / 2147483647;
+    };
+};
 
 const defaultTheme: Theme = {
     name: 'Midnight',
@@ -272,28 +282,43 @@ describe('themeControllerState', () => {
 
     it('builds a built-in dual theme from warm cover colors', () => {
         const builtinTheme = buildBuiltinDualTheme({
-            coverColors: ['rgb(220, 110, 70)', '#f97316']
+            coverColors: ['rgb(220, 110, 70)', '#f97316'],
+            random: createSequenceRandom(7),
         });
 
         expect(builtinTheme.dark.name).toContain('Built-in');
         expect(builtinTheme.light.name).toContain('Built-in');
+        expect(builtinTheme.dark.name).not.toBe(builtinTheme.light.name);
+        // Light and dark are the same theme seen day and night: same Chinese prefix, different suffix.
+        expect(builtinTheme.dark.name.slice(0, 2)).toBe(builtinTheme.light.name.slice(0, 2));
         expect(builtinTheme.dark.provider).toBe('Built-in');
         expect(builtinTheme.light.provider).toBe('Built-in');
-        expect(builtinTheme.dark.backgroundColor).toMatch(/^#/);
-        expect(builtinTheme.light.backgroundColor).toMatch(/^#/);
+        expect(builtinTheme.dark.backgroundColor).toMatch(/^#[0-9a-f]{6}$/);
+        expect(builtinTheme.light.backgroundColor).toMatch(/^#[0-9a-f]{6}$/);
         expect(builtinTheme.dark.backgroundColor).not.toBe(builtinTheme.light.backgroundColor);
-        expect(builtinTheme.dark.primaryColor).toBe('#f8fafc');
-        expect(builtinTheme.light.primaryColor).toBe('#111827');
+
+        for (const theme of [builtinTheme.light, builtinTheme.dark]) {
+            expect(getContrastRatio(theme.primaryColor, theme.backgroundColor)).toBeGreaterThanOrEqual(9);
+            expect(getContrastRatio(theme.accentColor, theme.backgroundColor)).toBeGreaterThanOrEqual(3.2);
+            expect(getContrastRatio(theme.secondaryColor, theme.backgroundColor)).toBeGreaterThanOrEqual(4.5);
+            expect(theme.description?.length).toBeGreaterThanOrEqual(15);
+            expect(theme.description?.length).toBeLessThanOrEqual(30);
+        }
     });
 
-    it('switches built-in palette families when the cover color hue changes', () => {
+    it('follows the cover hue instead of snapping onto a fixed palette family', () => {
         const warmTheme = buildBuiltinDualTheme({
-            coverColors: ['rgb(235, 120, 60)']
+            coverColors: ['rgb(235, 120, 60)'],
+            random: createSequenceRandom(11),
         });
         const coolTheme = buildBuiltinDualTheme({
-            coverColors: ['rgb(40, 150, 220)']
+            coverColors: ['rgb(40, 150, 220)'],
+            random: createSequenceRandom(11),
         });
 
+        // rgb(235, 120, 60) sits near 21deg, rgb(40, 150, 220) near 203deg.
+        expect(getHueDistance(hexToHsl(warmTheme.dark.backgroundColor)!.h, 21)).toBeLessThan(30);
+        expect(getHueDistance(hexToHsl(coolTheme.dark.backgroundColor)!.h, 203)).toBeLessThan(30);
         expect(warmTheme.dark.name).not.toBe(coolTheme.dark.name);
         expect(warmTheme.light.accentColor).not.toBe(coolTheme.light.accentColor);
     });

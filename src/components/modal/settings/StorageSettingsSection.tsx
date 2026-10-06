@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Cloud, Command, Database, Disc3, Download, FolderOpen, Layers, Loader2, Pencil, PlayCircle, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { AudioWaveform, Check, Cloud, Command, Database, Disc3, Download, FolderOpen, HardDrive, Layers, Loader2, Pencil, PlayCircle, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
 import { getSyncConfig, getSyncStatus, saveSyncConfig, setSyncStatus, subscribeSyncConfig, subscribeSyncStatus } from '../../../services/sync/syncConfig';
@@ -7,11 +7,19 @@ import { exportSyncLibraryBundle, importSyncLibraryBundle, isSyncLibraryExportBu
 import { createSyncLibraryZipBlob, readSyncLibraryZipFile } from '../../../services/sync/syncArchive';
 import { SYNC_PROVIDER, type SyncProviderConfig, type SyncRuntimeStatus } from '../../../services/sync/syncTypes';
 import { createSafeObjectUrl } from '../../../utils/blobGuards';
+import { formatLocalDateTimeStamp } from '../../../utils/downloadFileName';
+import { CustomSelect } from '../../shared/CustomSelect';
+import LocalLibraryWatchSection from './LocalLibraryWatchSection';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { openCommandPaletteCommand } from '../../../stores/useAppViewStore';
+import { closeSettings } from '../../../stores/useSettingsModalStore';
+import { LYRIC_EXPORT_COMMAND_ID } from '../../command-palette/commands/lyricExportCommands';
 
 // src/components/modal/settings/StorageSettingsSection.tsx
 // Shared storage and media cache settings used by the main options page and storage subview.
 
-type CacheCategory = 'playlist' | 'lyrics' | 'cover' | 'media';
+type CacheCategory = 'playlist' | 'lyrics' | 'cover' | 'media' | 'analysis';
 
 type CacheSizes = Record<CacheCategory, string>;
 
@@ -23,11 +31,14 @@ type StorageSettingsSectionProps = {
     enableMediaCache: boolean;
     errorTextColor: string;
     isCleaning: string | null;
+    isDaylight?: boolean;
     isElectron: boolean;
+    mediaCacheLimitGb: number;
     mediaCount: number;
     onChooseCacheDirectory: () => void;
     onClear: (category: CacheCategory) => void;
     onClearAll: () => void;
+    onSetMediaCacheLimitGb: (gigabytes: number) => void;
     onToggleMediaCache: (enabled: boolean) => void;
     settingsCardClass: string;
     settingsIconClass?: string;
@@ -44,11 +55,14 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
     enableMediaCache,
     errorTextColor,
     isCleaning,
+    isDaylight = false,
     isElectron,
+    mediaCacheLimitGb,
     mediaCount,
     onChooseCacheDirectory,
     onClear,
     onClearAll,
+    onSetMediaCacheLimitGb,
     onToggleMediaCache,
     settingsCardClass,
     settingsIconClass,
@@ -70,11 +84,18 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
     const iconClass = useInsetCacheRows && settingsIconClass
         ? `p-2 rounded-lg opacity-60 ${settingsIconClass}`
         : 'p-2 bg-white/5 rounded-lg opacity-60';
+    // Zero is "no ceiling", which is a real answer rather than a missing one, so it gets a label
+    // instead of an empty field.
+    const cacheLimitOptions = [1, 2, 5, 10, 20, 50, 0].map((gigabytes) => ({
+        value: String(gigabytes),
+        label: gigabytes === 0 ? (t('options.mediaCacheLimitNone') || 'No limit') : `${gigabytes} GB`,
+    }));
     const cacheItems = [
         { id: 'playlist' as const, label: t('options.playlistData') || 'Playlist Data', size: cacheSizes.playlist, icon: Layers },
         { id: 'lyrics' as const, label: t('options.lyrics') || 'Lyrics', size: cacheSizes.lyrics, icon: Command },
         { id: 'cover' as const, label: t('options.covers') || 'Covers', size: cacheSizes.cover, icon: Disc3 },
         { id: 'media' as const, label: t('options.mediaFiles') || 'Media Files', size: cacheSizes.media, icon: PlayCircle },
+        { id: 'analysis' as const, label: t('options.analysisData') || 'Analysis Data', size: cacheSizes.analysis, icon: AudioWaveform },
     ];
     const syncConfigDirty = JSON.stringify(syncConfig) !== JSON.stringify(draftSyncConfig);
     const syncConfigured = Boolean(draftSyncConfig.workerBaseUrl.trim() && draftSyncConfig.authToken.trim());
@@ -126,10 +147,10 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                 setSyncConfig(getSyncConfig());
                 setSyncStatus({ state: 'success', lastSyncAt: new Date().toISOString(), lastError: null });
                 setTestResult('success');
-                setSyncSummaryMsg('测试成功 (Test Successful)');
+                setSyncSummaryMsg(t('ui.storage.syncTestSuccess'));
             } else {
                 setTestResult('error');
-                setSyncSummaryMsg('连接失败或凭证无效 (Connection Failed)');
+                setSyncSummaryMsg(t('ui.storage.syncTestFailed'));
             }
         } catch (error) {
             setTestResult('error');
@@ -150,7 +171,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
         try {
             const summary = await syncNow({ syncThemes: true, applyRemoteSettings: false, pushSettings: false });
             if (summary) {
-                setSyncSummaryMsg(`主题同步完成。上传 ${summary.uploadedThemeCount} 个，下载 ${summary.downloadedThemeCount} 个，本地 ${summary.checkedLocalThemeCount} 个，共处理 ${summary.diffBucketCount} 个差异桶。`);
+                setSyncSummaryMsg(t('ui.storage.syncThemesComplete', { uploaded: summary.uploadedThemeCount, downloaded: summary.downloadedThemeCount, local: summary.checkedLocalThemeCount, diff: summary.diffBucketCount }));
             }
         } finally {
             setSyncAction('idle');
@@ -167,9 +188,9 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
             const summary = await syncNow({ syncThemes: false, applyRemoteSettings: true, pushSettings: true });
             if (summary) {
                 const parts = [];
-                if (summary.appliedRemoteSettings) parts.push('已拉取并应用云端设置');
-                if (summary.pushedLocalSettings) parts.push('已向云端推送本地最新设置');
-                setSyncSummaryMsg(parts.length > 0 ? `视觉设置同步完成。${parts.join('，')}。` : '视觉设置与云端一致，无需同步。');
+                if (summary.appliedRemoteSettings) parts.push(t('ui.storage.syncAppliedRemote'));
+                if (summary.pushedLocalSettings) parts.push(t('ui.storage.syncPushedLocal'));
+                setSyncSummaryMsg(parts.length > 0 ? t('ui.storage.syncSettingsComplete', { details: parts.join(', ') }) : t('ui.storage.syncSettingsNoChange'));
             }
         } finally {
             setSyncAction('idle');
@@ -185,7 +206,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
             if (!url) throw new TypeError('Sync export must produce a Blob');
             const link = document.createElement('a');
             link.href = url;
-            link.download = `folia-sync-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+            link.download = `folia-sync-${formatLocalDateTimeStamp()}.zip`;
             link.click();
             URL.revokeObjectURL(url);
         } finally {
@@ -225,7 +246,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
 
     return (
         <>
-            <section>
+            <SettingsAnchor anchorId="cacheDetails" label={t('options.cacheDetails') || 'Cache Details'}>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                     <Database size={14} /> {t('options.cacheDetails') || 'Cache Storage'}
                     <button
@@ -250,23 +271,38 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                     <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>{item.size}</div>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => onClear(item.id)}
-                                disabled={isCleaning === item.id}
-                                className={`p-2 hover:bg-white/10 rounded-lg ${errorTextColor} opacity-60 hover:opacity-100 transition-all disabled:opacity-20`}
-                                title="Clear"
-                            >
-                                {isCleaning === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                            </button>
+                            <div className="flex items-center gap-1">
+                                {item.id === 'lyrics' && (
+                                    <button
+                                        type="button"
+                                        data-ponder-lyric-export-settings-entry
+                                        onClick={() => {
+                                            openCommandPaletteCommand(LYRIC_EXPORT_COMMAND_ID);
+                                            closeSettings();
+                                        }}
+                                        className="p-2 hover:bg-white/10 rounded-lg opacity-60 hover:opacity-100 transition-all"
+                                        title={t('lyricExport.settingsEntry')}
+                                        aria-label={t('lyricExport.settingsEntry')}
+                                    >
+                                        <Download size={16} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => onClear(item.id)}
+                                    disabled={isCleaning === item.id}
+                                    className={`p-2 hover:bg-white/10 rounded-lg ${errorTextColor} opacity-60 hover:opacity-100 transition-all disabled:opacity-20`}
+                                    title={t('ui.clear')}
+                                >
+                                    {isCleaning === item.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Cloud size={14} /> {t('options.r2Sync') || 'Sync Server'}
-                </h3>
+            <SettingsAnchor anchorId="r2Sync" label={t('options.r2Sync') || 'Sync Server'}>
+                <SettingsSectionHeading icon={Cloud} label={t('options.r2Sync') || 'Sync Server'} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-center justify-between gap-4">
                         <div className="space-y-1">
@@ -274,7 +310,15 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                 {t('options.r2SyncEnable') || 'Enable sync server'}
                             </div>
                             <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.r2SyncEnableDesc') || 'Sync appearance settings and AI themes through your own Cloudflare D1 Worker or self-hosted sync service.'}
+                                {t('options.r2SyncEnableDesc') || 'Sync appearance settings and AI themes through your own Cloudflare D1 Worker or self-hosted sync service.'}{' '}
+                                <a
+                                    href="https://folia-site.cielaniska.top/guide/deploy-sync"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="underline underline-offset-2 hover:opacity-80"
+                                >
+                                    {t('options.r2SyncDeployDocs') || 'Deployment guide'}
+                                </a>
                             </div>
                         </div>
                         <button
@@ -386,7 +430,7 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                                 className="flex-1 px-3 py-2.5 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg text-xs font-medium transition-colors flex justify-center items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed text-purple-400"
                             >
                                 {syncAction === 'syncingSettings' ? <Loader2 size={14} className="animate-spin" /> : <Layers size={14} />}
-                                {t('options.syncVisualSettings') || '同步视觉设置'}
+                                {t('options.syncVisualSettings')}
                             </button>
                         </div>
 
@@ -403,12 +447,17 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                         {syncSummaryMsg || syncStatusLabel}
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Database size={14} /> {t('options.mediaCache') || 'Media Cache'}
-                </h3>
+            <LocalLibraryWatchSection
+                errorTextColor={errorTextColor}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
+                toggleOffBackgroundClass={toggleOffBackgroundClass}
+            />
+
+            <SettingsAnchor anchorId="mediaCache" label={t('options.mediaCache') || 'Media Cache'}>
+                <SettingsSectionHeading icon={Database} label={t('options.mediaCache') || 'Media Cache'} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
@@ -465,12 +514,36 @@ const StorageSettingsSection: React.FC<StorageSettingsSectionProps> = ({
                         </div>
                     )}
 
+                    {isElectron && (
+                        <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    <HardDrive size={14} />
+                                    {t('options.mediaCacheLimit') || 'Cache Limit'}
+                                </div>
+                                <div className="text-xs opacity-50 max-w-[240px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.mediaCacheLimitDesc') || 'Once past this, the songs you have not played in longest are dropped first.'}
+                                </div>
+                            </div>
+                            <div className="w-32 shrink-0">
+                                <CustomSelect
+                                    value={String(mediaCacheLimitGb)}
+                                    onChange={(value) => onSetMediaCacheLimitGb(Number(value))}
+                                    options={cacheLimitOptions}
+                                    ariaLabel={t('options.mediaCacheLimit') || 'Cache Limit'}
+                                    isDaylight={isDaylight}
+                                    theme={theme}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs opacity-50">
                         <span>{t('options.cachedSongsCount') || 'Cached Songs'}:</span>
-                        <span className="font-mono">{mediaCount}</span>
+                        <span className="font-mono">{mediaCount} · {cacheSizes.media}</span>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
         </>
     );
 };

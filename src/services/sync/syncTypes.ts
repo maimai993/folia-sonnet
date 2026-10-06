@@ -25,6 +25,7 @@ export type SyncRuntimeStatus = {
 };
 
 export type SyncedVisualSettings = {
+    followSystemTheme?: boolean;
     visualizerMode?: VisualizerMode;
     randomVisualizerModePerSong?: boolean;
     visualizerBackgroundMode?: VisualizerBackgroundMode | null;
@@ -34,6 +35,7 @@ export type SyncedVisualSettings = {
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
     lyricsFontStyle?: Theme['fontStyle'];
     lyricsFontScale?: number;
     lyricsFontWeight?: number | null;
@@ -55,8 +57,12 @@ export type SyncedVisualSettings = {
     monetBackgroundTuning?: unknown;
     nomandBackgroundTuning?: unknown;
     latentBackgroundTuning?: unknown;
+    soraBackgroundTuning?: unknown;
     monetTuning?: unknown;
     pendoloTuning?: unknown;
+    sonnetTuning?: unknown;
+    temperaTuning?: unknown;
+    lumiereTuning?: unknown;
     urlBackgroundList?: unknown[];
     urlBackgroundSelectedId?: string | null;
     homeLayoutStyle?: 'carousel' | 'grid';

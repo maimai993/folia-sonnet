@@ -96,6 +96,39 @@ const buildDuplicateImportCanonicalSongIds = (songs: LocalSong[]): Map<string, s
     return new Map(Array.from(canonicalSongs.entries()).map(([duplicateKey, song]) => [duplicateKey, song.id]));
 };
 
+/**
+ * 歌单里存的是"重复导入组"的 canonical id（见 repairPlaylistSongIds），而正在播放的可能是同一文件
+ * 的另一份副本。判断收藏和写入收藏都必须先换算到同一把尺子，否则写进去的 id 和读出来的对不上。
+ */
+export const buildCanonicalLocalSongIdIndex = (songs: LocalSong[]): Map<string, string> => {
+    const canonicalByDuplicateKey = buildDuplicateImportCanonicalSongIds(songs);
+    const index = new Map<string, string>();
+
+    songs.forEach(song => {
+        const duplicateKey = getDuplicateImportSongKey(song);
+        const canonicalSongId = duplicateKey ? canonicalByDuplicateKey.get(duplicateKey) : undefined;
+        if (canonicalSongId && canonicalSongId !== song.id) {
+            index.set(song.id, canonicalSongId);
+        }
+    });
+
+    return index;
+};
+
+export const resolveCanonicalLocalSongId = (songId: string, songs: LocalSong[]): string => {
+    const song = songs.find(candidate => candidate.id === songId);
+    if (!song) {
+        return songId;
+    }
+
+    const duplicateKey = getDuplicateImportSongKey(song);
+    if (!duplicateKey) {
+        return songId;
+    }
+
+    return buildDuplicateImportCanonicalSongIds(songs).get(duplicateKey) || songId;
+};
+
 const repairPlaylistSongIds = (
     songIds: string[],
     validSongById: Map<string, LocalSong>,
@@ -319,13 +352,16 @@ export const canDeleteLocalPlaylist = (playlist: LocalPlaylist | null | undefine
     return Boolean(playlist && !playlist.isFavorite);
 };
 
-export const addSongsToLocalPlaylist = async (playlistId: string, songs: LocalSong[]): Promise<LocalPlaylist | null> => {
-    const songIds = songs.map(song => song.id);
-    return updateLocalPlaylist(playlistId, playlist => ({
+const addSongIdsToLocalPlaylist = async (playlistId: string, songIds: string[]): Promise<LocalPlaylist | null> => (
+    updateLocalPlaylist(playlistId, playlist => ({
         ...playlist,
         songIds: dedupeSongIds([...playlist.songIds, ...songIds]),
-    }));
-};
+    }))
+);
+
+export const addSongsToLocalPlaylist = async (playlistId: string, songs: LocalSong[]): Promise<LocalPlaylist | null> => (
+    addSongIdsToLocalPlaylist(playlistId, songs.map(song => song.id))
+);
 
 export const removeSongsFromLocalPlaylist = async (playlistId: string, songIds: string[]): Promise<LocalPlaylist | null> => {
     const removingIds = new Set(songIds);
@@ -360,10 +396,11 @@ export const getFavoriteLocalPlaylist = async (): Promise<LocalPlaylist> => {
 
 export const setLocalSongFavorite = async (song: LocalSong, shouldFavorite: boolean): Promise<LocalPlaylist | null> => {
     const favoritePlaylist = await getFavoriteLocalPlaylist();
+    const canonicalSongId = resolveCanonicalLocalSongId(song.id, await getLocalSongs());
 
     if (shouldFavorite) {
-        return addSongsToLocalPlaylist(favoritePlaylist.id, [song]);
+        return addSongIdsToLocalPlaylist(favoritePlaylist.id, [canonicalSongId]);
     }
 
-    return removeSongsFromLocalPlaylist(favoritePlaylist.id, [song.id]);
+    return removeSongsFromLocalPlaylist(favoritePlaylist.id, [canonicalSongId]);
 };

@@ -1,14 +1,16 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { UnifiedSong, ReplayGainMode } from '../../types';
-import { FileAudio, RefreshCw, FileText, Upload } from 'lucide-react';
+import { FileAudio, RefreshCw, FileText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
+import LyricFileButton from './LyricFileButton';
 import { getLyricProviderLabel } from '../../utils/lyrics/lyricSourceLabels';
 import { getLocalSongs } from '../../services/db';
 import type { LocalSong } from '../../types';
 import { isLocalPlaybackSong } from '../../utils/appPlaybackGuards';
 import ReplayGainControl from './ReplayGainControl';
+import { usePlaybackStore } from '../../stores/usePlaybackStore';
 
 interface LocalTabProps {
     currentSong: UnifiedSong;
@@ -42,7 +44,7 @@ const LocalTab: React.FC<LocalTabProps> = ({
     isDaylight
 }) => {
     const { t } = useTranslation();
-    const lrcInputRef = useRef<HTMLInputElement>(null);
+    const activeSource = usePlaybackStore(state => state.activeLocalLyricsSource);
 
     const [loadedLocalData, setLoadedLocalData] = useState<{
         songId: string;
@@ -69,7 +71,9 @@ const LocalTab: React.FC<LocalTabProps> = ({
             }
         });
         return () => { active = false; };
-    }, [localSongId]);
+    // Source changes keep the same local song id, but the controller refreshes the current-song
+    // snapshot after persisting them. Re-read the record so this panel does not keep stale source UI.
+    }, [localSongId, currentSong]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isTranslation: boolean) => {
         const file = e.target.files?.[0];
@@ -103,17 +107,6 @@ const LocalTab: React.FC<LocalTabProps> = ({
         }
         return sources;
     }, [localData, t]);
-
-    // Determine currently active source
-    const activeSource = useMemo(() => {
-        if (!localData) return null;
-        if (localData.lyricsSource) return localData.lyricsSource;
-        // Default priority: local > embedded > online
-        if (localData.hasLocalLyrics) return 'local';
-        if (localData.hasEmbeddedLyrics) return 'embedded';
-        if ((localData.matchedLyrics?.lines?.length ?? 0) > 0) return 'online';
-        return null;
-    }, [localData]);
 
     const tabActiveBg = isDaylight ? 'bg-blue-500/15 text-blue-600' : 'bg-blue-500/20 text-blue-300';
     const tabInactiveBg = isDaylight ? 'bg-black/5 text-zinc-500 hover:bg-black/10' : 'bg-white/5 text-zinc-400 hover:bg-white/10';
@@ -193,19 +186,10 @@ const LocalTab: React.FC<LocalTabProps> = ({
                         <FileText size={14} /> {t('localMusic.lyrics')}
                     </h3>
                     <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={() => lrcInputRef.current?.click()}
-                            className="p-1.5 hover:bg-white/10 rounded-md transition-colors"
-                            title={t('localMusic.selectLrcFile')}
-                        >
-                            <Upload size={14} />
-                        </button>
-                        <input
-                            type="file"
-                            accept=".lrc,.vtt,.ttml,.qrc,.yrc,.krc,.txt"
-                            ref={lrcInputRef}
-                            className="hidden"
-                            onChange={(e) => handleFileChange(e, false)}
+                        <LyricFileButton
+                            isDaylight={isDaylight}
+                            onImportChange={(e) => handleFileChange(e, false)}
+                            buttonClassName="p-1.5 hover:bg-white/10 rounded-md transition-colors"
                         />
                         <button
                             onClick={onMatchOnline}

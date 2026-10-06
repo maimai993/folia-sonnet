@@ -1,0 +1,410 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// test/unit/onlineMusic/qqQrFailureLogging.integration.test.ts
+// 经过正式 HTTP transport、provider 和日志 buffer，验证日志面板及复制内容。
+vi.mock('@/utils/lyrics/providers/qqLyricProvider', () => ({ fetchQQLyrics: vi.fn(), searchQQLyrics: vi.fn() }));
+
+const fetchMock = vi.fn();
+const storage = new Map<string, string>();
+const privateFields = { token: 'private-token', cookie: 'private-cookie', uin: 'private-account',
+    ip: '192.0.2.1', deviceId: 'private-device', message: 'https://private.example/?token=private-token' };
+const failure = { failureStage: 'credential-validation', failureReason: 'upstream-rejected', upstreamCode: -30002,
+    upstreamGlobalCode: -1, upstreamSubCode: -99, upstreamHttpStatus: 200, retryAfterMs: 30000, ...privateFields };
+
+const setup = async () => {
+    const buffer = await import('@/utils/consoleLogBuffer');
+    buffer.installConsoleLogCapture();
+    const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
+    return { auth: qqProvider.auth!, buffer,
+        warnings: () => buffer.getConsoleLogEntries().filter(entry => entry.level === 'warn'),
+        log: () => buffer.formatConsoleLog() };
+};
+// 已登录的 QQ 会话（只有不透明 token），让普通的登录态检查真的发请求。
+const seedSession = async () => {
+    const { writeProviderSessionValue } = await import('@/services/onlineMusic/providerStorage');
+    writeProviderSessionValue('qq', 'cookie', 'qqmusic_session=private-cookie');
+};
+const deferred = () => {
+    let resolve!: (response: Response) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<Response>((yes, no) => { resolve = yes; reject = no; });
+    return { promise, resolve, reject };
+};
+
+describe('QQ QR ordinary failure logs', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        fetchMock.mockReset();
+        storage.clear();
+        vi.stubEnv('VITE_QQ_API_BASE', 'https://qq.example.test');
+        vi.stubGlobal('fetch', fetchMock);
+        vi.stubGlobal('window', { addEventListener: vi.fn() });
+        vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+            setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
+        for (const level of ['info', 'warn', 'error', 'log', 'debug'] as const) vi.spyOn(console, level).mockImplementation(() => {});
+    });
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+    it.each(['qq', 'wechat'])('shows HTTP 429 and its safe backoff origin for %s', async method => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ failureStage: 'qr-key', failureReason: 'local-backoff',
+            retryAfterMs: 30000, lastFailure: failure, ...privateFields }, { status: 429 }));
+        await auth.getQrKey!(method).catch(() => undefined);
+        expect(warnings()).toHaveLength(1);
+        expect(warnings()[0].scope).toBe('QQProvider');
+        expect(log()).toContain(`method=${method}`);
+        expect(log()).toContain('qr-key: transport=network httpStatus=429 stage=qr-key reason=local-backoff');
+        expect(log()).toContain('last-failure: stage=credential-validation reason=upstream-rejected upstreamCode=-30002');
+        expect(log()).toContain('upstreamHttpStatus=200 upstreamGlobalCode=-1 upstreamSubCode=-99');
+        expect(log()).not.toMatch(/private-|192\.0\.2\.1|https?:|qqmusic_session/);
+    });
+
+    it.each(['qr-create', 'qr-check'] as const)('shows HTTP 502 and upstream HTTP 503 for %s', async step => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ ...failure, failureStage: 'qr-create',
+            failureReason: 'upstream-http-error', upstreamHttpStatus: 503 }, { status: 502 }));
+        await (step === 'qr-create' ? auth.createQr!('private-key') : auth.checkQr!('private-key')).catch(() => undefined);
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain(`${step}: transport=network httpStatus=502`);
+        expect(log()).toContain('upstreamHttpStatus=503');
+        expect(log()).not.toMatch(/private-|https?:/);
+    });
+
+    it.each(['qq', 'wechat'])('logs HTTP 200 QR failure once, including its backoff origin, for %s', async method => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'private-key' } }));
+        await auth.getQrKey!(method);
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, ...failure, lastFailure: failure }));
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, ...failure, retryAfterMs: 29000, lastFailure: failure }));
+        await auth.checkQr!('private-key');
+        await auth.checkQr!('private-key');
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain(`method=${method}`);
+        expect(log()).toContain('qr-check: stage=credential-validation reason=upstream-rejected');
+        expect(log()).toContain('last-failure: stage=credential-validation');
+        expect(log()).not.toMatch(/private-|https?:/);
+    });
+
+    it.each(['qr-key', 'qr-create', 'qr-check'] as const)('shows missing QR material or unknown code for %s', async step => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 'private-code', data: {}, ...privateFields }));
+        await (step === 'qr-key' ? auth.getQrKey!('qq') : step === 'qr-create' ? auth.createQr!('private-key') : auth.checkQr!('private-key'));
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain(step === 'qr-check' ? 'qr-check: unexpected-code=unavailable' : `${step}: reason=missing-${step === 'qr-key' ? 'key' : 'image'}`);
+        expect(log()).not.toMatch(/private-|https?:/);
+    });
+
+    it('logs an unknown numeric QR terminal code safely', async () => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 999, message: 'QR code expired' }));
+        await auth.checkQr!('private-key');
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('unexpected-code=999');
+    });
+
+    // 3.1.3 的自然过期带 failureReason=qr-timeout；会话已被清掉（过期或取消）时后端只回一个不带任何失败字段的 800。
+    // 判定只看这些结构化字段，不比对后端文案。
+    const naturalExpiries = [
+        ['qr-timeout event', { code: 800, message: 'QR code expired', failureStage: 'qr-event', failureReason: 'qr-timeout', retryAfterMs: 30000 }],
+        ['dropped session', { code: 800, message: 'private-message' }],
+    ] as const;
+
+    it.each(naturalExpiries)('records a natural expiry before any scan as info, not a failure (%s)', async (_label, body) => {
+        const { auth, warnings, log, buffer } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 801 }));
+        await auth.checkQr!('key');
+        fetchMock.mockResolvedValueOnce(Response.json(body));
+        await expect(auth.checkQr!('key')).resolves.toEqual({ state: 'expired' });
+        expect(warnings()).toEqual([]);
+        const expired = buffer.getConsoleLogEntries().filter(entry => entry.level === 'info' && entry.scope === 'QQProvider');
+        expect(expired).toHaveLength(1);
+        expect(log()).toContain('qr-login:expired');
+        expect(log()).toContain('method=qq');
+        expect(log()).not.toContain('qr-login:failed');
+        expect(log()).not.toMatch(/private-/);
+        expect((await auth.getQrLoginDiagnostics!())[0]).toMatch(/^qr-check: result=expired stage=/);
+    });
+
+    it.each(naturalExpiries)('still counts an expiry after a scan as a failure (%s)', async (label, body) => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('wechat');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 802 }));
+        await auth.checkQr!('key');
+        fetchMock.mockResolvedValueOnce(Response.json(body));
+        await expect(auth.checkQr!('key')).resolves.toEqual({ state: 'expired' });
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('qr-login:failed');
+        expect(log()).toContain('method=wechat qr-check: result=expired-after-scan');
+        expect(log()).toContain(label === 'qr-timeout event' ? 'stage=qr-event reason=qr-timeout' : 'stage=unavailable reason=unavailable');
+        expect(log()).not.toMatch(/private-/);
+    });
+
+    it('does not take the backend message as proof of expiry', async () => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, message: 'QR code expired', failureStage: 'qr-event',
+            failureReason: 'login-rejected', retryAfterMs: 30000 }));
+        await expect(auth.checkQr!('key')).resolves.toMatchObject({ state: 'error' });
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('stage=qr-event reason=login-rejected');
+        expect(log()).not.toContain('qr-login:expired');
+    });
+
+    it.each([false, true])('filters invalid categories and numbers in HTTP success=%s', async ok => {
+        const { auth, log, warnings } = await setup();
+        const body = { code: 800, ...privateFields, failureStage: 'private-stage', failureReason: 'private-reason',
+            upstreamCode: 'private-account', upstreamGlobalCode: 1.5, upstreamSubCode: 1e30, upstreamHttpStatus: 999,
+            retryAfterMs: -1, lastFailure: { failureStage: 'private-stage', failureReason: 'private-reason', upstreamCode: 'private-token' } };
+        fetchMock.mockResolvedValueOnce(Response.json(body, { status: ok ? 200 : 502 }));
+        await auth.checkQr!('private-key').catch(() => undefined);
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('stage=unavailable reason=unavailable upstreamCode=unavailable retryAfterMs=unavailable');
+        expect(log()).toContain('upstreamHttpStatus=unavailable upstreamGlobalCode=unavailable upstreamSubCode=unavailable');
+        expect(log()).not.toMatch(/private-|999|1\.5|1e\+30|retryAfterMs=-1|https?:/);
+    });
+
+    it('keeps older non-JSON HTTP failures honest', async () => {
+        const { auth, log } = await setup();
+        fetchMock.mockResolvedValueOnce(new Response('private-body', { status: 429 }));
+        await auth.getQrKey!('private-method').catch(() => undefined);
+        expect(log()).toContain('httpStatus=429 stage=unavailable reason=unavailable');
+        expect(log()).not.toMatch(/private-|last-failure/);
+    });
+
+    it.each(['missing-session', 'anonymous', 'auth-required', 'network', 'raw-network'] as const)('logs account-refresh %s once with safe confirmation context', async reason => {
+        const { auth, log, warnings } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 803,
+            ...(reason === 'missing-session' ? {} : { cookie: 'qqmusic_session=private-cookie' }) }));
+        await auth.checkQr!('private-key');
+        if (reason === 'anonymous') fetchMock.mockResolvedValueOnce(Response.json({ code: 200, data: {}, ...privateFields }));
+        if (reason === 'auth-required' || reason === 'network') fetchMock.mockResolvedValueOnce(Response.json(failure, { status: reason === 'network' ? 502 : 401 }));
+        if (reason === 'raw-network') fetchMock.mockRejectedValueOnce(new Error('private-error https://private.example/?cookie=private-cookie'));
+        await auth.getLoginStatus().catch(() => undefined);
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain(`qr-check: result=confirmed hasSession=${reason !== 'missing-session'} hasCookie=${reason !== 'missing-session'}`);
+        expect(log()).toContain(reason === 'missing-session' || reason === 'anonymous' ? `account-refresh: reason=${reason}`
+            : `account-refresh: transport=${reason === 'raw-network' ? 'unknown' : reason}`);
+        expect(log()).not.toMatch(/private-|https?:|qqmusic_session/);
+    });
+
+    it.each(['qr-key', 'qr-create', 'qr-check', 'account-refresh'] as const)('ignores old %s failures after a new attempt', async step => {
+        const { auth, log, warnings, buffer } = await setup();
+        if (step === 'account-refresh') {
+            fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
+            await auth.checkQr!('old-key');
+        }
+        const old = deferred();
+        fetchMock.mockReturnValueOnce(old.promise);
+        const pending = (step === 'qr-key' ? auth.getQrKey!('qq') : step === 'qr-create' ? auth.createQr!('old-key')
+            : step === 'qr-check' ? auth.checkQr!('old-key') : auth.getLoginStatus()).catch(() => undefined);
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(step === 'account-refresh' ? 2 : 1));
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'new-key' } }));
+        await auth.getQrKey!('wechat');
+        buffer.clearConsoleLog();
+        old.resolve(Response.json(failure, { status: 502 }));
+        await pending;
+        expect(warnings()).toEqual([]);
+        expect(log()).toBe('');
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([]);
+    });
+
+    it.each(['qr-key', 'qr-create', 'qr-check', 'account-refresh'] as const)('ignores late HTTP 200 %s terminal responses', async step => {
+        const { auth, log, buffer } = await setup();
+        if (step === 'account-refresh') {
+            fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
+            await auth.checkQr!('old-key');
+        }
+        const old = deferred();
+        fetchMock.mockReturnValueOnce(old.promise);
+        const pending = step === 'qr-key' ? auth.getQrKey!('qq') : step === 'qr-create' ? auth.createQr!('old-key')
+            : step === 'qr-check' ? auth.checkQr!('old-key') : auth.getLoginStatus();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(step === 'account-refresh' ? 2 : 1));
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'new-key' } }));
+        await auth.getQrKey!('wechat');
+        buffer.clearConsoleLog();
+        old.resolve(Response.json({ code: step === 'qr-check' ? 800 : 200, ...failure, data: {} }));
+        await pending;
+        expect(log()).toBe('');
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([]);
+    });
+
+    it('keeps a late account failure out of a newly confirmed attempt', async () => {
+        const { auth, log, buffer } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-old-cookie' }));
+        await auth.checkQr!('old-key');
+        const old = deferred();
+        fetchMock.mockReturnValueOnce(old.promise);
+        const pending = auth.getLoginStatus().catch(() => undefined);
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'new-key' } }));
+        await auth.getQrKey!('wechat');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-new-cookie' }));
+        await auth.checkQr!('new-key');
+        buffer.clearConsoleLog();
+        old.reject(new Error('private-old-error https://private.example'));
+        await pending;
+        expect(log()).toBe('');
+        expect(await auth.getQrLoginDiagnostics!()).toEqual(['qr-check: result=confirmed hasSession=true hasCookie=true']);
+    });
+
+    it('does not copy raw cancellation errors into the log panel', async () => {
+        const { auth, log } = await setup();
+        fetchMock.mockRejectedValueOnce(new Error('private-error https://private.example/?token=private-token'));
+        await auth.cancelQr!('private-key');
+        expect(log()).toContain('qr-cancel:failed');
+        expect(log()).toContain('unknown');
+        expect(log()).not.toMatch(/private-|https?:/);
+    });
+
+    it('keeps the account failure handler from logging the raw QQ error again', async () => {
+        const { auth, log, warnings } = await setup();
+        const { handleLoginStatusFailure } = await import('@/services/onlineMusic/loginStatusFailure');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
+        await auth.checkQr!('private-key');
+        fetchMock.mockRejectedValueOnce(new Error('private-error https://private.example/?cookie=private-cookie'));
+        const updateAccount = vi.fn();
+        await auth.getLoginStatus().catch(error => handleLoginStatusFailure(error, { providerId: 'qq', cachedUser: null,
+            fallbackMessage: 'qq_login_status_failed', clearAuthState: vi.fn(), updateAccount }));
+        expect(warnings().filter(entry => entry.scope === 'QQProvider')).toHaveLength(1);
+        expect(log()).toContain('account-refresh: transport=unknown');
+        // 账户失败本身照记（是否有缓存账号、是否鉴权失效），只是不带原始错误文字。
+        expect(warnings()).toHaveLength(2);
+        expect(log()).toContain('[LoginStatus] failure');
+        expect(log()).toContain('hadCachedAccount');
+        expect(log()).not.toMatch(/private-|https?:|qqmusic_session/);
+        expect(updateAccount).toHaveBeenCalledWith(expect.objectContaining({ status: 'error', freshness: 'error' }));
+    });
+
+    it('keeps waiting polls quiet and allows the same failure in a new attempt before recovery', async () => {
+        const { auth, log, warnings, buffer } = await setup();
+        for (let attempt = 0; attempt < 2; attempt++) {
+            fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+            await auth.getQrKey!('qq');
+            fetchMock.mockResolvedValueOnce(Response.json({ code: 800, ...failure }));
+            await auth.checkQr!('key');
+        }
+        expect(warnings()).toHaveLength(2);
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('wechat');
+        buffer.clearConsoleLog();
+        for (const code of [801, 801, 802, 803]) {
+            fetchMock.mockResolvedValueOnce(Response.json({ code, ...(code === 803 ? { cookie: 'qqmusic_session=private-cookie' } : {}) }));
+            await auth.checkQr!('key');
+        }
+        expect(log()).toBe('');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 200, data: { profile: { musicid: 'private-account', info: { nick: 'private-nick' } } } }));
+        await expect(auth.getLoginStatus()).resolves.not.toBeNull();
+        expect(warnings()).toHaveLength(0);
+        expect(log()).toContain('login-status:profile');
+        expect(log()).not.toMatch(/private-|last-failure|upstreamCode/);
+        expect((await auth.getQrLoginDiagnostics!()).join(' ')).toContain('profile-present');
+    });
+
+    // 关窗（取消当前 key）也是一条边界：在途的 check 晚回时，这一轮已经被会话丢弃。
+    it('ignores a late failed check after the current QR is cancelled', async () => {
+        const { auth, warnings, buffer } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'current-key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, ...failure }));
+        await auth.checkQr!('current-key');
+        const before = await auth.getQrLoginDiagnostics!();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'current-key-2' } }));
+        await auth.getQrKey!('qq');
+        const late = deferred();
+        fetchMock.mockReturnValueOnce(late.promise);
+        const pending = auth.checkQr!('current-key-2');
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 200 }));
+        await auth.cancelQr!('current-key-2');
+        buffer.clearConsoleLog();
+        late.resolve(Response.json({ code: 800, ...failure, failureStage: 'mqtt-listener', failureReason: 'mqtt-websocket-closed' }));
+        await pending;
+        expect(warnings()).toEqual([]);
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([]);
+        expect(before.join(' ')).toContain('reason=upstream-rejected');
+    });
+
+    it('does not let a late confirmation after cancel claim the next ordinary account load', async () => {
+        const { auth, log, warnings, buffer } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'current-key' } }));
+        await auth.getQrKey!('qq');
+        const late = deferred();
+        fetchMock.mockReturnValueOnce(late.promise);
+        const pending = auth.checkQr!('current-key');
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 200 }));
+        await auth.cancelQr!('current-key');
+        late.resolve(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
+        await pending;
+        buffer.clearConsoleLog();
+        fetchMock.mockResolvedValueOnce(Response.json(failure, { status: 401 }));
+        await expect(auth.getLoginStatus()).resolves.toBeNull();
+        expect(warnings()).toEqual([]);
+        expect(log()).toContain('login-status:auth-required');
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([]);
+    });
+
+    it('keeps the current attempt when an older key is cancelled after a new one', async () => {
+        const { auth, warnings, log } = await setup();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'old-key' } }));
+        await auth.getQrKey!('qq');
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'new-key' } }));
+        await auth.getQrKey!('wechat');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 200 }));
+        await auth.cancelQr!('old-key');
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, ...failure }));
+        await auth.checkQr!('new-key');
+        expect(warnings()).toHaveLength(1);
+        expect(log()).toContain('method=wechat');
+    });
+
+    // 只有扫码确认后的那一次账号加载改走扫码摘要；与扫码交错的普通登录态检查照常记日志。
+    it.each(['profile', 'error'] as const)('keeps the ordinary login-status:%s log when a QR attempt starts meanwhile', async outcome => {
+        const { auth, log } = await setup();
+        await seedSession();
+        const status = deferred();
+        fetchMock.mockReturnValueOnce(status.promise);
+        const pending = auth.getLoginStatus().catch(() => undefined);
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'new-key' } }));
+        await auth.getQrKey!('qq');
+        status.resolve(outcome === 'profile'
+            ? Response.json({ code: 200, data: { profile: { musicid: 'private-account', info: { nick: 'private-nick' } } } })
+            : Response.json(failure, { status: 502 }));
+        await pending;
+        expect(log()).toContain(`login-status:${outcome}`);
+        expect(log()).not.toMatch(/private-|https?:/);
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([]);
+    });
+
+    it('does not let an ordinary load started before confirmation stand in for the QR account load', async () => {
+        const { auth, log, warnings } = await setup();
+        await seedSession();
+        fetchMock.mockResolvedValueOnce(Response.json({ data: { unikey: 'key' } }));
+        await auth.getQrKey!('qq');
+        const ordinary = deferred();
+        fetchMock.mockReturnValueOnce(ordinary.promise);
+        const ordinaryPending = auth.getLoginStatus();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-new-cookie' }));
+        await auth.checkQr!('key');
+        const refresh = deferred();
+        fetchMock.mockReturnValueOnce(refresh.promise);
+        const refreshPending = auth.getLoginStatus();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+        ordinary.resolve(Response.json({ code: 200, data: {} }));
+        await ordinaryPending;
+        refresh.resolve(Response.json({ code: 200, data: { profile: { musicid: 'private-account', info: { nick: 'private-nick' } } } }));
+        await expect(refreshPending).resolves.not.toBeNull();
+        expect(warnings()).toEqual([]);
+        expect(log()).toContain('login-status:anonymous');
+        expect(await auth.getQrLoginDiagnostics!()).toEqual([
+            'qr-check: result=confirmed hasSession=true hasCookie=true',
+            'account-refresh: reason=profile-present',
+        ]);
+    });
+});

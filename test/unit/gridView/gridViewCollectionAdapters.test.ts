@@ -1,14 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     createLocalGridViewCollection,
     createNavidromeGridViewCollection,
-    getProviderCollectionArtistLabel,
     refreshLocalGridViewCollection,
     resolveLocalAlbumArtistDisplay,
     resolveLocalGridViewCoverSource,
     resolveLocalGridViewTracks,
 } from '../../../src/components/app/home/gridViewCollectionAdapters';
-import { buildLocalGrid3DGroups } from '../../../src/components/app/home/localGrid3DModel';
+import { buildLocalHomeGroups } from '../../../src/library/core/model/localHomeModel';
+import { getLocalCoverAssetUrl } from '../../../src/services/localCoverAssetUrl';
+import { getProviderCollectionArtistLabel } from '../../../src/library/core/model/homeCards';
 import type { LocalLibraryGroup, LocalSong } from '../../../src/types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../../../src/types/localLibrary';
 import { applyLocalLibraryEntityDisplay, applyLocalSongCoverDisplay } from '../../../src/services/playbackAdapters';
@@ -250,7 +251,7 @@ describe('gridViewCollectionAdapters', () => {
             { ...buildLocalSong('track-02', '1-02 Title'), fileName: '1-02 Title.wav', folderName },
             { ...buildLocalSong('track-01', '1-01 Game'), fileName: '1-01 Game.wav', folderName },
         ];
-        const groups = buildLocalGrid3DGroups(songs, [], ((key: string) => key) as any);
+        const groups = buildLocalHomeGroups(songs, [], ((key: string) => key) as any, undefined, getLocalCoverAssetUrl);
         const folder = groups.folders.find(group => group.name === folderName)!;
         const descriptor = createLocalGridViewCollection(folder);
 
@@ -258,6 +259,27 @@ describe('gridViewCollectionAdapters', () => {
 
         const refreshed = refreshLocalGridViewCollection(descriptor, songs);
         expect(refreshed.songIds).toEqual(['track-01', 'track-02', 'track-04', 'track-10']);
+    });
+
+    it('uses the materialized runtime Blob in the original local Grid3D model', () => {
+        const assetId = `sha256:${'9'.repeat(64)}`;
+        const embeddedCover = new Blob(['cover'], { type: 'image/png' });
+        const songs = [{
+            ...buildLocalSong('asset-song', 'Asset Song'),
+            folderName: 'Music',
+            localCoverAssetId: assetId,
+            localCoverSource: 'embedded' as const,
+            embeddedCover,
+        }];
+        const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
+
+        const groups = buildLocalHomeGroups(songs, [], ((key: string) => key) as any, undefined, getLocalCoverAssetUrl);
+
+        expect(groups.folders.find(group => group.name === 'Music')).toMatchObject({
+            coverUrl: embeddedCover,
+        });
+        expect(createObjectUrl).not.toHaveBeenCalled();
+        createObjectUrl.mockRestore();
     });
 
     it('refreshes folder descriptors without pulling nested folders into the open folder view', () => {

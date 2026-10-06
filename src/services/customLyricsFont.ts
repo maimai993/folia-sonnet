@@ -1,4 +1,5 @@
 import { getFromCache, removeFromCache, saveToCache } from './db';
+import i18n from '../i18n/config';
 import type { StoredCustomLyricsFont } from '../types';
 
 // src/services/customLyricsFont.ts
@@ -76,7 +77,7 @@ export const isSupportedLyricsFontFile = (file: File) => {
 
 export const validateUploadedLyricsFontFile = (file: File): string | null => {
     if (!isSupportedLyricsFontFile(file)) {
-        return '仅支持 woff2、woff、ttf、otf 字体文件。';
+        return i18n.t('ui.unsupportedFontFormat');
     }
 
     if (file.size > MAX_UPLOADED_LYRICS_FONT_SIZE) {

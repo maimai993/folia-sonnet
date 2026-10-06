@@ -22,3 +22,9 @@ export const getRuntimeEnvironment = (): RuntimeEnvironment => {
 };
 
 export const supportsLocalMusicImport = (): boolean => !isCapacitorAndroid();
+
+/**
+ * 命令面板用的等价门控：本地音乐依赖文件选择器与本地目录扫描，Capacitor Android 容器里没有，
+ * 因此这些命令只在桌面端与浏览器端注册。
+ */
+export const LOCAL_MUSIC_COMMAND_PLATFORMS = ['electron', 'web'] as const;

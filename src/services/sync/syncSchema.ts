@@ -1,5 +1,6 @@
 import { sanitizeDualTheme } from '../themeSanitizer';
-import { hasVisualizerBackgroundMode } from '../../components/visualizer/backgrounds/registry';
+// 背景模式没有 mod 投稿通道，静态清单与活注册表在任何时刻都等价。
+import { isBuiltinVisualizerBackgroundMode } from '../../types/visualizerModes';
 import {
     SYNC_SCHEMA_VERSION,
     type SyncLibraryExportBundle,
@@ -37,12 +38,13 @@ const isFontStyle = (value: unknown): value is SyncedVisualSettings['lyricsFontS
 );
 
 const isVisualizerBackgroundMode = (value: unknown): value is NonNullable<SyncedVisualSettings['visualizerBackgroundMode']> => (
-    hasVisualizerBackgroundMode(value)
+    isBuiltinVisualizerBackgroundMode(value)
 );
 
 const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisualSettings => {
     const settings: SyncedVisualSettings = {};
 
+    if (typeof value.followSystemTheme === 'boolean') settings.followSystemTheme = value.followSystemTheme;
     if (typeof value.visualizerMode === 'string' && value.visualizerMode.trim()) settings.visualizerMode = value.visualizerMode;
     if (value.visualizerBackgroundMode === null) settings.visualizerBackgroundMode = null;
     else if (isVisualizerBackgroundMode(value.visualizerBackgroundMode)) settings.visualizerBackgroundMode = value.visualizerBackgroundMode;
@@ -50,10 +52,11 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (isFiniteNumber(value.visualizerOpacity)) settings.visualizerOpacity = value.visualizerOpacity;
     if (typeof value.hidePlayerTranslationSubtitle === 'boolean') settings.hidePlayerTranslationSubtitle = value.hidePlayerTranslationSubtitle;
     if (typeof value.showSubtitleTranslation === 'boolean') settings.showSubtitleTranslation = value.showSubtitleTranslation;
-    if (value.subtitleContentMode === 'translation' || value.subtitleContentMode === 'romanization' || value.subtitleContentMode === 'none') {
+    if (value.subtitleContentMode === 'translation' || value.subtitleContentMode === 'romanization' || value.subtitleContentMode === 'both' || value.subtitleContentMode === 'none') {
         settings.subtitleContentMode = value.subtitleContentMode;
     }
     if (typeof value.subtitleOverlayBackground === 'boolean') settings.subtitleOverlayBackground = value.subtitleOverlayBackground;
+    if (typeof value.subtitleUpcomingLyricsBlur === 'boolean') settings.subtitleUpcomingLyricsBlur = value.subtitleUpcomingLyricsBlur;
     if (isFontStyle(value.lyricsFontStyle)) settings.lyricsFontStyle = value.lyricsFontStyle;
     if (isFiniteNumber(value.lyricsFontScale)) settings.lyricsFontScale = value.lyricsFontScale;
     if (value.lyricsFontWeight === null) settings.lyricsFontWeight = null;
@@ -78,7 +81,12 @@ const parseSyncedVisualSettings = (value: Record<string, unknown>): SyncedVisual
     if (value.monetBackgroundTuning !== undefined) settings.monetBackgroundTuning = value.monetBackgroundTuning;
     if (value.nomandBackgroundTuning !== undefined) settings.nomandBackgroundTuning = value.nomandBackgroundTuning;
     if (value.latentBackgroundTuning !== undefined) settings.latentBackgroundTuning = value.latentBackgroundTuning;
+    if (value.soraBackgroundTuning !== undefined) settings.soraBackgroundTuning = value.soraBackgroundTuning;
     if (value.monetTuning !== undefined) settings.monetTuning = value.monetTuning;
+    if (value.pendoloTuning !== undefined) settings.pendoloTuning = value.pendoloTuning;
+    if (value.sonnetTuning !== undefined) settings.sonnetTuning = value.sonnetTuning;
+    if (value.temperaTuning !== undefined) settings.temperaTuning = value.temperaTuning;
+    if (value.lumiereTuning !== undefined) settings.lumiereTuning = value.lumiereTuning;
     if (Array.isArray(value.urlBackgroundList)) settings.urlBackgroundList = value.urlBackgroundList;
     if (value.urlBackgroundSelectedId === null) settings.urlBackgroundSelectedId = null;
     else if (typeof value.urlBackgroundSelectedId === 'string') settings.urlBackgroundSelectedId = value.urlBackgroundSelectedId;

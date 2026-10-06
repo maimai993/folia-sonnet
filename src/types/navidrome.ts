@@ -1,4 +1,4 @@
-import { AmllDbPlatform, LyricData, LyricProviderSource, SongResult } from '../types';
+import { AmllDbPlatform, LyricData, LyricProviderSource, ReplayGainInfo, SongResult } from '../types';
 
 // Navidrome/Subsonic API Configuration
 export interface NavidromeConfig {
@@ -77,12 +77,7 @@ export interface SubsonicSong {
     type: 'music' | 'podcast' | 'audiobook';
     isVideo: boolean;
     starred?: string;
-    replayGain?: {
-        trackGain?: number;
-        albumGain?: number;
-        trackPeak?: number;
-        albumPeak?: number;
-    };
+    replayGain?: ReplayGainInfo;
 }
 
 // Album List Response
@@ -316,10 +311,6 @@ export interface StructuredLyric {
     offset?: number;
     synced?: boolean;
 }
-
-export type NavidromeViewSelection =
-    | { type: 'album'; albumId: string; }
-    | { type: 'artist'; artistId: string; };
 
 export interface LyricsBySongIdResponse {
     lyricsList?: {

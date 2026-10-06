@@ -1,20 +1,25 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronLeft, ChevronRight, Cpu, GamepadDirectional, Mic, Monitor, PlayCircle, RotateCcw, Settings2 } from 'lucide-react';
+import { Boxes, Check, ChevronLeft, ChevronsLeftRight, GamepadDirectional, Mic, Monitor, Moon, Play, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import type { Theme, VisualizerFrameRate } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
-import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../utils/frameRateLimiter';
-import ThemedDialog from '../../shared/ThemedDialog';
+import type { Theme } from '../../../types';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 
 // src/components/modal/settings/LabSettingsModal.tsx
 // Experimental settings subview kept outside SettingsModal to avoid another giant inline panel.
+// Graphics switches now live in GraphicsSettingsSubview, the mod switch in ModsSettingsSubview and
+// the Ponder hints in GeneralSettingsSubview.
 
 type LabSettingsModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    onOpenLyricFilterSettings: () => void;
     theme?: Theme;
     voiceInputPause?: {
         enabled: boolean;
@@ -31,70 +36,63 @@ const panelMotion = {
     exit: { opacity: 0, scale: 0.98, y: 18 },
 };
 
-const getFrameRateLabel = (frameRate: VisualizerFrameRate) => `${frameRate} FPS`;
-
 const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     isOpen,
     onClose,
-    onOpenLyricFilterSettings,
     theme,
     voiceInputPause,
     embedded,
 }) => {
     const { t } = useTranslation();
     const isMouseDownOnOverlayRef = useRef(false);
-    const [isNativeBlurNoticeOpen, setIsNativeBlurNoticeOpen] = useState(false);
     const {
-        disableHomeDynamicBackground,
+        preventDisplaySleepDuringPlayback,
+        onTogglePreventDisplaySleepDuringPlayback,
+    } = useDesktopSettingsStore(useShallow(state => ({
+        preventDisplaySleepDuringPlayback: state.preventDisplaySleepDuringPlayback,
+        onTogglePreventDisplaySleepDuringPlayback: state.handleTogglePreventDisplaySleepDuringPlayback,
+    })));
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const {
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,
         alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle,
-        isDaylight,
+        useNativeMacFullscreenButton,
         showOpenPanelCloseButton,
-        staticMode,
-        visualizerFrameRate,
-        onToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton,
         onToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle,
-        onToggleHideTaskbarIcon,
-        onToggleMinimizeToTray,
+        onToggleNativeMacFullscreenButton,
         onToggleOpenPanelCloseButton,
-        onToggleOpenPlayerOnLaunch,
-        onToggleStaticMode,
-        onVisualizerFrameRateChange,
-        enablePlayerPageNativeBlur,
-        onTogglePlayerPageNativeBlur,
-    } = useSettingsUiStore(useShallow(state => ({
-        disableHomeDynamicBackground: state.disableHomeDynamicBackground,
+    } = usePlayerChromeSettingsStore(useShallow(state => ({
         hidePlayerProgressBar: state.hidePlayerProgressBar,
         hidePlayerRightPanelButton: state.hidePlayerRightPanelButton,
         alwaysShowPlayerBackButton: state.alwaysShowPlayerBackButton,
+        alwaysShowTrackSwitchButtons: state.alwaysShowTrackSwitchButtons,
         alwaysShowMainWindowTitlebar: state.alwaysShowMainWindowTitlebar,
-        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
-        isDaylight: state.isDaylight,
+        useNativeMacFullscreenButton: state.useNativeMacFullscreenButton,
         showOpenPanelCloseButton: state.showOpenPanelCloseButton,
-        staticMode: state.staticMode,
-        visualizerFrameRate: state.visualizerFrameRate,
-        enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
-        onToggleDisableHomeDynamicBackground: state.handleToggleDisableHomeDynamicBackground,
         onToggleHidePlayerProgressBar: state.handleToggleHidePlayerProgressBar,
         onToggleHidePlayerRightPanelButton: state.handleToggleHidePlayerRightPanelButton,
         onToggleAlwaysShowPlayerBackButton: state.handleToggleAlwaysShowPlayerBackButton,
+        onToggleAlwaysShowTrackSwitchButtons: state.handleToggleAlwaysShowTrackSwitchButtons,
         onToggleAlwaysShowMainWindowTitlebar: state.handleToggleAlwaysShowMainWindowTitlebar,
-        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
-        onToggleHideTaskbarIcon: state.handleToggleHideTaskbarIcon,
-        onToggleMinimizeToTray: state.handleToggleMinimizeToTray,
+        onToggleNativeMacFullscreenButton: state.handleToggleNativeMacFullscreenButton,
         onToggleOpenPanelCloseButton: state.handleToggleOpenPanelCloseButton,
-        onToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,
-        onToggleStaticMode: state.handleToggleStaticMode,
-        onVisualizerFrameRateChange: state.handleSetVisualizerFrameRate,
-        onTogglePlayerPageNativeBlur: state.handleTogglePlayerPageNativeBlur,
     })));
+    const {
+        hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle,
+    } = useTypographySettingsStore(useShallow(state => ({
+        hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
+        onToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
+    })));
+    const autoPlayOnLaunch = useAudioSettingsStore(state => state.autoPlayOnLaunch);
+    const onToggleAutoPlayOnLaunch = useAudioSettingsStore(state => state.handleToggleAutoPlayOnLaunch);
     const borderColor = isDaylight ? 'border-zinc-300/70' : 'border-white/10';
     const overlayBackground = isDaylight ? 'rgba(0,0,0,0.32)' : 'rgba(0,0,0,0.5)';
     const subviewPanelBg = isDaylight ? 'bg-zinc-200' : 'bg-zinc-900';
@@ -108,28 +106,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
     const utilityGhostButtonClass = isDaylight
         ? 'border-zinc-300 bg-white/50 hover:bg-white/80'
         : 'border-white/10 bg-white/5 hover:bg-white/10';
-    const rangeInputClass = [
-        'w-full accent-current',
-        isDaylight ? 'text-zinc-900' : 'text-white',
-    ].join(' ');
-    const isVisualizerFrameRateLimiterEnabled = visualizerFrameRate !== 'off';
-    const selectedVisualizerFrameRate = isVisualizerFrameRateLimiterEnabled ? visualizerFrameRate : 120;
-    const selectedVisualizerFrameRateIndex = VISUALIZER_FRAME_RATE_OPTIONS.indexOf(selectedVisualizerFrameRate);
-    const isLinux = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
-
-    const handleNativeBlurToggle = () => {
-        if (enablePlayerPageNativeBlur) {
-            onTogglePlayerPageNativeBlur(false);
-            return;
-        }
-
-        setIsNativeBlurNoticeOpen(true);
-    };
-
-    const confirmNativeBlur = () => {
-        onTogglePlayerPageNativeBlur(true);
-        setIsNativeBlurNoticeOpen(false);
-    };
+    const isElectron = typeof window !== 'undefined' && Boolean(window.electron);
+    const isMacElectron = window.electron?.platform === 'darwin';
 
     const renderToggle = (checked: boolean, onChange: () => void) => (
         <button
@@ -142,14 +120,6 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         </button>
     );
 
-    const handleToggleVisualizerFrameRateLimiter = () => {
-        onVisualizerFrameRateChange(isVisualizerFrameRateLimiterEnabled ? 'off' : selectedVisualizerFrameRate);
-    };
-
-    const handleFrameRateSliderChange = (value: string) => {
-        const nextIndex = Math.min(VISUALIZER_FRAME_RATE_OPTIONS.length - 1, Math.max(0, Number(value)));
-        onVisualizerFrameRateChange(VISUALIZER_FRAME_RATE_OPTIONS[nextIndex]);
-    };
     const handleOverlayMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
         isMouseDownOnOverlayRef.current = event.target === event.currentTarget;
     };
@@ -164,98 +134,8 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
         <>
             <div className={embedded ? "space-y-4" : "flex-1 overflow-y-auto custom-scrollbar px-4 py-5 sm:px-6 relative z-10"}>
             <div className={embedded ? "space-y-4" : "space-y-4"}>
-                <div className="pt-1">
-                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {t('options.labPerformanceSection')}
-                    </div>
-                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                        {t('options.labPerformanceSectionDesc')}
-                    </div>
-                </div>
-                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
-                                    <div className="space-y-1">
-                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                            <Monitor size={14} />
-                                            {t('options.enableStaticMode')}
-                                        </div>
-                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.enableStaticModeDesc')}
-                                        </div>
-                                        <div className="text-[11px] opacity-40 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.enableStaticModeDescSub')}
-                                        </div>
-                                    </div>
-                                    {renderToggle(staticMode, () => onToggleStaticMode(!staticMode))}
-                                </div>
-
-                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
-                                    <div className="space-y-1">
-                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                            <PlayCircle size={14} />
-                                            {t('options.disableHomeDynamicBackground')}
-                                        </div>
-                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.disableHomeDynamicBackgroundDesc')}
-                                        </div>
-                                        <div className="text-[11px] opacity-40 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
-                                            {t('options.disableHomeDynamicBackgroundWarning')}
-                                        </div>
-                                    </div>
-                                    {renderToggle(disableHomeDynamicBackground, () => onToggleDisableHomeDynamicBackground(!disableHomeDynamicBackground))}
-                                </div>
-
-                                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="space-y-1">
-                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                                                <Cpu size={14} />
-                                                {t('options.visualizerFrameRate')}
-                                            </div>
-                                            <div className="text-xs opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.visualizerFrameRateDesc')}
-                                            </div>
-                                        </div>
-                                        {renderToggle(isVisualizerFrameRateLimiterEnabled, handleToggleVisualizerFrameRateLimiter)}
-                                    </div>
-                                    <div className={`space-y-3 transition-opacity ${isVisualizerFrameRateLimiterEnabled ? 'opacity-100' : 'opacity-45 pointer-events-none'}`}>
-                                        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                                            <span>{t('options.visualizerFrameRateValue')}</span>
-                                            <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                                                {getFrameRateLabel(selectedVisualizerFrameRate)}
-                                            </span>
-                                        </div>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max={VISUALIZER_FRAME_RATE_OPTIONS.length - 1}
-                                            step="1"
-                                            value={Math.max(0, selectedVisualizerFrameRateIndex)}
-                                            onChange={(event) => handleFrameRateSliderChange(event.target.value)}
-                                            className={rangeInputClass}
-                                            aria-label={t('options.visualizerFrameRateValue')}
-                                            disabled={!isVisualizerFrameRateLimiterEnabled}
-                                        />
-                                        <div className="grid grid-cols-3 text-[11px] font-mono opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                                            {VISUALIZER_FRAME_RATE_OPTIONS.map((frameRate, index) => (
-                                                <span
-                                                    key={frameRate}
-                                                    className={index === 1 ? 'text-center' : index === 2 ? 'text-right' : ''}
-                                                >
-                                                    {frameRate}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-white/10 pt-5">
-                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.labPlayerUiSection')}
-                                    </div>
-                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.labPlayerUiSectionDesc')}
-                                    </div>
-                                </div>
+                <SettingsAnchor anchorId="labPlayerUi" label={t('options.labPlayerUiSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Settings2} label={t('options.labPlayerUiSection')} />
 
                                 <div className={`p-4 rounded-xl border space-y-3 ${settingsCardClass}`}>
                                     <div className="space-y-1">
@@ -330,13 +210,38 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     {renderToggle(alwaysShowPlayerBackButton, () => onToggleAlwaysShowPlayerBackButton(!alwaysShowPlayerBackButton))}
                                 </div>
 
-                                <div className="border-t border-white/10 pt-5">
-                                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                        {t('options.labWindowAndToolsSection')}
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <ChevronsLeftRight size={14} />
+                                            {t('options.alwaysShowTrackSwitchButtons')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[320px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.alwaysShowTrackSwitchButtonsDesc')}
+                                        </div>
                                     </div>
-                                    <div className="mt-1 text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                        {t('options.labWindowAndToolsSectionDesc')}
+                                    {renderToggle(alwaysShowTrackSwitchButtons, () => onToggleAlwaysShowTrackSwitchButtons(!alwaysShowTrackSwitchButtons))}
+                                </div>
+
+                </SettingsAnchor>
+
+                <SettingsAnchor anchorId="labWindowAndTools" label={t('options.labWindowAndToolsSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Boxes} label={t('options.labWindowAndToolsSection')} divider />
+
+                                <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                            <Play size={14} />
+                                            {t('options.autoPlayOnLaunch')}
+                                        </div>
+                                        <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.autoPlayOnLaunchDesc')}
+                                        </div>
+                                        <div className="text-[11px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.autoPlayOnLaunchDescSub')}
+                                        </div>
                                     </div>
+                                    {renderToggle(autoPlayOnLaunch, () => onToggleAutoPlayOnLaunch(!autoPlayOnLaunch))}
                                 </div>
 
                                 <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
@@ -352,37 +257,35 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                     {renderToggle(alwaysShowMainWindowTitlebar, () => onToggleAlwaysShowMainWindowTitlebar(!alwaysShowMainWindowTitlebar))}
                                 </div>
 
-                                {!isLinux && (
-                                    <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={handleNativeBlurToggle}>
-                                        <div className="flex flex-col pr-8">
-                                            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.enablePlayerPageNativeBlur')}
-                                            </span>
-                                            <span className="text-xs opacity-50 mt-1 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.enablePlayerPageNativeBlurDesc')}
-                                            </span>
+                                {isMacElectron && (
+                                    <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                        <div className="space-y-1">
+                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                                <Monitor size={14} />
+                                                {t('options.useNativeMacFullscreenButton')}
+                                            </div>
+                                            <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                                {t('options.useNativeMacFullscreenButtonDesc')}
+                                            </div>
                                         </div>
-                                        {renderToggle(enablePlayerPageNativeBlur, handleNativeBlurToggle)}
+                                        {renderToggle(useNativeMacFullscreenButton, () => onToggleNativeMacFullscreenButton(!useNativeMacFullscreenButton))}
                                     </div>
                                 )}
 
-                                <button
-                                    type="button"
-                                    onClick={onOpenLyricFilterSettings}
-                                    className={`w-full p-4 rounded-xl border transition-colors hover:bg-white/8 text-left ${settingsCardInteractiveClass}`}
-                                >
-                                    <div className="flex items-center justify-between gap-4">
+                                {isElectron && (
+                                    <div className={`p-4 rounded-xl border flex items-center justify-between gap-4 ${settingsCardClass}`}>
                                         <div className="space-y-1">
-                                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                                {t('options.lyricFilterRegex')}
+                                            <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                                <Moon size={14} />
+                                                {t('options.preventDisplaySleepDuringPlayback')}
                                             </div>
                                             <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                                {t('options.lyricFilterRegexDesc')}
+                                                {t('options.preventDisplaySleepDuringPlaybackDesc')}
                                             </div>
                                         </div>
-                                        <ChevronRight size={18} className="shrink-0 opacity-60" style={{ color: 'var(--text-primary)' }} />
+                                        {renderToggle(preventDisplaySleepDuringPlayback, () => onTogglePreventDisplaySleepDuringPlayback(!preventDisplaySleepDuringPlayback))}
                                     </div>
-                                </button>
+                                )}
 
                                 {voiceInputPause?.supported && (
                                     <div className={`flex items-center justify-between p-4 rounded-xl border transition-colors hover:bg-white/8 ${settingsCardInteractiveClass}`} onClick={voiceInputPause.onToggle}>
@@ -398,38 +301,9 @@ const LabSettingsModal: React.FC<LabSettingsModalProps> = ({
                                         {renderToggle(voiceInputPause.enabled, voiceInputPause.onToggle)}
                                     </div>
                                 )}
+                </SettingsAnchor>
             </div>
             </div>
-            <ThemedDialog
-                isOpen={isNativeBlurNoticeOpen}
-                onClose={() => setIsNativeBlurNoticeOpen(false)}
-                isDaylight={isDaylight}
-                title={t('options.nativeBlurConfirmTitle')}
-                footer={(
-                    <>
-                        <button
-                            type="button"
-                            onClick={() => setIsNativeBlurNoticeOpen(false)}
-                            className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${utilityGhostButtonClass}`}
-                            style={{ color: 'var(--text-primary)' }}
-                        >
-                            {t('localMusic.cancel')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={confirmNativeBlur}
-                            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                            style={{ backgroundColor: theme?.accentColor || '#3b82f6' }}
-                        >
-                            {t('options.nativeBlurConfirmAction')}
-                        </button>
-                    </>
-                )}
-            >
-                <p className="text-sm leading-6 opacity-75" style={{ color: 'var(--text-secondary)' }}>
-                    {t('options.nativeBlurConfirmDesc')}
-                </p>
-            </ThemedDialog>
         </>
     );
 

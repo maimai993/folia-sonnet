@@ -3,11 +3,17 @@ import { getPlaybackSongKey, getPlaybackSourceRef } from '../../utils/appPlaybac
 
 // src/services/onlineMusic/resourceKeys.ts
 
-export type SongResourceKind = 'audio' | 'lyric' | 'cover' | 'theme';
+export type SongResourceKind = 'audio' | 'lyric' | 'cover' | 'theme' | 'replayGain';
 
-export const getSongResourceCacheKey = (kind: SongResourceKind, song: SongResult): string => (
-    `${kind}_${getPlaybackSongKey(song)}`
-);
+export const getSongResourceCacheKey = (kind: SongResourceKind, song: SongResult): string => {
+    const sourceRef = getPlaybackSourceRef(song);
+    const versionedKind = kind === 'cover'
+        && sourceRef.kind === 'online'
+        && sourceRef.providerId === 'kugou'
+        ? 'cover_v2'
+        : kind;
+    return `${versionedKind}_${getPlaybackSongKey(song)}`;
+};
 
 export const getLegacySongResourceCacheKeys = (kind: SongResourceKind, song: SongResult): string[] => {
     const sourceRef = getPlaybackSourceRef(song);

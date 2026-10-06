@@ -5,7 +5,7 @@ description: Standardize Folia online-song data access around the Omni facade, i
 
 # Online Song Omni Routing
 
-Use this skill for every feature that exchanges data with an online music provider. Read the relevant sections of `README.md` and `src/README.md` first; treat `src/services/onlineMusic/omni.ts` and `src/types/onlineMusic.ts` as the public contract.
+Use this skill for every feature that exchanges data with an online music provider. For fast navigation, read `skills/codebase-navigation/SKILL.md`, then the relevant sections of `README.md`, `src/README.md`, and `src/services/onlineMusic/README.md`; treat `src/services/onlineMusic/omni.ts` and `src/types/onlineMusic.ts` as the public contract.
 
 ## Non-negotiable rule
 
@@ -14,6 +14,8 @@ Unless the feature is explicitly cross-provider, route all online-song data inte
 This rule applies to search, song detail, audio URLs, availability/replacement, lyrics, chorus ranges, playlists, albums, artists, recommendations, account status, likes, subscriptions, playlist mutations, and page URLs. Components, hooks, stores, and ordinary app services must not import a concrete provider, provider registry, or provider transport to perform these operations.
 
 `omni` is a facade, not a raw-response escape hatch. Callers consume `UnifiedSong`, `OmniCollection`, `OmniPage`, `OmniLyricsResult`, `OmniAudioSource`, `OmniUser`, and `OmniError`; never make caller code depend on provider-specific field names or envelopes.
+
+Current provider implementation map: `providerRegistry.ts` selects capabilities, `providerAccountCache.ts` and `providerStorage.ts` retain account/session state, `neteaseProvider.ts` and `kugouProvider.ts` normalize provider data, and `kugouTransport.ts` owns KuGou transport details. `navidromeService.ts` is a separate Subsonic service, not an Omni provider.
 
 ## Decide the boundary before coding
 

@@ -29,9 +29,11 @@ export function detectTimedLyricFormat(content?: string): TimedLyricFormat {
         return 'ttml';
     }
 
+    // A bare `-->` is not enough: lyric text can contain one (`go --> there`), and parseVTT only
+    // understands cues whose timing line matches VTT_TIMING_LINE_REGEX, so anything the regex
+    // misses would have parsed to zero lines as VTT anyway.
     if (
         normalized.startsWith('WEBVTT') ||
-        normalized.includes('-->') ||
         VTT_TIMING_LINE_REGEX.test(normalized)
     ) {
         return 'vtt';

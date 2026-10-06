@@ -8,8 +8,9 @@ import { formatSongName } from '../../utils/songNameFormatter';
 import { calculateMatchScoreDetails } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
 import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
-import { createSafeObjectUrl, isBlob } from '../../utils/blobGuards';
+import { getLocalCoverAssetUrl } from '../../services/localCoverAssetUrl';
 import { getLocalLibraryAssignment } from '../../services/localLibraryEntityRepository';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 import {
     getLyricMatchSourceLabel,
     getMatchResultAlbumName,
@@ -20,6 +21,7 @@ import {
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
 import { DurationMatchBadge } from './DurationMatchBadge';
+import { hasRenderableLyrics } from '../../utils/lyrics/validity';
 
 interface LyricMatchModalProps {
     song: LocalSong;
@@ -58,7 +60,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
     // Online data toggle state (dots)
     const [lyricsSource, setLyricsSource] = useState<'local' | 'embedded' | 'online' | undefined>(song.lyricsSource || 'online');
-    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !isBlob(song.embeddedCover));
+    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !song.localCoverAssetId);
     const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.titleOrigin !== 'import');
 
     // Derive song information for matching
@@ -78,35 +80,15 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
         }
     }, [selectedResult]);
 
-    // Derive preview cover URL with proper ObjectURL lifecycle management
-    const [previewCoverUrl, setPreviewCoverUrl] = useState<string | null>(null);
-    useEffect(() => {
-        let objectUrl: string | null = null;
-
+    const previewCoverUrl = useMemo(() => {
+        const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 512);
         if (!selectedResult) {
-            // Show current state
-            if (isBlob(song.embeddedCover)) {
-                objectUrl = createSafeObjectUrl(song.embeddedCover);
-                setPreviewCoverUrl(objectUrl);
-            } else {
-                setPreviewCoverUrl(song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null);
-            }
+            return song.useOnlineCover ? song.onlineMetadata?.coverUrl || localCoverUrl : localCoverUrl;
         } else if (useOnlineCover) {
             const selectedCoverUrl = getMatchResultCoverUrl(selectedResult, source);
-            setPreviewCoverUrl(selectedCoverUrl || song.onlineMetadata?.coverUrl || null);
-        } else {
-            // Local cover
-            if (isBlob(song.embeddedCover)) {
-                objectUrl = createSafeObjectUrl(song.embeddedCover);
-                setPreviewCoverUrl(objectUrl);
-            } else {
-                setPreviewCoverUrl(null);
-            }
+            return selectedCoverUrl || song.onlineMetadata?.coverUrl || localCoverUrl;
         }
-
-        return () => {
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
-        };
+        return localCoverUrl;
     }, [selectedResult, useOnlineCover, song, source]);
 
     // Derive lyrics source label
@@ -201,7 +183,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
             if (lyricsSource === 'online') {
                 try {
                     processed = await fetchLyricsForMatchSource(source, selectedResult);
-                    lyricsFailed = !processed?.lyrics;
+                    lyricsFailed = !processed?.isPureMusic && !hasRenderableLyrics(processed?.lyrics);
                 } catch (error) {
                     console.warn('[LocalMusic] Lyrics failed while applying metadata selection:', error);
                     lyricsFailed = true;
@@ -372,7 +354,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                                                 <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-800 flex-shrink-0">
                                                     {resultCoverUrl ? (
                                                         <img
-                                                            src={resultCoverUrl}
+                                                            src={getSizedCoverUrl(resultCoverUrl, 512)}
                                                             alt={result.name}
                                                             className="w-full h-full object-cover"
                                                         />
@@ -413,7 +395,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                             <div className="w-32 h-32 min-h-[64px] rounded-2xl overflow-hidden bg-zinc-800 shadow-md flex-shrink transition-all duration-300">
                                 {previewCoverUrl ? (
                                     <img
-                                        src={previewCoverUrl}
+                                        src={getSizedCoverUrl(previewCoverUrl, 512)}
                                         alt="Cover"
                                         className="w-full h-full object-cover"
                                     />
@@ -499,7 +481,11 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
                         {/* Lyric Preview Panel */}
                         <div className="w-full h-28 flex-shrink-0 mt-4 flex flex-col">
-                            <LyricPreviewPanel selectedResult={selectedResult} source={source} isDaylight={isDaylight} />
+                            <LyricPreviewPanel
+                                selectedResult={selectedResult}
+                                source={source}
+                                isDaylight={isDaylight}
+                            />
                         </div>
                     </div>
                 </div>

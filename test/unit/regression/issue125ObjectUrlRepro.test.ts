@@ -32,7 +32,7 @@ describe('issue #125 object URL repro', () => {
             buildLocalSong({
                 id: 'bad-cover-song',
                 addedAt: 2,
-                embeddedCover: { size: 20, type: 'image/png' } as unknown as Blob,
+                localCoverAssetId: 'not-a-valid-asset-id',
                 useOnlineCover: true,
                 onlineMetadata: {
                     source: 'qq',

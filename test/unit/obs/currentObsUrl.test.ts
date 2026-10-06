@@ -18,13 +18,15 @@ vi.mock('@/services/themePreferences', () => ({
     })),
 }));
 vi.mock('@/services/themeCache', () => ({ getLastDualTheme: vi.fn() }));
-vi.mock('@/utils/visualSettingsConfig', () => ({ buildVisualSettingsConfig: () => ({ visualizerMode: 'monet' }) }));
+vi.mock('@/services/obs/visualSettingsConfig', () => ({ buildVisualSettingsConfig: () => ({ visualizerMode: 'monet' }) }));
 
-import { buildCurrentObsUrl } from '@/utils/currentObsUrl';
+import { buildCurrentObsUrl } from '@/services/obs/currentObsUrl';
 import { compressConfig, readSavedCustomTheme } from '@/utils/appearanceCodec';
 import { readStoredLastAppliedThemePointer } from '@/services/themePreferences';
 import { getLastDualTheme } from '@/services/themeCache';
-import { useSettingsUiStore } from '@/stores/useSettingsUiStore';
+import { usePlayerChromeSettingsStore } from '@/stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '@/stores/useStageSettingsStore';
 
 const compressMock = vi.mocked(compressConfig);
 const pointerMock = vi.mocked(readStoredLastAppliedThemePointer);
@@ -42,11 +44,9 @@ describe('buildCurrentObsUrl', () => {
         pointerMock.mockReset().mockReturnValue('default');
         customMock.mockReset().mockReturnValue(undefined);
         aiMock.mockReset().mockResolvedValue(null);
-        useSettingsUiStore.setState({
-            isDaylight: false,
-            transparentPlayerBackground: false,
-            webObsThemeMode: 'static',
-        });
+        useStageSettingsStore.setState({ webObsThemeMode: 'static' });
+        useThemeSettingsStore.setState({ isDaylight: false });
+        usePlayerChromeSettingsStore.setState({ transparentPlayerBackground: false });
     });
 
     it('bakes the applied custom theme in static mode', async () => {
@@ -75,14 +75,16 @@ describe('buildCurrentObsUrl', () => {
         pointerMock.mockReturnValue('custom');
         customMock.mockReturnValue(CUSTOM);
         for (const mode of ['builtin', 'ai'] as const) {
-            useSettingsUiStore.setState({ webObsThemeMode: mode });
+            useStageSettingsStore.setState({ webObsThemeMode: mode });
             await buildCurrentObsUrl('now-playing');
             expect(bakedTheme()).toBeNull();
         }
     });
 
     it('writes the theme mode marker and keeps cfg the terminal segment', async () => {
-        useSettingsUiStore.setState({ isDaylight: true, transparentPlayerBackground: true, webObsThemeMode: 'static' });
+        useStageSettingsStore.setState({ webObsThemeMode: 'static' });
+        useThemeSettingsStore.setState({ isDaylight: true });
+        usePlayerChromeSettingsStore.setState({ transparentPlayerBackground: true });
         const url = await buildCurrentObsUrl('now-playing');
         expect(url).toContain('obsSource=now-playing');
         expect(url).toContain('daylight=1');
@@ -92,7 +94,7 @@ describe('buildCurrentObsUrl', () => {
     });
 
     it('marks the dynamic mode it was copied in', async () => {
-        useSettingsUiStore.setState({ webObsThemeMode: 'ai' });
+        useStageSettingsStore.setState({ webObsThemeMode: 'ai' });
         expect(await buildCurrentObsUrl('now-playing')).toContain('obsTheme=ai');
     });
 

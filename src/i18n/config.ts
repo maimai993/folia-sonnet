@@ -112,11 +112,27 @@ i18n
     }
   });
 
+/*
+ * The Electron main process keeps its own tiny locale table for the tray menu and
+ * native dialogs, and only learns the language through this IPC call. Pushing on every
+ * `languageChanged` plus once at startup means a `system` preference reaches the tray
+ * too, instead of only manual switches made in Settings.
+ */
+const pushLocaleToMainProcess = (value: string | null | undefined) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  void window.electron?.setAppLocale?.(normalizeSupportedLanguage(value));
+};
+
 i18n.on('languageChanged', lng => {
   syncDocumentLanguage(lng);
+  pushLocaleToMainProcess(lng);
 });
 
 syncDocumentLanguage(i18n.resolvedLanguage ?? i18n.language);
+pushLocaleToMainProcess(i18n.resolvedLanguage ?? i18n.language);
 
 export const applyAppLanguagePreference = async (
   preference: AppLanguagePreference

@@ -8,6 +8,7 @@ import type { VideoExportPreset, VideoExportState } from '../types/videoExport';
 import { idleVideoExportState } from '../types/videoExport';
 import {
     buildDefaultVideoExportFileName,
+    createCroppedVideoStream,
     getAudioElementCaptureStream,
     getMainWindowVideoCaptureStream,
     getVideoExportRecorderOptions,
@@ -16,18 +17,17 @@ import {
     stopMediaStream,
     wait,
 } from '../services/electronVideoExport';
+import { useTranslation } from 'react-i18next';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { useAppChromeStore } from '../stores/useAppChromeStore';
+import { setIsPanelOpen } from '../stores/useAppViewStore';
+import { currentTime } from '../stores/motionSignals';
 
 // src/hooks/useElectronVideoExportController.ts
 // Records the real player window so audio.currentTime remains the single animation clock.
 type UseElectronVideoExportControllerOptions = {
-    t: (key: string) => string;
     isElectronWindow: boolean;
     audioRef: RefObject<HTMLAudioElement | null>;
-    currentTime: MotionValue<number>;
-    duration: number;
-    currentSong: SongResult | null;
-    setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
     navigateToPlayer: () => void;
     pausePlayback: () => void;
     resumePlayback: () => Promise<void>;
@@ -38,18 +38,18 @@ const COUNTDOWN_SECONDS = 3;
 const toArrayBuffer = (blob: Blob) => blob.arrayBuffer();
 
 export const useElectronVideoExportController = ({
-    t,
     isElectronWindow,
     audioRef,
-    currentTime,
-    duration,
-    currentSong,
-    setIsPlayerChromeHidden,
-    setIsPanelOpen,
     navigateToPlayer,
     pausePlayback,
     resumePlayback,
 }: UseElectronVideoExportControllerOptions) => {
+    // Read here rather than passed in: store fields, a module-level motion signal, or i18n.
+    const { t } = useTranslation();
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const duration = usePlaybackStore(state => state.duration);
+    const setIsPlayerChromeHidden = useAppChromeStore(state => state.setIsPlayerChromeHidden);
+
     const [exportState, setExportState] = useState<VideoExportState>(idleVideoExportState);
     const recorderRef = useRef<MediaRecorder | null>(null);
     const cancelRequestedRef = useRef(false);
@@ -98,6 +98,7 @@ export const useElectronVideoExportController = ({
         let progressIntervalId: number | null = null;
         let endedListener: (() => void) | null = null;
         let removeCursorGuard: (() => void) | null = null;
+        let canvasCropCleanup: (() => void) | null = null;
         const wasPaused = audioElement.paused;
         const previousLoop = audioElement.loop;
         const previousTime = audioElement.currentTime;
@@ -151,11 +152,20 @@ export const useElectronVideoExportController = ({
             }
 
             const prepared = await electron.prepareVideoExportWindow({ width: preset.width, height: preset.height });
-            if (!prepared) {
+            if (prepared === false || !prepared.success) {
                 throw new Error(t('export.windowResizeFailed'));
             }
             await wait(300);
             videoStream = await getMainWindowVideoCaptureStream(preset);
+
+            // Canvas post-processing: pure integer crop to exact preset resolution.
+            // The snap strategy in main.cjs ensures contentPhys >= preset + margin,
+            // so the captured frame is naturally larger than the target — we simply
+            // extract a preset-sized region with symmetric pixel-perfect cropping.
+            const cropped = createCroppedVideoStream(videoStream, preset);
+            videoStream = cropped.stream;
+            canvasCropCleanup = cropped.cleanup;
+
             audioStream = getAudioElementCaptureStream(audioElement);
             combinedStream = new MediaStream([
                 ...videoStream.getVideoTracks(),
@@ -271,6 +281,7 @@ export const useElectronVideoExportController = ({
             }
             setIsPlayerChromeHidden(false);
             removeCursorGuard?.();
+            canvasCropCleanup?.();
             void electron.restoreVideoExportWindow();
             runningRef.current = false;
             cancelRequestedRef.current = false;

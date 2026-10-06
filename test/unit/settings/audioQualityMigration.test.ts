@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStoredAudioQuality } from '@/stores/useSettingsUiStore';
+import { resolveStoredAudioQuality } from '@/stores/useAudioSettingsStore';
 
 // test/unit/settings/audioQualityMigration.test.ts
 

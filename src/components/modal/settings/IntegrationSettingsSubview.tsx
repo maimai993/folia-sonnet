@@ -7,11 +7,17 @@ import type { NavidromeServerProfile } from '../../../types/navidrome';
 import type { ObsBrowserSourceStatus } from '../../../types/obsBrowserSource';
 import type { PlayerCapConnectionStatus } from '../../../types/playerCap';
 import { CustomSelect } from '../../shared/CustomSelect';
-import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
-import { resolveWebObsTarget } from '../../../utils/webObsTarget';
+import { buildCurrentObsUrl } from '../../../services/obs/currentObsUrl';
+import { resolveWebObsTarget } from '../../../services/obs/webObsTarget';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
-import { hasCustomObsFont } from '../../../utils/visualSettingsConfig';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
+import { resolveObsCopyHintKey } from '../../../services/obs/visualSettingsConfig';
+import type { LyricApiStatus } from '../../../types/lyricApi';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -72,9 +78,15 @@ export type IntegrationDiscordModel = {
     status?: ElectronDiscordPresenceStatus | null;
 };
 
+export type IntegrationLyricApiModel = {
+    status?: LyricApiStatus | null;
+    onToggle?: (enabled: boolean) => Promise<void> | void;
+};
+
 type IntegrationSettingsSubviewProps = {
     chrome: IntegrationSettingsChrome;
     discord: IntegrationDiscordModel;
+    lyricApi: IntegrationLyricApiModel;
     navidrome: IntegrationNavidromeModel;
     stage: IntegrationStageModel;
 };
@@ -88,6 +100,7 @@ const maskStageToken = (token: string | null | undefined, t: (key: string) => st
 const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
     chrome,
     discord,
+    lyricApi,
     navidrome,
     stage,
 }) => {
@@ -148,6 +161,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         return t('options.updateCheckDisabled');
     };
     const [obsAddressCopied, setObsAddressCopied] = useState(false);
+    const [lyricApiAddressCopied, setLyricApiAddressCopied] = useState(false);
     const [obsUrlCopied, setObsUrlCopied] = useState(false);
     // PlayerCap config: the subview reads the store directly (fewer layers); connection state/players are passed in by the stage model.
     const {
@@ -160,8 +174,9 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis,
         setPlayerCapSticky,
         setWebStageSource,
-        isDaylight,
-    } = useSettingsUiStore(useShallow(state => ({
+        obsKeepMainWindowAnimation,
+        handleToggleObsKeepMainWindowAnimation,
+    } = useStageSettingsStore(useShallow(state => ({
         playerCapHost: state.playerCapHost,
         playerCapPlayer: state.playerCapPlayer,
         playerCapTimeBasis: state.playerCapTimeBasis,
@@ -171,8 +186,10 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         setPlayerCapTimeBasis: state.setPlayerCapTimeBasis,
         setPlayerCapSticky: state.setPlayerCapSticky,
         setWebStageSource: state.setWebStageSource,
-        isDaylight: state.isDaylight,
+        obsKeepMainWindowAnimation: state.obsKeepMainWindowAnimation,
+        handleToggleObsKeepMainWindowAnimation: state.handleToggleObsKeepMainWindowAnimation,
     })));
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const [playerCapHostDraft, setPlayerCapHostDraft] = useState(playerCapHost);
     useEffect(() => { setPlayerCapHostDraft(playerCapHost); }, [playerCapHost]);
     const playerCapConnected = playerCapConnectionStatus === 'connected';
@@ -212,6 +229,12 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         window.setTimeout(() => setObsAddressCopied(false), 1600);
     };
 
+    const handleCopyLyricApiAddress = async (address: string) => {
+        await onCopyText(address);
+        setLyricApiAddressCopied(true);
+        window.setTimeout(() => setLyricApiAddressCopied(false), 1600);
+    };
+
     // Whether the web stage is enabled (stageSource is derived by the controller from the store's two toggles: null means disabled).
     const webStageEnabled = stageSource === 'now-playing' || stageSource === 'playercap';
 
@@ -222,8 +245,11 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         await onCopyText(await buildCurrentObsUrl(target.source, target.host, target.extra));
         setObsUrlCopied(true);
         window.setTimeout(() => setObsUrlCopied(false), 1600);
-        if (hasCustomObsFont()) {
-            useSettingsUiStore.getState().statusSetter?.({ type: 'info', text: t('options.obsUrlCustomFontHint') });
+        // Only surface a warning toast here; the copy itself is already acknowledged by the button
+        // state, so a plain "copied" success would be redundant.
+        const hint = resolveObsCopyHintKey();
+        if (hint.type === 'info') {
+            setStatusMessage({ type: 'info', text: t(hint.key) });
         }
     };
 
@@ -336,10 +362,8 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
     return (
         <>
             {isElectron && (
-                <section>
-                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Activity size={14} /> {t('options.discordRichPresence') || 'Discord Rich Presence'}
-                    </h3>
+                <SettingsAnchor anchorId="discordRichPresence" label={t('options.discordRichPresence') || 'Discord Rich Presence'}>
+                    <SettingsSectionHeading icon={Activity} label={t('options.discordRichPresence') || 'Discord Rich Presence'} />
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
@@ -372,14 +396,12 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                             )}
                         </div>
                     </div>
-                </section>
+                </SettingsAnchor>
             )}
 
             {isElectron && obsBrowserSourceStatus && (
-                <section>
-                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Server size={14} /> {t('options.obsBrowserSource') || 'OBS Browser Source'}
-                    </h3>
+                <SettingsAnchor anchorId="obsBrowserSource" label={t('options.obsBrowserSource') || 'OBS Browser Source'}>
+                    <SettingsSectionHeading icon={Server} label={t('options.obsBrowserSource') || 'OBS Browser Source'} />
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
@@ -387,7 +409,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                     {t('options.enableObsBrowserSource') || 'Enable OBS browser source'}
                                 </div>
                                 <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.obsBrowserSourceDesc') || 'Renders the full lyrics animation in OBS without audio. When connected, the main window stops rendering the heavy visualizer.'}
+                                    {t('options.obsBrowserSourceDesc') || 'Renders the full lyrics animation in OBS without audio. By default, the main window stops rendering the heavy visualizer while OBS is connected.'}
                                 </div>
                             </div>
                             <button
@@ -439,17 +461,104 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                         </button>
                                     </div>
                                 </div>
+
+                                <div className={`rounded-xl border p-3 flex items-center justify-between gap-4 ${settingsCardClass}`}>
+                                    <div className="space-y-1">
+                                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                            {t('options.obsKeepMainWindowAnimation') || 'Keep main window animation while OBS is connected'}
+                                        </div>
+                                        <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.obsKeepMainWindowAnimationDesc') || 'When on, the main window keeps rendering the lyrics animation while OBS is connected. The main window and OBS both render the heavy animation, which uses more GPU / CPU.'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleObsKeepMainWindowAnimation(!obsKeepMainWindowAnimation)}
+                                        className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!obsKeepMainWindowAnimation ? toggleOffBackgroundClass : ''}`}
+                                        style={{ backgroundColor: obsKeepMainWindowAnimation ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                        aria-label={t('options.obsKeepMainWindowAnimation') || 'Keep main window animation while OBS is connected'}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${obsKeepMainWindowAnimation ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                <details className={`rounded-xl border p-3 ${settingsCardClass}`}>
+                                    <summary className="cursor-pointer select-none text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                        {t('options.obsBrowserSourceGuideTitle') || 'How to use'}
+                                    </summary>
+                                    <ol className="mt-3 pl-4 list-decimal space-y-1.5 text-[11px] opacity-60 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                        {[1, 2, 3, 4, 5, 6].map(step => (
+                                            <li key={step}>{t(`options.obsBrowserSourceGuideStep${step}`)}</li>
+                                        ))}
+                                    </ol>
+                                </details>
                             </div>
                         )}
                     </div>
-                </section>
+                </SettingsAnchor>
+            )}
+
+            {isElectron && lyricApi.status && (
+                <SettingsAnchor anchorId="lyricApi" label={t('options.lyricApi')}>
+                    <SettingsSectionHeading icon={Server} label={t('options.lyricApi')} />
+                    <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.enableLyricApi')}
+                                </div>
+                                <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.lyricApiDesc')}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void lyricApi.onToggle?.(!lyricApi.status?.enabled)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!lyricApi.status.enabled ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: lyricApi.status.enabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                aria-label={t('options.enableLyricApi')}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${lyricApi.status.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        {lyricApi.status.enabled && (
+                            <div className={`rounded-xl border p-3 space-y-3 ${settingsCardClass}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-[0.16em] opacity-40 mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.lyricApiAddress')}
+                                        </div>
+                                        <div className="text-sm break-all" style={{ color: 'var(--text-primary)' }}>
+                                            {lyricApi.status.url ?? `http://127.0.0.1:${lyricApi.status.port}/v1/lyric`}
+                                        </div>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-1 rounded-full text-[10px] ${lyricApi.status.running ? successBgColor : errorBgColor} ${lyricApi.status.running ? successTextColor : errorTextColor}`}>
+                                        {lyricApi.status.running ? t('options.lyricApiRunning') : t('options.lyricApiUnavailable')}
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => lyricApi.status?.url ? void handleCopyLyricApiAddress(lyricApi.status.url) : undefined}
+                                    disabled={!lyricApi.status.url}
+                                    className="px-3 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-xs transition-colors disabled:opacity-40 flex items-center gap-2"
+                                    style={{ color: lyricApiAddressCopied ? '#86efac' : 'var(--text-primary)' }}
+                                >
+                                    {lyricApiAddressCopied ? <Check size={14} /> : null}
+                                    {lyricApiAddressCopied ? t('options.stageAddressCopied') : t('options.copyLyricApiAddress')}
+                                </button>
+                                {lyricApi.status.error && (
+                                    <div className="text-[10px] text-red-400 break-all">{lyricApi.status.error}</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </SettingsAnchor>
             )}
 
             {isElectron && stageStatus && (
-                <section>
-                    <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <Server size={14} /> {t('options.stageMode')}
-                    </h3>
+                <SettingsAnchor anchorId="stageMode" label={t('options.stageMode')}>
+                    <SettingsSectionHeading icon={Server} label={t('options.stageMode')} />
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
@@ -571,20 +680,28 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                             </div>
                         )}
                     </div>
-                </section>
+                </SettingsAnchor>
             )}
 
             {!isElectron && (
-                <section>
-                    <h3 className="text-sm font-bold uppercase tracking-wider mb-4 flex items-center justify-between gap-2" style={{ color: 'var(--text-secondary)' }}>
-                        <span className="flex items-center gap-2 opacity-50"><Server size={14} /> {t('options.stageMode')}</span>
+                <SettingsAnchor anchorId="stageMode" label={t('options.stageMode')}>
+                    {/* Right column uses max-content so it sizes to the URL button's natural width; the CSS button below stretches to match. */}
+                    <div className="mb-4 grid grid-cols-[minmax(0,1fr)_max-content] gap-x-2 gap-y-2 items-center">
+                        <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 opacity-50 row-span-full self-center m-0" style={{ color: 'var(--text-secondary)' }}>
+                            <Server size={14} /> {t('options.stageMode')}
+                        </h3>
                         <ObsCopyUrlButton
                             onCopy={handleCopyObsUrl}
                             copied={obsUrlCopied}
                             disabled={!webStageEnabled}
                             buttonClassName="px-2.5 py-1"
                         />
-                    </h3>
+                        <ObsCopyCssButton
+                            disabled={!webStageEnabled}
+                            buttonClassName="px-2.5 py-1 w-full"
+                            containerClassName="col-start-2 flex w-full"
+                        />
+                    </div>
                     <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                         <div className="flex items-center justify-between gap-4">
                             <div className="space-y-1">
@@ -636,10 +753,10 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                             </div>
                         )}
                     </div>
-                </section>
+                </SettingsAnchor>
             )}
 
-            <section>
+            <SettingsAnchor anchorId="navidrome" label={t('navidrome.settings') || 'Navidrome Settings'}>
                 <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
                     <Server size={14} /> {t('navidrome.settings') || 'Navidrome Settings'}
                     {navidromeEnabled && navidromeConfigured && (
@@ -769,7 +886,7 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                         </div>
                     )}
                 </div>
-            </section>
+            </SettingsAnchor>
         </>
     );
 };

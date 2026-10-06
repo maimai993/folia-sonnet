@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme } from '../../../types';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
 import { COMMAND_PALETTE_COMMANDS } from '../../command-palette/commandRegistry';
 import { getCommandTitle } from '../../command-palette/commandText';
 import { CustomSelect } from '../../shared/CustomSelect';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 
 // src/components/modal/settings/PinnedCommandSettings.tsx
 // Configures the three registry-backed shortcuts shown below the command palette.
@@ -23,19 +25,23 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
     theme,
 }) => {
     const { t } = useTranslation();
-    const { pinnedCommandIds, setPinnedCommandId } = useSettingsUiStore(useShallow(state => ({
+    const { pinnedCommandIds, setPinnedCommandId } = useSettingsModalStore(useShallow(state => ({
         pinnedCommandIds: state.pinnedCommandIds,
         setPinnedCommandId: state.setPinnedCommandId,
     })));
 
+    // Three slots each mapped the whole ~125-command registry through getCommandTitle on every
+    // render of the settings screen — roughly 375 t() lookups for a list that only changes when
+    // the language does. Resolve the titles once; the per-slot filter below is plain array work.
+    const commandOptions = useMemo(() => COMMAND_PALETTE_COMMANDS.map(command => ({
+        id: command.id,
+        value: command.id,
+        label: getCommandTitle(command, t),
+    })), [t]);
+
     return (
-        <section>
-            <h3
-                className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider opacity-50"
-                style={{ color: 'var(--text-secondary)' }}
-            >
-                <Pin size={14} /> {t('options.pinnedCommands')}
-            </h3>
+        <SettingsAnchor anchorId="pinnedCommands" label={t('options.pinnedCommands')}>
+            <SettingsSectionHeading icon={Pin} label={t('options.pinnedCommands')} />
             <div className={`space-y-4 rounded-xl border p-4 ${settingsCardClass}`}>
                 <div className="space-y-1">
                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -49,14 +55,9 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
                     {pinnedCommandIds.map((commandId, slotIndex) => {
                         const options = [
                             { value: '', label: t('options.pinnedCommandNone') },
-                            ...COMMAND_PALETTE_COMMANDS
-                                .filter(command => (
-                                    command.id === commandId || !pinnedCommandIds.includes(command.id)
-                                ))
-                                .map(command => ({
-                                    value: command.id,
-                                    label: getCommandTitle(command, t),
-                                })),
+                            ...commandOptions.filter(option => (
+                                option.id === commandId || !pinnedCommandIds.includes(option.id)
+                            )),
                         ];
                         const slotLabel = t('options.pinnedCommandSlot', { index: slotIndex + 1 });
 
@@ -79,7 +80,7 @@ const PinnedCommandSettings: React.FC<PinnedCommandSettingsProps> = ({
                     })}
                 </div>
             </div>
-        </section>
+        </SettingsAnchor>
     );
 };
 

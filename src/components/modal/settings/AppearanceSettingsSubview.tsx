@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Monitor, Palette, Settings2, LayoutGrid, Download, Copy, Check, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Monitor, Palette, Settings2, LayoutGrid, PanelsTopLeft, Images, Download, Copy, Check, ChevronRight, AlertTriangle, KeyRound, Music2, Film } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -9,17 +9,33 @@ import {
     type UrlBackgroundItem,
 } from '../../../types';
 import { applyVisualizerTuningsToSettings } from '../../visualizer/tuningRegistry';
-import { useSettingsUiStore } from '../../../stores/useSettingsUiStore';
+import { ObsCopyCssButton } from '../../shared/ObsCopyCssButton';
 import { mergeUrlBackgroundList } from '../../../utils/urlBackground';
 import { compressConfig, decompressConfig, readSavedCustomTheme } from '../../../utils/appearanceCodec';
+import { importFoliumParams, snapshotFoliumParams } from '../../../mods/folium/paramStore';
 import { ACTIVATE_CUSTOM_THEME_KEY, buildImportPlan, THEME_DARK_KEY, THEME_LIGHT_KEY, type ImportPlan } from '../../../utils/appearanceImportPlan';
 import { isFontFamilyAvailable } from '../../../utils/fontAvailability';
 import ImportConfirmDialog from './ImportConfirmDialog';
 import { extractCfgFromInput } from '../../../utils/obsUrl';
-import { buildCurrentObsUrl } from '../../../utils/currentObsUrl';
+import { buildCurrentObsUrl } from '../../../services/obs/currentObsUrl';
 import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
-import { resolveWebObsTarget, selectWebObsSource } from '../../../utils/webObsTarget';
-import { buildVisualSettingsConfig, hasCustomObsFont } from '../../../utils/visualSettingsConfig';
+import { resolveWebObsTarget, selectWebObsSource } from '../../../services/obs/webObsTarget';
+import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../services/obs/visualSettingsConfig';
+import LatticeSettingsSection from './LatticeSettingsSection';
+import GridViewSettingsSection from './GridViewSettingsSection';
+import VideoLayerSettingsSection from './VideoLayerSettingsSection';
+import NowPlayingCardSettingsSection from './NowPlayingCardSettingsSection';
+import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../services/themePreferences';
+import { SettingsAnchor } from './navigation/SettingsAnchorContext';
+import SettingsSectionHeading from './navigation/SettingsSectionHeading';
+import { settingsDividerClassFor } from './settingsCardClasses';
+import { setStatusMessage } from '../../../stores/useStatusMessageStore';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
+import { useTypographySettingsStore } from '../../../stores/useTypographySettingsStore';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 
 // src/components/modal/settings/AppearanceSettingsSubview.tsx
 // Visual settings subview for theme presets, lyric renderer entry, layout settings, and configurations import/export.
@@ -30,15 +46,22 @@ type AppearanceSettingsSubviewProps = {
     hasCustomTheme: boolean;
     isCustomThemePreferred: boolean;
     isDaylight: boolean;
+    followSystemTheme: boolean;
     onApplyCustomTheme: () => void;
     onApplyDefaultTheme: () => void;
     onOpenThemePark: () => void;
     onOpenVisPlayground: () => void;
     onToggleSongThemeAutoGenerate: (enabled: boolean) => void;
+    onToggleFollowSystemTheme: (enabled: boolean) => void;
     onToggleCustomThemePreferred: (enabled: boolean) => void;
     onToggleSongThemeAutoSwitch: (enabled: boolean) => void;
+    themeGenerationSource: ThemeGenerationSource;
+    onChangeThemeGenerationSource: (source: ThemeGenerationSource) => void;
+    aiApiKeyStatus: 'loading' | 'configured' | 'missing';
+    onOpenAiSettings: () => void;
     onToggleTransparentPlayerBackground: (enabled: boolean) => void;
     onToggleAutoHidePlayerChrome: (enabled: boolean) => void;
+    onToggleAutoHideCursorWithPlayerChrome: (enabled: boolean) => void;
     onSaveCustomTheme: (dualTheme: DualTheme) => void;
     settingsCardClass: string;
     songThemeAutoSwitchEnabled: boolean;
@@ -48,6 +71,13 @@ type AppearanceSettingsSubviewProps = {
     toggleOffBackgroundClass: string;
     transparentPlayerBackground: boolean;
     autoHidePlayerChrome: boolean;
+    autoHideCursorWithPlayerChrome: boolean;
+    stageTrackPillMode: 'auto' | 'always' | 'never';
+    stageTrackPillTimeoutSec: number;
+    stageTrackPillOnHome: boolean;
+    onChangeStageTrackPillMode: (mode: 'auto' | 'always' | 'never') => void;
+    onChangeStageTrackPillTimeoutSec: (sec: number) => void;
+    onToggleStageTrackPillOnHome: (enable: boolean) => void;
     utilityGhostButtonClass: string;
     grid3dCardStyle: 'image' | 'card';
     onChangeGrid3dCardStyle: (style: 'image' | 'card') => void;
@@ -65,15 +95,22 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     hasCustomTheme,
     isCustomThemePreferred,
     isDaylight,
+    followSystemTheme,
     onApplyCustomTheme,
     onApplyDefaultTheme,
     onOpenThemePark,
     onOpenVisPlayground,
     onToggleSongThemeAutoGenerate,
+    onToggleFollowSystemTheme,
     onToggleCustomThemePreferred,
     onToggleSongThemeAutoSwitch,
+    themeGenerationSource,
+    onChangeThemeGenerationSource,
+    aiApiKeyStatus,
+    onOpenAiSettings,
     onToggleTransparentPlayerBackground,
     onToggleAutoHidePlayerChrome,
+    onToggleAutoHideCursorWithPlayerChrome,
     onSaveCustomTheme,
     settingsCardClass,
     songThemeAutoSwitchEnabled,
@@ -83,6 +120,13 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     toggleOffBackgroundClass,
     transparentPlayerBackground,
     autoHidePlayerChrome,
+    autoHideCursorWithPlayerChrome,
+    stageTrackPillMode,
+    stageTrackPillTimeoutSec,
+    onChangeStageTrackPillMode,
+    onChangeStageTrackPillTimeoutSec,
+    stageTrackPillOnHome,
+    onToggleStageTrackPillOnHome,
     utilityGhostButtonClass,
     grid3dCardStyle,
     onChangeGrid3dCardStyle,
@@ -93,7 +137,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
     // OBS static URL points to this web deploy, so the copy button is web-only (no shareable URL under Electron).
     // The link follows the selected web stage source (Now Playing / PlayerCap); disabled when none is on.
     const isElectron = typeof window !== 'undefined' && Boolean((window as { electron?: unknown }).electron);
-    const webObsSource = useSettingsUiStore(selectWebObsSource);
+    const webObsSource = useStageSettingsStore(selectWebObsSource);
     const [importText, setImportText] = useState('');
     const [copiedType, setCopiedType] = useState<'none' | 'shortcode' | 'json' | 'obsurl'>('none');
     // Parsed config held back until the user confirms which groups to take.
@@ -122,19 +166,20 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         });
     }, [aiTheme, customTheme]);
 
-    // Access ZUSTAND settings store directly for setters & configurations
-    const store = useSettingsUiStore(useShallow(state => ({
-        statusSetter: state.statusSetter,
+    const storeThemeSettings = useThemeSettingsStore(useShallow(state => ({
+        handleToggleFollowSystemTheme: state.setFollowSystemTheme,
+        handleToggleCoverColorBg: state.handleToggleCoverColorBg,
+        handleToggleStaticMode: state.handleToggleStaticMode,
+    })));
+    const storePlayerChromeSettings = usePlayerChromeSettingsStore(useShallow(state => ({
         enablePlayerPageNativeBlur: state.enablePlayerPageNativeBlur,
-        visualizerMode: state.visualizerMode,
-        randomVisualizerModePerSong: state.randomVisualizerModePerSong,
-        visualizerBackgroundMode: state.visualizerBackgroundMode,
-        backgroundOpacity: state.backgroundOpacity,
-        visualizerOpacity: state.visualizerOpacity,
+    })));
+    const storeTypographySettings = useTypographySettingsStore(useShallow(state => ({
         hidePlayerTranslationSubtitle: state.hidePlayerTranslationSubtitle,
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
         subtitleOverlayBackground: state.subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur: state.subtitleUpcomingLyricsBlur,
         showHarmonySubtitle: state.showHarmonySubtitle,
         harmonySubtitleBackground: state.harmonySubtitleBackground,
         lyricsFontStyle: state.lyricsFontStyle,
@@ -147,31 +192,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         subtitleFontWeight: state.subtitleFontWeight,
         subtitleFontFamily: state.subtitleFontFamily,
         subtitleFontFallbackFamilies: state.subtitleFontFallbackFamilies,
-        classicTuning: state.classicTuning,
-        cadenzaTuning: state.cadenzaTuning,
-        partitaTuning: state.partitaTuning,
-        fumeTuning: state.fumeTuning,
-        claddaghTuning: state.claddaghTuning,
-        cappellaTuning: state.cappellaTuning,
-        tiltTuning: state.tiltTuning,
-        dioramaTuning: state.dioramaTuning,
-        monetBackgroundTuning: state.monetBackgroundTuning,
-        nomandBackgroundTuning: state.nomandBackgroundTuning,
-        latentBackgroundTuning: state.latentBackgroundTuning,
-        monetTuning: state.monetTuning,
-        pendoloTuning: state.pendoloTuning,
-        urlBackgroundList: state.urlBackgroundList,
-        urlBackgroundSelectedId: state.urlBackgroundSelectedId,
-
-        handleSetVisualizerMode: state.handleSetVisualizerMode,
-        handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
-        handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
-        handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
-        handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
         handleToggleHidePlayerTranslationSubtitle: state.handleToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation: state.handleToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: state.handleSetSubtitleContentMode,
         handleToggleSubtitleOverlayBackground: state.handleToggleSubtitleOverlayBackground,
+        handleToggleSubtitleUpcomingLyricsBlur: state.handleToggleSubtitleUpcomingLyricsBlur,
+        handleSetSubtitleOverlayOpacity: state.handleSetSubtitleOverlayOpacity,
         handleToggleShowHarmonySubtitle: state.handleToggleShowHarmonySubtitle,
         handleToggleHarmonySubtitleBackground: state.handleToggleHarmonySubtitleBackground,
         handleSetLyricsFontStyle: state.handleSetLyricsFontStyle,
@@ -184,6 +210,39 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetSubtitleFontWeight: state.handleSetSubtitleFontWeight,
         handleSetSubtitleFontFamily: state.handleSetSubtitleFontFamily,
         handleSetSubtitleFontFallbackFamilies: state.handleSetSubtitleFontFallbackFamilies,
+    })));
+    const storeVisualizer = useVisualizerSettingsStore(useShallow(state => ({
+        visualizerMode: state.visualizerMode,
+        randomVisualizerModePerSong: state.randomVisualizerModePerSong,
+        visualizerBackgroundMode: state.visualizerBackgroundMode,
+        backgroundOpacity: state.backgroundOpacity,
+        visualizerOpacity: state.visualizerOpacity,
+        classicTuning: state.classicTuning,
+        cadenzaTuning: state.cadenzaTuning,
+        partitaTuning: state.partitaTuning,
+        fumeTuning: state.fumeTuning,
+        claddaghTuning: state.claddaghTuning,
+        cappellaTuning: state.cappellaTuning,
+        tiltTuning: state.tiltTuning,
+        dioramaTuning: state.dioramaTuning,
+        monetBackgroundTuning: state.monetBackgroundTuning,
+        nomandBackgroundTuning: state.nomandBackgroundTuning,
+        latentBackgroundTuning: state.latentBackgroundTuning,
+        soraBackgroundTuning: state.soraBackgroundTuning,
+        monetTuning: state.monetTuning,
+        pendoloTuning: state.pendoloTuning,
+        sonnetTuning: state.sonnetTuning,
+        temperaTuning: state.temperaTuning,
+        lumiereTuning: state.lumiereTuning,
+        urlBackgroundList: state.urlBackgroundList,
+        urlBackgroundSelectedId: state.urlBackgroundSelectedId,
+        handleSetVisualizerMode: state.handleSetVisualizerMode,
+        handleToggleRandomVisualizerModePerSong: state.handleToggleRandomVisualizerModePerSong,
+        handleSetVisualizerBackgroundMode: state.handleSetVisualizerBackgroundMode,
+        handleSetBackgroundOpacity: state.handleSetBackgroundOpacity,
+        handleSetVisualizerOpacity: state.handleSetVisualizerOpacity,
+        handleToggleDisableVisualizerGeometricBackground: state.handleToggleDisableVisualizerGeometricBackground,
+        handleToggleDisableVisualizerVignette: state.handleToggleDisableVisualizerVignette,
         handleSetClassicTuning: state.handleSetClassicTuning,
         handleSetCadenzaTuning: state.handleSetCadenzaTuning,
         handleSetPartitaTuning: state.handleSetPartitaTuning,
@@ -195,8 +254,12 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         handleSetMonetBackgroundTuning: state.handleSetMonetBackgroundTuning,
         handleSetNomandBackgroundTuning: state.handleSetNomandBackgroundTuning,
         handleSetLatentBackgroundTuning: state.handleSetLatentBackgroundTuning,
+        handleSetSoraBackgroundTuning: state.handleSetSoraBackgroundTuning,
         handleSetMonetTuning: state.handleSetMonetTuning,
         handleSetPendoloTuning: state.handleSetPendoloTuning,
+        handleSetSonnetTuning: state.handleSetSonnetTuning,
+        handleSetTemperaTuning: state.handleSetTemperaTuning,
+        handleSetLumiereTuning: state.handleSetLumiereTuning,
         handleAddUrlBackgroundItem: state.handleAddUrlBackgroundItem,
         handleUpdateUrlBackgroundItem: state.handleUpdateUrlBackgroundItem,
         handleSetUrlBackgroundList: state.handleSetUrlBackgroundList,
@@ -225,11 +288,14 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         } else if (exportThemeType === 'ai') {
             exportTheme = aiTheme || null;
         }
+        const foliumParams = snapshotFoliumParams();
         return {
             theme: exportTheme,
             ...buildVisualSettingsConfig(),
             songThemeAutoSwitchEnabled,
             songThemeAutoGenerateEnabled,
+            // Mod settings and tunings (Folium param store) are visual settings too.
+            ...(Object.keys(foliumParams).length > 0 ? { foliumParams } : {}),
         };
     };
 
@@ -240,7 +306,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('shortcode');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy shortcode:', err);
         }
@@ -253,7 +319,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(code);
             setCopiedType('json');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.({ type: 'success', text: t('status.copied') });
+            setStatusMessage({ type: 'success', text: t('status.copied') });
         } catch (err) {
             console.error('Failed to copy JSON:', err);
         }
@@ -275,14 +341,13 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             await navigator.clipboard.writeText(url);
             setCopiedType('obsurl');
             setTimeout(() => setCopiedType('none'), 2000);
-            store.statusSetter?.(hasCustomObsFont()
-                ? { type: 'info', text: t('options.obsUrlCustomFontHint') }
-                : { type: 'success', text: t('status.copied') });
+            const hint = resolveObsCopyHintKey();
+            setStatusMessage({ type: hint.type, text: t(hint.key) });
         } catch (err) {
             // The URL is built asynchronously, so a browser that requires the write to stay inside the
             // click's own task can reject here. Say so instead of leaving the button looking inert.
             console.error('Failed to copy OBS URL:', err);
-            store.statusSetter?.({ type: 'error', text: t('status.copyFailed') });
+            setStatusMessage({ type: 'error', text: t('status.copyFailed') });
         }
     };
 
@@ -293,8 +358,8 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
         try {
             // Import accepts a bare shortcode/JSON or a full OBS URL (extracting its cfg param), so a look can be re-tuned from someone's link.
             const config = decompressConfig(extractCfgFromInput(importText));
-            const uiStore = useSettingsUiStore.getState();
-            const customFont = uiStore.lyricsCustomFont;
+  const uiStoreTypographySettings = useTypographySettingsStore.getState();
+            const customFont = uiStoreTypographySettings.lyricsCustomFont;
             const plan = buildImportPlan({
                 incoming: config,
                 current: { ...buildVisualSettingsConfig(), theme: customTheme ?? null },
@@ -307,9 +372,9 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 isCustomThemeActive: bgMode === 'custom',
                 // A config names an uploaded image or emoji pack by source, but never carries it.
                 assets: {
-                    hasCappellaEmojiPack: uiStore.storedCappellaEmojiPack.length > 0,
-                    hasMonetBackgroundImage: Boolean(uiStore.storedMonetBackgroundImage),
-                    hasMonetPortraitImage: Boolean(uiStore.storedMonetPortraitImage),
+                    hasCappellaEmojiPack: useVisualizerAssetStore.getState().storedCappellaEmojiPack.length > 0,
+                    hasMonetBackgroundImage: Boolean(useVisualizerAssetStore.getState().storedMonetBackgroundImage),
+                    hasMonetPortraitImage: Boolean(useVisualizerAssetStore.getState().storedMonetPortraitImage),
                 },
             });
 
@@ -318,7 +383,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             setPendingImport({ config, plan });
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
         }
     };
 
@@ -346,106 +411,137 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
 
             // 2. Restore Visualizer Setup
             if (has('visualizerMode') && config.visualizerMode) {
-                store.handleSetVisualizerMode(config.visualizerMode);
+                storeVisualizer.handleSetVisualizerMode(config.visualizerMode);
             }
             if (has('randomVisualizerModePerSong')) {
-                store.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
+                storeVisualizer.handleToggleRandomVisualizerModePerSong(Boolean(config.randomVisualizerModePerSong));
             }
             if (has('visualizerOpacity')) {
-                store.handleSetVisualizerOpacity(config.visualizerOpacity);
+                storeVisualizer.handleSetVisualizerOpacity(config.visualizerOpacity);
             }
             if (has('hidePlayerTranslationSubtitle')) {
-                store.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
+                storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
             }
             if (has('showSubtitleTranslation')) {
-                store.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
+                storeTypographySettings.handleToggleShowSubtitleTranslation(Boolean(config.showSubtitleTranslation));
             }
             if (has('subtitleContentMode')
                 && (config.subtitleContentMode === 'translation'
                     || config.subtitleContentMode === 'romanization'
+                    || config.subtitleContentMode === 'both'
                     || config.subtitleContentMode === 'none')) {
-                store.handleSetSubtitleContentMode(config.subtitleContentMode);
+                storeTypographySettings.handleSetSubtitleContentMode(config.subtitleContentMode);
             }
             if (has('subtitleOverlayBackground')) {
-                store.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+                storeTypographySettings.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
+            }
+            if (has('subtitleUpcomingLyricsBlur')) {
+                storeTypographySettings.handleToggleSubtitleUpcomingLyricsBlur(Boolean(config.subtitleUpcomingLyricsBlur));
+            }
+            if (has('subtitleOverlayOpacity')) {
+                storeTypographySettings.handleSetSubtitleOverlayOpacity(config.subtitleOverlayOpacity);
             }
             if (has('showHarmonySubtitle')) {
-                store.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
+                storeTypographySettings.handleToggleShowHarmonySubtitle(Boolean(config.showHarmonySubtitle));
             }
             if (has('harmonySubtitleBackground')) {
-                store.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
+                storeTypographySettings.handleToggleHarmonySubtitleBackground(Boolean(config.harmonySubtitleBackground));
             }
 
             if (has('visualizerBackgroundMode') && config.visualizerBackgroundMode) {
-                store.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
+                storeVisualizer.handleSetVisualizerBackgroundMode(config.visualizerBackgroundMode);
             }
             if (has('backgroundOpacity')) {
-                store.handleSetBackgroundOpacity(config.backgroundOpacity);
+                storeVisualizer.handleSetBackgroundOpacity(config.backgroundOpacity);
+            }
+            // Each of these four setters raises its own toast. They fire before the importSuccess
+            // message below, which writes the same single status slot last, so the user still ends
+            // on "imported" rather than on whichever toggle happened to be applied last.
+            if (has('useCoverColorBg')) {
+                storeThemeSettings.handleToggleCoverColorBg(Boolean(config.useCoverColorBg));
+            }
+            if (has('disableVisualizerGeometricBackground')) {
+                storeVisualizer.handleToggleDisableVisualizerGeometricBackground(Boolean(config.disableVisualizerGeometricBackground));
+            }
+            if (has('disableVisualizerVignette')) {
+                storeVisualizer.handleToggleDisableVisualizerVignette(Boolean(config.disableVisualizerVignette));
+            }
+            if (has('staticMode')) {
+                storeThemeSettings.handleToggleStaticMode(Boolean(config.staticMode));
             }
 
             if (has('lyricsFontStyle') && config.lyricsFontStyle) {
-                store.handleSetLyricsFontStyle(config.lyricsFontStyle);
+                storeTypographySettings.handleSetLyricsFontStyle(config.lyricsFontStyle);
             }
             if (has('lyricsFontScale')) {
-                store.handleSetLyricsFontScale(config.lyricsFontScale);
+                storeTypographySettings.handleSetLyricsFontScale(config.lyricsFontScale);
             }
             if (has('lyricsFontWeight')) {
-                store.handleSetLyricsFontWeight(config.lyricsFontWeight);
+                storeTypographySettings.handleSetLyricsFontWeight(config.lyricsFontWeight);
             }
             if (has('lyricsFontFallbackFamilies') && config.lyricsFontFallbackFamilies) {
-                store.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
+                storeTypographySettings.handleSetLyricsFontFallbackFamilies(config.lyricsFontFallbackFamilies);
             }
             // Only a system family is portable. Setting one evicts an uploaded font and deletes
             // its stored file, which is why the confirmation calls that out separately.
             if (has('lyricsCustomFontFamily') && config.lyricsCustomFontFamily) {
                 const family = String(config.lyricsCustomFontFamily);
-                useSettingsUiStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
+                useTypographySettingsStore.getState().handleSetLyricsCustomFont({ source: 'system', family, label: family });
             }
             if (has('subtitleFontInheritsLyrics')) {
-                store.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
+                storeTypographySettings.handleSetSubtitleFontInheritsLyrics(Boolean(config.subtitleFontInheritsLyrics));
             }
             if (has('subtitleFontScale')) {
-                store.handleSetSubtitleFontScale(config.subtitleFontScale);
+                storeTypographySettings.handleSetSubtitleFontScale(config.subtitleFontScale);
             }
             if (has('subtitleFontStyle') && config.subtitleFontStyle) {
-                store.handleSetSubtitleFontStyle(config.subtitleFontStyle);
+                storeTypographySettings.handleSetSubtitleFontStyle(config.subtitleFontStyle);
             }
             if (has('subtitleFontWeight')) {
-                store.handleSetSubtitleFontWeight(config.subtitleFontWeight);
+                storeTypographySettings.handleSetSubtitleFontWeight(config.subtitleFontWeight);
             }
             if (has('subtitleFontFamily')) {
-                store.handleSetSubtitleFontFamily(config.subtitleFontFamily);
+                storeTypographySettings.handleSetSubtitleFontFamily(config.subtitleFontFamily);
             }
             if (has('subtitleFontFallbackFamilies') && config.subtitleFontFallbackFamilies) {
-                store.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
+                storeTypographySettings.handleSetSubtitleFontFallbackFamilies(config.subtitleFontFallbackFamilies);
             }
 
             // Tunings. The bundle wins over the individual ones, which is why the plan never offers
             // both -- picking the bundle is picking every renderer at once.
             if (has('visualizerTunings') && config.visualizerTunings) {
-                applyVisualizerTuningsToSettings(store as unknown as Record<string, unknown>, config.visualizerTunings);
+                applyVisualizerTuningsToSettings(useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>, config.visualizerTunings);
             }
             if (!config.visualizerTunings) {
-                if (has('classicTuning') && config.classicTuning) store.handleSetClassicTuning(config.classicTuning);
-                if (has('cadenzaTuning') && config.cadenzaTuning) store.handleSetCadenzaTuning(config.cadenzaTuning);
-                if (has('partitaTuning') && config.partitaTuning) store.handleSetPartitaTuning(config.partitaTuning);
-                if (has('fumeTuning') && config.fumeTuning) store.handleSetFumeTuning(config.fumeTuning);
-                if (has('claddaghTuning') && config.claddaghTuning) store.handleSetCladdaghTuning(config.claddaghTuning);
-                if (has('cappellaTuning') && config.cappellaTuning) store.handleSetCappellaTuning(config.cappellaTuning);
-                if (has('tiltTuning') && config.tiltTuning) store.handleSetTiltTuning(config.tiltTuning);
-                if (has('dioramaTuning') && config.dioramaTuning) store.handleSetDioramaTuning(config.dioramaTuning);
-                if (has('monetTuning') && config.monetTuning) store.handleSetMonetTuning(config.monetTuning);
-                if (has('pendoloTuning') && config.pendoloTuning) store.handleSetPendoloTuning(config.pendoloTuning);
+                if (has('classicTuning') && config.classicTuning) storeVisualizer.handleSetClassicTuning(config.classicTuning);
+                if (has('cadenzaTuning') && config.cadenzaTuning) storeVisualizer.handleSetCadenzaTuning(config.cadenzaTuning);
+                if (has('partitaTuning') && config.partitaTuning) storeVisualizer.handleSetPartitaTuning(config.partitaTuning);
+                if (has('fumeTuning') && config.fumeTuning) storeVisualizer.handleSetFumeTuning(config.fumeTuning);
+                if (has('claddaghTuning') && config.claddaghTuning) storeVisualizer.handleSetCladdaghTuning(config.claddaghTuning);
+                if (has('cappellaTuning') && config.cappellaTuning) storeVisualizer.handleSetCappellaTuning(config.cappellaTuning);
+                if (has('tiltTuning') && config.tiltTuning) storeVisualizer.handleSetTiltTuning(config.tiltTuning);
+                if (has('dioramaTuning') && config.dioramaTuning) storeVisualizer.handleSetDioramaTuning(config.dioramaTuning);
+                if (has('monetTuning') && config.monetTuning) storeVisualizer.handleSetMonetTuning(config.monetTuning);
+                if (has('pendoloTuning') && config.pendoloTuning) storeVisualizer.handleSetPendoloTuning(config.pendoloTuning);
+                if (has('sonnetTuning') && config.sonnetTuning) storeVisualizer.handleSetSonnetTuning(config.sonnetTuning);
+                if (has('temperaTuning') && config.temperaTuning) storeVisualizer.handleSetTemperaTuning(config.temperaTuning);
+                if (has('lumiereTuning') && config.lumiereTuning) storeVisualizer.handleSetLumiereTuning(config.lumiereTuning);
             }
 
             if (has('monetBackgroundTuning') && config.monetBackgroundTuning) {
-                store.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
+                storeVisualizer.handleSetMonetBackgroundTuning(config.monetBackgroundTuning);
             }
             if (has('nomandBackgroundTuning') && config.nomandBackgroundTuning) {
-                store.handleSetNomandBackgroundTuning(config.nomandBackgroundTuning);
+                storeVisualizer.handleSetNomandBackgroundTuning(config.nomandBackgroundTuning);
             }
             if (has('latentBackgroundTuning') && config.latentBackgroundTuning) {
-                store.handleSetLatentBackgroundTuning(config.latentBackgroundTuning);
+                storeVisualizer.handleSetLatentBackgroundTuning(config.latentBackgroundTuning);
+            }
+            if (has('soraBackgroundTuning') && config.soraBackgroundTuning) {
+                storeVisualizer.handleSetSoraBackgroundTuning(config.soraBackgroundTuning);
+            }
+            if (has('foliumParams') && config.foliumParams) {
+                importFoliumParams(config.foliumParams);
             }
 
             let mergedUrlList: UrlBackgroundItem[] | undefined;
@@ -454,15 +550,15 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                 // Batch merge: compute the final list once, then apply with a single store update to
                 // avoid sequential localStorage writes per item. The plan diffs against this same
                 // helper, so the row's count is the count that gets stored.
-                mergedUrlList = mergeUrlBackgroundList(store.urlBackgroundList, config.urlBackgroundList);
-                store.handleSetUrlBackgroundList(mergedUrlList);
+                mergedUrlList = mergeUrlBackgroundList(storeVisualizer.urlBackgroundList, config.urlBackgroundList);
+                storeVisualizer.handleSetUrlBackgroundList(mergedUrlList);
             }
             // Validate that the imported selectedId still exists in the final list
             // to avoid a dangling reference that renders UrlBackgroundLayer blank.
             if (has('urlBackgroundSelectedId') && config.urlBackgroundSelectedId) {
-                const list = mergedUrlList ?? store.urlBackgroundList;
+                const list = mergedUrlList ?? storeVisualizer.urlBackgroundList;
                 if (list.some(i => i.id === config.urlBackgroundSelectedId)) {
-                    store.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
+                    storeVisualizer.handleSetUrlBackgroundSelectedId(config.urlBackgroundSelectedId);
                 }
             }
 
@@ -472,134 +568,52 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
             if (has('songThemeAutoGenerateEnabled')) {
                 onToggleSongThemeAutoGenerate(Boolean(config.songThemeAutoGenerateEnabled));
             }
+            if (has('themeGenerationSource') && isThemeGenerationSource(config.themeGenerationSource)) {
+                onChangeThemeGenerationSource(config.themeGenerationSource);
+            }
+            if (has('followSystemTheme')) {
+                storeThemeSettings.handleToggleFollowSystemTheme(Boolean(config.followSystemTheme));
+            }
 
-            store.statusSetter?.({ type: 'success', text: t('options.importSuccess') });
+            // The now playing card. Applied through the panel's own props, the same setters the three
+            // controls below use, so an import and a click land in the same place.
+            //
+            // The mode is checked against the three known values rather than handed straight to the
+            // setter: it is persisted verbatim, so an unknown string would be stored and only fall
+            // back to 'auto' on the next read - a setting that says one thing and behaves another.
+            // A malformed timeout is skipped rather than defaulted, so the import never applies a
+            // number that was in neither configuration; the setter clamps the rest to 3-60 itself.
+            if (has('stageTrackPillMode')
+                && (config.stageTrackPillMode === 'auto'
+                    || config.stageTrackPillMode === 'always'
+                    || config.stageTrackPillMode === 'never')) {
+                onChangeStageTrackPillMode(config.stageTrackPillMode);
+            }
+            if (has('stageTrackPillTimeoutSec') && Number.isFinite(Number(config.stageTrackPillTimeoutSec))) {
+                onChangeStageTrackPillTimeoutSec(Number(config.stageTrackPillTimeoutSec));
+            }
+            if (has('stageTrackPillOnHome')) {
+                onToggleStageTrackPillOnHome(Boolean(config.stageTrackPillOnHome));
+            }
+
+            setStatusMessage({ type: 'success', text: t('options.importSuccess') });
             setImportText('');
             setPendingImport(null);
         } catch (err) {
             console.error('Import settings failed:', err);
-            store.statusSetter?.({ type: 'error', text: t('options.importFailed') });
+            setStatusMessage({ type: 'error', text: t('options.importFailed') });
             setPendingImport(null);
         }
     };
 
     return (
         <div className="space-y-6">
-            {/* Section 1: Theme presets and edit options */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Palette size={14} /> {t('options.themePresets')}
-                </h3>
-                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                            {t('options.themePresets')}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={onOpenThemePark}
-                            className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
-                            style={{ color: 'var(--text-primary)' }}
-                            title={t('options.openThemePark')}
-                            aria-label={t('options.openThemePark')}
-                        >
-                            <Palette size={16} />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <button
-                            onClick={onApplyDefaultTheme}
-                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
-                            style={{
-                                ...getAccentOptionStyle(bgMode === 'default'),
-                                backgroundColor: bgMode === 'default'
-                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
-                                    : (isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(9, 9, 11, 0.5)'),
-                            }}
-                        >
-                            <div className="w-6 h-6 rounded-full shadow-sm" style={{ background: `linear-gradient(135deg, ${themeParkInitialTheme.light.backgroundColor}, ${themeParkInitialTheme.dark.backgroundColor})`, borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.15)' }} />
-                            <span className="text-xs font-semibold" style={{ color: isDaylight ? '#27272a' : '#e4e4e7' }}>{t('options.themePresetsDefault') || 'Default'}</span>
-                        </button>
-                        <button
-                            onClick={onApplyCustomTheme}
-                            disabled={!hasCustomTheme}
-                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                            style={{
-                                ...getAccentOptionStyle(bgMode === 'custom'),
-                                backgroundColor: bgMode === 'custom'
-                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
-                                    : (isDaylight ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.08)'),
-                            }}
-                        >
-                            <div className="w-6 h-6 rounded-full" style={{ background: hasCustomTheme ? `linear-gradient(135deg, ${themeParkInitialTheme.light.accentColor}, ${themeParkInitialTheme.dark.accentColor})` : 'rgba(114,119,134,0.4)' }} />
-                            <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || 'Custom'}</span>
-                        </button>
-                    </div>
-                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.preferCustomTheme')}
-                            </div>
-                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.preferCustomThemeDesc')}
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => hasCustomTheme && onToggleCustomThemePreferred(!isCustomThemePreferred)}
-                            disabled={!hasCustomTheme}
-                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!isCustomThemePreferred ? toggleOffBackgroundClass : ''} disabled:opacity-40 disabled:cursor-not-allowed`}
-                            style={{ backgroundColor: isCustomThemePreferred ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isCustomThemePreferred ? 'translate-x-6' : 'translate-x-0'}`} />
-                        </button>
-                    </div>
-                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
-                        <div className="space-y-1">
-                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.autoSwitchSongTheme')}
-                            </div>
-                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                {t('options.autoSwitchSongThemeDesc')}
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => onToggleSongThemeAutoSwitch(!songThemeAutoSwitchEnabled)}
-                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!songThemeAutoSwitchEnabled ? toggleOffBackgroundClass : ''}`}
-                            style={{ backgroundColor: songThemeAutoSwitchEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-                        >
-                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${songThemeAutoSwitchEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                        </button>
-                    </div>
-                    {songThemeAutoSwitchEnabled && (
-                        <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
-                            <div className="space-y-1">
-                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                    {t('options.autoGenerateSongTheme')}
-                                </div>
-                                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                                    {t('options.autoGenerateSongThemeDesc')}
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => onToggleSongThemeAutoGenerate(!songThemeAutoGenerateEnabled)}
-                                className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!songThemeAutoGenerateEnabled ? toggleOffBackgroundClass : ''}`}
-                                style={{ backgroundColor: songThemeAutoGenerateEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
-                            >
-                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${songThemeAutoGenerateEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            {/* Section 2: Lyrics Animation & Player View */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Monitor size={14} /> {t('options.lyricsRenderer')}
-                </h3>
+            {/* Section 1: Lyrics Animation & Player View */}
+            <SettingsAnchor anchorId="lyricsRenderer" label={t('options.lyricsRenderer')}>
+                <SettingsSectionHeading icon={Monitor} label={t('options.lyricsRenderer')} />
                 <div className="space-y-3">
-                    {store.enablePlayerPageNativeBlur && (
-                        <div className="flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-400">
+                    {storePlayerChromeSettings.enablePlayerPageNativeBlur && (
+                        <div className={`flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs ${isDaylight ? 'text-amber-600' : 'text-amber-400'}`}>
                             <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                             <span>{t('options.nativeBlurBackgroundNotice')}</span>
                         </div>
@@ -671,15 +685,229 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHidePlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
                             </button>
                         </div>
+                        {/* 指针隐藏是控制栏自动隐藏的附加项：上面那个开关关着时它无事可做，
+                            所以整行淡出，但仍可点击——先设好偏好再开自动隐藏也是合理的顺序。 */}
+                        <div className={`pl-4 border-l-2 border-white/10 flex items-center justify-between gap-4 transition-opacity ${autoHidePlayerChrome ? '' : 'opacity-40'}`}>
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.autoHideCursorWithPlayerChrome')}
+                                </div>
+                                <div className="text-xs opacity-50 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.autoHideCursorWithPlayerChromeDesc')}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onToggleAutoHideCursorWithPlayerChrome(!autoHideCursorWithPlayerChrome)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!autoHideCursorWithPlayerChrome ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: autoHideCursorWithPlayerChrome ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${autoHideCursorWithPlayerChrome ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            {/* Section 3: Grid card style */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <LayoutGrid size={14} /> {t('options.grid3dCardStyle')}
-                </h3>
+            {/* Section 2: Theme presets and edit options */}
+            <SettingsAnchor anchorId="themePresets" label={t('options.themePresets')}>
+                <SettingsSectionHeading icon={Palette} label={t('options.themePresets')} />
+                <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {t('options.themePresets')}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onOpenThemePark}
+                            className={`shrink-0 w-9 h-9 rounded-full border transition-colors flex items-center justify-center ${utilityGhostButtonClass}`}
+                            style={{ color: 'var(--text-primary)' }}
+                            title={t('options.openThemePark')}
+                            aria-label={t('options.openThemePark')}
+                        >
+                            <Palette size={16} />
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            onClick={onApplyDefaultTheme}
+                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all"
+                            style={{
+                                ...getAccentOptionStyle(bgMode === 'default'),
+                                backgroundColor: bgMode === 'default'
+                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                    : (isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(9, 9, 11, 0.5)'),
+                            }}
+                        >
+                            <div className="w-6 h-6 rounded-full shadow-sm" style={{ background: `linear-gradient(135deg, ${themeParkInitialTheme.light.backgroundColor}, ${themeParkInitialTheme.dark.backgroundColor})`, borderColor: isDaylight ? 'rgba(24,24,27,0.08)' : 'rgba(255,255,255,0.15)' }} />
+                            <span className="text-xs font-semibold" style={{ color: isDaylight ? '#27272a' : '#e4e4e7' }}>{t('options.themePresetsDefault') || 'Default'}</span>
+                        </button>
+                        <button
+                            onClick={onApplyCustomTheme}
+                            disabled={!hasCustomTheme}
+                            className="flex flex-col items-center gap-2 p-3 rounded-lg border transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{
+                                ...getAccentOptionStyle(bgMode === 'custom'),
+                                backgroundColor: bgMode === 'custom'
+                                    ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                    : (isDaylight ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.08)'),
+                            }}
+                        >
+                            <div className="w-6 h-6 rounded-full" style={{ background: hasCustomTheme ? `linear-gradient(135deg, ${themeParkInitialTheme.light.accentColor}, ${themeParkInitialTheme.dark.accentColor})` : 'rgba(114,119,134,0.4)' }} />
+                            <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{t('options.customTheme') || 'Custom'}</span>
+                        </button>
+                    </div>
+                    <div className={`p-3 rounded-xl border space-y-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.themeGenerationSource')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t(themeGenerationSource === 'cover'
+                                    ? 'options.themeGenerationSourceCoverDesc'
+                                    : 'options.themeGenerationSourceAiDesc')}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(['ai', 'cover'] as ThemeGenerationSource[]).map(source => {
+                                const isAiDisabled = source === 'ai' && aiApiKeyStatus !== 'configured';
+                                return (
+                                    <button
+                                        key={source}
+                                        type="button"
+                                        onClick={() => onChangeThemeGenerationSource(source)}
+                                        aria-pressed={themeGenerationSource === source}
+                                        disabled={isAiDisabled}
+                                        className="px-3 py-2 rounded-lg border text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                                        style={{
+                                            ...getAccentOptionStyle(themeGenerationSource === source),
+                                            color: 'var(--text-primary)',
+                                            backgroundColor: themeGenerationSource === source
+                                                ? (isDaylight ? `${accentOutlineColor}12` : `${accentOutlineColor}18`)
+                                                : (isDaylight ? 'rgba(24, 24, 27, 0.035)' : 'rgba(9, 9, 11, 0.5)'),
+                                        }}
+                                    >
+                                        {t(source === 'cover' ? 'options.themeGenerationSourceCover' : 'options.themeGenerationSourceAi')}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {aiApiKeyStatus === 'missing' && (
+                            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs">
+                                <KeyRound size={15} className="mt-0.5 shrink-0 text-amber-500" />
+                                <div className="space-y-1.5">
+                                    <p className={`leading-relaxed ${isDaylight ? 'text-amber-600' : 'text-amber-400'}`}>
+                                        {t('options.themeGenerationSourceAiUnavailable')}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={onOpenAiSettings}
+                                        className="font-semibold underline underline-offset-2 transition-opacity hover:opacity-75"
+                                        style={{ color: 'var(--text-primary)' }}
+                                    >
+                                        {t('options.configureAiApiKey')}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.followSystemTheme')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.followSystemThemeDesc')}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => onToggleFollowSystemTheme(!followSystemTheme)}
+                            aria-pressed={followSystemTheme}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!followSystemTheme ? toggleOffBackgroundClass : ''}`}
+                            style={{ backgroundColor: followSystemTheme ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${followSystemTheme ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.preferCustomTheme')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.preferCustomThemeDesc')}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => hasCustomTheme && onToggleCustomThemePreferred(!isCustomThemePreferred)}
+                            disabled={!hasCustomTheme}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!isCustomThemePreferred ? toggleOffBackgroundClass : ''} disabled:opacity-40 disabled:cursor-not-allowed`}
+                            style={{ backgroundColor: isCustomThemePreferred ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${isCustomThemePreferred ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                    <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
+                        <div className="space-y-1">
+                            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.autoSwitchSongTheme')}
+                            </div>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.autoSwitchSongThemeDesc')}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => onToggleSongThemeAutoSwitch(!songThemeAutoSwitchEnabled)}
+                            className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!songThemeAutoSwitchEnabled ? toggleOffBackgroundClass : ''}`}
+                            style={{ backgroundColor: songThemeAutoSwitchEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                        >
+                            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${songThemeAutoSwitchEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                    {songThemeAutoSwitchEnabled && (
+                        <div className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${settingsCardClass}`}>
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.autoGenerateSongTheme')}
+                                </div>
+                                <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                    {t(themeGenerationSource === 'cover'
+                                        ? 'options.autoGenerateSongThemeCoverDesc'
+                                        : 'options.autoGenerateSongThemeDesc')}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onToggleSongThemeAutoGenerate(!songThemeAutoGenerateEnabled)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors shrink-0 ${!songThemeAutoGenerateEnabled ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: songThemeAutoGenerateEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${songThemeAutoGenerateEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </SettingsAnchor>
+            {/* Section 3: Now playing card */}
+            <SettingsAnchor anchorId="stageTrackPill" label={t('options.stageTrackPill')}>
+                <SettingsSectionHeading icon={Music2} label={t('options.stageTrackPill')} />
+                <NowPlayingCardSettingsSection
+                    accentOutlineColor={accentOutlineColor}
+                    isDaylight={isDaylight}
+                    mode={stageTrackPillMode}
+                    timeoutSec={stageTrackPillTimeoutSec}
+                    showOnHome={stageTrackPillOnHome}
+                    settingsCardClass={settingsCardClass}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    theme={theme}
+                    onChangeMode={onChangeStageTrackPillMode}
+                    onChangeTimeoutSec={onChangeStageTrackPillTimeoutSec}
+                    onToggleShowOnHome={onToggleStageTrackPillOnHome}
+                />
+            </SettingsAnchor>
+
+            {/* Section 4: Grid card style */}
+            <SettingsAnchor anchorId="grid3dCardStyle" label={t('options.grid3dCardStyle')}>
+                <SettingsSectionHeading icon={LayoutGrid} label={t('options.grid3dCardStyle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -710,13 +938,45 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
-            {/* Section 4: Configurations Import/Export (New feature) */}
-            <section>
-                <h3 className="text-sm font-bold uppercase tracking-wider opacity-50 mb-3 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
-                    <Settings2 size={14} /> {t('options.importExportTitle')}
-                </h3>
+            {/* Section 5: Queue collage */}
+            <SettingsAnchor anchorId="latticeSettings" label={t('options.latticeSettings')}>
+                <SettingsSectionHeading icon={PanelsTopLeft} label={t('options.latticeSettings')} />
+                <LatticeSettingsSection
+                    settingsCardClass={settingsCardClass}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    isDaylight={isDaylight}
+                    theme={theme}
+                />
+            </SettingsAnchor>
+
+            {/* Section 6: Folia card grid, sitting with the poster wall it shares its look with. */}
+            <SettingsAnchor anchorId="gridViewCardSettings" label={t('options.gridViewCardSettings')}>
+                <SettingsSectionHeading icon={Images} label={t('options.gridViewCardSettings')} />
+                <GridViewSettingsSection
+                    settingsCardClass={settingsCardClass}
+                    settingsDividerClass={settingsDividerClassFor(isDaylight)}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    theme={theme}
+                />
+            </SettingsAnchor>
+
+            {/* Section 7: Video layer behind the lyrics. Not part of the import/export payload below. */}
+            <SettingsAnchor anchorId="videoLayerSettings" label={t('options.videoLayerSettings')}>
+                <SettingsSectionHeading icon={Film} label={t('options.videoLayerSettings')} />
+                <VideoLayerSettingsSection
+                    settingsCardClass={settingsCardClass}
+                    settingsDividerClass={settingsDividerClassFor(isDaylight)}
+                    toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    getAccentOptionStyle={getAccentOptionStyle}
+                    theme={theme}
+                />
+            </SettingsAnchor>
+
+            {/* Section 8: Configurations Import/Export (New feature) */}
+            <SettingsAnchor anchorId="importExportTitle" label={t('options.importExportTitle')}>
+                <SettingsSectionHeading icon={Settings2} label={t('options.importExportTitle')} />
                 <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
                     <div className="space-y-1">
                         <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -800,6 +1060,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 disabled={webObsSource === null}
                             />
                         )}
+                        {!isElectron && <ObsCopyCssButton disabled={webObsSource === null} />}
                         <div className="flex-1 min-w-[20px]" />
                         <button
                             type="button"
@@ -813,7 +1074,7 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                         </button>
                     </div>
                 </div>
-            </section>
+            </SettingsAnchor>
 
             <ImportConfirmDialog
                 isOpen={pendingImport !== null}

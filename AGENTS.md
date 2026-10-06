@@ -10,7 +10,30 @@
 4. 如果多个 skill 同时相关，可以组合使用，但只加载当前任务真正需要的内容。
 5. 不要主动移除项目中的注释，也不要在没有明确指令的情况下修改、删除或翻译 `@note` 注释。
 
+## 代码定位
+
+按成本从低到高三层：
+
+1. **结构性问题读 `docs/CODEMAP.md`** —— 由编译器和模块图生成（`npm run codemap`），
+   每次 main 落地后由 `codemap-sync` workflow 自动重生成并提交，**过期在结构上不可能发生**。
+   区域分布、枢纽模块、动态注册点的完整展开、分层边界违规都在里面。
+   本地想确认有没有偏差跑 `npm run codemap:check`；PR 不校验它，不必手动同步。
+2. **符号级问题默认用 rg** —— 快、灵活，还覆盖 `.md`/`.json`/CSS 这些 LSP 看不到的地方。
+3. **rg 拿不准时才用 `dev/mcp/ts-code-map/cli.mjs`** —— 同名消歧、引用完备性、调用链、
+   影响面这几类 rg 做不了的问题才升级。它是后备，不是默认。
+
+什么时候该升级，见 `skills/codebase-navigation/SKILL.md` 里的对照表。
+
+同一套能力也能作为 MCP server 挂载（`dev/mcp/ts-code-map/server.mjs`），但默认不加载：
+工具 schema 每个会话常驻约 6KB，而绝大多数问题读地图加 rg 就解决了。
+
+skill 只负责地图和编译器都推不出来的东西：口头术语到名字的映射，以及架构约束的意图。
+
 当前项目内 skills：
+
+- `codebase-navigation`
+  路径：`skills/codebase-navigation/SKILL.md`
+  用于说明代码定位的三层顺序（先读生成的代码地图，再用 rg，rg 拿不准才升级到 ts-code-map cli），以及定位之后改动要遵守的分层与模块边界；同时标注了几个已经不存在、但仍会被搜到的历史命名。
 
 - `testing-strategy`
   路径：`skills/testing-strategy/SKILL.md`
@@ -22,7 +45,7 @@
 
 - `glossary-alignment`
   路径：`skills/glossary-alignment/SKILL.md`
-  用于把开发者口头说的组件、视图、状态、面板、模式等术语，快速对齐到具体代码归属。
+  用于把开发者口头说的组件、视图、状态、面板、模式等术语换成可检索的符号名或模块名，再交给 MCP 解析成当前路径。表里只有名字，没有路径。
 
 - `file-modularization`
   路径：`skills/file-modularization/SKILL.md`
@@ -42,7 +65,15 @@
 
 - `kugou-provider-alignment`
   路径：`skills/kugou-provider-alignment/SKILL.md`
-  用于开发阶段根据 `docs\ku-go-api-docs.md`、`.env.local` 中的真实 KuGou 服务和 `test-results\.dev-credentials` 对齐酷狗 provider 的请求与响应，禁止猜测接口结构。
+  用于开发阶段根据 `docs\ku-go-api-docs.md`、`.env.local` 中的真实 KuGou 服务和 `.dev-credentials\kugou.json` 对齐酷狗 provider 的请求与响应，禁止猜测接口结构。
+
+- `online-song-omni-routing`
+  路径：`skills/online-song-omni-routing/SKILL.md`
+  用于所有在线歌曲、搜索、播放、歌词、歌单、账户和跨 provider 数据流，确保普通调用经过 Omni，只有 provider adapter/transport 直接接触原始接口。
+
+- `prepare-folia-release`
+  路径：`skills/prepare-folia-release/SKILL.md`
+  用于进入稳定版本发布流程：汇总上个稳定版本以来的用户可感知变化，更新新功能介绍、桌面与 Docker 版本元数据，并生成可手动粘贴的 Markdown release note。
 
 全局沟通规则：
 

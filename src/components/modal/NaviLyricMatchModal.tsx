@@ -18,7 +18,9 @@ import {
     type LyricMatchSource,
 } from './lyricMatchResultHelpers';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 import { getProviderSongMetadata } from '../../services/onlineMusic/songMetadata';
+import { hasRenderableLyrics } from '../../utils/lyrics/validity';
 
 export interface NavidromeMatchData {
     matchedSongId?: MediaId;
@@ -188,7 +190,10 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
         try {
             // Always fetch lyrics
             const processed = await fetchLyricsForMatchSource(source, selectedResult);
-            if (!processed) return;
+            if (!processed || (!hasRenderableLyrics(processed.lyrics) && !processed.isPureMusic)) {
+                alert(t('localMusic.noLyricsAvailable'));
+                return;
+            }
             const parsedLyrics: LyricData | null = processed ? processed.lyrics : null;
 
             const matchData: NavidromeMatchData = {
@@ -327,7 +332,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
                                             <div key={resultKey} onClick={() => setSelectedResult(result)} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${selectedKey === resultKey ? resultItemSelected : resultItemBg}`}>
                                                 <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800">
                                                     {resultCoverUrl ? (
-                                                        <img src={resultCoverUrl} alt={result.name} className="w-full h-full object-cover" />
+                                                        <img src={getSizedCoverUrl(resultCoverUrl, 512)} alt={result.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center">
                                                             <Music size={16} className="opacity-20" />
@@ -359,7 +364,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
                             {/* Cover Image */}
                             <div className="w-32 h-32 min-h-[64px] rounded-2xl overflow-hidden bg-zinc-800 shadow-md flex-shrink transition-all duration-300">
                                 {selectedCoverUrl || coverUrl ? (
-                                    <img src={selectedCoverUrl || coverUrl || ''} alt="Cover" className="w-full h-full object-cover" />
+                                    <img src={getSizedCoverUrl(selectedCoverUrl || coverUrl, 512)} alt="Cover" decoding="async" className="w-full h-full object-cover" />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center">
                                         <Music size={28} className="opacity-10" />
@@ -393,7 +398,11 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
 
                         {/* Lyric Preview Panel */}
                         <div className="w-full h-28 flex-shrink-0 mt-4 flex flex-col">
-                            <LyricPreviewPanel selectedResult={selectedResult} source={source} isDaylight={isDaylight} />
+                            <LyricPreviewPanel
+                                selectedResult={selectedResult}
+                                source={source}
+                                isDaylight={isDaylight}
+                            />
                         </div>
                     </div>
                 </div>

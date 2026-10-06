@@ -2,32 +2,36 @@ import i18n from '../../../i18n/config';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from '../../../services/coverCache';
 import { getLocalSongs } from '../../../services/db';
-import { ensureLocalSongEmbeddedCover, getAudioFromLocalSong } from '../../../services/localMusicService';
+import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../../../services/localMusicService';
 import { applyLocalLibraryEntityDisplay, buildUnifiedLocalSong } from '../../../services/playbackAdapters';
+import { buildNavidromeSourceRevision } from '../../../services/playbackRecovery/sourceRevision';
 import { getLocalLibraryCatalogSnapshot } from '../../../services/localLibraryEntityRepository';
 import { getNavidromeConfig, navidromeApi } from '../../../services/navidromeService';
+import { applyOnlineAudioSourceMetadata, loadOnlineSongAudioSource } from '../../../services/onlinePlayback';
 import type { ThemeCacheSongKey } from '../../../services/themeCache';
 import type { LyricData, LocalSong, SongResult, StatusMessage } from '../../../types';
 import type { NavidromeSong } from '../../../types/navidrome';
 import { hydrateNavidromeLyricPayload, resolvePreferredNavidromeLyrics } from '../../../utils/appNavidromeLyrics';
-import { hasRenderableLyrics, toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
+import { hasRenderableLyrics } from '../../../utils/appPlaybackHelpers';
 import {
     isLocalPlaybackSong,
     isNavidromePlaybackSong,
     isSamePlaybackSong,
     replacePlaybackSongInQueue,
 } from '../../../utils/appPlaybackGuards';
-import { createSafeObjectUrl, isBlob } from '../../../utils/blobGuards';
-import { LyricParserFactory } from '../../../utils/lyrics/LyricParserFactory';
+import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
 import { isPureMusicLyricText } from '../../../utils/lyrics/pureMusic';
 import { migrateLyricDataRenderHints } from '../../../utils/lyrics/renderHints';
+import { resolveLocalSongLyrics } from '../../../utils/lyrics/localSongLyrics';
 import { loadOnlineLyricsState, resolveOnlineLyrics } from '../../../utils/onlineLyricsState';
 import type { AudioQualityPreference, MediaId } from '../../../types/onlineMusic';
 import { omni } from '../../../services/onlineMusic/omni';
-import { getSongResourceCacheKey } from '../../../services/onlineMusic/resourceKeys';
-import { getCachedSongAudioBlob, getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../../services/onlineMusic/resourceCache';
+import { getCachedSongCoverUrl, getSongCacheWithLegacyMigration } from '../../../services/onlineMusic/resourceCache';
 import { getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setActiveLocalLyricsSource, setAudioSrc, setCachedCoverUrl, setCurrentSong } from '../../../stores/usePlaybackStore';
+import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 
 // src/components/app/playback/restorePlaybackSource.ts
 // Rehydrates playable audio and lyrics for a remembered song without reusing stale blob URLs.
@@ -39,11 +43,8 @@ type RestorePlaybackSourceParams = {
     userId?: MediaId;
     blobUrlRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setCurrentSong: SetState<SongResult | null>;
-    setCachedCoverUrl: SetState<string | null>;
-    setAudioSrc: SetState<string | null>;
+    setPlayQueue?: SetState<SongResult[]>;
     setLyrics: (nextLyrics: LyricData | null) => void;
-    setStatusMsg: SetState<StatusMessage | null>;
     restoreCachedThemeForSong?: (songId: ThemeCacheSongKey | SongResult, options?: {
         allowLastUsedFallback?: boolean;
         preserveCurrentOnMiss?: boolean;
@@ -69,11 +70,8 @@ export const restorePlaybackSourceForSong = async (
         userId,
         blobUrlRef,
         currentOnlineAudioUrlFetchedAtRef,
-        setCurrentSong,
-        setCachedCoverUrl,
-        setAudioSrc,
+        setPlayQueue,
         setLyrics,
-        setStatusMsg,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
         queue,
@@ -101,7 +99,8 @@ export const restorePlaybackSourceForSong = async (
         if (serverSong?.replayGain) {
             navidromeSongToRestore.navidromeData.replayGain = serverSong.replayGain;
         }
-        setAudioSrc(navidromeApi.getStreamUrl(config, navidromeId));
+        const restoredStreamUrl = navidromeApi.getStreamUrl(config, navidromeId);
+        setAudioSrc(restoredStreamUrl);
         const restoredCoverUrl = getSongCoverUrl(song) || navidromeSongToRestore.navidromeData.coverArtUrl;
         if (restoredCoverUrl) {
             setCachedCoverUrl(restoredCoverUrl);
@@ -118,7 +117,13 @@ export const restorePlaybackSourceForSong = async (
             setLyrics(restoredLyrics);
         }
 
-        const restoredSong = { ...song, navidromeData: navidromeSongToRestore } as SongResult;
+        const restoredCarrier = { ...song, navidromeData: navidromeSongToRestore } as SongResult;
+        // Recomputed rather than carried over from the persisted object: without a revision every
+        // representation lookup misses, and a restored session re-transcodes what is already cached.
+        const restoredSong = {
+            ...restoredCarrier,
+            playbackSourceRevision: buildNavidromeSourceRevision(restoredCarrier, restoredStreamUrl),
+        } as SongResult;
         setCurrentSong(restoredSong);
         void persistLastPlaybackCache?.(restoredSong, queue && queue.length > 0 ? queue : [restoredSong]);
         return true;
@@ -160,12 +165,15 @@ export const restorePlaybackSourceForSong = async (
             return false;
         }
 
-        songToRestore = await ensureLocalSongEmbeddedCover(songToRestore);
+        songToRestore = await ensureLocalSongCoverAsset(songToRestore);
+        const localCoverUrl = getLocalCoverAssetUrl(songToRestore.localCoverAssetId, 1024);
         const catalog = await getLocalLibraryCatalogSnapshot();
         const restoredSong = applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
             localSong: songToRestore,
             matchedSong: null,
-            coverUrl: songToRestore.useOnlineCover ? songToRestore.onlineMetadata?.coverUrl || null : null,
+            coverUrl: songToRestore.useOnlineCover
+                ? songToRestore.onlineMetadata?.coverUrl || localCoverUrl
+                : localCoverUrl,
             preferOnlineMetadata: false,
         }), catalog);
         setCurrentSong(restoredSong);
@@ -173,31 +181,12 @@ export const restorePlaybackSourceForSong = async (
         currentOnlineAudioUrlFetchedAtRef.current = null;
         setAudioSrc(blobUrl);
 
-        const source = songToRestore.lyricsSource;
-        if (source === 'online' && songToRestore.matchedLyrics) {
-            setLyrics(songToRestore.matchedLyrics);
-        } else if (source === 'embedded' && songToRestore.embeddedLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'embedded',
-                textContent: songToRestore.embeddedLyricsContent,
-                translationContent: songToRestore.embeddedTranslationLyricsContent,
-            }));
-        } else if ((source === 'local' || songToRestore.hasLocalLyrics) && songToRestore.localLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'local',
-                lrcContent: songToRestore.localLyricsContent,
-                tLrcContent: songToRestore.localTranslationLyricsContent,
-                formatHint: songToRestore.localLyricsFormat,
-            }));
-        } else if (songToRestore.hasEmbeddedLyrics && songToRestore.embeddedLyricsContent) {
-            setLyrics(await LyricParserFactory.parse({
-                type: 'embedded',
-                textContent: songToRestore.embeddedLyricsContent,
-                translationContent: songToRestore.embeddedTranslationLyricsContent,
-            }));
-        } else if (songToRestore.matchedLyrics) {
-            setLyrics(songToRestore.matchedLyrics);
-        }
+        const resolvedLyrics = await resolveLocalSongLyrics(
+            songToRestore,
+            useLyricSettingsStore.getState().localLyricsPriority,
+        );
+        setLyrics(resolvedLyrics.lyrics);
+        setActiveLocalLyricsSource(resolvedLyrics.source);
 
         const cacheKey = `cover_local_${songToRestore.id}`;
         const cachedCoverUrl = songToRestore.useOnlineCover
@@ -206,8 +195,8 @@ export const restorePlaybackSourceForSong = async (
         if (cachedCoverUrl) setCachedCoverUrl(cachedCoverUrl);
         else if (songToRestore.useOnlineCover && songToRestore.onlineMetadata?.coverUrl) {
             setCachedCoverUrl(await loadCachedOrFetchCover(cacheKey, songToRestore.onlineMetadata.coverUrl));
-        } else if (isBlob(songToRestore.embeddedCover)) {
-            setCachedCoverUrl(createSafeObjectUrl(songToRestore.embeddedCover));
+        } else if (localCoverUrl) {
+            setCachedCoverUrl(localCoverUrl);
         } else {
             setCachedCoverUrl(null);
         }
@@ -229,27 +218,30 @@ export const restorePlaybackSourceForSong = async (
         return false;
     }
 
-    const cachedAudio = await getCachedSongAudioBlob(song);
-    let restoredCachedAudio = false;
-    if (cachedAudio) {
-        const blobUrl = createSafeObjectUrl(cachedAudio);
-        if (blobUrl) {
-            replaceBlobUrl(blobUrlRef, blobUrl);
-            currentOnlineAudioUrlFetchedAtRef.current = null;
-            setAudioSrc(blobUrl);
-            restoredCachedAudio = true;
-        }
+    const audioResult = await loadOnlineSongAudioSource(song, audioQuality, null);
+    if (audioResult.kind === 'unavailable') {
+        setStatusMsg({ type: 'error', text: i18n.t(audioResult.reason === 'preview-only' ? 'status.songPreviewOnly'
+            : audioResult.reason === 'auth-required' ? 'status.loginExpired' : 'status.playbackFailed') });
+        return false;
     }
-    if (!restoredCachedAudio) {
-        const audioSource = await omni.getAudioSource(song, audioQuality);
-        const url = toSafeRemoteUrl(audioSource?.url);
-        if (url) {
-            currentOnlineAudioUrlFetchedAtRef.current = Date.now();
-            setAudioSrc(url);
-        } else {
-            setStatusMsg({ type: 'error', text: i18n.t('status.playbackFailed') });
-            return false;
-        }
+
+    if (audioResult.blobUrl) {
+        replaceBlobUrl(blobUrlRef, audioResult.blobUrl);
+        currentOnlineAudioUrlFetchedAtRef.current = null;
+    } else {
+        currentOnlineAudioUrlFetchedAtRef.current = Date.now();
+    }
+    setAudioSrc(audioResult.audioSrc);
+
+    const restoredSong = applyOnlineAudioSourceMetadata(song, audioResult.replayGain);
+    if (restoredSong.replayGain) {
+        setCurrentSong(prev => {
+            if (!prev || !isSamePlaybackSong(prev, song)) return prev;
+            return { ...prev, replayGain: restoredSong.replayGain };
+        });
+        const restoredQueue = replacePlaybackSongInQueue(queue || [restoredSong], restoredSong);
+        setPlayQueue?.(restoredQueue);
+        void persistLastPlaybackCache?.(restoredSong, restoredQueue);
     }
 
     const cachedLyrics = await getSongCacheWithLegacyMigration<LyricData>('lyric', song, migrateLyricDataRenderHints);

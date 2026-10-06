@@ -2,14 +2,14 @@
  * Lyrics Parser Web Worker
  *
  * Message API:
- * Request: { type: 'parse', format: 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'vtt' | 'ttml', content: string, translation?: string, requestId?: string }
+ * Request: { type: 'parse', format: 'lrc' | 'enhanced-lrc' | 'yrc' | 'qrc' | 'krc' | 'awlrc' | 'vtt' | 'ttml', content: string, translation?: string, requestId?: string }
  * Response: { type: 'result', data: LyricData, requestId?: string } | { type: 'error', message: string, requestId?: string }
  */
 
 import { parseLyricsByFormat, type LyricParseFormat } from '../utils/lyrics/parserCore';
 
 export const normalizeWorkerFormat = (format: string): LyricParseFormat => {
-    if (format === 'yrc' || format === 'qrc' || format === 'krc' || format === 'enhanced-lrc' || format === 'vtt' || format === 'ttml') {
+    if (format === 'yrc' || format === 'qrc' || format === 'krc' || format === 'awlrc' || format === 'enhanced-lrc' || format === 'vtt' || format === 'ttml') {
         return format;
     }
 

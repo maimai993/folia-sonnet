@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import type { LineRenderHints } from './utils/lyrics/renderHints';
 import type { MediaId, PlaybackSourceRef, ProviderCatalogRef } from './types/onlineMusic';
 
@@ -42,7 +43,9 @@ export interface LyricBackgroundVocal {
   alternateTexts?: LyricAlternateText[];
 }
 
-export type SubtitleContentMode = 'translation' | 'romanization' | 'none';
+// 'both' stacks romanization above translation; only the shared bottom subtitle overlay renders both rows.
+// Modes that lay translation out inside their own lyric layout (Monet, Pendolo, Lattice, Still) fall back to translation only.
+export type SubtitleContentMode = 'translation' | 'romanization' | 'both' | 'none';
 
 export interface LyricAgent {
   id: string;
@@ -67,6 +70,9 @@ export interface Line {
   renderHints?: LineRenderHints;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
+  // User-saved fine word boundaries for fullText, baked in upstream by the lyric setter.
+  // join('') must equal fullText. When present it wins over Intl.Segmenter word segmentation.
+  wordSegments?: string[];
 }
 
 export interface LyricData {
@@ -519,6 +525,265 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
   enableLineGlow: false,
 };
 
+export type SonnetOuterFrameMode = 'none' | 'frame' | 'full';
+
+export interface SonnetTuning {
+  cameraIntensity: number;
+  typographyMotion: number;
+  mgDensity: number;
+  showOnlyText: boolean;
+  showGuide: boolean;
+  showBackgroundMg: boolean;
+  showFixedGeo: boolean;
+  showGiantDecorativeText: boolean;
+  showBackgroundDecor: boolean;
+  enableTransitions: boolean;
+  outerFrameMode: SonnetOuterFrameMode;
+  textureResolution: number;
+  /** Master switch for the scene-wide post-process stack (grain + contrast). */
+  postProcessEnabled: boolean;
+  /** Film grain amount, 0..1. */
+  postProcessGrain: number;
+  /** Contrast boost, 0..1. */
+  postProcessContrast: number;
+  /** Fixed print-style passes riding the master switch; strength sliders, 0 disables the pass. */
+  postProcessRgbShift: number;
+  postProcessHalftone: number;
+  /** Vignette strength, 0..2 (2 = double the base darkening). */
+  postProcessVignette: number;
+  /** Radial lens curvature amount, 0..2. */
+  postProcessLensDistortion: number;
+  /** Radial chromatic dispersion amount, 0..1. */
+  postProcessLensDispersion: number;
+}
+
+export const DEFAULT_SONNET_TUNING: SonnetTuning = {
+  cameraIntensity: 1,
+  typographyMotion: 1,
+  mgDensity: 1,
+  showOnlyText: false,
+  showGuide: true,
+  showBackgroundMg: true,
+  showFixedGeo: true,
+  showGiantDecorativeText: true,
+  showBackgroundDecor: true,
+  enableTransitions: true,
+  outerFrameMode: 'full',
+  textureResolution: 1.5,
+  postProcessEnabled: false,
+  postProcessGrain: 0.2,
+  postProcessContrast: 0,
+  postProcessRgbShift: 0,
+  postProcessHalftone: 0,
+  postProcessVignette: 0.85,
+  postProcessLensDistortion: 0.3,
+  postProcessLensDispersion: 0.6,
+};
+
+/**
+ * `gradient` fills every tone shape with a four-colour ramp built from the cover art's
+ * extracted colours mixed with the theme, instead of a flat tone.
+ */
+export type TemperaColorMode = 'duo' | 'mono' | 'gradient';
+
+/** Where an image tends to sit; the exact spot is picked per shot from the seed. */
+export type TemperaLayerImageAlign = 'left' | 'center' | 'right' | 'free';
+
+/** Vertical counterpart to `TemperaLayerImageAlign`; `free` lets each shot choose a band. */
+export type TemperaLayerImageVerticalAlign = 'top' | 'center' | 'bottom' | 'free';
+
+/**
+ * One image in the user's Tempera pool - character art, a logo, a texture. Each shot picks one
+ * of them and places it itself, so an image carries a *tendency* rather than coordinates:
+ * hand-placing every picture would defeat the point of a pool. The file itself sits in
+ * IndexedDB under the same `id`, keeping the tuning small enough to sync.
+ */
+export interface TemperaLayerImage {
+  id: string;
+  name: string;
+  align: TemperaLayerImageAlign;
+  verticalAlign: TemperaLayerImageVerticalAlign;
+  /** Height as a fraction of the viewport height; width follows the source aspect. */
+  scale: number;
+  opacity: number;
+}
+
+export const TEMPERA_MAX_LAYER_IMAGES = 16;
+
+export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'> = {
+  align: 'free',
+  // Preserve the original character-art composition, which placed images low in the frame.
+  verticalAlign: 'bottom',
+  scale: 0.7,
+  opacity: 1,
+};
+
+export interface TemperaTuning {
+  cameraIntensity: number;
+  /** Per-glyph entrance motion strength, 0..2. */
+  glyphMotion: number;
+  /** Keep each source lyric line in one shot instead of slicing it into half-phrases. */
+  wholeLineLyrics: boolean;
+  /**
+   * 逐字入场时序, 0..1. How much of the way to the shot's lyric end each glyph's entrance
+   * stretches, past its 0.34s floor. 0 gives every glyph the same short window - percussive,
+   * and the shot is fully at rest well before it cuts. 1 lands the whole shot exactly on its
+   * lyric end - continuous, but nothing is ever still. See temperaLayout for the measurements.
+   */
+  glyphSettleStretch: number;
+  /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
+  colorMode: TemperaColorMode;
+  showBlocks: boolean;
+  showDecor: boolean;
+  /** 边角线框: the two registration marks in the top-left and bottom-right corners. */
+  showCornerMarks: boolean;
+  /**
+   * 文字动态反色: the lyric samples the artwork under it and picks whichever of ink/paper
+   * contrasts more, per pixel. This is how the mode colours type, not a post-process, so it
+   * has its own switch rather than riding `postProcessEnabled`.
+   */
+  textInversion: boolean;
+  /** Pool of user images; each shot picks one. The files themselves live in IndexedDB. */
+  layerImages: TemperaLayerImage[];
+  /** `back` lets the lyric invert against the picture; `front` puts it over the lyric. */
+  layerImageDepth: 'back' | 'front';
+  /** 0..1 chance that a given shot shows an image at all. */
+  layerImageFrequency: number;
+  enableTransitions: boolean;
+  textureResolution: number;
+  /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
+  postProcessEnabled: boolean;
+  /**
+   * 后处理纹理压缩: renders the post-process pass at 1x and stretches it onto the canvas
+   * instead of running it at `textureResolution`. Costs sharpness on hatch, screentone and
+   * type; buys back the fill rate a full-resolution full-screen pass costs.
+   */
+  postProcessTextureCompression: boolean;
+  /** Film grain amount, 0..1. */
+  postProcessGrain: number;
+  /** Contrast boost, 0..1. */
+  postProcessContrast: number;
+  /** RGB shift pass strength, 0..1 (0 disables the pass). */
+  postProcessRgbShift: number;
+  /** Vignette strength, 0..2 (2 = double the base darkening). */
+  postProcessVignette: number;
+  /** Radial lens curvature amount, 0..2. */
+  postProcessLensDistortion: number;
+}
+
+export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
+  cameraIntensity: 1,
+  glyphMotion: 1,
+  wholeLineLyrics: false,
+  glyphSettleStretch: 0.5,
+  colorMode: 'duo',
+  showBlocks: true,
+  showDecor: true,
+  showCornerMarks: true,
+  textInversion: true,
+  layerImages: [],
+  layerImageDepth: 'back',
+  layerImageFrequency: 0.6,
+  enableTransitions: true,
+  textureResolution: 1.5,
+  postProcessEnabled: true,
+  postProcessTextureCompression: false,
+  postProcessGrain: 0.2,
+  postProcessContrast: 0,
+  postProcessRgbShift: 0,
+  postProcessVignette: 0.85,
+  postProcessLensDistortion: 0.3,
+};
+
+/**
+ * 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样、烟雾倍频数封顶，用于省电。
+ */
+export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
+
+export interface LumiereTuning {
+  /** 光强倍率, 0.3..2. */
+  lightIntensity: number;
+  /** 随音乐变亮, 0..2 (0 = 不随音乐变). */
+  audioResponse: number;
+  /** 烟雾浓度, 0..2. */
+  fogDensity: number;
+  /**
+   * 暗场强度, 0..1：光后面铺一层主题背景色压暗的底，压住 folia 的共享背景（0 = 共享背景原样透出）。
+   * 浅色主题保底 0.94（绘光始终在暗场里）。
+   */
+  darkField: number;
+  /** 浮尘数量, 0..2. */
+  moteAmount: number;
+  /** 图形辉光, 0..2. */
+  bloom: number;
+  /** 文字辉光, 0..2. */
+  textBloom: number;
+  /** 未唱字透明度, 0.05..0.6. */
+  unlitOpacity: number;
+  /** 邻行：1 = 上一行 + 当前行，2 = 上一行 + 当前行 + 下一行. */
+  windowNeighbors: 1 | 2;
+  /** 崩解强度, 0..2. */
+  decay: number;
+  /** 背景歌词亮度, 0..2 (0 = 关). */
+  echo: number;
+  /** 烟雾细节（倍频数）, integer 2..6. */
+  fogOctaves: number;
+  /** 线稿. */
+  lineArt: boolean;
+  /** 前景散景. */
+  frontBokeh: boolean;
+  /** 所有换位都走轨迹线. */
+  trails: boolean;
+  /** 隐藏所有歌词换位的轨迹线，保留字的飞行与轨迹过渡. */
+  hideTrails: boolean;
+  /**
+   * 轨迹过渡：段落之间也和段内换镜头一样在同一个光场里交接（整首歌编成一个场景单元），
+   * 没有熄灯 / 闪白 / 拉焦 / 交叉渐变。改它会重新编译程序.
+   */
+  seamlessTransitions: boolean;
+  /** 画框. */
+  overlayFrame: boolean;
+  /**
+   * 仅显示歌词文字：只画歌词与字上的效果（点亮、光晕、闪点、十字爆闪、径迹、追字光斑），
+   * 光场、烟雾、星空、线稿、浮尘、背景歌词、主题图标、画框与片尾卡的光都不画。字的明暗仍按光束算.
+   */
+  textOnly: boolean;
+  /** 关键字着色（主题 wordColors）. */
+  keywordColors: boolean;
+  /** 主题图标（主题 lyricsIcons 画成线稿）. */
+  themeIcons: boolean;
+  /** 主题色占比, 0..1：0 = 香槟金光；越高光色越接近强调色、点亮 / 未唱的字越接近主色 / 次色. */
+  themeColorMix: number;
+  /** 画质. */
+  renderQuality: LumiereRenderQuality;
+}
+
+export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
+  lightIntensity: 1,
+  audioResponse: 1,
+  fogDensity: 1,
+  darkField: 0.75,
+  moteAmount: 1,
+  bloom: 1,
+  textBloom: 1,
+  unlitOpacity: 0.22,
+  windowNeighbors: 2,
+  decay: 1,
+  echo: 1,
+  fogOctaves: 5,
+  lineArt: true,
+  frontBokeh: true,
+  trails: true,
+  hideTrails: false,
+  seamlessTransitions: true,
+  overlayFrame: true,
+  textOnly: false,
+  keywordColors: true,
+  themeIcons: true,
+  themeColorMix: 0.3,
+  renderQuality: 'full',
+};
+
 // Diorama's camera STYLE (calm/standard/chaotic) is not part of its tuning: like every other
 // visualizer it follows theme.animationIntensity (the player-panel intensity chip / AI themes), so
 // the theme system stays the single source of truth. The tuning only carries diorama-specific knobs.
@@ -642,6 +907,7 @@ export type MonetBackgroundLayout = 'full-overlay' | 'half-pane-gradient';
 export type MonetBackgroundWashColorMode = 'theme' | 'custom';
 export type NomandBackgroundSource = 'cover-derived' | 'uploaded-global';
 export type NomandBackgroundDitheringType = '2x2' | '4x4' | '8x8';
+export type NomandBackgroundEffect = 'dithering' | 'fluted-glass' | 'paper-texture' | 'halftone-dots' | 'lens-distortion';
 export type LatentBackgroundDisplayMode = 'dithering' | 'mesh' | 'both';
 export type LatentBackgroundColorSource = 'cover-theme' | 'cover-only';
 export type MonetAudioStyle = 'bar' | 'line';
@@ -666,15 +932,36 @@ export interface MonetBackgroundTuning {
   backgroundHalfPaneOffsetX: number;
   backgroundWashColorMode: MonetBackgroundWashColorMode;
   backgroundWashCustomColor: string;
+  /** 整张背景图的缓慢缩放漂移；纯 CSS 合成层动画，不参与背景烘焙。 */
+  backgroundDriftEnabled: boolean;
+  /** 漂移幅度 0..1，同时决定位移距离和为防止露边而预放大的倍率。 */
+  backgroundDriftStrength: number;
+  /** 是否在烘焙的 overlay 里绘制那几条 1px 竖向纹理。 */
+  backgroundStreaksEnabled: boolean;
 }
 
 export interface NomandBackgroundTuning {
   imageSource: NomandBackgroundSource;
+  effect: NomandBackgroundEffect;
   ditheringType: NomandBackgroundDitheringType;
   size: number;
   colorSteps: number;
   originalColors: boolean;
   inverted: boolean;
+  flutedGlassSize: number;
+  flutedGlassDistortion: number;
+  flutedGlassBlur: number;
+  paperTextureContrast: number;
+  paperTextureRoughness: number;
+  paperTextureFiber: number;
+  halftoneDotsSize: number;
+  halftoneDotsRadius: number;
+  halftoneDotsContrast: number;
+  halftoneDotsOriginalColors: boolean;
+  halftoneDotsInverted: boolean;
+  lensDistortionSpread: number;
+  lensDistortionBulge: number;
+  lensDistortionDispersion: number;
   overlayEnabled: boolean;
   overlayOpacity: number;
 }
@@ -696,9 +983,15 @@ export interface LatentBackgroundTuning {
   overlayOpacity: number;
 }
 
+export interface SoraBackgroundTuning {
+  /** Skips the WebGL starfield and shows a static solid black (night) / white (daylight) frame. */
+  blank: boolean;
+}
+
 export interface MonetTuning {
   keywordColoringEnabled: boolean;
   showDescription: boolean;
+  showAudioVisualization: boolean;
   audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
@@ -718,15 +1011,33 @@ export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundHalfPaneOffsetX: 0,
   backgroundWashColorMode: 'theme',
   backgroundWashCustomColor: '#8fb7ff',
+  backgroundDriftEnabled: true,
+  backgroundDriftStrength: 0.5,
+  backgroundStreaksEnabled: true,
 };
 
 export const DEFAULT_NOMAND_BACKGROUND_TUNING: NomandBackgroundTuning = {
   imageSource: 'cover-derived',
+  effect: 'dithering',
   ditheringType: '8x8',
   size: 3,
   colorSteps: 4,
   originalColors: false,
   inverted: false,
+  flutedGlassSize: 0.5,
+  flutedGlassDistortion: 0.5,
+  flutedGlassBlur: 0.08,
+  paperTextureContrast: 0.32,
+  paperTextureRoughness: 0.42,
+  paperTextureFiber: 0.3,
+  halftoneDotsSize: 0.5,
+  halftoneDotsRadius: 1.25,
+  halftoneDotsContrast: 0.4,
+  halftoneDotsOriginalColors: false,
+  halftoneDotsInverted: false,
+  lensDistortionSpread: 0.45,
+  lensDistortionBulge: 0.3,
+  lensDistortionDispersion: 0.65,
   overlayEnabled: true,
   overlayOpacity: 0.35,
 };
@@ -748,9 +1059,14 @@ export const DEFAULT_LATENT_BACKGROUND_TUNING: LatentBackgroundTuning = {
   overlayOpacity: 0.35,
 };
 
+export const DEFAULT_SORA_BACKGROUND_TUNING: SoraBackgroundTuning = {
+  blank: false,
+};
+
 export const DEFAULT_MONET_TUNING: MonetTuning = {
   keywordColoringEnabled: true,
   showDescription: true,
+  showAudioVisualization: true,
   audioStyle: 'bar',
   fontScale: 1.2,
   portraitSource: 'cover',
@@ -823,6 +1139,8 @@ export interface StatusMessage {
   nonce?: number;
   durationMs?: number;
   actionLabel?: string;
+  /** Icon drawn before actionLabel inside the action button. */
+  actionIcon?: LucideIcon;
   onAction?: () => void;
   cancelLabel?: string;
   onCancel?: () => void;
@@ -889,6 +1207,15 @@ export interface NoCopyrightRecommendation {
 export type LyricProviderSource = 'netease' | 'qq' | 'kugou' | 'amll';
 export type AmllDbPlatform = 'ncm' | 'qq';
 
+export interface ReplayGainInfo {
+  /** ReplayGain gain values in decibels. */
+  trackGain?: number;
+  albumGain?: number;
+  /** ReplayGain peak values as positive linear ratios. */
+  trackPeak?: number;
+  albumPeak?: number;
+}
+
 export interface SongResult {
   id: MediaId;
   name: string;
@@ -901,6 +1228,8 @@ export interface SongResult {
   t?: 0 | 1 | 2;
   sourceType?: 'netease' | 'cloud';
   sourceRef?: PlaybackSourceRef;
+  /** Identity of the concrete bytes selected for playback; used to reject stale derived media. */
+  playbackSourceRevision?: string;
   fee?: number;
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;
@@ -908,6 +1237,7 @@ export interface SongResult {
   onlineLyricsState?: OnlineLyricsState;
   matchedLyricsSource?: LyricProviderSource;
   matchedLyricsProviderPlatform?: AmllDbPlatform;
+  replayGain?: ReplayGainInfo;
   qqMid?: string;
   kgHash?: string;
   amllDbPlatform?: AmllDbPlatform;
@@ -936,6 +1266,10 @@ export interface SearchResponse {
 // Local Music Types
 
 export type LocalLyricsPriority = 'local' | 'online';
+export type ActiveLocalLyricsSource = 'local' | 'embedded' | 'online';
+// Where a local song's `local*LyricsContent` came from: a sidecar file picked by the import, or a
+// file the user uploaded from the panel. Records written before this field existed have none.
+export type LocalLyricsOrigin = 'sidecar' | 'upload';
 
 export interface LocalSong {
   id: string; // UUID for local file
@@ -959,7 +1293,9 @@ export interface LocalSong {
   discNumber?: number;
   embeddedMetadataVersion?: number;
 
-  embeddedCover?: Blob; // Preferred local cover blob (folder cover or embedded art), stored in IndexedDB
+  localCoverAssetId?: string; // Content-addressed preferred local cover stored in local_cover_assets
+  localCoverSource?: import('./types/localCover').LocalCoverSourceKind;
+  localCoverNeedsAssetMigration?: boolean; // Retries local cover hashing/persistence during the next rescan
   replayGain?: number; // ReplayGain track gain in dB
   replayGainTrackGain?: number; // ReplayGain track gain in dB
   replayGainTrackPeak?: number; // ReplayGain track peak ratio
@@ -984,8 +1320,10 @@ export interface LocalSong {
   hasLocalLyrics?: boolean;
   localLyricsContent?: string;
   localLyricsFormat?: 'vtt' | 'ttml' | 'yrc' | 'qrc' | 'krc';
+  localLyricsOrigin?: LocalLyricsOrigin;
   hasLocalTranslationLyrics?: boolean;
   localTranslationLyricsContent?: string;
+  localTranslationLyricsOrigin?: LocalLyricsOrigin;
 
   // Embedded Lyrics (from file tags: ID3 USLT, Vorbis LYRICS, etc.)
   hasEmbeddedLyrics?: boolean;
@@ -1005,6 +1343,7 @@ export interface LocalLibrarySnapshotFile {
 
 export interface LocalLibrarySnapshotNode {
   name: string;
+  ignored?: boolean;
   relativePath: string;
   hash: string;
   files: LocalLibrarySnapshotFile[];
@@ -1013,6 +1352,8 @@ export interface LocalLibrarySnapshotNode {
 
 export interface LocalLibrarySnapshot {
   rootFolderName: string;
+  ignoredFolderPaths?: string[];
+  lyricFormatOrder?: import('./utils/lyrics/localLyricFormatOrder').LocalLyricFileFormat[]; // Sidecar lyric format order this scan used; undefined = default order
   scannedAt: number;
   tree: LocalLibrarySnapshotNode;
 }

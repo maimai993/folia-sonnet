@@ -11,6 +11,7 @@ import {
     type Theme,
 } from '../../../../types';
 import { colorWithAlpha } from '../../colorMix';
+import BackgroundToggleRow from '../BackgroundToggleRow';
 
 // src/components/visualizer/backgrounds/monet/MonetBackgroundSettingsCard.tsx
 // Background settings for the shell-level Monet image layer.
@@ -181,6 +182,9 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
         backgroundHalfPaneOffsetX: clampValue(tuning.backgroundHalfPaneOffsetX ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX, -40, 40, DEFAULT_MONET_BACKGROUND_TUNING.backgroundHalfPaneOffsetX),
         backgroundWashColorMode: tuning.backgroundWashColorMode ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashColorMode,
         backgroundWashCustomColor: normalizeHexInput(tuning.backgroundWashCustomColor) ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundWashCustomColor,
+        backgroundDriftEnabled: tuning.backgroundDriftEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+        backgroundDriftStrength: clampValue(tuning.backgroundDriftStrength ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength, 0, 1, DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength),
+        backgroundStreaksEnabled: tuning.backgroundStreaksEnabled ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
     };
 
     const sourceOptions = useMemo<PresetOption<MonetBackgroundSource>[]>(() => ([
@@ -315,6 +319,29 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                         onSliderCommit={onSliderCommit}
                     />
                 )}
+
+                <BackgroundToggleRow
+                    label={t('options.monetBackgroundDriftEnabled')}
+                    description={t('options.monetBackgroundDriftEnabledDesc')}
+                    checked={resolvedTuning.backgroundDriftEnabled}
+                    onChange={backgroundDriftEnabled => onTuningChange?.({ backgroundDriftEnabled })}
+                    theme={theme}
+                />
+
+                {resolvedTuning.backgroundDriftEnabled && (
+                    <SliderControl
+                        label={t('options.monetBackgroundDriftStrength')}
+                        valueLabel={`${Math.round(resolvedTuning.backgroundDriftStrength * 100)}%`}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={resolvedTuning.backgroundDriftStrength}
+                        onChange={(value) => onTuningChange?.({ backgroundDriftStrength: value })}
+                        rangeInputClass={rangeInputClass}
+                        onSliderPointerDown={onSliderPointerDown}
+                        onSliderCommit={onSliderCommit}
+                    />
+                )}
             </div>
 
             {/* Section 3: Filters & Post-processing */}
@@ -388,6 +415,14 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                     rangeInputClass={rangeInputClass}
                     onSliderPointerDown={onSliderPointerDown}
                     onSliderCommit={onSliderCommit}
+                />
+
+                <BackgroundToggleRow
+                    label={t('options.monetBackgroundStreaksEnabled')}
+                    description={t('options.monetBackgroundStreaksEnabledDesc')}
+                    checked={resolvedTuning.backgroundStreaksEnabled}
+                    onChange={backgroundStreaksEnabled => onTuningChange?.({ backgroundStreaksEnabled })}
+                    theme={theme}
                 />
 
                 <PresetGroup

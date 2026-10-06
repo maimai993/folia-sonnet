@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, SkipBack, SkipForward, Video, MirrorRectangular, X, Check, Sliders, Palette } from 'lucide-react';
+import { ChevronLeft, Heart, Lock, LockOpen, Pause, Pin, PinOff, Play, Repeat, Repeat1, RepeatOff, SkipBack, SkipForward, Video, MirrorRectangular, X, Check, Sliders, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PlayerState } from '../../types';
 import RemoteVideoExportPanel from './RemoteVideoExportPanel';
@@ -15,8 +15,14 @@ import {
     VIDEO_EXPORT_PRESET_MIN,
 } from '../../types/videoExport';
 import type { VideoExportPresetValues, VideoExportStartMode } from '../../types/videoExport';
-import { extractColors } from '../../utils/colorExtractor';
+import { useRemoteCoverArt } from './useRemoteCoverArt';
+import { useRemoteTrackHandoff } from './useRemoteTrackHandoff';
 import { useTranslation } from 'react-i18next';
+import {
+    DEFAULT_REMOTE_WINDOW_PRESENTATION,
+    shouldRevealRemoteTitlebar,
+} from './remoteTitlebarReveal';
+import type { RemoteWindowPresentation } from './remoteTitlebarReveal';
 
 // src/components/remote/RemoteControlApp.tsx
 // Electron-only companion window for controlling the single real player instance.
@@ -34,7 +40,6 @@ const formatTime = (seconds: number) => {
 const REMOTE_CONTROL_DOCUMENT_TITLE = 'Folia Remote';
 const REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY = 'remote_video_export_preset_values';
 const REMOTE_BACKGROUND_MODE_STORAGE_KEY = 'remote_background_mode';
-const REMOTE_TITLEBAR_REVEAL_THRESHOLD = 44;
 
 type BackgroundMode = 'default' | 'cover' | 'transparent';
 
@@ -64,14 +69,25 @@ const readStoredVideoExportPresetValues = (): VideoExportPresetValues => {
 
 const emptySnapshot: RemoteControlSnapshot = {
     hasTrack: false,
+    trackKey: null,
     title: null,
     artist: null,
     coverUrl: null,
     currentTime: 0,
     duration: 0,
     playerState: PlayerState.IDLE,
+    loopMode: 'off',
     canGoPrevious: false,
     canGoNext: false,
+    prevTrackKey: null,
+    prevTrackTitle: null,
+    prevTrackArtist: null,
+    prevTrackCoverUrl: null,
+    nextTrackKey: null,
+    nextTrackTitle: null,
+    nextTrackArtist: null,
+    nextTrackCoverUrl: null,
+    trackTransition: null,
     controlsDisabled: true,
     isStageActive: false,
     transparentModeEnabled: false,
@@ -84,10 +100,15 @@ const emptySnapshot: RemoteControlSnapshot = {
     isDaylight: false,
     lyrics: null,
     isLiked: false,
+    canLike: false,
     updatedAt: 0,
 };
 
 type RemotePanelMode = 'playback' | 'export' | 'transparent-controls';
+
+const HANDOFF_FACE_TRANSITION = { duration: 0.55, ease: 'linear' } as const;
+const SWITCH_FACE_TRANSITION = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
+const SWITCH_TEXT_TRANSITION = { duration: 0.32, ease: [0.22, 1, 0.36, 1] } as const;
 
 const RemoteControlApp: React.FC = () => {
     const { t } = useTranslation();
@@ -100,7 +121,6 @@ const RemoteControlApp: React.FC = () => {
         }
         return 'default';
     });
-    const [coverColors, setCoverColors] = useState<string[]>([]);
     const [snapshot, setSnapshot] = useState<RemoteControlSnapshot>(emptySnapshot);
     const [pendingSeek, setPendingSeek] = useState<number | null>(null);
     const [activePanel, setActivePanel] = useState<RemotePanelMode>('playback');
@@ -113,6 +133,8 @@ const RemoteControlApp: React.FC = () => {
     const [alwaysOnTop, setAlwaysOnTop] = useState(false);
     const [windowControlsRevealed, setWindowControlsRevealed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [windowPresentation, setWindowPresentation] = useState<RemoteWindowPresentation>(DEFAULT_REMOTE_WINDOW_PRESENTATION);
+    const [hoverNavSide, setHoverNavSide] = useState<'prev' | 'next' | null>(null);
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
     const isDraggingRef = useRef(false);
     const lastSeekTimeRef = useRef(0);
@@ -130,18 +152,6 @@ const RemoteControlApp: React.FC = () => {
             setDraftHeight(String(activePreset.height));
         }
     }, [selectedPresetId, presetValues, exportPresets]);
-
-    useEffect(() => {
-        if (!widthFocusedRef.current) {
-            setDraftWidth(String(snapshot.mainWindowWidth ?? 1920));
-        }
-    }, [snapshot.mainWindowWidth]);
-
-    useEffect(() => {
-        if (!heightFocusedRef.current) {
-            setDraftHeight(String(snapshot.mainWindowHeight ?? 1080));
-        }
-    }, [snapshot.mainWindowHeight]);
 
     useEffect(() => {
         if (isHovered) {
@@ -164,8 +174,39 @@ const RemoteControlApp: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        let mounted = true;
+        void window.electron?.getRemoteControlWindowSettings?.().then(settings => {
+            if (mounted && settings) {
+                setWindowPresentation(prev => (
+                    prev.hideTitlebar === settings.hideTitlebar && prev.clickThrough === settings.clickThrough ? prev : settings
+                ));
+            }
+        });
+        const unsubscribe = window.electron?.onRemoteControlWindowSettingsChanged?.(settings => {
+            setWindowPresentation(prev => (
+                prev.hideTitlebar === settings.hideTitlebar && prev.clickThrough === settings.clickThrough ? prev : settings
+            ));
+        });
+        return () => {
+            mounted = false;
+            unsubscribe?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        // A click-through window stops receiving mouse events, so mouseleave may never arrive: drop hover state explicitly.
+        if (windowPresentation.hideTitlebar || windowPresentation.clickThrough) {
+            setWindowControlsRevealed(false);
+        }
+        if (windowPresentation.clickThrough) {
+            setIsHovered(false);
+            setHoverNavSide(null);
+        }
+    }, [windowPresentation]);
+
+    useEffect(() => {
         const handleMouseMove = (event: MouseEvent) => {
-            const nextRevealed = event.clientY <= REMOTE_TITLEBAR_REVEAL_THRESHOLD;
+            const nextRevealed = shouldRevealRemoteTitlebar(event.clientY, windowPresentation);
             setWindowControlsRevealed(prev => (prev === nextRevealed ? prev : nextRevealed));
         };
         const handleMouseLeave = () => setWindowControlsRevealed(false);
@@ -177,23 +218,11 @@ const RemoteControlApp: React.FC = () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseleave', handleMouseLeave);
         };
-    }, []);
+    }, [windowPresentation]);
 
     useEffect(() => {
         window.localStorage.setItem(REMOTE_BACKGROUND_MODE_STORAGE_KEY, backgroundMode);
     }, [backgroundMode]);
-
-    useEffect(() => {
-        let mounted = true;
-        if (backgroundMode === 'cover' && snapshot.coverUrl) {
-            extractColors(snapshot.coverUrl, 3).then(colors => {
-                if (mounted) setCoverColors(colors);
-            }).catch(() => {
-                if (mounted) setCoverColors([]);
-            });
-        }
-        return () => { mounted = false; };
-    }, [snapshot.coverUrl, backgroundMode]);
 
     useEffect(() => {
         let mounted = true;
@@ -235,13 +264,83 @@ const RemoteControlApp: React.FC = () => {
     const progressValue = duration > 0 ? Math.max(0, Math.min(currentTime, duration)) : 0;
     const isPlaying = snapshot.playerState === PlayerState.PLAYING;
     const primaryDisabled = snapshot.controlsDisabled || !snapshot.hasTrack;
+    const likeDisabled = primaryDisabled || snapshot.canLike === false;
+    const likeUnavailableReason = snapshot.likeUnavailableProvider
+        ? t('status.providerLikeUnavailable', { provider: snapshot.likeUnavailableProvider })
+        : undefined;
     const title = snapshot.title || 'Folia';
     const artist = snapshot.artist || (snapshot.hasTrack ? 'Unknown artist' : 'No active track');
+
+    const {
+        trackEnterOffset,
+        recordNavIntent,
+        currentCoverUrl,
+        faces: trackFaces,
+        coverFaces,
+        hasIncomingCoverFace,
+        isHandoffActive,
+        isIncomingDominant,
+        isTransitionGlowActive,
+        incomingTrackKey,
+        incomingCoverUrl,
+        handoffIncomingOpacity,
+        handoffOutgoingOpacity,
+    } = useRemoteTrackHandoff({ snapshot, title, artist, isPlaying });
+
+    const { coverColors, getCachedCoverColors } = useRemoteCoverArt({
+        backgroundMode,
+        trackKey: snapshot.trackKey,
+        coverUrl: currentCoverUrl,
+        prevTrackKey: snapshot.prevTrackKey,
+        prevTrackCoverUrl: snapshot.prevTrackCoverUrl,
+        nextTrackKey: snapshot.nextTrackKey,
+        nextTrackCoverUrl: snapshot.nextTrackCoverUrl,
+    });
+
+    // 交接过半就把背景换成下一首的配色，剩下的交给背景本身 700ms 的颜色过渡。
+    // 取色按曲目标识缓存，换歌那一刻预读结果照样命中，不会先退回上一首的配色。
+    const isIncomingBackground = isHandoffActive && isIncomingDominant;
+    const activeCoverColors = getCachedCoverColors(
+        isIncomingBackground ? incomingTrackKey : snapshot.trackKey,
+        isIncomingBackground ? incomingCoverUrl : currentCoverUrl,
+    ) ?? coverColors;
+
+    const navigateTrack = (direction: 'prev' | 'next') => {
+        recordNavIntent(direction);
+        sendCommand({ type: direction === 'prev' ? 'previous' : 'next' });
+    };
+
+    const previewTitle = hoverNavSide === 'prev' && snapshot.canGoPrevious
+        ? snapshot.prevTrackTitle
+        : hoverNavSide === 'next' && snapshot.canGoNext
+            ? snapshot.nextTrackTitle
+            : null;
     const exportState = snapshot.exportState ?? idleVideoExportState();
     const isDaylight = Boolean(snapshot.isDaylight);
 
     const baseColor = isDaylight ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.35)';
     const activeColor = isDaylight ? '#1c1917' : '#ffffff';
+
+    // Ghost icon buttons: no resting chip, background only on hover. The filled
+    // play button stays the single anchor so the row reads as one primary action
+    // plus quiet satellites instead of seven competing pills.
+    const transportButtonClass = `flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30 ${isDaylight
+        ? 'text-black/70 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/75 hover:bg-white/10 hover:text-white'
+        }`;
+    const secondaryButtonBase = 'flex h-7 w-7 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30';
+    // Every button in the row shares one hover response: the same chip, and text
+    // arriving at full contrast. Only the resting level encodes state, so an "on"
+    // button rests just below full to keep the hover headroom the idle ones have.
+    const secondaryIdleClass = isDaylight
+        ? 'text-black/40 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/45 hover:bg-white/10 hover:text-white';
+    const secondaryActiveClass = isDaylight
+        ? 'text-black/85 hover:bg-black/[0.06] hover:text-black'
+        : 'text-white/90 hover:bg-white/10 hover:text-white';
+    const secondaryAlertClass = isDaylight
+        ? 'text-red-600/85 hover:bg-black/[0.06] hover:text-red-600'
+        : 'text-red-400/90 hover:bg-white/10 hover:text-red-400';
 
     const lastStatusRef = React.useRef(exportState.status);
     useEffect(() => {
@@ -251,14 +350,12 @@ const RemoteControlApp: React.FC = () => {
         lastStatusRef.current = exportState.status;
     }, [exportState.status]);
 
-    const coverStyle = useMemo<React.CSSProperties>(() => ({
-        backgroundImage: snapshot.coverUrl ? `url(${snapshot.coverUrl})` : undefined,
-    }), [snapshot.coverUrl]);
-
     const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties;
     const dragStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties;
 
     const progressPercent = duration > 0 ? (progressValue / duration) * 100 : 0;
+
+    const transitionGlowColor = isDaylight ? 'rgba(28, 25, 23, 0.45)' : 'rgba(255, 255, 255, 0.8)';
 
     useEffect(() => {
         window.localStorage.setItem(REMOTE_VIDEO_EXPORT_PRESET_VALUES_STORAGE_KEY, JSON.stringify(presetValues));
@@ -375,17 +472,17 @@ const RemoteControlApp: React.FC = () => {
                 {backgroundMode !== 'transparent' && (
                     <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none transition-opacity duration-300">
                         {/* Base layer */}
-                        <div className={`absolute inset-0 transition-colors duration-300 ${backgroundMode === 'cover' && coverColors.length > 0
+                        <div className={`absolute inset-0 transition-colors duration-300 ${backgroundMode === 'cover' && activeCoverColors.length > 0
                             ? (isDaylight ? 'bg-zinc-100' : 'bg-zinc-950')
                             : (isDaylight ? 'bg-[#f5f5f4]' : 'bg-[#060814]')
                             }`} />
 
                         {/* Blurry blobs */}
-                        {backgroundMode === 'cover' && coverColors.length >= 2 ? (
+                        {backgroundMode === 'cover' && activeCoverColors.length >= 2 ? (
                             <>
-                                <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full blur-[40px] transition-all duration-700 ease-in-out" style={{ backgroundColor: coverColors[0], opacity: isDaylight ? 0.35 : 0.25 }} />
-                                <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full blur-[50px] transition-all duration-700 ease-in-out" style={{ backgroundColor: coverColors[1], opacity: isDaylight ? 0.35 : 0.25 }} />
-                                <div className="absolute top-1/4 right-1/4 w-32 h-32 rounded-full blur-[30px] transition-all duration-700 ease-in-out" style={{ backgroundColor: coverColors[2] || coverColors[0], opacity: isDaylight ? 0.25 : 0.15 }} />
+                                <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full blur-[40px] transition-all duration-700 ease-in-out" style={{ backgroundColor: activeCoverColors[0], opacity: isDaylight ? 0.35 : 0.25 }} />
+                                <div className="absolute -bottom-16 -right-16 w-52 h-52 rounded-full blur-[50px] transition-all duration-700 ease-in-out" style={{ backgroundColor: activeCoverColors[1], opacity: isDaylight ? 0.35 : 0.25 }} />
+                                <div className="absolute top-1/4 right-1/4 w-32 h-32 rounded-full blur-[30px] transition-all duration-700 ease-in-out" style={{ backgroundColor: activeCoverColors[2] || activeCoverColors[0], opacity: isDaylight ? 0.25 : 0.15 }} />
                             </>
                         ) : isDaylight ? (
                             <>
@@ -478,18 +575,42 @@ const RemoteControlApp: React.FC = () => {
                         {/* Left Column: Cover Art with Hover Back Overlay */}
                         <div className={`relative h-[112px] w-[112px] shrink-0 overflow-hidden rounded-xl bg-cover bg-center shadow-md group transition-all duration-300 ${isDaylight ? 'bg-zinc-200 border border-black/5' : 'bg-zinc-800 border border-white/5'
                             }`}>
-                            {!snapshot.coverUrl && (
+                            {!currentCoverUrl && (
                                 <div className={`flex h-full w-full items-center justify-center text-3xl font-bold transition-colors duration-300 ${isDaylight ? 'text-black/35' : 'text-white/35'
                                     }`}>
                                     F
                                 </div>
                             )}
-                            {snapshot.coverUrl && (
-                                <div
-                                    className="h-full w-full bg-cover bg-center"
-                                    style={coverStyle}
-                                />
-                            )}
+                            {/* 手动切歌走方向性淡入；音频过渡则由本地 MotionValue 连续互换两张封面。
+                                交接的不透明度单独挂在内层：外层只管进出场，两层 opacity 天然相乘，
+                                本地 MotionValue 就不会和 initial/animate/exit 抢同一个 opacity。 */}
+                            <AnimatePresence initial={false}>
+                                {coverFaces.map(face => {
+                                    const handoffOpacity = face.mode === 'incoming'
+                                        ? handoffIncomingOpacity
+                                        : isHandoffActive && hasIncomingCoverFace ? handoffOutgoingOpacity : undefined;
+                                    return (
+                                        <motion.div
+                                            key={`cover-${face.key}`}
+                                            initial={face.mode === 'incoming'
+                                                ? { opacity: 1, scale: 1.02, y: 0 }
+                                                : { opacity: 0, scale: 1.06, y: trackEnterOffset }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.97, y: -trackEnterOffset }}
+                                            transition={face.mode === 'incoming' ? HANDOFF_FACE_TRANSITION : SWITCH_FACE_TRANSITION}
+                                            className="absolute inset-0 h-full w-full"
+                                        >
+                                            <motion.div
+                                                className="absolute inset-0 h-full w-full bg-cover bg-center"
+                                                style={{
+                                                    backgroundImage: `url(${face.coverUrl})`,
+                                                    ...(handoffOpacity ? { opacity: handoffOpacity } : {}),
+                                                }}
+                                            />
+                                        </motion.div>
+                                    );
+                                })}
+                            </AnimatePresence>
                             {activePanel !== 'playback' && (
                                 <button
                                     type="button"
@@ -527,9 +648,79 @@ const RemoteControlApp: React.FC = () => {
                         <div className="flex flex-col justify-between min-h-[112px] min-w-0">
                             {/* Static Title & Artist */}
                             <div className="min-w-0 pr-6">
-                                <div className="truncate text-[15px] font-bold leading-5 tracking-[-0.01em]">{title}</div>
-                                <div className={`truncate text-xs font-medium mt-0.5 transition-colors ${isDaylight ? 'text-black/50' : 'text-white/40'
-                                    }`}>{artist}</div>
+                                {/* Preview Sound Name */}
+                                <div className="relative h-5 min-w-0">
+                                    {/* hover 预览邻居标题时整叠标题一起让位，不必逐张改不透明度 */}
+                                    <div
+                                        className="absolute inset-0 transition-opacity duration-200"
+                                        style={{ opacity: previewTitle ? 0 : 1 }}
+                                    >
+                                        <AnimatePresence initial={false}>
+                                            {trackFaces.map(face => {
+                                                const handoffOpacity = face.mode === 'incoming'
+                                                    ? handoffIncomingOpacity
+                                                    : isHandoffActive ? handoffOutgoingOpacity : undefined;
+                                                return (
+                                                    <motion.div
+                                                        key={`title-${face.key}`}
+                                                        initial={face.mode === 'incoming'
+                                                            ? { opacity: 1, x: 0 }
+                                                            : { opacity: 0, x: trackEnterOffset }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        exit={{ opacity: 0, x: -trackEnterOffset }}
+                                                        transition={face.mode === 'incoming' ? HANDOFF_FACE_TRANSITION : SWITCH_TEXT_TRANSITION}
+                                                        className="absolute inset-0"
+                                                    >
+                                                        <motion.div
+                                                            className="absolute inset-0 truncate text-[15px] font-bold leading-5 tracking-[-0.01em]"
+                                                            style={handoffOpacity ? { opacity: handoffOpacity } : undefined}
+                                                        >
+                                                            {face.title}
+                                                        </motion.div>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </AnimatePresence>
+                                    </div>
+                                    <div
+                                        aria-hidden
+                                        className="absolute inset-0 truncate text-[15px] font-bold leading-5 tracking-[-0.01em] transition-opacity duration-200"
+                                        style={{ opacity: previewTitle ? 0.55 : 0 }}
+                                    >
+                                        {previewTitle}
+                                    </div>
+                                </div>
+                                <div className={`relative h-4 mt-0.5 min-w-0 transition-colors ${isDaylight ? 'text-black/50' : 'text-white/40'
+                                    }`}>
+                                    <AnimatePresence initial={false}>
+                                        {trackFaces.map(face => {
+                                            const handoffOpacity = face.mode === 'incoming'
+                                                ? handoffIncomingOpacity
+                                                : isHandoffActive ? handoffOutgoingOpacity : undefined;
+                                            return (
+                                                <motion.div
+                                                    key={`artist-${face.key}`}
+                                                    initial={face.mode === 'incoming'
+                                                        ? { opacity: 1, x: 0 }
+                                                        : { opacity: 0, x: trackEnterOffset }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    exit={{ opacity: 0, x: -trackEnterOffset }}
+                                                    transition={face.mode === 'incoming'
+                                                        ? HANDOFF_FACE_TRANSITION
+                                                        : { ...SWITCH_TEXT_TRANSITION, delay: 0.04 }}
+                                                    className="absolute inset-0"
+                                                >
+                                                    <motion.div
+                                                        className="absolute inset-0 truncate text-xs font-medium leading-4"
+                                                        style={handoffOpacity ? { opacity: handoffOpacity } : undefined}
+                                                    >
+                                                        {face.artist}
+                                                    </motion.div>
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </AnimatePresence>
+                                </div>
                             </div>
 
                             {/* Dynamic Panel with Framer Motion transitions */}
@@ -558,9 +749,22 @@ const RemoteControlApp: React.FC = () => {
                                                         />
                                                     </div>
 
+                                                    {/* Glow only while the audio transition cue is active. */}
+                                                    {isTransitionGlowActive && (
+                                                        <div
+                                                            aria-hidden
+                                                            className="remote-progress-transition-glow pointer-events-none absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+                                                            style={{
+                                                                width: `${progressPercent}%`,
+                                                                backgroundColor: activeColor,
+                                                                ['--transition-glow-color' as string]: transitionGlowColor,
+                                                            } as React.CSSProperties}
+                                                        />
+                                                    )}
+
                                                     {/* Transparent Large Hitbox Input Range */}
                                                     <input
-                                                        aria-label="Seek"
+                                                        aria-label={t('ui.seek')}
                                                         type="range"
                                                         min={0}
                                                         max={duration || 1}
@@ -618,25 +822,25 @@ const RemoteControlApp: React.FC = () => {
 
                                                             {/* Playback Actions */}
                                                             <div className="flex w-full items-center justify-between">
-                                                                <div className="flex items-center gap-1.5">
+                                                                {/* Playback domain: transport with loop mode trailing it */}
+                                                                <div className="flex items-center gap-0.5">
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.previous')}
+                                                                        title={t('remote.previous')}
                                                                         disabled={primaryDisabled || !snapshot.canGoPrevious}
-                                                                        onClick={() => sendCommand({ type: 'previous' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        onMouseEnter={() => setHoverNavSide('prev')}
+                                                                        onMouseLeave={() => setHoverNavSide(null)}
+                                                                        onClick={() => navigateTrack('prev')}
+                                                                        className={transportButtonClass}
                                                                     >
-                                                                        <SkipBack size={16} strokeWidth={2} />
+                                                                        <SkipBack size={17} strokeWidth={2} />
                                                                     </button>
                                                                     <button
-                                                                       type="button"
+                                                                        type="button"
                                                                         title={isPlaying ? t('remote.pause') : t('remote.play')}
-                                                                       disabled={primaryDisabled}
+                                                                        disabled={primaryDisabled}
                                                                         onClick={() => sendCommand({ type: 'play-pause' })}
-                                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
+                                                                        className={`flex h-9 w-9 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-30 ${isDaylight
                                                                             ? 'bg-zinc-900 text-white hover:bg-zinc-800'
                                                                             : 'bg-white text-zinc-950 hover:bg-white/90'
                                                                             }`}
@@ -645,53 +849,60 @@ const RemoteControlApp: React.FC = () => {
                                                                     </button>
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.next')}
+                                                                        title={t('remote.next')}
                                                                         disabled={primaryDisabled || !snapshot.canGoNext}
-                                                                        onClick={() => sendCommand({ type: 'next' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${isDaylight
-                                                                            ? 'bg-black/5 text-black/60 hover:bg-black/10 hover:text-black'
-                                                                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        onMouseEnter={() => setHoverNavSide('next')}
+                                                                        onMouseLeave={() => setHoverNavSide(null)}
+                                                                        onClick={() => navigateTrack('next')}
+                                                                        className={transportButtonClass}
                                                                     >
-                                                                        <SkipForward size={16} strokeWidth={2} />
+                                                                        <SkipForward size={17} strokeWidth={2} />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        title={snapshot.loopMode === 'off' ? t('remote.loopOff') : snapshot.loopMode === 'one' ? t('remote.loopOne') : t('remote.loopAll')}
+                                                                        aria-pressed={snapshot.loopMode !== 'off'}
+                                                                        disabled={primaryDisabled}
+                                                                        onClick={() => sendCommand({ type: 'cycle-loop-mode' })}
+                                                                        className={`${secondaryButtonBase} ml-2 ${snapshot.loopMode !== 'off' ? secondaryActiveClass : secondaryIdleClass}`}
+                                                                    >
+                                                                        {snapshot.loopMode === 'off' ? <RepeatOff size={15} strokeWidth={2} /> : snapshot.loopMode === 'one' ? <Repeat1 size={15} strokeWidth={2} /> : <Repeat size={15} strokeWidth={2} />}
                                                                     </button>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5">
+
+                                                                {/* Track reaction, then window tools */}
+                                                                <div className="flex items-center gap-0.5">
+                                                                    <span className="flex" title={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}>
+                                                                        <button
+                                                                            type="button"
+                                                                            aria-label={likeUnavailableReason || (snapshot.isLiked ? t('remote.unlike') : t('remote.like'))}
+                                                                            aria-pressed={snapshot.isLiked}
+                                                                            disabled={likeDisabled}
+                                                                            onClick={() => sendCommand({ type: 'toggle-like' })}
+                                                                            className={`${secondaryButtonBase} ${snapshot.isLiked ? secondaryAlertClass : secondaryIdleClass}`}
+                                                                        >
+                                                                            <Heart size={15} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
+                                                                        </button>
+                                                                    </span>
                                                                     <button
                                                                         type="button"
-                                                                        title={snapshot.isLiked ? t('remote.unlike') : t('remote.like')}
-                                                                        disabled={primaryDisabled}
-                                                                        onClick={() => sendCommand({ type: 'toggle-like' })}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${snapshot.isLiked
-                                                                            ? (isDaylight ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30' : 'bg-red-500/25 text-red-400 hover:bg-red-500/35')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                            }`}
-                                                                    >
-                                                                        <Heart size={16} fill={snapshot.isLiked ? 'currentColor' : 'none'} strokeWidth={2} />
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                         title={t('remote.transparentControls')}
+                                                                        title={t('remote.transparentControls')}
                                                                         onClick={() => {
                                                                             setPresetSelectorOpen(false);
                                                                             setActivePanel('transparent-controls');
                                                                         }}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition ${isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                                                                            }`}
+                                                                        className={`${secondaryButtonBase} ml-2 ${secondaryIdleClass}`}
                                                                     >
-                                                                        <MirrorRectangular size={16} strokeWidth={2} />
+                                                                        <MirrorRectangular size={15} strokeWidth={2} />
                                                                     </button>
                                                                     <button
                                                                         type="button"
-                                                                         title={t('remote.videoExport')}
+                                                                        title={t('remote.videoExport')}
                                                                         disabled={!snapshot.hasTrack}
                                                                         onClick={() => setActivePanel('export')}
-                                                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-35 ${exportState.status === 'recording'
-                                                                            ? (isDaylight ? 'bg-red-500/20 text-red-600 animate-pulse border border-red-500/25' : 'bg-red-500/25 text-red-400 animate-pulse border border-red-500/30')
-                                                                            : (isDaylight ? 'bg-black/5 text-black/70 hover:bg-black/10 hover:text-black' : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white')
-                                                                            }`}
+                                                                        className={`${secondaryButtonBase} ${exportState.status === 'recording' ? `${secondaryAlertClass} animate-pulse` : secondaryIdleClass}`}
                                                                     >
-                                                                        <Video size={16} strokeWidth={2} />
+                                                                        <Video size={15} strokeWidth={2} />
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -945,12 +1156,6 @@ const RemoteControlApp: React.FC = () => {
                                                     onFocus={() => { widthFocusedRef.current = true; }}
                                                     onBlur={() => {
                                                         widthFocusedRef.current = false;
-                                                        const currentWidth = snapshot.mainWindowWidth ?? 1920;
-                                                        setTimeout(() => {
-                                                            if (!widthFocusedRef.current && !isSavingRef.current) {
-                                                                setDraftWidth(String(currentWidth));
-                                                            }
-                                                        }, 150);
                                                     }}
                                                     onChange={(event) => setDraftWidth(event.currentTarget.value.replace(/[^\d]/g, ''))}
                                                     className="bg-transparent text-[11px] font-semibold outline-none w-full"
@@ -971,12 +1176,6 @@ const RemoteControlApp: React.FC = () => {
                                                     onFocus={() => { heightFocusedRef.current = true; }}
                                                     onBlur={() => {
                                                         heightFocusedRef.current = false;
-                                                        const currentHeight = snapshot.mainWindowHeight ?? 1080;
-                                                        setTimeout(() => {
-                                                            if (!heightFocusedRef.current && !isSavingRef.current) {
-                                                                setDraftHeight(String(currentHeight));
-                                                            }
-                                                        }, 150);
                                                     }}
                                                     onChange={(event) => setDraftHeight(event.currentTarget.value.replace(/[^\d]/g, ''))}
                                                     className="bg-transparent text-[11px] font-semibold outline-none w-full"

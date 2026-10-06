@@ -1,5 +1,6 @@
 import { NeteaseUser, NeteasePlaylist, NoCopyrightRecommendation, SongPrivilege, SongResult } from "../types";
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './onlineMusic/providerStorage';
+import type { PersonalFmRequestOptions } from '../types/onlineMusic';
 
 type UnavailableSongReplacement = {
   replacementSong: SongResult;
@@ -35,14 +36,52 @@ const getConfiguredApiBase = () => {
   return null;
 };
 
-const getApiBase = async () => {
-  if (API_BASE) return API_BASE;
+// Thrown when the Electron backend is not listening. The QR login modal keys its "restart backend"
+// overlay off this, so it must stay distinguishable from an ordinary request failure.
+export const NETEASE_API_UNAVAILABLE = 'NETEASE_API_UNAVAILABLE';
 
-  if (isElectronRuntime()) {
-    const port = await getElectronBridge().getNeteasePort();
-    API_BASE = `http://localhost:${port}`;
-    return API_BASE;
+const NETEASE_PORT_POLL_INTERVAL_MS = 250;
+// Backstop only. The main process bounds every startup network call, so `starting` always resolves
+// well inside this; the deadline exists so a wedged backend cannot hang a request forever.
+const NETEASE_PORT_WAIT_TIMEOUT_MS = 45000;
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+// The Electron backend no longer blocks window creation, so the renderer can outrun it. Wait while
+// it is still starting, but return null the moment it reports a failure — the login modal turns
+// that into a restart button rather than another opaque request error.
+const waitForNeteasePort = async (bridge: any): Promise<number | null> => {
+  const deadline = Date.now() + NETEASE_PORT_WAIT_TIMEOUT_MS;
+
+  for (;;) {
+    const port = await bridge.getNeteasePort();
+    if (Number.isInteger(port) && port > 0) return port;
+
+    const status = typeof bridge.getNeteaseApiStatus === 'function'
+      ? await bridge.getNeteaseApiStatus()
+      : null;
+    if (status?.status !== 'starting' || Date.now() >= deadline) return null;
+
+    await delay(NETEASE_PORT_POLL_INTERVAL_MS);
   }
+};
+
+const getApiBase = async () => {
+  // Deliberately uncached under Electron: the local server starts asynchronously and can be
+  // restarted from the login modal on a fresh port. Caching the first answer used to pin the
+  // renderer to the dead default port for the rest of the session, so every online feature kept
+  // failing with a bare network error long after the backend recovered.
+  if (isElectronRuntime()) {
+    const port = await waitForNeteasePort(getElectronBridge());
+    if (port === null) {
+      throw new Error(NETEASE_API_UNAVAILABLE);
+    }
+    // 必须是 127.0.0.1 而不是 localhost：本地 API 只监听 IPv4 回环（见 electron/main.cjs 的 startApi），
+    // 有公网 IPv6 的机器上 localhost 会先解析到 ::1。
+    return `http://127.0.0.1:${port}`;
+  }
+
+  if (API_BASE) return API_BASE;
 
   const configuredApiBase = getConfiguredApiBase();
   if (configuredApiBase) {
@@ -541,6 +580,30 @@ export const neteaseApi = {
     return fetchWithCreds(`/like?id=${id}&like=${like}`);
   },
 
+  /**
+   * 听歌打卡 (NCBL 加密日志版)。写用户账号，只应在真实播放之后调用一次。
+   *
+   * `sourceid` 是可选的，这里刻意不发：应用里没有"这条队列来自哪个歌单"的记录，凑一个来源等于
+   * 上报假数据。`source` 同样留给服务端默认值。
+   */
+  scrobbleV1: async (params: {
+    id: number;
+    time: number;
+    name?: string;
+    artist?: string;
+    level?: string;
+    bitrate?: number;
+    total?: number;
+  }) => {
+    const query = new URLSearchParams({ id: String(params.id), time: String(params.time) });
+    if (params.name) query.set('name', params.name);
+    if (params.artist) query.set('artist', params.artist);
+    if (params.level) query.set('level', params.level);
+    if (params.bitrate) query.set('bitrate', String(params.bitrate));
+    if (params.total) query.set('total', String(params.total));
+    return fetchWithCreds(`/scrobble/v1?${query.toString()}`);
+  },
+
   getLikedSongs: async (uid: number) => {
     return fetchWithCreds(`/likelist?uid=${uid}`);
   },
@@ -726,8 +789,36 @@ export const neteaseApi = {
   },
 
   // --- Radio ---
-  getPersonalFm: async () => {
-    return fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
+  // `/personal/fm/mode` only exists on newer NeteaseCloudMusicApi builds, and this app talks to
+  // whatever instance the user configured. The default mode keeps using the long-standing
+  // `/personal_fm`, and an instance that cannot serve a mode falls back to it instead of leaving
+  // the radio empty.
+  //
+  // Do not add `limit`: the module accepts one and forwards it, but the upstream radio ignores it
+  // and returns 3 tracks either way (measured). The queue controller's near-end refill is what
+  // keeps the stream going, exactly as it does for the plain FM endpoint.
+  getPersonalFm: async (options?: PersonalFmRequestOptions) => {
+    const fetchDefaultFm = () => fetchWithCreds(`/personal_fm?timestamp=${Date.now()}`);
+    const mode = options?.mode;
+    if (!mode || mode === 'DEFAULT') {
+      return fetchDefaultFm();
+    }
+
+    const params = new URLSearchParams({ mode });
+    if (mode === 'SCENE_RCMD' && options?.submode) {
+      params.set('submode', options.submode);
+    }
+
+    try {
+      const res = await fetchWithCreds(`/personal/fm/mode?${params.toString()}&timestamp=${Date.now()}`);
+      if (Array.isArray(res?.data) && res.data.length > 0) {
+        return res;
+      }
+      console.warn('[Netease] personal fm mode unsupported, falling back', { mode, code: res?.code });
+    } catch (error) {
+      console.warn('[Netease] personal fm mode request failed, falling back', { mode, error });
+    }
+    return fetchDefaultFm();
   },
 
   getDailyRecommendedSongs: async (afresh = false) => {

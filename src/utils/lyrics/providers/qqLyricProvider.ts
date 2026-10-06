@@ -12,6 +12,7 @@ import { qrcDecrypt } from './qrcDecrypt';
 import { applyDetectedChorusEffects, applyNeteaseChorusByTime } from '../chorusEffects';
 import type { NeteaseChorusRange } from '../chorusEffects';
 import { resolveFoliaApiUrl } from '../../../services/webApi';
+import { getOriginalCoverUrl } from '../../coverUrl';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electron;
 
@@ -124,7 +125,7 @@ export async function searchQQLyrics(keyword: string, page = 1, pageSize = 20): 
       
       const albumMid = info.album?.mid;
       const picUrl = albumMid
-        ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg?max_age=2592000`
+        ? getOriginalCoverUrl(`https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg?max_age=2592000`)
         : undefined;
 
       return {

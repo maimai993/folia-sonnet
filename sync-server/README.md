@@ -251,7 +251,7 @@ docker compose -f deploy/docker/compose.sync.yaml up -d --build
 使用 Node.js 运行，底层使用 `better-sqlite3`。
 
 ### 前置要求
-- Node.js >= 18
+- Node.js >= 24（与根项目和 `sync-server/package.json` 的 engine 一致）
 - npm / pnpm
 
 ### 1. 配置环境变量
@@ -310,7 +310,17 @@ http://127.0.0.1:13000
 
 客户端是本地优先的：AI 主题和主题同步 registry 保存在本机 IndexedDB，启动时会自动做主题同步；视觉设置的拉取/推送、完整 sync library 的 zip 导入导出由存储设置页面或命令面板触发。主题 registry 从旧 localStorage 迁移到 IndexedDB 时会执行一次性兼容迁移。
 
-服务端实现位于 `src/app.ts`，Node 入口位于 `src/node.ts`，Cloudflare 入口位于 `src/cloudflare.ts`；三种部署方式共用同一套路由和 D1/SQLite 兼容的数据访问模型。
+服务端实现位于 `src/app.ts`，Node 入口位于 `src/node.ts`，Cloudflare 入口位于 `src/cloudflare.ts`；`src/d1-emulator.ts` 为 Node 环境提供 D1 兼容实现。三种部署方式共用同一套路由和 D1/SQLite 兼容的数据访问模型。Cloudflare 配置模板是 `wrangler.toml`，安装脚本生成的 `wrangler.local.toml` 不应提交。
+
+实现定位：
+
+- `src/app.ts`：Hono 路由、Bearer/dashboard 鉴权、schema 版本、设置和主题同步 API。
+- `src/node.ts`：Node server 与 SQLite 启动入口。
+- `src/cloudflare.ts`：Worker/D1 适配入口。
+- `src/d1-emulator.ts`：本地 Node 对 D1 风格存储的兼容层。
+- `install.sh` / `install.ps1`：Node、Docker、Cloudflare 三种部署菜单。
+
+当前协议约束：schema version 为 `1`，主题 manifest 固定为 `256` 个 bucket；主题批量写入上限为 `500`，bucket 请求最多 `32` 个，完整主题 list 最多 `1000` 条。修改这些限制或路由时必须同步客户端 `src/services/sync/*` 和本 README。
 
 ---
 

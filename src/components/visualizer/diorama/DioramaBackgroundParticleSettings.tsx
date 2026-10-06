@@ -126,7 +126,7 @@ export const DioramaBackgroundParticleSettings: React.FC<DioramaBackgroundPartic
                     style={{ borderColor: colorWithAlpha(theme.accentColor, enabled ? 0.3 : 0.12) }}
                 >
                     {renderRange(
-                        t('options.dioramaMoteCircumference') || '圆周密度',
+                        t('options.dioramaMoteCircumference'),
                         circumference,
                         DIORAMA_MOTE_CIRCUMFERENCE_MIN,
                         DIORAMA_MOTE_CIRCUMFERENCE_MAX,
@@ -134,7 +134,7 @@ export const DioramaBackgroundParticleSettings: React.FC<DioramaBackgroundPartic
                         onCircumferenceChange,
                     )}
                     {renderRange(
-                        t('options.dioramaMoteRadial') || '径向密度',
+                        t('options.dioramaMoteRadial'),
                         radial,
                         DIORAMA_MOTE_RADIAL_MIN,
                         DIORAMA_MOTE_RADIAL_MAX,

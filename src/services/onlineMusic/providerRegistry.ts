@@ -4,17 +4,41 @@ import type { SongResult } from '../../types';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
 import { neteaseProvider } from './neteaseProvider';
 import { kugouProvider } from './kugouProvider';
+import { qqProvider } from './qqProvider';
+import { bodianProvider } from './bodianProvider';
 
 // src/services/onlineMusic/providerRegistry.ts
 
 const providers = new Map<OnlineProviderId, OnlineMusicProvider>();
 
+// Folium mods register and remove providers at runtime, after the UI first read the list. The version
+// lets that UI (through omni, see useOnlineProviderPlatform) notice instead of keeping a stale list.
+let registryVersion = 0;
+const registryListeners = new Set<() => void>();
+
+const announceRegistryChange = () => {
+    registryVersion += 1;
+    registryListeners.forEach(listener => listener());
+};
+
 export const registerOnlineMusicProvider = (provider: OnlineMusicProvider): void => {
     providers.set(provider.id, provider);
+    announceRegistryChange();
 };
 
 export const unregisterOnlineMusicProvider = (providerId: OnlineProviderId): void => {
-    providers.delete(providerId);
+    if (providers.delete(providerId)) announceRegistryChange();
+};
+
+/** Bumped by every registration and removal. */
+export const getOnlineMusicProviderRegistryVersion = (): number => registryVersion;
+
+/** Calls `listener` after every registration and removal; returns the unsubscribe function. */
+export const subscribeOnlineMusicProviderRegistry = (listener: () => void): (() => void) => {
+    registryListeners.add(listener);
+    return () => {
+        registryListeners.delete(listener);
+    };
 };
 
 export const getOnlineMusicProvider = (providerId: OnlineProviderId): OnlineMusicProvider | null => (
@@ -56,3 +80,5 @@ export const requireOnlineMusicProviderForSong = (song: SongResult): OnlineMusic
 
 registerOnlineMusicProvider(neteaseProvider);
 registerOnlineMusicProvider(kugouProvider);
+registerOnlineMusicProvider(qqProvider);
+registerOnlineMusicProvider(bodianProvider);

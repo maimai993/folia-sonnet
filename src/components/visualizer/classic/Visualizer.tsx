@@ -7,10 +7,12 @@ import { useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import { buildPostLyricLayoutUnits, buildDisplayWordsFromLayoutUnits } from '../../../utils/lyrics/cjkSemanticLayout';
 import { buildWordGraphemeTimings } from '../../../utils/lyrics/graphemeTiming';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { resolveWordColor } from '../wordColoring';
+import { wordGlowVariants } from '../wordGlow';
 
 // This mode is the most straightforward lyric pipeline in the folder.
 // First we ask runtime which line is active right now, then read renderHints from that line,
@@ -168,13 +170,12 @@ const Word: React.FC<{
     isChaotic: boolean;
     layoutVariants: Variants;
     bodyVariants: Variants;
-    glowVariants: Variants;
     baseColor: string;
     activeColor: string;
     renderProfile: ClassicLineRenderProfile;
     isChorus?: boolean;
     fontSize: string;
-}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, glowVariants, baseColor, activeColor, renderProfile, isChorus, fontSize }) => {
+}> = ({ word, config, currentTime, theme, isChaotic, layoutVariants, bodyVariants, baseColor, activeColor, renderProfile, isChorus, fontSize }) => {
     const [status, setStatus] = useState<"waiting" | "active" | "passed">("waiting");
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
     const duration = getClassicWordDisplayDuration(word, renderProfile);
@@ -229,7 +230,7 @@ const Word: React.FC<{
                     graphemeTimings.map((timing, index) => (
                         <motion.span
                             key={index}
-                            variants={glowVariants}
+                            variants={wordGlowVariants}
                             custom={{
                                 config,
                                 activeColor,
@@ -248,7 +249,7 @@ const Word: React.FC<{
                     ))
                 ) : (
                     <motion.span
-                        variants={glowVariants}
+                        variants={wordGlowVariants}
                         custom={{ config, activeColor, baseColor, duration, wordRevealMode: renderProfile.wordRevealMode }}
                     >
                         {word.text}
@@ -297,6 +298,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         subtitleFontScale = 1,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
+        subtitleUpcomingLyricsBlur,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         showSubtitleTranslation = true,
@@ -342,8 +344,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
 
     const mainFontSize = `clamp(${(2.25 * lyricsFontScale).toFixed(3)}rem, ${(6 * lyricsFontScale).toFixed(3)}vw, ${(4.5 * lyricsFontScale).toFixed(3)}rem)`;
     const emptyFontSize = `clamp(${(1.5 * lyricsFontScale).toFixed(3)}rem, ${(3.5 * lyricsFontScale).toFixed(3)}vw, ${(2.25 * lyricsFontScale).toFixed(3)}rem)`;
-    const translationFontSize = `clamp(${(1.125 * lyricsFontScale).toFixed(3)}rem, ${(2.6 * lyricsFontScale).toFixed(3)}vw, ${(1.25 * lyricsFontScale).toFixed(3)}rem)`;
-    const upcomingFontSize = `clamp(${(0.875 * lyricsFontScale).toFixed(3)}rem, ${(2 * lyricsFontScale).toFixed(3)}vw, ${(1 * lyricsFontScale).toFixed(3)}rem)`;
+    const { translationFontSize, upcomingFontSize } = resolveSubtitleFontSizes(lyricsFontScale);
 
     // Generate a stable random layout configuration for the current line.
     // Use the line start time as seed so the same lyric does not reshuffle every rerender.
@@ -541,94 +542,6 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         })
     };
 
-    // Glow layer is transparent text + text-shadow only.
-    // This is why active highlights can look large without changing the readable body thickness.
-    const glowVariants: Variants = {
-        waiting: {
-            color: "transparent",
-            textShadow: "none",
-        },
-        active: ({ activeColor, duration, index, total, charStartTime, charEndTime, wordStartTime, wordRevealMode }: any) => {
-            if (wordRevealMode === 'instant') {
-                return {
-                    color: "transparent",
-                    textShadow: [
-                        "none",
-                        `0 0 14px ${activeColor}, 0 0 24px ${activeColor}`,
-                        "none"
-                    ],
-                    transition: {
-                        duration: Math.min(duration || 0.08, 0.12),
-                        times: [0, 0.35, 1],
-                        ease: "easeOut"
-                    }
-                };
-            }
-
-            if (wordRevealMode === 'fast') {
-                return {
-                    color: "transparent",
-                    textShadow: [
-                        "none",
-                        `0 0 18px ${activeColor}, 0 0 32px ${activeColor}`,
-                        "none"
-                    ],
-                    transition: {
-                        duration: Math.min(Math.max(duration || 0.12, 0.12), 0.2),
-                        times: [0, 0.4, 1],
-                        ease: "easeInOut"
-                    }
-                };
-            }
-
-            if (total !== undefined && total > 1) {
-                const singleDuration = duration / total;
-                const hasCharTiming = typeof charStartTime === 'number'
-                    && typeof charEndTime === 'number'
-                    && typeof wordStartTime === 'number';
-                const resolvedCharDuration = hasCharTiming ? charEndTime - charStartTime : 0;
-                const charDuration = hasCharTiming
-                    ? Math.max(resolvedCharDuration, 0.001)
-                    : singleDuration;
-                const charDelay = hasCharTiming
-                    ? Math.max(0, charStartTime - wordStartTime)
-                    : singleDuration * index;
-                return {
-                    color: "transparent",
-                    textShadow: [
-                        "none",
-                        `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
-                        "none"
-                    ],
-                    transition: {
-                        duration: charDuration * 6, // stretch the fade over a few letters
-                        times: [0, 0.3, 1], // peak early, then fade
-                        delay: charDelay,
-                        ease: "easeInOut"
-                    }
-                };
-            }
-            return {
-                color: "transparent",
-                textShadow: [
-                    "none",
-                    `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
-                    `0 0 20px ${activeColor}, 0 0 40px ${activeColor}`,
-                ],
-                transition: {
-                    duration: (duration || 0.1), // stretch the fade over the word duration
-                    times: [0, 0.9, 1], // peak early, then fade
-                    ease: "easeInOut"
-                }
-            };
-        },
-        passed: ({ wordRevealMode }: any) => ({
-            color: "transparent",
-            textShadow: "none",
-            transition: { duration: wordRevealMode === 'instant' ? 0.12 : wordRevealMode === 'fast' ? 0.22 : 0.9, ease: "easeOut" }
-        })
-    };
-
     const lyricContainerFloat = useMemo(() => {
         const multiplier = resolvedClassicTuning.breathingFloatMultiplier;
         if (multiplier <= 0) {
@@ -696,7 +609,6 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                                         isChaotic={theme.animationIntensity === 'chaotic'}
                                         layoutVariants={layoutVariants}
                                         bodyVariants={bodyVariants}
-                                        glowVariants={glowVariants}
                                         baseColor={theme.primaryColor}
                                         activeColor={activeColor}
                                         renderProfile={activeWordRenderProfile!}
@@ -737,6 +649,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                 upcomingFontSize={upcomingFontSize}
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
+                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                 subtitleFontScale={subtitleFontScale}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}

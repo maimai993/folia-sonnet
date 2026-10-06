@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '@/i18n/config';
 import {
     buildStoredUploadedLyricsFont,
     clearUploadedLyricsFont,
@@ -24,6 +25,20 @@ const createFileLike = (content: string, name: string, type = ''): File => {
 };
 
 describe('customLyricsFont', () => {
+    // The rejection message comes back through i18n, and i18next detects the language from the
+    // environment - under vitest that is the *developer machine's* `navigator.language`. Asserting
+    // an English sentence without pinning the language made this file pass or fail depending on
+    // whose laptop it ran on.
+    const originalLanguage = i18n.language;
+
+    beforeAll(async () => {
+        await i18n.changeLanguage('en');
+    });
+
+    afterAll(async () => {
+        await i18n.changeLanguage(originalLanguage);
+    });
+
     const getFromCacheMock = vi.mocked(getFromCache);
     const saveToCacheMock = vi.mocked(saveToCache);
     const removeFromCacheMock = vi.mocked(removeFromCache);
@@ -71,7 +86,7 @@ describe('customLyricsFont', () => {
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.woff2'))).toBe(true);
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.ttf'))).toBe(true);
         expect(isSupportedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe(false);
-        expect(validateUploadedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe('仅支持 woff2、woff、ttf、otf 字体文件。');
+        expect(validateUploadedLyricsFontFile(createFileLike('font', 'lyrics.png', 'image/png'))).toBe('Only woff2, woff, ttf, otf font files are supported.');
     });
 
     it('registers a stored uploaded font with FontFace', async () => {

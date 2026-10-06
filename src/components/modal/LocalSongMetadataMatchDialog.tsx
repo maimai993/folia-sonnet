@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Check, FileAudio, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { LocalSong } from '../../types';
 import type { LocalLibraryAssignment } from '../../types/localLibrary';
-import { createSafeObjectUrl, isBlob } from '../../utils/blobGuards';
+import { getLocalCoverAssetUrl } from '../../services/localCoverAssetUrl';
 import { applyOnlineMetadataCandidate, useImportedSnapshotForLocalSong } from '../../services/localSongMetadataMatchService';
 import {
     buildLocalSongMetadataSearchQuery,
@@ -13,6 +13,7 @@ import {
     type OnlineMetadataSource,
 } from '../../services/onlineMetadataSearchService';
 import { DurationMatchBadge } from './DurationMatchBadge';
+import { getSizedCoverUrl } from '../../utils/coverUrl';
 
 // src/components/modal/LocalSongMetadataMatchDialog.tsx
 // Lets the user search one provider and independently choose its metadata bundle and cover.
@@ -35,8 +36,8 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
     const [applying, setApplying] = useState(false);
     const [restoringLocalInfo, setRestoringLocalInfo] = useState(false);
     const [useOnlineMetadata, setUseOnlineMetadata] = useState(song.titleOrigin !== 'import');
-    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !isBlob(song.embeddedCover));
-    const [embeddedCoverUrl, setEmbeddedCoverUrl] = useState<string | null>(null);
+    const [useOnlineCover, setUseOnlineCover] = useState(song.useOnlineCover ?? !song.localCoverAssetId);
+    const localCoverUrl = getLocalCoverAssetUrl(song.localCoverAssetId, 512);
     const requestIdRef = useRef(0);
     const target = useMemo(() => buildLocalSongMetadataSearchTarget(song), [song]);
     const currentTitle = song.title;
@@ -48,23 +49,12 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
         : song.importedMetadata.albumName) || t('localMusic.unknownAlbum');
     const currentCoverUrl = song.useOnlineCover && song.onlineMetadata?.coverUrl
         ? song.onlineMetadata.coverUrl
-        : embeddedCoverUrl;
+        : localCoverUrl;
     const selectedArtist = selected?.artists.map(artist => artist.name).join(', ') || '';
     const previewTitle = useOnlineMetadata && selected?.title ? selected.title : currentTitle;
     const previewArtist = useOnlineMetadata && selectedArtist ? selectedArtist : currentArtist;
     const previewAlbum = useOnlineMetadata && selected?.album?.name ? selected.album.name : currentAlbum;
     const previewCoverUrl = useOnlineCover && selected?.coverUrl ? selected.coverUrl : currentCoverUrl;
-
-    useEffect(() => {
-        if (!isBlob(song.embeddedCover)) {
-            setEmbeddedCoverUrl(null);
-            return;
-        }
-        const url = createSafeObjectUrl(song.embeddedCover);
-        if (!url) return;
-        setEmbeddedCoverUrl(url);
-        return () => URL.revokeObjectURL(url);
-    }, [song.embeddedCover]);
 
     const search = async () => {
         const safeQuery = query.trim();
@@ -185,7 +175,7 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wider opacity-45">{t('localMusic.currentSongInfo')}</div>
                                 <div className="flex gap-3">
                                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-current/10">
-                                        {currentCoverUrl && <img src={currentCoverUrl} alt="" className="h-full w-full object-cover" />}
+                                        {currentCoverUrl && <img src={getSizedCoverUrl(currentCoverUrl, 512)} alt="" decoding="async" className="h-full w-full object-cover" />}
                                     </div>
                                     <div className="min-w-0 text-xs">
                                         <div className="truncate font-bold">{currentTitle}</div>
@@ -198,7 +188,7 @@ export const LocalSongMetadataMatchDialog = ({ song, assignment, isDaylight, onC
                                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-blue-500">{t('localMusic.matchResultPreview')}</div>
                                 <div className="flex gap-3">
                                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-current/10">
-                                        {previewCoverUrl && <img src={previewCoverUrl} alt="" className="h-full w-full object-cover" />}
+                                        {previewCoverUrl && <img src={getSizedCoverUrl(previewCoverUrl, 512)} alt="" decoding="async" className="h-full w-full object-cover" />}
                                     </div>
                                     <div className="min-w-0 text-xs">
                                         <div className="truncate font-bold">{previewTitle}</div>

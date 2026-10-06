@@ -1,143 +1,56 @@
 ---
 name: readme-reference
-description: Use when making code, workflow, testing, or documentation changes in this repository and you need targeted project-specific facts from README files before editing. Read only relevant snippets from root README.md or src/README.md; do not load whole README files unless the user explicitly asks for a full document review.
+description: Use when making code, workflow, testing, deployment, or documentation changes in this repository and you need targeted project-specific facts from README files before editing. Read only the relevant section, verify it against code, and repair stale documentation when the task includes documentation.
 ---
 
 # README Reference
 
-这个 skill 用于在修改前从仓库内 README 定位仍然有效的项目上下文，但必须控制读取范围，避免把长 README 整段灌入上下文。
+README 是导航线索，不是代码真相。先按任务读取相关小片段，再用 tracked paths、imports、package scripts 和实现文件确认；发现旧路径时顺手修正文档或明确标记它。
 
-## When To Use
+## Source selection
 
-以下情况优先使用：
+- 产品能力、脚本、Electron、Vercel、API：`README.md`（根 README 只读，不在本任务中修改）。
+- `src/` 入口、模块职责、app-level 装配：`src/README.md`。
+- visualizer 共享入口、模式、背景、性能约定：`src/components/visualizer/README.md`。
+- Partita layout、sticky punctuation、预热和缓存：`src/components/visualizer/partita/README.md`。
+- 在线歌曲 Omni/provider 边界：`src/services/onlineMusic/README.md` + `src/services/onlineMusic/omni.ts`。
+- 同步 API、Node/Cloudflare/Docker 部署：`sync-server/README.md`。
+- Docker Web stack、端口、环境变量和 smoke test：`deploy/docker/README.md`。
+- Linux 便携包和 Electron 图形模式：`packaging/linux/README-LINUX.txt` + `electron/main.cjs`。
+- Cappella 内置头像/表情资源：相邻 `cappella/avatar/README.md` 或 `emo/README.md`，只在涉及这些资源时读取。
+- `test/manual/**/README.md` 属于测试/联调文档；按“排除测试文件”的任务要求不要把它们当作生产架构依据。
 
-- 修改前端架构、组件职责、服务层调用关系
-- 修改测试策略、测试入口、运行命令
-- 修改部署、开发、Electron、workflow 相关内容
-- 修改文档、issue template、贡献说明
-- 需要确认某个模块在项目中的定位，而不是只看当前文件猜测
+## Targeted reading
 
-## Primary Sources
+先用 `rg -n` 搜标题、脚本名、当前符号或路径，再打开命中位置附近 20-80 行。不要为了保险全文读取长 README。
 
-优先在这些项目文档里定位片段：
-
-- `README.md`
-- `src/README.md`
-- `sync-server/README.md`（仅当任务涉及同步服务端、Token、D1、Docker 或 Node 部署）
-
-不要默认完整读取这些文件。除非用户明确要求全文审阅，否则每次只读取和当前任务直接相关的小片段。
-
-## Read Budget
-
-默认读取预算：
-
-- 先用 `rg -n` 定位标题、关键词、脚本名、文件名或模块名。
-- 每个 README 单次只打开 20-80 行相关片段。
-- 同一任务通常不要从 README 读取超过 160 行。
-- 如果片段不够，再追加下一个最相关片段，而不是整文件打开。
-
-推荐命令模式：
-
-```bash
-rg -n "关键词|脚本名|模块名" README.md src/README.md
-sed -n '起始行,结束行p' README.md
-sed -n '起始行,结束行p' src/README.md
+```powershell
+rg -n "components/app|services/|visualizer|scripts|部署|Node|Docker" src/README.md README.md
+rg -n "VisualizerRenderer|registry|pendolo|sonnet|background" src/components/visualizer/README.md
+rg -n "Omni|provider|lyrics|playback|catalog" src/services/onlineMusic/README.md
+rg -n "Node|/health|/settings|/themes|compose" sync-server/README.md deploy/docker/README.md
 ```
 
-如果不确定关键词，先读目录或标题片段：
+## Verification protocol
 
-```bash
-rg -n "^##|^###|components/visualizer|services/|utils/lyrics|部署|脚本" README.md src/README.md
-```
+1. 文档给出路径时，用 `git ls-files -- <path>` 验证路径存在。
+2. 文档给出脚本时，核对根 `package.json`、领域 `package.json` 和 `vite.config.*` / `wrangler.*`。
+3. 文档给出入口时，先看该文件的 imports 和 export，再沿一层调用关系，不要直接扫描整个目录。
+4. 文档给出 API 时，核对 `sync-server/src/app.ts`、`worker/index.ts`、`api/` 或对应 bridge。
+5. 文档给出 provider 能力时，先看 `src/services/onlineMusic/omni.ts` 和 `src/types/onlineMusic.ts`，再看 adapter/transport。
+6. 代码与 README 冲突时，以代码为准，并在本次文档改动中更新对应说明。
 
-## How To Read Them
+## Repository-specific traps
 
-### `README.md`
+- 当前 app-level 目录是 `src/components/app/*`，旧的 `components/app/views/*`、`SearchResultsOverlay`、`src/components/LocalMusicView.tsx`、`src/components/local/*` 和 `src/components/navidrome/*` 不应作为新入口。
+- Visualizer 模式由 `src/components/visualizer/registry.tsx` 从各模式 `entry.tsx` 发现；当前不能只按旧文档中的 classic/cadenza/partita 列表理解。
+- 在线歌曲普通调用必须经过 `src/services/onlineMusic/omni.ts`；Navidrome 是独立 `src/services/navidromeService.ts`，不能仅凭“在线”一词混为一谈。
+- `src/App.tsx` 是历史大型编排文件；README 只提供入口关系，不代表新逻辑应继续写入其中。
+- Sync Server 的 Node engine 当前以 `sync-server/package.json` 和根 `package.json` 为准，不要复制旧的 Node 18 说明。
 
-主要提取这些信息：
+## Editing rules
 
-- 项目目标和支持的能力边界
-- Web / Electron / Vercel / API 的运行方式
-- 当前对外暴露的常用脚本
-- 本地音乐、网易云、Navidrome 的产品层说明
-
-适合回答这些问题：
-
-- 这个功能在产品上应该怎么描述
-- 这个改动会不会影响既有运行方式
-- 某个脚本或部署流程是不是已经对外说明过
-
-读取方式：
-
-- 涉及脚本：先 `rg -n "npm run|常用脚本|部署与开发|build|test" README.md`
-- 涉及产品能力：先 `rg -n "核心能力|本地音乐|Navidrome|网易云|AI|Stage API" README.md`
-- 涉及 Electron / Vercel / API：先 `rg -n "Electron|Vercel|API|环境变量|部署" README.md`
-
-### `src/README.md`
-
-主要提取这些信息：
-
-- 当前 `src/` 架构图
-- 组件、hooks、services、utils 的职责边界
-- 推荐阅读顺序
-- 模块间依赖关系和真实分工
-
-适合回答这些问题：
-
-- 应该改哪个模块，而不是随便往 `App.tsx` 里塞逻辑
-- 某段逻辑更适合放 service、hook、component 还是 util
-- 某个现有模块是否已经承担类似职责
-
-读取方式：
-
-- 涉及模块归属：先 `rg -n "Module Boundaries|Where Changes Usually Belong|components/|hooks/|services/|utils/" src/README.md`
-- 涉及 visualizer：先 `rg -n "visualizer|歌词可视化|components/visualizer" src/README.md`
-- 涉及歌词解析：先 `rg -n "parserCore|lyrics|utils/lyrics|worker" src/README.md`
-- 涉及 app-level 装配：先 `rg -n "components/app|App.tsx|PlayerPanel|Home" src/README.md`
-
-### `sync-server/README.md`
-
-主要提取这些信息：
-
-- 当前支持的部署方式和安装脚本
-- Token、端口、数据库路径和客户端连接方式
-- 同步服务公开的 API 路径
-
-涉及同步服务时，先用 README 了解面向用户的部署约定，再核对 `sync-server/package.json`、`sync-server/install.*`、`sync-server/src/app.ts` 和 `sync-server/src/node.ts`；不要只根据 README 推断后端行为。
-
-## Editing Rule
-
-如果 README 中的信息和代码现状明显不一致：
-
-- 不要盲信 README
-- 先以代码真实结构为准
-- 在最终修改中顺手修正文档，或者明确指出 README 已经过时
-
-### Strict Constraint: Protect Project Comments
-
-- Keep all comments prefixed with `@note` exactly as they are. These comments mark critical annotations and must not be translated, shortened, modified, or removed.
-- If refactoring significantly changes the code structure, preserve these comments as close as possible to the code they are logically associated with.
-
-## Practical Workflow
-
-1. 先判断任务是否涉及项目约定、架构边界或运行方式。
-2. 如果涉及，先用 `rg -n` 在对应 README 中找关键词或标题；同步服务任务同时检查 `sync-server/README.md`。
-3. 只打开命中的相关行附近片段。
-4. 用 README 提供方向，用真实代码确认细节。
-5. 如果 README 失真，明确指出并补文档，而不是默默忽略。
-
-## Repository-Specific Heuristics
-
-- 涉及前端主流程，优先看 `src/README.md` 对 `App.tsx`、`Home.tsx`、`services/*` 的职责描述。
-- 如果 `src/README.md` 提到的 app-level 装配目录已经演进，优先核对 `components/app/*`、`build*.ts`、`create*.ts` 的现状，旧版的 `components/app/views/*`、`SearchResultsOverlay`、单视图 `Home.tsx` 已经完全清理。
-- 涉及测试、开发、部署、脚本，优先看 `README.md` 的“部署与开发”“常用脚本”。
-- 涉及在线音乐（网易云、酷狗）、Navidrome 和本地音乐多来源的边界，先看 README 对各个来源的产品说明与 Omni facade 契约，再回到代码实现确认。
-- 涉及同步服务时，先看根 README 的产品层说明，再看 `sync-server/README.md` 的运维说明，最后回到 `src/services/sync/*` 和 `sync-server/src/*` 核对实际协议。
-
-## What To Avoid
-
-- 不读相关 README 片段就直接重构模块边界
-- 为了“保险”完整读取 `README.md` 或 `src/README.md`
-- 在已经有具体文件线索时，仍然大范围读 README
-- 把 README 当成绝对真相，不核对实际代码
-- 明明发现 README 已经过时，却不说明也不修
+- 只更新与当前代码/部署状态有关的段落；保持 README 可搜索、短路径明确。
+- 不要把完整源代码或大段接口响应复制进 README；给出第一入口和下一层即可。
+- 保留所有 `@note` 注释原文，不翻译、不缩短、不删除。
+- 文档任务的验证重点是路径、符号、命令、端口和配置值；不要为了 README 改动误跑完整构建。

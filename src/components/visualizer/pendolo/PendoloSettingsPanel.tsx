@@ -17,28 +17,28 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 }) => {
     const resolvedTuning = pendoloTuning ?? DEFAULT_PENDOLO_TUNING;
     const centerGradientOptions: VisualizerPresetOption<boolean>[] = useMemo(() => ([
-        { value: true, label: t('options.pendoloCenterGradientOn') || '开启' },
-        { value: false, label: t('options.pendoloCenterGradientOff') || '关闭' },
+        { value: true, label: t('options.pendoloCenterGradientOn') },
+        { value: false, label: t('options.pendoloCenterGradientOff') },
     ]), [t]);
     const coverOnWatchFaceOptions: VisualizerPresetOption<boolean>[] = useMemo(() => ([
-        { value: true, label: t('options.pendoloCoverOnWatchFaceOn') || '显示' },
-        { value: false, label: t('options.pendoloCoverOnWatchFaceOff') || '隐藏' },
+        { value: true, label: t('options.pendoloCoverOnWatchFaceOn') },
+        { value: false, label: t('options.pendoloCoverOnWatchFaceOff') },
     ]), [t]);
     const lineGlowOptions: VisualizerPresetOption<boolean>[] = useMemo(() => ([
-        { value: true, label: t('options.pendoloLineGlowOn') || '开启' },
-        { value: false, label: t('options.pendoloLineGlowOff') || '关闭' },
+        { value: true, label: t('options.pendoloLineGlowOn') },
+        { value: false, label: t('options.pendoloLineGlowOff') },
     ]), [t]);
     const gearDecorOptions: VisualizerPresetOption<PendoloTuning['showGearDecor']>[] = useMemo(() => ([
-        { value: 'none', label: t('options.decorNone') || '无' },
-        { value: 'subtle', label: t('options.decorSubtle') || '半透明' },
-        { value: 'full', label: t('options.decorFull') || '完整' },
+        { value: 'none', label: t('options.decorNone') },
+        { value: 'subtle', label: t('options.decorSubtle') },
+        { value: 'full', label: t('options.decorFull') },
     ]), [t]);
 
     return (
         <div className="space-y-4">
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloWheelCenterX') || '轮盘水平位置 (0 = 左边缘)'}</span>
+                    <span>{t('options.pendoloWheelCenterX')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.wheelCenterX > 0 ? '+' : ''}{Math.round(resolvedTuning.wheelCenterX * 100)}%
                     </span>
@@ -58,7 +58,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloArcRadius') || '轮盘半径'}</span>
+                    <span>{t('options.pendoloArcRadius')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {Math.round(resolvedTuning.arcRadius * 100)}%
                     </span>
@@ -78,7 +78,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloArcAngleDeg') || '弧度角度'}</span>
+                    <span>{t('options.pendoloArcAngleDeg')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {Math.round(resolvedTuning.arcAngleDeg)}°
                     </span>
@@ -98,7 +98,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloTickSnappiness') || '擒纵咬合力度'}</span>
+                    <span>{t('options.pendoloTickSnappiness')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.tickSnappiness.toFixed(1)}x
                     </span>
@@ -118,7 +118,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm" style={{ color: 'var(--text-primary)' }}>
-                    <span>{t('options.pendoloActiveScale') || '聚焦句缩放'}</span>
+                    <span>{t('options.pendoloActiveScale')}</span>
                     <span className="font-mono opacity-70" style={{ color: 'var(--text-secondary)' }}>
                         {resolvedTuning.activeScale.toFixed(2)}x
                     </span>
@@ -137,7 +137,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
             </div>
 
             <VisualizerPresetGroup
-                label={t('options.pendoloShowGearDecor') || '机械齿轮饰线'}
+                label={t('options.pendoloShowGearDecor')}
                 value={resolvedTuning.showGearDecor}
                 options={gearDecorOptions}
                 onChange={(next) => onPendoloTuningChange?.({ showGearDecor: next })}
@@ -145,7 +145,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 theme={theme}
             />
             <VisualizerPresetGroup
-                label={t('options.pendoloShowCenterGradient') || '齿轮区域中央深色渐变'}
+                label={t('options.pendoloShowCenterGradient')}
                 value={resolvedTuning.showCenterGradient ?? true}
                 options={centerGradientOptions}
                 onChange={(next) => onPendoloTuningChange?.({ showCenterGradient: next })}
@@ -153,7 +153,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 theme={theme}
             />
             <VisualizerPresetGroup
-                label={t('options.pendoloShowCoverOnWatchFace') || '表盘显示专辑封面'}
+                label={t('options.pendoloShowCoverOnWatchFace')}
                 value={resolvedTuning.showCoverOnWatchFace ?? false}
                 options={coverOnWatchFaceOptions}
                 onChange={(next) => onPendoloTuningChange?.({ showCoverOnWatchFace: next })}
@@ -161,7 +161,7 @@ const PendoloSettingsPanel: React.FC<VisualizerSettingsPanelProps> = ({
                 theme={theme}
             />
             <VisualizerPresetGroup
-                label={t('options.pendoloEnableLineGlow') || '线条发光效果'}
+                label={t('options.pendoloEnableLineGlow')}
                 value={resolvedTuning.enableLineGlow ?? false}
                 options={lineGlowOptions}
                 onChange={(next) => onPendoloTuningChange?.({ enableLineGlow: next })}

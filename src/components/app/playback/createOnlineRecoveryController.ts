@@ -1,13 +1,16 @@
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
-import { loadOnlineSongAudioSource } from '../../../services/onlinePlayback';
+import { applyOnlineAudioSourceMetadata, loadOnlineSongAudioSource } from '../../../services/onlinePlayback';
 import type { SongResult } from '../../../types';
 import type { AudioQualityPreference } from '../../../types/onlineMusic';
 import {
     getPlaybackSongKey,
     isLocalPlaybackSong,
     isNavidromePlaybackSong,
+    isSamePlaybackSong,
     isStagePlaybackSong,
+    replacePlaybackSongInQueue,
 } from '../../../utils/appPlaybackGuards';
+import { setAudioSrc, setCurrentSong, setPlayQueue } from '../../../stores/usePlaybackStore';
 
 // src/components/app/playback/createOnlineRecoveryController.ts
 
@@ -23,9 +26,31 @@ type RecoveryControllerParams = {
     onlinePlaybackRecoveryRef: MutableRefObject<Promise<boolean> | null>;
     lastAudioRecoverySourceRef: MutableRefObject<string | null>;
     currentOnlineAudioUrlFetchedAtRef: MutableRefObject<number | null>;
-    setAudioSrc: Dispatch<SetStateAction<string | null>>;
+    persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
+    playQueue: SongResult[];
     onlineAudioUrlTtlMs: number;
     onlineAudioUrlRefreshBufferMs: number;
+};
+
+// Provider stream URLs carry a per-request token in the query (QQ mints a fresh `vkey`/`guid`
+// every call), so comparing whole URLs never matches and the error -> refresh -> error cycle
+// runs unbounded. The origin+path identifies the media file itself, which is what "we already
+// refreshed this and it still failed" actually means. Cleared again once playback succeeds.
+export const getOnlineRecoveryKey = (src: string | null | undefined): string | null => {
+    if (!src) {
+        return null;
+    }
+
+    try {
+        const parsedUrl = new URL(src);
+        // Only remote streams carry a token in the query; blob: and friends have no meaningful origin.
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            return src;
+        }
+        return `${parsedUrl.origin}${parsedUrl.pathname}`;
+    } catch {
+        return src;
+    }
 };
 
 // Creates online-stream refresh and recovery helpers without tying them to a React hook.
@@ -41,7 +66,8 @@ export const createOnlineRecoveryController = ({
     onlinePlaybackRecoveryRef,
     lastAudioRecoverySourceRef,
     currentOnlineAudioUrlFetchedAtRef,
-    setAudioSrc,
+    persistLastPlaybackCache,
+    playQueue,
     onlineAudioUrlTtlMs,
     onlineAudioUrlRefreshBufferMs,
 }: RecoveryControllerParams) => {
@@ -78,7 +104,7 @@ export const createOnlineRecoveryController = ({
             return false;
         }
 
-        const normalizedFailedSrc = failedSrc || audioElement.currentSrc || audioSrc || null;
+        const normalizedFailedSrc = getOnlineRecoveryKey(failedSrc || audioElement.currentSrc || audioSrc || null);
         if (normalizedFailedSrc && lastAudioRecoverySourceRef.current === normalizedFailedSrc) {
             return false;
         }
@@ -109,6 +135,21 @@ export const createOnlineRecoveryController = ({
 
                 if (audioResult.blobUrl) {
                     blobUrlRef.current = audioResult.blobUrl;
+                }
+
+                const resolvedSong = applyOnlineAudioSourceMetadata(song, audioResult.replayGain);
+                const replayGain = resolvedSong.replayGain;
+                if (replayGain) {
+                    setCurrentSong(prev => {
+                        if (!prev || !isSamePlaybackSong(prev, song)) return prev;
+                        return { ...prev, replayGain };
+                    });
+                    const resolvedQueue = replacePlaybackSongInQueue(playQueue, resolvedSong);
+                    setPlayQueue(resolvedQueue);
+                    void persistLastPlaybackCache(
+                        resolvedSong,
+                        resolvedQueue,
+                    );
                 }
 
                 pendingResumeTimeRef.current = Math.max(0, resumeAt ?? audioRef.current.currentTime ?? 0);

@@ -14,7 +14,7 @@ import { buildMonetDisplayTokens, resolveMonetLyricContext } from '@/components/
 import { buildMonetVisibleLineEntries, measureMonetLineLayout, resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '@/components/visualizer/monet/monetLyricsModel';
 import { colorWithAlpha, mixColors, parseColorChannels } from '@/components/visualizer/colorMix';
 import { buildWordColorRanges, prepareWordColorMatchers, resolveTokenColorMap } from '@/components/visualizer/wordColoring';
-import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/useSettingsUiStore';
+import { resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveVisualizerBackgroundMode } from '@/stores/visualizerSettingsPersistence';
 
 // test/unit/visualizer/monetSettings.test.ts
 // Locks Monet tuning normalization, background cache keys, and lyric helper contracts.
@@ -29,6 +29,20 @@ vi.mock('@chenglou/pretext', () => ({
             lines: Array.from({ length: lineCount }, () => ({
                 width: Math.min(text.length, charsPerLine) * 10,
             })),
+        };
+    },
+}));
+
+// Monet measures lyric text through the rich-inline helper so timed words stay atomic like the
+// `inline-block` spans the rail renders. Mirror the plain mock's per-character heuristic here.
+vi.mock('@chenglou/pretext/rich-inline', () => ({
+    prepareRichInline: (items: { text: string; }[]) => ({ text: items.map(item => item.text).join('') }),
+    measureRichInlineStats: (prepared: { text?: string; }, maxWidth: number) => {
+        const text = prepared.text || ' ';
+        const charsPerLine = Math.max(1, Math.floor(maxWidth / 10));
+        return {
+            lineCount: Math.max(1, Math.ceil(text.length / charsPerLine)),
+            maxLineWidth: Math.min(text.length, charsPerLine) * 10,
         };
     },
 }));
@@ -73,6 +87,9 @@ describe('Monet tuning and lyric helpers', () => {
             backgroundHalfPaneOffsetX: 40,
             backgroundWashColorMode: 'custom',
             backgroundWashCustomColor: '#aabbcc',
+            backgroundDriftEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
+            backgroundDriftStrength: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
+            backgroundStreaksEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
         });
 
         expect(resolveStoredMonetBackgroundTuning({
@@ -90,14 +107,48 @@ describe('Monet tuning and lyric helpers', () => {
         expect(resolveStoredMonetBackgroundTuning({})).toEqual(DEFAULT_MONET_BACKGROUND_TUNING);
     });
 
+    it('clamps Monet background drift strength and keeps the drift and streak switches', () => {
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 9,
+            backgroundStreaksEnabled: false,
+        })).toEqual({
+            ...DEFAULT_MONET_BACKGROUND_TUNING,
+            backgroundDriftEnabled: false,
+            backgroundDriftStrength: 1,
+            backgroundStreaksEnabled: false,
+        });
+
+        expect(resolveStoredMonetBackgroundTuning({
+            backgroundDriftStrength: Number.NaN,
+        }).backgroundDriftStrength).toBe(DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength);
+    });
+
+    it('keeps drift out of the Monet background cache key but rebakes when streaks toggle', () => {
+        const theme = { backgroundColor: '#101014', primaryColor: '#ffffff', accentColor: '#8fb7ff' } as Theme;
+        const base = { coverUrl: 'https://example.com/cover.jpg', theme, tuning: DEFAULT_MONET_BACKGROUND_TUNING };
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundDriftEnabled: false, backgroundDriftStrength: 1 },
+        })).toBe(getMonetBackgroundCacheKey(base));
+
+        expect(getMonetBackgroundCacheKey({
+            ...base,
+            tuning: { ...DEFAULT_MONET_BACKGROUND_TUNING, backgroundStreaksEnabled: false },
+        })).not.toBe(getMonetBackgroundCacheKey(base));
+    });
+
     it('normalizes persisted Monet lyric and portrait tuning values', () => {
         expect(resolveStoredMonetTuning({
             keywordColoringEnabled: false,
+            showAudioVisualization: false,
             audioStyle: 'line',
             fontScale: 3,
             portraitSource: 'custom',
         })).toEqual({
             keywordColoringEnabled: false,
+            showAudioVisualization: false,
             audioStyle: 'line',
             fontScale: 1.5,
             portraitSource: 'custom',
@@ -136,6 +187,7 @@ describe('Monet tuning and lyric helpers', () => {
             overlayEnabled: false,
             overlayOpacity: 4,
         })).toEqual({
+            ...DEFAULT_NOMAND_BACKGROUND_TUNING,
             imageSource: 'uploaded-global',
             ditheringType: '8x8',
             size: 20,
@@ -150,6 +202,28 @@ describe('Monet tuning and lyric helpers', () => {
             ditheringType: 'invalid' as never,
             size: Number.NaN,
         })).toEqual(DEFAULT_NOMAND_BACKGROUND_TUNING);
+    });
+
+    it('normalizes and clamps Paper effect variant tuning', () => {
+        expect(resolveStoredNomandBackgroundTuning({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0,
+            flutedGlassDistortion: 2,
+            paperTextureContrast: -1,
+            halftoneDotsRadius: 4,
+            lensDistortionSpread: 2,
+            lensDistortionBulge: -2,
+            lensDistortionDispersion: Number.NaN,
+        })).toMatchObject({
+            effect: 'lens-distortion',
+            flutedGlassSize: 0.1,
+            flutedGlassDistortion: 1,
+            paperTextureContrast: 0,
+            halftoneDotsRadius: 2,
+            lensDistortionSpread: 1,
+            lensDistortionBulge: -1,
+            lensDistortionDispersion: DEFAULT_NOMAND_BACKGROUND_TUNING.lensDistortionDispersion,
+        });
     });
 
     it('normalizes Latent background tuning and clamps shader speed settings to 0-2', () => {

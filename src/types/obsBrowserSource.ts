@@ -70,9 +70,19 @@ export interface ObsBrowserSourceConfig {
     /** @deprecated Kept for OBS pages loaded before the background registry refactor. */
     urlBackgroundSelectedId?: string | null;
     lyricsFontScale: number;
+    // Optional like the other late additions below: an OBS page kept open across a Folia update may
+    // still be fed by (or feeding) a build that predates the field, so the renderer defaults instead
+    // of rendering at scale 0. The publisher always sends it.
+    subtitleFontScale?: number;
     visualizerOpacity: number;
     subtitleOverlayOpacity: number;
     subtitleOverlayBackground?: boolean;
+    subtitleUpcomingLyricsBlur?: boolean;
+    // Harmony (background-vocal) subtitles default to on in both the store and the overlay, so a
+    // config that omits these must read as "on" rather than silently hiding a layer the main window
+    // shows.
+    showHarmonySubtitle?: boolean;
+    harmonySubtitleBackground?: boolean;
     staticMode: boolean;
     hideTranslationSubtitle: boolean;
     showSubtitleTranslation?: boolean;
@@ -81,6 +91,12 @@ export interface ObsBrowserSourceConfig {
     cappellaCustomEmojiImages?: CappellaEmojiImage[];
     cappellaCustomAvatarImages?: CappellaAvatarImage[];
     monetPortraitImage?: MonetPortraitImage | null;
+    /**
+     * Tempera's canvas image pool, inlined as data URLs. The overlay is served from the local
+     * OBS server and is therefore a different origin from the main window, so it cannot read
+     * the IndexedDB these files actually live in.
+     */
+    temperaLayerImageAssets?: { id: string; name: string; url: string }[];
     updatedAt: number;
 }
 

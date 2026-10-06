@@ -60,7 +60,7 @@ const getLineKey = (line: Line | null) => (
 export const LyricPreviewPanel: React.FC<LyricPreviewPanelProps> = ({
     selectedResult,
     source,
-    isDaylight
+    isDaylight,
 }) => {
     const { t } = useTranslation();
     const [isLoading, setIsLoading] = useState(false);

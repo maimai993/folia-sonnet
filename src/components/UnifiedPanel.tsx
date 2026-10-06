@@ -1,9 +1,11 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft } from 'lucide-react';
+import { PANEL_SLIDE_CLAMP_PX, PANEL_SLIDE_TRACK_BASE_PX, PANEL_SLIDE_TRACK_FULL_PX, PANEL_SLIDE_TRIGGER_PX } from '../utils/panelSlideGesture';
+import { motion, AnimatePresence, useTransform } from 'framer-motion';
+import { Settings, Settings2, X, Disc, SlidersHorizontal, ListMusic, User as UserIcon, Home as HomeIcon, FileAudio, FileText, Radio, Cloud, Star, Command, ChevronLeft, MirrorRectangular, Puzzle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, LocalPlaylist, ThemeMode, VisualizerMode } from '../types';
-import type { ProviderCollection, ProviderUser } from '../types/onlineMusic';
+import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, ThemeMode, VisualizerMode } from '../types';
+import type { ProviderUser } from '../types/onlineMusic';
+import type { LibraryAccountController } from '../library/core/contracts/account';
 import CoverTab from './panelTab/CoverTab';
 import ControlsTab from './panelTab/ControlsTab';
 import QueueTab from './panelTab/QueueTab';
@@ -12,14 +14,23 @@ import LocalTab from './panelTab/LocalTab';
 import FmTab from './panelTab/FmTab';
 import NaviTab from './panelTab/NaviTab';
 import OnlineLyricsTab from './panelTab/OnlineLyricsTab';
-import PlaylistSelectionDialog from './shared/PlaylistSelectionDialog';
-import TextInputDialog from './shared/TextInputDialog';
 import type { OnlineLyricsState } from '../types';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef, getPlaybackSongSource, hasMixedPlaybackSources } from '../utils/appPlaybackGuards';
+import { resolveLikeAvailability } from '../utils/playerLikeAvailability';
+import { usePlayerBottomBarBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
+import { getSizedCoverUrl } from '../utils/coverUrl';
+import { openAddToPlaylist, useAddToPlaylistStore } from '../stores/useAddToPlaylistStore';
+import { usePlayerPanelTabShortcut } from '../hooks/usePlayerPanelTabShortcut';
+import { FOLIUM_PANEL_TAB_PREFIX, FoliumPanelTabBody, useFoliumPanelTabs } from '../mods/folium/registries/playerPanelTabs';
+import { countRender } from '../dev/renderCount';
 
-export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics';
+const TOUCH_GUIDE_DISPLAY_MS = 1400;
+
+export type PanelTab = 'cover' | 'controls' | 'queue' | 'account' | 'local' | 'navi' | 'onlineLyrics'
+    // Tabs registered by Folium mods (registries.playerPanelTabs).
+    | `folium:${string}`;
 
 type UnifiedPanelPlaybackProps = {
     isOpen: boolean;
@@ -64,6 +75,8 @@ type UnifiedPanelPlaybackProps = {
     replayGainMode: ReplayGainMode;
     onChangeReplayGainMode: (mode: ReplayGainMode) => void;
     isFmMode: boolean;
+    fmModeLabel: string;
+    onOpenFmModePicker?: () => void;
     onFmTrash: () => void;
     onNextTrack: () => void;
     onPrevTrack: () => void;
@@ -75,12 +88,15 @@ type UnifiedPanelPlaybackProps = {
     onVolumeChange: (val: number) => void;
     onToggleMute: () => void;
     showOpenPanelCloseButton: boolean;
+    isPanelGuideHotspotActive?: boolean;
     hideToggleButton?: boolean;
     isStageContext?: boolean;
     playbackControlsDisabled?: boolean;
     onOpenSettings?: () => void;
     onOpenCommandPalette?: () => void;
     isCommandPaletteOpen?: boolean;
+    transparentPlayerBackground: boolean;
+    onToggleTransparentPlayerBackground: (enable: boolean) => void;
 };
 
 type UnifiedPanelQueueProps = {
@@ -91,11 +107,12 @@ type UnifiedPanelQueueProps = {
     onRemoveSong: (index: number) => void;
     onMoveSongToEnd: (index: number) => void;
     onMoveSongToNext: (index: number) => void;
+    onOpenLattice?: () => void;
 };
 
 type UnifiedPanelAccountProps = {
     user: ProviderUser | null;
-    onLogout: () => void;
+    accountController: LibraryAccountController;
     audioQuality: AudioQualityPreference;
     onAudioQualityChange: (quality: AudioQualityPreference) => void;
     cacheSize: string;
@@ -109,14 +126,7 @@ type UnifiedPanelAccountProps = {
 };
 
 type UnifiedPanelLibraryProps = {
-    localPlaylists: LocalPlaylist[];
-    onlinePlaylists: ProviderCollection[];
     onSaveCurrentQueueAsPlaylist: (name: string) => Promise<void>;
-    onAddCurrentSongToLocalPlaylist: (playlistId: string) => Promise<void>;
-    onCreateCurrentLocalPlaylist: (name: string) => Promise<void>;
-    onAddCurrentSongToOnlinePlaylist: (playlist: ProviderCollection) => Promise<void>;
-    onAddCurrentSongToNavidromePlaylist: (playlistId: string) => Promise<void>;
-    onCreateCurrentNavidromePlaylist: (name: string) => Promise<void>;
     onOpenCurrentLocalAlbum: () => void;
     onOpenCurrentLocalArtist: (entityId?: string) => void;
     onOpenCurrentNavidromeAlbum: () => void;
@@ -137,6 +147,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     library,
     account,
 }) => {
+    countRender('UnifiedPanel');
     const { t } = useTranslation();
     const {
         isOpen,
@@ -180,6 +191,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         replayGainMode,
         onChangeReplayGainMode,
         isFmMode,
+        fmModeLabel,
+        onOpenFmModePicker,
         onFmTrash,
         onNextTrack,
         onPrevTrack,
@@ -191,23 +204,19 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onVolumeChange,
         onToggleMute,
         showOpenPanelCloseButton,
+        isPanelGuideHotspotActive = false,
         hideToggleButton = false,
         isStageContext = false,
         playbackControlsDisabled = false,
         onOpenSettings,
         onOpenCommandPalette,
         isCommandPaletteOpen = false,
+        transparentPlayerBackground,
+        onToggleTransparentPlayerBackground,
     } = playback;
     const { playQueue, onPlaySong, queueScrollRef, onShuffle, onRemoveSong, onMoveSongToEnd, onMoveSongToNext } = queue;
     const {
-        localPlaylists,
-        onlinePlaylists,
         onSaveCurrentQueueAsPlaylist,
-        onAddCurrentSongToLocalPlaylist,
-        onCreateCurrentLocalPlaylist,
-        onAddCurrentSongToOnlinePlaylist,
-        onAddCurrentSongToNavidromePlaylist,
-        onCreateCurrentNavidromePlaylist,
         onOpenCurrentLocalAlbum,
         onOpenCurrentLocalArtist,
         onOpenCurrentNavidromeAlbum,
@@ -216,7 +225,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     } = library;
     const {
         user,
-        onLogout,
+        accountController,
         audioQuality,
         onAudioQualityChange,
         cacheSize,
@@ -230,86 +239,35 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     } = account;
     const coverAreaRef = React.useRef<HTMLDivElement>(null);
     const [isCoverActionsVisible, setIsCoverActionsVisible] = React.useState(false);
-    const [isPlaylistPickerOpen, setIsPlaylistPickerOpen] = React.useState(false);
-    const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = React.useState(false);
-    const [navidromePlaylists, setNavidromePlaylists] = React.useState<Array<{ id: string; name: string; description?: string; }>>([]);
     const [showGuideLine, setShowGuideLine] = React.useState(false);
     const [isDragging, setIsDragging] = React.useState(false);
+    const guideHideTimeoutRef = React.useRef<number | null>(null);
 
     const isStage = isStageContext || Boolean(currentSong && (currentSong as any).isStage === true);
     const isNavidrome = currentSong && (currentSong as any).isNavidrome === true;
     const isLocal = currentSong && !isNavidrome && (((currentSong as any).isLocal === true) || Boolean((currentSong as any).localRef?.songId));
     const playbackSourceRef = currentSong ? getPlaybackSourceRef(currentSong) : null;
     const isOnline = playbackSourceRef?.kind === 'online';
-    const canCreateLocalPlaylist = isLocal;
-    const canCreateNavidromePlaylist = isNavidrome;
-    const canAddCurrentSongToPlaylist =
-        (isLocal && (localPlaylists.length > 0 || canCreateLocalPlaylist))
-        || (isOnline && onlinePlaylists.length > 0)
-        || (isNavidrome && (navidromePlaylists.length > 0 || canCreateNavidromePlaylist));
+    const bottomBarBottomPx = usePlayerBottomBarBottomPx();
+    const panelMaxHeight = useTransform(
+        bottomBarBottomPx,
+        bottom => `calc(100dvh - ${bottom + 64}px)`,
+    );
+    const likeAvailability = resolveLikeAvailability(currentSong, playbackControlsDisabled, isStage);
+    const likeDisabledReason = likeAvailability.reason
+        ? t(likeAvailability.reason.key, likeAvailability.reason.params)
+        : undefined;
+    const likeDisabled = likeAvailability.disabled;
+    // Answered by AddToPlaylistHost, which owns the picker now: the same question is asked by a
+    // command that can fire with this panel closed, so it cannot be derived from panel props.
+    const addToPlaylist = useAddToPlaylistStore(state => state.availability);
+    const showAddToPlaylistAction = addToPlaylist.isApplicable;
+    const canAddCurrentSongToPlaylist = addToPlaylist.canAdd;
+    const addToPlaylistDisabledReason = addToPlaylist.disabledReason;
     const supportsHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    const refreshNavidromePlaylists = React.useCallback(async () => {
-        const { getNavidromeConfig, navidromeApi } = await import('../services/navidromeService');
-        const config = getNavidromeConfig();
-        if (!config) {
-            setNavidromePlaylists([]);
-            return;
-        }
 
-        const playlists = await navidromeApi.getPlaylists(config);
-        setNavidromePlaylists(playlists.map((playlist) => ({
-            id: playlist.id,
-            name: playlist.name,
-            description: `${playlist.songCount} ${t('playlist.tracks')}`,
-        })));
-    }, [t]);
-
-    const availablePlaylists = React.useMemo(() => {
-        if (isLocal) {
-            return localPlaylists.map((playlist) => ({
-                id: playlist.id,
-                name: playlist.name,
-                description: `${playlist.songIds.length} ${t('playlist.tracks')}`,
-            }));
-        }
-
-        if (isOnline) {
-            return onlinePlaylists.map((playlist) => ({
-                id: playlist.id,
-                name: playlist.name,
-                description: `${playlist.trackCount || 0} ${t('playlist.tracks')}`,
-            }));
-        }
-
-        if (isNavidrome) {
-            return navidromePlaylists;
-        }
-
-        return [];
-    }, [isLocal, isOnline, isNavidrome, localPlaylists, navidromePlaylists, onlinePlaylists, t]);
-
-    React.useEffect(() => {
-        let cancelled = false;
-
-        const loadNavidromePlaylists = async () => {
-            if (!isNavidrome) {
-                setNavidromePlaylists([]);
-                return;
-            }
-
-            if (!cancelled) {
-                await refreshNavidromePlaylists();
-            }
-        };
-
-        void loadNavidromePlaylists();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [currentSong?.id, isNavidrome, refreshNavidromePlaylists]);
-
-    const tabs = [
+    const foliumTabs = useFoliumPanelTabs();
+    const tabs: { id: PanelTab; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
         { id: 'cover' as PanelTab, label: t('panel.cover'), icon: Disc },
         { id: 'controls' as PanelTab, label: t('panel.controls'), icon: SlidersHorizontal },
         isFmMode 
@@ -326,6 +284,23 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         tabs.splice(1, 0, { id: 'onlineLyrics' as PanelTab, label: t('localMusic.lyrics'), icon: FileText });
     }
 
+    foliumTabs.forEach((tab) => tabs.push({ id: tab.id, label: tab.label, icon: Puzzle }));
+
+    // A mod tab can vanish while open (mod disabled or reloaded): fall back to the cover tab.
+    const currentTabExists = tabs.some((tab) => tab.id === currentTab);
+    React.useEffect(() => {
+        if (!currentTabExists && currentTab.startsWith(FOLIUM_PANEL_TAB_PREFIX)) {
+            onTabChange('cover');
+        }
+    }, [currentTabExists, currentTab, onTabChange]);
+
+    usePlayerPanelTabShortcut({
+        isOpen,
+        currentTab,
+        availableTabs: tabs.map(tab => tab.id),
+        onTabChange,
+    });
+
     // Theme Helper
     // const isDaylight = theme.name === 'Daylight Default'; // Deprecated
     const isAI = bgMode === 'ai'; // AI themes usually dark
@@ -338,12 +313,13 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     const placeholderBg = isDaylight ? 'bg-stone-200' : 'bg-zinc-900';
     const activeTabBg = isDaylight ? 'bg-black/10' : 'bg-white/10';
     const tabSwitcherBg = isDaylight ? 'bg-black/5' : 'bg-white/5';
-    const toggleButtonMotionClass = (isOpen || showGuideLine || isDragging)
+    const canSlideOpenCommandPalette = !isOpen && Boolean(onOpenCommandPalette);
+    const isGuideLineVisible = canSlideOpenCommandPalette && (showGuideLine || isPanelGuideHotspotActive);
+    const toggleButtonMotionClass = (isOpen || isGuideLineVisible || isDragging)
         ? 'translate-x-0 opacity-100'
         : supportsHover
             ? 'translate-x-1/2 opacity-60 group-hover:translate-x-0 group-hover:opacity-100 md:translate-x-0 md:opacity-100 md:hover:scale-105'
             : 'translate-x-1/2 opacity-60';
-    const canSlideOpenCommandPalette = !isOpen && Boolean(onOpenCommandPalette);
     const setCommandDestinationFeedback = (progress: number) => {
         const iconContainer = trackEndIconRef.current;
         if (!iconContainer) {
@@ -376,8 +352,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             return;
         }
 
-        const dragX = Math.max(-44, Math.min(0, deltaX));
-        const progress = Math.min(1, Math.abs(dragX) / 36);
+        const dragX = Math.max(-PANEL_SLIDE_CLAMP_PX, Math.min(0, deltaX));
+        const progress = Math.min(1, Math.abs(dragX) / PANEL_SLIDE_TRIGGER_PX);
         button.style.transition = 'none';
         button.style.transform = `translateX(${dragX}px)`;
         button.style.filter = `brightness(${1 + progress * 0.18})`;
@@ -402,7 +378,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         const trackFill = trackFillRef.current;
         if (trackFill) {
             trackFill.style.transition = 'none';
-            trackFill.style.width = `${48 + Math.abs(dragX)}px`;
+            trackFill.style.width = `${PANEL_SLIDE_TRACK_BASE_PX + Math.abs(dragX)}px`;
             if (progress >= 1) {
                 trackFill.style.backgroundColor = theme.accentColor;
                 trackFill.style.opacity = '0.35';
@@ -427,7 +403,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             return;
         }
 
-        const dragX = Math.max(-44, Math.min(0, deltaX));
+        const dragX = Math.max(-PANEL_SLIDE_CLAMP_PX, Math.min(0, deltaX));
 
         if (mode === 'trigger') {
             button.animate(
@@ -453,8 +429,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             if (trackFill) {
                 trackFill.animate(
                     [
-                        { width: `${48 + Math.abs(dragX)}px`, opacity: '0.35' },
-                        { width: '96px', opacity: '0' },
+                        { width: `${PANEL_SLIDE_TRACK_BASE_PX + Math.abs(dragX)}px`, opacity: '0.35' },
+                        { width: `${PANEL_SLIDE_TRACK_FULL_PX}px`, opacity: '0' },
                     ],
                     { duration: 250, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
                 );
@@ -477,7 +453,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 
             if (trackFill) {
                 trackFill.style.transition = '';
-                trackFill.style.width = '48px';
+                trackFill.style.width = `${PANEL_SLIDE_TRACK_BASE_PX}px`;
                 trackFill.style.backgroundColor = '';
                 trackFill.style.opacity = '';
             }
@@ -509,7 +485,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         const trackFill = trackFillRef.current;
         if (trackFill) {
             trackFill.style.transition = 'width 160ms ease-out, background-color 160ms ease-out, opacity 160ms ease-out';
-            trackFill.style.width = '48px';
+            trackFill.style.width = `${PANEL_SLIDE_TRACK_BASE_PX}px`;
             trackFill.style.backgroundColor = '';
             trackFill.style.opacity = '';
         }
@@ -540,7 +516,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         const deltaX = event.clientX - gesture.startX;
         const deltaY = event.clientY - gesture.startY;
         setToggleButtonDragFeedback(deltaX);
-        if (deltaX <= -36 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+        if (deltaX <= -PANEL_SLIDE_TRIGGER_PX && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
             gesture.triggered = true;
             suppressToggleClickRef.current = true;
             event.preventDefault();
@@ -557,6 +533,25 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         if (supportsHover) {
             setShowGuideLine(false);
         }
+    };
+    const handleToggleHotspotPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.pointerType !== 'touch' || !canSlideOpenCommandPalette) {
+            return;
+        }
+
+        if (event.target instanceof Node && toggleButtonRef.current?.contains(event.target)) {
+            return;
+        }
+
+        if (guideHideTimeoutRef.current !== null) {
+            window.clearTimeout(guideHideTimeoutRef.current);
+        }
+
+        setShowGuideLine(true);
+        guideHideTimeoutRef.current = window.setTimeout(() => {
+            guideHideTimeoutRef.current = null;
+            setShowGuideLine(false);
+        }, TOUCH_GUIDE_DISPLAY_MS);
     };
     const clearToggleButtonGesture = () => {
         commandSlideRef.current = null;
@@ -588,20 +583,18 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     React.useEffect(() => {
         if (!isOpen) {
             setIsCoverActionsVisible(false);
-            setIsPlaylistPickerOpen(false);
-            setIsCreatePlaylistOpen(false);
         }
     }, [isOpen]);
+
+    React.useEffect(() => () => {
+        if (guideHideTimeoutRef.current !== null) {
+            window.clearTimeout(guideHideTimeoutRef.current);
+        }
+    }, []);
 
     React.useEffect(() => {
         setIsCoverActionsVisible(false);
     }, [currentTab, currentSong?.id]);
-
-    React.useEffect(() => {
-        if (!canAddCurrentSongToPlaylist) {
-            setIsPlaylistPickerOpen(false);
-        }
-    }, [canAddCurrentSongToPlaylist]);
 
     React.useEffect(() => {
         if (supportsHover || !isCoverActionsVisible) {
@@ -624,8 +617,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
     }, [isCoverActionsVisible, supportsHover]);
 
     return (
-        <div
-            className="absolute bottom-8 right-0 z-[60] flex flex-col items-end gap-4 pointer-events-none"
+        <motion.div
+            style={{ bottom: bottomBarBottomPx }}
+            className="absolute right-0 z-[60] flex flex-col items-end gap-4 pointer-events-none"
             onClick={(e) => e.stopPropagation()}
         >
             <div className="pr-4 md:pr-8">
@@ -635,13 +629,17 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             initial={{ opacity: 0, scale: 0.9, originY: 1, originX: 1 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className={`pointer-events-auto w-80 max-h-[calc(100dvh-6rem)] ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-16 md:mb-2 overflow-y-auto hide-scrollbar`}
-                            style={{ color: theme.primaryColor }}
+                            data-testid="unified-panel-surface"
+                            className={`pointer-events-auto w-80 ${glassBg} backdrop-blur-3xl rounded-3xl shadow-2xl flex flex-col mb-16 md:mb-2 overflow-y-auto hide-scrollbar`}
+                            style={{ color: theme.primaryColor, maxHeight: panelMaxHeight }}
                         >
                             <div className="p-5 flex flex-col">
                                 {/* Top: Cover Art */}
+                                {/* 四个角上的按钮平时完全看不见，所以整块封面是思索的落点：
+                                    指针停在封面上，讲的就是「这上面还藏着什么」。 */}
                                 <div
                                     ref={coverAreaRef}
+                                    data-ponder-panel-artwork
                                     onClick={(event) => {
                                         event.stopPropagation();
                                         if (!supportsHover) {
@@ -651,7 +649,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     className={`w-full aspect-square rounded-2xl overflow-hidden shadow-lg relative mb-4 ${placeholderBg} flex items-center justify-center group cursor-pointer`}
                                 >
                                     {coverUrl ? (
-                                        <img src={coverUrl} alt="Art" className="w-full h-full object-cover" />
+                                        <img src={getSizedCoverUrl(coverUrl, 512)} alt="Art" decoding="async" className="w-full h-full object-cover" />
                                     ) : (
                                         <Disc size={40} className="text-white/20" />
                                     )}
@@ -685,6 +683,31 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         </div>
                                     )}
 
+                                    {/* 右上角：播放页透明。不算高频，所以只占封面的空位，不占面板结构 */}
+                                    <div className={`absolute right-3 top-3 transition-all duration-200 ${
+                                        supportsHover
+                                            ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-x-3 -translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
+                                            : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 translate-x-3 -translate-y-3'}`
+                                    }`}>
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onToggleTransparentPlayerBackground(!transparentPlayerBackground);
+                                            }}
+                                            className={`w-11 h-11 rounded-full border backdrop-blur-md flex items-center justify-center transition-all ${
+                                                transparentPlayerBackground
+                                                    ? 'border-white/30 bg-white/85 text-zinc-900 hover:bg-white'
+                                                    : 'border-white/15 bg-black/25 text-white/90 hover:bg-black/40 hover:text-white'
+                                            }`}
+                                            title={t('options.transparentPlayerBackground')}
+                                            aria-label={t('options.transparentPlayerBackground')}
+                                            aria-pressed={transparentPlayerBackground}
+                                        >
+                                            <MirrorRectangular size={18} />
+                                        </button>
+                                    </div>
+
                                     <div className={`absolute left-3 bottom-3 transition-all duration-200 ${
                                         supportsHover
                                             ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 -translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
@@ -703,21 +726,27 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         </button>
                                     </div>
 
-                                    {canAddCurrentSongToPlaylist && (
-                                        <div className={`absolute right-3 bottom-3 transition-all duration-200 ${
+                                    {showAddToPlaylistAction && (
+                                        <div
+                                            title={addToPlaylistDisabledReason || t('localMusic.addToPlaylist')}
+                                            className={`absolute right-3 bottom-3 transition-all duration-200 ${
                                             supportsHover
                                                 ? 'pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 translate-x-3 translate-y-3 group-hover:translate-x-0 group-hover:translate-y-0'
                                                 : `${isCoverActionsVisible ? 'pointer-events-auto opacity-100 translate-x-0 translate-y-0' : 'pointer-events-none opacity-0 translate-x-3 translate-y-3'}`
-                                        }`}>
+                                        }`}
+                                        >
                                             <button
                                                 type="button"
                                                 onClick={(event) => {
                                                     event.stopPropagation();
+                                                    if (!canAddCurrentSongToPlaylist) return;
                                                     setIsCoverActionsVisible(false);
-                                                    setIsPlaylistPickerOpen(true);
+                                                    openAddToPlaylist();
                                                 }}
-                                                className="w-11 h-11 rounded-full border border-white/15 bg-black/25 text-white/90 backdrop-blur-md flex items-center justify-center transition-all hover:bg-black/40 hover:text-white"
-                                                title={t('localMusic.addToPlaylist')}
+                                                disabled={!canAddCurrentSongToPlaylist}
+                                                className="w-11 h-11 rounded-full border border-white/15 bg-black/25 text-white/90 backdrop-blur-md flex items-center justify-center transition-all hover:bg-black/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-black/25"
+                                                title={addToPlaylistDisabledReason || t('localMusic.addToPlaylist')}
+                                                aria-label={addToPlaylistDisabledReason || t('localMusic.addToPlaylist')}
                                             >
                                                 <Star size={18} />
                                             </button>
@@ -731,6 +760,9 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         <button
                                             key={tab.id}
                                             onClick={() => onTabChange(tab.id)}
+                                            aria-pressed={currentTab === tab.id}
+                                            // 每一格各自是一个思索目标：停在哪一格，讲的就是那一页。
+                                            data-ponder-panel-tab-button={tab.id}
                                             className={`flex-1 py-2 flex items-center justify-center transition-all rounded-lg
                                                 ${currentTab === tab.id ? `${activeTabBg} shadow-sm` : 'opacity-40 hover:opacity-100'}`}
                                             title={tab.label}
@@ -782,6 +814,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             onToggleLoop={onToggleLoop}
                                             onLike={onLike}
                                             isLiked={isLiked}
+                                            likeDisabled={likeDisabled}
+                                            likeDisabledReason={likeDisabledReason}
                                             onGenerateAITheme={onGenerateAITheme}
                                             isGeneratingTheme={isGeneratingTheme}
                                             canGenerateAITheme={canGenerateAITheme}
@@ -812,12 +846,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                         isFmMode ? (
                                             <FmTab
                                                 playerState={playerState}
+                                                modeLabel={fmModeLabel}
+                                                onOpenModePicker={onOpenFmModePicker}
                                                 onTogglePlay={onTogglePlay}
                                                 onNextTrack={onNextTrack}
                                                 onPrevTrack={onPrevTrack}
                                                 onTrash={onFmTrash}
                                                 onLike={onLike}
                                                 isLiked={isLiked}
+                                                likeDisabled={likeDisabled}
+                                                likeDisabledReason={likeDisabledReason}
                                                 isDaylight={isDaylight}
                                                 primaryColor={theme.primaryColor}
                                             />
@@ -840,6 +878,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                                 onRemoveSong={onRemoveSong}
                                                 onMoveSongToEnd={onMoveSongToEnd}
                                                 onMoveSongToNext={onMoveSongToNext}
+                                                onOpenLattice={queue.onOpenLattice}
                                                 // TODO: Define cross-source playlist export before enabling playlist creation for mixed queues.
                                                 canSaveLocalPlaylist={Boolean(
                                                     isLocal
@@ -855,7 +894,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     {currentTab === 'account' && (
                                         <AccountTab
                                             user={user}
-                                            onLogout={onLogout}
+                                            accountController={accountController}
                                             audioQuality={audioQuality}
                                             onAudioQualityChange={onAudioQualityChange}
                                             cacheSize={cacheSize}
@@ -894,6 +933,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             isDaylight={isDaylight}
                                         />
                                     )}
+                                    <FoliumPanelTabBody tab={currentTab} theme={theme} isDaylight={isDaylight} />
                                     {currentTab === 'onlineLyrics' && isOnline && currentSong && (
                                         <OnlineLyricsTab
                                             song={currentSong}
@@ -904,6 +944,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                             onClearOnlineLyricsState={onClearOnlineLyricsState}
                                             lyricTimelineOffsetMs={lyricTimelineOffsetMs}
                                             onLyricTimelineOffsetChange={onLyricTimelineOffsetChange}
+                                            replayGainMode={replayGainMode}
+                                            onChangeReplayGainMode={onChangeReplayGainMode}
                                             isDaylight={isDaylight}
                                         />
                                     )}
@@ -912,61 +954,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
-
-            <div className="pointer-events-auto">
-                <PlaylistSelectionDialog
-                    isOpen={isPlaylistPickerOpen}
-                    onClose={() => setIsPlaylistPickerOpen(false)}
-                    isDaylight={isDaylight}
-                    title={t('localMusic.addToPlaylist')}
-                    description={t('home.playlists') || 'Playlists'}
-                    playlists={availablePlaylists}
-                    onSelect={async (playlistId) => {
-                        if (isLocal) {
-                            await onAddCurrentSongToLocalPlaylist(String(playlistId));
-                            return;
-                        }
-
-                        if (isOnline) {
-                            const playlist = onlinePlaylists.find(item => String(item.id) === String(playlistId));
-                            if (!playlist) throw new Error('Selected playlist is unavailable');
-                            await onAddCurrentSongToOnlinePlaylist(playlist);
-                            return;
-                        }
-
-                        if (isNavidrome) {
-                            await onAddCurrentSongToNavidromePlaylist(String(playlistId));
-                            await refreshNavidromePlaylists();
-                        }
-                    }}
-                    onCreate={(isLocal || isNavidrome) ? () => {
-                        setIsPlaylistPickerOpen(false);
-                        setIsCreatePlaylistOpen(true);
-                    } : undefined}
-                    createLabel={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist')}
-                />
-
-                <TextInputDialog
-                    isOpen={isCreatePlaylistOpen}
-                    onClose={() => setIsCreatePlaylistOpen(false)}
-                    isDaylight={isDaylight}
-                    title={t(isNavidrome ? 'navidrome.createPlaylist' : 'localMusic.createPlaylist')}
-                    description={t('localMusic.enterPlaylistName')}
-                    placeholder={t('localMusic.enterPlaylistName')}
-                    confirmLabel={t('options.save')}
-                    onConfirm={async (name) => {
-                        if (isLocal) {
-                            await onCreateCurrentLocalPlaylist(name);
-                            return;
-                        }
-
-                        if (isNavidrome) {
-                            await onCreateCurrentNavidromePlaylist(name);
-                            await refreshNavidromePlaylists();
-                        }
-                    }}
-                />
             </div>
 
             {/* Toggle Button */}
@@ -980,7 +967,12 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                             : { opacity: 0, x: 20, y: 12, scale: 0.92 }
                         }
                         transition={{ duration: 0.24, ease: 'easeOut' }}
-                        className="pointer-events-auto fixed bottom-8 right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
+                        data-testid="panel-toggle"
+                        style={{ bottom: bottomBarBottomPx }}
+                        className="pointer-events-auto fixed right-0 z-[60] pr-4 md:pr-8 group w-20 flex justify-end"
+                        onMouseEnter={handleToggleButtonMouseEnter}
+                        onMouseLeave={handleToggleButtonMouseLeave}
+                        onPointerDown={handleToggleHotspotPointerDown}
                     >
                         {/* Wrapper for both track and button to guarantee perfect alignment across browsers */}
                         <div className={`relative w-12 h-12 transition-all duration-300 transform ${toggleButtonMotionClass}`}>
@@ -991,7 +983,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                     transition: 'opacity 200ms ease-out',
                                 }}
                                 className={`absolute right-0 top-0 h-12 rounded-full border pointer-events-none z-0 ${
-                                    showGuideLine || isDragging
+                                    isGuideLineVisible || isDragging
                                         ? 'opacity-100'
                                         : 'opacity-0'
                                 } ${
@@ -1003,14 +995,14 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                 {/* Semi-transparent command icon at the left end of the track */}
                                 <motion.div 
                                     className="absolute left-3.5 top-[17px] w-3.5 h-3.5 pointer-events-none flex items-center justify-center"
-                                    animate={showGuideLine ? {
+                                    animate={isGuideLineVisible ? {
                                         x: [0, -4, 0],
                                         opacity: [0.45, 0.85, 0.45],
                                     } : {
                                         x: 0,
                                         opacity: 0.45,
                                     }}
-                                    transition={showGuideLine ? {
+                                    transition={isGuideLineVisible ? {
                                         duration: 1.5,
                                         repeat: Infinity,
                                         ease: "easeInOut",
@@ -1046,8 +1038,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                                 onPointerMove={handleToggleButtonPointerMove}
                                 onPointerUp={clearToggleButtonGesture}
                                 onPointerCancel={clearToggleButtonGesture}
-                                onMouseEnter={handleToggleButtonMouseEnter}
-                                onMouseLeave={handleToggleButtonMouseLeave}
                                 onClick={handleToggleButtonClick}
                                 style={{ touchAction: canSlideOpenCommandPalette ? 'none' : undefined }}
                                 className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg backdrop-blur-md transform
@@ -1059,7 +1049,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </motion.div>
     );
 };
 

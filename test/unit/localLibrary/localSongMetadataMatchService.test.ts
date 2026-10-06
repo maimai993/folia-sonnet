@@ -78,7 +78,7 @@ describe('localSongMetadataMatchService', () => {
     });
 
     it('keeps an embedded cover during automatic metadata matching', async () => {
-        await applyOnlineMetadataCandidate(song('embedded', { embeddedCover: new Blob(['cover']) }), candidate, {
+        await applyOnlineMetadataCandidate(song('embedded', { localCoverAssetId: `sha256:${'a'.repeat(64)}` }), candidate, {
             mode: 'automatic',
             protectOrigins: ['manual', 'manual-match', 'split'],
         });

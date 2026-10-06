@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OnlineMusicProvider, ProviderCapabilities } from '@/types/onlineMusic';
 import {
     canPlayOnlineMusicSong,
     getOnlineMusicProvider,
+    getOnlineMusicProviderRegistryVersion,
     providerSupports,
     registerOnlineMusicProvider,
     requireOnlineMusicProvider,
+    subscribeOnlineMusicProviderRegistry,
     unregisterOnlineMusicProvider,
 } from '@/services/onlineMusic/providerRegistry';
 import { OnlineProviderError } from '@/types/onlineMusic';
@@ -94,6 +96,27 @@ describe('online music provider registry', () => {
         expect(canPlayOnlineMusicSong(partialProvider.normalizeSong({ id: 'HASH' }))).toBe(false);
     });
 
+    it('announces registrations and removals to subscribers until they unsubscribe', () => {
+        const listener = vi.fn();
+        const unsubscribe = subscribeOnlineMusicProviderRegistry(listener);
+        const before = getOnlineMusicProviderRegistryVersion();
+
+        registerOnlineMusicProvider(partialProvider);
+        unregisterOnlineMusicProvider('partial-test');
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 2);
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        // Removing an id that is not registered changes nothing, so nobody is told.
+        unregisterOnlineMusicProvider('partial-test');
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 2);
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        unsubscribe();
+        registerOnlineMusicProvider(partialProvider);
+        expect(getOnlineMusicProviderRegistryVersion()).toBe(before + 3);
+        expect(listener).toHaveBeenCalledTimes(2);
+    });
+
     it('uses a standardized unavailable error for an unregistered provider', () => {
         expect(() => requireOnlineMusicProvider('missing-test')).toThrow(OnlineProviderError);
         try {
@@ -115,6 +138,13 @@ describe('online music provider registry', () => {
         expect(getPlaybackSongKey(kugouSong)).toBe('online:partial-test:ABC123');
         expect(getPlaybackSongKey(legacySong)).toBe('online:netease:123');
         expect(getSongResourceCacheKey('audio', kugouSong)).toBe('audio_online:partial-test:ABC123');
+
+        const canonicalKugouSong = {
+            ...kugouSong,
+            sourceRef: { ...kugouSong.sourceRef, providerId: 'kugou' },
+        };
+        expect(getSongResourceCacheKey('cover', canonicalKugouSong)).toBe('cover_v2_online:kugou:ABC123');
+        expect(getSongResourceCacheKey('audio', canonicalKugouSong)).toBe('audio_online:kugou:ABC123');
     });
 
     it('preserves the cloud variant when migrating legacy NetEase cloud songs', () => {

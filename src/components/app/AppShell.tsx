@@ -9,6 +9,7 @@ import WindowControls from '../WindowControls';
 type AppShellProps = {
     appStyle: React.CSSProperties;
     isElectronWindow: boolean;
+    hideFullscreenButton: boolean;
     usesCustomWindowChrome: boolean;
     useCustomWindowRadius: boolean;
     showTransparentWindowBorder: boolean;
@@ -26,6 +27,7 @@ type AppShellProps = {
 const AppShell: React.FC<AppShellProps> = ({
     appStyle,
     isElectronWindow,
+    hideFullscreenButton,
     usesCustomWindowChrome,
     useCustomWindowRadius,
     showTransparentWindowBorder,
@@ -41,6 +43,7 @@ const AppShell: React.FC<AppShellProps> = ({
 }) => {
     const { t } = useTranslation();
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+    const hasFullscreenTitlebarButton = isElectronWindow && !hideFullscreenButton;
 
     useEffect(() => {
         if (!useCustomWindowRadius || !window.electron?.isWindowMaximized) {
@@ -109,7 +112,9 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className="pointer-events-auto absolute top-0 right-[180px] z-20 h-full flex items-center"
+                            className={`pointer-events-auto absolute top-0 z-20 h-full flex items-center ${
+                                hasFullscreenTitlebarButton ? 'right-[224px]' : 'right-[180px]'
+                            }`}
                             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
                             <button
@@ -119,7 +124,7 @@ const AppShell: React.FC<AppShellProps> = ({
                                 onClick={onToggleMainWindowClickThrough}
                                 className={`flex h-7 w-7 items-center justify-center rounded-full border shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all duration-200 ${
                                     showMainWindowClickThroughToggle
-                                        ? 'pointer-events-auto opacity-100 translate-y-0'
+                                        ? 'click-through-interactive pointer-events-auto opacity-100 translate-y-0'
                                         : 'pointer-events-none opacity-0 -translate-y-1'
                                 } ${
                                     isMainWindowClickThroughEnabled
@@ -139,6 +144,7 @@ const AppShell: React.FC<AppShellProps> = ({
                                 revealed={areTitlebarControlsVisible}
                                 isDaylight={isDaylight}
                                 isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}
+                                hideFullscreenButton={hideFullscreenButton}
                             />
                         </div>
                     </div>

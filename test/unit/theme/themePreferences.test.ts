@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+    isThemeGenerationSource,
     readStoredThemeAutoGenerateEnabled,
+    readStoredThemeGenerationSource,
     resolveCustomThemePreferenceChange,
     resolveSongThemeAutoGenerateChange,
     resolveSongThemeAutoSwitchChange,
     saveStoredThemeAutoGenerateEnabled,
+    saveStoredThemeGenerationSource,
     type ThemePreferenceSwitchState,
 } from '@/services/themePreferences';
 
@@ -127,5 +130,27 @@ describe('themePreferences', () => {
             songThemeAutoSwitchEnabled: true,
             songThemeAutoGenerateEnabled: true,
         });
+    });
+
+    it('defaults the theme generation source to AI and round-trips a stored choice', () => {
+        const localStorage = createLocalStorageMock();
+        (globalThis as { window?: { localStorage: Storage; }; }).window = { localStorage };
+
+        expect(readStoredThemeGenerationSource()).toBe('ai');
+
+        saveStoredThemeGenerationSource('cover');
+        expect(localStorage.getItem('theme_generation_source')).toBe('cover');
+        expect(readStoredThemeGenerationSource()).toBe('cover');
+
+        // A stale or hand-edited value falls back rather than propagating an unknown source.
+        localStorage.setItem('theme_generation_source', 'palette');
+        expect(readStoredThemeGenerationSource()).toBe('ai');
+    });
+
+    it('guards the theme generation source values', () => {
+        expect(isThemeGenerationSource('ai')).toBe(true);
+        expect(isThemeGenerationSource('cover')).toBe(true);
+        expect(isThemeGenerationSource('palette')).toBe(false);
+        expect(isThemeGenerationSource(undefined)).toBe(false);
     });
 });

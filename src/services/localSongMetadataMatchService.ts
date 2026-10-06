@@ -1,6 +1,6 @@
 import type { LocalSong } from '../types';
 import type { LocalLibraryAssignmentOrigin } from '../types/localLibrary';
-import { isBlob } from '../utils/blobGuards';
+import { hasLocalSongCover } from '../utils/localSongCover';
 import { applyLocalSongMatchSelection } from './localSongMatchSelectionService';
 import {
     findAutomaticOnlineMetadataCandidate,
@@ -40,7 +40,7 @@ export const applyOnlineMetadataCandidate = async (
     const useOnlineMetadata = options.useOnlineMetadata ?? true;
     const useOnlineCover = options.mode === 'manual'
         ? Boolean(options.useOnlineCover && candidate.coverUrl)
-        : Boolean(candidate.coverUrl && !isBlob(song.embeddedCover));
+        : Boolean(candidate.coverUrl && !hasLocalSongCover(song));
     const result = await applyLocalSongMatchSelection({
         songId: song.id,
         candidate,

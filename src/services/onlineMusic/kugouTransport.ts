@@ -74,6 +74,92 @@ const isDeviceVerificationRequired = (body: any): boolean => {
     return errorCode === 20028 || message.includes('本次请求需要验证');
 };
 
+// HTTP-like statuses that unambiguously mean the account session is no longer accepted.
+const KUGOU_AUTH_FAILURE_STATUSES: ReadonlySet<number> = new Set([401, 403]);
+
+// docs/ku-go-api-docs.md: an authenticated request without valid cookie credentials fails with error_code 152.
+// KuGouMusicApi reports every other upstream failure (including plain network errors) as status 502 with
+// no stable login-expired code, so anything outside this set must not be treated as a logout signal.
+const KUGOU_AUTH_FAILURE_ERROR_CODES: ReadonlySet<number> = new Set([152]);
+
+const BRIDGE_ERROR_PREFIX = /^Error invoking remote method '[^']*':\s*(?:\w*Error:\s*)?/;
+const BRIDGE_FIELDS = /KuGouApi\[([^\]]*)\](?::\s*(.*))?/;
+
+export type KugouFailureDetails = {
+    operation?: string;
+    status?: number;
+    errorCode?: number;
+    detail?: string;
+};
+
+const toFiniteNumber = (value: unknown): number | undefined => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+/**
+ * Reads operation/status/error_code from whatever an Electron `kugouRequest` rejection looks like:
+ * the bridge's `KuGouApi[operation=.. status=.. error_code=..]` error message (the only part of an
+ * Error that survives IPC), or a raw `{ status, body }` answer object from an unpatched main process.
+ */
+export const extractKugouFailureDetails = (error: unknown): KugouFailureDetails => {
+    if (error && typeof error === 'object' && !(error instanceof Error)) {
+        const answer = error as { status?: unknown; body?: { error_code?: unknown; errcode?: unknown } | null };
+        return {
+            status: toFiniteNumber(answer.status),
+            errorCode: toFiniteNumber(answer.body?.error_code ?? answer.body?.errcode),
+        };
+    }
+
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    const match = BRIDGE_FIELDS.exec(message);
+    if (!match) {
+        const detail = message.replace(BRIDGE_ERROR_PREFIX, '').trim();
+        return { detail: detail && detail !== '[object Object]' ? detail : undefined };
+    }
+    const fields = new Map(
+        match[1].split(/\s+/).filter(Boolean).map(entry => {
+            const separator = entry.indexOf('=');
+            return [entry.slice(0, separator), entry.slice(separator + 1)] as const;
+        }),
+    );
+    return {
+        operation: fields.get('operation'),
+        status: toFiniteNumber(fields.get('status')),
+        errorCode: toFiniteNumber(fields.get('error_code')),
+        detail: match[2]?.trim() || undefined,
+    };
+};
+
+/** Whether a KuGou failure means the session is really rejected, as opposed to a transient/unknown error. */
+export const isKugouAuthFailure = (details: Pick<KugouFailureDetails, 'status' | 'errorCode'>): boolean => (
+    (details.status !== undefined && KUGOU_AUTH_FAILURE_STATUSES.has(details.status))
+    || (details.errorCode !== undefined && KUGOU_AUTH_FAILURE_ERROR_CODES.has(details.errorCode))
+);
+
+/**
+ * Wraps an Electron IPC rejection into an OnlineProviderError so callers can tell a rejected login
+ * (`auth-required`) from everything else (`network`) instead of seeing "[object Object]".
+ */
+export const toKugouProviderError = (operation: KugouOperation, error: unknown): OnlineProviderError => {
+    if (error instanceof OnlineProviderError) return error;
+    const details = extractKugouFailureDetails(error);
+    const summary = [
+        `operation=${details.operation ?? operation}`,
+        details.status !== undefined ? `status=${details.status}` : '',
+        details.errorCode !== undefined ? `error_code=${details.errorCode}` : '',
+    ].filter(Boolean).join(' ');
+    const suffix = details.detail ? `: ${details.detail}` : '';
+    const authFailure = isKugouAuthFailure(details);
+    return new OnlineProviderError(
+        authFailure ? 'auth-required' : 'network',
+        `${authFailure ? 'KuGou login required' : 'KuGou request failed'} (${summary})${suffix}`,
+        'kugou',
+        error,
+    );
+};
+
 const getWebSessionCookie = (): string => {
     const values = new Map<string, string>();
     const storedCookie = readProviderSessionValue('kugou', 'cookie');
@@ -93,6 +179,11 @@ const getWebSessionCookie = (): string => {
 };
 
 export const hasKugouAuthenticatedSearchSession = (): boolean => {
+    // Electron keeps the reusable token/dfid in the encrypted main-process bridge. The account id
+    // is only a non-secret hint that lets this synchronous selector choose authenticated search.
+    if (typeof window !== 'undefined' && window.electron?.kugouRequest) {
+        return Boolean(readProviderSessionValue('kugou', 'userid'));
+    }
     const cookie = getWebSessionCookie();
     return ['token', 'userid', 'dfid'].every(key => (
         new RegExp(`(?:^|;)\\s*${key}=[^;]+`, 'i').test(cookie)
@@ -168,6 +259,51 @@ export const requestKugouAnonymousSearch = async (
     return body;
 };
 
+/**
+ * Legacy mobile play-info fallback used when the current /song/url endpoint refuses a hash.
+ * It is intentionally kept outside the signed Web API transport because it calls KuGou's old
+ * public mobile endpoint and works without the configured VITE_KUGOU_API_BASE.
+ */
+export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => {
+    const targetUrl = new URL('https://m.kugou.com/app/i/getSongInfo.php');
+    targetUrl.searchParams.set('cmd', 'playInfo');
+    targetUrl.searchParams.set('hash', hash);
+    const targetUrlString = targetUrl.toString();
+
+    // In Electron, route through the main-process lyric proxy so CORS cannot block this
+    // last-resort mobile endpoint. The Web build uses the same /api/lyric-proxy helper.
+    if (typeof window !== 'undefined' && window.electron?.fetchLyricProxy) {
+        const response = await window.electron.fetchLyricProxy(targetUrlString, { method: 'GET' });
+        if (!response.ok) {
+            throw new OnlineProviderError(
+                'network',
+                `KuGou legacy playInfo failed: ${response.status}`,
+                'kugou',
+            );
+        }
+        return JSON.parse(response.bodyText) as any;
+    }
+
+    const requestUrl = typeof window !== 'undefined' && window.electron
+        ? targetUrlString
+        : `/api/lyric-proxy?url=${encodeURIComponent(targetUrlString)}`;
+    const response = await fetch(requestUrl, {
+        method: 'GET',
+        credentials: 'omit',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36',
+        },
+    });
+    if (!response.ok) {
+        throw new OnlineProviderError(
+            'network',
+            `KuGou legacy playInfo failed: ${response.status}`,
+            'kugou',
+        );
+    }
+    return response.json();
+};
+
 const clearWebDeviceIdentity = (): void => {
     removeProviderSessionValue('kugou', 'dfid');
     const storedCookie = readProviderSessionValue('kugou', 'cookie');
@@ -194,6 +330,21 @@ const persistWebSession = (response: any): void => {
     if (dfid) writeProviderSessionValue('kugou', 'dfid', String(dfid));
 };
 
+/**
+ * Removes credentials written by older desktop builds. Electron only retains the non-sensitive
+ * account id in renderer storage; every reusable credential stays in the encrypted IPC bridge.
+ */
+const persistElectronAccountHint = (operation: KugouOperation, response: any): void => {
+    ['cookie', 'token', 'dfid'].forEach(key => removeProviderSessionValue('kugou', key));
+    if (operation === 'logout') {
+        removeProviderSessionValue('kugou', 'userid');
+        return;
+    }
+    const payload = response?.data || response?.body?.data || response?.body || response;
+    const userId = payload?.userid ?? payload?.user_id;
+    if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
+};
+
 export const getKugouTransportAvailability = () => {
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) return { configured: true } as const;
     return getWebApiBase()
@@ -204,8 +355,18 @@ export const getKugouTransportAvailability = () => {
 // Routes one provider request through Electron IPC or an explicitly configured Web backend.
 export const requestKugou = async <T = unknown>(operation: KugouOperation, params: KugouParams = {}): Promise<T> => {
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) {
-        const response = await window.electron.kugouRequest(operation, params);
-        persistWebSession(response);
+        // Account credentials are injected by the main-process bridge. Drop legacy renderer values
+        // at the IPC boundary so an old localStorage token cannot keep circulating after migration.
+        const electronParams = Object.fromEntries(
+            Object.entries(params).filter(([key]) => !['token', 'dfid', 'cookie'].includes(key.toLowerCase())),
+        );
+        let response: unknown;
+        try {
+            response = await window.electron.kugouRequest(operation, electronParams);
+        } catch (error) {
+            throw toKugouProviderError(operation, error);
+        }
+        persistElectronAccountHint(operation, response);
         return response as T;
     }
 
@@ -224,7 +385,11 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
 
         const response = await fetch(`${base}${ENDPOINTS[targetOperation]}?${query}`, { credentials: 'include' });
         if (!response.ok) {
-            throw new OnlineProviderError('network', `KuGouMusicApi request failed: ${response.status}`, 'kugou');
+            throw new OnlineProviderError(
+                KUGOU_AUTH_FAILURE_STATUSES.has(response.status) ? 'auth-required' : 'network',
+                `KuGouMusicApi request failed: ${response.status}`,
+                'kugou',
+            );
         }
         const responseBody = await response.json();
         persistWebSession(responseBody);
