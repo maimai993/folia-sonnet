@@ -42,12 +42,27 @@
             </intent-filter>
         </service>
 
+        <!-- 通知栏/锁屏/耳机的播放指令。清单注册而非 Activity 动态注册：
+             后台被点通知栏时 Activity 未必还在，动态接收器收不到指令。 -->
+        <receiver android:name=".FoliaCommandReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="top.izuna.foliamajor.action.WEB_COMMAND" />
+            </intent-filter>
+        </receiver>
+
         <!-- 让 MediaSession 的控制按钮（通知栏、锁屏、蓝牙耳机）能把应用唤到前台 -->
         <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+
+        <!-- 崩溃取证界面：开发机上没有 adb 设备，只能让 App 自己把栈显示出来 -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:label="崩溃信息"
+            android:theme="@style/AppTheme.NoActionBar" />
     </application>
 
     <!-- Permissions -->

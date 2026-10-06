@@ -42,6 +42,18 @@ public class FoliaPlaybackService extends android.app.Service {
     private MediaSessionCompat mediaSession;
     private NotificationManager notificationManager;
 
+    /**
+     * 服务是否还活着。
+     *
+     * 插件侧要靠它判断「有没有必要把服务拉起来」：原先无歌/暂停也会
+     * startForegroundService，于是打开应用就起一个前台服务。
+     */
+    private static volatile boolean running = false;
+
+    static boolean isRunning() {
+        return running;
+    }
+
     // 通知内容缓存：metadata 与 playbackState 是两次独立更新，
     // 每次都基于这些字段重建整条通知，而不是互相覆盖。
     private String cachedTitle = "";
@@ -53,9 +65,17 @@ public class FoliaPlaybackService extends android.app.Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        running = true;
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         createNotificationChannel();
         ensureMediaSession();
+        // 就地前台化。
+        //
+        // Android 要求 startForegroundService() 之后 5 秒内调用 startForeground()，
+        // 超时就抛 ForegroundServiceDidNotStartInTimeException 直接杀进程。
+        // 放在 onCreate 里而不是等 onStartCommand 走完分支，是最稳的做法：
+        // 无论后续 switch 走进哪个分支、甚至 intent 为 null，前台化都已经完成了。
+        promoteToForeground();
     }
 
     /**
@@ -134,18 +154,11 @@ public class FoliaPlaybackService extends android.app.Service {
                     break;
             }
 
-            // 只要服务还活着就必须占住前台。
-            //
-            // Android 要求 startForegroundService() 之后 5 秒内调用 startForeground()，
-            // 否则抛 ForegroundServiceDidNotStartInTimeException（Android 12+）
-            // 或直接判定服务未启动。之前只在 state=playing 时才前台化，
-            // 于是「切歌 → update 先发、state 后到」或「当前是 paused」的情况下，
-            // 服务压根没拿到前台优先级 —— 后台照样被节流，切下一首依旧拿不到地址。
-            startForeground(NOTIFICATION_ID, buildForegroundNotification());
-
             // 重建 MediaSession：进程被杀后 START_STICKY 只会重跑 onStartCommand，
             // 不会走 onCreate 的初始化路径。
             ensureMediaSession();
+            // 内容变了，通知要跟着重建（前台化本身在 onCreate 就已经完成）。
+            promoteToForeground();
         }
         // START_STICKY：进程被系统回收后（仍处于播放状态）尽量重建服务。
         return START_STICKY;
@@ -158,6 +171,7 @@ public class FoliaPlaybackService extends android.app.Service {
 
     @Override
     public void onDestroy() {
+        running = false;
         if (mediaSession != null) {
             mediaSession.setActive(false);
             mediaSession.release();
@@ -174,10 +188,26 @@ public class FoliaPlaybackService extends android.app.Service {
      * Capacitor Bridge 插件接收，无论 Activity 是否还在都能收到。
      */
     private void sendCommand(String command) {
-        Intent intent = new Intent(ACTION_WEB_COMMAND);
-        intent.setPackage(getPackageName());
+        // 必须写死组件名：Android 8+ 的隐式广播不会投递给清单注册的接收器。
+        Intent intent = new Intent(this, FoliaCommandReceiver.class);
+        intent.setAction(ACTION_WEB_COMMAND);
         intent.putExtra(EXTRA_COMMAND, command);
         sendBroadcast(intent);
+    }
+
+    /**
+     * 把服务顶到前台。
+     *
+     * 通知构造失败不该把整个应用带走：startForeground 抛异常意味着
+     * 系统判定「前台服务没起来」，紧接着就是进程被杀，用户看到的就是闪退。
+     * 这里兜住异常，宁可没有通知也要保住播放。
+     */
+    private void promoteToForeground() {
+        try {
+            startForeground(NOTIFICATION_ID, buildForegroundNotification());
+        } catch (Throwable error) {
+            Log.e(TAG, "startForeground failed; keeping the service alive without it", error);
+        }
     }
 
     private void updateMetadata(Intent intent) {
@@ -290,6 +320,16 @@ public class FoliaPlaybackService extends android.app.Service {
                 // 通知属于前台服务，用户无法手动划掉它（划掉就等于杀掉播放）。
                 .setOngoing(true);
 
+        // 通知栏的三个按钮：上一首 / 播放暂停 / 下一首。
+        // 必须真的 addAction —— MediaStyle 的紧凑视图只是「从第 0/1/2 个 action 里挑出来显示」，
+        // 不 addAction 就写 setShowActionsInCompactView(0,1,2) 是越界引用，等于白写。
+        boolean playing = cachedState == PlaybackStateCompat.STATE_PLAYING;
+        builder.addAction(buildAction(android.R.drawable.ic_media_previous, "上一首", "previous"));
+        builder.addAction(playing
+                ? buildAction(android.R.drawable.ic_media_pause, "暂停", "pause")
+                : buildAction(android.R.drawable.ic_media_play, "播放", "play"));
+        builder.addAction(buildAction(android.R.drawable.ic_media_next, "下一首", "next"));
+
         MediaSessionCompat.Token token = mediaSession == null ? null : mediaSession.getSessionToken();
         if (token != null) {
             builder.setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
@@ -321,6 +361,25 @@ public class FoliaPlaybackService extends android.app.Service {
         }
 
         return builder.build();
+    }
+
+    /**
+     * 通知栏按钮。
+     *
+     * 点下去直接广播给 FoliaCommandReceiver，由它交给插件派发给 Web 层。
+     * 用 command 的 hashCode 作 requestCode，三个按钮才不会互相复用同一个 PendingIntent。
+     */
+    private NotificationCompat.Action buildAction(int icon, CharSequence title, String command) {
+        Intent intent = new Intent(this, FoliaCommandReceiver.class);
+        intent.setAction(ACTION_WEB_COMMAND);
+        intent.putExtra(EXTRA_COMMAND, command);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent pendingIntent =
+                PendingIntent.getBroadcast(this, command.hashCode(), intent, flags);
+        return new NotificationCompat.Action(icon, title, pendingIntent);
     }
 
     private void stopForegroundCompat() {

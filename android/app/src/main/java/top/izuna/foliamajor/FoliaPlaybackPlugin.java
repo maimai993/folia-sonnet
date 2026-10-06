@@ -30,6 +30,30 @@ public class FoliaPlaybackPlugin extends Plugin {
      */
     private static final String EVENT_COMMAND = "foliaPlaybackCommand";
 
+    /**
+     * 通知栏/耳机按键在后台触发时，Activity 可能已经不在了，
+     * 只能从静态引用拿到插件实例（见 FoliaCommandReceiver）。
+     */
+    private static volatile FoliaPlaybackPlugin instance;
+
+    @Override
+    public void load() {
+        instance = this;
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        instance = null;
+        super.handleOnDestroy();
+    }
+
+    static void dispatchCommandFromReceiver(String command) {
+        FoliaPlaybackPlugin current = instance;
+        if (current != null) {
+            current.dispatchCommand(command);
+        }
+    }
+
     @PluginMethod
     public void update(PluginCall call) {
         Activity activity = getActivity();
@@ -65,6 +89,19 @@ public class FoliaPlaybackPlugin extends Plugin {
         }
 
         String state = call.getString("state");
+
+        // 只有真正在播放时才值得起前台服务。
+        //
+        // Web 层在挂载时就会推一次 state='stopped'（currentSong 为空时的初始态），
+        // 于是「一打开应用」就会 startForegroundService 把服务拉起来 ——
+        // 那段路径此前从未真正执行过（插件没注册成功），一跑就崩。
+        // 服务没在跑而状态又是 stopped/paused 时，直接忽略，不做任何原生调用。
+        boolean needsService = "playing".equals(state);
+        if (!needsService && !FoliaPlaybackService.isRunning()) {
+            call.resolve();
+            return;
+        }
+
         Intent intent = new Intent(activity, FoliaPlaybackService.class);
         intent.setAction(FoliaPlaybackService.ACTION_UPDATE_STATE);
         if (state != null) intent.putExtra(FoliaPlaybackService.EXTRA_STATE, state);
@@ -80,7 +117,9 @@ public class FoliaPlaybackPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         Activity activity = getActivity();
-        if (activity == null) {
+        // 服务没在跑就没什么可停的。注意这里原先会无条件 startService，
+        // 于是「打开应用、还没有歌」也会把一个前台服务拉起来再停掉。
+        if (activity == null || !FoliaPlaybackService.isRunning()) {
             call.resolve();
             return;
         }
@@ -110,8 +149,9 @@ public class FoliaPlaybackPlugin extends Plugin {
      * 避免在原生侧再实现一套播放器状态机。
      */
     public static void dispatchCommandToWeb(Context context, String command) {
-        Intent intent = new Intent(FoliaPlaybackService.ACTION_WEB_COMMAND);
-        intent.setPackage(context.getPackageName());
+        // Android 8+ 不再给隐式广播投递给清单注册的接收器，必须写死组件名。
+        Intent intent = new Intent(context, FoliaCommandReceiver.class);
+        intent.setAction(FoliaPlaybackService.ACTION_WEB_COMMAND);
         intent.putExtra(FoliaPlaybackService.EXTRA_COMMAND, command);
         context.sendBroadcast(intent);
     }

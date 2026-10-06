@@ -1,9 +1,5 @@
 package top.izuna.foliamajor;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,7 +13,6 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.PluginHandle;
 
 /**
  * Folia 的主 Activity。
@@ -32,33 +27,17 @@ import com.getcapacitor.PluginHandle;
 public class MainActivity extends BridgeActivity {
 
     /**
-     * 接收服务的播放控制意图（通知栏/锁屏/耳机按键经 MediaSession 转发而来）。
+     * 播放控制意图由清单注册的 FoliaCommandReceiver 统一接收，不再挂在 Activity 上。
      *
-     * 走广播而不是直接持有 Service 引用：Service 与 Activity 是不同组件，
-     * 且 Activity 可能已随后台被回收。广播由 Capacitor 插件派发给 JS，
-     * 由 Web 层调用自己那套播放控制，避免原生再实现一份播放器状态机。
+     * 原来的动态接收器只在 Activity 存活时有效，而用户点通知栏时应用通常在后台，
+     * 指令全部丢失；且它与新接收器同时匹配 ACTION_WEB_COMMAND，会一次指令派发两遍。
      */
-    private final BroadcastReceiver playbackCommandReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String command = intent.getStringExtra(FoliaPlaybackService.EXTRA_COMMAND);
-            if (command == null || command.isEmpty()) {
-                return;
-            }
-            if (getBridge() == null) {
-                return;
-            }
-            // getPlugin 返回的是 PluginHandle 包装类，实例要从它身上取。
-            PluginHandle handle = getBridge().getPlugin("FoliaPlayback");
-            Object plugin = handle == null ? null : handle.getInstance();
-            if (plugin instanceof FoliaPlaybackPlugin) {
-                ((FoliaPlaybackPlugin) plugin).dispatchCommand(command);
-            }
-        }
-    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // 第一行就装上：崩溃可能就发生在下面 super.onCreate() 的 Bridge 创建过程中。
+        FoliaCrashHandler.install(this);
+
         // 必须在 super.onCreate() **之前**注册。
         //
         // registerPlugin 只是往 bridgeBuilder 里登记类，而真正创建 Bridge
@@ -106,30 +85,6 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 0x1F02);
-    }
-
-    @Override
-    public void onStart() {
-        super.onStart();
-        // 服务发来的播放/切歌意图在这里接收，再派发回 Web 层。
-        // Activity 只在前台时才需要监听：通知栏/耳机按键会先把应用带到前台，
-        // 之后这条路径必然是活的。
-        IntentFilter filter = new IntentFilter(FoliaPlaybackService.ACTION_WEB_COMMAND);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(playbackCommandReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(playbackCommandReceiver, filter);
-        }
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        try {
-            unregisterReceiver(playbackCommandReceiver);
-        } catch (IllegalArgumentException alreadyGone) {
-            // 未注册过，忽略。
-        }
     }
 
     @Override
