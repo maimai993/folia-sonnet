@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 当前文件：仅对 Folia 自托管 API 域名放行明文 HTTP（酷狗 API 跑在 http://folia.tangbot.xyz:8080），其余域名保持禁止。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">folia.tangbot.xyz</domain>
+    </domain-config>
+</network-security-config>

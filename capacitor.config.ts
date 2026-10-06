@@ -13,6 +13,11 @@ const config: CapacitorConfig = {
     hostname: 'localhost',
     cleartext: false,
   },
+  android: {
+    // 酷狗 API 部署在 http://folia.tangbot.xyz:8080，WebView 页面本身走 https://localhost，
+    // 属于混合内容，必须显式放行才能发起该请求（明文白名单见 AndroidManifest 的 network_security_config）。
+    allowMixedContent: true,
+  },
   plugins: {
     SplashScreen: {
       launchAutoHide: true,
