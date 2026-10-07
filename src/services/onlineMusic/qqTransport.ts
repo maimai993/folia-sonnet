@@ -64,27 +64,50 @@ const getElectronQqPortReader = (): (() => Promise<number | null>) | null => {
 
 let electronApiBase: string | null = null;
 
+/**
+ * 后端路径怎么拼，取决于对面是哪种服务端：
+ * - `path`：路径式，如 `/api/qq/login/status`。内嵌的 qq-music-api（Electron）与
+ *   直接把 Express 应用挂在子路径下的自托管部署只认这种。
+ * - `query`：扁平式，如 `/api/qq?path=/login/status`。这是 `api-ts/qq.ts` /
+ *   `api/qq.js` 这两个 serverless 入口**原生**就认的形式，不依赖任何 rewrite。
+ *
+ * Vercel 上两种都能走通（rewrite 把路径式折算成扁平式），但自托管站点未必配了同样的
+ * rewrite，所以不能用「有没有 rewrite」当前提。这里不去猜部署形态：先按路径式发，
+ * 撞上 404 再换扁平式，并且**只有成功的那次才被记成偏好** —— 这样 `login_channels` /
+ * `user_playlist_detail` 在旧后端上必然的 404 不会被误当成「拼法错了」，不会污染后续请求。
+ */
+export type QqEndpointStyle = 'path' | 'query';
+
+let webEndpointStyle: QqEndpointStyle = 'path';
+
 export const resetQqTransportRuntimeCache = (): void => {
     electronApiBase = null;
+    webEndpointStyle = 'path';
 };
 
-const resolveApiBase = async (): Promise<string> => {
+const resolveApiBase = async (): Promise<{ base: string; embedded: boolean }> => {
     const readPort = getElectronQqPortReader();
     if (readPort) {
-        if (electronApiBase) return electronApiBase;
+        if (electronApiBase) return { base: electronApiBase, embedded: true };
         const port = await readPort();
         if (!port) {
             throw new OnlineProviderError('unavailable', 'Embedded QQMusicApi is not running', 'qq');
         }
         electronApiBase = `http://127.0.0.1:${port}`;
-        return electronApiBase;
+        return { base: electronApiBase, embedded: true };
     }
 
     const base = getWebApiBase();
     if (!base) {
         throw new OnlineProviderError('unavailable', 'VITE_QQ_API_BASE is not configured', 'qq');
     }
-    return base;
+    return { base, embedded: false };
+};
+
+const buildRequestUrl = (base: string, style: QqEndpointStyle, endpointPath: string, query: string): string => {
+    if (style === 'path') return `${base}${endpointPath}${query ? `?${query}` : ''}`;
+    const separator = query ? '&' : '';
+    return `${base}?path=${encodeURIComponent(endpointPath)}${separator}${query}`;
 };
 
 // The stored value is the backend's opaque `qqmusic_session=<token>` string, never a QQ credential.
@@ -217,9 +240,12 @@ const endpointFor = (operation: QqOperation, params: QqParams): { path: string; 
 };
 
 // Routes one provider request through the embedded Electron server or the configured Web base URL.
-export const requestQq = async <T = unknown>(operation: QqOperation, params: QqParams = {}): Promise<T> => {
-    const base = await resolveApiBase();
-
+const requestQqOnce = async <T = unknown>(
+    operation: QqOperation,
+    params: QqParams,
+    base: string,
+    style: QqEndpointStyle,
+): Promise<T> => {
     const endpoint = endpointFor(operation, params);
     const query = new URLSearchParams();
     Object.entries(endpoint.query).forEach(([key, value]) => {
@@ -242,7 +268,10 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     // Same-origin serverless calls must retain deployment-protection cookies; external qq-music-api instances
     // answer with `Access-Control-Allow-Origin: *`, so those requests still omit browser credentials.
     const credentials: RequestCredentials = isSameOriginBase(base) ? 'same-origin' : 'omit';
-    const response = await fetchWithTimeout(`${base}${endpoint.path}?${query}`, { credentials, headers });
+    const response = await fetchWithTimeout(
+        buildRequestUrl(base, style, endpoint.path, query.toString()),
+        { credentials, headers },
+    );
     if (!response.ok) {
         const failure = await readJsonBody(response);
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.
@@ -279,4 +308,23 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     assertUpstreamAccepted(operation, body);
     persistConfirmedSession(operation, body);
     return body as T;
+};
+
+export const requestQq = async <T = unknown>(operation: QqOperation, params: QqParams = {}): Promise<T> => {
+    const { base, embedded } = await resolveApiBase();
+    // 内嵌的 qq-music-api 就是一个 Express 应用，只有路径式一种拼法，不需要试错。
+    if (embedded) return requestQqOnce<T>(operation, params, base, 'path');
+
+    const preferred = webEndpointStyle;
+    const fallback: QqEndpointStyle = preferred === 'query' ? 'path' : 'query';
+    try {
+        return await requestQqOnce<T>(operation, params, base, preferred);
+    } catch (error) {
+        // 只有「后端根本没有这条路由」才像是拼法不对；其余失败（401 / 429 / 上游拒收）如实上抛。
+        if (!(error instanceof OnlineProviderError) || error.httpStatus !== 404) throw error;
+        const result = await requestQqOnce<T>(operation, params, base, fallback);
+        // 仅在备用拼法真的成功时才改偏好：路由本身不存在的 404 两边都会失败，不会走到这里。
+        webEndpointStyle = fallback;
+        return result;
+    }
 };

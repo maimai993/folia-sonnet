@@ -470,4 +470,44 @@ describe('QQ Music Web transport', () => {
         expect((error as Error).message).not.toContain('secret-qr-key');
         expect((error as Error).message).not.toContain('secret-session-token');
     });
+
+    // 自托管站点未必照搬 vercel.json 的 rewrite，路径式在那里一律 404；扁平式 `?path=` 是
+    // serverless 入口原生就认的形式。客户端两种都发得起，才有资格不去猜对面是哪种部署。
+    it('falls back to the flat ?path= form when the path-style route 404s', async () => {
+        let calls = 0;
+        const fetchMock = vi.fn(async () => {
+            calls += 1;
+            if (calls === 1) return Response.json({ code: 404 }, { status: 404 });
+            return Response.json({ code: 200, data: {} });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_status')).resolves.toEqual({ code: 200, data: {} });
+
+        const [firstUrl, secondUrl] = fetchMock.mock.calls.map(call => new URL(call[0]));
+        expect(firstUrl.pathname).toBe('/login/status');
+        expect(secondUrl.searchParams.get('path')).toBe('/login/status');
+        // 备用拼法成功后被记成偏好，后续请求不再白撞一次路径式。
+        await requestQq('login_status');
+        const thirdUrl = new URL(fetchMock.mock.calls[2][0]);
+        expect(thirdUrl.searchParams.get('path')).toBe('/login/status');
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    // 旧后端上没有 `login_channels` / `user_playlist_detail`，那种 404 是「路由不存在」，
+    // 不是「拼法不对」；两种拼法都失败时必须保持原偏好，否则整条链路会被带偏。
+    it('does not adopt the fallback form when the route itself is missing', async () => {
+        const fetchMock = vi.fn(async () => Response.json({ code: 404 }, { status: 404 }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_channels')).rejects.toMatchObject({ code: 'unsupported', httpStatus: 404 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        fetchMock.mockImplementation(async () => Response.json({ code: 200, data: {} }));
+        await requestQq('login_status');
+        const recoveredUrl = new URL(fetchMock.mock.calls[2][0]);
+        expect(recoveredUrl.pathname).toBe('/login/status');
+    });
 });
