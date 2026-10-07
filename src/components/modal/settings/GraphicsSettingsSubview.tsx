@@ -73,6 +73,32 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const onToggleLyricsWallpaperFeed = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperFeed);
     const lyricsWallpaperBackground = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
     const onSetLyricsWallpaperBackground = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperBackground);
+    const lyricsWallpaperImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
+    const onSetLyricsWallpaperImage = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperImage);
+    const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+
+    /** 选一张图当壁纸背景：压到 512 再转 base64 交给原生，原图太大没必要。 */
+    const handleWallpaperImagePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+            const bitmap = await createImageBitmap(file);
+            const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+            const width = Math.max(1, Math.round(bitmap.width * scale));
+            const height = Math.max(1, Math.round(bitmap.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            if (!context) return;
+            context.drawImage(bitmap, 0, 0, width, height);
+            bitmap.close();
+            onSetLyricsWallpaperImage(canvas.toDataURL('image/jpeg', 0.8));
+        } catch {
+            // 图片读不出来就保持原样。
+        }
+    };
 
     // 歌词壁纸是 Android 专有的，其它平台整段不渲染。
     const isAndroid = isCapacitorAndroid();
@@ -246,7 +272,7 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                             description={t('options.lyricsWallpaperBackgroundDesc')}
                             control={(
                                 <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--text-secondary)' }}>
-                                    {(['cover', 'color'] as const).map((mode) => (
+                                    {(['cover', 'color', 'image'] as const).map((mode) => (
                                         <button
                                             key={mode}
                                             type="button"
@@ -258,13 +284,58 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                         >
                                             {mode === 'cover'
                                                 ? t('options.lyricsWallpaperBackgroundCover')
-                                                : t('options.lyricsWallpaperBackgroundColor')}
+                                                : mode === 'color'
+                                                    ? t('options.lyricsWallpaperBackgroundColor')
+                                                    : t('options.lyricsWallpaperBackgroundImage')}
                                         </button>
                                     ))}
                                 </div>
                             )}
-                            dividerClass={dividerClass}
-                        />
+                        >
+                            {lyricsWallpaperBackground === 'image' && (
+                                <div className="mt-3 flex items-center gap-3">
+                                    {lyricsWallpaperImage ? (
+                                        <img
+                                            src={lyricsWallpaperImage}
+                                            alt=""
+                                            className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                                        />
+                                    ) : (
+                                        <div
+                                            className="h-14 w-14 shrink-0 rounded-lg border"
+                                            style={{ borderColor: 'var(--text-secondary)' }}
+                                        />
+                                    )}
+                                    <div className="space-y-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => imageInputRef.current?.click()}
+                                            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            {t('options.lyricsWallpaperPickImage')}
+                                        </button>
+                                        {lyricsWallpaperImage && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onSetLyricsWallpaperImage(null)}
+                                                className="block text-xs opacity-60 hover:opacity-100"
+                                                style={{ color: 'var(--text-secondary)' }}
+                                            >
+                                                {t('options.lyricsWallpaperClearImage')}
+                                            </button>
+                                        )}
+                                        <input
+                                            ref={imageInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={handleWallpaperImagePick}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </SettingsRow>
                         <SettingsRow
                             title={t('options.lyricsWallpaperFeed')}
                             description={t('options.lyricsWallpaperFeedDesc')}

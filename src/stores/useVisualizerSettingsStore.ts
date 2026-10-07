@@ -22,8 +22,13 @@ import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } 
 
 /** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
 export const LYRICS_WALLPAPER_FEED_STORAGE_KEY = 'folia.lyricsWallpaperFeed';
-/** 歌词壁纸的背景：模糊封面还是只用主题色渐变。 */
+
+const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' =>
+    value === 'color' || value === 'image' ? value : 'cover';
+/** 歌词壁纸的背景：模糊封面 / 主题色渐变 / 自选图片。 */
 export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
+/** 歌词壁纸的自选背景图（base64，已压到 512px）。体积不小，但落 localStorage 仍在配额内。 */
+export const LYRICS_WALLPAPER_IMAGE_STORAGE_KEY = 'folia.lyricsWallpaperImage';
 import { useVisualizerAssetStore } from './useVisualizerAssetStore';
 import { normalizeLumiereTuning } from '../utils/lumiereTuning';
 
@@ -42,8 +47,10 @@ export type VisualizerSettingsState = {
     glowBlurQuantize: boolean;
     /** 把播放中的歌词推给原生歌词动态壁纸。Android 专有，其它平台恒为 false 也不影响。 */
     lyricsWallpaperFeed: boolean;
-    /** 歌词壁纸的背景：'cover' 模糊封面，'color' 只用主题色渐变。 */
-    lyricsWallpaperBackground: 'cover' | 'color';
+    /** 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片。 */
+    lyricsWallpaperBackground: 'cover' | 'color' | 'image';
+    /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
+    lyricsWallpaperImage: string | null;
     classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
@@ -77,7 +84,8 @@ export type VisualizerSettingsState = {
     handleToggleRandomVisualizerModePerSong: (enable: boolean) => void;
     handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
-    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color') => void;
+    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image') => void;
+    handleSetLyricsWallpaperImage: (image: string | null) => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -135,8 +143,9 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
     glowBlurQuantize: readStoredGlowBlurQuantize(),
     lyricsWallpaperFeed: getStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, true),
-    lyricsWallpaperBackground:
-        getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover') === 'color' ? 'color' : 'cover',
+    lyricsWallpaperBackground: resolveWallpaperBackground(
+        getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover')),
+    lyricsWallpaperImage: getStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, '') || null,
     classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
@@ -301,6 +310,10 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     handleSetLyricsWallpaperBackground: (mode) => {
         setStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, mode);
         set({ lyricsWallpaperBackground: mode });
+    },
+    handleSetLyricsWallpaperImage: (image) => {
+        setStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, image || '');
+        set({ lyricsWallpaperImage: image });
     },
     handleSetClassicTuning: (patch) => {
         const prev = get().classicTuning;

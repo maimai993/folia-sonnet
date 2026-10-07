@@ -24,6 +24,8 @@ interface FoliaPlaybackPlugin {
     artist?: string;
     album?: string;
     artworkBase64?: string | null;
+    /** 封面地址。原生会自己下载，用来绕开 WebView 的 CORS 限制。 */
+    artworkUrl?: string | null;
     durationMs?: number;
   }): Promise<void>;
   /** 更新播放状态。playing=true 时服务会真正进入前台。 */
@@ -168,6 +170,9 @@ export const useCapacitorPlaybackBridge = ({
         artist: getSongArtistLabel(currentSong) || '',
         album: getSongAlbumLabel(currentSong) || '',
         artworkBase64,
+        // 封面地址一并给过去：WebView 里 fetch 远端封面常被 CORS 挡掉，
+        // 原生下载没有这个限制，通知栏因此总能拿到对应的封面。
+        artworkUrl: coverUrl || null,
         durationMs: getDurationMs(currentSong),
       });
     })();

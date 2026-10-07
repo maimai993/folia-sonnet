@@ -32,6 +32,61 @@ import javax.microedition.khronos.opengles.GL10;
  */
 public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
+    /**
+     * 一种可视化风格在壁纸上的落地参数。
+     *
+     * App 里的十几种可视化是 PixiJS 场景，逐帧照搬到壁纸上做不到（壁纸只能画原生 Surface）。
+     * 这里退一步做「风格对齐」：每种模式抽出一小组观感参数，背景的流速、光团、颗粒、
+     * 歌词的行距与高亮方式各不相同，选中什么模式，壁纸就呈现那种气质。
+     */
+    private static final class Style {
+        final float flowSpeed;
+        final float blobScale;
+        final float dust;
+        final float glow;
+        final float lineSpacing;
+        final float falloff;
+        final float currentScale;
+        /** 0 = 逐字擦除高亮，1 = 整行淡入，2 = 不做高亮。 */
+        final int textEffect;
+
+        Style(float flowSpeed, float blobScale, float dust, float glow, float lineSpacing,
+              float falloff, float currentScale, int textEffect) {
+            this.flowSpeed = flowSpeed;
+            this.blobScale = blobScale;
+            this.dust = dust;
+            this.glow = glow;
+            this.lineSpacing = lineSpacing;
+            this.falloff = falloff;
+            this.currentScale = currentScale;
+            this.textEffect = textEffect;
+        }
+    }
+
+    /** 与 App 的可视化模式一一对应：商籁/凝彩/绘光/流光/心象/云阶/浮名/倾诉/回环/莫奈/时计/群唱/镜台/静止。 */
+    private static final Style STILL = new Style(0.2f, 0.7f, 0.0f, 0.5f, 0.13f, 0.26f, 1.00f, 2);
+
+    private static Style styleFor(String mode) {
+        if (mode == null) return STILL;
+        switch (mode) {
+            case "tempera":   return new Style(0.5f, 1.30f, 0.4f, 1.10f, 0.125f, 0.30f, 1.06f, 0);
+            case "lumiere":   return new Style(0.9f, 1.15f, 1.2f, 1.35f, 0.120f, 0.28f, 1.08f, 0);
+            case "classic":   return new Style(1.1f, 1.00f, 0.9f, 1.20f, 0.115f, 0.30f, 1.05f, 0);
+            case "cadenza":   return new Style(0.7f, 1.10f, 0.6f, 1.00f, 0.130f, 0.34f, 1.10f, 1);
+            case "partita":   return new Style(0.8f, 0.95f, 1.5f, 0.95f, 0.140f, 0.22f, 1.04f, 1);
+            case "fume":      return new Style(1.4f, 1.40f, 0.8f, 1.45f, 0.150f, 0.38f, 1.12f, 1);
+            case "tilt":      return new Style(0.6f, 0.90f, 0.5f, 0.90f, 0.120f, 0.24f, 1.02f, 0);
+            case "claddagh":  return new Style(1.6f, 0.85f, 1.8f, 1.05f, 0.110f, 0.20f, 1.00f, 0);
+            case "monet":     return new Style(0.4f, 1.50f, 0.3f, 1.25f, 0.135f, 0.36f, 1.08f, 1);
+            case "pendolo":   return new Style(1.2f, 0.80f, 1.1f, 1.15f, 0.125f, 0.26f, 1.05f, 0);
+            case "cappella":  return new Style(0.9f, 1.05f, 2.0f, 1.30f, 0.145f, 0.30f, 1.06f, 1);
+            case "diorama":   return new Style(0.5f, 1.20f, 0.7f, 1.00f, 0.130f, 0.32f, 1.09f, 1);
+            case "still":     return STILL;
+            case "sonnet":
+            default:          return new Style(0.7f, 1.00f, 1.0f, 1.00f, 0.115f, 0.30f, 1.05f, 0);
+        }
+    }
+
     private static final String TAG = "LyricsRenderer";
     /** 一次最多画这么多行（当前行各向上下展开）。 */
     private static final int VISIBLE_SPAN = 3;
@@ -62,7 +117,18 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
     private float elapsedSeconds = 0f;
 
     private int coverTexture = 0;
-    private boolean coverUploaded = false;
+    /** 自选背景图。与封面分开存，换歌时不该被顶掉。 */
+    private int imageTexture = 0;
+    private String loadedImageKey = null;
+    private Style style = STILL;
+
+    /** 封面纹理只在 mode=cover 时需要；切到别的模式就释放掉。 */
+    private void releaseCover() {
+        if (coverTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[] { coverTexture }, 0);
+            coverTexture = 0;
+        }
+    }
 
     /** key = 文本 + '@' + 字号，value = 已上传的纹理。插入顺序即淘汰顺序。 */
     private final Map<String, TextTexture> textures =
@@ -138,14 +204,20 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         }
         motion += (motionTarget - motion) * blend;
 
-        syncCover(snapshot.cover);
+        style = styleFor(snapshot.visualizerMode);
+        boolean useCover = "cover".equals(snapshot.backgroundMode);
+        boolean useImage = "image".equals(snapshot.backgroundMode);
+        syncCover(useCover ? snapshot.cover : null);
+        syncImage(useImage ? snapshot.image : null);
 
         GLES20.glClearColor(0.02f, 0.02f, 0.03f, 1f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         drawBackground();
-        if ("cover".equals(snapshot.backgroundMode)) {
+        if (useCover) {
             drawCover();
+        } else if (useImage) {
+            drawImage();
         }
         drawLyrics(snapshot);
     }
@@ -171,7 +243,11 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
                 accent[0], accent[1], accent[2]);
         GLES20.glUniform3f(GLES20.glGetUniformLocation(backgroundProgram, "uBase"),
                 base[0], base[1], base[2]);
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uMotion"), motion);
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uMotion"),
+                motion * style.flowSpeed);
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uBlob"), style.blobScale);
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uDust"), style.dust);
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uGlow"), style.glow);
         GLES20.glUniform4f(GLES20.glGetUniformLocation(backgroundProgram, "uRect"),
                 -1f, -1f, 2f, 2f);
 
@@ -188,6 +264,38 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
                 1f, 1f, 1f, 0.28f, -1f, 1f);
     }
 
+    /** 自选背景图铺满，再压一层暗色蒙版保证歌词可读。 */
+    private void drawImage() {
+        if (imageTexture == 0 || quadProgram == 0) {
+            return;
+        }
+        drawTexturedQuad(imageTexture, 0f, 0f, surfaceWidth, surfaceHeight,
+                1f, 1f, 1f, 1f, -1f, 1f);
+        // 复用同一个纹理画一层纯黑蒙版：uUseTexColor=0 时着色器只用 uColor。
+        drawTexturedQuad(imageTexture, 0f, 0f, surfaceWidth, surfaceHeight,
+                0f, 0f, 0f, 0.38f, -1f, 0f);
+    }
+
+    private void syncImage(String imageBase64) {
+        if (imageBase64 == null) {
+            return;
+        }
+        if (imageBase64.equals(loadedImageKey)) {
+            return;
+        }
+        Bitmap decoded = decodeCover(imageBase64);
+        loadedImageKey = imageBase64;
+        if (decoded == null) {
+            return;
+        }
+        if (imageTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[] { imageTexture }, 0);
+            imageTexture = 0;
+        }
+        imageTexture = upload(decoded);
+        decoded.recycle();
+    }
+
     // ---- 歌词 ----
 
     private void drawLyrics(WallpaperLyricsState.Snapshot snapshot) {
@@ -199,7 +307,7 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         }
 
         float baseFontPx = clamp(surfaceHeight * 0.062f, 26f, 84f);
-        float lineStep = surfaceHeight * 0.115f;
+        float lineStep = surfaceHeight * style.lineSpacing;
         float centerY = surfaceHeight * 0.47f;
         float maxWidth = surfaceWidth * 0.84f;
 
@@ -222,7 +330,10 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
                 continue;
             }
 
-            float scale = 1f - Math.min(0.30f, 0.13f * distance);
+            float scale = 1f - Math.min(0.34f, 0.13f * distance);
+            if (distance < 0.5f) {
+                scale *= style.currentScale;
+            }
             float width = texture.width * scale;
             float height = texture.height * scale;
             if (width > maxWidth) {
@@ -230,12 +341,18 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
                 width *= fit;
                 height *= fit;
             }
-            float alpha = clamp(1f - 0.30f * distance, 0f, 1f);
+            float alpha = clamp(1f - style.falloff * distance, 0f, 1f);
+            // 整行淡入的风格：当前行随行内进度由暗转亮，而不是逐字擦除。
+            if (style.textEffect == 1 && distance < 0.5f) {
+                alpha *= clamp(0.35f + 0.65f * animatedProgress, 0f, 1f);
+            }
             float y = centerY + (i - animatedIndex) * lineStep;
 
             boolean isCurrent = distance < 0.5f;
-            // 逐字高亮：按行内进度在纹理上做横向擦除。
-            float progress = isCurrent ? clamp(animatedProgress, 0f, 1f) : -1f;
+            // 逐字高亮：按行内进度在纹理上做横向擦除。textEffect=2 的风格不做高亮。
+            float progress = (isCurrent && style.textEffect == 0)
+                    ? clamp(animatedProgress, 0f, 1f)
+                    : -1f;
 
             drawCentered(texture, y, width, height, alpha, progress);
         }
@@ -524,6 +641,9 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + "uniform vec3 uAccent;\n"
             + "uniform vec3 uBase;\n"
             + "uniform float uMotion;\n"
+            + "uniform float uBlob;\n"
+            + "uniform float uDust;\n"
+            + "uniform float uGlow;\n"
             + "void main() {\n"
             + "  vec2 p = vec2(vUv.x * uAspect, vUv.y);\n"
             + "  float t = uTime * 0.06 * uMotion;\n"
@@ -531,9 +651,9 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + " 0.26 + 0.10 * cos(t * 0.9));\n"
             + "  vec2 c2 = vec2((0.72 + 0.10 * cos(t * 0.8) + uOffsetX * 0.12) * uAspect,"
             + " 0.72 + 0.12 * sin(t * 1.3));\n"
-            + "  float g1 = smoothstep(0.95, 0.0, distance(p, c1));\n"
-            + "  float g2 = smoothstep(0.95, 0.0, distance(p, c2));\n"
-            + "  vec3 col = uBase + uAccent * (g1 * 0.42 + g2 * 0.28);\n"
+            + "  float g1 = smoothstep(0.95 * uBlob, 0.0, distance(p, c1));\n"
+            + "  float g2 = smoothstep(0.95 * uBlob, 0.0, distance(p, c2));\n"
+            + "  vec3 col = uBase + uAccent * (g1 * 0.42 + g2 * 0.28) * uGlow;\n"
             // 缓慢上浮的细颗粒，给静止的画面一点呼吸感。
             + "  float dust = 0.0;\n"
             + "  for (int i = 0; i < 8; i++) {\n"
@@ -544,7 +664,7 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + "    float r = 0.004 + 0.006 * fract(fi * 0.371);\n"
             + "    dust += smoothstep(r, 0.0, distance(p, vec2(x * uAspect, y)));\n"
             + "  }\n"
-            + "  col += vec3(0.55, 0.58, 0.68) * dust * 0.16;\n"
+            + "  col += vec3(0.55, 0.58, 0.68) * dust * 0.16 * uDust;\n"
             + "  float vignette = smoothstep(1.25, 0.30, distance(vUv, vec2(0.5)));\n"
             + "  col *= mix(0.52, 1.0, vignette);\n"
             + "  gl_FragColor = vec4(col, 1.0);\n"

@@ -59,8 +59,12 @@ public final class WallpaperLyricsState {
         public final int baseColor;
         /** 动效强度：calm 0.6 / normal 1.0 / chaotic 1.5，沿用 App 主题的 animationIntensity。 */
         public final float motion;
-        /** 背景模式：cover = 模糊封面，color = 只用主题色渐变。 */
+        /** 背景模式：cover = 模糊封面，color = 主题色渐变，image = 用户自选图片。 */
         public final String backgroundMode;
+        /** 自选背景图的 base64。只在 mode=image 时生效。 */
+        public final String image;
+        /** App 当前的可视化模式，决定壁纸的动画风格（见 LyricsRenderer 的风格表）。 */
+        public final String visualizerMode;
         public final TimedLine[] lines;
         public final boolean playing;
         /** 锚点：elapsedRealtime 为 anchorElapsedMs 时，播放位置是 anchorPositionMs。 */
@@ -69,8 +73,8 @@ public final class WallpaperLyricsState {
         public final long stamp;
 
         Snapshot(String title, String artist, String cover, int accent, int baseColor, float motion,
-                 String backgroundMode, TimedLine[] lines, boolean playing, long anchorElapsedMs,
-                 long anchorPositionMs, long stamp) {
+                 String backgroundMode, String image, String visualizerMode, TimedLine[] lines,
+                 boolean playing, long anchorElapsedMs, long anchorPositionMs, long stamp) {
             this.title = title == null ? "" : title;
             this.artist = artist == null ? "" : artist;
             this.cover = cover;
@@ -78,6 +82,8 @@ public final class WallpaperLyricsState {
             this.baseColor = baseColor;
             this.motion = motion;
             this.backgroundMode = backgroundMode == null ? "cover" : backgroundMode;
+            this.image = image;
+            this.visualizerMode = visualizerMode == null ? "sonnet" : visualizerMode;
             this.lines = lines == null ? new TimedLine[0] : lines;
             this.playing = playing;
             this.anchorElapsedMs = anchorElapsedMs;
@@ -134,7 +140,8 @@ public final class WallpaperLyricsState {
     }
 
     private static final Snapshot EMPTY = new Snapshot(
-            "", "", null, 0xFF7C5CFF, 0xFF09090B, 1f, "cover", new TimedLine[0], false, 0L, 0L, 0L);
+            "", "", null, 0xFF7C5CFF, 0xFF09090B, 1f, "cover", null, "sonnet",
+            new TimedLine[0], false, 0L, 0L, 0L);
 
     private static volatile Snapshot current = EMPTY;
 
@@ -146,13 +153,15 @@ public final class WallpaperLyricsState {
     public static void setAnchor(long positionMs, boolean playing) {
         Snapshot previous = current;
         current = new Snapshot(previous.title, previous.artist, previous.cover, previous.accent,
-                previous.baseColor, previous.motion, previous.backgroundMode, previous.lines,
-                playing, SystemClock.elapsedRealtime(), positionMs, previous.stamp);
+                previous.baseColor, previous.motion, previous.backgroundMode, previous.image,
+                previous.visualizerMode, previous.lines, playing,
+                SystemClock.elapsedRealtime(), positionMs, previous.stamp);
     }
 
     public static void publish(Context context, String title, String artist, String cover,
                                int accent, int baseColor, float motion, String backgroundMode,
-                               TimedLine[] lines, long positionMs, boolean playing) {
+                               String image, String visualizerMode, TimedLine[] lines,
+                               long positionMs, boolean playing) {
         Snapshot previous = current;
         Snapshot next = new Snapshot(
                 title != null ? title : previous.title,
@@ -162,6 +171,8 @@ public final class WallpaperLyricsState {
                 baseColor != 0 ? baseColor : previous.baseColor,
                 motion > 0f ? motion : previous.motion,
                 backgroundMode != null ? backgroundMode : previous.backgroundMode,
+                image,
+                visualizerMode != null ? visualizerMode : previous.visualizerMode,
                 lines != null ? lines : previous.lines,
                 playing,
                 SystemClock.elapsedRealtime(),
@@ -173,17 +184,25 @@ public final class WallpaperLyricsState {
         }
     }
 
-    /** 只换背景模式，不动时间轴（避免整条时间轴重新落盘）。 */
-    public static void setBackgroundMode(Context context, String backgroundMode) {
+    /** 只改外观（背景模式 / 自选图 / 可视化风格），不动时间轴，也避免整条时间轴重新落盘。 */
+    public static void setAppearance(Context context, String backgroundMode, String image,
+                                     String visualizerMode) {
         Snapshot previous = current;
-        current = new Snapshot(previous.title, previous.artist, previous.cover, previous.accent,
-                previous.baseColor, previous.motion, backgroundMode, previous.lines,
-                previous.playing, previous.anchorElapsedMs, previous.anchorPositionMs,
-                previous.stamp);
+        Snapshot next = new Snapshot(previous.title, previous.artist, previous.cover,
+                previous.accent, previous.baseColor, previous.motion,
+                backgroundMode != null ? backgroundMode : previous.backgroundMode,
+                image,
+                visualizerMode != null ? visualizerMode : previous.visualizerMode,
+                previous.lines, previous.playing, previous.anchorElapsedMs,
+                previous.anchorPositionMs, previous.stamp);
+        current = next;
         if (context != null) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()
-                    .putString(KEY_BACKGROUND, backgroundMode)
+                    .putString(KEY_BACKGROUND, next.backgroundMode)
+                    .putInt(KEY_BASE, next.baseColor)
+                    .putInt(KEY_ACCENT, next.accent)
+                    .putFloat(KEY_MOTION, next.motion)
                     .apply();
         }
     }
@@ -222,6 +241,8 @@ public final class WallpaperLyricsState {
                 prefs.getInt(KEY_BASE, EMPTY.baseColor),
                 prefs.getFloat(KEY_MOTION, EMPTY.motion),
                 prefs.getString(KEY_BACKGROUND, "cover"),
+                null,
+                "sonnet",
                 lines,
                 false,
                 SystemClock.elapsedRealtime(),

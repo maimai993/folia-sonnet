@@ -67,6 +67,8 @@ public class FoliaWallpaperPlugin extends Plugin {
                     parseColor(call.getString("backgroundColor")),
                     motion == null ? 0f : motion,
                     call.getString("background"),
+                    call.getString("image"),
+                    call.getString("visualizer"),
                     timeline,
                     Math.max(0L, positionMs),
                     isPlaying);
@@ -74,11 +76,14 @@ public class FoliaWallpaperPlugin extends Plugin {
         call.resolve();
     }
 
-    /** 只改背景模式：cover = 模糊封面，color = 只用主题色渐变。 */
+    /** 只改外观（背景模式 / 自选背景图 / 可视化风格），不动时间轴。 */
     @PluginMethod
-    public void setBackground(PluginCall call) {
-        String mode = call.getString("mode");
-        WallpaperLyricsState.setBackgroundMode(getContext(), mode);
+    public void setAppearance(PluginCall call) {
+        WallpaperLyricsState.setAppearance(
+                getContext(),
+                call.getString("background"),
+                call.getString("image"),
+                call.getString("visualizer"));
         call.resolve();
     }
 

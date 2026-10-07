@@ -74,6 +74,9 @@ public class FoliaPlaybackPlugin extends Plugin {
         if (artist != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTIST, artist);
         if (album != null) intent.putExtra(FoliaPlaybackService.EXTRA_ALBAND, album);
         if (artwork != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK, artwork);
+        // 同时把封面地址给过去：原生自己下载，绕开 WebView 的 CORS 限制。
+        String artworkUrl = call.getString("artworkUrl");
+        if (artworkUrl != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK_URL, artworkUrl);
         if (duration != null) intent.putExtra(FoliaPlaybackService.EXTRA_DURATION, (long) duration);
 
         startServiceCompat(activity, intent);

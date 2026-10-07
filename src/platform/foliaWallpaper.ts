@@ -30,13 +30,23 @@ export interface FoliaWallpaperPublishOptions {
     motion?: number;
     /** 封面 base64。体积大，只在换歌时发。 */
     cover?: string | null;
-    /** 背景模式：cover = 模糊封面，color = 只用主题色渐变。 */
+    /** 背景模式：cover = 模糊封面，color = 主题色渐变，image = 自选图片。 */
     background?: FoliaWallpaperBackgroundMode;
+    /** 自选背景图的 base64，background=image 时生效。 */
+    image?: string | null;
+    /** App 当前可视化模式，决定壁纸动画风格。 */
+    visualizer?: string;
+}
+
+export interface FoliaWallpaperAppearance {
+    background?: FoliaWallpaperBackgroundMode;
+    image?: string | null;
+    visualizer?: string;
 }
 
 interface FoliaWallpaperPlugin {
     publish(options: FoliaWallpaperPublishOptions): Promise<void>;
-    setBackground(options: { mode: FoliaWallpaperBackgroundMode }): Promise<void>;
+    setAppearance(options: FoliaWallpaperAppearance): Promise<void>;
     getBackground(): Promise<{ mode: FoliaWallpaperBackgroundMode }>;
     clear(): Promise<void>;
     isActive(): Promise<{ active: boolean }>;
@@ -55,11 +65,11 @@ export const publishLyricsWallpaper = async (
     }
 };
 
-export const setWallpaperBackground = async (
-    mode: FoliaWallpaperBackgroundMode,
+export const setWallpaperAppearance = async (
+    options: FoliaWallpaperAppearance,
 ): Promise<void> => {
     try {
-        await FoliaWallpaper.setBackground({ mode });
+        await FoliaWallpaper.setAppearance(options);
     } catch {
         // 同上。
     }

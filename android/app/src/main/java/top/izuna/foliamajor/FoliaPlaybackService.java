@@ -215,6 +215,7 @@ public class FoliaPlaybackService extends android.app.Service {
         String artist = intent.getStringExtra(EXTRA_ARTIST);
         String album = intent.getStringExtra(EXTRA_ALBAND);
         String artworkBase64 = intent.getStringExtra(EXTRA_ARTWORK);
+        String artworkUrl = intent.getStringExtra(EXTRA_ARTWORK_URL);
         long durationMs = intent.getLongExtra(EXTRA_DURATION, 0L);
 
         // 先更新缓存，再重建通知：metadata 与 state 是两次独立调用，
@@ -240,6 +241,77 @@ public class FoliaPlaybackService extends android.app.Service {
 
         if (mediaSession != null) {
             mediaSession.setMetadata(builder.build());
+        }
+
+        // 封面优先走原生下载：Web 层用 fetch 抓远端封面常常被 CORS 挡掉，
+        // 通知栏就只剩一个默认图标。原生侧没有同源限制，拿到再补一次通知。
+        if (artworkUrl != null && !artworkUrl.isEmpty()
+                && !artworkUrl.equals(pendingArtworkUrl)) {
+            pendingArtworkUrl = artworkUrl;
+            fetchArtwork(artworkUrl);
+        }
+    }
+
+    /** 上一次已经发起下载的封面地址，避免同一首歌反复下载。 */
+    private String pendingArtworkUrl = null;
+
+    private void fetchArtwork(final String url) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Bitmap bitmap = downloadBitmap(url);
+                if (bitmap == null) {
+                    return;
+                }
+                cachedArtwork = bitmap;
+                // 通知已经发出去了，要再 post 一次才会带上新封面。
+                notificationManager.notify(NOTIFICATION_ID, buildForegroundNotification());
+            }
+        }, "folia-artwork").start();
+    }
+
+    private static Bitmap downloadBitmap(String url) {
+        java.io.InputStream stream = null;
+        try {
+            java.net.HttpURLConnection connection =
+                    (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            connection.setConnectTimeout(6000);
+            connection.setReadTimeout(10000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) {
+                connection.disconnect();
+                return null;
+            }
+            stream = connection.getInputStream();
+            Bitmap decoded = android.graphics.BitmapFactory.decodeStream(stream);
+            connection.disconnect();
+            if (decoded == null) {
+                return null;
+            }
+            // 通知栏只需要一张小图，顺手压到 512，避免大图白占内存。
+            int edge = Math.max(decoded.getWidth(), decoded.getHeight());
+            if (edge > 512) {
+                float ratio = 512f / edge;
+                Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(decoded,
+                        Math.round(decoded.getWidth() * ratio),
+                        Math.round(decoded.getHeight() * ratio), true);
+                decoded.recycle();
+                return scaled;
+            }
+            return decoded;
+        } catch (Throwable error) {
+            Log.w(TAG, "Failed to download the cover", error);
+            return null;
+        } finally {
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (java.io.IOException ignored) {
+                    // 关闭失败不影响结果。
+                }
+            }
         }
     }
 
@@ -401,6 +473,7 @@ public class FoliaPlaybackService extends android.app.Service {
     static final String EXTRA_ARTIST = "artist";
     static final String EXTRA_ALBAND = "album";
     static final String EXTRA_ARTWORK = "artwork";
+    static final String EXTRA_ARTWORK_URL = "artworkUrl";
     static final String EXTRA_DURATION = "duration";
     static final String EXTRA_STATE = "state";
     static final String EXTRA_POSITION = "position";

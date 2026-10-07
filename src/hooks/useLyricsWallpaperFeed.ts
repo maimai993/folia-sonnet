@@ -1,6 +1,6 @@
 import React from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
-import { clearLyricsWallpaper, publishLyricsWallpaper, setWallpaperBackground } from '../platform/foliaWallpaper';
+import { clearLyricsWallpaper, publishLyricsWallpaper, setWallpaperAppearance } from '../platform/foliaWallpaper';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import type { Line } from '../types';
 
@@ -75,6 +75,9 @@ export const useLyricsWallpaperFeed = ({
     const enabled = isCapacitorAndroid();
     const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
     const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    const backgroundImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
+    // 壁纸动画风格跟随 App 选中的可视化模式。
+    const visualizerMode = useVisualizerSettingsStore(state => state.visualizerMode);
     const active = enabled && feedEnabled;
 
     const playing = playerState === 'PLAYING';
@@ -106,11 +109,15 @@ export const useLyricsWallpaperFeed = ({
         };
     }, [enabled, coverUrl]);
 
-    // 背景模式单独下发，不牵动时间轴。
+    // 外观（背景模式 / 自选图 / 可视化风格）单独下发，不牵动时间轴。
     React.useEffect(() => {
         if (!enabled) return;
-        void setWallpaperBackground(backgroundMode);
-    }, [enabled, backgroundMode]);
+        void setWallpaperAppearance({
+            background: backgroundMode,
+            image: backgroundImage,
+            visualizer: visualizerMode,
+        });
+    }, [enabled, backgroundMode, backgroundImage, visualizerMode]);
 
     // 换歌（或歌词本身变了）时下发整条时间轴。
     React.useEffect(() => {
@@ -124,6 +131,8 @@ export const useLyricsWallpaperFeed = ({
             motion: MOTION_BY_INTENSITY[animationIntensity ?? 'normal'] ?? 1,
             cover: coverRef.current,
             background: backgroundMode,
+            image: backgroundImage,
+            visualizer: visualizerMode,
             timeline: lines.map((line) => ({
                 text: line.fullText,
                 start: Math.round(line.startTime * 1000),
@@ -133,7 +142,8 @@ export const useLyricsWallpaperFeed = ({
             playing,
         });
         // getCurrentTime 是稳定的取数函数，不参与依赖比较以外的重算。
-    }, [active, lyrics, title, artist, backgroundMode, accentColor, backgroundColor, animationIntensity]);
+    }, [active, lyrics, title, artist, backgroundMode, backgroundImage, visualizerMode,
+        accentColor, backgroundColor, animationIntensity]);
 
     // 播放/暂停要立刻通知，否则暂停后原生还在按墙钟往前走。
     React.useEffect(() => {
