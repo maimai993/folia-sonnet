@@ -50,6 +50,11 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
     private float[] accent = new float[] { 0.49f, 0.36f, 1.0f };
     private float[] accentTarget = new float[] { 0.49f, 0.36f, 1.0f };
+    /** 与 App 当前主题一致的底色与动效强度。 */
+    private float[] base = new float[] { 0.035f, 0.035f, 0.043f };
+    private float[] baseTarget = new float[] { 0.035f, 0.035f, 0.043f };
+    private float motion = 1f;
+    private float motionTarget = 1f;
 
     private float animatedIndex = 0f;
     private float animatedProgress = 0f;
@@ -106,21 +111,32 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
         WallpaperLyricsState.Snapshot snapshot = WallpaperLyricsState.get();
 
-        // 进度与行号都做插值：JS 每 100ms 推一次，直接落帧会看到台阶。
-        animatedProgress = approach(animatedProgress, snapshot.progress, deltaSeconds, 6f);
-        float targetIndex = snapshot.index;
+        // 当前行由原生按墙钟从时间轴算出来，不依赖 JS 推送 ——
+        // 应用退到后台后 WebView 的定时器会被挂起，靠 JS 推「当前行」歌词就走不动了。
+        long position = snapshot.positionMs();
+        int computedIndex = snapshot.indexAt(position);
+        float computedProgress = snapshot.progressAt(position);
+
+        // 行号做插值：换行时平滑滑过去，而不是硬跳。
+        animatedProgress = approach(animatedProgress, computedProgress, deltaSeconds, 6f);
+        float targetIndex = computedIndex;
         // 换歌或拖动进度条造成的跳变直接对齐，不要缓慢地滑过去。
         if (Math.abs(targetIndex - animatedIndex) > 2.5f) {
             animatedIndex = targetIndex;
-            animatedProgress = snapshot.progress;
+            animatedProgress = computedProgress;
         } else {
             animatedIndex = approach(animatedIndex, targetIndex, deltaSeconds, 7f);
         }
 
         accentTarget = rgbFromColor(snapshot.accent);
+        baseTarget = rgbFromColor(snapshot.baseColor);
+        motionTarget = snapshot.motion;
+        float blend = Math.min(1f, deltaSeconds * 3f);
         for (int i = 0; i < 3; i++) {
-            accent[i] += (accentTarget[i] - accent[i]) * Math.min(1f, deltaSeconds * 3f);
+            accent[i] += (accentTarget[i] - accent[i]) * blend;
+            base[i] += (baseTarget[i] - base[i]) * blend;
         }
+        motion += (motionTarget - motion) * blend;
 
         syncCover(snapshot.cover);
 
@@ -128,7 +144,9 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         drawBackground();
-        drawCover();
+        if ("cover".equals(snapshot.backgroundMode)) {
+            drawCover();
+        }
         drawLyrics(snapshot);
     }
 
@@ -151,6 +169,9 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uOffsetX"), offsetX);
         GLES20.glUniform3f(GLES20.glGetUniformLocation(backgroundProgram, "uAccent"),
                 accent[0], accent[1], accent[2]);
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(backgroundProgram, "uBase"),
+                base[0], base[1], base[2]);
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(backgroundProgram, "uMotion"), motion);
         GLES20.glUniform4f(GLES20.glGetUniformLocation(backgroundProgram, "uRect"),
                 -1f, -1f, 2f, 2f);
 
@@ -187,7 +208,7 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
                 (int) Math.ceil(animatedIndex) + VISIBLE_SPAN);
 
         for (int i = first; i <= last; i++) {
-            String text = snapshot.lines[i];
+            String text = snapshot.lines[i].text;
             if (text == null || text.trim().isEmpty()) {
                 continue;
             }
@@ -501,21 +522,23 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + "uniform float uAspect;\n"
             + "uniform float uOffsetX;\n"
             + "uniform vec3 uAccent;\n"
+            + "uniform vec3 uBase;\n"
+            + "uniform float uMotion;\n"
             + "void main() {\n"
             + "  vec2 p = vec2(vUv.x * uAspect, vUv.y);\n"
-            + "  float t = uTime * 0.06;\n"
+            + "  float t = uTime * 0.06 * uMotion;\n"
             + "  vec2 c1 = vec2((0.30 + 0.12 * sin(t * 1.1) + uOffsetX * 0.12) * uAspect,"
             + " 0.26 + 0.10 * cos(t * 0.9));\n"
             + "  vec2 c2 = vec2((0.72 + 0.10 * cos(t * 0.8) + uOffsetX * 0.12) * uAspect,"
             + " 0.72 + 0.12 * sin(t * 1.3));\n"
             + "  float g1 = smoothstep(0.95, 0.0, distance(p, c1));\n"
             + "  float g2 = smoothstep(0.95, 0.0, distance(p, c2));\n"
-            + "  vec3 col = vec3(0.030, 0.031, 0.042) + uAccent * (g1 * 0.42 + g2 * 0.28);\n"
+            + "  vec3 col = uBase + uAccent * (g1 * 0.42 + g2 * 0.28);\n"
             // 缓慢上浮的细颗粒，给静止的画面一点呼吸感。
             + "  float dust = 0.0;\n"
             + "  for (int i = 0; i < 8; i++) {\n"
             + "    float fi = float(i);\n"
-            + "    float speed = 0.020 + 0.008 * fi;\n"
+            + "    float speed = (0.020 + 0.008 * fi) * uMotion;\n"
             + "    float x = fract(0.137 * fi + 0.05 * sin(uTime * 0.35 + fi));\n"
             + "    float y = fract(0.913 - mod(uTime * speed + 0.171 * fi, 1.0));\n"
             + "    float r = 0.004 + 0.006 * fract(fi * 0.371);\n"

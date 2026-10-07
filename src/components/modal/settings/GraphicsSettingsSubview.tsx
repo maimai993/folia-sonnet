@@ -71,6 +71,8 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const onToggleGlowBlurQuantize = useVisualizerSettingsStore(state => state.handleToggleGlowBlurQuantize);
     const lyricsWallpaperFeed = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
     const onToggleLyricsWallpaperFeed = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperFeed);
+    const lyricsWallpaperBackground = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    const onSetLyricsWallpaperBackground = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperBackground);
 
     // 歌词壁纸是 Android 专有的，其它平台整段不渲染。
     const isAndroid = isCapacitorAndroid();
@@ -236,6 +238,30 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                         ? t('options.lyricsWallpaperActive')
                                         : t('options.lyricsWallpaperSet')}
                                 </button>
+                            )}
+                            dividerClass={dividerClass}
+                        />
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperBackground')}
+                            description={t('options.lyricsWallpaperBackgroundDesc')}
+                            control={(
+                                <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--text-secondary)' }}>
+                                    {(['cover', 'color'] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => onSetLyricsWallpaperBackground(mode)}
+                                            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${lyricsWallpaperBackground === mode ? '' : 'opacity-60'}`}
+                                            style={lyricsWallpaperBackground === mode
+                                                ? { backgroundColor: theme?.accentColor || '#3b82f6', color: '#fff' }
+                                                : { color: 'var(--text-primary)' }}
+                                        >
+                                            {mode === 'cover'
+                                                ? t('options.lyricsWallpaperBackgroundCover')
+                                                : t('options.lyricsWallpaperBackgroundColor')}
+                                        </button>
+                                    ))}
+                                </div>
                             )}
                             dividerClass={dividerClass}
                         />

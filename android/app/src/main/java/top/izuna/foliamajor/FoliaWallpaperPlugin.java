@@ -29,37 +29,64 @@ public class FoliaWallpaperPlugin extends Plugin {
 
     @PluginMethod
     public void publish(PluginCall call) {
-        String[] lines = null;
-        JSArray linesArray = call.getArray("lines");
-        if (linesArray != null) {
-            int count = linesArray.length();
-            lines = new String[count];
+        WallpaperLyricsState.TimedLine[] timeline = null;
+        JSArray timelineArray = call.getArray("timeline");
+        if (timelineArray != null) {
+            int count = timelineArray.length();
+            timeline = new WallpaperLyricsState.TimedLine[count];
             for (int i = 0; i < count; i++) {
+                timeline[i] = new WallpaperLyricsState.TimedLine("", 0L, 0L);
                 try {
-                    lines[i] = linesArray.getString(i);
+                    org.json.JSONObject entry = timelineArray.getJSONObject(i);
+                    long start = entry.optLong("start", 0L);
+                    long end = entry.optLong("end", 0L);
+                    String text = entry.optString("text", "");
+                    timeline[i] = new WallpaperLyricsState.TimedLine(text, start, end);
                 } catch (JSONException error) {
-                    lines[i] = "";
+                    // 单行解析失败不影响整条时间轴。
                 }
             }
         }
 
-        Integer index = call.getInt("index");
-        Float progress = call.getFloat("progress");
+        Float positionSeconds = call.getFloat("positionMs");
+        long positionMs = positionSeconds == null ? -1L : (long) (double) positionSeconds;
         Boolean playing = call.getBoolean("playing");
-        Boolean slowChanged = call.getBoolean("slowChanged");
+        boolean isPlaying = playing != null && playing;
 
-        WallpaperLyricsState.publish(
-                getContext(),
-                call.getString("title"),
-                call.getString("artist"),
-                lines,
-                index == null ? 0 : index,
-                progress == null ? 0f : progress,
-                playing != null && playing,
-                parseAccent(call.getString("accent")),
-                call.getString("cover"),
-                slowChanged != null && slowChanged);
+        if (timeline == null && positionMs >= 0L) {
+            // 常规心跳：只挪时间锚点，不碰时间轴，也不落盘。
+            WallpaperLyricsState.setAnchor(positionMs, isPlaying);
+        } else {
+            Float motion = call.getFloat("motion");
+            WallpaperLyricsState.publish(
+                    getContext(),
+                    call.getString("title"),
+                    call.getString("artist"),
+                    call.getString("cover"),
+                    parseColor(call.getString("accent")),
+                    parseColor(call.getString("backgroundColor")),
+                    motion == null ? 0f : motion,
+                    call.getString("background"),
+                    timeline,
+                    Math.max(0L, positionMs),
+                    isPlaying);
+        }
         call.resolve();
+    }
+
+    /** 只改背景模式：cover = 模糊封面，color = 只用主题色渐变。 */
+    @PluginMethod
+    public void setBackground(PluginCall call) {
+        String mode = call.getString("mode");
+        WallpaperLyricsState.setBackgroundMode(getContext(), mode);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void getBackground(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("mode", WallpaperLyricsState.get().backgroundMode);
+        call.resolve(result);
     }
 
     @PluginMethod
@@ -114,7 +141,7 @@ public class FoliaWallpaperPlugin extends Plugin {
                 && getContext().getPackageName().equals(info.getPackageName());
     }
 
-    private static int parseAccent(String value) {
+    private static int parseColor(String value) {
         if (value == null || value.isEmpty()) {
             return 0;
         }

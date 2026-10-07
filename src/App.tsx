@@ -1456,6 +1456,10 @@ export default function App() {
         artist: displaySong ? getSongArtistLabel(displaySong) : null,
         coverUrl: displayCoverUrl ?? cachedCoverUrl,
         playerState: displayPlayerState,
+        // 让壁纸沿用 App 当前的主题色、底色与动效强度，避免两套色调各画各的。
+        accentColor: theme?.accentColor ?? null,
+        backgroundColor: theme?.backgroundColor ?? null,
+        animationIntensity: theme?.animationIntensity ?? null,
     });
 
     const {

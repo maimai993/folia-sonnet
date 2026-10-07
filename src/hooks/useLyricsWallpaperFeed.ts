@@ -1,34 +1,40 @@
 import React from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
-import { clearLyricsWallpaper, publishLyricsWallpaper } from '../platform/foliaWallpaper';
+import { clearLyricsWallpaper, publishLyricsWallpaper, setWallpaperBackground } from '../platform/foliaWallpaper';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import type { Line } from '../types';
 
 // src/hooks/useLyricsWallpaperFeed.ts
-// 把「当前行 + 行内进度」喂给原生歌词壁纸。
+// 把歌词送到原生壁纸。
 //
-// 动态壁纸是另一个组件，读不到 React 状态，只能由这里主动推过去。
-// 进度每 100ms 推一次（再快也看不出差别，只会白耗 bridge）；歌词只在窗口变化时才重发，
-// 因为整段歌词可能上百行，没必要每 100ms 序列化一遍。
+// 关键在于**不要指望这里的定时器**：应用退到后台后 WebView 的 JS 定时器会被系统挂起，
+// 靠它推「当前行」的话，后台时歌词就永远停在一句上。所以换歌时把整条时间轴一次性交过去，
+// 播放中只偶尔推一个时间锚点；之后由原生按墙钟自己往前推，JS 停了歌词也照样往下走。
 
-/** 以当前行为中心，向上下各取几行。壁纸只会画出其中距离当前行 3 行以内的。 */
-const WINDOW_RADIUS = 4;
-const TICK_MS = 100;
 const DEFAULT_ACCENT = '#7c5cff';
 const COVER_EDGE = 256;
+/** 心跳间隔。前台时用来校正锚点；后台被挂起也无所谓，原生自己会走。 */
+const TICK_MS = 500;
 
 type UseLyricsWallpaperFeedOptions = {
     lyrics: { lines: Line[] } | null;
-    currentLineIndex: number;
-    /** 读当前播放时间。传 get 方法而不是值，避免每 100ms 重建定时器。 */
+    /** 读当前播放时间（秒）。传 get 方法而不是值，避免每次渲染重建定时器。 */
     getCurrentTime: () => number;
     title: string | null;
     artist: string | null;
     coverUrl: string | null;
     playerState: string;
+    /** App 当前主题，用来让壁纸与 App 用同一套配色和动效强度。 */
+    accentColor?: string | null;
+    backgroundColor?: string | null;
+    animationIntensity?: 'calm' | 'normal' | 'chaotic' | null;
 };
 
-const clamp01 = (value: number): number => (value < 0 ? 0 : value > 1 ? 1 : value);
+const MOTION_BY_INTENSITY: Record<string, number> = {
+    calm: 0.6,
+    normal: 1,
+    chaotic: 1.5,
+};
 
 /** 把封面压成小图 base64：壁纸只用作模糊底图，不需要原图。 */
 const loadCoverAsBase64 = async (url: string): Promise<string | null> => {
@@ -57,25 +63,25 @@ const loadCoverAsBase64 = async (url: string): Promise<string | null> => {
 
 export const useLyricsWallpaperFeed = ({
     lyrics,
-    currentLineIndex,
     getCurrentTime,
     title,
     artist,
     coverUrl,
     playerState,
+    accentColor,
+    backgroundColor,
+    animationIntensity,
 }: UseLyricsWallpaperFeedOptions): void => {
     const enabled = isCapacitorAndroid();
     const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
+    const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
     const active = enabled && feedEnabled;
 
-    // 定时器里读 ref，避免因闭包拿到过期值。
-    const latest = React.useRef({ lines: [] as Line[], index: -1, playing: false, time: 0 });
-    latest.current.lines = lyrics?.lines ?? [];
-    latest.current.index = currentLineIndex;
-    latest.current.playing = playerState === 'PLAYING';
+    const playing = playerState === 'PLAYING';
+    const latest = React.useRef({ playing });
+    latest.current.playing = playing;
 
     const coverRef = React.useRef<string | null>(null);
-    const windowKeyRef = React.useRef('');
 
     // 关掉开关时清一次，别让壁纸停在过期的那一行上。
     React.useEffect(() => {
@@ -100,58 +106,53 @@ export const useLyricsWallpaperFeed = ({
         };
     }, [enabled, coverUrl]);
 
+    // 背景模式单独下发，不牵动时间轴。
+    React.useEffect(() => {
+        if (!enabled) return;
+        void setWallpaperBackground(backgroundMode);
+    }, [enabled, backgroundMode]);
+
+    // 换歌（或歌词本身变了）时下发整条时间轴。
     React.useEffect(() => {
         if (!active) return;
+        const lines = lyrics?.lines ?? [];
+        void publishLyricsWallpaper({
+            title: title ?? '',
+            artist: artist ?? '',
+            accent: accentColor || DEFAULT_ACCENT,
+            backgroundColor: backgroundColor || '#09090b',
+            motion: MOTION_BY_INTENSITY[animationIntensity ?? 'normal'] ?? 1,
+            cover: coverRef.current,
+            background: backgroundMode,
+            timeline: lines.map((line) => ({
+                text: line.fullText,
+                start: Math.round(line.startTime * 1000),
+                end: Math.round(line.endTime * 1000),
+            })),
+            positionMs: Math.round(getCurrentTime() * 1000),
+            playing,
+        });
+        // getCurrentTime 是稳定的取数函数，不参与依赖比较以外的重算。
+    }, [active, lyrics, title, artist, backgroundMode, accentColor, backgroundColor, animationIntensity]);
 
-        const tick = (): void => {
-            const { lines, index, playing } = latest.current;
-            const time = getCurrentTime();
-            latest.current.time = time;
+    // 播放/暂停要立刻通知，否则暂停后原生还在按墙钟往前走。
+    React.useEffect(() => {
+        if (!active) return;
+        void publishLyricsWallpaper({
+            positionMs: Math.round(getCurrentTime() * 1000),
+            playing,
+        });
+    }, [active, playing]);
 
-            if (lines.length === 0 || index < 0) {
-                // 没有歌词时也要把歌名推过去，壁纸至少能显示封面和标题。
-                const emptyKey = `${title ?? ''}|empty`;
-                const changed = emptyKey !== windowKeyRef.current;
-                windowKeyRef.current = emptyKey;
-                void publishLyricsWallpaper({
-                    title: title ?? '',
-                    artist: artist ?? '',
-                    lines: changed ? [] : null,
-                    index: 0,
-                    progress: 0,
-                    playing,
-                    accent: DEFAULT_ACCENT,
-                    cover: changed ? coverRef.current : null,
-                    slowChanged: changed,
-                });
-                return;
-            }
-
-            const from = Math.max(0, index - WINDOW_RADIUS);
-            const to = Math.min(lines.length, index + WINDOW_RADIUS + 1);
-            const key = `${title ?? ''}|${from}|${to}`;
-            const changed = key !== windowKeyRef.current;
-            windowKeyRef.current = key;
-
-            const current = lines[index];
-            const span = current ? Math.max(1, current.endTime - current.startTime) : 1;
-            const progress = current ? clamp01((time - current.startTime) / span) : 0;
-
+    // 心跳：前台时校正锚点。后台被挂起也无所谓，原生自己推进。
+    React.useEffect(() => {
+        if (!active) return;
+        const timer = window.setInterval(() => {
             void publishLyricsWallpaper({
-                title: title ?? '',
-                artist: artist ?? '',
-                lines: changed ? lines.slice(from, to).map((line) => line.fullText) : null,
-                index: index - from,
-                progress,
-                playing,
-                accent: DEFAULT_ACCENT,
-                cover: changed ? coverRef.current : null,
-                slowChanged: changed,
+                positionMs: Math.round(getCurrentTime() * 1000),
+                playing: latest.current.playing,
             });
-        };
-
-        tick();
-        const timer = window.setInterval(tick, TICK_MS);
+        }, TICK_MS);
         return () => window.clearInterval(timer);
-    }, [active, getCurrentTime, title, artist]);
+    }, [active]);
 };

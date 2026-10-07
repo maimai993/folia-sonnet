@@ -3,26 +3,41 @@ import { registerPlugin } from '@capacitor/core';
 // src/platform/foliaWallpaper.ts
 // 歌词动态壁纸的 Web 侧入口。原生实现见 android/.../wallpaper/LyricsWallpaperService。
 
+export interface FoliaWallpaperTimelineEntry {
+    /** 歌词文本。 */
+    text: string;
+    /** 起始毫秒。 */
+    start: number;
+    /** 结束毫秒。 */
+    end: number;
+}
+
+export type FoliaWallpaperBackgroundMode = 'cover' | 'color';
+
 export interface FoliaWallpaperPublishOptions {
+    /** 整条时间轴。只在换歌时发一次；之后原生自己按墙钟推进。 */
+    timeline?: FoliaWallpaperTimelineEntry[];
+    /** 当前播放位置（毫秒）。与 timeline 一起发时作为时间锚点。 */
+    positionMs?: number;
+    playing?: boolean;
     title?: string;
     artist?: string;
-    /** 歌词行窗口。传 null 表示沿用上一次的（进度推送时没必要重发整段歌词）。 */
-    lines?: string[] | null;
-    /** 当前行在 lines 里的下标。 */
-    index?: number;
-    /** 当前行内的进度 0..1，用于逐字高亮。 */
-    progress?: number;
-    playing?: boolean;
     /** 主题色，形如 #7c5cff。 */
     accent?: string;
+    /** App 当前主题的底色，形如 #09090b。 */
+    backgroundColor?: string;
+    /** 动效强度倍数：calm 0.6 / normal 1.0 / chaotic 1.5。 */
+    motion?: number;
     /** 封面 base64。体积大，只在换歌时发。 */
     cover?: string | null;
-    /** 慢字段（歌名/歌词行）是否变了，变了才落盘。 */
-    slowChanged?: boolean;
+    /** 背景模式：cover = 模糊封面，color = 只用主题色渐变。 */
+    background?: FoliaWallpaperBackgroundMode;
 }
 
 interface FoliaWallpaperPlugin {
     publish(options: FoliaWallpaperPublishOptions): Promise<void>;
+    setBackground(options: { mode: FoliaWallpaperBackgroundMode }): Promise<void>;
+    getBackground(): Promise<{ mode: FoliaWallpaperBackgroundMode }>;
     clear(): Promise<void>;
     isActive(): Promise<{ active: boolean }>;
     openPicker(): Promise<{ opened: boolean }>;
@@ -37,6 +52,16 @@ export const publishLyricsWallpaper = async (
         await FoliaWallpaper.publish(options);
     } catch {
         // 壁纸没启用或插件不可用时静默失败：它不该影响播放本身。
+    }
+};
+
+export const setWallpaperBackground = async (
+    mode: FoliaWallpaperBackgroundMode,
+): Promise<void> => {
+    try {
+        await FoliaWallpaper.setBackground({ mode });
+    } catch {
+        // 同上。
     }
 };
 

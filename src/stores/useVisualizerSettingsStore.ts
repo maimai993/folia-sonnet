@@ -18,10 +18,12 @@ import { buildStoredMonetBackgroundImage, clearMonetBackgroundImage, isSupported
 import { buildStoredMonetPortraitImage, clearMonetPortraitImage, isSupportedMonetPortraitFile, saveMonetPortraitImage } from '../services/monetPortraitImage';
 import { setStatusMessage } from './useStatusMessageStore';
 import { LUMIERE_TUNING_STORAGE_KEY, VISUALIZER_OPACITY_STORAGE_KEY, clampCladdaghEllipseTiltDeg, clampCladdaghFocusScaleRatio, clampCladdaghLetterSpacingOffset, clampCladdaghRadiusScale, clampClassicBreathingFloatMultiplier, clampClassicWordSpacing, clampFumeBackgroundObjectOpacity, clampFumeCameraSpeed, clampFumeGlowIntensity, clampFumeHeroScale, clampFumeTextHoldRatio, clampPartitaStagger, clampUnit, readStoredBackgroundOpacity, readStoredCadenzaTuning, readStoredCappellaTuning, readStoredCladdaghTuning, readStoredClassicTuning, readStoredDioramaTuning, readStoredFumeTuning, readStoredLatentBackgroundTuning, readStoredLumiereTuning, readStoredMonetBackgroundTuning, readStoredMonetTuning, readStoredNomandBackgroundTuning, readStoredPartitaTuning, readStoredPendoloTuning, readStoredSonnetTuning, readStoredSoraBackgroundTuning, readStoredTemperaTuning, readStoredTiltTuning, readStoredUrlBackgroundList, readStoredUrlBackgroundSelectedId, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, resolveCappellaAvatarSource, resolveFumeCameraTrackingMode, resolvePendoloNumber, resolveStoredDioramaTuning, resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveStoredSoraBackgroundTuning, sanitizeTemperaLayerImages } from './visualizerSettingsPersistence';
-import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 
 /** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
 export const LYRICS_WALLPAPER_FEED_STORAGE_KEY = 'folia.lyricsWallpaperFeed';
+/** 歌词壁纸的背景：模糊封面还是只用主题色渐变。 */
+export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
 import { useVisualizerAssetStore } from './useVisualizerAssetStore';
 import { normalizeLumiereTuning } from '../utils/lumiereTuning';
 
@@ -40,6 +42,8 @@ export type VisualizerSettingsState = {
     glowBlurQuantize: boolean;
     /** 把播放中的歌词推给原生歌词动态壁纸。Android 专有，其它平台恒为 false 也不影响。 */
     lyricsWallpaperFeed: boolean;
+    /** 歌词壁纸的背景：'cover' 模糊封面，'color' 只用主题色渐变。 */
+    lyricsWallpaperBackground: 'cover' | 'color';
     classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
@@ -73,6 +77,7 @@ export type VisualizerSettingsState = {
     handleToggleRandomVisualizerModePerSong: (enable: boolean) => void;
     handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
+    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color') => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -130,6 +135,8 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
     glowBlurQuantize: readStoredGlowBlurQuantize(),
     lyricsWallpaperFeed: getStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, true),
+    lyricsWallpaperBackground:
+        getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover') === 'color' ? 'color' : 'cover',
     classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
@@ -290,6 +297,10 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     handleToggleLyricsWallpaperFeed: (enable) => {
         setStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, enable);
         set({ lyricsWallpaperFeed: enable });
+    },
+    handleSetLyricsWallpaperBackground: (mode) => {
+        setStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, mode);
+        set({ lyricsWallpaperBackground: mode });
     },
     handleSetClassicTuning: (patch) => {
         const prev = get().classicTuning;
