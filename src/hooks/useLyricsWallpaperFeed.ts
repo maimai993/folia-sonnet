@@ -1,6 +1,7 @@
 import React from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
-import { publishLyricsWallpaper } from '../platform/foliaWallpaper';
+import { clearLyricsWallpaper, publishLyricsWallpaper } from '../platform/foliaWallpaper';
+import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import type { Line } from '../types';
 
 // src/hooks/useLyricsWallpaperFeed.ts
@@ -64,6 +65,8 @@ export const useLyricsWallpaperFeed = ({
     playerState,
 }: UseLyricsWallpaperFeedOptions): void => {
     const enabled = isCapacitorAndroid();
+    const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
+    const active = enabled && feedEnabled;
 
     // 定时器里读 ref，避免因闭包拿到过期值。
     const latest = React.useRef({ lines: [] as Line[], index: -1, playing: false, time: 0 });
@@ -73,6 +76,13 @@ export const useLyricsWallpaperFeed = ({
 
     const coverRef = React.useRef<string | null>(null);
     const windowKeyRef = React.useRef('');
+
+    // 关掉开关时清一次，别让壁纸停在过期的那一行上。
+    React.useEffect(() => {
+        if (enabled && !feedEnabled) {
+            void clearLyricsWallpaper();
+        }
+    }, [enabled, feedEnabled]);
 
     // 封面只在换歌时抓一次。
     React.useEffect(() => {
@@ -91,7 +101,7 @@ export const useLyricsWallpaperFeed = ({
     }, [enabled, coverUrl]);
 
     React.useEffect(() => {
-        if (!enabled) return;
+        if (!active) return;
 
         const tick = (): void => {
             const { lines, index, playing } = latest.current;
@@ -143,5 +153,5 @@ export const useLyricsWallpaperFeed = ({
         tick();
         const timer = window.setInterval(tick, TICK_MS);
         return () => window.clearInterval(timer);
-    }, [enabled, getCurrentTime, title, artist]);
+    }, [active, getCurrentTime, title, artist]);
 };

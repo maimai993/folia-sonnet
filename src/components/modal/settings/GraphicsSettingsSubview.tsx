@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Gauge, MonitorCog } from 'lucide-react';
+import { Gauge, MonitorCog, Wallpaper } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -13,6 +13,8 @@ import { settingsDividerClassFor } from './settingsCardClasses';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { isCapacitorAndroid } from '../../../platform/runtime';
+import { isLyricsWallpaperActive, openLyricsWallpaperPicker } from '../../../platform/foliaWallpaper';
 
 // src/components/modal/settings/GraphicsSettingsSubview.tsx
 // Everything that trades picture for smoothness or works around a renderer problem: static mode,
@@ -67,6 +69,31 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const onVisualizerFrameRateChange = useVisualizerSettingsStore(state => state.handleSetVisualizerFrameRate);
     const glowBlurQuantize = useVisualizerSettingsStore(state => state.glowBlurQuantize);
     const onToggleGlowBlurQuantize = useVisualizerSettingsStore(state => state.handleToggleGlowBlurQuantize);
+    const lyricsWallpaperFeed = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
+    const onToggleLyricsWallpaperFeed = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperFeed);
+
+    // 歌词壁纸是 Android 专有的，其它平台整段不渲染。
+    const isAndroid = isCapacitorAndroid();
+    const [isWallpaperActive, setIsWallpaperActive] = useState(false);
+
+    React.useEffect(() => {
+        if (!isAndroid) return;
+        let cancelled = false;
+        void isLyricsWallpaperActive().then((active) => {
+            if (!cancelled) setIsWallpaperActive(active);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isAndroid]);
+
+    const handleOpenWallpaperPicker = () => {
+        void openLyricsWallpaperPicker();
+        // 系统选择器要用户手动确认，返回后状态才变，延后复查一次。
+        window.setTimeout(() => {
+            void isLyricsWallpaperActive().then(setIsWallpaperActive);
+        }, 3000);
+    };
 
     const dividerClass = settingsDividerClassFor(isDaylight);
     const isLinux = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('linux');
@@ -190,6 +217,38 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                     theme={theme}
                 />
             </SettingsAnchor>
+
+            {isAndroid && (
+                <SettingsAnchor anchorId="graphicsLyricsWallpaper" label={t('options.lyricsWallpaperSection')} className="space-y-4">
+                    <SettingsSectionHeading icon={Wallpaper} label={t('options.lyricsWallpaperSection')} />
+                    <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperApply')}
+                            description={t('options.lyricsWallpaperApplyDesc')}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={handleOpenWallpaperPicker}
+                                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    {isWallpaperActive
+                                        ? t('options.lyricsWallpaperActive')
+                                        : t('options.lyricsWallpaperSet')}
+                                </button>
+                            )}
+                            dividerClass={dividerClass}
+                        />
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperFeed')}
+                            description={t('options.lyricsWallpaperFeedDesc')}
+                            control={renderToggle(lyricsWallpaperFeed, () => onToggleLyricsWallpaperFeed(!lyricsWallpaperFeed))}
+                            dividerClass={dividerClass}
+                            isLast
+                        />
+                    </div>
+                </SettingsAnchor>
+            )}
 
             <ThemedDialog
                 isOpen={isNativeBlurNoticeOpen}

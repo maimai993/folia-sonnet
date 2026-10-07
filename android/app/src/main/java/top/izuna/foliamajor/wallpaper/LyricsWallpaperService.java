@@ -41,7 +41,7 @@ public class LyricsWallpaperService extends WallpaperService {
             setTouchEventsEnabled(false);
 
             renderer = new LyricsRenderer();
-            glView = new WallpaperGlSurfaceView(LyricsWallpaperService.this, getSurfaceHolder());
+            glView = new WallpaperGlSurfaceView(LyricsWallpaperService.this);
             glView.setEGLContextClientVersion(2);
             glView.setPreserveEGLContextOnPause(true);
             glView.setRenderer(renderer);
@@ -79,28 +79,36 @@ public class LyricsWallpaperService extends WallpaperService {
             }
             super.onDestroy();
         }
+
+        /**
+         * 把 GLSurfaceView 绑到壁纸的 Surface 上：它内部会拿 getHolder() 去监听 surface 生命周期，
+         * 所以这里必须返回引擎的 holder 而不是自己的。
+         *
+         * 必须是 Engine 的内部类、且直接调 getSurfaceHolder()：
+         * GLSurfaceView 的构造函数内部就会调 init() → getHolder() 注册回调，
+         * 早于任何字段赋值的时机。用构造参数传 holder 的话，此刻字段还是 null，
+         * 一取就是 NullPointerException —— 而壁纸与应用同进程，这一崩就是整个进程崩，
+         * 表现出来就是「设了壁纸之后应用再也打不开」。
+         */
+        private final class WallpaperGlSurfaceView extends GLSurfaceView {
+
+            WallpaperGlSurfaceView(Context context) {
+                super(context);
+            }
+
+            @Override
+            public SurfaceHolder getHolder() {
+                return getSurfaceHolder();
+            }
+
+            void onDestroy() {
+                super.onDetachedFromWindow();
+            }
+        }
     }
 
     /**
      * 把 GLSurfaceView 绑到壁纸的 Surface 上：它内部会拿 getHolder() 去监听 surface 生命周期，
      * 所以这里必须返回引擎的 holder 而不是自己的。
      */
-    private static final class WallpaperGlSurfaceView extends GLSurfaceView {
-
-        private final SurfaceHolder surfaceHolder;
-
-        WallpaperGlSurfaceView(Context context, SurfaceHolder surfaceHolder) {
-            super(context);
-            this.surfaceHolder = surfaceHolder;
-        }
-
-        @Override
-        public SurfaceHolder getHolder() {
-            return surfaceHolder;
-        }
-
-        void onDestroy() {
-            super.onDetachedFromWindow();
-        }
-    }
 }
