@@ -35,6 +35,12 @@ export const NETEASE_SCROBBLE_KEY = 'folia_netease_scrobble';
 /** Whether pause fades out and resume fades in (services/playbackFade). On unless switched off. */
 export const PLAYBACK_FADE_KEY = 'folia_playback_fade_enabled';
 
+/**
+ * 播放时保持屏幕常亮。默认关：常亮是"别给我熄屏"，不是每个人在播放页都想要，
+ * 而且开着等于放弃了系统那套自动熄屏，属于该由用户点头的事。
+ */
+export const KEEP_SCREEN_ON_WHILE_PLAYING_KEY = 'folia_keep_screen_on_while_playing';
+
 /** Gigabytes of cached audio to keep. Zero is the listener asking for no ceiling at all. */
 export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 
@@ -144,6 +150,8 @@ export type AudioSettingsState = {
     neteaseScrobbleEnabled: boolean;
     /** Short fade when pausing and resuming instead of cutting the sound. On by default. */
     playbackFadeEnabled: boolean;
+    /** 播放时保持屏幕常亮（Android 的 FLAG_KEEP_SCREEN_ON）。Off by default. */
+    keepScreenOnWhilePlaying: boolean;
     audioOutputDeviceId: string;
     audioEqualizerSettings: AudioEqualizerSettings;
     isAudioEqualizerOpen: boolean;
@@ -158,6 +166,7 @@ export type AudioSettingsState = {
     handleToggleTranscodeFallback: (enable: boolean) => void;
     handleToggleNeteaseScrobble: (enable: boolean) => void;
     handleTogglePlaybackFade: (enable: boolean) => void;
+    handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     handleSetAudioEqualizerSettings: (settings: AudioEqualizerSettings) => void;
     handleApplyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
@@ -181,6 +190,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     // Off unless asked for: it writes to the listener's music account, so it is never a default.
     neteaseScrobbleEnabled: getStoredBoolean(NETEASE_SCROBBLE_KEY, false),
     playbackFadeEnabled: getStoredBoolean(PLAYBACK_FADE_KEY, true),
+    // 默认关：常亮等于放弃系统那套自动熄屏，该由用户点头，不该替他决定。
+    keepScreenOnWhilePlaying: getStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, false),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: readStoredAudioEqualizerSettings(),
     isAudioEqualizerOpen: false,
@@ -233,6 +244,10 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleTogglePlaybackFade: (enable) => {
         setStoredBoolean(PLAYBACK_FADE_KEY, enable);
         set({ playbackFadeEnabled: enable });
+    },
+    handleToggleKeepScreenOnWhilePlaying: (enable) => {
+        setStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, enable);
+        set({ keepScreenOnWhilePlaying: enable });
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });

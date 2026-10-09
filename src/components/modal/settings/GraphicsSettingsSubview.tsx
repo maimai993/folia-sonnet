@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Gauge, MonitorCog, Wallpaper } from 'lucide-react';
+import { Gauge, MonitorCog, Video, Wallpaper } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { Theme, VisualizerFrameRate } from '../../../types';
@@ -18,13 +18,18 @@ import { isCapacitorAndroid } from '../../../platform/runtime';
 import {
     clearWallpaperBackgroundImage,
     clearWallpaperFont,
+    clearWallpaperVideo as removeWallpaperVideo,
+    getWallpaperLockScreenStatus,
     hasWallpaperFont as queryWallpaperFont,
     hasWallpaperOverlayPermission,
+    hasWallpaperVideo as queryWallpaperVideo,
     isLyricsWallpaperActive,
     openLyricsWallpaperPicker,
     openWallpaperOverlaySettings,
     pickWallpaperFont,
+    pickWallpaperVideo,
 } from '../../../platform/foliaWallpaper';
+import type { WallpaperLockScreenStatus } from '../../../platform/foliaWallpaper';
 
 // src/components/modal/settings/GraphicsSettingsSubview.tsx
 // Everything that trades picture for smoothness or works around a renderer problem: static mode,
@@ -42,6 +47,14 @@ const openDocsLinkExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
 };
 
 const getFrameRateLabel = (frameRate: VisualizerFrameRate) => `${frameRate} FPS`;
+
+/** 壁纸背景四种模式的文案键。列成一张表，加一种模式时只改这一处。 */
+const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video', string> = {
+    cover: 'options.lyricsWallpaperBackgroundCover',
+    color: 'options.lyricsWallpaperBackgroundColor',
+    image: 'options.lyricsWallpaperBackgroundImage',
+    video: 'options.lyricsWallpaperBackgroundVideo',
+};
 
 type GraphicsSettingsSubviewProps = {
     isDaylight: boolean;
@@ -93,6 +106,12 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const onToggleLyricsWallpaperTranslation = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperTranslation);
     const lyricsWallpaperStyle = useVisualizerSettingsStore(state => state.lyricsWallpaperStyle);
     const onSetLyricsWallpaperStyle = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperStyle);
+    const wallpaperOverlayEnabled = useVisualizerSettingsStore(state => state.wallpaperOverlayEnabled);
+    const onToggleWallpaperOverlayEnabled = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayEnabled);
+    const wallpaperOverlayLockScreen = useVisualizerSettingsStore(state => state.wallpaperOverlayLockScreen);
+    const onToggleWallpaperOverlayLockScreen = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayLockScreen);
+    const wallpaperOverlayLockScreenOnly = useVisualizerSettingsStore(state => state.wallpaperOverlayLockScreenOnly);
+    const onToggleWallpaperOverlayLockScreenOnly = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayLockScreenOnly);
     const wallpaperOverlayOpacity = useVisualizerSettingsStore(state => state.wallpaperOverlayOpacity);
     const onSetWallpaperOverlayOpacity = useVisualizerSettingsStore(state => state.handleSetWallpaperOverlayOpacity);
     const wallpaperOverlayAllApps = useVisualizerSettingsStore(state => state.wallpaperOverlayAllApps);
@@ -108,6 +127,35 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const wallpaperOverlayHideAfterLyricsEnd = useVisualizerSettingsStore(state => state.wallpaperOverlayHideAfterLyricsEnd);
     const onToggleWallpaperOverlayHideAfterLyricsEnd = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayHideAfterLyricsEnd);
     const imageInputRef = React.useRef<HTMLInputElement | null>(null);
+
+    /*
+     * 音乐锁屏的自诊断。
+     *
+     * 「后台启动 Activity 被系统拦」是**静默**的：不抛异常、不返回失败码，
+     * 而真机上的 logcat 基本取不到。没有这一行提示，用户只能对着一个没反应的
+     * 开关猜到底是没到时机（还没熄屏过），还是被系统 / ROM 挡住了。
+     */
+    const [lockScreenStatus, setLockScreenStatus] =
+        React.useState<WallpaperLockScreenStatus | null>(null);
+    // 「仅在锁屏显示」也会把锁屏页带起来，所以诊断对它同样有意义。
+    const lockScreenActive = wallpaperOverlayLockScreen || wallpaperOverlayLockScreenOnly;
+    React.useEffect(() => {
+        if (!lockScreenActive) {
+            setLockScreenStatus(null);
+            return;
+        }
+        let cancelled = false;
+        const load = async () => {
+            const status = await getWallpaperLockScreenStatus();
+            if (!cancelled) setLockScreenStatus(status);
+        };
+        void load();
+        const timer = window.setInterval(() => void load(), 4000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+    }, [lockScreenActive]);
 
     const handleWallpaperImagePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -131,6 +179,34 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
             cancelled = true;
         };
     }, [isAndroid]);
+
+    /*
+     * 视频壁纸有没有上传。
+     *
+     * 视频是原生自己拷进私有目录的（几十 MB 不过桥），Web 侧拿不到内容，
+     * 只能问一句「有没有」，用来决定按钮写「上传」还是「更换」。
+     */
+    const [hasVideo, setHasVideo] = useState(false);
+    React.useEffect(() => {
+        if (!isAndroid) return;
+        let cancelled = false;
+        void queryWallpaperVideo().then((has) => {
+            if (!cancelled) setHasVideo(has);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isAndroid, lyricsWallpaperBackground]);
+
+    const handlePickVideo = async () => {
+        const result = await pickWallpaperVideo();
+        if (result === 'applied') setHasVideo(true);
+    };
+
+    const handleClearVideo = async () => {
+        await removeWallpaperVideo();
+        setHasVideo(false);
+    };
 
     const handleOpenWallpaperPicker = () => {
         void openLyricsWallpaperPicker();
@@ -378,6 +454,22 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                 </button>
                             )}
                         />
+                        {/* 叠层总开关：关掉之后一层都不挂，下面几项也就没有意义了。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayEnabled')}
+                            description={t('options.wallpaperOverlayEnabledDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayEnabled(!wallpaperOverlayEnabled)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayEnabled ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
                         {/* 叠层不透明度：整层从几乎看不见到完全不透明。 */}
                         <SettingsRow
                             title={t('options.wallpaperOverlayOpacity')}
@@ -416,6 +508,58 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                 </button>
                             )}
                         />
+                        {/* 音乐锁屏：锁屏之上也挂同一层。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayLockScreen')}
+                            description={t('options.wallpaperOverlayLockScreenDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayLockScreen(!wallpaperOverlayLockScreen)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayLockScreen ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayLockScreen ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayLockScreen ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {/* 叠层只在锁屏上出现：桌面 / 所有应用 / App 内都不挂。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayLockScreenOnly')}
+                            description={t('options.wallpaperOverlayLockScreenOnlyDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayLockScreenOnly(!wallpaperOverlayLockScreenOnly)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayLockScreenOnly ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayLockScreenOnly ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayLockScreenOnly ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {lockScreenActive && lockScreenStatus && (
+                            <p
+                                className="px-4 pb-3 text-xs leading-relaxed"
+                                style={{ color: 'var(--text-secondary)' }}
+                            >
+                                {lockScreenStatus.blocked
+                                    ? t('options.wallpaperOverlayLockScreenBlocked')
+                                    : (lockScreenStatus.hosted || lockScreenStatus.started)
+                                        ? t('options.wallpaperOverlayLockScreenReady')
+                                        : t('options.wallpaperOverlayLockScreenWaiting')}
+                            </p>
+                        )}
+                        {lockScreenActive && lockScreenStatus?.lastExit && (
+                            <p
+                                className="px-4 pb-3 text-xs leading-relaxed opacity-70"
+                                style={{ color: 'var(--text-secondary)' }}
+                            >
+                                {t('options.wallpaperOverlayLockScreenLastExit')}{lockScreenStatus.lastExit}
+                            </p>
+                        )}
                         {/* 跟随 + 叠层时，原生那层的歌词/进度条要不要让位。 */}
                         <SettingsRow
                             title={t('options.wallpaperOverlayHideNativeLyrics')}
@@ -501,7 +645,7 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                             dividerClass={dividerClass}
                             control={(
                                 <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--text-secondary)' }}>
-                                    {(['cover', 'color', 'image'] as const).map((mode) => (
+                                    {(['cover', 'color', 'image', 'video'] as const).map((mode) => (
                                         <button
                                             key={mode}
                                             type="button"
@@ -511,11 +655,7 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                                 ? { backgroundColor: theme?.accentColor || '#3b82f6', color: '#fff' }
                                                 : { color: 'var(--text-primary)' }}
                                         >
-                                            {mode === 'cover'
-                                                ? t('options.lyricsWallpaperBackgroundCover')
-                                                : mode === 'color'
-                                                    ? t('options.lyricsWallpaperBackgroundColor')
-                                                    : t('options.lyricsWallpaperBackgroundImage')}
+                                            {t(BACKGROUND_LABEL_KEYS[mode])}
                                         </button>
                                     ))}
                                 </div>
@@ -564,6 +704,41 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                             className="hidden"
                                             onChange={handleWallpaperImagePick}
                                         />
+                                    </div>
+                                </div>
+                            )}
+                            {lyricsWallpaperBackground === 'video' && (
+                                <div className="mt-3 flex items-center gap-3">
+                                    <div
+                                        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border"
+                                        style={{ borderColor: 'var(--text-secondary)' }}
+                                    >
+                                        <Video className="h-6 w-6 opacity-60" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handlePickVideo()}
+                                            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                            style={{ color: 'var(--text-primary)' }}
+                                        >
+                                            {t(hasVideo
+                                                ? 'options.lyricsWallpaperReplaceVideo'
+                                                : 'options.lyricsWallpaperPickVideo')}
+                                        </button>
+                                        {hasVideo && (
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleClearVideo()}
+                                                className="block text-xs opacity-60 hover:opacity-100"
+                                                style={{ color: 'var(--text-secondary)' }}
+                                            >
+                                                {t('options.lyricsWallpaperClearVideo')}
+                                            </button>
+                                        )}
+                                        <p className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                            {t('options.lyricsWallpaperVideoDesc')}
+                                        </p>
                                     </div>
                                 </div>
                             )}

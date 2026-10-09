@@ -7,7 +7,10 @@ import android.Manifest;
 import android.graphics.Color;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -47,16 +50,59 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FoliaPlaybackPlugin.class);
         registerPlugin(FoliaWallpaperPlugin.class);
         registerPlugin(top.izuna.foliamajor.lyricon.FoliaLyriconPlugin.class);
+        // 本地登录（内置接口代码 + Cookie/OkHttp）与返回键都在这个插件上。
+        registerPlugin(FoliaNativePlugin.class);
 
         super.onCreate(savedInstanceState);
 
         applyImmersiveMode();
-        // 播放时屏幕常亮（不阻止熄屏睡眠，因此不额外耗电）。
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyWebViewPlaybackSettings();
+        installBackPressedHandler();
+        PhoneLayoutOrientation.apply(this);
+        // 挖孔/刘海：沉浸式只管系统栏，屏幕顶部那一条黑边是系统把 cutout inset
+        // 垫成了 decor 的 padding，得由 PhoneFitCutout 清掉。
+        PhoneFitCutout.apply(this);
+        /*
+         * 这里**不再**无条件常亮。
+         *
+         * 常亮是「播放时不要熄屏」这件事的实现，但它有个副作用：应用在前台时屏幕
+         * 永远不灭。用户在播放页看歌词是想要的，可在设置里翻两页也想让它亮着就烦人了。
+         * 所以改成开关控制、且只在真的在播放时才打开（见 FoliaNativePlugin.setScreenAwake）。
+         */
         requestNotificationPermissionIfNeeded();
         // StatusBar 插件是在 Bridge 创建时（super 里）加载并应用配置的，
         // 可能在我们之后才动到 systemUiVisibility；多压几次确保沉浸态最终生效。
         scheduleImmersiveReapply();
+    }
+
+    /**
+     * 两件 WebView 默认不干、而播放器必须要的事。
+     *
+     * `setMediaPlaybackRequiresUserGesture(false)`：默认要用户先点过屏幕才允许播放音频，
+     * 于是「点通知栏的播放」或恢复播放时经常静默失败。
+     * `MIXED_CONTENT_ALWAYS_ALLOW`：页面本身是 https://localhost，封面与部分音频地址还是
+     * http，默认会被拦成混合内容（报错毫无特征：`TypeError: Failed to fetch`）。
+     */
+    private void applyWebViewPlaybackSettings() {
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView == null) return;
+        WebSettings settings = webView.getSettings();
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+    }
+
+    /**
+     * 返回键先交给网页：设置面板、弹层之类的层级会自己关掉自己（复用 Escape 的处理），
+     * 没人接管才真的退出 —— 否则在设置里按返回会直接把整个 App 关掉。
+     */
+    private void installBackPressedHandler() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (FoliaNativePlugin.emitBackPressed()) return;
+                finish();
+            }
+        });
     }
 
     /**
@@ -70,6 +116,8 @@ public class MainActivity extends BridgeActivity {
         View decorView = getWindow().getDecorView();
         for (long delay : new long[] { 150L, 500L, 1200L }) {
             decorView.postDelayed(this::applyImmersiveMode, delay);
+            // 系统会周期性把 cutout/状态栏的 inset 重新写回 padding，压完沉浸态再压一次挖孔。
+            decorView.postDelayed(() -> PhoneFitCutout.apply(this), delay);
         }
     }
 
@@ -95,15 +143,26 @@ public class MainActivity extends BridgeActivity {
         // 系统会在下拉通知栏、权限弹窗、旋转等时机重置沉浸态，回前台时要重新压一次。
         if (hasFocus) {
             applyImmersiveMode();
+            PhoneFitCutout.apply(this);
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        // 壁纸叠层要知道「用户现在是在用 App 还是在桌面上」：系统壁纸不是我们的时候，
+        // 它没有别的信号可用（壁纸服务压根不会被创建）。见 WallpaperOverlay.setAppForeground。
+        top.izuna.foliamajor.wallpaper.WallpaperOverlay.shared(this).setAppForeground(true);
         // 从后台回前台时系统会重新布局，直接 apply 有时会被随后的布局覆盖，
         // 延后一拍再压一次，避免出现一瞬间的状态栏/导航栏残留。
         getWindow().getDecorView().postDelayed(this::applyImmersiveMode, 120);
+        getWindow().getDecorView().postDelayed(() -> PhoneFitCutout.apply(this), 120);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        top.izuna.foliamajor.wallpaper.WallpaperOverlay.shared(this).setAppForeground(false);
     }
 
     /**

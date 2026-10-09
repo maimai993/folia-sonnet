@@ -1,6 +1,6 @@
 import type { AmllDbPlatform, LyricData } from '../../../types';
 import { parseLyricsByFormat } from '../parserCore';
-import { resolveFoliaApiUrl } from '../../../services/webApi';
+import { resolveProxiedUrl } from '../../../services/proxiedUrl';
 
 // src/utils/lyrics/providers/amllDbProvider.ts
 
@@ -22,7 +22,7 @@ export const buildAmllDbLyricsUrl = (platform: AmllDbPlatform, musicId: number |
 
 const buildAmllDbRequestUrl = (platform: AmllDbPlatform, musicId: number | string): string => {
     const targetUrl = buildAmllDbLyricsUrl(platform, musicId);
-    return getElectronBridge() ? targetUrl : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl)}`);
+    return getElectronBridge() ? targetUrl : resolveProxiedUrl(targetUrl);
 };
 
 async function requestAmllDb(platform: AmllDbPlatform, musicId: number | string): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {

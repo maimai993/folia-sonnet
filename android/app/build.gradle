@@ -72,6 +72,9 @@ dependencies {
     // Lyricon 状态栏歌词：把当前歌曲与歌词推给系统的歌词中心，由它在状态栏渲染。
     // SDK 是 Kotlin 写的，Java 侧要显式传全部参数（Kotlin 默认参数对 Java 不可见）。
     implementation "io.github.proify.lyricon:provider:0.1.70"
+    // 本地登录：内置的接口代码要直连各家音乐服务器，WebView 里过不了 CORS，
+    // 由 FoliaNative 插件用 OkHttp 代发（同时用 CookieManager 管登录态）。
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

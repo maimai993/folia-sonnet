@@ -19,4 +19,25 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
     </style>
+
+    <!--
+        音乐锁屏页：完全透明、无入场动画、不显示启动预览。
+
+        这一层自己不画东西（内容在 WallpaperOverlay 挂在它窗口上的子窗口里），
+        所以任何背景、动画或预览窗口都会被用户看见 —— 尤其是启动预览，
+        会在亮屏那一瞬闪一下白色，正好毁掉"锁屏上本来就有歌词"的观感。
+    -->
+    <style name="LockScreenTheme" parent="@android:style/Theme.Translucent.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

@@ -14,7 +14,13 @@ export interface FoliaWallpaperTimelineEntry {
     translation?: string;
 }
 
-export type FoliaWallpaperBackgroundMode = 'cover' | 'color' | 'image';
+/**
+ * 壁纸背景：模糊封面 / 主题色渐变 / 自选图片 / 视频。
+ *
+ * 'video' 那一档只在**原生系统动态壁纸**上生效（GLES 里用 MediaPlayer 解码画到
+ * Surface 上），不走 Web 叠层 —— 视频过不了桥，也没有必要过。
+ */
+export type FoliaWallpaperBackgroundMode = 'cover' | 'color' | 'image' | 'video';
 
 export interface FoliaWallpaperPublishOptions {
     /** 整条时间轴。只在换歌时发一次；之后原生自己按墙钟推进。 */
@@ -80,6 +86,30 @@ interface FoliaWallpaperPlugin {
     /** 壁纸的可视化叠层要 SYSTEM_ALERT_WINDOW，没授权时它是静默不工作的。 */
     hasOverlayPermission(): Promise<{ granted: boolean }>;
     openOverlaySettings(): Promise<void>;
+    pickVideo(): Promise<{ picked: boolean; rejected?: boolean }>;
+    getVideo(): Promise<{ has: boolean }>;
+    clearVideo(): Promise<void>;
+    getLockScreenStatus(): Promise<{
+        started: boolean;
+        blocked: boolean;
+        hosted: boolean;
+        attempts: number;
+        error?: string;
+    }>;
+}
+
+/** 音乐锁屏页的自诊断结果。见 WallpaperOverlay.LockScreenStatus。 */
+export interface WallpaperLockScreenStatus {
+    /** 锁屏页成功起来过（本次或上一次都算）。 */
+    started: boolean;
+    /** 试了几次都被系统挡回来了：基本可以确定是后台启动限制 / ROM 的「锁屏显示」开关。 */
+    blocked: boolean;
+    /** 此刻正挂在锁屏页上（叠层画在它上面）。 */
+    hosted: boolean;
+    attempts: number;
+    error?: string;
+    /** 上一次为什么退出（中文，直接显示给用户）。 */
+    lastExit?: string;
 }
 
 const FoliaWallpaper = registerPlugin<FoliaWallpaperPlugin>('FoliaWallpaper');
@@ -177,6 +207,41 @@ export const hasWallpaperOverlayPermission = async (): Promise<boolean> => {
     }
 };
 
+/**
+ * 挑一个视频当壁纸背景。
+ *
+ * 和字体那套一样：原生拿到 URI 自己拷进私有目录，这里只拿「成没成」——
+ * 视频动辄几十 MB，绝不走 base64 过桥。
+ */
+export const pickWallpaperVideo = async (): Promise<WallpaperFontPickResult> => {
+    try {
+        const result = await FoliaWallpaper.pickVideo();
+        if (result?.picked) return 'applied';
+        return result?.rejected ? 'rejected' : 'cancelled';
+    } catch {
+        return 'cancelled';
+    }
+};
+
+/** 有没有上传过视频背景：决定按钮显示「上传」还是「更换」。 */
+export const hasWallpaperVideo = async (): Promise<boolean> => {
+    try {
+        const result = await FoliaWallpaper.getVideo();
+        return Boolean(result?.has);
+    } catch {
+        return false;
+    }
+};
+
+/** 删掉原生那边的视频副本。 */
+export const clearWallpaperVideo = async (): Promise<void> => {
+    try {
+        await FoliaWallpaper.clearVideo();
+    } catch {
+        // 同上。
+    }
+};
+
 /** 跳到系统的叠层授权页。 */
 export const openWallpaperOverlaySettings = async (): Promise<void> => {
     try {
@@ -185,6 +250,22 @@ export const openWallpaperOverlaySettings = async (): Promise<void> => {
         // 桌面端 / 不支持的系统：静默，UI 那边会提示用户手动去设置里开。
     }
 };
+
+/**
+ * 音乐锁屏页起没起来。
+ *
+ * 「后台启动 Activity 被系统拦」是**静默**的（不抛错也不返回失败），
+ * 而真机上的 logcat 又基本取不到 —— 没有这一路反馈，用户只能对着一个
+ * 没反应的开关猜。设置页拿它把原因直接写出来。
+ */
+export const getWallpaperLockScreenStatus =
+    async (): Promise<WallpaperLockScreenStatus | null> => {
+        try {
+            return await FoliaWallpaper.getLockScreenStatus();
+        } catch {
+            return null;
+        }
+    };
 
 export const isLyricsWallpaperActive = async (): Promise<boolean> => {
     try {

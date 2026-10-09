@@ -6,6 +6,10 @@ import ConsoleLogPanel from './shared/ConsoleLogPanel';
 // import CoverSizeAuditPanel from './shared/CoverSizeAuditPanel';
 import DraggableDebugWindow from './shared/DraggableDebugWindow';
 import { isConsoleCaptureEnabled, subscribeToConsoleLog } from '../utils/consoleLogBuffer';
+import { readFrameTimingSnapshot, runCpuProbe } from '../utils/frameTimingDiagnostics';
+import { readAiThemeAttempts } from '../utils/aiThemeDiagnostics';
+import { readMediaDiagnostics } from '../utils/mediaDiagnostics';
+import { usePerfDiagnosticsStore } from '../stores/usePerfDiagnosticsStore';
 
 export interface DevDebugLineSnapshot {
     text: string | null;
@@ -577,6 +581,156 @@ const SonnetDebugPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> =
     );
 };
 
+/**
+ * 卡顿与 AI 诊断页。
+ *
+ * 「卡」有两种完全不同的成因：我们的渲染开销（帧间隔、longtask）与设备本身不够（核数、
+ * 内存、处理器探针）。三条放在一起才不会把用户设备性能不足当成我们的 bug，也不会反过来。
+ * AI 那一段是 AI 主题生成的最近几次尝试，用来解释「偶尔生成不出来」。
+ *
+ * 数值每秒刷新一次即可 —— 采样本身在 utils/frameTimingDiagnostics 里持续进行，
+ * 这里只是读数。处理器探针要占住主线程 250ms，所以只在按下按钮时跑。
+ */
+const PerfPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> = ({ isDaylight, panelClass }) => {
+    const [tick, setTick] = useState(0);
+    const [cpu, setCpu] = useState<ReturnType<typeof runCpuProbe> | null>(null);
+    const [probing, setProbing] = useState(false);
+
+    useEffect(() => {
+        const handle = window.setInterval(() => setTick(value => value + 1), 1000);
+        return () => window.clearInterval(handle);
+    }, []);
+
+    const perfEnabled = usePerfDiagnosticsStore(state => state.perfDiagnosticsEnabled);
+    const frames = useMemo(() => readFrameTimingSnapshot(), [tick]);
+    const media = useMemo(() => readMediaDiagnostics(), [tick]);
+    const aiAttempts = useMemo(() => readAiThemeAttempts().slice(-4).reverse(), [tick]);
+    const stats = frames.stats;
+    const ms = (value: number | null) => (value === null ? 'n/a' : `${value.toFixed(1)}ms`);
+    const fps = (value: number | null) => (value === null ? 'n/a' : `${value.toFixed(0)}fps`);
+    const buttonClass = isDaylight
+        ? 'rounded-full border border-black/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] hover:bg-black/[0.05] disabled:opacity-50'
+        : 'rounded-full border border-white/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] hover:bg-white/[0.07] disabled:opacity-50';
+
+    return (
+        <>
+            <section className={panelClass}>
+                {/* 采样默认关：这里全是 0 不是"很流畅"，而是根本没在采。说明必须写在最上面。 */}
+                <div className="px-3 pt-3 text-[10px] leading-relaxed opacity-60">
+                    {perfEnabled
+                        ? 'Sampling on.'
+                        : 'Sampling off — open 开发者选项 → 性能采样 to start collecting. Numbers below stay at zero until then.'}
+                </div>
+                <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">Frame Timing</div>
+                <div className="px-3 pb-3">
+                    <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
+                        <DebugRow label="health" value={frames.renderHealth} />
+                        <DebugRow label="refresh" value={frames.refreshHz === null ? 'n/a' : `${frames.refreshHz}Hz`} />
+                        <DebugRow label="frames" value={String(frames.frameCount)} />
+                        <DebugRow label="p50" value={ms(stats.p50Ms)} />
+                        <DebugRow label="p95" value={ms(stats.p95Ms)} />
+                        <DebugRow label="p99" value={ms(stats.p99Ms)} />
+                        <DebugRow label="max" value={ms(stats.maxMs)} />
+                        <DebugRow label="slow>32ms" value={String(frames.sessionSlowCount)} />
+                        <DebugRow label="jank>50ms" value={String(frames.sessionJankCount)} />
+                        <DebugRow label="freeze>100ms" value={`${frames.sessionFreezeCount} (max ${Math.round(frames.longestFreezeMs)}ms)`} />
+                        <DebugRow label="worst 1s" value={fps(frames.worstSecondFps)} />
+                        <DebugRow label="recent 1s" value={fps(frames.recentSecondFps)} />
+                        <DebugRow label="longtasks" value={`${frames.longTasks.count} (self ${frames.longTasks.selfCount}, other ${frames.longTasks.otherCount})`} />
+                        <DebugRow label="longtask max" value={frames.longTasks.count ? ms(frames.longTasks.maxMs) : 'n/a'} />
+                    </dl>
+                </div>
+            </section>
+
+            <section className={panelClass}>
+                <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">Device</div>
+                <div className="px-3 pb-3">
+                    <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
+                        <DebugRow label="class" value={frames.deviceClass} />
+                        <DebugRow label="cores" value={frames.cores === null ? 'n/a' : String(frames.cores)} />
+                        <DebugRow label="memory" value={frames.memoryGb === null ? 'n/a' : `${frames.memoryGb}GB`} />
+                        <DebugRow label="visible/hidden" value={`${(frames.visibleMs / 1000).toFixed(0)}s / ${(frames.hiddenMs / 1000).toFixed(0)}s`} />
+                    </dl>
+                    <div className="mt-3 flex items-center gap-3">
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={probing}
+                            onClick={() => {
+                                setProbing(true);
+                                // 让按钮先画出来：探针会占住主线程 250ms，同步跑会把点击卡住。
+                                window.setTimeout(() => {
+                                    try {
+                                        setCpu(runCpuProbe());
+                                    } finally {
+                                        setProbing(false);
+                                    }
+                                }, 60);
+                            }}
+                        >
+                            {probing ? 'running…' : 'run cpu probe'}
+                        </button>
+                        {cpu && (
+                            <span className="text-[10px] opacity-70">
+                                {`${(cpu.opsPerSecond / 1e6).toFixed(0)}M ops/s · ${cpu.index} · ${cpu.durationMs.toFixed(0)}ms`}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </section>
+
+            <section className={panelClass}>
+                <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">Audio Continuity</div>
+                <div className="px-3 pb-3">
+                    <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
+                        <DebugRow
+                            label="waiting"
+                            value={`${media.waitingCount} (total ${Math.round(media.waitingTotalMs)}ms, max ${Math.round(media.waitingMaxMs)}ms)${media.waitingNow ? ' · now' : ''}`}
+                        />
+                        <DebugRow label="stalled / errors" value={`${media.stalledCount} / ${media.errorCount}`} />
+                        <DebugRow label="seeking / seeked" value={`${media.seekingCount} / ${media.seekedCount}`} />
+                        <DebugRow label="rate changes" value={`${media.rateChangeCount} (rate ${media.playbackRate ?? 'n/a'})`} />
+                        <DebugRow
+                            label="buffer ahead"
+                            value={media.bufferedAheadSec === null ? 'n/a' : `${media.bufferedAheadSec.toFixed(2)}s (${media.bufferedRanges} ranges)`}
+                        />
+                        <DebugRow label="ready/network" value={`${media.readyState ?? 'n/a'} / ${media.networkState ?? 'n/a'}`} />
+                        <DebugRow label="last event" value={media.lastEvent ? `${media.lastEvent}${media.lastEventAt ? ` @${media.lastEventAt.slice(11, 19)}` : ''}` : 'n/a'} />
+                    </dl>
+                </div>
+            </section>
+
+            <section className={panelClass}>
+                <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">AI Theme (recent)</div>
+                <div className="px-3 pb-3">
+                    {aiAttempts.length === 0 ? (
+                        <div className="pt-2 text-[11px] opacity-70">还没有 AI 主题生成的记录。</div>
+                    ) : (
+                        <div className="mt-2 grid gap-1.5">
+                            {aiAttempts.map(entry => (
+                                <div key={`${entry.at}-${entry.provider}`} className="text-[10px] leading-relaxed">
+                                    <span className="opacity-60">{new Date(entry.at).toLocaleTimeString()}</span>
+                                    {' '}
+                                    <span className={entry.ok ? 'font-semibold' : 'font-semibold text-red-400'}>
+                                        {entry.ok ? 'ok' : 'fail'}
+                                    </span>
+                                    {' '}
+                                    {entry.provider}/{entry.model}
+                                    {` · ${entry.stage} · ${entry.durationMs}ms`}
+                                    {entry.status ? ` · HTTP ${entry.status}` : ''}
+                                    {entry.error ? (
+                                        <div className="break-words opacity-70">{entry.error}</div>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </section>
+        </>
+    );
+};
+
 const TabButton: React.FC<{
     label: string;
     isActive: boolean;
@@ -610,7 +764,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
 }) => {
     // Console first: on the desktop build this overlay is the only console there is, so reading it
     // is what the shortcut is pressed for.
-    const [activeTab, setActiveTab] = useState<'console' | 'memory' /* | 'covers' */ | 'playback' | 'lyrics' | 'theme' | 'sonnet'>('console');
+    const [activeTab, setActiveTab] = useState<'console' | 'memory' /* | 'covers' */ | 'playback' | 'lyrics' | 'theme' | 'sonnet' | 'perf'>('console');
     // The switch in Settings > Developer governs this whole overlay, not just its Console tab. It
     // is the debug back room's switch: off means the chord opens nothing at all. Hiding one tab and
     // leaving the other five was reading the switch as "the log" when it is named for the room.
@@ -765,6 +919,7 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
                     <TabButton label="Lyrics" isActive={activeTab === 'lyrics'} onClick={() => setActiveTab('lyrics')} isDaylight={isDaylight} />
                     <TabButton label="Theme" isActive={activeTab === 'theme'} onClick={() => setActiveTab('theme')} isDaylight={isDaylight} />
                     <TabButton label="Sonnet" isActive={activeTab === 'sonnet'} onClick={() => setActiveTab('sonnet')} isDaylight={isDaylight} />
+                    <TabButton label="Perf" isActive={activeTab === 'perf'} onClick={() => setActiveTab('perf')} isDaylight={isDaylight} />
                 </div>
 
                 {activeTab === 'console' && (
@@ -1002,6 +1157,11 @@ const DevDebugOverlay: React.FC<DevDebugOverlayProps> = ({
                 {activeTab === 'sonnet' && (
                     <div className="mt-3 grid gap-3">
                         <SonnetDebugPanel isDaylight={isDaylight} panelClass={panelClass} />
+                    </div>
+                )}
+                {activeTab === 'perf' && (
+                    <div className="mt-3 grid gap-3">
+                        <PerfPanel isDaylight={isDaylight} panelClass={panelClass} />
                     </div>
                 )}
             </div>

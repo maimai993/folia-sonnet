@@ -8,6 +8,7 @@ import { CustomSelect } from '../../shared/CustomSelect';
 import PinnedCommandSettings from './PinnedCommandSettings';
 import { supportsLocalMusicImport } from '../../../platform/runtime';
 import PonderHintSettingsSection from './PonderHintSettingsSection';
+import AndroidPhoneFitSetting from './AndroidPhoneFitSetting';
 import PlaybackEntryViewSection from './PlaybackEntryViewSection';
 import PlayerBottomBarSection from './PlayerBottomBarSection';
 import HomeCardPositionSection from './HomeCardPositionSection';
@@ -216,6 +217,13 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
                 settingsCardClass={settingsCardClass}
                 isDaylight={isDaylight}
                 accentColor={theme?.accentColor}
+            />
+
+            {/* 只在 Android 上出现（组件内部自行判断运行时），网页与桌面端不显示。 */}
+            <AndroidPhoneFitSetting
+                isDaylight={isDaylight}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
             />
         </div>
     );

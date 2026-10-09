@@ -1517,6 +1517,7 @@ export const GridView: React.FC<GridViewProps> = ({
             {/* Honeycomb Drag/Viewport Canvas Area */}
             <div
                 ref={containerRef}
+                data-folia-grid-canvas="true"
                 onPointerDown={(event) => {
                     if (event.button !== 0) return; // 仅限鼠标左键或主要指针拖动
 

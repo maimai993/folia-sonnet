@@ -9,6 +9,7 @@ const PATCHED = Symbol.for('folia.pixi821FilterPoolCompat');
 
 interface FilterSystemCompat {
     _globalFilterBindGroup: BindGroup;
+    _findFilterResolution?: (rootResolution: number) => number;
     init?: () => void;
     destroy: () => void;
     [PATCHED]?: boolean;
@@ -58,6 +59,19 @@ export const installPixiFilterPoolCompat = (pixi: PixiModule) => {
         if (shouldDestroy && textures.length > 0) unbindPassTextures();
         dropTextures.call(this, textures, shouldDestroy);
     };
+    // 池里的纹理可能在 FilterSystem 的栈里还留着引用时就被回收，下一次分辨率查询于是拿到
+    // `inputTexture.source === null`，Pixi 会每帧抛异常直到场景重建 —— 表现出来就是画面反复
+    // 卡一下。这里兜住异常、退回根分辨率：当前帧能画完，也不必把已销毁的纹理继续留在手里。
+    const findFilterResolution = prototype._findFilterResolution;
+    if (findFilterResolution) {
+        prototype._findFilterResolution = function (rootResolution: number) {
+            try {
+                return findFilterResolution.call(this, rootResolution);
+            } catch {
+                return rootResolution;
+            }
+        };
+    }
     // A checked-out texture can outlive its bucket and be destroyed directly on return.
     const returnTexture = pool.returnTexture;
     pool.returnTexture = function (texture, resetStyle) {

@@ -41,6 +41,8 @@ const PlayerControlSlotButton: React.FC<PlayerControlSlotButtonProps> = ({
             type="button"
             // 思索教程按它认这个槽位放的是哪个动作。纯标记，不参与任何行为。
             data-ponder-slot={actionId}
+            // 手机适配的 CSS 认这一个槽位（横竖屏下尺寸不同）。
+            data-folia-player-bar-slot="true"
             onClick={(e) => {
                 e.stopPropagation();
                 if (disabled) {

@@ -5,11 +5,15 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.media.MediaPlayer;
+import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.GLUtils;
 import android.util.Log;
+import android.view.Surface;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -172,6 +176,8 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
     private int backgroundProgram = 0;
     private int quadProgram = 0;
+    /** 视频背景那一套（OES 外部纹理），见 drawVideo。 */
+    private int videoProgram = 0;
     private int quadBuffer = 0;
 
     private float[] accent = new float[] { 0.49f, 0.36f, 1.0f };
@@ -217,6 +223,25 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
     private int imageWidth = 0;
     private int imageHeight = 0;
     private String loadedImageKey = null;
+
+    // ---- 视频背景（mode=video）----
+    /**
+     * 视频帧走的是 `GL_TEXTURE_EXTERNAL_OES`：SurfaceTexture 只肯往这种纹理上写，
+     * 拿不到 2D 纹理。所以它有自己那套 program（samplerExternalOES），
+     * 不能复用画位图的 quadProgram。
+     */
+    private int videoTexture = 0;
+    private SurfaceTexture videoSurfaceTexture = null;
+    private Surface videoSurface = null;
+    private MediaPlayer videoPlayer = null;
+    private String loadedVideoKey = null;
+    private int videoWidth = 0;
+    private int videoHeight = 0;
+    /** SurfaceTexture 给的采样变换（含 Y 轴翻转），每帧跟着 updateTexImage 一起取。 */
+    private final float[] videoTransform = new float[16];
+    /** 壁纸不可见时把解码器也停掉：视频本身很耗电，没必要在黑屏后面继续解。 */
+    private boolean videoActive = true;
+
     private Style style = LYRICS_STYLE;
     /** 歌词动画实验台里当前生效那个模式的配置（扁平键值表，见 WallpaperLyricsState.tuning）。 */
     private java.util.Map<String, Float> tuning = java.util.Collections.emptyMap();
@@ -263,8 +288,16 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         backgroundProgram = buildProgram(BACKGROUND_VERTEX, BACKGROUND_FRAGMENT);
         quadProgram = buildProgram(QUAD_VERTEX, QUAD_FRAGMENT);
+        videoProgram = buildProgram(VIDEO_VERTEX, VIDEO_FRAGMENT);
         quadBuffer = createUnitQuad();
         solidTexture = createSolidTexture();
+        /*
+         * GL 上下文是全新的：上一轮的 OES 纹理和 Surface 全部失效，
+         * 播放器也留不住（它抱着的正是那个旧 Surface）。清干净并让它重新起一份 ——
+         * key 置空，下一帧 syncVideo 就会照着磁盘上那个文件重新 prepare。
+         */
+        loadedVideoKey = null;
+        releaseVideoResources();
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glEnable(GLES20.GL_BLEND);
         // 位图纹理是预乘 alpha 的（Android Bitmap 的存储格式如此），
@@ -409,8 +442,12 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
         boolean useCover = "cover".equals(snapshot.backgroundMode);
         boolean useImage = "image".equals(snapshot.backgroundMode);
+        boolean useVideo = "video".equals(snapshot.backgroundMode);
         syncCover(useCover ? snapshot.cover : null);
         syncImage(useImage ? snapshot.image : null);
+        // 视频不像图片那样从状态里拿内容：文件是原生自己拷的，自己读就行
+        // （见 WallpaperBackgroundVideo 为什么必须拷一份）。
+        syncVideo(useVideo);
         syncFont(snapshot.font);
 
         GLES20.glClearColor(0.02f, 0.02f, 0.03f, 1f);
@@ -419,7 +456,12 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         // 选了图就只画「图 + 歌词」：用户要的就是那张图本身，
         // 再叠一层流动光晕和模糊封面反而把图盖掉了。图没就绪（读盘要一帧）时才走原来的渐变。
         boolean imageReady = useImage && imageTexture != 0;
-        if (imageReady) {
+        // 视频自己就是一整屏画面，和自选图一样：不再叠渐变和模糊封面。
+        // 还没起好（读盘 + prepare 要几帧）时先退回原来的画法，免得中间黑一下。
+        boolean videoReady = useVideo && videoTexture != 0 && videoPlayer != null;
+        if (videoReady) {
+            drawVideo();
+        } else if (imageReady) {
             drawImage();
         } else {
             drawBackground();
@@ -621,6 +663,207 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         imageWidth = blurred.getWidth();
         imageHeight = blurred.getHeight();
         blurred.recycle();
+    }
+
+    // ---- 视频背景 ----
+
+    /**
+     * 让「视频背景」跟着模式走：选中就起播放器，切走就整个放掉。
+     *
+     * 只在 GL 线程里进出（onDrawFrame / onSurfaceCreated）—— SurfaceTexture 必须挂在
+     * 当前这个 GL 上下文上，换个线程建出来的纹理画不出来。
+     */
+    private void syncVideo(boolean wanted) {
+        if (!wanted) {
+            if (loadedVideoKey != null) {
+                loadedVideoKey = null;
+                releaseVideoResources();
+            }
+            return;
+        }
+        String key = WallpaperBackgroundVideo.key(context);
+        if (key == null) {
+            // 选了视频但文件不在（用户清掉了 / 还没上传）：退回普通背景，别留黑屏。
+            if (loadedVideoKey != null) {
+                loadedVideoKey = null;
+                releaseVideoResources();
+            }
+            return;
+        }
+        if (key.equals(loadedVideoKey) && videoPlayer != null) {
+            // 已经在播了：只要把最新的一帧取到纹理上。
+            updateVideoFrame();
+            return;
+        }
+        releaseVideoResources();
+        loadedVideoKey = key;
+        String path = WallpaperBackgroundVideo.path(context);
+        if (path == null) {
+            return;
+        }
+        try {
+            int[] ids = new int[1];
+            GLES20.glGenTextures(1, ids, 0);
+            videoTexture = ids[0];
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTexture);
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            videoSurfaceTexture = new SurfaceTexture(videoTexture);
+            videoSurface = new Surface(videoSurfaceTexture);
+            MediaPlayer player = new MediaPlayer();
+            player.setDataSource(path);
+            player.setSurface(videoSurface);
+            // 静音 + 循环：它是背景，声音归音乐，也不该播完就停住。
+            player.setVolume(0f, 0f);
+            player.setLooping(true);
+            player.setOnVideoSizeChangedListener((mp, width, height) -> {
+                videoWidth = width;
+                videoHeight = height;
+            });
+            player.setOnPreparedListener(mp -> {
+                videoWidth = mp.getVideoWidth();
+                videoHeight = mp.getVideoHeight();
+                if (videoActive) {
+                    try {
+                        mp.start();
+                    } catch (Throwable ignored) {
+                        // 起不来就当没选过视频，下一帧会退回普通背景。
+                    }
+                }
+            });
+            player.setOnErrorListener((mp, what, extra) -> {
+                Log.w(TAG, "Wallpaper video playback failed: " + what + "/" + extra);
+                return true;
+            });
+            // 异步 prepare：同步那版会在这个线程上直接卡住解码器的初始化。
+            player.prepareAsync();
+            videoPlayer = player;
+        } catch (Throwable error) {
+            Log.w(TAG, "Could not start the wallpaper video", error);
+            releaseVideoResources();
+        }
+    }
+
+    /** 把 SurfaceTexture 上最新的一帧搬进 OES 纹理，并取回这一帧的采样变换。 */
+    private void updateVideoFrame() {
+        if (videoSurfaceTexture == null) {
+            return;
+        }
+        try {
+            videoSurfaceTexture.updateTexImage();
+            videoSurfaceTexture.getTransformMatrix(videoTransform);
+        } catch (Throwable ignored) {
+            // 纹理已被释放：下一轮 syncVideo 会重建。
+        }
+    }
+
+    private void drawVideo() {
+        if (videoProgram == 0 || videoTexture == 0) {
+            return;
+        }
+        updateVideoFrame();
+        GLES20.glUseProgram(videoProgram);
+        GLES20.glDisable(GLES20.GL_BLEND);
+
+        int position = GLES20.glGetAttribLocation(videoProgram, "aPosition");
+        int uv = GLES20.glGetAttribLocation(videoProgram, "aUv");
+        bindQuad(position, uv);
+
+        /*
+         * 和封面同一套 cover 逻辑：保持视频自身比例铺满，多出来的裁掉。
+         * 直接拉满屏幕的话，横屏视频会被压成一张胖脸。
+         * 裁剪做在采样区间上（uUvRect），不动顶点 —— OES 纹理同样吃这套 UV。
+         */
+        float uvX = 0f;
+        float uvY = 0f;
+        float uvW = 1f;
+        float uvH = 1f;
+        if (videoWidth > 0 && videoHeight > 0) {
+            float screenAspect = surfaceWidth / (float) surfaceHeight;
+            float videoAspect = videoWidth / (float) videoHeight;
+            if (videoAspect > screenAspect) {
+                uvW = screenAspect / videoAspect;
+                uvX = (1f - uvW) * 0.5f;
+            } else {
+                uvH = videoAspect / screenAspect;
+                uvY = (1f - uvH) * 0.5f;
+            }
+        }
+        GLES20.glUniform4f(GLES20.glGetUniformLocation(videoProgram, "uRect"),
+                -1f, -1f, 2f, 2f);
+        GLES20.glUniform4f(GLES20.glGetUniformLocation(videoProgram, "uUvRect"),
+                uvX, uvY, uvW, uvH);
+        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(videoProgram, "uTexMatrix"),
+                1, false, videoTransform, 0);
+        // 压一层薄薄的暗色：视频画面亮度没准，不压的话歌词经常看不清。
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(videoProgram, "uDim"), 0.22f);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTexture);
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(videoProgram, "uTexture"), 0);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        unbindQuad(position, uv);
+        GLES20.glEnable(GLES20.GL_BLEND);
+    }
+
+    private void releaseVideoResources() {
+        if (videoPlayer != null) {
+            try {
+                videoPlayer.release();
+            } catch (Throwable ignored) {
+                // 播放器已经坏了就不用管了。
+            }
+            videoPlayer = null;
+        }
+        if (videoSurface != null) {
+            videoSurface.release();
+            videoSurface = null;
+        }
+        if (videoSurfaceTexture != null) {
+            videoSurfaceTexture.release();
+            videoSurfaceTexture = null;
+        }
+        if (videoTexture != 0) {
+            GLES20.glDeleteTextures(1, new int[] { videoTexture }, 0);
+            videoTexture = 0;
+        }
+        videoWidth = 0;
+        videoHeight = 0;
+    }
+
+    /**
+     * 壁纸可见性变化时由 Engine 调用：不可见就暂停解码，回来再续上。
+     *
+     * 停渲染循环（glView.onPause）并不会停掉 MediaPlayer —— 它照样在后台一帧一帧解，
+     * 息屏后那几个小时就是纯耗电。
+     */
+    void setVideoActive(boolean active) {
+        videoActive = active;
+        if (videoPlayer == null) {
+            return;
+        }
+        try {
+            if (active) {
+                videoPlayer.start();
+            } else {
+                videoPlayer.pause();
+            }
+        } catch (Throwable ignored) {
+            // 还没 prepare 完 / 已经 release 了。
+        }
+    }
+
+    /** 引擎销毁时调用：解码器必须显式放掉，不然它会一直挂在进程里。 */
+    void releaseVideo() {
+        loadedVideoKey = null;
+        releaseVideoResources();
     }
 
     // ---- 歌词 ----
@@ -1594,5 +1837,42 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + "  }\n"
             // 位图是预乘 alpha 的，这里按预乘输出，配合 blendFunc(ONE, 1-SRC_ALPHA)。
             + "  gl_FragColor = vec4(rgb * a, a);\n"
+            + "}\n";
+
+    /*
+     * 视频那一套：顶点照旧，采样换成了 samplerExternalOES。
+     *
+     * uTexMatrix 是 SurfaceTexture 每帧给的那张变换矩阵（含 Y 轴翻转和裁剪），
+     * 必须乘在 UV 上 —— 不加它的话画出来是上下颠倒的（视频帧的坐标系和纹理反过来）。
+     */
+    private static final String VIDEO_VERTEX =
+            "attribute vec2 aPosition;\n"
+            + "attribute vec2 aUv;\n"
+            + "uniform vec4 uRect;\n"
+            + "uniform vec4 uUvRect;\n"
+            + "uniform mat4 uTexMatrix;\n"
+            + "varying vec2 vUv;\n"
+            + "void main() {\n"
+            + "  vec2 uv = vec2(uUvRect.x + aUv.x * uUvRect.z,\n"
+            + "                 1.0 - (uUvRect.y + aUv.y * uUvRect.w));\n"
+            + "  vUv = (uTexMatrix * vec4(uv, 0.0, 1.0)).xy;\n"
+            + "  vec2 ndc = uRect.xy + aPosition * uRect.zw;\n"
+            + "  gl_Position = vec4(ndc, 0.0, 1.0);\n"
+            + "}\n";
+
+    /**
+     * 注意 `#extension` 必须是整个片元着色器的第一行：写在 precision 或任何语句之后，
+     * 有的驱动会直接编译失败（表现为视频模式一片黑，日志里只有一句 compile failed）。
+     */
+    private static final String VIDEO_FRAGMENT =
+            "#extension GL_OES_EGL_image_external : require\n"
+            + "precision mediump float;\n"
+            + "uniform samplerExternalOES uTexture;\n"
+            + "uniform float uDim;\n"
+            + "varying vec2 vUv;\n"
+            + "void main() {\n"
+            + "  vec3 rgb = texture2D(uTexture, vUv).rgb;\n"
+            // 视频是不透明的整屏画面，不需要参与混合。
+            + "  gl_FragColor = vec4(rgb * (1.0 - uDim), 1.0);\n"
             + "}\n";
 }

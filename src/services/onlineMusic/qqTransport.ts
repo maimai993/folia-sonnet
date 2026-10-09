@@ -2,6 +2,7 @@ import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { upgradeInsecureApiBase } from '../../utils/secureApiBase';
+import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../foliaExtensionBridge';
 
 // src/services/onlineMusic/qqTransport.ts
 
@@ -135,7 +136,10 @@ const tokenFromCookieString = (cookie: string): string => {
 // `Access-Control-Allow-Origin: *`，按规范不允许搭配 credentials。
 const isSameOriginBase = (base: string): boolean => base.startsWith('/');
 
-export const hasQqSession = (): boolean => Boolean(getWebSessionCookie());
+// 走本地桥时登录凭据在原生 CookieManager（网页版在扩展的 cookie 库）里，
+// providerStorage 里那份是后端部署用的，这里照旧查不到 —— 别因此把用户当成未登录。
+export const hasQqExtensionSession = (): boolean => isFoliaExtensionBridgeConfigured(getWebApiBase());
+export const hasQqSession = (): boolean => hasQqExtensionSession() || Boolean(getWebSessionCookie());
 
 export const clearQqSession = (): void => removeProviderSessionValue('qq', 'cookie');
 
@@ -329,6 +333,34 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     const { base, embedded } = await resolveApiBase();
     // 内嵌的 qq-music-api 就是一个 Express 应用，只有路径式一种拼法，不需要试错。
     if (embedded) return requestQqOnce<T>(operation, params, base, 'path');
+
+    // 本地登录：请求交给内置在 App 里的接口代码，不出网、也不经过任何自建后端。
+    if (isFoliaExtensionBridgeConfigured(base)) {
+        const endpoint = endpointFor(operation, params);
+        try {
+            const body = await requestFoliaExtension<any>({
+                provider: 'qq',
+                operation,
+                method: 'GET',
+                path: endpoint.path,
+                params: endpoint.query,
+            });
+            if (body?.__foliaBridgeError) {
+                if (body.__foliaBridgeError === 'AUTH_REQUIRED') {
+                    throw new OnlineProviderError('auth-required', body.message || 'QQMusicApi login required', 'qq', body);
+                }
+                if (body.__foliaBridgeError === 'UNSUPPORTED') {
+                    throw new OnlineProviderError('unsupported', body.message || `QQMusicApi has no ${operation} route`, 'qq', body);
+                }
+                throw new OnlineProviderError('network', body.message || body.__foliaBridgeError, 'qq', body);
+            }
+            persistConfirmedSession(operation, body);
+            return body as T;
+        } catch (error) {
+            if (error instanceof OnlineProviderError) throw error;
+            throw new OnlineProviderError('network', error instanceof Error ? error.message : String(error), 'qq', error);
+        }
+    }
 
     const preferred = webEndpointStyle;
     const fallback: QqEndpointStyle = preferred === 'query' ? 'path' : 'query';

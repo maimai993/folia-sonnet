@@ -46,6 +46,40 @@ export const readStoredWallpaperOverlayOpacity = () => {
     return Number.isFinite(parsed) ? Math.min(1, Math.max(0.1, parsed)) : 1;
 };
 
+/**
+ * 叠层总开关。
+ *
+ * 关掉之后一层都不挂（原生那层歌词照旧）。它同时也是「叠层由应用进程托管」的开关 ——
+ * 打开时不再要求系统的动态壁纸是我们，没设壁纸也能在桌面/锁屏上挂这一层。
+ */
+export const WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY = 'folia.wallpaperOverlayEnabled';
+
+export const readStoredWallpaperOverlayEnabled = () => {
+    if (typeof window === 'undefined') {
+        return true;
+    }
+    // 没写过这个 key 的老用户按「开」处理：叠层本来就是默认在用的功能。
+    return localStorage.getItem(WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY) !== 'false';
+};
+
+/** 音乐锁屏：锁屏界面上也挂叠层。默认关 —— 锁屏上多一层东西要先由用户点头。 */
+export const WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY = 'folia.wallpaperOverlayLockScreen';
+
+export const readStoredWallpaperOverlayLockScreen = () =>
+    typeof window !== 'undefined'
+    && localStorage.getItem(WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY) === 'true';
+
+/**
+ * 叠层只在锁屏上出现：桌面、所有应用、App 内一律不挂。
+ *
+ * 默认关 —— 大多数人是冲着「桌面歌词」开的叠层，只有想要"锁屏才出现"的人才会来拨它。
+ */
+export const WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY = 'folia.wallpaperOverlayLockScreenOnly';
+
+export const readStoredWallpaperOverlayLockScreenOnly = () =>
+    typeof window !== 'undefined'
+    && localStorage.getItem(WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY) === 'true';
+
 /** 叠层是否在所有应用之上显示。默认只在桌面（壁纸可见）时挂着。 */
 export const WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY = 'folia.wallpaperOverlayAllApps';
 

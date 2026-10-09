@@ -4,6 +4,8 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 import { resolveFoliaApiUrl } from '../webApi';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { upgradeInsecureApiBase } from '../../utils/secureApiBase';
+import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../foliaExtensionBridge';
+import { resolveProxiedUrl } from '../proxiedUrl';
 
 // src/services/onlineMusic/kugouTransport.ts
 
@@ -183,6 +185,8 @@ const getWebSessionCookie = (): string => {
 };
 
 export const hasKugouAuthenticatedSearchSession = (): boolean => {
+    // 走本地桥时凭据在桥自己的 cookie 库里，渲染层看不到，但不代表没登录。
+    if (isFoliaExtensionBridgeConfigured(getWebApiBase())) return true;
     // Electron keeps the reusable token/dfid in the encrypted main-process bridge. The account id
     // is only a non-secret hint that lets this synchronous selector choose authenticated search.
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) {
@@ -231,7 +235,7 @@ export const requestKugouAnonymousSearch = async (
     Object.entries(params).forEach(([key, value]) => targetUrl.searchParams.set(key, String(value)));
     const requestUrl = typeof window !== 'undefined' && window.electron
         ? targetUrl.toString()
-        : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl.toString())}`);
+        : resolveProxiedUrl(targetUrl.toString());
     const response = await fetchWithTimeout(requestUrl, {
         method: 'GET',
         credentials: 'omit',
@@ -290,7 +294,7 @@ export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => 
 
     const requestUrl = typeof window !== 'undefined' && window.electron
         ? targetUrlString
-        : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrlString)}`);
+        : resolveProxiedUrl(targetUrlString);
     const response = await fetchWithTimeout(requestUrl, {
         method: 'GET',
         credentials: 'omit',
@@ -349,8 +353,34 @@ const persistElectronAccountHint = (operation: KugouOperation, response: any): v
     if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
 };
 
+/**
+ * 读桥返回里的账号 id。
+ *
+ * 本地桥给的是扁平结构（`userId`，见 nativeBridge/api/kugou.js），托管的 KuGouMusicApi
+ * 把同一个值放在 `data.userid`，`user_detail` 则是 `data.user_info`。只认这三种形状，
+ * 免得搜索结果里的某个歌曲 id 被当成账号 id 存进会话。
+ */
+const readBridgeAccountId = (response: any): string => {
+    const profile = response?.data?.user_info;
+    const candidate = response?.userId ?? response?.userid ?? response?.user_id
+        ?? profile?.userid ?? profile?.user_id;
+    return candidate === undefined || candidate === null ? '' : String(candidate).trim();
+};
+
+/**
+ * 桥把自己的凭据都存在它的 cookie 库里，渲染层只需要留一个账号 id。
+ *
+ * 少了这个 id，`getLoginStatus` 会在发出请求之前就放弃（它要用 id 去拼 `user_detail`），
+ * 于是刚扫完码的登录会以 `account-refresh-failed` 收场 —— 而桥那边其实已经登录成功了。
+ */
+const persistBridgeAccountHint = (response: any): void => {
+    const userId = readBridgeAccountId(response);
+    if (userId) writeProviderSessionValue('kugou', 'userid', userId);
+};
+
 export const getKugouTransportAvailability = () => {
     if (typeof window !== 'undefined' && window.electron?.kugouRequest) return { configured: true } as const;
+    if (isFoliaExtensionBridgeConfigured(getWebApiBase())) return { configured: true } as const;
     return getWebApiBase()
         ? { configured: true } as const
         : { configured: false, reason: 'not-configured' as const };
@@ -378,6 +408,33 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
     if (!base) {
         throw new OnlineProviderError('unavailable', 'VITE_KUGOU_API_BASE is not configured', 'kugou');
     }
+
+    // 本地登录：酷狗的接口代码就内置在 App 里，凭据也留在原生的 cookie 库，请求不出网。
+    if (isFoliaExtensionBridgeConfigured(base)) {
+        try {
+            const body = await requestFoliaExtension<any>({
+                provider: 'kugou',
+                operation,
+                method: 'GET',
+                params,
+            });
+            if (body?.__foliaBridgeError) {
+                if (body.__foliaBridgeError === 'AUTH_REQUIRED') {
+                    throw new OnlineProviderError('auth-required', body.message || 'KuGou login required', 'kugou', body);
+                }
+                if (body.__foliaBridgeError === 'UNSUPPORTED') {
+                    throw new OnlineProviderError('unsupported', body.message || `KuGouMusicApi has no ${operation} route`, 'kugou', body);
+                }
+                throw new OnlineProviderError('network', body.message || body.__foliaBridgeError, 'kugou', body);
+            }
+            persistBridgeAccountHint(body);
+            return body as T;
+        } catch (error) {
+            if (error instanceof OnlineProviderError) throw error;
+            throw toKugouProviderError(operation, error);
+        }
+    }
+
     const execute = async (targetOperation: KugouOperation, targetParams: KugouParams): Promise<any> => {
         const query = new URLSearchParams();
         Object.entries(targetParams).forEach(([key, value]) => {

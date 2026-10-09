@@ -76,6 +76,12 @@ export const WALLPAPER_GLOBAL_KEYS = {
     geometricDisabled: 'wp.geometricDisabled',
     /** 叠层整体窗口的不透明度。 */
     overlayOpacity: 'wp.overlayOpacity',
+    /** 叠层总开关。关掉就一层都不挂。 */
+    overlayEnabled: 'wp.overlayEnabled',
+    /** 音乐锁屏：锁屏之上也挂叠层。 */
+    showOnLockScreen: 'wp.showOnLockScreen',
+    /** 叠层只在锁屏上出现：桌面 / 所有应用 / App 内一律不挂。 */
+    overlayLockScreenOnly: 'wp.overlayLockScreenOnly',
     /** 叠层是否在所有应用之上显示。 */
     overlayAllApps: 'wp.overlayAllApps',
     /** 跟随 + 叠层时隐藏原生那层歌词。 */
@@ -122,6 +128,9 @@ export const withGlobalSettings = (
     if (typeof overlayOpacity === 'number' && Number.isFinite(overlayOpacity)) {
         out[WALLPAPER_GLOBAL_KEYS.overlayOpacity] = overlayOpacity;
     }
+    out[WALLPAPER_GLOBAL_KEYS.overlayEnabled] = settings.wallpaperOverlayEnabled === false ? 0 : 1;
+    out[WALLPAPER_GLOBAL_KEYS.showOnLockScreen] = settings.wallpaperOverlayLockScreen ? 1 : 0;
+    out[WALLPAPER_GLOBAL_KEYS.overlayLockScreenOnly] = settings.wallpaperOverlayLockScreenOnly ? 1 : 0;
     out[WALLPAPER_GLOBAL_KEYS.overlayAllApps] = settings.wallpaperOverlayAllApps ? 1 : 0;
     out[WALLPAPER_GLOBAL_KEYS.hideNativeLyrics] = settings.wallpaperOverlayHideNativeLyrics ? 1 : 0;
     out[WALLPAPER_GLOBAL_KEYS.hideNativeProgress] = settings.wallpaperOverlayHideNativeProgress ? 1 : 0;

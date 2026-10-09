@@ -22,8 +22,10 @@ import org.json.JSONException;
 import java.util.Iterator;
 
 import top.izuna.foliamajor.wallpaper.LyricsWallpaperService;
+import top.izuna.foliamajor.wallpaper.WallpaperBackgroundVideo;
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsFont;
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState;
+import top.izuna.foliamajor.wallpaper.WallpaperOverlay;
 
 /**
  * 歌词壁纸的 Web 侧入口。
@@ -95,6 +97,32 @@ public class FoliaWallpaperPlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * 音乐锁屏的自诊断。
+     *
+     * 真机上 logcat 基本取不到（很多 ROM 根本不给读），而「后台启动 Activity 被系统拦」
+     * 又是**静默**的 —— 不抛异常、不返回失败码。没有这一路反馈，用户只能对着一个
+     * 没反应的开关猜原因。设置页拿到它就能写明白：是还没到时机，还是被系统拦了
+     * （需要 ROM 的「锁屏显示 / 后台弹出界面」权限）。
+     */
+    @PluginMethod
+    public void getLockScreenStatus(PluginCall call) {
+        WallpaperOverlay.LockScreenStatus status =
+                WallpaperOverlay.shared(getContext()).lockScreenStatus();
+        JSObject result = new JSObject();
+        result.put("started", status.started);
+        result.put("blocked", status.blocked);
+        result.put("hosted", status.hosted);
+        result.put("attempts", status.attempts);
+        if (status.lastError != null) {
+            result.put("error", status.lastError);
+        }
+        if (status.lastExit != null) {
+            result.put("lastExit", status.lastExit);
+        }
+        call.resolve(result);
+    }
+
     /** 只改外观（背景模式 / 自选背景图 / 可视化风格），不动时间轴。 */
     @PluginMethod
     public void setAppearance(PluginCall call) {
@@ -110,14 +138,14 @@ public class FoliaWallpaperPlugin extends Plugin {
                 call.getBoolean("translation"),
                 durationSeconds == null ? -1L : (long) (double) durationSeconds,
                 readTuning(call.getObject("tuning")));
-        // 叠层不再只由壁纸服务托管了：开了「在所有应用上叠加」时，
-        // 即使系统的动态壁纸根本不是我们（甚至没设动态壁纸），也应该能在桌面上看到它。
-        // 这里由应用进程直接托管同一份叠层实例（见 WallpaperOverlay.shared）。
+        // 叠层总开关打开就由应用进程托管同一份叠层实例（见 WallpaperOverlay.shared）：
+        // 这样它不再要求系统的动态壁纸是我们 —— 没设壁纸、甚至壁纸是别人的静态图，
+        // 桌面 / 锁屏上照样能挂这一层。
         java.util.Map<String, Float> tuning = WallpaperLyricsState.tuning();
-        Float allApps = tuning.get("wp.overlayAllApps");
+        Float overlayEnabled = tuning.get("wp.overlayEnabled");
         top.izuna.foliamajor.wallpaper.WallpaperOverlay
                 .shared(getContext())
-                .setAppDriven(allApps != null && allApps >= 0.5f);
+                .setAppDriven(overlayEnabled == null || overlayEnabled >= 0.5f);
         call.resolve();
     }
 
@@ -197,6 +225,62 @@ public class FoliaWallpaperPlugin extends Plugin {
     @PluginMethod
     public void clearImage(PluginCall call) {
         WallpaperLyricsState.clearBackgroundImage(getContext());
+        call.resolve();
+    }
+
+    /**
+     * 打开系统文件选择器挑一个视频当壁纸背景。
+     *
+     * 视频动辄几十 MB，绝不过桥：原生拿到 URI 自己拷进私有目录，
+     * Web 侧只拿到「成没成」（见 WallpaperBackgroundVideo 为什么必须拷一份）。
+     */
+    @PluginMethod
+    public void pickVideo(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("video/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(call, intent, "handleVideoPicked");
+    }
+
+    @ActivityCallback
+    private void handleVideoPicked(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        boolean picked = false;
+        if (result != null && result.getResultCode() == Activity.RESULT_OK) {
+            Intent data = result.getData();
+            Uri uri = data == null ? null : data.getData();
+            if (uri != null) {
+                try {
+                    getContext().getContentResolver()
+                            .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Throwable ignored) {
+                    // 拷贝是一次性的，拿不到长期权限没关系。
+                }
+                picked = WallpaperBackgroundVideo.store(getContext(), uri) != null;
+            }
+        }
+        JSObject out = new JSObject();
+        out.put("picked", picked);
+        // 选了文件却用不了（太大 / 读不出来）：要跟「用户取消」区分开，UI 得给提示。
+        out.put("rejected", !picked && result != null
+                && result.getResultCode() == Activity.RESULT_OK);
+        call.resolve(out);
+    }
+
+    /** 有没有上传过视频背景：决定按钮显示「上传」还是「更换 / 清除」。 */
+    @PluginMethod
+    public void getVideo(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("has", WallpaperBackgroundVideo.key(getContext()) != null);
+        call.resolve(out);
+    }
+
+    @PluginMethod
+    public void clearVideo(PluginCall call) {
+        WallpaperBackgroundVideo.clear(getContext());
         call.resolve();
     }
 

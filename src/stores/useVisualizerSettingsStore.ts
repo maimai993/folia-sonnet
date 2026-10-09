@@ -17,14 +17,14 @@ import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupported
 import { buildStoredMonetBackgroundImage, clearMonetBackgroundImage, isSupportedMonetBackgroundFile, saveMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { buildStoredMonetPortraitImage, clearMonetPortraitImage, isSupportedMonetPortraitFile, saveMonetPortraitImage } from '../services/monetPortraitImage';
 import { setStatusMessage } from './useStatusMessageStore';
-import { WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY } from './visualizerSettingsPersistence';
-import { LUMIERE_TUNING_STORAGE_KEY, VISUALIZER_OPACITY_STORAGE_KEY, clampCladdaghEllipseTiltDeg, clampCladdaghFocusScaleRatio, clampCladdaghLetterSpacingOffset, clampCladdaghRadiusScale, clampClassicBreathingFloatMultiplier, clampClassicWordSpacing, clampFumeBackgroundObjectOpacity, clampFumeCameraSpeed, clampFumeGlowIntensity, clampFumeHeroScale, clampFumeTextHoldRatio, clampPartitaStagger, clampUnit, readStoredBackgroundOpacity, readStoredCadenzaTuning, readStoredCappellaTuning, readStoredCladdaghTuning, readStoredClassicTuning, readStoredDioramaTuning, readStoredFumeTuning, readStoredLatentBackgroundTuning, readStoredLumiereTuning, readStoredMonetBackgroundTuning, readStoredMonetTuning, readStoredNomandBackgroundTuning, readStoredPartitaTuning, readStoredPendoloTuning, readStoredSonnetTuning, readStoredSoraBackgroundTuning, readStoredTemperaTuning, readStoredTiltTuning, readStoredUrlBackgroundList, readStoredUrlBackgroundSelectedId, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, resolveCappellaAvatarSource, resolveFumeCameraTrackingMode, resolvePendoloNumber, resolveStoredDioramaTuning, resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveStoredSoraBackgroundTuning, sanitizeTemperaLayerImages } from './visualizerSettingsPersistence';
+import { WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY } from './visualizerSettingsPersistence';
+import { LUMIERE_TUNING_STORAGE_KEY, VISUALIZER_OPACITY_STORAGE_KEY, clampCladdaghEllipseTiltDeg, clampCladdaghFocusScaleRatio, clampCladdaghLetterSpacingOffset, clampCladdaghRadiusScale, clampClassicBreathingFloatMultiplier, clampClassicWordSpacing, clampFumeBackgroundObjectOpacity, clampFumeCameraSpeed, clampFumeGlowIntensity, clampFumeHeroScale, clampFumeTextHoldRatio, clampPartitaStagger, clampUnit, readStoredBackgroundOpacity, readStoredCadenzaTuning, readStoredCappellaTuning, readStoredCladdaghTuning, readStoredClassicTuning, readStoredDioramaTuning, readStoredFumeTuning, readStoredLatentBackgroundTuning, readStoredLumiereTuning, readStoredMonetBackgroundTuning, readStoredMonetTuning, readStoredNomandBackgroundTuning, readStoredPartitaTuning, readStoredPendoloTuning, readStoredSonnetTuning, readStoredSoraBackgroundTuning, readStoredTemperaTuning, readStoredTiltTuning, readStoredUrlBackgroundList, readStoredUrlBackgroundSelectedId, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayEnabled, readStoredWallpaperOverlayLockScreen, readStoredWallpaperOverlayLockScreenOnly, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, resolveCappellaAvatarSource, resolveFumeCameraTrackingMode, resolvePendoloNumber, resolveStoredDioramaTuning, resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveStoredSoraBackgroundTuning, sanitizeTemperaLayerImages } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 
 /** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
 export const LYRICS_WALLPAPER_FEED_STORAGE_KEY = 'folia.lyricsWallpaperFeed';
 
-const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' =>
+const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' =>
     value === 'color' || value === 'image' ? value : 'cover';
 /** 歌词壁纸的背景：模糊封面 / 主题色渐变 / 自选图片。 */
 export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
@@ -65,7 +65,7 @@ export type VisualizerSettingsState = {
     /** 把播放中的歌词推给原生歌词动态壁纸。Android 专有，其它平台恒为 false 也不影响。 */
     lyricsWallpaperFeed: boolean;
     /** 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片。 */
-    lyricsWallpaperBackground: 'cover' | 'color' | 'image';
+    lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video';
     /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
     lyricsWallpaperImage: string | null;
     /** 背景模糊强度 0..1：同时作用于模糊封面与自选背景图。 */
@@ -76,6 +76,12 @@ export type VisualizerSettingsState = {
     lyricsWallpaperTranslation: boolean;
     /** 壁纸样式：'minimal' 固定精简风格，'follow' 跟随播放页的可视化模式。 */
     lyricsWallpaperStyle: 'minimal' | 'follow';
+    /** 可视化叠层总开关。关掉之后一层都不挂。 */
+    wallpaperOverlayEnabled: boolean;
+    /** 音乐锁屏：锁屏界面上也挂叠层（画面与桌面叠层完全一致）。 */
+    wallpaperOverlayLockScreen: boolean;
+    /** 叠层只在锁屏上出现：桌面 / 所有应用 / App 内一律不挂。 */
+    wallpaperOverlayLockScreenOnly: boolean;
     /** 可视化叠层整体窗口的不透明度，0.1..1。 */
     wallpaperOverlayOpacity: number;
     /** 叠层是否在所有应用之上显示。关掉时只在桌面（壁纸可见）时挂着。 */
@@ -123,12 +129,15 @@ export type VisualizerSettingsState = {
     handleToggleRandomVisualizerModePerSong: (enable: boolean) => void;
     handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
-    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image') => void;
+    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video') => void;
     handleSetLyricsWallpaperImage: (image: string | null) => void;
     handleSetLyricsWallpaperBlur: (blur: number) => void;
     handleToggleLyricsWallpaperProgress: (enable: boolean) => void;
     handleToggleLyricsWallpaperTranslation: (enable: boolean) => void;
     handleSetWallpaperOverlayOpacity: (value: number) => void;
+    handleToggleWallpaperOverlayEnabled: (enable: boolean) => void;
+    handleToggleWallpaperOverlayLockScreen: (enable: boolean) => void;
+    handleToggleWallpaperOverlayLockScreenOnly: (enable: boolean) => void;
     handleToggleWallpaperOverlayAllApps: (enable: boolean) => void;
     handleToggleWallpaperOverlayHideNativeLyrics: (enable: boolean) => void;
     handleToggleWallpaperOverlayHideNativeProgress: (enable: boolean) => void;
@@ -202,6 +211,9 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     lyricsWallpaperStyle: getStoredString(LYRICS_WALLPAPER_STYLE_STORAGE_KEY, 'follow') === 'minimal'
         ? 'minimal'
         : 'follow',
+    wallpaperOverlayEnabled: readStoredWallpaperOverlayEnabled(),
+    wallpaperOverlayLockScreen: readStoredWallpaperOverlayLockScreen(),
+    wallpaperOverlayLockScreenOnly: readStoredWallpaperOverlayLockScreenOnly(),
     wallpaperOverlayOpacity: readStoredWallpaperOverlayOpacity(),
     wallpaperOverlayAllApps: readStoredWallpaperOverlayAllApps(),
     wallpaperOverlayHideNativeLyrics: readStoredWallpaperOverlayHideNativeLyrics(),
@@ -400,6 +412,30 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         const clamped = Math.min(1, Math.max(0.1, value));
         localStorage.setItem(WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, String(clamped));
         set({ wallpaperOverlayOpacity: clamped });
+    },
+    handleToggleWallpaperOverlayEnabled: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayEnabled: enable });
+    },
+    handleToggleWallpaperOverlayLockScreen: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayLockScreen: enable });
+    },
+    handleToggleWallpaperOverlayLockScreenOnly: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, enable ? 'true' : 'false');
+        /*
+         * 「只在锁屏显示」隐含着「锁屏上要显示」。
+         *
+         * 原生那边 lockScreenWanted() 已经把两个开关做了或运算（兜住了只发一个的情况），
+         * 但这里还是要顺手把音乐锁屏打开：设置页上那一行显示的是关着的，
+         * 用户会以为"只在锁屏显示"和"音乐锁屏"是两个互不相干的东西，
+         * 关掉其中一个就莫名其妙没效果了。
+         */
+        if (enable) {
+            localStorage.setItem(WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, 'true');
+            set({ wallpaperOverlayLockScreen: true });
+        }
+        set({ wallpaperOverlayLockScreenOnly: enable });
     },
     handleToggleWallpaperOverlayAllApps: (enable) => {
         localStorage.setItem(WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, enable ? 'true' : 'false');

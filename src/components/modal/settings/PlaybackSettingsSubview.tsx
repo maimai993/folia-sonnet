@@ -15,6 +15,7 @@ import { useLyricSettingsStore } from '../../../stores/useLyricSettingsStore';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { isNeteaseScrobbleReady } from '../../../services/onlineMusic/playbackReportGate';
+import { isCapacitorAndroid } from '../../../platform/runtime';
 
 // src/components/modal/settings/PlaybackSettingsSubview.tsx
 // Playback behavior and output-device settings extracted from the global settings modal.
@@ -53,9 +54,11 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         neteaseScrobbleEnabled,
         playbackFadeEnabled,
         queueAddBehavior,
+        keepScreenOnWhilePlaying,
         onToggleTranscodeFallback,
         onToggleNeteaseScrobble,
         onTogglePlaybackFade,
+        onToggleKeepScreenOnWhilePlaying,
         onQueueAddBehaviorChange,
     } = useAudioSettingsStore(useShallow(state => ({
         audioOutputDeviceId: state.audioOutputDeviceId,
@@ -63,9 +66,11 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
         neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
         playbackFadeEnabled: state.playbackFadeEnabled,
         queueAddBehavior: state.queueAddBehavior,
+        keepScreenOnWhilePlaying: state.keepScreenOnWhilePlaying,
         onToggleTranscodeFallback: state.handleToggleTranscodeFallback,
         onToggleNeteaseScrobble: state.handleToggleNeteaseScrobble,
         onTogglePlaybackFade: state.handleTogglePlaybackFade,
+        onToggleKeepScreenOnWhilePlaying: state.handleToggleKeepScreenOnWhilePlaying,
         onQueueAddBehaviorChange: state.handleSetQueueAddBehavior,
     })));
     // Subscribed to rather than read once: the panel has to grey out the moment the NetEase account
@@ -424,6 +429,21 @@ const PlaybackSettingsSubview: React.FC<PlaybackSettingsSubviewProps> = ({
                         </div>
                         {renderToggle(playbackFadeEnabled, () => onTogglePlaybackFade(!playbackFadeEnabled))}
                     </div>
+                    {/* 常亮只有 Android 实现了（窗口 FLAG），桌面端没有对应的开关，整行不显示。 */}
+                    {isCapacitorAndroid() && (
+                        <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.keepScreenOnWhilePlaying')}
+                                </div>
+                                <div className="text-[11px] opacity-50 max-w-[420px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.keepScreenOnWhilePlayingDesc')}
+                                </div>
+                            </div>
+                            {renderToggle(keepScreenOnWhilePlaying,
+                                () => onToggleKeepScreenOnWhilePlaying(!keepScreenOnWhilePlaying))}
+                        </div>
+                    )}
                     {window.electron?.requestTranscodeFallback && (
                         <div className="flex items-start justify-between gap-3 border-b border-current/10 pb-4">
                             <div className="space-y-1">

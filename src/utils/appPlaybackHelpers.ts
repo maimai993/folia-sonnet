@@ -158,6 +158,15 @@ export const getAudioSrcKind = (audioSrc: string | null): 'empty' | 'blob' | 'ht
     return 'other';
 };
 
+/**
+ * QQ 音乐的媒体 CDN。接口给回来的是 http 地址，而 Android 的明文策略默认把它们全拦掉
+ * （表现是 MEDIA_ERR_SRC_NOT_SUPPORTED，看着像音频坏了）。这些域名都有 https，一律升级。
+ */
+const QQ_MEDIA_HOST_SUFFIXES = ['.tc.qq.com', '.qqmusic.qq.com'];
+
+const isQqMediaHost = (hostname: string): boolean =>
+    QQ_MEDIA_HOST_SUFFIXES.some(suffix => hostname === suffix.slice(1) || hostname.endsWith(suffix));
+
 export const toSafeRemoteUrl = (url: string | null | undefined): string | null | undefined => {
     if (!url) {
         return url;
@@ -171,8 +180,13 @@ export const toSafeRemoteUrl = (url: string | null | undefined): string | null |
 
     try {
         const parsedUrl = new URL(normalizedUrl);
+        if (parsedUrl.protocol !== 'http:') {
+            return normalizedUrl;
+        }
+        if (isQqMediaHost(parsedUrl.hostname)) {
+            return normalizedUrl.replace(/^http:/, 'https:');
+        }
         if (
-            parsedUrl.protocol === 'http:' &&
             parsedUrl.hostname.startsWith('fs.') &&
             parsedUrl.hostname.endsWith('.kugou.com')
         ) {
@@ -185,12 +199,20 @@ export const toSafeRemoteUrl = (url: string | null | undefined): string | null |
     return normalizedUrl;
 };
 
-// Keeps KuGou's original HTTP media URL only in Electron; Web/PWA retains HTTPS normalization.
+// 酷狗 fs CDN 的 http 地址在 Electron 与安卓原生里都保留原样：换成 https 反而会被拒或返回
+// 无效音频，而这两个运行时都允许明文媒体播放。网页/PWA 必须继续归一成 https（混合内容会被拦）。
 export const toSafePlaybackUrl = (
     url: string | null | undefined,
     isElectron = typeof window !== 'undefined' && Boolean(window.electron)
 ): string | null | undefined => {
-    if (!url || !isElectron) {
+    if (!url) {
+        return url;
+    }
+
+    const isAndroidNative = typeof window !== 'undefined'
+        && (window as unknown as { Capacitor?: { getPlatform?: () => string } })
+            .Capacitor?.getPlatform?.() === 'android';
+    if (!isElectron && !isAndroidNative) {
         return toSafeRemoteUrl(url);
     }
 

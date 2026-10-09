@@ -20,6 +20,11 @@ interface ThemedDialogProps {
     closeDisabled?: boolean;
     /** Native `title` for the dimmed X, naming the run that has to finish before closing. */
     closeDisabledTitle?: string;
+    /**
+     * 这一类是哪种面板。纯标记（落进 data-folia-themed-dialog-kind），
+     * 手机适配的 CSS 靠它给个别的弹层单独排版（比如播放列表选择要压高度）。
+     */
+    panelKind?: string;
 }
 
 const ThemedDialog: React.FC<ThemedDialogProps> = ({
@@ -34,6 +39,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
     maxWidthClass = 'max-w-md',
     closeDisabled = false,
     closeDisabledTitle,
+    panelKind,
 }) => {
     const bgClass = isDaylight ? 'bg-white/90 border-white/30' : 'bg-zinc-900/95 border-white/10';
     const textPrimary = isDaylight ? 'text-zinc-900' : 'text-white';
@@ -60,6 +66,7 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     data-folia-keyboard-window="true"
+                    data-folia-themed-overlay="true"
                     className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
                     onMouseDown={handleOverlayMouseDown}
                     onClick={handleBackdropClick}
@@ -70,6 +77,8 @@ const ThemedDialog: React.FC<ThemedDialogProps> = ({
                         exit={{ scale: 0.94, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
                         onClick={(event) => event.stopPropagation()}
+                        data-folia-themed-dialog="true"
+                        data-folia-themed-dialog-kind={panelKind}
                         className={`relative w-full ${maxWidthClass} rounded-3xl border ${bgClass} p-6 shadow-2xl backdrop-blur-sm`}
                     >
                         <button

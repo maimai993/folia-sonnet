@@ -8,7 +8,7 @@ import {
     writeCoverAsset,
     type BinaryAssetWriteResult,
 } from './binaryAssetStore';
-import { resolveFoliaApiUrl } from './webApi';
+import { resolveProxiedUrl } from './proxiedUrl';
 
 interface StoredCoverDescriptor extends BinaryAssetWriteResult { }
 
@@ -28,7 +28,7 @@ const buildCoverRequestUrl = (coverUrl: string): string => {
         if (hostname === 'y.gtimg.cn'
             || hostname === 'kugou.com' || hostname.endsWith('.kugou.com')
             || hostname === 'kgimg.com' || hostname.endsWith('.kgimg.com')) {
-            return resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(coverUrl)}`);
+            return resolveProxiedUrl(coverUrl);
         }
     } catch {
         return coverUrl;

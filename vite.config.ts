@@ -139,6 +139,16 @@ function devLyricProxyPlugin() {
 
 export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig> {
   const isCapacitorBuild = process.env.FOLIA_BUILD_TARGET === 'capacitor';
+  // 本地登录：Android 包把三家音源的 API 基址写成哨兵值 `extension`，请求交给内置在
+  // App 里的接口代码（src/nativeBridge/api/*）+ 原生 OkHttp，不再依赖任何外部服务器。
+  // 写在配置里而不是 .env 里，是因为 .env.local 是给网页/桌面用的服务器地址，
+  // 而 process.env 在 Vite 的 env 解析里最后生效，能稳定覆盖它。
+  // VITE_FOLIA_API_BASE 保持不变：AI 主题与歌词代理确实还需要那个服务端。
+  if (isCapacitorBuild) {
+    process.env.VITE_NETEASE_API_BASE = 'extension';
+    process.env.VITE_QQ_API_BASE = 'extension';
+    process.env.VITE_KUGOU_API_BASE = 'extension';
+  }
   let commitHash = '';
   if (process.env.VERCEL_GIT_COMMIT_SHA) {
     commitHash = process.env.VERCEL_GIT_COMMIT_SHA.substring(0, 7);

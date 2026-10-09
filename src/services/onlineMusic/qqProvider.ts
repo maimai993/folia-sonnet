@@ -17,6 +17,8 @@ import { fetchQQLyrics, searchQQLyrics } from '../../utils/lyrics/providers/qqLy
 import { writeProviderSessionValue } from './providerStorage';
 import { normalizeQqCollection, normalizeQqSong, normalizeQqUser } from './qqNormalize';
 import { clearQqSession, getQqTransportAvailability, hasQqSession, requestQq } from './qqTransport';
+// @ts-ignore 内置桥侧的扫码分步追踪是纯 JavaScript，没有类型声明。
+import { getQrLoginTraceLines } from '../../nativeBridge/api/qrLoginTrace.js';
 
 // src/services/onlineMusic/qqProvider.ts
 
@@ -346,6 +348,52 @@ const getLyrics = async (song: SongResult): Promise<ProviderLyricsResult> => {
     return { lyrics: lyrics ?? null, isPureMusic: false };
 };
 
+// 账号展示信息（昵称 / 头像）来自上游的 profile 页，偶发失败时凭据还在、名字和头像却一起消失。
+// 按账号 id 缓存上一次的结果，只在字段缺失时补齐：切账号不会串（键是 id），
+// 上游给了新值也不会被旧值覆盖。
+const QQ_PROFILE_CACHE_KEY = 'folia_qq_profile_cache';
+const QQ_PROFILE_CACHE_LIMIT = 8;
+
+type QqProfileCacheEntry = { nickname?: string; avatarUrl?: string; at?: number };
+
+const readQqProfileCache = (): Record<string, QqProfileCacheEntry> => {
+    try {
+        const raw = localStorage.getItem(QQ_PROFILE_CACHE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw) as unknown;
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, QqProfileCacheEntry> : {};
+    } catch {
+        return {};
+    }
+};
+
+const cacheQqProfile = (user: ProviderUser): void => {
+    if (!user.id || (!user.nickname && !user.avatarUrl)) return;
+    try {
+        const cache = readQqProfileCache();
+        cache[String(user.id)] = {
+            ...(user.nickname ? { nickname: user.nickname } : {}),
+            ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+            at: Date.now(),
+        };
+        const recent = Object.entries(cache)
+            .sort(([, a], [, b]) => (b.at ?? 0) - (a.at ?? 0))
+            .slice(0, QQ_PROFILE_CACHE_LIMIT);
+        localStorage.setItem(QQ_PROFILE_CACHE_KEY, JSON.stringify(Object.fromEntries(recent)));
+    } catch {
+        // 存不下就当没有缓存，不影响登录本身。
+    }
+};
+
+const withCachedQqProfile = (user: ProviderUser): ProviderUser => {
+    if (user.nickname && user.avatarUrl) return user;
+    const cached = user.id ? readQqProfileCache()[String(user.id)] : undefined;
+    if (!cached) return user;
+    const nickname = user.nickname || cached.nickname || '';
+    const avatarUrl = user.avatarUrl || cached.avatarUrl;
+    return { ...user, nickname, ...(avatarUrl ? { avatarUrl } : {}) };
+};
+
 const getLoginStatus = async (): Promise<ProviderUser | null> => {
     // 扫码确认后的第一次账号加载认领这次刷新（记下确认时的尝试代次）；其余加载都是普通登录态检查，照常记日志。
     const qrRefreshAttempt = claimQrAccountRefresh();
@@ -364,14 +412,23 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
             if (!isQrAccountRefresh) console.info('[QQProvider] login-status:anonymous');
             return null;
         }
-        const user = normalizeQqUser(profile);
+        const fetched = normalizeQqUser(profile);
+        const user = withCachedQqProfile(fetched);
+        // 上游资料页确实可能不给显示名（验收账号就是）。缓存也补不上时至少给个可读标识，
+        // 否则账户卡片会空着一块 —— 这是「用户名不显示」最直接的原因。
+        const named = user.nickname || !user.id ? user : { ...user, nickname: `QQ ${user.id}` };
+        cacheQqProfile(named);
         recordQrAccountResult('profile-present', qrRefreshAttempt);
         // The acceptance test account returned a profile without a display name, so the profile itself is the signal.
         console.info('[QQProvider] login-status:profile', {
-            hasUserId: Boolean(user.id),
-            hasNickname: Boolean(user.nickname),
+            hasUserId: Boolean(named.id),
+            hasNickname: Boolean(named.nickname),
+            hasAvatar: Boolean(named.avatarUrl),
+            // 上游资料页没给名字/头像时，能看出是「接口没给」还是「我们没解析出来」。
+            profileSource: profile?.profileSource ?? 'unknown',
+            profileUnavailable: Boolean(profile?.profileUnavailable),
         });
-        return user;
+        return named;
     } catch (error) {
         if (qrRefreshAttempt !== null) recordQrTransportFailure('account-refresh', error, qrRefreshAttempt);
         // Missing, expired, rejected, or non-persisted backend sessions all arrive as 401.
@@ -937,7 +994,10 @@ export const qqProvider: OnlineMusicProvider = {
         },
         checkQr,
         async getQrLoginDiagnostics() {
-            return [...lastQrDiagnostics];
+            // 本地桥（安卓）在同一条链路里跑，「扫码成功却没反应」只有桥侧的分步追踪说得清：
+            // 走到哪一步、上游回了什么、换票重试了几次。桌面版这条追踪在扩展侧，这里为空。
+            const bridgeTrace = getQrLoginTraceLines('qq');
+            return bridgeTrace.length ? [...lastQrDiagnostics, ...bridgeTrace] : [...lastQrDiagnostics];
         },
         getQrTtlMs: () => QQ_QR_TTL_MS,
         async cancelQr(key) {

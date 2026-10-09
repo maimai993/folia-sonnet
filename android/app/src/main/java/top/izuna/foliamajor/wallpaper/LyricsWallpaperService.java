@@ -65,6 +65,11 @@ public class LyricsWallpaperService extends WallpaperService {
             } else {
                 glView.onPause();
             }
+            // 视频背景要单独停：停掉渲染循环并不会停 MediaPlayer，
+            // 它会在黑屏后面继续一帧一帧解码（见 LyricsRenderer.setVideoActive）。
+            if (renderer != null) {
+                renderer.setVideoActive(visible);
+            }
             if (overlay != null) {
                 // 叠层同样只在可见时挂着：WebView 里的 rAF 在后台不会自己停。
                 // 壁纸样式是「精简」时它内部会自己收起来（见 WallpaperOverlay.shouldShow）。
@@ -84,6 +89,10 @@ public class LyricsWallpaperService extends WallpaperService {
 
         @Override
         public void onDestroy() {
+            // 解码器不会跟着 GL 上下文一起没：不显式放掉，它会一直挂在进程里。
+            if (renderer != null) {
+                renderer.releaseVideo();
+            }
             if (overlay != null) {
                 overlay.setWallpaperVisible(false);
                 overlay = null;

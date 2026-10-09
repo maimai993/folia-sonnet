@@ -5,6 +5,9 @@ import { flattenTuning, tuningFieldFor, withGlobalSettings } from '../platform/w
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { useTypographySettingsStore } from '../stores/useTypographySettingsStore';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
+import { useMotionSettingsStore } from '../stores/useMotionSettingsStore';
+import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
+import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
 import type { Line } from '../types';
 
@@ -82,17 +85,27 @@ const fingerprintState = (state: Record<string, unknown>): string => {
  * 播放期间被反复写入同一个值时不会产生任何副作用。
  */
 const useAppearanceSettingsStamp = (): number => {
-    const [stamp, setStamp] = React.useState(() => hashString(fingerprintState({
+    /*
+     * 参与签名的 store 必须**一次列全**。
+     *
+     * 叠层那份页面是另一个 WebView 里的全新 store，只在加载那一刻读一次 localStorage；
+     * 之后它能不能看到新值，全靠这个签名变了 → 原生重载一份页面。
+     * 漏掉一个 store，那个 store 里的设置在叠层上就**永远不生效**，
+     * 而主界面（同一个上下文）永远是好的 —— 症状就是"改了没反应、但又是随机的"。
+     * 这条链已经因为这个漏过四次（每次都是不同的设置项），
+     * 所以宁可多列几个（多一次重载的代价远小于再漏一次）。
+     */
+    const snapshotStates = () => ({
         visualizer: useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>,
         typography: useTypographySettingsStore.getState() as unknown as Record<string, unknown>,
         theme: useThemeSettingsStore.getState() as unknown as Record<string, unknown>,
-    })));
+        motion: useMotionSettingsStore.getState() as unknown as Record<string, unknown>,
+        lyric: useLyricSettingsStore.getState() as unknown as Record<string, unknown>,
+        stage: useStageSettingsStore.getState() as unknown as Record<string, unknown>,
+    });
+    const [stamp, setStamp] = React.useState(() => hashString(fingerprintState(snapshotStates())));
     React.useEffect(() => {
-        const compute = () => hashString(fingerprintState({
-            visualizer: useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>,
-            typography: useTypographySettingsStore.getState() as unknown as Record<string, unknown>,
-            theme: useThemeSettingsStore.getState() as unknown as Record<string, unknown>,
-        }));
+        const compute = () => hashString(fingerprintState(snapshotStates()));
         let current = compute();
         // 首帧就对齐一次：useState 的初值是在上一次 render 时算的，这中间改过就过期了。
         setStamp(previous => (previous === current ? previous : current));
@@ -119,6 +132,9 @@ const useAppearanceSettingsStamp = (): number => {
             useVisualizerSettingsStore.subscribe(check),
             useTypographySettingsStore.subscribe(check),
             useThemeSettingsStore.subscribe(check),
+            useMotionSettingsStore.subscribe(check),
+            useLyricSettingsStore.subscribe(check),
+            useStageSettingsStore.subscribe(check),
         ];
         return () => {
             if (timer) window.clearTimeout(timer);
@@ -208,6 +224,10 @@ export const useLyricsWallpaperFeed = ({
     // 背景那几个全局开关也一起跟随（不透明度 / 暗角 / 几何背景）。
     const backgroundOpacity = useVisualizerSettingsStore(state => state.backgroundOpacity);
     const wallpaperOverlayOpacity = useVisualizerSettingsStore(state => state.wallpaperOverlayOpacity);
+    const wallpaperOverlayEnabled = useVisualizerSettingsStore(state => state.wallpaperOverlayEnabled);
+    const wallpaperOverlayLockScreen = useVisualizerSettingsStore(state => state.wallpaperOverlayLockScreen);
+    const wallpaperOverlayLockScreenOnly = useVisualizerSettingsStore(
+        state => state.wallpaperOverlayLockScreenOnly);
     const wallpaperOverlayAllApps = useVisualizerSettingsStore(state => state.wallpaperOverlayAllApps);
     const wallpaperOverlayHideNativeLyrics = useVisualizerSettingsStore(
         state => state.wallpaperOverlayHideNativeLyrics);
@@ -230,6 +250,9 @@ export const useLyricsWallpaperFeed = ({
             disableVisualizerVignette,
             disableVisualizerGeometricBackground,
             wallpaperOverlayOpacity,
+            wallpaperOverlayEnabled,
+            wallpaperOverlayLockScreen,
+            wallpaperOverlayLockScreenOnly,
             wallpaperOverlayAllApps,
             wallpaperOverlayHideNativeLyrics,
             wallpaperOverlayHideNativeProgress,
@@ -239,7 +262,8 @@ export const useLyricsWallpaperFeed = ({
             settingsStamp,
         }),
         [rawTuning, backgroundOpacity, disableVisualizerVignette,
-            disableVisualizerGeometricBackground, wallpaperOverlayOpacity, wallpaperOverlayAllApps,
+            disableVisualizerGeometricBackground, wallpaperOverlayOpacity, wallpaperOverlayEnabled,
+            wallpaperOverlayLockScreen, wallpaperOverlayLockScreenOnly, wallpaperOverlayAllApps,
             wallpaperOverlayHideNativeLyrics, wallpaperOverlayHideNativeProgress,
             wallpaperOverlaySkipInstrumental, wallpaperOverlayHideWhenPaused,
             wallpaperOverlayHideAfterLyricsEnd, settingsStamp]);

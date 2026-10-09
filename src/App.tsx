@@ -82,8 +82,11 @@ import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlayb
 import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { useCapacitorSystemBars } from './hooks/useCapacitorSystemBars';
 import { useCapacitorPlaybackBridge } from './hooks/useCapacitorPlaybackBridge';
+import { useNativeBackButton } from './hooks/useNativeBackButton';
+import { noteAudioEvent, resetMediaDiagnostics } from './utils/mediaDiagnostics';
 import { useLyricsWallpaperFeed } from './hooks/useLyricsWallpaperFeed';
 import { useLyriconFeed } from './hooks/useLyriconFeed';
+import { useScreenAwakeWhilePlaying } from './hooks/useScreenAwakeWhilePlaying';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useTranscodeFallback } from './hooks/useTranscodeFallback';
@@ -431,6 +434,8 @@ export default function App() {
         lyricsCustomFontFamily,
     } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
     useCapacitorSystemBars(isDaylight);
+    // Android 返回键：先当 Escape 交给弹层，没人接管才退出（原生侧已把事件转过来）。
+    useNativeBackButton();
     const {
         globalLyricTimelineOffsetMs,
         lyricFilterPattern,
@@ -1330,6 +1335,11 @@ export default function App() {
         }
     }, [audioSrc, audioRef, setDuration]);
 
+    // 换歌就复位播放侧停顿计数：上一首的卡顿不该算到这一首头上。
+    useEffect(() => {
+        resetMediaDiagnostics();
+    }, [audioSrc]);
+
     const { setupAudioAnalyzer, cacheSongAssets, cacheSongAssetsFor, adoptActiveDeckSource } = usePlaybackAudioBridge({
         audioRef,
         localSongs,
@@ -1473,6 +1483,9 @@ export default function App() {
         backgroundColor: theme?.backgroundColor ?? null,
         animationIntensity: theme?.animationIntensity ?? null,
     });
+
+    // Android 专有：播放中把屏幕钉住不熄（开关在「播放」设置里，默认关）。
+    useScreenAwakeWhilePlaying();
 
     // Android 专有：把当前歌曲与歌词推给状态栏歌词（Lyricon）。
     useLyriconFeed({
@@ -2440,7 +2453,13 @@ export default function App() {
                 if (!isShowingTail) currentTime.set(e.currentTarget.currentTime);
                 setPlayerState(PlayerState.PLAYING);
             }}
+            onWaiting={(e) => noteAudioEvent('waiting', e.currentTarget)}
+            onStalled={(e) => noteAudioEvent('stalled', e.currentTarget)}
+            onSeeking={(e) => noteAudioEvent('seeking', e.currentTarget)}
+            onRateChange={(e) => noteAudioEvent('ratechange', e.currentTarget)}
+            onCanPlay={(e) => noteAudioEvent('canplay', e.currentTarget)}
             onPlaying={(e) => {
+                noteAudioEvent('playing', e.currentTarget);
                 if (!automix.isActiveDeck(e.currentTarget)) return;
                 shouldAutoPlay.current = false;
                 if (!isShowingTail) currentTime.set(e.currentTarget.currentTime);
@@ -2500,6 +2519,7 @@ export default function App() {
                 automix.checkTransitionPoint(audioElement.currentTime);
             }}
             onSeeked={(e) => {
+                noteAudioEvent('seeked', e.currentTarget);
                 // Same split as onTimeUpdate: whichever deck the bar is showing is the one a seek
                 // on it has to be reflected from.
                 const isActive = automix.isActiveDeck(e.currentTarget);
@@ -2581,6 +2601,7 @@ export default function App() {
                 currentTime.set(0); // Ensure currentTime is reset when new audio loads
             }}
             onError={(e) => {
+                noteAudioEvent('error', e.currentTarget);
                 const audioElement = e.currentTarget;
                 const isActiveDeck = automix.isActiveDeck(audioElement);
                 const reportedDuration = Number.isFinite(audioElement.duration) && audioElement.duration > 0

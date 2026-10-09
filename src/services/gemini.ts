@@ -3,6 +3,7 @@ import { applyStoredAnimationIntensityToDualTheme } from "./themePreferences";
 import { sanitizeDualTheme } from "./themeSanitizer";
 import { getWebAiProvider } from "./runtimeConfig";
 import { resolveFoliaApiUrl } from "./webApi";
+import { recordAiThemeAttempt, type AiThemeTrigger } from "../utils/aiThemeDiagnostics";
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -17,18 +18,28 @@ export const isMissingAiApiKeyError = (error: unknown) => {
     && /(?:not configured|missing|configure)/i.test(message);
 };
 
+/**
+ * AI 主题生成。每次尝试（成功或失败）都记一条可公开的记录：provider、阶段、HTTP 状态、
+ * 截断后的错误原文与耗时 —— 「偶尔生成失败」这类反馈靠它定位，不记提示词、歌词与 Key。
+ */
 export const generateThemeFromLyrics = async (
   lyricsText: string,
-  options?: { isPureMusic?: boolean; songTitle?: string }
+  options?: { isPureMusic?: boolean; songTitle?: string; trigger?: AiThemeTrigger }
 ): Promise<DualTheme> => {
+  const provider = getWebAiProvider();
+  const trigger = options?.trigger ?? 'unknown';
+  const startedAt = Date.now();
+  // HTTP 失败那条在分支里已经记过，catch 只补没走到响应的（网络错误、解析失败），不重复记。
+  let recorded = false;
   try {
     // Check if running in Electron environment
     if ((window as any).electron && typeof (window as any).electron.generateTheme === 'function') {
       const dualTheme = await (window as any).electron.generateTheme(lyricsText, options);
-      return sanitizeDualTheme(dualTheme);
+      const theme = sanitizeDualTheme(dualTheme);
+      recordAiThemeAttempt({ provider, trigger, stage: 'request', ok: true, durationMs: Date.now() - startedAt });
+      return theme;
     }
 
-    const provider = getWebAiProvider();
     const endpoint = resolveFoliaApiUrl(provider === 'openai' ? 'generate-theme_openai' : 'generate-theme');
 
     const response = await fetch(endpoint, {
@@ -40,13 +51,42 @@ export const generateThemeFromLyrics = async (
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate theme');
+      const errorData = await response.json().catch(() => ({}));
+      const message = (errorData as { error?: string }).error || `HTTP ${response.status}`;
+      recorded = true;
+      recordAiThemeAttempt({
+        provider,
+        trigger,
+        stage: 'web-endpoint',
+        ok: false,
+        status: response.status,
+        error: message,
+        durationMs: Date.now() - startedAt,
+      });
+      throw new Error(message || 'Failed to generate theme');
     }
 
     const dualTheme = await response.json();
+    recordAiThemeAttempt({
+      provider,
+      trigger,
+      stage: 'request',
+      ok: true,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+    });
     return applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme as DualTheme));
   } catch (error) {
+    if (!recorded) {
+      recordAiThemeAttempt({
+        provider,
+        trigger,
+        stage: 'unknown',
+        ok: false,
+        error: getErrorMessage(error),
+        durationMs: Date.now() - startedAt,
+      });
+    }
     console.error("Failed to generate theme via API:", error);
     throw error;
   }

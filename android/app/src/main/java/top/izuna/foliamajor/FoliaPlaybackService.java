@@ -61,6 +61,9 @@ public class FoliaPlaybackService extends android.app.Service {
     private String cachedAlbum = "";
     private Bitmap cachedArtwork;
     private int cachedState = PlaybackStateCompat.STATE_NONE;
+    private long cachedDurationMs = 0L;
+    private long cachedPositionMs = 0L;
+    private boolean cachedPlaying = false;
     /** 已经调用过 startForeground 了；见 promoteToForeground()。 */
     private boolean foregrounded = false;
 
@@ -264,10 +267,12 @@ public class FoliaPlaybackService extends android.app.Service {
         if (title != null) cachedTitle = title;
         if (artist != null) cachedArtist = artist;
         if (album != null) cachedAlbum = album;
+        if (durationMs > 0) cachedDurationMs = durationMs;
         Bitmap artwork = decodeArtwork(artworkBase64);
         if (artwork != null) {
             cachedArtwork = artwork;
         }
+        publishSnapshot();
 
         MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, cachedTitle)
@@ -305,6 +310,7 @@ public class FoliaPlaybackService extends android.app.Service {
                     return;
                 }
                 cachedArtwork = bitmap;
+                publishSnapshot();
                 // 通知已经发出去了，要再 post 一次才会带上新封面。
                 notificationManager.notify(NOTIFICATION_ID, buildForegroundNotification());
             }
@@ -379,6 +385,75 @@ public class FoliaPlaybackService extends android.app.Service {
         }
 
         cachedState = compatState;
+        cachedPositionMs = positionMs;
+        cachedPlaying = playing;
+        publishSnapshot();
+    }
+
+    /**
+     * 当前媒体信息的一份**快照**，供音乐锁屏底部的面板读取。
+     *
+     * 为什么不做成回调 / 广播：锁屏页活在另一个组件里，而且随时可能被系统回收重建
+     * （转屏、内存紧张）。推的模式要维护订阅表，还得处理"推送时锁屏页还没起来"；
+     * 拉的模式只要一份 volatile 快照，页面起来时读一次、之后每秒再读一次即可 ——
+     * 反正这些字段本来就是给通知用的，服务里已经有一份现成的缓存。
+     */
+    public static final class MediaSnapshot {
+        public final String title;
+        public final String artist;
+        public final String album;
+        /** 已经解码好的封面（通知栏用的就是这一张）。null = 还没拿到。 */
+        public final Bitmap artwork;
+        public final long durationMs;
+        public final long positionMs;
+        public final boolean playing;
+
+        MediaSnapshot(String title, String artist, String album, Bitmap artwork,
+                long durationMs, long positionMs, boolean playing) {
+            this.title = title;
+            this.artist = artist;
+            this.album = album;
+            this.artwork = artwork;
+            this.durationMs = durationMs;
+            this.positionMs = positionMs;
+            this.playing = playing;
+        }
+    }
+
+    private static volatile MediaSnapshot lastSnapshot = null;
+
+    /** 最近一次的媒体信息。服务没起来过就是 null（那时锁屏页也不会显示）。 */
+    public static MediaSnapshot snapshot() {
+        return lastSnapshot;
+    }
+
+    private void publishSnapshot() {
+        lastSnapshot = new MediaSnapshot(cachedTitle, cachedArtist, cachedAlbum,
+                cachedArtwork, cachedDurationMs, cachedPositionMs, cachedPlaying);
+    }
+
+    /**
+     * 往 Web 层发一条播放控制指令（上一首 / 下一首）。
+     *
+     * 锁屏面板走的是**通知栏同一条路**：指令交给 FoliaCommandReceiver，由它派发给
+     * Capacitor 插件、再交给 Web 层。原生不自己另起一套播放器状态机 ——
+     * 真正知道"下一首是什么"的只有 Web 层（队列、随机、自动混播都在那边）。
+     */
+    static void sendPlaybackCommand(Context context, String command) {
+        // 必须写死组件名：Android 8+ 的隐式广播不会投递给清单注册的接收器。
+        Intent intent = new Intent(context, FoliaCommandReceiver.class);
+        intent.setAction(ACTION_WEB_COMMAND);
+        intent.putExtra(EXTRA_COMMAND, command);
+        context.sendBroadcast(intent);
+    }
+
+    /** 带位置的指令（锁屏面板拖进度条用）。 */
+    static void sendPlaybackCommand(Context context, String command, long positionMs) {
+        Intent intent = new Intent(context, FoliaCommandReceiver.class);
+        intent.setAction(ACTION_WEB_COMMAND);
+        intent.putExtra(EXTRA_COMMAND, command);
+        intent.putExtra(EXTRA_COMMAND_POSITION, positionMs);
+        context.sendBroadcast(intent);
     }
 
     private Bitmap decodeArtwork(String base64) {

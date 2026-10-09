@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  上一首：与 App 里用的图标（lucide 的 skip-back）同一套形状。
+
+  为什么不用系统的 @android:drawable/ic_media_previous：那套图标是 Android 2 时代的资源，
+  到今天已经是低分辨率位图 / 过时形状，放在锁屏这条面板上又糊又跳。
+  这里按 lucide 的 24x24 网格重画成矢量：尖朝左的三角 + 左侧一条竖杠。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,5 L19,19 L9,12 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4,5 L6,5 L6,19 L4,19 Z" />
+</vector>

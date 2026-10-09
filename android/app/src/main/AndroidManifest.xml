@@ -86,6 +86,29 @@
             android:exported="false"
             android:label="崩溃信息"
             android:theme="@style/AppTheme.NoActionBar" />
+
+        <!--
+            音乐锁屏页：系统正式支持的「画在锁屏之上」只能靠 Activity
+            （悬浮窗那条路各家 ROM 说了算，见 LockScreenMusicActivity 的说明）。
+
+            showWhenLocked 是清单里的前置声明，代码里的 setShowWhenLocked 是 API 27+ 的开关，
+            两个都要有。excludeFromRecents / taskAffinity="" 让它不污染最近任务与返回栈，
+            否则用户解锁后会发现多出来一个「Folia 锁屏」卡片。
+
+            这里**不能**加 android:noHistory="true"：它的语义是"用户一旦离开就 finish"，
+            而锁屏这个场景里"离开"的判定很微妙（keyguard 重新布局、被其它锁屏界面遮挡
+            都算），用户什么都没做，Activity 就被系统自己 finish 了 ——
+            表现正是「闪出播放界面，然后突然消失」。不进历史记录靠 excludeFromRecents 就够了。
+        -->
+        <activity
+            android:name=".LockScreenMusicActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:theme="@style/LockScreenTheme" />
     </application>
 
     <!-- Permissions -->

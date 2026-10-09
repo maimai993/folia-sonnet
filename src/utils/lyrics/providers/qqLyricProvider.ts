@@ -11,6 +11,7 @@ import { detectTimedLyricFormat } from '../formatDetection';
 import { qrcDecrypt } from './qrcDecrypt';
 import { applyDetectedChorusEffects, applyNeteaseChorusByTime } from '../chorusEffects';
 import type { NeteaseChorusRange } from '../chorusEffects';
+import { resolveProxiedUrl } from '../../../services/proxiedUrl';
 import { resolveFoliaApiUrl } from '../../../services/webApi';
 import { getOriginalCoverUrl } from '../../coverUrl';
 
@@ -20,6 +21,35 @@ const isElectron = typeof window !== 'undefined' && (window as any).electron;
  * Sends a POST request to u.y.qq.com via proxy or directly in Electron.
  */
 async function requestQQ(method: string, module: string, param: any): Promise<any> {
+  const payload = buildQQPayload(method, module, param);
+  const targetUrl = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
+  const directUrl = isElectron ? targetUrl : resolveProxiedUrl(targetUrl);
+  const data = await postQQ(directUrl, payload);
+  const code = data.code ?? data.request?.code;
+  if (code === 0) {
+    return data.request.data;
+  }
+  /*
+   * 带本地登录态（Android 上走桥、cookie 罐里是扫码登录得到的那些）被判失效时，
+   * QQ 会回一个非零 code（常见就是 2001）；而匿名请求往往照样拿得到歌词 ——
+   * 这个接口本身就是匿名可用的（comm 里 uid/udid 都是 0，Cookie 也只是 tmeLoginType=-1）。
+   * 所以失败时退回一次服务端代理（不带本机 cookie），别一上来就把歌词判死。
+   */
+  const proxyUrl = isElectron ? '' : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl)}`);
+  if (proxyUrl && proxyUrl !== directUrl) {
+    try {
+      const retryData = await postQQ(proxyUrl, payload);
+      if ((retryData.code ?? retryData.request?.code) === 0) {
+        return retryData.request.data;
+      }
+    } catch {
+      // 代理也拿不到就按原来的错误抛，别把重试的异常盖上去。
+    }
+  }
+  throw new Error(`QQ Music API error: code ${code}`);
+}
+
+function buildQQPayload(method: string, module: string, param: any) {
   const payload = {
     comm: {
       ct: 11,
@@ -39,10 +69,10 @@ async function requestQQ(method: string, module: string, param: any): Promise<an
       param,
     },
   };
+  return payload;
+}
 
-  const targetUrl = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
-  const url = isElectron ? targetUrl : resolveFoliaApiUrl(`lyric-proxy?url=${encodeURIComponent(targetUrl)}`);
-
+async function postQQ(url: string, payload: any): Promise<any> {
   const response = await fetch(url, {
     method: 'POST',
     credentials: isElectron ? 'omit' : 'same-origin',
@@ -58,12 +88,7 @@ async function requestQQ(method: string, module: string, param: any): Promise<an
     throw new Error(`QQ Music API request failed: ${response.status}`);
   }
 
-  const data = await response.json();
-  if (data.code !== 0 || data.request?.code !== 0) {
-    throw new Error(`QQ Music API error: code ${data.code || data.request?.code}`);
-  }
-
-  return data.request.data;
+  return response.json();
 }
 
 /**

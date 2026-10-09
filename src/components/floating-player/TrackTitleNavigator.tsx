@@ -81,6 +81,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
         return (
             <button
                 type="button"
+                data-folia-track-title-arrow={side}
                 aria-label={label}
                 title={target || label}
                 className={arrowClass}
@@ -98,9 +99,10 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
     };
 
     return (
-        <div className="group/title relative min-w-0 select-none px-1">
+        <div data-folia-track-title="true" className="group/title relative min-w-0 select-none px-1">
             {/* 感应区比箭头宽，指针「靠近」箭头即可预览；区内非箭头处的点击不拦截 */}
             <div
+                data-folia-track-title-zone="prev"
                 className={`${zoneClass} left-0 w-14 justify-start pl-1`}
                 onMouseEnter={() => enterZone('prev')}
                 onMouseLeave={leaveZone}
@@ -108,6 +110,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
                 {renderArrow('prev')}
             </div>
             <div
+                data-folia-track-title-zone="next"
                 className={`${zoneClass} right-0 w-14 justify-end pr-1`}
                 onMouseEnter={() => enterZone('next')}
                 onMouseLeave={leaveZone}
@@ -115,7 +118,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
                 {renderArrow('next')}
             </div>
 
-            <div className="pointer-events-none relative h-6">
+            <div data-folia-track-title-layer="true" className="pointer-events-none relative h-6">
                 {/* 整个文字块必须 pointer-events-none：它是 position:relative 且 DOM 序在感应区之后，
                     定位元素后来居上会盖住两侧箭头，导致悬浮和点击全部失效。
                     左右各让出 w-14 也是同一原因——绝对定位相对 padding box，inset-0 会铺到箭头上。 */}
@@ -124,6 +127,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
                 <AnimatePresence initial={false} mode="sync">
                     <motion.div
                         key={enterSeq}
+                        data-folia-track-title-text="true"
                         className="absolute inset-y-0 left-14 right-14 flex items-center"
                         initial={{ opacity: 0, x: slide }}
                         animate={{ opacity: isPreview ? 0 : 1, x: 0 }}
@@ -137,6 +141,7 @@ const TrackTitleNavigator: React.FC<TrackTitleNavigatorProps> = ({
                 {/* 预览层：纯 CSS opacity 交叉淡入，不参与 key 变化 */}
                 <div
                     aria-hidden
+                    data-folia-track-title-text="true"
                     className="absolute inset-y-0 left-14 right-14 flex items-center transition-opacity duration-200"
                     style={{ opacity: isPreview ? PREVIEW_OPACITY : 0 }}
                 >

@@ -1,8 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 当前文件：仅对 Folia 自托管 API 域名放行明文 HTTP（酷狗 API 跑在 http://folia.tangbot.xyz:8080），其余域名保持禁止。 -->
+<!--
+  当前文件：只对「接口给回来的就是 http、而 https 又不能用」的那几个媒体域名放行明文，其余保持禁止。
+
+  targetSdk 28+ 起明文默认是关的，被拦时 WebView 拿到的不是「连不上」而是
+  `ERR_CLEARTEXT_NOT_PERMITTED`，音频元素的表现是
+  `networkState=3 / mediaErrorCode=4 (MEDIA_ERR_SRC_NOT_SUPPORTED)`，
+  看起来像「格式不支持」—— 很容易误判成 vkey 失效或音频坏了。
+
+  哪些域名必须放行：
+  · 酷狗 fs CDN：换成 https 会被拒或返回无效音频，只能走明文。
+  · QQ 音乐媒体：接口返回的是 http 地址（aqqmusic.tc.qq.com / *.stream.qqmusic.qq.com）。
+    代码里会把这些升级成 https，但部分地址只有 http 版本，留着放行兜底。
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
     <domain-config cleartextTrafficPermitted="true">
+        <!-- 自托管 API -->
         <domain includeSubdomains="true">folia.tangbot.xyz</domain>
+        <!-- 酷狗 fs CDN -->
+        <domain includeSubdomains="true">kugou.com</domain>
+        <!-- QQ 音乐媒体 CDN -->
+        <domain includeSubdomains="true">tc.qq.com</domain>
+        <domain includeSubdomains="true">qqmusic.qq.com</domain>
     </domain-config>
 </network-security-config>

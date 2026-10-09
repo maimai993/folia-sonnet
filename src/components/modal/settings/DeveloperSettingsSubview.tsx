@@ -1,5 +1,5 @@
 import React, { useSyncExternalStore } from 'react';
-import { Activity, FolderOpen, ScrollText } from 'lucide-react';
+import { Activity, FolderOpen, Gauge, ScrollText } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
 import {
@@ -16,6 +16,7 @@ import {
     type DebugLogMode,
 } from '../../../services/debug/debugModule';
 import ConsoleLogPanel from '../../shared/ConsoleLogPanel';
+import { usePerfDiagnosticsStore } from '../../../stores/usePerfDiagnosticsStore';
 
 // src/components/modal/settings/DeveloperSettingsSubview.tsx
 // The debug module's switches: what is recorded, how its file opens, and where it lands.
@@ -125,6 +126,8 @@ const DeveloperSettingsSubview: React.FC<DeveloperSettingsSubviewProps> = ({
     const { t } = useTranslation();
     // Subscribed rather than read once: the switch clears the buffer, and the count beside it has
     // to answer for that immediately or it reads as the switch having done nothing.
+    const perfDiagnosticsEnabled = usePerfDiagnosticsStore(state => state.perfDiagnosticsEnabled);
+    const setPerfDiagnosticsEnabled = usePerfDiagnosticsStore(state => state.setPerfDiagnosticsEnabled);
     const entries = useSyncExternalStore(subscribeToConsoleLog, getConsoleLogEntries);
     // The SWITCH is subscribed too, and it has to be its own subscription. Read plainly, this line
     // re-rendered only when `entries` changed identity - which switching OFF does, because it
@@ -273,6 +276,41 @@ const DeveloperSettingsSubview: React.FC<DeveloperSettingsSubviewProps> = ({
                             );
                         })}
                     </div>
+                </div>
+            </div>
+
+            {/*
+                性能采样：帧耗时 / 长任务 / 音频停顿那几份诊断的总开关。
+                默认关 —— 它们是常驻开销（一条 rAF 循环 + 每个音频事件上一次记数），
+                只该在真的查「卡」的时候开着。桌面端和 Android 都走同一个开关，
+                因为要采的那些数据恰好都在渲染层。
+            */}
+            <div className={`rounded-2xl border p-4 space-y-4 ${settingsCardClass}`}>
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <div className="p-2 rounded-lg opacity-60 shrink-0">
+                            <Gauge size={14} />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.perfDiagnostics') || 'Performance sampling'}
+                            </span>
+                            <div className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.perfDiagnosticsDesc')
+                                    || 'Sample frame intervals, long tasks and audio stalls. Off by default: it costs a permanent rAF loop.'}
+                            </div>
+                        </div>
+                    </div>
+                    <Switch
+                        isOn={perfDiagnosticsEnabled}
+                        onToggle={() => setPerfDiagnosticsEnabled(!perfDiagnosticsEnabled)}
+                        theme={theme}
+                        toggleOffBackgroundClass={toggleOffBackgroundClass}
+                    />
+                </div>
+                <div className="text-[11px] leading-relaxed opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                    {t('options.perfDiagnosticsHint')
+                        || 'Read the numbers in the debug overlay: Perf tab (frame timing) and Audio Continuity (stalls).'}
                 </div>
             </div>
 

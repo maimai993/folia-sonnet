@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './i18n/config';
 import './index.css';
+// 手机适配的整套覆盖样式。规则全部由 <html data-folia-phone-fit='true'> 门控，
+// 开关关着时这里等于一张空表，上游桌面布局不会被碰到。放在 bootstrap 而不是 App 里，
+// 是为了让下面按 URL 挂的几个根（远程控制 / OBS）也能拿到同样的属性语义。
+import './styles/androidPhoneFit.css';
 import App from './App';
 import AppSplashGate from './components/AppSplashGate';
 import RemoteControlApp from './components/remote/RemoteControlApp';

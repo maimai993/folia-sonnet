@@ -30,8 +30,11 @@
   "exclude": [
     "node_modules",
     "dist",
+    "dist-release",
     "release",
     "sync-server",
-    "original"
+    "original",
+    "android",
+    "electron"
   ]
 }
