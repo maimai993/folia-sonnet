@@ -1842,8 +1842,18 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
     /*
      * 视频那一套：顶点照旧，采样换成了 samplerExternalOES。
      *
-     * uTexMatrix 是 SurfaceTexture 每帧给的那张变换矩阵（含 Y 轴翻转和裁剪），
-     * 必须乘在 UV 上 —— 不加它的话画出来是上下颠倒的（视频帧的坐标系和纹理反过来）。
+     * **这里不能自己翻 Y。**
+     *
+     * 图片（普通 2D 纹理）那套着色器里有 `1.0 - ...`，那是为了补偿 Bitmap 的行序；
+     * 而 SurfaceTexture 的 `getTransformMatrix()` 给出的矩阵**本身就包含那一次翻转** ——
+     * 于是「自己翻一次 + 矩阵再翻一次」= 画面上下颠倒。这正是视频背景倒过来的原因。
+     *
+     * 官方的写法（Grafika 的 Texture2dProgram、Camera2/ExoPlayer 的 Surface 渲染）都是：
+     * quad 的 UV (0,0) 落在**左下角**（与 aPosition 一致），直接乘矩阵，不做任何预处理。
+     * 我们的 unit quad 正是这个约定（aPosition.y=0 在屏幕下边，aUv.y=0 配着它）。
+     *
+     * cover 裁剪（uUvRect）是**居中**的，上下左右对称，所以它在哪一头的坐标系里
+     * 量都一样，不需要为它再做方向调整。
      */
     private static final String VIDEO_VERTEX =
             "attribute vec2 aPosition;\n"
@@ -1854,7 +1864,7 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
             + "varying vec2 vUv;\n"
             + "void main() {\n"
             + "  vec2 uv = vec2(uUvRect.x + aUv.x * uUvRect.z,\n"
-            + "                 1.0 - (uUvRect.y + aUv.y * uUvRect.w));\n"
+            + "                 uUvRect.y + aUv.y * uUvRect.w);\n"
             + "  vUv = (uTexMatrix * vec4(uv, 0.0, 1.0)).xy;\n"
             + "  vec2 ndc = uRect.xy + aPosition * uRect.zw;\n"
             + "  gl_Position = vec4(ndc, 0.0, 1.0);\n"
