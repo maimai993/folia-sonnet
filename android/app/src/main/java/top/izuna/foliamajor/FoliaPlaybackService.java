@@ -61,6 +61,8 @@ public class FoliaPlaybackService extends android.app.Service {
     private String cachedAlbum = "";
     private Bitmap cachedArtwork;
     private int cachedState = PlaybackStateCompat.STATE_NONE;
+    /** 已经调用过 startForeground 了；见 promoteToForeground()。 */
+    private boolean foregrounded = false;
 
     @Override
     public void onCreate() {
@@ -110,6 +112,18 @@ public class FoliaPlaybackService extends android.app.Service {
                 sendCommand("previous");
             }
 
+            /**
+             * 通知栏进度条被拖动。
+             *
+             * 光有 ACTION_SEEK_TO 还不够：系统只在 actions 里看到它时才把那条
+             * 进度条画成可拖的样子，真正拖完之后调的就是这里。位置以毫秒传回 Web 层，
+             * 由那边去 seek 音频 —— 原生不自己碰播放器。
+             */
+            @Override
+            public void onSeekTo(long pos) {
+                sendCommand("seek", pos);
+            }
+
             @Override
             public void onStop() {
                 sendCommand("stop");
@@ -125,12 +139,7 @@ public class FoliaPlaybackService extends android.app.Service {
         mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS
                 | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
         mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY
-                        | PlaybackStateCompat.ACTION_PAUSE
-                        | PlaybackStateCompat.ACTION_PLAY_PAUSE
-                        | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
-                        | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                        | PlaybackStateCompat.ACTION_STOP)
+                .setActions(supportedActions())
                 .setState(PlaybackStateCompat.STATE_NONE, 0, 1.0f)
                 .build());
     }
@@ -195,6 +204,31 @@ public class FoliaPlaybackService extends android.app.Service {
         sendBroadcast(intent);
     }
 
+    /** 带位置的命令（目前只有拖动进度条的 seek 用得到）。 */
+    private void sendCommand(String command, long positionMs) {
+        Intent intent = new Intent(this, FoliaCommandReceiver.class);
+        intent.setAction(ACTION_WEB_COMMAND);
+        intent.putExtra(EXTRA_COMMAND, command);
+        intent.putExtra(EXTRA_COMMAND_POSITION, positionMs);
+        sendBroadcast(intent);
+    }
+
+    /**
+     * 通知栏支持哪些动作。
+     *
+     * ACTION_SEEK_TO 是那条进度条的关键：系统只在 actions 里看到它时，才把进度条
+     * 画成可拖的；没有它，进度条要么不出现，要么就是一条点不动的灰条。
+     */
+    private static long supportedActions() {
+        return PlaybackStateCompat.ACTION_PLAY
+                | PlaybackStateCompat.ACTION_PAUSE
+                | PlaybackStateCompat.ACTION_PLAY_PAUSE
+                | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+                | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                | PlaybackStateCompat.ACTION_STOP
+                | PlaybackStateCompat.ACTION_SEEK_TO;
+    }
+
     /**
      * 把服务顶到前台。
      *
@@ -203,8 +237,15 @@ public class FoliaPlaybackService extends android.app.Service {
      * 这里兜住异常，宁可没有通知也要保住播放。
      */
     private void promoteToForeground() {
+        // 每条 onStartCommand 都会走到这里，而位置现在是每秒推一次。不挡住的话
+        // 通知每秒被重建一遍 —— 封面重新解码、通知闪烁，白白烧 CPU。
+        // startForeground 本身可以重复调用，贵的是 buildForegroundNotification()。
+        if (foregrounded) {
+            return;
+        }
         try {
             startForeground(NOTIFICATION_ID, buildForegroundNotification());
+            foregrounded = true;
         } catch (Throwable error) {
             Log.e(TAG, "startForeground failed; keeping the service alive without it", error);
         }
@@ -331,12 +372,7 @@ public class FoliaPlaybackService extends android.app.Service {
         }
 
         PlaybackStateCompat.Builder builder = new PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY
-                        | PlaybackStateCompat.ACTION_PAUSE
-                        | PlaybackStateCompat.ACTION_PLAY_PAUSE
-                        | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
-                        | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                        | PlaybackStateCompat.ACTION_STOP)
+                .setActions(supportedActions())
                 .setState(compatState, positionMs, speed);
         if (mediaSession != null) {
             mediaSession.setPlaybackState(builder.build());
@@ -460,6 +496,7 @@ public class FoliaPlaybackService extends android.app.Service {
         } else {
             stopForeground(true);
         }
+        foregrounded = false;
     }
 
     // ---- Web 层（useCapacitorPlaybackBridge）通过这些常量与服务交互 ----
@@ -477,5 +514,7 @@ public class FoliaPlaybackService extends android.app.Service {
     static final String EXTRA_DURATION = "duration";
     static final String EXTRA_STATE = "state";
     static final String EXTRA_POSITION = "position";
+    /** 拖动通知栏进度条时带回的目标位置（毫秒）。 */
+    static final String EXTRA_COMMAND_POSITION = "commandPosition";
     static final String EXTRA_SPEED = "speed";
 }

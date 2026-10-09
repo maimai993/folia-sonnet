@@ -95,3 +95,15 @@ dist-runtime/
 keystore.properties
 *.jks
 *.keystore
+
+# ---- 本机产物与本地状态（不进仓库）----
+# 出包脚本的产物（build-apk.sh 每次都会重写，进仓库只会让 diff 永远脏）。
+*.apk
+*.aab
+# Gradle 用户目录：build-apk.sh 可能在 android/ 下留一份缓存，几百 MB。
+android/.gradle-home*/
+.gradle-home*/
+# 本地登录态（QQ 设备授权等）。
+.auth-state/
+# WorkBuddy 在本项目的工作数据（会话记忆、一次性脚本产物）。
+.workbuddy/

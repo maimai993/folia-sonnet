@@ -59,9 +59,16 @@ const LyricsTimelineModal: React.FC<LyricsTimelineModalProps> = ({
     const windowRef = useRef<HTMLDivElement>(null);
 
     // Track active line
+    // While `latest` still sits inside the active line's window the scan is skipped: the modal
+    // used to walk the full lyric array with findIndex on every animation frame while open.
     useMotionValueEvent(currentTime, "change", (latest) => {
         if (!lyrics || !lyrics.lines) return;
-        const index = lyrics.lines.findIndex(line => latest >= line.startTime && latest <= line.endTime);
+        const lines = lyrics.lines;
+        const activeLine = activeLineIndex >= 0 ? lines[activeLineIndex] : null;
+        if (activeLine && latest >= activeLine.startTime && latest <= activeLine.endTime) {
+            return;
+        }
+        const index = lines.findIndex(line => latest >= line.startTime && latest <= line.endTime);
         if (index !== -1 && index !== activeLineIndex) {
             setActiveLineIndex(index);
         }

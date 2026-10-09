@@ -83,6 +83,7 @@ import { useMediaSessionBridge } from './hooks/useMediaSessionBridge';
 import { useCapacitorSystemBars } from './hooks/useCapacitorSystemBars';
 import { useCapacitorPlaybackBridge } from './hooks/useCapacitorPlaybackBridge';
 import { useLyricsWallpaperFeed } from './hooks/useLyricsWallpaperFeed';
+import { useLyriconFeed } from './hooks/useLyriconFeed';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useTranscodeFallback } from './hooks/useTranscodeFallback';
@@ -184,7 +185,6 @@ export default function App() {
         cachedCoverUrl, setCachedCoverUrl,
         duration, setDuration,
         playerState, setPlayerState,
-        currentLineIndex,
         playQueue, setPlayQueue,
         activePlaybackContext,
         isFmMode, setIsFmMode,
@@ -197,7 +197,7 @@ export default function App() {
         cachedCoverUrl: state.cachedCoverUrl, setCachedCoverUrl: state.setCachedCoverUrl,
         duration: state.duration, setDuration: state.setDuration,
         playerState: state.playerState, setPlayerState: state.setPlayerState,
-        currentLineIndex: state.currentLineIndex, setCurrentLineIndex: state.setCurrentLineIndex,
+        setCurrentLineIndex: state.setCurrentLineIndex,
         playQueue: state.playQueue, setPlayQueue: state.setPlayQueue,
         activePlaybackContext: state.activePlaybackContext, setActivePlaybackContext: state.setActivePlaybackContext,
         isFmMode: state.isFmMode, setIsFmMode: state.setIsFmMode,
@@ -237,6 +237,12 @@ export default function App() {
     })));
     const isDev = import.meta.env.DEV;
     const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
+
+    // Subscribed only while the debug snapshot is actually being built: a plain subscription
+    // re-rendered the whole App on every lyric-line change for a debug-only value.
+    const devDebugCurrentLineIndex = usePlaybackStore(state => (
+        isDev || isDevDebugOverlayVisible ? state.currentLineIndex : -1
+    ));
 
     // Player Data
     useOnlineSongMetadataHydration(currentSong, setCurrentSong);
@@ -1436,6 +1442,10 @@ export default function App() {
     // Capacitor Android 专有：把播放状态接到原生前台服务，换通知栏媒体控制，
     // 并让进程拿到前台优先级 —— 否则应用切到后台时 WebView 的 fetch 会被节流挂住，
     // 自动切下一首就拿不到歌曲地址。非 Android 平台直接空转。
+    //
+    // seekMainAudio 定义在下面（它依赖这批 transport 回调），而通知栏的拖动事件
+    // 是异步来的，所以用 ref 接过声明顺序，不把它提前。
+    const seekMainAudioRef = useRef<(time: number) => void>(() => { });
     useCapacitorPlaybackBridge({
         currentSong: displaySong,
         cachedCoverUrl: displayCoverUrl ?? cachedCoverUrl,
@@ -1444,22 +1454,36 @@ export default function App() {
         mediaSessionPauseRef,
         mediaSessionPrevRef,
         mediaSessionNextRef,
+        getCurrentTime: () => currentTime.get(),
+        onSeek: (seconds) => seekMainAudioRef.current(seconds),
     });
 
     // Capacitor Android 专有：把当前行与行内进度喂给原生歌词动态壁纸。
     // 壁纸是另一个组件，读不到 React 状态，只能由这里主动推过去。
     useLyricsWallpaperFeed({
         lyrics,
-        currentLineIndex,
         getCurrentTime: () => currentTime.get(),
         title: displaySong?.name ?? null,
         artist: displaySong ? getSongArtistLabel(displaySong) : null,
         coverUrl: displayCoverUrl ?? cachedCoverUrl,
         playerState: displayPlayerState,
+        duration,
         // 让壁纸沿用 App 当前的主题色、底色与动效强度，避免两套色调各画各的。
         accentColor: theme?.accentColor ?? null,
         backgroundColor: theme?.backgroundColor ?? null,
         animationIntensity: theme?.animationIntensity ?? null,
+    });
+
+    // Android 专有：把当前歌曲与歌词推给状态栏歌词（Lyricon）。
+    useLyriconFeed({
+        lyrics,
+        getCurrentTime: () => currentTime.get(),
+        title: displaySong?.name ?? null,
+        artist: displaySong ? getSongArtistLabel(displaySong) : null,
+        // id 在部分音源上是数字，Lyricon 只用它判断换没换歌，统一成字符串即可。
+        songId: displaySong?.id == null ? null : String(displaySong.id),
+        duration,
+        playerState: displayPlayerState,
     });
 
     const {
@@ -1873,7 +1897,7 @@ export default function App() {
                 playerState,
                 visualizerMode,
                 lyrics: lyrics,
-                currentLineIndex,
+                currentLineIndex: devDebugCurrentLineIndex,
                 currentTimeValue: currentTime.get(),
                 audioSrc,
                 coverUrl,
@@ -1885,7 +1909,7 @@ export default function App() {
     ), [
         audioSrc,
         coverUrl,
-        currentLineIndex,
+        devDebugCurrentLineIndex,
         currentSong,
         currentTime,
         currentView,
@@ -2050,6 +2074,7 @@ export default function App() {
             void publishStagePlayerPlaybackUpdate();
         }
     }, [publishStagePlayerPlaybackUpdate]);
+    seekMainAudioRef.current = seekMainAudio;
 
     const handleMonetLyricLineSeek = useCallback((lyricTimeSec: number) => {
         if (isNowPlayingControlDisabled) {

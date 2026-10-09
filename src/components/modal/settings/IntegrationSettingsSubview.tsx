@@ -18,6 +18,8 @@ import SettingsSectionHeading from './navigation/SettingsSectionHeading';
 import { setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
+import { useLyriconStore } from '../../../stores/useLyriconStore';
+import { isCapacitorAndroid } from '../../../platform/runtime';
 
 // src/components/modal/settings/IntegrationSettingsSubview.tsx
 // Integration settings for Discord, Stage, Now Playing, OBS, and Navidrome.
@@ -154,6 +156,11 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         status: discordPresenceStatus,
     } = discord;
     const { t } = useTranslation();
+    // 状态栏歌词是 Android 专有：这个子视图自己读 store，省掉一层父组件透传。
+    const isAndroid = isCapacitorAndroid();
+    const lyriconEnabled = useLyriconStore(state => state.enabled);
+    const lyriconConnected = useLyriconStore(state => state.connected);
+    const onToggleLyricon = useLyriconStore(state => state.handleToggleLyricon);
     const getNowPlayingStatusLabel = (status: NowPlayingConnectionStatus) => {
         if (status === 'connected') return t('status.connected');
         if (status === 'connecting') return t('status.connecting');
@@ -395,6 +402,48 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                 </span>
                             )}
                         </div>
+                    </div>
+                </SettingsAnchor>
+            )}
+
+            {isAndroid && (
+                <SettingsAnchor anchorId="lyricon" label={t('options.lyricon') || 'Lyricon'}>
+                    <SettingsSectionHeading icon={Activity} label={t('options.lyricon') || 'Lyricon'} />
+                    <div className={`p-4 rounded-xl border space-y-4 ${settingsCardClass}`}>
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="space-y-1">
+                                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {t('options.enableLyricon') || 'Enable status-bar lyrics'}
+                                </div>
+                                <div className="text-[10px] opacity-40 max-w-[360px]" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.lyriconDesc') || 'Send the current song and its lyrics to Lyricon, which renders them in the status bar. Requires the Lyricon app.'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleLyricon(!lyriconEnabled)}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${!lyriconEnabled ? toggleOffBackgroundClass : ''}`}
+                                style={{ backgroundColor: lyriconEnabled ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                aria-label={t('options.enableLyricon') || 'Enable status-bar lyrics'}
+                            >
+                                <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${lyriconEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
+                        {lyriconEnabled && (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className={`px-2 py-1 rounded-full text-[10px] ${lyriconConnected ? successBgColor : errorBgColor} ${lyriconConnected ? successTextColor : errorTextColor}`}>
+                                    {lyriconConnected
+                                        ? t('status.connected')
+                                        : t('options.lyriconNotConnected') || 'Lyricon not found'}
+                                </span>
+                                {!lyriconConnected && (
+                                    <span className="text-[10px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                        {t('options.lyriconNotConnectedDesc') || 'Install Lyricon and make sure its centre service is running.'}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </SettingsAnchor>
             )}

@@ -10,6 +10,32 @@ import { audioBands, audioPower, currentTime, lyricCurrentTime } from '../stores
 
 // src/hooks/usePlaybackVisualizerBridge.ts
 
+// The RAF loop below runs at display refresh rate for the whole app lifetime, so its
+// per-frame allocations are the single largest steady-state GC source. The spectrum
+// buffer is reused instead: every consumer of audioBands.spectrum polls `.get()` (none
+// subscribe to change events), and `.get()` returns this live buffer with fresh data.
+let spectrumBuffer: Uint8Array<ArrayBuffer> | null = null;
+const EMPTY_SPECTRUM = new Uint8Array(0);
+
+// ~21.5 Hz per bin at the analyser's fixed 44.1kHz / fftSize configuration.
+const SPECTRUM_HZ_PER_BIN = 21.5;
+
+const computeBandEnergy = (buffer: Uint8Array, minHz: number, maxHz: number): number => {
+    const start = Math.floor(minHz / SPECTRUM_HZ_PER_BIN);
+    const end = Math.floor(maxHz / SPECTRUM_HZ_PER_BIN);
+    let sum = 0;
+    for (let index = start; index <= end; index += 1) {
+        sum += buffer[index];
+    }
+    const count = end - start + 1;
+    return count > 0 ? sum / count : 0;
+};
+
+const shapeBandEnergy = (value: number, boost = 2) => {
+    const normalized = value / 255;
+    return Math.pow(normalized, boost) * 255;
+};
+
 type UsePlaybackVisualizerBridgeParams = {
 
     audioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -85,39 +111,27 @@ export function usePlaybackVisualizerBridge({
         const hasAudibleSignal = isActuallyPlaying || isTransitionAudible();
 
         if (hasAudibleSignal && analyserRef.current) {
-            const bufferLength = analyserRef.current.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyserRef.current.getByteFrequencyData(dataArray);
+            const analyser = analyserRef.current;
+            const bufferLength = analyser.frequencyBinCount;
+            if (!spectrumBuffer || spectrumBuffer.length !== bufferLength) {
+                spectrumBuffer = new Uint8Array(bufferLength);
+            }
+            const dataArray = spectrumBuffer;
+            analyser.getByteFrequencyData(dataArray);
             audioBands.spectrum?.set(dataArray);
 
-            const getEnergy = (minHz: number, maxHz: number): number => {
-                const start = Math.floor(minHz / 21.5);
-                const end = Math.floor(maxHz / 21.5);
-                let sum = 0;
-                for (let index = start; index <= end; index += 1) {
-                    sum += dataArray[index];
-                }
-                const count = end - start + 1;
-                return count > 0 ? sum / count : 0;
-            };
+            const bass = computeBandEnergy(dataArray, 20, 150);
+            const lowMid = computeBandEnergy(dataArray, 150, 400);
+            const mid = computeBandEnergy(dataArray, 400, 1200);
+            const vocal = computeBandEnergy(dataArray, 1000, 3500);
+            const treble = computeBandEnergy(dataArray, 3500, 12000);
 
-            const bass = getEnergy(20, 150);
-            const lowMid = getEnergy(150, 400);
-            const mid = getEnergy(400, 1200);
-            const vocal = getEnergy(1000, 3500);
-            const treble = getEnergy(3500, 12000);
-
-            const process = (value: number, boost = 2) => {
-                const normalized = value / 255;
-                return Math.pow(normalized, boost) * 255;
-            };
-
-            audioPower.set(process((bass + lowMid) / 2, 3));
-            audioBands.bass.set(process(bass, 1.8));
-            audioBands.lowMid.set(process(lowMid, 2));
-            audioBands.mid.set(process(mid, 2));
-            audioBands.vocal.set(process(vocal, 1.5));
-            audioBands.treble.set(process(treble, 2));
+            audioPower.set(shapeBandEnergy((bass + lowMid) / 2, 3));
+            audioBands.bass.set(shapeBandEnergy(bass, 1.8));
+            audioBands.lowMid.set(shapeBandEnergy(lowMid, 2));
+            audioBands.mid.set(shapeBandEnergy(mid, 2));
+            audioBands.vocal.set(shapeBandEnergy(vocal, 1.5));
+            audioBands.treble.set(shapeBandEnergy(treble, 2));
         } else {
             const time = Date.now() / 2000;
             const breath = (Math.sin(time) + 1) * 20;
@@ -127,7 +141,7 @@ export function usePlaybackVisualizerBridge({
             audioBands.mid.set(breath);
             audioBands.vocal.set(breath);
             audioBands.treble.set(breath);
-            audioBands.spectrum?.set(new Uint8Array(0));
+            audioBands.spectrum?.set(EMPTY_SPECTRUM);
         }
 
         if (isActuallyPlaying && audioElement) {

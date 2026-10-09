@@ -47,6 +47,9 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     lyricApi: { section: 'integration', labelKey: 'options.lyricApi', electronOnly: true },
     stageMode: { section: 'integration', labelKey: 'options.stageMode' },
     navidrome: { section: 'integration', labelKey: 'navidrome.settings' },
+    // 状态栏歌词只在 Android 上出现，但这里没有 androidOnly 标记，所以与 Electron 专用项
+    // 一样靠渲染侧的条件判断收起来；声明必须存在，否则覆盖率测试会把它当成漂移。
+    lyricon: { section: 'integration', labelKey: 'options.lyricon' },
 
     // StorageSettingsSection (LocalLibraryWatchSection renders inside it)
     cacheDetails: { section: 'storage', labelKey: 'options.cacheDetails' },
@@ -63,6 +66,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // GraphicsSettingsSubview
     graphicsPerformance: { section: 'graphics', labelKey: 'options.labPerformanceSection' },
     graphicsMotion: { section: 'graphics', labelKey: 'options.reduceMotionSection' },
+    graphicsLyricsWallpaper: { section: 'graphics', labelKey: 'options.lyricsWallpaperSection' },
 
     // ModsSettingsSubview
     modSystem: { section: 'mods', labelKey: 'options.enableModSystem', electronOnly: true },

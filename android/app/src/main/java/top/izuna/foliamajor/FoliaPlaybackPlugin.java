@@ -47,10 +47,10 @@ public class FoliaPlaybackPlugin extends Plugin {
         super.handleOnDestroy();
     }
 
-    static void dispatchCommandFromReceiver(String command) {
+    static void dispatchCommandFromReceiver(String command, long positionMs) {
         FoliaPlaybackPlugin current = instance;
         if (current != null) {
-            current.dispatchCommand(command);
+            current.dispatchCommand(command, positionMs);
         }
     }
 
@@ -139,8 +139,13 @@ public class FoliaPlaybackPlugin extends Plugin {
      * FoliaPlayback.onCommand(handler) 订阅，插件内部只管 notifyListeners。
      */
     public void dispatchCommand(String command) {
+        dispatchCommand(command, 0L);
+    }
+
+    public void dispatchCommand(String command, long positionMs) {
         JSObject payload = new JSObject();
         payload.put("command", command);
+        payload.put("positionMs", positionMs);
         notifyListeners(EVENT_COMMAND, payload);
     }
 

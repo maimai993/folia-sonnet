@@ -5,7 +5,22 @@ import type { MonetBackgroundImage, MonetBackgroundTuning, Theme } from '../../.
 // Builds and caches the static Monet poster background so the visualizer only recomputes when inputs change.
 const MONET_BACKGROUND_WIDTH = 1920;
 const MONET_BACKGROUND_HEIGHT = 1080;
+// Each entry resolves to a ~0.3-0.6MB jpeg dataURL, so the cache must stay bounded: with
+// cover-derived auto theming every song adds a key, and an unbounded Map grew forever.
+const MONET_BACKGROUND_CACHE_LIMIT = 12;
 const monetBackgroundCache = new Map<string, Promise<string | null>>();
+
+const touchMonetBackgroundCache = (key: string, value: Promise<string | null>) => {
+    monetBackgroundCache.delete(key);
+    monetBackgroundCache.set(key, value);
+    while (monetBackgroundCache.size > MONET_BACKGROUND_CACHE_LIMIT) {
+        const oldestKey = monetBackgroundCache.keys().next().value;
+        if (oldestKey === undefined) {
+            break;
+        }
+        monetBackgroundCache.delete(oldestKey);
+    }
+};
 
 interface BuildMonetBackgroundOptions {
     coverUrl?: string | null;
@@ -352,10 +367,11 @@ export const resolveMonetBackgroundDataUrl = (options: BuildMonetBackgroundOptio
     const cacheKey = getMonetBackgroundCacheKey(options);
     const cached = monetBackgroundCache.get(cacheKey);
     if (cached) {
+        touchMonetBackgroundCache(cacheKey, cached);
         return cached;
     }
 
     const next = buildMonetBackgroundDataUrl(options).catch(() => null);
-    monetBackgroundCache.set(cacheKey, next);
+    touchMonetBackgroundCache(cacheKey, next);
     return next;
 };

@@ -99,7 +99,7 @@ describe('QQ Music Web transport', () => {
         await requestQq('login_qr_key');
         await requestQq('login_status');
 
-        const urls = fetchMock.mock.calls.map(call => new URL(call[0]));
+        const urls = fetchMock.mock.calls.map(call => new URL(String(call[0])));
         expect(urls[0].searchParams.get('channel')).toBe('qq');
         expect(urls[1].searchParams.get('channel')).toBe('wechat');
         expect(urls[2].searchParams.get('channel')).toBeNull();
@@ -213,7 +213,7 @@ describe('QQ Music Web transport', () => {
         await requestQq('song_list_detail', { disstid: 9757480713 });
         await requestQq('song_info', { songmid: 'song-mid', songid: 42 });
 
-        const urls = fetchMock.mock.calls.map(call => new URL(call[0]));
+        const urls = fetchMock.mock.calls.map(call => new URL(String(call[0])));
         expect(urls.map(url => url.pathname)).toEqual([
             '/getMusicPlay/song-mid',
             '/getSongListDetail/9757480713',
@@ -249,7 +249,7 @@ describe('QQ Music Web transport', () => {
         await requestQq('artist_albums', { singermid: '0025NhlN2yWrP4', limit: 20, page: 40 });
         await requestQq('artist_songs', { singermid: '0025NhlN2yWrP4', limit: 20, page: 3 });
 
-        const urls = fetchMock.mock.calls.map(call => new URL(call[0]));
+        const urls = fetchMock.mock.calls.map(call => new URL(String(call[0])));
         expect(urls.map(url => url.pathname)).toEqual([
             '/getAlbumInfo',
             '/getSingerAlbum',
@@ -475,7 +475,7 @@ describe('QQ Music Web transport', () => {
     // serverless 入口原生就认的形式。客户端两种都发得起，才有资格不去猜对面是哪种部署。
     it('falls back to the flat ?path= form when the path-style route 404s', async () => {
         let calls = 0;
-        const fetchMock = vi.fn(async () => {
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
             calls += 1;
             if (calls === 1) return Response.json({ code: 404 }, { status: 404 });
             return Response.json({ code: 200, data: {} });
@@ -485,20 +485,53 @@ describe('QQ Music Web transport', () => {
 
         await expect(requestQq('login_status')).resolves.toEqual({ code: 200, data: {} });
 
-        const [firstUrl, secondUrl] = fetchMock.mock.calls.map(call => new URL(call[0]));
+        const [firstUrl, secondUrl] = fetchMock.mock.calls.map(call => new URL(String(call[0])));
         expect(firstUrl.pathname).toBe('/login/status');
         expect(secondUrl.searchParams.get('path')).toBe('/login/status');
         // 备用拼法成功后被记成偏好，后续请求不再白撞一次路径式。
         await requestQq('login_status');
-        const thirdUrl = new URL(fetchMock.mock.calls[2][0]);
+        const thirdUrl = new URL(String(fetchMock.mock.calls[2][0]));
         expect(thirdUrl.searchParams.get('path')).toBe('/login/status');
         expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    // 路径式打到一个不存在的子路径时，站点的 404 页往往不带 CORS 头。浏览器于是连 404
+    // 都不交给 JS，fetch 只抛 `TypeError: Failed to fetch` —— 看上去像后端挂了，
+    // 实际是拼法不对。网络级失败同样要换拼法试一次，否则这条链路永远查不出原因。
+    it('falls back to the flat ?path= form when the path-style request is blocked at the network level', async () => {
+        let calls = 0;
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+            calls += 1;
+            if (calls === 1) throw new TypeError('Failed to fetch');
+            return Response.json({ code: 200, data: {} });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_status')).resolves.toEqual({ code: 200, data: {} });
+
+        const [firstUrl, secondUrl] = fetchMock.mock.calls.map(call => new URL(String(call[0])));
+        expect(firstUrl.pathname).toBe('/login/status');
+        expect(secondUrl.searchParams.get('path')).toBe('/login/status');
+    });
+
+    // 后端返回的 401 / 429 是真实状态，不是拼法问题：换一种拼法再打一次只会把
+    // 退避计数翻倍，还掩盖了真正的原因。
+    it('does not retry another endpoint form on an authenticated backend status', async () => {
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+            Response.json({ code: 429 }, { status: 429 }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_qr_key')).rejects.toMatchObject({ httpStatus: 429 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     // 旧后端上没有 `login_channels` / `user_playlist_detail`，那种 404 是「路由不存在」，
     // 不是「拼法不对」；两种拼法都失败时必须保持原偏好，否则整条链路会被带偏。
     it('does not adopt the fallback form when the route itself is missing', async () => {
-        const fetchMock = vi.fn(async () => Response.json({ code: 404 }, { status: 404 }));
+        const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+            Response.json({ code: 404 }, { status: 404 }));
         vi.stubGlobal('fetch', fetchMock);
         const { requestQq } = await import('@/services/onlineMusic/qqTransport');
 
@@ -507,7 +540,7 @@ describe('QQ Music Web transport', () => {
 
         fetchMock.mockImplementation(async () => Response.json({ code: 200, data: {} }));
         await requestQq('login_status');
-        const recoveredUrl = new URL(fetchMock.mock.calls[2][0]);
+        const recoveredUrl = new URL(String(fetchMock.mock.calls[2][0]));
         expect(recoveredUrl.pathname).toBe('/login/status');
     });
 });

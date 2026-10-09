@@ -192,6 +192,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "lyric-segmentation",
   "visualizer-picker",
   "background-picker",
+  "lyrics-wallpaper",
   "visualizer-sonnet",
   "visualizer-tempera",
   "visualizer-lumiere",

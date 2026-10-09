@@ -17,7 +17,8 @@ import { buildStoredCappellaEmojiPack, clearCustomCappellaEmojiPack, isSupported
 import { buildStoredMonetBackgroundImage, clearMonetBackgroundImage, isSupportedMonetBackgroundFile, saveMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { buildStoredMonetPortraitImage, clearMonetPortraitImage, isSupportedMonetPortraitFile, saveMonetPortraitImage } from '../services/monetPortraitImage';
 import { setStatusMessage } from './useStatusMessageStore';
-import { LUMIERE_TUNING_STORAGE_KEY, VISUALIZER_OPACITY_STORAGE_KEY, clampCladdaghEllipseTiltDeg, clampCladdaghFocusScaleRatio, clampCladdaghLetterSpacingOffset, clampCladdaghRadiusScale, clampClassicBreathingFloatMultiplier, clampClassicWordSpacing, clampFumeBackgroundObjectOpacity, clampFumeCameraSpeed, clampFumeGlowIntensity, clampFumeHeroScale, clampFumeTextHoldRatio, clampPartitaStagger, clampUnit, readStoredBackgroundOpacity, readStoredCadenzaTuning, readStoredCappellaTuning, readStoredCladdaghTuning, readStoredClassicTuning, readStoredDioramaTuning, readStoredFumeTuning, readStoredLatentBackgroundTuning, readStoredLumiereTuning, readStoredMonetBackgroundTuning, readStoredMonetTuning, readStoredNomandBackgroundTuning, readStoredPartitaTuning, readStoredPendoloTuning, readStoredSonnetTuning, readStoredSoraBackgroundTuning, readStoredTemperaTuning, readStoredTiltTuning, readStoredUrlBackgroundList, readStoredUrlBackgroundSelectedId, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, resolveCappellaAvatarSource, resolveFumeCameraTrackingMode, resolvePendoloNumber, resolveStoredDioramaTuning, resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveStoredSoraBackgroundTuning, sanitizeTemperaLayerImages } from './visualizerSettingsPersistence';
+import { WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY } from './visualizerSettingsPersistence';
+import { LUMIERE_TUNING_STORAGE_KEY, VISUALIZER_OPACITY_STORAGE_KEY, clampCladdaghEllipseTiltDeg, clampCladdaghFocusScaleRatio, clampCladdaghLetterSpacingOffset, clampCladdaghRadiusScale, clampClassicBreathingFloatMultiplier, clampClassicWordSpacing, clampFumeBackgroundObjectOpacity, clampFumeCameraSpeed, clampFumeGlowIntensity, clampFumeHeroScale, clampFumeTextHoldRatio, clampPartitaStagger, clampUnit, readStoredBackgroundOpacity, readStoredCadenzaTuning, readStoredCappellaTuning, readStoredCladdaghTuning, readStoredClassicTuning, readStoredDioramaTuning, readStoredFumeTuning, readStoredLatentBackgroundTuning, readStoredLumiereTuning, readStoredMonetBackgroundTuning, readStoredMonetTuning, readStoredNomandBackgroundTuning, readStoredPartitaTuning, readStoredPendoloTuning, readStoredSonnetTuning, readStoredSoraBackgroundTuning, readStoredTemperaTuning, readStoredTiltTuning, readStoredUrlBackgroundList, readStoredUrlBackgroundSelectedId, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, resolveCappellaAvatarSource, resolveFumeCameraTrackingMode, resolvePendoloNumber, resolveStoredDioramaTuning, resolveStoredLatentBackgroundTuning, resolveStoredMonetBackgroundTuning, resolveStoredMonetTuning, resolveStoredNomandBackgroundTuning, resolveStoredSoraBackgroundTuning, sanitizeTemperaLayerImages } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 
 /** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
@@ -29,6 +30,22 @@ const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' 
 export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
 /** 歌词壁纸的自选背景图（base64，已压到 512px）。体积不小，但落 localStorage 仍在配额内。 */
 export const LYRICS_WALLPAPER_IMAGE_STORAGE_KEY = 'folia.lyricsWallpaperImage';
+/** 歌词壁纸的背景模糊强度 0..1。0 = 完全清晰，1 = 糊到只剩色块。 */
+export const LYRICS_WALLPAPER_BLUR_STORAGE_KEY = 'folia.lyricsWallpaperBlur';
+/** 歌词壁纸顶部下方那条整首歌的进度条。 */
+export const LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY = 'folia.lyricsWallpaperProgress';
+/** 歌词壁纸的双行翻译：主行下面再挂一行翻译。 */
+export const LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY = 'folia.lyricsWallpaperTranslation';
+/** 歌词壁纸的样式：'minimal' 固定精简风格，'follow' 跟随播放页选的可视化模式。 */
+export const LYRICS_WALLPAPER_STYLE_STORAGE_KEY = 'folia.lyricsWallpaperStyle';
+
+// 默认偏轻：多数人选图就是想看清那张图，糊过头反而违背意图。想要柔化往上拉即可。
+const DEFAULT_WALLPAPER_BLUR = 0.35;
+
+const clampWallpaperBlur = (value: number): number => {
+    if (!Number.isFinite(value)) return DEFAULT_WALLPAPER_BLUR;
+    return Math.min(1, Math.max(0, value));
+};
 import { useVisualizerAssetStore } from './useVisualizerAssetStore';
 import { normalizeLumiereTuning } from '../utils/lumiereTuning';
 
@@ -51,6 +68,28 @@ export type VisualizerSettingsState = {
     lyricsWallpaperBackground: 'cover' | 'color' | 'image';
     /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
     lyricsWallpaperImage: string | null;
+    /** 背景模糊强度 0..1：同时作用于模糊封面与自选背景图。 */
+    lyricsWallpaperBlur: number;
+    /** 是否在歌词区顶部下方显示整首歌的进度条。 */
+    lyricsWallpaperProgress: boolean;
+    /** 桌面歌词是否在主行下面再挂一行翻译。歌词本身没翻译时不会因此多出空行。 */
+    lyricsWallpaperTranslation: boolean;
+    /** 壁纸样式：'minimal' 固定精简风格，'follow' 跟随播放页的可视化模式。 */
+    lyricsWallpaperStyle: 'minimal' | 'follow';
+    /** 可视化叠层整体窗口的不透明度，0.1..1。 */
+    wallpaperOverlayOpacity: number;
+    /** 叠层是否在所有应用之上显示。关掉时只在桌面（壁纸可见）时挂着。 */
+    wallpaperOverlayAllApps: boolean;
+    /** 跟随 + 叠层时，隐藏原生那层歌词，避免和可视化的歌词叠在一起。 */
+    wallpaperOverlayHideNativeLyrics: boolean;
+    /** 跟随 + 叠层时，隐藏原生那层的进度条。 */
+    wallpaperOverlayHideNativeProgress: boolean;
+    /** 纯音乐（没有歌词）时不显示叠层。 */
+    wallpaperOverlaySkipInstrumental: boolean;
+    /** 暂停时自动隐藏叠层。 */
+    wallpaperOverlayHideWhenPaused: boolean;
+    /** 歌词唱完之后自动隐藏叠层。 */
+    wallpaperOverlayHideAfterLyricsEnd: boolean;
     classicTuning: ClassicTuning;
     cadenzaTuning: CadenzaTuning;
     partitaTuning: PartitaTuning;
@@ -86,6 +125,17 @@ export type VisualizerSettingsState = {
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
     handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image') => void;
     handleSetLyricsWallpaperImage: (image: string | null) => void;
+    handleSetLyricsWallpaperBlur: (blur: number) => void;
+    handleToggleLyricsWallpaperProgress: (enable: boolean) => void;
+    handleToggleLyricsWallpaperTranslation: (enable: boolean) => void;
+    handleSetWallpaperOverlayOpacity: (value: number) => void;
+    handleToggleWallpaperOverlayAllApps: (enable: boolean) => void;
+    handleToggleWallpaperOverlayHideNativeLyrics: (enable: boolean) => void;
+    handleToggleWallpaperOverlayHideNativeProgress: (enable: boolean) => void;
+    handleToggleWallpaperOverlaySkipInstrumental: (enable: boolean) => void;
+    handleToggleWallpaperOverlayHideWhenPaused: (enable: boolean) => void;
+    handleToggleWallpaperOverlayHideAfterLyricsEnd: (enable: boolean) => void;
+    handleSetLyricsWallpaperStyle: (style: 'minimal' | 'follow') => void;
     handleSetClassicTuning: (patch: Partial<ClassicTuning>) => void;
     handleResetClassicTuning: () => void;
     handleSetCadenzaTuning: (patch: Partial<CadenzaTuning>) => void;
@@ -146,6 +196,19 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     lyricsWallpaperBackground: resolveWallpaperBackground(
         getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover')),
     lyricsWallpaperImage: getStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, '') || null,
+    lyricsWallpaperBlur: clampWallpaperBlur(Number(getStoredString(LYRICS_WALLPAPER_BLUR_STORAGE_KEY, ''))),
+    lyricsWallpaperProgress: getStoredBoolean(LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY, true),
+    lyricsWallpaperTranslation: getStoredBoolean(LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY, true),
+    lyricsWallpaperStyle: getStoredString(LYRICS_WALLPAPER_STYLE_STORAGE_KEY, 'follow') === 'minimal'
+        ? 'minimal'
+        : 'follow',
+    wallpaperOverlayOpacity: readStoredWallpaperOverlayOpacity(),
+    wallpaperOverlayAllApps: readStoredWallpaperOverlayAllApps(),
+    wallpaperOverlayHideNativeLyrics: readStoredWallpaperOverlayHideNativeLyrics(),
+    wallpaperOverlayHideNativeProgress: readStoredWallpaperOverlayHideNativeProgress(),
+    wallpaperOverlaySkipInstrumental: readStoredWallpaperOverlaySkipInstrumental(),
+    wallpaperOverlayHideWhenPaused: readStoredWallpaperOverlayHideWhenPaused(),
+    wallpaperOverlayHideAfterLyricsEnd: readStoredWallpaperOverlayHideAfterLyricsEnd(),
     classicTuning: readStoredClassicTuning(),
     cadenzaTuning: readStoredCadenzaTuning(),
     partitaTuning: readStoredPartitaTuning(),
@@ -314,6 +377,53 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     handleSetLyricsWallpaperImage: (image) => {
         setStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, image || '');
         set({ lyricsWallpaperImage: image });
+    },
+    handleSetLyricsWallpaperBlur: (blur) => {
+        const next = clampWallpaperBlur(blur);
+        setStoredString(LYRICS_WALLPAPER_BLUR_STORAGE_KEY, String(next));
+        set({ lyricsWallpaperBlur: next });
+    },
+    handleToggleLyricsWallpaperProgress: (enable) => {
+        setStoredBoolean(LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY, enable);
+        set({ lyricsWallpaperProgress: enable });
+    },
+    handleToggleLyricsWallpaperTranslation: (enable) => {
+        setStoredBoolean(LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY, enable);
+        set({ lyricsWallpaperTranslation: enable });
+    },
+    handleSetLyricsWallpaperStyle: (style) => {
+        setStoredString(LYRICS_WALLPAPER_STYLE_STORAGE_KEY, style);
+        set({ lyricsWallpaperStyle: style });
+    },
+    handleSetWallpaperOverlayOpacity: (value) => {
+        // 下限 0.1：0 等于整层看不见，用户会以为功能坏了。
+        const clamped = Math.min(1, Math.max(0.1, value));
+        localStorage.setItem(WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, String(clamped));
+        set({ wallpaperOverlayOpacity: clamped });
+    },
+    handleToggleWallpaperOverlayAllApps: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayAllApps: enable });
+    },
+    handleToggleWallpaperOverlayHideNativeLyrics: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayHideNativeLyrics: enable });
+    },
+    handleToggleWallpaperOverlayHideNativeProgress: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayHideNativeProgress: enable });
+    },
+    handleToggleWallpaperOverlaySkipInstrumental: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlaySkipInstrumental: enable });
+    },
+    handleToggleWallpaperOverlayHideWhenPaused: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayHideWhenPaused: enable });
+    },
+    handleToggleWallpaperOverlayHideAfterLyricsEnd: (enable) => {
+        localStorage.setItem(WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperOverlayHideAfterLyricsEnd: enable });
     },
     handleSetClassicTuning: (patch) => {
         const prev = get().classicTuning;

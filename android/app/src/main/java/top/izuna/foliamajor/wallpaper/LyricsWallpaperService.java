@@ -33,6 +33,8 @@ public class LyricsWallpaperService extends WallpaperService {
 
         private WallpaperGlSurfaceView glView;
         private LyricsRenderer renderer;
+        /** 播放页那套可视化的叠层（见 WallpaperOverlay 里为什么需要它）。 */
+        private WallpaperOverlay overlay;
 
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
@@ -40,12 +42,15 @@ public class LyricsWallpaperService extends WallpaperService {
             // 壁纸不接收触摸：交给桌面处理。
             setTouchEventsEnabled(false);
 
-            renderer = new LyricsRenderer();
+            renderer = new LyricsRenderer(LyricsWallpaperService.this);
             glView = new WallpaperGlSurfaceView(LyricsWallpaperService.this);
             glView.setEGLContextClientVersion(2);
             glView.setPreserveEGLContextOnPause(true);
             glView.setRenderer(renderer);
             glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+
+            // 共享实例：应用侧开启「在所有应用上叠加」时用的是同一份，避免叠出两层。
+            overlay = WallpaperOverlay.shared(LyricsWallpaperService.this);
         }
 
         @Override
@@ -59,6 +64,11 @@ public class LyricsWallpaperService extends WallpaperService {
                 glView.onResume();
             } else {
                 glView.onPause();
+            }
+            if (overlay != null) {
+                // 叠层同样只在可见时挂着：WebView 里的 rAF 在后台不会自己停。
+                // 壁纸样式是「精简」时它内部会自己收起来（见 WallpaperOverlay.shouldShow）。
+                overlay.setWallpaperVisible(visible);
             }
         }
 
@@ -74,6 +84,10 @@ public class LyricsWallpaperService extends WallpaperService {
 
         @Override
         public void onDestroy() {
+            if (overlay != null) {
+                overlay.setWallpaperVisible(false);
+                overlay = null;
+            }
             if (glView != null) {
                 glView.onDestroy();
             }

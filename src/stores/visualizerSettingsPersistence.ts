@@ -33,6 +33,82 @@ export const readStoredBackgroundOpacity = () => {
     return Number.isFinite(parsed) ? parsed : 0.75;
 };
 
+/** 可视化叠层（盖在壁纸之上那层 WebView）整体窗口的不透明度。 */
+export const WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY = 'folia.wallpaperOverlayOpacity';
+
+export const readStoredWallpaperOverlayOpacity = () => {
+    if (typeof window === 'undefined') {
+        return 1;
+    }
+    const saved = localStorage.getItem(WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : 1;
+    // 下限给 0.1 而不是 0：0 等于整层看不见，用户会以为功能坏了。
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.1, parsed)) : 1;
+};
+
+/** 叠层是否在所有应用之上显示。默认只在桌面（壁纸可见）时挂着。 */
+export const WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY = 'folia.wallpaperOverlayAllApps';
+
+export const readStoredWallpaperOverlayAllApps = () =>
+    typeof window !== 'undefined'
+    && localStorage.getItem(WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY) === 'true';
+
+/**
+ * 跟随模式下是否隐藏原生那层歌词。
+ *
+ * 叠层跑的是播放页同一套可视化，它自己会画歌词；原生 GLES 那层如果照旧画，
+ * 两层歌词会叠在一起。默认「跟随 + 叠层可用」时把原生那层关掉更干净，
+ * 但留成开关 —— 有些模式的可视化歌词位置和原生不同，用户可能想两层都要。
+ */
+export const WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY = 'folia.wallpaperOverlayHideNativeLyrics';
+
+export const readStoredWallpaperOverlayHideNativeLyrics = () =>
+    typeof window !== 'undefined'
+    && localStorage.getItem(WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY) === 'true';
+
+/**
+ * 纯音乐（没有歌词）时是否不显示叠层。
+ *
+ * 纯音乐下可视化只能画背景，画不出歌词；有人要的就是这时候干净点，
+ * 也有人想留着动效当氛围，所以做成开关，默认开。
+ */
+/**
+ * 歌词唱完之后（尾奏很长 / 后半段是纯音乐）是否自动隐藏叠层。
+ *
+ * 有些曲目只在前半段有几句歌词，后面几分钟没有 —— 那时候叠层只是挂着一片空白。
+ * 默认开：最后一句唱完 3 秒后收起，跳回有歌词的位置再自动回来。
+ */
+export const WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY = 'folia.wallpaperOverlayHideAfterLyricsEnd';
+
+export const readStoredWallpaperOverlayHideAfterLyricsEnd = () =>
+    typeof window === 'undefined'
+    || localStorage.getItem(WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY) !== 'false';
+
+export const WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY = 'folia.wallpaperOverlaySkipInstrumental';
+
+/**
+ * 暂停时是否自动隐藏叠层。
+ *
+ * 暂停时画面是静止的，叠层继续挂着只是白占一层窗口（还持续跑 rAF）。
+ * 默认开：暂停就收起，恢复播放再自动回来。
+ */
+export const WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY = 'folia.wallpaperOverlayHideWhenPaused';
+
+export const readStoredWallpaperOverlayHideWhenPaused = () =>
+    typeof window === 'undefined'
+    || localStorage.getItem(WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY) !== 'false';
+
+export const readStoredWallpaperOverlaySkipInstrumental = () =>
+    typeof window === 'undefined'
+    || localStorage.getItem(WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY) !== 'false';
+
+/** 跟随模式下是否隐藏原生那层的进度条（叠层里可视化自带的那条不受影响）。 */
+export const WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY = 'folia.wallpaperOverlayHideNativeProgress';
+
+export const readStoredWallpaperOverlayHideNativeProgress = () =>
+    typeof window !== 'undefined'
+    && localStorage.getItem(WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY) === 'true';
+
 export const readStoredVisualizerOpacity = () => {
     if (typeof window === 'undefined') {
         return 1;

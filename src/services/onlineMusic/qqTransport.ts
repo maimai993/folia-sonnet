@@ -1,6 +1,7 @@
 import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { upgradeInsecureApiBase } from '../../utils/secureApiBase';
 
 // src/services/onlineMusic/qqTransport.ts
 
@@ -52,7 +53,9 @@ const getWebApiBase = (): string => {
         ? String(process.env?.VITE_QQ_API_BASE || '')
         : '';
     const value = viteValue || processValue;
-    return value.trim().replace(/\/$/, '');
+    // 明文后端在 https 页面里会被 WebView 当混合内容拦掉（报错是毫无特征的
+    // `TypeError: Failed to fetch`），所以这里先把它升级成 https。
+    return upgradeInsecureApiBase(value.trim().replace(/\/$/, ''));
 };
 
 // Electron embeds qq-music-api and starts it on a free port, so the base is only known at runtime.
@@ -310,6 +313,18 @@ const requestQqOnce = async <T = unknown>(
     return body as T;
 };
 
+/**
+ * fetch 在 WebView 里失败时抛的是 `TypeError: Failed to fetch` —— 混合内容被拦、
+ * CORS 没配、后端宕机、DNS 不通，四种原因长得完全一样。前两种恰恰都可能是**拼法**
+ * 造成的（路径式的 404 页往往不带 CORS 头，浏览器连 404 都不给 JS 看），
+ * 所以网络级失败同样值得换一种拼法再试一次。
+ */
+const isNetworkLevelFailure = (error: unknown): boolean => {
+    if (error instanceof TypeError) return true;
+    return error instanceof Error
+        && /failed to fetch|networkerror|network request failed|load failed/i.test(error.message);
+};
+
 export const requestQq = async <T = unknown>(operation: QqOperation, params: QqParams = {}): Promise<T> => {
     const { base, embedded } = await resolveApiBase();
     // 内嵌的 qq-music-api 就是一个 Express 应用，只有路径式一种拼法，不需要试错。
@@ -320,8 +335,12 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     try {
         return await requestQqOnce<T>(operation, params, base, preferred);
     } catch (error) {
-        // 只有「后端根本没有这条路由」才像是拼法不对；其余失败（401 / 429 / 上游拒收）如实上抛。
-        if (!(error instanceof OnlineProviderError) || error.httpStatus !== 404) throw error;
+        // 值得换拼法的只有两种：「后端根本没有这条路由」的 404，以及拼错地址时被
+        // 浏览器吞掉、只剩网络级错误的情况。其余失败（401 / 429 / 上游拒收）如实上抛。
+        const worthRetrying = error instanceof OnlineProviderError
+            ? error.httpStatus === 404
+            : isNetworkLevelFailure(error);
+        if (!worthRetrying) throw error;
         const result = await requestQqOnce<T>(operation, params, base, fallback);
         // 仅在备用拼法真的成功时才改偏好：路由本身不存在的 404 两边都会失败，不会走到这里。
         webEndpointStyle = fallback;

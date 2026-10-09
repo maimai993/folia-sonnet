@@ -205,11 +205,13 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
     },
     build: {
       rollupOptions: {
-        input: {
-          main: 'index.html',
-          stageClient: 'stage-client.html',
-          modExport: 'mod-export.html',
-        },
+          input: {
+            main: 'index.html',
+            stageClient: 'stage-client.html',
+            modExport: 'mod-export.html',
+            // 动态壁纸那层 WebView 加载的页面（见 src/entries/wallpaperSurface.ts）。
+            wallpaper: 'wallpaper.html',
+          },
         output: {
           // three.js is a large dependency used only by the diorama 3D visualizer. Split it into its
           // own chunk so it doesn't bloat the main bundle past the PWA precache size limit (each file

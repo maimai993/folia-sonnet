@@ -47,7 +47,9 @@ describe('searchSettingsNav', () => {
         const result = searchSettingsNav(desktopGroups, '图形', 'zh-CN');
         const graphics = flattenSettingsNavItems(result.groups).find(item => item.id === 'graphics');
 
-        expect(graphics?.anchors.map(anchor => anchor.id)).toEqual(['graphicsPerformance', 'graphicsMotion']);
+        expect(graphics?.anchors.map(anchor => anchor.id)).toEqual([
+            'graphicsPerformance', 'graphicsMotion', 'graphicsLyricsWallpaper',
+        ]);
     });
 
     it('never surfaces a section the platform does not show', () => {

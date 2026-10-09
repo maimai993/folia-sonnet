@@ -205,11 +205,23 @@ function LatticePoster({
             transition={reducedMotion
                 ? { duration: 0 }
                 : landing === null
+                    /*
+                     * 这里（入场波之外的一切重排：展开 / 收起 / 队列变化）刻意**不用 spring**。
+                     *
+                     * 一次展开会让同一格里的 12 张卡同时改变 x / y / width / height ——
+                     * 而 width / height 是布局属性，每一帧都要重新布局并重新绘制那张卡
+                     * （封面底图 + 三层渐变 + 描边），spring 的回弹还会把这个过程拖长。
+                     * 桌面 GPU 扛得住，Android WebView 上就是「选歌时整屏闪烁」。
+                     * 换成一段固定时长的缓出（不再有回弹收尾）：帧数可控，
+                     * 观感是"滑过去然后稳住"。0.46s 是这两个约束的中间值 ——
+                     * 再短会显得生硬（用户要求"慢一点"），再长则把重绘拖得更久。
+                     */
                     ? {
-                        type: 'spring', stiffness: 300, damping: 34,
-                        opacity: { duration: 0.26, ease: 'easeOut' },
-                        scaleX: { duration: 0.3, ease: 'easeOut' },
-                        scaleY: { duration: 0.3, ease: 'easeOut' },
+                        duration: 0.46,
+                        ease: [0.22, 1, 0.36, 1],
+                        opacity: { duration: 0.34, ease: 'easeOut' },
+                        scaleX: { duration: 0.36, ease: 'easeOut' },
+                        scaleY: { duration: 0.36, ease: 'easeOut' },
                     }
                     : {
                         type: 'spring', stiffness: 360, damping: 24, delay: landing,

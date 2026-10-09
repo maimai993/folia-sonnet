@@ -114,6 +114,9 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
     const touchStartX = useRef(0);
     const touchEndX = useRef(0);
     const wheelTimeout = useRef<any>(null);
+    // Read by the wheel listener without re-subscribing it on every focus change.
+    const focusedIndexRef = useRef(focusedIndex);
+    focusedIndexRef.current = focusedIndex;
     const prevInitialIndexRef = useRef(initialFocusedIndex);
     const onFocusedIndexChangeRef = useRef(onFocusedIndexChange);
     const [containerSize, setContainerSize] = useState(() => {
@@ -209,9 +212,9 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
                 const delta = e.deltaX !== 0 ? e.deltaX : e.deltaY;
                 if (Math.abs(delta) > 20) {
                     if (delta > 0) {
-                        if (focusedIndex < items.length - 1) setFocusedIndex(prev => prev + 1);
+                        if (focusedIndexRef.current < items.length - 1) setFocusedIndex(prev => prev + 1);
                     } else {
-                        if (focusedIndex > 0) setFocusedIndex(prev => prev - 1);
+                        if (focusedIndexRef.current > 0) setFocusedIndex(prev => prev - 1);
                     }
                 }
             }, 150);
@@ -222,7 +225,7 @@ const Carousel3D: React.FC<Carousel3DProps> = ({
             element.removeEventListener('wheel', handleWheel);
             if (wheelTimeout.current) clearTimeout(wheelTimeout.current);
         };
-    }, [focusedIndex, items.length]);
+    }, [items.length]);
 
     // Keyboard Handling
     useEffect(() => {

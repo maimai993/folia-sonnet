@@ -77,6 +77,20 @@
     cursor: grab;
     touch-action: none;
     overscroll-behavior: none;
+    /*
+     * 把整面墙的重绘圈在墙自己的层里。
+     *
+     * 磁贴的 width/height spring 是布局动画，重绘会沿着祖先链一路冒泡 ——
+     * 没有 containment 时 Chromium 把它记到 #document 上（轨迹实测：一次选歌
+     * 整屏级 paint 10 次）。Android WebView 的合成器面对整屏重栅格化 + 根层
+     * 上方那层噪点混合（.lattice-root::after 的 mix-blend-mode），低端 GPU 上
+     * 来不及稳定供帧，用户看到的就是「整屏一直闪烁」。
+     * paint containment 让 field 成为独立绘制边界：墙内怎么动，重绘都被
+     * 裁在这块区域里，不再惊动整屏。layout containment 同时隔断墙内布局
+     * 变化对外部的反噬（field 本身 absolute inset:0，尺寸不依赖内容，安全）。
+     * world 已有的 overflow: clip 语义被完整包含，无行为变化。
+     */
+    contain: layout paint;
 }
 
 .lattice-field:active { cursor: grabbing; }
@@ -85,7 +99,19 @@
     position: absolute;
     inset: 0;
     transform-origin: 0 0;
-    will-change: transform;
+    /*
+     * 这里**刻意不加** will-change: transform。
+     *
+     * world 的实际 bounds 是整面墙（实测 13054x12106，远超移动 GPU 的最大纹理尺寸）。
+     * will-change 把它变成常驻合成层后，任何一张磁贴做尺寸动画（width/height 是布局
+     * 属性，必然 repaint）都会落到这个巨型层上，触发整层 tile 重栅格化 ——
+     * 超限层在 Android WebView 的合成器上会反复丢弃重建，用户看到的就是
+     * 「选歌时整屏一直闪烁」。桌面 GPU 撑得住，所以桌面复现不了。
+     *
+     * 相机 pan 不受影响：transform 是合成属性，rAF 写 transform 时 Chromium
+     * 会自动把元素提升为合成层（首个 pan 帧有一次性提升开销，之后照旧走合成器），
+     * pan 停止后还会自动降级 —— 静止状态下磁贴动画只重绘自己那块小区域。
+     */
 }
 
 .lattice-poster {

@@ -16,6 +16,10 @@ type PlaybackFocusOptions = {
     /** Held false until the wall has measured itself; centring needs the real viewport. */
     ready: boolean;
     tiles: LatticeTile[];
+    /** 当前展开的那张卡。用来避免"换一张重复的海报重新展开"（见 focusCurrentSong）。 */
+    activePoster: ActiveLatticePoster | null;
+    /** 当前真正挂载着的卡的 id —— 已经展开的那张还在屏幕上才谈得上"别动它"。 */
+    renderedInstanceIds: ReadonlySet<string>;
     geometry: LatticeGeometry;
     metrics: WallMetrics;
     getViewportCenter: () => { x: number; y: number };
@@ -28,6 +32,8 @@ export const useLatticePlaybackFocus = ({
     currentSong,
     ready,
     tiles,
+    activePoster,
+    renderedInstanceIds,
     geometry,
     metrics,
     getViewportCenter,
@@ -44,6 +50,20 @@ export const useLatticePlaybackFocus = ({
     // write to that store — and re-render App, and with it the whole wall — for nothing.
     const { focusCurrentSong } = useStableCallbacks({ focusCurrentSong: (options?: { instant?: boolean }) => {
         if (!currentSongKey) return;
+        /*
+         * 已经在看着这首歌了就**什么都别做**。
+         *
+         * 同一首歌在墙上画了很多份（每个格子一份），跟随逻辑挑的是"离屏幕中心最近的
+         * 那一份"，而用户点的往往是眼前这一份 —— 两者常常不是同一张卡。
+         * 于是点一下会有两次展开：先展开用户点的那张，播放跟随紧接着把展开挪到另一张，
+         * 两块 block 跟着一起重排 —— 用户看到的就是"点一下闪一下"。
+         * 已经展开的正是这首歌、而且那张卡还在屏幕上时，直接收手。
+         */
+        if (activePoster
+            && activePoster.tile.id === currentSongKey
+            && renderedInstanceIds.has(activePoster.instance.instanceId)) {
+            return;
+        }
         const queueIndex = tiles.findIndex(tile => tile.id === currentSongKey);
         if (queueIndex < 0) return;
         // The song is drawn in every cell; jump to whichever copy is closest to what is on screen.

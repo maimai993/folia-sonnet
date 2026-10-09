@@ -93,7 +93,9 @@ export const usePlayerChromeSettingsStore = create<PlayerChromeSettingsState>((s
     ),
     hidePlayerRightPanelButton: getStoredBoolean('hide_player_right_panel_button', false),
     alwaysShowPlayerBackButton: getStoredBoolean('always_show_player_back_button', false),
-    alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', false),
+    // 默认常显：这两个箭头原本只在指针悬停时才冒出来，触屏上根本没有「悬停」这一步，
+    // 用户看到的就是「上一首 / 下一首不能用了」。要藏是主动的选择，交给开关。
+    alwaysShowTrackSwitchButtons: getStoredBoolean('always_show_track_switch_buttons', true),
     alwaysShowMainWindowTitlebar: getStoredBoolean('always_show_main_window_titlebar', false),
     hideFullscreenButton: getStoredBoolean('hide_fullscreen_button', false),
     useNativeMacFullscreenButton: getStoredBoolean('use_native_mac_fullscreen_button', false),

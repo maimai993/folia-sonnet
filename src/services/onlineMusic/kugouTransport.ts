@@ -3,6 +3,7 @@ import { OnlineProviderError } from '../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 import { resolveFoliaApiUrl } from '../webApi';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { upgradeInsecureApiBase } from '../../utils/secureApiBase';
 
 // src/services/onlineMusic/kugouTransport.ts
 
@@ -66,7 +67,9 @@ const getWebApiBase = (): string => {
         ? String(process.env?.VITE_KUGOU_API_BASE || '')
         : '';
     const value = viteValue || processValue;
-    return value.trim().replace(/\/$/, '');
+    // 明文后端在 https 页面里会被 WebView 当混合内容拦掉（报错是毫无特征的
+    // `TypeError: Failed to fetch`），所以这里先把它升级成 https。
+    return upgradeInsecureApiBase(value.trim().replace(/\/$/, ''));
 };
 
 const isDeviceVerificationRequired = (body: any): boolean => {

@@ -69,6 +69,9 @@ dependencies {
     // NotificationCompat 负责前台通知。Web 层的 navigator.mediaSession 在 Android WebView
     // 里不会生成系统媒体通知，也没有前台服务的优先级，必须走原生这一套。
     implementation "androidx.media:media:1.7.0"
+    // Lyricon 状态栏歌词：把当前歌曲与歌词推给系统的歌词中心，由它在状态栏渲染。
+    // SDK 是 Kotlin 写的，Java 侧要显式传全部参数（Kotlin 默认参数对 Java 不可见）。
+    implementation "io.github.proify.lyricon:provider:0.1.70"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

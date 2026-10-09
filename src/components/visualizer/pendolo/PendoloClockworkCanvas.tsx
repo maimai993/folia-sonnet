@@ -325,6 +325,12 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
 
         let animationFrameId: number;
 
+        // The center gradient's inputs (position, radius, color) only change on layout/theme
+        // changes, but the loop below runs at display refresh rate - cache the built gradient
+        // instead of recreating it (plus its four color-stop strings) every frame.
+        let centerGradientKey = '';
+        let centerGradient: CanvasGradient | null = null;
+
         const render = (timestamp: number) => {
             const p = propsRef.current;
             if (p.showGearDecor === 'none' && !p.showCenterGradient && !p.showCover) return;
@@ -393,12 +399,18 @@ const PendoloClockworkCanvas: React.FC<PendoloClockworkCanvasProps> = ({
             if (p.showCenterGradient) {
                 const gradientR = p.baseRadius * 1.65;
                 const bgCol = p.backgroundColor || '#000000';
-                const grad = ctx.createRadialGradient(p.centerX, p.centerY, 0, p.centerX, p.centerY, gradientR);
-                grad.addColorStop(0, colorWithAlpha(bgCol, 0.72));
-                grad.addColorStop(0.35, colorWithAlpha(bgCol, 0.52));
-                grad.addColorStop(0.7, colorWithAlpha(bgCol, 0.20));
-                grad.addColorStop(1, colorWithAlpha(bgCol, 0));
-                ctx.fillStyle = grad;
+                // Quantized to quarter pixels so sub-pixel jitter does not invalidate the cache.
+                const gradientKey = `${bgCol}|${Math.round(p.centerX * 4)}|${Math.round(p.centerY * 4)}|${Math.round(gradientR * 4)}`;
+                if (!centerGradient || gradientKey !== centerGradientKey) {
+                    const grad = ctx.createRadialGradient(p.centerX, p.centerY, 0, p.centerX, p.centerY, gradientR);
+                    grad.addColorStop(0, colorWithAlpha(bgCol, 0.72));
+                    grad.addColorStop(0.35, colorWithAlpha(bgCol, 0.52));
+                    grad.addColorStop(0.7, colorWithAlpha(bgCol, 0.20));
+                    grad.addColorStop(1, colorWithAlpha(bgCol, 0));
+                    centerGradient = grad;
+                    centerGradientKey = gradientKey;
+                }
+                ctx.fillStyle = centerGradient;
                 ctx.beginPath();
                 ctx.arc(p.centerX, p.centerY, gradientR, 0, Math.PI * 2);
                 ctx.fill();

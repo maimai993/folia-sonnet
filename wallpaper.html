@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Folia Wallpaper</title>
+    <style>
+        :root { color-scheme: dark; }
+        /*
+         * 整页必须全透明：叠层盖在系统壁纸之上，底下那层原生渲染（封面 / 模糊 / 纯色）
+         * 才是背景。这里只要给个不透明底色，用户看到的就是「壁纸蒙了一层灰雾」。
+         */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        #wallpaper-root {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="wallpaper-root"></div>
+    <script type="module" src="/src/entries/wallpaperSurface.tsx"></script>
+</body>
+</html>

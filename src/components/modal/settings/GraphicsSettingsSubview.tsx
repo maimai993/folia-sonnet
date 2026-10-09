@@ -13,8 +13,18 @@ import { settingsDividerClassFor } from './settingsCardClasses';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { encodeWallpaperImage } from '../../../utils/wallpaperImage';
 import { isCapacitorAndroid } from '../../../platform/runtime';
-import { isLyricsWallpaperActive, openLyricsWallpaperPicker } from '../../../platform/foliaWallpaper';
+import {
+    clearWallpaperBackgroundImage,
+    clearWallpaperFont,
+    hasWallpaperFont as queryWallpaperFont,
+    hasWallpaperOverlayPermission,
+    isLyricsWallpaperActive,
+    openLyricsWallpaperPicker,
+    openWallpaperOverlaySettings,
+    pickWallpaperFont,
+} from '../../../platform/foliaWallpaper';
 
 // src/components/modal/settings/GraphicsSettingsSubview.tsx
 // Everything that trades picture for smoothness or works around a renderer problem: static mode,
@@ -75,29 +85,36 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
     const onSetLyricsWallpaperBackground = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperBackground);
     const lyricsWallpaperImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
     const onSetLyricsWallpaperImage = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperImage);
+    const lyricsWallpaperBlur = useVisualizerSettingsStore(state => state.lyricsWallpaperBlur);
+    const onSetLyricsWallpaperBlur = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperBlur);
+    const lyricsWallpaperProgress = useVisualizerSettingsStore(state => state.lyricsWallpaperProgress);
+    const onToggleLyricsWallpaperProgress = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperProgress);
+    const lyricsWallpaperTranslation = useVisualizerSettingsStore(state => state.lyricsWallpaperTranslation);
+    const onToggleLyricsWallpaperTranslation = useVisualizerSettingsStore(state => state.handleToggleLyricsWallpaperTranslation);
+    const lyricsWallpaperStyle = useVisualizerSettingsStore(state => state.lyricsWallpaperStyle);
+    const onSetLyricsWallpaperStyle = useVisualizerSettingsStore(state => state.handleSetLyricsWallpaperStyle);
+    const wallpaperOverlayOpacity = useVisualizerSettingsStore(state => state.wallpaperOverlayOpacity);
+    const onSetWallpaperOverlayOpacity = useVisualizerSettingsStore(state => state.handleSetWallpaperOverlayOpacity);
+    const wallpaperOverlayAllApps = useVisualizerSettingsStore(state => state.wallpaperOverlayAllApps);
+    const onToggleWallpaperOverlayAllApps = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayAllApps);
+    const wallpaperOverlayHideNativeLyrics = useVisualizerSettingsStore(state => state.wallpaperOverlayHideNativeLyrics);
+    const onToggleWallpaperOverlayHideNativeLyrics = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayHideNativeLyrics);
+    const wallpaperOverlayHideNativeProgress = useVisualizerSettingsStore(state => state.wallpaperOverlayHideNativeProgress);
+    const onToggleWallpaperOverlayHideNativeProgress = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayHideNativeProgress);
+    const wallpaperOverlaySkipInstrumental = useVisualizerSettingsStore(state => state.wallpaperOverlaySkipInstrumental);
+    const onToggleWallpaperOverlaySkipInstrumental = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlaySkipInstrumental);
+    const wallpaperOverlayHideWhenPaused = useVisualizerSettingsStore(state => state.wallpaperOverlayHideWhenPaused);
+    const onToggleWallpaperOverlayHideWhenPaused = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayHideWhenPaused);
+    const wallpaperOverlayHideAfterLyricsEnd = useVisualizerSettingsStore(state => state.wallpaperOverlayHideAfterLyricsEnd);
+    const onToggleWallpaperOverlayHideAfterLyricsEnd = useVisualizerSettingsStore(state => state.handleToggleWallpaperOverlayHideAfterLyricsEnd);
     const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
-    /** 选一张图当壁纸背景：压到 512 再转 base64 交给原生，原图太大没必要。 */
     const handleWallpaperImagePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
-        try {
-            const bitmap = await createImageBitmap(file);
-            const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-            const width = Math.max(1, Math.round(bitmap.width * scale));
-            const height = Math.max(1, Math.round(bitmap.height * scale));
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext('2d');
-            if (!context) return;
-            context.drawImage(bitmap, 0, 0, width, height);
-            bitmap.close();
-            onSetLyricsWallpaperImage(canvas.toDataURL('image/jpeg', 0.8));
-        } catch {
-            // 图片读不出来就保持原样。
-        }
+        const encoded = await encodeWallpaperImage(file);
+        if (encoded) onSetLyricsWallpaperImage(encoded);
     };
 
     // 歌词壁纸是 Android 专有的，其它平台整段不渲染。
@@ -121,6 +138,57 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
         window.setTimeout(() => {
             void isLyricsWallpaperActive().then(setIsWallpaperActive);
         }, 3000);
+    };
+
+    // 可视化叠层要「显示在其他应用上层」权限，没授权时它是静默不启用的。
+    const [hasOverlayPermission, setHasOverlayPermission] = useState(false);
+
+    React.useEffect(() => {
+        if (!isAndroid) return;
+        let cancelled = false;
+        void hasWallpaperOverlayPermission().then((granted) => {
+            if (!cancelled) setHasOverlayPermission(granted);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isAndroid]);
+
+    const handleOpenOverlaySettings = () => {
+        void openWallpaperOverlaySettings();
+        // 授权页是系统界面，用户回来之后才生效，延后复查一次。
+        window.setTimeout(() => {
+            void hasWallpaperOverlayPermission().then(setHasOverlayPermission);
+        }, 3000);
+    };
+
+    // 字体是原生落在私有目录里的文件，应用这边只缓存一个「有没有」用于按钮文案。
+    const [hasWallpaperFont, setHasWallpaperFont] = useState(false);
+    const [fontNotice, setFontNotice] = useState<'applied' | 'rejected' | null>(null);
+
+    React.useEffect(() => {
+        if (!isAndroid) return;
+        let cancelled = false;
+        void queryWallpaperFont().then((value) => {
+            if (!cancelled) setHasWallpaperFont(value);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [isAndroid]);
+
+    const handlePickWallpaperFont = async () => {
+        const result = await pickWallpaperFont();
+        if (result === 'cancelled') return;
+        setHasWallpaperFont(result === 'applied');
+        setFontNotice(result);
+        window.setTimeout(() => setFontNotice(null), 3200);
+    };
+
+    const handleClearWallpaperFont = () => {
+        setHasWallpaperFont(false);
+        setFontNotice(null);
+        void clearWallpaperFont();
     };
 
     const dividerClass = settingsDividerClassFor(isDaylight);
@@ -268,8 +336,169 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                             dividerClass={dividerClass}
                         />
                         <SettingsRow
+                            title={t('options.lyricsWallpaperStyle')}
+                            description={t('options.lyricsWallpaperStyleDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--text-secondary)' }}>
+                                    {(['minimal', 'follow'] as const).map((style) => (
+                                        <button
+                                            key={style}
+                                            type="button"
+                                            onClick={() => onSetLyricsWallpaperStyle(style)}
+                                            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${lyricsWallpaperStyle === style ? '' : 'opacity-60'}`}
+                                            style={lyricsWallpaperStyle === style
+                                                ? { backgroundColor: theme?.accentColor || '#3b82f6', color: '#fff' }
+                                                : { color: 'var(--text-primary)' }}
+                                        >
+                                            {style === 'minimal'
+                                                ? t('options.lyricsWallpaperStyleMinimal')
+                                                : t('options.lyricsWallpaperStyleFollow')}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        />
+                        {/* 可视化叠层要 SYSTEM_ALERT_WINDOW；没授权时它静默不工作，
+                            用户只会看到「壁纸跟以前一样」，所以这里必须给明确入口。 */}
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperOverlay')}
+                            description={t('options.lyricsWallpaperOverlayDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={handleOpenOverlaySettings}
+                                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    {hasOverlayPermission
+                                        ? t('options.lyricsWallpaperOverlayGranted')
+                                        : t('options.lyricsWallpaperOverlayGrant')}
+                                </button>
+                            )}
+                        />
+                        {/* 叠层不透明度：整层从几乎看不见到完全不透明。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayOpacity')}
+                            description={t('options.wallpaperOverlayOpacityDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="range"
+                                        min={10}
+                                        max={100}
+                                        step={5}
+                                        value={Math.round(wallpaperOverlayOpacity * 100)}
+                                        onChange={(event) => onSetWallpaperOverlayOpacity(Number(event.target.value) / 100)}
+                                        className="h-1 w-28 cursor-pointer accent-white"
+                                    />
+                                    <span className="w-9 text-right font-mono text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                        {Math.round(wallpaperOverlayOpacity * 100)}%
+                                    </span>
+                                </div>
+                            )}
+                        />
+                        {/* 叠层是否在所有应用之上显示。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayAllApps')}
+                            description={t('options.wallpaperOverlayAllAppsDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayAllApps(!wallpaperOverlayAllApps)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayAllApps ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayAllApps ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayAllApps ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {/* 跟随 + 叠层时，原生那层的歌词/进度条要不要让位。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayHideNativeLyrics')}
+                            description={t('options.wallpaperOverlayHideNativeLyricsDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayHideNativeLyrics(!wallpaperOverlayHideNativeLyrics)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayHideNativeLyrics ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayHideNativeLyrics ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayHideNativeLyrics ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {/* 暂停时是否收起叠层。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayHideWhenPaused')}
+                            description={t('options.wallpaperOverlayHideWhenPausedDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayHideWhenPaused(!wallpaperOverlayHideWhenPaused)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayHideWhenPaused ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayHideWhenPaused ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayHideWhenPaused ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {/* 歌词唱完之后（长尾奏）是否收起叠层。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayHideAfterLyricsEnd')}
+                            description={t('options.wallpaperOverlayHideAfterLyricsEndDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayHideAfterLyricsEnd(!wallpaperOverlayHideAfterLyricsEnd)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayHideAfterLyricsEnd ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayHideAfterLyricsEnd ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayHideAfterLyricsEnd ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        {/* 纯音乐（没有歌词）时是否显示叠层。 */}
+                        <SettingsRow
+                            title={t('options.wallpaperOverlaySkipInstrumental')}
+                            description={t('options.wallpaperOverlaySkipInstrumentalDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlaySkipInstrumental(!wallpaperOverlaySkipInstrumental)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlaySkipInstrumental ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlaySkipInstrumental ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlaySkipInstrumental ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        <SettingsRow
+                            title={t('options.wallpaperOverlayHideNativeProgress')}
+                            description={t('options.wallpaperOverlayHideNativeProgressDesc')}
+                            dividerClass={dividerClass}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => onToggleWallpaperOverlayHideNativeProgress(!wallpaperOverlayHideNativeProgress)}
+                                    className={`h-6 w-12 shrink-0 rounded-full p-1 transition-colors ${!wallpaperOverlayHideNativeProgress ? toggleOffBackgroundClass : ''}`}
+                                    style={{ backgroundColor: wallpaperOverlayHideNativeProgress ? theme?.secondaryColor || 'rgba(114, 119, 134, 1)' : undefined }}
+                                >
+                                    <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${wallpaperOverlayHideNativeProgress ? 'translate-x-6' : 'translate-x-0'}`} />
+                                </button>
+                            )}
+                        />
+                        <SettingsRow
                             title={t('options.lyricsWallpaperBackground')}
                             description={t('options.lyricsWallpaperBackgroundDesc')}
+                            dividerClass={dividerClass}
                             control={(
                                 <div className="flex items-center gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--text-secondary)' }}>
                                     {(['cover', 'color', 'image'] as const).map((mode) => (
@@ -318,7 +547,10 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                         {lyricsWallpaperImage && (
                                             <button
                                                 type="button"
-                                                onClick={() => onSetLyricsWallpaperImage(null)}
+                                                onClick={() => {
+                                                onSetLyricsWallpaperImage(null);
+                                                void clearWallpaperBackgroundImage();
+                                            }}
                                                 className="block text-xs opacity-60 hover:opacity-100"
                                                 style={{ color: 'var(--text-secondary)' }}
                                             >
@@ -335,6 +567,84 @@ const GraphicsSettingsSubview: React.FC<GraphicsSettingsSubviewProps> = ({
                                     </div>
                                 </div>
                             )}
+                        </SettingsRow>
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperBlur')}
+                            description={t('options.lyricsWallpaperBlurDesc')}
+                            dividerClass={dividerClass}
+                        >
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-secondary)' }}>
+                                    <span className="opacity-60">{t('options.lyricsWallpaperBlurValue')}</span>
+                                    <span className="font-mono opacity-70">{Math.round(lyricsWallpaperBlur * 100)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="5"
+                                    value={Math.round(lyricsWallpaperBlur * 100)}
+                                    onChange={(event) => onSetLyricsWallpaperBlur(Number(event.target.value) / 100)}
+                                    className={rangeInputClass}
+                                    aria-label={t('options.lyricsWallpaperBlurValue')}
+                                />
+                            </div>
+                        </SettingsRow>
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperProgress')}
+                            description={t('options.lyricsWallpaperProgressDesc')}
+                            control={renderToggle(lyricsWallpaperProgress, () => onToggleLyricsWallpaperProgress(!lyricsWallpaperProgress))}
+                            dividerClass={dividerClass}
+                        />
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperTranslation')}
+                            description={t('options.lyricsWallpaperTranslationDesc')}
+                            control={renderToggle(lyricsWallpaperTranslation, () => onToggleLyricsWallpaperTranslation(!lyricsWallpaperTranslation))}
+                            dividerClass={dividerClass}
+                        />
+                        <SettingsRow
+                            title={t('options.lyricsWallpaperFont')}
+                            description={t('options.lyricsWallpaperFontDesc')}
+                            control={(
+                                <button
+                                    type="button"
+                                    onClick={() => void handlePickWallpaperFont()}
+                                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    {hasWallpaperFont
+                                        ? t('options.lyricsWallpaperReplaceFont')
+                                        : t('options.lyricsWallpaperPickFont')}
+                                </button>
+                            )}
+                            dividerClass={dividerClass}
+                        >
+                            <div className="mt-2 flex items-center gap-3">
+                                <span
+                                    className="text-xs"
+                                    style={{
+                                        color: fontNotice === 'rejected'
+                                            ? 'var(--danger-color, #ef4444)'
+                                            : 'var(--text-secondary)',
+                                    }}
+                                >
+                                    {fontNotice === 'applied'
+                                        ? t('options.lyricsWallpaperFontApplied')
+                                        : fontNotice === 'rejected'
+                                            ? t('options.lyricsWallpaperFontFailed')
+                                            : ''}
+                                </span>
+                                {hasWallpaperFont && (
+                                    <button
+                                        type="button"
+                                        onClick={handleClearWallpaperFont}
+                                        className="text-xs opacity-60 hover:opacity-100"
+                                        style={{ color: 'var(--text-secondary)' }}
+                                    >
+                                        {t('options.lyricsWallpaperClearFont')}
+                                    </button>
+                                )}
+                            </div>
                         </SettingsRow>
                         <SettingsRow
                             title={t('options.lyricsWallpaperFeed')}

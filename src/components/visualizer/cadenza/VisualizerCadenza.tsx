@@ -204,16 +204,42 @@ const graphemeSegmenter = typeof Intl !== 'undefined'
     ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
     : null;
 
+// Grapheme segmentation allocates a fresh array per call and runs on the per-frame draw path
+// (twice per placement per frame). Texts repeat every frame while a line is on screen, so the
+// results are memoized; callers only ever read the returned array.
+const graphemeCache = new Map<string, string[]>();
+const GRAPHEME_CACHE_LIMIT = 2048;
+
 const splitGraphemes = (text: string) => {
     if (!text) return [] as string[];
-    if (graphemeSegmenter) {
-        return Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment);
+    const cached = graphemeCache.get(text);
+    if (cached) {
+        // Refresh LRU recency.
+        graphemeCache.delete(text);
+        graphemeCache.set(text, cached);
+        return cached;
     }
-    return Array.from(text);
+
+    const segments = graphemeSegmenter
+        ? Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
+        : Array.from(text);
+    graphemeCache.set(text, segments);
+    if (graphemeCache.size > GRAPHEME_CACHE_LIMIT) {
+        const oldestKey = graphemeCache.keys().next().value;
+        if (oldestKey !== undefined) {
+            graphemeCache.delete(oldestKey);
+        }
+    }
+    return segments;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const mix = (from: number, to: number, amount: number) => from + (to - from) * amount;
+
+// Per-frame draw path memo: measured text ascents keyed by "<font>\0<text>" (see the overlay
+// placement loop). Bounded like the grapheme cache above.
+const textAscentCache = new Map<string, number>();
+const TEXT_ASCENT_CACHE_LIMIT = 1024;
 const easeOutCubic = (value: number) => 1 - Math.pow(1 - clamp(value, 0, 1), 3);
 const easeInOutQuad = (value: number) => {
     const normalized = clamp(value, 0, 1);
@@ -1590,8 +1616,21 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
                 const overlayAnchorX = drawX + placement.width / 2;
                 const overlayAnchorY = drawBaselineY - placement.height * 0.42;
                 const overlayOffsetX = textX;
-                const textMetrics = textContext.measureText(placement.text);
-                const measuredAscent = textMetrics.actualBoundingBoxAscent || preparedState.fontPx * 0.78;
+                // measureText triggers glyph layout; text and font are constant while a line is
+                // on screen, so only the ascent value is kept, keyed by font + text.
+                const ascentCacheKey = `${preparedState.font}\u0000${placement.text}`;
+                let measuredAscent = textAscentCache.get(ascentCacheKey);
+                if (measuredAscent === undefined) {
+                    const textMetrics = textContext.measureText(placement.text);
+                    measuredAscent = textMetrics.actualBoundingBoxAscent || preparedState.fontPx * 0.78;
+                    textAscentCache.set(ascentCacheKey, measuredAscent);
+                    if (textAscentCache.size > TEXT_ASCENT_CACHE_LIMIT) {
+                        const oldestKey = textAscentCache.keys().next().value;
+                        if (oldestKey !== undefined) {
+                            textAscentCache.delete(oldestKey);
+                        }
+                    }
+                }
                 const overlayOffsetY = textY - measuredAscent;
                 const glyphs = splitGraphemes(placement.text);
                 const shouldSplitGlow = wordRevealMode === 'normal' && !isCJK(placement.text) && glyphs.length > 1;

@@ -10,6 +10,14 @@
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
+
+        <!-- Lyricon 状态栏歌词：声明本应用是一个歌词提供端。缺 `lyricon_module` 时
+             Lyricon 不会把本应用当成模块，App 里开了开关也推不出去。 -->
+        <meta-data android:name="lyricon_module" android:value="true" />
+        <meta-data android:name="lyricon_module_author" android:value="Folia" />
+        <meta-data android:name="lyricon_module_description" android:value="Folia 音乐播放器：当前歌曲与逐行歌词" />
+        <meta-data android:name="lyricon_module_tags" android:resource="@array/lyricon_module_tags" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
@@ -88,4 +96,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+        壁纸的可视化叠层：WallpaperService 本身只能往 Surface 上画 GLES，
+        画不了 PixiJS 那套可视化，所以要在壁纸之上叠一个 WebView 窗口来跑同一套渲染代码。
+        属于「用户必须手动授权」的权限（设置 → 应用 → 显示在其他应用上层）。
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 </manifest>

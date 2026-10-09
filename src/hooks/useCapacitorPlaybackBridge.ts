@@ -39,7 +39,7 @@ interface FoliaPlaybackPlugin {
   /** 原生在用户点击通知栏/锁屏/耳机按键时派发的事件。 */
   addListener(
     eventName: 'foliaPlaybackCommand',
-    listener: (payload: { command: string }) => void,
+    listener: (payload: { command: string; positionMs?: number }) => void,
   ): Promise<() => void>;
 }
 
@@ -95,6 +95,14 @@ const loadArtworkAsBase64 = async (url: string): Promise<string | null> => {
   }
 };
 
+/**
+ * 通知栏进度条的位置刷新间隔。
+ *
+ * 系统按 PlaybackState 里的 position 自己往前推，但那只在速度恒定时准；
+ * 缓冲、跳转、换源之后它会停在错的地方，所以这里定期校准一次。
+ */
+const POSITION_TICK_MS = 1000;
+
 type UseCapacitorPlaybackBridgeOptions = {
   currentSong: SongResult | null;
   cachedCoverUrl: string | null;
@@ -103,6 +111,10 @@ type UseCapacitorPlaybackBridgeOptions = {
   mediaSessionPauseRef: React.RefObject<() => void>;
   mediaSessionPrevRef: React.RefObject<() => void>;
   mediaSessionNextRef: React.RefObject<() => Promise<void> | void>;
+  /** 读当前播放时间（秒），用来让通知栏那条进度条真的往前走。 */
+  getCurrentTime?: () => number;
+  /** 用户拖动通知栏进度条后回传的目标位置（秒）。 */
+  onSeek?: (seconds: number) => void;
 };
 
 /**
@@ -119,15 +131,21 @@ export const useCapacitorPlaybackBridge = ({
   mediaSessionPauseRef,
   mediaSessionPrevRef,
   mediaSessionNextRef,
+  getCurrentTime,
+  onSeek,
 }: UseCapacitorPlaybackBridgeOptions): void => {
   const enabled = isCapacitorAndroid();
+
+  // 这两个回调是每次渲染都可能换身份的内联函数，进 effect 依赖会把订阅反复重建。
+  const callbacksRef = React.useRef({ getCurrentTime, onSeek });
+  callbacksRef.current = { getCurrentTime, onSeek };
 
   // 通知栏/锁屏/耳机的控制键走这里回到 Web 层。
   React.useEffect(() => {
     if (!enabled) return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    void FoliaPlayback.addListener('foliaPlaybackCommand', ({ command }) => {
+    void FoliaPlayback.addListener('foliaPlaybackCommand', ({ command, positionMs }) => {
       switch (command) {
         case 'play':
           void mediaSessionPlayRef.current?.();
@@ -143,6 +161,10 @@ export const useCapacitorPlaybackBridge = ({
           break;
         case 'stop':
           mediaSessionPauseRef.current?.();
+          break;
+        case 'seek':
+          // 拖动通知栏进度条。原生只在 actions 里带了 ACTION_SEEK_TO 时才派发这个。
+          callbacksRef.current.onSeek?.(Math.max(0, (positionMs ?? 0) / 1000));
           break;
       }
     }).then((off) => {
@@ -179,6 +201,10 @@ export const useCapacitorPlaybackBridge = ({
   }, [enabled, currentSong, cachedCoverUrl]);
 
   // 播放状态：playing 时服务进入前台，这是后台网络不被节流的关键。
+  //
+  // 位置必须真的传过去。原先这里写死 positionMs: 0，通知栏那条进度条于是永远停在
+  // 开头 —— 看不出在播，更谈不上拖。播放中每秒校准一次：系统按 PlaybackState 自带
+  // 的速度往前推，但缓冲、跳转、换源之后它会停在错的地方。
   React.useEffect(() => {
     if (!enabled) return;
     const state: PlaybackSnapshot = playerState === 'PLAYING'
@@ -186,8 +212,19 @@ export const useCapacitorPlaybackBridge = ({
       : playerState === 'PAUSED'
         ? 'paused'
         : 'stopped';
-    void FoliaPlayback.setState({ state, positionMs: 0, speed: 1 });
-  }, [enabled, playerState]);
+    const push = () => {
+      const seconds = callbacksRef.current.getCurrentTime?.() ?? 0;
+      void FoliaPlayback.setState({
+        state,
+        positionMs: Math.max(0, Math.round(seconds * 1000)),
+        speed: 1,
+      });
+    };
+    push();
+    if (state !== 'playing') return;
+    const timer = window.setInterval(push, POSITION_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [enabled, playerState, currentSong]);
 };
 
 const getDurationMs = (song: SongResult): number => {

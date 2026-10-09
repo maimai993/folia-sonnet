@@ -1,20 +1,28 @@
 package top.izuna.foliamajor;
 
+import android.app.Activity;
 import android.app.WallpaperManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
+
+import androidx.activity.result.ActivityResult;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONException;
 
+import java.util.Iterator;
+
 import top.izuna.foliamajor.wallpaper.LyricsWallpaperService;
+import top.izuna.foliamajor.wallpaper.WallpaperLyricsFont;
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState;
 
 /**
@@ -41,7 +49,8 @@ public class FoliaWallpaperPlugin extends Plugin {
                     long start = entry.optLong("start", 0L);
                     long end = entry.optLong("end", 0L);
                     String text = entry.optString("text", "");
-                    timeline[i] = new WallpaperLyricsState.TimedLine(text, start, end);
+                    String translation = readTranslation(entry);
+                    timeline[i] = new WallpaperLyricsState.TimedLine(text, start, end, translation);
                 } catch (JSONException error) {
                     // 单行解析失败不影响整条时间轴。
                 }
@@ -52,12 +61,17 @@ public class FoliaWallpaperPlugin extends Plugin {
         long positionMs = positionSeconds == null ? -1L : (long) (double) positionSeconds;
         Boolean playing = call.getBoolean("playing");
         boolean isPlaying = playing != null && playing;
+        Boolean showTranslation = call.getBoolean("translation");
+        java.util.Map<String, Float> tuning = readTuning(call.getObject("tuning"));
 
         if (timeline == null && positionMs >= 0L) {
             // 常规心跳：只挪时间锚点，不碰时间轴，也不落盘。
+            // 开关本身走 setAppearance，心跳不带时间轴时不重复写盘。
             WallpaperLyricsState.setAnchor(positionMs, isPlaying);
         } else {
             Float motion = call.getFloat("motion");
+            Float blur = call.getFloat("blur");
+            Float durationSeconds = call.getFloat("durationMs");
             WallpaperLyricsState.publish(
                     getContext(),
                     call.getString("title"),
@@ -69,7 +83,12 @@ public class FoliaWallpaperPlugin extends Plugin {
                     call.getString("background"),
                     call.getString("image"),
                     call.getString("visualizer"),
+                    blur == null ? -1f : blur,
+                    call.getBoolean("progress"),
+                    showTranslation,
+                    durationSeconds == null ? -1L : (long) (double) durationSeconds,
                     timeline,
+                    tuning,
                     Math.max(0L, positionMs),
                     isPlaying);
         }
@@ -79,11 +98,105 @@ public class FoliaWallpaperPlugin extends Plugin {
     /** 只改外观（背景模式 / 自选背景图 / 可视化风格），不动时间轴。 */
     @PluginMethod
     public void setAppearance(PluginCall call) {
+        Float blur = call.getFloat("blur");
+        Float durationSeconds = call.getFloat("durationMs");
         WallpaperLyricsState.setAppearance(
                 getContext(),
                 call.getString("background"),
                 call.getString("image"),
-                call.getString("visualizer"));
+                call.getString("visualizer"),
+                blur == null ? -1f : blur,
+                call.getBoolean("progress"),
+                call.getBoolean("translation"),
+                durationSeconds == null ? -1L : (long) (double) durationSeconds,
+                readTuning(call.getObject("tuning")));
+        // 叠层不再只由壁纸服务托管了：开了「在所有应用上叠加」时，
+        // 即使系统的动态壁纸根本不是我们（甚至没设动态壁纸），也应该能在桌面上看到它。
+        // 这里由应用进程直接托管同一份叠层实例（见 WallpaperOverlay.shared）。
+        java.util.Map<String, Float> tuning = WallpaperLyricsState.tuning();
+        Float allApps = tuning.get("wp.overlayAllApps");
+        top.izuna.foliamajor.wallpaper.WallpaperOverlay
+                .shared(getContext())
+                .setAppDriven(allApps != null && allApps >= 0.5f);
+        call.resolve();
+    }
+
+    /**
+     * 壁纸歌词字体。传 null / 空串表示清除、回落到系统 sans-serif。
+     * 字体文件几 MB，桥上过一趟不小，但只在用户真的换字体时才走一次。
+     */
+    @PluginMethod
+    public void setFont(PluginCall call) {
+        WallpaperLyricsState.setLyricsFont(getContext(), call.getString("font"));
+        call.resolve();
+    }
+
+    /**
+     * 打开系统文件选择器挑一个 .ttf / .otf 给壁纸歌词用。
+     *
+     * 为什么不走 base64：一个中文字体动辄好几 MB，转 base64 过桥既慢又吃内存，
+     * 所以原生自己拿到 URI 拷进私有目录，Web 侧只拿到「成没成」。
+     */
+    @PluginMethod
+    public void pickFont(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // 各家文件管理器给字体报的 MIME 很乱（font/ttf、application/x-font-ttf，
+        // 甚至干脆是 application/octet-stream），所以主类型放宽、只用 EXTRA 做倾向性过滤。
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "font/ttf", "font/otf", "font/ttx", "font/sfnt",
+                "application/font-sfnt", "application/x-font-ttf", "application/x-font-otf",
+                "application/vnd.ms-opentype"});
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(call, intent, "handleFontPicked");
+    }
+
+    @ActivityCallback
+    private void handleFontPicked(PluginCall call, ActivityResult result) {
+        if (call == null) {
+            return;
+        }
+        boolean picked = false;
+        boolean rejected = false;
+        if (result != null && result.getResultCode() == Activity.RESULT_OK) {
+            Intent data = result.getData();
+            Uri uri = data == null ? null : data.getData();
+            if (uri != null) {
+                try {
+                    getContext().getContentResolver()
+                            .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Throwable ignored) {
+                    // 拿不到长期权限也没关系：文件是一次性拷进私有目录的。
+                }
+                picked = WallpaperLyricsState.setLyricsFontFromUri(getContext(), uri) != null;
+                // 选了文件、但那不是个能用的字体 —— 跟「用户取消」要区分开，UI 得给出提示。
+                rejected = !picked;
+            }
+        }
+        JSObject out = new JSObject();
+        out.put("picked", picked);
+        out.put("rejected", rejected);
+        call.resolve(out);
+    }
+
+    /** 壁纸歌词当前有没有自选字体。UI 用它决定按钮显示「更换」还是「选择」。 */
+    @PluginMethod
+    public void getFont(PluginCall call) {
+        // 状态里的 font 只在应用推过一轮之后才有；冷启动时以磁盘上的文件为准。
+        String font = WallpaperLyricsState.get().font;
+        if (font == null) {
+            font = WallpaperLyricsFont.key(getContext());
+        }
+        JSObject out = new JSObject();
+        out.put("font", font != null);
+        call.resolve(out);
+    }
+
+    /** 用户主动「清除图片」：删掉磁盘上的副本。关掉推送开关不删，下次开回来还要用。 */
+    @PluginMethod
+    public void clearImage(PluginCall call) {
+        WallpaperLyricsState.clearBackgroundImage(getContext());
         call.resolve();
     }
 
@@ -98,6 +211,36 @@ public class FoliaWallpaperPlugin extends Plugin {
     public void clear(PluginCall call) {
         WallpaperLyricsState.clear(getContext());
         call.resolve();
+    }
+
+    /**
+     * 壁纸那层「可视化叠层」要画在壁纸之上，必须有 SYSTEM_ALERT_WINDOW。
+     *
+     * 没拿到权限时叠层是**静默不启用**的（退回原生 GLES 渲染），
+     * 用户只会看到「壁纸和以前一样」，完全想不到是需要授权 ——
+     * 所以设置页得能主动查这个状态并一键跳去授权。
+     */
+    @PluginMethod
+    public void hasOverlayPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", top.izuna.foliamajor.wallpaper.WallpaperOverlay
+                .canOverlay(getContext()));
+        call.resolve(result);
+    }
+
+    /** 跳到系统的「显示在其他应用上层」授权页，直接定位到本应用。 */
+    @PluginMethod
+    public void openOverlaySettings(PluginCall call) {
+        try {
+            android.content.Intent intent = new android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Throwable error) {
+            call.reject("无法打开授权页面");
+        }
     }
 
     /** 当前系统壁纸是不是我们这个。UI 用它决定按钮显示「设置」还是「已启用」。 */
@@ -144,6 +287,43 @@ public class FoliaWallpaperPlugin extends Plugin {
         android.app.WallpaperInfo info = manager.getWallpaperInfo();
         return info != null
                 && getContext().getPackageName().equals(info.getPackageName());
+    }
+
+    /**
+     * 读一行的翻译。没有翻译的行一律返回 null（不是空串）——
+     * 空串会让渲染侧分不清「没翻译」和「翻译是空的」，从而多画出一条空行。
+     */
+    private static String readTranslation(org.json.JSONObject entry) {
+        String value = entry.optString("translation", null);
+        if (value == null || value.isEmpty() || value.equals("null")) {
+            return null;
+        }
+        return value;
+    }
+
+    /**
+     * 歌词动画实验台的配置。
+     *
+     * 一律压成 float：布尔开关当 0/1 用，字符串枚举由 Web 侧先转成序号。
+     * 表里只放**当前生效那个模式**的字段，所以 native 那边按字段名取值不会有歧义。
+     * 拿不到（没传 / 不是数字）的字段直接跳过 —— 缺项时渲染器会退回默认值。
+     */
+    private static java.util.Map<String, Float> readTuning(JSObject tuning) {
+        if (tuning == null) {
+            return null;
+        }
+        java.util.Map<String, Float> values = new java.util.HashMap<>();
+        java.util.Iterator<String> keys = tuning.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object value = tuning.opt(key);
+            if (value instanceof Number) {
+                values.put(key, ((Number) value).floatValue());
+            } else if (value instanceof Boolean) {
+                values.put(key, ((Boolean) value) ? 1f : 0f);
+            }
+        }
+        return values;
     }
 
     private static int parseColor(String value) {

@@ -24,6 +24,8 @@ public class FoliaCommandReceiver extends BroadcastReceiver {
         if (command == null || command.isEmpty()) {
             return;
         }
-        FoliaPlaybackPlugin.dispatchCommandFromReceiver(command);
+        // 只有 seek 带位置；其余命令拿到的是默认值 0，Web 层不会去读。
+        long positionMs = intent.getLongExtra(FoliaPlaybackService.EXTRA_COMMAND_POSITION, 0L);
+        FoliaPlaybackPlugin.dispatchCommandFromReceiver(command, positionMs);
     }
 }

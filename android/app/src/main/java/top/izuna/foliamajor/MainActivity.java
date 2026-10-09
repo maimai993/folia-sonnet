@@ -46,6 +46,7 @@ public class MainActivity extends BridgeActivity {
         // JS 侧调用会静默失败 —— 播放通知因此完全不出现。
         registerPlugin(FoliaPlaybackPlugin.class);
         registerPlugin(FoliaWallpaperPlugin.class);
+        registerPlugin(top.izuna.foliamajor.lyricon.FoliaLyriconPlugin.class);
 
         super.onCreate(savedInstanceState);
 

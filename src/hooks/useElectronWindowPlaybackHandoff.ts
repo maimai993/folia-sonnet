@@ -141,7 +141,6 @@ export function useElectronWindowPlaybackHandoff({
     const isFmMode = usePlaybackStore(state => state.isFmMode);
     const playerState = usePlaybackStore(state => state.playerState);
     const duration = usePlaybackStore(state => state.duration);
-    const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);
     const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
     const setIsPlayerChromeHidden = useAppChromeStore(state => state.setIsPlayerChromeHidden);
     const showTransparentWindowBorder = useAppChromeStore(state => state.showTransparentWindowBorder);
@@ -161,7 +160,9 @@ export function useElectronWindowPlaybackHandoff({
             audioRef,
             audioSrc,
             cachedCoverUrl,
-            currentLineIndex,
+            // Read at capture time rather than subscribed: capturing happens on demand
+            // (window drag/close), and a subscription here re-rendered the host per lyric line.
+            currentLineIndex: usePlaybackStore.getState().currentLineIndex,
             currentSong,
             currentTime,
             duration,
@@ -206,7 +207,6 @@ export function useElectronWindowPlaybackHandoff({
         audioRef,
         audioSrc,
         cachedCoverUrl,
-        currentLineIndex,
         currentSong,
         currentTime,
         currentView,

@@ -111,7 +111,21 @@ export default function PosterWall({
     const applyCamera = useCallback((next: LatticeCamera, updateBounds = false) => {
         cameraRef.current = next;
         if (worldRef.current) {
-            worldRef.current.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.scale})`;
+            /*
+             * 相机用**二维** transform，不要用 translate3d。
+             *
+             * translate3d 会把整面墙提成常驻合成层，而 world 的实际 bounds 是
+             * 12212x11580（受限的另一头）—— 任何一张磁贴在这个层里repaint，
+             * 都要按这个尺寸重新栅格化一遍 tile。桌面 GPU 撑得住，
+             * Android WebView 的合成器面对超限层会反复丢弃重建，用户看到的就是
+             * 「选歌时整屏闪烁」。实测 Trajectory：world 层整屏级 paint 6~10 次/次选歌，
+             * 改成二维 transform 之后降到 0 —— 层不再存在，重绘被 `.lattice-field`
+             * 的 paint containment 裁在保证可见的那一小块里。
+             *
+             * 平移本身不受影响：2D transform 同样可以被合成器处理，
+             * pan 期间 Chromium 会临时提层，pan 结束自动降级。
+             */
+            worldRef.current.style.transform = `translate(${next.x}px, ${next.y}px) scale(${next.scale})`;
         }
         publishCurrentPosterVisibility(next);
         if (!updateBounds || frameRef.current !== null) return;
@@ -220,6 +234,10 @@ export default function PosterWall({
         };
     }, []);
 
+    // 只跟 instances 走，不跟每次渲染走：少了它的话跟随逻辑会拿不到"哪张卡还在屏幕上"。
+    const renderedInstanceIds = useMemo(
+        () => new Set(instances.map(instance => instance.instanceId)), [instances]);
+
     const { didDragRef, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClickCapture } = useWallPointerPan({
         applyCamera,
         animationRef,
@@ -292,6 +310,8 @@ export default function PosterWall({
         currentSong,
         ready: measured,
         tiles,
+        activePoster,
+        renderedInstanceIds,
         geometry,
         metrics: METRICS,
         getViewportCenter,

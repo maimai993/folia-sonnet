@@ -113,7 +113,6 @@ export function useStagePlaybackController({
     const isFmMode = usePlaybackStore(state => state.isFmMode);
     const playerState = usePlaybackStore(state => state.playerState);
     const duration = usePlaybackStore(state => state.duration);
-    const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);
 
     const [stageStatus, setStageStatus] = useState<StageStatus | null>(null);
     const [nowPlayingConnectionStatus, setNowPlayingConnectionStatus] = useState<NowPlayingConnectionStatus>('disabled');
@@ -165,10 +164,17 @@ export function useStagePlaybackController({
     ) => boolean) | null>(null);
     const shouldPublishNowPlayingStateRef = useRef(false);
     const lastNowPlayingPauseStateRef = useRef(nowPlayingPaused);
-    const currentLineIndexRef = useRef(currentLineIndex);
+    // Mirrors the store's currentLineIndex without subscribing: a subscription re-rendered the
+    // host App on every lyric-line change for a value that only ever feeds this ref.
+    const currentLineIndexRef = useRef(usePlaybackStore.getState().currentLineIndex);
 
     nowPlayingPausedRef.current = nowPlayingPaused;
-    currentLineIndexRef.current = currentLineIndex;
+    useEffect(() => {
+        currentLineIndexRef.current = usePlaybackStore.getState().currentLineIndex;
+        return usePlaybackStore.subscribe(state => {
+            currentLineIndexRef.current = state.currentLineIndex;
+        });
+    }, []);
 
     const stageActiveEntryKind = stageStatus?.activeEntryKind ?? null;
     const stageLyricsSession = stageStatus?.lyricsSession ?? null;
@@ -204,8 +210,8 @@ export function useStagePlaybackController({
         playerState,
         currentTime: audioRef.current?.currentTime ?? currentTime.get(),
         duration,
-        currentLineIndex,
-    }), [audioRef, audioSrc, cachedCoverUrl, currentLineIndex, currentSong, currentTime, duration, isFmMode, lyrics, playQueue, playerState]);
+        currentLineIndex: currentLineIndexRef.current,
+    }), [audioRef, audioSrc, cachedCoverUrl, currentLineIndexRef, currentSong, currentTime, duration, isFmMode, lyrics, playQueue, playerState]);
 
     const applyPlaybackSnapshot = useCallback((snapshot: PlaybackSnapshot | null) => {
         pendingResumeTimeRef.current = snapshot ? Math.max(0, snapshot.currentTime) : null;
