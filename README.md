@@ -1,9 +1,21 @@
 # Folia-Sonnet 
 
-这是将 Folia 打包到 Android 平台的实验性项目，不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划。本仓库版本基于 Folia-major 0.7.13 正式版，请按照下面的说明自行构建。**项目不提供构建完成的安卓安装包**。
+这是将 Folia 打包到 Android 平台的实验性项目，不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划。本仓库版本基于 Folia-major 0.7.13 正式版，请按照下面的说明自行构建。**仓库 Releases 中附带的是演示安装包，不建议直接当作日常客户端使用 —— 请先配置好你自己的后端服务再使用。**
 
 > [!WARNING]
 > 本仓库仅作为安卓端打包示范，不会继续维护并同步 Folia-major 主仓库的更新。功能、兼容性、构建链均可能随时失效；请自行 fork、审计并维护你的副本。
+
+> [!IMPORTANT]
+> **关于演示安装包**
+>
+> Releases 里附带的 APK 是**演示包**，只用来展示界面与前台播放体验：
+>
+> - **没有内置在线音乐后端**，在线搜索、歌词、封面、AI 主题等功能在未配置服务器时不可用；
+> - 不会随主仓库更新，也不保证兼容性与后续维护；
+> - **不建议直接日常使用**。
+>
+> 请按下方「Android 构建」一节先部署并配置后端服务（`VITE_NETEASE_API_BASE`、
+> `VITE_KUGOU_API_BASE`、`VITE_FOLIA_API_BASE`），再构建属于你自己的安装包。
 
 ## 范围与限制
 
@@ -44,6 +56,8 @@ cd android
 ```
 
 输出文件：`android/app/build/outputs/apk/debug/app-debug.apk`。
+
+如果跳过上面的后端配置直接构建，产出的就是等同于 Releases 中**演示包**的版本：可以安装、可以看界面与本地播放，但在线功能不可用 —— 这正是它不建议直接日常使用的原因。
 
 发布 AAB、签名和完整工具链说明见 [技术与开发说明](docs/technical.md#android--capacitor)。
 
