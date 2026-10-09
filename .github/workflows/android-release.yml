@@ -1,0 +1,183 @@
+name: Android Release
+
+# Android 出包：Web 产物 → Capacitor 同步 → 签名 → APK / AAB。
+#
+# 触发方式两种：
+#   1. 打 v* 标签（正式发布，默认发 GitHub Release）
+#   2. 手动 workflow_dispatch（临时出包，默认只传 artifact 不发 Release）
+#
+# 与 npm script 的关系：`npm run cap:sync:android` = `build:capacitor` + `cap sync android`，
+# 一条命令把「构建前端」和「同步进 android/app/src/main/assets/public」都做了 ——
+# 这两步必须连着跑，**只打包不 build+同步，打出来的就是上一版的前端**（踩过）。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_bundle:
+        description: 'Also build the Play Store bundle (AAB)'
+        required: false
+        default: true
+        type: boolean
+      publish_release:
+        description: 'Publish / attach to a GitHub Release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  # 出包跑一次要十几分钟，别让后一次推送把正在跑的掐掉：掐掉等于白等一轮。
+  cancel-in-progress: false
+
+jobs:
+  build-android:
+    name: Build signed Android artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      # vite 构建这棵树在默认堆上限下偶发 OOM；CI runner 有 7GB，给到 6GB 留点余量。
+      NODE_OPTIONS: --max-old-space-size=6144
+      # 2 核 runner：守护进程与并行执行只会让 transform 阶段跟自己抢内存，直接关掉。
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 与 pr-unit-tests 用同一把 key：这棵树 1.4GB（onnxruntime-node 原生库 285MB +
+      # electron 43 的 dist 313MB），冷启动 npm ci 要五分钟，命中缓存直接省掉。
+      # 见 pr-unit-tests.yml 里关于缓存作用域的说明。
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-ubuntu-latest-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # Capacitor 7 的 android 库以 source/target 21 编译，JDK 17 会直接报
+      # 「无效的源发行版：21」。必须是 21 或更高。
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties', 'android/variables.gradle') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build web assets and sync to Android
+        # 一条命令两件事：vite build（FOLIA_BUILD_TARGET=capacitor）+ cap sync android。
+        # 分开写容易漏掉同步那一步，而漏了之后打出来的包照样是绿的 —— 只有装机才发现
+        # 前端还是旧的。
+        run: npm run cap:sync:android
+
+      - name: Restore signing keystore
+        # build.gradle 里的签名是**可选**的：没有 keystore.properties 就打未签名包。
+        # 所以这里缺 secrets 不 fail，只是打个警告 —— 未签名的包装不上真机，
+        # 但至少能验证整条构建链路是通的。
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 未配置 —— 本次产出的是**未签名**的 release 包"
+            exit 0
+          fi
+          echo "${KEYSTORE_BASE64}" | base64 --decode > android/folia-release.jks
+          # storeFile 相对 **app 模块** 目录解析（app/build.gradle 里的 file()），
+          # 所以是 ../folia-release.jks 而不是 folia-release.jks。
+          cat > android/keystore.properties <<EOF
+          storeFile=../folia-release.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD}
+          EOF
+          echo "签名配置已写入（keystore 已恢复）"
+
+      - name: Build release APK
+        working-directory: ./android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Build release bundle (AAB)
+        if: github.event_name == 'push' || inputs.build_bundle
+        working-directory: ./android
+        run: ./gradlew bundleRelease --stacktrace
+
+      - name: Verify packaged web assets
+        # 只比 chunk 名不够，内容也要断言：改的是壁纸页时 bootstrap 的哈希根本不会变，
+        # 上一次就差点因此漏判（详见本机 build-apk.sh 里的同一段注释）。
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK" || { echo "没有产出 APK"; exit 1; }
+          unzip -l "$APK" | grep -E "assets/public/wallpaper\.html|assets/public/assets/bootstrap-.*\.js" \
+            || { echo "Web 产物没进包 —— 大概率是 cap sync 那一步没跑"; exit 1; }
+          unzip -p "$APK" "assets/public/assets/wallpaper-*.js" | grep -c "wallpaper-stage" \
+            || { echo "壁纸页代码没进包"; exit 1; }
+
+      - name: Name artifacts by version
+        id: name
+        run: |
+          set -euo pipefail
+          VERSION="$(node -e "process.stdout.write(require('./package.json').version)")"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          mkdir -p dist-android
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "dist-android/folia-sonnet-${VERSION}-release.apk"
+          if [[ -f android/app/build/outputs/bundle/release/app-release.aab ]]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab \
+               "dist-android/folia-sonnet-${VERSION}-release.aab"
+          fi
+          ls -la dist-android
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-android-${{ steps.name.outputs.version }}
+          path: dist-android/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        # 只在打标签（或手动勾选）时发。手动出包默认不发 —— 临时验证用的包
+        # 不该出现在 Releases 里。
+        if: github.event_name == 'push' || inputs.publish_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist-android/* --clobber
