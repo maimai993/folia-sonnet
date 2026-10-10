@@ -78,6 +78,9 @@ public class FoliaWallpaperPlugin extends Plugin {
          * themeJson 是整份主题的序列化：AI 主题的辨识度往往不在四个颜色上，而在
          * wordColors（指定词上色）和 lyricsIcons（可视化里飘的图标）这类字段里，
          * 按字段一个个补永远补不全，所以整份推下来。
+         *
+         * 注意 save 的语义是「null = 不动」：这条入口心跳也在走（播放暂停 / 跳变
+         * 只带 positionMs），那些调用里主题字段全部缺席，绝不能当成清除。
          */
         WallpaperThemePalette.save(
             getContext(),

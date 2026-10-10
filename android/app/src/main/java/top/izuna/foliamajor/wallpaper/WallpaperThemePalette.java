@@ -29,18 +29,36 @@ public final class WallpaperThemePalette {
 
     private WallpaperThemePalette() {}
 
+    /**
+     * null = 这次没带，**保持原值**；空串 = 明确清除；非空 = 覆盖。
+     *
+     * 为什么要区分：`publish` 是心跳也在走的入口（播放暂停、跳变校正都只带
+     * positionMs/playing），那些调用里主题字段全部缺席 —— 如果把缺席当成清除，
+     * 换歌时刚存好的主题在下一个 500ms 心跳里就被抹掉了，
+     * 叠层随即退回内置主题，表现正是「AI 主题在桌面叠层上没生效」。
+     */
     public static void save(Context context, String primary, String secondary, String themeJson) {
         if (context == null) return;
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
-        // 传空串 = 「这次没有这个值」，清掉，别让叠层一直挂着上一首歌的颜色。
-        if (primary == null || primary.isEmpty()) editor.remove(KEY_PRIMARY);
-        else editor.putString(KEY_PRIMARY, primary);
-        if (secondary == null || secondary.isEmpty()) editor.remove(KEY_SECONDARY);
-        else editor.putString(KEY_SECONDARY, secondary);
-        if (themeJson == null || themeJson.isEmpty()) editor.remove(KEY_THEME_JSON);
-        else editor.putString(KEY_THEME_JSON, themeJson);
-        editor.apply();
+        boolean changed = false;
+        if (primary != null) {
+            if (primary.isEmpty()) editor.remove(KEY_PRIMARY);
+            else editor.putString(KEY_PRIMARY, primary);
+            changed = true;
+        }
+        if (secondary != null) {
+            if (secondary.isEmpty()) editor.remove(KEY_SECONDARY);
+            else editor.putString(KEY_SECONDARY, secondary);
+            changed = true;
+        }
+        if (themeJson != null) {
+            if (themeJson.isEmpty()) editor.remove(KEY_THEME_JSON);
+            else editor.putString(KEY_THEME_JSON, themeJson);
+            changed = true;
+        }
+        // 三个字段都没带就别动盘：心跳一次都不落盘，省掉无谓的写放大。
+        if (changed) editor.apply();
     }
 
     /** 下标 0 = 主文本色，1 = 次色；没有就是空串。 */
