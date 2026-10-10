@@ -80,6 +80,14 @@ export type WallpaperPayload = {
     primaryColor?: string;
     /** App 当前主题的次色（未唱到的那些行）。 */
     secondaryColor?: string;
+    /**
+     * App 当前**整份主题**。
+     *
+     * AI 主题真正的辨识度往往不在四个颜色上，而在 `wordColors`（给指定词上色）
+     * 和 `lyricsIcons`（可视化里飘的图标）这类字段里 —— 只推颜色的话这两样一个都来不了，
+     * 叠层画出来就是「配色变了，AI 主题的效果一点没有」。
+     */
+    theme?: Partial<Theme> | null;
     visualizer?: string;
     lines?: WallpaperTimedLine[];
     firstIndex?: number;
@@ -276,8 +284,16 @@ const WallpaperSurface: React.FC = () => {
      */
     const dualTheme = React.useMemo(() => buildBuiltinDualTheme(), []);
     const theme = React.useMemo<Theme>(() => {
-        // 只借用内置主题里跟颜色无关的部分（字体、动画强度）。
+        /*
+         * 打底用的是 App 推下来的整份主题（有就优先），内置主题只当兜底。
+         *
+         * 内置主题补的是「App 没推主题时」的情况（旧包 / 首份数据还没到），
+         * 而 App 推下来的那份里带着 AI 主题的 wordColors / lyricsIcons 等一整套字段 ——
+         * 这些是内置主题**永远不可能有**的，只覆盖四个颜色就拿不到。
+         * 仍然铺一层内置主题在下面：万一 App 那份缺字段（旧包），不至于整块是空的。
+         */
         const skeleton = isDaylight ? dualTheme.light : dualTheme.dark;
+        const base = payload.theme ? { ...skeleton, ...payload.theme } : skeleton;
         /*
          * 颜色一律走平滑值：换歌时 payload 里的主题色是瞬间替换的，
          * 直接用会让整个可视化的配色硬跳一下（「还是上一个主题色，然后突然变色」）。
@@ -295,7 +311,7 @@ const WallpaperSurface: React.FC = () => {
          */
         const primary = smoothPrimary || payload.primaryColor || accent;
         return {
-            ...skeleton,
+            ...base,
             name: 'wallpaper',
             backgroundColor: smoothBase || payload.backgroundColor || skeleton.backgroundColor,
             primaryColor: primary,
@@ -310,7 +326,8 @@ const WallpaperSurface: React.FC = () => {
             secondaryColor: smoothSecondary || payload.secondaryColor || lightenColor(accent, 0.5),
         };
     }, [dualTheme, isDaylight, smoothAccent, smoothBase, smoothPrimary, smoothSecondary,
-        payload.accent, payload.backgroundColor, payload.primaryColor, payload.secondaryColor]);
+        payload.accent, payload.backgroundColor, payload.primaryColor, payload.secondaryColor,
+        payload.theme]);
 
     React.useEffect(() => {
         // 主题跟随系统深浅色，和播放页的判定保持一致。

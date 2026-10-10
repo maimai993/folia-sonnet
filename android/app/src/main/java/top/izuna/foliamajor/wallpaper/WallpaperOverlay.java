@@ -26,6 +26,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import top.izuna.foliamajor.LockScreenMusicActivity;
@@ -2351,6 +2352,22 @@ public final class WallpaperOverlay {
             }
             if (palette[1] != null && !palette[1].isEmpty()) {
                 out.put("secondaryColor", palette[1]);
+            }
+            /*
+             * 整份主题（含 wordColors / lyricsIcons）。
+             *
+             * 这两个字段才是 AI 主题真正「有辨识度」的部分：只推四个颜色的话，
+             * 叠层画出来的歌词永远只有配色变了，图标和指定词上色一点没跟过来 ——
+             * 用户看到的就是「AI 主题在桌面叠层上没生效」。
+             * 主题 JSON 只在 App 换主题时才变，这里每次都读一份小 pref，成本可忽略。
+             */
+            String themeJson = WallpaperThemePalette.readThemeJson(context);
+            if (!themeJson.isEmpty()) {
+                try {
+                    out.put("theme", new JSONObject(themeJson));
+                } catch (JSONException ignored) {
+                    // 主题 JSON 坏了：退回只按四个颜色画，别让整包数据推不出去。
+                }
             }
 
             // 必须发**整条时间轴**，不能只发当前行附近那几行。

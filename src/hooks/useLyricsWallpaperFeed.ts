@@ -9,7 +9,7 @@ import { useMotionSettingsStore } from '../stores/useMotionSettingsStore';
 import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
-import type { Line } from '../types';
+import type { Line, Theme } from '../types';
 
 // src/hooks/useLyricsWallpaperFeed.ts
 // 把歌词送到原生壁纸。
@@ -160,6 +160,12 @@ type UseLyricsWallpaperFeedOptions = {
     /** 主文本色 / 次色。叠层那份页面拿不到 App 的主题对象，只能靠这里下发。 */
     primaryColor?: string | null;
     secondaryColor?: string | null;
+    /**
+     * App 当前整份主题。叠层是另一个 WebView，读不到 App 的主题对象，
+     * 而 AI 主题里「有辨识度」的往往不是颜色而是 `wordColors` / `lyricsIcons`
+     * 这类字段 —— 整份序列化推过去，叠层拿它打底。
+     */
+    theme?: Theme | null;
     animationIntensity?: 'calm' | 'normal' | 'chaotic' | null;
 };
 
@@ -206,9 +212,24 @@ export const useLyricsWallpaperFeed = ({
     backgroundColor,
     primaryColor,
     secondaryColor,
+    theme,
     animationIntensity,
 }: UseLyricsWallpaperFeedOptions): void => {
     const enabled = isCapacitorAndroid();
+    /*
+     * 整份主题序列化一份推给叠层。
+     *
+     * `theme` 是 useThemeController 里的 state，引用稳定，所以这个 memo 只在真的换主题
+     * 时才重算 —— 否则下面的推送 effect 会每次渲染都重跑一遍。
+     */
+    const themeJson = React.useMemo(() => {
+        if (!theme) return null;
+        try {
+            return JSON.stringify(theme);
+        } catch {
+            return null;
+        }
+    }, [theme]);
     const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
     const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
     const backgroundImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
@@ -334,6 +355,7 @@ export const useLyricsWallpaperFeed = ({
             backgroundColor: backgroundColor || '#09090b',
             primaryColor: primaryColor || undefined,
             secondaryColor: secondaryColor || undefined,
+            themeJson: themeJson || undefined,
             motion: MOTION_BY_INTENSITY[animationIntensity ?? 'normal'] ?? 1,
             cover: wallpaperCover,
             background: backgroundMode,
@@ -363,8 +385,8 @@ export const useLyricsWallpaperFeed = ({
         // getCurrentTime 是稳定的取数函数，不参与依赖比较以外的重算。
         // wallpaperCover 在依赖里：封面异步到位后再推一次，壁纸才能拿到它和从它取的高亮色。
     }, [active, lyrics, title, artist, backgroundMode, backgroundImage, wallpaperVisualizer,
-        accentColor, backgroundColor, primaryColor, secondaryColor, animationIntensity, backgroundBlur,
-        showProgress, showTranslation, tuning, durationMs, wallpaperCover]);
+        accentColor, backgroundColor, primaryColor, secondaryColor, themeJson, animationIntensity,
+        backgroundBlur, showProgress, showTranslation, tuning, durationMs, wallpaperCover]);
 
     // 播放/暂停要立刻通知，否则暂停后原生还在按墙钟往前走。
     React.useEffect(() => {

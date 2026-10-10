@@ -1486,6 +1486,9 @@ export default function App() {
         // 否则它只能用内置主题打底，AI 主题换上去颜色一点没变。
         primaryColor: theme?.primaryColor ?? null,
         secondaryColor: theme?.secondaryColor ?? null,
+        // 整份主题：AI 主题的 wordColors / lyricsIcons 这类字段一个都传不过去的话，
+        // 叠层画出来就只有配色变了，「AI 主题的效果」一点都没有。
+        theme,
         animationIntensity: theme?.animationIntensity ?? null,
     });
 

@@ -68,17 +68,22 @@ public class FoliaWallpaperPlugin extends Plugin {
         java.util.Map<String, Float> tuning = readTuning(call.getObject("tuning"));
 
         /*
-         * 完整主题色（文本主色 / 次色）单独下发。
+         * 完整主题（含文本主色 / 次色）单独下发。
          *
          * 叠层那份页面是另一个 WebView，它的主题是拿内置主题打底、只覆盖高亮色和底色
          * 搭出来的 —— 主文本色因此永远是内置主题的。App 里换成 AI / 自定义主题之后，
          * 叠层的歌词颜色一点没变（「AI 主题在桌面叠层上不生效」）。
-         * 这两个颜色不走 Snapshot（那串构造参数改动面太大），单独存一张小表。
+         * 这几个值不走 Snapshot（那串构造参数改动面太大），单独存一张小表。
+         *
+         * themeJson 是整份主题的序列化：AI 主题的辨识度往往不在四个颜色上，而在
+         * wordColors（指定词上色）和 lyricsIcons（可视化里飘的图标）这类字段里，
+         * 按字段一个个补永远补不全，所以整份推下来。
          */
         WallpaperThemePalette.save(
             getContext(),
             call.getString("primaryColor"),
-            call.getString("secondaryColor"));
+            call.getString("secondaryColor"),
+            call.getString("themeJson"));
 
         if (timeline == null && positionMs >= 0L) {
             // 常规心跳：只挪时间锚点，不碰时间轴，也不落盘。

@@ -44,6 +44,16 @@ export interface FoliaWallpaperPublishOptions {
     primaryColor?: string;
     /** App 当前主题的次色（未唱到的那些行、辅助文本）。 */
     secondaryColor?: string;
+    /**
+     * App 当前**整份主题**的 JSON。
+     *
+     * 只推四个颜色是不够的：AI 主题的辨识度往往不在颜色上 ——
+     * `wordColors`（给指定的词单独上色）和 `lyricsIcons`（可视化里飘的那些图标）
+     * 这类字段一个都传不过去，叠层画出来就只有配色变了，「AI 主题效果」一点没有。
+     * 按字段一个个加永远补不全（每加一项就漏一项），所以整份序列化推下来，
+     * 叠层拿它当打底主题，再套上单独推的颜色（那几个要走平滑过渡）。
+     */
+    themeJson?: string;
     /** 动效强度倍数：calm 0.6 / normal 1.0 / chaotic 1.5。 */
     motion?: number;
     /** 封面 base64。体积大，只在换歌时发。 */
