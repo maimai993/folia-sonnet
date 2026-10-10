@@ -216,7 +216,17 @@ final class LocalAudioServer {
 
             String token = URLDecoder.decode(path.substring(AUDIO_PATH_PREFIX.length()), "UTF-8");
             if (token.startsWith(IMPORTED_PREFIX)) {
-                streamImportedFile(output, requestParts, headers, token.substring(IMPORTED_PREFIX.length()));
+                /*
+                 * 传**完整的** token，别先剥掉 imported- 再拼路径。
+                 *
+                 * 磁盘上的副本名本身就是 "imported-<稳定名>"（导入那边 safeName 就是这么起的，
+                 * 删副本的 resolveImportedFile 也是按完整 ref 拼的），而这里剥掉前缀之后
+                 * 拼出来的是 "imported-audio/<稳定名>" —— 少了一段，永远 isFile() == false，
+                 * 于是每一首手动导入的歌都回 404：<audio> 报 Format error、
+                 * 导入时抓封面和内嵌歌词的那次 fetch 也一起失败（封面/歌词全空）。
+                 * 表现正是「扫描导入能播，手动导入一律播不了」。
+                 */
+                streamImportedFile(output, requestParts, headers, token);
                 return;
             }
             if (token.startsWith(FILE_PREFIX)) {
@@ -260,6 +270,13 @@ final class LocalAudioServer {
         Map<String, String> headers,
         String fileName
     ) throws IOException {
+        // 现在传进来的是完整文件名（含 imported- 前缀）。这个服务监听在 127.0.0.1 上，
+        // 设备上任何应用都能连，名字来自 URL，必须挡掉路径穿越。
+        if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
+            Log.w(TAG, "imported audio refused: " + fileName);
+            writeStatus(output, 404, "Not Found");
+            return;
+        }
         File target = new File(importedAudioDirectory(), fileName);
         if (!target.isFile()) {
             Log.w(TAG, "imported audio missing: " + fileName);
