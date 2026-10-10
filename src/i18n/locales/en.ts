@@ -2429,6 +2429,8 @@ export default {
     "clearAll": "Clear All",
     "confirmClearAll": "Are you sure you want to clear all cache?",
     "electronSettings": "AI Theme Settings",
+    "aiThemeDesc": "Add your own key and AI themes are generated right on this device (nothing goes through a server).",
+    "aiKeyStoredLocally": "The key is stored on this device only and is never uploaded.",
     "aiProvider": "AI Provider",
     "otherCompatibleApi": "Other Compatible API",
     "useSystemProxyAI": "Use System Proxy for AI",

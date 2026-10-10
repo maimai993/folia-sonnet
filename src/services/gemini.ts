@@ -4,6 +4,7 @@ import { sanitizeDualTheme } from "./themeSanitizer";
 import { getWebAiProvider } from "./runtimeConfig";
 import { resolveFoliaApiUrl } from "./webApi";
 import { recordAiThemeAttempt, type AiThemeTrigger } from "../utils/aiThemeDiagnostics";
+import { generateThemeWithConfiguredAi, isLocalAiThemeAvailable } from "./aiThemeClient";
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error) {
@@ -38,6 +39,16 @@ export const generateThemeFromLyrics = async (
       const theme = sanitizeDualTheme(dualTheme);
       recordAiThemeAttempt({ provider, trigger, stage: 'request', ok: true, durationMs: Date.now() - startedAt });
       return theme;
+    }
+
+    /*
+     * 设备本地直连：安卓没有 Electron 主进程，也没有部署自带的 generate-theme 端点，
+     * 两条路都走不通 —— 这就是「AI 主题」在 App 里一直是灰的的原因。
+     * 用户在设置里填了自己的 Key 之后走这条，请求直接从设备发出去（安卓经原生 OkHttp 桥
+     * 绕开 CORS）。它自己会记诊断，这里不要再记一条。
+     */
+    if (isLocalAiThemeAvailable()) {
+      return await generateThemeWithConfiguredAi(lyricsText, options);
     }
 
     const endpoint = resolveFoliaApiUrl(provider === 'openai' ? 'generate-theme_openai' : 'generate-theme');

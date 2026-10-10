@@ -22,6 +22,7 @@ import { ObsCopyUrlButton } from '../../shared/ObsCopyUrlButton';
 import { resolveWebObsTarget, selectWebObsSource } from '../../../services/obs/webObsTarget';
 import { buildVisualSettingsConfig, resolveObsCopyHintKey } from '../../../services/obs/visualSettingsConfig';
 import LatticeSettingsSection from './LatticeSettingsSection';
+import AiProviderSettings from './AiProviderSettings';
 import GridViewSettingsSection from './GridViewSettingsSection';
 import VideoLayerSettingsSection from './VideoLayerSettingsSection';
 import NowPlayingCardSettingsSection from './NowPlayingCardSettingsSection';
@@ -791,6 +792,14 @@ const AppearanceSettingsSubview: React.FC<AppearanceSettingsSubviewProps> = ({
                                 );
                             })}
                         </div>
+                        {/*
+                            非桌面端（安卓 / 网页）没有主进程那套 AI 设置：凭据由用户自己填、存在本机，
+                            AI 主题生成因此才有第三条路（services/aiThemeClient.ts）。
+                            桌面端继续走主进程设置，这里不插一脚。
+                        */}
+                        {!isElectron && (
+                            <AiProviderSettings settingsCardClass={settingsCardClass} isDaylight={isDaylight} />
+                        )}
                         {aiApiKeyStatus === 'missing' && (
                             <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs">
                                 <KeyRound size={15} className="mt-0.5 shrink-0 text-amber-500" />

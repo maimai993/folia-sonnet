@@ -2295,6 +2295,8 @@ export default {
     "clearAll": "Bersihkan Semua",
     "confirmClearAll": "Yakin ingin membersihkan semua cache?",
     "electronSettings": "Pengaturan Tema AI",
+    "aiThemeDesc": "Masukkan kunci Anda sendiri dan tema AI dibuat langsung di perangkat ini (tanpa lewat server).",
+    "aiKeyStoredLocally": "Kunci hanya disimpan di perangkat ini dan tidak pernah diunggah.",
     "aiProvider": "Penyedia AI",
     "otherCompatibleApi": "API Kompatibel Lainnya",
     "useSystemProxyAI": "Gunakan Proxy Sistem untuk AI",

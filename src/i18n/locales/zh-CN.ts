@@ -2430,6 +2430,8 @@ export default {
     "clearAll": "全部清空",
     "confirmClearAll": "确定要清空所有缓存吗？",
     "electronSettings": "AI主题设置",
+    "aiThemeDesc": "填自己的密钥，AI 主题直接在设备上生成（不经过任何服务器）。",
+    "aiKeyStoredLocally": "密钥只保存在本机，不会上传。",
     "aiProvider": "AI 供应商",
     "otherCompatibleApi": "其他兼容接口",
     "useSystemProxyAI": "为AI使用系统代理",
