@@ -132,6 +132,34 @@ describe('localLibraryCatalogService', () => {
         ]);
     });
 
+    it('leaves online metadata, cover choice and artist assignments untouched for a lyrics-only patch without metadata', async () => {
+        await assignImportedSongs([song('lyrics-only')]);
+        await applyMatchedMetadata('lyrics-only', {
+            source: 'netease',
+            songId: 1,
+            artists: [{ id: 1, name: 'Online Artist' }],
+            album: { id: 10, name: 'Online Album' },
+            coverUrl: 'https://example.com/cover.jpg',
+        }, { songPatch: { useOnlineCover: true } });
+        const before = await appDatabase.local_library_assignments.get('lyrics-only');
+
+        // AMLL 歌词匹配走的就是这条路径（见 resolveLyricMatchMetadataSelection）
+        await applyMatchedMetadata('lyrics-only', {}, {
+            lyricsOnly: true,
+            songPatch: { matchedLyricsSource: 'amll', lyricsSource: 'online' },
+        });
+
+        const stored = await appDatabase.local_music.get('lyrics-only');
+        expect(stored?.onlineMetadata).toMatchObject({
+            songId: 1,
+            artists: [{ id: 1, name: 'Online Artist' }],
+            coverUrl: 'https://example.com/cover.jpg',
+        });
+        expect(stored?.useOnlineCover).toBe(true);
+        expect(stored?.matchedLyricsSource).toBe('amll');
+        expect(await appDatabase.local_library_assignments.get('lyrics-only')).toEqual(before);
+    });
+
     it('does not overwrite matched assignments during a rescan import update', async () => {
         await assignImportedSongs([song('matched')]);
         await applyMatchedMetadata('matched', {

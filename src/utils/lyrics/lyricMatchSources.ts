@@ -1,16 +1,16 @@
 import { getOnlineMusicProvider } from '../../services/onlineMusic/providerRegistry';
 import type { AmllDbPlatform, LyricData, LyricProviderSource, SongResult } from '../../types';
-import { calculateMatchScore, calculateMatchScoreDetails } from './matchScore';
+import { calculateMatchScore } from './matchScore';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
-import { fetchAmllDbLyrics } from './providers/amllDbProvider';
+import { fetchAmllDbLyrics, getAmllDbMusicIds, searchAmllDbSongs } from './providers/amllDbProvider';
+import { buildAmllDbSearchQueries, toAmllDbSongResults } from './amllDbCandidates';
 import { applyNeteaseChorusByTime } from './chorusEffects';
 import { hasRenderableLyrics } from './validity';
 
 // src/utils/lyrics/lyricMatchSources.ts
 
-const AMLL_DB_SEARCH_LIMIT_PER_SOURCE = 5;
-const AMLL_DB_MAX_PROBES = 4;
-const AMLL_DB_MAX_RESULTS = 5;
+const AMLL_DB_SEARCH_PAGE_SIZE = 50;
+const AMLL_DB_MAX_RESULTS = 20;
 
 export type LyricMatchSearchTarget = {
     title: string;
@@ -27,13 +27,6 @@ export type LyricMatchFetchResult = {
 
 export const LYRIC_MATCH_SOURCES: readonly LyricProviderSource[] = ['netease', 'amll', 'qq', 'kugou'];
 
-export const sourceSupportsManualSearch = (source: LyricProviderSource): boolean => source !== 'amll';
-
-const withAmllDbPlatform = (song: SongResult, platform: AmllDbPlatform): SongResult => ({
-    ...song,
-    amllDbPlatform: platform,
-});
-
 const sortByMatchScore = (songs: SongResult[], target: LyricMatchSearchTarget) => (
     [...songs].sort((a, b) => calculateMatchScore(target, b) - calculateMatchScore(target, a))
 );
@@ -42,67 +35,23 @@ const hasChorusMarkers = (lyrics: LyricData | null): boolean => (
     Boolean(lyrics?.lines.some(line => line.isChorus))
 );
 
-const getAmllDbCandidateKey = (song: SongResult): string => `${song.amllDbPlatform ?? 'unknown'}:${song.id}`;
-
-function shouldProbeAmllDbCandidate(song: SongResult, target: LyricMatchSearchTarget): boolean {
-    const details = calculateMatchScoreDetails(target, song);
-    if (!details.titleMatched) {
-        return false;
-    }
-
-    const identityMatched = details.artistMatched || details.albumMatched === true;
-    if (!identityMatched) {
-        return false;
-    }
-
-    return details.score >= 72 && details.durationMatched !== false;
-}
-
-// Searches NetEase and QQ candidates, then keeps only candidates that have AMLLDB TTML.
+// AMLL 官方搜索直接返回已收录的歌曲，不用再先搜网易云 / QQ 后逐个探测（#515）。
+// 按 buildAmllDbSearchQueries 的顺序搜，有结果就停；请求失败（限流、网络错误）时直接停止，不再发兜底请求。
 export async function searchAmllDbLyricCandidates(
     query: string,
     target: LyricMatchSearchTarget,
 ): Promise<SongResult[]> {
-    const [neteaseResult, qqResult] = await Promise.allSettled([
-        getOnlineMusicProvider('netease')?.search?.searchSongs(query, AMLL_DB_SEARCH_LIMIT_PER_SOURCE, 0)
-            || Promise.resolve({ items: [], hasMore: false, nextOffset: 0 }),
-        searchQQLyrics(query, 1, AMLL_DB_SEARCH_LIMIT_PER_SOURCE),
-    ]);
-
-    const neteaseSongs = neteaseResult.status === 'fulfilled'
-        ? neteaseResult.value.items.map(song => withAmllDbPlatform(song, 'ncm'))
-        : [];
-    const qqSongs = qqResult.status === 'fulfilled'
-        ? qqResult.value.map(song => withAmllDbPlatform(song, 'qq'))
-        : [];
-
-    const seen = new Set<string>();
-    const candidates = sortByMatchScore([...neteaseSongs, ...qqSongs], target)
-        .filter(candidate => {
-            const key = getAmllDbCandidateKey(candidate);
-            if (seen.has(key)) {
-                return false;
-            }
-            seen.add(key);
-            return shouldProbeAmllDbCandidate(candidate, target);
-        })
-        .slice(0, AMLL_DB_MAX_PROBES);
-
-    const probes = candidates.map(async (candidate) => {
-        const platform = candidate.amllDbPlatform;
-        if (!platform) {
-            return null;
+    for (const params of buildAmllDbSearchQueries(query)) {
+        const items = await searchAmllDbSongs(params, AMLL_DB_SEARCH_PAGE_SIZE);
+        if (items === null) {
+            return [];
         }
-
-        const lyrics = await fetchAmllDbLyrics(platform, candidate.id);
-        return hasRenderableLyrics(lyrics) ? candidate : null;
-    });
-
-    const results = await Promise.all(probes);
-    const available = results.filter((candidate): candidate is SongResult => candidate !== null)
-        .slice(0, AMLL_DB_MAX_RESULTS);
-
-    return available;
+        const candidates = toAmllDbSongResults(items);
+        if (candidates.length > 0) {
+            return sortByMatchScore(candidates, target).slice(0, AMLL_DB_MAX_RESULTS);
+        }
+    }
+    return [];
 }
 
 export async function searchLyricsByMatchSource(
@@ -156,7 +105,7 @@ export async function fetchLyricsForMatchSource(
     if (!platform) {
         return null;
     }
-    const fetchedLyrics = await fetchAmllDbLyrics(platform, selectedResult.id);
+    const fetchedLyrics = await fetchAmllDbLyrics(platform, getAmllDbMusicIds(platform, selectedResult));
     const lyrics = hasRenderableLyrics(fetchedLyrics) ? fetchedLyrics : null;
     const chorusRanges = platform === 'ncm' && !hasChorusMarkers(lyrics)
         ? await getOnlineMusicProvider('netease')?.lyrics?.getChorusRanges?.(selectedResult.id) ?? []

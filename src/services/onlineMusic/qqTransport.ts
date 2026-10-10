@@ -89,13 +89,23 @@ export const resetQqTransportRuntimeCache = (): void => {
     webEndpointStyle = 'path';
 };
 
+// 内嵌后端没在监听时，把主进程报的状态与故障原因带进错误：时间线里直接能看到它为什么没起来。
+const describeEmbeddedStatus = async (): Promise<string> => {
+    try {
+        const status = await window.electron?.getQqApiStatus?.();
+        return status ? ` (status ${status.status}${status.error ? `: ${status.error}` : ''})` : '';
+    } catch {
+        return '';
+    }
+};
+
 const resolveApiBase = async (): Promise<{ base: string; embedded: boolean }> => {
     const readPort = getElectronQqPortReader();
     if (readPort) {
         if (electronApiBase) return { base: electronApiBase, embedded: true };
         const port = await readPort();
         if (!port) {
-            throw new OnlineProviderError('unavailable', 'Embedded QQMusicApi is not running', 'qq');
+            throw new OnlineProviderError('unavailable', `Embedded QQMusicApi is not running${await describeEmbeddedStatus()}`, 'qq');
         }
         electronApiBase = `http://127.0.0.1:${port}`;
         return { base: electronApiBase, embedded: true };
@@ -205,6 +215,9 @@ const persistConfirmedSession = (operation: QqOperation, body: any): void => {
     if (typeof cookie === 'string' && cookie) writeProviderSessionValue('qq', 'cookie', cookie);
 };
 
+/** 网页版配置的远端 API 地址（自检与诊断报告用）；桌面版走内嵌后端，返回 null。 */
+export const getQqRemoteApiBase = (): string | null => (getElectronQqPortReader() ? null : getWebApiBase() || null);
+
 export const getQqTransportAvailability = () => {
     if (getElectronQqPortReader()) return { configured: true } as const;
     return getWebApiBase()
@@ -275,12 +288,26 @@ const requestQqOnce = async <T = unknown>(
     // Same-origin serverless calls must retain deployment-protection cookies; external qq-music-api instances
     // answer with `Access-Control-Allow-Origin: *`, so those requests still omit browser credentials.
     const credentials: RequestCredentials = isSameOriginBase(base) ? 'same-origin' : 'omit';
-    const response = await fetchWithTimeout(
-        buildRequestUrl(base, style, endpoint.path, query.toString()),
-        { credentials, headers },
-    );
+    let response: Response;
+    try {
+        response = await fetchWithTimeout(
+            buildRequestUrl(base, style, endpoint.path, query.toString()),
+            { credentials, headers },
+        );
+    } catch (error) {
+        // 连后端本身都没连上（内嵌后端退出、远端不可达），与后端回了错误码分开。
+        // 这段文字不能只为了好看：路径式的地址在部分部署上会以「浏览器把 404 吞掉、只剩
+        // Failed to fetch」的形式失败，requestQq 要靠它判断该不该换另一种拼法。
+        throw new OnlineProviderError(
+            'network',
+            `QQMusicApi ${operation} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+            'qq',
+            error,
+        );
+    }
     if (!response.ok) {
         const failure = await readJsonBody(response);
+        const backendMessage = typeof failure?.message === 'string' && failure.message.trim() ? ` (${failure.message.trim()})` : '';
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.
         if (response.status === 401) {
             clearQqSession();
@@ -300,7 +327,7 @@ const requestQqOnce = async <T = unknown>(
         }
         throw new OnlineProviderError(
             'network',
-            `QQMusicApi request failed: ${response.status}`,
+            `QQMusicApi ${operation} failed: HTTP ${response.status}${backendMessage}`,
             'qq',
             failure,
             response.status,
@@ -369,8 +396,11 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     } catch (error) {
         // 值得换拼法的只有两种：「后端根本没有这条路由」的 404，以及拼错地址时被
         // 浏览器吞掉、只剩网络级错误的情况。其余失败（401 / 429 / 上游拒收）如实上抛。
+        // 上游把「连不上后端」也包成了 OnlineProviderError（错误信息里仍带着
+        // Failed to fetch 那类原文），所以这里不能只看 httpStatus —— 网络级的失败
+        // 同样是「拼法可能不对」的信号，得照旧换一种拼法再试。
         const worthRetrying = error instanceof OnlineProviderError
-            ? error.httpStatus === 404
+            ? error.httpStatus === 404 || (error.code === 'network' && isNetworkLevelFailure(error))
             : isNetworkLevelFailure(error);
         if (!worthRetrying) throw error;
         const result = await requestQqOnce<T>(operation, params, base, fallback);

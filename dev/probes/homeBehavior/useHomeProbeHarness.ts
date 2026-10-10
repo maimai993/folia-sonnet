@@ -24,7 +24,12 @@ import { installNavidromeShim, NAVIDROME_PROBE_CONFIG } from '../libraryBehavior
 import { recordProbeCall } from '../libraryBehavior/probeLog';
 import { probeRefreshGate, releaseAllProbeRefreshGates } from '../libraryBehavior/probeGates';
 import { PROBE_SURFACE_CALLBACKS } from '../libraryBehavior/probeSurfaceCallbacks';
-import { isProbeSandbox, onProbeBackCollection } from '../libraryBehavior/useLibraryProbeHarness';
+import {
+    isProbeSandbox,
+    onProbeBackCollection,
+    onProbePopCollectionTo,
+    onProbePushCollection,
+} from '../libraryBehavior/useLibraryProbeHarness';
 import { readHomeLibrary, seedHomeLibrary } from './homeLocalFixtures';
 import { installHomeServiceHook } from './serviceStubs';
 import { installHomeProbeApi } from './homeProbeApi';
@@ -198,7 +203,7 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
         useCollectionNavigationStore.getState().openRoot(collection, 'home');
     }, []);
     const onPushCollection = useCallback((collection: GridViewCollectionDescriptor) => {
-        useCollectionNavigationStore.getState().push(collection);
+        onProbePushCollection(collection);
     }, []);
 
     const activeCollections = activeProvider?.collections;
@@ -237,6 +242,7 @@ export const useHomeProbeModel = (initial: HomeProbeLibrary): { model: HomeViewM
         account,
         onOpenCollection,
         onPushCollection,
+        onPopCollectionTo: onProbePopCollectionTo,
         onBackCollection: onProbeBackCollection,
     }), [account, onOpenCollection, onPushCollection, surfaceProps]);
 

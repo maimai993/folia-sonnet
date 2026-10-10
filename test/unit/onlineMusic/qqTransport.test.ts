@@ -457,17 +457,20 @@ describe('QQ Music Web transport', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('keeps QR keys and session cookies out of error messages', async () => {
+    it('names the operation and the backend message, but never the session cookie', async () => {
         storage.set('online_provider:qq:cookie', 'qqmusic_session=secret-session-token');
-        const fetchMock = vi.fn().mockResolvedValue(Response.json({ code: 502 }, { status: 502 }));
+        const fetchMock = vi.fn().mockResolvedValue(Response.json(
+            { code: 429, message: 'QR login is temporarily backed off', retryAfterMs: 30000 },
+            { status: 429 },
+        ));
         vi.stubGlobal('fetch', fetchMock);
         const { requestQq } = await import('@/services/onlineMusic/qqTransport');
 
-        const error = await requestQq('login_qr_check', { key: 'secret-qr-key' }).catch((thrown: Error) => thrown);
+        const error = await requestQq('login_qr_key', { channel: 'qq' }).catch((thrown: Error) => thrown);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('QQMusicApi request failed: 502');
-        expect((error as Error).message).not.toContain('secret-qr-key');
+        expect((error as Error).message).toBe('QQMusicApi login_qr_key failed: HTTP 429 (QR login is temporarily backed off)');
+        expect(error).toMatchObject({ httpStatus: 429, retryAfterMs: 30000 });
         expect((error as Error).message).not.toContain('secret-session-token');
     });
 
@@ -542,5 +545,30 @@ describe('QQ Music Web transport', () => {
         await requestQq('login_status');
         const recoveredUrl = new URL(String(fetchMock.mock.calls[2][0]));
         expect(recoveredUrl.pathname).toBe('/login/status');
+    });
+
+    // 上游把「连不上后端」也包成了 OnlineProviderError（原文仍是 `Failed to fetch`），
+    // 所以这条断言在两种拼法都试过之后依然成立 —— 网络级失败也要换拼法试一次，
+    // 但两次都失败时抛出的是最后那次的原因，不会把 unreachable 改成别的说法。
+    it('tells an unreachable backend apart from a backend that answered with an error', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_qr_check', { key: 'k' })).rejects.toMatchObject({
+            code: 'network',
+            message: 'QQMusicApi login_qr_check unreachable: Failed to fetch',
+        });
+    });
+
+    it('says why the embedded server is not running', async () => {
+        vi.stubEnv('VITE_QQ_API_BASE', '');
+        const getQqApiStatus = vi.fn().mockResolvedValue({ status: 'error', port: null, error: 'listen: EADDRINUSE', updatedAt: 1 });
+        vi.stubGlobal('window', { electron: { getQqPort: vi.fn().mockResolvedValue(null), getQqApiStatus } });
+        const { requestQq } = await import('@/services/onlineMusic/qqTransport');
+
+        await expect(requestQq('login_qr_key')).rejects.toMatchObject({
+            code: 'unavailable',
+            message: 'Embedded QQMusicApi is not running (status error: listen: EADDRINUSE)',
+        });
     });
 });

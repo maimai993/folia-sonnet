@@ -1,16 +1,17 @@
 const os = require('os');
 
 // electron/neteaseLoginDiagnostics.cjs
-// 扫码登录只在少数用户、少数时候失败，开发机上复现不了，只能让用户把现场带回来。
-// 必须记在主进程的请求层：上游 login_qr_check 出错时会把网易的真实返回码（风控 8821 等）吞成
-// 一个 404，渲染进程拿到的永远只是「Not Found」。这里只记登录相关的请求，而且只记能公开贴出来的
-// 东西：返回码、耗时、带没带来源 IP 头、cookie 里有没有凭据——不记 cookie、token 和 IP 本身。
+// 网易登录请求的记录：包在上游 util/request 外面，只记登录相关的接口（扫码、匿名注册、账户读取），
+// 每次调用记下 uri、加密方式、来源 IP 头、deviceId、cookie 里有没有登录 / 匿名凭据、耗时与结果（状态码、返回码、原文），
+// 并经连接层记录器（electron/networkRecorder.cjs）对上这一次调用实际发出的连接：连了哪个地址、v4 还是 v6、
+// 失败在 TCP / TLS / 等响应的哪一步、Node 错误码。快照给诊断报告，同一条记录也打到主进程日志。
+// cookie 只记有没有 MUSIC_U / MUSIC_A，不记值：值对排查没有用，贴进公开 issue 却等于交出账号。
 
 const LOGIN_URI_PATTERN = /^\/api\/(login\/|register\/anonimous|w\/nuser\/account\/get|nuser\/account\/get)/;
 const MAX_ENTRIES = 40;
-const MAX_MESSAGE_LENGTH = 200;
-// deviceId 只留末尾几位：足够看出前后两次请求是不是同一个设备，又不至于把整个标识贴到 issue 里。
-const DEVICE_ID_TAIL_LENGTH = 6;
+const MAX_MESSAGE_LENGTH = 300;
+// 报告里一行一个请求，deviceId 只留末尾几位就能看出前后是不是同一个设备；完整值在 identity 行。
+const DEVICE_ID_TAIL_LENGTH = 8;
 
 const truncate = (value) => {
   const text = typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -53,29 +54,44 @@ const describeOutcome = (settled, value) => {
   };
 };
 
-const isGlobalIpv6 = (address) => !/^(fe80|fc|fd)/i.test(address) && address !== '::1';
+// 连接层记录里与这一行有关的部分（一次调用通常只有一个连接；带反作弊 token 的接口会多出几个）。
+const compactConnection = (entry) => ({
+  host: entry.host,
+  path: entry.path,
+  dns: entry.dns,
+  attempts: entry.attempts,
+  remote: entry.remote,
+  reusedSocket: entry.reusedSocket,
+  connectMs: entry.connectMs,
+  tlsMs: entry.tlsMs,
+  responseMs: entry.responseMs,
+  totalMs: entry.totalMs,
+  status: entry.status,
+  error: entry.error,
+});
 
-// 只报网卡名和有没有可用地址，不报地址本身。有公网 IPv6、以及存在 TUN 一类的代理网卡，都是排查时要先问的。
+// 列出每块网卡的名字与地址。Teredo、6to4、TUN 一类的代理网卡、有没有公网 IPv6，都是排查连接被重置时要先看的。
 const describeNetwork = (networkInterfaces) => {
   let interfaces = {};
   try {
     interfaces = networkInterfaces() || {};
-  } catch {
-    return { interfaces: [], globalIpv6Count: 0 };
+  } catch (error) {
+    return { interfaces: [], error: error instanceof Error ? error.message : String(error) };
   }
-  let globalIpv6Count = 0;
-  const summary = Object.entries(interfaces).flatMap(([name, addresses]) => {
-    const external = (addresses || []).filter(item => !item.internal);
-    if (external.length === 0) return [];
-    const globalIpv6 = external.filter(item => (item.family === 'IPv6' || item.family === 6) && isGlobalIpv6(item.address)).length;
-    globalIpv6Count += globalIpv6;
-    return [{
-      name,
-      ipv4: external.some(item => item.family === 'IPv4' || item.family === 4),
-      globalIpv6: globalIpv6 > 0,
-    }];
-  });
-  return { interfaces: summary, globalIpv6Count };
+  return {
+    interfaces: Object.entries(interfaces).flatMap(([name, addresses]) => {
+      const external = (addresses || []).filter(item => !item.internal);
+      if (external.length === 0) return [];
+      return [{
+        name,
+        addresses: external.map(item => ({
+          address: item.address,
+          family: item.family === 'IPv6' || item.family === 6 ? 6 : 4,
+          ...(item.scopeid ? { scopeId: item.scopeid } : {}),
+        })),
+      }];
+    }),
+  };
 };
 
 // 创建一份登录诊断记录：wrapRequest 包住上游 request，snapshot 给渲染进程生成诊断报告。
@@ -83,10 +99,12 @@ function createNeteaseLoginDiagnostics({
   now = Date.now,
   getDefaultDeviceId = () => global.deviceId,
   networkInterfaces = os.networkInterfaces,
+  networkRecorder = null,
   logger = console,
 } = {}) {
   const entries = [];
   const startup = {};
+  let seq = 0;
 
   const record = (entry) => {
     entries.push(entry);
@@ -102,6 +120,7 @@ function createNeteaseLoginDiagnostics({
     const startedAt = now();
     const cookie = options.cookie;
     const deviceId = readCookieField(cookie, 'deviceId') || getDefaultDeviceId() || '';
+    const tag = `netease-login#${++seq}`;
     const entry = {
       at: startedAt,
       uri,
@@ -112,13 +131,16 @@ function createNeteaseLoginDiagnostics({
       hasMusicA: Boolean(readCookieField(cookie, 'MUSIC_A')),
       durationMs: null,
       outcome: { settled: 'pending', status: null, code: null, message: '' },
+      connections: [],
     };
     record(entry);
 
     const finish = (settled, value) => {
       entry.durationMs = now() - startedAt;
       entry.outcome = describeOutcome(settled, value);
-      logger.info('[Netease API] login request', {
+      entry.connections = networkRecorder ? networkRecorder.entriesForTag(tag).map(compactConnection) : [];
+      const last = entry.connections[entry.connections.length - 1];
+      logger[settled === 'rejected' ? 'warn' : 'info']('[Netease API] login request', {
         uri,
         settled,
         status: entry.outcome.status,
@@ -127,10 +149,17 @@ function createNeteaseLoginDiagnostics({
         durationMs: entry.durationMs,
         ipHeader: entry.ipHeader,
         deviceIdTail: entry.deviceIdTail,
+        ...(last ? {
+          remote: last.remote ? `${last.remote.address} (IPv${last.remote.family ?? '?'})` : null,
+          connectMs: last.connectMs,
+          tlsMs: last.tlsMs,
+          networkError: last.error,
+        } : {}),
       });
     };
 
-    return Promise.resolve(request(uri, data, options)).then(
+    const run = () => Promise.resolve(request(uri, data, options));
+    return (networkRecorder ? networkRecorder.run(tag, run) : run()).then(
       (result) => {
         finish('resolved', result);
         return result;
@@ -150,7 +179,11 @@ function createNeteaseLoginDiagnostics({
     capturedAt: now(),
     startup: { ...startup },
     network: describeNetwork(networkInterfaces),
-    requests: entries.map(entry => ({ ...entry, outcome: { ...entry.outcome } })),
+    requests: entries.map(entry => ({
+      ...entry,
+      outcome: { ...entry.outcome },
+      connections: entry.connections.map(connection => ({ ...connection })),
+    })),
   });
 
   return { wrapRequest, noteStartup, snapshot };
@@ -158,4 +191,6 @@ function createNeteaseLoginDiagnostics({
 
 module.exports = {
   createNeteaseLoginDiagnostics,
+  describeNetwork,
+  readCookieField,
 };

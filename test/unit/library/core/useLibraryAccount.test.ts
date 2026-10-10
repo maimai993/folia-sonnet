@@ -55,6 +55,7 @@ const quillLogin: LibraryLoginSessionSnapshot = {
     qrImageUrl: 'qr.png',
     failure: 'expired-after-scan',
     retryCooldownSeconds: null,
+    selfCheck: null,
     backend: { failed: false, detail: null, restarting: false, canRestart: false },
     copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: { key: 'home.qrExpired' } },
 };
@@ -148,11 +149,12 @@ describe('useLibraryAccount', () => {
             description: 'home.confirmOnlineProviderSwitch{"provider":"Quill"}',
         });
 
+        // 后端故障时重试不可用，但诊断照样给：报告里有拉起的每一步与错误原文。
         fake.set({ login: { ...quillLogin, backend: { failed: true, detail: 'down', restarting: false, canRestart: true } } });
         expect(view!.login).toMatchObject({
             canRetry: false,
-            canShowDiagnostics: false,
-            diagnosticsPrompt: null,
+            canShowDiagnostics: true,
+            diagnosticsPrompt: 'home.qrDiagnosticsPromptScanned',
             backendFailure: { title: 'home.loginBackendDown', restartLabel: 'home.restartBackend', restartingLabel: 'home.restartingBackend' },
         });
     });

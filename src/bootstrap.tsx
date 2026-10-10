@@ -17,7 +17,11 @@ import { initFoliumClients } from './mods/folium/clientLoader';
 import { restoreSavedFoliumSelections } from './mods/folium/missingEntries';
 import { installFoliumCommandPaletteSync } from './mods/folium/commandPaletteSync';
 import { installFoliumHostEvents } from './mods/folium/hostEvents';
+import { installLibrarySuiteChromeCommands } from './library/app/installLibrarySuiteChromeCommands';
 import { installNativeDragGuard } from './utils/nativeDragGuard';
+import { bootNavidromeServerPreset } from './services/navidromeServerPreset';
+import { isNavidromeEnabled } from './services/navidromeService';
+import { setNavidromeEnabledState } from './stores/useLibraryStore';
 import { isMainAppSurface, isObsBrowserSourceSurface, isRemoteControlSurface, obsSourceKind } from './utils/appSurface';
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
@@ -69,12 +73,26 @@ const renderApp = () => root.render(
     </React.StrictMode>
   );
 
+// Library suites declare their chrome actions in their manifests; the palette cannot import the
+// registry, so the commands are put into its list here, before anything renders (main window only,
+// like the mod commands below). A clashing execute shortcut throws here, at startup.
+if (isMainApp) installLibrarySuiteChromeCommands();
+
 const bootFolium = async () => {
     if (!isMainApp) return;
     installFoliumCommandPaletteSync();
     installFoliumHostEvents();
     await initFoliumClients();
     restoreSavedFoliumSelections();
+};
+
+// Docker 预置的 Navidrome 凭据要在渲染前落进 localStorage（原因见 services/navidromeServerPreset.ts）。
+// 和 mod 加载并行跑，自带超时，失败只是这次不套用。
+const bootNavidrome = async () => {
+    if (!isMainApp) return;
+    const result = await bootNavidromeServerPreset();
+    // useLibraryStore 在模块加载时就读过开关，这里补一次同步。
+    if (result === 'applied') setNavidromeEnabledState(isNavidromeEnabled());
 };
 
 // 启动链上的每一步都是 await 串起来的，而 #app-splash 遮罩要等 renderApp 跑完才移除。
@@ -90,9 +108,11 @@ const renderOnce = () => {
 };
 const bootFallbackTimer = setTimeout(renderOnce, BOOT_RENDER_FALLBACK_MS);
 // 正常路径下这个定时器必然会被 renderOnce 抢跑或在同一轮事件循环里失效，不必留着。
-void bootFolium()
-    .catch((error) => {
-        console.error('[bootstrap] Folium initialization failed; continuing to render.', error);
+// allSettled：mod 加载失败也要等预置写完再渲染，失败原因单独打出来，不吞掉。
+void Promise.allSettled([bootFolium(), bootNavidrome()])
+    .then(([folium, navidrome]) => {
+        if (folium.status === 'rejected') console.error('[Bootstrap] Folium boot failed:', folium.reason);
+        if (navidrome.status === 'rejected') console.warn('[Navidrome] Server preset boot failed:', navidrome.reason);
     })
     .finally(() => {
         void initializeLocalCoverRuntime()

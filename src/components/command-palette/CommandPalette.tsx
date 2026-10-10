@@ -150,6 +150,13 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
         setSyntaxIndex(index => (index < syntaxSuggestions.length ? index : 0));
     }, [syntaxSuggestions]);
 
+    // Arrow keys only move activeIndex; the body is a fixed-height scroller, so the highlighted
+    // row has to be pulled back into view or it walks off the bottom edge.
+    const activeMatchRowRef = useRef<HTMLButtonElement | null>(null);
+    useEffect(() => {
+        activeMatchRowRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [activeIndex]);
+
     // What `--play` / `--add` would do, for the inline box that has no preview row to say so.
     // Null whenever no flag is typed, which is also every command that is not the filter.
     const inlineAction = useMemo(() => (
@@ -527,6 +534,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                                     return (
                                         <button
                                             key={match.command.id}
+                                            ref={isActive ? activeMatchRowRef : undefined}
                                             type="button"
                                             disabled={isExecuting}
                                             onMouseEnter={() => {

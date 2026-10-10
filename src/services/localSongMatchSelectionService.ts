@@ -2,6 +2,7 @@ import type { AmllDbPlatform, LocalSong, LyricData, LyricProviderSource } from '
 import type { LocalLibraryAssignmentOrigin } from '../types/localLibrary';
 import type { OnlineMetadataCandidate } from './onlineMetadataSearchService';
 import { cacheLocalSongOnlineCover, removeCachedCover } from './coverCache';
+import { sourceProvidesSongMetadata } from '../utils/lyrics/matchResult';
 import { applyMatchedMetadata, restoreImportedMetadata } from './localLibraryCatalogService';
 
 // src/services/localSongMatchSelectionService.ts
@@ -38,6 +39,24 @@ export interface ApplyLocalSongMatchSelectionResult {
   lyricsApplied: boolean;
   partialLyricsFailure: boolean;
 }
+
+// 歌词匹配弹窗确认时，按来源和开关决定元数据与封面怎么处理。
+// 不提供元数据的来源（AMLL）只写歌词：不传候选，元数据和封面保持原样，
+// 否则别名会被当成多位歌手写进本地库，没有封面的候选还会清掉已缓存的在线封面。
+export const resolveLyricMatchMetadataSelection = (
+  source: LyricProviderSource,
+  candidate: OnlineMetadataCandidate,
+  toggles: { useOnlineMetadata: boolean; useOnlineCover: boolean },
+): Pick<ApplyLocalSongMatchSelectionInput, 'candidate' | 'metadata' | 'cover'> => {
+  if (!sourceProvidesSongMetadata(source)) {
+    return { candidate: undefined, metadata: 'keep', cover: 'keep' };
+  }
+  return {
+    candidate,
+    metadata: toggles.useOnlineMetadata ? 'online' : 'imported',
+    cover: toggles.useOnlineCover && candidate.coverUrl ? 'online' : 'embedded',
+  };
+};
 
 const buildSongPatch = (input: ApplyLocalSongMatchSelectionInput) => {
   const patch: Partial<LocalSong> = {};

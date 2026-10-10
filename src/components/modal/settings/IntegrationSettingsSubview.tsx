@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, AlertCircle, Check, Loader2, Server, Trash2 } from 'lucide-react';
+import { Activity, AlertCircle, Check, Loader2, RotateCcw, Server, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import type { NowPlayingConnectionStatus, StageSource, StageStatus, Theme } from '../../../types';
@@ -59,14 +59,20 @@ export type IntegrationStageModel = {
 };
 
 export type IntegrationNavidromeModel = {
+    /** Docker 预置可用且当前不是预置配置：显示「恢复使用服务器预置」。 */
+    navidromeCanRestorePreset: boolean;
     navidromeConfigured: boolean;
+    navidromeRestoreFailed: boolean;
+    navidromeRestoring: boolean;
     navidromeEnabled: boolean;
     navidromePassword: string;
     navidromeServerProfile: NavidromeServerProfile | null;
     navidromeTestStatus: NavidromeTestStatus;
     navidromeUrl: string;
     navidromeUsername: string;
+    navidromeUsesPreset: boolean;
     onClearNavidrome: () => void;
+    onRestoreNavidromePreset: () => Promise<void> | void;
     onToggleNavidrome: (enabled: boolean) => void;
     setNavidromePassword: (value: string) => void;
     setNavidromeUrl: (value: string) => void;
@@ -136,14 +142,19 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
         playerCapPlayers,
     } = stage;
     const {
+        navidromeCanRestorePreset,
         navidromeConfigured,
         navidromeEnabled,
+        navidromeRestoreFailed,
+        navidromeRestoring,
         navidromePassword,
         navidromeServerProfile,
         navidromeTestStatus,
         navidromeUrl,
         navidromeUsername,
+        navidromeUsesPreset,
         onClearNavidrome,
+        onRestoreNavidromePreset,
         onToggleNavidrome,
         setNavidromePassword,
         setNavidromeUrl,
@@ -890,6 +901,12 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                     </div>
                                 </div>
                             )}
+
+                            {navidromeConfigured && navidromeUsesPreset && (
+                                <p className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('navidrome.usingServerPreset') || 'Using the server preset account'}
+                                </p>
+                            )}
                         </>
                     )}
 
@@ -924,6 +941,19 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                 )}
                             </button>
 
+                            {navidromeCanRestorePreset && (
+                                <button
+                                    onClick={() => void onRestoreNavidromePreset()}
+                                    disabled={navidromeRestoring}
+                                    title={t('navidrome.restoreServerPreset') || 'Use server preset'}
+                                    aria-label={t('navidrome.restoreServerPreset') || 'Use server preset'}
+                                    className="px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    {navidromeRestoring ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                </button>
+                            )}
+
                             {navidromeConfigured && (
                                 <button
                                     onClick={onClearNavidrome}
@@ -933,6 +963,12 @@ const IntegrationSettingsSubview: React.FC<IntegrationSettingsSubviewProps> = ({
                                 </button>
                             )}
                         </div>
+                    )}
+
+                    {navidromeEnabled && navidromeCanRestorePreset && navidromeRestoreFailed && (
+                        <p className={`text-xs ${errorTextColor}`}>
+                            {t('navidrome.restoreServerPresetFailed') || 'Could not reach the server preset. Try again later.'}
+                        </p>
                     )}
                 </div>
             </SettingsAnchor>

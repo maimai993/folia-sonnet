@@ -4,8 +4,8 @@ import type { LibraryLoginView } from '../../core/bindings/useLibraryAccount';
 
 // src/library/suites/tui/LibraryTuiAccountLogin.tsx
 // TUI 的扫码登录框（只做展示）：等宽方框，标题嵌在上边框里；多方式时上面一排登录方式（↑↓ 移动高亮、Enter 选），
-// 中间是二维码图片 / 选方式的占位 / 后端故障原因，下面是状态行、主动作（重试或重启后端）、失败后的诊断入口、
-// provider 的说明与按键提示。数据全部来自 useLibraryAccountLogin 翻译好的快照，动作经回调交给 account surface
+// 中间左边是二维码图片 / 选方式的占位 / 后端故障原因，右边是状态行、主动作（重试或重启后端），失败后右边接着是
+// 简单办法（重启 Folia；换个网络再重启）、自检结论，最后才是「还是不行？」与复制诊断；下面是 provider 的说明与按键提示。数据全部来自 useLibraryAccountLogin 翻译好的快照，动作经回调交给 account surface
 // （LibraryTuiAccount）调账户 controller；按键在 account surface 的捕获监听里处理，这里的按钮给鼠标用。
 
 export type LibraryTuiDiagnosticsCopyState = 'idle' | 'working' | 'copied' | 'failed';
@@ -50,6 +50,7 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
     const awaitingMethod = Boolean(methodStep) && session.selectedMethodId == null;
     const canRestart = showRestart && Boolean(backendFailure);
     const diagnostics = showDiagnostics && view.diagnosticsPrompt ? view.diagnosticsPrompt : null;
+    const failureTips = diagnostics ? view.failureTips : null;
 
     // 按键提示跟着此刻能做的事走（与捕获监听里的判断同一套条件）。
     const hints = [
@@ -73,7 +74,7 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
             aria-label={view.title}
             data-tui-account-login={session.providerId}
             data-tui-login-phase={session.phase}
-            className="relative w-full max-w-md border px-4 pb-3 pt-4 text-[13px]"
+            className={`relative w-full ${diagnostics ? 'max-w-2xl' : 'max-w-md'} border px-4 pb-3 pt-4 text-[13px]`}
             style={{ borderColor: accentColor, backgroundColor: boxBackground, color: 'var(--text-primary)' }}
         >
             <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: boxBackground }}>
@@ -161,27 +162,50 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
                             <span aria-hidden="true">]</span>
                         </button>
                     ) : null}
+                    {diagnostics ? (
+                        <div className="mt-1 border-t border-current/15 pt-2 text-[12px]" data-tui-login-diagnostics>
+                            {failureTips ? (
+                                <div data-tui-login-tips>
+                                    <p className="font-bold opacity-75">{failureTips.title}</p>
+                                    {failureTips.items.map((item, index) => <p key={item}>{`${index + 1}. ${item}`}</p>)}
+                                </div>
+                            ) : null}
+                            {view.selfCheck ? (
+                                <div className="mt-2" data-tui-login-self-check={view.selfCheck.running ? 'running' : 'done'}>
+                                    <p className="font-bold opacity-75">{view.selfCheck.title}</p>
+                                    {view.selfCheck.running ? <p className="opacity-60">{view.selfCheck.runningText}</p> : null}
+                                    {view.selfCheck.verdict ? <p data-tui-login-self-check-verdict>{view.selfCheck.verdict}</p> : null}
+                                    {view.selfCheck.proxyNote ? <p className="text-[11px] opacity-60">{view.selfCheck.proxyNote}</p> : null}
+                                    {view.selfCheck.error ? <p className="opacity-70">{view.selfCheck.error}</p> : null}
+                                    {view.selfCheck.items.map(item => (
+                                        <p key={item.id} className="text-[11px] opacity-70" data-tui-login-self-check-item={item.id}>
+                                            {`${item.state === 'ok' ? '[ok]' : item.state === 'fail' ? '[!!]' : '[??]'} ${item.label}${item.detail && item.state !== 'ok' ? `: ${item.detail}` : ''}`}
+                                        </p>
+                                    ))}
+                                </div>
+                            ) : null}
+                            {/* 诊断与反馈放在最后、调暗：先让用户试简单办法。 */}
+                            <div className="mt-2 opacity-70">
+                                {failureTips ? <p>{failureTips.escalation}</p> : null}
+                                <p className="text-[11px] opacity-80">{diagnostics}</p>
+                                <p className="text-[11px] opacity-60">{t('home.qrDiagnosticsDisclosure')}</p>
+                                <button
+                                    type="button"
+                                    data-tui-login-diagnostics-copy={copyState}
+                                    disabled={copyState === 'working'}
+                                    onClick={onCopyDiagnostics}
+                                    className="mt-1 hover:underline disabled:opacity-50"
+                                    style={{ color: accentColor }}
+                                >
+                                    <span aria-hidden="true">[</span>
+                                    {copyLabel}
+                                    <span aria-hidden="true">]</span>
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </div>
-
-            {diagnostics ? (
-                <div className="mt-3 border-t border-current/15 pt-2 text-[12px]" data-tui-login-diagnostics>
-                    <p className="opacity-75">{diagnostics}</p>
-                    <p className="text-[11px] opacity-45">{t('home.qrDiagnosticsPrivacy')}</p>
-                    <button
-                        type="button"
-                        data-tui-login-diagnostics-copy={copyState}
-                        disabled={copyState === 'working'}
-                        onClick={onCopyDiagnostics}
-                        className="mt-1 hover:underline disabled:opacity-50"
-                        style={{ color: accentColor }}
-                    >
-                        <span aria-hidden="true">[</span>
-                        {copyLabel}
-                        <span aria-hidden="true">]</span>
-                    </button>
-                </div>
-            ) : null}
 
             <p className="mt-3 text-[11px] opacity-35">{view.note}</p>
             <p className="mt-1 text-[11px] opacity-50" data-tui-login-hints>{hints}</p>

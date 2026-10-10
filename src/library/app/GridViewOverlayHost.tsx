@@ -39,31 +39,44 @@ import { useLibraryBackdrop } from './useLibraryBackdrop';
 import { useLibrarySuiteStore } from '../core/state/useLibrarySuiteStore';
 import { useLibraryBrowseSessionStore } from '../core/state/useLibraryBrowseSessionStore';
 import type { LibraryNavigationContext, LibrarySurfaceId } from '../core/contracts/suite';
-import { forgetLibraryLayouts, listLibrarySuiteOverlays, listLibrarySuites, resolveLibrarySurface } from '../registry';
+import {
+    forgetLibraryLayouts,
+    hasLibrarySuiteChoice,
+    listLibrarySuiteOverlays,
+    resolveLibraryStage,
+    resolveLibrarySurface,
+} from '../registry';
+import { resolveLibraryLayerPresentation } from '../core/model/libraryStage';
+import { resolveCollectionPush } from '../core/model/collectionNavigation';
+import { LIBRARY_HOME_SESSION_KEY } from './librarySuiteChoice';
+import LibrarySuiteStageSlot from './LibrarySuiteStageSlot';
 
 // src/library/app/GridViewOverlayHost.tsx
 // Hosts the GridView overlay outside Grid3D so it can be opened/restored independently.
 // R3 起集合层与歌手页经 registry 解析：当前选中的 suite 实现了就由它渲染，否则回退默认 suite（grid）。
 // 宿主只交出契约里的输入（core/contracts/suite）；网格专属的转场（移形换影的入场计划、返回时的测量、
 // 常驻的转场层）由网格 entry 的 transitions 提供，宿主不再直接 import 任何 suite。
+// B1 起还挂生效 suite 的常驻舞台（manifest 的 stage，见 LibrarySuiteStageSlot）：当前层归带 stage 的 suite 时
+// 不垫背景板、不藏首页（规则在 core/model/libraryStage）；grid / TUI 没有 stage，行为不变。
 //
 // 返回的语义（P4.5，同一个手势在每套 suite 里含义相同）：
 // - 返回按钮 = 完成（onDone）：清掉这一层的浏览会话，让每套 suite 忘掉这一层的布局记录，再返回；
 // - Escape 与浏览器后退 = 离开但保留（onBack / popstate）。
 // 两条返回路径都只让渲染这一层的 suite 跑一次 beforeBack：应用内返回在这里先跑，再走历史后退；浏览器后退
 // 不经过这里，由导航 store 在 popstate 弹栈之前通知（subscribeCollectionPop），界面那时还是返回前的样子。
+// N1 起「进入的正好是上一层」（歌手 ↔ 专辑来回点，折成一次返回）与面包屑跳层（onPopTo）也是弹栈：导航层走浏览器
+// 历史退回，beforeBack 同样由弹栈通知跑一次；这两条路径在宿主这里都不跑 beforePush / beforeBack。
 
 // suite 的切换浮层：懒加载、且只在 DEV 下引用，生产包不受影响（生产构建里也只有一套 suite）。
 const DevLibraryRendererSwitch = import.meta.env.DEV ? React.lazy(() => import('./DevLibraryRendererSwitch')) : null;
-const HAS_SUITE_CHOICE = listLibrarySuites().length > 1;
+const HAS_SUITE_CHOICE = hasLibrarySuiteChoice();
 /** 在首页上切 suite 时交给 switchLibrarySuite 的会话 key（首页没有集合浏览会话，冲刷什么都不做）。 */
-const HOME_SUITE_SESSION_KEY = 'home';
+const HOME_SUITE_SESSION_KEY = LIBRARY_HOME_SESSION_KEY;
 // 声明了转场层的 suite：常驻渲染，只有当前负责集合层的那套收到 enabled。
 const SUITE_OVERLAYS = listLibrarySuiteOverlays();
 
-/** 导航发生之前的栈状态，交给 suite 的转场钩子。 */
-const readNavigationContext = (): LibraryNavigationContext => {
-    const snapshot = useCollectionNavigationStore.getState().snapshot;
+/** 导航快照 → 交给 suite 的导航上下文（转场钩子与 stage 共用一种形状）。 */
+const toNavigationContext = (snapshot: CollectionNavigationSnapshot | null): LibraryNavigationContext => {
     const depth = snapshot?.stack.length ?? 0;
     return {
         depth,
@@ -72,10 +85,17 @@ const readNavigationContext = (): LibraryNavigationContext => {
     };
 };
 
+/** 导航发生之前的栈状态，交给 suite 的转场钩子。 */
+const readNavigationContext = (): LibraryNavigationContext => (
+    toNavigationContext(useCollectionNavigationStore.getState().snapshot)
+);
+
 type GridViewOverlayHostProps = {
     surfaceProps: HomeSurfaceProps;
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
+    /** 跳到导航栈第 depth 层（保留的层数，0 为整个关掉）；交给 surface 的 onPopTo。 */
+    onPopCollectionTo: (depth: number) => void;
     onBackCollection: () => void;
     isInteractive?: boolean;
     children: (
@@ -153,6 +173,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     surfaceProps,
     onOpenCollection,
     onPushCollection,
+    onPopCollectionTo,
     onBackCollection,
     isInteractive = true,
     children,
@@ -174,6 +195,15 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     // 背景板和转场启用状态由实际渲染这一层的 suite 解析；未声明背景板时使用中性淡入淡出。
     const backdrop = useLibraryBackdrop(transitionOwner.transitions?.backdrop);
     const activeTransitions = backdrop.enabled ? transitionOwner.transitions : undefined;
+    // 生效 suite 的 stage（B1；grid / TUI 没有，未知 id 回退 grid 也没有）。当前层由带 stage 的 suite 渲染时，
+    // 画面归 stage：不垫背景板、不藏首页。当前层回退到 grid 时与没有 stage 一样。
+    const stage = resolveLibraryStage(suiteId);
+    const layerPresentation = resolveLibraryLayerPresentation({
+        hasOpenLayer: Boolean(selectedCollection),
+        stageSuiteId: stage?.suiteId ?? null,
+        layerSuiteId: transitionOwner.suiteId,
+    });
+    const stageNavigation = useMemo(() => toNavigationContext(collectionSnapshot), [collectionSnapshot]);
     const [resolvedLocalCollectionCoverUrl, setResolvedLocalCollectionCoverUrl] = useState<string | undefined>(undefined);
     const [navidromePlaylistItems, setNavidromePlaylistItems] = useState<Array<{ id: string | number; name: string; description?: string; }>>([]);
     const [editingEntityId, setEditingEntityId] = useState<string | null>(null);
@@ -256,8 +286,13 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
 
     // 压栈 / 返回之前先让负责集合层的 suite 安排转场（网格：级联入场计划、反向移形换影，原先写在这里的
     // 两段逻辑原样搬进了 suites/grid/transitions/gridHostTransitions）。
+    // 只有真的压栈才安排入场：要进入的正好是上一层时（N1 折叠紧邻往返）是一次返回，反向转场由弹栈通知跑；
+    // 就是当前这一层时什么都不发生，也不该留下一个没人用的入场计划。
     const handlePushCollection = useCallback((col: GridViewCollectionDescriptor) => {
-        activeTransitions?.beforePush?.(readNavigationContext());
+        const decision = resolveCollectionPush(useCollectionNavigationStore.getState().snapshot, col);
+        if (decision.kind === 'push') {
+            activeTransitions?.beforePush?.(readNavigationContext());
+        }
         onPushCollection(col);
     }, [activeTransitions, onPushCollection]);
 
@@ -586,14 +621,22 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                 className="absolute inset-0"
                 aria-hidden={Boolean(selectedCollection)}
                 style={{
-                    visibility: selectedCollection ? 'hidden' : 'visible',
+                    visibility: layerPresentation.hideHome ? 'hidden' : 'visible',
                     pointerEvents: selectedCollection ? 'none' : 'auto',
                 }}
             >
                 {children(openGridView, isInteractive && !selectedCollection)}
             </div>
+            {/* 生效 suite 的常驻舞台：首页之上、背景板与集合层之下；始终占这个位置，打开 / 关闭集合不重挂。 */}
+            <LibrarySuiteStageSlot
+                stage={stage}
+                isInteractive={isInteractive}
+                theme={surfaceProps.theme}
+                isDaylight={isDaylight}
+                navigation={stageNavigation}
+            />
             <AnimatePresence initial={false}>
-                {selectedCollection && (
+                {layerPresentation.showBackdrop && (
                     <motion.div
                         key="library-transition-backdrop"
                         data-library-backdrop=""
@@ -630,6 +673,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 onDone={handleDoneCollection}
                                 onOpenAlbum={handlePushAlbumCollection}
                                 onOpenArtist={handlePushArtistCollection}
+                                onPopTo={onPopCollectionTo}
                             />
                         </React.Suspense>
                     ) : (
@@ -650,6 +694,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 onDone={handleDoneCollection}
                                 onOpenAlbum={handlePushAlbumCollection}
                                 onOpenArtist={handlePushArtistCollection}
+                                onPopTo={onPopCollectionTo}
                             />
                         </React.Suspense>
                     )

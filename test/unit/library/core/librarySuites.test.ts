@@ -3,6 +3,8 @@ import {
     buildLibrarySuiteIndex,
     DEFAULT_LIBRARY_SUITE_ID,
     intersectDeclaredActions,
+    isLibrarySuiteChoiceAvailable,
+    LIBRARY_SUITE_INITIAL_CHOICE,
     LIBRARY_ACCOUNT_ACTION_IDS,
     LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS,
     LIBRARY_ACTION_IDS,
@@ -10,6 +12,7 @@ import {
     LIBRARY_ARTIST_ACTION_IDS,
     LIBRARY_SURFACE_IDS,
     resolveDeclaredMutationActions,
+    resolveLibrarySuiteInitialChoice,
 } from '@/library/core/model/librarySuites';
 import { EMPTY_COLLECTION_MUTATION_SNAPSHOT } from '@/library/core/model/collectionMutationCapabilities';
 import type { LibraryActionId, LibrarySuiteManifest } from '@/library/core/contracts/suite';
@@ -187,5 +190,67 @@ describe('declared actions and core capabilities', () => {
         const declared = { actions: ['play', 'remove-entry', 'rename', 'export-playlist'] as LibraryActionId[], extraActions: [] };
         // 进行中（enabled=false）仍然出现；声明了但不支持的（export-playlist）、支持但没声明的（subscribe）不出现。
         expect(resolveDeclaredMutationActions(declared, capabilities)).toEqual(['remove-entry', 'rename']);
+    });
+});
+
+describe('initial choice and the effective suite (B0)', () => {
+    it('keeps the fallback suite and the initial choice apart', () => {
+        expect(DEFAULT_LIBRARY_SUITE_ID).toBe('grid');
+        // 测试配置用 VITE_LIBRARY_INITIAL_SUITE=grid 钉住；没有覆盖时是开发阶段的 bravais。
+        expect(LIBRARY_SUITE_INITIAL_CHOICE).toBe('grid');
+        expect(resolveLibrarySuiteInitialChoice(undefined)).toBe('bravais');
+        expect(resolveLibrarySuiteInitialChoice('')).toBe('bravais');
+        expect(resolveLibrarySuiteInitialChoice('  ')).toBe('bravais');
+        expect(resolveLibrarySuiteInitialChoice(' tui ')).toBe('tui');
+        expect(resolveLibrarySuiteInitialChoice(true)).toBe('bravais');
+    });
+
+    it('resolves an unavailable initial choice and unknown ids to the default suite', () => {
+        const index = buildLibrarySuiteIndex([gridLike(), listLike()]);
+        expect(index.resolveId('list')).toBe('list');
+        expect(index.resolveId('grid')).toBe('grid');
+        // 初始选择 bravais 还不在清单里（B0 合入时）：生效的是网格。
+        expect(index.resolveId('bravais')).toBe('grid');
+        expect(index.resolveId('nope')).toBe('grid');
+        // available: false 等于不存在。
+        expect(buildLibrarySuiteIndex([gridLike(), listLike({ available: false })]).resolveId('list')).toBe('grid');
+    });
+
+    it('offers a choice only when more than one suite is available', () => {
+        expect(isLibrarySuiteChoiceAvailable(buildLibrarySuiteIndex([gridLike()]).suites)).toBe(false);
+        expect(isLibrarySuiteChoiceAvailable(buildLibrarySuiteIndex([gridLike(), listLike({ available: false })]).suites)).toBe(false);
+        expect(isLibrarySuiteChoiceAvailable(buildLibrarySuiteIndex([gridLike(), listLike()]).suites)).toBe(true);
+    });
+});
+
+describe('suite stage (B1)', () => {
+    it('resolves the stage of the effective suite only', () => {
+        const stage = component('list-stage');
+        const index = buildLibrarySuiteIndex([gridLike(), listLike({ stage })]);
+        const resolved = index.resolveStage('list');
+        expect(resolved).toEqual({ suiteId: 'list', component: stage });
+        // 同一套 suite 总是同一个对象（宿主把它当 props 传给 memo 的挂载位）。
+        expect(index.resolveStage('list')).toBe(resolved);
+        // 默认 suite 没有 stage；未知 id 回退到它，也就没有 stage。
+        expect(index.resolveStage('grid')).toBeNull();
+        expect(index.resolveStage('nope')).toBeNull();
+    });
+
+    it('does not borrow a stage: a suite without one gets none, an unavailable one counts as absent', () => {
+        const stage = component('list-stage');
+        expect(buildLibrarySuiteIndex([gridLike(), listLike()]).resolveStage('list')).toBeNull();
+        expect(buildLibrarySuiteIndex([gridLike(), listLike({ stage, available: false })]).resolveStage('list')).toBeNull();
+        // 默认 suite 若声明了 stage，未知 id 回退时生效的就是它的；选中的 suite 没声明时不借默认 suite 的。
+        const gridStage = component('grid-stage');
+        const index = buildLibrarySuiteIndex([{ ...gridLike(), stage: gridStage }, listLike()]);
+        expect(index.resolveStage('nope')).toEqual({ suiteId: 'grid', component: gridStage });
+        expect(index.resolveStage('list')).toBeNull();
+    });
+
+    it('keeps surface resolution unchanged when a suite brings a stage', () => {
+        const index = buildLibrarySuiteIndex([gridLike(), listLike({ stage: component('list-stage') })]);
+        expect(index.resolve('collection', 'list').suite.id).toBe('list');
+        expect(index.resolve('artist', 'list')).toMatchObject({ isFallback: true });
+        expect(index.resolve('artist', 'list').suite.id).toBe('grid');
     });
 });

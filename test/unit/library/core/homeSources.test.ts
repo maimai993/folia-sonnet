@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
 import type { OmniProviderCapabilities, ProviderAccountSummary, ProviderCollection } from '@/types/onlineMusic';
 import {
+    cycleIndex,
     homeScanPercent,
     isHomeImportBusy,
     isOnlineHomeTab,
@@ -188,5 +189,33 @@ describe('online loading and import state', () => {
         expect(homeScanPercent({ active: true, folderName: 'A', totalSongs: 0, completedSongs: 0 })).toBe(0);
         expect(homeScanPercent({ active: true, folderName: 'A', totalSongs: 3, completedSongs: 1 })).toBe(33);
         expect(homeScanPercent({ active: true, folderName: 'A', totalSongs: 3, completedSongs: 5 })).toBe(100);
+    });
+});
+
+describe('cycleIndex（首页 Tab / F6 循环）', () => {
+    const tabs = [
+        { key: 'playlist', disabled: false },
+        { key: 'radio', disabled: true },
+        { key: 'albums', disabled: false },
+        { key: 'local', disabled: false },
+    ];
+    const enabled = (tab: { disabled: boolean }) => !tab.disabled;
+
+    it('跳过不可用项，首尾绕回', () => {
+        expect(cycleIndex(tabs, 0, 1, enabled)).toBe(2);
+        expect(cycleIndex(tabs, 2, -1, enabled)).toBe(0);
+        expect(cycleIndex(tabs, 3, 1, enabled)).toBe(0);
+        expect(cycleIndex(tabs, 0, -1, enabled)).toBe(3);
+    });
+
+    it('当前项不在列表里时，往后落到第一个可用项，往前落到最后一个', () => {
+        expect(cycleIndex(tabs, -1, 1, enabled)).toBe(0);
+        expect(cycleIndex(tabs, -1, -1, enabled)).toBe(3);
+    });
+
+    it('只剩当前项可用时停在原地；全都不可用或列表为空时返回 -1', () => {
+        expect(cycleIndex(tabs, 0, 1, tab => tab.key === 'playlist')).toBe(0);
+        expect(cycleIndex(tabs, 0, 1, () => false)).toBe(-1);
+        expect(cycleIndex([], -1, 1, () => true)).toBe(-1);
     });
 });

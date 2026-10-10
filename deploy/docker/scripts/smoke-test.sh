@@ -39,7 +39,9 @@ curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/healthz" >/
 curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/api/healthz" >/dev/null
 curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_SYNC_PORT/health" >/dev/null
 curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/" | grep -q '<div id="root"></div>'
-curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/runtime-config.js" | grep -q 'aiProvider:"gemini"'
+curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/runtime-config.js" | grep -q 'aiProvider:"gemini",deployment:"docker"'
+# 冒烟环境不填 NAVIDROME_*：端点必须可达且明确返回未配置。
+curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/api/navidrome-preset" | grep -q '"configured":false'
 curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/netease/" >/dev/null
 curl --fail --silent --show-error "http://127.0.0.1:$FOLIA_HTTP_PORT/kugou/" >/dev/null
 # QQ 用 /login/status 而不是 /：它只读进程内会话状态，不会建立 QR session 或注册装置。

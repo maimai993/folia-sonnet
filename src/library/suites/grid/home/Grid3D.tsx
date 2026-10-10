@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type StatusMessage } from '../../../../types';
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
+import { useGrid3DTabKeys } from './useGrid3DTabKeys';
 import DesktopGrid3DSurface from './DesktopGrid3DSurface';
 import OnlineProviderSwitcher from '../account/OnlineProviderSwitcher';
 import OnlineProviderConnectPanel from '../account/OnlineProviderConnectPanel';
@@ -27,7 +28,7 @@ import { useLibraryHomeDirectory } from '../../../core/bindings/useLibraryHomeDi
 import { useLibraryHomeListRegistration, useLibraryHomeTabsRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
 import { useLibraryAccountProviders } from '../../../core/bindings/useLibraryAccount';
 import { resolveProviderSelectLabel } from '../../../core/model/accountRules';
-import { translateHomeMessage } from '../../../core/model/homeSources';
+import { cycleIndex, translateHomeMessage } from '../../../core/model/homeSources';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -302,6 +303,17 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 ?.focus({ preventScroll: true });
         });
     };
+
+    // Tab / Shift+Tab 在可用页签之间循环，切完把焦点交回海报轨道，和点胶囊一样。
+    useGrid3DTabKeys({
+        isActive: isInteractive,
+        onCycleTab: delta => {
+            const next = cycleIndex(homeTabs, homeTabs.findIndex(tab => tab.key === homeViewTab), delta, tab => !tab.disabledReason);
+            if (next < 0 || homeTabs[next].key === homeViewTab) return;
+            setHomeViewTab(homeTabs[next].key);
+            focusActiveSlider();
+        },
+    });
 
     return (
         <div

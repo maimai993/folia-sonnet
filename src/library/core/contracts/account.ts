@@ -1,5 +1,6 @@
 import type { Theme } from '../../../types';
 import type {
+    LoginSelfCheckResult,
     OnlineProviderId,
     ProviderAccountSummary,
     ProviderCapabilities,
@@ -50,6 +51,55 @@ export type LibraryLoginCopy = {
     status: LibraryHomeMessage | null;
 };
 
+// ─── 登录失败后的自检（规则在 core/model/loginSelfCheckRules） ─────────
+
+export type LoginSelfCheckVerdictKind =
+    /** 桌面版：内嵌后端没在运行或没有回应。 */
+    | 'backend-down'
+    /** 网页版：配置的远端 API 连不上。 */
+    | 'remote-unreachable'
+    /** QQ：系统钥匙串不可用，登录态无法加密保存，扫码确认后必然失败。 */
+    | 'credential-store'
+    | 'dns-failed'
+    /** TLS 握手阶段被重置：常见于代理、加速器、防火墙或运营商的干扰。 */
+    | 'tls-reset'
+    /** 某个域名所有地址都连不上（超时、拒绝、路由不可达等）。 */
+    | 'upstream-unreachable'
+    /** IPv4 能连上，IPv6 不行：系统可能优先走了坏掉的 IPv6（含 Teredo）。 */
+    | 'ipv6-failed'
+    /** 连接能建立，但 HTTPS 请求本身失败。 */
+    | 'https-failed'
+    | 'clock-skew'
+    | 'network-ok';
+
+export type LoginSelfCheckProxyKind = 'fake-ip' | 'system' | 'env';
+
+export type LoginSelfCheckVerdict = {
+    kind: LoginSelfCheckVerdictKind;
+    /** 补充说明：出问题的域名与错误码、后端的错误原文、时钟偏差分钟数等；没有时为 null。 */
+    detail: string | null;
+    /** 有代理参与时附加提示；没有为 null。 */
+    proxy: LoginSelfCheckProxyKind | null;
+};
+
+export type LoginSelfCheckItemId = 'backend' | 'credential-store' | 'dns' | 'ipv4' | 'ipv6' | 'https' | 'proxy' | 'clock';
+
+export type LoginSelfCheckItem = {
+    id: LoginSelfCheckItemId;
+    state: 'ok' | 'fail' | 'warn' | 'skip';
+    /** 失败或提示时的简短说明（错误码、域名）；正常时为 null。 */
+    detail: string | null;
+};
+
+/**
+ * 登录失败后的主动自检（不在手机上取消、provider 有自检能力时由会话自动跑一次）：
+ * running 时界面显示「正在检查」；done 带结构化结果与结论；failed 是自检本身出错（原文进报告）。
+ */
+export type LibraryLoginSelfCheck =
+    | { status: 'running' }
+    | { status: 'done'; result: LoginSelfCheckResult; verdict: LoginSelfCheckVerdict }
+    | { status: 'failed'; message: string };
+
 /** 同一时间最多一个登录会话；换 suite 不中断（宿主持有 controller）。 */
 export type LibraryLoginSessionSnapshot = {
     /** 会话代次：每次要码（含重试、换登录方式）都会换新，晚到的结果按它作废。 */
@@ -69,6 +119,8 @@ export type LibraryLoginSessionSnapshot = {
      * 冷却结束时自动回到 null。
      */
     retryCooldownSeconds: number | null;
+    /** 失败后的自检；没有失败、在手机上取消或 provider 没有自检能力时为 null。 */
+    selfCheck: LibraryLoginSelfCheck | null;
     backend: LibraryLoginBackendState;
     copy: LibraryLoginCopy;
 };
@@ -247,6 +299,10 @@ export type LibraryAccountAuthPort = {
     getQrTtlMs(providerId: OnlineProviderId): number | null;
     /** 自己不会失败（omni 把 provider 的错误写成一行）。 */
     getQrLoginDiagnostics(providerId: OnlineProviderId): Promise<string[]>;
+    /** 此刻能不能主动自检（同步回答，界面据此决定要不要显示「正在检查」）。 */
+    canRunQrLoginSelfCheck(providerId: OnlineProviderId): boolean;
+    /** 主动自检；没有可检查的对象时 resolve null，自检本身出错时 reject。 */
+    runQrLoginSelfCheck(providerId: OnlineProviderId): Promise<LoginSelfCheckResult | null>;
     getProviderCapabilities(providerId: OnlineProviderId): Pick<ProviderCapabilities, 'auth'>;
 };
 

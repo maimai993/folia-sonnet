@@ -64,6 +64,23 @@ class StageApiError extends Error {
 }
 
 const normalizeStageText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+// Lyric files from older Chinese tools are GBK and end lines with "\r\r\n" or a bare "\r".
+// A BOM wins, then strict UTF-8, then GB18030; line endings become "\n" for the LRC parser.
+const decodeStageLyricsText = (bytes) => {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('gb18030').decode(bytes);
+  }
+};
+
+const decodeStageLyricsBuffer = (buffer) => decodeStageLyricsText(
+  new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+).replace(/\r\n?/g, '\n');
+
 const isStageLyricsFormat = (value) => STAGE_LYRICS_FORMAT_VALUES.has(value);
 
 const hasLrcTimeline = (text) => /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/.test(text);
@@ -1221,7 +1238,7 @@ function createStageApi({
     }
 
     if (lyricsFile) {
-      resolvedLyricsText = (await fsp.readFile(lyricsFile.filePath, 'utf-8')).trim();
+      resolvedLyricsText = decodeStageLyricsBuffer(await fsp.readFile(lyricsFile.filePath)).trim();
     } else if (!resolvedLyricsText && embeddedMetadata?.lyrics) {
       resolvedLyricsText = normalizeStageText(embeddedMetadata.lyrics);
       logStage('info', 'Using embedded lyrics from uploaded audio metadata.');

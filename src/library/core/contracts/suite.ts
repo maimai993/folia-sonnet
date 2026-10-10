@@ -9,6 +9,7 @@ import type { LibraryHomeResources } from './homeModel';
 import type { CollectionMutationController } from './mutations';
 import type { LibraryPlaybackPort } from './ports';
 import type { CollectionResource } from './resource';
+import type { LibrarySuiteChromeActionMeta } from './suiteChrome';
 
 // src/library/core/contracts/suite.ts
 // UI suite 的能力契约：core 定义有哪些 surface、每个 surface 上有哪些动作、宿主交给任何一套 suite 的输入；
@@ -179,6 +180,13 @@ export type LibraryCollectionNavigation = {
     /** album 是界面上已有的专辑摘要（名字、封面、目录引用），track 是触发它的那首歌（在线集合按它解析目录）。 */
     onOpenAlbum: (albumId: number | string, album?: LibraryCatalogLinkHint, track?: SongResult) => void;
     onOpenArtist: (artistId: number | string, artist?: LibraryCatalogLinkHint, track?: SongResult) => void;
+    /**
+     * 跳到导航栈的第 depth 层（面包屑点击）：depth 是保留的层数，与 LibraryNavigationContext.depth 同一种量，
+     * 0 表示整个关掉；不比当前浅时什么都不做；栈里有重复的集合时按位置算。宿主经浏览器历史退回（与浏览器后退同路），
+     * beforeBack 由宿主在弹栈前跑一次，suite 不要自己再跑。打开的专辑 / 歌手（onOpenAlbum / onOpenArtist）正好是上一层时
+     * 同样是一次返回（N1 折叠紧邻往返），更早的层照常压栈。
+     */
+    onPopTo?: (depth: number) => void;
 };
 
 /** 打开专辑 / 歌手时界面上已有的摘要；在线集合的条目原样带着 provider 的字段。 */
@@ -320,6 +328,21 @@ export type LibrarySuiteTransitions = {
 };
 
 /**
+ * stage 的输入（B1）。stage 是一套 suite 常驻在首页与集合层之间的舞台（bravais 的整面墙），横跨 surface：
+ * 首页与集合 / 歌手 surface 只把自己的层描述交给 suite 内部的 store，由 stage 统一画出来。
+ * 宿主（GridViewOverlayHost）只挂**当前生效 suite** 的 stage，打开 / 关闭集合不重挂；首页外壳整个卸载时
+ * （播放页全屏后 Home 返回 null）它跟着卸载，所以 stage 要跨卸载保留的布局应放进 sessionStorage 或 store。
+ */
+export type LibrarySuiteStageProps = {
+    /** 首页外壳层的值（不是首页 surface 的值：集合层打开时 stage 仍可交互）。另一层盖在上面时为 false。 */
+    isInteractive: boolean;
+    theme: Theme;
+    isDaylight: boolean;
+    /** 当前集合导航快照（只读）：stage 据此知道「现在是哪一层」，用于转场方向与层栈。首页时 depth 为 0。 */
+    navigation: LibraryNavigationContext;
+};
+
+/**
  * suite 自己的布局记录（滚动位置、坐标……，属于 suite，不进 core）。「完成」（返回按钮）时宿主让**每一套** suite
  * 忘掉这一层的记录——不只是正在渲染它的那套：在 TUI 里点了返回，下次在网格里打开也该从头开始。
  */
@@ -338,4 +361,17 @@ export type LibrarySuiteManifest = {
     transitions?: LibrarySuiteTransitions;
     /** 有布局记录的 suite 才给（网格：集合与歌手页的 sessionStorage 记录）。 */
     layout?: LibrarySuiteLayout;
+    /**
+     * 常驻舞台（B1，见 LibrarySuiteStageProps）。只在这套 suite 生效时挂载；渲染当前层的 suite 有 stage 时，宿主不画
+     * 集合层的中性背景板、也不隐藏首页（画面由 stage 负责）。与 transitions.Overlay 不同：Overlay 是每套 suite
+     * 都常驻挂载的转场层，enabled=false 表示「不做转场」；stage 是这套 suite 的画面本身。
+     * 非默认 suite 必须用 React.lazy（没选中它的用户不加载它的 chunk）。
+     */
+    stage?: LibrarySurfaceComponent<LibrarySuiteStageProps>;
+    /**
+     * 外观动作（B2，见 ./suiteChrome）：只出现在命令面板里的 suite 自有操作。这里静态声明元数据，命令由命令面板按它
+     * 生成（id 为 `<suiteId>-<动作 id>`）；运行时由 suite 用 useLibrarySuiteChromeRegistration 注册实现，只有注册着的
+     * 那套 suite 的动作可用。不声明则没有外观动作（grid 与 TUI 都不声明：网格的局部动作走 grid surface）。
+     */
+    chromeActions?: readonly LibrarySuiteChromeActionMeta[];
 };

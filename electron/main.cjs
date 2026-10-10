@@ -2046,7 +2046,7 @@ const stageApi = createStageApi({
   stageApiTokenSettingKey: STAGE_API_TOKEN_SETTING_KEY,
   stageApiPortSettingKey: STAGE_API_PORT_SETTING_KEY,
   defaultStageApiPort: DEFAULT_STAGE_API_PORT,
-  getNeteasePort: () => assignedPort,
+  getNeteasePort: () => neteaseBackend.getPort(),
 });
 
 const lyricApi = createLyricApi({
@@ -2916,8 +2916,7 @@ function setupCorsBypassHandlers() {
         hostname === 'kugou.com' ||
         hostname.endsWith('.kugou.com') ||
         // Bodian audio and cover CDNs may omit CORS headers needed by Web Audio and canvas/WebGL.
-        bodianMediaPolicy.allows(details) ||
-        hostname === 'amll-ttml-db.stevexmh.net';
+        bodianMediaPolicy.allows(details);
     } catch (error) {
       isTargetDomain = false;
     }
@@ -2967,12 +2966,15 @@ function isAllowedLyricProxyHost(hostname) {
     hostname.endsWith('.kugou.com') ||
     hostname === 'kgimg.com' ||
     hostname.endsWith('.kgimg.com') ||
-    hostname === 'amll-ttml-db.stevexmh.net'
+    hostname === 'api.amll.dev'
   );
 }
 
+// AMLL TTML DB 官方 API（#515）。UA 由渲染进程按构建信息拼好放在请求头里，这里原样转发。
+const AMLL_API_TIMEOUT_MS = 5000;
+
 function isAmllDbHost(hostname) {
-  return hostname === 'amll-ttml-db.stevexmh.net';
+  return hostname === 'api.amll.dev';
 }
 
 async function proxyLyricRequest(targetUrlStr, init = {}) {
@@ -2999,21 +3001,11 @@ async function proxyLyricRequest(targetUrlStr, init = {}) {
     method: typeof init?.method === 'string' ? init.method : 'GET',
     headers,
     body: init?.body,
+    ...(isAmllDbRequest ? { signal: AbortSignal.timeout(AMLL_API_TIMEOUT_MS) } : {}),
   });
 
   if (isAmllDbRequest) {
     console.log(`[AMLL Proxy] Response ${response.status} ${targetUrl.toString()}`);
-  }
-
-  if (isAmllDbRequest && response.status === 404) {
-    console.log(`[AMLL Proxy] Convert 404 -> 204 ${targetUrl.toString()}`);
-    return {
-      ok: true,
-      status: 204,
-      statusText: 'No Content',
-      headers: {},
-      bodyText: '',
-    };
   }
 
   const normalizedHeaders = {};
@@ -3821,19 +3813,7 @@ ${isPureMusic && songTitle ? `Song title: ${songTitle}\n` : ''}Source snippet:
 ${snippet}`;
 }
 
-// Provide Netease API unblock parameter as requested
-process.env.ENABLE_GENERAL_UNBLOCK = 'false';
-
-// Issue: Netease API module reads 'anonymous_token' synchronously from tmp dir upon require.
-// If not present, Electron crashes with ENOENT. Pre-create the file, then hydrate the
-// package's runtime state in the order required by the current api-enhanced build.
 const fsp = fs.promises;
-const os = require('os');
-const tokenPath = path.resolve(os.tmpdir(), 'anonymous_token');
-const xeapiPublicKeyPath = path.resolve(os.tmpdir(), 'xeapi_public_key');
-if (!fs.existsSync(tokenPath)) {
-  fs.writeFileSync(tokenPath, '', 'utf-8');
-}
 
 async function ensureAudioCacheDirectory() {
   await fsp.mkdir(getAudioCacheDirectory(), { recursive: true });
@@ -4096,240 +4076,36 @@ async function clearCoverCacheDirectory() {
   }
 }
 
-const { withoutImplicitClientIp } = require('./neteaseApiStartup.cjs');
-const { createNeteaseLoginDiagnostics } = require('./neteaseLoginDiagnostics.cjs');
-const neteaseLoginDiagnostics = createNeteaseLoginDiagnostics();
-// util/request 在首次 require 时读一次匿名 token 并缓存到进程结束，之后启动流程写回的新 token
-// 要到下次启动才生效。记下这一刻文件是否为空，诊断时才知道登录请求有没有匿名凭据兜底。
-neteaseLoginDiagnostics.noteStartup({
-  anonymousTokenAtLoad: fs.readFileSync(tokenPath, 'utf-8').trim() ? 'present' : 'empty',
-});
-// 必须赶在 main / server 首次 require util/request 之前替换缓存里的导出，它们拿到的才是包过的版本。
-// 先 require 再取缓存项：赋值左侧会先求值，写成一行时缓存项还不存在。
-// 诊断记录包在最里层，看到的是来源 IP 策略处理过、真正要发出去的 options。
-const ncmRequestPath = require.resolve('@neteasecloudmusicapienhanced/api/util/request');
-const ncmRequest = require(ncmRequestPath);
-require.cache[ncmRequestPath].exports = withoutImplicitClientIp(neteaseLoginDiagnostics.wrapRequest(ncmRequest));
-const { register_anonimous } = require('@neteasecloudmusicapienhanced/api/main');
-const { getXeapiPublicKey } = require('@neteasecloudmusicapienhanced/api/util/xeapiKey');
-const {
-  cookieToJson,
-  generateDeviceId,
-  generateRandomChineseIP,
-} = require('@neteasecloudmusicapienhanced/api/util/index');
-const { serveNcmApi } = require('@neteasecloudmusicapienhanced/api/server');
-const {
-  refreshAnonymousToken,
-  resolveXeapiPublicKey,
-} = require('./neteaseApiStartup.cjs');
-const {
-  isModuleNotFound: isQqApiModuleNotFound,
-  startQqApi: startQqApiServer,
-} = require('./qqApiStartup.cjs');
+const { createNetworkRecorder } = require('./networkRecorder.cjs');
+const { createNeteaseBackend } = require('./neteaseBackend.cjs');
+const { createQqBackend } = require('./qqBackend.cjs');
+const { registerLoginBackendIpc } = require('./loginBackendIpc.cjs');
 
-const net = require('net');
-// null until serveNcmApi is actually listening. A numeric fallback used to be handed to the
-// renderer on failure, which turned "backend never started" into an opaque fetch error.
-let assignedPort = null;
-const NETEASE_API_STATUS_CHANNEL = 'netease-api-status-changed';
-let neteaseApiStatus = {
-  status: 'starting',
-  port: null,
-  error: null,
-  updatedAt: Date.now(),
-};
+// 内嵌后端（网易、QQ）的出站连接记录：要在任何后端发出请求之前开始订阅。
+const networkRecorder = createNetworkRecorder();
+networkRecorder.start();
 
-function serializeError(error) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === 'string' && error.trim()) {
-    return error;
-  }
-
-  return 'Unknown error';
-}
-
-function updateNeteaseApiStatus(nextStatus) {
-  neteaseApiStatus = {
-    ...neteaseApiStatus,
-    ...nextStatus,
-    updatedAt: Date.now(),
-  };
-
+function broadcastToWindows(channel, payload) {
   BrowserWindow.getAllWindows().forEach((win) => {
     if (!win.isDestroyed()) {
-      win.webContents.send(NETEASE_API_STATUS_CHANNEL, neteaseApiStatus);
+      win.webContents.send(channel, payload);
     }
   });
 }
 
-async function getFreePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.listen(0, () => {
-      const port = srv.address().port;
-      srv.close((err) => {
-        if (err) reject(err);
-        else resolve(port);
-      });
-    });
-    srv.on('error', reject);
-  });
-}
-
-// Initializes the Netease API runtime files before the local server starts handling requests.
-async function initializeNcmApiRuntime() {
-  global.cnIp = generateRandomChineseIP();
-
-  if (!global.deviceId) {
-    global.deviceId = generateDeviceId();
-  }
-
-  let currentPublicKey = {};
-  if (fs.existsSync(xeapiPublicKeyPath)) {
-    try {
-      currentPublicKey = JSON.parse(fs.readFileSync(xeapiPublicKeyPath, 'utf-8'));
-    } catch (error) {
-      console.warn('[Netease API] Failed to read cached xeapi public key, regenerating', error);
-    }
-  }
-
-  const { publicKey: nextPublicKey, refreshed } = await resolveXeapiPublicKey({
-    currentPublicKey,
-    deviceId: global.deviceId,
-    getXeapiPublicKey,
-  });
-  if (refreshed) {
-    fs.writeFileSync(xeapiPublicKeyPath, JSON.stringify(nextPublicKey), 'utf-8');
-  }
-  console.log(
-    `[Netease API] xeapi public key ready (source=${refreshed ? 'network' : 'cache'}, version=${nextPublicKey?.version ?? 'unknown'})`,
-  );
-
-  const anonymousTokenRefreshed = await refreshAnonymousToken({
-    registerAnonymous: register_anonimous,
-    cookieToJson,
-    persistToken: (token) => fs.writeFileSync(tokenPath, token, 'utf-8'),
-  });
-  neteaseLoginDiagnostics.noteStartup({
-    runtimeInitializedAt: Date.now(),
-    xeapiKeySource: refreshed ? 'network' : 'cache',
-    xeapiKeyVersion: nextPublicKey?.version ?? 'unknown',
-    anonymousTokenRefreshed,
-  });
-}
-
-async function startApi() {
-  updateNeteaseApiStatus({ status: 'starting', port: null, error: null });
-  try {
-    const freePort = await getFreePort();
-    await initializeNcmApiRuntime();
-    // 只监听 IPv4 回环：本地 API 只给本进程和渲染进程用，不该暴露到局域网；固定地址也让渲染进程
-    // 不再随 localhost 解析到 ::1 还是 127.0.0.1 而走不同的来源 IP 分支（见 withoutImplicitClientIp）。
-    await serveNcmApi({ port: freePort, host: '127.0.0.1' });
-    assignedPort = freePort;
-    neteaseLoginDiagnostics.noteStartup({ listenHost: '127.0.0.1', listenPort: freePort });
-    updateNeteaseApiStatus({ status: 'running', port: assignedPort, error: null });
-    console.log('Netease API started on port', assignedPort);
-  } catch (e) {
-    assignedPort = null;
-    updateNeteaseApiStatus({ status: 'error', port: null, error: serializeError(e) });
-    console.error('Failed to start Netease API', e);
-  }
-
-  return neteaseApiStatus;
-}
-
-let neteaseApiStartPromise = null;
-
-// Serializes start attempts. The renderer can now ask for a restart, and serveNcmApi has no
-// shutdown hook, so a second concurrent attempt would leak a listening server on another port.
-function startNeteaseApi() {
-  if (neteaseApiStatus.status === 'running') {
-    return Promise.resolve(neteaseApiStatus);
-  }
-
-  if (!neteaseApiStartPromise) {
-    neteaseApiStartPromise = startApi().finally(() => {
-      neteaseApiStartPromise = null;
-    });
-  }
-
-  return neteaseApiStartPromise;
-}
-
-const QQ_API_STATUS_CHANNEL = 'qq-api-status-changed';
-let qqApiStatus = {
-  status: 'starting',
-  port: null,
-  error: null,
-  updatedAt: Date.now(),
-};
-
-function updateQqApiStatus(nextStatus) {
-  qqApiStatus = {
-    ...qqApiStatus,
-    ...nextStatus,
-    updatedAt: Date.now(),
-  };
-
-  BrowserWindow.getAllWindows().forEach((win) => {
-    if (!win.isDestroyed()) {
-      win.webContents.send(QQ_API_STATUS_CHANNEL, qqApiStatus);
-    }
-  });
-}
-
-let qqApiHandle = null;
+// 必须在任何代码 require 网易上游之前创建：它先准备匿名 token 文件、替换上游模块，再加载上游（见 neteaseBackend.cjs）。
+// 拉起本身（网络请求）在 app ready 之后由 start() 进行。
+const neteaseBackend = createNeteaseBackend({ broadcast: broadcastToWindows, networkRecorder });
 
 // Runs @yakult-green-tea/qq-music-api in-process. Device identifiers remain in their existing file;
 // account credentials are owned by the API and cross this boundary only through an encrypted
 // main-process repository. The renderer continues to receive only an opaque session token.
-async function startQqApi() {
-  updateQqApiStatus({ status: 'starting', port: null, error: null });
-  try {
-    const freePort = await getFreePort();
-    // getFreePort only observes that the port was free a moment ago, so the bind can still lose a
-    // race. Awaiting the handle means 'running' is only published once the socket is really bound.
-    qqApiHandle = await startQqApiServer({
-      port: freePort,
-      stateFilePath: path.join(app.getPath('userData'), 'qq-auth-state', 'qq-device.json'),
-      authSessionRepository: qqAuthSessionRepository,
-    });
-    updateQqApiStatus({ status: 'running', port: freePort, error: null });
-    console.log('QQ API started on port', freePort);
-  } catch (error) {
-    qqApiHandle = null;
-
-    // A build that shipped without the package can never recover, so it is reported as
-    // 'unavailable' rather than 'error'; everything else (a lost port race, a throw from inside the
-    // package) is a real failure and keeps the error status.
-    if (isQqApiModuleNotFound(error)) {
-      updateQqApiStatus({ status: 'unavailable', port: null, error: serializeError(error) });
-      console.warn('[QQ API] Package not installed; QQ provider will stay unavailable in this build');
-      return;
-    }
-
-    updateQqApiStatus({ status: 'error', port: null, error: serializeError(error) });
-    console.error('Failed to start QQ API', error);
-  }
-}
-
-async function stopQqApi() {
-  const handle = qqApiHandle;
-  qqApiHandle = null;
-  if (!handle) {
-    return;
-  }
-
-  try {
-    await handle.close();
-  } catch (error) {
-    console.error('Failed to stop QQ API', error);
-  }
-}
+const qqBackend = createQqBackend({
+  broadcast: broadcastToWindows,
+  networkRecorder,
+  getStateFilePath: () => path.join(app.getPath('userData'), 'qq-auth-state', 'qq-device.json'),
+  authSessionRepository: qqAuthSessionRepository,
+});
 
 function isElectronDevRuntime() {
   return process.env.ELECTRON_DEV === 'true' || process.env.NODE_ENV === 'development';
@@ -5410,9 +5186,9 @@ app.whenReady().then(async () => {
   setupAutoUpdater();
   // Not awaited: this performs network round trips (xeapi key, anonymous token) that used to keep
   // the window from appearing at all on a slow or blocked route. Status reaches the renderer over
-  // NETEASE_API_STATUS_CHANNEL, and get-netease-port reports null until the server is listening.
-  void startNeteaseApi();
-  await startQqApi();
+  // netease-api-status-changed, and get-netease-port reports null until the server is listening.
+  void neteaseBackend.start();
+  await qqBackend.start();
   try {
     await stageApi.startStageServerIfNeeded();
   } catch (error) {
@@ -5645,7 +5421,7 @@ app.on('before-quit', () => {
     }
   }
   void discordPresence.destroy();
-  void stopQqApi();
+  void qqBackend.stop();
   void lyricApi.stop();
 });
 
@@ -6125,38 +5901,15 @@ ipcMain.handle('clear-local-cover-assets', async () => {
   return localCoverAssetStore.clear();
 });
 
-// Retrieve dynamic port of local Netease API Server
-ipcMain.handle('get-netease-port', () => {
-  return assignedPort;
+// 内嵌后端的端口、状态、重启、诊断快照与主动自检（electron/loginBackendIpc.cjs）。
+registerLoginBackendIpc({
+  ipcMain,
+  app,
+  safeStorage,
+  getDefaultSession: () => session.defaultSession,
+  neteaseBackend,
+  qqBackend,
 });
-
-ipcMain.handle('restart-netease-api', () => startNeteaseApi());
-
-ipcMain.handle('get-netease-api-status', () => {
-  return neteaseApiStatus;
-});
-
-// 扫码登录失败后，渲染进程用它生成可以直接贴进 issue 的诊断信息；内容不含 cookie、token 和 IP。
-ipcMain.handle('get-netease-login-diagnostics', () => ({
-  app: {
-    version: app.getVersion(),
-    electron: process.versions.electron,
-    platform: process.platform,
-    arch: process.arch,
-    osRelease: os.release(),
-  },
-  apiStatus: {
-    status: neteaseApiStatus.status,
-    port: neteaseApiStatus.port,
-    error: neteaseApiStatus.error,
-  },
-  ...neteaseLoginDiagnostics.snapshot(),
-}));
-
-// Retrieve dynamic port of the embedded QQ API server; null until it is running.
-ipcMain.handle('get-qq-port', () => qqApiStatus.port);
-
-ipcMain.handle('get-qq-api-status', () => qqApiStatus);
 
 ipcMain.handle('kugou-api-status', () => kugouApiBridge.getStatus());
 ipcMain.handle('kugou-api-request', (_event, operation, params) => kugouApiBridge.request(operation, params));

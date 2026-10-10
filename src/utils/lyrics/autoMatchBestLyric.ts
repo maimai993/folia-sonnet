@@ -4,7 +4,7 @@ import type { OnlineProviderId, ProviderLyricsResult } from '../../types/onlineM
 import { applyNeteaseChorusByTime } from './chorusEffects';
 import type { NeteaseChorusRange } from './chorusEffects';
 import { searchQQLyrics, fetchQQLyrics } from './providers/qqLyricProvider';
-import { fetchAmllDbLyrics } from './providers/amllDbProvider';
+import { fetchAmllDbLyrics, getAmllDbMusicIds } from './providers/amllDbProvider';
 import { normalizeLyricMatchDurationMs } from './duration';
 import { calculateMatchScoreDetails } from './matchScore';
 import { buildLyricSearchQuery } from './searchQuery';
@@ -362,9 +362,11 @@ export async function autoMatchBestLyric(
         song: any,
     ): Promise<AutoMatchBestLyricMatch | null> => {
         console.log(`[autoMatchBestLyric] Probing AMLLDB ${platform}/${song.id} for "${song.name || title}"`);
+        // QQ 要依次试 mid 和数字 ID，每次请求各有超时，外层按 ID 个数放宽，否则第一次慢了第二个 ID 就轮不到
+        const musicIds = getAmllDbMusicIds(platform, song);
         const lyrics = await withTimeout(
-            fetchAmllDbLyrics(platform, song.id),
-            PROVIDER_LYRIC_TIMEOUT_MS,
+            fetchAmllDbLyrics(platform, musicIds),
+            PROVIDER_LYRIC_TIMEOUT_MS * Math.max(1, musicIds.length),
             `AMLLDB lyric fetch for ${platform}/${song.id}`,
             null
         );

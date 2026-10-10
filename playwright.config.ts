@@ -73,7 +73,8 @@ export default defineConfig({
   // 累积、localStorage 跨用例串。8 个 spec 省下的那点时间不值这个风险。
   webServer: {
     // 应用和组件回归都显式启用开发验证 suite，不依赖开发者的 .env.local。
-    command: 'cross-env VITE_LIBRARY_TUI=true VITE_NETEASE_API_BASE=http://127.0.0.1:4173/__mock_netease__ npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
+    // 初始选择钉在 grid：截图基线与现有用例都假设没选过 suite 的人看到网格（开发阶段的初始选择是 bravais）。
+    command: 'cross-env VITE_LIBRARY_TUI=true VITE_LIBRARY_INITIAL_SUITE=grid VITE_NETEASE_API_BASE=http://127.0.0.1:4173/__mock_netease__ npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: true,
     timeout: 120_000,

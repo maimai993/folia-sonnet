@@ -42,6 +42,7 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
                 surfaceProps={model.surfaceProps}
                 onOpenCollection={model.onOpenCollection}
                 onPushCollection={model.onPushCollection}
+                onPopCollectionTo={model.onPopCollectionTo}
                 onBackCollection={model.onBackCollection}
                 isInteractive={isInteractive}
             >

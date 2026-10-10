@@ -4,6 +4,7 @@ export {
     getMatchResultAlbumName,
     getMatchResultArtists,
     getMatchResultCoverUrl,
+    sourceProvidesSongMetadata,
     sourceSupportsCover,
 } from '../../utils/lyrics/matchResult';
 export type { LyricMatchSource } from '../../utils/lyrics/matchResult';

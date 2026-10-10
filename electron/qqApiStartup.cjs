@@ -1,3 +1,5 @@
+const { keepServerErrorsLogged, waitUntilListening } = require('./backendLifecycle.cjs');
+
 // electron/qqApiStartup.cjs
 //
 // Starts @yakult-green-tea/qq-music-api inside the Electron main process. The package is a regular
@@ -21,30 +23,9 @@ function isModuleNotFound(error) {
 }
 
 // The package calls app.listen() while it is being required, so require() returns before the socket
-// is bound. Resolving only on 'listening' keeps the caller from reporting "running" against a port
-// that may still fail to bind; a bind failure arrives as 'error' and is surfaced as a rejection
-// rather than an unhandled event on the server.
-function waitUntilListening(server) {
-  return new Promise((resolve, reject) => {
-    if (server.listening) {
-      resolve(server);
-      return;
-    }
-
-    const onListening = () => {
-      server.removeListener('error', onError);
-      resolve(server);
-    };
-
-    const onError = (error) => {
-      server.removeListener('listening', onListening);
-      reject(error);
-    };
-
-    server.once('listening', onListening);
-    server.once('error', onError);
-  });
-}
+// is bound. Resolving only on 'listening' (waitUntilListening) keeps the caller from reporting "running"
+// against a port that may still fail to bind; a bind failure arrives as a rejection rather than an
+// unhandled event on the server.
 
 function closeServer(server) {
   return new Promise((resolve) => {
@@ -145,9 +126,7 @@ async function startQqApi(options = {}) {
   await waitUntilListening(server);
 
   // Once bound, later socket errors must not take the main process down with an unhandled 'error'.
-  server.on('error', (error) => {
-    console.error('[QQ API] server error', error);
-  });
+  keepServerErrorsLogged(server, 'QQ API');
 
   return {
     port,

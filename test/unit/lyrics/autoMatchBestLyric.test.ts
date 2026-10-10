@@ -34,7 +34,8 @@ vi.mock('@/utils/lyrics/providers/kugouLyricProvider', () => ({
     fetchKugouLyrics: vi.fn()
 }));
 
-vi.mock('@/utils/lyrics/providers/amllDbProvider', () => ({
+vi.mock('@/utils/lyrics/providers/amllDbProvider', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@/utils/lyrics/providers/amllDbProvider')>(),
     fetchAmllDbLyrics: vi.fn()
 }));
 
@@ -159,8 +160,8 @@ describe('autoMatchBestLyric', () => {
         });
 
         expect(result && 'lyrics' in result ? result.source : null).toBe('amll');
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 101);
-        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith('ncm', 'KUGOU-HASH');
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['101']);
+        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith('ncm', ['KUGOU-HASH']);
     });
 
     it('prioritizes NetEase when perfect word-by-word match exists', async () => {
@@ -244,7 +245,7 @@ describe('autoMatchBestLyric', () => {
         }) as any;
 
         expect(result).toMatchObject({ source: 'amll', id: 987, matchedLyricsProviderPlatform: 'ncm' });
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 987);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['987']);
         expect(getLyricMock).not.toHaveBeenCalled();
         expect(cloudSearchMock).not.toHaveBeenCalled();
     });
@@ -306,7 +307,7 @@ describe('autoMatchBestLyric', () => {
         }) as any;
 
         expect(searchQQLyricsMock).toHaveBeenCalledWith('Correct title - Correct artist - Correct album', 1, 10);
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('qq', 202);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('qq', ['selected-mid', '202']);
         expect(result).toMatchObject({ source: 'amll', id: 202, matchedLyricsProviderPlatform: 'qq' });
         expect(fetchQQLyricsMock).not.toHaveBeenCalled();
         expect(cloudSearchMock).not.toHaveBeenCalled();
@@ -377,7 +378,7 @@ describe('autoMatchBestLyric', () => {
             id: 101,
             lyrics: lineByLineLyrics,
         });
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 101);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['101']);
         expect(searchQQLyricsMock).toHaveBeenCalled();
         expect(kugouSearchSpy).toHaveBeenCalled();
         kugouSearchSpy.mockRestore();
@@ -603,7 +604,7 @@ describe('autoMatchBestLyric', () => {
         expect(result.source).toBe('amll');
         expect(result.id).toBe(101);
         expect(result.matchedLyricsProviderPlatform).toBe('ncm');
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 101);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['101']);
         expect(cloudSearchMock).not.toHaveBeenCalled();
         expect(fetchQQLyricsMock).not.toHaveBeenCalled();
     });
@@ -630,7 +631,7 @@ describe('autoMatchBestLyric', () => {
 
         expect(result.source).toBe('amll');
         expect(result.matchedLyricsProviderPlatform).toBe('ncm');
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 101);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['101']);
         expect(searchQQLyricsMock).not.toHaveBeenCalled();
         expect(searchKugouLyricsMock).not.toHaveBeenCalled();
     });
@@ -665,8 +666,8 @@ describe('autoMatchBestLyric', () => {
         expect(result.id).toBe(201);
         expect(result.qqMid).toBe('mid123');
         expect(fetchAmllDbLyricsMock).toHaveBeenCalledTimes(1);
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', 101);
-        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith('qq', 201);
+        expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('ncm', ['101']);
+        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith('qq', expect.arrayContaining(['201']));
         expect(fetchQQLyricsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 201 }), { chorusRanges: [] });
     });
 
@@ -734,7 +735,7 @@ describe('autoMatchBestLyric', () => {
         expect(result.source).toBe('kugou');
         expect(result.id).toBe(301);
         expect(result.kgHash).toBe('hash123');
-        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith(expect.anything(), 301);
+        expect(fetchAmllDbLyricsMock).not.toHaveBeenCalledWith(expect.anything(), expect.arrayContaining(['301']));
     });
 
     it('returns null if no sources match the duration filter', async () => {

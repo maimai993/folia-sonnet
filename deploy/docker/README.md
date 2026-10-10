@@ -73,6 +73,9 @@ docker compose ps
 | `FOLIA_FORWARD_CLIENT_IP` | `false` | 是否把浏览器 IP 转发给音乐平台；保持 `false` 可避免 LAN/Docker 地址出现在登录地点 |
 | `ENABLE_GENERAL_UNBLOCK` | `false` | 网易云 API 通用解锁开关；默认关闭 |
 | `QQ_AUTH_SESSION_PATH` / `QQ_SESSION_SECRET` | 空 | 两项同时设置后，把 QQ 登录态加密保存到 `qq-api-state` 卷；配置方法见 [`qq-api/README.md`](./qq-api/README.md) |
+| `NAVIDROME_URL` / `NAVIDROME_USERNAME` / `NAVIDROME_PASSWORD` | 空 | 三项都填后，任何新打开的浏览器自动登录这个 Navidrome；见下方 [Navidrome 预置账号](#navidrome-预置账号) |
+| `NAVIDROME_PRESET_ALLOW` | `private` | 允许读取 Navidrome 预置凭据的来源：逗号分隔的 IP/CIDR，`private` 表示局域网，`any` 表示不限制 |
+| `FOLIA_TRUSTED_PROXIES` | 空 | Folia 前面还有反向代理时填代理本身的 IP/CIDR（不接受 `private`），gateway 才能从 `X-Forwarded-For` 还原真实来源 |
 | `FOLIA_SYNC_BIND` / `FOLIA_SYNC_PORT` | `0.0.0.0` / `13000` | Sync Server 监听 |
 | `FOLIA_SYNC_DATA_DIR` | `./data/sync` | SQLite 持久化目录 |
 | `SYNC_TOKEN` | 无 | Sync 客户端 Bearer Token，至少八位，必填 |
@@ -101,6 +104,42 @@ docker compose up -d --wait
 ```
 
 同一时间只允许一个活跃扫码会话。没有被扫过的旧二维码会被下一次登录请求直接接管，只有正在手机上确认的会话才会让新请求收到 409。上游装置注册失败时服务返回 502 加 `Retry-After`，随后返回 429，属于预期的退避行为。多实例部署不要共用同一个装置状态卷。
+
+## Navidrome 预置账号
+
+Navidrome 凭据默认只保存在各个浏览器自己的 localStorage 里，手机、电视、电脑要各登录一次。在 `.env` 里填上三项后，backend 通过 `/api/navidrome-preset` 下发凭据，新打开的浏览器自动登录并启用 Navidrome：
+
+```env
+NAVIDROME_URL=http://NAS-IP:4533
+NAVIDROME_USERNAME=folia
+NAVIDROME_PASSWORD=...
+```
+
+- `NAVIDROME_URL` 由浏览器直接访问，必须是各设备都能连上的地址，不能写 Docker 内部主机名。Folia 走 HTTPS 时它也要是 HTTPS，否则浏览器会拦截混合内容。
+- 这个浏览器以前手动关过 Navidrome 开关的，预置凭据会写入，但开关保持关闭，需要在设置里自己打开。
+- 浏览器里手动填写的配置优先于预置：在设置页填别的服务器并测试成功后，这个浏览器就一直用手动配置，设置页会出现「恢复使用服务器预置」按钮。
+- 在设置页清除配置后，这个浏览器不再自动套用预置，直到点「恢复使用服务器预置」。
+- 修改 `.env` 里的密码或地址后，仍在使用预置的浏览器下次打开时会自动跟上。修改后执行 `docker compose up -d --force-recreate backend`。
+- 只填一两项，或 `NAVIDROME_URL` 不是完整的 http(s) 地址，backend 日志会报警告，预置不生效。
+
+### 来源限制
+
+Subsonic 协议要在浏览器里用明文密码计算 token，所以端点返回的是明文密码。gateway 默认只把它交给局域网来源：回环、`10/8`、`172.16/12`、`192.168/16`、`100.64/10`（Tailscale 等组网）、链路本地和对应的 IPv6。其他来源收到 403，前端当作没有预置，回到手动登录。
+
+```env
+# 只放行某个网段，可以和 private 混用
+NAVIDROME_PRESET_ALLOW=192.168.1.0/24,100.64.0.0/10
+```
+
+限制按 gateway 看到的来源地址判断，以下两种情况会让它失效，需要自己确认：
+
+- **前面有反向代理**（NAS 自带的 HTTPS 代理、Caddy、Nginx Proxy Manager 等）：gateway 看到的来源都是代理的局域网地址，公网请求也会被放行。把代理本身的地址填进 `FOLIA_TRUSTED_PROXIES`，并确认代理会追加 `X-Forwarded-For`。gateway 只信任这些地址追加的那一段，客户端自己伪造的 `X-Forwarded-For` 不起作用。只填代理的确切地址，不要填整个局域网段：被信任的地址发来的 `X-Forwarded-For` 会被当真，范围填大了，客户端就能自填一个局域网地址冒充。为此这一项不接受 `private`。
+- **Docker 用 userland-proxy 转发端口**（Docker Desktop、rootless Docker、部分 NAS 系统）：所有请求都显示为 Docker 网桥地址 `172.x`，同样会被当成局域网。这种环境如果要暴露到公网，把 `NAVIDROME_PRESET_ALLOW` 收窄到具体地址，或者干脆不填 `NAVIDROME_*`。
+
+修改后执行 `docker compose up -d --force-recreate gateway`。
+
+> [!WARNING]
+> 局域网里能打开 Folia 页面的人都能读到这组凭据。建议在 Navidrome 里单独建一个账号给 Folia 用。
 
 ## HTTPS 与浏览器安全上下文
 

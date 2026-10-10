@@ -11,6 +11,7 @@ import PonderHintSettingsSection from './PonderHintSettingsSection';
 import AndroidPhoneFitSetting from './AndroidPhoneFitSetting';
 import AndroidScreenAwakeSetting from './AndroidScreenAwakeSetting';
 import PlaybackEntryViewSection from './PlaybackEntryViewSection';
+import LibrarySuiteSection from './LibrarySuiteSection';
 import PlayerBottomBarSection from './PlayerBottomBarSection';
 import HomeCardPositionSection from './HomeCardPositionSection';
 import { SettingsAnchor } from './navigation/SettingsAnchorContext';
@@ -192,6 +193,12 @@ const GeneralSettingsSubview: React.FC<GeneralSettingsSubviewProps> = ({
             <HomeCardPositionSection isDaylight={isDaylight} settingsCardClass={settingsCardClass} theme={theme} />
 
             <PlaybackEntryViewSection
+                isDaylight={isDaylight}
+                settingsCardClass={settingsCardClass}
+                theme={theme}
+            />
+
+            <LibrarySuiteSection
                 isDaylight={isDaylight}
                 settingsCardClass={settingsCardClass}
                 theme={theme}
