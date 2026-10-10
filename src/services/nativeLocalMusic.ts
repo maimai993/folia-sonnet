@@ -44,8 +44,14 @@ type NativePickResponse = {
     failures?: Array<{ uri?: string; message?: string }>;
 };
 
+type NativeScanResponse = {
+    tracks?: NativeAudioTrack[];
+    /** 媒体库一首都没有、又没开"所有文件访问"时置位：先去开权限，再扫一遍。 */
+    needsAllFilesAccess?: boolean;
+};
+
 type NativePlugin = {
-    scanLocalAudio?: () => Promise<{ tracks?: NativeAudioTrack[] }>;
+    scanLocalAudio?: () => Promise<NativeScanResponse>;
     pickAudioFiles?: () => Promise<NativePickResponse>;
     pickAudioFolder?: () => Promise<NativePickResponse>;
     deleteImportedAudio?: (options: { refs: string[] }) => Promise<{
@@ -53,6 +59,7 @@ type NativePlugin = {
         failed?: string[];
     }>;
     localAudioServerPort?: () => Promise<{ port?: number }>;
+    requestAllFilesAccess?: () => Promise<{ granted?: boolean }>;
 };
 
 export const ANDROID_MEDIA_FOLDER_NAME = 'Android 本地音乐';
@@ -102,11 +109,32 @@ export const nativeAudioUrlForRef = async (ref: string): Promise<string | null> 
 };
 
 /**
+ * 带用户去系统设置开「所有文件访问」。
+ *
+ * 这是受限权限，App 弹窗要不来，只能跳设置页让用户手动开；回来的结果由原生回包告知。
+ * 没有对应的插件方法（旧包 / 非安卓）时返回 false，调用方按"没授权"继续走。
+ */
+export const requestAndroidAllFilesAccess = async (): Promise<boolean> => {
+    const plugin = getPlugin();
+    if (!plugin?.requestAllFilesAccess) return false;
+    try {
+        const response = await plugin.requestAllFilesAccess();
+        return response?.granted === true;
+    } catch {
+        return false;
+    }
+};
+
+/**
  * 扫描设备音乐库（MediaStore）导入。
  *
  * 这是文件选择器之外的备用入口：选择器需要用户在系统文件管理器里自己找到文件，
  * 而音乐库扫描直接把系统已经收录的音频全部读进来，不需要逐首挑选。
  * 因此它依赖 READ_MEDIA_AUDIO 权限，插件会自行申请。
+ *
+ * 媒体库一首都没有时（有的 ROM 收录不全），原生会在没开"所有文件访问"的
+ * 情况下置 needsAllFilesAccess —— 这里带用户去开一次，然后重扫（这次原生
+ * 会按目录走文件系统兜底）；用户拒绝就按空结果收场，不再反复打扰。
  */
 export const scanAndroidDeviceMusic = async (): Promise<LocalSong[]> => {
     const plugin = getPlugin();
@@ -117,7 +145,16 @@ export const scanAndroidDeviceMusic = async (): Promise<LocalSong[]> => {
 
     noteLibraryStep('local', 'scan:start');
     try {
-        const response = await plugin.scanLocalAudio();
+        let response = await plugin.scanLocalAudio();
+        if (response.needsAllFilesAccess) {
+            noteLibraryStep('local', 'scan:needs-all-files');
+            if (await requestAndroidAllFilesAccess()) {
+                noteLibraryStep('local', 'scan:all-files-granted');
+                response = await plugin.scanLocalAudio();
+            } else {
+                noteLibraryStep('local', 'scan:all-files-denied');
+            }
+        }
         const now = Date.now();
         const songs = (response.tracks || []).map((track): LocalSong => {
             const fileName = track.fileName || `track-${track.id}`;

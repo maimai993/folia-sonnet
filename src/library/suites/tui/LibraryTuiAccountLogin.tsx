@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryLoginView } from '../../core/bindings/useLibraryAccount';
+import { getProviderAppIcon } from '../../../assets/providers/appIcons';
 
 // src/library/suites/tui/LibraryTuiAccountLogin.tsx
 // TUI 的扫码登录框（只做展示）：等宽方框，标题嵌在上边框里；多方式时上面一排登录方式（↑↓ 移动高亮、Enter 选），
@@ -77,7 +78,9 @@ const LibraryTuiAccountLogin: React.FC<LibraryTuiAccountLoginProps> = ({
             className={`relative w-full ${diagnostics ? 'max-w-2xl' : 'max-w-md'} border px-4 pb-3 pt-4 text-[13px]`}
             style={{ borderColor: accentColor, backgroundColor: boxBackground, color: 'var(--text-primary)' }}
         >
-            <h3 className="absolute -top-2.5 left-3 px-1 font-bold" style={{ color: accentColor, backgroundColor: boxBackground }}>
+            <h3 className="absolute -top-2.5 left-3 flex items-center gap-1.5 px-1 font-bold" style={{ color: accentColor, backgroundColor: boxBackground }}>
+                {/* 标题里嵌上当前平台的应用图标，一眼看出在登谁（未登记的平台回落 Folia 本尊）。 */}
+                <img src={getProviderAppIcon(session.providerId)} alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                 {view.title}
             </h3>
             <button

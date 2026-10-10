@@ -4,7 +4,9 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -35,8 +37,11 @@ import java.util.concurrent.Executors;
  * 必须支持 Range：<audio> 拖进度、以及某些格式要先读文件尾部的元数据，都靠它。
  */
 final class LocalAudioServer {
+    private static final String TAG = "LocalAudioServer";
     private static final String AUDIO_PATH_PREFIX = "/audio/";
     private static final String IMPORTED_PREFIX = "imported-";
+    /** 直接按绝对路径流原文件的 ref 前缀（文件系统兜底扫描出来的歌，不复制进私有目录）。 */
+    private static final String FILE_PREFIX = "file-";
     private final Context context;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private ServerSocket serverSocket;
@@ -58,6 +63,7 @@ final class LocalAudioServer {
                     Socket socket = serverSocket.accept();
                     executor.execute(() -> handle(socket));
                 } catch (IOException ignored) {
+                    Log.i(TAG, "server socket closed, stopping accept loop");
                     break;
                 }
             }
@@ -110,8 +116,15 @@ final class LocalAudioServer {
                 streamImportedFile(output, requestParts, headers, token.substring(IMPORTED_PREFIX.length()));
                 return;
             }
+            if (token.startsWith(FILE_PREFIX)) {
+                streamExternalFile(output, requestParts, headers, token.substring(FILE_PREFIX.length()));
+                return;
+            }
             streamMediaStoreFile(output, requestParts, headers, token);
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            // 之前这里连日志都没有：流写到一半断掉，WebView 那边只会报一句
+            // Format error，原生侧连发生了什么都不知道。
+            Log.w(TAG, "audio request failed", error);
         }
     }
 
@@ -146,6 +159,7 @@ final class LocalAudioServer {
     ) throws IOException {
         File target = new File(importedAudioDirectory(), fileName);
         if (!target.isFile()) {
+            Log.w(TAG, "imported audio missing: " + fileName);
             writeStatus(output, 404, "Not Found");
             return;
         }
@@ -155,6 +169,38 @@ final class LocalAudioServer {
             headers,
             target.length(),
             guessMimeType(fileName),
+            () -> new FileInputStream(target)
+        );
+    }
+
+    /**
+     * 按绝对路径流用户自己的音频（文件系统兜底扫描的歌）。
+     *
+     * 只放行外存根目录下的音频文件，别的一律 404 —— 这个服务监听在 127.0.0.1 上，
+     * 设备上任何应用都能连上来，不能让它变成一个任读全盘的口子。
+     * 走这条路的歌要求已授予「所有文件访问」，没授权时读流会自己失败。
+     */
+    private void streamExternalFile(
+        BufferedOutputStream output,
+        String[] requestParts,
+        Map<String, String> headers,
+        String encodedPath
+    ) throws IOException {
+        String filePath = URLDecoder.decode(encodedPath, "UTF-8");
+        File target = new File(filePath);
+        File root = Environment.getExternalStorageDirectory();
+        boolean insideRoot = root != null && filePath.startsWith(root.getPath() + File.separator);
+        if (!insideRoot || !target.isFile() || !isAudioFileName(filePath)) {
+            Log.w(TAG, "external audio refused: " + filePath);
+            writeStatus(output, 404, "Not Found");
+            return;
+        }
+        writeResponse(
+            output,
+            requestParts,
+            headers,
+            target.length(),
+            guessMimeType(filePath),
             () -> new FileInputStream(target)
         );
     }
@@ -171,6 +217,13 @@ final class LocalAudioServer {
         String mime,
         StreamSupplier supplier
     ) throws IOException {
+        // 空文件喂给 <audio> 只会换来一句莫名的 MEDIA_ELEMENT_ERROR: Format error；
+        // 这里直接 404 并把原因写进日志，下次一眼就能看出是"文件是空的"。
+        if (size <= 0) {
+            Log.w(TAG, "audio source is empty or unreadable (size=" + size + "): " + requestParts[1]);
+            writeStatus(output, 404, "Empty Audio");
+            return;
+        }
         long start = 0;
         long end = size > 0 ? size - 1 : -1;
         String range = headers.get("range");
@@ -190,11 +243,19 @@ final class LocalAudioServer {
         }
 
         long contentLength = end >= start ? end - start + 1 : -1;
+        Log.i(TAG, requestParts[0] + " " + requestParts[1]
+            + " range=" + (range == null ? "-" : range)
+            + " size=" + size + " partial=" + partial
+            + (partial ? " bytes=" + start + "-" + end : ""));
         StringBuilder response = new StringBuilder();
         response.append(partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
         response.append("Content-Type: ").append(mime).append("\r\n");
         response.append("Accept-Ranges: bytes\r\n");
         response.append("Access-Control-Allow-Origin: *\r\n");
+        // crossOrigin="anonymous" 的 <audio> 会带 CORS 语义，把 Range 相关头暴露出来，
+        // 拖进度条（发 Range、读 Content-Range）才不会在 CORS 检查上被拦。
+        response.append("Access-Control-Allow-Headers: range, content-range, content-length\r\n");
+        response.append("Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n");
         response.append("Connection: close\r\n");
         if (size > 0) {
             response.append("Content-Length: ").append(contentLength).append("\r\n");
@@ -210,7 +271,7 @@ final class LocalAudioServer {
         if ("GET".equals(requestParts[0])) {
             try (InputStream audio = supplier.open()) {
                 if (audio != null) {
-                    if (start > 0) audio.skip(start);
+                    skipFully(audio, start);
                     byte[] buffer = new byte[64 * 1024];
                     long remaining = contentLength;
                     int read;
@@ -223,6 +284,32 @@ final class LocalAudioServer {
             }
         }
         output.flush();
+    }
+
+    /**
+     * InputStream.skip 不保证一次跳够（它爱跳多少跳多少），文件流上偶尔也会短跳。
+     * 之前直接一个 skip 了事，短跳时从错误的位置开始发 —— 解码器读到的就是一段
+     * 被错位的数据，表现正是「MEDIA_ELEMENT_ERROR: Format error」这类莫名失败。
+     */
+    private static void skipFully(InputStream audio, long bytes) throws IOException {
+        long remaining = bytes;
+        while (remaining > 0) {
+            long skipped = audio.skip(remaining);
+            if (skipped <= 0) {
+                // skip 返回 0 只能靠读来推进（可能已经到头）。
+                if (audio.read() == -1) return;
+                skipped = 1;
+            }
+            remaining -= skipped;
+        }
+    }
+
+    /** 路径是不是设备上常见的音频扩展名（文件系统兜底扫描与 file- 路由共用）。 */
+    static boolean isAudioFileName(String fileName) {
+        String lower = fileName == null ? "" : fileName.toLowerCase();
+        return lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav")
+            || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".ogg")
+            || lower.endsWith(".opus") || lower.endsWith(".ape") || lower.endsWith(".wma");
     }
 
     static String guessMimeType(String fileName) {

@@ -78,6 +78,9 @@ public class FoliaPlaybackPlugin extends Plugin {
         String artworkUrl = call.getString("artworkUrl");
         if (artworkUrl != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK_URL, artworkUrl);
         if (duration != null) intent.putExtra(FoliaPlaybackService.EXTRA_DURATION, (long) duration);
+        // 封面角标用哪颗图标：当前播放来源的平台（netease/qq/kugou/bodian/folia）。
+        String providerBadge = call.getString("providerBadge");
+        if (providerBadge != null) intent.putExtra(FoliaPlaybackService.EXTRA_PROVIDER_BADGE, providerBadge);
 
         startServiceCompat(activity, intent);
         call.resolve();

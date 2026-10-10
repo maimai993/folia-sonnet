@@ -8,9 +8,11 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.CookieManager;
 
@@ -590,7 +592,9 @@ public class FoliaNativePlugin extends Plugin {
                     if (displayName == null || displayName.isEmpty()) displayName = "track-" + System.currentTimeMillis();
                     String safeName = "imported-" + stableFileId(displayName, fileSize, directory);
                     File target = new File(directory, safeName);
-                    if (!target.isFile() || target.length() != fileSize) {
+                    boolean alreadyThere = target.isFile() && target.length() > 0
+                        && (fileSize <= 0 || target.length() == fileSize);
+                    if (!alreadyThere) {
                         try (InputStream source = resolver.openInputStream(uri);
                              OutputStream sink = new FileOutputStream(target)) {
                             if (source == null) continue;
@@ -600,6 +604,19 @@ public class FoliaNativePlugin extends Plugin {
                                 sink.write(buffer, 0, read);
                             }
                         }
+                    }
+                    /*
+                     * 拷出来是 0 字节（provider 授权失效、openInputStream 静默失败等）绝对不能进库：
+                     * <audio> 播它会报一句莫名的 MEDIA_ELEMENT_ERROR: Format error，用户只会看到
+                     * "本地播放有 bug"。这里删掉空文件、记进 failures，让上层能看见。
+                     */
+                    if (target.length() <= 0) {
+                        target.delete();
+                        JSObject failure = new JSObject();
+                        failure.put("uri", String.valueOf(uri));
+                        failure.put("message", "Copied file is empty: " + displayName);
+                        failures.put(failure);
+                        continue;
                     }
 
                     JSObject track = new JSObject();
@@ -670,6 +687,11 @@ public class FoliaNativePlugin extends Plugin {
     /**
      * 设备音乐库扫描：这是文件选择器之外的入口，读的是系统已经收录的音频，
      * 不需要用户自己去文件管理器里翻。
+     *
+     * 媒体库一首都没扫到时：
+     * · 没有所有文件访问 → 回包里带 needsAllFilesAccess，让 Web 层引导用户去开；
+     * · 已经开了 → 直接按目录走文件系统兜底扫描（有的 ROM 收录不全，音乐躺在
+     *   Download/Music 之外的角落里，MediaStore 永远看不到）。
      */
     private void resolveLocalAudioScan(PluginCall call) {
         try {
@@ -722,10 +744,110 @@ public class FoliaNativePlugin extends Plugin {
                 }
             }
             JSObject result = new JSObject();
+            if (tracks.length() == 0 && isAllFilesAccessGranted()) {
+                collectAudioFilesFromStorage(tracks, port);
+            } else if (tracks.length() == 0) {
+                result.put("needsAllFilesAccess", true);
+            }
             result.put("tracks", tracks);
             call.resolve(result);
         } catch (Exception error) {
             call.reject(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * 「所有文件访问」是受限权限，弹窗要不来，只能跳系统设置让用户手动开。
+     * 开完回到应用（onActivityResult 由 Capacitor 的 ActivityCallback 接住）再把结果带回 JS。
+     */
+    @PluginMethod
+    public void requestAllFilesAccess(PluginCall call) {
+        if (isAllFilesAccessGranted()) {
+            JSObject result = new JSObject();
+            result.put("granted", true);
+            call.resolve(result);
+            return;
+        }
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity unavailable; cannot request all-files access.");
+            return;
+        }
+        Intent intent = new Intent(
+            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            Uri.fromParts("package", activity.getPackageName(), null)
+        );
+        try {
+            startActivityForResult(call, intent, "handleAllFilesAccessResult");
+        } catch (Exception firstError) {
+            // 有的 ROM 不认带包名的深链，退到通用的"所有文件访问"列表页。
+            try {
+                startActivityForResult(
+                    call,
+                    new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                    "handleAllFilesAccessResult"
+                );
+            } catch (Exception secondError) {
+                call.reject("No all-files access settings page on this device: "
+                    + secondError.getMessage(), secondError);
+            }
+        }
+    }
+
+    @ActivityCallback
+    private void handleAllFilesAccessResult(PluginCall call, ActivityResult activityResult) {
+        if (call == null) return;
+        JSObject result = new JSObject();
+        result.put("granted", isAllFilesAccessGranted());
+        call.resolve(result);
+    }
+
+    private static boolean isAllFilesAccessGranted() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager();
+    }
+
+    /**
+     * 文件系统兜底扫描：媒体库一首都没有、但用户给了所有文件访问时，直接翻外存目录。
+     *
+     * 只递归 Music / Download（外加它们的子目录），跳过隐藏目录与 Android/ 私有区，
+     * 最多收 2000 首 —— 全盘翻既慢又会把系统目录翻出成千上万垃圾。
+     * ref 是 `file-<绝对路径>`，播放地址按它拼，音频由 LocalAudioServer 的 file- 路由直接从原文件流出来，不复制。
+     */
+    private void collectAudioFilesFromStorage(JSArray tracks, int port) {
+        File root = Environment.getExternalStorageDirectory();
+        if (root == null || !root.isDirectory()) return;
+        File music = new File(root, "Music");
+        File download = new File(root, "Download");
+        java.util.ArrayDeque<File> queue = new java.util.ArrayDeque<>();
+        if (music.isDirectory()) queue.add(music);
+        if (download.isDirectory()) queue.add(download);
+        int collected = 0;
+        int visited = 0;
+        while (!queue.isEmpty() && collected < 2000 && visited < 20000) {
+            File directory = queue.poll();
+            File[] children = directory.listFiles();
+            if (children == null) continue;
+            for (File child : children) {
+                visited += 1;
+                String name = child.getName();
+                if (child.isDirectory()) {
+                    if (name.startsWith(".") || name.equals("Android")) continue;
+                    queue.add(child);
+                    continue;
+                }
+                if (!LocalAudioServer.isAudioFileName(name)) continue;
+                String ref = "file-" + child.getAbsolutePath();
+                JSObject track = new JSObject();
+                track.put("id", ref);
+                track.put("fileName", name);
+                track.put("title", name.replaceFirst("\\.[^.]+$", ""));
+                track.put("fileSize", child.length());
+                track.put("mimeType", LocalAudioServer.guessMimeType(name));
+                track.put("url", "http://127.0.0.1:" + port + "/audio/" + Uri.encode(ref));
+                tracks.put(track);
+                collected += 1;
+                if (collected >= 2000) break;
+            }
         }
     }
 

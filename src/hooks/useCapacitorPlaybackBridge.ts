@@ -27,6 +27,8 @@ interface FoliaPlaybackPlugin {
     /** 封面地址。原生会自己下载，用来绕开 WebView 的 CORS 限制。 */
     artworkUrl?: string | null;
     durationMs?: number;
+    /** 通知栏封面角标用哪颗图标（当前播放来源的平台，本地等自家人传 'folia'）。 */
+    providerBadge?: string | null;
   }): Promise<void>;
   /** 更新播放状态。playing=true 时服务会真正进入前台。 */
   setState(options: {
@@ -196,6 +198,7 @@ export const useCapacitorPlaybackBridge = ({
         // 原生下载没有这个限制，通知栏因此总能拿到对应的封面。
         artworkUrl: coverUrl || null,
         durationMs: getDurationMs(currentSong),
+        providerBadge: resolveProviderBadge(currentSong),
       });
     })();
   }, [enabled, currentSong, cachedCoverUrl]);
@@ -233,6 +236,19 @@ const getDurationMs = (song: SongResult): number => {
   if (typeof ms !== 'number' || !Number.isFinite(ms)) return 0;
   // 有些音源给的是秒。
   return ms > 0 && ms < 1000 ? Math.round(ms * 1000) : Math.round(ms);
+};
+
+/**
+ * 通知栏封面角标用哪颗图标。
+ *
+ * 通知栏封面右下角原本画的是 `android.R.drawable.ic_media_play`（那个 ▶），
+ * 现在换成「这首歌来自哪个平台」的应用图标。来源只在在线歌的 sourceRef 上有，
+ * 本地 / Navidrome / 舞台这些自家人一律回落 'folia' —— 原生侧没登记的值也回落 Folia。
+ */
+export const resolveProviderBadge = (song: SongResult | null | undefined): string => {
+  const sourceRef = song?.sourceRef;
+  if (sourceRef?.kind === 'online' && sourceRef.providerId) return sourceRef.providerId;
+  return 'folia';
 };
 
 export { ACTION_UPDATE_METADATA, ACTION_UPDATE_STATE, ACTION_STOP_FOREGROUND, ACTION_WEB_COMMAND, EXTRA_COMMAND };

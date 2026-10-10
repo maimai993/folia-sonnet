@@ -32,6 +32,8 @@ type BackendFailureProps = {
 
 type OnlineProviderLoginModalProps = {
     title: string;
+    /** 当前在登录哪个平台：传了就在标题上方摆该平台的应用图标，一眼看出在登谁。 */
+    iconUrl?: string;
     note: string;
     qrCodeImg: string;
     statusText: string;
@@ -50,6 +52,7 @@ type OnlineProviderLoginModalProps = {
 
 const OnlineProviderLoginModal = ({
     title,
+    iconUrl,
     note,
     qrCodeImg,
     statusText,
@@ -96,6 +99,14 @@ const OnlineProviderLoginModal = ({
                 >
                     <X size={16} />
                 </button>
+                {iconUrl && (
+                    <img
+                        src={iconUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="mx-auto mb-3 h-14 w-14 rounded-2xl object-contain shadow-lg"
+                    />
+                )}
                 <h3 className="text-lg font-bold mb-6" style={{ color: 'var(--text-primary)' }}>{title}</h3>
                 {loginMethods && (
                     <div className="mb-5">

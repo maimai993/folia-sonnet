@@ -120,6 +120,21 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!--
+        本地曲库扫描：读系统媒体库里的音频必须声明这两个权限，缺了的话
+        Capacitor 的 requestPermissionForAlias 会直接判"拒绝"，扫描按钮点了没反应。
+        13+ 用 READ_MEDIA_AUDIO，12 及以下用 READ_EXTERNAL_STORAGE（maxSdkVersion 限住，
+        两个不能混在同一个别名里申请，见 FoliaNativePlugin.audioPermissionAlias 的说明）。
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!--
+        所有文件访问（MANAGE_EXTERNAL_STORAGE）：媒体库扫不到的歌（有的 ROM 不收录、
+        用户音乐放在 Download/Music 之外的角落）靠它做文件系统兜底扫描。
+        这是"受限权限"，不能靠弹窗给，只能跳系统设置让用户手动开 —— 见
+        FoliaNativePlugin.requestAllFilesAccess。
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!--
         壁纸的可视化叠层：WallpaperService 本身只能往 Surface 上画 GLES，
         画不了 PixiJS 那套可视化，所以要在壁纸之上叠一个 WebView 窗口来跑同一套渲染代码。
         属于「用户必须手动授权」的权限（设置 → 应用 → 显示在其他应用上层）。

@@ -64,6 +64,8 @@ public class FoliaPlaybackService extends android.app.Service {
     private long cachedDurationMs = 0L;
     private long cachedPositionMs = 0L;
     private boolean cachedPlaying = false;
+    /** 封面角标（通知 small icon）的资源 id；0 = 还没收到过，用缺省。 */
+    private int cachedBadgeRes = 0;
     /** 已经调用过 startForeground 了；见 promoteToForeground()。 */
     private boolean foregrounded = false;
 
@@ -261,6 +263,10 @@ public class FoliaPlaybackService extends android.app.Service {
         String artworkBase64 = intent.getStringExtra(EXTRA_ARTWORK);
         String artworkUrl = intent.getStringExtra(EXTRA_ARTWORK_URL);
         long durationMs = intent.getLongExtra(EXTRA_DURATION, 0L);
+        String providerBadge = intent.getStringExtra(EXTRA_PROVIDER_BADGE);
+        if (providerBadge != null) {
+            cachedBadgeRes = providerIconRes(providerBadge);
+        }
 
         // 先更新缓存，再重建通知：metadata 与 state 是两次独立调用，
         // 任何一次都要能拿到完整的通知内容。
@@ -473,6 +479,23 @@ public class FoliaPlaybackService extends android.app.Service {
         }
     }
 
+    /**
+     * 平台 key → 角标 drawable。
+     *
+     * 图标文件在 res/drawable-nodpi/ 下（ic_provider_*.png，与 src/assets/providers/ 的同一套）。
+     * 没登记的平台（含空值）一律回落 Folia 本尊 —— 通知栏角标永远画得出东西，只是不一定认得。
+     */
+    private static int providerIconRes(String badge) {
+        if (badge == null) return R.mipmap.ic_launcher;
+        switch (badge) {
+            case "netease": return R.drawable.ic_provider_netease;
+            case "qq": return R.drawable.ic_provider_qq;
+            case "kugou": return R.drawable.ic_provider_kugou;
+            case "bodian": return R.drawable.ic_provider_bodian;
+            default: return R.mipmap.ic_launcher;
+        }
+    }
+
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return;
@@ -496,7 +519,10 @@ public class FoliaPlaybackService extends android.app.Service {
      */
     private Notification buildForegroundNotification() {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_media_play)
+                // 封面角标：媒体通知会把 small icon 画在封面右下角，原本是 ic_media_play 那个 ▶，
+                // 现在换成「这首歌来自哪个平台」的应用图标（本地等自家人用 Folia 本尊）。
+                // 没收到过角标信息时（0）回落 Folia 图标，不再显示播放三角。
+                .setSmallIcon(cachedBadgeRes != 0 ? cachedBadgeRes : R.mipmap.ic_launcher)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setOnlyAlertOnce(true)
@@ -587,6 +613,8 @@ public class FoliaPlaybackService extends android.app.Service {
     static final String EXTRA_ARTWORK = "artwork";
     static final String EXTRA_ARTWORK_URL = "artworkUrl";
     static final String EXTRA_DURATION = "duration";
+    /** 封面角标（通知 small icon）用哪颗图标：当前播放来源的平台 key。 */
+    static final String EXTRA_PROVIDER_BADGE = "providerBadge";
     static final String EXTRA_STATE = "state";
     static final String EXTRA_POSITION = "position";
     /** 拖动通知栏进度条时带回的目标位置（毫秒）。 */

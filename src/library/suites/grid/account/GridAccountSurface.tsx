@@ -18,8 +18,9 @@ import {
 import OnlineProviderLoginModal from './OnlineProviderLoginModal';
 import { buildQrLoginFailureHelpProps } from './buildQrLoginFailureHelpProps';
 import ConfirmDialog from '../../../../components/shared/ConfirmDialog';
-import qqIcon from '../../../../assets/providers/qq.svg';
-import wechatIcon from '../../../../assets/providers/wechat.svg';
+import { getProviderAppIcon } from '../../../../assets/providers/appIcons';
+import qqIcon from '../../../../assets/providers/qq.png';
+import wechatIcon from '../../../../assets/providers/wechat.webp';
 
 // src/library/suites/grid/account/GridAccountSurface.tsx
 // 网格的 account surface（Library v2 · A5）：按账户 controller 的快照渲染登录弹窗（OnlineProviderLoginModal）与
@@ -57,6 +58,8 @@ const buildLoginModalProps = (
     const { session } = view;
     return {
         title: view.title,
+        // 标题上方摆当前平台的应用图标（本地/未登记的平台回落 Folia 本尊）。
+        iconUrl: getProviderAppIcon(session.providerId),
         note: view.note,
         qrCodeImg: session.qrImageUrl,
         statusText: view.status ?? '',
