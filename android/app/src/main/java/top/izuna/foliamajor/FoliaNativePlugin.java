@@ -923,6 +923,106 @@ public class FoliaNativePlugin extends Plugin {
         }
     }
 
+    /**
+     * 把一个 ref 指向的音频**复制一份进 App 私有目录**，返回 `imported-xxx` 形式的新 ref。
+     *
+     * 为什么需要它：MediaStore 那一路（扫描设备音乐库得到的歌）是按 id **现读用户原文件**的，
+     * 这一环只要出问题 —— 文件被搬走、媒体库还没刷新、某个 ROM 不给读 ——
+     * 播放就只剩一句「无法访问文件，请重新导入」，而用户的原文件根本没动过，
+     * 让他重新导入整个文件夹毫无道理。复制进私有目录之后，播放只认 App 自己的副本，
+     * 跟 MediaStore 收不收录、权限还在不在彻底脱钩，和「挑选导入」那条路一样稳。
+     *
+     * **只在真的播不出来时才调**（见 localMusicService.getAudioFromLocalSong），
+     * 不是扫描时整库复制 —— 那会把几百首歌、几个 G 平白占一遍。
+     */
+    @PluginMethod
+    public void copyLocalAudio(PluginCall call) {
+        final String ref = call.getString("ref");
+        if (ref == null || ref.isEmpty()) {
+            call.reject("Missing audio ref");
+            return;
+        }
+        final Activity activity = getActivity();
+        new Thread(() -> {
+            JSObject result = new JSObject();
+            try {
+                if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
+                localAudioServer.start();
+                String copied = materializeAudioCopy(localAudioServer.importedAudioDirectory(), ref);
+                if (copied == null) {
+                    result.put("copied", false);
+                    result.put("error", "Source is unreachable: " + ref);
+                } else {
+                    result.put("copied", true);
+                    result.put("ref", copied);
+                }
+            } catch (Exception error) {
+                result.put("copied", false);
+                result.put("error", error.getMessage() == null ? error.toString() : error.getMessage());
+            }
+            if (activity != null) activity.runOnUiThread(() -> call.resolve(result));
+            else call.resolve(result);
+        }, "folia-audio-copy").start();
+    }
+
+    /** 返回新 ref（imported-xxx）；源取不到、或拷出来是空的，都返回 null。 */
+    private String materializeAudioCopy(File directory, String ref) throws IOException {
+        // 已经是私有副本：没有「原文件」可以再拷一次，拷也拷不出别的字节。
+        if (ref.startsWith("imported-")) return null;
+
+        ContentResolver resolver = getContext().getContentResolver();
+        Uri sourceUri = null;
+        File sourceFile = null;
+        String displayName = null;
+        long fileSize = 0;
+
+        if (ref.startsWith("file-")) {
+            sourceFile = new File(ref.substring("file-".length()));
+            if (!sourceFile.isFile()) return null;
+            displayName = sourceFile.getName();
+            fileSize = sourceFile.length();
+        } else {
+            long mediaId;
+            try {
+                mediaId = Long.parseLong(ref.trim());
+            } catch (NumberFormatException error) {
+                return null;
+            }
+            sourceUri = android.content.ContentUris.withAppendedId(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaId);
+            try (Cursor cursor = resolver.query(sourceUri, new String[]{
+                MediaStore.Audio.Media.DISPLAY_NAME,
+                MediaStore.Audio.Media.SIZE,
+            }, null, null, null)) {
+                if (cursor == null || !cursor.moveToFirst()) return null;
+                displayName = cursor.getString(0);
+                fileSize = cursor.getLong(1);
+            }
+        }
+        if (displayName == null || displayName.isEmpty()) displayName = "track-" + System.currentTimeMillis();
+
+        File target = new File(directory, "imported-" + stableFileId(displayName, fileSize, directory));
+        if (target.isFile() && target.length() > 0) return target.getName();
+
+        InputStream source = sourceUri != null
+            ? resolver.openInputStream(sourceUri)
+            : new java.io.FileInputStream(sourceFile);
+        if (source == null) return null;
+        try (InputStream in = source; OutputStream sink = new FileOutputStream(target)) {
+            byte[] buffer = new byte[128 * 1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                sink.write(buffer, 0, read);
+            }
+        }
+        // 拷出来是 0 字节（授权失效 / provider 静默失败）等于没拷：删掉，别留个坏文件。
+        if (target.length() <= 0) {
+            target.delete();
+            return null;
+        }
+        return target.getName();
+    }
+
     /** 只认自己拷进去的那些文件名，挡掉 ../ 这类越界的 ref。 */
     private static File resolveImportedFile(File directory, String ref) {
         if (ref == null || !ref.startsWith("imported-")) return null;

@@ -4,7 +4,7 @@ import type { MotionValue } from 'framer-motion';
 import { LyricParserFactory } from '../utils/lyrics/LyricParserFactory';
 import { getFromCacheWithMigration, getLocalSongs, removeFromCache, saveLocalSong, saveToCache } from '../services/db';
 import { getCachedCoverUrl, loadCachedOrFetchCover } from '../services/coverCache';
-import { ensureLocalSongCoverAsset, getAudioFromLocalSong } from '../services/localMusicService';
+import { ensureLocalSongCoverAsset, getAudioFromLocalSong, getLastLocalAudioFailureReason } from '../services/localMusicService';
 import { addSongsToLocalPlaylist, buildCanonicalLocalSongIdIndex, createLocalPlaylist, getLocalPlaylists, setLocalSongFavorite } from '../services/localPlaylistService';
 import { applyLocalLibraryEntityDisplay, buildLocalQueue, buildNavidromeQueue, buildUnifiedLocalSong, buildUnifiedNavidromeSong, resolveLocalSongMetadata } from '../services/playbackAdapters';
 import { getPrefetchedData } from '../services/prefetchService';
@@ -532,7 +532,21 @@ export function useLibraryPlaybackController({
 
         const blobUrl = await getAudioFromLocalSong(localSong);
         if (!blobUrl) {
-            setStatusMsg({ type: 'error', text: t('status.localFileAccessError') || '' });
+            /*
+             * 补一句原因。没有 logcat 的机器上，「请重新导入文件夹」这一句等于什么都没说：
+             * 副本丢了 / 被网络栈挡了 / 这首歌根本没有原生引用 —— 三种的处理完全不同。
+             * 让用户一眼能把范围报出来，比再来一轮猜测强。
+             */
+            const reason = getLastLocalAudioFailureReason();
+            const suffix = reason === 'missing' ? '（本机副本已丢失）'
+                : reason === 'blocked' ? '（回环地址被挡）'
+                    : reason === 'no-server' ? '（音频服务未启动）'
+                        : reason === 'no-ref' ? '（这首歌没有原生引用）'
+                            : '';
+            setStatusMsg({
+                type: 'error',
+                text: `${t('status.localFileAccessError') || ''}${suffix}`,
+            });
             return;
         }
 

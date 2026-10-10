@@ -31,6 +31,7 @@ import { getLocalLyricFilePriority, isSameLocalLyricFormatOrder, normalizeLocalL
 import { readLyricFile } from '../utils/lyrics/lyricFileDecoding';
 import { isLocalFolderIgnored, normalizeLocalFolderPath, runLocalFolderMutation, setLocalFolderIgnored } from './localLibraryFolderIgnore';
 import {
+    copyAndroidLocalAudio,
     deleteAndroidImportedAudio,
     isAndroidNativeRuntime,
     nativeAudioUrlForRef,
@@ -1653,31 +1654,81 @@ async function blobUrlFromNativeAudioUrl(url: string): Promise<string | null> {
     }
 }
 
+/**
+ * 按 ref 取一个能播的地址：拿得到就流式播，取不到字节就整首取成 Blob。
+ * 返回 null 表示这个 ref 彻底不行（调用方据此决定要不要自己复制一份）。
+ */
+/**
+ * 上一次播放失败的原因。
+ *
+ * 没有 logcat 的机器上，「无法访问文件，请重新导入文件夹」这一句等于什么都没说：
+ * 副本丢了、请求被网络栈挡了、端口没拿到 —— 三种的处理方式完全不同。
+ * 记下来交给界面显示，用户一眼就能把范围报出来。
+ */
+export type LocalAudioFailureReason = 'missing' | 'blocked' | 'no-ref' | 'no-server' | null;
+let lastLocalAudioFailure: LocalAudioFailureReason = null;
+export const getLastLocalAudioFailureReason = (): LocalAudioFailureReason => lastLocalAudioFailure;
+
+async function playableUrlForNativeRef(ref: string): Promise<string | null> {
+    const nativeUrl = await nativeAudioUrlForRef(ref);
+    if (!nativeUrl) {
+        lastLocalAudioFailure = 'no-server';
+        return null;
+    }
+    const probe = await probeNativeAudioUrl(nativeUrl);
+    if (probe === 'ok') {
+        lastLocalAudioFailure = null;
+        return nativeUrl;
+    }
+    if (probe === 'missing') {
+        lastLocalAudioFailure = 'missing';
+        return null;
+    }
+    const blobUrl = await blobUrlFromNativeAudioUrl(nativeUrl);
+    lastLocalAudioFailure = blobUrl ? null : 'blocked';
+    return blobUrl;
+}
+
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
     // 安卓原生曲库：文件在 MediaStore 或 App 私有目录里，WebView 拿不到句柄，
     // 走原生那个回环的小服务（地址按当前端口现拼，见 nativeAudioUrlForRef）。
-    const nativeUrl = song.nativeAudioRef ? await nativeAudioUrlForRef(song.nativeAudioRef) : null;
-    if (nativeUrl) {
-        const probe = await probeNativeAudioUrl(nativeUrl);
-        if (probe === 'ok') return nativeUrl;
-
-        if (probe === 'missing') {
-            // 副本没了（清空数据、重装、导入时被判成空文件删掉等）都只会走到这里。
-            // 明确报出来，好过让 <audio> 抛一句看不懂的 Format error。
-            console.warn(`[LocalMusic] Native audio copy is gone or empty for ${song.id}: ${song.nativeAudioRef}`);
-            return null;
+    if (song.nativeAudioRef) {
+        const direct = await playableUrlForNativeRef(song.nativeAudioRef);
+        if (direct) {
+            lastLocalAudioFailure = null;
+            return direct;
         }
 
-        const blobUrl = await blobUrlFromNativeAudioUrl(nativeUrl);
-        if (blobUrl) {
-            console.warn(`[LocalMusic] Loopback audio blocked, fell back to a blob for ${song.id}`);
-            return blobUrl;
+        /*
+         * 自己复制一份。
+         *
+         * MediaStore 那一路（扫描设备音乐库）是按 id **现读用户原文件**的：
+         * 文件被搬走、媒体库还没刷新、某个 ROM 不给读，播放就只剩一句
+         * 「无法访问文件，请重新导入」—— 而用户的原文件根本没动过，
+         * 让人重新导入整个文件夹毫无道理。这里把源文件的字节拷进 App 私有目录，
+         * 之后这首歌只认那份副本，和「挑选导入」那条路一样，与 MediaStore 和权限脱钩。
+         *
+         * 只在真播不出来时拷这一首，不是扫描时整库复制 —— 那会平白占几个 G。
+         */
+        const copiedRef = await copyAndroidLocalAudio(song.nativeAudioRef);
+        if (copiedRef && copiedRef !== song.nativeAudioRef) {
+            const copiedUrl = await playableUrlForNativeRef(copiedRef);
+            if (copiedUrl) {
+                // 记住新 ref：下次直接播副本，不用再拷贝一次。
+                song.nativeAudioRef = copiedRef;
+                void saveLocalSong(song).catch((error) => {
+                    console.warn('[LocalMusic] Failed to persist the copied audio ref:', error);
+                });
+                return copiedUrl;
+            }
         }
-        console.warn(`[LocalMusic] Native audio unreachable for ${song.id}: ${nativeUrl}`);
+
+        console.warn(`[LocalMusic] Native audio unreachable for ${song.id}: ${song.nativeAudioRef}`);
         return null;
     }
+    lastLocalAudioFailure = 'no-ref';
 
     const fileHandle = await getAccessibleFileHandle(song);
 

@@ -60,6 +60,15 @@ type NativePlugin = {
     }>;
     localAudioServerPort?: () => Promise<{ port?: number }>;
     requestAllFilesAccess?: () => Promise<{ granted?: boolean }>;
+    /**
+     * 把一个 ref 指向的音频复制一份进 App 私有目录，返回新的 `imported-` ref。
+     * 只在该首歌真的播不出来时才调，不是扫描时整库复制。
+     */
+    copyLocalAudio?: (options: { ref: string }) => Promise<{
+        copied?: boolean;
+        ref?: string;
+        error?: string;
+    }>;
 };
 
 export const ANDROID_MEDIA_FOLDER_NAME = 'Android 本地音乐';
@@ -99,6 +108,39 @@ export const resolveNativeAudioServerPort = async (): Promise<number> => {
 const noteAudioServerPort = (port: unknown): void => {
     const value = Number(port) || 0;
     if (value > 0) resolvedAudioServerPort = value;
+};
+
+/**
+ * 把 ref 指向的音频**自己复制一份**进 App 私有目录，返回新 ref（失败返回 null）。
+ *
+ * 用它的理由很直接：MediaStore 那一路是按 id 现读用户原文件的，
+ * 文件被搬走、媒体库没刷新、或者某个 ROM 不给读，播放就只剩一句
+ * 「无法访问文件，请重新导入」—— 而用户的原文件根本没动过，
+ * 让人重新导入整个文件夹毫无道理。复制一份之后，播放只认 App 自己的副本，
+ * 和「挑选导入」那条路一样，与 MediaStore 和权限彻底脱钩。
+ *
+ * 只在真播不出来时调一次，之后那首歌就用新 ref，不会再回到原文件。
+ */
+export const copyAndroidLocalAudio = async (ref: string): Promise<string | null> => {
+    const plugin = getPlugin();
+    if (!ref || !plugin?.copyLocalAudio) return null;
+    try {
+        const response = await plugin.copyLocalAudio({ ref });
+        if (!response?.copied) {
+            noteLibraryStep('local', 'copy:failed', { ref, error: response?.error });
+            return null;
+        }
+        const next = response.ref;
+        if (!next) return null;
+        noteLibraryStep('local', 'copy:ok', { from: ref, to: next });
+        return next;
+    } catch (error) {
+        noteLibraryStep('local', 'copy:error', {
+            ref,
+            message: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
 };
 
 export const nativeAudioUrlForRef = async (ref: string): Promise<string | null> => {
