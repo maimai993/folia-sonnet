@@ -157,6 +157,9 @@ type UseLyricsWallpaperFeedOptions = {
     /** App 当前主题，用来让壁纸与 App 用同一套配色和动效强度。 */
     accentColor?: string | null;
     backgroundColor?: string | null;
+    /** 主文本色 / 次色。叠层那份页面拿不到 App 的主题对象，只能靠这里下发。 */
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
     animationIntensity?: 'calm' | 'normal' | 'chaotic' | null;
 };
 
@@ -201,6 +204,8 @@ export const useLyricsWallpaperFeed = ({
     duration,
     accentColor,
     backgroundColor,
+    primaryColor,
+    secondaryColor,
     animationIntensity,
 }: UseLyricsWallpaperFeedOptions): void => {
     const enabled = isCapacitorAndroid();
@@ -327,6 +332,8 @@ export const useLyricsWallpaperFeed = ({
             artist: artist ?? '',
             accent: accentColor || DEFAULT_ACCENT,
             backgroundColor: backgroundColor || '#09090b',
+            primaryColor: primaryColor || undefined,
+            secondaryColor: secondaryColor || undefined,
             motion: MOTION_BY_INTENSITY[animationIntensity ?? 'normal'] ?? 1,
             cover: wallpaperCover,
             background: backgroundMode,
@@ -356,8 +363,8 @@ export const useLyricsWallpaperFeed = ({
         // getCurrentTime 是稳定的取数函数，不参与依赖比较以外的重算。
         // wallpaperCover 在依赖里：封面异步到位后再推一次，壁纸才能拿到它和从它取的高亮色。
     }, [active, lyrics, title, artist, backgroundMode, backgroundImage, wallpaperVisualizer,
-        accentColor, backgroundColor, animationIntensity, backgroundBlur, showProgress,
-        showTranslation, tuning, durationMs, wallpaperCover]);
+        accentColor, backgroundColor, primaryColor, secondaryColor, animationIntensity, backgroundBlur,
+        showProgress, showTranslation, tuning, durationMs, wallpaperCover]);
 
     // 播放/暂停要立刻通知，否则暂停后原生还在按墙钟往前走。
     React.useEffect(() => {

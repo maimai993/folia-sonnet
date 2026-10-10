@@ -34,6 +34,16 @@ export interface FoliaWallpaperPublishOptions {
     accent?: string;
     /** App 当前主题的底色，形如 #09090b。 */
     backgroundColor?: string;
+    /**
+     * App 当前主题的**主文本色**。
+     *
+     * 叠层页面（另一个 WebView）的主题是拿内置主题打底、只覆盖高亮色和底色搭出来的，
+     * 主文本色因此永远是内置主题的 —— AI / 自定义主题换上去，歌词颜色一点没变。
+     * 这两个颜色单独下发，叠层才可能跟 App 用同一套配色。
+     */
+    primaryColor?: string;
+    /** App 当前主题的次色（未唱到的那些行、辅助文本）。 */
+    secondaryColor?: string;
     /** 动效强度倍数：calm 0.6 / normal 1.0 / chaotic 1.5。 */
     motion?: number;
     /** 封面 base64。体积大，只在换歌时发。 */

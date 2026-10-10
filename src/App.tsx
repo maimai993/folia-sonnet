@@ -1482,6 +1482,10 @@ export default function App() {
         // 让壁纸沿用 App 当前的主题色、底色与动效强度，避免两套色调各画各的。
         accentColor: theme?.accentColor ?? null,
         backgroundColor: theme?.backgroundColor ?? null,
+        // 叠层是另一个 WebView，拿不到 App 的主题对象：主文本色 / 次色也得一并推过去，
+        // 否则它只能用内置主题打底，AI 主题换上去颜色一点没变。
+        primaryColor: theme?.primaryColor ?? null,
+        secondaryColor: theme?.secondaryColor ?? null,
         animationIntensity: theme?.animationIntensity ?? null,
     });
 

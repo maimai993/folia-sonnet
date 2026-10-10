@@ -1,0 +1,47 @@
+package top.izuna.foliamajor.wallpaper;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+/**
+ * 叠层要用的「文本主色 / 次色」，由主 WebView 下发。
+ *
+ * 为什么单独放一张表，而不是塞进 WallpaperLyricsState 的 Snapshot：
+ * Snapshot 那串构造参数已经有十几个、六个构造点全在用，为了两个颜色去动它
+ * 风险远大于收益。这里只存叠层需要、而 Snapshot 不带的那两个颜色；
+ * 高亮色与底色仍然走原来的通路（publish 那一路已经在推）。
+ *
+ * 为什么必须单独存：叠层页面（wallpaperSurface）的主题是拿
+ * `buildBuiltinDualTheme()` 打底、只覆盖高亮色和底色搭出来的 ——
+ * 于是**主文本色永远等于内置主题的**，AI / 自定义主题里那套配色一个字都传不过去。
+ * 表现就是「App 里换成了 AI 主题，桌面叠层的歌词还是老样子」。
+ */
+public final class WallpaperThemePalette {
+    private static final String PREFS = "folia_wallpaper_theme_palette";
+    private static final String KEY_PRIMARY = "primary";
+    private static final String KEY_SECONDARY = "secondary";
+
+    private WallpaperThemePalette() {}
+
+    public static void save(Context context, String primary, String secondary) {
+        if (context == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        // 传空串 = 「这次没有这个值」，清掉，别让叠层一直挂着上一首歌的颜色。
+        if (primary == null || primary.isEmpty()) editor.remove(KEY_PRIMARY);
+        else editor.putString(KEY_PRIMARY, primary);
+        if (secondary == null || secondary.isEmpty()) editor.remove(KEY_SECONDARY);
+        else editor.putString(KEY_SECONDARY, secondary);
+        editor.apply();
+    }
+
+    /** 下标 0 = 主文本色，1 = 次色；没有就是空串。 */
+    public static String[] read(Context context) {
+        String[] result = { "", "" };
+        if (context == null) return result;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        result[0] = prefs.getString(KEY_PRIMARY, "");
+        result[1] = prefs.getString(KEY_SECONDARY, "");
+        return result;
+    }
+}

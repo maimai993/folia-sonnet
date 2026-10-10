@@ -26,6 +26,7 @@ import top.izuna.foliamajor.wallpaper.WallpaperBackgroundVideo;
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsFont;
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState;
 import top.izuna.foliamajor.wallpaper.WallpaperOverlay;
+import top.izuna.foliamajor.wallpaper.WallpaperThemePalette;
 
 /**
  * 歌词壁纸的 Web 侧入口。
@@ -65,6 +66,19 @@ public class FoliaWallpaperPlugin extends Plugin {
         boolean isPlaying = playing != null && playing;
         Boolean showTranslation = call.getBoolean("translation");
         java.util.Map<String, Float> tuning = readTuning(call.getObject("tuning"));
+
+        /*
+         * 完整主题色（文本主色 / 次色）单独下发。
+         *
+         * 叠层那份页面是另一个 WebView，它的主题是拿内置主题打底、只覆盖高亮色和底色
+         * 搭出来的 —— 主文本色因此永远是内置主题的。App 里换成 AI / 自定义主题之后，
+         * 叠层的歌词颜色一点没变（「AI 主题在桌面叠层上不生效」）。
+         * 这两个颜色不走 Snapshot（那串构造参数改动面太大），单独存一张小表。
+         */
+        WallpaperThemePalette.save(
+            getContext(),
+            call.getString("primaryColor"),
+            call.getString("secondaryColor"));
 
         if (timeline == null && positionMs >= 0L) {
             // 常规心跳：只挪时间锚点，不碰时间轴，也不落盘。

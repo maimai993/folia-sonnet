@@ -76,6 +76,10 @@ export type WallpaperPayload = {
     artist?: string;
     accent?: string;
     backgroundColor?: string;
+    /** App 当前主题的主文本色。没有（旧包）时退回从高亮色派生，行为不变。 */
+    primaryColor?: string;
+    /** App 当前主题的次色（未唱到的那些行）。 */
+    secondaryColor?: string;
     visualizer?: string;
     lines?: WallpaperTimedLine[];
     firstIndex?: number;
@@ -250,6 +254,12 @@ const WallpaperSurface: React.FC = () => {
     const [smoothBase, setSmoothBase] = React.useState<string | null>(null);
     const accentRef = React.useRef<string | null>(null);
     const baseRef = React.useRef<string | null>(null);
+    // 主文本色 / 次色也走同一套平滑：它们现在是 App 主题的一部分，
+    // 换歌（换主题）时同样是瞬间替换，不插值的话歌词颜色会硬跳一下。
+    const [smoothPrimary, setSmoothPrimary] = React.useState<string | null>(null);
+    const [smoothSecondary, setSmoothSecondary] = React.useState<string | null>(null);
+    const primaryRef = React.useRef<string | null>(null);
+    const secondaryRef = React.useRef<string | null>(null);
 
     const lines = React.useMemo(() => toLines(payload), [payload]);
     const tunings = React.useMemo(
@@ -275,11 +285,20 @@ const WallpaperSurface: React.FC = () => {
          * smooth 还是 null（首份颜色没到）时退回 payload 原值，行为与之前一致。
          */
         const accent = smoothAccent || payload.accent || skeleton.accentColor;
+        /*
+         * 主文本色 / 次色一律用 App 推下来的那一份。
+         *
+         * 之前这两个是从高亮色派生的（主色 = 高亮色、次色 = 高亮色混白），
+         * 于是叠层的配色只由高亮色决定：App 里换成 AI / 自定义主题之后，
+         * 高亮色跟着变了、文本色却还是按"高亮色"那一套算出来的 ——
+         * 叠层看着就是「主题没换」。现在直接用 App 那份，两边才是一套。
+         */
+        const primary = smoothPrimary || payload.primaryColor || accent;
         return {
             ...skeleton,
             name: 'wallpaper',
             backgroundColor: smoothBase || payload.backgroundColor || skeleton.backgroundColor,
-            primaryColor: accent,
+            primaryColor: primary,
             accentColor: accent,
             /*
              * 次色必须和主色拉开明度，不能直接等于主色。
@@ -288,9 +307,10 @@ const WallpaperSurface: React.FC = () => {
              * 一旦等于背景色，那一行就等于隐形了（用户报的「有一句歌词和背景同色」）。
              * 朝白色混一档，既和主色同源，又保证在任何底色上都看得见。
              */
-            secondaryColor: lightenColor(accent, 0.5),
+            secondaryColor: smoothSecondary || payload.secondaryColor || lightenColor(accent, 0.5),
         };
-    }, [dualTheme, isDaylight, smoothAccent, smoothBase, payload.accent, payload.backgroundColor]);
+    }, [dualTheme, isDaylight, smoothAccent, smoothBase, smoothPrimary, smoothSecondary,
+        payload.accent, payload.backgroundColor, payload.primaryColor, payload.secondaryColor]);
 
     React.useEffect(() => {
         // 主题跟随系统深浅色，和播放页的判定保持一致。
@@ -336,6 +356,16 @@ const WallpaperSurface: React.FC = () => {
             if (nextBase !== undefined) {
                 baseRef.current = nextBase;
                 setSmoothBase(nextBase);
+            }
+            const nextPrimary = stepColorTowards(primaryRef.current, latest.primaryColor, dtMs);
+            if (nextPrimary !== undefined) {
+                primaryRef.current = nextPrimary;
+                setSmoothPrimary(nextPrimary);
+            }
+            const nextSecondary = stepColorTowards(secondaryRef.current, latest.secondaryColor, dtMs);
+            if (nextSecondary !== undefined) {
+                secondaryRef.current = nextSecondary;
+                setSmoothSecondary(nextSecondary);
             }
             frame = requestAnimationFrame(tick);
         };

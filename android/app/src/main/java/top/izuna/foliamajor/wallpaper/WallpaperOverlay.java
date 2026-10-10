@@ -2338,6 +2338,20 @@ public final class WallpaperOverlay {
             out.put("visualizer", snapshot.visualizerMode);
             out.put("accent", colorToHex(snapshot.accent));
             out.put("backgroundColor", colorToHex(snapshot.baseColor));
+            /*
+             * 主文本色 / 次色由主 WebView 单独下发（见 WallpaperThemePalette）。
+             *
+             * 不补这两个的话，叠层只能用「内置主题打底 + 高亮色」拼一个主题出来，
+             * 主文本色永远是内置的 —— App 里换成 AI / 自定义主题，
+             * 叠层的歌词颜色一点没变。
+             */
+            String[] palette = WallpaperThemePalette.read(context);
+            if (palette[0] != null && !palette[0].isEmpty()) {
+                out.put("primaryColor", palette[0]);
+            }
+            if (palette[1] != null && !palette[1].isEmpty()) {
+                out.put("secondaryColor", palette[1]);
+            }
 
             // 必须发**整条时间轴**，不能只发当前行附近那几行。
             // 可视化的「唱完了」是按它拿到的 lines 判定的 ——
