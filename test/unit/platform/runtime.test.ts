@@ -37,12 +37,15 @@ describe('platform runtime', () => {
     expect(getRuntimeEnvironment()).toBe('electron');
   });
 
-  it('recognizes Capacitor Android and disables local music import', () => {
+  // 安卓的本地曲库走原生（MediaStore 扫描 / 系统文件管理器 / 本地音频服务），
+  // 不再是 File System Access API，所以这里必须支持 —— 返回 false 的话首页会把
+  // 「本地」页签硬掰回「歌单」，点本地就像没反应。
+  it('recognizes Capacitor Android and keeps local music import available', () => {
     capacitorState.native = true;
     capacitorState.platform = 'android';
     expect(isCapacitorAndroid()).toBe(true);
     expect(getRuntimeEnvironment()).toBe('capacitor-android');
-    expect(supportsLocalMusicImport()).toBe(false);
+    expect(supportsLocalMusicImport()).toBe(true);
   });
 
   it('does not treat a native non-Android host as Android', () => {
