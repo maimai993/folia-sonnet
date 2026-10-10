@@ -1614,13 +1614,70 @@ async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
     }
 }
 
+type NativeAudioProbe = 'ok' | 'missing' | 'blocked';
+
+/**
+ * 播放前先问一次本机回环服务：这个 ref 到底还能不能取到字节。
+ *
+ * 之前是把 http://127.0.0.1:<port>/audio/<ref> 直接丢给 <audio> —— 副本丢了、空了、
+ * 或者请求被网络栈（明文 / CORS / Range）挡掉，浏览器报出来**一模一样**：
+ * networkState=3、mediaErrorCode=4，就一句 "MEDIA_ELEMENT_ERROR: Format error"。
+ * 拿 1 个字节的 Range 请求先探一次，三种情况就能分开处理。
+ */
+async function probeNativeAudioUrl(url: string): Promise<NativeAudioProbe> {
+    try {
+        const response = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+        if (response.ok) return 'ok';
+        // 服务侧对「文件不存在」和「文件是空的」都回 404（并把原因写进 logcat）。
+        return response.status === 404 ? 'missing' : 'blocked';
+    } catch {
+        // fetch 直接抛：连字节都没拿到，属于网络层被挡，不是文件本身的问题。
+        return 'blocked';
+    }
+}
+
+/**
+ * 把整首取成本地 Blob 再换 object URL。
+ *
+ * 这是非安卓本地播放一直在走的路（getAudioFromFile 也是 object URL）。换成它之后，
+ * 回环地址在 <audio> 上可能遇到的 CORS / Range / 明文 / 混合内容这些环节全部不存在 ——
+ * object URL 是同源资源。只在「流式那条路走不通」时才用，正常情况不花这个内存。
+ */
+async function blobUrlFromNativeAudioUrl(url: string): Promise<string | null> {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        return createSafeObjectUrl(await response.blob());
+    } catch {
+        return null;
+    }
+}
+
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
     // 安卓原生曲库：文件在 MediaStore 或 App 私有目录里，WebView 拿不到句柄，
     // 走原生那个回环的小服务（地址按当前端口现拼，见 nativeAudioUrlForRef）。
     const nativeUrl = song.nativeAudioRef ? await nativeAudioUrlForRef(song.nativeAudioRef) : null;
-    if (nativeUrl) return nativeUrl;
+    if (nativeUrl) {
+        const probe = await probeNativeAudioUrl(nativeUrl);
+        if (probe === 'ok') return nativeUrl;
+
+        if (probe === 'missing') {
+            // 副本没了（清空数据、重装、导入时被判成空文件删掉等）都只会走到这里。
+            // 明确报出来，好过让 <audio> 抛一句看不懂的 Format error。
+            console.warn(`[LocalMusic] Native audio copy is gone or empty for ${song.id}: ${song.nativeAudioRef}`);
+            return null;
+        }
+
+        const blobUrl = await blobUrlFromNativeAudioUrl(nativeUrl);
+        if (blobUrl) {
+            console.warn(`[LocalMusic] Loopback audio blocked, fell back to a blob for ${song.id}`);
+            return blobUrl;
+        }
+        console.warn(`[LocalMusic] Native audio unreachable for ${song.id}: ${nativeUrl}`);
+        return null;
+    }
 
     const fileHandle = await getAccessibleFileHandle(song);
 

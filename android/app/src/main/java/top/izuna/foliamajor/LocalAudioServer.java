@@ -18,12 +18,20 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * 本地音频流服务器。
@@ -39,11 +47,30 @@ import java.util.concurrent.Executors;
 final class LocalAudioServer {
     private static final String TAG = "LocalAudioServer";
     private static final String AUDIO_PATH_PREFIX = "/audio/";
+    private static final String REMOTE_AUDIO_PATH_PREFIX = "/remote-audio/";
     private static final String IMPORTED_PREFIX = "imported-";
     /** 直接按绝对路径流原文件的 ref 前缀（文件系统兜底扫描出来的歌，不复制进私有目录）。 */
     private static final String FILE_PREFIX = "file-";
+    /*
+     * 只能代哪些主机的远端音频。
+     *
+     * 这个服务监听在 127.0.0.1 上，设备上任何应用都能连上来 —— 放行任意 URL 就等于
+     * 开了一个「任读全网」的口子，所以按主机白名单收口。目前只有 Kuwo（波点）需要它：
+     * 它的 CDN 不下发 CORS 头，而 <audio> 带 crossOrigin="anonymous"，
+     * 于是播放被同源策略挡掉（表现是 MEDIA_ELEMENT_ERROR: Format error）。
+     */
+    private static final String[] REMOTE_AUDIO_HOST_SUFFIXES = { "kuwo.cn", "music.126.net" };
+    private static final String REMOTE_AUDIO_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36";
+    private static final String REMOTE_AUDIO_REFERER = "https://www.kuwo.cn/";
+    private static final String NETEASE_REMOTE_AUDIO_REFERER = "https://music.163.com/";
     private final Context context;
     private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final OkHttpClient remoteAudioClient = new OkHttpClient.Builder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build();
+    private final Map<String, String> remoteAudioUrls = new LinkedHashMap<>();
     private ServerSocket serverSocket;
     private int port;
 
@@ -73,6 +100,58 @@ final class LocalAudioServer {
 
     int getPort() {
         return port;
+    }
+
+    /**
+     * 把一个远端音频地址挂到本地服务上，返回 `http://127.0.0.1:<port>/remote-audio/<token>`。
+     *
+     * 为什么要绕这一圈：<audio> 带 crossOrigin="anonymous"，而 Kuwo（波点）的 CDN
+     * 根本不下发 Access-Control-Allow-Origin —— 请求连字节都拿不到，报出来却是
+     * 一句毫无特征的 "MEDIA_ELEMENT_ERROR: Format error" / "The element has no supported sources"。
+     * 本地服务回包带 ACAO: *，同源检查就过了；Range 也照样转发，拖进度条不受影响。
+     */
+    synchronized String registerRemoteAudio(String value) throws IOException {
+        URL url = new URL(value);
+        String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.ROOT);
+        if (!("http".equals(url.getProtocol()) || "https".equals(url.getProtocol()))
+            || !isRemoteAudioHostAllowed(host)) {
+            throw new IOException("Unsupported remote audio host");
+        }
+        int localPort = start();
+        String token = android.util.Base64.encodeToString(
+            value.getBytes(StandardCharsets.UTF_8),
+            android.util.Base64.URL_SAFE | android.util.Base64.NO_PADDING | android.util.Base64.NO_WRAP
+        );
+        synchronized (remoteAudioUrls) {
+            remoteAudioUrls.remove(token);
+            remoteAudioUrls.put(token, value);
+            while (remoteAudioUrls.size() > 128) {
+                String oldest = remoteAudioUrls.keySet().iterator().next();
+                remoteAudioUrls.remove(oldest);
+            }
+        }
+        return "http://127.0.0.1:" + localPort + REMOTE_AUDIO_PATH_PREFIX + token;
+    }
+
+    /** 有些 CDN 看 Referer 决定给不给资源：不带时回的是一段 HTML 而不是音频。 */
+    private static String remoteAudioReferer(String value) {
+        try {
+            String host = new URL(value).getHost();
+            if (host != null && (host.equals("music.126.net") || host.endsWith(".music.126.net"))) {
+                return NETEASE_REMOTE_AUDIO_REFERER;
+            }
+        } catch (Exception ignored) {
+            return REMOTE_AUDIO_REFERER;
+        }
+        return REMOTE_AUDIO_REFERER;
+    }
+
+    private static boolean isRemoteAudioHostAllowed(String host) {
+        if (host.isEmpty()) return false;
+        for (String suffix : REMOTE_AUDIO_HOST_SUFFIXES) {
+            if (host.equals(suffix) || host.endsWith("." + suffix)) return true;
+        }
+        return false;
     }
 
     /** 复制进私有目录的音频存放位置。 */
@@ -106,6 +185,30 @@ final class LocalAudioServer {
             String path = requestParts[1];
             int query = path.indexOf('?');
             if (query >= 0) path = path.substring(0, query);
+            /*
+             * 预检（OPTIONS）必须自己答。
+             *
+             * 跨源请求只要带了 Range 之外的头、或者某些 WebView 版本对 Range 也走预检，
+             * 浏览器就会先发一个 OPTIONS —— 服务不答就是 CORS 失败，
+             * 而失败的表现和「文件不存在」一模一样（mediaErrorCode=4）。
+             * 答一个 204 并放行 Range，探测和播放两条路都才走得通。
+             */
+            if ("OPTIONS".equals(requestParts[0])) {
+                String response = "HTTP/1.1 204 No Content\r\n"
+                    + "Access-Control-Allow-Origin: *\r\n"
+                    + "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n"
+                    + "Access-Control-Allow-Headers: range, content-range, content-length\r\n"
+                    + "Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n"
+                    + "Access-Control-Max-Age: 86400\r\n"
+                    + "Content-Length: 0\r\nConnection: close\r\n\r\n";
+                output.write(response.getBytes(StandardCharsets.US_ASCII));
+                output.flush();
+                return;
+            }
+            if (path.startsWith(REMOTE_AUDIO_PATH_PREFIX)) {
+                streamRemoteAudio(output, requestParts, headers, path.substring(REMOTE_AUDIO_PATH_PREFIX.length()));
+                return;
+            }
             if (!path.startsWith(AUDIO_PATH_PREFIX)) {
                 writeStatus(output, 404, "Not Found");
                 return;
@@ -203,6 +306,98 @@ final class LocalAudioServer {
             guessMimeType(filePath),
             () -> new FileInputStream(target)
         );
+    }
+
+    /**
+     * 代转发一个远端音频（只有白名单主机能用，见 {@link #registerRemoteAudio}）。
+     *
+     * Range 原样往上带：拖进度条时 <audio> 会发 `bytes=xxx-`，上游回 206，
+     * 我们也要回 206 并把它的 Content-Range 转给 WebView，否则播放器会认为
+     * 服务端不支持拖动，重新整首下载一次。
+     */
+    private void streamRemoteAudio(
+        BufferedOutputStream output,
+        String[] requestParts,
+        Map<String, String> headers,
+        String token
+    ) throws IOException {
+        String target;
+        synchronized (remoteAudioUrls) {
+            target = remoteAudioUrls.get(token);
+        }
+        if (target == null) {
+            Log.w(TAG, "remote audio token unknown: " + token);
+            writeStatus(output, 404, "Not Found");
+            return;
+        }
+
+        Request.Builder request = new Request.Builder().url(target);
+        // 有些 CDN 看 UA / Referer 决定给不给资源，不带的话会回一段 HTML 而不是音频
+        // —— 那种回包喂进 <audio> 正是「Format error」的经典来源。
+        request.header("User-Agent", REMOTE_AUDIO_USER_AGENT);
+        request.header("Referer", remoteAudioReferer(target));
+        String range = headers.get("range");
+        if (range != null && range.startsWith("bytes=")) request.header("Range", range);
+
+        Response upstream = remoteAudioClient.newCall(request.build()).execute();
+        try {
+            ResponseBody body = upstream.body();
+            if (!upstream.isSuccessful() || body == null) {
+                Log.w(TAG, "remote audio upstream " + upstream.code() + " for " + target);
+                writeStatus(output, 502, "Upstream Error");
+                return;
+            }
+            String contentType = body.contentType() != null ? body.contentType().toString() : "audio/mpeg";
+            String contentRange = upstream.header("Content-Range");
+            long size = body.contentLength();
+            // 上游不给长度（chunked）时，拿 Content-Range 里的 total 兜底。
+            if (size < 0 && contentRange != null) {
+                int slash = contentRange.indexOf('/');
+                if (slash >= 0 && slash + 1 < contentRange.length()) {
+                    try {
+                        size = Long.parseLong(contentRange.substring(slash + 1).trim());
+                    } catch (NumberFormatException ignored) {
+                        size = -1;
+                    }
+                }
+            }
+            boolean partial = upstream.code() == 206 || contentRange != null;
+
+            Log.i(TAG, "remote " + target + " -> " + upstream.code()
+                + " type=" + contentType + " size=" + size + " range=" + (contentRange == null ? "-" : contentRange));
+
+            StringBuilder response = new StringBuilder();
+            response.append(partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
+            response.append("Content-Type: ").append(contentType).append("\r\n");
+            response.append("Accept-Ranges: bytes\r\n");
+            // 这一整条链路存在的唯一理由就是同源：没有这两行，<audio crossOrigin="anonymous">
+            // 依然会被 CORS 挡在门外，和直连 CDN 没区别。
+            response.append("Access-Control-Allow-Origin: *\r\n");
+            response.append("Access-Control-Allow-Headers: range, content-range, content-length\r\n");
+            response.append("Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n");
+            response.append("Connection: close\r\n");
+            if (size >= 0) {
+                response.append("Content-Length: ").append(size).append("\r\n");
+                if (contentRange != null) {
+                    response.append("Content-Range: ").append(contentRange).append("\r\n");
+                }
+            }
+            response.append("\r\n");
+            output.write(response.toString().getBytes(StandardCharsets.US_ASCII));
+
+            if ("GET".equals(requestParts[0])) {
+                try (InputStream audio = body.byteStream()) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int read;
+                    while ((read = audio.read(buffer)) != -1) {
+                        output.write(buffer, 0, read);
+                    }
+                }
+            }
+            output.flush();
+        } finally {
+            upstream.close();
+        }
     }
 
     private interface StreamSupplier {
@@ -335,9 +530,23 @@ final class LocalAudioServer {
         return value == -1 && line.length() == 0 ? null : line.toString();
     }
 
+    /**
+     * 错误响应也一定要带 CORS 头。
+     *
+     * <audio> 带 crossOrigin="anonymous"，响应缺 Access-Control-Allow-Origin 时，
+     * 浏览器把「CORS 被拒」和「文件不存在 / 空文件」报成一模一样的东西：
+     * networkState=3、mediaErrorCode=4（MEDIA_ERR_SRC_NOT_SUPPORTED）——
+     * 也就是那句毫无特征的 MEDIA_ELEMENT_ERROR: Format error。
+     * 带上 ACAO 之后，上层用 fetch 探一次就能读到真实的 404/502，不用再猜。
+     */
     private static void writeStatus(OutputStream output, int status, String message) throws IOException {
         String response = "HTTP/1.1 " + status + " " + message + "\r\n"
-            + "Content-Length: 0\r\nConnection: close\r\n\r\n";
+            + "Content-Type: text/plain\r\n"
+            + "Content-Length: 0\r\n"
+            + "Access-Control-Allow-Origin: *\r\n"
+            + "Access-Control-Allow-Headers: range, content-range, content-length\r\n"
+            + "Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n"
+            + "Connection: close\r\n\r\n";
         output.write(response.getBytes(StandardCharsets.US_ASCII));
         output.flush();
     }

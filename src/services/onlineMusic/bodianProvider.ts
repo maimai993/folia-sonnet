@@ -7,6 +7,7 @@ import { bodianPage, normalizeBodianCollection, normalizeBodianSong, normalizeBo
 import { bodianCatalog } from './bodianCatalog';
 import { bodianLibrary, clearBodianLibraryCache } from './bodianLibrary';
 import { bodianMutations } from './bodianMutations';
+import { proxyNativeRemoteAudioUrl } from '../nativeRemoteAudio';
 import type { BodianLyricsPayload } from 'bodian-music-api';
 
 // src/services/onlineMusic/bodianProvider.ts
@@ -76,7 +77,11 @@ export const bodianProvider: OnlineMusicProvider = {
             });
             // Full-track caches and timing must never ingest a 30-second preview as the complete song.
             if (audio.preview) throw new OnlineProviderError('preview-only', 'Bodian only offers a preview; sign in with an eligible account', 'bodian');
-            return audio;
+            // 波点的直链挂在 Kuwo 的 CDN 上，不下发 CORS 头，而 <audio> 带 crossOrigin="anonymous"
+            // —— 直连时字节被同源检查挡掉，报出来却只是一句 Format error。真机上换成
+            // 本地回环服务代转（回包带 ACAO），别的平台原样返回。
+            const url = await proxyNativeRemoteAudioUrl(audio.url);
+            return url && url !== audio.url ? { ...audio, url } : audio;
         },
         getAvailability(song) {
             return song.sourceRef?.kind === 'online' && song.sourceRef.providerData?.unavailable

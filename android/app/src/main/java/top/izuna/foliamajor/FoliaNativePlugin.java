@@ -888,6 +888,41 @@ public class FoliaNativePlugin extends Plugin {
         }
     }
 
+    /**
+     * 把一个远端音频地址换成「本地服务代转发」的地址。
+     *
+     * Web 侧拿到的 CDN 直链（波点走 Kuwo）没有 CORS 头，而 <audio> 带
+     * crossOrigin="anonymous"，于是字节根本进不来、报一句毫无特征的 Format error。
+     * 这里换成 http://127.0.0.1:<port>/remote-audio/<token>，由原生代转并回包带 ACAO。
+     * 失败（非白名单主机 / 服务起不来）时 resolve 成原地址，让播放照旧尝试一次直连，
+     * 别因为代理本身出问题就把整首歌判死。
+     */
+    @PluginMethod
+    public void registerRemoteAudio(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            JSObject empty = new JSObject();
+            empty.put("url", url == null ? "" : url);
+            empty.put("proxied", false);
+            call.resolve(empty);
+            return;
+        }
+        try {
+            if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
+            String proxied = localAudioServer.registerRemoteAudio(url);
+            JSObject result = new JSObject();
+            result.put("url", proxied);
+            result.put("proxied", true);
+            call.resolve(result);
+        } catch (Exception error) {
+            JSObject result = new JSObject();
+            result.put("url", url);
+            result.put("proxied", false);
+            result.put("error", String.valueOf(error.getMessage()));
+            call.resolve(result);
+        }
+    }
+
     /** 只认自己拷进去的那些文件名，挡掉 ../ 这类越界的 ref。 */
     private static File resolveImportedFile(File directory, String ref) {
         if (ref == null || !ref.startsWith("imported-")) return null;
