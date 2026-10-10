@@ -1,25 +1,45 @@
 package top.izuna.foliamajor;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.DocumentsContract;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.webkit.CookieManager;
 
+import androidx.activity.result.ActivityResult;
+
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -38,10 +58,30 @@ import okhttp3.ResponseBody;
  * 都在设备本地完成 —— 不再需要用户自己搭任何后端。
  *
  * 另外顺手提供一个 Android 上绕不开的小东西：返回键与退出（exitApp）。
+ *
+ * 本地音乐也在这里：安卓 WebView 没有 File System Access API（showDirectoryPicker），
+ * 曲库只能由原生侧给 —— MediaStore 扫描设备音乐库，或用系统文件管理器挑文件/文件夹，
+ * 再通过 LocalAudioServer 把音频以 http 喂回 WebView。
  */
-@CapacitorPlugin(name = "FoliaNative")
+@CapacitorPlugin(
+    name = "FoliaNative",
+    permissions = {
+        @Permission(
+            alias = "audio",
+            strings = { Manifest.permission.READ_MEDIA_AUDIO }
+        ),
+        @Permission(
+            alias = "audioLegacy",
+            strings = { Manifest.permission.READ_EXTERNAL_STORAGE }
+        )
+    }
+)
 public class FoliaNativePlugin extends Plugin {
     private static volatile FoliaNativePlugin instance;
+
+    /** 文件/文件夹选择器只用一份：连点两次会开两个系统界面，回来的回调就串了。 */
+    private boolean isAudioPickerOpen = false;
+    private LocalAudioServer localAudioServer;
 
     private final OkHttpClient client = new OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -335,6 +375,381 @@ public class FoliaNativePlugin extends Plugin {
         Activity activity = getActivity();
         call.resolve();
         if (activity != null) activity.runOnUiThread(activity::finish);
+    }
+
+    // ---- 本地音乐（安卓没有 File System Access API，曲库只能由原生侧给）----
+
+    @PluginMethod
+    public void scanLocalAudio(PluginCall call) {
+        String alias = audioPermissionAlias();
+        if (getPermissionState(alias) != PermissionState.GRANTED) {
+            requestPermissionForAlias(alias, call, "audioPermissionCallback");
+            return;
+        }
+        resolveLocalAudioScan(call);
+    }
+
+    /**
+     * Android 13 起读音频用 READ_MEDIA_AUDIO，之前的版本用 READ_EXTERNAL_STORAGE。
+     *
+     * 这两个权限不能放在同一个别名里：被申请的那一个拿到授权后，另一个在系统看来仍是
+     * 拒绝，而 Capacitor 对同一别名取「全部授权才算授权」，结果永远停在 PROMPT，
+     * 扫描会被误判成「权限被拒」。所以按系统版本分开取别名。
+     */
+    private String audioPermissionAlias() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ? "audio" : "audioLegacy";
+    }
+
+    @PermissionCallback
+    private void audioPermissionCallback(PluginCall call) {
+        if (getPermissionState(audioPermissionAlias()) == PermissionState.GRANTED) {
+            resolveLocalAudioScan(call);
+        } else {
+            call.reject("Audio permission denied");
+        }
+    }
+
+    @PluginMethod
+    public void pickAudioFiles(PluginCall call) {
+        if (isAudioPickerOpen) {
+            call.reject("Audio picker is already open");
+            return;
+        }
+        // 用 Capacitor 自己的活动回调机制（@ActivityCallback + startActivityForResult），
+        // 而不是在 load() 里直接 registerForActivityResult：后者依赖活动生命周期时序，
+        // 在部分设备上会拿不到可用的启动器，表现就是「点了导入毫无反应」。
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("audio/*")
+            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        isAudioPickerOpen = true;
+        startActivityForResult(call, intent, "handlePickedAudio");
+    }
+
+    /** 选择整个文件夹；原生侧递归扫描其中的音频，用户可以一次导入整张专辑/目录。 */
+    @PluginMethod
+    public void pickAudioFolder(PluginCall call) {
+        if (isAudioPickerOpen) {
+            call.reject("Audio picker is already open");
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        isAudioPickerOpen = true;
+        startActivityForResult(call, intent, "handlePickedAudioFolder");
+    }
+
+    /** 供 WebView 重建导入音频的流地址（端口每次启动都可能不同，不能把 URL 存死）。 */
+    @PluginMethod
+    public void localAudioServerPort(PluginCall call) {
+        try {
+            if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
+            int port = localAudioServer.start();
+            JSObject result = new JSObject();
+            result.put("port", port);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject(error.getMessage(), error);
+        }
+    }
+
+    @ActivityCallback
+    private void handlePickedAudio(PluginCall call, ActivityResult activityResult) {
+        isAudioPickerOpen = false;
+        if (call == null) return;
+
+        // -1 = RESULT_OK，0 = RESULT_CANCELED。区分「用户取消」和「选完了却没数据」，
+        // 否则两种情况的返回值一模一样，只能靠猜。
+        int resultCode = activityResult == null ? Activity.RESULT_CANCELED : activityResult.getResultCode();
+        List<Uri> uris = new ArrayList<>();
+        Intent data = activityResult == null ? null : activityResult.getData();
+        if (data != null) {
+            ClipData clipData = data.getClipData();
+            if (clipData != null) {
+                for (int index = 0; index < clipData.getItemCount(); index += 1) {
+                    Uri uri = clipData.getItemAt(index).getUri();
+                    if (uri != null) uris.add(uri);
+                }
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+        }
+
+        completePickedAudioImport(call, uris, resultCode);
+    }
+
+    @ActivityCallback
+    private void handlePickedAudioFolder(PluginCall call, ActivityResult activityResult) {
+        isAudioPickerOpen = false;
+        if (call == null) return;
+        int resultCode = activityResult == null ? Activity.RESULT_CANCELED : activityResult.getResultCode();
+        List<Uri> uris = new ArrayList<>();
+        Intent data = activityResult == null ? null : activityResult.getData();
+        Uri treeUri = data == null ? null : data.getData();
+        if (treeUri != null) {
+            try {
+                // 拿到长期授权：重启之后还能读这个目录，重新导入时不必再让用户选一次。
+                getContext().getContentResolver().takePersistableUriPermission(
+                    treeUri,
+                    data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+            } catch (Exception ignored) {
+                // Some providers do not offer persistable grants; the current grant is still usable.
+            }
+            collectAudioDocuments(treeUri, DocumentsContract.getTreeDocumentId(treeUri), uris);
+        }
+        completePickedAudioImport(call, uris, resultCode);
+    }
+
+    private void collectAudioDocuments(Uri treeUri, String parentDocumentId, List<Uri> output) {
+        Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId);
+        String[] projection = new String[]{
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        };
+        try (Cursor cursor = getContext().getContentResolver().query(childrenUri, projection, null, null, null)) {
+            if (cursor == null) return;
+            while (cursor.moveToNext()) {
+                String documentId = cursor.getString(0);
+                String displayName = cursor.getString(1);
+                String mimeType = cursor.getString(2);
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
+                    collectAudioDocuments(treeUri, documentId, output);
+                    continue;
+                }
+                if (isAudioDocument(displayName, mimeType)) {
+                    output.add(DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId));
+                }
+            }
+        } catch (Exception ignored) {
+            // A provider can deny one subtree without invalidating the rest of the selection.
+        }
+    }
+
+    private static boolean isAudioDocument(String displayName, String mimeType) {
+        if (mimeType != null && mimeType.startsWith("audio/")) return true;
+        String lower = displayName == null ? "" : displayName.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav")
+            || lower.endsWith(".m4a") || lower.endsWith(".aac") || lower.endsWith(".ogg")
+            || lower.endsWith(".opus") || lower.endsWith(".ape") || lower.endsWith(".wma");
+    }
+
+    private void completePickedAudioImport(PluginCall call, List<Uri> uris, int resultCode) {
+        if (uris.isEmpty()) {
+            JSObject result = new JSObject();
+            result.put("tracks", new JSArray());
+            result.put("cancelled", resultCode != Activity.RESULT_OK);
+            result.put("picked", 0);
+            result.put("resultCode", resultCode);
+            if (resultCode == Activity.RESULT_OK) {
+                result.put("error", "Picker returned RESULT_OK without a readable document uri");
+            }
+            call.resolve(result);
+            return;
+        }
+
+        // 拷贝是重活：一次导入几十上百个文件，放在调用线程上会把界面卡死，
+        // 所以整个搬进后台线程，完成后再回到 UI 线程 resolve。
+        final Activity activity = getActivity();
+        new Thread(() -> {
+          try {
+            if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
+            int port = localAudioServer.start();
+            File directory = localAudioServer.importedAudioDirectory();
+            ContentResolver resolver = getContext().getContentResolver();
+            JSArray tracks = new JSArray();
+            JSArray failures = new JSArray();
+            int copied = 0;
+
+            for (Uri uri : uris) {
+                try {
+                    String displayName = queryDisplayName(resolver, uri);
+                    long fileSize = queryFileSize(resolver, uri);
+                    if (displayName == null || displayName.isEmpty()) displayName = "track-" + System.currentTimeMillis();
+                    String safeName = "imported-" + stableFileId(displayName, fileSize, directory);
+                    File target = new File(directory, safeName);
+                    if (!target.isFile() || target.length() != fileSize) {
+                        try (InputStream source = resolver.openInputStream(uri);
+                             OutputStream sink = new FileOutputStream(target)) {
+                            if (source == null) continue;
+                            byte[] buffer = new byte[128 * 1024];
+                            int read;
+                            while ((read = source.read(buffer)) != -1) {
+                                sink.write(buffer, 0, read);
+                            }
+                        }
+                    }
+
+                    JSObject track = new JSObject();
+                    track.put("id", safeName);
+                    track.put("fileName", displayName);
+                    track.put("fileSize", target.length());
+                    track.put("mimeType", LocalAudioServer.guessMimeType(safeName));
+                    track.put("url", "http://127.0.0.1:" + port + "/audio/" + safeName);
+                    tracks.put(track);
+                    copied += 1;
+                } catch (Exception error) {
+                    // 单个文件读不了不该让整批失败，但必须把原因带回去，
+                    // 否则界面只会「什么都没发生」。
+                    JSObject failure = new JSObject();
+                    failure.put("uri", String.valueOf(uri));
+                    failure.put("message", error.getMessage() == null ? error.toString() : error.getMessage());
+                    failures.put(failure);
+                }
+            }
+
+            JSObject result = new JSObject();
+            result.put("tracks", tracks);
+            result.put("port", port);
+            result.put("picked", uris.size());
+            result.put("copied", copied);
+            result.put("failures", failures);
+            result.put("resultCode", resultCode);
+            if (activity != null) activity.runOnUiThread(() -> call.resolve(result));
+            else call.resolve(result);
+          } catch (Exception error) {
+            String message = error.getMessage() == null ? error.toString() : error.getMessage();
+            if (activity != null) activity.runOnUiThread(() -> call.reject(message, error));
+            else call.reject(message, error);
+          }
+        }, "folia-audio-import").start();
+    }
+
+    /** 文件名 + 大小定出一个稳定的 id：重复导入同一个文件不会在私有目录里堆出第二份副本。 */
+    private static String stableFileId(String displayName, long fileSize, File directory) {
+        String candidate = displayName.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (candidate.length() > 60) {
+            candidate = candidate.substring(candidate.length() - 60);
+        }
+        int dot = candidate.lastIndexOf('.');
+        String base = dot > 0 ? candidate.substring(0, dot) : candidate;
+        String extension = dot > 0 ? candidate.substring(dot) : "";
+        String stamp = Integer.toHexString((displayName + ':' + fileSize).hashCode());
+        return base + "-" + stamp + extension;
+    }
+
+    private static String queryDisplayName(ContentResolver resolver, Uri uri) {
+        try (Cursor cursor = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) return cursor.getString(0);
+        } catch (Exception ignored) {
+        }
+        String last = uri.getLastPathSegment();
+        return last == null ? null : last.substring(last.lastIndexOf('/') + 1);
+    }
+
+    private static long queryFileSize(ContentResolver resolver, Uri uri) {
+        try (Cursor cursor = resolver.query(uri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getLong(0);
+        } catch (Exception ignored) {
+        }
+        return -1;
+    }
+
+    /**
+     * 设备音乐库扫描：这是文件选择器之外的入口，读的是系统已经收录的音频，
+     * 不需要用户自己去文件管理器里翻。
+     */
+    private void resolveLocalAudioScan(PluginCall call) {
+        try {
+            if (localAudioServer == null) {
+                localAudioServer = new LocalAudioServer(getContext());
+            }
+            int port = localAudioServer.start();
+            JSArray tracks = new JSArray();
+            String[] projection = new String[]{
+                MediaStore.Audio.Media._ID,
+                MediaStore.Audio.Media.DISPLAY_NAME,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.SIZE,
+                MediaStore.Audio.Media.MIME_TYPE
+            };
+            // IS_MUSIC != 0：把录音、通知音、语音消息这些"也是音频但不是歌"的东西滤掉。
+            try (Cursor cursor = getContext().getContentResolver().query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                MediaStore.Audio.Media.IS_MUSIC + " != 0",
+                null,
+                MediaStore.Audio.Media.TITLE + " COLLATE NOCASE ASC"
+            )) {
+                if (cursor != null) {
+                    int idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
+                    int nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
+                    int titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
+                    int artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST);
+                    int albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM);
+                    int durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
+                    int sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE);
+                    int mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE);
+                    while (cursor.moveToNext()) {
+                        long id = cursor.getLong(idColumn);
+                        JSObject track = new JSObject();
+                        track.put("id", String.valueOf(id));
+                        track.put("fileName", cursor.getString(nameColumn));
+                        track.put("title", cursor.getString(titleColumn));
+                        track.put("artist", cursor.getString(artistColumn));
+                        track.put("album", cursor.getString(albumColumn));
+                        track.put("duration", cursor.getLong(durationColumn));
+                        track.put("fileSize", cursor.getLong(sizeColumn));
+                        track.put("mimeType", cursor.getString(mimeColumn));
+                        track.put("url", "http://127.0.0.1:" + port + "/audio/" + id);
+                        tracks.put(track);
+                    }
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("tracks", tracks);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * 删除「挑选文件 / 文件夹导入」时复制进私有目录的音频副本。
+     *
+     * 只删 App 自己的副本，绝不碰用户的原文件；MediaStore 扫描得到的歌不在这里删，
+     * 它们只是引用，用户的原文件必须保留。
+     */
+    @PluginMethod
+    public void deleteImportedAudio(PluginCall call) {
+        JSArray refs = call.getArray("refs", new JSArray());
+        JSArray deleted = new JSArray();
+        JSArray failed = new JSArray();
+        try {
+            if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
+            File directory = localAudioServer.importedAudioDirectory();
+            for (int index = 0; index < refs.length(); index += 1) {
+                String ref = refs.getString(index);
+                File target = resolveImportedFile(directory, ref);
+                if (target == null) {
+                    failed.put(ref);
+                    continue;
+                }
+                // 已经不在了也算成功，重复删除不该被当成错误。
+                if (!target.exists() || target.delete()) {
+                    deleted.put(ref);
+                } else {
+                    failed.put(ref);
+                }
+            }
+            JSObject result = new JSObject();
+            result.put("deleted", deleted);
+            result.put("failed", failed);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject(error.getMessage(), error);
+        }
+    }
+
+    /** 只认自己拷进去的那些文件名，挡掉 ../ 这类越界的 ref。 */
+    private static File resolveImportedFile(File directory, String ref) {
+        if (ref == null || !ref.startsWith("imported-")) return null;
+        if (ref.contains("/") || ref.contains("\\") || ref.contains("..")) return null;
+        return new File(directory, ref);
     }
 
     /**

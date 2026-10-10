@@ -93,6 +93,23 @@ export const createLibraryHomeActions = (port: LibraryHomePort): LibraryHomeActi
             }
         },
 
+        scanDeviceMusic: async () => {
+            if (isHomeImportBusy(snapshot)) return BUSY;
+            if (typeof port.scanDeviceMusic !== 'function') return UNSUPPORTED;
+            patch({ scanningDevice: true });
+            try {
+                const imported = await port.scanDeviceMusic();
+                if (imported > 0) void port.refreshLocalSongs();
+                return OK;
+            } catch (error) {
+                console.error('[LibraryHome] Failed to scan device music:', error);
+                port.notify({ kind: 'alert', message: { key: 'localMusic.scanDeviceFailed' } });
+                return FAILED;
+            } finally {
+                patch({ scanningDevice: false });
+            }
+        },
+
         refreshFolders: async () => {
             if (isHomeImportBusy(snapshot)) return BUSY;
             patch({ refreshingFolders: true });

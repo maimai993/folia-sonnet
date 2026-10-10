@@ -1276,6 +1276,13 @@ export interface LocalSong {
   fileName: string;
   filePath: string; // File path for reference
   fileHandle?: FileSystemFileHandle; // For re-accessing the file (not persisted, stored in memory)
+  /**
+   * 安卓原生曲库的音频标识（MediaStore 的 id，或导入时写进私有目录的文件名）。
+   *
+   * 不存播放 URL：那个地址是原生临时起的小服务（端口每次启动都可能变），
+   * 存下来重启就失效。播放前用它按当前端口重新拼（见 nativeAudioUrlForRef）。
+   */
+  nativeAudioRef?: string;
   duration: number; // milliseconds
   fileSize: number; // bytes
   fileLastModified?: number; // milliseconds since epoch

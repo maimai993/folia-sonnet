@@ -30,6 +30,13 @@ import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { getLocalLyricFilePriority, isSameLocalLyricFormatOrder, normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../utils/lyrics/localLyricFormatOrder';
 import { readLyricFile } from '../utils/lyrics/lyricFileDecoding';
 import { isLocalFolderIgnored, normalizeLocalFolderPath, runLocalFolderMutation, setLocalFolderIgnored } from './localLibraryFolderIgnore';
+import {
+    deleteAndroidImportedAudio,
+    isAndroidNativeRuntime,
+    nativeAudioUrlForRef,
+    pickAndroidLocalMusic,
+    scanAndroidDeviceMusic,
+} from './nativeLocalMusic';
 
 
 type EmbeddedMetadata = EmbeddedMetadataResult;
@@ -176,6 +183,11 @@ async function getImportDirectoryHandle(expectedRootName?: string): Promise<File
 
     const availability = getLocalLibraryAvailability();
     if (!availability.supported) throw new Error(`Local library unavailable: ${availability.reason}`);
+
+    // 安卓走原生，曲库里没有也不可能有持久化的目录句柄。可用性判定在那边是「原生可用」，
+    // 但 WebView 仍然没有 showDirectoryPicker —— 不挡住的话这里会直接抛
+    // 「showDirectoryPicker is not a function」。
+    if (isAndroidNativeRuntime()) return null;
 
     // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions
     return await window.showDirectoryPicker();
@@ -1118,6 +1130,15 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
 // Import folder using File System Access API (if supported)
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
+    /*
+     * 安卓没有 File System Access API，这里不能去调 showDirectoryPicker —— 它会直接抛
+     * 「Local library unavailable」。改走原生：用系统文件管理器挑整个文件夹（或逐个文件），
+     * 选中的音频由原生复制进私有目录，再通过回环地址播放。
+     */
+    if (isAndroidNativeRuntime()) {
+        return await pickAndroidLocalMusic();
+    }
+
     // Request access in the user gesture before waiting for other library writes.
     try {
         const dirHandle = await getImportDirectoryHandle(expectedRootName);
@@ -1596,6 +1617,11 @@ async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
+    // 安卓原生曲库：文件在 MediaStore 或 App 私有目录里，WebView 拿不到句柄，
+    // 走原生那个回环的小服务（地址按当前端口现拼，见 nativeAudioUrlForRef）。
+    const nativeUrl = song.nativeAudioRef ? await nativeAudioUrlForRef(song.nativeAudioRef) : null;
+    if (nativeUrl) return nativeUrl;
+
     const fileHandle = await getAccessibleFileHandle(song);
 
     if (fileHandle) {
@@ -1742,12 +1768,19 @@ export async function deleteSongsByIds(songIds: string[]): Promise<void> {
     if (uniqueSongIds.length === 0) return;
     const allSongs = await getLocalSongs();
     const deletedIdSet = new Set(uniqueSongIds);
+    const deletedSongs = allSongs.filter(song => deletedIdSet.has(song.id));
     const affectedRoots = new Set(
-        allSongs
-            .filter(song => deletedIdSet.has(song.id))
+        deletedSongs
             .map(getRootFolderName)
             .filter((root): root is string => Boolean(root)),
     );
+    // 安卓「挑选导入」的音频是复制进 App 私有目录的：库里删了，那份副本也得跟着删，
+    // 否则它会一直留着占空间（只清自己写出的 imported-*，MediaStore 的歌是引用不删）。
+    void deleteAndroidImportedAudio(
+        deletedSongs
+            .map(song => song.nativeAudioRef)
+            .filter((ref): ref is string => Boolean(ref)),
+    ).catch(error => console.warn('[LocalMusic] Failed to delete imported android audio:', error));
     uniqueSongIds.forEach(id => {
         fileHandleMap.delete(id);
         localCoverAssetRequestMap.delete(id);
@@ -1789,6 +1822,10 @@ async function removeImportedRootContents(rootFolderName: string): Promise<void>
 
 // Resync folder: refresh an imported folder in place using the persisted root handle
 export async function resyncFolder(folderName: string): Promise<LocalSong[] | null> {
+    // 安卓没有持久化的目录句柄可重扫：那边的歌来自设备音乐库，整库重扫走 resyncAllFolders，
+    // 这里不能转去 importFolder —— 那会弹一次系统文件选择器，而用户点的是「刷新」。
+    if (isAndroidNativeRuntime()) return null;
+
     // Only root imports have persisted directory handles. Derived child folders
     // should resync through their imported root folder handle.
     const rootFolderName = folderName.split('/')[0] || folderName;
@@ -1810,6 +1847,10 @@ function getLocalSongRootFolderName(song: LocalSong): string | null {
 
 // Resyncs all imported local roots once, even when the song list contains nested folders.
 export async function resyncAllFolders(): Promise<LocalSong[] | null> {
+    // 安卓：设备音乐库重扫一次就够了。挑文件夹导入的那些文件已经在 App 私有目录里，
+    // 不存在「按根重扫」这回事 —— 逐个根去调 importFolder 会连着弹好几次系统选择器。
+    if (isAndroidNativeRuntime()) return await scanAndroidDeviceMusic();
+
     const allSongs = await getLocalSongs();
     const handles = await getDirHandles();
     const rootFolderNames = Array.from(new Set(

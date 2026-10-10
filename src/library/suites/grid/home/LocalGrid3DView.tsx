@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileUp, FolderOpen, Loader2, Music, ListMusic, User, Disc3, RefreshCw } from 'lucide-react';
+import { FileUp, FolderOpen, Loader2, Music, ListMusic, User, Disc3, RefreshCw, Smartphone } from 'lucide-react';
 import DesktopGrid3DSurface, { DesktopGrid3DAction } from './DesktopGrid3DSurface';
 import { LocalPlaylist, LocalSong, Theme } from '../../../../types';
 import type { GridViewCollectionDescriptor } from '../../../../components/app/home/gridViewCollectionAdapters';
@@ -15,6 +15,7 @@ import { resolveLocalHomeActions } from '../../../core/model/localHomeModel';
 import { useLibraryHomeLocal, useLocalDirectoryTrees, useLocalHomeBatchConfig } from '../../../core/bindings/useLibraryHomeLocal';
 import { useLibraryHomeActions } from '../../../core/bindings/useLibraryHomeActions';
 import { useLibraryHomeListRegistration } from '../../../core/bindings/useLibraryHomeSurfaceRegistration';
+import { isAndroidNativeRuntime } from '../../../../services/nativeLocalMusic';
 
 // src/library/suites/grid/home/LocalGrid3DView.tsx
 // Desktop-only local music Grid3D overview that opens GridView instead of legacy carousel details.
@@ -32,6 +33,7 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
     'import-folder': <FolderOpen size={13} />,
     'refresh-folders': <RefreshCw size={13} />,
     'import-playlist': <FileUp size={13} />,
+    'scan-device-music': <Smartphone size={13} />,
 };
 
 interface LocalGrid3DViewProps {
@@ -134,9 +136,13 @@ export const LocalGrid3DView: React.FC<LocalGrid3DViewProps> = ({
         if (id === 'import-folder') void homeActions.importFolder();
         else if (id === 'refresh-folders') void homeActions.refreshFolders();
         else if (id === 'import-playlist') playlistFileInputRef.current?.click();
+        else if (id === 'scan-device-music') void homeActions.scanDeviceMusic();
     };
 
-    const localActions = resolveLocalHomeActions(actionState);
+    // 安卓原生才有「扫描设备音乐库」：core 不做平台判定，由这里按运行时告诉它。
+    const localActions = resolveLocalHomeActions(actionState, {
+        deviceScan: isAndroidNativeRuntime(),
+    });
     const actions: DesktopGrid3DAction[] = localActions.map(action => ({
         id: action.id,
         label: t(action.labelKey),

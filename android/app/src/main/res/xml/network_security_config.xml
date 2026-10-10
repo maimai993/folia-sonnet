@@ -14,6 +14,15 @@
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
+    <!--
+      本地音频服务（LocalAudioServer）：安卓本地音乐走原生扫描/挑选，而 WebView 的 <audio>
+      播不了 content://，也不认 App 私有目录 —— 原生起一个只监听 127.0.0.1 的小服务把音频
+      以 http 喂回去。它是本机回环，明文是唯一选择，放行它不涉及任何外部流量。
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
     <domain-config cleartextTrafficPermitted="true">
         <!-- 自托管 API -->
         <domain includeSubdomains="true">folia.tangbot.xyz</domain>

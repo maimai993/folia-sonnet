@@ -271,8 +271,16 @@ export const localBatchSelectionType = (section: LocalHomeSectionKey): LibraryDi
     section === 'folders' || section === 'albums' || section === 'artists' ? section : null
 );
 
-/** 本地页签右上角的三个导入动作：文案随进行中的动作变，任何一个在进行或扫描中时都禁用。 */
-export const resolveLocalHomeActions = (snapshot: LibraryHomeActionsSnapshot): LibraryHomeListAction[] => {
+/**
+ * 本地页签右上角的导入动作：文案随进行中的动作变，任何一个在进行或扫描中时都禁用。
+ *
+ * `deviceScan` 由调用方（UI）按运行时给：只有安卓原生才有「扫描设备音乐库」这条入口，
+ * 而 core 不该自己去做平台判定。
+ */
+export const resolveLocalHomeActions = (
+    snapshot: LibraryHomeActionsSnapshot,
+    options: { deviceScan?: boolean } = {},
+): LibraryHomeListAction[] => {
     const busy = isHomeImportBusy(snapshot);
     const scanning = Boolean(snapshot.scan?.active) || snapshot.refreshingFolders;
     return [
@@ -297,5 +305,13 @@ export const resolveLocalHomeActions = (snapshot: LibraryHomeActionsSnapshot): L
             pending: snapshot.importingPlaylist,
             disabled: busy || snapshot.importingPlaylist,
         },
+        // 安卓专属：系统文件管理器挑不出「设备里已经收录的所有音乐」，得靠 MediaStore 扫。
+        ...(options.deviceScan ? [{
+            id: 'scan-device-music' as const,
+            labelKey: snapshot.scanningDevice ? 'localMusic.scanningDevice' : 'localMusic.scanDevice',
+            titleKey: 'localMusic.scanDevice',
+            pending: Boolean(snapshot.scanningDevice),
+            disabled: busy,
+        }] : []),
     ];
 };
