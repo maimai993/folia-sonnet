@@ -126,8 +126,15 @@ const PagePonderTouchButton: React.FC<PagePonderTouchButtonProps> = ({ accent, i
             }}
             aria-label={t('ponder.openPage')}
             title={t('ponder.openPage')}
-            // 收起来之后不可点：留着可点的话，右上角会变成一块看不见却能按的地方。
-            className={`fixed right-5 top-5 z-[190] flex h-12 w-12 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-all duration-200 active:scale-95 ${
+            /*
+             * 收起来之后不可点：留着可点的话，右上角会变成一块看不见却能按的地方。
+             *
+             * 纵向位置往下一档（top-20 而不是贴着 top-5）：弹窗的关闭按钮是
+             * `absolute right-4 top-4`，而这个按钮的 z-index 190 比弹窗高，
+             * 贴在右上角时正好压住关闭按钮 —— 用户点关闭却打开了这一页的思考面板。
+             * 往下让出那一块（关闭按钮大约占到 56px 高），两个就不打架了。
+             */
+            className={`fixed right-5 top-20 z-[190] flex h-12 w-12 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-all duration-200 active:scale-95 ${
                 isRevealed ? 'opacity-100' : 'pointer-events-none -translate-y-2 opacity-0'
             } ${isDaylight ? 'border-black/10 bg-white/80' : 'border-white/15 bg-zinc-900/80'}`}
             style={{ color: accent }}
