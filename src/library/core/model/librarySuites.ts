@@ -7,10 +7,13 @@ import type {
     LibraryHomeActionId,
     LibrarySuiteId,
     LibrarySuiteManifest,
+    LibrarySuiteStageProps,
+    LibrarySurfaceComponent,
     LibrarySurfaceDeclaration,
     LibrarySurfaceId,
     LibrarySurfacePropsMap,
 } from '../contracts/suite';
+import { assertLibrarySuiteChromeActions } from './suiteChrome';
 
 // src/library/core/model/librarySuites.ts
 // suite 清单的纯规则：建索引（去重、默认 suite 必须实现全部 surface、丢掉不可用的）、按 surface 解析
@@ -21,6 +24,28 @@ import type {
 
 /** 默认 suite：任何 suite 没实现的 surface 都由它渲染，所以它必须实现全部 surface。 */
 export const DEFAULT_LIBRARY_SUITE_ID: LibrarySuiteId = 'grid';
+
+/** 没有构建变量覆盖时的初始选择（开发阶段为 bravais，发版前复核）。 */
+const LIBRARY_SUITE_INITIAL_CHOICE_FALLBACK: LibrarySuiteId = 'bravais';
+
+/**
+ * 初始选择的取值：构建变量（VITE_LIBRARY_INITIAL_SUITE）给了非空值就用它，否则用内置的初始选择。
+ * 这里不判断合法性——初始选择可以是当前构建里没有的 suite，渲染时照常经 registry 回退到默认 suite。
+ */
+export const resolveLibrarySuiteInitialChoice = (override: unknown): LibrarySuiteId => (
+    typeof override === 'string' && override.trim() ? override.trim() : LIBRARY_SUITE_INITIAL_CHOICE_FALLBACK
+);
+
+/**
+ * 初始选择：用户从没选过 suite（存储里没有记录）时 store 的初值。与默认 suite（回退 suite）是两回事：
+ * 默认 suite 负责兜底渲染，初始选择只是「没选过的人先看到哪套」。测试配置用 VITE_LIBRARY_INITIAL_SUITE=grid 钉住。
+ */
+export const LIBRARY_SUITE_INITIAL_CHOICE: LibrarySuiteId = resolveLibrarySuiteInitialChoice(
+    import.meta.env.VITE_LIBRARY_INITIAL_SUITE,
+);
+
+/** 可用的 suite 不止一套时才有得选（设置项、命令面板与 DEV 浮层都按它决定出不出现）。 */
+export const isLibrarySuiteChoiceAvailable = (suites: readonly unknown[]): boolean => suites.length > 1;
 
 export const LIBRARY_SURFACE_IDS: readonly LibrarySurfaceId[] = ['home', 'collection', 'artist', 'account'];
 
@@ -149,14 +174,27 @@ export type ResolvedLibrarySuiteSurface<Surface extends LibrarySurfaceId> = {
     isFallback: boolean;
 };
 
+/** 生效 suite 的 stage（B1）。同一套 suite 总是同一个对象。 */
+export type ResolvedLibrarySuiteStage = {
+    suiteId: LibrarySuiteId;
+    component: LibrarySurfaceComponent<LibrarySuiteStageProps>;
+};
+
 export type LibrarySuiteIndex = {
     /** 可用的 suite，默认 suite 在最前，其余按 id。 */
     suites: readonly LibrarySuiteManifest[];
     defaultSuite: LibrarySuiteManifest;
     has: (suiteId: string) => boolean;
     get: (suiteId: string) => LibrarySuiteManifest | undefined;
+    /** 实际生效的 suite id：可用就是它自己，未知或当前构建不可用时是默认 suite。 */
+    resolveId: (suiteId: string) => LibrarySuiteId;
     /** 选中的 suite 实现了就用它，否则（或 id 未知）回退默认 suite。 */
     resolve: <Surface extends LibrarySurfaceId>(surface: Surface, suiteId: string) => ResolvedLibrarySuiteSurface<Surface>;
+    /**
+     * 生效 suite 的 stage：先经 resolveId（未知或不可用的 id 是默认 suite），再看它有没有声明 stage；没有就是 null。
+     * stage 不按 surface 回退——它属于整套 suite，选中的 suite 没有 stage 时不会借用默认 suite 的。
+     */
+    resolveStage: (suiteId: string) => ResolvedLibrarySuiteStage | null;
 };
 
 const toDeclaredActions = (declaration: LibrarySurfaceDeclaration<unknown>): LibraryDeclaredActions => Object.freeze({
@@ -167,7 +205,8 @@ const toDeclaredActions = (declaration: LibrarySurfaceDeclaration<unknown>): Lib
 /**
  * 建 suite 索引。清单有问题就在启动时抛错（而不是等到某个 surface 渲染时才发现）：重复 id、
  * 默认 suite 缺失或没实现全部 surface、声明了清单之外的动作。available === false 的 suite 被丢掉。
- * account surface 另要列全基础动作（LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS）。
+ * account surface 另要列全基础动作（LIBRARY_ACCOUNT_REQUIRED_ACTION_IDS）；外观动作（chromeActions）按
+ * ./suiteChrome 的 assertLibrarySuiteChromeActions 校验。
  */
 export const buildLibrarySuiteIndex = (
     manifests: readonly LibrarySuiteManifest[],
@@ -195,6 +234,7 @@ export const buildLibrarySuiteIndex = (
                 throw new Error(`[LibrarySuites] Suite "${manifest.id}" declares the account surface without the required action(s) ${missingRequired.join(', ')}`);
             }
         }
+        assertLibrarySuiteChromeActions(manifest.id, manifest.chromeActions);
         if (manifest.available !== false) byId.set(manifest.id, manifest);
     }
 
@@ -231,15 +271,22 @@ export const buildLibrarySuiteIndex = (
         }
         resolved.set(suite.id, perSurface);
     }
+    const stages = new Map<string, ResolvedLibrarySuiteStage>();
+    for (const suite of suites) {
+        if (suite.stage) stages.set(suite.id, Object.freeze({ suiteId: suite.id, component: suite.stage }));
+    }
+    const resolveId = (suiteId: string): LibrarySuiteId => (byId.has(suiteId) ? suiteId : defaultSuite.id);
 
     return {
         suites,
         defaultSuite,
         has: suiteId => byId.has(suiteId),
         get: suiteId => byId.get(suiteId),
+        resolveId,
         resolve: <Surface extends LibrarySurfaceId>(surface: Surface, suiteId: string) => (
             (resolved.get(suiteId) ?? resolved.get(defaultSuite.id)!).get(surface) as unknown as ResolvedLibrarySuiteSurface<Surface>
         ),
+        resolveStage: suiteId => stages.get(resolveId(suiteId)) ?? null,
     };
 };
 

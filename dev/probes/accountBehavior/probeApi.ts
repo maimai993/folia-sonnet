@@ -5,6 +5,9 @@
 // 确认框这些界面由用例按 suite 的 DOM 去点（A0 只有网格），探针不替界面做动作，否则钉不住真实交互。
 // A6 起用例按 suite 参数化：grid 驱动点网格的 DOM，tui 驱动按 TUI 的键（见 test/component/accountBehavior.spec.ts）。
 
+/** 失败后自检的剧本：返回的结果推出哪种结论（tls-reset / network-ok），或自检本身出错（error）。 */
+export type AccountSelfCheckScript = 'tls-reset' | 'network-ok' | 'error';
+
 /** 二维码轮询时 checkQr 依次返回的状态；队列空了一律返回 waiting。 */
 /** canceled：用户在手机上取消，后端要求冷却 ACCOUNT_CANCEL_COOLDOWN_MS 之后才能再要码。 */
 export type AccountQrState = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error' | 'canceled';
@@ -26,7 +29,9 @@ export type AccountCallOp =
     /** 切换确认后的宿主清理（账户 controller 的切换清理端口，即应用的 createLibraryAccountSwitchCleanupPort）。 */
     | 'switch-cleanup'
     /** 网易本地后端的重启动作（useNeteaseApiStatusStore.restart）。 */
-    | 'backend-restart';
+    | 'backend-restart'
+    /** 登录失败后的主动自检（provider.runQrLoginSelfCheck）。 */
+    | 'self-check';
 
 export type AccountCall = {
     seq: number;
@@ -62,6 +67,8 @@ export type AccountProbeApi = {
     failRefresh: (providerId: string, times: number) => void;
     /** 接下来 times 次要码抛错。 */
     failCreate: (providerId: string, times: number) => void;
+    /** 让这个 provider 有自检能力并按剧本返回；null 撤掉自检能力（默认没有）。 */
+    setSelfCheck: (providerId: string, script: AccountSelfCheckScript | null) => void;
 
     // ---- 种子（不经确认，等同启动恢复） ----
     setAccount: (providerId: string, status: 'authenticated' | 'anonymous') => void;

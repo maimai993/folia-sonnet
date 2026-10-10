@@ -14,6 +14,8 @@ export type HomeViewModel = {
     account: LibraryAccountController;
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
+    /** 跳到集合栈的第 depth 层（保留的层数，0 为整个关掉），浏览器历史同步退回；见 useAppNavigation 的 popCollectionTo。 */
+    onPopCollectionTo: (depth: number) => void;
     onBackCollection: () => void;
 };
 
@@ -57,6 +59,7 @@ export type HomeModelDeps = {
     onStatusMessage?: HomeSurfaceProps['onStatusMessage'];
     onOpenCollection: (collection: GridViewCollectionDescriptor) => void;
     onPushCollection: (collection: GridViewCollectionDescriptor) => void;
+    onPopCollectionTo: (depth: number) => void;
     onBackCollection: () => void;
 };
 
@@ -98,12 +101,14 @@ export const buildHomeModel = ({
     onStatusMessage,
     onOpenCollection,
     onPushCollection,
+    onPopCollectionTo,
     onBackCollection,
 }: BuildHomeModelParams): HomeViewModel => {
     return {
         account,
         onOpenCollection,
         onPushCollection,
+        onPopCollectionTo,
         onBackCollection,
         surfaceProps: {
             onPlaySong: playSong,

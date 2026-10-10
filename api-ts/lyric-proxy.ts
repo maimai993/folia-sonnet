@@ -38,12 +38,7 @@ const IGNORED_FORWARD_HEADERS = [
 function isAllowedLyricProxyHost(hostname: string): boolean {
   return hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
     hostname === 'y.gtimg.cn' ||
-    hostname === 'kugou.com' || hostname.endsWith('.kugou.com') ||
-    hostname === 'amll-ttml-db.stevexmh.net';
-}
-
-function isAmllDbHost(hostname: string): boolean {
-  return hostname === 'amll-ttml-db.stevexmh.net';
+    hostname === 'kugou.com' || hostname.endsWith('.kugou.com');
 }
 
 export default async function handler(req: any, res: any) {
@@ -101,9 +96,6 @@ export default async function handler(req: any, res: any) {
     }
 
     const response = await fetch(targetUrl.toString(), fetchOptions);
-    if (isAmllDbHost(hostname) && response.status === 404) {
-      return res.status(204).end();
-    }
 
     const contentType = response.headers.get('content-type') || '';
 

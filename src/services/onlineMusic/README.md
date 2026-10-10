@@ -20,7 +20,11 @@ UI / hooks / stores / app services
 当前 registry 注册 `netease`、`kugou`、`qq` 和桌面端的 `bodian`。波点接入状态、接口与剩余验收见
 [`docs/bodian.md`](../../../docs/bodian.md)；支持喜欢与自建歌单歌曲增删，收藏写入尚未实现。Navidrome 是独立的 Subsonic 服务，入口是 `src/services/navidromeService.ts`，不属于 Omni provider。
 
-QQ 扫码的安全失败摘要由 `qqProvider.ts` 收集，写入普通日志的 `[QQProvider] qr-login:failed`，也可通过 `omni.getQrLoginDiagnostics` 读取。覆盖 key、图片、检查和确认后的账号加载，保留 HTTP 状态、固定原因、安全数字和退避来源；相同失败不因倒计时重复输出，上一轮晚回的诊断不会污染新尝试或日志。取消当前二维码（关窗、到期）与要新码一样结束这一轮；没扫过码的自然过期只记 info 级的 `qr-login:expired`，不算失败；确认后只有紧接着开始的那一次账号加载写进摘要，其余登录态检查照常记 `login-status:*`。Library Core 的扫码会话与账户 controller 对 QQ 不记原始错误文字（`core/model/accountRules.ts` 的 `describeAccountError`），登录界面（grid 的诊断区块与 TUI 的 F4）不给 QQ 诊断入口（`canShowLoginDiagnostics`）。
+扫码登录的分工：provider（`neteaseProvider.ts`、`qqProvider.ts`）把后端的响应翻译成 `QrLoginState`，失败时带上后端原文（`message`）、原始返回字段（`detail`，QQ 的失败阶段与原因、上游状态码、退避时长、上一次失败都原样保留）、结构化原因（`reason`：手机上取消、连接被重置）、冷却（`retryAfterMs`）以及「网络层瞬时失败」（`transient`，没拿到上游回应、二维码仍有效）；要码与生成二维码拿不到 key / 图片时直接抛错，不再交出空值。provider 不持有任何扫码的模块级状态：一轮扫码的步骤、代次、时间线都在 Library Core 的 `core/services/providerLoginSession.ts`。会话在登录失败后自动调用 `omni.runQrLoginSelfCheck` 跑一次主动自检（在手机上取消除外），结论由 `core/model/loginSelfCheckRules.ts` 推出、显示在登录界面上，并和时间线、`omni.getQrLoginDiagnostics` 的 provider 段一起进诊断报告。
+
+provider 段的内容来自主进程的内嵌后端快照（`loginBackendDiagnostics.ts` 排版，`electron/loginBackendIpc.cjs` 的 `get-login-diagnostics`）：应用与系统环境、凭据加密后端、后端状态、每一轮拉起的步骤（耗时、结果、错误原文）、上游连接记录（`electron/networkRecorder.cjs`：连了哪个地址、v4 还是 v6、TCP / TLS 耗时、断在哪一步、Node 错误码），网易另有每次登录请求的记录与扫码身份，QQ 另有包内扫码服务的原始失败（`electron/qqBackend.cjs` 挂在 `failSession` / `failBootstrap` 上的钩子）与 `qq-auth.*` 事件。报告不做隐私脱敏（IP、错误原文都保留），登录界面如实告知报告收集了哪些数据；登录凭据（cookie、token、session）的值从不进入记录。网页版没有主进程，provider 段只有会话状态，自检只检查远端 API 能不能连上（`loginSelfCheck.ts`）。
+
+网易扫码轮询（`/login/qr/check`）在桌面端由主进程替换的 `login_qr_check` 处理（`electron/neteaseApiStartup.cjs` 的 `createLoginQrCheck`）：上游原版请求失败时只回 `404 Not Found`，替换后渲染进程拿到真实的 `{ code, msg }`，例如 `code 502: read ECONNRESET`。扫码的要码与轮询在主进程遇到网络层失败时立即重发一次（`withQrNetworkRetry`）；渲染进程的会话对轮询的瞬时失败再容忍两次。识别连接被重置与网络层失败用 `shared/networkErrorText`（`.mjs` 给渲染进程，`.cjs` 给主进程，内容一致）。主进程在扫码请求被重置后，于下一次要码前换掉扫码身份（`electron/neteaseLoginIdentity.cjs`）：`deviceId` 每次都换；匿名 token `MUSIC_A` 只在 token 文件比加载时更新时才换得到。网易与 QQ 两个内嵌后端的拉起、状态与诊断分别在 `electron/neteaseBackend.cjs` 与 `electron/qqBackend.cjs`，`electron/main.cjs` 只负责装配。
 
 ## Public contract
 

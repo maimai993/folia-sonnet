@@ -20,7 +20,11 @@ import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrary
 import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librarySuites';
 import { DEFAULT_THEME } from '../../../src/services/baseThemes';
 import { PROBE_SURFACE_CALLBACKS } from '../libraryBehavior/probeSurfaceCallbacks';
-import { onProbeBackCollection } from '../libraryBehavior/useLibraryProbeHarness';
+import {
+    onProbeBackCollection,
+    onProbePopCollectionTo,
+    onProbePushCollection,
+} from '../libraryBehavior/useLibraryProbeHarness';
 import {
     ACCOUNT_INITIAL_ACTIVE,
     ACCOUNT_NETEASE,
@@ -37,6 +41,7 @@ import {
     resetFakeAuth,
     scriptQrStates,
     setQrTtl,
+    setSelfCheck,
     shouldFailRefresh,
 } from './fakeAuthProviders';
 import { probeSwitchCleanup } from './probeSwitchCleanup';
@@ -213,7 +218,7 @@ export const useAccountProbeModel = (): AccountProbeModel => {
         useCollectionNavigationStore.getState().openRoot(collection, 'home');
     }, []);
     const onPushCollection = useCallback<HomeViewModel['onPushCollection']>(collection => {
-        useCollectionNavigationStore.getState().push(collection);
+        onProbePushCollection(collection);
     }, []);
 
     const activeCollections = activeProvider?.collections;
@@ -240,6 +245,7 @@ export const useAccountProbeModel = (): AccountProbeModel => {
         account,
         onOpenCollection,
         onPushCollection,
+        onPopCollectionTo: onProbePopCollectionTo,
         onBackCollection: onProbeBackCollection,
     }), [account, onOpenCollection, onPushCollection, surfaceProps]);
 
@@ -260,6 +266,7 @@ export const useAccountProbeModel = (): AccountProbeModel => {
             setQrTtl,
             failRefresh,
             failCreate,
+            setSelfCheck,
             setAccount: seedAccount,
             setActive: providerId => useOnlineProviderAccountStore.setState({ activeProviderId: providerId }),
             setNeteaseBackend: ({ supported, status, error = null }) => {

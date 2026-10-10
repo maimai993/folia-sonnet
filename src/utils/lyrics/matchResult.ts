@@ -39,3 +39,7 @@ export const getMatchResultCoverUrl = (
 
 export const sourceSupportsCover = (source: LyricMatchSource, result?: SongResult | null): boolean =>
     Boolean(getMatchResultCoverUrl(result, source));
+
+// AMLL 搜索结果是歌词库条目：artists 是同一歌手的多语言别名而不是合作歌手，也没有封面和真实专辑 ID，
+// 只能用来写歌词，不能当作歌曲元数据写进本地库
+export const sourceProvidesSongMetadata = (source: LyricMatchSource): boolean => source !== 'amll';

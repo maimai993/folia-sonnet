@@ -6,6 +6,7 @@ import {
     hasLibrarySuite,
     listLibrarySuiteOverlays,
     listLibrarySuites,
+    resolveLibraryStage,
     resolveLibrarySurface,
     resolveLibrarySurfaceActions,
 } from '@/library/registry';
@@ -155,5 +156,13 @@ describe('library suite registry', () => {
         expect(resolveLibrarySurface('collection', 'tui').transitions).toBeUndefined();
         expect(resolveLibrarySurface('artist', 'tui').transitions).toBeUndefined();
         expect(resolveLibrarySurface('artist', 'grid').transitions?.beforeBack).toBeTypeOf('function');
+    });
+
+    it('mounts no stage for the grid, the TUI or an unknown id (B1)', () => {
+        // grid 与 TUI 都没有 stage；未知 id 生效的是 grid，同样没有。宿主因此照旧垫背景板、藏首页，也不加载任何 stage chunk。
+        expect(listLibrarySuites().filter(suite => suite.stage).map(suite => suite.id)).toEqual([]);
+        expect(resolveLibraryStage('grid')).toBeNull();
+        expect(resolveLibraryStage('tui')).toBeNull();
+        expect(resolveLibraryStage('nope')).toBeNull();
     });
 });

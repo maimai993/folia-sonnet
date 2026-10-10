@@ -1,66 +1,45 @@
-import type { AmllDbPlatform, LyricData } from '../../../types';
+import type { AmllDbPlatform, LyricData, SongResult } from '../../../types';
 import { parseLyricsByFormat } from '../parserCore';
+import {
+    buildAmllApiLyricsUrl,
+    buildAmllApiSearchUrl,
+    getAmllApiData,
+    type AmllApiSearchPage,
+    type AmllApiSearchParams,
+    type AmllApiSongItem,
+} from './amllApi';
 
 // src/utils/lyrics/providers/amllDbProvider.ts
 
-const AMLL_DB_BASE_URL = 'https://amll-ttml-db.stevexmh.net';
 const AMLL_DB_CACHE_LIMIT = 200;
-const AMLL_DB_FETCH_TIMEOUT_MS = 5000;
 const lyricsCache = new Map<string, Promise<LyricData | null>>();
 
-function getElectronBridge() {
-    if (typeof window === 'undefined') {
-        return undefined;
-    }
-    return window.electron;
-}
+type AmllDbMusicId = number | string | null | undefined;
 
-export const buildAmllDbLyricsUrl = (platform: AmllDbPlatform, musicId: number | string): string => (
-    `${AMLL_DB_BASE_URL}/${platform}/${encodeURIComponent(String(musicId))}?format=ttml`
-);
-
-const buildAmllDbRequestUrl = (platform: AmllDbPlatform, musicId: number | string): string => {
-    const targetUrl = buildAmllDbLyricsUrl(platform, musicId);
-    return getElectronBridge() ? targetUrl : `/api/lyric-proxy?url=${encodeURIComponent(targetUrl)}`;
-};
-
-async function requestAmllDb(platform: AmllDbPlatform, musicId: number | string): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {
-    const requestUrl = buildAmllDbRequestUrl(platform, musicId);
-    const electronBridge = getElectronBridge();
-
-    if (electronBridge?.fetchLyricProxy) {
-        const response = await electronBridge.fetchLyricProxy(requestUrl, {
-            method: 'GET',
-        });
-        return {
-            ok: response.ok,
-            status: response.status,
-            text: async () => response.bodyText,
-        };
-    }
-
-    return fetch(requestUrl, {
-        credentials: 'omit',
-        signal: AbortSignal.timeout(AMLL_DB_FETCH_TIMEOUT_MS),
-    });
-}
+const normalizeMusicIds = (ids: readonly AmllDbMusicId[]): string[] => ids
+    .map(id => String(id ?? '').trim())
+    .filter((id, index, all) => id && all.indexOf(id) === index);
 
 export function clearAmllDbLyricsCache(): void {
     lyricsCache.clear();
 }
 
+// AMLL 里 QQ 歌曲有的按 mid 收录，有的按数字 ID 收录（约 2:1），两种都要试；mid 在前
+export function getAmllDbMusicIds(
+    platform: AmllDbPlatform,
+    song: Pick<SongResult, 'id' | 'qqMid'>,
+): string[] {
+    return normalizeMusicIds(platform === 'qq' ? [song.qqMid, song.id] : [song.id]);
+}
+
 async function fetchAmllDbLyricsUncached(
     platform: AmllDbPlatform,
-    musicId: number | string,
+    musicId: string,
 ): Promise<LyricData | null> {
     try {
-        const response = await requestAmllDb(platform, musicId);
-        if (!response.ok) {
-            return null;
-        }
-
-        const ttml = await response.text();
-        if (!ttml.trim() || !/<tt(?:\s|>)/i.test(ttml)) {
+        const song = await getAmllApiData<AmllApiSongItem>(buildAmllApiLyricsUrl(platform, musicId));
+        const ttml = song?.lyrics;
+        if (!ttml?.trim() || !/<tt(?:\s|>)/i.test(ttml)) {
             return null;
         }
 
@@ -72,15 +51,7 @@ async function fetchAmllDbLyricsUncached(
     }
 }
 
-export async function fetchAmllDbLyrics(
-    platform: AmllDbPlatform,
-    musicId: number | string,
-): Promise<LyricData | null> {
-    const id = String(musicId).trim();
-    if (!id) {
-        return null;
-    }
-
+function fetchAmllDbLyricsCached(platform: AmllDbPlatform, id: string): Promise<LyricData | null> {
     const cacheKey = `${platform}:${id}`;
     const cached = lyricsCache.get(cacheKey);
     if (cached) {
@@ -97,4 +68,32 @@ export async function fetchAmllDbLyrics(
     }
 
     return request;
+}
+
+// 传入多个 ID 时按顺序逐个查询，返回第一个有歌词的结果
+export async function fetchAmllDbLyrics(
+    platform: AmllDbPlatform,
+    musicId: AmllDbMusicId | readonly AmllDbMusicId[],
+): Promise<LyricData | null> {
+    for (const id of normalizeMusicIds(Array.isArray(musicId) ? musicId : [musicId])) {
+        const lyrics = await fetchAmllDbLyricsCached(platform, id);
+        if (lyrics) {
+            return lyrics;
+        }
+    }
+    return null;
+}
+
+// 官方搜索。没有结果返回空列表；限流、服务端错误、网络错误返回 null，调用方据此区分「搜不到」和「没搜成」
+export async function searchAmllDbSongs(
+    params: AmllApiSearchParams,
+    pageSize: number,
+): Promise<AmllApiSongItem[] | null> {
+    try {
+        const page = await getAmllApiData<AmllApiSearchPage>(buildAmllApiSearchUrl(params, pageSize));
+        return page ? page.items : null;
+    } catch (error) {
+        console.warn('[AMLLDB] Search failed:', params, error);
+        return null;
+    }
 }

@@ -12,7 +12,12 @@ import {
 import { buildLocalHomeGroups } from '../../../src/library/core/model/localHomeModel';
 import { getLocalCoverAssetUrl } from '../../../src/services/localCoverAssetUrl';
 import { useLocalLibraryCatalog, type LocalLibraryCatalogSnapshot } from '../../../src/hooks/useLocalLibraryCatalog';
-import { notifyCollectionPop, useCollectionNavigationStore } from '../../../src/stores/useCollectionNavigationStore';
+import {
+    notifyCollectionPop,
+    useCollectionNavigationStore,
+    type CollectionNavigationSnapshot,
+} from '../../../src/stores/useCollectionNavigationStore';
+import { resolveCollectionPopTo } from '../../../src/library/core/model/collectionNavigation';
 import { useOnlineProviderAccountStore } from '../../../src/stores/useOnlineProviderAccountStore';
 import { useLibrarySuiteStore } from '../../../src/library/core/state/useLibrarySuiteStore';
 import { DEFAULT_LIBRARY_SUITE_ID } from '../../../src/library/core/model/librarySuites';
@@ -99,6 +104,25 @@ const popNavigation = () => {
     const next = { ...snapshot, stack: snapshot.stack.slice(0, -1) };
     notifyCollectionPop(next);
     store.restore(next);
+};
+
+// 弹到 to（更浅的一层；null 是整个关掉）：和浏览器后退同一个顺序，先通知再改 store。真实应用里面包屑跳层
+// 走 history.go(-k)，落地后的 popstate 也是这个顺序（见 useAppNavigation 的 traverseCollectionTo）。
+const popNavigationTo = (to: CollectionNavigationSnapshot | null) => {
+    notifyCollectionPop(to);
+    useCollectionNavigationStore.getState().restore(to);
+};
+
+// 压栈（N1 折叠紧邻往返）：要进入的正好是上一层时当作一次返回，与真实应用一致（那里走 backCollection）。
+const pushNavigation = (collection: GridViewCollectionDescriptor) => {
+    const decision = useCollectionNavigationStore.getState().push(collection);
+    if (decision.kind === 'back') popNavigation();
+};
+
+// 面包屑跳层：depth 是保留的层数，0 为整个关掉。
+const popNavigationToDepth = (depth: number) => {
+    const to = resolveCollectionPopTo(useCollectionNavigationStore.getState().snapshot, depth);
+    if (to !== undefined) popNavigationTo(to);
 };
 
 export type LibraryProbeHarness = {
@@ -216,7 +240,7 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
         useCollectionNavigationStore.getState().openRoot(collection, 'home');
     }, []);
     const onPushCollection = useCallback((collection: GridViewCollectionDescriptor) => {
-        useCollectionNavigationStore.getState().push(collection);
+        pushNavigation(collection);
     }, []);
 
     // 把 fixture id 换成首页同款的集合描述：在线走 createOnlineGridViewCollection，本地走 Grid3D 的分组。
@@ -325,4 +349,8 @@ export const useLibraryProbeHarness = (): LibraryProbeHarness => {
     };
 };
 
-export { popNavigation as onProbeBackCollection };
+export {
+    popNavigation as onProbeBackCollection,
+    pushNavigation as onProbePushCollection,
+    popNavigationToDepth as onProbePopCollectionTo,
+};

@@ -87,6 +87,7 @@ const createBaseParams = () => {
         addSongToQueue: vi.fn(),
         onOpenCollection: vi.fn(),
         onPushCollection: vi.fn(),
+        onPopCollectionTo: vi.fn(),
         onBackCollection: vi.fn(),
     };
 };

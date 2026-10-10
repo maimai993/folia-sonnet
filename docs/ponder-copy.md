@@ -766,7 +766,7 @@
         "gridMap": "点顶部「全部」打开 GridMap 查看所有集合；{{mod}} + F 或直接输入可筛选集合。",
         "gridSearchResult": "提交右上角搜索后会打开独立搜索工作台，结果按歌曲列出，可播放、打开艺人/专辑或加入队列。",
         "gridCardKeys": "← / → 切换中央海报，Enter 打开当前集合；滚轮和水平拖动执行同样的焦点移动。",
-        "gridPageKeys": "{{mod}} + K 命令；{{mod}} + B 进 Lattice（需有队列）；Ctrl + G 本页 Ponder。",
+        "gridPageKeys": "Tab / Shift + Tab 切换页签；{{mod}} + K 命令；{{mod}} + B 进 Lattice（需有队列）；Ctrl + G 本页 Ponder。",
         "gridView": "集合网格展示刚才打开的卡片所包含的歌曲、专辑或艺人。返回时会回到上一级，并保留原来的位置。",
         "gridViewActions": "选中卡片可以播放或继续进入。页面操作区还会按集合能力提供全部播放、加入队列、编辑等动作。",
         "gridViewBack": "左上角返回按钮退出当前集合，并清理这次进入使用的导航记录。Esc 在没有更内层状态时也会返回。",
@@ -1071,7 +1071,7 @@
 | `grid-page` | `grid-page-map` | 用地图总览全部集合 | `ponder.captions.pages.gridMap` | 点顶部「全部」打开 GridMap 查看所有集合；{{mod}} + F 或直接输入可筛选集合。 | map：全部集合地图 | `ponder.anchors.grid.map` |
 | `grid-page` | `grid-page-search` | 搜索歌曲而不是筛选海报 | `ponder.captions.pages.gridSearchResult` | 提交右上角搜索后会打开独立搜索工作台，结果按歌曲列出，可播放、打开艺人/专辑或加入队列。 | search：歌曲搜索 | `ponder.anchors.grid.search` |
 | `grid-page` | `grid-page-keyboard` | Grid3D 的全部页面快捷键 | `ponder.captions.pages.gridCardKeys` | ← / → 切换中央海报，Enter 打开当前集合；滚轮和水平拖动执行同样的焦点移动。 | shelf：3D 海报轨道 | `ponder.anchors.grid.shelf` |
-| `grid-page` | `grid-page-keyboard` | Grid3D 的全部页面快捷键 | `ponder.captions.pages.gridPageKeys` | {{mod}} + K 命令；{{mod}} + B 进 Lattice（需有队列）；Ctrl + G 本页 Ponder。 | page：海报墙 | `ponder.anchors.pages.grid` |
+| `grid-page` | `grid-page-keyboard` | Grid3D 的全部页面快捷键 | `ponder.captions.pages.gridPageKeys` | Tab / Shift + Tab 切换页签；{{mod}} + K 命令；{{mod}} + B 进 Lattice（需有队列）；Ctrl + G 本页 Ponder。 | page：海报墙 | `ponder.anchors.pages.grid` |
 | `grid-palette-hotkey` | `grid-palette-hotkey-owner` | 网格上的 S 归谁 | `ponder.captions.gridHotkey.off` | 在海报墙和集合页，按字母直接筛选；默认按 S 也是筛选，不会打开命令窗口。 | toggle：S 归命令窗口 | `ponder.anchors.gridHotkey.toggle` |
 | `grid-palette-hotkey` | `grid-palette-hotkey-owner` | 网格上的 S 归谁 | `ponder.captions.gridHotkey.on` | 打开后，S 用于打开命令窗口，其他字母仍用于筛选。 | toggle：S 归命令窗口 | `ponder.anchors.gridHotkey.toggle` |
 | `grid-view-card-settings` | `grid-view-card-cover` | 封面怎么占这张卡 | `ponder.captions.gridStyle.fullBleed` | 全画幅封面让集合页封面铺满卡片，歌名和歌手显示在渐变遮罩上。 | fullBleed：全画幅封面 | `ponder.anchors.gridViewCard.fullBleed` |

@@ -11,7 +11,7 @@ import {
     ACCOUNT_QUILL,
     accountRule,
 } from '../../dev/probes/accountBehavior/accountFixtureRules';
-import type { AccountCall, AccountCallOp, AccountQrState } from '../../dev/probes/accountBehavior/probeApi';
+import type { AccountCall, AccountCallOp, AccountQrState, AccountSelfCheckScript } from '../../dev/probes/accountBehavior/probeApi';
 import '../../dev/probes/accountBehavior/probeApi';
 
 // test/component/accountBehavior.spec.ts
@@ -56,6 +56,10 @@ const scriptQr = (page: Page, providerId: string, states: AccountQrState[]) => p
 const setQrTtl = (page: Page, providerId: string, ttlMs: number | null) => page.evaluate(
     ([id, ttl]) => window.__accountProbe!.setQrTtl(id, ttl),
     [providerId, ttlMs] as const,
+);
+const setSelfCheck = (page: Page, providerId: string, script: AccountSelfCheckScript | null) => page.evaluate(
+    ([id, value]) => window.__accountProbe!.setSelfCheck(id, value),
+    [providerId, script] as const,
 );
 const setAccount = (page: Page, providerId: string, status: 'authenticated' | 'anonymous') => page.evaluate(
     ([id, value]) => window.__accountProbe!.setAccount(id, value),
@@ -311,6 +315,11 @@ const expectConfirmFor = async (page: Page, driver: AccountDriver, providerId: s
 for (const suite of SUITES) {
 const driver = DRIVERS[suite];
 const isGrid = suite === 'grid';
+// 失败帮助的入口：网格里先给简单办法，诊断与反馈收在「还是不行？」下面；TUI 直接给复制按钮（F4）。
+const failureHelpEntry = (page: Page) => (isGrid
+    ? loginDialog(page).getByRole('button', { name: 'Still not working? Send us the diagnostics' })
+    : diagnosticsButton(page));
+const tipsList = (page: Page) => loginDialog(page).getByText('Restart Folia, then scan again.');
 
 test.describe(`[${suite}] switching`, () => {
     test.beforeEach(async ({ page, mount }) => {
@@ -462,7 +471,7 @@ test.describe(`[${suite}] signing in`, () => {
         await expect.poll(() => calls(page, 'refresh')).toEqual([expect.objectContaining({ providerId: ACCOUNT_GAMMA, ok: false })]);
         await expect(loginDialog(page)).toBeVisible();
         await expect(statusText(page, 'error')).toBeVisible();
-        await expect(diagnosticsButton(page)).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
         await expect(retryButton(page)).toBeVisible();
         await expect(driver.confirmDialog(page)).toHaveCount(0);
         expect(await accountStatus(page, ACCOUNT_GAMMA)).toBe('anonymous');
@@ -499,7 +508,7 @@ test.describe(`[${suite}] signing in`, () => {
         // 后端报过期（没扫过）：不算失败；重试沿用已选的方式，并取消过期的那个会话。
         await scriptQr(page, ACCOUNT_QUILL, ['expired']);
         await expect(statusText(page, 'expired')).toBeVisible();
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toHaveCount(0);
         await driver.retry(page);
         await expect.poll(() => calls(page, 'create', ACCOUNT_QUILL)).toHaveLength(3);
         expect((await calls(page, 'create', ACCOUNT_QUILL))[2].methodId).toBe('wechat');
@@ -526,7 +535,7 @@ test.describe(`[${suite}] QR lifetime`, () => {
         await expect(statusText(page, 'expired')).toBeVisible();
         await expect.poll(() => calls(page, 'cancel')).toEqual([expect.objectContaining({ providerId: ACCOUNT_GAMMA, key })]);
         await expect(retryButton(page)).toBeVisible();
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toHaveCount(0);
         // 到点即停：之后不再轮询。
         const checks = await countCalls(page, 'check');
         await page.waitForTimeout(2_500);
@@ -547,8 +556,11 @@ test.describe(`[${suite}] QR lifetime`, () => {
         const key = await lastKey(page, ACCOUNT_GAMMA);
         await expect(statusText(page, 'scanned')).toBeVisible();
         await expect(statusText(page, 'expired')).toBeVisible();
-        await expect(diagnosticsButton(page)).toBeVisible();
-        await expect(loginDialog(page).getByText(/Confirmed on your phone but still not signed in/)).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
+        await expect(tipsList(page)).toBeVisible();
+        // 扫过码才过期的那句提示在诊断与反馈里：网格要先展开「还是不行？」。
+        if (isGrid) await failureHelpEntry(page).click();
+        await expect(loginDialog(page).getByText(/If you confirmed on your phone but were still not signed in/)).toBeVisible();
         expect((await calls(page, 'cancel')).map(call => call.key)).toEqual([key]);
 
         // 后端报的过期同理：扫过才算失败。
@@ -556,9 +568,9 @@ test.describe(`[${suite}] QR lifetime`, () => {
         await scriptQr(page, ACCOUNT_GAMMA, ['scanned', 'expired']);
         await driver.retry(page);
         await expect(statusText(page, 'scanned')).toBeVisible();
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toHaveCount(0);
         await expect(statusText(page, 'expired')).toBeVisible();
-        await expect(diagnosticsButton(page)).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
     });
 });
 
@@ -567,14 +579,14 @@ test.describe(`[${suite}] QQ diagnostics`, () => {
         await mountAccount(mount, page, suite);
     });
 
-    // QQ 的扫码失败摘要写在普通日志面板里（PR #495），登录界面不给复制报告 / 反馈入口；grid 的诊断区块与
-    // TUI 的诊断行和 F4 都看 core 的 canShowLoginDiagnostics。同一种失败在别的平台照样给入口（对照组 gamma）。
+    // QQ 的扫码失败和别的平台一样给复制报告 / 反馈入口；grid 的诊断区块与 TUI 的诊断行和 F4 都看
+    // core 的 canShowLoginDiagnostics（对照组 gamma）。失败后由会话自动跑一次自检，结论显示在诊断区块里。
     test(`[${suite}] a login canceled on the phone says so and holds the retry until the backend cooldown ends`, async ({ page }) => {
         await scriptQr(page, ACCOUNT_GAMMA, ['canceled']);
         await driver.selectProvider(page, ACCOUNT_GAMMA);
         await expect(loginDialog(page).getByText(/^Login was canceled on your phone\. You can get a new QR code in \d+s\.$/)).toBeVisible();
         // 用户自己取消的，没有要排查的东西。
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toHaveCount(0);
         // 冷却中：网格的重试按钮在但不能点；TUI 不给重试，Enter 不要码。
         if (isGrid) {
             await expect(retryButton(page)).toBeDisabled();
@@ -593,11 +605,11 @@ test.describe(`[${suite}] QQ diagnostics`, () => {
         await expect(statusText(page, 'waiting')).toBeVisible();
     });
 
-    test(`[${suite}] a failed QQ sign-in offers retry but no diagnostics`, async ({ page }) => {
+    test(`[${suite}] a failed QQ sign-in offers retry and diagnostics like other providers`, async ({ page }) => {
         await scriptQr(page, ACCOUNT_GAMMA, ['error']);
         await driver.selectProvider(page, ACCOUNT_GAMMA);
         await expect(statusText(page, 'error')).toBeVisible();
-        await expect(diagnosticsButton(page)).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
         await driver.closeLogin(page);
         await expect(loginDialog(page)).toHaveCount(0);
 
@@ -606,22 +618,83 @@ test.describe(`[${suite}] QQ diagnostics`, () => {
         await expect(statusText(page, 'scanned')).toBeVisible();
         await expect(statusText(page, 'error')).toBeVisible();
         await expect(retryButton(page)).toBeVisible();
-        await expect(diagnosticsButton(page)).toHaveCount(0);
-        await expect(loginDialog(page).getByText(/diagnostic/i)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toBeVisible();
         if (!isGrid) {
-            await expect(loginDialog(page).locator('[data-tui-login-diagnostics]')).toHaveCount(0);
-            // F4 在没有诊断入口时不接：不出现复制状态，登录框还在。
+            await expect(loginDialog(page).locator('[data-tui-login-diagnostics]')).toHaveCount(1);
+            // F4 复制 QQ 的诊断报告：换掉剪贴板写入，读回写进去的内容。
+            await page.evaluate(() => {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: { writeText: async (text: string) => { (window as unknown as { __copied?: string }).__copied = text; } },
+                });
+            });
             await page.keyboard.press('F4');
-            await expect(loginDialog(page).locator('[data-tui-login-diagnostics-copy]')).toHaveCount(0);
-            await expect(loginDialog(page)).toBeVisible();
+            await expect(loginDialog(page).locator('[data-tui-login-diagnostics-copy]')).toHaveAttribute('data-tui-login-diagnostics-copy', 'copied');
+            const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
+            expect(copied).toContain('### Folia QR login diagnostics');
+            expect(copied).toContain(`provider: ${ACCOUNT_QQ}`);
         }
 
-        // 重试照常可用，新会话同样不给诊断。
+        // 重试后新会话失败同样给诊断。
         await scriptQr(page, ACCOUNT_QQ, ['error']);
         await driver.retry(page);
         await expect.poll(() => countCalls(page, 'create', ACCOUNT_QQ)).toBe(2);
         await expect(statusText(page, 'error')).toBeVisible();
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toBeVisible();
+    });
+
+    test(`[${suite}] a failed sign-in runs the automatic check once and shows where the connection broke`, async ({ page }) => {
+        await setSelfCheck(page, ACCOUNT_GAMMA, 'tls-reset');
+        await scriptQr(page, ACCOUNT_GAMMA, ['error']);
+        await driver.selectProvider(page, ACCOUNT_GAMMA);
+        await expect(statusText(page, 'error')).toBeVisible();
+
+        // 先给简单办法（重启；换网络再重启），自检结论在它后面。
+        await expect(tipsList(page)).toBeVisible();
+        await expect(loginDialog(page).getByText('Switch to another network (for example a phone hotspot), then restart Folia.')).toBeVisible();
+        const verdict = loginDialog(page).getByText(/The connection to the Gamma servers was cut during the encryption handshake \(probe\.example 203\.0\.113\.7 \(IPv4\): ECONNRESET\)/);
+        await expect(verdict).toBeVisible();
+        await expect(loginDialog(page).getByText(/IPv4 connection: probe\.example: ECONNRESET \(tls\)/)).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
+        expect(await countCalls(page, 'self-check', ACCOUNT_GAMMA)).toBe(1);
+
+        // 报告里带着同一个结论与逐层的结果。
+        await page.evaluate(() => {
+            Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: { writeText: async (text: string) => { (window as unknown as { __copied?: string }).__copied = text; } },
+            });
+        });
+        if (isGrid) {
+            // 诊断一开始收着：展开之后才有复制与反馈。
+            await expect(diagnosticsButton(page)).toHaveCount(0);
+            await failureHelpEntry(page).click();
+            await diagnosticsButton(page).click();
+        } else {
+            await page.keyboard.press('F4');
+        }
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '')).toContain('verdict: tls-reset');
+        const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
+        expect(copied).toContain('v4 203.0.113.7: tcp 10ms → ECONNRESET at tls: read ECONNRESET');
+        expect(copied).toContain('probe: acct-gamma diagnostics');
+    });
+
+    test(`[${suite}] no automatic check for a login canceled on the phone, and a check that fails says so`, async ({ page }) => {
+        await setSelfCheck(page, ACCOUNT_GAMMA, 'network-ok');
+        await scriptQr(page, ACCOUNT_GAMMA, ['canceled']);
+        await driver.selectProvider(page, ACCOUNT_GAMMA);
+        await expect(loginDialog(page).getByText(/^Login was canceled on your phone\./)).toBeVisible();
+        await page.waitForTimeout(300);
+        expect(await countCalls(page, 'self-check', ACCOUNT_GAMMA)).toBe(0);
+        await driver.closeLogin(page);
+        await expect(loginDialog(page)).toHaveCount(0);
+
+        await setSelfCheck(page, ACCOUNT_QQ, 'error');
+        await scriptQr(page, ACCOUNT_QQ, ['error']);
+        await driver.selectProvider(page, ACCOUNT_QQ);
+        await expect(statusText(page, 'error')).toBeVisible();
+        await expect(loginDialog(page).getByText('The automatic check could not finish: probe: self-check unavailable')).toBeVisible();
+        await expect(failureHelpEntry(page)).toBeVisible();
     });
 });
 
@@ -668,10 +741,11 @@ test.describe(`[${suite}] NetEase backend`, () => {
         await expect(loginDialog(page).getByText('The local NetEase service is not running')).toBeVisible();
         await expect(loginDialog(page).getByText('probe: xeapi key missing')).toBeVisible();
         await driver.expectRestartLabel(page, 'Restart backend');
-        // 要码照常发出（后端没起来所以失败），但失败被后端故障盖住：没有重试、没有诊断、没有状态文案。
+        // 要码照常发出（后端没起来所以失败）：重试与状态文案被后端故障盖住，诊断照样给——
+        // 报告里有拉起的每一步与错误原文，重启解决不了时用户可以直接反馈。
         await expect.poll(() => countCalls(page, 'create', ACCOUNT_NETEASE)).toBe(1);
         await expect(retryButton(page)).toHaveCount(0);
-        await expect(diagnosticsButton(page)).toHaveCount(0);
+        await expect(failureHelpEntry(page)).toBeVisible();
         await expect(statusText(page, 'error')).toHaveCount(0);
         await expect(qrImage(page)).toHaveCount(0);
 

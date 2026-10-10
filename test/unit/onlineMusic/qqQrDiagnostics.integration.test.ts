@@ -1,17 +1,72 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { formatQrLoginDiagnosticReport } from '@/utils/qrLoginDiagnosticReport';
+import type { LibraryAccountAuthPort, LibraryAccountClock } from '@/library/core/contracts/account';
 
 // test/unit/onlineMusic/qqQrDiagnostics.integration.test.ts
-// 使用正式 transport 和 provider，把模拟 HTTP 响应送到最终复制报告。
+// 正式的 transport、provider 与 core 的扫码会话串起来，只把 HTTP 换成桩：后端回了什么，复制出来的报告里就是什么
+// （失败阶段与原因、HTTP 状态、退避时长原样保留），而登录凭据（session 的值）永远不出现。
 vi.mock('@/utils/lyrics/providers/qqLyricProvider', () => ({ fetchQQLyrics: vi.fn(), searchQQLyrics: vi.fn() }));
 
 const storage = new Map<string, string>();
 const fetchMock = vi.fn();
-const reportFor = async () => {
+
+/** 手动时钟：advance 按到期顺序触发计时器，每次触发前后排空微任务。 */
+const createManualClock = () => {
+    let now = Date.UTC(2026, 9, 7, 12, 0, 0);
+    let seq = 0;
+    const timers = new Map<number, { at: number; callback: () => void }>();
+    const flush = () => new Promise<void>(resolve => setImmediate(resolve));
+    const clock: LibraryAccountClock = {
+        now: () => now,
+        setTimeout: (callback, ms) => {
+            const id = ++seq;
+            timers.set(id, { at: now + ms, callback });
+            return id;
+        },
+        clearTimeout: handle => { timers.delete(handle as number); },
+    };
+    const advance = async (ms: number) => {
+        const target = now + ms;
+        for (; ;) {
+            await flush();
+            const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort(([, a], [, b]) => a.at - b.at)[0];
+            if (!due) break;
+            timers.delete(due[0]);
+            now = due[1].at;
+            due[1].callback();
+        }
+        now = target;
+        await flush();
+    };
+    return { clock, advance };
+};
+
+const createSession = async () => {
     const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-    return formatQrLoginDiagnosticReport({ generatedAt: Date.now(), appVersion: 'test', userAgent: 'test',
-        providerId: 'qq', methodId: 'qq', failure: 'start-error', timeline: [],
-        providerLines: await qqProvider.auth!.getQrLoginDiagnostics!() });
+    const { createProviderLoginSession } = await import('@/library/core/services/providerLoginSession');
+    const qqAuth = qqProvider.auth!;
+    const auth: LibraryAccountAuthPort = {
+        resolveQrLoginMethods: async () => [],
+        createQrLogin: async (_providerId, methodId) => {
+            const key = await qqAuth.getQrKey!(methodId);
+            return { key, imageUrl: await qqAuth.createQr!(key) };
+        },
+        checkQrLogin: (_providerId, key) => qqAuth.checkQr!(key),
+        cancelQrLogin: (_providerId, key) => qqAuth.cancelQr!(key),
+        getQrTtlMs: () => null,
+        getQrLoginDiagnostics: () => qqAuth.getQrLoginDiagnostics!(),
+        canRunQrLoginSelfCheck: () => false,
+        runQrLoginSelfCheck: async () => null,
+        getProviderCapabilities: () => ({ auth: true }),
+    };
+    const manual = createManualClock();
+    const session = createProviderLoginSession({
+        auth,
+        clock: manual.clock,
+        diagnostics: { appVersion: 'test', userAgent: 'test' },
+        log: () => { },
+        onConfirmed: () => qqAuth.getLoginStatus().then(user => (user ? true : false)),
+    });
+    return { session, manual };
 };
 
 describe('QQ QR copied report integration', () => {
@@ -26,96 +81,76 @@ describe('QQ QR copied report integration', () => {
             setItem: (key: string, value: string) => storage.set(key, value),
             removeItem: (key: string) => storage.delete(key),
         });
+        vi.spyOn(console, 'info').mockImplementation(() => { });
+        vi.spyOn(console, 'warn').mockImplementation(() => { });
     });
     afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-    it.each(['qq', 'wechat'])('preserves backend HTTP and cooldown origin for %s', async (method) => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 429, failureStage: 'qr-key', failureReason: 'local-backoff',
-            retryAfterMs: 30000, lastFailure: { failureStage: 'device-bootstrap', failureReason: 'upstream-rejected',
-                upstreamHttpStatus: 200, upstreamCode: -30002, upstreamSubCode: -99 },
-            token: 'private-token', cookie: 'private-cookie', uin: 'private-account', ip: '192.0.2.1' }, { status: 429 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await expect(qqProvider.auth!.getQrKey!(method)).rejects.toMatchObject({ httpStatus: 429 });
-        const report = await reportFor();
-        expect(report).toContain('qq details:\n  qr-key: transport=network httpStatus=429 stage=qr-key reason=local-backoff');
-        expect(report).toContain('last-failure: stage=device-bootstrap reason=upstream-rejected upstreamCode=-30002');
-        expect(report).not.toMatch(/private-|192\.0\.2\.1|qq\.example\.test/);
+    it.each(['qq', 'wechat'])('keeps the backend cooldown, its cause and the last failure for %s', async (method) => {
+        fetchMock.mockResolvedValueOnce(Response.json({
+            code: 429,
+            message: 'QR login is temporarily backed off',
+            failureStage: 'qr-key',
+            failureReason: 'local-backoff',
+            retryAfterMs: 30000,
+            lastFailure: { failureStage: 'session-issue', failureReason: 'unexpected-error', upstreamHttpStatus: 200 },
+        }, { status: 429 }));
+        const { session } = await createSession();
+
+        await session.start('qq', method).settled;
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'start-error', retryCooldownSeconds: 30 });
+        const report = await session.buildDiagnosticReport();
+        expect(report).toContain(`provider: qq (method ${method})`);
+        expect(report).toContain('message="QQMusicApi login_qr_key failed: HTTP 429 (QR login is temporarily backed off)"');
+        expect(report).toContain('httpStatus=429');
+        expect(report).toContain('"failureReason":"local-backoff"');
+        expect(report).toContain('"lastFailure":{"failureStage":"session-issue","failureReason":"unexpected-error","upstreamHttpStatus":200}');
+        expect(String(fetchMock.mock.calls[0][0])).toContain(`channel=${method}`);
     });
 
-    it('reports a non-JSON failure from an older backend without inventing a cause', async () => {
-        fetchMock.mockResolvedValueOnce(new Response('private-token', { status: 429 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.getQrKey!('qq').catch(() => undefined);
-        const report = await reportFor();
-        expect(report).toContain('httpStatus=429 stage=unavailable reason=unavailable');
-        expect(report).not.toMatch(/private-token|last-failure/);
+    it('reports the failure stage behind "QR login failed" after the phone confirmed', async () => {
+        fetchMock
+            .mockResolvedValueOnce(Response.json({ code: 200, data: { unikey: 'qr-key' } }))
+            .mockResolvedValueOnce(Response.json({ code: 200, data: { qrimg: 'data:image/png;base64,AAAA' } }))
+            .mockResolvedValueOnce(Response.json({ code: 802, message: 'QR code scanned' }))
+            .mockResolvedValueOnce(Response.json({
+                code: 800,
+                message: 'QR login failed',
+                failureStage: 'credential-exchange',
+                failureReason: 'upstream-rejected',
+                upstreamCode: 1000,
+                retryAfterMs: 30000,
+            }));
+        const { session, manual } = await createSession();
+        await session.start('qq', 'qq').settled;
+
+        await manual.advance(4000);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error', retryCooldownSeconds: 30 });
+        const report = await session.buildDiagnosticReport();
+        expect(report).toContain('state state=scanned polls=1');
+        expect(report).toContain('message="code 800: QR login failed (stage credential-exchange, reason upstream-rejected)"');
+        expect(report).toContain('"upstreamCode":1000');
     });
 
-    it('reports HTTP 502 and the distinct upstream HTTP status when QR creation fails', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 502, failureStage: 'qr-create', failureReason: 'upstream-http-error',
-            upstreamHttpStatus: 503 }, { status: 502 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.createQr!('private-key').catch(() => undefined);
-        const report = await reportFor();
-        expect(report).toContain('qr-create: transport=network httpStatus=502 stage=qr-create reason=upstream-http-error');
-        expect(report).toContain('upstreamHttpStatus=503');
-        expect(report).not.toContain('private-key');
-    });
+    it('says why the account did not load after a confirmed scan, without the session value', async () => {
+        fetchMock
+            .mockResolvedValueOnce(Response.json({ code: 200, data: { unikey: 'qr-key' } }))
+            .mockResolvedValueOnce(Response.json({ code: 200, data: { qrimg: 'data:image/png;base64,AAAA' } }))
+            .mockResolvedValueOnce(Response.json({ code: 803, message: 'Authorization login successful', cookie: 'qqmusic_session=secret-session-token' }))
+            .mockResolvedValueOnce(Response.json({ code: 200, data: {} }));
+        const { session, manual } = await createSession();
+        await session.start('qq', 'qq').settled;
 
-    it('reports MQTT failure from a successful HTTP check response', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 800, message: 'QR login failed', failureStage: 'mqtt-listener',
-            failureReason: 'mqtt-websocket-closed', retryAfterMs: 30000, token: 'private-token' }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await expect(qqProvider.auth!.checkQr!('private-key')).resolves.toMatchObject({ state: 'error' });
-        const report = await reportFor();
-        expect(report).toContain('qr-check: stage=mqtt-listener reason=mqtt-websocket-closed');
-        expect(report).not.toMatch(/private-key|private-token/);
-    });
+        await manual.advance(2000);
 
-    it('discards unrecognised categories and invalid numbers from an HTTP failure', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ failureStage: 'private-stage', failureReason: 'private-reason',
-            upstreamHttpStatus: 999, upstreamCode: 'private-account', upstreamSubCode: 'private-token', retryAfterMs: -1,
-            lastFailure: { failureStage: 'private-stage', failureReason: 'private-reason', upstreamCode: 'private-cookie' },
-            message: 'private-message' }, { status: 502 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.getQrKey!('qq').catch(() => undefined);
-        const report = await reportFor();
-        expect(report).toContain('httpStatus=502 stage=unavailable reason=unavailable upstreamCode=unavailable retryAfterMs=unavailable');
-        expect(report).toContain('upstreamHttpStatus=unavailable');
-        expect(report).not.toMatch(/private-|999|retryAfterMs=-1/);
-    });
-
-    it('records confirmation without a session and does not request an account', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 803 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.checkQr!('key');
-        await expect(qqProvider.auth!.getLoginStatus()).resolves.toBeNull();
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(await reportFor()).toContain('account-refresh: reason=missing-session');
-    });
-
-    it('records a loaded profile without copying its account data', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 200, data: { profile: { musicid: 'private-account',
-            info: { nick: 'private-nickname', logo: 'https://private-avatar.example' } } } }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.checkQr!('key');
-        await expect(qqProvider.auth!.getLoginStatus()).resolves.not.toBeNull();
-        const report = await reportFor();
-        expect(report).toContain('account-refresh: reason=profile-present');
-        expect(report).not.toMatch(/private-|qqmusic_session/);
-    });
-
-    it('reports a rejected account after confirmation and keeps cookies out of the report', async () => {
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 803, cookie: 'qqmusic_session=private-cookie' }));
-        fetchMock.mockResolvedValueOnce(Response.json({ code: 401 }, { status: 401 }));
-        const { qqProvider } = await import('@/services/onlineMusic/qqProvider');
-        await qqProvider.auth!.checkQr!('private-key');
-        await expect(qqProvider.auth!.getLoginStatus()).resolves.toBeNull();
-        const report = await reportFor();
-        expect(report).toContain('qr-check: result=confirmed hasSession=true');
-        expect(report).toContain('account-refresh: transport=auth-required httpStatus=401');
-        expect(report).not.toMatch(/private-cookie|private-key/);
-        expect([...storage.values()].join('')).not.toContain('private-cookie');
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'account-refresh-failed' });
+        const report = await session.buildDiagnosticReport();
+        expect(report).toContain('complete completed=false');
+        expect(report).toContain('last account check:');
+        expect(report).toContain('login_status: the backend does not recognize the stored session');
+        expect(report).toContain('session: backend session stored=yes');
+        expect(report).not.toContain('secret-session-token');
     });
 });

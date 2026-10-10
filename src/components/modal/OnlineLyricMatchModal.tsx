@@ -6,7 +6,7 @@ import { formatSongName } from '../../utils/songNameFormatter';
 import { loadOnlineLyricsState, saveOnlineLyricsState } from '../../utils/onlineLyricsState';
 import { calculateMatchScore } from '../../utils/lyrics/matchScore';
 import { buildLyricSearchQuery } from '../../utils/lyrics/searchQuery';
-import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource, sourceSupportsManualSearch } from '../../utils/lyrics/lyricMatchSources';
+import { fetchLyricsForMatchSource, LYRIC_MATCH_SOURCES, searchLyricsByMatchSource } from '../../utils/lyrics/lyricMatchSources';
 import { getLyricMatchSourceLabel, type LyricMatchSource } from './lyricMatchResultHelpers';
 import {
     getMatchResultCoverUrl,
@@ -58,15 +58,9 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
         };
     }, [song]);
 
-    const getMatchQuery = (query = searchQuery) => (
-        sourceSupportsManualSearch(source)
-            ? query.trim()
-            : buildLyricSearchQuery(songInfo.title, songInfo.artist, songInfo.album || '')
-    );
-
     const handleSearch = async (query = searchQuery) => {
-        const q = getMatchQuery(query);
-        if (!q.trim()) {
+        const q = query.trim();
+        if (!q) {
             return;
         }
 
@@ -218,30 +212,28 @@ const OnlineLyricMatchModal: React.FC<OnlineLyricMatchModalProps> = ({ song, onC
                             })}
                         </div>
 
-                        {sourceSupportsManualSearch(source) && (
-                            <div className="flex gap-3">
-                                <div className={`flex-1 flex items-center gap-3 rounded-2xl border px-4 py-3 ${inputBg}`}>
-                                    <Search size={18} className={textSecondary} />
-                                    <input
-                                        value={searchQuery}
-                                        onChange={event => setSearchQuery(event.target.value)}
-                                        onKeyDown={event => {
-                                            if (event.key === 'Enter') {
-                                                void handleSearch();
-                                            }
-                                        }}
-                                        className={`flex-1 bg-transparent outline-none text-sm ${textPrimary}`}
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => void handleSearch()}
-                                    disabled={isSearching}
-                                    className={`px-4 rounded-2xl text-sm font-medium transition-colors ${searchBtnBg}`}
-                                >
-                                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('localMusic.search')}
-                                </button>
+                        <div className="flex gap-3">
+                            <div className={`flex-1 flex items-center gap-3 rounded-2xl border px-4 py-3 ${inputBg}`}>
+                                <Search size={18} className={textSecondary} />
+                                <input
+                                    value={searchQuery}
+                                    onChange={event => setSearchQuery(event.target.value)}
+                                    onKeyDown={event => {
+                                        if (event.key === 'Enter') {
+                                            void handleSearch();
+                                        }
+                                    }}
+                                    className={`flex-1 bg-transparent outline-none text-sm ${textPrimary}`}
+                                />
                             </div>
-                        )}
+                            <button
+                                onClick={() => void handleSearch()}
+                                disabled={isSearching}
+                                className={`px-4 rounded-2xl text-sm font-medium transition-colors ${searchBtnBg}`}
+                            >
+                                {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('localMusic.search')}
+                            </button>
+                        </div>
 
                         <div className="min-h-0 flex-1 overflow-y-auto space-y-3 pr-1">
                             {isSearching ? (

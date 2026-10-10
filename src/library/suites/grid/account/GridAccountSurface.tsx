@@ -16,7 +16,7 @@ import {
     type LibraryLoginView,
 } from '../../../core/bindings/useLibraryAccount';
 import OnlineProviderLoginModal from './OnlineProviderLoginModal';
-import { buildQrLoginDiagnosticsProps } from './buildQrLoginDiagnosticsProps';
+import { buildQrLoginFailureHelpProps } from './buildQrLoginFailureHelpProps';
 import ConfirmDialog from '../../../../components/shared/ConfirmDialog';
 import qqIcon from '../../../../assets/providers/qq.svg';
 import wechatIcon from '../../../../assets/providers/wechat.svg';
@@ -89,11 +89,13 @@ const buildLoginModalProps = (
                 onRestart: features.backendRestart ? () => void account.restartLoginBackend() : undefined,
             }
             : undefined,
-        diagnostics: features.diagnostics && view.canShowDiagnostics && session.failure
-            ? buildQrLoginDiagnosticsProps({
+        failureHelp: features.diagnostics && view.canShowDiagnostics && session.failure && view.failureTips
+            ? buildQrLoginFailureHelpProps({
                 t,
                 providerId: session.providerId,
                 failure: session.failure,
+                tips: view.failureTips,
+                selfCheck: view.selfCheck,
                 buildReport: async () => {
                     const result = await account.buildLoginDiagnosticReport();
                     if (result.status !== 'ok') throw new Error('no login session to report');

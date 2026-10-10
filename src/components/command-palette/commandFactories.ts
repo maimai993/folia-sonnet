@@ -5,6 +5,8 @@ import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { GridSurfaceActionId } from '../../types/gridCommandSurface';
 import type { LibraryDirectorySurfaceActionId } from '../../library/core/contracts/directory';
 import type { LibraryArtistSurfaceActionId } from '../../library/core/contracts/artist';
+import type { LibrarySuiteChromeActionMeta } from '../../library/core/contracts/suiteChrome';
+import { libraryChromeCommandId } from '../../library/core/model/suiteChrome';
 import { settingsAnchorSubview, type SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { CommandPaletteCommand, CommandPaletteContext, CommandPaletteGroup } from './types';
 
@@ -166,6 +168,37 @@ export const createArtistSurfaceCommand = (
     scope: 'artist-surface',
     isAvailable: context => context?.scope.artist?.getState().availableActions.includes(action) ?? false,
     execute: (_input, context) => context.scope.artist?.run(action) ?? false,
+});
+
+/**
+ * One chrome action a library suite declares in its manifest (`chromeActions`, B2), as a palette command
+ * with the id `<suiteId>-<actionId>`.
+ *
+ * The text, keywords and execute key are static (so the registry contract can enumerate them); whether it
+ * applies is asked of whoever registered the suite chrome right now. It is offered only while that is this
+ * very suite — another suite's chrome on screen, or none, greys it out — and only while the suite's own
+ * handler says it can run. `scopeOwner` lets two suites reuse a key: their chrome is never up together.
+ */
+export const createSuiteChromeCommand = (
+    suiteId: string,
+    action: LibrarySuiteChromeActionMeta,
+): CommandPaletteCommand => defineCommand({
+    id: libraryChromeCommandId(suiteId, action.id),
+    group: 'grid',
+    title: action.title,
+    description: action.description,
+    keywords: [...action.keywords],
+    scope: 'suite-chrome',
+    scopeOwner: suiteId,
+    ...(action.executeShortcut ? { executeShortcut: action.executeShortcut } : {}),
+    isAvailable: (context) => {
+        const chrome = context?.scope.chrome;
+        return chrome?.suiteId === suiteId && chrome.isAvailable(action.id);
+    },
+    execute: (_input, context) => {
+        const chrome = context.scope.chrome;
+        return chrome?.suiteId === suiteId ? chrome.run(action.id) : false;
+    },
 });
 
 export const createAppLanguageCommand = (

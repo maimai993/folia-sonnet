@@ -6,7 +6,7 @@ import {
     type ProviderLoginSession,
 } from '@/library/core/services/providerLoginSession';
 import type { LibraryAccountAuthPort, LibraryAccountClock, LibraryAccountLogger } from '@/library/core/contracts/account';
-import type { QrLoginState } from '@/types/onlineMusic';
+import { OnlineProviderError, type LoginSelfCheckResult, type QrLoginState } from '@/types/onlineMusic';
 
 // test/unit/library/core/providerLoginSession.test.ts
 // 扫码登录会话服务（A2）：test/unit/hooks/useOnlineProviderQrLogin.test.ts 的每一条行为在这里逐条对应（标注 [hook]），
@@ -88,6 +88,8 @@ describe('providerLoginSession', () => {
             cancelQrLogin: vi.fn().mockResolvedValue(undefined),
             getQrTtlMs: vi.fn().mockReturnValue(QR_TTL_MS),
             getQrLoginDiagnostics: vi.fn().mockResolvedValue(['runtime: test']),
+            canRunQrLoginSelfCheck: vi.fn().mockReturnValue(false),
+            runQrLoginSelfCheck: vi.fn().mockResolvedValue(null),
         };
     });
 
@@ -297,13 +299,13 @@ describe('providerLoginSession', () => {
     it('issues a new session id on every start and exposes the raw snapshot from loading on', async () => {
         const session = createSession();
         expect(session.getSnapshot()).toEqual({
-            sessionId: 0, providerId: null, methodId: null, phase: 'idle', qrImageUrl: '', failure: null, retryCooldownSeconds: null,
+            sessionId: 0, providerId: null, methodId: null, phase: 'idle', qrImageUrl: '', failure: null, retryCooldownSeconds: null, selfCheck: null,
         });
 
         const first = session.start('qq', 'qq');
         expect(session.getSnapshot()).toEqual({
             sessionId: first.sessionId, providerId: 'qq', methodId: 'qq', phase: 'loading', qrImageUrl: '', failure: null,
-            retryCooldownSeconds: null,
+            retryCooldownSeconds: null, selfCheck: null,
         });
         await first.settled;
         expect(session.getSnapshot()).toMatchObject({ phase: 'waiting', qrImageUrl: 'qr-1.png' });
@@ -546,16 +548,16 @@ describe('providerLoginSession', () => {
     });
 });
 
-// QQ 的扫码失败由 qqProvider 写白名单过滤后的摘要（PR #495）；会话自己的日志与时间线对它只记固定类别。
-// 原 hook 测试里的「keeps raw QQ %s failures out of ordinary logs」迁到这里（确认后账户刷新抛错那一步在
-// controller 里，见 providerAccountController.test.ts）。
-describe('providerLoginSession · QQ failures stay out of ordinary logs', () => {
-    const secret = 'private-token https://private.example/?cookie=private-cookie';
-    const privateError = () => {
-        const error = new Error(secret);
-        error.name = 'private-name';
-        return error;
-    };
+// 失败的记录对每个 provider 都一样完整：错误名、原文、错误类别、HTTP 状态、后端的原始响应都进日志与报告。
+// 后面是要码串行、冷却、轮询的瞬时失败容忍与失败后的自检。
+describe('providerLoginSession · failures, serial requests, cooldown and self-check', () => {
+    const backendError = () => new OnlineProviderError(
+        'network',
+        'QQMusicApi login_qr_check failed: HTTP 502 (upstream unreachable)',
+        'qq',
+        { code: 502, failureStage: 'qr-poll', failureReason: 'network-error' },
+        502,
+    );
     type Step = 'start' | 'check' | 'state' | 'confirm' | 'cancel';
     const EVENT: Record<Step, [string, string]> = {
         start: ['start:error', 'start-error'],
@@ -577,19 +579,27 @@ describe('providerLoginSession · QQ failures stay out of ordinary logs', () => 
             cancelQrLogin: vi.fn().mockResolvedValue(undefined),
             getQrTtlMs: vi.fn().mockReturnValue(QR_TTL_MS),
             getQrLoginDiagnostics: vi.fn().mockResolvedValue(['runtime: test']),
+            canRunQrLoginSelfCheck: vi.fn().mockReturnValue(false),
+            runQrLoginSelfCheck: vi.fn().mockResolvedValue(null),
         };
     });
 
-    /** 让某一步以私密内容失败，返回那一步记下的日志条目与诊断报告。 */
+    /** 让某一步失败，返回那一步记下的日志条目与诊断报告。 */
     const failAt = async (providerId: string, step: Step) => {
-        if (step === 'start') auth.createQrLogin.mockRejectedValueOnce(privateError());
-        if (step === 'check') auth.checkQrLogin.mockRejectedValueOnce(privateError());
-        if (step === 'state') auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', message: secret });
+        if (step === 'start') auth.createQrLogin.mockRejectedValueOnce(backendError());
+        if (step === 'check') auth.checkQrLogin.mockRejectedValueOnce(backendError());
+        if (step === 'state') {
+            auth.checkQrLogin.mockResolvedValueOnce({
+                state: 'error',
+                message: 'code 800: QR login failed (stage credential-exchange, reason upstream-rejected)',
+                detail: { code: 800, failureStage: 'credential-exchange', failureReason: 'upstream-rejected', upstreamCode: 1000 },
+            });
+        }
         if (step === 'confirm') {
             auth.checkQrLogin.mockResolvedValueOnce({ state: 'confirmed' });
-            onConfirmed.mockRejectedValueOnce(privateError());
+            onConfirmed.mockRejectedValueOnce(backendError());
         }
-        if (step === 'cancel') auth.cancelQrLogin.mockRejectedValueOnce(privateError());
+        if (step === 'cancel') auth.cancelQrLogin.mockRejectedValueOnce(backendError());
         const session = createSession();
         await session.start(providerId, 'wechat').settled;
         if (step === 'cancel') session.stop();
@@ -600,24 +610,33 @@ describe('providerLoginSession · QQ failures stay out of ordinary logs', () => 
         return { session, entry, failure, report: await session.buildDiagnosticReport() };
     };
 
-    it.each(['start', 'check', 'state', 'confirm', 'cancel'] as const)('keeps raw QQ %s failures out of ordinary logs and the report', async step => {
-        const { session, entry, failure, report } = await failAt('qq', step);
+    it.each([
+        ...(['start', 'check', 'state', 'confirm', 'cancel'] as const).map(step => ['qq', step] as const),
+        ...(['start', 'check', 'state', 'confirm', 'cancel'] as const).map(step => ['kugou', step] as const),
+    ])('logs the full %s %s failure and puts it into the report', async (providerId, step) => {
+        const { session, entry, failure, report } = await failAt(providerId, step);
 
-        // 那一步确实记了一条（不是因为没记才「干净」），只是不带原始内容。
         expect(entry).toBeDefined();
-        expect(entry![2]).toMatchObject({ providerId: 'qq' });
-        if (step !== 'state') expect(entry![2]).toMatchObject({ reason: 'provider-error' });
-        expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-|https?:/);
-        expect(report).not.toMatch(/private-|https?:/);
+        if (step === 'state') {
+            expect(entry![2]).toMatchObject({
+                providerId,
+                state: 'error',
+                message: 'code 800: QR login failed (stage credential-exchange, reason upstream-rejected)',
+                detail: { failureStage: 'credential-exchange', failureReason: 'upstream-rejected', upstreamCode: 1000 },
+            });
+            expect(report).toContain('"failureReason":"upstream-rejected"');
+        } else {
+            expect(entry![2]).toMatchObject({
+                providerId,
+                name: 'OnlineProviderError',
+                message: 'QQMusicApi login_qr_check failed: HTTP 502 (upstream unreachable)',
+                code: 'network',
+                httpStatus: 502,
+                cause: { failureReason: 'network-error' },
+            });
+            if (step !== 'cancel') expect(report).toContain('message="QQMusicApi login_qr_check failed: HTTP 502 (upstream unreachable)"');
+        }
         if (failure) expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure });
-    });
-
-    it.each(['start', 'check', 'state', 'confirm', 'cancel'] as const)('still logs the raw %s failure for other providers', async step => {
-        const { entry } = await failAt('kugou', step);
-
-        expect(entry).toBeDefined();
-        expect(entry![2]).toMatchObject({ providerId: 'kugou', message: secret });
-        if (step !== 'state') expect(entry![2]).toMatchObject({ name: 'private-name' });
     });
 
     // ─── 要码串行与冷却（PR #501 之后的修复） ───────────────────────────
@@ -677,6 +696,34 @@ describe('providerLoginSession · QQ failures stay out of ordinary logs', () => 
         expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'canceled-on-device', retryCooldownSeconds: null });
     });
 
+    it('marks a poll the upstream reset as connection-reset, still a failure worth diagnosing', async () => {
+        auth.checkQrLogin.mockResolvedValueOnce({
+            state: 'error', message: 'code 502: read ECONNRESET', reason: 'connection-reset',
+        } satisfies QrLoginState);
+        const session = createSession();
+        await session.start('netease').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'connection-reset', retryCooldownSeconds: null });
+    });
+
+    it('takes a connection reset off a failed QR key request', async () => {
+        auth.createQrLogin.mockRejectedValueOnce(Object.assign(new Error('code 502: read ECONNRESET'), { qrLoginReason: 'connection-reset' }));
+        const session = createSession();
+        await session.start('netease').settled;
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'connection-reset' });
+    });
+
+    it('treats an unknown poll reason as a plain check failure', async () => {
+        auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', reason: 'made-up' } as unknown as QrLoginState);
+        const session = createSession();
+        await session.start('netease').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error' });
+    });
+
     it('takes the cooldown of a rejected request, and a new start clears it', async () => {
         auth.createQrLogin.mockRejectedValueOnce(Object.assign(new Error('backed off'), { retryAfterMs: 25_000 }));
         const session = createSession();
@@ -697,5 +744,162 @@ describe('providerLoginSession · QQ failures stay out of ordinary logs', () => 
         await manual.advance(QR_POLL_INTERVAL_MS);
 
         expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error', retryCooldownSeconds: null });
+    });
+
+    // ─── 轮询的网络层瞬时失败 ──────────────────────────────────────────
+
+    const RESET_POLL = {
+        state: 'error', message: 'code 502: read ECONNRESET', reason: 'connection-reset', transient: true, detail: { code: 502 },
+    } satisfies QrLoginState;
+
+    it('keeps polling through transient network failures while the QR is still valid', async () => {
+        auth.checkQrLogin
+            .mockResolvedValueOnce({ state: 'scanned' })
+            .mockResolvedValueOnce(RESET_POLL)
+            .mockResolvedValueOnce(RESET_POLL)
+            .mockResolvedValueOnce({ state: 'confirmed' });
+        const session = createSession();
+        await session.start('netease').settled;
+
+        await manual.advance(3 * QR_POLL_INTERVAL_MS);
+        // 两次被重置之间界面保持「已扫码」，不闪成错误。
+        expect(session.getSnapshot()).toMatchObject({ phase: 'scanned', failure: null });
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'confirmed', failure: null });
+        expect(onConfirmed).toHaveBeenCalledOnce();
+        const retries = log.mock.calls.filter(([, event]) => event === 'poll:retry');
+        expect(retries.map(([level, , detail]) => [level, detail.attempt, detail.reason])).toEqual([
+            ['warn', 1, 'connection-reset'],
+            ['warn', 2, 'connection-reset'],
+        ]);
+    });
+
+    it('fails once the transient failures exceed the limit, and counts only consecutive ones', async () => {
+        auth.checkQrLogin
+            .mockResolvedValueOnce(RESET_POLL)
+            .mockResolvedValueOnce({ state: 'waiting' })
+            .mockResolvedValueOnce(RESET_POLL)
+            .mockResolvedValueOnce(RESET_POLL)
+            .mockResolvedValueOnce(RESET_POLL);
+        const session = createSession();
+        await session.start('netease').settled;
+
+        await manual.advance(4 * QR_POLL_INTERVAL_MS);
+        expect(session.getSnapshot()).toMatchObject({ phase: 'waiting', failure: null });
+
+        await manual.advance(QR_POLL_INTERVAL_MS);
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'connection-reset' });
+        expect(auth.checkQrLogin).toHaveBeenCalledTimes(5);
+        // 失败之后不再轮询，TTL 也已清掉；没有冷却时不剩任何计时器。
+        expect(manual.pendingTimers()).toBe(0);
+    });
+
+    // ─── 失败后的自检 ─────────────────────────────────────────────────
+
+    const selfCheckResult = (): LoginSelfCheckResult => ({
+        providerId: 'netease',
+        runtime: 'electron',
+        startedAt: 0,
+        durationMs: 1200,
+        backend: { status: 'running', port: 4100, error: null, probe: { ok: true, httpStatus: 200, durationMs: 5, error: null } },
+        proxy: { env: {}, system: 'DIRECT' },
+        hosts: [{
+            host: 'interfacepc.music.163.com',
+            dns: { addresses: [{ address: '240e::7', family: 6 }, { address: '59.111.181.35', family: 4 }], durationMs: 8, error: null, fakeIp: false },
+            connections: [
+                { address: '59.111.181.35', family: 4, tcpMs: 20, tlsMs: 60, error: null },
+                { address: '240e::7', family: 6, tcpMs: 25, tlsMs: null, error: { code: 'ECONNRESET', message: 'read ECONNRESET', phase: 'tls' } },
+            ],
+            https: { httpStatus: 200, durationMs: 90, remote: { address: '59.111.181.35', family: 4 }, error: null, clockSkewMs: 1200 },
+        }],
+    });
+
+    it('runs the self-check after a failure and keeps its verdict in the snapshot and the report', async () => {
+        const check = deferred<LoginSelfCheckResult | null>();
+        auth.canRunQrLoginSelfCheck.mockReturnValue(true);
+        auth.runQrLoginSelfCheck.mockImplementation(() => check.promise);
+        auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', message: 'code 8821: 需要行为验证码验证', detail: { code: 8821 } });
+        const session = createSession();
+        await session.start('netease').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'error', failure: 'check-error', selfCheck: { status: 'running' } });
+        expect(auth.runQrLoginSelfCheck).toHaveBeenCalledExactlyOnceWith('netease');
+
+        check.resolve(selfCheckResult());
+        await manual.flush();
+        expect(session.getSnapshot().selfCheck).toMatchObject({
+            status: 'done',
+            verdict: { kind: 'ipv6-failed', detail: 'interfacepc.music.163.com 240e::7: ECONNRESET at tls', proxy: null },
+        });
+        const report = await session.buildDiagnosticReport();
+        expect(report).toContain('self-check: electron, 1200ms');
+        expect(report).toContain('verdict: ipv6-failed (interfacepc.music.163.com 240e::7: ECONNRESET at tls)');
+        expect(report).toContain('v6 240e::7: tcp 25ms → ECONNRESET at tls: read ECONNRESET');
+        expect(report).toMatch(/ self-check verdict=ipv6-failed /);
+    });
+
+    it('does not run a self-check when the user canceled on the phone or an unscanned QR simply expired', async () => {
+        auth.canRunQrLoginSelfCheck.mockReturnValue(true);
+        auth.checkQrLogin.mockResolvedValueOnce({ state: 'error', reason: 'canceled-on-device', retryAfterMs: 5000 });
+        const session = createSession();
+        await session.start('qq').settled;
+        await manual.advance(QR_POLL_INTERVAL_MS);
+        expect(session.getSnapshot()).toMatchObject({ failure: 'canceled-on-device', selfCheck: null });
+
+        auth.checkQrLogin.mockResolvedValue({ state: 'waiting' });
+        await session.start('qq').settled;
+        await manual.advance(QR_TTL_MS);
+        expect(session.getSnapshot()).toMatchObject({ phase: 'expired', failure: null, selfCheck: null });
+        expect(auth.runQrLoginSelfCheck).not.toHaveBeenCalled();
+    });
+
+    it('still runs the self-check when the front-end TTL ends a scanned QR', async () => {
+        auth.canRunQrLoginSelfCheck.mockReturnValue(true);
+        auth.runQrLoginSelfCheck.mockResolvedValue(selfCheckResult());
+        auth.checkQrLogin.mockResolvedValue({ state: 'scanned' });
+        const session = createSession();
+        await session.start('qq').settled;
+
+        await manual.advance(QR_TTL_MS);
+
+        expect(session.getSnapshot()).toMatchObject({
+            phase: 'expired',
+            failure: 'expired-after-scan',
+            selfCheck: { status: 'done', verdict: { kind: 'ipv6-failed' } },
+        });
+    });
+
+    it('drops a self-check result that arrives after a new start', async () => {
+        const check = deferred<LoginSelfCheckResult | null>();
+        auth.canRunQrLoginSelfCheck.mockReturnValue(true);
+        auth.runQrLoginSelfCheck.mockImplementation(() => check.promise);
+        auth.createQrLogin.mockRejectedValueOnce(new Error('NETEASE_API_UNAVAILABLE: local NetEase API is error'));
+        const session = createSession();
+        await session.start('netease').settled;
+        expect(session.getSnapshot().selfCheck).toEqual({ status: 'running' });
+
+        await session.start('netease').settled;
+        check.resolve(selfCheckResult());
+        await manual.flush();
+
+        expect(session.getSnapshot()).toMatchObject({ phase: 'waiting', failure: null, selfCheck: null });
+    });
+
+    it('waits for a running self-check before building the report, and records a self-check that failed', async () => {
+        const check = deferred<LoginSelfCheckResult | null>();
+        auth.canRunQrLoginSelfCheck.mockReturnValue(true);
+        auth.runQrLoginSelfCheck.mockImplementation(() => check.promise);
+        auth.createQrLogin.mockRejectedValueOnce(new Error('boom'));
+        const session = createSession();
+        await session.start('netease').settled;
+
+        const report = session.buildDiagnosticReport();
+        check.reject(new Error('IPC channel closed'));
+
+        await expect(report).resolves.toContain('self-check: failed (IPC channel closed)');
+        expect(session.getSnapshot().selfCheck).toEqual({ status: 'failed', message: 'IPC channel closed' });
+        expect(log).toHaveBeenCalledWith('warn', 'self-check:error', expect.objectContaining({ message: 'IPC channel closed' }));
     });
 });

@@ -1,4 +1,8 @@
+const { isNetworkFailureMessage } = require('../shared/networkErrorText.cjs');
+
 // electron/neteaseApiStartup.cjs
+// 网易本地 API 的启动与请求管线上用到的纯函数：启动期网络调用的超时与重试、xeapi 公钥与匿名 token 的刷新、
+// 来源 IP 策略、扫码请求的网络层重试、替换上游 login_qr_check。装配顺序见 electron/neteaseBackend.cjs。
 
 const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_BASE_DELAY_MS = 250;
@@ -111,6 +115,8 @@ async function resolveXeapiPublicKey({
   logger = console,
   retryOptions,
   timeoutMs = DEFAULT_OPERATION_TIMEOUT_MS,
+  // 所有重试都失败时调用（不论之后是回落到缓存还是抛出），启动步骤记录据此留下最终的错误原文。
+  onFailure,
 }) {
   try {
     const publicKey = await retryStartupOperation(
@@ -138,6 +144,7 @@ async function resolveXeapiPublicKey({
 
     return { publicKey, refreshed: true };
   } catch (error) {
+    onFailure?.(error);
     if (!hasUsableXeapiPublicKey(currentPublicKey)) {
       throw error;
     }
@@ -157,6 +164,8 @@ async function refreshAnonymousToken({
   logger = console,
   retryOptions,
   timeoutMs = DEFAULT_OPERATION_TIMEOUT_MS,
+  // 所有重试都失败时调用；匿名 token 是可选凭据，失败不阻塞启动，只把原因交给启动步骤记录。
+  onFailure,
 }) {
   try {
     await retryStartupOperation(async () => {
@@ -189,6 +198,7 @@ async function refreshAnonymousToken({
     });
     return true;
   } catch (error) {
+    onFailure?.(error);
     logger.warn(
       `[Netease API] Failed to refresh anonymous token, keeping existing token: ${getErrorMessage(error)}`,
     );
@@ -204,12 +214,76 @@ function withoutImplicitClientIp(request) {
   return (uri, data, options = {}) => request(uri, data, options.randomCNIP ? options : { ...options, ip: '' });
 }
 
+// 替换上游 module/login_qr_check.js。上游的 catch 分支引用了 try 块里的 result，请求一旦被拒
+// （连接被重置的 502、风控 8821 等）就抛 ReferenceError，server 只能回一个 `404 Not Found`，
+// 扫码时间线上看不到真实原因。这里发同样的请求，被拒时把 request 的 answer 原样抛出，
+// server 会按它的状态码和正文（{ code, msg }）回给渲染进程。
+function createLoginQrCheck(createOption) {
+  return async (query, request) => {
+    const result = await request(
+      '/api/login/qrcode/client/login',
+      { key: query.key, type: 3 },
+      createOption(query),
+    );
+    return {
+      status: 200,
+      body: { ...result.body, cookie: result.cookie.join(';') },
+      cookie: result.cookie,
+    };
+  };
+}
+
+// 扫码的两步：要码与轮询。两者都可以安全地重发：重发要码只是换一把新 key，重发轮询只是多问一次同一把 key。
+const QR_RETRY_URIS = new Set(['/api/login/qrcode/unikey', '/api/login/qrcode/client/login']);
+const DEFAULT_QR_RETRY_DELAY_MS = 300;
+
+/** 上游 request 的网络层失败：axios 没拿到响应时上游 reject 成 { status: 502, body: { code: 502, msg } }。 */
+const isUpstreamNetworkFailure = (error) => Boolean(
+  error
+  && typeof error === 'object'
+  && Number(error.status) === 502
+  && isNetworkFailureMessage(error.body?.msg),
+);
+
+// 上游每次请求都新建连接；用户贴回的报告里，被重置的扫码请求前后同一身份的请求照常成功（#445 #469 #502），
+// 被重置是逐个连接的偶发事件。扫码两步遇到网络层失败时隔一小段再发一次，单次重置不再直接让登录失败。
+// 每次尝试各自经过诊断记录（这一层包在诊断记录外面），报告里能看到重试本身。
+// 传给上游的 data / options 每次都复制一份：上游会往 data 上写字段，重发不能带着上一次的改动。
+function withQrNetworkRetry(request, {
+  uris = QR_RETRY_URIS,
+  delayMs = DEFAULT_QR_RETRY_DELAY_MS,
+  sleep = wait,
+  logger = console,
+} = {}) {
+  const attempt = (uri, data, options) => request(uri, { ...data }, {
+    ...options,
+    ...(options?.cookie && typeof options.cookie === 'object' ? { cookie: { ...options.cookie } } : {}),
+  });
+  return async (uri, data = {}, options = {}) => {
+    try {
+      return await attempt(uri, data, options);
+    } catch (error) {
+      if (!uris.has(uri) || !isUpstreamNetworkFailure(error)) throw error;
+      logger.warn('[Netease API] QR request failed at the network level, retrying once', {
+        uri,
+        message: error.body?.msg,
+      });
+      await sleep(delayMs);
+      return attempt(uri, data, options);
+    }
+  };
+}
+
 module.exports = {
   DEFAULT_OPERATION_TIMEOUT_MS,
+  DEFAULT_QR_RETRY_DELAY_MS,
+  createLoginQrCheck,
+  isUpstreamNetworkFailure,
   hasUsableXeapiPublicKey,
   refreshAnonymousToken,
   resolveXeapiPublicKey,
   retryStartupOperation,
+  withQrNetworkRetry,
   withTimeout,
   withoutImplicitClientIp,
 };

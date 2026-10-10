@@ -285,11 +285,11 @@ GET /api/qq/getSongInfo/0039MnYb0qxYhV
 
 ## 扫码失败诊断
 
-QQ 登录界面不显示诊断区块（网格登录弹窗与 TUI 登录框都一样，TUI 的 F4 不复制报告），Folia 自己的扫码会话与账户日志对 QQ 也只记固定类别、不记原始错误文字。普通日志面板中的 `[QQProvider] qr-login:failed` 提供安全失败摘要，可在「设置 → 开发者」或播放器的 `Alt+Shift+D` → Console 查看、筛选和复制。摘要记录扫码通道、失败步骤、HTTP 状态及后端提供的安全原因代码。`@yakult-green-tea/qq-music-api` 3.1.3 起提供这些字段，本地退避 `429` 还会带上 `last-failure`；旧后端缺失的字段显示 `unavailable`，不能据此判断首次失败原因。
+QQ 扫码失败后，登录界面与其它平台一样在二维码旁边给出失败帮助：先是两条简单办法（重启 Folia 再扫码；换个网络，例如手机热点，再重启 Folia），然后是自动检查（本地服务、凭据保存、DNS、IPv4 / IPv6 的 TCP 与 TLS 握手、HTTPS、代理、系统时间）的一句结论与逐项结果，最后才是收起的「还是不行？」——展开后有「复制诊断」「反馈」（TUI 登录框里排在最后，F4 复制）。在手机上取消不跑自检、不给这块帮助。
 
-摘要也覆盖缺少 key、二维码图片、未知返回码和确认后的账号加载失败，并附上确认响应是否带有会话的布尔值。只输出固定类别和安全数字，不包含 cookie、token、IP、账号、设备标识、URL、原始错误或响应正文；等待轮询不额外记录，同一轮的相同失败不会因退避倒计时重复输出。重试会清空内部摘要并隔离上一轮晚回的诊断；同一份摘要也由 provider 的 `getQrLoginDiagnostics` 返回（`omni.getQrLoginDiagnostics('qq')`，`omni` 没有挂到 `window`，只供代码与测试读取）。
+报告分三段：本轮扫码的时间线（每一步的错误原文、HTTP 状态、后端原始响应，包括 `failureStage`、`failureReason`、`upstreamCode`、`retryAfterMs`、`lastFailure` 等字段，后端新增的类别也原样保留）、自检结果、`qq details`。`qq details` 来自主进程：应用与系统环境、凭据加密后端（Linux 上为 `basic_text` 时 QQ 登录态无法保存，自检会直接给出这个结论）、QQ 本地服务的状态与拉起步骤、包内扫码服务的原始失败（挂在 `failSession` / `failBootstrap` 上的钩子记下的错误名、原文、错误码、上游 HTTP 状态与栈顶几行）、`qq-auth.*` 事件、上游连接记录（`u.y.qq.com`、`mu.y.qq.com` 的 MQTT 等，含连上的地址与断在哪一步），以及最近一次登录态检查的结论。报告不做隐私脱敏，界面会告知其中包含版本、网卡与 IP、请求记录与错误原文；登录凭据（session 的值）不在其中。
 
-没扫过码就自然过期不算失败：后端回 `failureReason=qr-timeout`，或会话已被清掉、回一个不带任何失败字段的 `800` 时，只在普通日志里记一条 info 级的 `[QQProvider] qr-login:expired`；扫过码之后才过期仍记为 `qr-login:failed`。判定只看这些结构化字段，不比对后端文案，所以 3.1.2 及更早的后端在二维码超时时仍会记成失败，原因显示 `unavailable`。关闭登录框、二维码到期时 Folia 取消当前二维码，这与重新要码一样结束这一轮，之后才回来的轮询结果不再记录，也不会把之后一次普通的登录态检查当成扫码后的账号加载。
+没扫过码就自然过期不算失败：后端回 `failureReason=qr-timeout`，或会话已被清掉、回一个不带任何失败字段的 `800` 时，会话记为过期、不跑自检。判定只看这些结构化字段，不比对后端文案；带失败字段的 `800`（上游拒绝、MQTT 断开、凭据交换失败等）一律算失败。关闭登录框、二维码到期时 Folia 取消当前二维码，之后才回来的轮询结果作废。
 
 ## 一句话排错表
 
@@ -302,6 +302,7 @@ QQ 登录界面不显示诊断区块（网格登录弹窗与 TUI 登录框都一
 | Cloudflare QQ 二维码打不开 | 确认依赖为 3.1.0 或更高版本，并检查 Worker 日志中的 WebSocket 错误 |
 | 正式 `workers.dev` 返回 1042，但 Preview 正常 | 等待新域名传播，不要因为这个现象修改 Static Assets 或 MQTT 代码 |
 | 自建歌单打不开，提示不是公开歌单 | 后端版本过旧，缺少带凭据的 `/user/playlist-detail` 路由；升级 `@yakult-green-tea/qq-music-api` 后即可读取不公开的自建歌单 |
+| 收藏的「百万收藏」「歌手漫游」等官方歌单打不开，报 `code 10` | 后端低于 3.1.4，或 serverless 部署未设置 `QQ_SESSION_SECRET`；这类歌单只能带登录会话读取 |
 | 扫码后上游返回 `20279` | 先在 QQ 音乐账号中清理旧登录设备，再重新扫码 |
 | 修改 `VITE_QQ_API_BASE` 后仍请求旧地址 | 该变量在构建时写入前端，必须重新构建；同时检查 `.env.local` 是否覆盖平台配置 |
 | 关闭二维码后仍担心计费 | 查看日志是否出现取消请求，以及 Durable Object 的 `/open`、`/close` 是否成对出现 |

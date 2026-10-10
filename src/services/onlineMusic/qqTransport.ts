@@ -67,13 +67,23 @@ export const resetQqTransportRuntimeCache = (): void => {
     electronApiBase = null;
 };
 
+// 内嵌后端没在监听时，把主进程报的状态与故障原因带进错误：时间线里直接能看到它为什么没起来。
+const describeEmbeddedStatus = async (): Promise<string> => {
+    try {
+        const status = await window.electron?.getQqApiStatus?.();
+        return status ? ` (status ${status.status}${status.error ? `: ${status.error}` : ''})` : '';
+    } catch {
+        return '';
+    }
+};
+
 const resolveApiBase = async (): Promise<string> => {
     const readPort = getElectronQqPortReader();
     if (readPort) {
         if (electronApiBase) return electronApiBase;
         const port = await readPort();
         if (!port) {
-            throw new OnlineProviderError('unavailable', 'Embedded QQMusicApi is not running', 'qq');
+            throw new OnlineProviderError('unavailable', `Embedded QQMusicApi is not running${await describeEmbeddedStatus()}`, 'qq');
         }
         electronApiBase = `http://127.0.0.1:${port}`;
         return electronApiBase;
@@ -174,6 +184,9 @@ const persistConfirmedSession = (operation: QqOperation, body: any): void => {
     if (typeof cookie === 'string' && cookie) writeProviderSessionValue('qq', 'cookie', cookie);
 };
 
+/** 网页版配置的远端 API 地址（自检与诊断报告用）；桌面版走内嵌后端，返回 null。 */
+export const getQqRemoteApiBase = (): string | null => (getElectronQqPortReader() ? null : getWebApiBase() || null);
+
 export const getQqTransportAvailability = () => {
     if (getElectronQqPortReader()) return { configured: true } as const;
     return getWebApiBase()
@@ -241,9 +254,21 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
     // Same-origin serverless calls must retain deployment-protection cookies; external qq-music-api instances
     // answer with `Access-Control-Allow-Origin: *`, so those requests still omit browser credentials.
     const credentials: RequestCredentials = isSameOriginBase(base) ? 'same-origin' : 'omit';
-    const response = await fetch(`${base}${endpoint.path}?${query}`, { credentials, headers });
+    let response: Response;
+    try {
+        response = await fetch(`${base}${endpoint.path}?${query}`, { credentials, headers });
+    } catch (error) {
+        // 连后端本身都没连上（内嵌后端退出、远端不可达），与后端回了错误码分开。
+        throw new OnlineProviderError(
+            'network',
+            `QQMusicApi ${operation} unreachable: ${error instanceof Error ? error.message : String(error)}`,
+            'qq',
+            error,
+        );
+    }
     if (!response.ok) {
         const failure = await readJsonBody(response);
+        const backendMessage = typeof failure?.message === 'string' && failure.message.trim() ? ` (${failure.message.trim()})` : '';
         // A missing, expired, rejected, or non-persisted backend session is surfaced uniformly as 401.
         if (response.status === 401) {
             clearQqSession();
@@ -263,7 +288,7 @@ export const requestQq = async <T = unknown>(operation: QqOperation, params: QqP
         }
         throw new OnlineProviderError(
             'network',
-            `QQMusicApi request failed: ${response.status}`,
+            `QQMusicApi ${operation} failed: HTTP ${response.status}${backendMessage}`,
             'qq',
             failure,
             response.status,

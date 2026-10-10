@@ -3,7 +3,11 @@ import '../../src/i18n/config';
 import GridViewOverlayHost from '../../src/library/app/GridViewOverlayHost';
 import type { ProbeDefinition } from './definition';
 import { ProbeControlPanel } from './libraryBehavior/ProbeControlPanel';
-import { onProbeBackCollection, useLibraryProbeHarness } from './libraryBehavior/useLibraryProbeHarness';
+import {
+    onProbeBackCollection,
+    onProbePopCollectionTo,
+    useLibraryProbeHarness,
+} from './libraryBehavior/useLibraryProbeHarness';
 // dev/probes/libraryBehavior.probe.tsx
 
 /**
@@ -32,6 +36,7 @@ const LibraryBehaviorProbe: React.FC = () => {
                         surfaceProps={harness.surfaceProps}
                         onOpenCollection={harness.onOpenCollection}
                         onPushCollection={harness.onPushCollection}
+                        onPopCollectionTo={onProbePopCollectionTo}
                         onBackCollection={onProbeBackCollection}
                         isInteractive
                     >

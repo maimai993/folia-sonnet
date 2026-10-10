@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryHomeSurfaceProps } from '../../core/contracts/suite';
 import type { LibraryHomeTabKey } from '../../core/contracts/homeModel';
-import { isOnlineHomeTab, resolveHomeSourceGroups, type LibraryHomeSourceGroup } from '../../core/model/homeSources';
+import { cycleIndex, isOnlineHomeTab, resolveHomeSourceGroups, type LibraryHomeSourceGroup } from '../../core/model/homeSources';
 import { LOCAL_HOME_SECTIONS, localHomeSectionOfRow } from '../../core/model/localHomeModel';
 import { NAVIDROME_HOME_SECTIONS } from '../../core/model/navidromeHomeModel';
 import { useLibraryHomeSources } from '../../core/bindings/useLibraryHomeSources';
@@ -26,15 +26,6 @@ import { useLibraryTuiHomePageKeys } from './useLibraryTuiHomeKeyboard';
 // 这里不引用网格的任何实现。
 
 type SectionTab = { key: string; label: string; active: boolean; disabledReason?: string };
-
-/** 在列表里按 delta 找下一个可用项（绕回）；全都不可用时返回 -1。 */
-const cycleIndex = <T,>(items: readonly T[], current: number, delta: 1 | -1, enabled: (item: T) => boolean): number => {
-    for (let step = 1; step <= items.length; step += 1) {
-        const index = (current + delta * step + items.length * step) % items.length;
-        if (enabled(items[index])) return index;
-    }
-    return -1;
-};
 
 const LibraryTuiHome: React.FC<LibraryHomeSurfaceProps> = (props) => {
     const {

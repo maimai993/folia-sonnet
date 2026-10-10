@@ -1,8 +1,8 @@
 import type { UnifiedSong } from '../../../src/types';
-import type { OnlineMusicProvider } from '../../../src/types/onlineMusic';
+import type { LoginSelfCheckResult, OnlineMusicProvider } from '../../../src/types/onlineMusic';
 import { useNeteaseApiStatusStore } from '../../../src/stores/useNeteaseApiStatusStore';
 import { ACCOUNT_CANCEL_COOLDOWN_MS, ACCOUNT_NETEASE, accountUser, qrKeyOf, type AccountProviderRule } from './accountFixtureRules';
-import type { AccountCall, AccountQrState } from './probeApi';
+import type { AccountCall, AccountQrState, AccountSelfCheckScript } from './probeApi';
 
 // dev/probes/accountBehavior/fakeAuthProviders.ts
 // 账户探针的假 provider：走真实的 provider registry 和 omni（createQrLogin / checkQrLogin / cancelQrLogin /
@@ -13,6 +13,7 @@ const qrQueues = new Map<string, AccountQrState[]>();
 const qrTtls = new Map<string, number | null>();
 const refreshFailures = new Map<string, number>();
 const createFailures = new Map<string, number>();
+const selfChecks = new Map<string, AccountSelfCheckScript>();
 let qrSerial = 0;
 
 let calls: AccountCall[] = [];
@@ -40,6 +41,34 @@ export const failRefresh = (providerId: string, times: number): void => {
 export const failCreate = (providerId: string, times: number): void => {
     createFailures.set(providerId, times);
 };
+export const setSelfCheck = (providerId: string, script: AccountSelfCheckScript | null): void => {
+    if (script) selfChecks.set(providerId, script);
+    else selfChecks.delete(providerId);
+};
+
+// 自检结果：tls-reset 时上游域名的握手在 TLS 阶段被重置，network-ok 时每一层都正常。
+const selfCheckResultOf = (providerId: string, script: Exclude<AccountSelfCheckScript, 'error'>): LoginSelfCheckResult => ({
+    providerId,
+    runtime: 'electron',
+    startedAt: Date.now(),
+    durationMs: 120,
+    backend: { status: 'running', port: 4100, error: null, probe: { ok: true, httpStatus: 200, durationMs: 3, error: null } },
+    proxy: { env: {}, system: 'DIRECT' },
+    hosts: [{
+        host: 'probe.example',
+        dns: { addresses: [{ address: '203.0.113.7', family: 4 }], durationMs: 2, error: null, fakeIp: false },
+        connections: [{
+            address: '203.0.113.7',
+            family: 4,
+            tcpMs: 10,
+            tlsMs: script === 'network-ok' ? 30 : null,
+            error: script === 'network-ok' ? null : { code: 'ECONNRESET', message: 'read ECONNRESET', phase: 'tls' },
+        }],
+        https: script === 'network-ok'
+            ? { httpStatus: 200, durationMs: 40, remote: { address: '203.0.113.7', family: 4 }, error: null, clockSkewMs: 0 }
+            : null,
+    }],
+});
 
 /** 消耗一次「失败」配额；返回这一次是否该失败。 */
 const takeFailure = (table: Map<string, number>, providerId: string): boolean => {
@@ -57,6 +86,7 @@ export const resetFakeAuth = (): void => {
     qrTtls.clear();
     refreshFailures.clear();
     createFailures.clear();
+    selfChecks.clear();
     clearAccountCalls();
 };
 
@@ -142,6 +172,14 @@ export const createFakeAuthProvider = (rule: AccountProviderRule): OnlineMusicPr
             },
             getQrTtlMs: () => qrTtls.get(providerId) ?? 0,
             getQrLoginDiagnostics: async () => [`probe: ${providerId} diagnostics`],
+            canRunQrLoginSelfCheck: () => selfChecks.has(providerId),
+            runQrLoginSelfCheck: async () => {
+                recordAccountCall({ op: 'self-check', providerId });
+                const script = selfChecks.get(providerId);
+                if (!script) return null;
+                if (script === 'error') throw new Error('probe: self-check unavailable');
+                return selfCheckResultOf(providerId, script);
+            },
         },
     };
 };

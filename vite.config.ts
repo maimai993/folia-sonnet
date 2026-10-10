@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { type ConfigEnv, type UserConfig, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { commandPinyinPlugin } from './dev/pinyin/commandPinyinPlugin.mjs';
+import { normalizeBuildCommit, resolveBuildRepo } from './dev/build/buildIdentity.mjs';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
 import fs from 'fs';
@@ -36,12 +37,7 @@ function isAllowedLyricProxyHost(hostname: string): boolean {
   return hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
     hostname === 'y.gtimg.cn' ||
     hostname === 'kugou.com' || hostname.endsWith('.kugou.com') ||
-    hostname === 'kgimg.com' || hostname.endsWith('.kgimg.com') ||
-    hostname === 'amll-ttml-db.stevexmh.net';
-}
-
-function isAmllDbHost(hostname: string): boolean {
-  return hostname === 'amll-ttml-db.stevexmh.net';
+    hostname === 'kgimg.com' || hostname.endsWith('.kgimg.com');
 }
 
 function setLyricProxyCorsHeaders(res: import('http').ServerResponse): void {
@@ -113,11 +109,6 @@ function devLyricProxyPlugin() {
           });
 
           setLyricProxyCorsHeaders(res);
-          if (isAmllDbHost(targetUrl.hostname) && response.status === 404) {
-            res.statusCode = 204;
-            res.end();
-            return;
-          }
 
           res.statusCode = response.status;
           res.statusMessage = response.statusText;
@@ -186,6 +177,10 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
   if (process.env.REQUIRE_COMMIT_NAME === 'true' && canResolveCommitName && !commitSuffix) {
     throw new Error(`Could not resolve the commit name for ${commitHash}`);
   }
+
+  // 请求 AMLL 官方 API 时 UA 里的构建身份，见 dev/build/buildIdentity.mjs
+  const buildRepo = resolveBuildRepo(process.env, () => execSync('git remote get-url origin', { stdio: ['ignore', 'pipe', 'ignore'] }).toString());
+  const buildCommit = normalizeBuildCommit(commitHash);
 
   const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'Realeco';
   const appReleaseChannel = process.env.APP_RELEASE_CHANNEL?.trim().toLowerCase() || 'realeco';
@@ -278,6 +273,8 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
     define: {
       '__COMMIT_HASH__': JSON.stringify(commitHash + commitSuffix),
       '__GIT_BRANCH__': JSON.stringify(gitBranch),
+      '__BUILD_REPO__': JSON.stringify(buildRepo),
+      '__BUILD_COMMIT__': JSON.stringify(buildCommit),
       '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
       '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel),
       '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel),

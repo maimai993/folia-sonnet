@@ -3,10 +3,22 @@ import { describe, expect, it, vi } from 'vitest';
 // test/unit/electron/neteaseApiStartup.test.ts
 
 const {
+    createLoginQrCheck,
     refreshAnonymousToken,
     resolveXeapiPublicKey,
+    withQrNetworkRetry,
     withoutImplicitClientIp,
 } = require('../../../electron/neteaseApiStartup.cjs') as {
+    withQrNetworkRetry: (
+        request: (uri: string, data: any, options: any) => Promise<unknown>,
+        options?: Record<string, unknown>,
+    ) => (uri: string, data?: any, options?: any) => Promise<unknown>;
+    createLoginQrCheck: (
+        createOption: (query: Record<string, unknown>) => Record<string, unknown>,
+    ) => (
+        query: Record<string, unknown>,
+        request: (uri: string, data: unknown, options: Record<string, unknown>) => Promise<any>,
+    ) => Promise<unknown>;
     withoutImplicitClientIp: (
         request: (uri: string, data: unknown, options: Record<string, unknown>) => unknown,
     ) => (uri: string, data: unknown, options?: Record<string, unknown>) => unknown;
@@ -215,5 +227,92 @@ describe('NetEase API client IP policy', () => {
         const options = { ip: '116.1.2.3', randomCNIP: true };
         withoutImplicitClientIp(request)('/api/song/enhance/player/url/v1', {}, options);
         expect(request).toHaveBeenCalledWith('/api/song/enhance/player/url/v1', {}, options);
+    });
+});
+
+describe('NetEase QR check module', () => {
+    const createOption = (query: Record<string, unknown>) => ({ cookie: query.cookie });
+    const upstreamLoginQrCheck = require('@neteasecloudmusicapienhanced/api/module/login_qr_check') as (
+        query: Record<string, unknown>,
+        request: (uri: string, data: unknown, options: Record<string, unknown>) => Promise<any>,
+    ) => Promise<unknown>;
+    const upstreamCreateOption = require('@neteasecloudmusicapienhanced/api/util/option') as (
+        query: Record<string, unknown>,
+    ) => Record<string, unknown>;
+
+    // 上游一旦修好这个 bug，这条会失败：届时删掉 main.cjs 里的替换和 createLoginQrCheck。
+    it('is still needed: the upstream module throws a ReferenceError on a rejected poll', async () => {
+        const request = vi.fn().mockRejectedValue({ status: 502, body: { code: 502, msg: 'read ECONNRESET' }, cookie: [] });
+        await expect(upstreamLoginQrCheck({ key: 'k' }, request)).rejects.toBeInstanceOf(ReferenceError);
+    });
+
+    it('matches the upstream module on success', async () => {
+        const answer = { status: 200, body: { code: 802, message: '授权中' }, cookie: ['NMTID=b'] };
+        const upstreamRequest = vi.fn().mockResolvedValue(answer);
+        const ownRequest = vi.fn().mockResolvedValue(answer);
+        const query = { key: 'k', cookie: 'os=pc', timestamp: '1' };
+
+        await expect(createLoginQrCheck(upstreamCreateOption)(query, ownRequest))
+            .resolves.toEqual(await upstreamLoginQrCheck(query, upstreamRequest));
+        expect(ownRequest.mock.calls).toEqual(upstreamRequest.mock.calls);
+    });
+
+    it('returns the poll result with the cookie joined into the body', async () => {
+        const request = vi.fn().mockResolvedValue({ status: 200, body: { code: 803, message: 'ok' }, cookie: ['MUSIC_U=a', 'NMTID=b'] });
+        await expect(createLoginQrCheck(createOption)({ key: 'k', cookie: 'c' }, request)).resolves.toEqual({
+            status: 200,
+            body: { code: 803, message: 'ok', cookie: 'MUSIC_U=a;NMTID=b' },
+            cookie: ['MUSIC_U=a', 'NMTID=b'],
+        });
+        expect(request).toHaveBeenCalledWith('/api/login/qrcode/client/login', { key: 'k', type: 3 }, { cookie: 'c' });
+    });
+
+    // 上游原版在这里抛 ReferenceError，server 只能回 404；现在 server 拿到的是 request 的 answer。
+    it.each([
+        { status: 502, body: { code: 502, msg: 'read ECONNRESET' }, cookie: [] },
+        { status: 400, body: { code: 8821, message: '需要行为验证码验证' }, cookie: [] },
+    ])('rethrows the rejected answer $body.code so the server can relay it', async answer => {
+        const request = vi.fn().mockRejectedValue(answer);
+        await expect(createLoginQrCheck(createOption)({ key: 'k' }, request)).rejects.toBe(answer);
+    });
+});
+
+describe('NetEase QR network retry', () => {
+    const RESET = { status: 502, body: { code: 502, msg: 'read ECONNRESET' }, cookie: [] };
+    const retryOptions = () => ({ sleep: vi.fn().mockResolvedValue(undefined), logger: { warn: vi.fn() } });
+
+    it.each(['/api/login/qrcode/unikey', '/api/login/qrcode/client/login'])('sends %s once more after a network-level failure', async (uri) => {
+        const ok = { status: 200, body: { code: 801 }, cookie: [] };
+        const request = vi.fn().mockRejectedValueOnce(RESET).mockResolvedValueOnce(ok);
+        const options = retryOptions();
+
+        await expect(withQrNetworkRetry(request, options)(uri, { key: 'k' }, { cookie: { os: 'pc' } })).resolves.toBe(ok);
+
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(options.sleep).toHaveBeenCalledWith(300);
+        // 每次都是新的 data / cookie 对象：上游会往 data 上写字段，重发不能带着上一次的改动。
+        const [[, firstData, firstOptions], [, secondData, secondOptions]] = request.mock.calls;
+        expect(secondData).toEqual({ key: 'k' });
+        expect(secondData).not.toBe(firstData);
+        expect(secondOptions.cookie).not.toBe(firstOptions.cookie);
+    });
+
+    it('gives up after the second failure and hands back that answer', async () => {
+        const second = { status: 502, body: { code: 502, msg: 'connect ETIMEDOUT 59.111.181.35:443' }, cookie: [] };
+        const request = vi.fn().mockRejectedValueOnce(RESET).mockRejectedValueOnce(second);
+
+        await expect(withQrNetworkRetry(request, retryOptions())('/api/login/qrcode/client/login')).rejects.toBe(second);
+        expect(request).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a NetEase rejection or a request outside the QR flow', async () => {
+        const riskControl = { status: 400, body: { code: 8821, message: '需要行为验证码验证' }, cookie: [] };
+        const rejected = vi.fn().mockRejectedValue(riskControl);
+        await expect(withQrNetworkRetry(rejected, retryOptions())('/api/login/qrcode/client/login')).rejects.toBe(riskControl);
+        expect(rejected).toHaveBeenCalledTimes(1);
+
+        const other = vi.fn().mockRejectedValue(RESET);
+        await expect(withQrNetworkRetry(other, retryOptions())('/api/song/enhance/player/url/v1')).rejects.toBe(RESET);
+        expect(other).toHaveBeenCalledTimes(1);
     });
 });

@@ -911,6 +911,54 @@ test.describe('navigation', () => {
         await expect.poll(() => calls(page, 'playSong')).toHaveLength(1);
         expect((await lastCall(page, 'playSong'))?.ids).toEqual([focusedKey]);
     });
+
+    // N1（折叠紧邻往返）：要进入的正好是上一层时当作一次返回（X → Y → X 变回 X）；更早的层照常压栈，
+    // 栈里可以有重复，返回沿完整路径退回。走的是真实的链接点击（宿主的 onOpenAlbum / onOpenArtist → 压栈判断）。
+    test('[grid] the layer right below the top folds into a back; a deeper layer still pushes', async ({ mount, page }) => {
+        await mountProbe(mount, page);
+        await open(page, 'online-public');
+        await waitForScope(page, expectedPlayableIndexes(fixture['online-public'].rawIndexes).length);
+        /** 当前那一层（转场期间退场的层还在 DOM 里）里某张卡片上的歌手 / 专辑名（多位歌手时名字后面带逗号）。 */
+        const link = (surface: 'collection' | 'artist', cardId: string, name: string) => page
+            .locator(`[data-library-surface="${surface}"]`).last()
+            .locator(`[data-folia-grid-item-id="${cardId}"]`)
+            .getByText(new RegExp(`^${name},?$`)).first();
+        const songKey = (prefix: string, index: number) => `${onlinePlaybackKey(PROBE_PROVIDER_A, onlineSongId(prefix, index))}-0`;
+        const settle = () => page.waitForTimeout(600);
+
+        // A 歌单 → B 专辑（第 1 首的专辑）→ C 客座歌手（专辑第 7 首带客座）→ D 主歌手（客座热门第 1 首）。
+        await link('collection', songKey('public', 1), PROBE_ALBUM.name).dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name]);
+        await waitForScope(page, PROBE_ALBUM.rawIndexes.length);
+        await settle();
+        await link('collection', songKey(PROBE_ALBUM.prefix, 7), 'Guest Singer').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer']);
+        await expect(link('artist', onlineSongId('gtop', 1), 'Probe Artist')).toBeVisible();
+        await settle();
+        await link('artist', onlineSongId('gtop', 1), 'Probe Artist').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer', 'Probe Artist']);
+        await expect(link('artist', onlineSongId('artop', 21), 'Guest Singer')).toBeVisible();
+        await settle();
+
+        // D 上点 C（上一层）：折成一次返回，不压栈。
+        await link('artist', onlineSongId('artop', 21), 'Guest Singer').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer']);
+        await expect(link('artist', onlineSongId('gtop', 1), 'Probe Artist')).toBeVisible();
+        await settle();
+        await link('artist', onlineSongId('gtop', 1), 'Probe Artist').dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer', 'Probe Artist']);
+        await expect(link('artist', onlineSongId('artop', 21), PROBE_ALBUM.name)).toBeVisible();
+        await settle();
+
+        // D 上点 B（更早的一层）：照常压栈，B 在栈里出现两次；返回回到 D。
+        await link('artist', onlineSongId('artop', 21), PROBE_ALBUM.name).dispatchEvent('click');
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer', 'Probe Artist', PROBE_ALBUM.name]);
+        await waitForScope(page, PROBE_ALBUM.rawIndexes.length);
+        await settle();
+        await back(page);
+        await expect.poll(() => stack(page)).toEqual(['Public Playlist', PROBE_ALBUM.name, 'Guest Singer', 'Probe Artist']);
+        await expect(page.locator('[data-library-surface="artist"]')).toHaveCount(1);
+    });
 });
 
 // P4.4：集合里曲目上的专辑 / 歌手链接（网格：卡片上的名字；TUI：行上的按钮）。core 的规则同一份（core/model/trackLinks），

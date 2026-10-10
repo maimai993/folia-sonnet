@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { neteaseApi } from '@/services/netease';
-import { searchQQLyrics } from '@/utils/lyrics/providers/qqLyricProvider';
-import { fetchAmllDbLyrics } from '@/utils/lyrics/providers/amllDbProvider';
-import { searchAmllDbLyricCandidates } from '@/utils/lyrics/lyricMatchSources';
+import { fetchAmllDbLyrics, searchAmllDbSongs } from '@/utils/lyrics/providers/amllDbProvider';
+import { fetchLyricsForMatchSource, searchAmllDbLyricCandidates } from '@/utils/lyrics/lyricMatchSources';
+import type { AmllApiSongItem } from '@/utils/lyrics/providers/amllApi';
 
 // test/unit/lyrics/lyricMatchSources.test.ts
 // Covers source-specific lyric matching orchestration.
@@ -30,8 +29,10 @@ vi.mock('@/utils/lyrics/providers/kugouLyricProvider', () => ({
     fetchKugouLyrics: vi.fn(),
 }));
 
-vi.mock('@/utils/lyrics/providers/amllDbProvider', () => ({
+vi.mock('@/utils/lyrics/providers/amllDbProvider', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@/utils/lyrics/providers/amllDbProvider')>(),
     fetchAmllDbLyrics: vi.fn(),
+    searchAmllDbSongs: vi.fn(),
 }));
 
 vi.mock('@/utils/lyrics/chorusEffects', () => ({
@@ -48,51 +49,103 @@ const createWordByWordLyrics = () => ({
     isWordByWord: true as const,
 });
 
+const songItem = (overrides: Partial<AmllApiSongItem> = {}): AmllApiSongItem => ({
+    id: 1,
+    filename: '1-1-a.ttml',
+    createdAt: 1,
+    musicNames: ['Song Title'],
+    artistNames: ['Artist Name'],
+    albumNames: ['Album'],
+    ncmMusicIds: [],
+    qqMusicIds: [],
+    appleMusicIds: [],
+    spotifyIds: [],
+    isrcs: [],
+    authorIds: [],
+    authorUsernames: [],
+    ...overrides,
+});
+
+const target = { title: 'Song Title', artist: 'Artist Name, Guest', durationMs: 200000 };
+
 describe('lyricMatchSources', () => {
-    const cloudSearchMock = vi.mocked(neteaseApi.cloudSearch);
-    const searchQQLyricsMock = vi.mocked(searchQQLyrics);
+    const searchAmllDbSongsMock = vi.mocked(searchAmllDbSongs);
     const fetchAmllDbLyricsMock = vi.mocked(fetchAmllDbLyrics);
 
     beforeEach(() => {
         vi.resetAllMocks();
     });
 
-    it('probes AMLLDB candidates concurrently', async () => {
-        const deferred: Array<{
-            resolve: (value: ReturnType<typeof createWordByWordLyrics> | null) => void;
-        }> = [];
+    describe('searchAmllDbLyricCandidates', () => {
+        it('searches the official API with musicName and first artist, without probing lyrics', async () => {
+            searchAmllDbSongsMock.mockResolvedValue([
+                songItem({ id: 3, musicNames: ['Other Song'], artistNames: ['Someone'], ncmMusicIds: ['300'] }),
+                songItem({ id: 2, createdAt: 2, ncmMusicIds: ['101'] }),
+                songItem({ id: 1, createdAt: 1, ncmMusicIds: ['101'] }),
+                songItem({ id: 4, qqMusicIds: ['000zi9gH0OEMMu'] }),
+                songItem({ id: 5, spotifyIds: ['only-spotify'] }),
+            ]);
 
-        cloudSearchMock.mockResolvedValue({
-            result: {
-                songs: [
-                    { id: 101, name: 'Song Title', dt: 200000, ar: [{ name: 'Artist Name' }] },
-                    { id: 102, name: 'Song Title', dt: 200000, ar: [{ name: 'Artist Name' }] },
-                ],
-            },
+            const results = await searchAmllDbLyricCandidates('Song Title - Artist Name, Guest - Album', target);
+
+            expect(searchAmllDbSongsMock).toHaveBeenCalledTimes(1);
+            expect(searchAmllDbSongsMock).toHaveBeenCalledWith({ musicName: 'Song Title', artistName: 'Artist Name' }, 50);
+            expect(fetchAmllDbLyricsMock).not.toHaveBeenCalled();
+            expect(results.map(result => [result.amllDbPlatform, result.id])).toEqual([
+                ['ncm', 101],
+                ['qq', '000zi9gH0OEMMu'],
+                ['ncm', 300],
+            ]);
         });
-        searchQQLyricsMock.mockResolvedValue([]);
-        fetchAmllDbLyricsMock.mockImplementation(() => {
-            let resolve!: (value: ReturnType<typeof createWordByWordLyrics> | null) => void;
-            const promise = new Promise<ReturnType<typeof createWordByWordLyrics> | null>((res) => {
-                resolve = res;
+
+        it('retries with the title alone when title + artist finds nothing', async () => {
+            searchAmllDbSongsMock
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([songItem({ ncmMusicIds: ['101'] })]);
+
+            const results = await searchAmllDbLyricCandidates('Song Title - Artist Name', target);
+
+            expect(searchAmllDbSongsMock.mock.calls.map(([params]) => params)).toEqual([
+                { musicName: 'Song Title', artistName: 'Artist Name' },
+                { musicName: 'Song Title' },
+            ]);
+            expect(results.map(result => result.id)).toEqual([101]);
+        });
+
+        it('searches free-form manual input as a title first, then as a keyword query', async () => {
+            searchAmllDbSongsMock.mockResolvedValue([]);
+
+            await expect(searchAmllDbLyricCandidates('  some lyric line  ', target)).resolves.toEqual([]);
+            expect(searchAmllDbSongsMock.mock.calls.map(([params]) => params)).toEqual([
+                { musicName: 'some lyric line' },
+                { q: 'some lyric line' },
+            ]);
+        });
+
+        it('stops without the title-only retry when the request fails', async () => {
+            searchAmllDbSongsMock.mockResolvedValue(null);
+
+            await expect(searchAmllDbLyricCandidates('Song Title - Artist Name', target)).resolves.toEqual([]);
+            expect(searchAmllDbSongsMock).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('fetchLyricsForMatchSource (amll)', () => {
+        it('tries the QQ mid before the numeric id', async () => {
+            fetchAmllDbLyricsMock.mockResolvedValue(createWordByWordLyrics());
+
+            const result = await fetchLyricsForMatchSource('amll', {
+                id: 105094238,
+                qqMid: '000zi9gH0OEMMu',
+                name: 'Song Title',
+                artists: [],
+                album: { id: 0, name: '' },
+                durationMs: 0,
+                amllDbPlatform: 'qq',
             });
-            deferred.push({ resolve });
-            return promise;
+
+            expect(fetchAmllDbLyricsMock).toHaveBeenCalledWith('qq', ['000zi9gH0OEMMu', '105094238']);
+            expect(result).toMatchObject({ matchedLyricsProviderPlatform: 'qq', isPureMusic: false });
         });
-
-        const searchPromise = searchAmllDbLyricCandidates('Song Title - Artist Name', {
-            title: 'Song Title',
-            artist: 'Artist Name',
-            durationMs: 200000,
-        });
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        expect(fetchAmllDbLyricsMock).toHaveBeenCalledTimes(2);
-
-        deferred[0].resolve(null);
-        deferred[1].resolve(createWordByWordLyrics());
-        const results = await searchPromise;
-
-        expect(results.map(result => result.id)).toEqual([102]);
     });
 });

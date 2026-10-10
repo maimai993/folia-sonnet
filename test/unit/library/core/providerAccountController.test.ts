@@ -13,7 +13,7 @@ import type {
     LibraryProviderAccountPort,
     LibraryProviderSwitchCleanupPort,
 } from '@/library/core/contracts/account';
-import type { OnlineProviderId, ProviderAccountSummary, QrLoginMethod, QrLoginState } from '@/types/onlineMusic';
+import { OnlineProviderError, type OnlineProviderId, type ProviderAccountSummary, type QrLoginMethod, type QrLoginState } from '@/types/onlineMusic';
 
 // test/unit/library/core/providerAccountController.test.ts
 // 在线账户 controller（A3）：test/unit/onlineMusic/providerSwitchTransaction.test.ts 的切换 / 登录事务逐条迁移（标注 [txn]），
@@ -199,6 +199,8 @@ beforeEach(() => {
         cancelQrLogin: vi.fn(async (providerId: OnlineProviderId, key: string) => { ops.push(['cancel', providerId, key]); }),
         getQrTtlMs: vi.fn().mockReturnValue(null),
         getQrLoginDiagnostics: vi.fn().mockResolvedValue(['runtime: test']),
+        canRunQrLoginSelfCheck: vi.fn().mockReturnValue(false),
+        runQrLoginSelfCheck: vi.fn().mockResolvedValue(null),
     };
     // 刷新成功即视为拿到了登录态（真实刷新器会把账户写进 store）。
     refresh = vi.fn<LibraryProviderAccountPort['refresh']>(async (providerId: OnlineProviderId) => {
@@ -877,13 +879,16 @@ describe('providerAccountController · dispose', () => {
 // PR #495：QQ 的扫码 / 账户失败由 qqProvider 写白名单过滤后的摘要。controller 里带 providerId 的错误日志
 // （登录方式解析、会话启动、确认后的账户刷新、切换后的刷新、登出）对 QQ 只记固定类别；原 hook 测试里
 // 「确认后账户刷新抛错」那一步在新架构下落到这里的 login:refresh-error。
-describe('providerAccountController · QQ failures stay out of ordinary logs', () => {
-    const secret = 'private-token https://private.example/?cookie=private-cookie';
-    const privateError = () => {
-        const error = new Error(secret);
-        error.name = 'private-name';
-        return error;
-    };
+// 登录 / 刷新 / 登出的失败对每个 provider 都记完整的错误（名字、原文与 OnlineProviderError 的字段），
+// 诊断报告里能直接看到后端回了什么。
+describe('providerAccountController · failures are logged in full for every provider', () => {
+    const backendError = () => new OnlineProviderError(
+        'network',
+        'QQMusicApi login_status failed: HTTP 502 (upstream unreachable)',
+        'qq',
+        { code: 502, message: 'upstream unreachable' },
+        502,
+    );
     type Step = 'methods' | 'start' | 'refresh' | 'switch-refresh' | 'logout';
     const EVENT: Record<Step, string> = {
         methods: 'login:methods-error',
@@ -893,7 +898,7 @@ describe('providerAccountController · QQ failures stay out of ordinary logs', (
         logout: 'logout:error',
     };
 
-    /** 让 providerId 的某一步以私密内容抛错，返回那一步记下的日志条目。 */
+    /** 让 providerId 的某一步抛错，返回那一步记下的日志条目。 */
     const failAt = async (providerId: OnlineProviderId, step: Step) => {
         accounts = createAccounts('alpha', [
             summary('qq', { status: step === 'switch-refresh' ? 'authenticated' : 'anonymous' }),
@@ -901,58 +906,69 @@ describe('providerAccountController · QQ failures stay out of ordinary logs', (
         ]);
         const controller = createController();
         if (step === 'methods') {
-            auth.resolveQrLoginMethods.mockRejectedValueOnce(privateError());
+            auth.resolveQrLoginMethods.mockRejectedValueOnce(backendError());
             await controller.startLogin(providerId);
         } else if (step === 'start') {
-            auth.getProviderCapabilities.mockImplementationOnce(() => { throw privateError(); });
+            auth.getProviderCapabilities.mockImplementationOnce(() => { throw backendError(); });
             await controller.startLogin(providerId);
             await manual.flush();
         } else if (step === 'refresh') {
-            refresh.mockRejectedValueOnce(privateError());
+            refresh.mockRejectedValueOnce(backendError());
             await controller.startLogin(providerId);
             await confirmNextPoll();
             expect(controller.getSnapshot().login).toMatchObject({ providerId, phase: 'error', failure: 'account-refresh-failed' });
         } else if (step === 'switch-refresh') {
-            refresh.mockRejectedValueOnce(privateError());
+            refresh.mockRejectedValueOnce(backendError());
             const switching = controller.requestSwitch(providerId);
             await controller.confirmSwitch(controller.getSnapshot().pendingSwitch!.id);
             await expect(switching).resolves.toMatchObject({ status: 'switched', providerId });
         } else {
             accounts.update(providerId, { status: 'authenticated' });
             accounts.port.setActiveProviderId(providerId);
-            logoutPort.mockRejectedValueOnce(privateError());
+            logoutPort.mockRejectedValueOnce(backendError());
             await expect(controller.logout(providerId)).resolves.toMatchObject({ status: 'failed', providerId });
         }
         return log.mock.calls.find(([level, event]) => level === 'warn' && event === EVENT[step]);
     };
 
-    it.each(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const)('logs only a fixed category for a QQ %s failure', async step => {
-        const entry = await failAt('qq', step);
+    it.each([
+        ...(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const).map(step => ['qq', step] as const),
+        ...(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const).map(step => ['kugou', step] as const),
+    ])('logs the full %s %s failure', async (providerId, step) => {
+        const entry = await failAt(providerId, step);
 
         expect(entry).toBeDefined();
-        expect(entry![2]).toEqual({ providerId: 'qq', reason: 'provider-error' });
-        expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-|https?:/);
+        expect(entry![2]).toEqual({
+            providerId,
+            name: 'OnlineProviderError',
+            message: 'QQMusicApi login_status failed: HTTP 502 (upstream unreachable)',
+            code: 'network',
+            httpStatus: 502,
+            cause: { code: 502, message: 'upstream unreachable' },
+        });
     });
 
-    it.each(['methods', 'start', 'refresh', 'switch-refresh', 'logout'] as const)('keeps the raw %s failure for other providers', async step => {
-        const entry = await failAt('kugou', step);
-
-        expect(entry).toBeDefined();
-        expect(entry![2]).toEqual({ providerId: 'kugou', name: 'private-name', message: secret });
-    });
-
-    it('builds no QQ report through the UI rule, and a report built anyway carries no raw text', async () => {
+    it('puts the raw start failure of a QQ login into the report', async () => {
         accounts = createAccounts('alpha', [summary('qq')]);
         const controller = createController();
-        auth.createQrLogin.mockRejectedValueOnce(privateError());
+        auth.createQrLogin.mockRejectedValueOnce(new OnlineProviderError(
+            'network',
+            'QQMusicApi login_qr_key failed: HTTP 429 (QR login is temporarily backed off)',
+            'qq',
+            { code: 429, failureStage: 'qr-key', failureReason: 'local-backoff', retryAfterMs: 30000 },
+            429,
+            30000,
+        ));
         await controller.startLogin('qq');
         await manual.flush();
 
         const { login } = controller.getSnapshot();
-        expect(login).toMatchObject({ providerId: 'qq', phase: 'error', failure: 'start-error' });
-        expect(canShowLoginDiagnostics(login!)).toBe(false);
+        expect(login).toMatchObject({ providerId: 'qq', phase: 'error', failure: 'start-error', retryCooldownSeconds: 30 });
+        expect(canShowLoginDiagnostics(login!)).toBe(true);
         const report = await controller.buildLoginDiagnosticReport();
         expect(report.status).toBe('ok');
-        expect(report.status === 'ok' && report.report).not.toMatch(/private-|https?:/);
+        const text = report.status === 'ok' ? report.report : '';
+        expect(text).toContain('message="QQMusicApi login_qr_key failed: HTTP 429 (QR login is temporarily backed off)"');
+        expect(text).toContain('"failureReason":"local-backoff"');
     });
 });

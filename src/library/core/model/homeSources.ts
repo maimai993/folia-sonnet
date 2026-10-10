@@ -119,6 +119,19 @@ export const resolveHomeTabs = ({
     ...(navidromeEnabled ? [{ key: 'navidrome' as const, label: { key: 'navidrome.title', fallback: 'Navidrome' } }] : []),
 ];
 
+/**
+ * 在列表里按 delta 找下一个可用项（绕回）；全都不可用时返回 -1。两套首页的 Tab / F6 循环共用。
+ * current 不在列表里（-1）时，往后从第一个找起，往前从最后一个找起。
+ */
+export const cycleIndex = <T,>(items: readonly T[], current: number, delta: 1 | -1, enabled: (item: T) => boolean): number => {
+    const start = current >= 0 ? current : delta === 1 ? -1 : items.length;
+    for (let step = 1; step <= items.length; step += 1) {
+        const index = (((start + delta * step) % items.length) + items.length) % items.length;
+        if (enabled(items[index])) return index;
+    }
+    return -1;
+};
+
 /** 翻译页签（label 与不可用原因）。 */
 export const translateHomeTabs = (tabs: readonly LibraryHomeTab[], t: TFunction): LibraryHomeTabView[] => tabs.map(tab => ({
     key: tab.key,

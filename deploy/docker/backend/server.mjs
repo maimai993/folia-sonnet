@@ -61,6 +61,32 @@ const fromEdge = (handler) => async (req, res, next) => {
     }
 };
 
+// Navidrome 预置凭据：三项都填才生效。只缺一两项多半是填漏了，启动时报出来，端点照常返回未配置。
+const readNavidromePreset = () => {
+    const serverUrl = (process.env.NAVIDROME_URL || '').trim().replace(/\/+$/, '');
+    const username = (process.env.NAVIDROME_USERNAME || '').trim();
+    const password = process.env.NAVIDROME_PASSWORD || '';
+    const filled = [serverUrl, username, password].filter(Boolean).length;
+    if (filled === 0) return null;
+    if (filled < 3) {
+        console.warn('[folia-web-api] NAVIDROME_URL / NAVIDROME_USERNAME / NAVIDROME_PASSWORD must all be set; Navidrome preset disabled.');
+        return null;
+    }
+    // 浏览器拿它直接发请求，漏写协议会变成相对路径，每个请求都悄悄失败。
+    let protocol = '';
+    try {
+        protocol = new URL(serverUrl).protocol;
+    } catch {
+        // 解析失败按无效处理
+    }
+    if (protocol !== 'http:' && protocol !== 'https:') {
+        console.warn(`[folia-web-api] NAVIDROME_URL must be an absolute http(s) URL, got "${serverUrl}"; Navidrome preset disabled.`);
+        return null;
+    }
+    return { serverUrl, username, password };
+};
+const navidromePreset = readNavidromePreset();
+
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
@@ -74,6 +100,14 @@ const rawBody = express.raw({ type: () => true, limit: REQUEST_BODY_LIMIT });
 app.get('/api/healthz', (_req, res) => {
     res.json({ ok: true, service: 'folia-web-api' });
 });
+// 能访问 gateway 的人都能读到这组凭据：Subsonic 的 token 要在浏览器里用明文密码算，没法只下发哈希。
+// 来源限制在 gateway；这里只认一种精确写法（区分大小写、不吃结尾斜杠），不给路径变体留绕过的口子。
+const navidromePresetRouter = express.Router({ caseSensitive: true, strict: true });
+navidromePresetRouter.get('/api/navidrome-preset', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(navidromePreset ? { configured: true, ...navidromePreset } : { configured: false });
+});
+app.use(navidromePresetRouter);
 app.all('/api/generate-theme', jsonBody, generateTheme);
 app.all('/api/generate-theme_openai', rawBody, fromEdge(generateOpenAiTheme));
 app.all('/api/segment-lyrics', rawBody, fromEdge(segmentLyrics));

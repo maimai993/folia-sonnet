@@ -51,21 +51,18 @@ const openLocalHome = async (page: Page, options: { collectionMorph?: boolean } 
 };
 
 /**
- * 在本地页签的搜索框里搜。导入之后曲库的实体目录要晚一拍才就绪，那之前的结果不带实体（歌手 / 专辑链接是灰的），
- * 所以搜到链接可点为止（重复提交是 replace，不会多压历史）。
+ * 在本地页签的搜索框里搜。导入之后曲库的实体目录要晚一拍才就绪，那之前的结果不带实体（歌手链接是灰的、没有专辑）；
+ * 搜索页按当前目录重算展示，目录到了同一行就会补上链接，所以提交一次、等链接可点即可。
+ * 以前这里反复回车直到链接可点，但轮询里的 isEnabled() 对不存在的专辑按钮会一直等下去（不会抛错落到 catch），
+ * 第一次回车搜在目录之前就把整个轮询卡满 15s。
  */
 const searchLocal = async (page: Page, query: string) => {
     const input = page.getByPlaceholder('Search local songs...');
     await input.fill(query);
-    await expect.poll(async () => {
-        if (await searchResult(page).count() === 0) {
-            await input.press('Enter');
-        } else {
-            await page.keyboard.press('Enter');
-        }
-        await page.waitForTimeout(300);
-        return page.getByRole('button', { name: 'Fixture Album' }).isEnabled().catch(() => false);
-    }, { timeout: 15_000 }).toBe(true);
+    await input.press('Enter');
+    await expect(searchResult(page)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Fixture Album' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Test Artist' })).toBeEnabled();
     expect(await historyState(page)).toMatchObject({ hash: `#search/${query}`, view: 'home', stack: [] });
 };
 
@@ -139,6 +136,34 @@ test.describe('search results', () => {
         await tui(page).locator('[data-tui-back]').click();
         await expectSearchResults(page, 'Midnight');
     });
+});
+
+// 搜索结果是提交那一刻的快照。导入后紧接着搜，实体目录还没加载完，快照里的行没有专辑、歌手不带实体；
+// 搜索页渲染时要按当前目录重算，否则这些行会一直缺链接到重新搜索为止。这里把 store 里的结果换回那种快照，
+// 确定性地复现「目录比搜索晚到」，不靠机器负载去撞时序。
+test('local search results pick up the entity catalog that arrives after the search', async ({ page }) => {
+    await openLocalHome(page);
+    await searchLocal(page, 'Midnight');
+
+    await page.evaluate(async () => {
+        const modulePath = '/src/stores/useSearchNavigationStore.ts';
+        const { useSearchNavigationStore } = await import(/* @vite-ignore */ modulePath);
+        const results = useSearchNavigationStore.getState().searchResults as Array<{
+            artists: Array<{ id: number; name: string }>;
+            album?: Record<string, unknown>;
+        }>;
+        useSearchNavigationStore.setState({
+            searchResults: results.map(track => ({
+                ...track,
+                artists: track.artists.map(artist => ({ id: 0, name: artist.name })),
+                album: { ...track.album, id: 0, name: '', entityId: undefined },
+            })),
+        });
+    });
+
+    await expect(searchResult(page)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Fixture Album' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Test Artist' })).toBeEnabled();
 });
 
 test('the player panel Cover tab opens the album, and Back returns to the player', async ({ page }) => {
@@ -258,6 +283,81 @@ test('[grid] browser back from a nested album plays the reverse transition', asy
     await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __exitSeen?: boolean }).__exitSeen))).toBe(true);
     await expect(page.locator('[data-folia-collection-morph="exit-backdrop"]')).toHaveCount(0, { timeout: 5_000 });
     await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+});
+
+// N1（折叠紧邻往返）：在歌手页和专辑页之间来回点，栈和浏览器历史都不再变长——要进入的歌手正好是上一层时当作一次
+// 应用内返回（history.back()），栈深保持 2–3。返回（应用内或浏览器后退）落到上一个不同的集合，网格的反向转场每次
+// 返回只跑一次（折回也算一次返回）。要打开歌单展开转场才有反向转场可数。
+test('[grid] bouncing between an artist and an album keeps the depth at 2–3, and each back reverses once', async ({ page }) => {
+    await openLocalHome(page, { collectionMorph: true });
+    await page.getByRole('heading', { name: 'All Songs' }).first().click();
+    await expect(grid(page)).toHaveCount(1);
+    await expect(grid(page).getByText('Midnight Train').first()).toBeVisible();
+
+    // 转场期间退场的那一层还在 DOM 里：只看当前那一层（网格给它或它的卡片容器打 data-folia-active-grid）。
+    const active = (surface: 'artist' | 'collection') => page.locator(
+        `[data-library-renderer="grid"][data-library-surface="${surface}"]:is([data-folia-active-grid], :has([data-folia-active-grid]))`,
+    );
+    const openArtist = async () => {
+        // 曲目卡片上的歌手名（专辑页头的歌手名不是链接）。
+        await active('collection').locator('[data-folia-grid-item-id]').getByText('Test Artist', { exact: true }).first().dispatchEvent('click');
+        await expect(active('artist')).toHaveCount(1);
+        await expect(active('artist').getByRole('heading', { name: 'Test Artist' })).toBeVisible();
+    };
+    const openAlbum = async () => {
+        await active('artist').getByText('Fixture Album', { exact: true }).first().dispatchEvent('click');
+        await expect(active('collection')).toHaveCount(1);
+        await expect(active('collection').getByText('Midnight Train').first()).toBeVisible();
+    };
+    const historyLength = () => page.evaluate(() => window.history.length);
+    // 反向转场的次数：网格的 beforeBack 每次都经转场 store 的 armExit / armNestedExit 武装，包一层计数。
+    const reverseRuns = () => page.evaluate(() => (window as unknown as { __reverseRuns?: number }).__reverseRuns ?? 0);
+    await page.evaluate(async () => {
+        const modulePath = '/src/library/suites/grid/transitions/collectionMorphStore.ts';
+        const { useCollectionMorphStore } = await import(/* @vite-ignore */ modulePath);
+        const flag = window as unknown as { __reverseRuns?: number };
+        flag.__reverseRuns = 0;
+        const { armExit, armNestedExit } = useCollectionMorphStore.getState();
+        useCollectionMorphStore.setState({
+            armExit: (...args: unknown[]) => { flag.__reverseRuns! += 1; return armExit(...args); },
+            armNestedExit: (...args: unknown[]) => { flag.__reverseRuns! += 1; return armNestedExit(...args); },
+        });
+    });
+
+    await openArtist();
+    await openAlbum();
+    expect(await historyState(page)).toMatchObject({ stack: ['All Songs', 'Test Artist', 'Fixture Album'] });
+    const deepestLength = await historyLength();
+
+    for (let round = 1; round <= 4; round += 1) {
+        await page.waitForTimeout(600);
+        await openArtist();
+        await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Test Artist']);
+        await expect.poll(reverseRuns).toBe(round);
+        await page.waitForTimeout(600);
+        await openAlbum();
+        await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Test Artist', 'Fixture Album']);
+        expect(await historyLength()).toBe(deepestLength);
+    }
+    expect(await reverseRuns()).toBe(4);
+
+    // 浏览器后退：落到上一个不同的集合（歌手页），反向转场一次。
+    await page.waitForTimeout(600);
+    await page.goBack();
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Test Artist']);
+    await expect(active('artist')).toHaveCount(1);
+    await expect.poll(reverseRuns).toBe(5);
+
+    // 前进回到专辑，再用应用内返回：落在同一层，反向转场同样只一次。
+    await page.goForward();
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Test Artist', 'Fixture Album']);
+    await expect(active('collection')).toHaveCount(1);
+    await page.waitForTimeout(600);
+    await active('collection').locator('button').filter({ has: page.locator('svg.lucide-chevron-left') }).first().click();
+    await expect.poll(async () => (await historyState(page)).stack).toEqual(['All Songs', 'Test Artist']);
+    await expect(active('artist')).toHaveCount(1);
+    await page.waitForTimeout(600);
+    expect(await reverseRuns()).toBe(6);
 });
 
 /**

@@ -79,6 +79,15 @@ export type GridViewCollectionDescriptor =
 /** 与渲染形态无关的名字；新代码用它，旧的 GridView* 名字保留作兼容。 */
 export type LibraryCollectionDescriptor = GridViewCollectionDescriptor;
 
+/**
+ * 集合导航栈的快照：根集合从哪里打开，以及从根到当前层的每一层（可能有重复的集合，规则见 core/model/collectionNavigation）。
+ * 原定义在 stores/useCollectionNavigationStore（那里仍转出）；纯规则要用它，所以放在契约里。
+ */
+export type CollectionNavigationSnapshot = {
+    origin: CollectionNavigationOrigin;
+    stack: GridViewCollectionDescriptor[];
+};
+
 /** 判定集合身份需要的最少字段：在线集合必须带 provider。 */
 export type LibraryCollectionIdentity =
     | Pick<OnlineGridViewCollectionDescriptor, 'source' | 'providerId' | 'type' | 'id'>

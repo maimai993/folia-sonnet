@@ -21,7 +21,7 @@ const createDiagnostics = (overrides: Record<string, unknown> = {}) => {
         now: () => (clock += 25),
         getDefaultDeviceId: () => 'GLOBALDEVICE123456',
         networkInterfaces: () => ({}),
-        logger: { info: vi.fn() },
+        logger: { info: vi.fn(), warn: vi.fn() },
         ...overrides,
     });
 };
@@ -42,12 +42,21 @@ describe('NetEase login diagnostics', () => {
             uri: '/api/login/qrcode/client/login',
             // 包在来源 IP 策略里面，看到的是最终发出去的请求：隐式 IP 已被去掉。
             ipHeader: 'none',
-            deviceIdTail: 'ABCDEF',
+            deviceIdTail: 'CEABCDEF',
             hasMusicU: false,
             hasMusicA: true,
             durationMs: 25,
             outcome: { settled: 'rejected', status: 400, code: 8821, message: '需要行为验证码验证' },
         });
+    });
+
+    it('keeps the error text as the upstream wrote it', async () => {
+        const diagnostics = createDiagnostics();
+        const request = vi.fn().mockRejectedValue({ status: 502, body: { code: 502, msg: 'connect ECONNREFUSED 127.0.0.1:7890' } });
+
+        await expect(diagnostics.wrapRequest(request)('/api/login/qrcode/unikey', {}, {})).rejects.toBeDefined();
+
+        expect(diagnostics.snapshot().requests[0].outcome.message).toBe('connect ECONNREFUSED 127.0.0.1:7890');
     });
 
     it('ignores requests that have nothing to do with signing in', async () => {
@@ -70,32 +79,61 @@ describe('NetEase login diagnostics', () => {
         expect(snapshot).not.toContain('secret');
         expect(diagnostics.snapshot().requests[0]).toMatchObject({
             hasMusicU: true,
-            deviceIdTail: '123456',
+            deviceIdTail: 'CE123456',
             outcome: { settled: 'resolved', code: 803 },
         });
     });
 
-    it('summarises network interfaces without exposing any address', () => {
+    it('lists every external interface with its addresses', () => {
         const diagnostics = createDiagnostics({
             networkInterfaces: () => ({
                 lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
                 'Wi-Fi': [
                     { address: '192.168.1.5', family: 'IPv4', internal: false },
-                    { address: 'fe80::1', family: 'IPv6', internal: false },
+                    { address: 'fe80::1', family: 'IPv6', internal: false, scopeid: 11 },
                     { address: '2408:8000::1', family: 'IPv6', internal: false },
                 ],
                 Clash: [{ address: '198.18.0.1', family: 'IPv4', internal: false }],
             }),
         });
 
-        const { network } = diagnostics.snapshot();
-        expect(network).toEqual({
+        expect(diagnostics.snapshot().network).toEqual({
             interfaces: [
-                { name: 'Wi-Fi', ipv4: true, globalIpv6: true },
-                { name: 'Clash', ipv4: true, globalIpv6: false },
+                {
+                    name: 'Wi-Fi',
+                    addresses: [
+                        { address: '192.168.1.5', family: 4 },
+                        { address: 'fe80::1', family: 6, scopeId: 11 },
+                        { address: '2408:8000::1', family: 6 },
+                    ],
+                },
+                { name: 'Clash', addresses: [{ address: '198.18.0.1', family: 4 }] },
             ],
-            globalIpv6Count: 1,
         });
-        expect(JSON.stringify(network)).not.toMatch(/192\.168|2408|198\.18/);
+    });
+
+    it('attaches the connections that this very request opened, matched by its recorder tag', async () => {
+        const tags: string[] = [];
+        const connection = {
+            host: 'interfacepc.music.163.com', path: '/eapi/login/qrcode/client/login', dns: [], attempts: [],
+            remote: { address: '240e::1', family: 6 }, reusedSocket: false, connectMs: 30, tlsMs: null,
+            responseMs: null, totalMs: 95, status: null, error: { code: 'ECONNRESET', message: 'read ECONNRESET', phase: 'tls' },
+        };
+        const networkRecorder = {
+            run: (tag: string, fn: () => unknown) => {
+                tags.push(tag);
+                return fn();
+            },
+            entriesForTag: (tag: string) => (tag === tags[0] ? [connection] : []),
+        };
+        const diagnostics = createDiagnostics({ networkRecorder });
+        const request = vi.fn().mockRejectedValue({ status: 502, body: { code: 502, msg: 'read ECONNRESET' } });
+
+        await expect(diagnostics.wrapRequest(request)('/api/login/qrcode/client/login', {}, {})).rejects.toBeDefined();
+
+        expect(tags).toHaveLength(1);
+        expect(diagnostics.snapshot().requests[0].connections).toEqual([
+            expect.objectContaining({ remote: { address: '240e::1', family: 6 }, error: { code: 'ECONNRESET', message: 'read ECONNRESET', phase: 'tls' } }),
+        ]);
     });
 });

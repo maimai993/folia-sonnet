@@ -3,11 +3,12 @@ import type {
     LibraryDeclaredActions,
     LibrarySuiteId,
     LibrarySuiteManifest,
+    LibrarySuiteStageProps,
     LibrarySuiteTransitions,
     LibrarySurfaceId,
     LibrarySurfacePropsMap,
 } from './core/contracts/suite';
-import { buildLibrarySuiteIndex, DEFAULT_LIBRARY_SUITE_ID } from './core/model/librarySuites';
+import { buildLibrarySuiteIndex, DEFAULT_LIBRARY_SUITE_ID, isLibrarySuiteChoiceAvailable } from './core/model/librarySuites';
 
 // src/library/registry.ts
 // Library 的 suite 注册表：从各 suite 的 `suites/<id>/entry.ts` 自动发现（照 visualizer registry 的做法，
@@ -34,6 +35,15 @@ export const listLibrarySuites = (): readonly LibrarySuiteManifest[] => SUITE_IN
 export const hasLibrarySuite = (suiteId: string): suiteId is LibrarySuiteId => SUITE_INDEX.has(suiteId);
 
 export const getLibrarySuite = (suiteId: string): LibrarySuiteManifest | undefined => SUITE_INDEX.get(suiteId);
+
+/**
+ * 实际生效的 suite：store 里存的选择可能是这个构建里没有的（初始选择、旧版本的记录），那时生效的是默认 suite。
+ * 设置项、命令面板的 picker 与 DEV 浮层展示「当前 suite」都用它，不直接读 store 的值。
+ */
+export const resolveActiveLibrarySuiteId = (suiteId: string): LibrarySuiteId => SUITE_INDEX.resolveId(suiteId);
+
+/** 有没有得选（可用的 suite 不止一套）：设置项与命令面板共用这一个判断。 */
+export const hasLibrarySuiteChoice = (): boolean => isLibrarySuiteChoiceAvailable(SUITE_INDEX.suites);
 
 export type ResolvedLibrarySurface<Surface extends LibrarySurfaceId> = {
     /** 实际渲染这个 surface 的 suite（回退时是默认 suite）。 */
@@ -90,6 +100,21 @@ export const listLibrarySuiteOverlays = (): ReadonlyArray<{
         ? [{ suiteId: suite.id, Overlay: suite.transitions.Overlay as unknown as React.ComponentType<{ enabled: boolean }> }]
         : []
 ));
+
+export type ResolvedLibraryStage = {
+    /** stage 所属的 suite（就是生效的 suite）。 */
+    suiteId: LibrarySuiteId;
+    component: React.ComponentType<LibrarySuiteStageProps>;
+};
+
+/**
+ * 生效 suite 的 stage（B1）：宿主只挂这一个。id 未知或不可用时生效的是默认 suite（grid 没有 stage），结果为 null；
+ * 选中的 suite 没声明 stage 也是 null（stage 属于整套 suite，不回退）。同一套 suite 总是同一个对象。
+ */
+export const resolveLibraryStage = (suiteId: string): ResolvedLibraryStage | null => (
+    // 契约里的组件只是结构化的最小类型；entry 里放的是 React 组件（非默认 suite 为 lazy），这里只还原类型。
+    SUITE_INDEX.resolveStage(suiteId) as unknown as ResolvedLibraryStage | null
+);
 
 /**
  * 「完成」（返回按钮）时忘掉这一层的布局记录：问**每一套**可用的 suite，不只是正在渲染它的那套
