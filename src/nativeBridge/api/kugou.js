@@ -921,14 +921,15 @@ async function kgPostAndroidSigned(baseURL, urlPath, cookieHeader, bodyData, ext
   const dfid = kgCookieDfid(cookieHeader) || '-';
   const clienttime = Math.floor(Date.now() / 1000);
   const leanCookie = buildKGLeanCookie(cookieHeader);
-  // POST 必须是**非空** body：安卓侧由 OkHttp 代发，它见到空 body 直接抛
-  // `method POST must have a request body.`（HttpMethod.requiresRequestBody 那条），
-  // 整条请求连网关都到不了。上游 KuGouMusicApi 跑在 Node 上用 axios，允许 POST 不带 body，
-  // 所以「只走 query 的推荐接口」照上游搬过来就会在安卓上炸。
-  // 兜成一个空对象：签名算的是这一串，真正发出去的也是这一串，两边不会不一致。
-  const bodyJson = bodyData === undefined || bodyData === null || bodyData === ''
-    ? '{}'
-    : JSON.stringify(bodyData);
+  /*
+   * body 串要**和上游 KuGouMusicApi 一模一样**（util/request.js 里 `data` 为空就是 `''`）：
+   * signature 是 `md5(盐 + params + data + 盐)`，服务端按它自己收到的 body 验签。
+   *
+   * 曾经为了迁就原生把它兜成 `'{}'`，结果签名就与服务端算的对不上 —— 请求不报错了，
+   * 但返回的歌列表是空的（「每日推荐是空的」）。空 body 该由原生侧补成 0 长度的 body
+   * （见 FoliaNativePlugin.httpRequest），JS 这边不要动它。
+   */
+  const bodyJson = bodyData === undefined ? '' : JSON.stringify(bodyData || {});
   const params = Object.assign({
     dfid,
     mid,
@@ -4235,16 +4236,27 @@ function kgSignParamsKey(data) {
  *
  * 上游是 POST 且不带 data，参数全走 query；本地桥的 kgPostAndroidSigned 会把 dfid/mid/
  * appid/clientver/clienttime/token/userid 这些默认参数一起签进去，所以这里只补 platform。
- * body 传空对象而不是空串：OkHttp 不给 POST 发空 body（见 kgPostAndroidSigned 里的说明）。
+ * body 不传（与上游一致）：空 body 由原生补成 0 长度，见 kgPostAndroidSigned 里的说明。
  */
 export async function handleKGEverydayRecommend(cookieHeader, platform) {
   cookieHeader = cookieHeader || await getKGCookie();
+  const userId = kgCookieUserId(cookieHeader);
+  const token = kgCookieToken(cookieHeader);
+  if (!userId || !token) {
+    // kgPostAndroidSigned 在这两个缺一个时直接返回 null，界面上就只看到「每日推荐是空的」，
+    // 而不知道到底缺什么 —— 这里把缺的那一项记进本地库追踪，下一次看日志能直接定位。
+    noteLibraryStep('kugou', 'everyday:recommend:no-session', {
+      hasUserId: Boolean(userId),
+      hasToken: Boolean(token),
+    });
+    return null;
+  }
   noteLibraryStep('kugou', 'everyday:recommend:start');
   const body = await kgPostAndroidSigned(
     'https://gateway.kugou.com',
     '/everyday_song_recommend',
     cookieHeader,
-    {},
+    undefined,
     { platform: String(platform || 'ios') },
     { 'x-router': 'everydayrec.service.kugou.com' },
   );
@@ -4329,7 +4341,7 @@ export async function handleKGEverydayHistory(cookieHeader, options) {
     'https://gateway.kugou.com',
     '/everyday/api/v1/get_history',
     cookieHeader,
-    {},
+    undefined,
     extra,
     { 'x-router': 'everydayrec.service.kugou.com' },
   );

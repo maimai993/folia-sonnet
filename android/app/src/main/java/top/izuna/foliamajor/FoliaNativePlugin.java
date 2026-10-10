@@ -236,6 +236,13 @@ public class FoliaNativePlugin extends Plugin {
         call.resolve(result);
     }
 
+    /** OkHttp 要求这些方法必须带 body（见 httpRequest 里的说明）。 */
+    private static boolean requiresRequestBody(String method) {
+        return "POST".equalsIgnoreCase(method)
+            || "PUT".equalsIgnoreCase(method)
+            || "PATCH".equalsIgnoreCase(method);
+    }
+
     @PluginMethod
     public void httpRequest(PluginCall call) {
         String url = call.getString("url", "");
@@ -278,6 +285,20 @@ public class FoliaNativePlugin extends Plugin {
                 body = RequestBody.create(mediaType, bodyText);
             }
             String requestMethod = method == null ? "GET" : method;
+            /*
+             * OkHttp 不给 POST/PUT/PATCH 发空 body：`HttpMethod.requiresRequestBody` 会直接抛
+             * `method POST must have a request body.` —— 整条请求根本出不去。
+             *
+             * 而上游 KuGouMusicApi 跑在 Node 上用 axios，POST 不带 body 是合法的，
+             * 那些「参数全走 query」的推荐接口（每日推荐、历史推荐）就是这么写的。
+             * 这里补一个长度为 0 的 body：线上看到的就是 Content-Length: 0，
+             * 与上游完全一致 —— 于是 JS 侧不必为了迁就原生把签名里参与计算的
+             * body 串改成别的（签名必须和实际发出去的东西对得上，改了就验签失败、
+             * 表现为「接口通了但没有歌」）。
+             */
+            if (body == null && requiresRequestBody(requestMethod)) {
+                body = RequestBody.create(null, new byte[0]);
+            }
             if (body != null && "GET".equalsIgnoreCase(requestMethod)) {
                 // 有接口的播放地址是「GET + JSON body」，OkHttp 公开的 method() 不接受这种组合，
                 // 只能先选好 GET 再用它自己的 setter 把校验过的 body 塞进去。
