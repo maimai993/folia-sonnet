@@ -921,7 +921,14 @@ async function kgPostAndroidSigned(baseURL, urlPath, cookieHeader, bodyData, ext
   const dfid = kgCookieDfid(cookieHeader) || '-';
   const clienttime = Math.floor(Date.now() / 1000);
   const leanCookie = buildKGLeanCookie(cookieHeader);
-  const bodyJson = bodyData === undefined ? '' : JSON.stringify(bodyData || {});
+  // POST 必须是**非空** body：安卓侧由 OkHttp 代发，它见到空 body 直接抛
+  // `method POST must have a request body.`（HttpMethod.requiresRequestBody 那条），
+  // 整条请求连网关都到不了。上游 KuGouMusicApi 跑在 Node 上用 axios，允许 POST 不带 body，
+  // 所以「只走 query 的推荐接口」照上游搬过来就会在安卓上炸。
+  // 兜成一个空对象：签名算的是这一串，真正发出去的也是这一串，两边不会不一致。
+  const bodyJson = bodyData === undefined || bodyData === null || bodyData === ''
+    ? '{}'
+    : JSON.stringify(bodyData);
   const params = Object.assign({
     dfid,
     mid,
@@ -4226,8 +4233,9 @@ function kgSignParamsKey(data) {
 /**
  * 每日推荐（/everyday/recommend → everydayrec 服务）。
  *
- * 上游是 POST + 空 body，参数全走 query；本地桥的 kgPostAndroidSigned 会把 dfid/mid/
+ * 上游是 POST 且不带 data，参数全走 query；本地桥的 kgPostAndroidSigned 会把 dfid/mid/
  * appid/clientver/clienttime/token/userid 这些默认参数一起签进去，所以这里只补 platform。
+ * body 传空对象而不是空串：OkHttp 不给 POST 发空 body（见 kgPostAndroidSigned 里的说明）。
  */
 export async function handleKGEverydayRecommend(cookieHeader, platform) {
   cookieHeader = cookieHeader || await getKGCookie();
@@ -4236,7 +4244,7 @@ export async function handleKGEverydayRecommend(cookieHeader, platform) {
     'https://gateway.kugou.com',
     '/everyday_song_recommend',
     cookieHeader,
-    undefined,
+    {},
     { platform: String(platform || 'ios') },
     { 'x-router': 'everydayrec.service.kugou.com' },
   );
@@ -4321,7 +4329,7 @@ export async function handleKGEverydayHistory(cookieHeader, options) {
     'https://gateway.kugou.com',
     '/everyday/api/v1/get_history',
     cookieHeader,
-    undefined,
+    {},
     extra,
     { 'x-router': 'everydayrec.service.kugou.com' },
   );

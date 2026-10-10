@@ -315,15 +315,23 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
 
     /** 两帧之间最少隔多久（纳秒）：30fps。 */
     private static final long FRAME_INTERVAL_NS = 33_000_000L;
+    /**
+     * 待机（没歌、没歌词）时的帧间隔：10fps。
+     *
+     * 那会儿画面上只有一层慢慢流动的背景，按播放时的 30fps 画纯属白烧电 ——
+     * 桌面停留的时间可比播放时长得多。
+     */
+    private static final long IDLE_FRAME_INTERVAL_NS = 100_000_000L;
     private long lastFrameNanos = 0L;
 
-    /** 把渲染节奏按到 30fps；见 onDrawFrame 里的说明。 */
-    private void throttleFrameRate() {
+    /** 把渲染节奏按到 30fps（待机时 10fps）；见 onDrawFrame 里的说明。 */
+    private void throttleFrameRate(boolean idle) {
+        long interval = idle ? IDLE_FRAME_INTERVAL_NS : FRAME_INTERVAL_NS;
         if (lastFrameNanos == 0L) {
             lastFrameNanos = System.nanoTime();
             return;
         }
-        long target = lastFrameNanos + FRAME_INTERVAL_NS;
+        long target = lastFrameNanos + interval;
         long now = System.nanoTime();
         if (now >= target) {
             lastFrameNanos = now;
@@ -356,13 +364,21 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
          * 交换出去的是上一帧没画完的缓冲，会有撕裂感。让 GL 线程睡到下一帧的时间点，
          * 摆出去的每一帧都是画完整的。
          */
-        throttleFrameRate();
+        WallpaperLyricsState.Snapshot snapshot = WallpaperLyricsState.get();
+        /*
+         * **没有歌词时不能整帧 return。**
+         *
+         * 早先这里有一条 `if (snapshot.isEmpty()) return;`，结果是没播放、冷启动、纯待机时
+         * 一帧都不画 —— 桌面壁纸直接是空的（保持住上一次的内容，或者干脆黑掉一块）。
+         * 而下面那套 IDLE_* 待机配色正是为了这个状态写的，被这条早退挡着从来没生效过。
+         * 空状态照样要铺背景，只是不必按播放时的帧率画，所以把 idle 交给节流。
+         */
+        boolean idle = snapshot.isEmpty();
+        throttleFrameRate(idle);
         long now = System.nanoTime();
         float deltaSeconds = lastNanos == 0L ? 0.016f : Math.min(0.1f, (now - lastNanos) / 1e9f);
         lastNanos = now;
         elapsedSeconds += deltaSeconds;
-
-        WallpaperLyricsState.Snapshot snapshot = WallpaperLyricsState.get();
 
         // 当前行由原生按墙钟从时间轴算出来，不依赖 JS 推送 ——
         // 应用退到后台后 WebView 的定时器会被挂起，靠 JS 推「当前行」歌词就走不动了。
@@ -370,9 +386,6 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         int computedIndex = snapshot.indexAt(position);
         float computedProgress = snapshot.progressAt(position);
 
-        if (snapshot.isEmpty()) {
-            return;
-        }
         activeMode = snapshot.visualizerMode;
         // style / tuning 必须在这之前落地：下面的行插值要看 enableTransitions，
         // 后面的背景与歌词绘制也要看这两个。
@@ -414,7 +427,6 @@ public final class LyricsRenderer implements GLSurfaceView.Renderer {
         // 没歌（冷启动、纯待机）时别用那套「近乎全黑」的默认底色：
         // 空状态下背景只有一层极暗的底 + 很弱的光团，看上去就是一块黑屏。
         // 这里换一套能站得住的待机配色，让它至少像一张壁纸。
-        boolean idle = snapshot.isEmpty();
         accentTarget = rgbFromColor(idle ? IDLE_ACCENT : snapshot.accent);
         baseTarget = rgbFromColor(idle ? IDLE_BASE : snapshot.baseColor);
         motionTarget = idle ? Math.max(0.6f, snapshot.motion) : snapshot.motion;
