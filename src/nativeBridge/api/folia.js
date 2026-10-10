@@ -46,12 +46,16 @@ import {
   getKGLoginStatus,
   getKGUserVipDetail,
   handleKGArtistDetail,
+  handleKGEverydayHistory,
+  handleKGEverydayRecommend,
   handleKGLoginQrCheck,
   handleKGLoginQrCreate,
   handleKGLoginQrKey,
   handleKGLyric,
+  handleKGPersonalFm,
   handleKGPlaylistTracks,
   handleKGSearch,
+  handleKGTopCardYouth,
   handleKGSongUrl,
   handleKGUserPlaylists,
   searchKGLyricCandidates,
@@ -1180,11 +1184,42 @@ async function handleFoliaKugouRequest(input, url) {
       data: { info: items, list: items, songs: items, total: items.length },
     };
   }
-  if (operation === 'everyday_recommend' || operation === 'personal_fm' || operation === 'top_card_youth') {
-    return { status: 1, error_code: 0, data: { info: [], songs: [], lists: [], total: 0 } };
+  // 推荐类接口以前这里是直接返回空数组，UI 上就表现为「私人 FM / 每日推荐没有歌」。
+  // 现在都真的去打酷狗的推荐服务；拿不到（没登录 / 被风控）时再退化成空列表，至少不会报错。
+  if (operation === 'everyday_recommend') {
+    const body = await handleKGEverydayRecommend(cookie, params.platform);
+    return body || { status: 1, error_code: 0, data: { songs: [], total: 0 } };
+  }
+  if (operation === 'personal_fm') {
+    const body = await handleKGPersonalFm(cookie, {
+      action: params.action,
+      hash: params.hash,
+      songid: params.songid,
+      playtime: params.playtime,
+      mode: params.mode,
+      song_pool_id: params.song_pool_id,
+      is_overplay: params.is_overplay,
+      remain_songcnt: params.remain_songcnt,
+      platform: params.platform,
+    });
+    return body || { status: 1, error_code: 0, data: { songs: [], total: 0 } };
+  }
+  if (operation === 'top_card_youth') {
+    const body = await handleKGTopCardYouth(cookie, {
+      card_id: params.card_id,
+      pagesize: params.pagesize,
+      tagid: params.tagid,
+    });
+    return body || { status: 1, error_code: 0, data: { songs: [], total: 0 } };
   }
   if (operation === 'everyday_history') {
-    return { status: 1, error_code: 0, data: { info: [], list: [], total: 0 } };
+    const body = await handleKGEverydayHistory(cookie, {
+      mode: params.mode,
+      date: params.date,
+      history_name: params.history_name,
+      platform: params.platform,
+    });
+    return body || { status: 1, error_code: 0, data: { info: [], list: [], total: 0 } };
   }
   if (operation === 'user_cloud') {
     return { status: 1, error_code: 0, data: { info: [], songs: [], total: 0 } };

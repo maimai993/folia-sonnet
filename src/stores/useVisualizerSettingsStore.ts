@@ -24,8 +24,14 @@ import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } 
 /** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
 export const LYRICS_WALLPAPER_FEED_STORAGE_KEY = 'folia.lyricsWallpaperFeed';
 
+/*
+ * 注意函数体要和返回类型一起改：加了 'video' 这一支类型、**没**加这个判断的话，
+ * 存进去的 'video' 在**下一次读存储**时就会被静默回退成 'cover' ——
+ * 用户看到的就是「设了视频背景，动一下别的设置又变回封面」。
+ * （读存储不只在启动时发生：叠层那份页面每次重载都会重新读一遍 localStorage。）
+ */
 const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' =>
-    value === 'color' || value === 'image' ? value : 'cover';
+    value === 'color' || value === 'image' || value === 'video' ? value : 'cover';
 /** 歌词壁纸的背景：模糊封面 / 主题色渐变 / 自选图片。 */
 export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
 /** 歌词壁纸的自选背景图（base64，已压到 512px）。体积不小，但落 localStorage 仍在配额内。 */

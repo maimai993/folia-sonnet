@@ -4213,6 +4213,158 @@ export async function handleKGArtistDetail(id, name, limit) {
   };
 }
 
+/**
+ * 推荐类接口用的 `signParamsKey`：md5(appid + 盐 + clientver + data)。
+ *
+ * 上游 KuGouMusicApi 的标准版/概念版走不同盐值，本地桥固定用概念版（lite）那一套，
+ * 和 kgPostAndroidSigned 里签 signature 用的是同一个盐，别两边改了一个忘了另一个。
+ */
+function kgSignParamsKey(data) {
+  return md5(`${KG_LITE_APPID}${KG_ANDROID_SIGN_SALT}${KG_LITE_CLIENTVER}${data}`);
+}
+
+/**
+ * 每日推荐（/everyday/recommend → everydayrec 服务）。
+ *
+ * 上游是 POST + 空 body，参数全走 query；本地桥的 kgPostAndroidSigned 会把 dfid/mid/
+ * appid/clientver/clienttime/token/userid 这些默认参数一起签进去，所以这里只补 platform。
+ */
+export async function handleKGEverydayRecommend(cookieHeader, platform) {
+  cookieHeader = cookieHeader || await getKGCookie();
+  noteLibraryStep('kugou', 'everyday:recommend:start');
+  const body = await kgPostAndroidSigned(
+    'https://gateway.kugou.com',
+    '/everyday_song_recommend',
+    cookieHeader,
+    undefined,
+    { platform: String(platform || 'ios') },
+    { 'x-router': 'everydayrec.service.kugou.com' },
+  );
+  noteLibraryStep('kugou', 'everyday:recommend:done', {
+    status: body && body.status,
+    errorCode: body && body.error_code,
+  });
+  return body;
+}
+
+/**
+ * 私人 FM（/personal/fm → persnfm 服务）。
+ *
+ * `remain_songcnt` 是「队列里还剩几首没播」的意思，酷狗服务端在它大于 4 时**直接不返回新歌**，
+ * 所以默认必须给 0 —— 否则 FM 首页会一次次拿到空列表，表现就是「私人 FM 没有歌」。
+ */
+export async function handleKGPersonalFm(cookieHeader, options) {
+  options = options || {};
+  cookieHeader = cookieHeader || await getKGCookie();
+  const userId = kgCookieUserId(cookieHeader);
+  const token = kgCookieToken(cookieHeader);
+  const vipType = kgCookieVipType(cookieHeader);
+  const mid = await getKGMid(cookieHeader);
+  const dateTime = Date.now();
+  const data = {
+    appid: KG_LITE_APPID,
+    clienttime: dateTime,
+    mid,
+    action: String(options.action || 'play'),
+    recommend_source_locked: 0,
+    song_pool_id: Number(options.song_pool_id) || 0,
+    callerid: 0,
+    m_type: 1,
+    platform: String(options.platform || 'ios'),
+    area_code: 1,
+    // 夹在 0~4：服务端见大于 4 就不发歌，调用方就算把整个播放队列长度传进来也不会把 FM 变成空的。
+    remain_songcnt: Math.max(0, Math.min(4, Number(options.remain_songcnt) || 0)),
+    clientver: KG_LITE_CLIENTVER,
+    is_overplay: options.is_overplay ? 1 : 0,
+    mode: String(options.mode || 'normal'),
+    fakem: 'ca981cfc583a4c37f28d2d49000013c16a0a',
+    key: kgSignParamsKey(dateTime),
+  };
+  if (userId) {
+    data.userid = userId;
+    data.kguid = userId;
+  }
+  if (token) data.token = token;
+  if (vipType) data.vip_type = vipType;
+  if (options.hash) data.hash = options.hash;
+  if (options.songid) data.songid = options.songid;
+  if (options.playtime) data.playtime = options.playtime;
+  if (options.cur_mark) data.cur_mark = options.cur_mark;
+  noteLibraryStep('kugou', 'personal:fm:start', { action: data.action, mode: data.mode });
+  const body = await kgPostAndroidSigned(
+    'https://gateway.kugou.com',
+    '/v2/personal_recommend',
+    cookieHeader,
+    data,
+    {},
+    { 'x-router': 'persnfm.service.kugou.com' },
+  );
+  noteLibraryStep('kugou', 'personal:fm:done', {
+    status: body && body.status,
+    errorCode: body && body.error_code,
+  });
+  return body;
+}
+
+/** 历史推荐（/everyday/history）：mode=list 拿日期列表，mode=song 拿某天的歌。 */
+export async function handleKGEverydayHistory(cookieHeader, options) {
+  options = options || {};
+  cookieHeader = cookieHeader || await getKGCookie();
+  const extra = {
+    mode: String(options.mode || 'list'),
+    platform: String(options.platform || 'ios'),
+  };
+  if (options.history_name) extra.history_name = options.history_name;
+  if (options.date) extra.date = options.date;
+  noteLibraryStep('kugou', 'everyday:history:start', { mode: extra.mode });
+  const body = await kgPostAndroidSigned(
+    'https://gateway.kugou.com',
+    '/everyday/api/v1/get_history',
+    cookieHeader,
+    undefined,
+    extra,
+    { 'x-router': 'everydayrec.service.kugou.com' },
+  );
+  noteLibraryStep('kugou', 'everyday:history:done', {
+    status: body && body.status,
+    errorCode: body && body.error_code,
+  });
+  return body;
+}
+
+/** 歌曲推荐（概念版卡片，/top/card/youth）。clientver 上游写死 11490，别改成 lite 的 11440。 */
+export async function handleKGTopCardYouth(cookieHeader, options) {
+  options = options || {};
+  cookieHeader = cookieHeader || await getKGCookie();
+  const pagesize = Number(options.pagesize);
+  noteLibraryStep('kugou', 'top:card:youth:start', { cardId: options.card_id });
+  const body = await kgPostAndroidSigned(
+    'https://gateway.kugou.com',
+    '/youth/v1/song/single_card_recommend',
+    cookieHeader,
+    {
+      tagid: options.tagid != null ? options.tagid : '',
+      u_info: '',
+      source_mixsong: '',
+    },
+    {
+      card_id: Number(options.card_id) || 3005,
+      area_code: 1,
+      platform: 'ios',
+      module_id: 1,
+      ver: 'v2',
+      pagesize: Number.isFinite(pagesize) && pagesize > 0 ? pagesize : 30,
+      clientver: 11490,
+    },
+    {},
+  );
+  noteLibraryStep('kugou', 'top:card:youth:done', {
+    status: body && body.status,
+    errorCode: body && body.error_code,
+  });
+  return body;
+}
+
 function parseKGCommentTime(value) {
   const text = String(value || '').trim();
   if (!text) return 0;
