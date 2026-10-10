@@ -1813,10 +1813,12 @@ export async function getLocalSongArrayBuffer(song: LocalSong): Promise<ArrayBuf
 // Extracts and persists one song's embedded cover after an explicit playback-time request.
 async function extractAndPersistSongCover(
     song: LocalSong,
-    fileHandle: FileSystemFileHandle,
+    fileHandle: FileSystemFileHandle | null,
+    file?: File,
 ): Promise<LocalSong> {
-    const file = await fileHandle.getFile();
-    const metadata = await extractEmbeddedMetadata(file, true);
+    const source = file ?? await fileHandle?.getFile();
+    if (!source) return song;
+    const metadata = await extractEmbeddedMetadata(source, true);
     if (!metadata.cover || !metadata.coverAssetId) return song;
     stageLocalCoverAsset(metadata.coverAssetId, metadata.cover);
 
@@ -1824,11 +1826,36 @@ async function extractAndPersistSongCover(
         ...song,
         localCoverAssetId: metadata.coverAssetId,
         localCoverSource: 'embedded',
-        fileHandle,
+        // 安卓没有 File System Access 句柄，这里不能凭空塞一个：留原值（undefined）。
+        ...(fileHandle ? { fileHandle } : {}),
     };
     Object.assign(song, updatedSong);
     await saveLocalSong(updatedSong);
     return updatedSong;
+}
+
+/**
+ * 安卓上把整首音频取回来当 File。
+ *
+ * 本地歌在安卓走的是原生回环服务（`nativeAudioRef`），**没有 File System Access 句柄** ——
+ * 而 ensureLocalSongCoverAsset 之前只认句柄，拿不到就直接放弃。
+ * 结果是：安卓本地歌的封面**只有导入那一次**有机会抽出来（导入时解析内嵌元数据），
+ * 那一趟一旦失败（比如副本那次 fetch 404），这首歌就永远没有封面 ——
+ * 队列磁贴、播放页全是空白。这里让封面抽取也能从原生回环那份字节里拿。
+ */
+async function nativeAudioFile(song: LocalSong): Promise<File | null> {
+    if (!song.nativeAudioRef) return null;
+    const url = await nativeAudioUrlForRef(song.nativeAudioRef);
+    if (!url) return null;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const blob = await response.blob();
+        if (blob.size <= 0) return null;
+        return new File([blob], song.fileName || 'audio', { type: song.mimeType || 'audio/*' });
+    } catch {
+        return null;
+    }
 }
 
 export async function ensureLocalSongCoverAsset(song: LocalSong): Promise<LocalSong> {
@@ -1839,7 +1866,15 @@ export async function ensureLocalSongCoverAsset(song: LocalSong): Promise<LocalS
         localCoverAssetRequestMap.set(song.id, (async () => {
             const fileHandle = await getAccessibleFileHandle(song);
             if (!fileHandle) {
-                return song;
+                // 安卓没有句柄，但字节还能从原生回环服务取回来 —— 别就这么放弃。
+                const nativeFile = await nativeAudioFile(song);
+                if (!nativeFile) return song;
+                try {
+                    return await extractAndPersistSongCover(song, null, nativeFile);
+                } catch (error) {
+                    console.warn(`[LocalMusic] Failed to ensure native embedded cover for ${song.fileName}:`, error);
+                    return song;
+                }
             }
 
             try {
