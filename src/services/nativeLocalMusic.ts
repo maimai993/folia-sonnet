@@ -64,7 +64,12 @@ type NativePlugin = {
      * 把一个 ref 指向的音频复制一份进 App 私有目录，返回新的 `imported-` ref。
      * 只在该首歌真的播不出来时才调，不是扫描时整库复制。
      */
-    copyLocalAudio?: (options: { ref: string }) => Promise<{
+    copyLocalAudio?: (options: {
+        ref: string;
+        /** 原文件名。私有副本丢了的时候，原生靠它回媒体库把原文件找回来重拷。 */
+        fileName?: string;
+        fileSize?: number;
+    }) => Promise<{
         copied?: boolean;
         ref?: string;
         error?: string;
@@ -121,11 +126,19 @@ const noteAudioServerPort = (port: unknown): void => {
  *
  * 只在真播不出来时调一次，之后那首歌就用新 ref，不会再回到原文件。
  */
-export const copyAndroidLocalAudio = async (ref: string): Promise<string | null> => {
+export const copyAndroidLocalAudio = async (
+    ref: string,
+    fileName?: string,
+    fileSize?: number,
+): Promise<string | null> => {
     const plugin = getPlugin();
     if (!ref || !plugin?.copyLocalAudio) return null;
     try {
-        const response = await plugin.copyLocalAudio({ ref });
+        const response = await plugin.copyLocalAudio({
+            ref,
+            fileName: fileName || undefined,
+            fileSize: Number(fileSize) > 0 ? Number(fileSize) : 0,
+        });
         if (!response?.copied) {
             noteLibraryStep('local', 'copy:failed', { ref, error: response?.error });
             return null;

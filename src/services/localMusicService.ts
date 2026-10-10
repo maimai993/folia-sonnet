@@ -1712,7 +1712,7 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
          *
          * 只在真播不出来时拷这一首，不是扫描时整库复制 —— 那会平白占几个 G。
          */
-        const copiedRef = await copyAndroidLocalAudio(song.nativeAudioRef);
+        const copiedRef = await copyAndroidLocalAudio(song.nativeAudioRef, song.fileName, song.fileSize);
         if (copiedRef && copiedRef !== song.nativeAudioRef) {
             const copiedUrl = await playableUrlForNativeRef(copiedRef);
             if (copiedUrl) {
@@ -1725,7 +1725,12 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
             }
         }
 
-        console.warn(`[LocalMusic] Native audio unreachable for ${song.id}: ${song.nativeAudioRef}`);
+        // 原因必须写进日志：副本丢了 / 被网络栈挡了 / 服务没起来，三种的处理完全不同，
+        // 而真机上那句「无法访问文件」本身看不出任何区别。
+        console.warn(
+            `[LocalMusic] Native audio unreachable for ${song.id}: ${song.nativeAudioRef}`
+            + ` (reason: ${lastLocalAudioFailure ?? 'unknown'})`,
+        );
         return null;
     }
     lastLocalAudioFailure = 'no-ref';

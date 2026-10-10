@@ -79,6 +79,7 @@ import okhttp3.ResponseBody;
     }
 )
 public class FoliaNativePlugin extends Plugin {
+    private static final String TAG = "FoliaNative";
     private static volatile FoliaNativePlugin instance;
 
     /** 文件/文件夹选择器只用一份：连点两次会开两个系统界面，回来的回调就串了。 */
@@ -942,21 +943,30 @@ public class FoliaNativePlugin extends Plugin {
             call.reject("Missing audio ref");
             return;
         }
+        final String fileName = call.getString("fileName");
+        final long fileSize = call.getLong("fileSize", 0L);
         final Activity activity = getActivity();
         new Thread(() -> {
             JSObject result = new JSObject();
             try {
                 if (localAudioServer == null) localAudioServer = new LocalAudioServer(getContext());
                 localAudioServer.start();
-                String copied = materializeAudioCopy(localAudioServer.importedAudioDirectory(), ref);
+                File directory = localAudioServer.importedAudioDirectory();
+                String copied = materializeAudioCopy(directory, ref, fileName, fileSize);
                 if (copied == null) {
+                    File target = new File(directory, ref);
+                    String why = ref.startsWith("imported-") && !target.isFile()
+                        ? "private copy is gone and the original was not found in the media store"
+                        : "source is unreachable";
+                    Log.w(TAG, "copyLocalAudio failed for " + ref + ": " + why);
                     result.put("copied", false);
-                    result.put("error", "Source is unreachable: " + ref);
+                    result.put("error", why + ": " + ref);
                 } else {
                     result.put("copied", true);
                     result.put("ref", copied);
                 }
             } catch (Exception error) {
+                Log.w(TAG, "copyLocalAudio failed for " + ref, error);
                 result.put("copied", false);
                 result.put("error", error.getMessage() == null ? error.toString() : error.getMessage());
             }
@@ -965,16 +975,50 @@ public class FoliaNativePlugin extends Plugin {
         }, "folia-audio-copy").start();
     }
 
+    /**
+     * 按文件名 + 大小回媒体库里找原文件。
+     *
+     * 兜的是「私有副本没了、而这首歌本来是挑文件夹导入的」这种情况：
+     * 挑选导入时只记了副本名，原文件的 Uri 没留下来，副本一旦丢了就没有任何退路 ——
+     * 只能让用户重新导入整个文件夹。而原文件多半还躺在外部存储里、也被媒体库收录着，
+     * 按「文件名 + 大小」把它找回来重新拷一遍，比让用户重导一遍合理得多。
+     */
+    private String copyFromMediaStoreByName(File directory, String fileName, long fileSize) {
+        if (fileName == null || fileName.isEmpty()) return null;
+        ContentResolver resolver = getContext().getContentResolver();
+        String selection = fileSize > 0
+            ? MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.SIZE + "=?"
+            : MediaStore.Audio.Media.DISPLAY_NAME + "=?";
+        String[] args = fileSize > 0
+            ? new String[]{ fileName, String.valueOf(fileSize) }
+            : new String[]{ fileName };
+        try (Cursor cursor = resolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                new String[]{ MediaStore.Audio.Media._ID },
+                selection, args, null)) {
+            if (cursor == null || !cursor.moveToFirst()) return null;
+            long id = cursor.getLong(0);
+            return materializeAudioCopy(directory, String.valueOf(id), fileName, fileSize);
+        } catch (Exception error) {
+            Log.w(TAG, "media store lookup failed for " + fileName, error);
+            return null;
+        }
+    }
+
     /** 返回新 ref（imported-xxx）；源取不到、或拷出来是空的，都返回 null。 */
-    private String materializeAudioCopy(File directory, String ref) throws IOException {
-        // 已经是私有副本：没有「原文件」可以再拷一次，拷也拷不出别的字节。
-        if (ref.startsWith("imported-")) return null;
+    private String materializeAudioCopy(File directory, String ref, String fileName, long fileSize)
+            throws IOException {
+        if (ref.startsWith("imported-")) {
+            // 副本还在就没什么可做的；没了才回媒体库按文件名把原文件找回来重拷。
+            File existing = new File(directory, ref);
+            if (existing.isFile() && existing.length() > 0) return null;
+            return copyFromMediaStoreByName(directory, fileName, fileSize);
+        }
 
         ContentResolver resolver = getContext().getContentResolver();
         Uri sourceUri = null;
         File sourceFile = null;
         String displayName = null;
-        long fileSize = 0;
 
         if (ref.startsWith("file-")) {
             sourceFile = new File(ref.substring("file-".length()));
