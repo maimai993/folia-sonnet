@@ -93,7 +93,8 @@ export const isFoliaExtensionBridgeConfigured = (value?: string | null): boolean
     || normalized === 'folia-extension'
     || normalized === 'folia-extension://netease'
     || normalized === 'folia-extension://qq'
-    || normalized === 'folia-extension://kugou';
+    || normalized === 'folia-extension://kugou'
+    || normalized === 'folia-extension://bodian';
 };
 
 export const getFoliaExtensionBridgeInfo = () => ({

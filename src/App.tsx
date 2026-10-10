@@ -86,7 +86,7 @@ import { useNativeBackButton } from './hooks/useNativeBackButton';
 import { noteAudioEvent, resetMediaDiagnostics } from './utils/mediaDiagnostics';
 import { useLyricsWallpaperFeed } from './hooks/useLyricsWallpaperFeed';
 import { useLyriconFeed } from './hooks/useLyriconFeed';
-import { useScreenAwakeWhilePlaying } from './hooks/useScreenAwakeWhilePlaying';
+import { useScreenAwake } from './hooks/useScreenAwake';
 import { usePlayerChromeAutoHide } from './hooks/usePlayerChromeAutoHide';
 import { usePlaybackAudioBridge } from './hooks/usePlaybackAudioBridge';
 import { useTranscodeFallback } from './hooks/useTranscodeFallback';
@@ -1484,8 +1484,9 @@ export default function App() {
         animationIntensity: theme?.animationIntensity ?? null,
     });
 
-    // Android 专有：播放中把屏幕钉住不熄（开关在「播放」设置里，默认关）。
-    useScreenAwakeWhilePlaying();
+    // Android 专有：把屏幕钉住不熄。两个开关（界面设置的常驻常亮、播放设置的播放时常亮）
+    // 在这里取或后过桥，都默认关。
+    useScreenAwake();
 
     // Android 专有：把当前歌曲与歌词推给状态栏歌词（Lyricon）。
     useLyriconFeed({

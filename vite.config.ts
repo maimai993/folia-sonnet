@@ -148,6 +148,8 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
     process.env.VITE_NETEASE_API_BASE = 'extension';
     process.env.VITE_QQ_API_BASE = 'extension';
     process.env.VITE_KUGOU_API_BASE = 'extension';
+    // 波点同样没有可配的后端：桌面端由 Electron 内置，Android 由 src/nativeBridge/api/bodian.js 顶上。
+    process.env.VITE_BODIAN_API_BASE = 'extension';
   }
   let commitHash = '';
   if (process.env.VERCEL_GIT_COMMIT_SHA) {
