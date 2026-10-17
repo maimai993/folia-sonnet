@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  暂停：lucide 的 pause，两根 4×16 的圆角竖条（x=6 / x=14），与 folia_play 同一套网格。
+  这两根必须和播放那个三角形一眼分得开，所以不做描边版 —— 锁屏上图标只有 22dp，
+  描边的竖条在深色壁纸上会糊成一片。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,4 h2 a1,1 0 0 1 1,1 v14 a1,1 0 0 1 -1,1 h-2 a1,1 0 0 1 -1,-1 V5 a1,1 0 0 1 1,-1 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M15,4 h2 a1,1 0 0 1 1,1 v14 a1,1 0 0 1 -1,1 h-2 a1,1 0 0 1 -1,-1 V5 a1,1 0 0 1 1,-1 Z" />
+</vector>

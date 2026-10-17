@@ -20,6 +20,7 @@ import {
     hasWallpaperVideo as queryWallpaperVideo,
     isLyricsWallpaperActive,
     openLyricsWallpaperPicker,
+    openRomPermissionPage,
     openWallpaperOverlaySettings,
     pickWallpaperFont,
     pickWallpaperVideo,
@@ -778,6 +779,54 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                     >
                         {t('options.wallpaperOverlayLockScreenLastExit')}{lockScreenStatus.lastExit}
                     </p>
+                )}
+                {/*
+                 * ROM 引导：锁屏页起不来时，绝大多数是 ROM 那几道开关没开。
+                 *
+                 * 代码绕不过去（没有任何调用能替用户授权），只能把人送到正确的页面 ——
+                 * 所以这里在「被拦了 / 试过但一直没起来」时才出现，平时不占地方。
+                 */}
+                {lockScreenActive && lockScreenStatus && (lockScreenStatus.blocked
+                    || (!lockScreenStatus.hosted && !lockScreenStatus.started
+                        && lockScreenStatus.attempts > 0)) && (
+                    <div className="px-4 pb-3">
+                        <p
+                            className="text-xs leading-relaxed"
+                            style={{ color: 'var(--text-secondary)' }}
+                        >
+                            {lockScreenStatus.rom
+                                ? t('options.wallpaperOverlayLockScreenRomHint', { rom: lockScreenStatus.rom })
+                                : t('options.wallpaperOverlayLockScreenGenericHint')}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={handleOpenOverlaySettings}
+                                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                {hasOverlayPermission
+                                    ? t('options.lyricsWallpaperOverlayGranted')
+                                    : t('options.lyricsWallpaperOverlayGrant')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void openRomPermissionPage('background')}
+                                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                {t('options.wallpaperOverlayLockScreenOpenBackground')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void openRomPermissionPage('power')}
+                                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${utilityGhostButtonClass}`}
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                {t('options.wallpaperOverlayLockScreenOpenPower')}
+                            </button>
+                        </div>
+                    </div>
                 )}
                 {/* 叠层的动作流水：只给「为什么突然消失」这类问题用，所以折叠起来，
                     平时不占地方。新的在前，最多 40 条（原生那边是个环形缓冲）。 */}

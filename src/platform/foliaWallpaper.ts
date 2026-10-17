@@ -163,7 +163,13 @@ interface FoliaWallpaperPlugin {
         hosted: boolean;
         attempts: number;
         error?: string;
+        /** ROM 标签（"ColorOS 14"）。空串 = 不是 ColorOS 系。 */
+        rom?: string;
+        /** 悬浮窗权限：Android 14 上它是后台启动 Activity 的主要豁免来源。 */
+        overlayGranted?: boolean;
     }>;
+    /** 跳到 ROM 那几道开关的页面。见 RomPermissionGuide。 */
+    openRomPermission(options: { target: string }): Promise<{ opened: boolean }>;
     /** 叠层最近做了什么（新的在前）。见 WallpaperOverlay.noteOverlayEvent。 */
     getOverlayEventLog(): Promise<{ events: string[] }>;
 }
@@ -180,6 +186,10 @@ export interface WallpaperLockScreenStatus {
     error?: string;
     /** 上一次为什么退出（中文，直接显示给用户）。 */
     lastExit?: string;
+    /** ROM 标签（"ColorOS 14"）；空串 = 不是 ColorOS 系。 */
+    rom?: string;
+    /** 悬浮窗权限。Android 14 起它是后台启动 Activity 的主要豁免来源。 */
+    overlayGranted?: boolean;
 }
 
 const FoliaWallpaper = registerPlugin<FoliaWallpaperPlugin>('FoliaWallpaper');
@@ -396,6 +406,22 @@ export const getWallpaperLockScreenStatus =
             return null;
         }
     };
+
+/**
+ * 跳到 ROM 那几道开关对应的一页。
+ *
+ * ColorOS 这类 ROM 会**静默**掐掉后台弹出的界面，而且没有 API 能替用户授权，
+ * 只能把人送到正确的设置页。target 见 RomPermissionGuide：
+ * overlay（悬浮窗）/ background（后台弹出界面 · 锁屏显示）/ power（自启动 · 耗电）
+ * / details（应用详情，兜底，一定在）。
+ */
+export const openRomPermissionPage = async (target: string): Promise<void> => {
+    try {
+        await FoliaWallpaper.openRomPermission({ target });
+    } catch {
+        // 打不开也没关系：设置页那段引导已经把手动路径写出来了。
+    }
+};
 
 /**
  * 叠层最近做了什么（新的在前）。

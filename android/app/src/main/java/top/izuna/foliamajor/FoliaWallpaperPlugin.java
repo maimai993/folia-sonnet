@@ -150,6 +150,32 @@ public class FoliaWallpaperPlugin extends Plugin {
         if (status.lastExit != null) {
             result.put("lastExit", status.lastExit);
         }
+        /*
+         * ROM 与那几道开关的状态。
+         *
+         * 只报 started/blocked 的话，用户看到"被拦了"也不知道该去哪儿开 ——
+         * ColorOS 要的是「后台弹出界面 + 锁屏显示 + 自启动」，而且悬浮窗权限在
+         * Android 14 上是后台启动的主要豁免来源，缺了它多半起不来。
+         */
+        result.put("rom", top.izuna.foliamajor.lockscreen.RomPermissionGuide.romLabel());
+        result.put("overlayGranted",
+                top.izuna.foliamajor.lockscreen.RomPermissionGuide.canDrawOverlays(getContext()));
+        call.resolve(result);
+    }
+
+    /**
+     * 把用户送到 ROM 那几道开关对应的页面。
+     *
+     * target 见 RomPermissionGuide：overlay（悬浮窗）/ background（后台弹出界面 ·
+     * 锁屏显示）/ power（自启动 · 耗电）/ details（应用详情，兜底）。
+     */
+    @PluginMethod
+    public void openRomPermission(PluginCall call) {
+        String target = call.getString("target");
+        boolean opened = top.izuna.foliamajor.lockscreen.RomPermissionGuide
+                .open(getContext(), target);
+        JSObject result = new JSObject();
+        result.put("opened", opened);
         call.resolve(result);
     }
 

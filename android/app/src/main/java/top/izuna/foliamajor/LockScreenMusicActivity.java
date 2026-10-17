@@ -1,16 +1,12 @@
 package top.izuna.foliamajor;
 
 import android.app.Activity;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.TextView;
 
 /**
  * 音乐锁屏：一个**真正的锁屏页面**，不是悬浮窗。
@@ -35,7 +31,7 @@ import android.widget.TextView;
  *
  * 既然注定要占住这块输入，就得自己把出口给用户：
  *  · **上滑退出**（和很多锁屏的解锁手势同向，符合直觉）；
- *  · **右下那个 ✕ 按钮**直接退出。
+ *  · 底部面板上那个 **ˇ** 直接退出（它是面板的一行，见 LockScreenControlPanel）。
  * 退掉之后就是原本的锁屏，照常解锁。
  *
  * 生命周期由 `WallpaperOverlay` 的屏幕广播掌管：息屏时起、解锁（USER_PRESENT）或
@@ -61,7 +57,6 @@ public class LockScreenMusicActivity extends Activity {
         }
     };
 
-    private View exitButton = null;
     private boolean tracking = false;
     /** 这次手势已经触发过退出了：防止一次滑动里反复 dismiss（那正是"抽搐"的形状）。 */
     private boolean gestureConsumed = false;
@@ -108,17 +103,14 @@ public class LockScreenMusicActivity extends Activity {
         setContentView(new View(this));
         handWindowTokenToOverlay();
         /*
-         * ✕ 按钮和底部面板**单独**排队，不等叠层交接那一趟。
+         * 底部面板**单独**排队，不等叠层交接那一趟。
          *
-         * 原来它们挂在 handWindowTokenToOverlay 的 post 里，那一趟要先去通知叠层换宿主，
+         * 原来它挂在 handWindowTokenToOverlay 的 post 里，那一趟要先去通知叠层换宿主，
          * 而换宿主会摘窗口 + 重建页面（整整一秒的加载与淡入）；
-         * 被排在后面，于是"刚亮屏那一下"既没有按钮也没有手势 ——
+         * 被排在后面，于是"刚亮屏那一下"既没有面板也没有手势 ——
          * 这正是「必须等它全部出现才退得掉」的一半。
          */
-        getWindow().getDecorView().post(() -> {
-            addExitButton();
-            attachControlPanel();
-        });
+        getWindow().getDecorView().post(this::attachControlPanel);
         panelHandler.postDelayed(panelRefresh, LockScreenControlPanel.REFRESH_INTERVAL_MS);
     }
 
@@ -197,7 +189,7 @@ public class LockScreenMusicActivity extends Activity {
         }
         /*
          * 事件必须**继续往下传**：这一层只是顺便看一眼手势，不是来吃事件的。
-         * 一旦在这里吞掉，✕ 按钮（挂在同级子窗口上）和锁屏自己的手势条都收不到了。
+         * 一旦在这里吞掉，面板上的按钮和锁屏自己的手势条都收不到了。
          */
         return super.dispatchTouchEvent(event);
     }
@@ -226,91 +218,20 @@ public class LockScreenMusicActivity extends Activity {
     }
 
     /**
-     * 把窗口 token 交给叠层，并挂上退出按钮。
+     * 把窗口 token 交给叠层。
      *
      * 必须等 decorView 真的贴上窗口之后才拿得到 token —— 在 onCreate 里直接读会拿到 null，
      * 于是窗口以 PANEL 类型挂上去时立刻被拒（表现是「锁屏上什么都没有，日志也不报错」）。
      */
     private void handWindowTokenToOverlay() {
         final View decorView = getWindow().getDecorView();
-        decorView.post(() -> {
-            top.izuna.foliamajor.wallpaper.WallpaperOverlay
-                    .shared(LockScreenMusicActivity.this)
-                    .setLockScreenHost(LockScreenMusicActivity.this);
-            addExitButton();
-        });
-    }
-
-    /**
-     * 退出按钮：一个挂在同一个 token 上的小圆钮（TYPE_APPLICATION_PANEL），**左上角**。
-     *
-     * 为什么不放进 Activity 的内容视图：叠层那层全屏窗口盖在它之上，
-     * 画在内容视图里的按钮会被压在下面（看得见摸不着）。
-     * 同级的子窗口按添加顺序叠，这一层后加、在最上面；而叠层本身是 NOT_TOUCHABLE，
-     * 按在它上面的事件会穿到这一层来，所以按钮照样点得到。
-     *
-     * 为什么在左上角而不是底部：底部让给了控制条（那里也是系统手势条的地盘，
-     * 再挤一个按钮进去容易误触）；左上角是锁屏上唯一一块既不会被歌词内容占住、
-     * 又够得着的地方。
-     *
-     * 用 ✕ 而不是文字：这一层可能出现在任何语言的锁屏上，符号不用翻译。
-     */
-    private void addExitButton() {
-        if (exitButton != null) {
-            return;
-        }
-        float density = getResources().getDisplayMetrics().density;
-        TextView button = new TextView(this);
-        button.setText("✕");
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
-        button.setGravity(Gravity.CENTER);
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setColor(0x66000000);
-        background.setStroke(Math.max(1, Math.round(density)), 0x66FFFFFF);
-        button.setBackground(background);
-        int size = Math.round(36f * density);
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                size,
-                size,
-                WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                android.graphics.PixelFormat.TRANSLUCENT);
-        // 左上角：留一点边距，别贴着屏幕边缘（全面屏的圆角会把它切掉一角），
-        // 也避开状态栏那一行的图标。
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = Math.round(18f * density);
-        params.y = Math.round(30f * density);
-        params.token = getWindow().getDecorView().getWindowToken();
-        button.setOnClickListener(view -> dismiss());
-        try {
-            WindowManager manager = (WindowManager) getSystemService(WINDOW_SERVICE);
-            manager.addView(button, params);
-            exitButton = button;
-        } catch (Throwable error) {
-            // token 失效 / ROM 拒绝：至少上滑退出还在，用户不会被锁在外面。
-            exitButton = null;
-            android.util.Log.w("FoliaLockScreen", "Could not add the exit button", error);
-        }
-    }
-
-    private void removeExitButton() {
-        if (exitButton == null) {
-            return;
-        }
-        try {
-            ((WindowManager) getSystemService(WINDOW_SERVICE)).removeView(exitButton);
-        } catch (Throwable ignored) {
-            // 已经被摘掉了。
-        }
-        exitButton = null;
+        decorView.post(() -> top.izuna.foliamajor.wallpaper.WallpaperOverlay
+                .shared(LockScreenMusicActivity.this)
+                .setLockScreenHost(LockScreenMusicActivity.this));
     }
 
     @Override
     protected void onDestroy() {
-        removeExitButton();
         // 定时刷新必须停：Runnable 持有 Activity，漏掉这一句就是整屏 Activity 泄漏。
         panelHandler.removeCallbacks(panelRefresh);
         if (controlPanel != null) {

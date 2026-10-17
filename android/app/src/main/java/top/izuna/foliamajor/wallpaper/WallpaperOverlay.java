@@ -213,6 +213,51 @@ public final class WallpaperOverlay {
     /** 「刚解锁」的有效窗口。起页那一趟跨进程 + 首帧，超出这个量的就不是同一个事件了。 */
     private static final long UNLOCK_GRACE_MS = 5000L;
 
+    /**
+     * 锁屏面板上的「暂停」按下了：这一轮锁屏**不许**按「暂停时隐藏」把页面收走。
+     *
+     * 那条开关（wp.hideWhenPaused，默认开）是为桌面叠层设计的：暂停后画面本来就静止，
+     * 挂着白耗电。但它管到锁屏页上就自相矛盾了 —— 那一页上就摆着播放键，
+     * 按下去整页退场，播放键跟着一起消失，用户想续播只能解锁进 App。
+     *
+     * 只在**锁屏宿主还在**时生效（见 pausedHideWaived）：宿主一没，这就只是一台
+     * 普通桌面叠层，照旧按设置收起。解锁（USER_PRESENT）与宿主交接时清零。
+     */
+    private volatile boolean lockScreenPauseHold = false;
+
+    /**
+     * 锁屏面板按下「暂停 / 播放」时调一下。
+     *
+     * @param hold true = 这次是暂停，本轮锁屏保持显示；false = 恢复播放，撤回该豁免
+     *             （之后若是从别处暂停，就恢复成按设置收起）。
+     */
+    public void holdLockScreenWhilePaused(boolean hold) {
+        if (lockScreenPauseHold == hold) {
+            return;
+        }
+        lockScreenPauseHold = hold;
+        noteOverlayEvent(hold
+                ? "锁屏面板暂停：本轮锁屏保持显示，不按「暂停时隐藏」退场"
+                : "锁屏面板恢复播放：撤回暂停豁免");
+        // 豁免刚落下时往往已经判过一轮「不该显示」，立刻对齐一次，别等下一轮巡检。
+        runOnUi(() -> {
+            if (hold) {
+                ensureShown();
+            }
+            scheduleWatch();
+        });
+    }
+
+    /**
+     * 「暂停时隐藏」这一刻该不该让路（见 lockScreenPauseHold）。
+     *
+     * 只看**锁屏宿主还在**的情形：宿主没了，这一层就是桌面叠层，没有播放键可点，
+     * 按设置收起才对。
+     */
+    private boolean pausedHideWaived() {
+        return lockScreenPauseHold && lockScreenHost != null;
+    }
+
     /** 见 lockScreenUnlockedAtMs。给 LockScreenMusicActivity 起来时自检用。 */
     public boolean lockScreenRecentlyUnlocked() {
         return lockScreenUnlockedAtMs > 0L
@@ -310,6 +355,11 @@ public final class WallpaperOverlay {
                 lockScreenShownAtMs = SystemClock.elapsedRealtime();
             }
             noteOverlayEvent("锁屏宿主交接 → " + (activity == null ? "null（回桌面 / 悬浮窗）" : "锁屏页"));
+            /*
+             * 宿主一换就是新的一轮：上一轮「锁屏面板暂停也别收」的豁免不能跟着走过来 ——
+             * 拖着它的话，回到桌面后暂停中的叠层会一直挂着（那里没有播放键，纯浪费）。
+             */
+            lockScreenPauseHold = false;
             lockScreenHost = activity;
             if (added) {
                 detach("宿主交接（锁屏页" + (activity == null ? "退场" : "起来") + "，窗口类型要换）");
@@ -528,6 +578,12 @@ public final class WallpaperOverlay {
             }
             // 三次都起不来：基本可以确定是系统那道限制（或 ROM 的「锁屏显示」开关）。
             lockScreenBlocked = true;
+            /*
+             * 把当时的环境一起记进事件流水：设置页直接显示给用户，
+             * 免得再问一遍「什么机型、悬浮窗开了吗」。
+             */
+            noteOverlayEvent("锁屏页起不来（" + lockScreenAttempts + " 次）→ "
+                    + top.izuna.foliamajor.lockscreen.RomPermissionGuide.describe(context));
             Log.w(TAG, "Lock screen page never came up after " + lockScreenAttempts
                     + " attempts (last error: " + lockScreenLastError + ")"
                     + " — likely blocked by the background activity start restriction"
@@ -586,7 +642,7 @@ public final class WallpaperOverlay {
                 && snapshot.positionMs() > INSTRUMENTAL_CONFIRM_MS) {
             return "纯音乐，且开了「跳过纯音乐」";
         }
-        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true)) {
+        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()) {
             return "播放已暂停，且开了「暂停时隐藏」";
         }
         if (lyricsFinished(snapshot)) {
@@ -614,7 +670,11 @@ public final class WallpaperOverlay {
                 && snapshot.positionMs() > INSTRUMENTAL_CONFIRM_MS) {
             return true;
         }
-        return !snapshot.playing && tuningFlag("wp.hideWhenPaused", true);
+        /*
+         * 锁屏面板上按的暂停不算「没内容」：那一页上就摆着播放键，钉住"别再起来"
+         * 等于把它连同播放键一起判死，这一轮锁屏再也不会回来（见 lockScreenPauseHold）。
+         */
+        return !snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived();
     }
 
     /** 锁屏页**不是**我们主动 finish 掉的时候（被系统回收了）由 Activity 调来记一笔。 */
@@ -785,6 +845,8 @@ public final class WallpaperOverlay {
                     lockScreenUnlockedAtMs = SystemClock.elapsedRealtime();
                     // 解锁了：下次锁屏是全新的一轮，"用户关过"不再算数。
                     lockScreenDismissed = false;
+                    // 同上：这一轮在锁屏面板上按过暂停也不该影响下一次锁屏（见 lockScreenPauseHold）。
+                    lockScreenPauseHold = false;
                     // 解锁了：锁屏页该退场（它的 onDestroy 会把叠层摘下来，
                     // 之后按桌面/所有应用的条件重新挂）。
                     // 这是正常退场 —— 不是"没内容可显示"，下次锁屏照常再来。
@@ -1652,7 +1714,10 @@ public final class WallpaperOverlay {
         }
         // 暂停时收起：静止画面没必要挂着一层窗口（还在持续跑 rAF）。
         // 恢复播放时下一轮巡检就会重新挂上，歌词也在那一下补推。
-        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true)) {
+        //
+        // 例外是锁屏面板上按下暂停的那一次（见 lockScreenPauseHold）：那一页上
+        // 有播放键，收走就等于把"续播"这个动作一起收走了。
+        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()) {
             return false;
         }
         // 歌词唱完了、后面还有很长的尾奏（有些曲子后半段就是纯音乐）：
