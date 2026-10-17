@@ -1,6 +1,16 @@
 
 
 export default {
+  "stageCache": {
+    "generating": "正在生成视觉方案",
+    "generated": "视觉方案已生成",
+    "localHit": "已使用本地视觉方案",
+    "updated": "视觉方案已更新",
+    "undo": "撤销更新",
+    "restored": "已恢复上一版视觉方案",
+    "accept": "使用新版",
+    "saveFailed": "视觉方案可用，但本地保存失败"
+  },
   "libraryBravais": {
     "suiteName": "Bravais 墙面",
     "homeTitle": "书库",

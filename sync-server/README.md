@@ -318,8 +318,11 @@ http://127.0.0.1:13000
 | `GET` | `/api/fonts` | 无 | 字体市场目录（只回已启用的，含后台烤好的预览图地址） |
 | `GET` | `/api/fonts/:id/file` | 无 | 下载字体文件本体（客户端点「使用」才取） |
 | `GET` | `/api/fonts/:id/preview` | 无 | 预览图（不可变缓存） |
-| `GET` | `/api/ai-cache/:kind/:key` | 无 | 拉取 AI 生成缓存，`kind` 为 `theme` / `director`，`key` 为歌词文件 MD5 |
-| `PUT` | `/api/ai-cache/:kind/:key` | 无 | 上传 AI 生成结果（单条 payload 上限 64KB，空数据与不合规的一律拒绝） |
+| `GET` / `PUT` | `/api/ai-stage?title=&artists=` / `/api/ai-stage` | 无 | 完整歌名与 JSON 艺人数组身份的通用视觉方案；普通 PUT 原子补缺并返回现存版本，GET 支持 ETag / If-None-Match |
+| `PUT` | `/api/ai-stage/replace` | Bearer | 显式替换通用版，必须提供当前 `baseRevision`，旧修订返回 409 |
+| `GET` | `/api/ai-stage/history?title=&artists=` | Bearer | 最近最多十份旧版；恢复时将旧 payload 与当前 baseRevision 提交 replace |
+| `GET` | `/api/ai-cache/:kind/:key` | 无 | 保留旧歌词与 policy MD5 键读取能力 |
+| `PUT` | `/api/ai-cache/:kind/:key` | 无 | 兼容旧键补缺，不覆盖现存条目；stage 必须完整合法，UTF-8 payload 上限 64KB |
 | `GET` | `/admin/api/ai-cache-backups/:kind/:key` | 登录 | 这个键被覆盖前留下来的旧版（最多 10 份，新的在前） |
 | `POST` | `/admin/api/ai-cache-backups/:id/restore` | 登录 | 把某一版旧版捞回成当前那条（当前那条会先存进备份，捞错还能再捞） |
 | `GET` | `/stage` | 无 | 访客检索页：按歌名搜云缓存（支持 `?q=`） |
@@ -328,9 +331,17 @@ http://127.0.0.1:13000
 
 字体市场与云缓存的接口刻意放在 Bearer 门之外：没有填 key 的用户也要能先拉到别人已经生成好的结果。同步数据（设置 / 主题）依旧受 `SYNC_TOKEN` 保护。
 
+通用缓存采用完整 title 与结构化 artists 的有限规范化身份，不拆分艺人、不去除 Live 等版本文字，缺艺人返回 400。GET 的 provider/mediaId 仅作可选来源信息，不参与匹配；PUT JSON 为 `{title, artists, provider?, mediaId?, payload, baseRevision?}`。响应顶层包含 `hit`、`identityKey`、`revision`、`payload`，未命中为 200 `hit:false`；普通 PUT 的 `stored:false` 表示返回已有公共版。修订使用唯一 ID，相同内容重试不建新版；恢复发布生成新修订，防止旧授权在恢复后复活。新表与触发器通过 CREATE IF NOT EXISTS 添加，不改变同步 schema 对外版本。
+
+`ai_stage_sources` 保存每身份最多64条客户端自报的 `(provider, mediaId)` 多对多关联，仅在合法 PUT 后登记；标记为 `client_reported`，不是核验结果，GET 不凭该关联绕过歌名与艺人身份。公开写入有每进程/Worker isolate、每连接IP每分钟120次的基础限制，桶最多1024个；Node 读取连接地址，Cloudflare 请求读取平台提供的IP，无可信地址时共享匿名桶。反向代理可能使用户共用桶，多实例也不共享计数，公网仍应配置边缘限流。
+
+可选只读迁移预演：编译后使用 Node24 执行 `node sync-server/dist/stageMigrationPreview.js <本地SQLite路径> <元数据JSONL路径>`。JSONL 每行显式提供 `{key,title,artists,payload}`；只有结构化身份完整、现存旧键存在且归档内容与当前数据库一致、payload 完整合法的项才列为候选。同身份内容冲突单独报告且不列候选。程序以 readOnly 打开数据库，不联网、不写入；不从同名推断艺人，也不把候选列表视为迁移完成。
+
+新接口不请求音乐平台、不检查歌词哈希或时间轴；完整 light/dark 四个颜色字段、已注册模式与允许参数严格验证，参数定义由 `shared/stageCatalog.mjs` 与客户端共用。replace/history 使用 SYNC_TOKEN，请仅由受控管理流程调用。该接口是可选扩展，旧 APK 不会自动使用；不包含已部署或真实数据迁移的承诺。客户端行为与验收边界见 [AI视觉缓存说明](../docs/ai-stage-cache.md)。
+
 字体文件**只能由后台管理人员上传**，上传时在管理员浏览器里用 canvas 把预览图烤成 PNG 一并存库，所以客户端列目录时只需要几 KB 的预览图，几 MB 的字体本体只有点「使用」那一刻才会下载。
 
-客户端是本地优先的：AI 主题和主题同步 registry 保存在本机 IndexedDB，启动时会自动做主题同步；视觉设置的拉取/推送、完整 sync library 的 zip 导入导出由存储设置页面或命令面板触发。主题 registry 从旧 localStorage 迁移到 IndexedDB 时会执行一次性兼容迁移。
+主题同步 registry、同步下载或导入的主题记录可以保存在本机 IndexedDB，启动时会自动做主题同步；视觉设置的拉取/推送、完整 sync library 的 zip 导入导出由存储设置页面或命令面板触发。主题 registry 从旧 localStorage 迁移到 IndexedDB 时会执行一次性兼容迁移。当前云缓存 `stage` 的复用主要依赖短期内存，普通播放恢复也未接入按歌读取这些同步记录；不能将同步下载等同于完整视觉方案已经可按歌离线使用。
 
 服务端实现位于 `src/app.ts`，Node 入口位于 `src/node.ts`，Cloudflare 入口位于 `src/cloudflare.ts`；`src/d1-emulator.ts` 为 Node 环境提供 D1 兼容实现。三种部署方式共用同一套路由和 D1/SQLite 兼容的数据访问模型。Cloudflare 配置模板是 `wrangler.toml`，安装脚本生成的 `wrangler.local.toml` 不应提交。
 

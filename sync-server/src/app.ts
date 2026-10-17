@@ -14,6 +14,7 @@ import { adminFontRoutes, fontRoutes, readFontStats } from './fonts.js';
 import { adminStatsImageRoutes } from './statsImage.js';
 import { galleryApiRoutes, galleryPageRoutes } from './stageGallery.js';
 import type { FontBlobStore } from './fontBlobs.js';
+import { aiStageRoutes, stageSchema } from './aiStage.js';
 
 export type D1PreparedStatement = {
   bind: (...values: unknown[]) => D1PreparedStatement;
@@ -73,6 +74,7 @@ let schemaEnsured = false;
 const ensureSchema = async (db: D1Database) => {
   if (schemaEnsured) return;
   await db.batch([
+    ...stageSchema.map((query) => db.prepare(query)),
     db.prepare(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -254,7 +256,8 @@ const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Authorization', 'Content-Type'],
+  allowHeaders: ['Authorization', 'Content-Type', 'If-None-Match'],
+  exposeHeaders: ['ETag'],
 }));
 
 // Token length validation middleware
@@ -657,6 +660,7 @@ api.post('/themes/list', async (c) => {
  */
 app.route('/api/fonts', fontRoutes);
 app.route('/api/ai-cache', aiCacheRoutes);
+app.route('/api/ai-stage', aiStageRoutes);
 
 /*
  * 访客检索：`/stage` 是搜索页，`/stage/entry/<md5>` 是详情页。

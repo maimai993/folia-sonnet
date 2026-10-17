@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { requireAdmin } from './admin.js';
 import type { D1Database, Env } from './app.js';
 import { readHighlightWords, verifyStageUpload } from './stageVerifier.js';
+import { validateStagePayload } from './stagePayload.js';
+import { bodyLimit } from 'hono/body-limit';
+import { stageWriteRateLimit } from './aiStage.js';
 
 // src/aiCache.ts
 // The AI cloud cache: a shared shelf of "this lyric file already got an answer".
@@ -134,8 +137,9 @@ const readPayload = (value: unknown): { ok: true; payload: unknown; bytes: numbe
   } catch {
     return { ok: false };
   }
-  if (!serialized || serialized.length > MAX_PAYLOAD_BYTES) return { ok: false };
-  return { ok: true, payload: value, bytes: serialized.length };
+  const bytes = new TextEncoder().encode(serialized).byteLength;
+  if (!serialized || bytes > MAX_PAYLOAD_BYTES) return { ok: false };
+  return { ok: true, payload: value, bytes };
 };
 
 const readMetaText = (value: unknown, limit: number): string => (
@@ -241,19 +245,16 @@ const archiveExistingEntry = async (db: D1Database, kind: string, key: string): 
 /*
  * PUT /api/ai-cache/:kind/:key — the push, after a real generation.
  *
- * 同键**覆盖**，不是「已存在就跳过」。用户点了「重新生成」说明他对云端那条
- * 不满意，就是要拿新的把旧的换掉；累加器 `hits` 照旧留着（它记的是这条被拿过
- * 多少次，换了内容也不该清零），`created_at` 也不动。
- *
- * 但覆盖前先过一遍校验：空数据一律拒，形状不合规一律拒，能拿平台上的歌词原文件
- * 重算哈希的再对一遍。通过了才把旧版存进备份、再写入新的一版。
+ * 公开路径原子补缺，已有内容原样返回；管理员路径才允许替换并留旧版。
+ * stage 必须通过完整纯数据契约校验。旧协议的歌词校验保留用于新提交，
+ * 通用 /api/ai-stage 则不依赖歌词或平台接口。
  */
 const handlePut = async (
   db: D1Database,
   kind: string,
   key: string,
   body: unknown,
-  options: { strict: boolean },
+  options: { strict: boolean; admin: boolean },
 ) => {
   const source = (body ?? {}) as {
     payload?: unknown;
@@ -267,7 +268,7 @@ const handlePut = async (
     isPureMusic?: unknown;
   };
   const parsed = readPayload(source.payload);
-  if (!parsed.ok) return { ok: false, error: 'invalid_payload', stored: false, note: 'payload 缺失或超过 64KB。' };
+  if (!parsed.ok || (kind === 'stage' && !validateStagePayload(source.payload))) return { ok: false, error: 'invalid_payload', stored: false, note: 'payload 缺失、不完整、不合法或超过 64KB。' };
 
   const songTitle = readMetaText(source.songTitle, MAX_TITLE_CHARS);
   const platform = readMetaText(source.platform, MAX_PLATFORM_CHARS);
@@ -289,7 +290,17 @@ const handlePut = async (
   const provider = readMetaText(source.provider, 64);
   const model = readMetaText(source.model, 128);
 
-  /* 先把旧版存好，再覆盖 —— 顺序反了就什么都没留下。 */
+  // 公开提交只补缺；旧半截条目也保留供管理员确认，避免并发覆盖。
+  if (!options.admin) {
+    const inserted = await db.prepare(`INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) ON CONFLICT(kind, cache_key) DO NOTHING`)
+      .bind(kind, key, JSON.stringify(parsed.payload), parsed.bytes, songTitle, provider, model, platform, now, now).run();
+    const current = await db.prepare('SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at FROM ai_cache WHERE kind = ? AND cache_key = ?')
+      .bind(kind, key).first<AiCacheRow>();
+    const writeResult = inserted as { changes?: number; meta?: { changes?: number } };
+    return { ok: true, stored: Number(writeResult.meta?.changes ?? writeResult.changes ?? 0) > 0, entry: current ? mapRow(current) : null };
+  }
+  /* 管理员覆盖前保留旧版。 */
   await archiveExistingEntry(db, kind, key);
 
   await db
@@ -397,6 +408,10 @@ export const findResolveCandidates = async (
 const buildRoutes = (options: { admin: boolean }) => {
   const routes = new Hono<{ Bindings: Env }>();
   if (options.admin) routes.use('*', requireAdmin);
+  else {
+    routes.use('*', stageWriteRateLimit);
+    routes.use('*', bodyLimit({ maxSize: 80 * 1024, onError: (c) => c.json({ ok: false, error: 'request_too_large' }, 413) }));
+  }
 
   /*
    * POST /api/ai-cache/resolve —— 公开，因为要拉缓存的人本来就没 token。
@@ -412,10 +427,7 @@ const buildRoutes = (options: { admin: boolean }) => {
     if (!KIND_PATTERN.test(kind) || !songTitle) {
       return c.json({ ok: true, candidates: [] });
     }
-    return c.json({
-      ok: true,
-      candidates: await findResolveCandidates(c.env.FOLIA_SYNC_DB, kind, songTitle),
-    });
+    return c.json({ ok: true, candidates: await findResolveCandidates(c.env.FOLIA_SYNC_DB, kind, songTitle) });
   });
 
   routes.get('/:kind/:key', async (c) => {
@@ -440,7 +452,7 @@ const buildRoutes = (options: { admin: boolean }) => {
      * 平台上的歌词对哈希。默认开着。
      */
     const strict = String(c.env.AI_CACHE_VERIFY ?? '').trim().toLowerCase() !== 'off';
-    const result = await handlePut(c.env.FOLIA_SYNC_DB, kind, key, body, { strict });
+    const result = await handlePut(c.env.FOLIA_SYNC_DB, kind, key, body, { strict, admin: options.admin });
     return c.json(result, result.ok ? 200 : 400);
   });
 
@@ -534,6 +546,11 @@ export const restoreCacheBackup = async (
     .bind(id)
     .first<AiCacheBackupRow>();
   if (!row) return { ok: false, error: 'not_found', status: 404 };
+  if (row.kind === 'stage') {
+    let payload: unknown;
+    try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
+    if (!validateStagePayload(payload)) return { ok: false, error: 'invalid_payload', status: 400 };
+  }
 
   await archiveExistingEntry(db, row.kind, row.cache_key);
 

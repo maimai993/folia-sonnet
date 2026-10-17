@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { generateThemeFromLyrics, isMissingAiApiKeyError } from '../services/gemini';
-import { notifyStageResolved } from '../services/aiStage';
+import { notifyStageResolved, restorePersistentStage, subscribeStageUpdates, subscribeStageCacheDiagnostics, rollbackStageUpdate, acceptStageUpdate } from '../services/aiStage';
+import { normalizeStageIdentity } from '../services/stageCache/identity';
+import { resolveStageCloudNamespace } from '../services/stageCache/cloud';
+import { readDirectorSettings } from '../services/lyricDirector/state';
+import { AI_SETTINGS_CHANGED_EVENT } from '../services/aiSettings';
 import { saveToCache } from '../services/db';
 import { DualTheme, LyricData, SongResult, StatusMessage, Theme, ThemeMode } from '../types';
 import { getLastDualTheme, getLastLegacyTheme, type ThemeCacheSongKey } from '../services/themeCache';
@@ -34,7 +38,8 @@ import {
     getBaseThemeForMode,
     resolveBgModeTheme,
 } from './themeControllerState';
-import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
+import { getPlaybackSongKey, getPlaybackSourceRef } from '../utils/appPlaybackGuards';
+import { usePlaybackStore, selectDisplaySong } from '../stores/usePlaybackStore';
 import { resolveSongPlatform } from '../utils/songPlatform';
 import { recordAiThemeSkip } from '../utils/aiThemeDiagnostics';
 import { setStatusMessage as setStatusMsg } from '../stores/useStatusMessageStore';
@@ -44,6 +49,7 @@ type StatusSetter = Dispatch<SetStateAction<StatusMessage | null>>;
 export type GenerateAIThemeOptions = {
     source?: 'manual' | 'auto';
     shouldApply?: () => boolean;
+    signal?: AbortSignal;
     /** 「重新生成」：不看缓存重新问一次模型，结果覆盖掉云端已有的那条。 */
     force?: boolean;
 };
@@ -185,6 +191,11 @@ export function useThemeController({
     const [isGeneratingTheme, setIsGeneratingTheme] = useState(false);
     const activeThemeGenerationCountRef = useRef(0);
     const themeGenerationSongKeysRef = useRef(new Set<string>());
+    const themeRequestRevisionRef = useRef(0);
+    const playbackEpochRef = useRef(0);
+    useEffect(() => usePlaybackStore.subscribe((state, previous) => {
+        if (selectDisplaySong(state) !== selectDisplaySong(previous)) playbackEpochRef.current += 1;
+    }), []);
 
     const themeSourceModel = useMemo(() => buildThemeSourceModel({
         bgMode,
@@ -245,6 +256,7 @@ export function useThemeController({
 
     useEffect(() => {
         saveStoredThemeAutoGenerateEnabled(songThemeAutoGenerateEnabled);
+        window.dispatchEvent(new CustomEvent(AI_SETTINGS_CHANGED_EVENT));
     }, [songThemeAutoGenerateEnabled]);
 
     useEffect(() => {
@@ -487,6 +499,9 @@ export function useThemeController({
     };
 
     const restoreThemeFromLastAppliedPointer = async () => {
+        const epoch = playbackEpochRef.current;
+        const revision = themeRequestRevisionRef.current;
+        const valid = () => epoch === playbackEpochRef.current && revision === themeRequestRevisionRef.current;
         const pointer = readStoredLastAppliedThemePointer();
 
         if (pointer === 'custom' && customTheme) {
@@ -496,12 +511,14 @@ export function useThemeController({
 
         if (pointer === 'ai') {
             const lastDualTheme = await getLastDualTheme();
+            if (!valid()) return 'none' as const;
             if (lastDualTheme) {
                 applyDualTheme(lastDualTheme, { respectCustomPreference: false });
                 return 'fallback-dual' as const;
             }
 
             const lastLegacyTheme = await getLastLegacyTheme();
+            if (!valid()) return 'none' as const;
             if (lastLegacyTheme) {
                 applyLegacyTheme(lastLegacyTheme, { respectCustomPreference: false });
                 return 'legacy' as const;
@@ -518,6 +535,9 @@ export function useThemeController({
         songOrId: ThemeCacheSongKey | SongResult,
         options?: { allowLastUsedFallback?: boolean; preserveCurrentOnMiss?: boolean }
     ) => {
+        const epoch = playbackEpochRef.current;
+        const revision = themeRequestRevisionRef.current;
+        const valid = () => epoch === playbackEpochRef.current && revision === themeRequestRevisionRef.current;
         if (!songThemeAutoSwitchEnabled) {
             if (options?.allowLastUsedFallback) {
                 return restoreThemeFromLastAppliedPointer();
@@ -525,21 +545,33 @@ export function useThemeController({
             return 'restored' as const;
         }
 
-        /*
-         * 以前在这里先翻本地缓存（`dual_theme_*` / `theme_*`）—— 那份缓存按用户要求删掉了。
-         * 生成结果现在只存在云端（services/aiStage.ts）：命中云端的那一次在
-         * generateThemeFromLyrics 里就已经返回，走不到这里。
-         */
+        if (typeof songOrId === 'object' && songOrId !== null && 'name' in songOrId
+            && !(songOrId as SongResult).onlineLyricsState?.hasOnlineOverride
+            && (songOrId as SongResult).onlineLyricsState?.lyricsSource !== 'imported'
+            && !readDirectorSettings().userHint.trim()) {
+            const song = songOrId as SongResult;
+            const cached = await restorePersistentStage({ title: song.name,
+                artist: song.artists?.map(artist => artist.name).join('、') ?? '',
+                artists: song.artists?.map(artist => artist.name) ?? [], album: null });
+            if (!valid()) return 'none' as const;
+            if (cached?.current.payload.theme) {
+                applyDualTheme(cached.current.payload.theme, { respectCustomPreference: true });
+                setCurrentSongHasLocalAiTheme(true);
+                return 'fallback-dual' as const;
+            }
+        }
         setCurrentSongHasLocalAiTheme(false);
 
         if (options?.allowLastUsedFallback) {
             const lastDualTheme = await getLastDualTheme();
+            if (!valid()) return 'none' as const;
             if (lastDualTheme) {
                 applyDualTheme(lastDualTheme, { respectCustomPreference: false });
                 return 'fallback-dual' as const;
             }
 
             const lastLegacyTheme = await getLastLegacyTheme();
+            if (!valid()) return 'none' as const;
             if (lastLegacyTheme) {
                 applyLegacyTheme(lastLegacyTheme, { respectCustomPreference: false });
                 return 'legacy' as const;
@@ -566,13 +598,13 @@ export function useThemeController({
 
         if (currentSong) {
             saveSyncedThemeWithoutBlocking(currentSong, coverTheme, 'fallback');
-            setCurrentSongHasLocalAiTheme(true);
         }
 
         if (!shouldApply()) {
             return { status: 'generated', applied: false };
         }
 
+        setCurrentSongHasLocalAiTheme(Boolean(currentSong));
         applyDualTheme(coverTheme);
         const customPreferred = bgMode === 'custom' && customTheme;
         setStatusMsg(origin === 'fallback'
@@ -606,9 +638,15 @@ export function useThemeController({
             return { status: 'skipped', reason: 'in-flight' };
         }
 
+        const revision = ++themeRequestRevisionRef.current;
+        const epoch = playbackEpochRef.current;
+        const shouldApply = () => !options.signal?.aborted
+            && revision === themeRequestRevisionRef.current
+            && epoch === playbackEpochRef.current
+            && (options.shouldApply?.() ?? true)
+            && (!currentSong || getPlaybackSongKey(selectDisplaySong(usePlaybackStore.getState()) ?? currentSong) === songKey);
         themeGenerationSongKeysRef.current.add(songKey);
         beginThemeGeneration();
-        setStatusMsg({ type: 'info', text: t('status.generatingTheme') });
         try {
             // The cover source never touches the model, so it also never needs a lyric prompt:
             // an instrumental with no title still gets a theme from its artwork.
@@ -617,7 +655,7 @@ export function useThemeController({
                 recordAiThemeSkip('source-cover', source);
                 return await applyCoverDerivedTheme(
                     currentSong,
-                    () => options.shouldApply?.() ?? true,
+                    shouldApply,
                     'chosen',
                 );
             }
@@ -643,6 +681,15 @@ export function useThemeController({
                  * 也会是同一个答案，没必要多存一份）。
                  */
                 artist: currentSong?.artists?.map(artist => artist.name).filter(Boolean).join('、') || undefined,
+                artists: currentSong?.artists?.map(artist => artist.name).filter(Boolean),
+                mediaId: currentSong ? (() => {
+                    const ref = getPlaybackSourceRef(currentSong);
+                    return ref.kind === 'online' ? ref.mediaId : undefined;
+                })() : undefined,
+                signal: options.signal,
+                isCurrent: shouldApply,
+                publicEligible: currentSong?.onlineLyricsState?.lyricsSource !== 'imported'
+                    && !currentSong?.onlineLyricsState?.hasOnlineOverride,
                 /*
                  * 歌词行一起传进去：云缓存的指纹由「歌词正文 + 设置」算出，
                  * 导演那条链路算的是同一个值，两边才会共用一条缓存。
@@ -654,37 +701,23 @@ export function useThemeController({
                  * 服务端再按顺序逐个平台试。键仍然是那个 MD5。
                  */
                 platform: resolveSongPlatform(currentSong),
-                /*
-                 * 手动点「生成 AI 主题」就是「我对现在这个不满意，再给一个」——
-                 * 所以不看缓存，直接重新问模型，生成完把云端那条**覆盖**掉。
-                 *
-                 * 自动触发（切歌）相反，必须走缓存：那正是云缓存要省掉的那次调用。
-                 */
+                /* 手动重生成仅替换本机选择，不授予公共覆盖权限。 */
                 force: options.force === true || source === 'manual',
             });
             const normalizedDualTheme = applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme));
             if (currentSong) {
-                /*
-                 * 只往云端同步一份。本地不再落 `dual_theme_*` 缓存 —— 生成结果
-                 * 只存在云端（services/aiStage.ts），本地再存一份就是两份真相，
-                 * 老版本攒下来的那份永远传不上去，等于白生成。
-                 */
+                /* 设置同步保留原协议；完整 stage 由独立缓存管理。 */
                 saveSyncedThemeWithoutBlocking(currentSong, normalizedDualTheme, source === 'auto' ? 'auto' : 'manual');
-                setCurrentSongHasLocalAiTheme(true);
             }
 
-            const shouldApply = options.shouldApply?.() ?? true;
-            if (!shouldApply) {
+            if (!shouldApply()) {
                 return { status: 'generated', applied: false };
             }
 
+            setCurrentSongHasLocalAiTheme(Boolean(currentSong));
             applyDualTheme(normalizedDualTheme);
 
-            /*
-             * 一次生成，两种说法：这次真调了模型就说「主题生成成功，已缓存到云端」，
-             * 下一个人撞上同一段歌词时（source === 'cloud'）说「已从云端拉取缓存」。
-             * 两条互斥 —— 命中那次根本没走生成，不该报「生成成功」。
-             */
+            /* 生成结果提示不代表公共上传或离线保存已成功。 */
             if (bgMode === 'custom' && customTheme) {
                 setStatusMsg({ type: 'success', text: t('notifications.aiThemeUpdatedCustomPreferred') });
             } else {
@@ -693,16 +726,17 @@ export function useThemeController({
 
             return { status: 'generated', applied: true };
         } catch (error: unknown) {
+            if ((error as Error)?.name === 'AbortError') return { status: 'generated', applied: false };
             console.error(error);
             if (isMissingAiApiKeyError(error)) {
                 return await applyCoverDerivedTheme(
                     currentSong,
-                    () => options.shouldApply?.() ?? true,
+                    shouldApply,
                     'fallback',
                 );
             }
 
-            if (options.shouldApply?.() ?? true) {
+            if (shouldApply()) {
                 setStatusMsg({ type: 'error', text: t('status.themeGenerationFailed') });
             }
             return { status: 'failed' };
@@ -711,6 +745,39 @@ export function useThemeController({
             endThemeGeneration();
         }
     };
+
+    useEffect(() => subscribeStageUpdates(event => {
+        const song = selectDisplaySong(usePlaybackStore.getState());
+        const identity = song && normalizeStageIdentity({ title: song.name,
+            artists: song.artists?.map(artist => artist.name) ?? [] });
+        if (!identity || identity.key !== event.identityKey || !songThemeAutoSwitchEnabled || !event.payload.theme
+            || (event.isCurrent && !event.isCurrent())
+            || (event.namespace !== resolveStageCloudNamespace() && event.namespace !== `${resolveStageCloudNamespace()}/personal`)
+            || Boolean(readDirectorSettings().userHint.trim())
+            || song.onlineLyricsState?.lyricsSource === 'imported' || song.onlineLyricsState?.hasOnlineOverride) return;
+        const epoch = playbackEpochRef.current;
+        const actionCurrent = () => epoch === playbackEpochRef.current
+            && selectDisplaySong(usePlaybackStore.getState()) === song;
+        themeRequestRevisionRef.current += 1;
+        applyDualTheme(event.payload.theme);
+        setCurrentSongHasLocalAiTheme(true);
+        setStatusMsg({ type: 'success', text: t(event.reason === 'rollback' ? 'stageCache.restored' : 'stageCache.updated'),
+            nonce: Date.now(), durationMs: 12_000,
+            actionLabel: t(event.reason === 'rollback' ? 'stageCache.accept' : 'stageCache.undo'),
+            onAction: () => {
+                if (!actionCurrent()) return;
+                if (event.reason === 'rollback') {
+                    if (event.redoRevision) void acceptStageUpdate(identity.key, event.redoRevision, event.revision);
+                } else void rollbackStageUpdate(identity.key, event.revision);
+            } });
+    }), [songThemeAutoSwitchEnabled, t]);
+
+    useEffect(() => subscribeStageCacheDiagnostics(event => {
+        if (event.operation !== 'persist' || event.success || event.namespace !== resolveStageCloudNamespace()) return;
+        const song = selectDisplaySong(usePlaybackStore.getState());
+        const identity = song && normalizeStageIdentity({ title: song.name, artists: song.artists?.map(artist => artist.name) ?? [] });
+        if (identity?.key === event.identityKey) setStatusMsg({ type: 'error', text: t('stageCache.saveFailed'), nonce: Date.now() });
+    }), [t]);
 
     const setThemeWithStoredIntensity = (nextTheme: Theme) => {
         if (isThemeAnimationIntensity(nextTheme.animationIntensity)) {

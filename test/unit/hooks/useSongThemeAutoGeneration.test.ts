@@ -176,7 +176,38 @@ describe('useSongThemeAutoGeneration', () => {
         expect(calls).toEqual([{ songId: 'a' }]);
     });
 
-    it('asks only once per song', async () => {
+    it('revokes old A after A-B-A and retries a new playback epoch', async () => {
+        setHidden(true);
+        const a = buildSong('a');
+        const aLyrics = buildLyrics('first');
+        setPlayback(a, aLyrics);
+        await render(true, false);
+        const oldOptions = vi.mocked(generateAITheme).mock.calls[0][2]!;
+        expect(oldOptions.shouldApply?.()).toBe(true);
+        // Both transitions occur before React can rerender; the store guard still revokes A.
+        act(() => {
+            usePlaybackStore.setState({ currentSong: buildSong('b') });
+            usePlaybackStore.setState({ currentSong: a });
+        });
+        expect(oldOptions.shouldApply?.()).toBe(false);
+        expect(oldOptions.signal?.aborted).toBe(true);
+        setPlayback(buildSong('b'), buildLyrics('second')); await flush();
+        setPlayback(a, aLyrics); await flush();
+        expect(calls.map(call => call.songId)).toEqual(['a', 'a', 'b', 'a']);
+    });
+
+    it('replaces same-song lyric input and cancels the previous consumer', async () => {
+        setHidden(true);
+        const a = buildSong('a');
+        setPlayback(a, buildLyrics('first')); await render(true, false);
+        const oldOptions = vi.mocked(generateAITheme).mock.calls[0][2]!;
+        setPlayback(a, buildLyrics('replacement')); await flush();
+        expect(oldOptions.shouldApply?.()).toBe(false);
+        expect(oldOptions.signal?.aborted).toBe(true);
+        expect(calls).toHaveLength(2);
+    });
+
+    it('asks only once for a stable input', async () => {
         setHidden(true);
         setPlayback(buildSong('a'), buildLyrics('la la la'));
         await render(true, false);

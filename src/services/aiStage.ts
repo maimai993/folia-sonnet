@@ -5,7 +5,6 @@ import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { THEME_GENERATION_STAGE_PREFIX, buildThemeSourcePrompt } from '../utils/aiThemePrompts';
 import {
     fingerprintLyricSource,
-    withAiCloudCache,
     type AiCloudCacheSource,
 } from './aiCloudCache';
 import { requestAiCompletion } from './aiCompletion';
@@ -28,7 +27,9 @@ import {
 } from './lyricDirector/prompt';
 import { readDirectorSettings, readRecentModes } from './lyricDirector/state';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
-import { md5 } from '../utils/md5';
+import { createStageRuntime } from './stageCache/runtime';
+export { subscribeStageUpdates, StageCacheMissError, setProtectedStageKeys, subscribeStageCacheDiagnostics,
+    type StageUpdate, type StageCacheDiagnostic } from './stageCache/runtime';
 
 // src/services/aiStage.ts
 // 一次 AI 调用，两份答案：视觉主题 + 歌词动画决策。
@@ -43,9 +44,6 @@ export const STAGE_CACHE_KIND = 'stage';
 
 /** 主题 JSON 与动画 JSON 一起出，输出上限按更占地方的那份给。 */
 const STAGE_MAX_TOKENS = 8192;
-/** 同一首歌刚问过就别再问 —— 切歌后主题与导演会各触发一次，指纹相同。 */
-const RECENT_TTL_MS = 10 * 60 * 1000;
-const RECENT_MAX_ENTRIES = 32;
 
 const translate = (key: string): string => i18n.t(key) as string;
 
@@ -93,6 +91,10 @@ export interface StageRequest {
     /** 切歌时可以拿它掐掉还在飞的那次请求。 */
     signal?: AbortSignal;
     require?: StageRequirement;
+    priority?: 'manual' | 'current' | 'next';
+    cacheOnly?: boolean;
+    isCurrent?: () => boolean;
+    publicEligible?: boolean;
     /**
      * 答案从哪来。默认是「一次调用同时问主题与动画」；桌面版走 Electron 主进程时
      * 拿不到合并 prompt，由调用方自己给一个只产主题的实现。
@@ -102,17 +104,6 @@ export interface StageRequest {
 
 export interface StageResult extends StageParts {
     source: AiCloudCacheSource;
-    /**
-     * 这一趟是「拿来主义」：答案直接从进程内取到（最近结果、或蹭了在飞的那次请求），
-     * **这次调用既没调模型、也没往云端写一个字节**。
-     *
-     * `source` 说的是「这份答案当初是哪来的」（进程内命中时沿用那一次真实的来源，
-     * 见 readRecent 上的注释），它回答不了「这一趟有没有真的贡献」—— 而「上传成功，
-     * 感谢你的贡献」「已提前为下一首生成并上传」这两句问的正是后者。少了这个标记，
-     * 同一首歌第二次问（切走再切回来、预取过的下一首再预取一次）会把那句感谢再说
-     * 一遍，其实那趟什么都没上传。
-     */
-    reused?: boolean;
 }
 
 const hasRequired = (parts: StageParts, require: StageRequirement): boolean => {
@@ -379,143 +370,25 @@ export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
     return parts;
 };
 
-/*
- * 进程内的两级去重 —— 这是「合并成一次请求」真正落地的地方。
- *
- * 切歌后主题链路（650ms 后）与导演链路（等歌词 250ms 后）都会调进来，指纹又是同一个
- * （policy 与歌词正文都由上面那两个函数统一算）。没有这层就会打两次模型：
- *  - 在飞：后到的那个 await 同一个 Promise，只发一次请求；
- *  - 最近结果：前一次刚算完，后一次直接取答案，连缓存接口都不必再问。
- *
- * 两条链路谁先到都一样：先到的那次既拿到了主题也拿到了动画决策，后到的直接复用
- * 自己需要的那一半。
- *
- * 命中这一层时**沿用那次真实的来源**，不能一律说成「云端」。这台机器刚自己算出来的
- * 答案被标成 cloud，界面就会对刚生成完的用户说「已从云端拉取缓存」—— 而那一句本来
- * 是留给「这会儿没调模型、用的是别人推的那份」的。
- */
-const inFlight = new Map<string, Promise<StageResult>>();
-const recent = new Map<string, { parts: StageParts; at: number; source: AiCloudCacheSource }>();
+const stageRuntime = createStageRuntime(payload => normalizeStagePayload(payload, []));
+export const restorePersistentStage = stageRuntime.restore;
+export const rollbackStageUpdate = stageRuntime.rollback;
+export const acceptStageUpdate = stageRuntime.acceptUpdate;
 
-const readRecent = (
-    fingerprint: string,
-): { parts: StageParts; source: AiCloudCacheSource } | null => {
-    const entry = recent.get(fingerprint);
-    if (!entry) return null;
-    if (Date.now() - entry.at > RECENT_TTL_MS) {
-        recent.delete(fingerprint);
-        return null;
-    }
-    return { parts: entry.parts, source: entry.source };
-};
-
-const rememberRecent = (
-    fingerprint: string,
-    parts: StageParts,
-    source: AiCloudCacheSource,
-): void => {
-    recent.delete(fingerprint);
-    recent.set(fingerprint, { parts, at: Date.now(), source });
-    while (recent.size > RECENT_MAX_ENTRIES) {
-        const oldest = recent.keys().next();
-        if (oldest.done) break;
-        recent.delete(oldest.value);
-    }
-};
-
-/**
- * 结果来源提示：生成完一条，命中时另一条。
- *
- * 命中时结果来得很突然 —— 界面上只会看到主题一瞬间变了，既没有「生成中」也没有
- * 任何说明。两条文案互斥，由 `source` 二选一，不会出现连着弹两次的情况。
- *
- * 放在这里（而不是服务内部），是因为同一次请求可能被主题、导演两条链路复用：
- * 弹提示是「告知用户」这种只有调用方知道该不该做的事。
- */
 export const notifyStageResolved = (source: AiCloudCacheSource): void => {
-    setStatusMessage({
-        type: 'info',
-        text: translate(source === 'cloud' ? 'options.cloudCacheHit' : 'status.themeGenerated'),
-        nonce: Date.now(),
-    });
+    setStatusMessage({ type: 'info', text: translate(source === 'local' ? 'stageCache.localHit' : source === 'cloud' ? 'options.cloudCacheHit' : 'stageCache.generated'), nonce: Date.now() });
 };
 
-/** 先问云端，没有（或不全）再生成，生成完回传。一次往返，一条缓存。 */
-const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
-    const { value, source } = await withAiCloudCache({
-        kind: STAGE_CACHE_KIND,
-        fingerprint: ctx.fingerprint,
-        generate: () => (ctx.generate ?? generateStage)(ctx),
-        skipPull: ctx.skipPull,
-        /* 缺了要用的那一半就跟没命中一样，重新生成一份完整的。 */
-        validate: (payload) => {
-            const parts = normalizeStagePayload(payload, ctx.blockedModes);
-            return parts && hasRequired(parts, ctx.requirement) ? parts : null;
-        },
-        /* 回传前先把云端已有的那半捞回来，别让只出一半的生成结果把它抹掉。 */
-        combine: (previous, fresh) => combineStageParts(previous, fresh, ctx.blockedModes),
-        songTitle: ctx.songTitle,
-        /*
-         * 平台名 + 歌词正文的哈希只给服务端校验用。
-         *
-         * 键是「歌词 + policy」的 MD5，policy（屏蔽的样式、自定义提示词）只有本机能算，
-         * 服务端复现不出来 —— 所以另外给它一份纯歌词的哈希，它拿平台上的歌词原文件
-         * 重算一遍就能对上。算不出来（比如没有歌词正文）就不带，服务端按无从校验放行。
-         */
-        platform: ctx.platform,
-        lyricHash: ctx.lyricSource ? md5(ctx.lyricSource) : '',
-        /*
-         * 歌词正文只给「精确键没中」那一次兜底判定用，不跟着上传 —— 判定在本机做，
-         * 服务端只按歌名回一批高亮词。
-         */
-        lyricText: ctx.lyricSource,
-        isPureMusic: ctx.isPureMusic,
-    });
-    return { ...value, source };
-};
-
-/**
- * 唯一该被功能代码调用的那个入口。
- *
- * `require` 决定「哪一半没有就算没命中」：主题链路只要主题，导演链路只要动画，于是只答出
- * 一半的模型输出（或早期版本推的半截缓存）不会把另一条链路卡住。
- */
+/** 所有消费者共享歌曲身份、持久缓存及单生成调度，播放提交权留给调用者。 */
 export const requestStage = async (request: StageRequest): Promise<StageResult> => {
     const ctx = buildStageContext(request);
-
-    /*
-     * 「重新判断」要跳过**每一层**，不是只跳过进程内缓存。
-     *
-     * 少跳一层，用户点「重新生成」拿到的还是服务器上那条旧答案 —— 他会觉得这个
-     * 按钮是坏的。所以 force 时：不看最近结果、不蹭在飞的请求、不拉云端，
-     * 直接生成，然后**覆盖**云端那条（写接口本来就是 upsert）。
-     */
-    if (!request.force) {
-        const cached = readRecent(ctx.fingerprint);
-        if (cached && hasRequired(cached.parts, ctx.requirement)) {
-            return { ...cached.parts, source: cached.source, reused: true };
-        }
-
-        const pending = inFlight.get(ctx.fingerprint);
-        if (pending) {
-            const shared = await pending.catch(() => null);
-            if (shared && hasRequired(shared, ctx.requirement)) {
-                return { ...shared, source: shared.source, reused: true };
-            }
-        }
-    }
-
-    const promise = resolveStage(ctx);
-    inFlight.set(ctx.fingerprint, promise);
-    try {
-        const result = await promise;
-        /* 记下的是「这一首歌刚问出的答案」：主题与导演先后到，后到的那次不必再问一遍。 */
-        rememberRecent(ctx.fingerprint, {
-            ...(result.theme ? { theme: result.theme } : {}),
-            ...(result.decision ? { decision: result.decision } : {}),
-        }, result.source);
-        return result;
-    } finally {
-        inFlight.delete(ctx.fingerprint);
-    }
+    const result = await stageRuntime.resolve({ ...request, hint: request.hint ?? readDirectorSettings().userHint,
+        priority: request.priority ?? (request.force ? 'manual' : 'current') }, ctx.fingerprint, async () => {
+        setStatusMessage({ type: 'info', text: translate('stageCache.generating'), nonce: Date.now() });
+        // 共享生成不继承某个消费者的取消信号，底层真正结束前一直占用生成槽。
+        return (ctx.generate ?? generateStage)({ ...ctx, signal: AbortSignal.timeout(180_000) });
+    });
+    const parts = normalizeStagePayload(result, []);
+    if (!parts || !hasRequired(parts, ctx.requirement)) throw new Error('No usable visual stage for this consumer');
+    return { ...parts, source: result.source };
 };

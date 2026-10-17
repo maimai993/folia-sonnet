@@ -57,6 +57,11 @@ export const generateThemeFromLyrics = async (
     isPureMusic?: boolean;
     songTitle?: string;
     artist?: string;
+    artists?: string[];
+    mediaId?: string | number;
+    signal?: AbortSignal;
+    isCurrent?: () => boolean;
+    publicEligible?: boolean;
     album?: string | null;
     trigger?: AiThemeTrigger;
     lines?: readonly StageLyricLine[];
@@ -103,17 +108,27 @@ export const generateThemeFromLyrics = async (
         song: {
           title: options?.songTitle ?? '',
           artist: options?.artist ?? '',
+          artists: options?.artists,
+          provider: options?.platform,
+          mediaId: options?.mediaId,
           album: options?.album ?? null,
         },
         lines: lyricLines as { fullText?: string }[],
         isPureMusic: resolved.isPureMusic,
         songTitle: options?.songTitle,
         platform: options?.platform,
+        signal: options?.signal,
+        isCurrent: options?.isCurrent,
+        publicEligible: options?.publicEligible,
+        priority: options?.trigger === 'manual' ? 'manual' : 'current',
         require: 'theme',
         /* 「重新生成」同样要跳过缓存，否则桌面端点下去拿回的还是云端那条旧答案。 */
         force: options?.force === true,
         generate: async () => ({
-          theme: sanitizeDualTheme(await (window as any).electron.generateTheme(lyricsText, options)),
+          theme: sanitizeDualTheme(await (window as any).electron.generateTheme(lyricsText, {
+            isPureMusic: options?.isPureMusic, songTitle: options?.songTitle,
+            artist: options?.artist, album: options?.album,
+          })),
         }),
       });
       if (!stage.theme) throw new Error('AI 没有返回可用的主题。');
@@ -135,12 +150,19 @@ export const generateThemeFromLyrics = async (
         song: {
           title: options?.songTitle ?? '',
           artist: options?.artist ?? '',
+          artists: options?.artists,
+          provider: options?.platform,
+          mediaId: options?.mediaId,
           album: options?.album ?? null,
         },
         lines: lyricLines as { fullText?: string }[],
         isPureMusic: resolved.isPureMusic,
         songTitle: options?.songTitle,
         platform: options?.platform,
+        signal: options?.signal,
+        isCurrent: options?.isCurrent,
+        publicEligible: options?.publicEligible,
+        priority: options?.trigger === 'manual' ? 'manual' : 'current',
         require: 'theme',
         force: options?.force === true,
       });
@@ -172,15 +194,22 @@ export const generateThemeFromLyrics = async (
         song: {
             title: options?.songTitle ?? '',
             artist: options?.artist ?? '',
+            artists: options?.artists,
+            provider: options?.platform,
+            mediaId: options?.mediaId,
             album: options?.album ?? null,
         },
         lines: lyricLines as { fullText?: string }[],
         isPureMusic: resolved.isPureMusic,
         songTitle: options?.songTitle,
         platform: options?.platform,
+        signal: options?.signal,
+        isCurrent: options?.isCurrent,
+        publicEligible: options?.publicEligible,
+        priority: options?.trigger === 'manual' ? 'manual' : 'current',
         require: 'theme',
         force: options?.force === true,
-        generate: async () => {
+        generate: async (ctx) => {
             /*
              * 解析不出地址 = 这条路根本不通：安卓构建必须显式配后端地址，
              * 没配的时候 resolveFoliaApiUrl 会抛。那是配置问题，不是「生成失败」，
@@ -201,7 +230,8 @@ export const generateThemeFromLyrics = async (
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ lyricsText, ...options }),
+                    body: JSON.stringify({ lyricsText, isPureMusic: options?.isPureMusic, songTitle: options?.songTitle }),
+                    signal: ctx.signal,
                 },
             );
 

@@ -9,6 +9,7 @@ RUN npm ci
 
 COPY sync-server/tsconfig.json ./
 COPY sync-server/src ./src
+COPY shared/stageCatalog.mjs shared/stageCatalog.d.mts /shared/
 RUN npm run build:node
 
 FROM node:24-alpine AS runner
@@ -26,8 +27,10 @@ RUN npm ci --omit=dev \
     && chown node:node /app/data
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /shared /shared
 COPY deploy/docker/sync-server/entrypoint.sh /usr/local/bin/folia-sync-server
-RUN chmod 0555 /usr/local/bin/folia-sync-server
+RUN chmod -R a+rX /app /shared \
+    && chmod 0555 /usr/local/bin/folia-sync-server
 
 VOLUME ["/app/data"]
 EXPOSE 3000

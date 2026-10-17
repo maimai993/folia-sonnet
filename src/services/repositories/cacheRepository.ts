@@ -34,6 +34,7 @@ export const getCacheTableName = (key: string): CacheTableName => {
     key.startsWith('automix_profile_') ||
     key.startsWith('lyric_') ||
     key.startsWith('theme_') ||
+    key.startsWith('stage_song_v1_') ||
     key.startsWith('replayGain_') ||
     key.startsWith('playlist_tracks_') ||
     key.startsWith('playlist_detail_') ||
@@ -176,7 +177,7 @@ const matchesCategory = (key: string, category: CacheCategory): boolean => {
   // with it; a profile costs a full decode and a model pass to rebuild, and stays true whether or
   // not the bytes it was measured from are still on this machine. Someone reclaiming five gigabytes
   // of audio has no reason to pay for that again.
-  if (category === 'analysis') return key.startsWith('automix_profile_');
+  if (category === 'analysis') return key.startsWith('automix_profile_') || key.startsWith('stage_song_v1_');
   // A track's ReplayGain describes the audio and arrives with it, so it is cleared with it. It is
   // counted here but NOT in mediaCount below, which means "songs cached" and would otherwise
   // double for every track that has both.
