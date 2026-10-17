@@ -1,3 +1,4 @@
+import { SONNET_CAMERA_INTENSITY_MAX } from '../shared/stageCatalog.mjs';
 import type { LucideIcon } from 'lucide-react';
 import type { LineRenderHints } from './utils/lyrics/renderHints';
 import type { MediaId, PlaybackSourceRef, ProviderCatalogRef } from './types/onlineMusic';
@@ -578,7 +579,7 @@ export interface SonnetTuning {
  * 读取 localStorage 时的旧数据兼容、外观码导入，全都引这个常量。
  * 凝彩（tempera）的 cameraIntensity 是另一回事，不受它约束。
  */
-export const SONNET_CAMERA_INTENSITY_MAX = 0.7;
+export { SONNET_CAMERA_INTENSITY_MAX } from '../shared/stageCatalog.mjs';
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
   cameraIntensity: SONNET_CAMERA_INTENSITY_MAX,

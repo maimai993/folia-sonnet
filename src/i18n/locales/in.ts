@@ -1,6 +1,16 @@
 
 
 export default {
+  "stageCache": {
+    "generating": "Membuat tampilan visual",
+    "generated": "Tampilan visual dibuat",
+    "localHit": "Menggunakan tampilan visual tersimpan",
+    "updated": "Tampilan visual diperbarui",
+    "undo": "Batalkan pembaruan",
+    "restored": "Tampilan visual sebelumnya dipulihkan",
+    "accept": "Gunakan versi baru",
+    "saveFailed": "Tampilan visual tersedia, tetapi gagal disimpan secara lokal"
+  },
   "libraryBravais": {
     "suiteName": "Dinding Bravais",
     "homeTitle": "Pustaka",

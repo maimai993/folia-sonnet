@@ -341,7 +341,7 @@ export const pushAiCloudCache = async (
     }
 };
 
-export type AiCloudCacheSource = 'cloud' | 'ai';
+export type AiCloudCacheSource = 'cloud' | 'ai' | 'local';
 
 /**
  * 唯一该被功能代码调用的那个入口：先问缓存，没有再生成，生成完回传。

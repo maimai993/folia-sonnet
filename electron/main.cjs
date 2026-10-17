@@ -3654,6 +3654,7 @@ function getGeminiResponseSchema() {
 async function generateGeminiTheme({ apiKey, systemPrompt, sourcePrompt, customFetch, endpointUrl }) {
   const endpoint = resolveGeminiGenerateContentUrl(endpointUrl);
   const response = await customFetch(endpoint, {
+    signal: AbortSignal.timeout(180_000),
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

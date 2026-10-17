@@ -9,7 +9,7 @@ export type SongThemeAutoGenerationDecisionInput = {
     currentSong: SongResult | null;
     lyrics: LyricData | null;
     isLyricsLoading: boolean;
-    hasAttempted: boolean;
+    hasAttempted?: boolean;
     hasCachedTheme: boolean;
     // Cover-derived themes read the artwork, not the lyrics, so they need no prompt source.
     requiresPromptSource?: boolean;
@@ -27,11 +27,18 @@ export const isSongThemeGenerationStillCurrent = ({
     latestSongKey,
     targetSongKey,
     enabled,
+    latestEpoch,
+    targetEpoch,
+    signal,
 }: {
     latestSongKey: string | null;
     targetSongKey: string;
     enabled: boolean;
-}) => latestSongKey === targetSongKey && enabled;
+    latestEpoch?: number;
+    targetEpoch?: number;
+    signal?: AbortSignal;
+}) => latestSongKey === targetSongKey && enabled && !signal?.aborted
+    && latestEpoch === targetEpoch;
 
 export const shouldRequestSongThemeAutoGeneration = ({
     enabled,

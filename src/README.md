@@ -83,6 +83,7 @@ App.tsx
 - 播放：`onlinePlayback.ts`、`playbackAdapters.ts`、`prefetchService.ts`、`nowPlayingProvider.ts`、`playerCapProvider.ts`。
 - 缓存/数据库：`db.ts`、`appDatabase.ts`、`repositories/*`、`coverCache.ts`、`audioCache.ts`、`binaryAssetStore.ts`。
 - 主题：`themeCache.ts`、`themePreferences.ts`、`themeSanitizer.ts`、`visualizerImageAsset.ts`、Monet image services。
+- AI 视觉方案：`services/aiStage.ts`、`services/stageCache/*`、`services/stagePlaybackCoordinator.ts`、`services/lyricDirector/director.ts`；通用身份、本地持久化、预取与调度见 [AI视觉缓存说明](../docs/ai-stage-cache.md)。
 - 同步：`services/sync/*`；编排从 `syncCoordinator.ts` 开始，配置快照在 `settingsSnapshot.ts`。
 
 ## Lyrics and visualizer

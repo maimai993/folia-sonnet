@@ -1,6 +1,16 @@
 
 
 export default {
+  "stageCache": {
+    "generating": "Generating visual stage",
+    "generated": "Visual stage generated",
+    "localHit": "Using saved visual stage",
+    "updated": "Visual stage updated",
+    "undo": "Undo update",
+    "restored": "Previous visual stage restored",
+    "accept": "Use new version",
+    "saveFailed": "Visual stage is available, but could not be saved locally"
+  },
   "libraryBravais": {
     "suiteName": "Bravais wall",
     "homeTitle": "Library",

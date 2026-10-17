@@ -1,4 +1,7 @@
 *
+!shared/
+!shared/stageCatalog.mjs
+!shared/stageCatalog.d.mts
 !sync-server/
 !sync-server/package.json
 !sync-server/package-lock.json

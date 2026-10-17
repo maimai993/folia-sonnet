@@ -149,7 +149,7 @@ export const createAiFetch = (): typeof fetch => {
 
         const bytes = base64ToBytes(result.bodyBase64);
         const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-        return new Response(buffer, {
+        return new Response([204, 205, 304].includes(result.status) ? null : buffer, {
             status: result.status,
             headers: buildHeaders(result.headers),
         });

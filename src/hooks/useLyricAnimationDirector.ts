@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
-import { usePlaybackStore } from '../stores/usePlaybackStore';
+import { selectDisplayLyrics, selectDisplaySong, usePlaybackStore } from '../stores/usePlaybackStore';
+import { startStagePlaybackCoordinator } from '../services/stagePlaybackCoordinator';
+import { subscribeStageUpdates } from '../services/aiStage';
 import { AI_SETTINGS_CHANGED_EVENT } from '../services/aiSettings';
 import {
     abortLyricDirectorRequests,
+    applyCurrentStageUpdate,
     notifyLyricDirectorLyricsLoaded,
     notifyLyricDirectorSongChanged,
     refreshDirectorAiStatus,
@@ -26,11 +29,11 @@ export const useLyricAnimationDirector = (): void => {
     }, []);
 
     useEffect(() => usePlaybackStore.subscribe((state, previous) => {
-        if (state.currentSong !== previous.currentSong || state.transitionDisplay !== previous.transitionDisplay) {
+        if (selectDisplaySong(state) !== selectDisplaySong(previous)) {
             notifyLyricDirectorSongChanged();
             return;
         }
-        if (state.lyrics !== previous.lyrics) {
+        if (selectDisplayLyrics(state) !== selectDisplayLyrics(previous)) {
             notifyLyricDirectorLyricsLoaded();
         }
     }), []);
@@ -42,5 +45,7 @@ export const useLyricAnimationDirector = (): void => {
         return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, onAiSettingsChanged);
     }, []);
 
+    useEffect(() => subscribeStageUpdates(applyCurrentStageUpdate), []);
+    useEffect(() => startStagePlaybackCoordinator(), []);
     useEffect(() => () => abortLyricDirectorRequests(), []);
 };

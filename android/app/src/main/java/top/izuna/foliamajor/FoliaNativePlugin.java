@@ -692,6 +692,7 @@ public class FoliaNativePlugin extends Plugin {
             Integer timeoutMs = call.getInt("timeoutMs");
             if (timeoutMs != null && timeoutMs > 0) {
                 requestClient = requestClient.newBuilder()
+                    .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .writeTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .build();
