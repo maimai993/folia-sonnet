@@ -66,6 +66,8 @@ final class LockScreenControlPanel {
     private static final int LIKE_TINT = 0xFFEF4444;
     /** 每秒刷一次：封面与歌名是换歌才变的慢字段，播放位置在这条面板上只到秒。 */
     static final long REFRESH_INTERVAL_MS = 1000L;
+    /** 拖完进度条后，预览位置最多再按多久（见 seekSettleUntilElapsedMs）。 */
+    private static final long SEEK_SETTLE_MS = 1200L;
 
     /**
      * 退出动画的可调参数。
@@ -161,6 +163,15 @@ final class LockScreenControlPanel {
     private boolean seeking = false;
     /** 拖动中的预览位置；-1 = 不预览（跟着播放走）。 */
     private long seekPreviewMs = -1L;
+    /**
+     * 抬手后**继续按住**预览位置的截止时间（elapsedRealtime）。
+     *
+     * seek 指令要绕 Web 一圈才回到快照里，那一两秒里外推出来的还是**旧**位置 ——
+     * 不清掉预览的话进度条会往回跳一下再走回来。所以要留一段"落地窗口"，
+     * 到点再交还给实时位置（见 applyProgress）。窗口是**有上限**的：指令丢了也只是
+     * 多停一会儿，不会永远卡在预览上。
+     */
+    private long seekSettleUntilElapsedMs = 0L;
 
     private boolean tracking = false;
     private boolean gestureConsumed = false;
@@ -195,6 +206,11 @@ final class LockScreenControlPanel {
         }
         float density = activity.getResources().getDisplayMetrics().density;
         int margin = Math.round(14f * density);
+        /*
+         * 下边距单独一个值：整块面板比原来再往上抬一截（离屏幕底 28dp = 两侧留白的
+         * 两倍）。两侧仍是 14dp，不然宽度会跟着一起缩。
+         */
+        int bottomMargin = margin * 2;
         int cover = Math.round(52f * density);
         int padding = Math.round(12f * density);
         int radius = Math.round(18f * density);
@@ -410,8 +426,8 @@ final class LockScreenControlPanel {
          * 先填内容（refresh 现在看 cardView 而不是 panel，所以能在 addView 之前调），
          * 再自己 measure 一次拿到卡片高度，据此算出跑道长度：
          *
-         *     卡片下沿离屏幕底 = margin
-         *     出屏距离 travel  = margin + 卡片高 + overshoot
+         *     卡片下沿离屏幕底 = bottomMargin
+         *     出屏距离 travel  = bottomMargin + 卡片高 + overshoot
          *
          * 于是 addView 时窗口尺寸和位置**一次给全**，之后不再改窗口。
          * 早先是在挂上之后再撑（哪怕几何上做了补偿），窗口尺寸和 params.y 分两步落，
@@ -431,7 +447,7 @@ final class LockScreenControlPanel {
         int cardHeight = Math.max(root.getMeasuredHeight(), Math.round(48f * density));
         growExitRunway(
                 Math.round(ExitMotion.upDistance * density) + Math.round(2f * density),
-                margin + cardHeight
+                bottomMargin + cardHeight
                         + Math.round(ExitMotion.overshoot * density)
                         + Math.round(2f * density)
                         + Math.round(24f * density));
@@ -447,12 +463,11 @@ final class LockScreenControlPanel {
                 android.graphics.PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         /*
-         * 下边距与两侧**取同一个值**：三边留白一致，面板读起来才是"居中浮在锁屏上"，
-         * 而不是往下坠了一截（原来是 26dp，比两侧的 14dp 多出 12dp）。
-         * 直接引用 margin，以后调两侧宽度时底部会跟着走，不用再改第二处。
+         * 下边距比两侧大一倍：整块面板要浮得高一点，锁屏底部那一片（指纹区 / 手势条 /
+         * 快捷入口）留给它自己。两侧仍是 margin，改宽度不用再动第二处。
          */
-        // 卡片下沿要停在离屏幕底 margin 处；窗口底边则再往下让出整条跑道。
-        baseMarginY = margin;
+        // 卡片下沿要停在离屏幕底 bottomMargin 处；窗口底边则再往下让出整条跑道。
+        baseMarginY = bottomMargin;
         params.y = baseMarginY - preparedBottomRunway;
         params.token = activity.getWindow().getDecorView().getWindowToken();
 
@@ -541,6 +556,7 @@ final class LockScreenControlPanel {
         playPauseButton = null;
         seeking = false;
         seekPreviewMs = -1L;
+        seekSettleUntilElapsedMs = 0L;
     }
 
     /** UI 此刻是不是收起的（点锁屏空白处切换）。 */
@@ -676,7 +692,14 @@ final class LockScreenControlPanel {
         subtitleView.setVisibility(subtitle.length() > 0 ? View.VISIBLE : View.GONE);
 
         long durationMs = info == null ? 0L : info.durationMs;
-        long positionMs = info == null ? 0L : info.positionMs;
+        /*
+         * 用**外推后**的位置，而不是快照里那个原值。
+         *
+         * 快照是推送那一刻写的，而锁屏 / 息屏时 WebView 的定时器被 Chromium 节流，
+         * 这一推可能几十秒才来一次 —— 直接读它就是「进度条不动」。见
+         * FoliaPlaybackService.livePositionMs。
+         */
+        long positionMs = FoliaPlaybackService.livePositionMs();
         if (durationMs > 0) {
             durationView.setText(formatTime(positionMs) + " / " + formatTime(durationMs));
         } else {
@@ -797,9 +820,14 @@ final class LockScreenControlPanel {
                     if (seeking) {
                         long target = positionFromRatio(event.getX() / (float) width);
                         seeking = false;
-                        seekPreviewMs = -1L;
                         if (target >= 0L) {
+                            seekPreviewMs = target;
+                            // 别立刻交还给实时位置：seek 还在路上，那一段外推的是旧位置。
+                            seekSettleUntilElapsedMs = android.os.SystemClock.elapsedRealtime()
+                                    + SEEK_SETTLE_MS;
                             FoliaPlaybackService.sendPlaybackCommand(activity, "seek", target);
+                        } else {
+                            seekPreviewMs = -1L;
                         }
                     }
                     return true;
@@ -832,9 +860,19 @@ final class LockScreenControlPanel {
         }
         FoliaPlaybackService.MediaSnapshot info = FoliaPlaybackService.snapshot();
         long duration = info == null ? 0L : info.durationMs;
-        long position = seekPreviewMs >= 0L
-                ? seekPreviewMs
-                : (info == null ? 0L : info.positionMs);
+        long position;
+        if (seekPreviewMs >= 0L) {
+            if (!seeking && android.os.SystemClock.elapsedRealtime() > seekSettleUntilElapsedMs) {
+                // 落地窗口过了：交还给实时位置（seek 没生效也会在这里被拽回真值）。
+                seekPreviewMs = -1L;
+                position = FoliaPlaybackService.livePositionMs();
+            } else {
+                position = seekPreviewMs;
+            }
+        } else {
+            // 同 refresh 那一处：要外推后的位置，直接读快照是「不动」的那条老路。
+            position = FoliaPlaybackService.livePositionMs();
+        }
         float ratio = duration > 0L ? Math.min(1f, Math.max(0f, position / (float) duration)) : 0f;
         android.widget.FrameLayout.LayoutParams params =
                 (android.widget.FrameLayout.LayoutParams) progressFill.getLayoutParams();

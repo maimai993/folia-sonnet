@@ -833,6 +833,15 @@ public class FoliaPlaybackService extends android.app.Service {
         public final Bitmap artwork;
         public final long durationMs;
         public final long positionMs;
+        /**
+         * `positionMs` 是**哪一刻**的值（SystemClock.elapsedRealtime()）。
+         *
+         * 带上它，读快照的一方才能自己往前外推：这一份是推送时写的，而推送会随着
+         * WebView 被 Chromium 节流而长时间不来（锁屏 / 息屏那一会儿能拖到几十秒）。
+         * 没有这个时刻，读到的就永远是"几十秒前的位置"，进度条看着就是不动。
+         * 系统通知栏那条不缺这一步 —— PlaybackState 自带 updateTime，由 SystemUI 外推。
+         */
+        public final long positionTakenAtElapsedMs;
         public final boolean playing;
         /** 当前这首歌是不是「已喜欢」。 */
         public final boolean liked;
@@ -840,14 +849,15 @@ public class FoliaPlaybackService extends android.app.Service {
         public final boolean canLike;
 
         MediaSnapshot(String title, String artist, String album, Bitmap artwork,
-                long durationMs, long positionMs, boolean playing,
-                boolean liked, boolean canLike) {
+                long durationMs, long positionMs, long positionTakenAtElapsedMs,
+                boolean playing, boolean liked, boolean canLike) {
             this.title = title;
             this.artist = artist;
             this.album = album;
             this.artwork = artwork;
             this.durationMs = durationMs;
             this.positionMs = positionMs;
+            this.positionTakenAtElapsedMs = positionTakenAtElapsedMs;
             this.playing = playing;
             this.liked = liked;
             this.canLike = canLike;
@@ -861,10 +871,50 @@ public class FoliaPlaybackService extends android.app.Service {
         return lastSnapshot;
     }
 
+    /**
+     * 进度条**此刻**该站的位置：快照里那一份，加上从记下它那刻起到现在流过的时间。
+     *
+     * 直接用快照里的 positionMs 是不够的 —— 那一推从 Web 层来，而锁屏 / 息屏那会儿
+     * WebView 的定时器被 Chromium 节流（1 秒变 1 分钟），快照就停在几十秒前的数上，
+     * 表现就是「进度条不动」「一直是 00」（原生播放器那条路上的注释也记着这个症状）。
+     *
+     * 系统通知栏那条没有这个问题：PlaybackState 自带 updateTime 与速度，由 SystemUI
+     * 外推。这里补上同一件事，锁屏那条才跟通知栏那条是同一条。
+     *
+     * 原生在放时直接问播放器：它既是真值，也不吃 Web 那份节流（见
+     * resolvePlaybackPositionMs）。暂停时不外推 —— 手指停在那就该停在那就。
+     */
+    public static long livePositionMs() {
+        MediaSnapshot info = lastSnapshot;
+        if (info == null) {
+            return 0L;
+        }
+        if (top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()) {
+            long nativePosition =
+                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.currentPositionMs();
+            if (nativePosition >= 0L) {
+                return nativePosition;
+            }
+        }
+        long base = Math.max(0L, info.positionMs);
+        if (!info.playing) {
+            return base;
+        }
+        long elapsed = android.os.SystemClock.elapsedRealtime() - info.positionTakenAtElapsedMs;
+        if (elapsed <= 0L) {
+            return base;
+        }
+        long advanced = base + elapsed;
+        // 外推不能溢出时长：缓冲 / 卡顿那一会儿它会跑在真实位置前面，夹住即可，
+        // 下一推来了自然会被拉回真值。
+        return info.durationMs > 0L ? Math.min(advanced, info.durationMs) : advanced;
+    }
+
     private void publishSnapshot() {
         lastSnapshot = new MediaSnapshot(cachedTitle, cachedArtist, cachedAlbum,
-                cachedArtwork, cachedDurationMs, resolvePlaybackPositionMs(), cachedPlaying,
-                cachedLiked, cachedCanLike);
+                cachedArtwork, cachedDurationMs, resolvePlaybackPositionMs(),
+                android.os.SystemClock.elapsedRealtime(),
+                cachedPlaying, cachedLiked, cachedCanLike);
     }
 
     /**
