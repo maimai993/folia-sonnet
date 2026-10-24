@@ -2205,6 +2205,27 @@ public class FoliaNativePlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("enabled", enabled);
         result.put("orientation", PhoneLayoutOrientation.getOrientation(getContext()));
+        result.put("override", PhoneLayoutOrientation.getOverride());
+        call.resolve(result);
+    }
+
+    /**
+     * 「进入可视化自动横屏」的临时覆盖。
+     *
+     * mode: `landscape` / `portrait` 立刻锁过去，`auto`（其它值也一样）撤掉覆盖、
+     * 回到 `setPhoneFitLayout` 那一份落盘的选择。
+     *
+     * **不落盘**：这是「此刻在哪一页」的后果，不是用户的一项选择 —— 下次启动该回到
+     * 他自己选的那个方向。Activity 重建（转屏本身就会触发一次 onConfigurationChanged，
+     * 而 manifest 里声明了 configChanges，所以不重建）时 static 还在，覆盖也就还在。
+     */
+    @PluginMethod
+    public void setPhoneFitOrientationOverride(PluginCall call) {
+        String mode = call.getString("mode", "auto");
+        PhoneLayoutOrientation.setOverride(getActivity(), mode);
+        JSObject result = new JSObject();
+        result.put("orientation", mode);
+        result.put("override", PhoneLayoutOrientation.getOverride());
         call.resolve(result);
     }
 
