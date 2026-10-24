@@ -1505,7 +1505,7 @@ export interface FoliumAiTarget {
      * as its own provider because the form then only has to ask for a key — the
      * request still goes out through the OpenAI transport.
      */
-    provider: 'gemini' | 'openai' | 'deepseek';
+    provider: 'gemini' | 'deepseek' | 'mimo' | 'qwen' | 'tencentcloud' | 'openai' | 'anthropic' | 'kimi' | 'glm' | 'custom';
     /** The model actually sent; where the settings leave it blank the host fills in its own default. */
     model: string;
 }

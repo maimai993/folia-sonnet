@@ -30,8 +30,11 @@ const AUTH_MEMBERS: Record<string, string[]> = {
         'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'openLoginPage', 'startLogin',
     ],
+    // 暂时没有 `getLoginDiagnostics`：035281ce 换成 v23 原生登录方案时，带
+    // getYtmLoginDiagnostics 的 ytmInPageRuntime 被删了，登录诊断这一段随之丢了（回归）。
+    // 补实现之前，这里按现状登记 —— 报告里 YTM 那一段现在是空的。
     ytm: [
-        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
+        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'openLoginPage', 'opensLoginPageItself', 'signInRanOut', 'startLogin',
     ],
     // 汽水（扫码）与飞牛（用户名密码 + 自建服务地址）是我们自己接的两个平台。
