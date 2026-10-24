@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LYRIC_EXPORT_COMMAND_ID } from '../../../command-palette/commands/lyricExportCommands';
 import ConfirmDialog from '../../../shared/ConfirmDialog';
-import { clearAllData } from '../../../../services/db';
+import { clearAllCaches } from '../../../../services/db';
 import { openCommandPaletteCommand } from '../../../../stores/useAppViewStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { closeSettings } from '../../../../stores/useSettingsModalStore';
@@ -35,10 +35,12 @@ const StoragePage: React.FC = () => {
     const setCacheLimitGb = useAudioSettingsStore(state => state.handleSetMediaCacheLimitGb);
     const [clearingAll, setClearingAll] = useState<'no' | 'asking' | 'running'>('no');
 
-    // Everything the app stored goes, so it starts again from an empty state.
+    // Every cache listed below goes; the local library and its hand-made merges, splits and
+    // assignments stay, because a rescan cannot bring those back. Reload so nothing in memory keeps
+    // serving what was just cleared.
     const clearEverything = async () => {
         setClearingAll('running');
-        await clearAllData();
+        await clearAllCaches();
         window.location.reload();
     };
 
