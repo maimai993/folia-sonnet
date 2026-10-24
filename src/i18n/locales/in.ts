@@ -2014,6 +2014,8 @@ export default {
     "orientationLandscape": "Saat ini: lanskap",
     "forceLandscape": "Paksa lanskap",
     "forceLandscapeDesc": "Aktif mengunci aplikasi ke lanskap (dua arah); nonaktif mengembalikan rotasi ke sistem.",
+    "autoLandscapeVisualizer": "Lanskap otomatis di visualizer",
+    "autoLandscapeVisualizerDesc": "Aktif: selama “Tampilan setelah memutar” disetel ke Visualizer, masuk ke halaman pemutar mengunci layar ke lanskap dan keluar darinya mengembalikan ke potret. Hanya berlaku saat “Paksa lanskap” nonaktif. Selama ini aktif, perpustakaan juga terus potret — nonaktifkan untuk memutar layar sendiri.",
     "cacheDetails": "Detail Cache",
     "settingsGroupInterface": "Antarmuka",
     "settingsGroupMusic": "Musik",

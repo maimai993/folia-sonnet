@@ -1,10 +1,22 @@
 import { setSafeAreaBypass } from './phoneInsets';
 import { setSystemBarsAlwaysHidden } from '../platform/foliaNative';
+import { isAndroidAppShell } from '../platform/runtime';
+import { getStoredBoolean, setStoredBoolean } from '../stores/storagePrimitives';
 
 export const ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
 export const ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY = 'folia_android_phone_fit_orientation';
+/** 「进入可视化自动横屏」开关。默认关 —— 转屏是件大事，不该替用户决定。 */
+export const ANDROID_AUTO_LANDSCAPE_STORAGE_KEY = 'folia_android_auto_landscape_player';
 
 export type AndroidPhoneFitOrientation = 'portrait' | 'landscape';
+
+/**
+ * 「进入可视化自动横屏」此刻压在方向上的覆盖；null = 没有覆盖，方向就是落盘那份选择。
+ *
+ * 与 `AndroidPhoneFitOrientation` 分开：那一份是用户的选择（要落盘、要能改），这一份是
+ * 「现在在哪一页」的后果（不落盘，进播放页才有）。
+ */
+export type AndroidOrientationOverride = AndroidPhoneFitOrientation | null;
 
 export const readStoredAndroidPhoneFit = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -58,6 +70,14 @@ export const applyAndroidPhoneFit = (
     const root = document.documentElement;
     root.setAttribute('data-folia-phone-fit', enabled ? 'true' : 'false');
     root.setAttribute('data-folia-phone-orientation', orientation);
+};
+
+export const readStoredAutoLandscapeForVisualizer = (): boolean => (
+    getStoredBoolean(ANDROID_AUTO_LANDSCAPE_STORAGE_KEY, false)
+);
+
+export const writeStoredAutoLandscapeForVisualizer = (enabled: boolean): void => {
+    setStoredBoolean(ANDROID_AUTO_LANDSCAPE_STORAGE_KEY, enabled);
 };
 
 export const installAndroidPhoneFitPreference = (): void => {
@@ -272,24 +292,46 @@ export const installDeviceProfilePreference = (): void => {
     }
 };
 
+type PhoneFitNativePlugin = {
+    setPhoneFitLayout?: (options: {
+        enabled: boolean;
+        orientation: AndroidPhoneFitOrientation;
+    }) => Promise<unknown>;
+    setPhoneFitOrientationOverride?: (options: { mode: 'landscape' | 'portrait' | 'auto' }) => Promise<unknown>;
+};
+
+const phoneFitNativePlugin = (): PhoneFitNativePlugin | null => {
+    if (typeof window === 'undefined') return null;
+    const plugin = (window as unknown as {
+        Capacitor?: { Plugins?: { FoliaNative?: PhoneFitNativePlugin } };
+    }).Capacitor?.Plugins?.FoliaNative;
+    return plugin ?? null;
+};
+
 export const syncAndroidPhoneFitNative = (
     enabled: boolean,
     orientation: AndroidPhoneFitOrientation,
 ): void => {
-    if (typeof window === 'undefined') return;
-    const plugin = (window as unknown as {
-        Capacitor?: {
-            getPlatform?: () => string;
-            Plugins?: {
-                FoliaNative?: {
-                    setPhoneFitLayout?: (options: {
-                        enabled: boolean;
-                        orientation: AndroidPhoneFitOrientation;
-                    }) => Promise<unknown>;
-                };
-            };
-        };
-    }).Capacitor?.Plugins?.FoliaNative;
+    const plugin = phoneFitNativePlugin();
     if (typeof plugin?.setPhoneFitLayout !== 'function') return;
     void plugin.setPhoneFitLayout({ enabled, orientation }).catch(() => undefined);
+};
+
+/**
+ * 把临时覆盖交给原生（「进入可视化自动横屏」）。null 撤掉覆盖，方向回到落盘那份选择。
+ *
+ * 覆盖是**不落盘**的，所以每一次运行都得由 Web 层重新压一次 —— 而最早那一次可能发生在
+ * Capacitor 桥建好之前（那时插件还不存在，调用会被静默丢掉，屏幕就永远不转）。所以插件
+ * 不在时挂一次 deviceready 补发：启动落在播放页的人，方向才不会漏掉。
+ */
+export const syncAndroidOrientationOverride = (override: AndroidOrientationOverride): void => {
+    const mode = override ?? 'auto';
+    const send = (): boolean => {
+        const plugin = phoneFitNativePlugin();
+        if (typeof plugin?.setPhoneFitOrientationOverride !== 'function') return false;
+        void plugin.setPhoneFitOrientationOverride({ mode }).catch(() => undefined);
+        return true;
+    };
+    if (send() || typeof document === 'undefined' || !isAndroidAppShell()) return;
+    document.addEventListener('deviceready', send, { once: true });
 };

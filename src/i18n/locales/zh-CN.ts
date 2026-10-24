@@ -2015,6 +2015,8 @@ export default {
     "orientationLandscape": "当前：横屏兼容",
     "forceLandscape": "强制横屏",
     "forceLandscapeDesc": "打开后把界面锁成横屏（左右横放都能跟着转），关掉则交回系统自己转。",
+    "autoLandscapeVisualizer": "进入可视化时自动横屏",
+    "autoLandscapeVisualizerDesc": "打开后，只要「播放后进入的视图」是可视化，进入播放页就把屏幕锁成横屏，离开播放页再转回竖屏。只在「强制横屏」关着时生效；开启期间资料库也一直是竖屏，想自己转屏就关掉它。",
     "cacheDetails": "缓存详情",
     "settingsGroupInterface": "界面",
     "settingsGroupMusic": "音乐",

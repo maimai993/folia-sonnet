@@ -2014,6 +2014,8 @@ export default {
     "orientationLandscape": "Current: landscape fit",
     "forceLandscape": "Force landscape",
     "forceLandscapeDesc": "On locks the app to landscape (either way round); off hands rotation back to the system.",
+    "autoLandscapeVisualizer": "Auto-landscape in the visualizer",
+    "autoLandscapeVisualizerDesc": "On: with “Where playback opens” set to Visualizer, entering the player locks the screen to landscape and leaving it turns it back to portrait. It only applies while “Force landscape” is off. While it is on the library stays portrait too — turn this off to rotate by hand.",
     "cacheDetails": "Cache Details",
     "settingsGroupInterface": "Interface",
     "settingsGroupMusic": "Music",

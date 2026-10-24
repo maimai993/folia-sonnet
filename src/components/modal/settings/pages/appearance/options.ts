@@ -108,6 +108,13 @@ export const O = {
         noteKey: 'options.forceLandscapeDesc',
         available: isCapacitorAndroid,
     }),
+    // 「进入可视化自动横屏」（fork 独有）：跟着上面那一行，因为两行讲的是同一件事（屏幕
+    // 朝哪边）。这一行只在「播放后进入的视图」是可视化、且「强制横屏」关着时才真的转，
+    // 说明里交代清楚，行本身照旧可拨。
+    autoLandscapeVisualizer: option(VIEW, 'autoLandscapeVisualizer', 'options.autoLandscapeVisualizer', {
+        noteKey: 'options.autoLandscapeVisualizerDesc',
+        available: isCapacitorAndroid,
+    }),
     aiProvider: option(AI, 'aiProvider', 'options.aiProvider'),
     geminiKey: option(AI, 'geminiApiKey', 'options.geminiApiKey'),
     openaiUrl: option(AI, 'openaiApiUrl', 'options.openaiApiUrl'),
