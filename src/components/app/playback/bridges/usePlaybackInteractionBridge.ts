@@ -3,6 +3,8 @@ import type React from 'react';
 import type { MotionValue } from 'framer-motion';
 import { omni } from '../../../../services/onlineMusic/omni';
 import { playbackFade } from '../../../../services/playbackFade';
+import { nativePlaybackEngine } from '../../../../services/playbackEngine/nativePlaybackEngine';
+import { shouldPauseNativePlayback } from './nativeTogglePause';
 import { PlayerState } from '../../../../types';
 import type { ReplayGainMode, SongResult, StageLoopMode, StatusMessage } from '../../../../types';
 import { getReplayGainModeLabel } from '../../../../utils/appPlaybackHelpers';
@@ -170,9 +172,14 @@ export function usePlaybackInteractionBridge({
         }
 
         // 原生播放（P1）：下面的 `audioRef.current.paused` 这时候恒为 true（元素是空的），
-        // 照它判就变成「按播放键只会一直开始播放，永远按不停」。改看播放状态。
+        // 照它判就变成「按播放键只会一直开始播放，永远按不停」。
+        //
+        // 也不能只看 `playerState`：切歌后它有一小段是 IDLE / 还在追旧状态，而原生那边
+        // 已经接受播放意图、开始出声了（`nativePlaybackEngine.play()` 先记 playing，事件
+        // 晚一点才回）。那一小段里按暂停会被当成「开始播放」，也就是切歌后的前几秒双击
+        // 暂停没反应。两个都看：任一说在播，这一下就是暂停。
         if (nativeTakesRef?.current) {
-            if (playerState === PlayerState.PLAYING) {
+            if (shouldPauseNativePlayback(playerState, nativePlaybackEngine.isPlaying())) {
                 pausePlayback();
             } else {
                 startPlaybackFromInteraction();
