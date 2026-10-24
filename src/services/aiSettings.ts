@@ -126,16 +126,18 @@ const normalizeProvider = (value: unknown): AiProviderId => (
     AI_PROVIDER_IDS.includes(value as AiProviderId) ? value as AiProviderId : 'gemini'
 );
 
+const owns = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
+
 const asText = (value: unknown, fallback = ''): string => (
     typeof value === 'string' ? value : value === undefined || value === null ? fallback : String(value)
 );
 
+/** 只认明确的字符串，空串也留着：清空输入框和「没设置过」是两件事；trim 交给用它的地方。 */
 const asRecord = (value: unknown): Record<string, string> => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     const result: Record<string, string> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-        const text = asText(entry).trim();
-        if (text) result[key] = text;
+        if (typeof entry === 'string') result[key] = entry;
     }
     return result;
 };
@@ -143,27 +145,33 @@ const asRecord = (value: unknown): Record<string, string> => {
 /*
  * 旧版（只有 Gemini / DeepSeek / 其他兼容接口三家）的存储形状：
  * provider + deepseekApiKey + openaiApiKey + openaiApiUrl + openaiApiModel + 温度 + 流式。
- * 读到旧形状就把它们搬进新字段：DeepSeek 的 Key 与模型归 DeepSeek，
- * 「其他兼容接口」的地址、Key 与模型归 custom（Key 同时留给 openai，免得那一路还要重填）。
+ * 旧版那几项 openai* 说的是「其他兼容接口」，所以只归 custom（DeepSeek 自己那一份照旧归 deepseek），
+ * 不再顺手复制给 openai —— 复制等于把用户填的密钥发到官方站点去。
+ * 这里只算字段，不碰 localStorage：读设置不该写盘。
  */
-const migrateLegacy = (parsed: Record<string, unknown>): Partial<AiSettings> => {
+const migrateLegacy = (record: Record<string, unknown>): Partial<AiSettings> => {
     const apiKeys: Partial<Record<AiProviderId, string>> = {};
-    const deepseekKey = asText(parsed.deepseekApiKey).trim();
-    if (deepseekKey) apiKeys.deepseek = deepseekKey;
-    const openaiKey = asText(parsed.openaiApiKey).trim();
-    if (openaiKey) {
-        apiKeys.openai = openaiKey;
-        apiKeys.custom = openaiKey;
+    if (owns(record, 'deepseekApiKey')) apiKeys.deepseek = asText(record.deepseekApiKey);
+    if (owns(record, 'openaiApiKey')) apiKeys.custom = asText(record.openaiApiKey);
+    const apiModels: Partial<Record<AiProviderId, string>> = {};
+    if (owns(record, 'openaiApiModel')) {
+        apiModels.custom = asText(record.openaiApiModel);
+        apiModels.deepseek = asText(record.openaiApiModel);
     }
-    const openaiUrl = asText(parsed.openaiApiUrl).trim();
-    return {
-        ...(Object.keys(apiKeys).length ? { apiKeys } : {}),
-        ...(openaiUrl ? { customApiUrl: openaiUrl } : {}),
-        ...(asText(parsed.openaiApiModel).trim() ? { apiModels: { deepseek: asText(parsed.openaiApiModel).trim(), custom: asText(parsed.openaiApiModel).trim() } } : {}),
-        ...(asText(parsed.openaiApiTemperature).trim() ? { apiTemperature: asText(parsed.openaiApiTemperature) } : {}),
-        ...(parsed.openaiApiStream === true ? { apiStream: true } : {}),
-    };
+    return { apiKeys, apiModels };
 };
+
+/** 旧形状的 openai* 三项在旧版指的是「其他兼容接口」，不是官方 openai。 */
+const hasLegacyCompatibleFields = (record: Record<string, unknown>): boolean => (
+    owns(record, 'openaiApiUrl') || owns(record, 'openaiApiKey') || owns(record, 'openaiApiModel')
+);
+
+/** 新形状里已经明确写过官方 openai 的安装，provider 保持用户的明确选择。 */
+const hasExplicitOfficialOpenAi = (record: Record<string, unknown>): boolean => (
+    owns(asRecord(record.apiKeys), 'openai')
+    || owns(asRecord(record.apiModels), 'openai')
+    || owns(asRecord(record.apiBaseUrls), 'openai')
+);
 
 export const readAiSettings = (): AiSettings => {
     if (typeof localStorage === 'undefined') return { ...DEFAULT_AI_SETTINGS, apiKeys: {}, apiModels: {}, apiBaseUrls: {} };
@@ -173,19 +181,20 @@ export const readAiSettings = (): AiSettings => {
         const parsed = JSON.parse(raw) as Partial<AiSettings> | null;
         if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_AI_SETTINGS, apiKeys: {}, apiModels: {}, apiBaseUrls: {} };
         const record = parsed as Record<string, unknown>;
-        const legacy = !record.apiKeys && (record.deepseekApiKey || record.openaiApiKey)
-            ? migrateLegacy(record)
-            : {};
+        const legacy = migrateLegacy(record);
+        const provider = normalizeProvider(record.provider);
         return {
-            provider: normalizeProvider(record.provider),
-            geminiApiKey: asText(parsed.geminiApiKey),
-            geminiApiUrl: asText(parsed.geminiApiUrl),
-            apiKeys: asRecord(record.apiKeys ?? legacy.apiKeys),
-            apiModels: asRecord(record.apiModels ?? legacy.apiModels),
+            provider: provider === 'openai' && hasLegacyCompatibleFields(record) && !hasExplicitOfficialOpenAi(record)
+                ? 'custom'
+                : provider,
+            geminiApiKey: asText(record.geminiApiKey),
+            geminiApiUrl: asText(record.geminiApiUrl),
+            apiKeys: { ...legacy.apiKeys, ...asRecord(record.apiKeys) },
+            apiModels: { ...legacy.apiModels, ...asRecord(record.apiModels) },
             apiBaseUrls: asRecord(record.apiBaseUrls),
-            customApiUrl: asText(parsed.customApiUrl ?? legacy.customApiUrl),
-            apiTemperature: asText(parsed.apiTemperature ?? legacy.apiTemperature, DEFAULT_AI_SETTINGS.apiTemperature),
-            apiStream: (parsed.apiStream ?? legacy.apiStream) === true,
+            customApiUrl: asText(owns(record, 'customApiUrl') ? record.customApiUrl : record.openaiApiUrl),
+            apiTemperature: asText(owns(record, 'apiTemperature') ? record.apiTemperature : record.openaiApiTemperature, DEFAULT_AI_SETTINGS.apiTemperature),
+            apiStream: (owns(record, 'apiStream') ? record.apiStream : record.openaiApiStream) === true,
         };
     } catch {
         return { ...DEFAULT_AI_SETTINGS, apiKeys: {}, apiModels: {}, apiBaseUrls: {} };
