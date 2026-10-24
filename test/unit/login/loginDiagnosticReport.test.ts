@@ -6,7 +6,6 @@ import { loginCaseOf, loginFailureFacts } from '@/services/onlineMusic/login/log
 import { omni } from '@/services/onlineMusic/omni';
 import { qishuiProvider } from '@/services/onlineMusic/qishuiProvider';
 import { spotifyProvider } from '@/services/onlineMusic/spotify/spotifyProvider';
-import { ytmProvider } from '@/services/onlineMusic/ytm/ytmProvider';
 import { listOnlineMusicProviders } from '@/services/onlineMusic/providerRegistry';
 import type { LoginDiagnosticLine, LoginSelfCheckResult } from '@/types/onlineMusic';
 
@@ -159,9 +158,10 @@ describe('QR login diagnostic report', () => {
                 // 汽水只有 provider 自己记的那几行（安卓没有主进程的请求记录可问），
                 // 所以下面只要求它们原样进报告，不套主进程那几条断言。
                 qishui: () => qishuiProvider.auth!.getLoginDiagnostics!(),
-                // Spotify 与 YouTube Music 同样只有 provider 自己那几行（安卓上它们没有主进程的请求记录）。
+                // Spotify 只有 provider 自己那几行（安卓上它没有主进程的请求记录）。
+                // YouTube Music 暂时不在这里：035281ce 换成 v23 原生登录方案时，带
+                // getYtmLoginDiagnostics 的 ytmInPageRuntime 一并删掉了，成员清单要等它补回来再加。
                 spotify: () => spotifyProvider.auth!.getLoginDiagnostics!(),
-                ytm: () => ytmProvider.auth!.getLoginDiagnostics!(),
             };
             const declaring = listOnlineMusicProviders().filter(provider => provider.auth?.getLoginDiagnostics).map(provider => provider.id);
             expect(Object.keys(builders).sort()).toEqual(declaring.sort());
