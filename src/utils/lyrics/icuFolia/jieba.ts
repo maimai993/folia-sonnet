@@ -15,15 +15,15 @@
 export interface JiebaData {
     /** Every dictionary word, sorted by code unit, joined with '\n'. */
     words: string;
-    /** Each word's frequency, in the same order, as base64 of unsigned LEB128 varints. */
-    freqs: string;
+    /** Each word's frequency, in the same order, as unsigned LEB128 varints. */
+    freqs: Uint8Array;
     /** The sum of all frequencies in the dictionary file. */
     total: number;
     hmm: {
         start: Record<HmmState, number>;
         trans: Record<HmmState, Partial<Record<HmmState, number>>>;
-        /** Per state: the characters, and their log probabilities as base64 float64. */
-        emit: Record<HmmState, [string, string]>;
+        /** Per state: the characters, and their log probabilities as float64. */
+        emit: Record<HmmState, [string, Float64Array]>;
     };
 }
 
@@ -39,7 +39,7 @@ export interface Jieba {
     addWord(word: string, freq?: number): number;
 }
 
-type HmmState = 'B' | 'E' | 'M' | 'S';
+export type HmmState = 'B' | 'E' | 'M' | 'S';
 
 // Index order is alphabetical, which is also how jieba breaks ties between states.
 const STATES: HmmState[] = ['B', 'E', 'M', 'S'];
@@ -57,15 +57,7 @@ const RE_HAN_HMM = /([一-鿕]+)/u;
 const RE_SKIP_HMM = /([a-zA-Z0-9]+(?:\.\d+)?%?)/u;
 const LATIN_CHAR = /^[a-zA-Z0-9]$/;
 
-const decodeBase64 = (base64: string): Uint8Array => {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return bytes;
-};
-
-const decodeVarints = (base64: string, count: number): Uint32Array => {
-    const bytes = decodeBase64(base64);
+const decodeVarints = (bytes: Uint8Array, count: number): Uint32Array => {
     // jieba's largest frequency is under a million, far inside 32 bits.
     const values = new Uint32Array(count);
     let cursor = 0;
@@ -170,9 +162,7 @@ export const createJieba = (data: JiebaData, options: JiebaOptions = {}): Jieba 
     const start = STATES.map(state => data.hmm.start[state]);
     const trans = STATES.map(from => STATES.map(to => data.hmm.trans[from][to] ?? MIN_FLOAT));
     const emit = STATES.map(state => {
-        const [chars, logsBase64] = data.hmm.emit[state];
-        const bytes = decodeBase64(logsBase64);
-        const logs = new Float64Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 8);
+        const [chars, logs] = data.hmm.emit[state];
         const table = new Map<string, number>();
         Array.from(chars).forEach((char, index) => table.set(char, logs[index]));
         return table;

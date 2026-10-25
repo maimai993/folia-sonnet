@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   // 命令面板的检索索引在单测里也要读到构建期生成的拼音字典。
   // 繁中 locale 由 zh-CN 在构建期转换生成，同样只以虚拟模块存在。
-  // icu-folia 的 jieba 词典和 HMM 表同样以虚拟模块提供，单测走的是和正式构建同一条加载路径。
+  // icu-folia 的 jieba 词典和 HMM 表同样以虚拟模块提供（导出二进制文件的 URL），单测走的是和正式构建同一条 fetch + 解码路径。
   plugins: [commandPinyinPlugin(), traditionalLocalePlugin(), icuFoliaDataPlugin()],
   // 单测默认按官方构建跑（vite.config 构建期注入的值）；非官方分支由各自的用例显式传入构建环境。
   define: {

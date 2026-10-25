@@ -293,6 +293,10 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
         },
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000,
+          // icu-folia's dictionary and HMM tables load as binary assets fetched at runtime (see
+          // dev/icuFolia/icuFoliaDataPlugin.mjs); they must be precached like the code that
+          // fetches them, and each stays under the 5 MB per-file limit on its own.
+          globPatterns: ['**/*.{js,css,html}', '**/icu-folia-*.bin'],
           importScripts: [localCoverWorkerImport],
           // Docker serves this file dynamically; it must never be pinned in the PWA precache.
           // The cover route is stored with the worker script itself, so precaching it is redundant.

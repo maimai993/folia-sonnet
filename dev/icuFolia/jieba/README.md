@@ -18,8 +18,10 @@ which match upstream byte for byte:
 | `dict.txt` | `7197c3211ddd98962b036cdf40324d1ea2bfaa12bd028e68faa70111a88e12a8` |
 | `prob_emit.py` | `27d46b1c9efe4dd148fde8be042a21be40e3562d0c7f1273f9de7abae12ebb8d` |
 
-Nothing reads these at runtime. `dev/icuFolia/icuFoliaDataPlugin.mjs` turns them into compact virtual
-modules at build time; `src/utils/lyrics/icuFolia/jieba.ts` is the segmenter that uses them.
+Nothing reads these at runtime. `dev/icuFolia/icuFoliaDataPlugin.mjs` encodes them at build time into
+two binary asset files, plus the virtual modules that hand over their URLs;
+`src/utils/lyrics/icuFolia/jiebaData.ts` fetches and decodes them, `src/utils/lyrics/icuFolia/jieba.ts`
+is the segmenter that uses them.
 
 To update, copy the same files from a newer upstream commit, `gzip -9n dict.txt prob_emit.py`, change
 the commit and the sha256 values above, and run the icu-folia tests: the corpus in `test/unit/lyrics/icuFolia/corpus.ts` shows what moved.

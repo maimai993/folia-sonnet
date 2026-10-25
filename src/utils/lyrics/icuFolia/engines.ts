@@ -1,5 +1,6 @@
 import type { IcuFoliaEngines } from './segmenter';
 import { createJieba } from './jieba';
+import { fetchJiebaDict, fetchJiebaHmm } from './jiebaData';
 import { CHINESE_DEMOTED_WORDS, CHINESE_EXTRA_WORDS } from './jiebaLexicon';
 
 // src/utils/lyrics/icuFolia/engines.ts
@@ -7,9 +8,9 @@ import { CHINESE_DEMOTED_WORDS, CHINESE_EXTRA_WORDS } from './jiebaLexicon';
 // BudouX for Japanese, with a traditional -> simplified character map in front of jieba.
 //
 // All of it arrives in lazy chunks, off the startup bundle: the dictionary and the HMM tables are
-// Vite virtual modules built by dev/icuFolia/icuFoliaDataPlugin.mjs. Building the engines is a few
-// single passes over that data (~10 ms), so it does not stall a frame the way a dictionary built in
-// one long call would.
+// binary assets built by dev/icuFolia/icuFoliaDataPlugin.mjs, whose URLs the virtual modules hand
+// over. Building the engines is a few single passes over that data (~10 ms), so it does not stall a
+// frame the way a dictionary built in one long call would.
 
 /** HMM words longer than this fall back to single characters; see jieba.ts for why two. */
 const MAX_HMM_WORD_LENGTH = 2;
@@ -26,22 +27,26 @@ const createSimplifier = (pairs: string) => {
 };
 
 export const loadIcuFoliaEngines = async (): Promise<IcuFoliaEngines> => {
-    const [dict, hmm, { createJapaneseParser }] = await Promise.all([
+    const [dictModule, hmmModule, { createJapaneseParser }] = await Promise.all([
         import('virtual:icu-folia-dict'),
         import('virtual:icu-folia-hmm'),
         import('./budouxJapanese'),
     ]);
+    const [dict, hmm] = await Promise.all([
+        fetchJiebaDict(dictModule.default),
+        fetchJiebaHmm(hmmModule.default),
+    ]);
 
     const jieba = createJieba({
-        words: dict.DICT_WORDS,
-        freqs: dict.DICT_FREQS,
-        total: dict.DICT_TOTAL,
-        hmm: { start: hmm.HMM_START, trans: hmm.HMM_TRANS, emit: hmm.HMM_EMIT },
+        words: dict.words,
+        freqs: dict.freqs,
+        total: dict.total,
+        hmm: { start: hmm.start, trans: hmm.trans, emit: hmm.emit },
     }, { maxHmmWordLength: MAX_HMM_WORD_LENGTH });
     CHINESE_EXTRA_WORDS.forEach(word => jieba.addWord(word));
     CHINESE_DEMOTED_WORDS.forEach(word => jieba.addWord(word, 1));
 
-    const simplify = createSimplifier(hmm.T2S_PAIRS);
+    const simplify = createSimplifier(hmm.t2s);
     const japanese = createJapaneseParser();
 
     return {

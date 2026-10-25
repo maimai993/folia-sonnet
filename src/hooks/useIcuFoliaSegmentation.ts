@@ -9,9 +9,9 @@ import { applyLyricsTransform, untransformedLyrics } from '../services/hostExten
 // Loads icu-folia's engines when they would change something on screen, and bakes its split onto
 // lyrics that reached the store before the engines were ready.
 //
-// The engines are ~4.4 MB of lazy chunks (~2 MB gzipped, ~30 MB resident once loaded), so they load
-// only once a mode that lays text out by words is showing lyrics with Chinese or Japanese in them —
-// the only text icu-folia cuts differently from plain ICU. Once loaded they stay loaded, and from then on the lyric setter bakes the split itself.
+// The engines are ~3.6 MB of lazy binary assets (~1.6 MB deflated in the APK, ~30 MB resident once
+// decoded), so they load only once a mode that lays text out by words is showing lyrics with Chinese
+// or Japanese in them — the only text icu-folia cuts differently from plain ICU. Once loaded they stay loaded, and from then on the lyric setter bakes the split itself.
 //
 // The late bake mirrors useLyricWordSegmentation's: a pure transform over the lines already in the
 // store, applied to the pre-transform lyrics with the extension transform re-run from there, and a

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DICT_FREQS, DICT_TOTAL, DICT_WORDS } from 'virtual:icu-folia-dict';
-import { HMM_EMIT, HMM_START, HMM_TRANS } from 'virtual:icu-folia-hmm';
+import { fetchJiebaDict, fetchJiebaHmm } from '../../../../src/utils/lyrics/icuFolia/jiebaData';
 import { createJieba, type JiebaOptions } from '../../../../src/utils/lyrics/icuFolia/jieba';
 import reference from './jiebaReference.json';
 
@@ -8,12 +7,20 @@ import reference from './jiebaReference.json';
 // jieba.ts against jieba itself: jiebaReference.json holds jieba-rs's output (recorded from
 // jieba-wasm before icu-folia dropped it) for 500 sentences, with and without the HMM, and after
 // adding words. With no HMM length cap the reimplementation must match it word for word.
+//
+// The data loads through the same fetch-and-decode path the browser takes (jiebaData.ts): the
+// virtual modules hand over data: URLs in tests and binary assets in the real build.
+
+const [dict, hmm] = await Promise.all([
+    fetchJiebaDict((await import('virtual:icu-folia-dict')).default),
+    fetchJiebaHmm((await import('virtual:icu-folia-hmm')).default),
+]);
 
 const DATA = {
-    words: DICT_WORDS,
-    freqs: DICT_FREQS,
-    total: DICT_TOTAL,
-    hmm: { start: HMM_START, trans: HMM_TRANS, emit: HMM_EMIT },
+    words: dict.words,
+    freqs: dict.freqs,
+    total: dict.total,
+    hmm: { start: hmm.start, trans: hmm.trans, emit: hmm.emit },
 };
 
 const build = (options: JiebaOptions = { maxHmmWordLength: Number.POSITIVE_INFINITY }) => createJieba(DATA, options);
