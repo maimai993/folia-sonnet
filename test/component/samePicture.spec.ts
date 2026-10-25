@@ -9,7 +9,7 @@ import { expect, test } from './fixtures';
 // what has to hold is that the files of one artwork come out alike and two artworks do not.
 
 const ARTWORKS = [
-    '/assets/placeholder_cover.jpg', '/assets/placeholder_cover-2.jpg', '/img/preview-cappella.jpg', '/img/preview-diorama.png',
+    '/assets/placeholder_cover.webp', '/assets/placeholder_cover-2.webp', '/img/preview-cappella.jpg', '/img/preview-diorama.png',
     '/img/preview-fume.png', '/img/preview-lumi.png', '/img/preview-pat.png', '/img/preview-pendolo.png', '/img/preview-tilt.png',
     '/img/visualizer.png', '/mods/k3panel/preview.jpg', '/mods/more-progress-buttons/preview.jpg', '/mods/sample-aurora-visualizer/preview.jpg',
     '/mods/sample-progress-bar/preview.jpg', '/mods/sample-rickroll/preview.jpg', '/mods/visualizer52hz/preview.jpg',
