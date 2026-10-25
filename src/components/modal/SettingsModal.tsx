@@ -10,7 +10,7 @@ import { kitMotionTokens, useKitReducedMotion } from './settings/kit/motion';
 import { SETTINGS_PAGES, SETTINGS_PAGE_OPTIONS } from './settings/pages';
 import HelpPage from './settings/pages/HelpPage';
 import { SettingsPageContext, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
-import meowImageUrl from '../../../build/miao.png';
+import meowImageUrl from '../../../build/miao.webp';
 import type { LyricData } from '../../types';
 import { type SettingsModalState, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
