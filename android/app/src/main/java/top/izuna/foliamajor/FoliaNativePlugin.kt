@@ -454,6 +454,24 @@ class FoliaNativePlugin : Plugin() {
         .build()
 
     /**
+     * AI 请求专用的客户端：**连接共用 `client`，只放宽读超时**。
+     *
+     * `client` 那 45 秒是给普通接口的（云缓存、歌词、平台接口都是秒级往返）。AI 生成不是：
+     * 一次主题 + 动画决策的往返 60 秒以上是常态，45 秒一到 `onFailure` 直接 reject，
+     * 而那时 JS 多半已经切走了 —— 表现就是「后台切歌 AI 主题一次都不生成」。
+     * 这条链路专门从 `httpRequest` 挪过来就是为了修那个问题，超时卡在这里等于换个地方复发。
+     *
+     * 用 `newBuilder()` 派生而不是另建一个：连接池、DNS 缓存、拦截器全部共用，
+     * 不会因为多一个客户端多开一套线程与连接。
+     */
+    private val aiClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(150, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
      * 读一条 AI 云缓存：命中原生副本就直接回，否则发一次请求并把命中的答案留下来。
      *
      * 回的是**服务端响应体原文**（字符串），不由原生去解析 JSON —— Capacitor 的嵌套对象
@@ -569,9 +587,9 @@ class FoliaNativePlugin : Plugin() {
                 body = ByteArray(0).toRequestBody(null)
             }
             builder.method(method, body)
-            // AI 的往返本来就慢，这里给足时间；等待交给 OkHttp 线程池，不占桥线程。
+            // AI 的往返本来就慢，读超时由 aiClient 放宽到 150 秒；等待交给 OkHttp 线程池，不占桥线程。
             call.setKeepAlive(true)
-            client.newCall(builder.build()).enqueue(object : Callback {
+            aiClient.newCall(builder.build()).enqueue(object : Callback {
                 override fun onFailure(httpCall: Call, error: IOException) {
                     call.reject(error.message, error)
                 }

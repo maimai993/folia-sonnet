@@ -1916,7 +1916,17 @@ class FloatingLyricsOverlay private constructor(context: Context) {
                     canvas.drawText(text, x, baseline, textPaint)
                     canvas.restore()
                 }
-                drawUnderlines(canvas, text, x, baseline, fontSize, wordBounds(text),
+                /*
+                 * 下划线**整行一条**，不按词分段。
+                 *
+                 * 分段来自词典 / ICU 切词，而那些段跟 `progress` 之间没有任何时间对应关系：
+                 * 传一个按像素算的推进量进去，线会「先第一段、再第二段」地跳着亮，
+                 * 和上面那道连续的扫光对不齐 —— 正是 sungOffsetX 注释里立的规矩
+                 * （下划线与字必须共用同一个推进量）。所以这一档直接一条通长的线，
+                 * 按 progress 从左往右填，和文字完全同步。
+                 */
+                drawUnderlines(canvas, text, x, baseline, fontSize,
+                        listOf(FloatingVocab.Segment(0, text.length)),
                         measured * clamp01(progress), alpha)
                 return
             }
