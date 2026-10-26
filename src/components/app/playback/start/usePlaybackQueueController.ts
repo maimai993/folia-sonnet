@@ -563,6 +563,42 @@ export function usePlaybackQueueController({
                             // （问 + 显示一起），别绕过 currentSong 直接写 store。
                             makeSongCurrent(song);
                             setPlayerState(PlayerState.PLAYING);
+                            /*
+                             * 歌词与主题得跟着这一单走。
+                             *
+                             * playFromQueue 走的是 nativePlayMirrorEntry —— 那条路**不发
+                             * syncTo**（只有原生兜底切歌、以及 JS 推旧 metadata 时守卫才发），
+                             * 所以 useAppPlaybackBridges 里 onSyncToSong 的那套认领一次都到不了。
+                             * 而那套认领正是唯一补歌词 / 主题的地方：Web 全流程的加载在 playSong
+                             * 下半段，这里提前 return 就全跳过了。
+                             *
+                             * 症状：声音与队列都对（#82 已修），但歌词与主题停在上一个歌单那首
+                             * 上，要等下一首才翻；跨平台点歌同理。
+                             *
+                             * 先清旧歌词再异步拉，与 onSyncToSong 同一做法：清掉那一拍短暂空窗，
+                             * 好过挂着别首的词。`isCurrent` 用 askedSongKeyRef —— 与 Web 路径
+                             * 同一判据，期间又点了别的歌就让位。
+                             */
+                            setLyrics(null);
+                            void (async () => {
+                                try {
+                                    await loadOnlineSongLyrics(song, null, userId, {
+                                        isCurrent: () => askedSongKeyRef.current === nativeKey,
+                                        onLyrics: resolvedLyrics => {
+                                            if (askedSongKeyRef.current === nativeKey) setLyrics(resolvedLyrics);
+                                        },
+                                        onDone: () => undefined,
+                                    });
+                                } catch (error) {
+                                    console.warn('[App] Lyric fetch failed (native dispatch)', error);
+                                }
+                                try {
+                                    await restoreCachedThemeForSong(song);
+                                } catch (error) {
+                                    // 主题加载失败不影响播放：保持当前主题即可。
+                                    console.warn('[App] Theme restore failed (native dispatch)', error);
+                                }
+                            })();
                             return;
                         }
                     } catch {
