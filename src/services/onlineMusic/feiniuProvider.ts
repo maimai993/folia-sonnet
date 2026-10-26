@@ -25,6 +25,7 @@ import {
     feiniuServerUrlFromFnId,
     readFeiniuUser,
     rememberFeiniuUser,
+    syncFeiniuGatewayCredentials,
 } from './feiniuTransport';
 import { feiniuPage, normalizeFeiniuCollection, normalizeFeiniuSong, normalizeFeiniuUser } from './feiniuNormalize';
 import { backfillSongCovers } from './onlineCoverFallback';
@@ -214,6 +215,16 @@ export const feiniuProvider: OnlineMusicProvider = {
                 return [];
             }
         },
+    },
+
+    /*
+     * 原生兜底切歌要自己拼取流地址与 Cookie，地址和登录态都得推过去。
+     *
+     * 由这里实现而不是让 hook 直接调 feiniuTransport：按依赖方向 hooks 只该经过 omni
+     * （见 docs/CODEMAP.md 的分层边界）。
+     */
+    nativeGateway: {
+        syncCredentials: () => syncFeiniuGatewayCredentials(),
     },
 };
 

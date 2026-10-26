@@ -1,7 +1,7 @@
 import type { JsonValue, OmniProviderId, ProviderRawEndpoint } from '../../../types/onlineMusic';
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
-import { getOnlineMusicProvider } from '../providerRegistry';
+import { getOnlineMusicProvider, listOnlineMusicProviders } from '../providerRegistry';
 import { withoutCredentials } from '../rawResponse';
 import { unsupported } from './providerCalls';
 
@@ -9,6 +9,21 @@ import { unsupported } from './providerCalls';
 // The platform back end's raw endpoints, for Folium's platform.raw only.
 
 export const rawMethods = {
+    /*
+     * 把「原生兜底切歌要用的凭据」推一遍给原生网关。
+     *
+     * 原生那条兜底（WebView 冻结后仍能切歌 / 取流）得自己拼取流地址和 Cookie，
+     * 而这些凭据只有各平台自己的 transport 知道怎么读。调用方是 hooks
+     * （useCapacitorPlaybackBridge），按依赖方向不该直连 `<id>Transport.ts` ——
+     * 所以这里开一个入口，由各平台 provider 自己实现（见 `nativeGateway`）。
+     *
+     * 没有这个能力的平台安静跳过：它不是取数据，缺了只是那条平台没有原生兜底。
+     */
+    syncNativeGatewayCredentials(): void {
+        for (const provider of listOnlineMusicProviders()) {
+            provider.nativeGateway?.syncCredentials();
+        }
+    },
     // ---- 平台后端的原始接口（OnlineRawRequestProvider）：调用平台专有能力的后备通道，只给 Folium 的
     // 实验接口 platform.raw 用。omni 已有对应能力的接口，调用方应改用 omni（分类表的 `omni` 一列）。
 
