@@ -8,6 +8,7 @@ import { settingsTokens, useSettingsKitTheme } from '../modal/settings/kit/kitTh
 import { openLoginWindow } from './loginWindowStore';
 import { PlatformMark } from './PlatformMark';
 import { orderRows, rowStatus } from './platformRows';
+import { Button } from '../ui/Button';
 import './login.css';
 
 // src/components/login/SignInSpotlight.tsx
@@ -126,9 +127,9 @@ const SignInSpotlight: React.FC<SignInSpotlightProps> = ({ isOpen, account, onPr
             >
                 {t('login.spotlightNote')}
             </p>
-            <button
+            <Button
                 ref={buttonRef}
-                type="button"
+                variant="bare"
                 onClick={press}
                 className="login-cta mt-8 inline-flex h-14 max-w-full items-center gap-3 rounded-2xl bg-[var(--st-accent)] pl-3 pr-6 text-[16px] font-semibold text-[color:var(--st-on-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.98]"
                 style={{ '--login-halo': 'var(--st-accent)' } as React.CSSProperties}
@@ -141,7 +142,7 @@ const SignInSpotlight: React.FC<SignInSpotlightProps> = ({ isOpen, account, onPr
                     ))}
                 </span>
                 <span className="truncate">{t('home.login')}</span>
-            </button>
+            </Button>
             <p className="mt-4 text-[12px] leading-4 text-white/45">{t('login.spotlightFootnote')}</p>
         </div>,
         document.body,
