@@ -563,6 +563,14 @@ export function usePlaybackQueueController({
                             // （问 + 显示一起），别绕过 currentSong 直接写 store。
                             makeSongCurrent(song);
                             setPlayerState(PlayerState.PLAYING);
+                            // 交给原生的那份队列（mirrorQueue）与 store 里的不是同一份时，
+                            // store 也要落到它上面 —— 否则 Kotlin 已经在放新队列、通知栏
+                            // 也能照着它切歌，而 WebView 的 playQueue 还停在旧歌单：
+                            // 面板与 Lattice 显示旧队列，「定位正在播放」按
+                            // playingSongLocator.ts:31-34 的全或无判定找不到归属，
+                            // 于是报「这个播放队列没有对应的歌单或专辑」。
+                            // 队列本来就跟着 store（下一首 / 上一首 / 队列面板点歌）时不重写。
+                            if (!queueFollowsStore) setPlayQueue(mirrorQueue);
                             return;
                         }
                     } catch {
