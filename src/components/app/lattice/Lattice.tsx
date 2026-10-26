@@ -12,6 +12,7 @@ import WallBackButton from '../../wall/WallBackButton';
 import { buildLatticeTiles, type LatticeTile } from './latticeModel';
 import { useStableCallbacks } from '../../../hooks/useStableCallbacks';
 import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { countRender } from '../../../dev/renderCount';
 import '../../wall/wall.css';
@@ -39,7 +40,6 @@ type LatticeProps = {
     controls: LatticePlaybackActions;
     lyrics: LyricData | null;
     lyricSource: LatticeLyricSource;
-    lyricKeywordColoringEnabled: boolean;
     currentSong: SongResult | null;
     playerState: PlayerState;
     currentTime: MotionValue<number>;
@@ -67,7 +67,6 @@ export default function Lattice({
     controls,
     lyrics,
     lyricSource,
-    lyricKeywordColoringEnabled,
     currentSong,
     playerState,
     currentTime,
@@ -88,6 +87,8 @@ export default function Lattice({
 }: LatticeProps) {
     countRender('Lattice');
     const { t } = useTranslation();
+    // 关键词着色走全局开关（useVisualizerSettingsStore）——曾看莫奈的 tuning，已被收编。
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
     const vignette = useLatticeSettingsStore(state => state.latticeVignette);
     const lightsOn = useLatticeSettingsStore(state => state.latticeLightsOn);
     const posterTintEnabled = useLatticeSettingsStore(state => state.latticePosterTintEnabled);
@@ -192,7 +193,7 @@ export default function Lattice({
         <LatticePlaybackProvider actions={controls} currentSong={currentSong} queue={queue} lyrics={lyrics}
             currentTime={currentTime} lyricCurrentTime={lyricCurrentTime} duration={playbackDuration} onSeek={onSeek} isDaylight={isDaylight}>
         <LatticeLyricsProvider source={lyricSource} songKey={currentSong ? getPlaybackSongKey(currentSong) : ''}
-            keywordColoringEnabled={lyricKeywordColoringEnabled}>
+            keywordColoringEnabled={keywordColoringEnabled}>
         <section
             className={`lattice-root lattice-queue-root ${isDaylight ? 'is-daylight' : ''} ${vignette ? 'has-vignette' : ''} ${lightsOn ? '' : 'is-lights-out'} ${posterTintEnabled ? 'has-poster-tint' : ''} ${posterTintUseCustomColor ? 'uses-custom-poster-tint' : ''} ${surfaceOff ? 'is-handoff-surface-off' : ''} ${fadesIn && !reducedMotion ? 'is-returning' : ''}`}
             data-wall-handoff={handoffRole ?? undefined}

@@ -9,7 +9,7 @@ import {
     DIORAMA_PARTICLE_SIZE_MIN,
     type DioramaTuning,
 } from '../../../types';
-import { Group, Row, Toggle, type SettingsGroupDef } from '../../modal/settings/kit';
+import { Group, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
 import { DioramaGeometrySettings } from './DioramaGeometrySettings';
 import { DioramaBackgroundParticleSettings } from './DioramaBackgroundParticleSettings';
@@ -69,7 +69,6 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps<Diorama
         soulActiveEnabled: dioramaTuning.soulActiveEnabled ?? DEFAULT_DIORAMA_TUNING.soulActiveEnabled,
         gradientEnabled: dioramaTuning.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled,
         gradientIntensity: Math.min(1.5, Math.max(0.1, dioramaTuning.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity)),
-        keywordColoringEnabled: dioramaTuning.keywordColoringEnabled ?? DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
     };
 
     const handleDioramaTuningChange = (patch: Partial<DioramaTuning>) => {
@@ -150,17 +149,7 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps<Diorama
                 onSliderPointerDown={onSliderPointerDown}
                 onSliderCommit={onSliderCommit}
             />
-
-            {/* 关键字着色: a plain on/off - the colours themselves are the theme's 关键词 list, not a
-                strength. Independent of the follow-sing effects above: it sets the colour a unit RESTS
-                at, and they dye away from it and settle back onto it. */}
-            <Row label={t('options.dioramaKeywordColoring')}>
-                <Toggle
-                    checked={resolvedTuning.keywordColoringEnabled}
-                    onChange={(next) => handleDioramaTuningChange({ keywordColoringEnabled: next })}
-                />
-            </Row>
-
+            {/* 关键词着色不再单列：它是全局开关（设置 → 外观），样式这边读了同一个值。 */}
             <DioramaGeometrySettings
                 t={t}
                 value={resolvedTuning.geometryVisibility}

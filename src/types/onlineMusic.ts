@@ -942,6 +942,17 @@ export interface OnlineRawRequestProvider {
     request(endpoint: string, params: Record<string, JsonValue>, signal: AbortSignal): Promise<unknown>;
 }
 
+/**
+ * 原生网关的凭据同步（见 OnlineMusicProvider.nativeGateway）。
+ *
+ * 原生兜底在 WebView 冻结之后自己切歌、自己拼取流地址，需要平台地址与登录态；
+ * 这些东西怎么读只有平台自己的 transport 清楚，所以由 provider 实现这一个方法。
+ */
+export interface OnlineNativeGatewayProvider {
+    /** 把当前会话里的地址与凭据推给原生网关。没登录时推空的（原生那边据此不放行）。 */
+    syncCredentials(): void;
+}
+
 export interface OnlineMusicProvider {
     id: OnlineProviderId;
     displayName: string;
@@ -978,6 +989,14 @@ export interface OnlineMusicProvider {
     mutations?: OnlineMutationProvider;
     /** 平台后端的原始接口（OnlineRawRequestProvider）；没有它的平台不能直通。 */
     raw?: OnlineRawRequestProvider;
+    /**
+     * 原生兜底要用的凭据：交给原生网关（跑在 WebView 之外的那一份）。
+     *
+     * WebView 被冻结之后，切歌与取流由原生自己做，它得知道「这个平台的地址与登录态」。
+     * 凭据怎么读只有各平台自己的 transport 清楚，所以由 provider 实现、omni 统一调用
+     * （见 omni.syncNativeGatewayCredentials）。没有原生兜底的平台不实现。
+     */
+    nativeGateway?: OnlineNativeGatewayProvider;
 }
 
 // Public canonical contract consumed through the omni facade. Provider-prefixed

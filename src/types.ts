@@ -806,8 +806,6 @@ export interface LumiereTuning {
    * 光场、烟雾、星空、线稿、浮尘、背景歌词、主题图标、画框与片尾卡的光都不画。字的明暗仍按光束算.
    */
   textOnly: boolean;
-  /** 关键字着色（主题 wordColors）. */
-  keywordColors: boolean;
   /** 主题图标（主题 lyricsIcons 画成线稿）. */
   themeIcons: boolean;
   /** 主题色占比, 0..1：0 = 香槟金光；越高光色越接近强调色、点亮 / 未唱的字越接近主色 / 次色. */
@@ -836,7 +834,6 @@ export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
   seamlessTransitions: true,
   overlayFrame: true,
   textOnly: false,
-  keywordColors: true,
   themeIcons: true,
   themeColorMix: 0.3,
   renderQuality: 'full',
@@ -932,10 +929,6 @@ export interface DioramaTuning {
   /** 渐变跟唱: the line's fill progressively deepens with the sung progress. Independent toggle + strength. */
   gradientEnabled: boolean;
   gradientIntensity: number;
-  /** 关键字着色: the theme's `wordColors` keywords (written by the AI theme from the song's lyrics) become
-   *  the follow-sing TARGET colour of the units they cover - hidden until the singing reaches them, never
-   *  a resting colour. Same source and matcher as every other visualizer. */
-  keywordColoringEnabled: boolean;
 }
 
 export const DEFAULT_DIORAMA_TUNING: DioramaTuning = {
@@ -957,7 +950,6 @@ export const DEFAULT_DIORAMA_TUNING: DioramaTuning = {
   soulActiveEnabled: false,
   gradientEnabled: false,
   gradientIntensity: 1,
-  keywordColoringEnabled: true,
 };
 
 export type MonetBackgroundSource = 'cover-derived' | 'uploaded-global';
@@ -1047,7 +1039,6 @@ export interface SoraBackgroundTuning {
 }
 
 export interface MonetTuning {
-  keywordColoringEnabled: boolean;
   showDescription: boolean;
   fontScale: number;
   portraitSource: MonetPortraitSource;
@@ -1120,7 +1111,6 @@ export const DEFAULT_SORA_BACKGROUND_TUNING: SoraBackgroundTuning = {
 };
 
 export const DEFAULT_MONET_TUNING: MonetTuning = {
-  keywordColoringEnabled: true,
   showDescription: true,
   fontScale: 1.2,
   portraitSource: 'cover',

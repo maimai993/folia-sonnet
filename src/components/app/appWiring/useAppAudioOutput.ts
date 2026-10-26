@@ -82,6 +82,8 @@ export const useAppAudioOutput = (model: Input) => {
     useEffect(() => {
         nativeTakesRef.current = nativeTakes;
     }, [nativeTakes]);
+    /** 原生解析失败过的歌（会话级黑名单）：这些歌不再分流，直接走 Web 全流程。 */
+    const nativeFailedKeysRef = useRef<Set<string>>(new Set());
 
     const syncOutputGain = useCallback((targetVolume: number, smoothing = 0.015) => {
         const clampedVolume = clampMediaVolume(targetVolume);
@@ -174,7 +176,7 @@ export const useAppAudioOutput = (model: Input) => {
         ...model,
         coverUrl, effectiveLoopMode, effectiveLyricTimelineOffsetMs, getCoverUrl, getTargetPlaybackVolume,
         handleAudioOutputDeviceChange, handleLyricTimelineOffsetChange, handlePreviewVolume, nativeActive,
-        nativeTakes, nativeTakesRef, persistLastPlaybackCache, recoverOnlinePlaybackSource, setLyrics,
+        nativeTakes, nativeTakesRef, nativeFailedKeysRef, persistLastPlaybackCache, recoverOnlinePlaybackSource, setLyrics,
         setLyricsStable, shouldRefreshCurrentOnlineAudioSource, syncOutputGain
     };
 };

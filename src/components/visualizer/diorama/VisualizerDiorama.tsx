@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { DEFAULT_DIORAMA_TUNING, type Line } from '../../../types';
 import { isInterludeLine } from '../../../utils/lyrics/parserCore';
 import { useVisualizerRuntime } from '../runtime';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
@@ -170,6 +171,8 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
         dioramaTuning,
     } = props;
     const { t } = useTranslation();
+    // 关键词着色是全局开关（useVisualizerSettingsStore），不再看镜台自己的 tuning。
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
     // A style switch waits for the first draw of the scene (FirstFrame).
     const firstFrameDrawn = useFirstFrameDrawn();
 
@@ -507,8 +510,7 @@ const VisualizerDiorama: React.FC<VisualizerDioramaProps> = (props) => {
                             && (dioramaTuning?.soulActiveEnabled ?? DEFAULT_DIORAMA_TUNING.soulActiveEnabled)}
                         gradientIntensity={(dioramaTuning?.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled)
                             ? (dioramaTuning?.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity) : 0}
-                        keywordColoringEnabled={dioramaTuning?.keywordColoringEnabled
-                            ?? DEFAULT_DIORAMA_TUNING.keywordColoringEnabled}
+                        keywordColoringEnabled={keywordColoringEnabled}
                     />
                 </Canvas>
             </div>

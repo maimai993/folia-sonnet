@@ -9313,6 +9313,15 @@ ${lines.join("\n")}
       const liked = String(p.liked != null ? p.liked : "true") !== "false";
       return api().likeSong(String(p.id || ""), liked);
     },
+    // fork 的渲染层（qishuiMutations.likeSong）用的是 like_song 这个名字 ——
+    // 与桌面桥（qishuiApiBridge.cjs）一致。车机协议里同一件事叫 track.like，
+    // 缺这个别名时 App 里那颗心点下去只得到 unsupported（「红心点击没反应」）。
+    // liked 接受布尔与字符串两种（桌面桥传布尔，渲染层也传布尔）。
+    "like_song": async (params) => {
+      const p = params || {};
+      const liked = !(p.liked === false || String(p.liked) === "false");
+      return api().likeSong(String(p.id || ""), liked);
+    },
     "playlist.collect": () => {
       throw Object.assign(new Error("汽水车机协议不支持收藏歌单"), { code: "unsupported" });
     },

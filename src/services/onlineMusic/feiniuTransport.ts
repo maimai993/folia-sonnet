@@ -146,9 +146,14 @@ export const getFeiniuServerUrl = (): string => (
 /** 登录成功（或用户改地址）后记下来。登出不清：下次登录少填一项。 */
 export const setFeiniuServerUrl = (value: string): void => {
     const normalized = normalizeFeiniuServerUrl(value);
-    if (!normalized || normalized === getFeiniuServerUrl()) return;
-    clearFeiniuSession();
-    writeProviderSessionValue('feiniu', 'server', normalized);
+    if (!normalized) return;
+    if (normalized !== getFeiniuServerUrl()) {
+        // 换了地址：旧地址下的登录态用不上了，先清掉再存新地址。
+        clearFeiniuSession();
+        writeProviderSessionValue('feiniu', 'server', normalized);
+    }
+    // 原生兜底切歌要自己拼取流地址与 Cookie，地址（以及随之清掉的会话）都要推过去。
+    syncFeiniuGatewayCredentials();
     getFeiniuResourceSession();
 };
 
@@ -183,6 +188,7 @@ export const isFeiniuRelayMode = (): boolean => readProviderSessionValue('feiniu
 
 export const setFeiniuRelayMode = (relay: boolean): void => {
     writeProviderSessionValue('feiniu', 'relay', relay ? '1' : '0');
+    syncFeiniuGatewayCredentials();
     syncFeiniuCookieJarForRelay(relay);
     getFeiniuResourceSession();
 };
@@ -191,6 +197,25 @@ export const setFeiniuRelayMode = (relay: boolean): void => {
 export const feiniuAuthCookie = (): string => (
     isFeiniuRelayMode() ? `music-token=${getFeiniuToken()}; mode=relay` : `music-token=${getFeiniuToken()}`
 );
+
+/**
+ * 把飞牛的会话三件套（地址 / token / 中继）推给原生网关。
+ *
+ * 原生兜底切歌（WebView 冻结时的播放延续）要自己拼取流地址、给 ExoPlayer 带会话
+ * Cookie —— 飞牛的凭据全在 Web 层的会话存储里，不推过去原生那边就两手空空。
+ * 没装插件（网页 / 桌面端、worker、单测）时是空操作。token 为空＝登出，原生清掉。
+ */
+export const syncFeiniuGatewayCredentials = (): void => {
+    if (typeof window === 'undefined') return;
+    const plugin = (window as any).Capacitor?.Plugins?.FoliaNative;
+    if (!plugin?.setGatewayCredentials) return;
+    void plugin.setGatewayCredentials({
+        provider: 'feiniu',
+        serverUrl: getFeiniuServerUrl(),
+        token: getFeiniuToken(),
+        relayMode: isFeiniuRelayMode(),
+    }).catch(() => undefined);
+};
 
 /** 封面与音频流的鉴权头；没登录时给 null（那时本来也取不到资源）。 */
 export const feiniuResourceHeaders = (): Record<string, string> | null => {
@@ -566,6 +591,7 @@ export const feiniuPasswordLogin = async (username: string, password: string, se
     // 这里补上标志，之后 API 与封面 / 音频流才会带上 `mode=relay`（见 feiniuAuthCookie）。
     setFeiniuRelayMode(isFeiniuRelayAddress(getFeiniuServerUrl()));
     syncFeiniuCookieJar();
+    syncFeiniuGatewayCredentials();
     return data;
 };
 
@@ -579,6 +605,8 @@ export const clearFeiniuSession = (): void => {
     removeProviderSessionValue('feiniu', 'token');
     removeProviderSessionValue('feiniu', 'relay');
     removeProviderSessionValue('feiniu', 'user');
+    // 原生网关那边留着旧 token 就会继续按已登出的人取流，所以两边一起清。
+    syncFeiniuGatewayCredentials();
     getFeiniuResourceSession();
 };
 

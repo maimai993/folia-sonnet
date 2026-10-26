@@ -73,6 +73,8 @@ export const resolveLumiereBloomLevelDrop = (renderResolution: number, graphicsR
 export interface LumiereSceneTuningContext {
     /** false 时不画歌词：背景歌词碎片也关掉（它们是歌词的字），光照照常。 */
     showText: boolean;
+    /** 全局关键词着色开关（useVisualizerSettingsStore）——原来是用户 tuning 里的 keywordColors。 */
+    keywordColoringEnabled: boolean;
 }
 
 /** 用户 tuning → 场景 tuning。画质档在这里折进倍频与浮尘；「仅显示歌词文字」即场景的 textOnly。 */
@@ -100,7 +102,7 @@ export const toLumiereSceneTuning = (
         hideTrails: tuning.hideTrails,
         overlayFrame: tuning.overlayFrame,
         textOnly: tuning.textOnly,
-        keywordColors: tuning.keywordColors,
+        keywordColors: context.keywordColoringEnabled,
         themeIcons: tuning.themeIcons,
         themeColorMix: tuning.themeColorMix,
     };

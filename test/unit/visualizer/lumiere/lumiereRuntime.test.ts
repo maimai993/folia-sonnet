@@ -24,9 +24,10 @@ import { syntheticSong } from './lumiereFixtures';
 
 describe('绘光 tuning → 场景 tuning', () => {
     it('复制共享字段，仅显示歌词文字、关键词着色与主题图标直通', () => {
-        const scene = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, keywordColors: false, themeIcons: false }, { showText: true });
+        // 关键词着色现在是全局开关，从 context 进来，不再在用户 tuning 里。
+        const scene = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, themeIcons: false }, { showText: true, keywordColoringEnabled: false });
         expect(scene.textOnly).toBe(false);
-        expect(toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, textOnly: true }, { showText: true }).textOnly).toBe(true);
+        expect(toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, textOnly: true }, { showText: true, keywordColoringEnabled: true }).textOnly).toBe(true);
         expect(scene.keywordColors).toBe(false);
         expect(scene.themeIcons).toBe(false);
         expect(scene.lightIntensity).toBe(DEFAULT_LUMIERE_TUNING.lightIntensity);
@@ -34,12 +35,12 @@ describe('绘光 tuning → 场景 tuning', () => {
     });
 
     it('不显示歌词时关掉背景歌词碎片', () => {
-        expect(toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: false }).echo).toBe(0);
+        expect(toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: false, keywordColoringEnabled: true }).echo).toBe(0);
     });
 
     it('隐藏径迹实时传给场景，不重建也不影响飞行或轨迹过渡', () => {
-        const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true });
-        const hidden = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, hideTrails: true }, { showText: true });
+        const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true, keywordColoringEnabled: true });
+        const hidden = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, hideTrails: true }, { showText: true, keywordColoringEnabled: true });
         expect(hidden).toEqual({ ...base, hideTrails: true });
         expect(LUMIERE_LIVE_SCENE_KEYS).toContain('hideTrails');
         expect(requiresLumiereSceneRebuild(base, hidden)).toBe(false);
@@ -48,17 +49,17 @@ describe('绘光 tuning → 场景 tuning', () => {
 
     it('画质档封顶倍频、低画质减浮尘', () => {
         const tuning = { ...DEFAULT_LUMIERE_TUNING, fogOctaves: 6, moteAmount: 1 };
-        expect(toLumiereSceneTuning({ ...tuning, renderQuality: 'full' }, { showText: true }).fogOctaves).toBe(6);
-        expect(toLumiereSceneTuning({ ...tuning, renderQuality: 'balanced' }, { showText: true }).fogOctaves).toBe(4);
-        const low = toLumiereSceneTuning({ ...tuning, renderQuality: 'low' }, { showText: true });
+        expect(toLumiereSceneTuning({ ...tuning, renderQuality: 'full' }, { showText: true, keywordColoringEnabled: true }).fogOctaves).toBe(6);
+        expect(toLumiereSceneTuning({ ...tuning, renderQuality: 'balanced' }, { showText: true, keywordColoringEnabled: true }).fogOctaves).toBe(4);
+        const low = toLumiereSceneTuning({ ...tuning, renderQuality: 'low' }, { showText: true, keywordColoringEnabled: true });
         expect(low.fogOctaves).toBe(3);
         expect(low.moteAmount).toBeCloseTo(LUMIERE_QUALITY_PROFILES.low.moteScale);
         // 用户设得比上限低时按用户的。
-        expect(toLumiereSceneTuning({ ...tuning, fogOctaves: 2, renderQuality: 'low' }, { showText: true }).fogOctaves).toBe(2);
+        expect(toLumiereSceneTuning({ ...tuning, fogOctaves: 2, renderQuality: 'low' }, { showText: true, keywordColoringEnabled: true }).fogOctaves).toBe(2);
     });
 
     it('每帧现读的字段不重建，烘焙进场景的字段与 bloom 跨 0 才重建', () => {
-        const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true });
+        const base = toLumiereSceneTuning(DEFAULT_LUMIERE_TUNING, { showText: true, keywordColoringEnabled: true });
         const live = { ...base, lightIntensity: 1.7, fogDensity: 0.3, audioResponse: 0, unlitOpacity: 0.5, fogOctaves: 3, bloom: 1.8, textBloom: 0.4, darkField: 0.1 };
         expect(requiresLumiereSceneRebuild(base, live)).toBe(false);
         expect(requiresLumiereSceneRebuild(base, { ...base, bloom: 0 })).toBe(true);

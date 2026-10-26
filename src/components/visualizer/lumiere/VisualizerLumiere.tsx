@@ -9,6 +9,7 @@ import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
 import { useVisualizerPixiHost } from '../pixi/pixiRuntimeHost';
 import { useVisualizerRuntime } from '../runtime';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useVisualizerSongCommit } from '../songHandover';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import VisualizerShell from '../VisualizerShell';
@@ -50,12 +51,14 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
         lumiereTuning = DEFAULT_LUMIERE_TUNING,
     } = props;
     const { t } = useTranslation();
+    // 关键词着色是全局开关（useVisualizerSettingsStore），不再看绘光自己的 tuning。
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
     const hostRef = useRef<HTMLDivElement>(null);
     const [runtimeFailed, setRuntimeFailed] = useState(false);
 
     // 运行时创建期间这些输入可能已经变了；create 完成后按最新值补一次。
-    const latestRef = useRef({ tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands });
-    latestRef.current = { tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands };
+    const latestRef = useRef({ tuning: lumiereTuning, paused, showText, staticMode, keywordColoringEnabled, audioPower, audioBands });
+    latestRef.current = { tuning: lumiereTuning, paused, showText, staticMode, keywordColoringEnabled, audioPower, audioBands };
     const metadataRef = useRef<LumiereSongMetadata>({ title: songTitle, artist: songArtist, album: songAlbum });
     metadataRef.current = { title: songTitle, artist: songArtist, album: songAlbum };
 
@@ -111,6 +114,7 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
                 audioBands: latest.audioBands,
                 staticMode: latest.staticMode,
                 showText: latest.showText,
+                keywordColoringEnabled: latest.keywordColoringEnabled,
                 paused: latest.paused,
                 metadata: metadataRef.current,
                 signal,
@@ -119,6 +123,7 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
             runtime.setSongMetadata(metadataRef.current);
             runtime.setTuning(current.tuning);
             runtime.setShowText(current.showText);
+            runtime.setKeywordColoringEnabled(current.keywordColoringEnabled);
             runtime.setStaticMode(current.staticMode);
             runtime.setAudioSources(current.audioPower, current.audioBands);
             runtime.setPaused(current.paused);
@@ -139,6 +144,10 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
     useEffect(() => {
         runtimeRef.current?.setShowText(showText);
     }, [showText, runtimeRef]);
+
+    useEffect(() => {
+        runtimeRef.current?.setKeywordColoringEnabled(keywordColoringEnabled);
+    }, [keywordColoringEnabled, runtimeRef]);
 
     useEffect(() => {
         runtimeRef.current?.setStaticMode(staticMode);

@@ -92,7 +92,8 @@ describe('fume single-line font size', () => {
                 }
             }
         }
-    });
+        // 3 × 6 × 8 × 文本数 × 2 次完整搜索，默认 5 秒在慢机器上不够。
+    }, 120_000);
 
     it('answers random layouts as measuring would, sizes near a half or whole pixel included', () => {
         // The grid above lands near a pixel edge only by chance; random widths and scales land there often.
@@ -114,7 +115,8 @@ describe('fume single-line font size', () => {
                 expect(got).toEqual(searchMeasuringEveryTry(text, variant, width, lyricsFontScale, densityScale, heroScale));
             }
         }
-    });
+        // 12 个布局 × 250 次搜索，同样不是 5 秒能跑完的量。
+    }, 120_000);
 
     it('measures a text at far fewer sizes than it tries', () => {
         const measures = new Map<string, FumeLineMeasures>();

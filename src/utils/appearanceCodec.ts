@@ -174,7 +174,6 @@ const compressDiorama = (t: any): any => ({
     sae: t.soulActiveEnabled,
     gre: t.gradientEnabled,
     gri: t.gradientIntensity,
-    kce: t.keywordColoringEnabled,
 });
 const decompressDiorama = (o: any): any => ({
     cameraSpeed: o.cs !== undefined ? o.cs : DEFAULT_DIORAMA_TUNING.cameraSpeed,
@@ -202,7 +201,6 @@ const decompressDiorama = (o: any): any => ({
     soulActiveEnabled: o.sae !== undefined ? o.sae : DEFAULT_DIORAMA_TUNING.soulActiveEnabled,
     gradientEnabled: o.gre !== undefined ? o.gre : DEFAULT_DIORAMA_TUNING.gradientEnabled,
     gradientIntensity: o.gri !== undefined ? o.gri : DEFAULT_DIORAMA_TUNING.gradientIntensity,
-    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
 });
 
 const compressMonetBackground = (t: any): any => ({
@@ -334,7 +332,6 @@ const decompressSoraBackground = (o: any): any => ({
 });
 
 const compressMonet = (t: any): any => ({
-    kce: t.keywordColoringEnabled,
     msd: t.showDescription,
     mfs: t.fontScale,
     mps: t.portraitSource,
@@ -343,7 +340,6 @@ const compressMonet = (t: any): any => ({
     mpdh: t.showPortraitDragHanger,
 });
 const decompressMonet = (o: any): any => ({
-    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: o.msd !== undefined ? o.msd : DEFAULT_MONET_TUNING.showDescription,
     fontScale: o.mfs !== undefined ? o.mfs : DEFAULT_MONET_TUNING.fontScale,
     portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,
@@ -521,7 +517,6 @@ const LUMIERE_SHORT_KEYS = {
     seamlessTransitions: 'st',
     overlayFrame: 'of',
     textOnly: 'txo',
-    keywordColors: 'kc',
     themeIcons: 'thi',
     themeColorMix: 'tcm',
     renderQuality: 'rq',

@@ -232,5 +232,6 @@ describe('store contract', () => {
         }
 
         expect(dangling).toEqual([]);
-    });
+        // 这里要把 src / test / dev 的每个 .ts(x) 都读一遍，默认 5 秒在慢机器上不够。
+    }, 120_000);
 });

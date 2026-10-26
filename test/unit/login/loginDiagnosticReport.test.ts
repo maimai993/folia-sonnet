@@ -6,6 +6,7 @@ import { loginCaseOf, loginFailureFacts } from '@/services/onlineMusic/login/log
 import { omni } from '@/services/onlineMusic/omni';
 import { qishuiProvider } from '@/services/onlineMusic/qishuiProvider';
 import { spotifyProvider } from '@/services/onlineMusic/spotify/spotifyProvider';
+import { ytmProvider } from '@/services/onlineMusic/ytm/ytmProvider';
 import { listOnlineMusicProviders } from '@/services/onlineMusic/providerRegistry';
 import type { LoginDiagnosticLine, LoginSelfCheckResult } from '@/types/onlineMusic';
 
@@ -160,6 +161,8 @@ describe('QR login diagnostic report', () => {
                 qishui: () => qishuiProvider.auth!.getLoginDiagnostics!(),
                 // Spotify 同样只有 provider 自己那几行（安卓上它没有主进程的请求记录）。
                 spotify: () => spotifyProvider.auth!.getLoginDiagnostics!(),
+                // YTM 也一样：账号没读出来时，它说的是自己那边卡在哪。
+                ytm: () => ytmProvider.auth!.getLoginDiagnostics!(),
             };
             const declaring = listOnlineMusicProviders().filter(provider => provider.auth?.getLoginDiagnostics).map(provider => provider.id);
             expect(Object.keys(builders).sort()).toEqual(declaring.sort());

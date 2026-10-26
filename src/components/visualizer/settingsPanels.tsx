@@ -338,7 +338,6 @@ export const TiltSettingsPanel: React.FC<VisualizerSettingsPanelProps<TiltTuning
     );
 };
 
-
 export { CappellaSettingsPanel } from './cappella/CappellaSettingsPanel';
 export { CladdaghSettingsPanel } from './claddagh/CladdaghSettingsPanel';
 export { DioramaSettingsPanel } from './diorama/DioramaSettingsPanel';

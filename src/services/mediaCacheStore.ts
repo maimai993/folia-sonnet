@@ -24,6 +24,12 @@ type FoliaNativeBridge = {
     localAudioServerPort?: () => Promise<{ port?: number }>;
     mediaCacheStats?: () => Promise<{ size?: number; count?: number }>;
     clearMediaCache?: () => Promise<void>;
+    cacheAudioFromUrl?: (options: {
+        cacheKey: string;
+        url: string;
+        limitBytes?: number;
+        minDurationMs?: number;
+    }) => Promise<{ stored?: number }>;
 };
 
 let cachedPort = 0;
@@ -212,5 +218,36 @@ export const clearNativeMediaCache = async (): Promise<void> => {
         await plugin.clearMediaCache();
     } catch {
         // 清不掉就留着，下次「清除缓存」还会再清一遍。
+    }
+};
+
+/**
+ * 原生侧整首歌落盘：让原生自己从 URL 下载，不经 Web 的手。
+ *
+ * 以前写缓存的是 Web（fetch 字节再 PUT 回回环服务），应用退后台 / WebView 冻结时
+ * 这条路经常没机会跑完。挪到原生之后谁叫一声都能存；文件名编码两边一致，
+ * 存出来的就是同一批文件，读回路径不用改。
+ *
+ * `minDurationMs` 是防试听片段的：原生会用 MediaExtractor 探下载文件的时长，
+ * 不足歌长一半的不落盘（stored 回 0）。
+ */
+export const cacheNativeMediaFromUrl = async (
+    cacheKey: string,
+    url: string,
+    limitBytes: number,
+    minDurationMs?: number,
+): Promise<boolean> => {
+    const plugin = getNativePlugin();
+    if (!plugin || typeof plugin.cacheAudioFromUrl !== 'function') return false;
+    try {
+        const result = await plugin.cacheAudioFromUrl({
+            cacheKey,
+            url,
+            limitBytes: Math.max(0, Math.round(limitBytes)),
+            ...(minDurationMs && minDurationMs > 0 ? { minDurationMs: Math.round(minDurationMs) } : {}),
+        });
+        return Number(result?.stored) > 0;
+    } catch {
+        return false;
     }
 };

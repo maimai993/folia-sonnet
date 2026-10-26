@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { type Theme, type SubtitleContentMode, type VisualizerBackgroundMode, type VisualizerMode } from '../../../types';
 import { Button, Group, PictureGrid, Reveal, Row, Segmented, Select, Tabs, Value, type PictureState } from '../../modal/settings/kit';
 import type { SettingsGroupDef } from '../../modal/settings/kit';
@@ -23,6 +23,12 @@ import {
 } from '../backgrounds/registry';
 import BackgroundPicture from '../preview/BackgroundPicture';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
+import {
+    getDirectorStateVersion,
+    readDirectorSettings,
+    subscribeDirectorState,
+    updateDirectorSettings,
+} from '../../../services/lyricDirector/state';
 // 上游 v0.7.22 的随机池（参与随机的样式）。fork 这边只留池子本身，智能动感模式那两张卡片已随功能砍掉。
 import RandomPoolGroup from '../random/RandomPoolGroup';
 import { useRandomPool } from '../random/useRandomPool';
@@ -225,6 +231,10 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
     const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const randomVisualizerModePerSong = useVisualizerSettingsStore(state => state.randomVisualizerModePerSong);
     const setRandomVisualizerModePerSong = useVisualizerSettingsStore(state => state.handleToggleRandomVisualizerModePerSong);
+    // 「允许 AI 自动切换」与 AI 设置卡里那颗是同一份值（lyricDirector 的 autoOnSongChange）：
+    // 这里只是把它也摆到动画参数这一页，两处开关谁拨都一样。
+    useSyncExternalStore(subscribeDirectorState, getDirectorStateVersion);
+    const directorSettings = readDirectorSettings();
     const resolvedBackgroundMode = backgroundConfig?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE;
     const backgroundEntry = getVisualizerBackgroundRegistryEntry(resolvedBackgroundMode);
     const backgroundModeOptions = useMemo(() => (
@@ -308,6 +318,22 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     checked={randomVisualizerModePerSong}
                                     onChange={setRandomVisualizerModePerSong}
                                 />
+                                <ToggleRow
+                                    label={t('aiDirector.allowAutoMode')}
+                                    note={t('aiDirector.allowAutoModeDesc')}
+                                    checked={directorSettings.autoOnSongChange}
+                                    onChange={(next) => updateDirectorSettings({ autoOnSongChange: next })}
+                                />
+                                <Row label={t('options.directorPriority')} note={t('options.directorPriorityDesc')}>
+                                    <Segmented<'ai' | 'random'>
+                                        value={directorSettings.autoDecisionPriority}
+                                        options={[
+                                            { value: 'ai', label: t('options.directorPriorityAi') },
+                                            { value: 'random', label: t('options.directorPriorityRandom') },
+                                        ]}
+                                        onChange={(next) => updateDirectorSettings({ autoDecisionPriority: next })}
+                                    />
+                                </Row>
                             </Group>
                             {/* 随机开着时，池子列在样式选项之前：它决定「每首换一种」能换成哪些。 */}
                             {randomEnabled && <RandomPoolGroup />}

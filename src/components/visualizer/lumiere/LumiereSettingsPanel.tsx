@@ -59,7 +59,6 @@ const TEXT_CONTROLS_TAIL: ControlSpec[] = [
 
 const THEME_CONTROLS: ControlSpec[] = [
     slider('themeColorMix', 'options.lumiereThemeColorMix', 0, 1, { step: 0.01, noteKey: 'options.lumiereThemeColorMixHint' }),
-    toggle('keywordColors', 'options.lumiereKeywordColors'),
     toggle('themeIcons', 'options.lumiereThemeIcons'),
 ];
 

@@ -223,6 +223,9 @@ function mount() {
         pendingResumeTimeRef: refs.pendingResumeTimeRef,
         currentOnlineAudioUrlFetchedAtRef: refs.currentOnlineAudioUrlFetchedAtRef,
         lastAudioRecoverySourceRef: refs.lastAudioRecoverySourceRef,
+        nativePlaybackRef: { current: false },
+        nativeLikeStateOf: () => undefined,
+        nativeFailedKeysRef: { current: new Set<string>() },
     };
     /** One render of the hook: its closures read the stores as they are now. */
     const render = () => {

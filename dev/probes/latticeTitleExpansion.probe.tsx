@@ -23,7 +23,7 @@ function Probe() {
     return <div style={{ height: '100vh' }}>
         <Lattice queue={songs} currentSong={null} playerState={PlayerState.PAUSED} currentTime={time} lyricCurrentTime={time}
             playbackDuration={180} canTogglePlayback={false} isDaylight={false} lyrics={null}
-            lyricSource={source} lyricKeywordColoringEnabled={false}
+            lyricSource={source}
             controls={{ loopMode: 'off', playback: { prev: noop, next: noop, toggleLoop: noop, shuffleQueue: noop,
                 toggleSongLike: noop, isSongLiked: false, isFmMode: false }, invokeCommandById: noop, canInvokeCommandById: () => false }}
             onBack={noop} onOpenPlayer={noop} onPlaySong={noop} onTogglePlayback={noop} onSeek={noop} />

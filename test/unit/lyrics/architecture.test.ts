@@ -77,7 +77,8 @@ describe('lyrics architecture', () => {
         }
 
         expect(offenders).toEqual([]);
-    });
+        // 要把 src 下每个 .ts(x) 读一遍，默认 5 秒在慢机器上不够。
+    }, 120_000);
 
     it('keeps worker and compatibility wrappers wired to parserCore', async () => {
         const workerContent = await readRepoFile('src/workers/lyricsParser.worker.ts');

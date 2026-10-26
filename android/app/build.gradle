@@ -3,6 +3,9 @@ import groovy.json.JsonSlurper
 // 当前文件：Folia Android 应用版本、SDK 与可选发布签名配置。
 
 apply plugin: 'com.android.application'
+// Kotlin 混编（原生代码正从 Java 迁往 Kotlin）。jvmTarget 与本模块 Java 的默认
+// source/target（1.8）对齐，避免 javac/kotlinc 的 JVM-target 不一致报错。
+apply plugin: 'kotlin-android'
 
 def packageJson = new JsonSlurper().parseText(file('../../package.json').text)
 def keystorePropertiesFile = rootProject.file('keystore.properties')
@@ -75,6 +78,11 @@ android {
             }
         }
     }
+    /*
+     * Kotlin 的 jvmTarget 见文件末尾（`apply from: 'capacitor.build.gradle'` 之后那段）——
+     * 必须与 Java 的 targetCompatibility 一致，而那一份会被 capacitor 生成的
+     * compileOptions（21）覆盖，所以两边都放在 apply 之后统一钉成 17。
+     */
 }
 
 repositories {
@@ -110,6 +118,30 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+/*
+ * Java 与 Kotlin 必须编译到**同一个** jvmTarget。
+ *
+ * 本模块是 Kotlin 混编（原生代码已从 Java 迁到 Kotlin）。之前 Kotlin 写 1.8，而 AGP 在
+ * JDK 21 上默认把 compileReleaseJavaWithJavac 放在 21 —— Gradle 直接判
+ * 「Inconsistent JVM-target compatibility」并中止，出包脚本（build-release.sh 设了
+ * JAVA_HOME=jdk-21）连 assembleRelease 都进不去。
+ *
+ * ⚠️ 这段**必须留在 `apply from: 'capacitor.build.gradle'` 之后**：那个文件是
+ * `capacitor update` 生成的（不可手改），它把 compileOptions 设成 21，后应用的会覆盖
+ * 先设置的那份 —— 只改上面 android{} 里的 compileOptions 实测无效。
+ * 同理，改完这个文件之后跑 `npx cap sync` 会重新生成 capacitor.build.gradle，
+ * 但这段在 apply 之后，仍然赢。
+ */
+android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

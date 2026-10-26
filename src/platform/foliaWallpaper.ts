@@ -149,6 +149,8 @@ interface FoliaWallpaperPlugin {
      */
     resetFloatingLyrics(): Promise<void>;
     clear(): Promise<void>;
+    /** 心跳：只刷新「播放管线还活着」的时间戳，见 wallpaperHeartbeat。 */
+    heartbeat(): Promise<void>;
     isActive(): Promise<{ active: boolean }>;
     openPicker(): Promise<{ opened: boolean }>;
     /** 壁纸的可视化叠层要 SYSTEM_ALERT_WINDOW，没授权时它是静默不工作的。 */
@@ -209,6 +211,22 @@ export const setWallpaperAppearance = async (
 ): Promise<void> => {
     try {
         await FoliaWallpaper.setAppearance(options);
+    } catch {
+        // 同上。
+    }
+};
+
+/**
+ * 心跳：告诉原生「这条播放管线还活着」。
+ *
+ * 什么都不推、什么都不改，只刷新壁纸那边的心跳时间戳。停了（App 被划掉后台 /
+ * WebView 死透）之后，壁纸与两层叠层超时就只画背景，不再画没人听的歌词和进度条。
+ * 前台由这里的定时器发；退到后台 JS 定时器被挂起，由播放服务接管（见
+ * FoliaPlaybackService 的 heartbeatTick）—— 音频还在放，歌词就得继续走。
+ */
+export const wallpaperHeartbeat = async (): Promise<void> => {
+    try {
+        await FoliaWallpaper.heartbeat();
     } catch {
         // 同上。
     }

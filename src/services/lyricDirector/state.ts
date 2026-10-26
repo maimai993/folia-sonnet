@@ -25,6 +25,11 @@ const RECENT_LIMIT = 8;
 export interface LyricDirectorSettings {
     /** Decide for every track once its lyrics are ready. */
     autoOnSongChange: boolean;
+    /**
+     * 「随机动画」也开着时切歌听谁的。'ai'（默认）：AI 的答案覆盖随机那一票，
+     * AI 没给（自动关了、没算出来）时随机兜底；'random'：随机先定，AI 只算不应用。
+     */
+    autoDecisionPriority: 'ai' | 'random';
     /** Reuse a song's stored pick instead of asking the AI again. */
     rememberPerSong: boolean;
     /** Off means only the mode is switched; your own parameter values stay. */
@@ -63,6 +68,7 @@ export const DEFAULT_BLOCKED_DIRECTOR_MODES = ['lumiere', 'still'];
 
 export const DEFAULT_DIRECTOR_SETTINGS: LyricDirectorSettings = {
     autoOnSongChange: true,
+    autoDecisionPriority: 'ai',
     rememberPerSong: true,
     // The user asked for both switches in Settings → AI to be on by default:
     // the mode follows the song, and the parameters go with it.
@@ -116,6 +122,8 @@ const load = (): PersistedState => {
         if (savedSettings && typeof savedSettings === 'object') {
             const candidate = savedSettings as Record<string, unknown>;
             if (typeof candidate.autoOnSongChange === 'boolean') settings.autoOnSongChange = candidate.autoOnSongChange;
+            // 只认显式的 'random'，其余（含旧存档缺字段）都回默认的 'ai'。
+            settings.autoDecisionPriority = candidate.autoDecisionPriority === 'random' ? 'random' : 'ai';
             if (typeof candidate.rememberPerSong === 'boolean') settings.rememberPerSong = candidate.rememberPerSong;
             if (typeof candidate.applyParams === 'boolean') settings.applyParams = candidate.applyParams;
             if (typeof candidate.prefetchNext === 'boolean') settings.prefetchNext = candidate.prefetchNext;

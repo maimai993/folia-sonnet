@@ -8,6 +8,7 @@ import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
 import { Button } from '../../ui';
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
@@ -51,6 +52,8 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
         songHandoff = null,
     } = props;
     const { t } = useTranslation();
+    // 关键词着色是全局开关（useVisualizerSettingsStore），不再看莫奈自己的 tuning。
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
 
     // Through a blend the words stay on the song on screen until the audio crossover, then show the
     // incoming one (monetSongHandoff.ts). Held as state so the hand-off's every frame renders nothing.
@@ -329,7 +332,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     fontStack={lyricFontStack}
                                     translationFontStack={translationFontStack}
                                     subtitleTheme={subtitleTheme}
-                                    keywordColoringEnabled={monetTuning.keywordColoringEnabled}
+                                    keywordColoringEnabled={keywordColoringEnabled}
                                     emptyText=""
                                     subtitleContentMode={resolvedSubtitleContentMode}
                                     audioPower={audioPower}

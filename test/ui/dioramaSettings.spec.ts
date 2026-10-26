@@ -98,15 +98,4 @@ test('switches between clouds and corridor mode and keeps particle controls inte
     await expect(page.getByRole('slider', { name: 'Point Cloud Density' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Cloud Aura' })).toBeVisible();
 
-    // 关键字着色 is a plain on/off with no strength tier, so it has no expander of its own - the colours
-    // are the theme's keyword list, not a slider. Defaults on, and persists through the store.
-    const keywordSwitch = page.getByRole('switch', { name: 'Keyword Coloring' });
-    await expect(keywordSwitch).toBeVisible();
-    await expect(keywordSwitch).toHaveAttribute('aria-checked', 'true');
-    await keywordSwitch.click();
-    await expect(keywordSwitch).toHaveAttribute('aria-checked', 'false');
-    const storedAfterOff = await page.evaluate(() => JSON.parse(localStorage.getItem('diorama_tuning') ?? '{}'));
-    expect(storedAfterOff.keywordColoringEnabled).toBe(false);
-    await keywordSwitch.click();
-    await expect(keywordSwitch).toHaveAttribute('aria-checked', 'true');
 });

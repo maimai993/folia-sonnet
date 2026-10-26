@@ -16,6 +16,8 @@ import { SongResult, UnifiedSong, LocalSong } from '../../../types';
 import { MediaId } from '../../../types/onlineMusic';
 import { isLocalPlaybackSong } from '../../../utils/appPlaybackGuards';
 import { toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
+import { resolveSongLiked } from '../../../utils/resolveSongLiked';
+import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
 import { resetMediaDiagnostics } from '../../../utils/mediaDiagnostics';
 import { shouldShowNowPlayingToast } from '../overlays/now-playing-toast/nowPlayingToastVisibility';
 import { resolveNextUpTrack } from '../overlays/now-playing-toast/resolveNextUpTrack';
@@ -45,12 +47,14 @@ export const useAppPlaybackQueue = (model: Input) => {
         addNavidromeSongsToQueue, audioContextRef, audioRef, audioSrc, automixEnabled, automixRef, blobUrlRef,
         coverUrl, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, currentView, effectiveLoopMode,
         globalLyricTimelineOffsetMs, handleLocalQueueAdd, interruptStagePlaybackForMainTransition, isFmMode,
-        isNowPlayingStageActive, lastAudioRecoverySourceRef, loadLocalPlaylists, loadLocalSongs,
+        isNowPlayingStageActive, isLocalSongLiked, lastAudioRecoverySourceRef, likedSongIds, loadLocalPlaylists, loadLocalSongs,
         loadMoreSearchResults, localLibraryCatalog, localSongs, mainPlaybackSnapshotRef, nativeActive,
+        nativeFailedKeysRef, nativeTakesRef,
         navigateToCollection, navigateToPlaybackView, navigateToSearch, onPlayLocalSong, onPlayNavidromeSong,
         pendingResumeTimeRef, persistLastPlaybackCache, playQueue, playbackAutoSkipCountRef,
         restoreCachedThemeForSong, setCurrentSong, setDuration, setIsLyricsLoading, setIsPanelOpen, setLyrics,
-        setPanelTab, setPlayQueue, shouldAutoPlay, stageTrackPillMode, stageTrackPillOnHome, statusMsg, submitSearch,
+        setPanelTab, setPlayQueue, shouldAutoPlay, stageTrackPillMode, stageTrackPillOnHome, starredNavidromeSongIds,
+        statusMsg, submitSearch,
         t, transitionSettings, user, volumePreviewFrameRef
     } = model;
     // --- Effects ---
@@ -115,6 +119,15 @@ export const useAppPlaybackQueue = (model: Input) => {
         lastAudioRecoverySourceRef,
         getDisplaySong,
         endHeldTransition,
+        // 两轨合一：点歌 / 切歌的分流。nativeTakes 是「这一首交给原生」的即时判定，
+        // 但分流发生在回调里（用户按下时才跑），所以传 ref —— 跟 transport 回调同一套纪律。
+        nativePlaybackRef: nativeTakesRef,
+        // 队列里每首歌的红心状态：同步读账号缓存，随队列一起落进原生镜像。
+        nativeLikeStateOf: (song) => ({
+            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+            canLike: !resolveLikeAvailability(song, false, false).disabled,
+        }),
+        nativeFailedKeysRef,
     });
     const handleSearchResultArtistOpen = useCallback(async (
         track: UnifiedSong,

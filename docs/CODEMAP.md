@@ -69,6 +69,7 @@
 | 32+ | `src/stores/useCollectionNavigationStore.ts` |
 | 32+ | `src/stores/useOnlineProviderAccountStore.ts` |
 | 32+ | `src/stores/usePlayerChromeSettingsStore.ts` |
+| 32+ | `src/stores/useSettingsModalStore.ts` |
 | 32+ | `src/stores/useThemeSettingsStore.ts` |
 | 32+ | `src/stores/useVisualizerSettingsStore.ts` |
 | 32+ | `src/types/localLibrary.ts` |
@@ -316,7 +317,9 @@
 规则是人定的（见 `codemap.mjs` 的 `BOUNDARY_RULES`），拿真实的值导入图去比对。
 `import type` 不算——它在运行时不存在。
 
-当前没有违规。
+下面这些边的依赖方向本身就是错的：
+
+- `src/hooks/useCapacitorPlaybackBridge.ts` → `src/services/onlineMusic/feiniuTransport.ts`  —— 普通调用应经过 omni，不应直连 provider adapter/transport
 
 ### 目录归属存疑
 

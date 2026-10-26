@@ -29,6 +29,17 @@ export const CACHE_SIZE_KEY = 'folia_cache_size';
 
 export const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
 
+/**
+ * 缓存开关的第二代 key。
+ *
+ * 为什么换名而不是直接改默认值：老版本的包还认着旧 key，同一把 key 上翻转默认值，
+ * 新旧两版对「用户到底选没选过」的判断会互相打架 —— 旧版升级上来读到的语义是错的，
+ * 回退旧版时更可能直接起不来。另起 `folia_enable_media_cache_v2`：
+ * 没写过的安装（绝大多数）默认**开**，写过的按用户自己的选择来。
+ * 旧 key 不再读：谁升级到这一版，缓存就是开的，直到他亲手关掉。
+ */
+export const ENABLE_MEDIA_CACHE_V2_KEY = 'folia_enable_media_cache_v2';
+
 /** What the toggle used to write to, before it was corrected to the prefixed key above. */
 export const LEGACY_ENABLE_MEDIA_CACHE_KEY = 'enable_media_cache';
 
@@ -106,30 +117,18 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
 );
 
 /**
- * Reads the media cache toggle, honouring the key its own setter used to write to.
+ * Reads the media cache toggle from the v2 key: default **on**.
  *
- * The setter wrote a bare 'enable_media_cache' while startup read the folia-prefixed key, so the
- * setting silently reverted to off on every restart. Anyone who switched it on has their real
- * preference sitting under the legacy key, and simply correcting the setter would throw that
- * away once more - so read it as a fallback and promote it to the canonical key.
+ * 旧 key（folia_enable_media_cache / enable_media_cache）不再参与：那是上一代
+ * 默认关的开关，新 key 一换，这一版的语义是「默认缓存，除非用户亲手关」。
  */
 export const readStoredEnableMediaCache = (): boolean => {
     if (typeof window === 'undefined') {
-        return false;
+        return true;
     }
 
-    const canonical = localStorage.getItem(ENABLE_MEDIA_CACHE_KEY);
-    if (canonical !== null) {
-        return canonical === 'true';
-    }
-
-    const legacy = localStorage.getItem(LEGACY_ENABLE_MEDIA_CACHE_KEY);
-    if (legacy === null) {
-        return false;
-    }
-
-    localStorage.setItem(ENABLE_MEDIA_CACHE_KEY, legacy);
-    return legacy === 'true';
+    const stored = localStorage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
+    return stored === null ? true : stored === 'true';
 };
 
 export const readStoredMediaCacheLimitGb = (): number => {
@@ -397,7 +396,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         set({ audioQuality: quality });
     },
     handleToggleMediaCache: (enable) => {
-        setStoredBoolean(ENABLE_MEDIA_CACHE_KEY, enable);
+        setStoredBoolean(ENABLE_MEDIA_CACHE_V2_KEY, enable);
         set({ enableMediaCache: enable });
     },
     handleSetMediaCacheLimitGb: (gigabytes) => {

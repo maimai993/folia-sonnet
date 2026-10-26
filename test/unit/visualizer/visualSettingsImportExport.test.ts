@@ -140,7 +140,6 @@ describe('Visual Settings Import and Export', () => {
             soulActiveEnabled: true,
             gradientEnabled: true,
             gradientIntensity: 0.7,
-            keywordColoringEnabled: false,
         },
         monetBackgroundTuning: {
             backgroundSource: 'cover-derived' as const,
@@ -181,7 +180,6 @@ describe('Visual Settings Import and Export', () => {
             overlayOpacity: 0.5,
         },
         monetTuning: {
-            keywordColoringEnabled: false,
             showDescription: false,
             fontScale: 1.1,
             portraitSource: 'cover' as const,

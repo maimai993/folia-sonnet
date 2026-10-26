@@ -45,7 +45,6 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
     const resolvedTuning = {
-        keywordColoringEnabled: monetTuning.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
         showDescription: monetTuning.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
@@ -83,11 +82,6 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                     onChange={(value) => onMonetTuningChange?.({ fontScale: value })}
                     onDragStart={onSliderPointerDown}
                     onDragEnd={onSliderCommit}
-                />
-                <ToggleRow
-                    label={t('options.monetKeywordColoring')}
-                    checked={resolvedTuning.keywordColoringEnabled}
-                    onChange={(value) => onMonetTuningChange?.({ keywordColoringEnabled: value })}
                 />
                 <ToggleRow
                     label={t('options.monetShowDescription')}

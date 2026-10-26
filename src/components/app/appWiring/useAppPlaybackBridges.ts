@@ -15,13 +15,18 @@ import { useNavidromeScrobbleReporter } from '../../../hooks/useNavidromeScrobbl
 import { useScreenAwake } from '../../../hooks/useScreenAwake';
 import { useTranscodeFallback } from '../../../hooks/useTranscodeFallback';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
+import { loadOnlineSongLyrics } from '../../../services/onlinePlayback';
 import { nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { useNativePlaybackRuntime } from '../../../services/playbackEngine/useNativePlaybackRuntime';
 import { currentTime } from '../../../stores/motionSignals';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
+import { setDuration as setDurationInStore, setPlayerState as setPlayerStateInStore } from '../../../stores/usePlaybackStore';
 import { PlayerState } from '../../../types';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
 import { resolveSongLiked } from '../../../utils/resolveSongLiked';
+import { persistPlaybackCache } from '../playback/persistPlaybackCache';
+import { makeSongCurrent } from '../playback/currentSong';
 import { useRecentPlaysRecorder } from '../home/explore/useRecentPlaysRecorder';
 import { useElectronPlaybackBridge } from '../playback/bridges/useElectronPlaybackBridge';
 import { usePlaybackAudioBridge } from '../playback/bridges/usePlaybackAudioBridge';
@@ -31,6 +36,8 @@ import { usePlaybackTransportController } from '../playback/bridges/usePlaybackT
 import { usePlaybackVisualizerBridge } from '../playback/bridges/usePlaybackVisualizerBridge';
 import { useTransportCommandRefs } from '../playback/bridges/useTransportCommandRefs';
 import { useRef, useCallback } from 'react';
+import type { SongResult } from '../../../types';
+import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 
 // src/components/app/appWiring/useAppPlaybackBridges.ts
 // 播放与系统之间的桥：音频分析、转码兜底、transport、系统媒体会话、通知栏、歌词推送。
@@ -52,9 +59,10 @@ export const useAppPlaybackBridges = (model: Input) => {
         getSyntheticStageLyricsTime, getTargetPlaybackVolume, handleLike, handleNextTrack, handlePrevTrack,
         handleStageExternalPlayRequest, handleToggleLoopMode, incomingLyricTimelineOffsetMs, isElectronWindow,
         isLocalSongLiked, isLyricsLoading, isNowPlayingControlDisabledRef, isNowPlayingStageActive,
-        isPlayerCapStageActive, likedSongIds, localSongs, lyrics, nativeActive, nativeTakesRef,
-        navigateBackFromPlayer, navigateToPlayer, pendingResumeTimeRef, playerChromeVisibilityMode,
-        recoverOnlinePlaybackSource, setPlayerChromeVisibilityModeTo, setPlayerState, shouldAutoPlay,
+        isPlayerCapStageActive, likedSongIds, localSongs, lyrics, nativeActive, nativeFailedKeysRef, nativeTakesRef,
+        playQueue,
+        navigateBackFromPlayer, navigateToPlayer, pendingResumeTimeRef, playerChromeVisibilityMode, playSong,
+        recoverOnlinePlaybackSource, restoreCachedThemeForSong, setLyricsStable, setPlayerChromeVisibilityModeTo, setPlayerState, shouldAutoPlay,
         shouldRefreshCurrentOnlineAudioSource, skipAfterPlaybackFailure, stageActiveEntryKind, stageLyricsClockRef,
         stageLyricsSession, stageStatus, starredNavidromeSongIds, syncNowPlayingClock, syncOutputGain,
         syncStageLyricsClock, t, theme, themeSettling
@@ -207,6 +215,111 @@ export const useAppPlaybackBridges = (model: Input) => {
         canLike: nativeCanLikeSong,
         // 与面板里的喜爱按钮同一个动作：能不能用、状态怎么存都归它，原生不自己记账。
         onToggleLike: handleLike,
+        // 原生兜底切歌后 JS 的认领（App 启动拉快照 + syncTo 命令共用这一个入口）：
+        // 把队列跳到原生正在放的那首，并把它已经放到的位置对齐过去。
+        // 队列里找不到（还没恢复 / 队列早换过了）回 false，调用方会重试。
+        //
+        // ⚠️ 这两个回调在 App.tsx 拆分（4de8e8be）时被整段弄丢了 —— 没有它们，
+        // 原生通知栏切歌之后界面永远停在旧歌上（syncTo 没人接），下一首/上一首
+        // 表现为「按了没反应」；解析失败的黑名单回执（nativePlayFailed）同样
+        // 没人收，失败的歌每按一次都再撞一次原生。这里按原语义接回来。
+        onSyncToSong: (songKey, positionMs) => {
+            const state = usePlaybackStore.getState();
+            const shown = state.currentSong;
+            if (shown && getPlaybackSongKey(shown) === songKey) {
+                // key 相等也要补齐：乐观 setCurrentSong 之后的 syncTo、以及 WebView
+                // 冻结期间原生一直在放的启动快照认领都走这里 —— 界面得跟上。
+                if (positionMs && positionMs > 0) currentTime.set(positionMs / 1000);
+                if (state.playerState !== PlayerState.PLAYING) setPlayerStateInStore(PlayerState.PLAYING);
+                return true;
+            }
+            const song = state.playQueue.find((item) => getPlaybackSongKey(item) === songKey);
+            if (!song) return false;
+            /*
+             * 原生正在放这首：只把**界面**认领过去，绝不走 playSong —— 它会重新
+             * 解析地址并换 audioSrc，那条 effect 会把原生刚切好的歌重新 prepare
+             * 一遍、从头再放（两头打架）。界面认领不动 audioSrc：原生播放器手里
+             * 的源就是真源，Web 这边只跟进显示（歌词/封面由 currentSong 的
+             * effect 自己去拉）。
+             */
+            if (nativeTakesRef.current) {
+                makeSongCurrent(song);
+                if (positionMs && positionMs > 0) currentTime.set(positionMs / 1000);
+                const candidate = song as SongResult & { duration?: number; durationMs?: number };
+                const ms = candidate.durationMs ?? candidate.duration;
+                if (typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
+                    setDurationInStore(ms > 0 && ms < 1000 ? ms : ms / 1000);
+                }
+                // 原生切歌（nativePlayMirrorEntry）是直接起播的，界面对齐成在播。
+                setPlayerStateInStore(PlayerState.PLAYING);
+                void persistPlaybackCache(song, state.playQueue);
+                /*
+                 * 歌词跟着认领走：原生的 UI-only 认领**不经过 playSong**，而歌词的
+                 * 加载在 playSong 那条链里 —— 不补这一步，store 里躺着的就还是上一首
+                 * 的歌词。壁纸推送（useLyricsWallpaperFeed）在标题一变就整包下发，
+                 * 于是「旧歌词 + 新标题」把原生兜底刚发对的 timeline 又盖回去
+                 * （用户报的「下一首歌词还是上一首的，偶发」—— 谁后到谁赢，所以偶发）。
+                 * AI 动画导演与每歌随机动画同样盯着 currentSong / lyrics：没有这一步，
+                 * 前台服务活着时切歌它们一个都拿不到新歌词，主题与动画参数全停在旧歌上。
+                 *
+                 * 先清掉旧歌词再异步拉：清掉的那一拍壁纸短暂空窗，好过挂着别首的词。
+                 */
+                setLyricsStable(null);
+                const claimedKey = songKey;
+                void (async () => {
+                    try {
+                        await loadOnlineSongLyrics(song, null, null, {
+                            isCurrent: () => {
+                                const now = usePlaybackStore.getState().currentSong;
+                                return Boolean(now && getPlaybackSongKey(now) === claimedKey);
+                            },
+                            onLyrics: (resolved) => setLyricsStable(resolved),
+                            onDone: () => undefined,
+                        });
+                    } catch {
+                        // 拉不到（本地 / Navidrome / 平台不认）就保持空：壁纸空窗，
+                        // 原生兜底那条 publishNativeTrack 已经先发对了的场合不受影响。
+                    }
+                    /*
+                     * 主题跟着认领走：restoreCachedThemeForSong 在 playSong 那条链里，
+                     * 这里绕过了 playSong，不补这一步的话本机改过的那版 / 云缓存的主题
+                     * 就一次都不翻 —— 高亮色与动画样式停在上一个主题上（用户报的
+                     * 「拿不到 AI 主题高亮色、动画样式」）。随机动画与 AI 导演各自盯着
+                     * currentSong / lyrics，主题落定后它们自己的 effect 会接上。
+                     */
+                    try {
+                        await restoreCachedThemeForSong(song);
+                    } catch {
+                        // 主题加载失败不影响播放：保持当前主题即可。
+                    }
+                })();
+                return true;
+            }
+            void playSong(song, state.playQueue).then(() => {
+                if (positionMs && positionMs > 0) seekMainAudioRef.current(positionMs / 1000);
+            });
+            return true;
+        },
+        // 原生按需解析地址失败（URL 为 null）的回执：把这首歌拉黑（本次会话内
+        // 不再分流给原生）并回退 Web 全流程自己放，不卡住不重试。
+        onNativePlayFailed: (songKey) => {
+            nativeFailedKeysRef.current.add(songKey);
+            const state = usePlaybackStore.getState();
+            const song = state.playQueue.find((item) => getPlaybackSongKey(item) === songKey);
+            if (song) void playSong(song, state.playQueue);
+        },
+        /*
+         * 队列镜像与红心状态：这两个 prop 也在 App.tsx 拆分（4de8e8be）时被弄丢了 ——
+         * queue 缺席时镜像 effect 直接早退（useCapacitorPlaybackBridge 里
+         * `if (!list || list.length === 0) return`），原生那边的队列快照从此不再更新，
+         * WebView 冻结后的通知栏切歌只能靠启动时的旧快照兜底；likeStateOf 缺席时
+         * 全量镜像每一条的红心状态都落到 false，原生兜底切到哪一首那颗心都是空的。
+         */
+        queue: playQueue,
+        likeStateOf: (song) => ({
+            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+            canLike: !resolveLikeAvailability(song, false, isNowPlayingStageActive).disabled,
+        }),
     });
 
     // Capacitor Android 专有：把当前行与行内进度喂给原生歌词动态壁纸。

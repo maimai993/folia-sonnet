@@ -4,10 +4,16 @@ import { isCapacitorAndroid } from '../platform/runtime';
 import type { SongResult } from '../types';
 import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
-import { fetchCoverBytes } from '../services/coverBytes';
 import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
+import { applyNativeLikeOverrides, omni, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
+import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
+import { buildQueueMirrorEntries, getMirrorDurationMs, resolveLikeIdentity } from '../utils/queueMirrorEntry';
 
 // 当前文件：把播放状态与元数据送到原生前台服务，换取通知栏媒体控制与后台网络保活。
+//
+// 分工（原生为真源）：通知栏那张封面由原生按 artworkUrl 自己下载（没有 CORS 限制，
+// 也不吃 WebView 冻结）；JS 不再抓 base64 —— 拉取的活全归原生，JS 只在醒来时
+// 「问原生要当前的状态」（getPlaybackSnapshot）把自己对齐过去。
 
 /**
  * 与 FoliaPlaybackService / MainActivity 里的常量一一对应，改一处必须两处都改。
@@ -21,12 +27,11 @@ const EXTRA_COMMAND = 'command';
 type PlaybackSnapshot = 'playing' | 'paused' | 'stopped';
 
 interface FoliaPlaybackPlugin {
-  /** 启动前台服务并更新媒体元数据。artworkBase64 传 null 表示这次没有新封面。 */
+  /** 启动前台服务并更新媒体元数据。封面由原生按 artworkUrl 自己下载，不经 JS。 */
   update(options: {
     title?: string;
     artist?: string;
     album?: string;
-    artworkBase64?: string | null;
     /** 封面地址。原生会自己下载，用来绕开 WebView 的 CORS 限制。 */
     artworkUrl?: string | null;
     durationMs?: number;
@@ -50,6 +55,12 @@ interface FoliaPlaybackPlugin {
      * 画出来点了没反应比不画更让人困惑。不传 = 这次不改。
      */
     canLike?: boolean | null;
+    /**
+     * 红心的原生兜底：当前歌来自哪个平台、平台侧的歌曲 id。
+     * WebView 冻结时通知栏那颗心按它直接对各平台补写收藏（kugou 等没有原生通道会跳过）。
+     */
+    providerId?: string | null;
+    serverSongId?: string | null;
   }): Promise<void>;
   /** 更新播放状态。playing=true 时服务会真正进入前台。 */
   setState(options: {
@@ -59,65 +70,60 @@ interface FoliaPlaybackPlugin {
   }): Promise<void>;
   /** 停止播放时收掉前台服务与通知。 */
   stop(): Promise<void>;
+  /**
+   * 队列快照：WebView 冻结后通知栏切歌的原生兜底数据源。
+   * 推**全量队列**（每条带平台身份，不带地址 —— 地址由原生平台网关按需解析，
+   * 也有预取缓存），index 是当前歌的下标。队列本体只在队列真的变了时才推。
+   */
+  setQueueMirror(options: { queueJson: string; index: number }): Promise<void>;
+  /** 队列没变、只是换了一首正播的：轻量推游标，不过大 JSON。 */
+  setQueueMirrorIndex(options: { index: number }): Promise<void>;
+  /**
+   * 问原生要当前的状态（原生是播放的真源）。
+   * WebView 冻结期间通知栏的镜像换源、原生补写红心都发生在原生侧，JS 醒来后
+   * 第一件事是拉这份快照对齐自己的队列 / 位置 / 红心，而不是推旧状态过去。
+   */
+  getPlaybackSnapshot(): Promise<{
+    snapshot: {
+      hasSong: boolean;
+      songKey: string;
+      title: string;
+      artist: string;
+      album: string;
+      durationMs: number;
+      positionMs: number;
+      playing: boolean;
+      liked: boolean;
+      canLike: boolean;
+      providerId: string;
+      serverSongId: string;
+      artworkUrl: string;
+    };
+  }>;
+  /**
+   * 两轨合一：App 内点歌 / 切歌全走原生桥执行。
+   * 原生先把调用者手里最新的队列落进镜像，再找这首歌：地址有缓存直接放，
+   * 没有就按需解析后放。回 ok=false（原生没激活 / 定位不到）时调用方回退 Web 全流程。
+   */
+  playFromQueue(options: { songKey: string; queueJson: string; index: number }): Promise<{ ok: boolean }>;
+  /**
+   * 上下首分流：原生在镜像里定位当前首的相邻一首直接放。
+   * skipped=false 表示定位不到相邻首（队列到头 / FM / 原生没激活），调用方回退 Web 逻辑。
+   */
+  requestSkip(options: { direction: number }): Promise<{ skipped: boolean }>;
+  /**
+   * 原生补写过的红心（WebView 冻结期间通知栏那颗心在服务器上写成功的）。
+   * App 启动时取走一次，对齐进账号缓存，App 里的心才不会与通知栏打架。
+   */
+  consumeLikeOverrides(): Promise<{ overrides: NativeLikeOverrideInput[] }>;
   /** 原生在用户点击通知栏/锁屏/耳机按键时派发的事件。 */
   addListener(
     eventName: 'foliaPlaybackCommand',
-    listener: (payload: { command: string; positionMs?: number }) => void,
+    listener: (payload: { command: string; positionMs?: number; songKey?: string }) => void,
   ): Promise<() => void>;
 }
 
 const FoliaPlayback = registerPlugin<FoliaPlaybackPlugin>('FoliaPlayback');
-
-// 通知栏封面：Base64 体积大，同一首歌只取一次。
-const artworkCache = new Map<string, string>();
-const ARTWORK_MAX_EDGE = 512;
-
-/**
- * 把封面图片抓成 base64。
- *
- * 通知栏需要 Bitmap 而非 URL：通知由系统进程渲染，它无法访问 WebView 的
- * 缓存文件或带鉴权的资源。用 canvas 缩到 512px 再编码，避免大图撑爆 Binder 事务
- * （跨进程传输有 1MB 上限，传原始大图会 TransactionTooLargeException）。
- */
-const loadArtworkAsBase64 = async (url: string): Promise<string | null> => {
-  const cached = artworkCache.get(url);
-  if (cached) return cached;
-  if (typeof document === 'undefined') return null;
-
-  try {
-    // 取字节这件事只有 services/coverBytes 那一处知道该怎么取：
-    // 带凭据的那一跳会让「回通配符」的图床直接被浏览器判死，通知栏于是常年没有封面。
-    const blob = await fetchCoverBytes(url);
-    if (!blob) return null;
-    if (typeof createImageBitmap !== 'function') return null;
-
-    const bitmap = await createImageBitmap(blob);
-    const scale = Math.min(1, ARTWORK_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) return null;
-    context.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close();
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    // data URL 本身带前缀，原生侧会剥掉，这里原样传。
-    artworkCache.set(url, dataUrl);
-    // 只缓存最近的几张，避免长时间播放把内存吃满。
-    if (artworkCache.size > 8) {
-      const oldest = artworkCache.keys().next().value;
-      if (oldest !== undefined) artworkCache.delete(oldest);
-    }
-    return dataUrl;
-  } catch {
-    // 封面拿不到不影响播放与通知，原生侧会退回默认图标。
-    return null;
-  }
-};
 
 /**
  * 通知栏进度条的位置刷新间隔。
@@ -145,6 +151,27 @@ type UseCapacitorPlaybackBridgeOptions = {
   canLike?: boolean;
   /** 通知栏 / 锁屏 / 耳机那颗心被按下。与面板里的喜爱按钮同一个动作。 */
   onToggleLike?: () => void;
+  /**
+   * 原生兜底切歌后 JS 的认领：把队列跳到原生正在放的那首（按 songKey 找），
+   * 找到并接管了回 true（positionMs 是原生此刻的位置，接管后对齐过去）；
+   * 队列还没恢复 / 找不到这首歌回 false，调用方会重试。
+   * 不认领的话，App 打开时队列还停在旧歌上，与通知栏各说各话。
+   */
+  onSyncToSong?: (songKey: string, positionMs?: number) => boolean | void;
+  /**
+   * 两轨合一的失败回执：原生解析这首歌的播放地址失败。调用方把歌拉黑并回退
+   * Web 全流程（playSong 直通），不重试不卡住。
+   */
+  onNativePlayFailed?: (songKey: string) => void;
+  /** 队列快照：原生兜底切歌的数据源。缺省时不推。 */
+  queue?: SongResult[];
+  /** 当前这首歌已解析的播放地址（audioSrc）。 */
+  currentAudioUrl?: string | null;
+  /**
+   * 每条队列条目的红心状态（同步读账号缓存，不发网络）：全量队列每一条都带，
+   * 原生兜底切到哪一首，通知栏那颗心都不会消失。
+   */
+  likeStateOf?: (song: SongResult) => { liked: boolean; canLike: boolean } | undefined;
 };
 
 /**
@@ -166,19 +193,72 @@ export const useCapacitorPlaybackBridge = ({
   isLiked = false,
   canLike = false,
   onToggleLike,
+  queue,
+  currentAudioUrl,
+  likeStateOf,
+  onSyncToSong,
+  onNativePlayFailed,
 }: UseCapacitorPlaybackBridgeOptions): void => {
   const enabled = isCapacitorAndroid();
 
   // 这三个回调是每次渲染都可能换身份的内联函数，进 effect 依赖会把订阅反复重建。
-  const callbacksRef = React.useRef({ getCurrentTime, onSeek, onToggleLike });
-  callbacksRef.current = { getCurrentTime, onSeek, onToggleLike };
+  const callbacksRef = React.useRef({ getCurrentTime, onSeek, onToggleLike, onSyncToSong, onNativePlayFailed });
+  callbacksRef.current = { getCurrentTime, onSeek, onToggleLike, onSyncToSong, onNativePlayFailed };
+
+  // 原生补写的红心，App 这边开机认领：把账号缓存（likedSongIds）对齐到原生写入的
+  // 服务器真状态。不认领的话，打开 App 那一刻 JS 推的还是旧缓存，通知栏那颗心会被
+  // 它翻回去（原生侧有真源守卫拦着通知栏，但 App 里的心也对不上）。
+  React.useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void FoliaPlayback.consumeLikeOverrides()
+      .then(({ overrides }) => {
+        if (cancelled || !overrides || overrides.length === 0) return;
+        applyNativeLikeOverrides(overrides);
+      })
+      .catch(() => {
+        // 老版本原生没有这个方法：没有记录就没有可对齐的，静默跳过。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  // 问原生要当前的状态：原生是播放的真源。WebView 冻结期间镜像换过源、原生一直在
+  // 放，JS 醒来后不是推它自己那份旧状态，而是先拉这份快照把自己的队列与位置对齐
+  // 过去。队列的恢复（localStorage hydration）可能比这个 effect 晚：找不到歌就每
+  // 500ms 重试一次，最多 6 秒，之后放弃（没有可对齐的就算了）。
+  React.useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const attempt = async (): Promise<boolean> => {
+      const { snapshot } = await FoliaPlayback.getPlaybackSnapshot();
+      if (cancelled || !snapshot || !snapshot.hasSong || !snapshot.songKey) return true;
+      return Boolean(callbacksRef.current.onSyncToSong?.(snapshot.songKey, snapshot.positionMs));
+    };
+    const run = async () => {
+      for (let attemptIndex = 0; attemptIndex < 12 && !cancelled; attemptIndex += 1) {
+        try {
+          if (await attempt()) return;
+        } catch {
+          // 老版本原生没有这个方法：没有可对齐的，静默放弃。
+          return;
+        }
+        await new Promise((resolveTimer) => setTimeout(resolveTimer, 500));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 
   // 通知栏/锁屏/耳机的控制键走这里回到 Web 层。
   React.useEffect(() => {
     if (!enabled) return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    void FoliaPlayback.addListener('foliaPlaybackCommand', ({ command, positionMs }) => {
+    void FoliaPlayback.addListener('foliaPlaybackCommand', ({ command, positionMs, songKey }) => {
       switch (command) {
         case 'play':
           void mediaSessionPlayRef.current?.();
@@ -200,10 +280,33 @@ export const useCapacitorPlaybackBridge = ({
           callbacksRef.current.onSeek?.(Math.max(0, (positionMs ?? 0) / 1000));
           break;
         case 'like':
-          // 通知栏 / 锁屏 / 耳机那颗心。与面板里的喜爱按钮走同一个 handleLike：
-          // 能不能用、成功与否、状态怎么存都归 Web 层那一份判断，原生不自己记账。
-          // 状态变了会随下一次元数据推送回到通知栏，那颗心自己换形状。
+          // 通知栏 / 锁屏 / 耳机那颗心（原生播放未激活时才走这条路）。
+          // 与面板里的喜爱按钮同一个 handleLike：能不能用、成功与否、状态怎么存
+          // 都归 Web 层那一份判断。状态变了会随下一次元数据推送回到通知栏。
           callbacksRef.current.onToggleLike?.();
+          break;
+        case 'likeDone':
+          /*
+           * 原生播放激活时通知栏那颗心由原生直接写（0 延迟亮心，见
+           * FoliaPlaybackService.handleTransportLike），这里只做对齐：
+           * 把原生写入的补写记录领回来更新账号缓存，App 里那颗心跟着变。
+           * 故意不调 onToggleLike —— 它会再写一遍平台，两次写状态翻两遍等于没点。
+           */
+          void FoliaPlayback.consumeLikeOverrides()
+            .then(({ overrides }) => {
+              if (overrides && overrides.length > 0) applyNativeLikeOverrides(overrides);
+            })
+            .catch(() => undefined);
+          break;
+        case 'syncTo':
+          // 原生兜底切歌后的认领：把队列跳到原生正在放的那首（守卫期间旧歌的
+          // metadata 会被原生拒收，见 FoliaPlaybackService.updateMetadata）。
+          if (songKey) callbacksRef.current.onSyncToSong?.(songKey);
+          break;
+        case 'nativePlayFailed':
+          // 两轨合一的失败回执：原生按需解析地址失败（URL 为 null）。JS 把这首歌
+          // 拉黑（本次会话内不再分流给它）并回退 Web 全流程自己放，不卡住不重试。
+          if (songKey) callbacksRef.current.onNativePlayFailed?.(songKey);
           break;
       }
     }).then((off) => {
@@ -217,6 +320,10 @@ export const useCapacitorPlaybackBridge = ({
   }, [enabled, mediaSessionPlayRef, mediaSessionPauseRef, mediaSessionPrevRef, mediaSessionNextRef]);
 
   // 元数据：切歌时更新一次。
+  //
+  // 封面只给地址，抓取完全归原生（fetchArtwork 按 URL 下载，没有 CORS 限制，
+  // 也不吃 WebView 冻结）。JS 抓 base64 那条路整个删了 —— 它每首歌多一趟
+  // canvas 编码、多占一份桥的吞吐，而原生下载本来就更快更稳。
   React.useEffect(() => {
     if (!enabled) return;
     if (!currentSong) {
@@ -225,37 +332,86 @@ export const useCapacitorPlaybackBridge = ({
     }
     const coverUrl = cachedCoverUrl || getSongCoverUrl(currentSong) || '';
     const songKey = getPlaybackSongKey(currentSong);
-    const metadata = {
+    const likeIdentity = resolveLikeIdentity(currentSong);
+    void FoliaPlayback.update({
       title: currentSong.name || '',
       artist: getSongArtistLabel(currentSong) || '',
       album: getSongAlbumLabel(currentSong) || '',
-      // 封面地址一并给过去：WebView 里 fetch 远端封面常被 CORS 挡掉，
-      // 原生下载没有这个限制，通知栏因此总能拿到对应的封面。
       artworkUrl: coverUrl || null,
-      durationMs: getDurationMs(currentSong),
+      durationMs: getMirrorDurationMs(currentSong),
       providerBadge: resolveProviderBadge(currentSong),
       songKey,
       liked: isLiked,
       canLike,
-    };
-
-    // 分两次发：先不带封面发一次，让原生立刻换标题并把上一首的封面丢掉，再等封面抓到补一次。
-    //
-    // 合成一次（等 base64 拿到再发）的话，封面抓取的这一段时间里原生手上的还是上一首的图，
-    // 通知栏就先画出上一首的封面，等下载线程跑完才换成当前歌 —— 看着就是封面慢了一拍。
-    let cancelled = false;
-    void (async () => {
-      await FoliaPlayback.update({ ...metadata, artworkBase64: null });
-      if (!coverUrl) return;
-      const artworkBase64 = await loadArtworkAsBase64(coverUrl);
-      // 抓封面期间可能已经切歌了，晚到的这张不能贴到新歌上。
-      if (cancelled || !artworkBase64) return;
-      await FoliaPlayback.update({ ...metadata, artworkBase64 });
-    })();
-    return () => {
-      cancelled = true;
-    };
+      providerId: likeIdentity.providerId || null,
+      serverSongId: likeIdentity.serverSongId || null,
+    });
   }, [enabled, currentSong, cachedCoverUrl, isLiked, canLike]);
+
+  // 网易 uid 推给原生：原生兜底切歌后要拉「我喜欢」名单对红心（uid 只在 Web 层的
+  // 账号缓存里，cookie 里没有）。登录 / 登出（账号 store 变化）都会跟着推一遍。
+  React.useEffect(() => {
+    if (!enabled) return;
+    const push = () => {
+      if (typeof window === 'undefined') return;
+      const plugin = (window as any).Capacitor?.Plugins?.FoliaNative;
+      if (!plugin?.setGatewayCredentials) return;
+      const account = useOnlineProviderAccountStore.getState().accounts['netease'];
+      const uid = account?.user?.id;
+      void plugin
+        .setGatewayCredentials({ provider: 'netease', userId: uid == null ? '' : String(uid) })
+        .catch(() => undefined);
+    };
+    push();
+    const unsubscribe = useOnlineProviderAccountStore.subscribe(push);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [enabled]);
+
+  // 队列快照：WebView 冻结后通知栏切歌的唯一依据。
+  //
+  // 推**全量队列**而不是「当前 ±10」的窗口：地址不再随条目带（原生平台网关按需
+  // 解析，当前这首歌也有预取），窗口就成了人为的天花板 —— 连切几首就到头
+  // （用户报的「下一首了五首就下不去了」），而网关面前队列里每一首都是平等的。
+  // 每一条都带平台身份（网易 id / QQ songmid / 酷狗 hash）与红心状态（likeStateOf
+  // 同步读账号缓存），原生兜底切到哪一首，那颗心都不会消失。
+  //
+  // 全量 JSON 一推几百 KB，桥只有一条 —— 所以只在**队列本体变化**时推；
+  // 换歌只走下面那个轻量游标 effect。likeStateOf 是内联函数（每次渲染都是新身份），
+  // 不进依赖；但它读的那份红心状态要有个稳定的信号，否则账号里的红心变了、
+  // Navidrome 收藏刷新了，队列本体没变就再也不推 —— 原生兜底切过去那颗心是旧的。
+  const likeSignal = React.useMemo(
+    () => (queue ?? []).map((song) => {
+      const state = likeStateOf?.(song);
+      return `${getPlaybackSongKey(song)}|${state?.liked ? 1 : 0}${state?.canLike === false ? 0 : 1}`;
+    }).join(','),
+    [queue, likeStateOf],
+  );
+  const mirrorSourceRef = React.useRef({ queue, likeStateOf, currentSong });
+  mirrorSourceRef.current = { queue, likeStateOf, currentSong };
+  React.useEffect(() => {
+    if (!enabled) return;
+    const { queue: list, likeStateOf: stateOf, currentSong: activeSong } = mirrorSourceRef.current;
+    if (!list || list.length === 0) return;
+    // 飞牛的凭据要在队列之前到位：登录可能发生在插件可用之前（重启后桥晚一步），
+    // 这里每推一次队列顺手同步一遍 —— 一次几十字节的调用，换原生兜底不空手。
+    // 走 omni 而不是直连 transport：hooks 按依赖方向只该经过 omni。
+    omni.syncNativeGatewayCredentials();
+    const entries = buildQueueMirrorEntries(list, stateOf);
+    const index = activeSong ? list.findIndex((song) => getPlaybackSongKey(song) === getPlaybackSongKey(activeSong)) : -1;
+    void FoliaPlayback.setQueueMirror({ queueJson: JSON.stringify(entries), index });
+    // likeSignal 不进依赖数组的「语义」，只当「红心状态变了」的触发器用。
+    // eslint 层面它确实被 effect 体间接读到，所以照实列上。
+  }, [enabled, queue, likeSignal]);
+
+  // 游标：队列没变、换了一首正播的。几百 KB 的全量 JSON 不跟着切歌过桥。
+  React.useEffect(() => {
+    if (!enabled || !currentSong || !queue || queue.length === 0) return;
+    const index = queue.findIndex((song) => getPlaybackSongKey(song) === getPlaybackSongKey(currentSong));
+    if (index < 0) return;
+    void FoliaPlayback.setQueueMirrorIndex({ index });
+  }, [enabled, currentSong, queue]);
 
   // 播放状态：playing 时服务进入前台，这是后台网络不被节流的关键。
   //
@@ -347,14 +503,6 @@ export const useCapacitorPlaybackBridge = ({
   }, [enabled, playerState, currentSong]);
 };
 
-const getDurationMs = (song: SongResult): number => {
-  const candidate = (song as SongResult & { duration?: number; durationMs?: number });
-  const ms = candidate.durationMs ?? candidate.duration;
-  if (typeof ms !== 'number' || !Number.isFinite(ms)) return 0;
-  // 有些音源给的是秒。
-  return ms > 0 && ms < 1000 ? Math.round(ms * 1000) : Math.round(ms);
-};
-
 /**
  * 通知栏封面角标用哪颗图标。
  *
@@ -369,3 +517,5 @@ export const resolveProviderBadge = (song: SongResult | null | undefined): strin
 };
 
 export { ACTION_UPDATE_METADATA, ACTION_UPDATE_STATE, ACTION_STOP_FOREGROUND, ACTION_WEB_COMMAND, EXTRA_COMMAND };
+// 两轨合一：点歌 / 切歌的分流（usePlaybackQueueController）也走同一个插件句柄。
+export { FoliaPlayback };

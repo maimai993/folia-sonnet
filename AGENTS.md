@@ -75,8 +75,8 @@
 ### Bug 与 issue（先提 issue 再修）
 
 - **发现 bug（包括 CI 红掉时暴露的行为问题）先提 issue，再修。** 不许没有 issue 直接改代码：事后无从追溯「为什么改这里」。
-- issue 写清：现象、复现步骤、期望行为、影响范围；用 `gh issue create` 提。修完在 PR 正文里关联：`Closes #<编号>`（不是修 bug 的改动也至少写 `Refs #<编号>` 关联到相关 issue/任务）。
-- CI 门禁：`.github/workflows/issue-link.yml` 检查 PR 正文有没有 `Closes/Fixes/Resolves/Refs + #编号`，没有就红（job 名 `Pull request links an issue`）；PR 模板里有对应勾选项。
+- issue 写清：现象、复现步骤、期望行为、影响范围；用 `gh issue create` 提。修 bug 的 PR 在正文写 `Closes #<编号>`（`npm run pr` 加 `--issue <编号>` 会自动写入）；新功能、重构、文档有相关任务就写 `Refs #<编号>`，没有可以不写。
+- CI 门禁：`.github/workflows/issue-link.yml` 对 `fix/*` 分支和带 `bug` 标签的 PR 检查正文有没有 `Closes/Fixes/Resolves/Refs + #编号`，没有就红（job 名 `Pull request links an issue`）；其他 PR 跳过。PR 模板里有对应说明。
 - CI 红掉时，`.github/workflows/ci-failure-notice.yml` 会在 PR 上自动留一条指引评论（附运行链接）——先按它确认是不是 bug，是就先提 issue，并重读本文件再动手。
 - 流程细节见 `docs/issue-workflow.md`。
 
@@ -95,7 +95,7 @@
 
 ### CI
 
-- **开 PR 之前**跑 `npm run ci:local`（typecheck + 单测 + `vite build` + 版本约束，与 `.github/workflows/ci.yml` 同一套），红了不许开 PR。Windows 上 `test/unit/mod-system/modSignature.test.ts` 的符号链接用例会因权限失败（要开发者模式/管理员），这是环境限制：其余全绿照常开 PR，这一项以 Linux 的 CI 为准。
+- **开 PR 之前**跑 `npm run ci:local`（控件/体积/版本/密钥扫描 + typecheck + sync-server typecheck + 单测 + `vite build` + 产物密钥扫描，与 `.github/workflows/ci.yml` 同一套），红了不许开 PR。第一次跑之前先装 sync-server 的依赖：`npm --prefix sync-server ci`。Windows 上 `test/unit/mod-system/modSignature.test.ts` 的符号链接用例会因权限失败（要开发者模式/管理员），这是环境限制：其余全绿照常开 PR，这一项以 Linux 的 CI 为准。
 - **开 PR 之后**盯 CI，全绿才合并：有 gh 用 `gh pr checks <编号> --watch`；没有 gh（或走 SSH 认证）就开 PR 页面的 **Checks** 标签。红了当场修，不要交给别人。
 - **合并前必须 review，至少一次 AI review**，而且报告要发在 GitHub 上：有 gh 用 `gh pr review <编号> --comment --body-file review.md`；没有 gh 就在 **Files changed → Review changes → Comment** 里写。只在聊天里说「看过了」不算，PR 的 Reviews 里能查到才算。有未处理的 CHANGES_REQUESTED 不许合。
 - **`gh` 只是便利工具，不是硬依赖。** 走 SSH 认证、没装 gh、或不想在本机登录 gh 的人都照常提 PR：`npm run pr -- "标题"` 会先跑本地门禁再 push（SSH 用自己的 key），检测不到可用的 gh 时打印 compare 链接，浏览器里点 Create pull request；之后的盯 CI 与写 review 都在网页完成。
@@ -105,6 +105,14 @@
 - 密钥泄漏门禁：`node ci/checkSecrets.ts` 扫源码、`node ci/checkSecrets.ts --dist dist` 扫构建产物；`VITE_` 变量名带 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL/AUTH 一律失败（会被内联进前端包）。误报写进 `ci/secretsAllowlist.json` 并写理由。规则细节见 `docs/contracts/secrets-guard.md` 与 `docs/contracts/secrets.md`。
 - 版本约束实现在 `ci/checkVersionPolicy.ts`，单独跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
 - `.github/workflows/android-release.yml`：推 `release/*` 分支、`v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；标签与分支名都必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。配了 secrets 时 CI 会当场校验 keystore 的口令/alias，并对产物 APK 验签、比对证书指纹；换 keystore 必须同时更新那 4 个 secrets 和 workflow 里的 `EXPECTED_CERT_SHA256`（当前证书 `BC:10:0C:6E:…:50:DA`，`keytool -list -v` 可查）。
+
+### CI
+
+- 新 CI 的检查逻辑都放 `ci/`，`.github/workflows/` 只留入口；沿用的旧 workflow 之后逐个替换，新流程不要再直接往 `.github/workflows/` 里加。
+- `.github/workflows/ci.yml`：PR 与 main 上并行跑类型检查、单测、`vite build` 打包冒烟、版本约束。出包不在这里。
+- 版本约束实现在 `ci/checkVersionPolicy.ts`，本地跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
+- `.github/workflows/android-release.yml`：推 `v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；手动那条可以涨版本、打标签、发 Release，标签必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。
+- 本地跑一遍与 CI 相同的门禁：`npm run typecheck && npm run test:unit && npm run check:versions`。
 
 ### 生成的文件不手改
 

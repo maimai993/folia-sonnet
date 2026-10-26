@@ -14,6 +14,8 @@ import { ytmMutations } from './ytmMutations';
 import { resetYtmRecommendations, ytmRecommendations } from './ytmRecommendations';
 import { describeYtmLoginFailure, ytmLoginFailure } from './ytmLoginFailure';
 import { describeYtmFailure } from './ytmFailure';
+import { getYtmLoginDiagnostics, noteYtmLoginStatusCheck } from './ytmLoginDiagnostics';
+import { diagnosticLine } from '../login/loginDiagnosticReport';
 import i18n from '../../../i18n/config';
 import { isCapacitorAndroid } from '../../../platform/runtime';
 
@@ -161,7 +163,15 @@ export const ytmProvider: OnlineMusicProvider = {
             caseNotes: { 'browser-unfinished': 'home.loginCaseYtmUnfinished', 'no-browser': 'home.loginNoBrowserYtm' },
         }),
         async getLoginStatus() {
-            const user = await requestYtm<ProviderUser | null>('login_status');
+            let user: ProviderUser | null;
+            try {
+                user = await requestYtm<ProviderUser | null>('login_status');
+            } catch (error) {
+                noteYtmLoginStatusCheck(diagnosticLine`login_status failed: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
+            }
+            // 与另一家同一条规矩：只有「平台说这个登录不算数」才等于没人登录，其它错误必须抛出去。
+            noteYtmLoginStatusCheck(diagnosticLine`${user ? `signed in (id ${user.id ? 'present' : 'missing'}, nickname ${user.nickname ? 'present' : 'missing'})` : 'nobody is signed in'}`);
             noteYtmAccount(user);
             return user ? normalizeYtmUser(user) : null;
         },
@@ -190,6 +200,8 @@ export const ytmProvider: OnlineMusicProvider = {
             return key;
         },
         describeLoginFailure: describeYtmLoginFailure,
+        // 登录确认之后账号没读出来（account-refresh-failed）时，报告里这一段靠它说出卡在哪。
+        getLoginDiagnostics: async () => getYtmLoginDiagnostics(),
         async openLoginPage() { await requestYtm('web_login_open'); },
         // The window of the sign-in is opened by its start, and closing it ends the sign-in.
         opensLoginPageItself: () => true,

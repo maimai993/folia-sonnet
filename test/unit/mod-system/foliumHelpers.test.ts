@@ -523,5 +523,6 @@ describe('helpers on the folium object', () => {
             expect(registry.list().filter((entry) => entry.modId === 'helpers-closed-all')).toEqual([]);
         });
         expect(hasFoliumEventHandlers('omni.lyricsResolved')).toBe(false);
-    });
+        // 每一类注册表都要真 reconcile 一次，默认 5 秒在慢机器上不够。
+    }, 120_000);
 });

@@ -121,7 +121,7 @@ const CURRENT: Record<string, unknown> = {
     },
     monet_tuning: {
         ...DEFAULT_MONET_TUNING,
-        keywordColoringEnabled: !DEFAULT_MONET_TUNING.keywordColoringEnabled, showDescription: !DEFAULT_MONET_TUNING.showDescription,
+        showDescription: !DEFAULT_MONET_TUNING.showDescription,
         fontScale: 1.2, portraitSource: 'custom', portraitOffsetX: -40, portraitStyle: 'rectangular',
     },
     pendolo_tuning: {

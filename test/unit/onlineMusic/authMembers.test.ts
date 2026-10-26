@@ -30,9 +30,9 @@ const AUTH_MEMBERS: Record<string, string[]> = {
         'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'openLoginPage', 'startLogin',
     ],
-    // YTM 换 v23 原生登录后，诊断段随页内运行时一起拿掉了（035281ce），这里不再有它。
+    // YTM 在安卓有一份登录诊断（账号没读出来时说清卡在哪）；上游把它去掉过，本分支这个 fork 保留着。
     ytm: [
-        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
+        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'openLoginPage', 'opensLoginPageItself', 'signInRanOut', 'startLogin',
     ],
     // 汽水（扫码）与飞牛（用户名密码 + 自建服务地址）是我们自己接的两个平台。

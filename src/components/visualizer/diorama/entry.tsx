@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ghost, Highlighter } from 'lucide-react';
+import { Ghost } from 'lucide-react';
 import type { DioramaTuning } from '../../../types';
 import { QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
@@ -34,13 +34,6 @@ export default defineVisualizer({
     renderSettingsPanel: props => <DioramaSettingsPanel {...props} />,
     renderQuickControls: ({ tuning, onTuningChange, t }: VisualizerQuickControlsProps<DioramaTuning>) => (
         <>
-            <QuickControlToggle
-                active={tuning.keywordColoringEnabled}
-                label={t('options.dioramaKeywordColoring')}
-                onToggle={() => onTuningChange({ keywordColoringEnabled: !tuning.keywordColoringEnabled })}
-            >
-                <Highlighter size={14} />
-            </QuickControlToggle>
             <QuickControlToggle
                 active={tuning.soulEnabled}
                 label={t('options.dioramaSoulEffect')}

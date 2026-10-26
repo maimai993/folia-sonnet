@@ -83,6 +83,11 @@ export const O = {
     autoGenerate: option(SONG_THEME, 'autoGenerateSongTheme', 'options.autoGenerateSongTheme'),
     source: option(SONG_THEME, 'themeGenerationSource', 'options.themeGenerationSource'),
     preferCustom: option(SONG_THEME, 'preferCustomTheme', 'options.preferCustomTheme'),
+    // 全局关键词着色（fork 独有）：原来各动画面板里各有一颗、海报墙看的是莫奈那颗，
+    // 现在收编成一颗总闸，管所有画歌词的地方（莫奈 / 镜台 / 绘光 / 海报墙）。
+    keywordColoring: option(SONG_THEME, 'keywordColoring', 'options.keywordColoring', {
+        noteKey: 'options.keywordColoringDesc',
+    }),
     // 下面两项是 AiProviderSettings 那块卡片里的（fork 独有）：桌面端那块由 Electron 主进程
     // 设置顶掉，非桌面才画，搜索里跟着一起退场。
     cloudCache: option(SONG_THEME, 'cloudCache', 'options.cloudCache', {

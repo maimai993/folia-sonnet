@@ -240,19 +240,6 @@ export const PlatformColumn: React.FC<PlatformColumnProps> = ({ rows, chosenId, 
                 </label>
             )}
             <div className={`relative min-h-0 ${tall ? 'flex flex-1 flex-col' : ''}`}>
-                {/* 高亮在滚动内容之外裁切：旧的绝对定位高亮会撑大 scrollWidth，触发滚动条、
-                    压窄行再重新量测，在安卓平板上两种布局来回振荡。滚动时只更新绘制坐标。 */}
-                <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg"
-                    style={fade ? { WebkitMaskImage: fade, maskImage: fade } : undefined}
-                >
-                    <div
-                        ref={highlightRef}
-                        data-login-highlight="true"
-                        className="st-t-move absolute left-0 top-0 rounded-lg bg-[var(--st-fill2)] opacity-0 transition-[transform,width,opacity]"
-                    />
-                </div>
                 <div
                     ref={listRef}
                     role="listbox"
@@ -265,6 +252,17 @@ export const PlatformColumn: React.FC<PlatformColumnProps> = ({ rows, chosenId, 
                     className={`relative min-h-0 rounded-lg outline-none ${lie === 'column' ? 'st-scroll flex flex-1 flex-col overflow-y-auto overscroll-contain' : 'login-row-scroll flex gap-1 overflow-x-auto overscroll-x-contain'}`}
                     style={fade ? { WebkitMaskImage: fade, maskImage: fade } : undefined}
                 >
+                    {/*
+                        高亮那一块：位置和大小由 placeGlow 直接写在它身上（不经过 React），
+                        这里只给个起始的不透明度，写死的内容不会再被 React 动。
+                        它必须是列表里的第一块：量测和绘制拿它当第一块看。
+                    */}
+                    <div
+                        ref={highlightRef}
+                        aria-hidden
+                        className="st-t-move pointer-events-none absolute left-0 top-0 rounded-lg bg-[var(--st-fill2)] transition-[transform,width,opacity]"
+                        style={{ opacity: 0 }}
+                    />
                     {showAll && (
                         <div
                             id={`login-row-${ALL_PROVIDERS_ID}`}

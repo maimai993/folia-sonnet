@@ -637,7 +637,10 @@ export async function handleSongUrl(id, cookie, qualityPreference) {
 export async function handleLyric(id, cookie) {
   let body = {};
   try {
-    body = await api('/api/song/lyric/v1', { id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0 }, cookie);
+    // yv: 1 = 要逐字（YRC）。以前这里一片 0，平台只回整行 LRC，
+    // 壁纸那条时间轴就只能按整行跳 —— 用户反馈「后台歌词不跟逐字」。
+    // 拿不到逐字时 yrc 是空的，取词方按整行 LRC 走，与以前一样。
+    body = await api('/api/song/lyric/v1', { id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 1, ytv: 0, yrv: 0 }, cookie);
   } catch (_) {
     body = await api('/api/song/lyric', { id, lv: -1, tv: -1 }, cookie);
   }

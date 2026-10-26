@@ -56,5 +56,6 @@ describe('Omni architecture boundaries', () => {
             }
         }
         expect(differences).toEqual([]);
-    });
+        // 要把整个源码树按行数一遍（几百个文件），默认 5 秒在慢机器上不够。
+    }, 120_000);
 });

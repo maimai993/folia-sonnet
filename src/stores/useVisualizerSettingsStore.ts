@@ -81,6 +81,13 @@ type OwnSettingsState = {
     randomVisualizerModes: RandomVisualizerMode[];
     /** Snap animated glow blur radii to a bounded set. See components/visualizer/wordGlow.ts. */
     glowBlurQuantize: boolean;
+    /**
+     * 全局关键词着色：AI 主题的 wordColors 高亮在歌词上画不画。
+     *
+     * 一颗总闸管所有画面（莫奈 / 镜台 / 绘光 / 海报墙）—— 以前各样式面板里各有一颗，
+     * 而且海报墙看的是莫奈那颗，彼此不该有这种牵连，于是收编成全局一份。
+     */
+    keywordColoringEnabled: boolean;
     /** 把播放中的歌词推给原生歌词动态壁纸。Android 专有，其它平台恒为 false 也不影响。 */
     lyricsWallpaperFeed: boolean;
     /** 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片，'video' 自选视频。 */
@@ -248,6 +255,7 @@ type OwnSettingsState = {
     handleToggleWallpaperOverlayHideAfterLyricsEnd: (enable: boolean) => void;
     handleToggleWallpaperOverlayHideCoverArt: (enable: boolean) => void;
     handleSetSmartBeat: (patch: SmartBeatPatch) => void;
+    handleSetKeywordColoringEnabled: (enable: boolean) => void;
 };
 
 export type VisualizerSettingsState = OwnSettingsState & VisualizerTuningSettings;
@@ -312,6 +320,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
     randomVisualizerModes: readStoredRandomVisualizerModes(),
     glowBlurQuantize: readStoredGlowBlurQuantize(),
+    keywordColoringEnabled: getStoredBoolean('keyword_coloring_enabled', true),
     lyricsWallpaperFeed: getStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, true),
     lyricsWallpaperBackground: resolveWallpaperBackground(
         getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover')),
@@ -350,6 +359,10 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         const next = resolveSmartBeatSettings(patch, get().smartBeat);
         if (typeof window !== 'undefined') localStorage.setItem(SMART_BEAT_STORAGE_KEY, JSON.stringify(next));
         set({ smartBeat: next });
+    },
+    handleSetKeywordColoringEnabled: (enable) => {
+        setStoredBoolean('keyword_coloring_enabled', enable);
+        set({ keywordColoringEnabled: enable });
     },
     handleToggleDisableVisualizerVignette: (disable) => {
         setStoredBoolean('disable_visualizer_vignette', disable);

@@ -42,7 +42,6 @@ const NON_DEFAULT_TUNING: LumiereTuning = {
     seamlessTransitions: false,
     overlayFrame: false,
     textOnly: true,
-    keywordColors: false,
     themeIcons: false,
     themeColorMix: 0.35,
     renderQuality: 'balanced',

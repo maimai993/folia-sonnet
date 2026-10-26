@@ -24,6 +24,7 @@ import { noteAudioEvent } from '../../utils/mediaDiagnostics';
 import CommandPalette from '../command-palette/CommandPalette';
 import { PlayerBottomBarLayoutContext } from '../floating-player/PlayerBottomBarLayoutContext';
 import LoginHost from '../login/LoginHost';
+import SignInSpotlight from '../login/SignInSpotlight';
 import AnalysisModelsPrompt from '../modal/AnalysisModelsPrompt';
 import AppUpdatePromptDialog from '../modal/AppUpdatePromptDialog';
 import FreeSoftwareNoticeModal from '../modal/FreeSoftwareNoticeModal';
@@ -465,7 +466,6 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                                     isStageActive: isNowPlayingStageActive, disabled: isNowPlayingControlDisabled }}
                                 lyrics={commandPaletteContext.shared.lyrics}
                                 lyricSource={visualizerRendererModel}
-                                lyricKeywordColoringEnabled={visualizerRendererModel.visualizerTunings.monet.keywordColoringEnabled}
                                 currentSong={displaySong}
                                 playerState={displayPlayerState}
                                 currentTime={currentTime}
@@ -627,6 +627,17 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 isOpen={startupExperience.isFreeSoftwareNoticeOpen}
                 isDaylight={isDaylight}
                 onClose={startupExperience.closeFreeSoftwareNotice}
+            />
+            {/*
+                首启最后一步：把首页那个登录按钮送到脸上来。
+                App.tsx 拆成一层层装配之后这一处挂了漏 —— 状态和动作用 useStartupExperienceGate
+                早就备好了，只有 JSX 没接上，于是这一层对用户等于不存在。
+                放在登录窗口之前：它点下去正是 openLoginWindow，窗口要能盖在它上面。
+            */}
+            <SignInSpotlight
+                isOpen={startupExperience.isSignInSpotlightOpen}
+                account={accountController}
+                onPressed={startupExperience.pressSignInSpotlight}
             />
             {/* 登录窗口挂在最外层：每个资料库界面（网格、Bravais、文本）都用 openLoginWindow 打开同一个窗口。 */}
             <LoginHost account={accountController} />

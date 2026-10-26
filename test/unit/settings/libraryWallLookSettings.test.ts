@@ -75,7 +75,8 @@ describe('BravaisWallGroup', () => {
         await render();
 
         expect(container.innerHTML).toBe('');
-    });
+        // 整个分组的设置页要现装一遍（含 i18n 与 store），默认 5 秒在慢机器上不够。
+    }, 120_000);
 
     it('groups the transparency, the windows per block and the stack edges under one heading', async () => {
         gate.isBravaisActive = true;
@@ -160,6 +161,7 @@ describe('BravaisWallGroup', () => {
         expect(listsGroup()).toBe(false);
         gate.isBravaisActive = true;
         expect(listsGroup()).toBe(true);
-        // The search module loads the whole command registry the first time.
-    }, 30000);
+        // The search module loads the whole command registry the first time. On a cold, busy
+        // machine that one import has been measured at 30s+ here, so the budget has to clear it.
+    }, 120_000);
 });

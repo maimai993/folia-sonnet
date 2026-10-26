@@ -170,6 +170,9 @@ function mount({ address = false } = {}) {
         pendingResumeTimeRef: refs.pendingResumeTimeRef,
         currentOnlineAudioUrlFetchedAtRef: refs.currentOnlineAudioUrlFetchedAtRef,
         lastAudioRecoverySourceRef: refs.lastAudioRecoverySourceRef,
+        nativePlaybackRef: { current: false },
+        nativeLikeStateOf: () => undefined,
+        nativeFailedKeysRef: { current: new Set<string>() },
     } as never);
     return { refs, watch, queue, interruptStage };
 }

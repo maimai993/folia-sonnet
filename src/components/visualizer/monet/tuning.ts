@@ -31,7 +31,6 @@ const portraitSource = (value: MonetPortraitSource | undefined): MonetPortraitSo
  * they are passed over here.
  */
 export const resolveStoredMonetTuning = (parsed: Partial<MonetTuning> & Record<string, unknown>): MonetTuning => ({
-    keywordColoringEnabled: parsed.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: parsed.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
     fontScale: fontScale(
         parsed.fontScale ?? DEFAULT_MONET_TUNING.fontScale,

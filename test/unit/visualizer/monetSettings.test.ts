@@ -146,11 +146,9 @@ describe('Monet tuning and lyric helpers', () => {
 
     it('normalizes persisted Monet lyric and portrait tuning values', () => {
         expect(resolveStoredMonetTuning({
-            keywordColoringEnabled: false,
             fontScale: 3,
             portraitSource: 'custom',
         })).toEqual({
-            keywordColoringEnabled: false,
             fontScale: 1.5,
             portraitSource: 'custom',
             showDescription: true,

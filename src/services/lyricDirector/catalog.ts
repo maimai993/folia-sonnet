@@ -44,6 +44,8 @@ const MODE_HINTS: Record<string, string> = {
     sonnet: '日式 MV 分镜、相机运动与转场，电影感强',
     tempera: '印刷色块与拼贴、逐字入场',
     lumiere: '光场与烟雾、辉光崩解，华丽',
+    hanabi: '花火粒子与夜空、升空绽放与拼贴，节庆感强',
+    prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -62,6 +64,8 @@ const MODE_NAMES: Record<string, string> = {
     sonnet: '商籁',
     tempera: '凝彩',
     lumiere: '绘光',
+    hanabi: '花火',
+    prompt: '提示词',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -80,6 +84,8 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     sonnet: 'ui.visualizerSonnet',
     tempera: 'ui.visualizerTempera',
     lumiere: 'ui.visualizerLumiere',
+    hanabi: 'ui.visualizerHanabi',
+    prompt: 'ui.visualizerPrompt',
 };
 
 export type DirectorParamSpec =
@@ -171,7 +177,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
     monet: {
         setter: 'handleSetMonetTuning',
         params: {
-            keywordColoringEnabled: { kind: 'boolean', zh: '关键词着色' },
             showDescription: { kind: 'boolean', zh: '显示简介' },
             fontScale: { kind: 'number', min: 0.7, max: 1.5, zh: '字号' },
             portraitStyle: { kind: 'select', options: ['square', 'rectangular'], zh: '封面样式' },
@@ -191,7 +196,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             soulIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '灵魂出窍强度' },
             gradientEnabled: { kind: 'boolean', zh: '渐变跟唱' },
             gradientIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '渐变强度' },
-            keywordColoringEnabled: { kind: 'boolean', zh: '关键词着色' },
             soulActiveEnabled: { kind: 'boolean', zh: '当前字跟随漂移' },
             particleGlowEnabled: { kind: 'boolean', zh: '粒子光晕' },
             particleGlowIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '粒子光晕强度' },
@@ -300,7 +304,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             seamlessTransitions: { kind: 'boolean', zh: '无缝转场' },
             overlayFrame: { kind: 'boolean', zh: '画框' },
             textOnly: { kind: 'boolean', zh: '仅歌词文字' },
-            keywordColors: { kind: 'boolean', zh: '关键词着色' },
             themeIcons: { kind: 'boolean', zh: '主题图标' },
             themeColorMix: { kind: 'number', min: 0, max: 1, zh: '主题色占比' },
             renderQuality: { kind: 'select', options: ['full', 'balanced', 'low'], zh: '画质' },

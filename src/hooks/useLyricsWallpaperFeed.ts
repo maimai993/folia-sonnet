@@ -1,6 +1,6 @@
 import React from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
-import { clearLyricsWallpaper, publishLyricsWallpaper, pushLyricsFontToNative, setWallpaperAppearance, setWallpaperFloatingPreview, type FoliaWallpaperTimelineEntry } from '../platform/foliaWallpaper';
+import { clearLyricsWallpaper, publishLyricsWallpaper, pushLyricsFontToNative, setWallpaperAppearance, setWallpaperFloatingPreview, wallpaperHeartbeat, type FoliaWallpaperTimelineEntry } from '../platform/foliaWallpaper';
 import { getStoredUploadedLyricsFont } from '../services/customLyricsFont';
 import { flattenTuning, tuningFieldFor, withGlobalSettings } from '../platform/wallpaperVisualizerTuning';
 import { useVisualizerSettingsStore, type VisualizerSettingsState } from '../stores/useVisualizerSettingsStore';
@@ -12,6 +12,7 @@ import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
 import { fetchCoverBytes } from '../services/coverBytes';
 import { actuallyPlaying } from '../stores/motionSignals';
+import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
 import type { Line, Theme } from '../types';
 
 // src/hooks/useLyricsWallpaperFeed.ts
@@ -84,6 +85,12 @@ const WALLPAPER_DRIFT_TOLERANCE_MS = 900;
  * 间隔留了三倍余量：后台节流漏掉一两次也不会把预览搞没。
  */
 const PREVIEW_RENEW_MS = 15_000;
+
+/**
+ * 心跳间隔。前台每两秒敲一下「播放管线还活着」；退到后台 JS 定时器被挂起后由
+ * 播放服务接管（原生 2 秒一敲）。原生侧的超时是 8 秒，容得下几次没接着。
+ */
+const HEARTBEAT_MS = 2_000;
 
 /*
  * 换歌那一推要「等一等」再发。
@@ -426,6 +433,59 @@ export const useLyricsWallpaperFeed = ({
     // 于是封面（以及从封面取的高亮色）永远推不到壁纸那边 —— 表现就是「歌词始终纯白」。
     const [wallpaperCover, setWallpaperCover] = React.useState<string | null>(null);
 
+    /*
+     * 回到前台 / 页面重新可见：**先把位置对齐到原生，再推**。
+     *
+     * 退到后台之后 WebView 的 JS 定时器被系统挂起，`getCurrentTime()` 停在挂起那一刻；
+     * 而原生那边这段时间一直在放。回到前台时如果照旧拿这个旧值去推整条时间轴
+     * （换歌 / 歌词变化的那个 effect 恰好会在挂起期间累积的所有变更上重跑一次），
+     * 就会把**过期位置**写进锚点 —— 壁纸和叠层立刻从正确的那一句跳回几十秒前，
+     * 也就是用户报的「打开前台后错误的歌词会覆盖后台的」。
+     *
+     * 判据用 visibilitychange + resume 两个事件：前者是切前后台，后者是 Capacitor
+     * 自己补的（有些 ROM 上只来一个）。只对齐位置，不在这里推送 —— 推送交给下面
+     * 那几个按内容变化触发的 effect，它们会在这一拍之后拿到已经对齐的值。
+     */
+    React.useEffect(() => {
+        if (!active) return undefined;
+        const resync = () => {
+            /*
+             * 原生在抽头（桥活着且手上真有歌）时，位置以它为准：
+             * 引擎内部是「锚点 + 墙钟」，getPositionSec() 回来的就是原生此刻的位置。
+             * 原生没在播（走 <audio> / 已释放）时什么都不同步，用的是 Web 自己的时钟。
+             */
+            if (!nativePlaybackEngine.isPlaying()) return;
+            const nativeSec = nativePlaybackEngine.getPositionSec();
+            if (!Number.isFinite(nativeSec) || nativeSec < 0) return;
+            pushLyricsWallpaperPosition.current(nativeSec);
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') resync();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('resume', resync);
+        window.addEventListener('focus', resync);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('resume', resync);
+            window.removeEventListener('focus', resync);
+        };
+    }, [active]);
+
+    /*
+     * 「把某个位置推给原生」这一支单独抽出来，供上面的回前台对齐使用。
+     *
+     * 写成 ref 是为了不让上面那个 effect 依赖一长串值（依赖一变就重挂监听，
+     * 反而更容易漏掉真正该对齐的那一次）。
+     */
+    const pushLyricsWallpaperPosition = React.useRef<(seconds: number) => void>(() => {});
+    pushLyricsWallpaperPosition.current = (seconds: number) => {
+        void publishLyricsWallpaper({
+            positionMs: Math.round(seconds * 1000),
+            playing: latest.current.playing,
+        });
+    };
+
     // 关掉开关时清一次，别让壁纸停在过期的那一行上。
     React.useEffect(() => {
         if (enabled && !feedEnabled) {
@@ -477,6 +537,17 @@ export const useLyricsWallpaperFeed = ({
     React.useEffect(() => {
         if (!active) return;
         const lines = lyrics?.lines ?? [];
+        /*
+         * 手上没有这首歌的歌词时**不要推空轴**。
+         *
+         * 原生兜底切歌（通知栏 / WebView 冻结期间的自动下一首）会自己向平台拉歌词、
+         * 就地发布时间轴（publishNativeTrack）。Web 这边认领后若歌词还没拉回来
+         * （在线歌词一趟网络往返，慢平台好几秒），照推的话带出去的是空表 ——
+         * 原生刚发对的那份就被清掉了，用户看到的就是「有概率切歌后壁纸没歌词」。
+         * 空着不推：原生那边的保持原状语义（lines=null 不动时间轴）继续生效，
+         * 等歌词真的到了（lines 变了）这一 effect 自然会再跑一次补上。
+         */
+        if (lines.length === 0 && (title ?? '').length > 0) return;
         const send = () => {
             void publishLyricsWallpaper({
                 title: title ?? '',
@@ -540,6 +611,12 @@ export const useLyricsWallpaperFeed = ({
          *
          * 闸只在「换了一首歌」时开：歌词晚到、改设置这些**不**重开它 ——
          * 那些本来就该当场生效，按住反而成了「改了半天没反应」。
+         *
+         * ⚠️ 后台**不等**：`setTimeout` 在后台会被系统节流（重的直接冻住），
+         * 等主题那一拍可能一分钟后才跑，而这一分钟里多半又切了歌 —— cleanup 把定时器
+         * 清掉，这一首的整条时间轴（连同 AI 主题的 wordColors）就一次都没推出去，
+         * 桌面叠层一直挂着上一首的样子（用户原话：「AI 主题获取也需要走原生，
+         * 不然后台没有」）。前台那 650ms 是为了少打一次推送，后台没人看着，不值得赌。
          */
         const songKey = `${title ?? ''}\u0000${artist ?? ''}`;
         if (songGateRef.current.key !== songKey) songGateRef.current = { key: songKey, since: Date.now() };
@@ -551,7 +628,8 @@ export const useLyricsWallpaperFeed = ({
             || (Boolean(coverUrl) && !wallpaperCover)
             || Date.now() - since < THEME_SETTLE_MIN_MS
         );
-        if (!waiting) {
+        const pageHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        if (!waiting || pageHidden) {
             send();
             return;
         }
@@ -634,6 +712,25 @@ export const useLyricsWallpaperFeed = ({
             playing,
         });
     }, [active, playing]);
+
+    /*
+     * 心跳：只要壁纸推送开着就定期敲一下「我还活着」。
+     *
+     * 它与上面的锚点推送是两回事 —— 锚点只在换行 / 跳变时推，正常播放期间可能
+     * 几分钟都不吭声，指望不上当心跳。而原生那边「锚点 + 墙钟」只会一直往前走，
+     * 一旦写锚点的一方死透了（应用被划掉后台、WebView 销毁），没人踩刹车，
+     * 歌词就照最后一首歌的时间轴一路唱到头、进度条走满 —— 心跳超时就是那脚刹车：
+     * 壁纸与两层叠层收掉歌词和进度条，只留背景。暂停中也照敲：歌词冻在原地
+     * 是「用户看得见的状态」，不算没人管还在走。
+     *
+     * 只覆盖前台；退到后台 JS 定时器被挂起，由播放服务接管（音频还在放，
+     * 歌词就得继续走）。App 一死两条心跳一起停，超时后壁纸只剩背景。
+     */
+    React.useEffect(() => {
+        if (!active) return undefined;
+        const timer = window.setInterval(() => void wallpaperHeartbeat(), HEARTBEAT_MS);
+        return () => window.clearInterval(timer);
+    }, [active]);
 
     /*
      * 「音频**真的**在不在播」一变，就立刻把锚点同步过去。
