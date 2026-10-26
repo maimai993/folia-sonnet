@@ -12,7 +12,6 @@ import { settingsAnchorSubview } from '../../../../utils/settingsAnchorModel';
 import { isCapacitorAndroid } from '../../../../platform/runtime';
 import { settingsCardClassFor } from '../settingsCardClasses';
 import AndroidForceLandscapeSetting from '../AndroidForceLandscapeSetting';
-import AndroidPlaybackAutoLandscapeSetting from '../AndroidPlaybackAutoLandscapeSetting';
 import DeviceTypeSetting from '../DeviceTypeSetting';
 import GlassSurfaceSetting from '../GlassSurfaceSetting';
 import LyricFlatSetting from '../LyricFlatSetting';
@@ -94,7 +93,6 @@ const AppearancePage: React.FC = () => {
                 {/* 下面三项组件内部自行判断运行时：非安卓直接返回 null，这里不用再判端。 */}
                 <DeviceTypeSetting />
                 <AndroidForceLandscapeSetting />
-                <AndroidPlaybackAutoLandscapeSetting />
             </Group>
 
             <Group def={THEME}>

@@ -16,6 +16,7 @@ import { isNativePlayerAvailable } from '../../../../services/playbackEngine/nat
 import { runsOnWindows } from '../../../../utils/platform';
 import { Button, Chips, Group, Reveal, Row, Segmented, Slider, Status, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
+import AndroidPlaybackAutoLandscapeSetting from '../AndroidPlaybackAutoLandscapeSetting';
 import { useSettingsPage } from './settingsPageContext';
 import { TextField } from '@/components/ui';
 
@@ -355,6 +356,10 @@ const PlaybackPage: React.FC = () => {
                         <Toggle checked={voiceInputPause.enabled} onChange={voiceInputPause.onToggle} />
                     </Row>
                 )}
+                {/* 「进入可视化自动横屏」是播放行为而不是外观：它只在播放页生效、离开就转回，
+                    和上面几行同属「播放时怎么表现」，放在这里比塞进「外观 → 显示」好找。
+                    组件内部自己判端，非安卓返回 null。 */}
+                <AndroidPlaybackAutoLandscapeSetting />
             </Group>
 
             {/* The whole group answers to ANALYSIS_MODELS_ENABLED, same as the rows inside it say:
