@@ -5,8 +5,7 @@ import type { SongResult } from '../types';
 import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
-import { applyNativeLikeOverrides, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
-import { syncFeiniuGatewayCredentials } from '../services/onlineMusic/feiniuTransport';
+import { applyNativeLikeOverrides, omni, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { buildQueueMirrorEntries, getMirrorDurationMs, resolveLikeIdentity } from '../utils/queueMirrorEntry';
 
@@ -379,7 +378,16 @@ export const useCapacitorPlaybackBridge = ({
   // 同步读账号缓存），原生兜底切到哪一首，那颗心都不会消失。
   //
   // 全量 JSON 一推几百 KB，桥只有一条 —— 所以只在**队列本体变化**时推；
-  // 换歌只走下面那个轻量游标 effect。likeStateOf 是内联函数，走 ref 不进依赖。
+  // 换歌只走下面那个轻量游标 effect。likeStateOf 是内联函数（每次渲染都是新身份），
+  // 不进依赖；但它读的那份红心状态要有个稳定的信号，否则账号里的红心变了、
+  // Navidrome 收藏刷新了，队列本体没变就再也不推 —— 原生兜底切过去那颗心是旧的。
+  const likeSignal = React.useMemo(
+    () => (queue ?? []).map((song) => {
+      const state = likeStateOf?.(song);
+      return `${getPlaybackSongKey(song)}|${state?.liked ? 1 : 0}${state?.canLike === false ? 0 : 1}`;
+    }).join(','),
+    [queue, likeStateOf],
+  );
   const mirrorSourceRef = React.useRef({ queue, likeStateOf, currentSong });
   mirrorSourceRef.current = { queue, likeStateOf, currentSong };
   React.useEffect(() => {
@@ -388,11 +396,14 @@ export const useCapacitorPlaybackBridge = ({
     if (!list || list.length === 0) return;
     // 飞牛的凭据要在队列之前到位：登录可能发生在插件可用之前（重启后桥晚一步），
     // 这里每推一次队列顺手同步一遍 —— 一次几十字节的调用，换原生兜底不空手。
-    syncFeiniuGatewayCredentials();
+    // 走 omni 而不是直连 transport：hooks 按依赖方向只该经过 omni。
+    omni.syncNativeGatewayCredentials();
     const entries = buildQueueMirrorEntries(list, stateOf);
     const index = activeSong ? list.findIndex((song) => getPlaybackSongKey(song) === getPlaybackSongKey(activeSong)) : -1;
     void FoliaPlayback.setQueueMirror({ queueJson: JSON.stringify(entries), index });
-  }, [enabled, queue]);
+    // likeSignal 不进依赖数组的「语义」，只当「红心状态变了」的触发器用。
+    // eslint 层面它确实被 effect 体间接读到，所以照实列上。
+  }, [enabled, queue, likeSignal]);
 
   // 游标：队列没变、换了一首正播的。几百 KB 的全量 JSON 不跟着切歌过桥。
   React.useEffect(() => {

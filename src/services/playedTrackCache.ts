@@ -89,6 +89,15 @@ export const cachePlayedTrackAssets = async (
             // 照样能存。试听片段的校验在原生做（MediaExtractor 探时长，同一条
             // 「不足歌长一半不存」的规则）；原生没接上（老包 / 非安卓）才回落 Web 抓字节。
             const metadata = getProviderSongMetadata(song);
+            /*
+             * 原生那条是**快路**，不是唯一的路。
+             *
+             * 它每次都用 HttpURLConnection 重新拉一遍 URL：源站一次 5xx / 超时就存不下，
+             * 而这里要是「原生的路都到头了」直接收工，这首歌就整个会话再也不缓存了 ——
+             * 用户看到的是「有的歌存了、有的没存」。所以原生没存成时照样往下走 Web 那条：
+             * 后台跑不完最多是白试一次，前台时它是真的能救回来。
+             */
+            let storedNatively = false;
             if (await hasNativeMediaCache()) {
                 const writesOver = await hasCachedSongAudio(song);
                 const stored = await cacheNativeMediaFromUrl(
@@ -98,17 +107,18 @@ export const cachePlayedTrackAssets = async (
                     metadata.durationMs || 0,
                 );
                 if (stored) {
+                    storedNatively = true;
                     if (writesOver) await saveSongAudioLevel(song, undefined);
                     await saveSongAudioLevel(song, level);
                     clearCachedSongAudioDistrust(song);
                     result.audio = true;
+                    notifyAudioCached(getSongResourceCacheKey('audio', song), src);
                     console.log(`[Cache] Audio saved by native download, fetched at ${level ?? 'an unknown level'}`);
                 } else {
-                    console.log('[Cache] Native download declined to store:', song.name);
+                    console.log('[Cache] Native download declined to store, falling back to the web path:', song.name);
                 }
-                // 无论存没存，原生的路都到头了 —— 不再走 Web 那套抓字节（后台多半也跑不完）。
-                // 封面那段在函数尾部，不 return，让它继续走。
-            } else {
+            }
+            if (!storedNatively) {
                 const response = await fetch(src);
                 // An error page is a body too: without this check it is stored as the track's audio.
                 if (!response.ok) throw new Error(`Audio request failed with status ${response.status}`);
