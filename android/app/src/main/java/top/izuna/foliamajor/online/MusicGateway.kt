@@ -1526,7 +1526,12 @@ class MusicGateway private constructor() {
             if (kgMidCache == null) {
                 synchronized(MusicGateway::class.java) {
                     if (kgMidCache == null) {
-                        kgMidCache = md5("mineradio_" + System.currentTimeMillis() + "_" + Math.random())
+                        val fresh = md5("mineradio_" + System.currentTimeMillis() + "_" + Math.random())
+                        // 算不出来就这次先用着、**不写进缓存**：写进去（尤其是空串）之后
+                        // 整个进程的酷狗请求都会带着一个空 mid，而且再也没有重算的机会。
+                        // 正常情况下 MD5 不会不可用，但「缓存了一个坏值」是不可逆的。
+                        if (fresh.isEmpty()) return ""
+                        kgMidCache = fresh
                     }
                 }
             }
