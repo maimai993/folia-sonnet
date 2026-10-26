@@ -118,6 +118,25 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             }
             val position = current.currentPosition
             val duration = current.duration
+            /*
+             * 单曲循环回绕单独报一次 `seeked`。
+             *
+             * `REPEAT_MODE_ONE` 是**无缝**重播：ExoPlayer 不回调
+             * `onPositionDiscontinuity`，也不发 `STATE_ENDED`，位置就这么从末尾跳回 0。
+             * 而 Web 侧（nativePlaybackEngine.getPositionSec）有一条只进不退的夹子
+             * `lastDeliveredMs`，只在这几个事件上复位：playing / seeked。于是回绕之后
+             * 引擎仍把位置夹在上一轮的末尾，进度条冻在最后不动 —— 声音其实已经在从头放了。
+             *
+             * 判据：位置比上一拍明显往回走（超过正常的相邻两拍间隔），且不是在播另一首。
+             * 用户手动 seek 往回拖也会命中，那本来就该报 seeked，行为一致。
+             */
+            if (position + POSITION_TICK_MS < cachedPositionMs) {
+                cachedPositionMs = position
+                cachedDurationMs = if (duration > 0) duration else 0L
+                emit("seeked", position, cachedDurationMs, null)
+                handler.postDelayed(this, POSITION_TICK_MS)
+                return
+            }
             cachedPositionMs = position
             cachedDurationMs = if (duration > 0) duration else 0L
             emit("position", position, cachedDurationMs, null)
