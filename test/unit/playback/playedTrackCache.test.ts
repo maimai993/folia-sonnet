@@ -30,6 +30,16 @@ vi.mock('../../../src/services/audioCache', () => ({
 vi.mock('../../../src/services/db', () => ({
     saveToCache: (key: string, value: unknown) => saveToCache(key, value),
 }));
+// 原生缓存这条快路：之前整个文件没有 mock 它，于是 hasNativeMediaCache() 恒为 false，
+// 原生分支在用例里一次都没跑到。mock 成可切换的，专门覆盖那条分支。
+const hasNativeMediaCache = vi.fn<() => Promise<boolean>>();
+const cacheNativeMediaFromUrl = vi.fn<(key: string, url: string, limit: number, durationMs: number) => Promise<boolean>>();
+vi.mock('../../../src/services/mediaCacheStore', () => ({
+    hasNativeMediaCache: () => hasNativeMediaCache(),
+    cacheNativeMediaFromUrl: (key: string, url: string, limit: number, durationMs: number) => (
+        cacheNativeMediaFromUrl(key, url, limit, durationMs)
+    ),
+}));
 
 const { cachePlayedTrackAssets } = await import('../../../src/services/playedTrackCache');
 const { getSongResourceCacheKey } = await import('../../../src/services/onlineMusic/resourceKeys');
@@ -103,6 +113,59 @@ describe('cachePlayedTrackAssets', () => {
         vi.stubGlobal('Audio', HeaderReader);
         vi.spyOn(console, 'log').mockImplementation(() => { });
         clearCachedSongAudioDistrust(onlineSong);
+        // 默认走 Web 那条老路：原生不可用 / 存不下，与线上非安卓环境一致。
+        hasNativeMediaCache.mockResolvedValue(false);
+        cacheNativeMediaFromUrl.mockResolvedValue(false);
+    });
+
+    // 安卓优先走原生下载：字节不出网到 Web 再绕回来，WebView 冻结时这条路照样能存。
+    // 但它每次都重新拉一遍 URL —— 源站抖一次就存不下，所以它只能是「快路」，
+    // 存不下必须回落 Web，否则这首歌整个会话都不再缓存。
+    describe('with the native download path available', () => {
+        const src = 'https://cdn.example/audio.mp3';
+
+        beforeEach(() => {
+            hasNativeMediaCache.mockResolvedValue(true);
+            hasCachedSongCover.mockResolvedValue(true);
+        });
+
+        it('stores through the native download and does not fetch in the page', async () => {
+            cacheNativeMediaFromUrl.mockResolvedValue(true);
+            const fetchSpy = vi.fn(async () => audioResponse());
+            vi.stubGlobal('fetch', fetchSpy);
+
+            const written = await cachePlayedTrackAssets(onlineSong, src);
+
+            expect(written.audio).toBe(true);
+            expect(cacheNativeMediaFromUrl).toHaveBeenCalledTimes(1);
+            // 原生存下了就不该再走 Web 抓字节。
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(saveSongAudioLevel).toHaveBeenCalled();
+        });
+
+        it('falls back to the web download when the native one declines', async () => {
+            cacheNativeMediaFromUrl.mockResolvedValue(false);
+            const fetchSpy = vi.fn(async () => audioResponse());
+            vi.stubGlobal('fetch', fetchSpy);
+
+            const written = await cachePlayedTrackAssets(onlineSong, src);
+
+            // 原生的路走不通，Web 那条把它救回来 —— 这正是这条用例要钉住的行为。
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+            expect(written.audio).toBe(true);
+            expect(saveAudioBlob).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves the song uncached when both paths fail', async () => {
+            cacheNativeMediaFromUrl.mockResolvedValue(false);
+            vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, blob: async () => new Blob(['x']) })));
+            vi.spyOn(console, 'error').mockImplementation(() => { });
+
+            const written = await cachePlayedTrackAssets(onlineSong, src);
+
+            expect(written.audio).toBe(false);
+            expect(saveAudioBlob).not.toHaveBeenCalled();
+        });
     });
 
     // An expired or refused stream URL answers with an error page. That page is a body like any
