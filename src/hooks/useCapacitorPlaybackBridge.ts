@@ -178,7 +178,7 @@ type UseCapacitorPlaybackBridgeOptions = {
    * 队列还没恢复 / 找不到这首歌回 false，调用方会重试。
    * 不认领的话，App 打开时队列还停在旧歌上，与通知栏各说各话。
    */
-  onSyncToSong?: (songKey: string, positionMs?: number) => boolean | void;
+  onSyncToSong?: (songKey: string, positionMs?: number, playing?: boolean) => boolean | void;
   /**
    * 两轨合一的失败回执：原生解析这首歌的播放地址失败。调用方把歌拉黑并回退
    * Web 全流程（playSong 直通），不重试不卡住。
@@ -249,13 +249,17 @@ export const useCapacitorPlaybackBridge = ({
   // 放，JS 醒来后不是推它自己那份旧状态，而是先拉这份快照把自己的队列与位置对齐
   // 过去。队列的恢复（localStorage hydration）可能比这个 effect 晚：找不到歌就每
   // 500ms 重试一次，最多 6 秒，之后放弃（没有可对齐的就算了）。
+  //
+  // ⚠️ 不只在挂载时跑：App 常驻后台、每次亮屏回前台（visibilitychange / resume /
+  // focus）都要重新拉一次快照把自己对齐过去 —— 原生在后台可能已经切了好几首歌，
+  // 只认挂载那一次的话，回到前台看到的就是旧歌（issue #106 的第二个症状）。
   React.useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     const attempt = async (): Promise<boolean> => {
       const snapshot = await FoliaPlayback.getPlaybackSnapshot();
       if (cancelled || !snapshot || !snapshot.hasSong || !snapshot.songKey) return true;
-      return Boolean(callbacksRef.current.onSyncToSong?.(snapshot.songKey, snapshot.positionMs));
+      return Boolean(callbacksRef.current.onSyncToSong?.(snapshot.songKey, snapshot.positionMs, snapshot.playing));
     };
     const run = async () => {
       for (let attemptIndex = 0; attemptIndex < 12 && !cancelled; attemptIndex += 1) {
@@ -268,9 +272,19 @@ export const useCapacitorPlaybackBridge = ({
         await new Promise((resolveTimer) => setTimeout(resolveTimer, 500));
       }
     };
+    const onForeground = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      void run();
+    };
     void run();
+    document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('resume', onForeground);
+    window.addEventListener('focus', onForeground);
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('resume', onForeground);
+      window.removeEventListener('focus', onForeground);
     };
   }, [enabled]);
 

@@ -239,7 +239,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         // 原生通知栏切歌之后界面永远停在旧歌上（syncTo 没人接），下一首/上一首
         // 表现为「按了没反应」；解析失败的黑名单回执（nativePlayFailed）同样
         // 没人收，失败的歌每按一次都再撞一次原生。这里按原语义接回来。
-        onSyncToSong: (songKey, positionMs) => {
+        onSyncToSong: (songKey, positionMs, playing = true) => {
             const state = usePlaybackStore.getState();
             /*
              * 队列也要对齐：WebView 冻结期间原生可能自动跳过了放不了的歌、随机挑了
@@ -263,7 +263,9 @@ export const useAppPlaybackBridges = (model: Input) => {
                 // key 相等也要补齐：乐观 setCurrentSong 之后的 syncTo、以及 WebView
                 // 冻结期间原生一直在放的启动快照认领都走这里 —— 界面得跟上。
                 if (positionMs && positionMs > 0) currentTime.set(positionMs / 1000);
-                if (state.playerState !== PlayerState.PLAYING) setPlayerStateInStore(PlayerState.PLAYING);
+                // 播放状态**以原生为准**：亮屏回前台的快照认领里原生可能在暂停
+                // （issue #106 —— 以前无条件写成 PLAYING，界面与通知栏各说各话）。
+                setPlayerStateInStore(playing ? PlayerState.PLAYING : PlayerState.PAUSED);
                 return true;
             }
             const song = state.playQueue.find((item) => getPlaybackSongKey(item) === songKey);
@@ -284,7 +286,8 @@ export const useAppPlaybackBridges = (model: Input) => {
                     setDurationInStore(ms > 0 && ms < 1000 ? ms : ms / 1000);
                 }
                 // 原生切歌（nativePlayMirrorEntry）是直接起播的，界面对齐成在播。
-                setPlayerStateInStore(PlayerState.PLAYING);
+                // 亮屏回前台的快照认领带原生的真实状态：暂停就是暂停。
+                setPlayerStateInStore(playing ? PlayerState.PLAYING : PlayerState.PAUSED);
                 void persistPlaybackCache(song, state.playQueue);
                 /*
                  * 歌词跟着认领走：原生的 UI-only 认领**不经过 playSong**，而歌词的

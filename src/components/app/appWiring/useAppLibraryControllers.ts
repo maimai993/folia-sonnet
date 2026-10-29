@@ -7,11 +7,19 @@ import { usePlayingSongLocatorStore } from '../../../stores/usePlayingSongLocato
 import { createLyricFilterPatternSaver } from '../home/createLyricFilterPatternSaver';
 import { type GridViewCollectionDescriptor } from '../home/gridViewCollectionAdapters';
 import { createPanelNavigation } from '../navigation/createPanelNavigation';
+import { currentTime } from '../../../stores/motionSignals';
+import { makeSongCurrent } from '../playback/currentSong';
+import { setDuration as setDurationInStore, setPlayerState as setPlayerStateInStore, setPlayQueue } from '../../../stores/usePlaybackStore';
+import { readNativeQueueState } from '../../../services/nativeQueueBridge';
+import { songFromMirrorEntry } from '../../../utils/queueMirrorEntry';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { useElectronWindowPlaybackHandoff } from '../playback/restore/useElectronWindowPlaybackHandoff';
 import { useSessionRestoreController } from '../playback/restore/useSessionRestoreController';
 import { useLibraryPlaybackController } from '../playback/start/useLibraryPlaybackController';
 import { createQueueMutations } from '../player-panel/createQueueMutations';
 import { useEffect, useCallback, useMemo } from 'react';
+import type { SongResult } from '../../../types';
+import { PlayerState } from '../../../types';
 
 // src/components/app/appWiring/useAppLibraryControllers.ts
 // 本地曲库与播放控制器：窗口播放交接、本地歌播放、会话恢复、歌词过滤保存、队列改动。
@@ -25,7 +33,7 @@ export const useAppLibraryControllers = (model: Input) => {
         handleSetLyricStaffAbsorbMode, handleSetLyricStaffMinDwellSeconds, handleSetLyricStaffPattern,
         handleSetLyricStaffPolicy, handleToggleTransparentPlayerBackground, interruptStagePlaybackForMainTransition,
         isElectronWindow, lastAudioRecoverySourceRef, lyricFilterEnabled, lyricFilterPattern, lyricsLoadingWritesRef,
-        mainPlaybackSnapshotRef, navigateDirectHome, navigateToCollection, navigateToHome, navigateToPlaybackView,
+        mainPlaybackSnapshotRef, nativeActive, nativeTakesRef, navigateDirectHome, navigateToCollection, navigateToHome, navigateToPlaybackView,
         navigateToPlayer, nowPlayingLyricPayload, nowPlayingPaused, nowPlayingProgressMs, nowPlayingProgressQuality,
         nowPlayingTrack, pendingResumeTimeRef, persistLastPlaybackCache, playQueue, pushCollection, queueAddBehavior,
         restoreCachedThemeForSong, restoreStagePlaybackHandoff, setIsLyricsLoading, setLyrics, setLyricsStable,
@@ -130,6 +138,45 @@ export const useAppLibraryControllers = (model: Input) => {
         setLyrics,
         restoreCachedThemeForSong,
         persistLastPlaybackCache,
+        /*
+         * native-first 恢复（issue #106）：原生手上真有歌时，会话恢复**认领原生**，
+         * 不再从持久化缓存把旧歌 setAudioSrc 回去 —— 那会把原生正在放的歌重新
+         * prepare 成缓存里那首，表现就是「打开 App 唤醒时自动切歌」。
+         *
+         * 认领与 onSyncToSong 的 UI-only 路径同语义：currentSong / 队列 / 位置 /
+         * 播放状态全部以原生为准，audioSrc 不动（原生的源就是真源）。原生没歌
+         * （web 全流程的歌、或已经停止）回 false，照旧走缓存恢复。
+         */
+        adoptNativePlayback: async () => {
+            if (!nativeTakesRef.current && !nativeActive) return false;
+            const native = await readNativeQueueState();
+            if (!native || !native.hasSong || !native.songKey) return false;
+            // 冷启动时原生播放器正在放 = 原生真的在播（这里不问 web 的 store，
+            // 它还没恢复完，正是要被对齐的一方）。
+            // songKey 是原生的真源：镜像里找不到这条（镜像旧了）也照样认领，
+            // currentSong 从队列条目建不出来时按快照的元数据先占位。
+            const entry = native.entries.find((item) => item.songKey === native.songKey);
+            const nativeQueue = native.entries.map((item) => songFromMirrorEntry(item));
+            const song: SongResult = entry
+                ? songFromMirrorEntry(entry)
+                : ({
+                    id: native.songKey,
+                    name: native.title || native.songKey,
+                    artists: native.artist ? [{ id: `${native.songKey}-a0`, name: native.artist }] : [],
+                    album: { id: `${native.songKey}-al`, name: native.album || '' },
+                    durationMs: native.durationMs,
+                } as unknown as SongResult);
+            const queue = nativeQueue.some((item) => getPlaybackSongKey(item) === getPlaybackSongKey(song))
+                ? nativeQueue
+                : [song, ...nativeQueue];
+            setPlayQueue(queue);
+            makeSongCurrent(song);
+            currentTime.set(native.positionMs / 1000);
+            if (native.durationMs > 0) setDurationInStore(native.durationMs / 1000);
+            setPlayerStateInStore(native.playing ? PlayerState.PLAYING : PlayerState.PAUSED);
+            void persistLastPlaybackCache(song, queue);
+            return true;
+        },
         clearPersistedStagePlaybackCache,
         loadLocalSongs,
         loadLocalPlaylists,

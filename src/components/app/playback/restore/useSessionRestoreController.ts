@@ -36,6 +36,11 @@ type UseSessionRestoreControllerParams = {
         preserveCurrentOnMiss?: boolean;
     }) => Promise<unknown>;
     persistLastPlaybackCache: (song: SongResult | null, queue: SongResult[]) => Promise<void>;
+    /**
+     * 原生手上真有歌时的认领入口（native-first 恢复，见 restoreSession 内注释）。
+     * 回 true = 已认领原生的当前歌与队列；回 false = 原生没歌，按缓存恢复。
+     */
+    adoptNativePlayback?: () => Promise<boolean>;
     clearPersistedStagePlaybackCache: () => Promise<void>;
     loadLocalSongs: () => Promise<void>;
     loadLocalPlaylists: () => Promise<void>;
@@ -60,6 +65,7 @@ export function useSessionRestoreController({
     setLyrics,
     restoreCachedThemeForSong,
     persistLastPlaybackCache,
+    adoptNativePlayback,
     clearPersistedStagePlaybackCache,
     loadLocalSongs,
     loadLocalPlaylists,
@@ -103,6 +109,22 @@ export function useSessionRestoreController({
             const writesAtStart = queueWritesAtMountRef.current;
             const rewritten = () => wholeQueueWritesSoFar() !== writesAtStart;
             try {
+                /*
+                 * ⭐ native-first：**原生手上真有歌时，恢复以原生为准，不碰缓存。**
+                 *
+                 * 进程被杀 / WebView 重载之后冷启动：原生前台服务可能还活着、一直在放
+                 * （甚至已经自动切了好几首）。这时若照旧从持久化缓存恢复 last_song，
+                 * setAudioSrc 会把原生正在放的歌**重新 prepare 成缓存里那首旧的** ——
+                 * web 反向抢占原生，表现就是「打开 App 唤醒时自动切歌」（issue #106）。
+                 *
+                 * 先问一次原生：有歌就把 currentSong / 队列 / 位置对齐过去并收工，
+                 * 绝不 setAudioSrc；没歌（原生从没接过播放、或已停止）才走缓存恢复。
+                 */
+                if (adoptNativePlayback && await adoptNativePlayback()) {
+                    console.log('[Session] Native player holds playback; adopting it instead of the cached session');
+                    return;
+                }
+
                 let lastSong = await getFromCache<SongResult>('last_song');
                 let lastQueue = await getFromCache<SongResult[]>('last_queue');
 
