@@ -17,7 +17,16 @@ if (!fs.existsSync(tsc)) {
 }
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const result = spawnSync(npm, ['run', 'build:node'], { cwd: serverDir, stdio: 'inherit' });
+/*
+ * Windows 上不能直接 spawn `npm.cmd`：Node 22.12+ 起在没有 shell 的情况下
+ * spawn `.cmd` / `.bat` 会回 EINVAL（CVE-2024-27980 的缓解），本地门禁会
+ * 在完全无关的地方红掉。Windows 走 `cmd /c`，其余平台照旧直连 npm。
+ */
+const spawnCommand = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : npm;
+const spawnArgs = process.platform === 'win32'
+    ? ['/d', '/s', '/c', 'npm', 'run', 'build:node']
+    : ['run', 'build:node'];
+const result = spawnSync(spawnCommand, spawnArgs, { cwd: serverDir, stdio: 'inherit' });
 if (result.error || result.status !== 0) {
     console.error('[ci] sync-server 的 typecheck 失败了。');
     process.exit(result.status ?? 1);
