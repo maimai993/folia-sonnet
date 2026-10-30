@@ -346,8 +346,11 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     }
     if (has('libraryWallSeamDirection') && isLibraryWallSeamDirection(config.libraryWallSeamDirection)) {
         storeLibraryWall.setSeamDirection(config.libraryWallSeamDirection);
-    }
-    if (has('libraryWallSeamDirectionReverse')) {
-        storeLibraryWall.setSeamDirectionReverse(Boolean(config.libraryWallSeamDirectionReverse));
+    } else if (has('libraryWallSeamDirectionReverse') && config.libraryWallSeamDirectionReverse !== false) {
+        /*
+         * 旧配置只带「反向」开关（没有方向，或方向是不可认的取值）：那时的「自动 + 反向」等价于现在的
+         * 'auto-reverse'。压缩格式由 appearanceCodec 折算了，这里接的是旧 JSON 配置那条路。
+         */
+        storeLibraryWall.setSeamDirection('auto-reverse');
     }
 };

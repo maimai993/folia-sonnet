@@ -154,7 +154,6 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     // 播放页标题栏后面的磨砂底。归在 visualizer 组，和同样会跟着导出的
     // hidePlayerTranslationSubtitle 一起：它属于「播放页长什么样」。
     playerHeaderBlur: 'visualizer',
-    libraryWallSeamDirectionReverse: 'libraryWall',
 };
 
 // Fields the import applies only when the incoming value is truthy, so an incoming null means "the
@@ -198,7 +197,7 @@ const TRUTHY_GUARDED_FIELDS = new Set([
     'stageTrackPillMode',
     // applyImportedConfig only applies a known info strip preset, all of which are truthy strings.
     'libraryWallSeamStyle',
-    // Likewise a known info strip direction (auto / vertical / horizontal).
+    // Likewise a known info strip direction (auto / auto-reverse / vertical / horizontal).
     'libraryWallSeamDirection',
 ]);
 

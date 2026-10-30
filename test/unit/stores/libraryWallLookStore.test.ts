@@ -24,6 +24,7 @@ const SEAM_CLEAR_KEY = 'library_wall_seam_clear';
 const SEAM_STYLE_KEY = 'library_wall_seam_style';
 const SEAM_DIRECTION_KEY = 'library_wall_seam_direction';
 const SEAM_DIRECTION_REVERSE_KEY = 'library_wall_seam_direction_reverse';
+const SEAM_DIRECTION_MIGRATED_KEY = 'library_wall_seam_direction_migrated';
 const BACKDROP_LYRICS_KEY = 'library_wall_backdrop_lyrics';
 const BACKDROP_BLUR_KEY = 'library_wall_backdrop_blur';
 
@@ -44,6 +45,10 @@ const loadStore = async (initial: Record<string, string> = {}, options: StorageO
         setItem: (key: string, value: string) => {
             if (options.throwOnSet) throw new Error('quota exceeded');
             storage.set(key, value);
+        },
+        removeItem: (key: string) => {
+            if (options.throwOnSet) throw new Error('quota exceeded');
+            storage.delete(key);
         },
     });
     return (await import('@/stores/useLibraryWallLookStore')).useLibraryWallLookStore;
@@ -243,10 +248,11 @@ describe('useLibraryWallLookStore', () => {
         expect((await loadStore({ [BACKDROP_BLUR_KEY]: 'true' }, { throwOnGet: true })).getState().backdropBlur).toBe(false);
     });
 
-    // 信息条方向：默认自动（按视口形状）；三个取值以外的回默认后再写，读不到也按默认。
+    // 信息条方向：默认自动（反向）（用户定）；四个取值以外的回默认后再写，读不到也按默认。
     it('opens the info strip by the screen shape by default and persists a fixed direction', async () => {
         const store = await loadStore();
-        expect(store.getState().seamDirection).toBe('auto');
+        expect(store.getState().seamDirection).toBe('auto-reverse');
+        // 新用户什么都没动过：一个键都不写，默认值只在内存里。
         expect(storage.size).toBe(0);
 
         store.getState().setSeamDirection('horizontal');
@@ -255,24 +261,38 @@ describe('useLibraryWallLookStore', () => {
         expect(restarted.getState().seamDirection).toBe('horizontal');
 
         restarted.getState().setSeamDirection('sideways' as never);
-        expect(storage.get(SEAM_DIRECTION_KEY)).toBe('auto');
-        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'Vertical' })).getState().seamDirection).toBe('auto');
+        expect(storage.get(SEAM_DIRECTION_KEY)).toBe('auto-reverse');
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'Vertical' })).getState().seamDirection).toBe('auto-reverse');
         expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'vertical' })).getState().seamDirection).toBe('vertical');
-        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'vertical' }, { throwOnGet: true })).getState().seamDirection).toBe('auto');
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'auto-reverse' })).getState().seamDirection).toBe('auto-reverse');
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'vertical' }, { throwOnGet: true })).getState().seamDirection).toBe('auto-reverse');
     });
 
-    // 反向只翻「自动」那一支，默认开（2026-10-24）：只认 'false' 为关，读不到也按默认开。
-    it('flips the automatic direction by default and persists the choice', async () => {
-        const store = await loadStore();
-        expect(store.getState().seamDirectionReverse).toBe(true);
-        expect(storage.size).toBe(0);
+    // 「反向」从前是独立开关（默认开，用户定 2026-10-24），现在并进方向取值成了 'auto-reverse'。
+    // 旧存档要按旧默认迁移过来，否则老用户升上来方向会翻个个儿。旧键只读不写。
+    it('migrates the retired reverse toggle into the direction value', async () => {
+        // 什么都没存过：旧默认（自动 + 反向开）→ 自动（反向）。
+        expect((await loadStore()).getState().seamDirection).toBe('auto-reverse');
 
-        store.getState().setSeamDirectionReverse(false);
-        expect(storage.get(SEAM_DIRECTION_REVERSE_KEY)).toBe('false');
-        expect((await loadStore(Object.fromEntries(storage))).getState().seamDirectionReverse).toBe(false);
+        // 存过 auto、没存过开关：那时候开关默认是开 → 自动（反向）。
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'auto' })).getState().seamDirection).toBe('auto-reverse');
+        // 存过 auto + 开关开 → 自动（反向）。
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'auto', [SEAM_DIRECTION_REVERSE_KEY]: 'true' })).getState().seamDirection).toBe('auto-reverse');
+        // 存过 auto + 开关关 → 纯自动。
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'auto', [SEAM_DIRECTION_REVERSE_KEY]: 'false' })).getState().seamDirection).toBe('auto');
+        // 只存过开关关（没存方向）→ 纯自动。
+        expect((await loadStore({ [SEAM_DIRECTION_REVERSE_KEY]: 'false' })).getState().seamDirection).toBe('auto');
+        // 竖向 / 横向不受旧开关影响，原样返回。
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'vertical', [SEAM_DIRECTION_REVERSE_KEY]: 'true' })).getState().seamDirection).toBe('vertical');
+        expect((await loadStore({ [SEAM_DIRECTION_KEY]: 'horizontal', [SEAM_DIRECTION_REVERSE_KEY]: 'false' })).getState().seamDirection).toBe('horizontal');
 
-        expect((await loadStore({ [SEAM_DIRECTION_REVERSE_KEY]: 'false' })).getState().seamDirectionReverse).toBe(false);
-        expect((await loadStore({ [SEAM_DIRECTION_REVERSE_KEY]: 'yes' })).getState().seamDirectionReverse).toBe(true);
-        expect((await loadStore({ [SEAM_DIRECTION_REVERSE_KEY]: 'false' }, { throwOnGet: true })).getState().seamDirectionReverse).toBe(true);
+        // 迁移只做一次：旧键删掉、标记写上，之后写什么方向都原样生效。
+        const store = await loadStore({ [SEAM_DIRECTION_KEY]: 'auto', [SEAM_DIRECTION_REVERSE_KEY]: 'true' });
+        expect(storage.get(SEAM_DIRECTION_REVERSE_KEY)).toBeUndefined();
+        expect(storage.get(SEAM_DIRECTION_MIGRATED_KEY)).toBe('1');
+        store.getState().setSeamDirection('auto');
+        expect(storage.get(SEAM_DIRECTION_KEY)).toBe('auto');
+        // 重启后不再被旧开关折成自动（反向）。
+        expect((await loadStore(Object.fromEntries(storage))).getState().seamDirection).toBe('auto');
     });
 });
