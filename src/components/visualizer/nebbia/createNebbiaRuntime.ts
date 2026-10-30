@@ -93,7 +93,14 @@ export class NebbiaRuntime {
         this.fontReady = this.glyphs.fontReady();
         document.fonts?.addEventListener('loadingdone', this.handleFontsLoaded);
         // 笔顺数据只读一次；到了以后字形缓存作废，下一次排版用上
-        void loadNebbiaStrokes().then(data => { if (data && !this.dead) { this.glyphs.clear(); this.rebuild(); } });
+        void loadNebbiaStrokes().then(data => {
+            if (!data || this.dead) return;
+            // 首屏还没排出来：正在排的那一遍等会儿直接用上刚到的笔顺，不必作废重画一遍
+            // （切进雾笺的卡顿里原本有两遍全量字形栅格化）。
+            if (this.laid.length === 0) return;
+            this.glyphs.clear();
+            this.rebuild();
+        });
     }
 
     setSong(song: NebbiaSong) {
