@@ -867,6 +867,7 @@ export default {
       "visualizer-tempera": { "title": "Visualizer: Tempera", "description": "Switch to the Tempera color-block lyric PV" },
       "visualizer-lumiere": { "title": "Visualizer: Lumiere", "description": "Switch to the Lumiere stage-light lyric PV" },
       "visualizer-hanabi": { "title": "Visualizer: Hanabi", "description": "Switch to the Hanabi fireworks lyric PV" },
+    "visualizer-machi": { "title": "Visualizer: Machi", "description": "Switch to the Machi town dioramas" },
       "desktop-toggle-remote-control": { "title": "Toggle remote control window", "description": "Open or close the remote control window" },
       "desktop-toggle-main-window-always-on-top": { "title": "Toggle main window always on top", "description": "Pin or unpin the main window above other windows" },
       "background-monet-full-overlay": { "title": "Background: Monet Full Screen Overlay", "description": "Switch background to Monet full screen overlay layout" },
