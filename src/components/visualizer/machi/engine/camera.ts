@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MachiCameraView } from '../types';
+import { MACHI_GYRO_MAX_STEP, type MachiGyroOffsets } from '../gyro';
 
 // src/components/visualizer/machi/engine/camera.ts
 // 町景的镜头：正交投影的斜俯视。缩放 1 时按视口把场景给的构图点（底座、最高的招牌……）都框进去，并给底部字幕让出一点；
@@ -101,6 +102,10 @@ export class MachiCamera {
     private motionWeight = 0;
     /** 镜头有变化、需要补一帧（暂停时按需渲染用）。 */
     needsRender = true;
+    /** 陀螺仪适配：开了才收读数，读数换成镜头偏移叠在静止视角上。 */
+    private gyro = false;
+    private readonly gyroOffsets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
+    private readonly gyroTargets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
     /** 自定义视角下拖动停稳了：新视角（相对默认构图）交给外面存。 */
     onCommit: ((view: MachiCameraView) => void) | null = null;
     /** 镜头被拖动了：暂停时渲染循环睡着，要叫醒它。 */
@@ -135,6 +140,51 @@ export class MachiCamera {
         if (motion === this.motion) return;
         this.motion = motion;
         this.needsRender = true;
+    }
+
+    /**
+     * 开关陀螺仪适配。关上时偏移归零（镜头慢慢回到静止视角），不是一下子跳回去。
+     */
+    setGyro(gyro: boolean) {
+        if (gyro === this.gyro) return;
+        this.gyro = gyro;
+        if (!gyro) {
+            this.gyroTargets.azimuth = 0;
+            this.gyroTargets.elevation = 0;
+        }
+        this.needsRender = true;
+        this.onWake?.();
+    }
+
+    /** 陀螺仪读数：目标偏移（弧度）。镜头一帧一帧追过去。 */
+    setGyroOffsets(offsets: MachiGyroOffsets) {
+        if (!this.gyro) return;
+        if (offsets.azimuth === this.gyroTargets.azimuth && offsets.elevation === this.gyroTargets.elevation) return;
+        this.gyroTargets.azimuth = offsets.azimuth;
+        this.gyroTargets.elevation = offsets.elevation;
+        // 暂停时循环是睡着的：叫醒它追这一下。
+        this.onWake?.();
+    }
+
+    /** 偏移还在往目标追（暂停时循环要接着跑）。 */
+    private get gyroMoving() {
+        return Math.abs(this.gyroTargets.azimuth - this.gyroOffsets.azimuth) > 1e-4
+            || Math.abs(this.gyroTargets.elevation - this.gyroOffsets.elevation) > 1e-4;
+    }
+
+    /** 往里追一帧：按帧间隔收敛，单帧不过 MAX_STEP，手机放下时不会抖。 */
+    private stepGyro(realDelta: number) {
+        if (!this.gyroMoving) return;
+        const k = Math.min(1, realDelta * 8);
+        const follow = (current: number, target: number) => {
+            const want = current + (target - current) * k;
+            return Math.abs(want - current) > MACHI_GYRO_MAX_STEP ? current + Math.sign(want - current) * MACHI_GYRO_MAX_STEP : want;
+        };
+        this.gyroOffsets.azimuth = follow(this.gyroOffsets.azimuth, this.gyroTargets.azimuth);
+        this.gyroOffsets.elevation = follow(this.gyroOffsets.elevation, this.gyroTargets.elevation);
+        this.needsRender = true;
+        // 镜头停在静止位置时（没在拖、没在回正）才自己摆一下；拖拽时交给拖拽。
+        if (this.still) this.settle();
     }
 
     /**
@@ -287,7 +337,14 @@ export class MachiCamera {
     private place(view: MachiView, target: THREE.Vector3) {
         this.target.copy(target);
         this.controls?.target.copy(target);
-        this.camera.position.copy(target).addScaledVector(orbitDirection(view.azimuth, view.elevation), CAMERA_DISTANCE);
+        // 陀螺仪的偏移叠在摆好的视角上：转动是加的，俯仰要重新夹回范围里。
+        const azimuth = view.azimuth + this.gyroOffsets.azimuth;
+        const elevation = clamp(
+            view.elevation + this.gyroOffsets.elevation,
+            MACHI_CAMERA_LIMITS.minElevation,
+            MACHI_CAMERA_LIMITS.maxElevation,
+        );
+        this.camera.position.copy(target).addScaledVector(orbitDirection(azimuth, elevation), CAMERA_DISTANCE);
         this.camera.zoom = view.zoom;
         this.camera.lookAt(target);
         this.camera.updateProjectionMatrix();
@@ -390,7 +447,7 @@ export class MachiCamera {
 
     /** 镜头还在动（阻尼、回正、等着报新视角、运镜幅度在升降）：暂停时也要继续出帧。 */
     get busy() {
-        return this.interacting || this.returning || this.commitPending || this.needsRender || this.ramping;
+        return this.interacting || this.returning || this.commitPending || this.needsRender || this.ramping || this.gyroMoving;
     }
 
     /**
@@ -399,6 +456,8 @@ export class MachiCamera {
      */
     update(realDelta: number, ambientDelta: number) {
         const controls = this.controls;
+        // 陀螺仪的偏移每帧往里追一点（预览、暂停时也要走，它属于界面）。
+        this.stepGyro(realDelta);
         // 预览不接拖拽，只有运镜。
         if (!controls) {
             this.stepMotion(realDelta, ambientDelta);

@@ -59,6 +59,7 @@ import { resolveMachiPalette } from './engine/palette';
 import { MachiSky } from './engine/sky';
 import { MachiSkyLights } from './engine/skyLights';
 import { createMachiSnowUniforms, setMachiSnowRoofs } from './engine/snow';
+import { subscribeMachiGyro } from './gyro';
 import { resolveMachiSceneId } from './machiTuning';
 import { MACHI_SCENES } from './scenes';
 import type { MachiScene, MachiSceneContent, MachiSceneContext } from './scenes/types';
@@ -172,6 +173,8 @@ export class MachiRuntime {
     private readonly renderer: THREE.WebGLRenderer;
     private readonly scene = new THREE.Scene();
     private readonly camera = new MachiCamera();
+    /** 陀螺仪适配的退订函数；没开就是 null。 */
+    private unsubscribeGyro: (() => void) | null = null;
     private readonly clock = new MachiClock();
     private readonly blend: MachiColorBlend;
     private readonly materials: MachiMaterials;
@@ -300,6 +303,7 @@ export class MachiRuntime {
         this.camera.onCommit = view => this.options.onViewChange?.(view, this.stageId);
         this.camera.onWake = () => this.wake();
         this.camera.setMotion(options.tuning.motion, options.tuning.motionSpeed);
+        this.applyGyro(options.tuning.gyro);
         this.mountScene(sceneId);
 
         if (!options.previewMode) this.camera.attach(canvas);
@@ -810,6 +814,7 @@ export class MachiRuntime {
         if (previous.timeOfDay !== tuning.timeOfDay || previous.weather !== tuning.weather) this.refreshEnvironmentTarget();
         this.camera.setCustom(this.customView(this.stageId));
         this.camera.setMotion(tuning.motion, tuning.motionSpeed);
+        if (previous.gyro !== tuning.gyro) this.applyGyro(tuning.gyro);
         if (qualityKey(previous.quality) !== qualityKey(tuning.quality)) {
             // 换了画质设置：自动降级从这套设置重新开始。
             this.degrade = 0;
@@ -899,10 +904,24 @@ export class MachiRuntime {
         };
     }
 
+    /** 开/关陀螺仪适配：开了订设备倾斜，读数交给镜头；关了退订，偏移自己走回零。 */
+    private applyGyro(gyro: boolean) {
+        this.camera.setGyro(gyro);
+        if (!gyro) {
+            this.unsubscribeGyro?.();
+            this.unsubscribeGyro = null;
+            return;
+        }
+        if (this.unsubscribeGyro) return;
+        this.unsubscribeGyro = subscribeMachiGyro(offsets => this.camera.setGyroOffsets(offsets));
+    }
+
     destroy() {
         if (this.disposed) return;
         this.disposed = true;
         this.stopLoop();
+        this.unsubscribeGyro?.();
+        this.unsubscribeGyro = null;
         window.clearTimeout(this.signRepaintTimer);
         window.clearInterval(this.clockTimer);
         this.resizeObserver.disconnect();

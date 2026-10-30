@@ -84,6 +84,7 @@ export const normalizeMachiTuning = (raw: unknown): MachiTuning => {
         views: normalizeMachiViews(stored.views, stored.view),
         motion: typeof input.motion === 'boolean' ? input.motion : d.motion,
         motionSpeed: numberWithin(input.motionSpeed, d.motionSpeed, MACHI_MOTION_SPEED_LIMITS.min, MACHI_MOTION_SPEED_LIMITS.max),
+        gyro: typeof input.gyro === 'boolean' ? input.gyro : d.gyro,
         aperture: within('aperture'),
         dof: within('dof'),
         dofRange: within('dofRange'),

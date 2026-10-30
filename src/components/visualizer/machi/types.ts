@@ -108,6 +108,8 @@ export interface MachiTuning {
     motion: boolean;
     /** 运镜的快慢（倍数）。 */
     motionSpeed: number;
+    /** 陀螺仪适配：手机倾斜时镜头跟着轻微偏一点（左右转头、上下俯仰），关掉就是固定机位。 */
+    gyro: boolean;
     /** 光圈（f 值）。 */
     aperture: number;
     dof: number;
@@ -134,6 +136,7 @@ export const DEFAULT_MACHI_TUNING: MachiTuning = {
     views: DEFAULT_MACHI_VIEWS,
     motion: false,
     motionSpeed: 1,
+    gyro: false,
     aperture: 8,
     dof: 1,
     dofRange: 1,

@@ -13,6 +13,7 @@ import {
     signedReadout,
 } from './cameraControls';
 import { resolveMachiQualityPreset } from './machiTuning';
+import { machiGyroSupported, requestMachiGyroPermission } from './gyro';
 import { getMachiShownScene, subscribeMachiShownScene } from './shownScene';
 import {
     DEFAULT_MACHI_TUNING,
@@ -165,6 +166,12 @@ const MachiSettingsPanel: React.FC<VisualizerSettingsPanelProps<MachiTuning>> = 
     const preset = resolveMachiQualityPreset(quality);
     const setQuality = (patch: Partial<MachiQuality>) => onTuningChange?.({ quality: { ...quality, ...patch } });
     const levels = MACHI_DETAIL_LEVELS.map(level => ({ value: level, label: t(LEVEL_LABEL_KEYS[level]) }));
+    // 陀螺仪：这台设备给不给读数；iOS 上打开时才在这一次点击里问权限。
+    const gyroSupported = machiGyroSupported();
+    const setGyro = async (gyro: boolean) => {
+        if (gyro && !(await requestMachiGyroPermission())) return;
+        onTuningChange?.({ gyro });
+    };
     return (
         <>
             <Group def={SCENE_GROUP}>
@@ -256,6 +263,13 @@ const MachiSettingsPanel: React.FC<VisualizerSettingsPanelProps<MachiTuning>> = 
                     onChange={motionSpeed => onTuningChange?.({ motionSpeed })}
                     onDragStart={onSliderPointerDown}
                     onDragEnd={onSliderCommit}
+                />
+                <ToggleRow
+                    label={t('options.machiGyro')}
+                    note={t(gyroSupported ? 'options.machiGyroHint' : 'options.machiGyroUnsupported')}
+                    checked={tuning.gyro && gyroSupported}
+                    disabled={!gyroSupported}
+                    onChange={gyro => void setGyro(gyro)}
                 />
             </Group>
 
