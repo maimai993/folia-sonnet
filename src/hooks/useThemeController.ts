@@ -329,8 +329,9 @@ export function useThemeController({
                 }
             }
 
-            const baseTheme = getBaseTheme();
-            if (legacyTheme) {
+            // 「默认」不参与旧版主题的配色：切回默认必须真的回到默认主题（只换背景不算回去）。
+            if (bgMode === 'ai' && legacyTheme) {
+                const baseTheme = getBaseTheme();
                 return normalizeTheme({
                     ...legacyTheme,
                     backgroundColor: baseTheme.backgroundColor,
