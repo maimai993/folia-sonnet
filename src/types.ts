@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+﻿import type { LucideIcon } from 'lucide-react';
 import type { LineRenderHints } from './utils/lyrics/renderHints';
 import type { LyricProviderSource } from './utils/lyrics/lyricSources';
 import type { MediaId, OnlineProviderId, PlaybackSourceRef, ProviderCatalogRef } from './types/onlineMusic';
@@ -127,7 +127,7 @@ export type ThemeMode = 'default' | 'ai' | 'custom';
 export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet';
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60 | 30;
-/** 画布渲染分辨率的上限，见 utils/renderPixelRatio.ts。 */
+/** 鐢诲竷娓叉煋鍒嗚鲸鐜囩殑涓婇檺锛岃 utils/renderPixelRatio.ts銆?*/
 export type RenderPixelRatio = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2;
 
 export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio' | 'cloud' | 'explore';
@@ -565,16 +565,10 @@ export interface SonnetTuning {
 }
 
 /**
- * 商奈（sonnet）镜头运动强度的上限 —— 也就是它的默认值。
- *
- * 这一档的相机运动是叠在分镜与转场上的：数值再高，镜头推拉很容易把画面甩出屏幕外（画幅
- * 边缘露黑、歌词被推出画面）。所以「能调多少」就定在 0.7，默认也直接落在 0.7 —— 默认即
- * 安全上限，滑块只能往下收。
- *
- * 改这里一处即可：AI 导演的可调范围（services/lyricDirector/catalog）、store 的写入夹取、
- * 读取 localStorage 时的旧数据兼容、外观码导入，全都引这个常量。
- * 凝彩（tempera）的 cameraIntensity 是另一回事，不受它约束。
- */
+ * 鍟嗗锛坰onnet锛夐暅澶磋繍鍔ㄥ己搴︾殑涓婇檺 鈥斺€?涔熷氨鏄畠鐨勯粯璁ゅ€笺€? *
+ * 杩欎竴妗ｇ殑鐩告満杩愬姩鏄彔鍦ㄥ垎闀滀笌杞満涓婄殑锛氭暟鍊煎啀楂橈紝闀滃ご鎺ㄦ媺寰堝鏄撴妸鐢婚潰鐢╁嚭灞忓箷澶栵紙鐢诲箙
+ * 杈圭紭闇查粦銆佹瓕璇嶈鎺ㄥ嚭鐢婚潰锛夈€傛墍浠ャ€岃兘璋冨灏戙€嶅氨瀹氬湪 0.7锛岄粯璁や篃鐩存帴钀藉湪 0.7 鈥斺€?榛樿鍗? * 瀹夊叏涓婇檺锛屾粦鍧楀彧鑳藉線涓嬫敹銆? *
+ * 鏀硅繖閲屼竴澶勫嵆鍙細AI 瀵兼紨鐨勫彲璋冭寖鍥达紙services/lyricDirector/catalog锛夈€乻tore 鐨勫啓鍏ュす鍙栥€? * 璇诲彇 localStorage 鏃剁殑鏃ф暟鎹吋瀹广€佸瑙傜爜瀵煎叆锛屽叏閮藉紩杩欎釜甯搁噺銆? * 鍑濆僵锛坱empera锛夌殑 cameraIntensity 鏄彟涓€鍥炰簨锛屼笉鍙楀畠绾︽潫銆? */
 export const SONNET_CAMERA_INTENSITY_MAX = 0.7;
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
@@ -601,15 +595,20 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
 };
 
 /**
- * One beat effect's own setting under 智能动感模式 (services/beatFx/beatEffects.ts): whether it plays,
+ * One beat effect's own setting under 鏅鸿兘鍔ㄦ劅妯″紡 (services/beatFx/beatEffects.ts): whether it plays,
  * and its strength, 0..2, 1 being the look it was tuned to.
  */
 export interface BeatEffectSetting {
   on: boolean;
   strength: number;
+  /**
+   * An effect made of parts, each with its own slider (BeatEffectDef `parts`, 雾笺's 疏雨轻车): their
+   * strengths by part key, 0..2, a part never touched at 1. `strength` is then unused.
+   */
+  parts?: Record<string, number>;
 }
 
-/** 智能动感模式's three settings (2026-10-17, the user's 全开 / 半开 / 不开):
+/** 鏅鸿兘鍔ㄦ劅妯″紡's three settings (2026-10-17, the user's 鍏ㄥ紑 / 鍗婂紑 / 涓嶅紑):
  * - `on`: the effects play, and a track with nothing stored is analysed now on the GPU.
  * - `cached`: the effects play from what is already stored - a track analysed before under `on`, or
  *   whose beats automix analysed - and nothing is ever started for them: no model run, no decode, no
@@ -621,7 +620,7 @@ export interface BeatEffectSetting {
 export type SmartBeatMode = 'off' | 'cached' | 'on';
 
 /**
- * 智能动感模式, one setting for every visualizer and background that draws beat FX, and each effect's
+ * 鏅鸿兘鍔ㄦ劅妯″紡, one setting for every visualizer and background that draws beat FX, and each effect's
  * own setting. The effects a picture has are declared on its registry entry (`beatEffects`), each
  * reading beat_this' beats or htdemucs' drum hits (src/services/beatFx). An effect with nothing
  * stored plays at strength 1. Read `mode` through `smartBeatActive` / `smartBeatMayAnalyse`
@@ -683,26 +682,26 @@ export interface TemperaTuning {
   /** Keep each source lyric line in one shot instead of slicing it into half-phrases. */
   wholeLineLyrics: boolean;
   /**
-   * 逐字入场时序, 0..1. How much of the way to the shot's lyric end each glyph's entrance
+   * 閫愬瓧鍏ュ満鏃跺簭, 0..1. How much of the way to the shot's lyric end each glyph's entrance
    * stretches, past its 0.34s floor. 0 gives every glyph the same short window - percussive,
    * and the shot is fully at rest well before it cuts. 1 lands the whole shot exactly on its
    * lyric end - continuous, but nothing is ever still. See temperaLayout for the measurements.
    */
   glyphSettleStretch: number;
-  /** 墨染奥行 景深, 0..2：景深模糊与各层视差。只在墨染奥行开着时生效。 */
+  /** 澧ㄦ煋濂ヨ 鏅繁, 0..2锛氭櫙娣辨ā绯婁笌鍚勫眰瑙嗗樊銆傚彧鍦ㄥⅷ鏌撳ゥ琛屽紑鐫€鏃剁敓鏁堛€?*/
   depthOfField: number;
-  /** 墨染奥行 镜头平移, 0..2：每个镜头推多远、漂多少。只在墨染奥行开着时生效。 */
+  /** 澧ㄦ煋濂ヨ 闀滃ご骞崇Щ, 0..2锛氭瘡涓暅澶存帹澶氳繙銆佹紓澶氬皯銆傚彧鍦ㄥⅷ鏌撳ゥ琛屽紑鐫€鏃剁敓鏁堛€?*/
   depthPan: number;
-  /** 墨染奥行 歌词远近, 0..2：小字退多远、大字领多前。只在墨染奥行开着时生效。 */
+  /** 澧ㄦ煋濂ヨ 姝岃瘝杩滆繎, 0..2锛氬皬瀛楅€€澶氳繙銆佸ぇ瀛楅澶氬墠銆傚彧鍦ㄥⅷ鏌撳ゥ琛屽紑鐫€鏃剁敓鏁堛€?*/
   glyphDepth: number;
   /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
   colorMode: TemperaColorMode;
   showBlocks: boolean;
   showDecor: boolean;
-  /** 边角线框: the two registration marks in the top-left and bottom-right corners. */
+  /** 杈硅绾挎: the two registration marks in the top-left and bottom-right corners. */
   showCornerMarks: boolean;
   /**
-   * 文字动态反色: the lyric samples the artwork under it and picks whichever of ink/paper
+   * 鏂囧瓧鍔ㄦ€佸弽鑹? the lyric samples the artwork under it and picks whichever of ink/paper
    * contrasts more, per pixel. This is how the mode colours type, not a post-process, so it
    * has its own switch rather than riding `postProcessEnabled`.
    */
@@ -718,7 +717,7 @@ export interface TemperaTuning {
   /** Master switch for the scene-wide post-process stack (grain + contrast + print passes). */
   postProcessEnabled: boolean;
   /**
-   * 后处理纹理压缩: renders the post-process pass at 1x and stretches it onto the canvas
+   * 鍚庡鐞嗙汗鐞嗗帇缂? renders the post-process pass at 1x and stretches it onto the canvas
    * instead of running it at `textureResolution`. Costs sharpness on hatch, screentone and
    * type; buys back the fill rate a full-resolution full-screen pass costs.
    */
@@ -763,63 +762,58 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
 };
 
 /**
- * 绘光画质档位。`full` 全分辨率；`balanced` / `low` 把光场与辉光降采样、烟雾倍频数封顶，用于省电。
- */
+ * 缁樺厜鐢昏川妗ｄ綅銆俙full` 鍏ㄥ垎杈ㄧ巼锛沗balanced` / `low` 鎶婂厜鍦轰笌杈夊厜闄嶉噰鏍枫€佺儫闆惧€嶉鏁板皝椤讹紝鐢ㄤ簬鐪佺數銆? */
 export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
 
 export interface LumiereTuning {
-  /** 光强倍率, 0.3..2. */
+  /** 鍏夊己鍊嶇巼, 0.3..2. */
   lightIntensity: number;
-  /** 随音乐变亮, 0..2 (0 = 不随音乐变). */
+  /** 闅忛煶涔愬彉浜? 0..2 (0 = 涓嶉殢闊充箰鍙?. */
   audioResponse: number;
-  /** 烟雾浓度, 0..2. */
+  /** 鐑熼浘娴撳害, 0..2. */
   fogDensity: number;
   /**
-   * 暗场强度, 0..1：光后面铺一层主题背景色压暗的底，压住 folia 的共享背景（0 = 共享背景原样透出）。
-   * 浅色主题保底 0.94（绘光始终在暗场里）。
-   */
+   * 鏆楀満寮哄害, 0..1锛氬厜鍚庨潰閾轰竴灞備富棰樿儗鏅壊鍘嬫殫鐨勫簳锛屽帇浣?folia 鐨勫叡浜儗鏅紙0 = 鍏变韩鑳屾櫙鍘熸牱閫忓嚭锛夈€?   * 娴呰壊涓婚淇濆簳 0.94锛堢粯鍏夊缁堝湪鏆楀満閲岋級銆?   */
   darkField: number;
-  /** 浮尘数量, 0..2. */
+  /** 娴皹鏁伴噺, 0..2. */
   moteAmount: number;
-  /** 图形辉光, 0..2. */
+  /** 鍥惧舰杈夊厜, 0..2. */
   bloom: number;
-  /** 文字辉光, 0..2. */
+  /** 鏂囧瓧杈夊厜, 0..2. */
   textBloom: number;
-  /** 未唱字透明度, 0.05..0.6. */
+  /** 鏈敱瀛楅€忔槑搴? 0.05..0.6. */
   unlitOpacity: number;
-  /** 邻行：1 = 上一行 + 当前行，2 = 上一行 + 当前行 + 下一行. */
+  /** 閭昏锛? = 涓婁竴琛?+ 褰撳墠琛岋紝2 = 涓婁竴琛?+ 褰撳墠琛?+ 涓嬩竴琛? */
   windowNeighbors: 1 | 2;
-  /** 崩解强度, 0..2. */
+  /** 宕╄В寮哄害, 0..2. */
   decay: number;
-  /** 背景歌词亮度, 0..2 (0 = 关). */
+  /** 鑳屾櫙姝岃瘝浜害, 0..2 (0 = 鍏?. */
   echo: number;
-  /** 烟雾细节（倍频数）, integer 2..6. */
+  /** 鐑熼浘缁嗚妭锛堝€嶉鏁帮級, integer 2..6. */
   fogOctaves: number;
-  /** 线稿. */
+  /** 绾跨. */
   lineArt: boolean;
-  /** 前景散景. */
+  /** 鍓嶆櫙鏁ｆ櫙. */
   frontBokeh: boolean;
-  /** 所有换位都走轨迹线. */
+  /** 鎵€鏈夋崲浣嶉兘璧拌建杩圭嚎. */
   trails: boolean;
-  /** 隐藏所有歌词换位的轨迹线，保留字的飞行与轨迹过渡. */
+  /** 闅愯棌鎵€鏈夋瓕璇嶆崲浣嶇殑杞ㄨ抗绾匡紝淇濈暀瀛楃殑椋炶涓庤建杩硅繃娓? */
   hideTrails: boolean;
   /**
-   * 轨迹过渡：段落之间也和段内换镜头一样在同一个光场里交接（整首歌编成一个场景单元），
-   * 没有熄灯 / 闪白 / 拉焦 / 交叉渐变。改它会重新编译程序.
+   * 杞ㄨ抗杩囨浮锛氭钀戒箣闂翠篃鍜屾鍐呮崲闀滃ご涓€鏍峰湪鍚屼竴涓厜鍦洪噷浜ゆ帴锛堟暣棣栨瓕缂栨垚涓€涓満鏅崟鍏冿級锛?   * 娌℃湁鐔勭伅 / 闂櫧 / 鎷夌劍 / 浜ゅ弶娓愬彉銆傛敼瀹冧細閲嶆柊缂栬瘧绋嬪簭.
    */
   seamlessTransitions: boolean;
-  /** 画框. */
+  /** 鐢绘. */
   overlayFrame: boolean;
   /**
-   * 仅显示歌词文字：只画歌词与字上的效果（点亮、光晕、闪点、十字爆闪、径迹、追字光斑），
-   * 光场、烟雾、星空、线稿、浮尘、背景歌词、主题图标、画框与片尾卡的光都不画。字的明暗仍按光束算.
+   * 浠呮樉绀烘瓕璇嶆枃瀛楋細鍙敾姝岃瘝涓庡瓧涓婄殑鏁堟灉锛堢偣浜€佸厜鏅曘€侀棯鐐广€佸崄瀛楃垎闂€佸緞杩广€佽拷瀛楀厜鏂戯級锛?   * 鍏夊満銆佺儫闆俱€佹槦绌恒€佺嚎绋裤€佹诞灏樸€佽儗鏅瓕璇嶃€佷富棰樺浘鏍囥€佺敾妗嗕笌鐗囧熬鍗＄殑鍏夐兘涓嶇敾銆傚瓧鐨勬槑鏆椾粛鎸夊厜鏉熺畻.
    */
   textOnly: boolean;
-  /** 主题图标（主题 lyricsIcons 画成线稿）. */
+  /** 涓婚鍥炬爣锛堜富棰?lyricsIcons 鐢绘垚绾跨锛? */
   themeIcons: boolean;
-  /** 主题色占比, 0..1：0 = 香槟金光；越高光色越接近强调色、点亮 / 未唱的字越接近主色 / 次色. */
+  /** 涓婚鑹插崰姣? 0..1锛? = 棣欐閲戝厜锛涜秺楂樺厜鑹茶秺鎺ヨ繎寮鸿皟鑹层€佺偣浜?/ 鏈敱鐨勫瓧瓒婃帴杩戜富鑹?/ 娆¤壊. */
   themeColorMix: number;
-  /** 画质. */
+  /** 鐢昏川. */
   renderQuality: LumiereRenderQuality;
 }
 
@@ -886,8 +880,8 @@ export const DIORAMA_PARTICLE_DENSITY_MIN = 96;
 export const DIORAMA_PARTICLE_DENSITY_MAX = 1536;
 export const DIORAMA_PARTICLE_DENSITY_STEP = 24;
 // Background dust motes PER LINE of the resident window (see dioramaMoteField.ts). The motes sit in a
-// shell around the flight axis, and the two axes are INDEPENDENT: 圆周 = motes around each ring, 径向 =
-// how many layers across the shell's thickness (inner→outer). Motes-per-line = 圆周 x 径向; the window
+// shell around the flight axis, and the two axes are INDEPENDENT: 鍦嗗懆 = motes around each ring, 寰勫悜 =
+// how many layers across the shell's thickness (inner鈫抩uter). Motes-per-line = 鍦嗗懆 x 寰勫悜; the window
 // holds 8 lines, so MAX x MAX bounds the layer at 8*48*4 = 1536 points for low-end GPUs / OBS sources
 // however far the sliders are dragged. Default 28 x 2 = 56 matches the old single-slider default.
 export const DIORAMA_MOTE_CIRCUMFERENCE_MIN = 4;
@@ -921,21 +915,21 @@ export interface DioramaTuning {
   particleGlowIntensity: number;
   showParticles: boolean;
   /** Background dust shell, two INDEPENDENT axes (motes-per-line = the product; field clamps to its cap):
-   *  背景粒子·圆周密度 = motes around each ring, 背景粒子·径向密度 = layers across the shell thickness. */
+   *  鑳屾櫙绮掑瓙路鍦嗗懆瀵嗗害 = motes around each ring, 鑳屾櫙绮掑瓙路寰勫悜瀵嗗害 = layers across the shell thickness. */
   backgroundParticleCircumference: number;
   backgroundParticleRadial: number;
-  /** 普通辉光跟唱: soft glow on the unit being sung. Independent toggle + strength. */
+  /** 鏅€氳緣鍏夎窡鍞? soft glow on the unit being sung. Independent toggle + strength. */
   glowEnabled: boolean;
   glowIntensity: number;
-  /** 灵魂出窍跟唱: a ghost copy of the sung glyph drifts out of the text. Independent toggle + strength. */
+  /** 鐏甸瓊鍑虹獚璺熷敱: a ghost copy of the sung glyph drifts out of the text. Independent toggle + strength. */
   soulEnabled: boolean;
   soulIntensity: number;
-  /** 当前字漂移: a plain ON/OFF sub-switch of 灵魂出窍. ON lets the glyph CURRENTLY being sung drift at the
-   *  same 灵魂出窍强度 as every other glyph; OFF holds it perfectly registered (no doubling / reading
+  /** 褰撳墠瀛楁紓绉? a plain ON/OFF sub-switch of 鐏甸瓊鍑虹獚. ON lets the glyph CURRENTLY being sung drift at the
+   *  same 鐏甸瓊鍑虹獚寮哄害 as every other glyph; OFF holds it perfectly registered (no doubling / reading
    *  obstruction) until it finishes, after which it detaches and flies like the rest. No strength of its
    *  own - it borrows soulIntensity. Only has a visible effect when soulEnabled. */
   soulActiveEnabled: boolean;
-  /** 渐变跟唱: the line's fill progressively deepens with the sung progress. Independent toggle + strength. */
+  /** 娓愬彉璺熷敱: the line's fill progressively deepens with the sung progress. Independent toggle + strength. */
   gradientEnabled: boolean;
   gradientIntensity: number;
 }
@@ -991,11 +985,11 @@ export interface MonetBackgroundTuning {
   backgroundHalfPaneOffsetX: number;
   backgroundWashColorMode: MonetBackgroundWashColorMode;
   backgroundWashCustomColor: string;
-  /** 整张背景图的缓慢缩放漂移；纯 CSS 合成层动画，不参与背景烘焙。 */
+  /** 鏁村紶鑳屾櫙鍥剧殑缂撴參缂╂斁婕傜Щ锛涚函 CSS 鍚堟垚灞傚姩鐢伙紝涓嶅弬涓庤儗鏅儤鐒欍€?*/
   backgroundDriftEnabled: boolean;
-  /** 漂移幅度 0..1，同时决定位移距离和为防止露边而预放大的倍率。 */
+  /** 婕傜Щ骞呭害 0..1锛屽悓鏃跺喅瀹氫綅绉昏窛绂诲拰涓洪槻姝㈤湶杈硅€岄鏀惧ぇ鐨勫€嶇巼銆?*/
   backgroundDriftStrength: number;
-  /** 是否在烘焙的 overlay 里绘制那几条 1px 竖向纹理。 */
+  /** 鏄惁鍦ㄧ儤鐒欑殑 overlay 閲岀粯鍒堕偅鍑犳潯 1px 绔栧悜绾圭悊銆?*/
   backgroundStreaksEnabled: boolean;
 }
 
@@ -1193,7 +1187,7 @@ export interface StatusMessage {
   note?: string;
   /** Words quoted from outside the app (a platform's own answer), with their code. */
   quote?: { text: string; code?: string };
-  /** A count down to the action happening on its own (the skip to the next song): its line ("5 秒后跳到下一首"),
+  /** A count down to the action happening on its own (the skip to the next song): its line ("5 绉掑悗璺冲埌涓嬩竴棣?),
    *  the whole seconds left and the whole time, so the action button fills over it without stepping. Kept out
    *  of `text` so the toast stays the same one while it counts. */
   countdown?: { text: string; seconds: number; totalMs: number };
@@ -1208,10 +1202,7 @@ export interface StatusMessage {
   cancelLabel?: string;
   onCancel?: () => void;
   /**
-   * 这条提示**不吃点击**（提示条默认是 `pointer-events: auto`，会浮在可视化那一层上面
-   * 把点击接走）。给「点一下空白 → 弹提示 → 再点一下任意处」这种用法用：不然用户补的
-   * 那一下落在提示条上，就永远到不了下面那一层，于是只能反复弹同一句提示。
-   */
+   * 杩欐潯鎻愮ず**涓嶅悆鐐瑰嚮**锛堟彁绀烘潯榛樿鏄?`pointer-events: auto`锛屼細娴湪鍙鍖栭偅涓€灞備笂闈?   * 鎶婄偣鍑绘帴璧帮級銆傜粰銆岀偣涓€涓嬬┖鐧?鈫?寮规彁绀?鈫?鍐嶇偣涓€涓嬩换鎰忓銆嶈繖绉嶇敤娉曠敤锛氫笉鐒剁敤鎴疯ˉ鐨?   * 閭ｄ竴涓嬭惤鍦ㄦ彁绀烘潯涓婏紝灏辨案杩滃埌涓嶄簡涓嬮潰閭ｄ竴灞傦紝浜庢槸鍙兘鍙嶅寮瑰悓涓€鍙ユ彁绀恒€?   */
   inert?: boolean;
   persistent?: boolean;
 }
@@ -1256,11 +1247,8 @@ export interface NoCopyrightRecommendation {
 export type { LyricProviderSource };
 
 /**
- * 设置里存的那一项：可以是一个具体平台，也可以是「跟随播放平台来源」。
- *
- * 两层不是多此一举 —— 具体平台才能发请求，而「跟随」要等拿到歌才知道是哪个平台，
- * 所以每个消费点传 preferredSource 之前都要过 resolveLyricSourcePreference 解析一次。
- */
+ * 璁剧疆閲屽瓨鐨勯偅涓€椤癸細鍙互鏄竴涓叿浣撳钩鍙帮紝涔熷彲浠ユ槸銆岃窡闅忔挱鏀惧钩鍙版潵婧愩€嶃€? *
+ * 涓ゅ眰涓嶆槸澶氭涓€涓?鈥斺€?鍏蜂綋骞冲彴鎵嶈兘鍙戣姹傦紝鑰屻€岃窡闅忋€嶈绛夋嬁鍒版瓕鎵嶇煡閬撴槸鍝釜骞冲彴锛? * 鎵€浠ユ瘡涓秷璐圭偣浼?preferredSource 涔嬪墠閮借杩?resolveLyricSourcePreference 瑙ｆ瀽涓€娆°€? */
 export type LyricSourcePreference = LyricProviderSource | 'follow-source';
 export type AmllDbPlatform = 'ncm' | 'qq';
 
@@ -1299,11 +1287,8 @@ export interface SongResult {
   kgHash?: string;
   amllDbPlatform?: AmllDbPlatform;
   /**
-   * 云端缓存里那条主题键 —— 只有从「AI 主题」那一屏（云端歌名清单）挑出来的歌才有。
-   *
-   * 点了播放要**直接用上云上那一条**，而不是再生成一遍：生成要有歌词、要有 API Key，
-   * 而这条缓存存在的意义就是不必再算一次。见 services/aiThemeCloud.ts。
-   */
+   * 浜戠缂撳瓨閲岄偅鏉′富棰橀敭 鈥斺€?鍙湁浠庛€孉I 涓婚銆嶉偅涓€灞忥紙浜戠姝屽悕娓呭崟锛夋寫鍑烘潵鐨勬瓕鎵嶆湁銆?   *
+   * 鐐逛簡鎾斁瑕?*鐩存帴鐢ㄤ笂浜戜笂閭ｄ竴鏉?*锛岃€屼笉鏄啀鐢熸垚涓€閬嶏細鐢熸垚瑕佹湁姝岃瘝銆佽鏈?API Key锛?   * 鑰岃繖鏉＄紦瀛樺瓨鍦ㄧ殑鎰忎箟灏辨槸涓嶅繀鍐嶇畻涓€娆°€傝 services/aiThemeCloud.ts銆?   */
   aiCloudThemeKey?: string;
 }
 
@@ -1341,11 +1326,8 @@ export interface LocalSong {
   filePath: string; // File path for reference
   fileHandle?: FileSystemFileHandle; // For re-accessing the file (not persisted, stored in memory)
   /**
-   * 安卓原生曲库的音频标识（MediaStore 的 id，或导入时写进私有目录的文件名）。
-   *
-   * 不存播放 URL：那个地址是原生临时起的小服务（端口每次启动都可能变），
-   * 存下来重启就失效。播放前用它按当前端口重新拼（见 nativeAudioUrlForRef）。
-   */
+   * 瀹夊崜鍘熺敓鏇插簱鐨勯煶棰戞爣璇嗭紙MediaStore 鐨?id锛屾垨瀵煎叆鏃跺啓杩涚鏈夌洰褰曠殑鏂囦欢鍚嶏級銆?   *
+   * 涓嶅瓨鎾斁 URL锛氶偅涓湴鍧€鏄師鐢熶复鏃惰捣鐨勫皬鏈嶅姟锛堢鍙ｆ瘡娆″惎鍔ㄩ兘鍙兘鍙橈級锛?   * 瀛樹笅鏉ラ噸鍚氨澶辨晥銆傛挱鏀惧墠鐢ㄥ畠鎸夊綋鍓嶇鍙ｉ噸鏂版嫾锛堣 nativeAudioUrlForRef锛夈€?   */
   nativeAudioRef?: string;
   duration: number; // milliseconds
   fileSize: number; // bytes
@@ -1425,12 +1407,8 @@ export interface LocalLibrarySnapshotNode {
 export interface LocalLibrarySnapshot {
   rootFolderName: string;
   /**
-   * 「删除文件夹」留下的墓碑。
-   *
-   * 删根目录只删掉了库里的歌，而**刷新**在安卓上等于整库重扫一次（resyncAllFolders →
-   * scanAndroidDeviceMusic），歌会被原样扫回来 —— 于是「删了、一刷新又回来了」。
-   * 所以删根时留一条记录：刷新那条路照它跳过，只有用户**显式**点「扫描设备音乐」才清掉。
-   */
+   * 銆屽垹闄ゆ枃浠跺す銆嶇暀涓嬬殑澧撶銆?   *
+   * 鍒犳牴鐩綍鍙垹鎺変簡搴撻噷鐨勬瓕锛岃€?*鍒锋柊**鍦ㄥ畨鍗撲笂绛変簬鏁村簱閲嶆壂涓€娆★紙resyncAllFolders 鈫?   * scanAndroidDeviceMusic锛夛紝姝屼細琚師鏍锋壂鍥炴潵 鈥斺€?浜庢槸銆屽垹浜嗐€佷竴鍒锋柊鍙堝洖鏉ヤ簡銆嶃€?   * 鎵€浠ュ垹鏍规椂鐣欎竴鏉¤褰曪細鍒锋柊閭ｆ潯璺収瀹冭烦杩囷紝鍙湁鐢ㄦ埛**鏄惧紡**鐐广€屾壂鎻忚澶囬煶涔愩€嶆墠娓呮帀銆?   */
   rootRemoved?: boolean;
   ignoredFolderPaths?: string[];
   lyricFormatOrder?: import('./utils/lyrics/localLyricFormatOrder').LocalLyricFileFormat[]; // Sidecar lyric format order this scan used; undefined = default order

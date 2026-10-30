@@ -125,6 +125,12 @@ export const setBeatFxLiveEffects = (strengths: Readonly<Record<string, number>>
 export const getBeatEffectStrength = (id: string): number => liveEffects[id] ?? 0;
 
 /**
+ * Whether the effect plays at all (0..2): a strength of 0 means the sliders are down, which is not the
+ * same as the effect being off — 雾笺's 疏雨轻车 keeps its drops and only stops the riding.
+ */
+export const isBeatEffectPlaying = (id: string): boolean => id in liveEffects;
+
+/**
  * How many beats and downbeats the clock has fired since the app started - only ever growing, across
  * tracks and seeks - so a frame loop that remembers last frame's counts sees exactly the ones fired
  * since. One shared object, read it rather than keep it.

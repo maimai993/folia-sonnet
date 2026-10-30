@@ -21,3 +21,12 @@ export const DRUM_HITS_PREFIX = 'drum_hits_v1_';
 
 /** Whether `key` is a track's stored drum hits. */
 export const isDrumHitsKey = (key: string): boolean => key.startsWith(DRUM_HITS_PREFIX);
+
+/**
+ * A track's vocal envelope off htdemucs' vocal stem (vocalEnvelope.ts), which 雾笺 drops its rain on;
+ * stored beside the drum hits, the version part of the prefix as there.
+ */
+export const VOCAL_ENVELOPE_PREFIX = 'vocal_envelope_v1_';
+
+/** Whether `key` is a track's stored vocal envelope. */
+export const isVocalEnvelopeKey = (key: string): boolean => key.startsWith(VOCAL_ENVELOPE_PREFIX);

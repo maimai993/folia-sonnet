@@ -7,14 +7,25 @@ import type { BeatEffectSetting, SmartBeatSettings } from '../../types';
 //
 // An effect reads one source, and the source is what decides which model runs for the track on
 // screen (components/visualizer/beatClockTargets.ts): 'beats' is Beat This!' beat list (final0, the
-// beat clock in beatFxLive.ts), 'drums' htdemucs' drum hits (analysis/drumHits.ts). A picture whose
-// live effects read only drums never runs beat_this, and the other way round.
+// beat clock in beatFxLive.ts), 'drums' htdemucs' drum hits (analysis/drumHits.ts), 'stems' the drum
+// hits and the vocal envelope the same htdemucs run reads with them (analysis/vocalEnvelope.ts; 雾笺's
+// 疏雨轻车). A picture whose live effects read only htdemucs never runs beat_this, and the other way round.
+//
+// An effect can be made of parts (`parts`), each with its own slider in place of the one strength:
+// 疏雨轻车 is the rain on the voice and the bus jolting on the kicks, one switch, two strengths. A
+// part plays at `getBeatEffectStrength(beatEffectPartId(id, key))` (beatFxLive.ts).
 //
 // A retired effect keeps its code and its declaration but never plays and is not offered: the user
 // set it aside (2026-10-17: 时计's 齿轮随拍 and the Latent background's 潮汐脉动) rather than deleting
 // it, so it can come back by dropping `retired`.
 
-export type BeatEffectSource = 'beats' | 'drums';
+export type BeatEffectSource = 'beats' | 'drums' | 'stems';
+
+/** A part of an effect with its own slider: a stable key (stored) and the i18n key of its name. */
+export interface BeatEffectPart {
+    key: string;
+    nameKey: string;
+}
 
 export interface BeatEffectDef {
     /** Stable, stored in settings and exported configs: `<mode>.<name>`. */
@@ -24,6 +35,8 @@ export interface BeatEffectDef {
     /** i18n key of what it does. */
     descKey: string;
     source: BeatEffectSource;
+    /** Its parts, each with its own strength slider in place of the one; see the header. */
+    parts?: readonly BeatEffectPart[];
     /** Never plays and is not offered; see the header. */
     retired?: boolean;
 }
@@ -42,6 +55,7 @@ export const BEAT_EFFECT_IDS = {
     hanabiBeatBursts: 'hanabi.beatBursts',
     hanabiBeatPulse: 'hanabi.beatPulse',
     temperaInkFlash: 'tempera.inkFlash',
+    nebbiaDrizzleRide: 'nebbia.drizzleRide',
 } as const;
 
 /**
@@ -53,6 +67,12 @@ export const LEGACY_BEAT_LIST_EFFECT_IDS: readonly string[] = [BEAT_EFFECT_IDS.s
 /** The effect's setting, or the default for one never touched. */
 export const resolveBeatEffectSetting = (settings: SmartBeatSettings, id: string): BeatEffectSetting =>
     settings.effects[id] ?? BEAT_EFFECT_DEFAULT;
+
+/** The id a part plays under in the live strengths (beatFxLive.ts `getBeatEffectStrength`). */
+export const beatEffectPartId = (id: string, part: string): string => `${id}:${part}`;
+
+/** A part's strength in an effect's setting, 1 for one never touched. */
+export const resolveBeatEffectPartStrength = (setting: BeatEffectSetting, part: string): number => setting.parts?.[part] ?? 1;
 
 /**
  * The effects that read drum hits (`source: 'drums'`), on any picture. Their declarations live on the

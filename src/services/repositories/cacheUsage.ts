@@ -1,7 +1,7 @@
-import type { StoredCacheEntry } from '../appDatabase';
+﻿import type { StoredCacheEntry } from '../appDatabase';
 import type { CacheCategory } from './cacheRepository';
 // Pure: the analysis key prefixes, with nothing but a type import behind them.
-import { isBeatGridKey, isDrumHitsKey } from '../analysis/beatGridKeys';
+import { isBeatGridKey, isDrumHitsKey, isVocalEnvelopeKey } from '../analysis/beatGridKeys';
 
 // src/services/repositories/cacheUsage.ts
 // How much of the cache each category holds, counted one row at a time. No imports at run time but
@@ -48,7 +48,7 @@ export const matchesCategory = (key: string, category: CacheCategory): boolean =
   // A track's Beat This! beats (services/analysis/beatGrid.ts) are the same kind of thing - a model
   // pass to rebuild, read by automix and by the beat FX - and are cleared with the profiles. So are
   // its drum hits off htdemucs (services/analysis/drumHits.ts).
-  if (category === 'analysis') return key.startsWith('automix_profile_') || isBeatGridKey(key) || isDrumHitsKey(key);
+  if (category === 'analysis') return key.startsWith('automix_profile_') || isBeatGridKey(key) || isDrumHitsKey(key) || isVocalEnvelopeKey(key);
   // A track's ReplayGain describes the audio and arrives with it, so it is cleared with it. It is
   // counted here but NOT in mediaCount below, which means "songs cached" and would otherwise
   // double for every track that has both. The level the audio was fetched at (`audioLevel_`)
