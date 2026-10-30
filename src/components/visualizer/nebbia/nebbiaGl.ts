@@ -25,6 +25,9 @@ export class NebbiaGl {
     private W = 1; private H = 1;
     private spriteReady = false;
     private instData = new Float32Array(0);
+    /** 两张画布纹理上次分配时的像素尺寸：一样就复用存储，只上传内容。 */
+    private maskSize = { w: 0, h: 0 };
+    private breathSize = { w: 0, h: 0 };
     /** 精灵贴图加载好时调（这之前不画水珠）。 */
     onSpriteReady: (() => void) | null = null;
 
@@ -167,16 +170,31 @@ export class NebbiaGl {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
+    /**
+     * 把画布内容传到已绑定的纹理上。尺寸和上次一样就用 `texSubImage2D`（只写内容，不重新分配纹理存储）；
+     * 逐帧走 `texImage2D` 会让驱动每帧新建一份存储，是这段最贵的一笔。
+     */
+    private uploadCanvas(size: { w: number; h: number }, canvas: HTMLCanvasElement) {
+        const { gl } = this;
+        if (size.w > 0 && size.w === canvas.width && size.h === canvas.height) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+            return;
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        size.w = canvas.width;
+        size.h = canvas.height;
+    }
+
     /** 画一帧：遮罩画布上传（白气遮罩只在这一帧有哈气时传，`breath` 为 null 就不传），两张水珠纹理，雾的预渲染，主画面。 */
     render(mask: HTMLCanvasElement, breath: HTMLCanvasElement | null, drops: number[], field: number[], u: NebbiaUniforms) {
         const { gl, U } = this;
         gl.activeTexture(gl.TEXTURE0 + this.mask.unit);
         gl.bindTexture(gl.TEXTURE_2D, this.mask.t);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+        this.uploadCanvas(this.maskSize, mask);
         if (breath) {
             gl.activeTexture(gl.TEXTURE0 + this.breath.unit);
             gl.bindTexture(gl.TEXTURE_2D, this.breath.t);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, breath);
+            this.uploadCanvas(this.breathSize, breath);
         }
         this.renderDrops(this.drop, drops);
         this.renderDrops(this.field, field);
