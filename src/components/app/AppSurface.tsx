@@ -45,6 +45,7 @@ import Home from './Home';
 import { createOnlineGridViewCollection } from './home/gridViewCollectionAdapters';
 import { wallExitCompleted, WALL_LAYER } from './lattice/wallLayer';
 import MediaCacheMigrationNotice from './MediaCacheMigrationNotice';
+import TestBuildNotice from './notices/TestBuildNotice';
 import AppOverlays from './overlays/AppOverlays';
 import { handleOnlineMediaFailure } from './playback/handleOnlineMediaFailure';
 import { notePreviewPlaying } from './playback/source/previewNotice';
@@ -621,6 +622,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             />
 
             <AppDialogs model={appDialogsModel} />
+            {/* 测试版提醒：不是 main / release/* 构建的包，启动时说一句它是什么来路。 */}
+            <TestBuildNotice />
             {/* 启动那一次：把上一版的媒体缓存搬进私有目录，搬的时候给一条提示。 */}
             <MediaCacheMigrationNotice />
             <FreeSoftwareNoticeModal

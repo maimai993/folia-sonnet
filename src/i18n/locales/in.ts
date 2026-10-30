@@ -5980,5 +5980,11 @@ export default {
         "noMatch": "“Jangan gunakan metadata online” di kiri bawah membuat lagu ini hanya memakai milik berkasnya."
       }
     }
+  },
+  "testBuild": {
+    "title": "Versi uji",
+    "body": "Paket ini dibangun dari cabang {{branch}}, bukan dari main atau cabang release/. Fitur bisa belum lengkap dan data bisa bermasalah — jangan pakai sebagai versi sehari-hari.",
+    "unknownBranch": "cabang tak dikenal",
+    "ok": "Mengerti"
   }
 } as const;

@@ -5980,5 +5980,11 @@ export default {
         "noMatch": "“Don't use online metadata” at the bottom left makes the song use only what the file has."
       }
     }
+  },
+  "testBuild": {
+    "title": "Test build",
+    "body": "This build comes from the {{branch}} branch, not from main or a release/ branch. Features may be missing and data may be wrong — do not use it as your everyday build.",
+    "unknownBranch": "an unknown branch",
+    "ok": "Got it"
   }
 } as const;

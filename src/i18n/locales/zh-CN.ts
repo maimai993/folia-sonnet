@@ -5981,5 +5981,11 @@ export default {
         "noMatch": "左下角的「不使用在线数据」让这首歌只用文件自己的信息。"
       }
     }
+  },
+  "testBuild": {
+    "title": "测试版",
+    "body": "这个包是从 {{branch}} 分支构建的，不是从 main 或 release/ 分支出的正式版。功能可能不全，数据也可能出问题 —— 别拿它当日常使用的主版本。",
+    "unknownBranch": "无法识别的分支",
+    "ok": "我知道了"
   }
 } as const;
