@@ -65,6 +65,8 @@ describe('machi gyro', () => {
         const seen: { azimuth: number; elevation: number }[] = [];
         subscribeMachiGyro(offsets => seen.push(offsets));
         target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
+        // 分两步转，每步都在可信幅度里（一步跳太多会被当成换系，重新取基准）。
+        target.dispatch('deviceorientation', { beta: 50, gamma: -50 });
         target.dispatch('deviceorientation', { beta: 89, gamma: -89 });
         expect(seen[0]!.azimuth).toBeCloseTo(-MACHI_GYRO_RANGE.azimuth, 6);
         expect(seen[0]!.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
@@ -95,6 +97,34 @@ describe('machi gyro', () => {
         expect(seen).toHaveLength(1);
         target.dispatch('deviceorientation', { beta: 30, gamma: -22 });
         expect(seen[1]!.azimuth).toBeCloseTo(-2 * DEGREE, 6);
+    });
+
+    it('comes back after sitting at the limit instead of sticking there', () => {
+        const target = fakeWindow();
+        const seen: { azimuth: number; elevation: number }[] = [];
+        subscribeMachiGyro(offsets => seen.push(offsets));
+        target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
+        // 转到远超范围：夹在上限。
+        target.dispatch('deviceorientation', { beta: 0, gamma: 40 });
+        expect(seen[0]!.azimuth).toBeCloseTo(MACHI_GYRO_RANGE.azimuth, 6);
+        // 停在极限上转回来：必须跟着回，不能卡住。
+        target.dispatch('deviceorientation', { beta: 0, gamma: 2 });
+        expect(seen[1]!.azimuth).toBeCloseTo(2 * DEGREE, 6);
+    });
+
+    it('takes the pose as a new reference when the reading jumps (phone past vertical)', () => {
+        const target = fakeWindow();
+        const seen: { azimuth: number; elevation: number }[] = [];
+        subscribeMachiGyro(offsets => seen.push(offsets));
+        target.dispatch('deviceorientation', { beta: 88, gamma: 0 });
+        target.dispatch('deviceorientation', { beta: 100, gamma: 0 });
+        expect(seen[0]!.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
+        // 翻过竖直方向，读数换系跳一大截：不能当成「倾斜到极限」，而是以新姿态为基准、偏移归零。
+        target.dispatch('deviceorientation', { beta: -85, gamma: 0 });
+        expect(seen[1]).toEqual({ azimuth: 0, elevation: 0 });
+        // 从新基准继续转，仍然跟得上。
+        target.dispatch('deviceorientation', { beta: -88, gamma: 0 });
+        expect(seen[2]!.elevation).toBeCloseTo(-3 * DEGREE, 6);
     });
 
     it('asks iOS for permission and reports what the user said', async () => {

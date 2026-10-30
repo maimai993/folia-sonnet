@@ -45,21 +45,42 @@ export const requestMachiGyroPermission = async (): Promise<boolean> => {
 export const subscribeMachiGyro = (onOffsets: (offsets: MachiGyroOffsets) => void) => {
     if (!machiGyroSupported()) return () => {};
     let origin: { beta: number; gamma: number } | null = null;
+    let last: { beta: number; gamma: number } | null = null;
     const clamp = (value: number, limit: number) => Math.min(limit, Math.max(-limit, value));
+    /**
+     * 手机翻过竖直方向时 beta / gamma 会换系、读数一跳就是几十上百度。这种跳变不能当成「倾斜到极限」，
+     * 否则基准还留在旧姿态，人就觉得转到底之后陀螺仪失效、转回来也不回。超过这个幅度就当换系，重取基准。
+     */
+    const MAX_TRUSTED_JUMP = 60;
+    const ZERO: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
+    /** 以当前姿态为新的基准，并把偏移交回零（镜头慢慢回机位，不跳）。 */
+    const rebase = (reading: { beta: number; gamma: number }) => {
+        origin = reading;
+        onOffsets(ZERO);
+    };
     const reset = () => {
         origin = null;
+        last = null;
     };
     // 转屏后 beta / gamma 的含义会变，重新取基准。
     window.addEventListener('orientationchange', reset);
     const listener = (event: DeviceOrientationEvent) => {
         // 没有陀螺仪的设备只给 null（有的连 alpha 都是 null）。
         if (event.beta === null || event.gamma === null) return;
+        const reading = { beta: event.beta, gamma: event.gamma };
+        const jumped = last !== null
+            && (Math.abs(reading.beta - last.beta) > MAX_TRUSTED_JUMP || Math.abs(reading.gamma - last.gamma) > MAX_TRUSTED_JUMP);
+        last = reading;
         if (!origin) {
-            origin = { beta: event.beta, gamma: event.gamma };
+            origin = reading;
             return;
         }
-        const gamma = clamp((event.gamma - origin.gamma) * DEGREE, MACHI_GYRO_RANGE.azimuth);
-        const beta = clamp((event.beta - origin.beta) * DEGREE, MACHI_GYRO_RANGE.elevation);
+        if (jumped) {
+            rebase(reading);
+            return;
+        }
+        const gamma = clamp((reading.gamma - origin.gamma) * DEGREE, MACHI_GYRO_RANGE.azimuth);
+        const beta = clamp((reading.beta - origin.beta) * DEGREE, MACHI_GYRO_RANGE.elevation);
         onOffsets({ azimuth: gamma, elevation: beta });
     };
     window.addEventListener('deviceorientation', listener);
