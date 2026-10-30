@@ -9,7 +9,13 @@ import { type GridViewCollectionDescriptor } from '../home/gridViewCollectionAda
 import { createPanelNavigation } from '../navigation/createPanelNavigation';
 import { currentTime } from '../../../stores/motionSignals';
 import { makeSongCurrent } from '../playback/currentSong';
-import { setDuration as setDurationInStore, setPlayerState as setPlayerStateInStore, setPlayQueue } from '../../../stores/usePlaybackStore';
+import {
+    setAudioSrc as setAudioSrcInStore,
+    setDuration as setDurationInStore,
+    setPlayerState as setPlayerStateInStore,
+    setPlayQueue,
+} from '../../../stores/usePlaybackStore';
+import { nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { readNativeQueueState } from '../../../services/nativeQueueBridge';
 import { songFromMirrorEntry } from '../../../utils/queueMirrorEntry';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
@@ -148,7 +154,11 @@ export const useAppLibraryControllers = (model: Input) => {
          * （web 全流程的歌、或已经停止）回 false，照旧走缓存恢复。
          */
         adoptNativePlayback: async () => {
-            if (!nativeTakesRef.current && !nativeActive) return false;
+            // 判据只看「原生插件可用」，**不看 audioSrc**：冷启动时 audioSrc 还是
+            // null（nativeTakes 因此为 false），而这正是最需要 native-first 的那条
+            // 路径 —— 用 nativeTakes 判断会让这里恒回 false，issue #106 修不掉。
+            // 「原生手上真有歌」由下面的 hasSong + songKey 判断。
+            if (!nativeActive) return false;
             const native = await readNativeQueueState();
             if (!native || !native.hasSong || !native.songKey) return false;
             // 冷启动时原生播放器正在放 = 原生真的在播（这里不问 web 的 store，
@@ -171,7 +181,23 @@ export const useAppLibraryControllers = (model: Input) => {
                 : [song, ...nativeQueue];
             setPlayQueue(queue);
             makeSongCurrent(song);
-            currentTime.set(native.positionMs / 1000);
+            /*
+             * 把引擎那半边也对齐：冷启动时 JS 的引擎状态是空的，而原生一直在放。
+             * `adoptSource` 只记账、不 prepare —— 之后装源 effect 看到地址相同会跳过，
+             * 不会把原生正在放的歌从头再放（issue #106）。
+             */
+            const adoptedUrl = entry?.url?.trim();
+            if (adoptedUrl && nativePlaybackEngine.supports(adoptedUrl)) {
+                nativePlaybackEngine.adoptSource(adoptedUrl, {
+                    positionMs: native.positionMs,
+                    durationMs: native.durationMs,
+                    playing: native.playing,
+                });
+                setAudioSrcInStore(adoptedUrl);
+            }
+            // 位置 0 是「原生刚 prepare 还没走」的正常值，不要用它把界面进度归零
+            // （缓存的进度可能是有意义的），与 onSyncToSong 里同一写法。
+            if (native.positionMs > 0) currentTime.set(native.positionMs / 1000);
             if (native.durationMs > 0) setDurationInStore(native.durationMs / 1000);
             setPlayerStateInStore(native.playing ? PlayerState.PLAYING : PlayerState.PAUSED);
             void persistLastPlaybackCache(song, queue);

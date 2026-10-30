@@ -103,6 +103,27 @@ class NativePlaybackEngine {
         return this.hasSource;
     }
 
+    /**
+     * 认领：原生播放器手里**本来就是这首歌**，只是 Web 侧这一半还没跟上
+     * （冷启动 / WebView 重载后 JS 的引擎状态是空的，而原生前台服务一直在放）。
+     *
+     * 只对齐引擎自己记的账，**不 prepare、不动播放器** —— 走 `setSource` 会把原生
+     * 正在放的歌从头再放一遍，正是 issue #106 要修的那个「唤醒后自己切歌/回到开头」。
+     * 之后 `useNativePlaybackRuntime` 的装源 effect 看到 `activeUrl()` 已是这个地址，
+     * 也会跳过重复装源。
+     */
+    adoptSource(url: string, state: { positionMs: number; durationMs: number; playing: boolean }): void {
+        this.ensureSubscription();
+        this.currentUrl = url;
+        this.hasSource = true;
+        this.playing = state.playing;
+        this.stalled = false;
+        this.positionMs = Math.max(0, state.positionMs);
+        this.durationMs = Math.max(0, state.durationMs);
+        this.updatedAtMs = performance.now();
+        this.lastDeliveredMs = this.positionMs;
+    }
+
     isPlaying(): boolean {
         return this.hasSource && this.playing;
     }

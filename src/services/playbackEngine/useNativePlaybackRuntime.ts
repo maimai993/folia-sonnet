@@ -59,6 +59,15 @@ export const useNativePlaybackRuntime = ({
             console.info('[NativePlayer] 这一首回落到 <audio>', audioSrc.slice(0, 24), '(原生吃不下这种地址)');
             return;
         }
+        /*
+         * 原生手上已经是这个地址：不重新装源。
+         *
+         * 冷启动 / 唤醒认领原生时（issue #106），JS 把 audioSrc 对齐成原生正在放的
+         * 地址 —— 那条路**没有经过 setSource**，但原生播放器手里本来就是这首。
+         * 不拦这一下会把原生正在放的歌 prepare 一遍、从头再放，等于「唤醒后自己
+         * 切回开头」。地址相同就当它已经装好了。
+         */
+        if (nativePlaybackEngine.activeUrl() === audioSrc) return;
         console.info('[NativePlayer] 接管这一首', audioSrc.slice(0, 24));
         nativePlaybackEngine.setRepeatMode(callbacksRef.current.repeatOne ? 1 : 0);
         void nativePlaybackEngine.setSource(audioSrc).catch(error => {
