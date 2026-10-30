@@ -868,6 +868,7 @@ export default {
       "visualizer-tempera": { "title": "切换到可视化：凝彩", "description": "切换到凝彩色块 PV 可视化" },
       "visualizer-lumiere": { "title": "切换到可视化：绘光", "description": "切换到绘光舞台光 PV 可视化" },
       "visualizer-hanabi": { "title": "切换到可视化：花火", "description": "切换到花火烟花歌词 PV 可视化" },
+    "visualizer-nebbia": { "title": "切换到可视化：雾笺", "description": "切换到雾笺雨夜车窗手写歌词可视化" },
       "desktop-toggle-remote-control": { "title": "切换遥控窗口", "description": "打开或关闭遥控窗口" },
       "desktop-toggle-main-window-always-on-top": { "title": "切换主窗口置顶", "description": "置顶或取消置顶主窗口" },
       "background-monet-full-overlay": { "title": "背景切换到 莫奈: 全屏叠色", "description": "切换背景到莫奈全屏叠色" },

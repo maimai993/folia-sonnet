@@ -867,6 +867,7 @@ export default {
       "visualizer-tempera": { "title": "Visualizer: Tempera", "description": "Alihkan ke PV lirik blok warna Tempera" },
       "visualizer-lumiere": { "title": "Visualizer: Lumiere", "description": "Alihkan ke PV lirik cahaya panggung Lumiere" },
       "visualizer-hanabi": { "title": "Visualizer: Hanabi", "description": "Alihkan ke PV lirik kembang api Hanabi" },
+    "visualizer-nebbia": { "title": "Visualizer: Nebbia", "description": "Alihkan ke tampilan lirik tulisan tangan di jendela berembun Nebbia" },
       "desktop-toggle-remote-control": { "title": "Alihkan jendela remote control", "description": "Buka atau tutup jendela remote control" },
       "desktop-toggle-main-window-always-on-top": { "title": "Alihkan jendela utama selalu di atas", "description": "Sematkan atau lepas jendela utama di atas jendela lain" },
       "background-monet-full-overlay": { "title": "Latar: Overlay Layar Penuh Monet", "description": "Alihkan latar ke tata letak overlay layar penuh Monet" },
