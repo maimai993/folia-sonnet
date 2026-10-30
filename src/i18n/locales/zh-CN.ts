@@ -1965,6 +1965,15 @@ export default {
     "localLyricSourceDesc": "本地文件和 Navidrome 曲库没有平台来源，用这里选的歌词源匹配；上面的优先级选「跟随播放平台」时，它们也走这一项。"
   },
   "options": {
+    "nebbiaLayout_badge": "徽章",
+    "nebbiaLayout_columns": "竖排几列",
+    "nebbiaLayout_cross": "十字",
+    "nebbiaLayout_header": "刊头",
+    "nebbiaLayout_lines2": "两行错落",
+    "nebbiaLayout_lines3": "三行错落",
+    "nebbiaLayout_orbit": "环绕",
+    "nebbiaLayout_pillar": "竖柱",
+    "nebbiaLayout_ribbon": "横条",
     "beatEffectNeedsStems": "这次安装缺少 HTDemucs 模型，请重新安装 Folia。",
     "beatEffect_nebbiaDrizzleRide": "疏雨轻车",
     "beatEffect_nebbiaDrizzleRideDesc": "雾笺的雨和车跟着 HTDemucs 分离出的歌走：雨跟人声，唱得越响，砸在玻璃上的小雨点越多，每个吐字砸下一颗大雨点，躲开正在唱的那句；车跟底鼓颠，不再随机颠簸。雨点和颠簸各有一条强度，拉到 0 就不下雨或不颠。歌还没分析完时，雨点跟着混音里人声那一段频率走，车照旧随机颠。",

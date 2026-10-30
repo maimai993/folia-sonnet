@@ -1964,6 +1964,15 @@ export default {
     "localLyricSourceDesc": "Local files and Navidrome tracks carry no provider of their own, so they are matched with this source. It is also the fallback when the priority above follows the playback source."
   },
   "options": {
+    "nebbiaLayout_badge": "Badge",
+    "nebbiaLayout_columns": "Vertical columns",
+    "nebbiaLayout_cross": "Cross",
+    "nebbiaLayout_header": "Masthead",
+    "nebbiaLayout_lines2": "Two staggered rows",
+    "nebbiaLayout_lines3": "Three staggered rows",
+    "nebbiaLayout_orbit": "Orbit",
+    "nebbiaLayout_pillar": "Pillar",
+    "nebbiaLayout_ribbon": "Ribbon",
     "beatEffectNeedsStems": "The HTDemucs model is missing from this install; reinstall Folia.",
     "beatEffect_nebbiaDrizzleRide": "Drizzle Ride",
     "beatEffect_nebbiaDrizzleRideDesc": "Nebbia's rain and bus follow the song HTDemucs separates. The rain follows the voice: the louder the singing, the more small drops hit the glass, and a big drop lands on each sung syllable, away from the line being sung. The bus jolts on the kick drum instead of at random. Rain and jolts each have their own strength; at 0 there is no rain, or no jolts. Until the track is analysed, the rain follows the vocal range of the mix and the bus jolts at random.",

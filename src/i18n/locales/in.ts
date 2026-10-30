@@ -1964,6 +1964,15 @@ export default {
     "localLyricSourceDesc": "Berkas lokal dan trek Navidrome tidak punya penyedia sendiri, jadi dicocokkan dengan sumber ini. Ini juga menjadi fallback saat prioritas di atas mengikuti sumber pemutaran."
   },
   "options": {
+    "nebbiaLayout_badge": "Lencana",
+    "nebbiaLayout_columns": "Kolom vertikal",
+    "nebbiaLayout_cross": "Silang",
+    "nebbiaLayout_header": "Kepala surat",
+    "nebbiaLayout_lines2": "Dua baris berselang",
+    "nebbiaLayout_lines3": "Tiga baris berselang",
+    "nebbiaLayout_orbit": "Orbit",
+    "nebbiaLayout_pillar": "Pilar",
+    "nebbiaLayout_ribbon": "Pita",
     "beatEffectNeedsStems": "Model HTDemucs tidak ada di instalasi ini; instal ulang Folia.",
     "beatEffect_nebbiaDrizzleRide": "Gerimis Perjalanan",
     "beatEffect_nebbiaDrizzleRideDesc": "Hujan dan bus Nebbia mengikuti lagu yang dipisahkan HTDemucs. Hujan mengikuti vokal: makin keras nyanyiannya, makin banyak tetes kecil yang mengenai kaca, dan satu tetes besar jatuh di setiap suku kata, menjauhi baris yang sedang dinyanyikan. Bus terguncang mengikuti kick drum, bukan acak. Hujan dan guncangan masing-masing punya kekuatan sendiri; di 0 tidak ada hujan atau guncangan. Sebelum lagu selesai dianalisis, hujan mengikuti rentang vokal dari campuran dan bus terguncang acak.",
