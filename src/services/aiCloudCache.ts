@@ -714,13 +714,24 @@ export const withAiCloudCache = async <T>(options: {
     const { kind, fingerprint, generate, validate, combine, songTitle, platform, lyricHash, lyricText, isPureMusic, skipPull } = options;
 
     let previous: unknown = null;
-    if (!skipPull && isFoliaCloudCacheEnabled()) {
+    /*
+     * 这条路径以前是静默的：拉不到就当作没命中直接生成，日志里一个字都没有。于是
+     * 「没配 AI 时根本不问云缓存」和「问了但请求失败」在用户侧看起来一模一样
+     * （见 #150）。这里每次都给一行结论：问了没有、命没命中。
+     */
+    const cacheEnabled = isFoliaCloudCacheEnabled();
+    if (skipPull || !cacheEnabled) {
+        console.info(`[ai-cache] pull skipped (${skipPull ? 'force' : 'disabled'})`);
+    }
+    if (!skipPull && cacheEnabled) {
         const pulled = await pullAiCloudCache(kind, fingerprint, {
             songTitle,
             /* 纯音乐那半的「歌词」其实是歌名，别拿它去判高亮词。 */
             lyricText: isPureMusic ? '' : lyricText,
         });
         const validated = pulled.status === 'hit' ? validate(pulled.payload) : null;
+        if (pulled.status !== 'hit') console.info(`[ai-cache] pull missed (${pulled.status})`);
+        else if (validated === null) console.info('[ai-cache] pull hit but the entry did not validate');
         if (validated !== null) {
             /*
              * 按内容捞到的那条**回填**到自己这个键上。
