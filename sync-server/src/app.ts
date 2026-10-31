@@ -11,7 +11,8 @@ import adminAuthRoutes, {
   readAdminPublicOrigin,
 } from './admin.js';
 import { renderLoginPage, renderPanelPage } from './panel.js';
-import { aiCacheRoutes, adminCacheBackupRoutes, adminCacheRoutes, readCacheStats } from './aiCache.js';
+import { aiCacheRoutes, adminCacheRoutes, readCacheStats } from './aiCache.js';
+import { adminCacheBackupRoutes } from './aiCacheBackups.js';
 import { adminCachePages } from './adminCachePages.js';
 import { adminFontRoutes, fontRoutes, readFontStats } from './fonts.js';
 import { adminStatsImageRoutes } from './statsImage.js';
@@ -775,6 +776,13 @@ app.get('/admin', async (c) => {
 });
 app.route('/admin/api/fonts', adminFontRoutes);
 app.route('/admin/api/ai-cache', adminCacheRoutes);
+/*
+ * 旧版列表与「捞回某一版」。恢复之后要让 `/songs` 的总数缓存作废 —— 捞回来的那条
+ * 可能带着一个当前库里已经没有的歌名（原因见 aiCacheSongTotal.ts）。
+ *
+ * 这里用一个包装好的模块级实例、并以**导入名**挂载：契约提取脚本（ci/contracts/extract.ts）
+ * 按 `app.route('前缀', 标识符)` 回溯到 import 表，内联调用或另起局部常量它都找不到。
+ */
 app.route('/admin/api/ai-cache-backups', adminCacheBackupRoutes);
 /*
  * 管理面板的缓存详情页面：`/admin/cache/:kind/:key`。

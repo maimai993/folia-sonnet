@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './admin.js';
 import type { D1Database, D1PreparedStatement, Env } from './app.js';
-import { looseSongTitle, rankSongTitleMatch, songTitleFallbackTokens, songTitleLike, songTitleQueryTokens, songTitleTokens } from './songTitleMatch.js';
+import { MAX_CACHE_BACKUPS } from './aiCacheBackups.js';
+import { invalidateSongTotalCache, readSongTotal } from './aiCacheSongTotal.js';
+import {
+  deleteTitleTokens,
+  findResolveCandidates as findResolveCandidatesIn,
+  writeTitleTokens,
+} from './aiCacheTitleIndex.js';
 import { readHighlightWords, verifyStageUpload } from './stageVerifier.js';
 
 // src/aiCache.ts
@@ -26,8 +32,6 @@ const DEFAULT_LIST_LIMIT = 200;
 const MAX_SONGS_LIMIT = 200;
 const DEFAULT_SONGS_LIMIT = 60;
 const MAX_PLATFORM_CHARS = 64;
-/** 同一个键最多留几份旧版：够把被盖掉的那条捞回来，又不至于无限长。 */
-export const MAX_CACHE_BACKUPS = 10;
 
 const KIND_PATTERN = /^[a-z0-9_-]{1,32}$/;
 const KEY_PATTERN = /^[a-f0-9]{32}$/;
@@ -69,21 +73,6 @@ type AiCacheRow = {
   updated_at: string;
 };
 
-type AiCacheBackupRow = {
-  id: number;
-  kind: string;
-  cache_key: string;
-  payload_json: string;
-  payload_bytes: number;
-  song_title: string | null;
-  provider: string | null;
-  model: string | null;
-  platform: string | null;
-  hits: number;
-  created_at: string;
-  archived_at: string;
-};
-
 const mapRow = (row: AiCacheRow): AiCacheEntry => {
   let payload: unknown = null;
   try {
@@ -103,30 +92,6 @@ const mapRow = (row: AiCacheRow): AiCacheEntry => {
     hits: Number(row.hits ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-};
-
-/** 备份表里的一行：够管理员看清是哪一版，也能整版捞回来。 */
-const mapBackupRow = (row: AiCacheBackupRow) => {
-  let payload: unknown = null;
-  try {
-    payload = JSON.parse(row.payload_json);
-  } catch {
-    payload = null;
-  }
-  return {
-    id: Number(row.id ?? 0),
-    kind: row.kind,
-    key: row.cache_key,
-    payload,
-    songTitle: row.song_title ?? '',
-    provider: row.provider ?? '',
-    model: row.model ?? '',
-    platform: row.platform ?? '',
-    payloadBytes: Number(row.payload_bytes ?? 0),
-    hits: Number(row.hits ?? 0),
-    createdAt: row.created_at,
-    archivedAt: row.archived_at,
   };
 };
 
@@ -333,6 +298,8 @@ const handlePut = async (
     /* 倒排索引跟主表在同一个事务里更新：不会出现「主表改了、索引还指着旧歌名」。 */
     ...writeTitleTokens(db, kind, key, songTitle, now),
   ]);
+  /* 可能新增了一种歌名，让 /songs 的总数缓存立刻作废（不等 TTL 自然过期）。 */
+  invalidateSongTotalCache(db);
 
   return {
     ok: true,
@@ -351,27 +318,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (char) => `\\${char}`);
-
-/** 一个键一次给多少条候选去判合规 —— 多了只是让客户端多比几遍。 */
-const MAX_RESOLVE_CANDIDATES = 12;
-/**
- * 模糊匹配先捞多少行回来打分。
- *
- * LIKE '%…%' 用不上索引，而「哪条才是同一首歌」只有压成核心名之后才知道 —— 这件事
- * SQL 做不了，只好先多捞一点、在本机排完再截断。payload 只给最后那几条 parse。
- */
-const MAX_RESOLVE_SCAN_ROWS = 200;
-/** 一次查询里最多并列几条 token（核心名 + 各段 + 首字 + 单字，通常 5~12 个）。 */
-const MAX_RESOLVE_TOKENS = 16;
-/** 兜底的 LIKE 路径最多并列几条模式（与原来的行为一致）。 */
-const MAX_RESOLVE_LIKE_PATTERNS = 4;
-
-/** 捞回来的一行，还没打分。只带排序与打分要用的列，让扫描走覆盖索引。 */
-type ResolveRow = {
-  cache_key: string;
-  song_title: string | null;
-  updated_at: string | null;
-};
 
 /**
  * 按主键把整行（含 payload_json）补回来。
@@ -416,223 +362,6 @@ export const hydrateCacheRows = async (
   return map;
 };
 
-/**
- * 按 token 捞候选行 —— resolve 的**唯一取数入口**。
- *
- * 走 `ai_cache_title_token` 的 `(kind, token, cache_key)` 主键：`IN` 几个 token 就是几次
- * 索引点查，和库有多大无关（同一份 4 万条数据实测 14ms → 0.03ms）。`DISTINCT` 是因为
- * 一条记录可能有多个 token 同时命中；只有命中很多时才建临时表去重，正常情况（几个 token、
- * 十来行）不会。
- *
- * 只捞这几列 —— payload 留给最后那几条才取（见 hydrateCacheRows）。
- *
- * `ORDER BY` 里不能写 `updated_at`：那会让 SQLite 放弃索引顺序、把整个结果集建临时表
- * 再排。时间倒序在 `rankResolveRows` 里做，那里只面对几十行。
- */
-const scanResolveRows = async (
-  db: D1Database,
-  kind: string,
-  /** 要问的 token（见 songTitleMatch.ts 的 `songTitleQueryTokens`）。 */
-  tokens: string[],
-): Promise<ResolveRow[]> => {
-  const terms = [...new Set(tokens.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
-    .slice(0, MAX_RESOLVE_TOKENS);
-  if (terms.length === 0) return [];
-  const placeholders = terms.map(() => '?').join(', ');
-  const rows = await db
-    .prepare(
-      `SELECT DISTINCT cache_key, song_title, updated_at
-       FROM ai_cache_title_token
-       WHERE kind = ? AND token IN (${placeholders})
-       LIMIT ?`,
-    )
-    .bind(kind, ...terms, MAX_RESOLVE_SCAN_ROWS)
-    .all<ResolveRow>();
-  return rows.results ?? [];
-};
-
-/**
- * 把一条记录的歌名写进倒排索引。
- *
- * 写入路径（PUT / 恢复旧版）与「首次命中时补写」共用它：先删掉这个键原有的 token 行，
- * 再按新歌名重写 —— 歌名可能变了，留着旧 token 就会指到一条已经改名的记录。
- *
- * 两步合成一次 `batch`，一个事务里完成，不会出现「删了还没写」的空窗。
- */
-const writeTitleTokens = (
-  db: D1Database,
-  kind: string,
-  key: string,
-  songTitle: string,
-  updatedAt: string,
-): D1PreparedStatement[] => {
-  const tokens = songTitleTokens(songTitle);
-  const statements: D1PreparedStatement[] = [
-    db.prepare('DELETE FROM ai_cache_title_token WHERE kind = ? AND cache_key = ?').bind(kind, key),
-  ];
-  if (tokens.length > 0) {
-    /* 多行 INSERT 一次搞定：每多一条语句就多一次跨进程的往返。 */
-    const values = tokens.map(() => '(?, ?, ?, ?, ?)').join(', ');
-    const binds: unknown[] = [];
-    tokens.forEach((token) => {
-      binds.push(kind, token, key, songTitle, updatedAt);
-    });
-    statements.push(
-      db
-        .prepare(`INSERT OR REPLACE INTO ai_cache_title_token (kind, token, cache_key, song_title, updated_at) VALUES ${values}`)
-        .bind(...binds),
-    );
-  }
-  return statements;
-};
-
-/**
- * 老库没有倒排索引时的兜底：这条路走原来的 `LIKE`，命中之后顺手把 token 补写进去。
- *
- * 不回填全部历史数据是有意的 —— 4 万条要好几秒、10 万条要几十秒，放在启动路径上就是
- * 「升级后第一次启动像挂了」。改成用到哪条就补哪条：热门歌名很快全都补上，冷门的
- * 一直走这个慢路径也不会有人察觉。
- */
-const scanResolveRowsByLike = async (
-  db: D1Database,
-  kind: string,
-  patterns: string[],
-  title: string,
-): Promise<ResolveRow[]> => {
-  const terms = [...new Set(patterns.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
-    .slice(0, MAX_RESOLVE_LIKE_PATTERNS);
-  if (terms.length === 0) return [];
-  const where = terms.map(() => "song_title LIKE ? ESCAPE '\\'").join(' OR ');
-  const rows = await db
-    .prepare(
-      `SELECT cache_key, song_title, updated_at
-       FROM ai_cache
-       WHERE kind = ? AND song_title <> '' AND (${where})
-       ORDER BY (song_title = ?) DESC
-       LIMIT ?`,
-    )
-    .bind(kind, ...terms.map((term) => `%${escapeLike(term)}%`), title, MAX_RESOLVE_SCAN_ROWS)
-    .all<ResolveRow>();
-  return rows.results ?? [];
-};
-
-/**
- * 打分 + 排序 + 截断：归一后对不上的不算候选。
- *
- * 时间倒序**在这里**做，不在 SQL 里做 —— 这是唯一能同时拿到「按时间最近」和
- * 「只用索引取前 200 行」的做法（理由见 `scanResolveRows`）。
- */
-const rankResolveRows = (rows: ResolveRow[], title: string) => rows
-  .map((row) => ({ row, rank: rankSongTitleMatch(String(row.song_title ?? ''), title) }))
-  /* 归一后对不上的不算候选 —— 光靠原样包含捞回来的，高亮词那关也过不去。 */
-  .filter((entry) => entry.rank < 3)
-  .sort((left, right) => (
-    left.rank - right.rank
-    || String(right.row.updated_at ?? '').localeCompare(String(left.row.updated_at ?? ''))
-  ))
-  .slice(0, MAX_RESOLVE_CANDIDATES);
-
-export interface ResolveCandidate {
-  key: string;
-  songTitle: string;
-  platform: string;
-  provider: string;
-  model: string;
-  updatedAt: string;
-  /** 这条答案里 AI 标记的高亮词 —— 客户端拿它跟自己手上的歌词比。 */
-  words: string[];
-}
-
-/*
- * 按**歌名**找同类条目 —— 精确键没命中时的兜底。
- *
- * 键是「歌词 + policy」的 MD5，于是同一首歌换个版本的歌词（翻唱、现场、平台之间
- * 同一首歌的 LRC 也常常不一样）就是另一个键，明明库里躺着答案却取不到。这里改按歌名
- * 找，把每条候选的高亮词带回去，由客户端拿自己那段歌词判「合不合规」。
- *
- * 只返回高亮词、不返回 payload：判定的活留在客户端，歌词正文也就不用上传。
- */
-export const findResolveCandidates = async (
-  db: D1Database,
-  kind: string,
-  songTitle: string,
-): Promise<ResolveCandidate[]> => {
-  const title = String(songTitle ?? '').trim().slice(0, MAX_TITLE_CHARS);
-  if (!title) return [];
-
-  /*
-   * 两轮查，而不是把 token 全塞进一条 `IN (...)`：
-   *
-   * 第一轮只问 `K:`（整个核心名）与 `S:`（拆段）—— 基数小，命中多少就是多少。这一轮
-   * 覆盖了绝大多数请求（歌名一致、或「歌手 - 歌名」写法差异）。
-   *
-   * 一条都没有时才单独问 `D:`（首字/首词）。它基数很大（4 万条库里 `D:晴` 就是 1338 行），
-   * 和上面混在一条语句里会把 `LIMIT` 撑满，**反而把精确命中的那几十行挤掉**。分两轮
-   * 才能既保住精度、又留住「名字写法差太多」时的兜底。
-   */
-  let rows = await scanResolveRows(db, kind, songTitleQueryTokens(title));
-  if (rows.length === 0) {
-    rows = await scanResolveRows(db, kind, songTitleFallbackTokens(title));
-  }
-  if (rows.length === 0) {
-    /*
-     * 一条 token 都没命中：可能是老库还没建倒排（历史条目没进索引），也可能真的没有。
-     * 走一次原来的 LIKE 兜底，顺手把命中的那几条补写进索引 —— 下次就走快路径了。
-     */
-    rows = await scanResolveRowsByLike(db, kind, [title, looseSongTitle(title) || title, songTitleLike(title) || title], title);
-    if (rows.length > 0) await backfillTitleTokens(db, kind, rows);
-  }
-
-  const ranked = rankResolveRows(rows, title);
-
-  /*
-   * 名次定完才按主键把整行（含 payload）补回来 —— 索引那几步只碰 token 表，
-   * 大字段一次都不读。只取 12 条候选，payload 的读取量从「全表」缩到这 12 条。
-   */
-  const full = await hydrateCacheRows(db, ranked.map(({ row }) => ({ kind, cache_key: String(row.cache_key ?? '') })));
-
-  return ranked.map(({ row }) => {
-    const hydrated = full.get(`${kind}\u0000${String(row.cache_key ?? '')}`);
-    const payloadJson = hydrated?.payload_json ?? null;
-    let payload: unknown = null;
-    try {
-      payload = payloadJson ? JSON.parse(payloadJson) : null;
-    } catch {
-      payload = null;
-    }
-    return {
-      key: String(row.cache_key ?? ''),
-      songTitle: String(hydrated?.song_title ?? row.song_title ?? ''),
-      platform: String(hydrated?.platform ?? ''),
-      provider: String(hydrated?.provider ?? ''),
-      model: String(hydrated?.model ?? ''),
-      updatedAt: String(row.updated_at ?? ''),
-      words: isRecord(payload) ? readHighlightWords(payload) : [],
-    };
-  });
-};
-
-/**
- * 把「走 LIKE 兜底捞回来的那几条」补写进倒排索引。
- *
- * 只在兜底路径上调用，一次最多 `MAX_RESOLVE_SCAN_ROWS` 条，且全部合成一次 batch；
- * 失败不影响本次结果（这次已经捞到了），顶多下次再慢一遍。
- */
-const backfillTitleTokens = async (
-  db: D1Database,
-  kind: string,
-  rows: ResolveRow[],
-): Promise<void> => {
-  const statements: D1PreparedStatement[] = [];
-  rows.forEach((row) => {
-    const key = String(row.cache_key ?? '');
-    const songTitle = String(row.song_title ?? '');
-    if (!key || !songTitle) return;
-    statements.push(...writeTitleTokens(db, kind, key, songTitle, String(row.updated_at ?? '')));
-  });
-  if (statements.length === 0) return;
-  await db.batch(statements).catch(() => undefined);
-};
 
 const buildRoutes = (options: { admin: boolean }) => {
   const routes = new Hono<{ Bindings: Env }>();
@@ -654,7 +383,12 @@ const buildRoutes = (options: { admin: boolean }) => {
     }
     return c.json({
       ok: true,
-      candidates: await findResolveCandidates(c.env.FOLIA_SYNC_DB, kind, songTitle),
+      candidates: await findResolveCandidatesIn(c.env.FOLIA_SYNC_DB, kind, songTitle, {
+        hydrate: (wanted) => hydrateCacheRows(c.env.FOLIA_SYNC_DB, wanted),
+        readWords: readHighlightWords,
+        isRecord,
+        maxTitleChars: MAX_TITLE_CHARS,
+      }),
     });
   });
 
@@ -691,15 +425,19 @@ const buildRoutes = (options: { admin: boolean }) => {
      * 总数先给：客户端要拿它**先把屏幕铺满**（占位行按总数排好），再一条一条往里填。
      * 不先占位的话，每插一条整张表就重排一次 —— 几百条下来就是一直在抖。
      * 带了 q 就是筛完之后的条数（不然「已加载 3 / 900」这种进度根本没法看）。
+     *
+     * 不带 q 的那一个走短时缓存：`COUNT(DISTINCT song_title)` 得把整个歌名索引读一遍
+     * 去重，4 万条实测 5.6ms，而分页那半句只要 0.15ms —— 每请求都算一次的话，这一句
+     * 就是 `/songs` 的全部开销（压测里 p50 44ms 里大部分是它，并发时还排队）。
+     * 歌名总数变得很慢（只有新歌进库才变），缓存几秒完全看不出差别；带 q 的计数各不
+     * 相同，缓存没有意义，仍然每次现算。
      */
     const totalRow = query
       ? await c.env.FOLIA_SYNC_DB
         .prepare(`SELECT COUNT(DISTINCT song_title) AS total FROM ai_cache WHERE song_title IS NOT NULL AND song_title <> ''${filter}`)
         .bind(`%${escapeLike(query)}%`)
         .first<{ total: number }>()
-      : await c.env.FOLIA_SYNC_DB
-        .prepare("SELECT COUNT(DISTINCT song_title) AS total FROM ai_cache WHERE song_title IS NOT NULL AND song_title <> ''")
-        .first<{ total: number }>();
+      : await readSongTotal(c.env.FOLIA_SYNC_DB);
 
     const binds: unknown[] = query ? [`%${escapeLike(query)}%`, limit, offset] : [limit, offset];
 
@@ -857,8 +595,9 @@ export const adminCacheRoutes = (() => {
     /* 主表和倒排索引一起删：留着 token 行只会让 resolve 命中一条已经不存在的记录。 */
     await c.env.FOLIA_SYNC_DB.batch([
       c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ? AND cache_key = ?').bind(kind, key),
-      c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token WHERE kind = ? AND cache_key = ?').bind(kind, key),
+      deleteTitleTokens(c.env.FOLIA_SYNC_DB, kind, key),
     ]);
+    invalidateSongTotalCache(c.env.FOLIA_SYNC_DB);
     return c.json({ ok: true });
   });
 
@@ -870,138 +609,16 @@ export const adminCacheRoutes = (() => {
       if (!KIND_PATTERN.test(kind)) return c.json({ ok: false, error: 'invalid_kind' }, 400);
       await c.env.FOLIA_SYNC_DB.batch([
         c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ?').bind(kind),
-        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token WHERE kind = ?').bind(kind),
+        deleteTitleTokens(c.env.FOLIA_SYNC_DB, kind),
       ]);
     } else {
       await c.env.FOLIA_SYNC_DB.batch([
         c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache'),
-        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token'),
+        deleteTitleTokens(c.env.FOLIA_SYNC_DB),
       ]);
     }
+    invalidateSongTotalCache(c.env.FOLIA_SYNC_DB);
     return c.json({ ok: true });
-  });
-
-  return routes;
-})();
-
-/*
- * Admin: `/admin/api/ai-cache-backups/...` —— 每次被覆盖之前的那一版。
- *
- * 校验能挡住空数据，挡不住「一份能看但很糟的主题」。真被盖掉了，管理员在这里挑一版
- * 旧的捞回来，比让人重新生成一遍划算得多。
- */
-/**
- * 按主表里当前的歌名重建某个键的 token（恢复旧版之后调用）。
- *
- * 不用入参里的歌名：那条记录刚从备份表捞回主表，只有主表才是最准的。
- */
-const rebuildTitleTokens = async (db: D1Database, kind: string, key: string): Promise<void> => {
-  const row = await db
-    .prepare('SELECT song_title, updated_at FROM ai_cache WHERE kind = ? AND cache_key = ?')
-    .bind(kind, key)
-    .first<{ song_title: string | null; updated_at: string | null }>();
-  if (!row) return;
-  await db
-    .batch(writeTitleTokens(db, kind, key, String(row.song_title ?? ''), String(row.updated_at ?? '')))
-    .catch(() => undefined);
-};
-
-/**
- * 把某一版副本捞回成当前那条 —— JSON 接口与管理页面共用这一份。
- *
- * 先把**现在这条**也存进备份再覆盖：万一捞错了还能再捞回来，不会把当前版本弄丢。
- * 这一版捞回来之后自己就没必要留着了，删掉。
- */
-export const restoreCacheBackup = async (
-  db: D1Database,
-  id: number,
-): Promise<{ ok: true; kind: string; key: string } | { ok: false; error: string; status: 400 | 404 }> => {
-  if (!Number.isFinite(id) || id <= 0) {
-    return { ok: false, error: 'invalid_id', status: 400 };
-  }
-  const now = new Date().toISOString();
-  // Resolve and consume the target inside one transaction; a missing target makes every write a no-op.
-  const results = await db.batch([
-    db.prepare('SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?').bind(id),
-    db.prepare(`
-      INSERT INTO ai_cache_backups
-        (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at)
-      SELECT current.kind, current.cache_key, current.payload_json, current.payload_bytes,
-        current.song_title, current.provider, current.model, current.platform, current.hits, current.created_at, ?
-      FROM ai_cache AS current
-      JOIN ai_cache_backups AS target ON target.kind = current.kind AND target.cache_key = current.cache_key
-      WHERE target.id = ?
-    `).bind(now, id),
-    db.prepare(`
-      DELETE FROM ai_cache_backups
-      WHERE (kind, cache_key) = (SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?)
-        AND id <> ?
-        AND id NOT IN (
-          SELECT id FROM ai_cache_backups
-          WHERE (kind, cache_key) = (SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?)
-            AND id <> ?
-          ORDER BY archived_at DESC, id DESC
-          LIMIT ?
-        )
-    `).bind(id, id, id, id, MAX_CACHE_BACKUPS),
-    db.prepare(`
-      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at)
-      SELECT kind, cache_key, payload_json, COALESCE(payload_bytes, 0), COALESCE(song_title, ''),
-        COALESCE(provider, ''), COALESCE(model, ''), COALESCE(platform, ''), COALESCE(hits, 0), COALESCE(created_at, ?), ?
-      FROM ai_cache_backups WHERE id = ?
-      ON CONFLICT(kind, cache_key) DO UPDATE SET
-        payload_json = excluded.payload_json,
-        payload_bytes = excluded.payload_bytes,
-        song_title = excluded.song_title,
-        provider = excluded.provider,
-        model = excluded.model,
-        platform = excluded.platform,
-        updated_at = excluded.updated_at
-    `).bind(now, now, id),
-    db.prepare('DELETE FROM ai_cache_backups WHERE id = ?').bind(id),
-  ]);
-  const row = (results[0] as { results?: { kind: string; cache_key: string }[] }).results?.[0];
-  if (!row) return { ok: false, error: 'not_found', status: 404 };
-  /*
-   * 倒排索引在事务之后重建：token 是 JS 算出来的，SQL 里编不出来。
-   * 从主表读回刚恢复的歌名（而不是从备份表的入参拼），保证和主表一致。
-   */
-  await rebuildTitleTokens(db, row.kind, row.cache_key);
-  return { ok: true, kind: row.kind, key: row.cache_key };
-};
-
-export const adminCacheBackupRoutes = (() => {
-  const routes = new Hono<{ Bindings: Env }>();
-  routes.use('*', requireAdmin);
-
-  /** GET /admin/api/ai-cache-backups/:kind/:key —— 这个键留下来的旧版，新的在前。 */
-  routes.get('/:kind/:key', async (c) => {
-    const kind = String(c.req.param('kind') || '').toLowerCase();
-    const key = String(c.req.param('key') || '').toLowerCase();
-    if (!KIND_PATTERN.test(kind) || !KEY_PATTERN.test(key)) {
-      return c.json({ ok: false, error: 'invalid_key' }, 400);
-    }
-    const rows = await c.env.FOLIA_SYNC_DB
-      .prepare('SELECT id, kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at FROM ai_cache_backups WHERE kind = ? AND cache_key = ? ORDER BY archived_at DESC, id DESC')
-      .bind(kind, key)
-      .all<AiCacheBackupRow>();
-    return c.json({
-      ok: true,
-      limit: MAX_CACHE_BACKUPS,
-      backups: (rows.results ?? []).map(mapBackupRow),
-    });
-  });
-
-  /*
-   * POST /admin/api/ai-cache-backups/:id/restore —— 把某一版捞回成当前那条。
-   *
-   * 借口与页面共用同一个 `restoreCacheBackup`；这里只负责把结果说成 JSON。
-   */
-  routes.post('/:id/restore', async (c) => {
-    const id = Number.parseInt(String(c.req.param('id') || ''), 10);
-    const result = await restoreCacheBackup(c.env.FOLIA_SYNC_DB, id);
-    if (!result.ok) return c.json({ ok: false, error: result.error }, result.status);
-    return c.json({ ok: true, restored: id });
   });
 
   return routes;
