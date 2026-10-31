@@ -126,16 +126,22 @@ const normalizeProvider = (value: unknown): AiProviderId => (
     AI_PROVIDER_IDS.includes(value as AiProviderId) ? value as AiProviderId : 'gemini'
 );
 
+const owns = (value: object, key: string): boolean => Object.prototype.hasOwnProperty.call(value, key);
+
+// 仅显式保存时写入；区分本次修复前的自动复制与用户在修复后主动填写的官方 Key。
+const CREDENTIAL_ROUTING_VERSION = 1;
+
 const asText = (value: unknown, fallback = ''): string => (
     typeof value === 'string' ? value : value === undefined || value === null ? fallback : String(value)
 );
 
+/** 只认明确的字符串，空串也留着：清空输入框和「没设置过」是两件事；trim 交给用它的地方。 */
 const asRecord = (value: unknown): Record<string, string> => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     const result: Record<string, string> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-        const text = asText(entry).trim();
-        if (text) result[key] = text;
+        // 明确清空不能被旧字段补回；trim 留给请求 resolver。
+        if (typeof entry === 'string') result[key] = entry;
     }
     return result;
 };
@@ -144,25 +150,42 @@ const asRecord = (value: unknown): Record<string, string> => {
  * 旧版（只有 Gemini / DeepSeek / 其他兼容接口三家）的存储形状：
  * provider + deepseekApiKey + openaiApiKey + openaiApiUrl + openaiApiModel + 温度 + 流式。
  * 读到旧形状就把它们搬进新字段：DeepSeek 的 Key 与模型归 DeepSeek，
- * 「其他兼容接口」的地址、Key 与模型归 custom（Key 同时留给 openai，免得那一路还要重填）。
+ * 「其他兼容接口」的地址与 Key 只归 custom，不能复制到官方 openai；旧共享模型仍供 DeepSeek 使用。
+ * 这里只计算内存里的设置，不在读取时改写磁盘。
  */
-const migrateLegacy = (parsed: Record<string, unknown>): Partial<AiSettings> => {
+const migrateLegacy = (record: Record<string, unknown>): Partial<AiSettings> => {
     const apiKeys: Partial<Record<AiProviderId, string>> = {};
-    const deepseekKey = asText(parsed.deepseekApiKey).trim();
-    if (deepseekKey) apiKeys.deepseek = deepseekKey;
-    const openaiKey = asText(parsed.openaiApiKey).trim();
-    if (openaiKey) {
-        apiKeys.openai = openaiKey;
-        apiKeys.custom = openaiKey;
+    if (owns(record, 'deepseekApiKey')) apiKeys.deepseek = typeof record.deepseekApiKey === 'string' ? record.deepseekApiKey : '';
+    if (owns(record, 'openaiApiKey')) apiKeys.custom = typeof record.openaiApiKey === 'string' ? record.openaiApiKey : '';
+    const apiModels: Partial<Record<AiProviderId, string>> = {};
+    if (owns(record, 'openaiApiModel')) {
+        apiModels.custom = asText(record.openaiApiModel);
+        apiModels.deepseek = asText(record.openaiApiModel);
     }
-    const openaiUrl = asText(parsed.openaiApiUrl).trim();
-    return {
-        ...(Object.keys(apiKeys).length ? { apiKeys } : {}),
-        ...(openaiUrl ? { customApiUrl: openaiUrl } : {}),
-        ...(asText(parsed.openaiApiModel).trim() ? { apiModels: { deepseek: asText(parsed.openaiApiModel).trim(), custom: asText(parsed.openaiApiModel).trim() } } : {}),
-        ...(asText(parsed.openaiApiTemperature).trim() ? { apiTemperature: asText(parsed.openaiApiTemperature) } : {}),
-        ...(parsed.openaiApiStream === true ? { apiStream: true } : {}),
-    };
+    return { apiKeys, apiModels };
+};
+
+/** 旧形状的 openai* 三项在旧版指的是「其他兼容接口」，不是官方 openai。 */
+const hasLegacyCompatibleFields = (record: Record<string, unknown>): boolean => (
+    owns(record, 'openaiApiUrl') || owns(record, 'openaiApiKey') || owns(record, 'openaiApiModel')
+);
+
+/** 新形状的官方字段只用于保留 provider（含明确空值），不证明 Key 已获确认；疑似副本另行阻断。 */
+const hasOfficialFields = (record: Record<string, unknown>): boolean => (
+    owns(asRecord(record.apiKeys), 'openai')
+    || owns(asRecord(record.apiModels), 'openai')
+    || owns(asRecord(record.apiBaseUrls), 'openai')
+);
+
+/** 未带确认标记的历史官方副本先停用，不能把凭据跨服务商边界发出；等用户重填确认。 */
+const hasUnconfirmedOfficialCopy = (record: Record<string, unknown>, apiKeys: AiSettings['apiKeys']): boolean => {
+    if (record.credentialRoutingVersion === CREDENTIAL_ROUTING_VERSION) return false;
+    const officialKey = apiKeys.openai?.trim();
+    if (!officialKey) return false;
+    // 旧版本曾把兼容接口 Key 同时写进 openai/custom；custom 可能已被用户清空，
+    // 因而不能只比较两个值，必须把 custom 字段本身视为未确认来源的证据。
+    if (owns(asRecord(record.apiKeys), 'custom')) return true;
+    return typeof record.openaiApiKey === 'string' && officialKey === record.openaiApiKey.trim();
 };
 
 export const readAiSettings = (): AiSettings => {
@@ -173,19 +196,22 @@ export const readAiSettings = (): AiSettings => {
         const parsed = JSON.parse(raw) as Partial<AiSettings> | null;
         if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_AI_SETTINGS, apiKeys: {}, apiModels: {}, apiBaseUrls: {} };
         const record = parsed as Record<string, unknown>;
-        const legacy = !record.apiKeys && (record.deepseekApiKey || record.openaiApiKey)
-            ? migrateLegacy(record)
-            : {};
+        const legacy = migrateLegacy(record);
+        const apiKeys = { ...legacy.apiKeys, ...asRecord(record.apiKeys) };
+        if (hasUnconfirmedOfficialCopy(record, apiKeys)) apiKeys.openai = '';
+        const provider = normalizeProvider(record.provider);
         return {
-            provider: normalizeProvider(record.provider),
-            geminiApiKey: asText(parsed.geminiApiKey),
-            geminiApiUrl: asText(parsed.geminiApiUrl),
-            apiKeys: asRecord(record.apiKeys ?? legacy.apiKeys),
-            apiModels: asRecord(record.apiModels ?? legacy.apiModels),
+            provider: provider === 'openai' && hasLegacyCompatibleFields(record) && !hasOfficialFields(record)
+                ? 'custom'
+                : provider,
+            geminiApiKey: asText(record.geminiApiKey),
+            geminiApiUrl: asText(record.geminiApiUrl),
+            apiKeys,
+            apiModels: { ...legacy.apiModels, ...asRecord(record.apiModels) },
             apiBaseUrls: asRecord(record.apiBaseUrls),
-            customApiUrl: asText(parsed.customApiUrl ?? legacy.customApiUrl),
-            apiTemperature: asText(parsed.apiTemperature ?? legacy.apiTemperature, DEFAULT_AI_SETTINGS.apiTemperature),
-            apiStream: (parsed.apiStream ?? legacy.apiStream) === true,
+            customApiUrl: asText(owns(record, 'customApiUrl') ? record.customApiUrl : record.openaiApiUrl),
+            apiTemperature: asText(owns(record, 'apiTemperature') ? record.apiTemperature : record.openaiApiTemperature, DEFAULT_AI_SETTINGS.apiTemperature),
+            apiStream: (owns(record, 'apiStream') ? record.apiStream : record.openaiApiStream) === true,
         };
     } catch {
         return { ...DEFAULT_AI_SETTINGS, apiKeys: {}, apiModels: {}, apiBaseUrls: {} };
@@ -196,7 +222,7 @@ export const writeAiSettings = (patch: Partial<AiSettings>): AiSettings => {
     const next: AiSettings = { ...readAiSettings(), ...patch };
     if (typeof localStorage !== 'undefined') {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, credentialRoutingVersion: CREDENTIAL_ROUTING_VERSION }));
         } catch {
             // Quota or private mode: keep the in-memory value for this session.
         }
@@ -242,9 +268,12 @@ export const resolveAnthropicMessagesUrl = (settings: AiSettings): string => (
 );
 
 /** 实际要打的那个 chat/completions 地址（只有 OpenAI 兼容端点用它）。 */
-export const resolveAiChatCompletionsUrl = (settings: AiSettings): string => (
-    normalizeChatCompletionsUrl(resolveAiBaseUrl(settings))
-);
+export const resolveAiChatCompletionsUrl = (settings: AiSettings): string => {
+    const baseUrl = resolveAiBaseUrl(settings);
+    // 旧配置迁入 custom 后，空地址不能再触发共享 helper 的官方默认站点，否则仍会误发旧 Key。
+    if (settings.provider === 'custom' && !baseUrl) throw new Error('CUSTOM_API_URL is not configured');
+    return normalizeChatCompletionsUrl(baseUrl);
+};
 
 /** 实际要用的模型：留空用服务商的推荐模型。 */
 export const resolveAiModel = (settings: AiSettings): string => {
@@ -252,6 +281,7 @@ export const resolveAiModel = (settings: AiSettings): string => {
     if (configured) return configured;
     const preset = aiPresetOf(settings.provider);
     if (preset?.recommendedModel) return preset.recommendedModel;
+    if (settings.provider === 'custom' && !resolveAiBaseUrl(settings)) return '';
     const apiUrl = resolveAiChatCompletionsUrl(settings);
     return resolveOpenAICompatibleModel(apiUrl, '');
 };

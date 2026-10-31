@@ -42,6 +42,14 @@
 - 允许短暂存在：主进程为某个功能主动下发的本地 Token（舞台 Token 在 `StageStatus` 里回给渲染进程，`electron/stageApi.cjs:313`）。这类 Token 只在本机回环服务上有效，仍按凭据对待：不写日志、不入同步/导出。
 - 桌面端渲染进程**不持久化** AI Key；持久化的是 `localStorage` 里的「是否已配」布尔与端点（`src/components/modal/settings/useElectronSettingsPanel.ts:112-122,207-217`）。
 
+#### 旧版 AI 兼容接口设置迁移（#54）
+
+- Web / Android 的 `foliaAiProviderSettings` 旧 `openaiApiKey`、`openaiApiUrl` 指「其他兼容接口」，只迁入 `custom`；旧 `openaiApiModel` 同时供 custom / DeepSeek 使用，不复制 Key 给官方 `openai`；已有新字符串值（含空串）与 `apiStream:false` 优先。读取只在内存归一化，不写盘、不发事件。
+- 修复前曾把同一 Key 自动复制给 `openai` / `custom`。旧字段消失后，无法区分误迁移和用户主动复用 Key：未带确认版本且官方 Key 与 custom Key / 旧兼容 Key 相同的记录，内存里暂停使用官方副本（显示为空、按未配置处理），**不自动改发到 custom 地址**。原始磁盘数据在纯读取时保留；其余 provider、custom Key / 地址保持。
+- 用户可在「设置 → AI」手动选择 `custom` 继续用原地址；要用官方则重新填写官方 Key。显式保存才写 `credentialRoutingVersion:1`，先从已归一化的设置合并 patch；无关设置保存不能复活暂停的副本。用户此后主动为两家填写同一 Key 不会再次被拦。标记只存在存储层，不进入公共 `AiSettings` 返回值或事件。
+- 旧地址为空不代表已确认官方目的地：迁入 custom 后必须填写地址，请求 resolver 报 `CUSTOM_API_URL is not configured`，不会走共享 helper 的官方默认地址。连接测试同样零请求。
+- 这是保守的兼容性取舍：升级前主动复用同一 Key 的人也需重新确认；如果旧副本已被改成不同值且旧字段已丢失，无法推断其来源。本次不宣称能恢复所有历史配置，也不改变 WebView 明文存储的遗留风险。
+
 ### 2.3 安卓原生
 
 - 有加密的：YouTube Music 会话用 Android Keystore 里应用专属的 AES-GCM 密钥加密，密文写 `getNoBackupFilesDir()`（不进云备份），密钥不出应用；解不开就整份丢弃、让用户重登（`android/app/src/main/java/top/izuna/foliamajor/YtmSessionStore.java:23-35,58-77,97-147`）。
