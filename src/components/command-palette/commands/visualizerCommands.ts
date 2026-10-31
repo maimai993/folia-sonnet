@@ -7,6 +7,7 @@ import { lyricSegmentationCommand } from './lyricSegmentationCommand';
 import { openLyricsWallpaperPicker } from '../../../platform/foliaWallpaper';
 import { VISUALIZER_REGISTRY } from '../../visualizer/registry';
 import { VISUALIZER_BACKGROUND_REGISTRY } from '../../visualizer/backgrounds/registry';
+import { isAndroidAppShell } from '../../../platform/runtime';
 
 // src/components/command-palette/commands/visualizerCommands.ts
 // Commands in the `visualizer` group: switching lyric animation modes and background layouts.
@@ -58,7 +59,7 @@ const LATENT_VARIANT_COMMANDS: CommandPaletteCommand[] = [
 // What finds any of 智能动感模式's three commands (Sonnet and Diorama on the beats, Pendolo on the drums).
 const SMART_BEAT_KEYWORDS = ['smart beat', 'beat fx', 'beat this', 'sonnet beat', 'diorama beat', 'pendolo drums', '智能动感模式', '动感', '节拍', '鼓点', '推镜裂光', '水镜涟漪', '仿真鼓面', '商籁动感', '镜台涟漪', '时计'];
 
-export const visualizerCommands: CommandPaletteCommand[] = [
+const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
     lyricSegmentationCommand,
     defineCommand({
         id: 'visualizer-picker',
@@ -165,3 +166,11 @@ export const visualizerCommands: CommandPaletteCommand[] = [
         ...(mode === 'latent' ? LATENT_VARIANT_COMMANDS : []),
     ]),
 ];
+
+/*
+ * 安卓端没做智能动感模式的分析（没有 Beat This! 的桥与模型），开关本身不显示，
+ * 这条「智能动感模式 开 / 关」命令也就没有意义 —— 一并摘掉，免得调了没反应。
+ */
+export const visualizerCommands: CommandPaletteCommand[] = isAndroidAppShell()
+    ? ALL_VISUALIZER_COMMANDS.filter(command => command.id !== 'smart-beat-toggle')
+    : ALL_VISUALIZER_COMMANDS;
