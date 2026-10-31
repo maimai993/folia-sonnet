@@ -42,6 +42,37 @@ export const requestMachiGyroPermission = async (): Promise<boolean> => {
  * 订阅设备倾斜，回调给相对「按下开关那一刻」的偏移（弧度）。返回退订函数。
  * 用第一条读数当基准，所以开关一开画面不会突然跳；屏幕转过来（横竖屏）时基准跟着重置。
  */
+/**
+ * 屏幕转过的角度（0 / 90 / 180 / 270）。`beta` / `gamma` 是设备坐标系的读数，横屏时它们跟屏幕的
+ * 左右、上下差 90°：直接用会「左右变成上下、上下变成左右」，所以要按屏幕角重映射。
+ */
+export const machiScreenAngle = (): number => {
+    if (typeof window === 'undefined') return 0;
+    const orientation = window.screen?.orientation as (ScreenOrientation & { angle?: number }) | undefined;
+    const raw = orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0;
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0;
+    return ((Math.round(raw / 90) * 90) % 360 + 360) % 360;
+};
+
+/**
+ * 把设备坐标系里的倾斜量换算成屏幕坐标系里的偏移（弧度）。竖屏就是原来的「`gamma` 管左右、`beta` 管上下」；
+ * 横屏两轴互换（90° 与 270° 差一个符号，对应手机往哪边横过来），180° 倒置时两轴都反。
+ */
+export const machiScreenOffsets = (deltaBeta: number, deltaGamma: number, angle: number): MachiGyroOffsets => {
+    // `|| 0` 把 -0 归一成 0：偏移量算出负零没有意义，也比较容易在断言里踩坑。
+    const rad = (degrees: number) => degrees * DEGREE || 0;
+    switch (angle) {
+    case 90:
+        return { azimuth: rad(-deltaBeta), elevation: rad(deltaGamma) };
+    case 180:
+        return { azimuth: rad(-deltaGamma), elevation: rad(-deltaBeta) };
+    case 270:
+        return { azimuth: rad(deltaBeta), elevation: rad(-deltaGamma) };
+    default:
+        return { azimuth: rad(deltaGamma), elevation: rad(deltaBeta) };
+    }
+};
+
 export const subscribeMachiGyro = (onOffsets: (offsets: MachiGyroOffsets) => void) => {
     if (!machiGyroSupported()) return () => {};
     let origin: { beta: number; gamma: number } | null = null;
@@ -62,8 +93,11 @@ export const subscribeMachiGyro = (onOffsets: (offsets: MachiGyroOffsets) => voi
         origin = null;
         last = null;
     };
-    // 转屏后 beta / gamma 的含义会变，重新取基准。
+    // 转屏后 beta / gamma 的含义会变，重新取基准。Android 上不一定都发 orientationchange，
+    // screen.orientation 的 change 也接上（两处都注册，重复 reset 无副作用）。
     window.addEventListener('orientationchange', reset);
+    const screenOrientation = (window.screen as Screen | undefined)?.orientation;
+    screenOrientation?.addEventListener?.('change', reset);
     const listener = (event: DeviceOrientationEvent) => {
         // 没有陀螺仪的设备只给 null（有的连 alpha 都是 null）。
         if (event.beta === null || event.gamma === null) return;
@@ -79,14 +113,18 @@ export const subscribeMachiGyro = (onOffsets: (offsets: MachiGyroOffsets) => voi
             rebase(reading);
             return;
         }
-        const gamma = clamp((reading.gamma - origin.gamma) * DEGREE, MACHI_GYRO_RANGE.azimuth);
-        const beta = clamp((reading.beta - origin.beta) * DEGREE, MACHI_GYRO_RANGE.elevation);
-        onOffsets({ azimuth: gamma, elevation: beta });
+        // 按屏幕角换算：竖屏左右是 gamma、上下是 beta，横屏两轴互换（见 machiScreenOffsets）。
+        const mapped = machiScreenOffsets(reading.beta - origin.beta, reading.gamma - origin.gamma, machiScreenAngle());
+        onOffsets({
+            azimuth: clamp(mapped.azimuth, MACHI_GYRO_RANGE.azimuth),
+            elevation: clamp(mapped.elevation, MACHI_GYRO_RANGE.elevation),
+        });
     };
     window.addEventListener('deviceorientation', listener);
     return () => {
         window.removeEventListener('deviceorientation', listener);
         window.removeEventListener('orientationchange', reset);
+        screenOrientation?.removeEventListener?.('change', reset);
     };
 };
 

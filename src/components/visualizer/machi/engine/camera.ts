@@ -105,6 +105,8 @@ export class MachiCamera {
     /** 陀螺仪适配：开了才收读数，读数换成镜头偏移叠在静止视角上。 */
     private gyro = false;
     private readonly gyroOffsets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
+    /** 上一次真正叠进画面的偏移：不在静止位置时按差值继续跟，不从 restView() 重摆。 */
+    private readonly gyroApplied: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
     private readonly gyroTargets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
     /** 自定义视角下拖动停稳了：新视角（相对默认构图）交给外面存。 */
     onCommit: ((view: MachiCameraView) => void) | null = null;
@@ -184,7 +186,22 @@ export class MachiCamera {
         this.gyroOffsets.elevation = follow(this.gyroOffsets.elevation, this.gyroTargets.elevation);
         this.needsRender = true;
         // 镜头停在静止位置时（没在拖、没在回正）才自己摆一下；拖拽时交给拖拽。
-        if (this.still) this.settle();
+        if (this.still) {
+            this.settle();
+            return;
+        }
+        // 手动拖过视角之后 `idleSince` 不会清零，`still` 再也不会成立，上面的 settle() 走不到；
+        // 而陀螺仪的偏移只在 place() 里叠加，于是「手动调整视角后陀螺仪失效」。
+        // 这里按差值把偏移补上去：用相机此刻的视角减掉上次已叠加的量，再交给 place() 叠新的，
+        // 这样既不会把拖拽的结果弹回机位，也不会重复叠加。拖拽中、回正中、等报视角时不插手。
+        if (!this.interacting && !this.returning && !this.commitPending) {
+            const current = this.view();
+            this.place({
+                azimuth: current.azimuth - this.gyroApplied.azimuth,
+                elevation: current.elevation - this.gyroApplied.elevation,
+                zoom: current.zoom,
+            }, this.target.clone());
+        }
     }
 
     /**
@@ -344,6 +361,8 @@ export class MachiCamera {
             MACHI_CAMERA_LIMITS.minElevation,
             MACHI_CAMERA_LIMITS.maxElevation,
         );
+        this.gyroApplied.azimuth = this.gyroOffsets.azimuth;
+        this.gyroApplied.elevation = this.gyroOffsets.elevation;
         this.camera.position.copy(target).addScaledVector(orbitDirection(azimuth, elevation), CAMERA_DISTANCE);
         this.camera.zoom = view.zoom;
         this.camera.lookAt(target);

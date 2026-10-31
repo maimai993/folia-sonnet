@@ -103,6 +103,7 @@ const Viewfinder: React.FC = () => (
 const MachiCameraBar: React.FC<MachiCameraBarProps> = ({ tuning, scene, theme, t, isPlayerChromeHidden, onPreview, onCommit, onTuningChange, onClose }) => {
     const [tab, setTab] = useState<BarTab>(lastTab);
     const motionLabelId = useId();
+    const gyroLabelId = useId();
     const bottom = usePlayerSubtitleBottomPx(isPlayerChromeHidden);
     // 默认构图下画面就是默认构图：滑块从它读，拖哪一项就从它改起（不是存着的旧自定义视角，不然一拖画面会跳过去）。
     const view = tuning.camera === 'custom' ? tuning.views[scene] : DEFAULT_MACHI_VIEW;
@@ -252,6 +253,9 @@ const MachiCameraBar: React.FC<MachiCameraBarProps> = ({ tuning, scene, theme, t
                                 <>
                                     <BarChoice label={t('options.machiCameraMotion')} labelId={motionLabelId}>
                                         <Toggle checked={tuning.motion} labelledBy={motionLabelId} onChange={motion => onTuningChange({ motion })} />
+                                    </BarChoice>
+                                    <BarChoice label={t('options.machiGyro')} labelId={gyroLabelId}>
+                                        <Toggle checked={tuning.gyro} labelledBy={gyroLabelId} onChange={gyro => onTuningChange({ gyro })} />
                                     </BarChoice>
                                     <BarSlider
                                         label={t('options.machiCameraMotionSpeed')}

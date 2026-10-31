@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     MACHI_GYRO_RANGE,
     machiGyroSupported,
+    machiScreenAngle,
+    machiScreenOffsets,
     requestMachiGyroPermission,
     subscribeMachiGyro,
 } from '@/components/visualizer/machi/gyro';
@@ -141,5 +143,47 @@ describe('machi gyro', () => {
     it('treats platforms without requestPermission as already allowed', async () => {
         fakeWindow();
         await expect(requestMachiGyroPermission()).resolves.toBe(true);
+    });
+
+    it('maps device axes onto screen axes for every screen angle', () => {
+        // 竖屏：gamma 管左右、beta 管上下。
+        expect(machiScreenOffsets(0, 10, 0)).toEqual({ azimuth: 10 * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(10, 0, 0)).toEqual({ azimuth: 0, elevation: 10 * DEGREE });
+        // 横屏 90°：两轴互换（左右变成上下、上下变成左右）。
+        expect(machiScreenOffsets(10, 0, 90)).toEqual({ azimuth: -10 * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(0, 10, 90)).toEqual({ azimuth: 0, elevation: 10 * DEGREE });
+        // 反方向横过来：符号相反。
+        expect(machiScreenOffsets(10, 0, 270)).toEqual({ azimuth: 10 * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(0, 10, 270)).toEqual({ azimuth: 0, elevation: -10 * DEGREE });
+        // 倒置：两轴都反。
+        expect(machiScreenOffsets(10, 10, 180)).toEqual({ azimuth: -10 * DEGREE, elevation: -10 * DEGREE });
+    });
+
+    it('reads the screen angle, falling back to window.orientation and portrait', () => {
+        const target = fakeWindow();
+        expect(machiScreenAngle()).toBe(0);
+        (target as unknown as { screen: unknown }).screen = { orientation: { angle: 90 } };
+        expect(machiScreenAngle()).toBe(90);
+        (target as unknown as { screen: unknown }).screen = { orientation: { angle: 275 } };
+        expect(machiScreenAngle()).toBe(270);
+        (target as unknown as { screen: unknown }).screen = undefined;
+        (target as unknown as { orientation: number }).orientation = -90;
+        expect(machiScreenAngle()).toBe(270);
+    });
+
+    it('turns a landscape tilt into the same on-screen direction', () => {
+        const target = fakeWindow();
+        (target as unknown as { screen: unknown }).screen = { orientation: { angle: 90 } };
+        const seen: { azimuth: number; elevation: number }[] = [];
+        subscribeMachiGyro(offsets => seen.push(offsets));
+        target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
+        // 横屏下左右倾（设备坐标是 beta）：屏幕上是左右转。
+        target.dispatch('deviceorientation', { beta: 5, gamma: 0 });
+        expect(seen[0]!.azimuth).toBeCloseTo(-5 * DEGREE, 6);
+        expect(seen[0]!.elevation).toBeCloseTo(0, 6);
+        // 横屏下上下倾（设备坐标是 gamma）：屏幕上是俯仰。
+        target.dispatch('deviceorientation', { beta: 5, gamma: 4 });
+        expect(seen[1]!.azimuth).toBeCloseTo(-5 * DEGREE, 6);
+        expect(seen[1]!.elevation).toBeCloseTo(4 * DEGREE, 6);
     });
 });

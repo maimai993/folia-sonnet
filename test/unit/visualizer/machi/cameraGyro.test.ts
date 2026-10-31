@@ -78,4 +78,22 @@ describe('MachiCamera gyro', () => {
         expect(camera.view().elevation).toBeLessThanOrEqual(MACHI_CAMERA_LIMITS.maxElevation + 1e-9);
         expect(camera.view().elevation).toBeLessThan(HOME.elevation + 45 * DEG);
     });
+
+    it('keeps following the gyro after the view was adjusted by hand', () => {
+        const camera = create();
+        camera.setGyro(true);
+        // 手动调过视角并固定下来（存成自定义视角）。此后镜头不会自己回机位，
+        // 以前这条路上陀螺仪的偏移再也摆不上去，画面就不跟着倾斜了。
+        camera.setCustom({ azimuth: 12, elevation: 5, zoom: 1.2, panX: 0, panZ: 0 });
+        run(camera, 10);
+        const before = camera.offset().azimuth;
+        camera.setGyroOffsets({ azimuth: 6 * DEG, elevation: 0 });
+        run(camera, 120);
+        // 自定义视角还在，陀螺仪的 6° 也叠了上去。
+        expect(camera.offset().azimuth).toBeCloseTo(before + 6, 1);
+        // 偏移归零后回到自定义视角本身。
+        camera.setGyroOffsets({ azimuth: 0, elevation: 0 });
+        run(camera, 120);
+        expect(camera.offset().azimuth).toBeCloseTo(before, 1);
+    });
 });
