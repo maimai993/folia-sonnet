@@ -530,11 +530,29 @@ export const neteaseProvider: OnlineMusicProvider = {
                 case 800: return { state: 'expired' };
                 case 801: return { state: 'waiting' };
                 case 802: return { state: 'scanned' };
-                case 803:
-                    if (typeof response?.cookie === 'string' && response.cookie) {
-                        writeProviderSessionValue('netease', 'cookie', response.cookie);
+                case 803: {
+                    const answeredCookie = typeof response?.cookie === 'string' ? response.cookie : '';
+                    if (answeredCookie) writeProviderSessionValue('netease', 'cookie', answeredCookie);
+                    /*
+                     * 803 只说明「手机上点了确认」，登录态是随这份回答回来的 cookie。远端 API 有时
+                     * 只在 Set-Cookie 里带、body 里没有 `cookie` 字段，这时写不进去 —— 会话留在匿名，
+                     * 后面 user/account 一问就不是刚登录的那个人（真机诊断：completed=false、
+                     * login cookie=no、anonymous cookie=yes、same-user=no）。
+                     *
+                     * 所以这里必须回看一眼存量：还是只有匿名 cookie 就把话说明白，不再报「已确认」
+                     * 让人以为登上了。
+                     */
+                    if (!answeredCookie && !readProviderSessionValue('netease', 'cookie', ['netease_cookie'])) {
+                        const answered = describeQrResponse(response);
+                        console.warn('[NeteaseProvider] QR confirmed but the answer carried no session cookie:', answered);
+                        return {
+                            state: 'error',
+                            message: `扫码已确认，但接口没有带回登录 cookie（${answered}）`,
+                            failure: describeNeteaseLoginFailure('check', response) ?? undefined,
+                        };
                     }
                     return { state: 'confirmed' };
+                }
                 // 带上原始状态码：只剩 state 的话，日志里看不出网易云回的是哪一个码（风控的 8821 等）。
                 default: return { state: 'error', message: describeQrResponse(response), failure: neteaseCheckFailure(response) };
             }
