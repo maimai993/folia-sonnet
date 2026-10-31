@@ -208,7 +208,14 @@ const matchLyricsFromOtherSources = async (
     processed: { lyrics: LyricData | null; isPureMusic: boolean },
 ): Promise<LyricData | null> => {
     const settings = useLyricSettingsStore.getState();
-    if (!settings.autoUseBestLyric) return null;
+    console.info('[Lyrics] borrow attempt', {
+        autoUseBestLyric: settings.autoUseBestLyric,
+        preferred: settings.preferredAlternativeLyricSource,
+        title: song.name,
+        artist: (song.artists || []).map((item) => item.name).join(' / '),
+        durationMs: song.durationMs,
+    });
+    if (!settings.autoUseBestLyric) { console.info('[Lyrics] borrow skipped: autoUseBestLyric is off'); return null; }
     const rawProvider = (song.sourceRef as { providerId?: string } | undefined)?.providerId;
     const providerId = isLyricProviderSource(rawProvider) && getLyricSource(rawProvider).platform
         ? rawProvider as PlatformLyricSource
