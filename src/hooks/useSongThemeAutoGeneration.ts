@@ -146,6 +146,13 @@ export function useSongThemeAutoGeneration({
                  *
                  * 只有真发起了生成才该记：那才是「别给同一首歌重复烧一次」要挡的事。
                  */
+                console.info('[theme-auto] skip (no pull this time)', {
+                    enabled: latestEnabledRef.current,
+                    hasLyrics: Boolean(latestInput.lyrics?.lines.length),
+                    requiresPromptSource,
+                    hidden: isPlaybackInterfaceHidden(),
+                    attempted: attemptedSongKeyRef.current === targetSongKey,
+                });
                 return;
             }
 
