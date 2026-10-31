@@ -442,7 +442,7 @@ export interface ResolveCandidate {
  *
  * 只返回高亮词、不返回 payload：判定的活留在客户端，歌词正文也就不用上传。
  */
-export const findResolveCandidates = async (
+const findResolveCandidatesOfKind = async (
   db: D1Database,
   kind: string,
   songTitle: string,
@@ -528,6 +528,30 @@ export const findResolveCandidates = async (
       words: isRecord(payload) ? readHighlightWords(payload) : [],
     };
   });
+};
+
+/*
+ * 主题与动画合成一条以后，客户端只用 `kind = 'stage'` 去问；而这个仓库更早的版本把主题
+ * 单独存成 `kind = 'theme'`。于是「云上明明有这首歌」在客户端看来一直 `miss`
+ * （实测日志：连续 `[ai-cache] pull missed (miss)`，高亮词却对得上）。
+ *
+ * 所以按歌名找候选时把兄弟 kind 一起问：判定仍在客户端（高亮词 + payload 校验），
+ * 拿错只是白跑一趟，不会贴错主题。
+ */
+const SIBLING_CACHE_KIND: Record<string, string> = { stage: 'theme', theme: 'stage' };
+
+export const findResolveCandidates = async (
+  db: D1Database,
+  kind: string,
+  songTitle: string,
+): Promise<ResolveCandidate[]> => {
+  const own = await findResolveCandidatesOfKind(db, kind, songTitle);
+  const sibling = SIBLING_CACHE_KIND[kind];
+  if (!sibling || own.length >= MAX_RESOLVE_CANDIDATES) return own;
+  const rest = await findResolveCandidatesOfKind(db, sibling, songTitle);
+  if (rest.length === 0) return own;
+  const seen = new Set(own.map((entry) => entry.key));
+  return [...own, ...rest.filter((entry) => !seen.has(entry.key))].slice(0, MAX_RESOLVE_CANDIDATES);
 };
 
 const buildRoutes = (options: { admin: boolean }) => {
