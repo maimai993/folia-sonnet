@@ -23,6 +23,7 @@ describe('visualizer registry', () => {
             'tempera',
             'lumiere',
             'hanabi',
+            'machi',
             'nebbia',
             'classic',
             'cadenza',

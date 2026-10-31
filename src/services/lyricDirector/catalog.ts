@@ -47,6 +47,7 @@ const MODE_HINTS: Record<string, string> = {
     hanabi: '花火粒子与夜空、升空绽放与拼贴，节庆感强',
     prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
     nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
+    machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -68,6 +69,7 @@ const MODE_NAMES: Record<string, string> = {
     hanabi: '花火',
     prompt: '提示词',
     nebbia: '雾笺',
+    machi: '町景',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -89,6 +91,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     hanabi: 'ui.visualizerHanabi',
     prompt: 'ui.visualizerPrompt',
     nebbia: 'ui.visualizerNebbia',
+    machi: 'ui.visualizerMachi',
 };
 
 export type DirectorParamSpec =
@@ -332,6 +335,19 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             rainBig: { kind: 'number', min: 0, max: 2, zh: '吐字时的大雨点' },
             bump: { kind: 'number', min: 0, max: 2.5, zh: '颠簸' },
             resolution: { kind: 'number', min: 0.5, max: 2, zh: '渲染分辨率' },
+        },
+    },
+    machi: {
+        setter: 'handleSetMachiTuning',
+        params: {
+            motion: { kind: 'boolean', zh: '运镜' },
+            motionSpeed: { kind: 'number', min: 0.25, max: 3, zh: '运镜速度' },
+            gyro: { kind: 'boolean', zh: '陀螺仪适配' },
+            aperture: { kind: 'number', min: 1.4, max: 16, zh: '光圈' },
+            dof: { kind: 'number', min: 0, max: 2, zh: '景深强度' },
+            dofRange: { kind: 'number', min: 0.3, max: 3, zh: '景深范围' },
+            tiltShift: { kind: 'number', min: 0, max: 1, zh: '移轴' },
+            focusOffset: { kind: 'number', min: -10, max: 10, zh: '对焦点偏移' },
         },
     },
     still: { setter: null, params: {} },

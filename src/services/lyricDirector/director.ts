@@ -430,7 +430,8 @@ const requestDecision = async (input: {
             require: 'decision',
         });
         if (!decision) throw new Error('AI 没有返回可用的动画决策。');
-        return { decision, source, contributed: source !== 'cloud' && reused !== true };
+        /* 只有真去问了模型才算「这台机器贡献过」。本地那一层跟云端命中一样，都是白拿。 */
+        return { decision, source, contributed: source === 'ai' && reused !== true };
     } finally {
         inFlight.delete(controller);
     }

@@ -95,6 +95,7 @@ export const useVisualizerRendererModel = ({
         harmonySubtitleBackground: state.harmonySubtitleBackground,
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
+        subtitleOverlayLayout: state.subtitleOverlayLayout,
     })));
     const assets = useVisualizerStyleAssets();
     const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);

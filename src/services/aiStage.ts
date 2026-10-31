@@ -437,15 +437,22 @@ const rememberRecent = (
  * 结果来源提示：生成完一条，命中时另一条。
  *
  * 命中时结果来得很突然 —— 界面上只会看到主题一瞬间变了，既没有「生成中」也没有
- * 任何说明。两条文案互斥，由 `source` 二选一，不会出现连着弹两次的情况。
+ * 任何说明。三条文案互斥，由 `source` 选，不会出现连着弹两次的情况。
+ *
+ * 本地那一层（`'local'`）单独一句：它确实没发请求，说「已从云端拉取缓存」是假话。
  *
  * 放在这里（而不是服务内部），是因为同一次请求可能被主题、导演两条链路复用：
  * 弹提示是「告知用户」这种只有调用方知道该不该做的事。
  */
 export const notifyStageResolved = (source: AiCloudCacheSource): void => {
+    const text = source === 'local'
+        ? 'options.cloudCacheHitLocal'
+        : source === 'cloud'
+            ? 'options.cloudCacheHit'
+            : 'status.themeGenerated';
     setStatusMessage({
         type: 'info',
-        text: translate(source === 'cloud' ? 'options.cloudCacheHit' : 'status.themeGenerated'),
+        text: translate(text),
         nonce: Date.now(),
     });
 };

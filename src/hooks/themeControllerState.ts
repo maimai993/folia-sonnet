@@ -144,19 +144,18 @@ export const resolveBgModeTheme = ({
         if (!aiTheme) {
             return baseTheme;
         }
-
         const selectedAiTheme = isDaylight ? aiTheme.light : aiTheme.dark;
         /*
-         * 高亮词与歌词图标是**这首歌**的：跟着选中的那份主题走，不从上一份主题里继承。
+         * 背景就是默认主题的那一份，文字、强调色、按钮这些也都用默认的 —— 只把**这首歌**的
+         * 高亮词与歌词图标带过来（它们跟着这首歌的主题走，缺了就没有 AI 高亮）。
          *
-         * 以前这两项取的是 `previousTheme` 的。第一次走到这里时上一份是默认主题
-         * （高亮词为空），于是 AI 主题的配色照样换上、高亮词却永远是空的 —— 之后
-         * previousTheme 自己也变成空，再也回不来。表现就是「AI 主题生效了，但歌词
-         * 没有 AI 高亮」。继承上一首歌的高亮词本身也不对：那是照着别一首的歌词挑的。
+         * 以前这里返回的是整份 `selectedAiTheme` 只换背景，于是「主题来源」切回默认时，除了底色
+         * 之外还是上一个来源的配色，看起来像没切回去（只能靠「重置主题」）。
          */
         return {
-            ...selectedAiTheme,
-            backgroundColor: baseTheme.backgroundColor,
+            ...baseTheme,
+            wordColors: selectedAiTheme.wordColors,
+            lyricsIcons: selectedAiTheme.lyricsIcons,
         };
     }
 

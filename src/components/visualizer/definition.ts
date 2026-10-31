@@ -19,6 +19,7 @@ import {
     type PendoloTuning,
     type SonnetTuning,
     type SubtitleContentMode,
+    type SubtitleOverlayLayout,
     type TemperaTuning,
     type Theme,
     type TiltTuning,
@@ -120,6 +121,8 @@ export interface VisualizerSharedProps {
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
+    /** The shared bottom subtitle's rows (VisualizerSubtitleOverlay); it does not read subtitleContentMode. */
+    subtitleOverlayLayout?: SubtitleOverlayLayout;
     paused?: boolean;
     onBack?: () => void;
     isPanelOpen?: boolean;
@@ -186,6 +189,8 @@ export interface VisualizerQuickControlsProps<T = any> {
     tuning: T;
     onTuningChange: (patch: Partial<T>) => void;
     settings: VisualizerTuningSettings;
+    /** Closes the player panel the controls sit in: for a control that opens something on the player page itself (Machi's viewfinder bar). */
+    onClosePanel?: () => void;
 }
 
 export interface VisualizerRegistryEntry {

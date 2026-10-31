@@ -49,6 +49,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     hidePlayerTranslationSubtitle: storeTypographySettings.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
     subtitleContentMode: storeTypographySettings.subtitleContentMode,
+    subtitleOverlayLayout: storeTypographySettings.subtitleOverlayLayout,
     subtitleOverlayBackground: storeTypographySettings.subtitleOverlayBackground,
     subtitleUpcomingLyricsBlur: storeTypographySettings.subtitleUpcomingLyricsBlur,
     subtitleOverlayOpacity: storeTypographySettings.subtitleOverlayOpacity,
@@ -118,8 +119,6 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // 播放页标题栏后面那层磨砂底：属于播放页的样子，不给用户例外。OBS 覆盖层不画标题栏，用不上它，
     // 但它跟着一起走，导出的「样子」才是完整的。
     playerHeaderBlur: usePlayerChromeSettingsStore.getState().playerHeaderBlur,
-    // Whether the automatic branch is flipped (a column on tall screens, a row on wide ones).
-    libraryWallSeamDirectionReverse: useLibraryWallLookStore.getState().seamDirectionReverse,
   };
 }
 

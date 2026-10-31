@@ -9,7 +9,8 @@ import {
 } from '@/utils/libraryWallSeamDirection';
 
 // test/unit/utils/libraryWallSeamDirection.test.ts
-// bravais 信息条方向的取值规则：三个取值、默认自动、非法值回默认；自动时只有明显竖着的视口（高 ≥ 宽 × 1.1）开横条。
+// bravais 信息条方向的取值规则：四个取值（自动 / 自动（反向）/ 竖向 / 横向）、默认自动（反向）、非法值回默认；
+// 两个自动都只看视口形状（高 ≥ 宽 × 1.1），「自动（反向）」把结果反过来。
 
 /** 按 CSS 的 max-aspect-ratio 语义算这条查询在某个视口上命不命中（宽 / 高 ≤ 比值）。 */
 const matchesPortraitQuery = (width: number, height: number) => {
@@ -19,13 +20,15 @@ const matchesPortraitQuery = (width: number, height: number) => {
 };
 
 describe('libraryWallSeamDirection', () => {
-    it('lists auto / vertical / horizontal, defaults to auto and normalizes anything else to it', () => {
-        expect(LIBRARY_WALL_SEAM_DIRECTIONS).toEqual(['auto', 'vertical', 'horizontal']);
-        expect(DEFAULT_LIBRARY_WALL_SEAM_DIRECTION).toBe('auto');
+    it('lists auto / auto-reverse / vertical / horizontal, defaults to the reversed automatic, normalizes anything else to it', () => {
+        expect(LIBRARY_WALL_SEAM_DIRECTIONS).toEqual(['auto', 'auto-reverse', 'vertical', 'horizontal']);
+        expect(DEFAULT_LIBRARY_WALL_SEAM_DIRECTION).toBe('auto-reverse');
         expect(LIBRARY_WALL_SEAM_DIRECTIONS.every(isLibraryWallSeamDirection)).toBe(true);
         expect(normalizeLibraryWallSeamDirection('vertical')).toBe('vertical');
+        expect(normalizeLibraryWallSeamDirection('auto')).toBe('auto');
+        expect(normalizeLibraryWallSeamDirection('auto-reverse')).toBe('auto-reverse');
         for (const value of [undefined, null, '', 'Horizontal', 'sideways', 1, true]) {
-            expect(normalizeLibraryWallSeamDirection(value)).toBe('auto');
+            expect(normalizeLibraryWallSeamDirection(value)).toBe('auto-reverse');
         }
     });
 
@@ -34,6 +37,12 @@ describe('libraryWallSeamDirection', () => {
         expect(resolveLibraryWallSeamHorizontal('auto', false)).toBe(false);
         expect(resolveLibraryWallSeamHorizontal('horizontal', false)).toBe(true);
         expect(resolveLibraryWallSeamHorizontal('vertical', true)).toBe(false);
+    });
+
+    // 「自动（反向）」= 同一个判断、结果反过来：竖着拿的手机用竖缝，横着的桌面窗口 / 手机横屏用横条。
+    it('reverses the automatic branch for auto-reverse', () => {
+        expect(resolveLibraryWallSeamHorizontal('auto-reverse', true)).toBe(false);
+        expect(resolveLibraryWallSeamHorizontal('auto-reverse', false)).toBe(true);
     });
 
     it('counts only clearly tall viewports as portrait, so near-square windows do not flip back and forth', () => {

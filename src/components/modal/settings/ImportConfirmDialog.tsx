@@ -55,6 +55,7 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     hidePlayerTranslationSubtitle: 'options.hidePlayerTranslationSubtitle',
     showSubtitleTranslation: 'options.showSubtitleTranslation',
     subtitleContentMode: 'options.subtitleContentMode',
+    subtitleOverlayLayout: 'options.subtitleOverlayRows',
     subtitleOverlayBackground: 'options.subtitleOverlayBackground',
     subtitleOverlayOpacity: 'options.subtitleOverlayOpacity',
     showHarmonySubtitle: 'options.showHarmonySubtitle',
@@ -102,7 +103,6 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     libraryWallBackdropBlur: 'options.bravaisBackdropBlur',
     libraryWallSeamDirection: 'options.bravaisSeamDirection',
     playerHeaderBlur: 'options.playerHeaderBlur',
-    libraryWallSeamDirectionReverse: 'options.bravaisSeamDirectionReverse',
 };
 
 // The per-renderer tunings borrow the renderer's own display name instead of inventing one.

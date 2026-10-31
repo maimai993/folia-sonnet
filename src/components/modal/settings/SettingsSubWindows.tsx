@@ -86,6 +86,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
         hidePlayerTranslationSubtitle,
         showSubtitleTranslation,
         subtitleContentMode,
+        subtitleOverlayLayout,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
@@ -104,6 +105,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
         handleToggleHidePlayerTranslationSubtitle: onToggleHidePlayerTranslationSubtitle,
         handleToggleShowSubtitleTranslation: onToggleShowSubtitleTranslation,
         handleSetSubtitleContentMode: onSubtitleContentModeChange,
+        handleSetSubtitleOverlayLayout: onSubtitleOverlayLayoutChange,
         handleSetSubtitleOverlayOpacity: setSubtitleOverlayOpacity,
         handleToggleSubtitleOverlayBackground: onToggleSubtitleOverlayBackground,
         handleToggleSubtitleUpcomingLyricsBlur: onToggleSubtitleUpcomingLyricsBlur,
@@ -215,6 +217,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                         hideTranslationSubtitle={hidePlayerTranslationSubtitle}
                         showSubtitleTranslation={showSubtitleTranslation}
                         subtitleContentMode={subtitleContentMode}
+                        subtitleOverlayLayout={subtitleOverlayLayout}
                         subtitleOverlayOpacity={subtitleOverlayOpacity}
                         subtitleOverlayBackground={subtitleOverlayBackground}
                         subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
@@ -249,6 +252,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                         onToggleHideTranslationSubtitle={onToggleHidePlayerTranslationSubtitle}
                         onToggleShowSubtitleTranslation={onToggleShowSubtitleTranslation}
                         onSubtitleContentModeChange={onSubtitleContentModeChange}
+                        onSubtitleOverlayLayoutChange={onSubtitleOverlayLayoutChange}
                         onSubtitleOverlayOpacityChange={setSubtitleOverlayOpacity}
                         onToggleSubtitleOverlayBackground={onToggleSubtitleOverlayBackground}
                         onToggleSubtitleUpcomingLyricsBlur={onToggleSubtitleUpcomingLyricsBlur}
@@ -287,6 +291,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                         monetPortraitImage={monetPortraitImage}
                         showSubtitleTranslation={showSubtitleTranslation}
                         subtitleContentMode={subtitleContentMode}
+                        subtitleOverlayLayout={subtitleOverlayLayout}
                         lyricsFontStyle={lyricsFontStyle}
                         lyricsFontScale={lyricsFontScale}
                         lyricsFontWeight={lyricsFontWeight}

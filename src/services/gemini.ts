@@ -149,7 +149,7 @@ export const generateThemeFromLyrics = async (
       recordAiThemeAttempt({
         provider,
         trigger,
-        stage: stage.source === 'cloud' ? 'cloud-cache' : 'request',
+        stage: stage.source === 'ai' ? 'request' : 'cloud-cache',
         ok: true,
         durationMs: Date.now() - startedAt,
       });
@@ -230,7 +230,7 @@ export const generateThemeFromLyrics = async (
     recordAiThemeAttempt({
         provider,
         trigger,
-        stage: stage.source === 'cloud' ? 'cloud-cache' : 'web-endpoint',
+        stage: stage.source === 'ai' ? 'web-endpoint' : 'cloud-cache',
         ok: true,
         durationMs: Date.now() - startedAt,
     });

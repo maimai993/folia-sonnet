@@ -1,6 +1,7 @@
 import { createAiFetch, fetchAiCacheViaNative } from './aiNativeFetch';
 import { describeAiTarget, type AiCompletionTarget } from './aiCompletion';
 import { isFoliaCloudCacheEnabled, resolveCloudApiUrl } from './foliaCloud';
+import { dropLocalCloudEntry, forgetLocalCloudMiss, readLocalCloudEntry, readLocalCloudMiss, rememberLocalCloudMiss, writeLocalCloudEntry } from './aiCloudCacheLocal';
 import { md5 } from '../utils/md5';
 
 // src/services/aiCloudCache.ts
@@ -14,6 +15,9 @@ import { md5 } from '../utils/md5';
 //     主题都生成不出来，能命中别人的结果就是白赚。
 //  2. **缓存永不阻塞功能。** 拉失败、推失败、返回的 JSON 不认识 —— 全部
 //     静默退回「照常生成」，缓存只是加速器，不是依赖。
+//
+// 本地那一层（aiCloudCacheLocal.ts）在拉之前先看：本机存着就直接用，零请求；云端拿到的
+// 一律回写本地。服务器扛不住的是「同一首歌反复问同一个键」，本地命中正好省掉的就是它。
 
 /** 提示词一改，缓存就换一批：老答案的格式未必还能用。 */
 const CACHE_SCHEMA = 'v1';
@@ -176,6 +180,8 @@ const wasRecentMiss = (kind: AiCloudCacheKind, key: string): boolean => {
  */
 const forgetMiss = (kind: AiCloudCacheKind, key: string): void => {
     missCache.delete(missKey(kind, key));
+    /* 本地那条「问过、没有」同理：刚推上去的键不该再被本地挡住。 */
+    void forgetLocalCloudMiss(kind, key);
 };
 
 export type AiCloudCachePull =
@@ -190,6 +196,8 @@ export type AiCloudCachePull =
         matched: 'exact' | 'words' | 'forced';
         /** words 命中时，答案原本存在哪个键上 —— 回填到自己这个键要用它。 */
         sourceKey?: string;
+        /** 这一条是从本地那一层拿的，没有发出网络请求。 */
+        local?: boolean;
     }
     | { status: 'miss' }
     | { status: 'unavailable' };
@@ -322,6 +330,9 @@ export const highlightWordsPresent = (words: readonly string[], lyricText: strin
  * 那条路还会按歌名兜底一层。
  */
 export const fetchEntry = async (kind: AiCloudCacheKind, key: string): Promise<unknown> => {
+    /* 本地先看：这条键取过一次就不用再打扰服务器。 */
+    const local = await readLocalCloudEntry(kind, key);
+    if (local) return local.payload;
     try {
         const response = await createAiFetch()(resolveAiCloudCacheUrl(kind, key), {
             method: 'GET',
@@ -332,6 +343,9 @@ export const fetchEntry = async (kind: AiCloudCacheKind, key: string): Promise<u
         const data = await response.json().catch(() => null) as { hit?: unknown; entry?: unknown } | null;
         const entry = data?.entry;
         if (data?.hit !== true || !isPlainObject(entry) || !('payload' in entry)) return null;
+        /* 取到就落本地。这条路取的是「按已知键」的一条，认它作 exact —— 内容有没有被
+           早年的「强制匹配」污染，由调用方（按高亮词判定那一步）负责，不是这里。 */
+        void writeLocalCloudEntry(kind, key, entry.payload, 'exact');
         return entry.payload;
     } catch {
         return null;
@@ -441,12 +455,28 @@ export const pullAiCloudCache = async (
 ): Promise<AiCloudCachePull> => {
     if (!isFoliaCloudCacheEnabled()) return { status: 'unavailable' };
     if (!/^[a-f0-9]{32}$/.test(key)) return { status: 'unavailable' };
-    if (wasRecentMiss(kind, key)) return { status: 'miss' };
 
     const songTitle = String(meta.songTitle ?? '').trim();
     const lyricText = String(meta.lyricText ?? '');
     /* 有歌名又有歌词才判得动：两样缺一样就只剩「信键」或「信歌名」这两条老路。 */
     const judgeByWords = Boolean(songTitle && lyricText);
+
+    /*
+     * 本地先看。
+     *
+     * 本机存着这条答案就直接用 —— 不发请求、不走原生那一趟。有歌词可判时不认 `exact` 那一档：
+     * 跟下面「不读精确键」是同一条纪律（精确键里的内容未必是这份歌词的），本地这一层不能
+     * 把它绕过去。`words` / `own` 是认过的，照用。
+     */
+    const local = await readLocalCloudEntry(kind, key);
+    if (local && (local.how !== 'exact' || !judgeByWords)) {
+        return { status: 'hit', payload: local.payload, matched: local.how === 'words' ? 'words' : 'exact', local: true };
+    }
+
+    /* 本地记着「问过、云端没有」且还没过期：直接当没有，别去打服务器。 */
+    if (await readLocalCloudMiss(kind, key)) return { status: 'miss' };
+
+    if (wasRecentMiss(kind, key)) return { status: 'miss' };
 
     const url = resolveAiCloudCacheUrl(kind, key);
     let data: { hit?: unknown; entry?: unknown } | null = null;
@@ -476,7 +506,10 @@ export const pullAiCloudCache = async (
     }
     if (native) {
         /* 原生真发了请求、服务端说没有：那就是没命中，不必再用网页那条再问一遍。 */
-        if (!native.ok) return { status: 'miss' };
+        if (!native.ok) {
+            void rememberLocalCloudMiss(kind, key);
+            return { status: 'miss' };
+        }
         /* 原生回的是响应体原文：解析不出来就跟没命中一样，别让一条脏响应炸了整条链路。 */
         try {
             data = JSON.parse(native.body) as { hit?: unknown; entry?: unknown };
@@ -503,6 +536,8 @@ export const pullAiCloudCache = async (
 
     const entry = data?.entry;
     if (data?.hit === true && isPlainObject(entry) && 'payload' in entry) {
+        /* 云端给了就落本地：下次同键是本地命中，零请求。 */
+        void writeLocalCloudEntry(kind, key, entry.payload, 'exact');
         return { status: 'hit', payload: entry.payload, matched: 'exact' };
     }
 
@@ -514,12 +549,14 @@ export const pullAiCloudCache = async (
      */
     if (!songTitle) {
         rememberMiss(kind, key);
+        void rememberLocalCloudMiss(kind, key);
         return { status: 'miss' };
     }
 
     const candidates = await fetchResolveCandidates(kind, songTitle);
     if (candidates.length === 0) {
         rememberMiss(kind, key);
+        void rememberLocalCloudMiss(kind, key);
         return { status: 'miss' };
     }
 
@@ -563,6 +600,13 @@ export const pullAiCloudCache = async (
     );
     const index = payloads.findIndex((payload) => payload !== null);
     if (index >= 0) {
+        /*
+         * 这一条已经认过了，就落到**自己这个键**上：下次同键问本地即可。
+         *
+         * `lyricText` 在场是 words（高亮词 100% 验过），否则是 forced（只是最靠前那条）。
+         * forced 不进本地 —— 它没被验证过，存下来等于把别人的答案钉在自己身上。
+         */
+        if (lyricText) void writeLocalCloudEntry(kind, key, payloads[index], 'words');
         return {
             status: 'hit',
             payload: payloads[index],
@@ -576,6 +620,7 @@ export const pullAiCloudCache = async (
     }
 
     rememberMiss(kind, key);
+    void rememberLocalCloudMiss(kind, key);
     return { status: 'miss' };
 };
 
@@ -604,14 +649,24 @@ export const pushAiCloudCache = async (
             }),
             signal: withTimeout(),
         });
-        if (response.ok) forgetMiss(kind, key);
+        /* 成功就地留一份：这首自己刚生成的，下次同键本地命中，不用再问服务器。 */
+        if (response.ok) {
+            forgetMiss(kind, key);
+            void writeLocalCloudEntry(kind, key, payload, 'own');
+        }
         return response.ok;
     } catch {
         return false;
     }
 };
 
-export type AiCloudCacheSource = 'cloud' | 'ai';
+/**
+ * 结果是哪儿来的。
+ *
+ * `local` 是本机存着的那一份（云缓存的本地层，零请求）—— 跟 `cloud` 分开，是因为界面上的
+ * 提示不该让本地命中冒充「已从云端拉取缓存」，而它确实也没发请求。
+ */
+export type AiCloudCacheSource = 'cloud' | 'local' | 'ai';
 
 /**
  * 唯一该被功能代码调用的那个入口：先问缓存，没有再生成，生成完回传。
@@ -673,8 +728,11 @@ export const withAiCloudCache = async <T>(options: {
              * 同一份歌词下次还是同一个键 —— 不回填就得再走一遍「搜歌名 + 逐条判」，
              * 白花两次往返。回填的是库里已有的答案（不是新生成的），落哪个键都不影响
              * 别人，而命中率会实打实地涨。回填失败无所谓：反正这一次已经命中了。
+             *
+             * 本地命中的不再回推：本机早就有这一份，推上去纯属白给服务器加负载 ——
+             * 而且要的就是「本地命中零请求」这件事。
              */
-            if (pulled.status === 'hit' && pulled.matched === 'words') {
+            if (pulled.status === 'hit' && pulled.matched === 'words' && !pulled.local) {
                 void pushAiCloudCache(kind, fingerprint, validated, {
                     songTitle,
                     platform,
@@ -683,8 +741,13 @@ export const withAiCloudCache = async <T>(options: {
                     target: describeAiTarget(),
                 }).catch(() => false);
             }
-            return { value: validated, source: 'cloud' };
+            return { value: validated, source: pulled.status === 'hit' && pulled.local ? 'local' : 'cloud' };
         }
+        /*
+         * 本地存着的那一份没通过校验：它是脏的（老版本存的形状、或者上游改了格式），
+         * 扔掉，让下一次老老实实回云端问。
+         */
+        if (pulled.status === 'hit' && pulled.local) void dropLocalCloudEntry(kind, fingerprint);
         /*
          * 没通过校验的那份也要留着 —— 它缺的正是这次要问的那一半，但它**有**这次
          * 生成不出来的那一半。丢掉就等于把已有的成果擦掉。

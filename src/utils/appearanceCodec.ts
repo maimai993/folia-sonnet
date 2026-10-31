@@ -556,6 +556,7 @@ export const compressConfig = (config: any): string => {
     if (config.hidePlayerTranslationSubtitle !== undefined) minified.hpts = config.hidePlayerTranslationSubtitle;
     if (config.showSubtitleTranslation !== undefined) minified.sst = config.showSubtitleTranslation;
     if (config.subtitleContentMode !== undefined) minified.scm = config.subtitleContentMode;
+    if (config.subtitleOverlayLayout !== undefined) minified.sovl = config.subtitleOverlayLayout;
     if (config.subtitleOverlayBackground !== undefined) minified.sob = config.subtitleOverlayBackground;
     if (config.subtitleUpcomingLyricsBlur !== undefined) minified.sulb = config.subtitleUpcomingLyricsBlur;
     if (config.subtitleOverlayOpacity !== undefined) minified.soo = config.subtitleOverlayOpacity;
@@ -613,7 +614,6 @@ export const compressConfig = (config: any): string => {
     if (config.libraryWallBackdropBlur !== undefined) minified.lwbb = config.libraryWallBackdropBlur;
     if (config.libraryWallSeamDirection !== undefined) minified.lwsd = config.libraryWallSeamDirection;
     if (config.playerHeaderBlur !== undefined) minified.phb = config.playerHeaderBlur;
-    if (config.libraryWallSeamDirectionReverse !== undefined) minified.lwdr = config.libraryWallSeamDirectionReverse;
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -707,6 +707,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.hpts !== undefined) decompressed.hidePlayerTranslationSubtitle = parsed.hpts;
         if (parsed.sst !== undefined) decompressed.showSubtitleTranslation = parsed.sst;
         if (parsed.scm !== undefined) decompressed.subtitleContentMode = parsed.scm;
+        if (parsed.sovl !== undefined) decompressed.subtitleOverlayLayout = parsed.sovl;
         if (parsed.sob !== undefined) decompressed.subtitleOverlayBackground = parsed.sob;
         if (parsed.sulb !== undefined) decompressed.subtitleUpcomingLyricsBlur = parsed.sulb;
         if (parsed.soo !== undefined) decompressed.subtitleOverlayOpacity = parsed.soo;
@@ -763,7 +764,15 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lwbb !== undefined) decompressed.libraryWallBackdropBlur = parsed.lwbb;
         if (parsed.lwsd !== undefined) decompressed.libraryWallSeamDirection = parsed.lwsd;
         if (parsed.phb !== undefined) decompressed.playerHeaderBlur = parsed.phb;
-        if (parsed.lwdr !== undefined) decompressed.libraryWallSeamDirectionReverse = parsed.lwdr;
+        /*
+         * lwdr：旧的反向开关（只翻「自动」那一支）。它已经并进方向取值成为 'auto-reverse'，所以不再原样带出来，
+         * 只在旧配置的「自动 + 反向」这一组合上折算一次：lwsd 是 'auto'（或没写，那时旧版默认就是自动）而
+         * lwdr 不是 false 时，方向记成 'auto-reverse'。旧配置导入后的观感与导出它时一致，不会因为少了个键
+         * 就突然翻回「自动」。
+         */
+        if (parsed.lwdr !== undefined && parsed.lwdr !== false) {
+            if (parsed.lwsd === undefined || parsed.lwsd === 'auto') decompressed.libraryWallSeamDirection = 'auto-reverse';
+        }
 
         return decompressed;
     } else {
@@ -773,7 +782,7 @@ export const decompressConfig = (str: string): any => {
             'theme', 'visualizerMode', 'randomVisualizerModePerSong', 'randomVisualizerModes', 'visualizerBackgroundMode', 'backgroundOpacity',
             'useCoverColorBg', 'disableVisualizerGeometricBackground', 'disableVisualizerVignette', 'staticMode',
             'visualizerOpacity', 'hidePlayerTranslationSubtitle', 'showSubtitleTranslation', 'subtitleContentMode',
-            'subtitleOverlayBackground', 'subtitleUpcomingLyricsBlur', 'subtitleOverlayOpacity',
+            'subtitleOverlayLayout', 'subtitleOverlayBackground', 'subtitleUpcomingLyricsBlur', 'subtitleOverlayOpacity',
             'showHarmonySubtitle', 'harmonySubtitleBackground',
             'lyricsFontStyle', 'lyricsFontScale', 'lyricsFontWeight', 'lyricsFontFallbackFamilies',
             'subtitleFontInheritsLyrics', 'subtitleFontScale', 'subtitleFontStyle', 'subtitleFontWeight', 'subtitleFontFamily',
@@ -787,7 +796,11 @@ export const decompressConfig = (str: string): any => {
             'libraryWallStackEdges',
             'libraryWallSeamClear', 'libraryWallSeamStyle', 'libraryWallBackdropLyrics', 'libraryWallBackdropBlur',
             'libraryWallSeamDirection',
-            'playerHeaderBlur', 'libraryWallSeamDirectionReverse',
+            'playerHeaderBlur',
+            // 旧的反向开关（已并进 libraryWallSeamDirection 的 'auto-reverse'）。留着这一格只为一件事：
+            // 只带 lwdr 的旧 JSON 配置仍算「认得的外观配置」，不至于整份被当成非法。取值本身由
+            // visualConfigTransfer 折算，别的地方不要读它。
+            'libraryWallSeamDirectionReverse',
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {

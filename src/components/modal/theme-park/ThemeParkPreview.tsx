@@ -9,6 +9,7 @@ import {
     CappellaEmojiImage,
     MonetPortraitImage,
     SubtitleContentMode,
+    SubtitleOverlayLayout,
     Theme,
     VisualizerMode,
 } from '../../../types';
@@ -95,6 +96,7 @@ const ThemePreview: React.FC<{
     monetPortraitImage?: MonetPortraitImage | null;
     showSubtitleTranslation: boolean;
     subtitleContentMode?: SubtitleContentMode;
+    subtitleOverlayLayout?: SubtitleOverlayLayout;
     lyricsFontScale: number;
     currentTime: PreviewClock;
     currentLineIndex: number;
@@ -123,6 +125,7 @@ const ThemePreview: React.FC<{
     monetPortraitImage,
     showSubtitleTranslation,
     subtitleContentMode,
+    subtitleOverlayLayout,
     lyricsFontScale,
     currentTime,
     currentLineIndex,
@@ -172,6 +175,7 @@ const ThemePreview: React.FC<{
                             lyricsFontScale={lyricsFontScale}
                             showSubtitleTranslation={showSubtitleTranslation}
                             subtitleContentMode={subtitleContentMode}
+                            subtitleOverlayLayout={subtitleOverlayLayout}
                             cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                             cappellaCustomAvatarImages={cappellaCustomAvatarImages}
                             monetPortraitImage={monetPortraitImage}
