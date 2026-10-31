@@ -3,7 +3,10 @@ import {
     isSongTitleCandidate,
     looseSongTitle,
     rankSongTitleMatch,
+    songTitleFallbackTokens,
     songTitleKey,
+    songTitleQueryTokens,
+    songTitleTokens,
 } from '../../../sync-server/src/songTitleMatch';
 
 // test/unit/sync-server/songTitleMatch.test.ts
@@ -98,5 +101,83 @@ describe('rankSongTitleMatch —— 谁该排前面', () => {
 
     it('同分时新的排在前面由调用方按 updated_at 定，这里只保证同分', () => {
         expect(rankSongTitleMatch('晴天 (Live)', '晴天（现场版）')).toBe(0);
+    });
+});
+
+/*
+ * 倒排索引的 token。写进去的和查询时问的必须是同一套 —— 两边不一致就会
+ * 「明明在库里，却怎么也捞不到」，而且不会报错，只会静默返回空候选。
+ */
+describe('songTitleTokens —— 倒排索引写什么、问什么', () => {
+    it('核心名一定带 K: 前缀', () => {
+        expect(songTitleTokens('晴天')).toContain('K:晴天');
+        expect(songTitleQueryTokens('晴天')).toContain('K:晴天');
+    });
+
+    /* 括号、后缀、大小写压完之后是同一个核心名，所以指向同一批候选。 */
+    it('同一首歌的不同写法落到同一个 K: token', () => {
+        for (const variant of ['晴天 (Live)', '晴天【伴奏】', '晴天 现场版', '晴天 Remix']) {
+            expect(songTitleTokens(variant)).toContain('K:晴天');
+        }
+        expect(songTitleTokens('Someone Like You (Live)')).toContain('K:someonelikeyou');
+    });
+
+    /* 「周杰伦 - 晴天」要能配上库里的「晴天」：靠 S: 拆段。 */
+    it('「歌手 - 歌名」拆段后各有一个 S: token', () => {
+        const tokens = songTitleTokens('周杰伦 - 晴天');
+        expect(tokens).toContain('S:周杰伦');
+        expect(tokens).toContain('S:晴天');
+    });
+
+    /*
+     * 不建单字 token：中文常用字太泛（实测 4 万条库里 `C:海` 命中 5022 行），
+     * 拿它查会把 LIMIT 一次撑满，等于换个方式全扫。
+     */
+    it('不建单字 token', () => {
+        expect(songTitleTokens('晴天')).toEqual(['K:晴天', 'S:晴天', 'D:晴']);
+        expect(songTitleTokens('Someone Like You').some((token) => token.startsWith('C:'))).toBe(false);
+        expect(songTitleQueryTokens('晴天雨天雪天').some((token) => token.startsWith('C:'))).toBe(false);
+    });
+
+    it('首字/首词钩子有 D: token，且统一小写', () => {
+        /* 中日韩取首字，拉丁取首词（至少三个字符，见 songTitleSeed）。 */
+        expect(songTitleTokens('晴天')).toContain('D:晴');
+        expect(songTitleTokens('Someone Like You')).toContain('D:someone');
+        /* token 是逐字相等才命中的，大小写不统一就会静默配不上。 */
+        expect(songTitleTokens('Someone Like You').filter((token) => token.startsWith('D:')))
+            .toEqual(songTitleTokens('someone like you').filter((token) => token.startsWith('D:')));
+    });
+
+    /*
+     * 写路径与读路径的对应关系由下面「精确 token 与兜底 token 分开，合并起来就是完整一套」
+     * 那条钉住：读侧分成两轮问，两轮合起来必须等于写进去的那一套。
+     */
+
+    /*
+     * 两轮查询：第一轮只问精确的 K:/S:，D: 留到一条都没命中时单独问。
+     * 混在一条 IN (...) 里 D: 会把 LIMIT 撑满，把精确命中挤掉。
+     */
+    it('精确 token 与兜底 token 分开，合并起来就是完整一套', () => {
+        for (const title of ['晴天', '周杰伦 - 晴天', 'Someone Like You']) {
+            const precise = songTitleQueryTokens(title);
+            const fallback = songTitleFallbackTokens(title);
+            expect(precise.every((token) => !token.startsWith('D:'))).toBe(true);
+            expect(fallback.every((token) => token.startsWith('D:'))).toBe(true);
+            /* 两轮合起来必须等于写进索引的那一套，否则会有 token 永远问不到。 */
+            expect([...precise, ...fallback].sort()).toEqual([...songTitleTokens(title)].sort());
+        }
+    });
+
+    /* 压不出核心名的（整个名字都是噪声）不该进索引，也不该去问。 */
+    it('压不出核心名时两边都是空', () => {
+        expect(songTitleTokens('Live')).toEqual([]);
+        expect(songTitleQueryTokens('Live')).toEqual([]);
+        expect(songTitleFallbackTokens('Live')).toEqual([]);
+        expect(songTitleTokens('')).toEqual([]);
+    });
+
+    it('token 不重复', () => {
+        const tokens = songTitleTokens('晴天 晴天 (Live)');
+        expect(new Set(tokens).size).toBe(tokens.length);
     });
 });

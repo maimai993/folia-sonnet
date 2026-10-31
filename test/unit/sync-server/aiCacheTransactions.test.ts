@@ -251,4 +251,31 @@ describe('AI cache UTF-8 payload limits', () => {
         expect((await response.json()).error).toBe('empty_payload');
         expect(await snapshot()).toEqual(before);
     });
+
+    /*
+     * /songs 的总数是 `COUNT(DISTINCT song_title)`，整个歌名索引读一遍去重（4 万条 5.6ms），
+     * 而分页本身只要 0.15ms —— 所以它带了 5 秒缓存。缓存不能把新歌盖住：写入、删除
+     * 都要立刻作废，否则「刚推上去就刷新 /songs」看不到自己那首。
+     */
+    it('counts a new song on /songs as soon as it is pushed, despite the total cache', async () => {
+        const total = async () => (await (await request('/api/ai-cache/songs?limit=50')).json()).total;
+        const putTitle = (songTitle: string, cacheKey: string) => request(`/api/ai-cache/stage/${cacheKey}`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ payload: payload('x'), songTitle, provider: 'synthetic', model: 'test', platform: 'qq' }),
+        });
+
+        expect(await total()).toBe(0);
+        expect((await putTitle('Synthetic Song', key)).status).toBe(200);
+        expect(await total()).toBe(1);
+        /* 同一个歌名换个键不算新歌，总数不变（这条同时证明缓存值是对的，不是恒加一）。 */
+        expect((await putTitle('Synthetic Song', otherKey)).status).toBe(200);
+        expect(await total()).toBe(1);
+        /* 出现新歌名，缓存必须立刻作废。 */
+        expect((await putTitle('Another Song', 'c'.repeat(32))).status).toBe(200);
+        expect(await total()).toBe(2);
+        /* 删掉唯一那条「Another Song」之后立刻少掉（DELETE 在 admin 路由下，要带 cookie）。 */
+        expect((await request(`/admin/api/ai-cache/stage/${'c'.repeat(32)}`, { method: 'DELETE', headers: { Cookie: cookie } })).status).toBe(200);
+        expect(await total()).toBe(1);
+    });
 });

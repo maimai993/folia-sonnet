@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './admin.js';
 import type { D1Database, Env } from './app.js';
-import { MAX_CACHE_BACKUPS, restoreCacheBackup } from './aiCache.js';
+import { MAX_CACHE_BACKUPS, restoreCacheBackup } from './aiCacheBackups.js';
+import { invalidateSongTotalCache } from './aiCacheSongTotal.js';
 import {
   renderAdminBackupPage,
   renderAdminCachePage,
@@ -118,7 +119,7 @@ export const adminCachePages = (() => {
    */
   routes.post('/backups/:id/restore', async (c) => {
     const id = Number.parseInt(String(c.req.param('id') || ''), 10);
-    const result = await restoreCacheBackup(c.env.FOLIA_SYNC_DB, id);
+    const result = await restoreCacheBackup(c.env.FOLIA_SYNC_DB, id, invalidateSongTotalCache);
     if (!result.ok) return html(renderAdminMissingPage(`没捞回来：${result.error}`));
     return c.redirect(`/admin/cache/${encodeURIComponent(result.kind)}/${encodeURIComponent(result.key)}`, 303);
   });

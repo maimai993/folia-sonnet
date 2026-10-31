@@ -23,12 +23,12 @@
     {
       "method": "POST",
       "path": "/admin/api/ai-cache-backups/:id/restore",
-      "handlerFile": "sync-server/src/aiCache.ts"
+      "handlerFile": "sync-server/src/aiCacheBackups.ts"
     },
     {
       "method": "GET",
       "path": "/admin/api/ai-cache-backups/:kind/:key",
-      "handlerFile": "sync-server/src/aiCache.ts"
+      "handlerFile": "sync-server/src/aiCacheBackups.ts"
     },
     {
       "method": "DELETE",
