@@ -1,4 +1,5 @@
-import { nativePlayer, type NativePlaybackEvent } from './nativePlayerPlugin';
+import { nativePlayer, type NativePlaybackEvent, type NativePlaybackSnapshot } from './nativePlayerPlugin';
+import { isNativePlaybackReconciling } from './nativePlaybackSync';
 
 // src/services/playbackEngine/nativePlaybackEngine.ts
 //
@@ -76,6 +77,22 @@ class NativePlaybackEngine {
      */
     private trackGain = 1;
     private currentUrl: string | null = null;
+    private songKey: string | null = null;
+
+    /** 认领只重置本地时钟，绝不 prepare / seek / play 原生。 */
+    adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
+        this.ensureSubscription();
+        this.currentUrl = snapshot.url;
+        this.songKey = snapshot.songKey ?? null;
+        this.hasSource = true;
+        this.positionMs = Math.max(0, snapshot.positionMs);
+        this.durationMs = Math.max(0, snapshot.durationMs);
+        this.playing = snapshot.playing;
+        this.rate = snapshot.speed ?? 1;
+        this.stalled = false;
+        this.updatedAtMs = performance.now();
+        this.lastDeliveredMs = this.positionMs;
+    }
     private listeners = new Set<(event: NativePlaybackEvent) => void>();
     private subscriptionStarted = false;
 
@@ -131,8 +148,11 @@ class NativePlaybackEngine {
         return this.durationMs > 0 ? this.durationMs / 1000 : 0;
     }
 
-    async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number } = {}): Promise<void> {
+    async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number; songKey?: string | null } = {}): Promise<void> {
+        if (isNativePlaybackReconciling()) return;
+        if (this.hasSource && this.currentUrl === url && (!options.songKey || options.songKey === this.songKey)) return;
         this.ensureSubscription();
+        this.songKey = options.songKey ?? null;
         this.currentUrl = url;
         this.hasSource = true;
         this.playing = false;
@@ -146,6 +166,7 @@ class NativePlaybackEngine {
             url,
             startPositionMs: options.startPositionMs ?? null,
             repeatMode: this.repeatMode,
+            songKey: this.songKey,
         });
         await nativePlayer.setVolume(this.volume);
     }
@@ -250,6 +271,8 @@ class NativePlaybackEngine {
         if (this.subscriptionStarted) return;
         this.subscriptionStarted = true;
         void nativePlayer.addListener(event => {
+            if (isNativePlaybackReconciling()) return;
+            if (event.songKey && this.songKey && event.songKey !== this.songKey) return;
             this.apply(event);
             this.listeners.forEach(listener => listener(event));
         }).catch(() => undefined);

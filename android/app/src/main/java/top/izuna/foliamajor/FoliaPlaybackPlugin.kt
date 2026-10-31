@@ -313,10 +313,20 @@ class FoliaPlaybackPlugin : Plugin() {
      */
     @PluginMethod
     fun getQueueState(call: PluginCall) {
-        try {
-            call.resolve(JSObject.fromJSONObject(FoliaPlaybackService.queueStateJson()))
-        } catch (error: Throwable) {
-            call.reject("读取播放队列失败", error as? Exception)
+        /*
+         * 回主线程再读：服务里那些缓存字段与 MediaSession 都归主线程。
+         *
+         * 读之前先让服务按当前缓存重建 metadata / PlaybackState / 通知 —— 原生拉到的
+         * 歌词、原生引擎的位置就是这样进快照的（#106）。只刷新，不动播放器、不起服务、
+         * 也不发命令。
+         */
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                FoliaPlaybackService.activeService()?.refreshForSnapshot()
+                call.resolve(JSObject.fromJSONObject(FoliaPlaybackService.queueStateJson()))
+            } catch (error: Throwable) {
+                call.reject("读取播放队列失败", error as? Exception)
+            }
         }
     }
 

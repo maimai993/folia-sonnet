@@ -1,5 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 import type { CappellaAvatarImage, CappellaEmojiImage } from '../types';
+import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
 
 // src/platform/foliaWallpaper.ts
 // 歌词动态壁纸的 Web 侧入口。原生实现见 android/.../wallpaper/LyricsWallpaperService。
@@ -207,6 +208,7 @@ const FoliaWallpaper = registerPlugin<FoliaWallpaperPlugin>('FoliaWallpaper');
 export const publishLyricsWallpaper = async (
     options: FoliaWallpaperPublishOptions,
 ): Promise<void> => {
+    if (isNativePlaybackReconciling()) return;
     try {
         await FoliaWallpaper.publish(options);
     } catch {

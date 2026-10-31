@@ -16,6 +16,8 @@ import { setPlayQueue, usePlaybackStore } from '../../../../stores/usePlaybackSt
 import { askedSongKeyRef, makeSongCurrent, startRestore } from '../currentSong';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { isRestoredSongPlayable } from '../playableSong';
+import { readNativeQueueState } from '../../../../services/nativeQueueBridge';
+import { adoptNativePlaybackState } from './adoptNativePlaybackState';
 
 // src/components/app/playback/restore/useSessionRestoreController.ts
 
@@ -103,6 +105,13 @@ export function useSessionRestoreController({
             const writesAtStart = queueWritesAtMountRef.current;
             const rewritten = () => wholeQueueWritesSoFar() !== writesAtStart;
             try {
+                // WebView 重建不等于播放器重启：先问原生，不能把磁盘里的旧歌装回去。
+                const native = await readNativeQueueState();
+                if (native?.hasSong && native.nativeMedia?.songKey === native.songKey && native.nativeMedia.url) {
+                    if (askedSongKeyRef.current === null) adoptNativePlaybackState(native);
+                    shouldAutoPlayRef.current = false;
+                    return;
+                }
                 let lastSong = await getFromCache<SongResult>('last_song');
                 let lastQueue = await getFromCache<SongResult[]>('last_queue');
 

@@ -546,6 +546,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     /**
+     * 缓存里最后一首的地址；没装过东西时是 null。
+     *
+     * 读的是 volatile 缓存，不碰播放器线程 —— 队列快照在桥线程上组装（见
+     * FoliaNativePlayerPlugin.mediaSnapshot）。
+     */
+    fun currentUrl(): String? = lastUrl
+
+    /**
      * 引擎此刻装的那首歌的身份（MediaItem 的 mediaId）；没装东西时是空串。
      *
      * 读的是缓存的 volatile 字段，不碰播放器：调用方在插件线程上，而播放器在这条

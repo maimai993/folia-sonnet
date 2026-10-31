@@ -12,7 +12,9 @@
 // 唯一的例外是渲染：歌词与主题要按当前曲目重新拉，因为那是界面的事（原生给的是
 // songKey，怎么画由前台决定）。
 
+import { registerPlugin } from '@capacitor/core';
 import { isCapacitorAndroid } from '../platform/runtime';
+import type { NativePlaybackSnapshot } from './playbackEngine/nativePlayerPlugin';
 
 export type NativeLoopMode = 'off' | 'all' | 'one';
 
@@ -52,6 +54,8 @@ export type NativeQueueState = {
     providerId: string;
     serverSongId: string;
     artworkUrl: string;
+    nativeMedia?: NativePlaybackSnapshot & { url: string; speed?: number };
+    lyrics?: { songKey: string; lrc: string; translated: string };
 };
 
 type NativeQueuePlugin = {
@@ -60,12 +64,8 @@ type NativeQueuePlugin = {
     setQueueMirror: (options: { queueJson?: string; index?: number }) => Promise<void>;
 };
 
-const plugin = (): NativeQueuePlugin | null => {
-    if (!isCapacitorAndroid()) return null;
-    const g = window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } };
-    const candidate = g.Capacitor?.Plugins?.FoliaPlayback as NativeQueuePlugin | undefined;
-    return candidate && typeof candidate.getQueueState === 'function' ? candidate : null;
-};
+const nativeQueuePlugin = registerPlugin<NativeQueuePlugin>('FoliaPlayback');
+const plugin = (): NativeQueuePlugin | null => isCapacitorAndroid() ? nativeQueuePlugin : null;
 
 /** 拉一次完整状态。非安卓返回 null，调用方按既有（Web 全流程）路径走。 */
 export const readNativeQueueState = async (): Promise<NativeQueueState | null> => {

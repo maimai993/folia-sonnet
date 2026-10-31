@@ -61,6 +61,45 @@ class FoliaNativePlayerPlugin : Plugin() {
         private var instance: FoliaNativePlayerPlugin? = null
 
         /**
+         * 原生播放器此刻的只读快照，作为 getQueueState 的 `nativeMedia` 字段。
+         *
+         * 只读缓存字段（volatile），不碰播放器线程；没有真媒体时 [mediaSnapshot] 返回 null。
+         */
+        data class NativeMediaSnapshot(
+            val songKey: String,
+            val url: String,
+            val positionMs: Long,
+            val durationMs: Long,
+            val playing: Boolean,
+            val speed: Float,
+        ) {
+            fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
+                put("songKey", songKey)
+                put("url", url)
+                put("positionMs", positionMs)
+                put("durationMs", durationMs)
+                put("playing", playing)
+                put("speed", speed.toDouble())
+            }
+        }
+
+        /** 原生手上真有歌时给一份快照；没有播放器 / 没装过源时返回 null。 */
+        @JvmStatic
+        fun mediaSnapshot(): NativeMediaSnapshot? {
+            val current = instance ?: return null
+            val player = current.player ?: return null
+            if (!player.hasMedia()) return null
+            return NativeMediaSnapshot(
+                player.currentMediaId(),
+                player.currentUrl() ?: "",
+                player.getPositionMs(),
+                player.getDurationMs(),
+                player.isPlaying(),
+                player.getSpeed(),
+            )
+        }
+
+        /**
          * WebView 冻结时通知栏拖进度条：桥收不到 seek 那条广播，只能直接在原生侧跳。
          * 只有原生手上真有歌时才动手；其余情况由服务照旧转给 JS。
          */
@@ -315,6 +354,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                 payload.put("type", type)
                 payload.put("positionMs", positionMs.toDouble())
                 payload.put("durationMs", durationMs.toDouble())
+                payload.put("songKey", player?.currentMediaId() ?: "")
                 /*
                  * ⭐ **播完了自动下一首。**
                  *
@@ -369,7 +409,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                      *
                      * 现在反过来：FoliaPlaybackService.onTrackFinished 按原生队列的循环模式
                      * 立刻决定（单曲循环重播 / 换下一首 / 顺序播放走到头才停），它自己不叫醒
-                     * 前台。前台在场时会收到一条 "next" 用来把界面跟上，不在场也没有损失。
+                     * 前台。装源后以 syncTo 通知界面认领，不再发 next 让 Web 重复切歌。
                      */
                     MAIN.post {
                         val context = instance?.getContext()
@@ -387,7 +427,10 @@ class FoliaNativePlayerPlugin : Plugin() {
                  * 过桥那一下回主线程：`notifyListeners` 里的监听器表不是为并发写的
                  * （`Plugin.eventListeners` 是个普通 HashMap，加 / 删监听器在 JS 那一侧）。
                  */
-                MAIN.post { notifyListeners(EVENT, payload) }
+                MAIN.post {
+                    top.izuna.foliamajor.FoliaPlaybackService.activeService()?.refreshForSnapshot()
+                    notifyListeners(EVENT, payload)
+                }
             }
         })
         // 「播放淡入淡出」跟着设置走：插件是新进程里第一个起来的东西，这里读一次就够，

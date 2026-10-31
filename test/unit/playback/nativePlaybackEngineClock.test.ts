@@ -104,6 +104,29 @@ describe('nativePlaybackEngine clock', () => {
         expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(10, 5);
     });
 
+    it('adopts the native clock after a long freeze without playback commands', async () => {
+        nowMs = 30 * 60 * 1000;
+        vi.clearAllMocks();
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'B', url: 'https://example.invalid/B', positionMs: 12000, durationMs: 90000, playing: true });
+        expect(nativePlaybackEngine.getPositionSec()).toBe(12);
+        nowMs += 1000;
+        expect(nativePlaybackEngine.getPositionSec()).toBe(13);
+        await nativePlaybackEngine.setSource('https://example.invalid/B', { songKey: 'B' });
+        expect(harness.nativePlayer.prepare).not.toHaveBeenCalled();
+        expect(harness.nativePlayer.play).not.toHaveBeenCalled();
+        expect(harness.nativePlayer.seek).not.toHaveBeenCalled();
+        expect(harness.nativePlayer.stop).not.toHaveBeenCalled();
+        expect(nativePlaybackEngine.getDurationSec()).toBe(90);
+    });
+
+    it('adopts paused zero position and discards delayed events for the old track', () => {
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'B', url: 'https://example.invalid/B', positionMs: 0, durationMs: 90000, playing: false });
+        emit({ type: 'playing', songKey: 'A', positionMs: 70000, durationMs: 200000 });
+        nowMs = 10000;
+        expect(nativePlaybackEngine.getPositionSec()).toBe(0);
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+    });
+
     it('resets to zero when the player loops the track', () => {
         emit({ type: 'playing', positionMs: 1000, durationMs: 200_000 });
         nowMs = 200_000;

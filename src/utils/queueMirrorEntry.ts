@@ -151,7 +151,12 @@ export const songFromMirrorEntry = (entry: {
     coverUrl: string;
     durationSec: number;
 }): SongResult => {
-    const mediaId = entry.songId || entry.mid || entry.hash || entry.albumAudioId || entry.songKey;
+    const onlinePrefix = `online:${entry.providerId}:`;
+    const kind = entry.songKey.startsWith('local:') ? 'local'
+        : entry.songKey.startsWith('navidrome:') ? 'navidrome' : 'online';
+    const mediaId = entry.songKey.startsWith(onlinePrefix) ? entry.songKey.slice(onlinePrefix.length)
+        : kind !== 'online' ? entry.songKey.slice(entry.songKey.indexOf(':') + 1)
+            : entry.songId || entry.mid || entry.hash || entry.albumAudioId || entry.songKey;
     const artists = entry.artist
         ? entry.artist.split('/').map(name => name.trim()).filter(Boolean).map((name, index) => ({ id: `${mediaId}-a${index}`, name }))
         : [];
@@ -159,11 +164,13 @@ export const songFromMirrorEntry = (entry: {
         id: mediaId,
         name: entry.title,
         artists,
-        album: { id: `${mediaId}-al`, name: entry.album },
+        album: { id: `${mediaId}-al`, name: entry.album, picUrl: entry.coverUrl },
         durationMs: Math.round((entry.durationSec || 0) * 1000),
+        ...(kind === 'local' ? { isLocal: true, localRef: { songId: mediaId } } : {}),
+        ...(kind === 'navidrome' ? { isNavidrome: true } : {}),
         sourceRef: {
-            kind: 'online',
-            providerId: entry.providerId,
+            kind,
+            ...(kind === 'online' ? { providerId: entry.providerId } : {}),
             mediaId,
             providerData: {
                 songId: entry.songId,

@@ -51,6 +51,8 @@ export const askedSongKeyRef: AskedSongKeyRef = {
 };
 
 let playsStarted = 0;
+/** 用于只读快照：读取期间新发起的用户播放优先于那份旧快照。 */
+export const playRequestsSoFar = (): number => playsStarted;
 let playsDropped = 0;
 /** How often a song was asked for. The key cannot tell two asks for the same song apart; this can. */
 let asks = 0;

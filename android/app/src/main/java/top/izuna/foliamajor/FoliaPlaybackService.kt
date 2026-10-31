@@ -20,6 +20,9 @@ import androidx.core.app.NotificationCompat
 
 import top.izuna.foliamajor.coloros.ColorOsLyricBridge
 import top.izuna.foliamajor.player.NativeLoopMode
+import top.izuna.foliamajor.player.NativeLyricPresentation
+import top.izuna.foliamajor.player.NativeLyricsCache
+import top.izuna.foliamajor.player.NativeMirrorGuard
 import top.izuna.foliamajor.player.NativePlayQueue
 import top.izuna.foliamajor.player.NativeQueueEntry
 
@@ -78,13 +81,8 @@ class FoliaPlaybackService : android.app.Service() {
     // WebView 冻结时通知栏那颗心按它直接对各平台补写收藏（见 scheduleLikeFallback）。
     private var cachedProviderId = ""
     private var cachedServerSongId = ""
-    /**
-     * 原生兜底切歌的「真源」：镜像换源之后 JS 醒来第一份 metadata 推的还是它自己的
-     * 旧歌 —— 收下它通知栏就会弹回旧歌（「一打开 app 全部恢复原样」）。守卫期间
-     * 别的歌不收，同时发 syncTo 叫 JS 把队列跳到原生正在放这首；它推来同一首时解除。
-     */
-    @Volatile
-    private var nativeSkipSongKey: String? = null
+    /** 原生兜底切歌拉到（或确认没有）的当前歌词，getQueueState 的快照读它。 */
+    private val nativeLyrics = NativeLyricsCache()
     /** 原生红心兜底在途标记：同一时刻只允许一发，连点两下不会发出两个相反的写入。 */
     @Volatile
     private var likeFallbackInFlight = false
@@ -473,41 +471,42 @@ class FoliaPlaybackService : android.app.Service() {
                     ACTION_UPDATE_METADATA -> updateMetadata(intent)
                     ACTION_UPDATE_STATE -> updatePlaybackState(intent)
                     ACTION_UPDATE_QUEUE_MIRROR -> {
-                        mirroredQueueJson = intent.getStringExtra(EXTRA_QUEUE_MIRROR_JSON)
-                        mirroredIndex = intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
+                        val incomingQueue = intent.getStringExtra(EXTRA_QUEUE_MIRROR_JSON)
+                        val incomingIndex = intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
                         /*
-                         * 镜像变了，队列状态机也要跟上 —— 否则「插歌 / 删歌之后原生还按
-                         * 旧队列推进」。用 syncEntries 而不是 replace：镜像 effect 会因为
-                         * 各种无关的重渲染反复推同一份队列，replace 会把下标重置到队首，
-                         * 那就变成「莫名其妙跳回第一首」。能对上当前这首就保下标。
+                         * 队列状态机用 syncEntries 跟上（replace 会把下标重置到队首）。
+                         * 原生有明确媒体身份时游标只按它定位；没有才认前台下标（冷启动）。
                          */
-                        val entries = NativeQueueEntry.fromArray(mirroredQueueJson)
+                        val entries = NativeQueueEntry.fromArray(incomingQueue)
                         if (entries.isNotEmpty()) {
-                            // 冷启动时状态机是空的，syncEntries 没有「同一首歌」可保留，
-                            // 只会给下标 0；而前台推来的 index 才是真正正播的那一首。
-                            // 空手上任时按前台说的来 —— 否则 getQueueState().index 一直是
-                            // 队首，前台照着它恢复/播放，就会出现「声音和界面不是同一首」
-                            // （用户报的「刚启动直接播放」那条）。
-                            val hadCurrent = playQueue.current() != null
-                            playQueue.syncEntries(entries)
-                            if (!hadCurrent && mirroredIndex in entries.indices) {
-                                playQueue.seekTo(mirroredIndex)
+                            // 引擎没带 songKey（Web 装源没给身份）时为空串：那一档不拦前台下标。
+                            val nativeKey = top.izuna.foliamajor.player.FoliaNativePlayerPlugin
+                                    .mediaSnapshot()?.songKey ?: ""
+                            val target = NativeMirrorGuard.mirrorIndex(entries.map { it.songKey }, nativeKey,
+                                    nativeKey.isNotEmpty(), incomingIndex)
+                            // 旧队列连当前媒体都没有时拒绝整份同步；显式点歌仍走 playFromQueue。
+                            if (nativeKey.isEmpty() || target >= 0) {
+                                val hadCurrent = playQueue.current() != null
+                                playQueue.syncEntries(entries)
+                                if (target >= 0 && (nativeKey.isNotEmpty() || !hadCurrent)) playQueue.seekTo(target)
+                                mirroredQueueJson = incomingQueue
+                                mirroredIndex = playQueue.currentIndex()
+                                playQueue.bumpRevision()
                             }
-                            playQueue.bumpRevision()
                         }
                     }
                     ACTION_UPDATE_QUEUE_INDEX -> {
                         // 队列本体不变、只是换了一首正播的：轻量更新游标。全量队列一推
-                        // 几百 KB，不能跟着切歌一起反复过桥。
-                        //
-                        // 游标要**同时**写进状态机：getQueueState().index 读的是 playQueue
-                        // 的下标，只改 mirroredIndex 的话前台拿到的「当前是第几首」永远停在
-                        // 旧值（冷启动时是队首）。原生刚切过歌、前台还没认领时不写 ——
-                        // 那条路上原生才是真源，别被前台的旧值拽回去。
+                        // 几百 KB，不能跟着切歌一起反复过桥。原生有明确媒体身份时不收 ——
+                        // 前台可能还在推旧歌的游标，别把原生当前这首拽回去。
                         val nextIndex = intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
-                        mirroredIndex = nextIndex
-                        if (nextIndex >= 0 && nativeSkipSongKey.isNullOrEmpty()) {
-                            playQueue.seekTo(nextIndex)?.let { playQueue.bumpRevision() }
+                        val nativeKey = top.izuna.foliamajor.player.FoliaNativePlayerPlugin
+                                .mediaSnapshot()?.songKey ?: ""
+                        if (NativeMirrorGuard.acceptsQueueIndex(nativeKey.isNotEmpty())) {
+                            mirroredIndex = nextIndex
+                            if (nextIndex >= 0) {
+                                playQueue.seekTo(nextIndex)?.let { playQueue.bumpRevision() }
+                            }
                         }
                     }
                     ACTION_SCHEDULE_LIKE_FALLBACK -> {
@@ -657,8 +656,8 @@ class FoliaPlaybackService : android.app.Service() {
      *   · 还有下一首 → 换源继续（地址没预取到就向平台要，见 resolveMirrorEntryAsync）；
      *   · 顺序播放走到头 → 停在那儿，不假装还有歌。
      *
-     * 仍然会广播一条 "next" 给 JS：JS 活着时收到它可以把界面上的当前曲目跟上，但
-     * **它不再决定播什么**，收到只是渲染。JS 不在场也没有损失。
+     * 界面由 nativePlayMirrorEntry 装的 syncTo 跟上，不再额外广播 "next" ——
+     * 那条会让 JS 的播放链跟原生抢同一首歌（#106）。
      */
     fun onTrackFinished() {
         /*
@@ -748,9 +747,9 @@ class FoliaPlaybackService : android.app.Service() {
             playQueue.all().forEach { put(it.toJson()) }
         }.toString()
         mirroredIndex = playQueue.currentIndex()
+        // 装源成功后 nativePlayMirrorEntry 自己会发 syncTo 让 JS 跟上；
+        // 这里再发 "next" 会让 JS 那条播放链跟原生抢同一首歌（#106）。
         playQueueEntry(next)
-        // JS 在场就让它把界面跟上；不在场无所谓。
-        sendCommand("next")
     }
 
     /**
@@ -1421,8 +1420,8 @@ class FoliaPlaybackService : android.app.Service() {
             cachedCanLike = false
             cachedProviderId = ""
             cachedServerSongId = ""
-            // 真源守卫：JS 醒来推的还是旧歌时不许覆盖这里的结果（见 updateMetadata）。
-            nativeSkipSongKey = songKey
+            // 上一首的歌词立刻作废：拉不到也要留个显式空结果给快照。
+            nativeLyrics.clear(songKey)
             /*
              * 界面认领也**主动**发一份，不等 JS 自己推 metadata 时被守卫拦下再补。
              * 通知栏切歌常常就发生在用户盯着 App 的时候 —— 守卫那条路要等 JS 恰好
@@ -1501,6 +1500,9 @@ class FoliaPlaybackService : android.app.Service() {
             }
         }
         if (songChanged) {
+            // 换歌先把上一首的时间轴清掉：拉不到词时也不能让壁纸继续唱旧歌。
+            NativeLyricPresentation.clear(this, songKey, cachedSongKey, cachedTitle,
+                    cachedArtist, cachedDurationMs, cachedPlaying)
             fetchLyricForNativePlayback(songKey,
                     if (entryProvider.isEmpty()) cachedProviderId else entryProvider,
                     if (entrySongId.isEmpty()) cachedServerSongId else entrySongId,
@@ -1512,17 +1514,13 @@ class FoliaPlaybackService : android.app.Service() {
     }
 
     /**
-     * 原生兜底切歌之后把这首歌的歌词拉回来直接喂给壁纸。
-     *
-     * WebView 冻结时 Web 那条「换歌推整条时间轴」不会来，壁纸与叠层就停在上一首的
-     * 歌词与封面上（用户报的「下一首歌词不会拉、壁纸封面歌词都不改」）。这里用原生
-     * 平台网关（MusicGateway）向平台要 LRC，解成时间轴就地发布 —— 覆盖范围与取流
-     * 地址一致：网易与 QQ。纯音乐 / 拉不到就保持原状（壁纸继续放上一首的歌词，
-     * 总比清空成黑屏好）。
+     * 原生兜底切歌之后把这首的歌词拉回来喂给壁纸；拉不到 / 纯音乐也落显式空结果，
+     * 快照与桌面歌词都不会继续用上一首的词（#106）。
      */
     private fun fetchLyricForNativePlayback(songKey: String, providerId: String, songId: String,
                                             mid: String, hash: String, durationMs: Long) {
         if (providerId.isEmpty() || (songId.isEmpty() && mid.isEmpty() && hash.isEmpty())) {
+            nativeLyrics.store(songKey, "", "")
             return
         }
         val title = cachedTitle
@@ -1531,28 +1529,32 @@ class FoliaPlaybackService : android.app.Service() {
         Thread({
             val lyric =
                     top.izuna.foliamajor.online.MusicGateway.fetchLyric(providerId, songId, mid, hash)
-            if (lyric == null || lyric.mainLrc.isEmpty()) {
-                return@Thread
-            }
-            val lines = top.izuna.foliamajor.online.MusicGateway.parseLrc(lyric.mainLrc, lyric.transLrc)
-            if (lines.isEmpty()) {
-                return@Thread
-            }
-            // 解析这一趟网络的时间里可能又切了一首：只认还在放的那首。
-            if (songKey != cachedSongKey) {
-                return@Thread
-            }
+            // 解析这一趟网络的时间里可能又切了一首：只认还在放的那首（晚到的结果丢掉）。
+            if (songKey != cachedSongKey) return@Thread
+            val mainLrc = lyric?.mainLrc ?: ""
+            val transLrc = lyric?.transLrc ?: ""
+            val lines = if (mainLrc.isEmpty()) emptyList()
+            else top.izuna.foliamajor.online.MusicGateway.parseLrc(mainLrc, transLrc)
             mainHandler.post {
                 if (songKey != cachedSongKey) return@post
+                if (lines.isEmpty()) {
+                    nativeLyrics.store(songKey, "", "")
+                    NativeLyricPresentation.clear(this, songKey, cachedSongKey, title,
+                            artist, durationMs, cachedPlaying)
+                    applyMetadata()
+                    applyPlaybackState()
+                    publishNotification()
+                    return@post
+                }
+                nativeLyrics.store(songKey, mainLrc, transLrc)
+                NativeLyricPresentation.publishColorOs(this, nativeLyrics.snapshot(songKey), title, artist, cachedAlbum, durationMs)
                 top.izuna.foliamajor.wallpaper.WallpaperLyricsState.publishNativeTrack(
-                        title, artist, artworkUrl, durationMs,
-                        lines.toTypedArray())
+                        title, artist, artworkUrl, durationMs, lines.toTypedArray())
                 // 同一份歌词也要给播放页：以前只喂了桌面歌词，播放页靠 JS 自己再拉一次，
                 // 而那次拉取挂在 currentSong 的 React effect 上 —— 原生派发的点歌绕过了
                 // 它，于是「歌词停在上一个歌单那首，要等下一首才翻」。
-                //
-                // 现在原生拉到什么就推什么，前台只按 songKey 认领并渲染，不自己判断该不该拉。
-                FoliaPlaybackPlugin.dispatchLyrics(songKey, lyric.mainLrc, lyric.transLrc)
+                FoliaPlaybackPlugin.dispatchLyrics(songKey, mainLrc, transLrc)
+                applyMetadata()
             }
         }, "folia-native-lyric").start()
     }
@@ -1653,26 +1655,14 @@ class FoliaPlaybackService : android.app.Service() {
 
     private fun updateMetadata(intent: Intent) {
         /*
-         * 原生兜底切歌的真源守卫。
+         * 原生兜底切歌的真源守卫（#106）：引擎装的是哪首只看 mediaId。
          *
-         * WebView 冻结期间原生用镜像换过源之后，JS 醒来第一份 metadata 推的还是它
-         * 自己那份旧歌 —— 收下它，通知栏就弹回旧歌，原生正在放的歌反而没了名分
-         * （用户说的「一打开 app 立马恢复全部」）。JS 认领（推来同一首）之前别的歌
-         * 一概不收，同时发 syncTo 叫它把队列跳过来。代价：守卫期内用户在 App 里点的
-         * 别的歌也会被拽回来一次（窗口只有 JS 醒来到第一份推送之间那几秒），
-         * 但「通知栏与实际播放对不上」比这个难受得多。
+         * 只要引擎有明确媒体身份，songKey 对不上的 metadata 一概不收并持续发 syncTo
+         * 叫 JS 认领（不是只挡一次）；引擎没带 songKey（Web 装源没给身份）时不拦。
          */
-        if (!nativeSkipSongKey.isNullOrEmpty()) {
-            val incomingKey = intent.getStringExtra(EXTRA_SONG_KEY)
-            if (incomingKey != null && !incomingKey.isEmpty()) {
-                if (incomingKey == nativeSkipSongKey) {
-                    nativeSkipSongKey = null // JS 认领了，恢复正常通道。
-                } else {
-                    sendCommand("syncTo", 0L, nativeSkipSongKey)
-                    return // 旧歌不收：缓存不动，lastMetadataAtMs 也不前进。
-                }
-            }
-        }
+        val incomingKey = intent.getStringExtra(EXTRA_SONG_KEY)
+        val nativeKey = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()?.songKey ?: ""
+        if (NativeMirrorGuard.rejectsMetadata(nativeKey, incomingKey)) return
         // JS 回话了：skip 的确认计时器看到这个时间戳变化就会收手，不再用镜像兜底。
         lastMetadataAtMs = android.os.SystemClock.elapsedRealtime()
         val title = intent.getStringExtra(EXTRA_TITLE)
@@ -1682,7 +1672,7 @@ class FoliaPlaybackService : android.app.Service() {
         val artworkUrl = intent.getStringExtra(EXTRA_ARTWORK_URL)
         val durationMs = intent.getLongExtra(EXTRA_DURATION, 0L)
         val providerBadge = intent.getStringExtra(EXTRA_PROVIDER_BADGE)
-        val songKey = intent.getStringExtra(EXTRA_SONG_KEY)
+        val songKey = incomingKey
         if (providerBadge != null) {
             cachedBadgeRes = providerIconRes(providerBadge)
         }
@@ -1709,6 +1699,8 @@ class FoliaPlaybackService : android.app.Service() {
             // 也不能拿着上一首的 id 去给新歌写收藏。
             cachedProviderId = ""
             cachedServerSongId = ""
+            // 原生兜底那一路的歌词缓存也只属于上一首。
+            nativeLyrics.clear(songKey)
         }
 
         // 「喜欢」与否跟着 metadata 一起到：它是当前歌曲的属性，不是播放状态。
@@ -1839,16 +1831,16 @@ class FoliaPlaybackService : android.app.Service() {
 
     private fun updatePlaybackState(intent: Intent) {
         val state = intent.getStringExtra(EXTRA_STATE)
-        val playing = "playing" == state
-        val positionMs = intent.getLongExtra(EXTRA_POSITION, 0L)
-        val speed = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
+        // 原生手上有媒体时以引擎为准：Web 推来的状态可能还是上一首 / 冻结前的旧值。
+        val native = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()
+        val playing = native?.playing ?: ("playing" == state)
+        val positionMs = native?.positionMs ?: intent.getLongExtra(EXTRA_POSITION, 0L)
+        val speed = native?.speed ?: intent.getFloatExtra(EXTRA_SPEED, 1.0f)
 
-        val compatState = if ("playing" == state) {
-            PlaybackStateCompat.STATE_PLAYING
-        } else if ("paused" == state) {
-            PlaybackStateCompat.STATE_PAUSED
-        } else {
-            PlaybackStateCompat.STATE_STOPPED
+        val compatState = when {
+            playing -> PlaybackStateCompat.STATE_PLAYING
+            native != null || "paused" == state -> PlaybackStateCompat.STATE_PAUSED
+            else -> PlaybackStateCompat.STATE_STOPPED
         }
 
         cachedState = compatState
@@ -1916,6 +1908,32 @@ class FoliaPlaybackService : android.app.Service() {
         if (mediaSession != null) {
             mediaSession?.setPlaybackState(builder.build())
         }
+    }
+
+    /** getQueueState 读快照前重建 metadata / PlaybackState / 通知；不碰播放器、不起服务、不发命令。 */
+    fun refreshForSnapshot() {
+        top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()?.let {
+            if (it.songKey.isNotEmpty() && it.songKey != cachedSongKey) {
+                playQueue.all().find { entry -> entry.songKey == it.songKey }?.let { entry ->
+                    cachedSongKey = entry.songKey; cachedTitle = entry.title
+                    cachedArtist = entry.artist; cachedAlbum = entry.album
+                    cachedProviderId = entry.providerId; cachedServerSongId = entry.songId
+                    cachedLiked = false; cachedCanLike = false
+                    cachedArtwork = null; pendingArtworkUrl = null
+                    mirroredIndex = playQueue.all().indexOf(entry); playQueue.seekTo(mirroredIndex)
+                    if (entry.coverUrl.isNotEmpty()) { pendingArtworkUrl = entry.coverUrl; fetchArtwork(entry.coverUrl) }
+                    nativeLyrics.clear(entry.songKey)
+                }
+            }
+            cachedPositionMs = it.positionMs
+            cachedDurationMs = it.durationMs
+            cachedSpeed = it.speed
+            cachedPlaying = it.playing
+            cachedState = if (it.playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        }
+        applyMetadata()
+        applyPlaybackState()
+        publishNotification()
     }
 
     private fun translationActionIcon(): Int {
@@ -2244,6 +2262,8 @@ class FoliaPlaybackService : android.app.Service() {
                 out.put("providerId", service.cachedProviderId)
                 out.put("serverSongId", service.cachedServerSongId)
                 out.put("artworkUrl", service.pendingArtworkUrl ?: "")
+                // nativeMedia / lyrics 只在真有值时才带（歌词拉完才给，空串也算拉完）。
+                NativeLyricPresentation.attach(out, service.nativeLyrics, service.cachedSongKey)
             }
             return out
         }

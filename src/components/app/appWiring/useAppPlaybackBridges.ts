@@ -40,7 +40,9 @@ import { useRef, useCallback } from 'react';
 import type { SongResult } from '../../../types';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { useSongThemeFollow } from '../../../hooks/useSongThemeFollow';
-import { readNativeQueueState } from '../../../services/nativeQueueBridge';
+import { readNativeQueueState, type NativeQueueState } from '../../../services/nativeQueueBridge';
+import { adoptNativePlaybackState } from '../playback/restore/adoptNativePlaybackState';
+import { toLyricData } from '../../../hooks/useNativeLyricsSubscription';
 import { songFromMirrorEntry } from '../../../utils/queueMirrorEntry';
 
 // src/components/app/appWiring/useAppPlaybackBridges.ts
@@ -214,6 +216,17 @@ export const useAppPlaybackBridges = (model: Input) => {
     // 而且它会随下一次元数据推送自己纠正回来。
     const nativeSongLiked = resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
     const nativeCanLikeSong = !resolveLikeAvailability(displaySong, false, isNowPlayingStageActive).disabled;
+    const claimNativeSnapshot = (snapshot: NativeQueueState): boolean => {
+        const claimed = adoptNativePlaybackState(snapshot);
+        if (claimed) {
+            shouldAutoPlay.current = false;
+            if (snapshot.nativeMedia) nativeTakesRef.current = true;
+            if (snapshot.lyrics?.songKey === snapshot.songKey) {
+                setLyricsStable(toLyricData(snapshot.lyrics.lrc, snapshot.lyrics.translated));
+            }
+        }
+        return claimed;
+    };
     useCapacitorPlaybackBridge({
         currentSong: displaySong,
         cachedCoverUrl: displayCoverUrl ?? cachedCoverUrl,
@@ -239,97 +252,12 @@ export const useAppPlaybackBridges = (model: Input) => {
         // 原生通知栏切歌之后界面永远停在旧歌上（syncTo 没人接），下一首/上一首
         // 表现为「按了没反应」；解析失败的黑名单回执（nativePlayFailed）同样
         // 没人收，失败的歌每按一次都再撞一次原生。这里按原语义接回来。
-        onSyncToSong: (songKey, positionMs) => {
-            const state = usePlaybackStore.getState();
-            /*
-             * 队列也要对齐：WebView 冻结期间原生可能自动跳过了放不了的歌、随机挑了
-             * 格、通知栏切了歌 —— 它的 playQueue 换过下标甚至内容。只认领 currentSong
-             * 不认领队列的话，用户回来看到的还是旧队列：点「下一首」会跳回冻结前的
-             * 位置，列表顺序也是错的。拉一次整份状态，队列与下标一起摆正。
-             */
-            void (async () => {
-                const native = await readNativeQueueState();
-                if (!native || native.revision === 0) return;
-                const shown = usePlaybackStore.getState().playQueue;
-                const nativeKeys = native.entries.map(entry => entry.songKey).join('|');
-                const shownKeys = shown.map(item => getPlaybackSongKey(item)).join('|');
-                if (nativeKeys === shownKeys) return;
-                usePlaybackStore.getState().setPlayQueue(
-                    native.entries.map(entry => songFromMirrorEntry(entry)),
-                );
-            })();
-            const shown = state.currentSong;
-            if (shown && getPlaybackSongKey(shown) === songKey) {
-                // key 相等也要补齐：乐观 setCurrentSong 之后的 syncTo、以及 WebView
-                // 冻结期间原生一直在放的启动快照认领都走这里 —— 界面得跟上。
-                if (positionMs && positionMs > 0) currentTime.set(positionMs / 1000);
-                if (state.playerState !== PlayerState.PLAYING) setPlayerStateInStore(PlayerState.PLAYING);
-                return true;
-            }
-            const song = state.playQueue.find((item) => getPlaybackSongKey(item) === songKey);
-            if (!song) return false;
-            /*
-             * 原生正在放这首：只把**界面**认领过去，绝不走 playSong —— 它会重新
-             * 解析地址并换 audioSrc，那条 effect 会把原生刚切好的歌重新 prepare
-             * 一遍、从头再放（两头打架）。界面认领不动 audioSrc：原生播放器手里
-             * 的源就是真源，Web 这边只跟进显示（歌词/封面由 currentSong 的
-             * effect 自己去拉）。
-             */
-            if (nativeTakesRef.current) {
-                makeSongCurrent(song);
-                if (positionMs && positionMs > 0) currentTime.set(positionMs / 1000);
-                const candidate = song as SongResult & { duration?: number; durationMs?: number };
-                const ms = candidate.durationMs ?? candidate.duration;
-                if (typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
-                    setDurationInStore(ms > 0 && ms < 1000 ? ms : ms / 1000);
-                }
-                // 原生切歌（nativePlayMirrorEntry）是直接起播的，界面对齐成在播。
-                setPlayerStateInStore(PlayerState.PLAYING);
-                void persistPlaybackCache(song, state.playQueue);
-                /*
-                 * 歌词跟着认领走：原生的 UI-only 认领**不经过 playSong**，而歌词的
-                 * 加载在 playSong 那条链里 —— 不补这一步，store 里躺着的就还是上一首
-                 * 的歌词。壁纸推送（useLyricsWallpaperFeed）在标题一变就整包下发，
-                 * 于是「旧歌词 + 新标题」把原生兜底刚发对的 timeline 又盖回去
-                 * （用户报的「下一首歌词还是上一首的，偶发」—— 谁后到谁赢，所以偶发）。
-                 * AI 动画导演与每歌随机动画同样盯着 currentSong / lyrics：没有这一步，
-                 * 前台服务活着时切歌它们一个都拿不到新歌词，主题与动画参数全停在旧歌上。
-                 *
-                 * 先清掉旧歌词再异步拉：清掉的那一拍壁纸短暂空窗，好过挂着别首的词。
-                 */
-                setLyricsStable(null);
-                const claimedKey = songKey;
-                void (async () => {
-                    try {
-                        await loadOnlineSongLyrics(song, null, null, {
-                            isCurrent: () => {
-                                const now = usePlaybackStore.getState().currentSong;
-                                return Boolean(now && getPlaybackSongKey(now) === claimedKey);
-                            },
-                            onLyrics: (resolved) => setLyricsStable(resolved),
-                            onDone: () => undefined,
-                        });
-                    } catch {
-                        // 拉不到（本地 / Navidrome / 平台不认）就保持空：壁纸空窗，
-                        // 原生兜底那条 publishNativeTrack 已经先发对了的场合不受影响。
-                    }
-                    /*
-                     * 主题跟着认领走：restoreCachedThemeForSong 在 playSong 那条链里，
-                     * 这里绕过了 playSong，不补这一步的话本机改过的那版 / 云缓存的主题
-                     * 就一次都不翻 —— 高亮色与动画样式停在上一个主题上（用户报的
-                     * 「拿不到 AI 主题高亮色、动画样式」）。随机动画与 AI 导演各自盯着
-                     * currentSong / lyrics，主题落定后它们自己的 effect 会接上。
-                     */
-                    try {
-                        await restoreCachedThemeForSong(song);
-                    } catch {
-                        // 主题加载失败不影响播放：保持当前主题即可。
-                    }
-                })();
-                return true;
-            }
-            void playSong(song, state.playQueue).then(() => {
-                if (positionMs && positionMs > 0) seekMainAudioRef.current(positionMs / 1000);
+        onNativeSnapshot: claimNativeSnapshot,
+        onSyncToSong: (_songKey, _positionMs, _playing) => {
+            // syncTo 可能是在冻结期间排队的旧事件：只把它当作「读当前快照」的提示，
+            // 不执行其中的旧曲目 / 位置，更不能因 nativeTakesRef 尚未恢复而 playSong。
+            void readNativeQueueState().then(snapshot => {
+                if (snapshot) claimNativeSnapshot(snapshot);
             });
             return true;
         },

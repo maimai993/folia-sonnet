@@ -22,6 +22,7 @@ export type NativePlaybackEvent = {
     positionMs?: number;
     durationMs?: number;
     message?: string;
+    songKey?: string;
 };
 
 export type NativePlaybackSnapshot = {

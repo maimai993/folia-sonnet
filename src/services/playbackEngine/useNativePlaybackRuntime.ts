@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
+import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nativePlaybackSync';
 import type { MutableRefObject } from 'react';
 import { setDuration } from '../../stores/usePlaybackStore';
 import { currentTime } from '../../stores/motionSignals';
@@ -48,11 +51,12 @@ export const useNativePlaybackRuntime = ({
     const callbacksRef = useRef({ onEnded, onError, getTargetPlaybackVolume, repeatOne });
     callbacksRef.current = { onEnded, onError, getTargetPlaybackVolume, repeatOne };
 
-    const takes = enabled && nativePlaybackEngine.supports(audioSrc);
+    const reconciling = useSyncExternalStore(subscribeNativePlaybackSync, isNativePlaybackReconciling, () => false);
+    const takes = enabled && !reconciling && nativePlaybackEngine.supports(audioSrc);
 
     // 地址 → 播放器。blob 地址（本地歌）原生吃不下，那种歌整首回落到 <audio>。
     useEffect(() => {
-        if (!enabled || !audioSrc) return;
+        if (!enabled || reconciling || isNativePlaybackReconciling() || !audioSrc) return;
         if (!nativePlaybackEngine.supports(audioSrc)) {
             // 「开关开了但这首歌还是网页在播」的全部答案都在这行日志里 —— 均衡器还能听出
             // 变化，就是因为它根本没走原生。看日志比猜快。
@@ -61,18 +65,19 @@ export const useNativePlaybackRuntime = ({
         }
         console.info('[NativePlayer] 接管这一首', audioSrc.slice(0, 24));
         nativePlaybackEngine.setRepeatMode(callbacksRef.current.repeatOne ? 1 : 0);
-        void nativePlaybackEngine.setSource(audioSrc).catch(error => {
+        const song = usePlaybackStore.getState().currentSong;
+        void nativePlaybackEngine.setSource(audioSrc, { songKey: song ? getPlaybackSongKey(song) : null }).catch(error => {
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
-    }, [audioSrc, enabled]);
+    }, [audioSrc, enabled, reconciling]);
 
     // 关掉开关、或没有歌了 → 收掉播放器，别让上一首在后台继续响。
     useEffect(() => {
-        if (!enabled) return;
+        if (!enabled || reconciling || isNativePlaybackReconciling()) return;
         if (audioSrc && nativePlaybackEngine.supports(audioSrc)) return;
         void nativePlaybackEngine.stop().catch(() => undefined);
-    }, [audioSrc, enabled]);
+    }, [audioSrc, enabled, reconciling]);
 
     // 单曲循环随时能按，不能等下一次装地址才生效（那首歌的循环会丢：ExoPlayer 还是
     // OFF，歌放完停在末尾，进度条不动；Web 那条路的 <audio>.loop 是元素属性，React
@@ -119,7 +124,7 @@ export const useNativePlaybackRuntime = ({
                     }
                     break;
                 case 'ended':
-                    callbacksRef.current.onEnded();
+                    // 原生服务已经处理 ended 并推进队列；Web 只观察，不能再次 requestSkip。
                     break;
                 case 'error':
                     console.error('[NativePlayer] player error', event.message);

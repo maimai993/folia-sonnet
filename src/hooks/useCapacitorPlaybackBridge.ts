@@ -8,6 +8,9 @@ import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackE
 import { applyNativeLikeOverrides, omni, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { buildQueueMirrorEntries, getMirrorDurationMs, resolveLikeIdentity } from '../utils/queueMirrorEntry';
+import type { NativeQueueState } from '../services/nativeQueueBridge';
+import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
+import { useNativePlaybackReconciliation } from './useNativePlaybackReconciliation';
 
 // 当前文件：把播放状态与元数据送到原生前台服务，换取通知栏媒体控制与后台网络保活。
 //
@@ -179,6 +182,7 @@ type UseCapacitorPlaybackBridgeOptions = {
    * 不认领的话，App 打开时队列还停在旧歌上，与通知栏各说各话。
    */
   onSyncToSong?: (songKey: string, positionMs?: number, playing?: boolean) => boolean | void;
+  onNativeSnapshot?: (snapshot: NativeQueueState) => boolean | Promise<boolean>;
   /**
    * 两轨合一的失败回执：原生解析这首歌的播放地址失败。调用方把歌拉黑并回退
    * Web 全流程（playSong 直通），不重试不卡住。
@@ -218,6 +222,7 @@ export const useCapacitorPlaybackBridge = ({
   currentAudioUrl,
   likeStateOf,
   onSyncToSong,
+  onNativeSnapshot,
   onNativePlayFailed,
 }: UseCapacitorPlaybackBridgeOptions): void => {
   const enabled = isCapacitorAndroid();
@@ -245,48 +250,11 @@ export const useCapacitorPlaybackBridge = ({
     };
   }, [enabled]);
 
-  // 问原生要当前的状态：原生是播放的真源。WebView 冻结期间镜像换过源、原生一直在
-  // 放，JS 醒来后不是推它自己那份旧状态，而是先拉这份快照把自己的队列与位置对齐
-  // 过去。队列的恢复（localStorage hydration）可能比这个 effect 晚：找不到歌就每
-  // 500ms 重试一次，最多 6 秒，之后放弃（没有可对齐的就算了）。
-  //
-  // ⚠️ 不只在挂载时跑：App 常驻后台、每次亮屏回前台（visibilitychange / resume /
-  // focus）都要重新拉一次快照把自己对齐过去 —— 原生在后台可能已经切了好几首歌，
-  // 只认挂载那一次的话，回到前台看到的就是旧歌（issue #106 的第二个症状）。
-  React.useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    const attempt = async (): Promise<boolean> => {
-      const snapshot = await FoliaPlayback.getPlaybackSnapshot();
-      if (cancelled || !snapshot || !snapshot.hasSong || !snapshot.songKey) return true;
-      return Boolean(callbacksRef.current.onSyncToSong?.(snapshot.songKey, snapshot.positionMs, snapshot.playing));
-    };
-    const run = async () => {
-      for (let attemptIndex = 0; attemptIndex < 12 && !cancelled; attemptIndex += 1) {
-        try {
-          if (await attempt()) return;
-        } catch {
-          // 老版本原生没有这个方法：没有可对齐的，静默放弃。
-          return;
-        }
-        await new Promise((resolveTimer) => setTimeout(resolveTimer, 500));
-      }
-    };
-    const onForeground = () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      void run();
-    };
-    void run();
-    document.addEventListener('visibilitychange', onForeground);
-    window.addEventListener('resume', onForeground);
-    window.addEventListener('focus', onForeground);
-    return () => {
-      cancelled = true;
-      document.removeEventListener('visibilitychange', onForeground);
-      window.removeEventListener('resume', onForeground);
-      window.removeEventListener('focus', onForeground);
-    };
-  }, [enabled]);
+  // 一份完整原生快照包含队列、歌曲、时钟及暂停状态；认领完成前不回写旧状态。
+  const { pending: reconciling, refresh: refreshNative } = useNativePlaybackReconciliation(snapshot => (
+    onNativeSnapshot?.(snapshot)
+      ?? Boolean(callbacksRef.current.onSyncToSong?.(snapshot.songKey, snapshot.positionMs, snapshot.playing))
+  ));
 
   // 通知栏/锁屏/耳机的控制键走这里回到 Web 层。
   React.useEffect(() => {
@@ -337,7 +305,7 @@ export const useCapacitorPlaybackBridge = ({
           // 原生兜底切歌后的认领：把队列跳到原生正在放的那首（守卫期间旧歌的
           // metadata 会被原生拒收，见 FoliaPlaybackService.updateMetadata）。
           // 原生切歌是直接起播的，所以这里不带 playing（默认视为在播）。
-          if (songKey) callbacksRef.current.onSyncToSong?.(songKey);
+          refreshNative();
           break;
         case 'nativePlayFailed':
           // 两轨合一的失败回执：原生按需解析地址失败（URL 为 null）。JS 把这首歌
@@ -369,7 +337,7 @@ export const useCapacitorPlaybackBridge = ({
   // 也不吃 WebView 冻结）。JS 抓 base64 那条路整个删了 —— 它每首歌多一趟
   // canvas 编码、多占一份桥的吞吐，而原生下载本来就更快更稳。
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || reconciling || isNativePlaybackReconciling()) return;
     if (!currentSong) {
       void FoliaPlayback.stop();
       return;
@@ -390,7 +358,7 @@ export const useCapacitorPlaybackBridge = ({
       providerId: likeIdentity.providerId || null,
       serverSongId: likeIdentity.serverSongId || null,
     });
-  }, [enabled, currentSong, cachedCoverUrl, isLiked, canLike]);
+  }, [enabled, currentSong, cachedCoverUrl, isLiked, canLike, reconciling]);
 
   // 网易 uid 推给原生：原生兜底切歌后要拉「我喜欢」名单对红心（uid 只在 Web 层的
   // 账号缓存里，cookie 里没有）。登录 / 登出（账号 store 变化）都会跟着推一遍。
@@ -438,7 +406,7 @@ export const useCapacitorPlaybackBridge = ({
   const mirrorSourceRef = React.useRef({ queue, likeStateOf, currentSong });
   mirrorSourceRef.current = { queue, likeStateOf, currentSong };
   React.useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || reconciling || isNativePlaybackReconciling()) return;
     const { queue: list, likeStateOf: stateOf, currentSong: activeSong } = mirrorSourceRef.current;
     if (!list || list.length === 0) return;
     // 飞牛的凭据要在队列之前到位：登录可能发生在插件可用之前（重启后桥晚一步），
@@ -450,15 +418,15 @@ export const useCapacitorPlaybackBridge = ({
     void FoliaPlayback.setQueueMirror({ queueJson: JSON.stringify(entries), index });
     // likeSignal 不进依赖数组的「语义」，只当「红心状态变了」的触发器用。
     // eslint 层面它确实被 effect 体间接读到，所以照实列上。
-  }, [enabled, queue, likeSignal]);
+  }, [enabled, queue, likeSignal, reconciling]);
 
   // 游标：队列没变、换了一首正播的。几百 KB 的全量 JSON 不跟着切歌过桥。
   React.useEffect(() => {
-    if (!enabled || !currentSong || !queue || queue.length === 0) return;
+    if (!enabled || reconciling || isNativePlaybackReconciling() || !currentSong || !queue || queue.length === 0) return;
     const index = queue.findIndex((song) => getPlaybackSongKey(song) === getPlaybackSongKey(currentSong));
     if (index < 0) return;
     void FoliaPlayback.setQueueMirrorIndex({ index });
-  }, [enabled, currentSong, queue]);
+  }, [enabled, currentSong, queue, reconciling]);
 
   // 播放状态：playing 时服务进入前台，这是后台网络不被节流的关键。
   //
@@ -473,6 +441,8 @@ export const useCapacitorPlaybackBridge = ({
         ? 'paused'
         : 'stopped';
     const push = () => {
+      // 原生接管时状态也归原生，不能用恢复中的 Web 播放态覆盖它。
+      if (reconciling || isNativePlaybackReconciling() || nativePlaybackEngine.ownsPlayback()) return;
       const seconds = callbacksRef.current.getCurrentTime?.() ?? 0;
       void FoliaPlayback.setState({
         state,
@@ -499,8 +469,7 @@ export const useCapacitorPlaybackBridge = ({
      * 计算（全服务只有一处读取，就是它的兜底分支）。后台节流那个顾虑同样不成立 ——
      * 它跑在原生侧，不吃 WebView 的定时器节流。
      *
-     * ⚠️ 只挡**位置**：播放 / 暂停翻转靠上面那次 `push()`（effect 依赖 playerState），
-     * 服务要认状态，那条不能省。
+     * 原生接管时播放态同样由原生状态边界刷新；Web 只在 <audio> 回落路径推送。
      */
     const timer = window.setInterval(() => {
       if (nativePlaybackEngine.ownsPlayback()) return;
@@ -547,7 +516,7 @@ export const useCapacitorPlaybackBridge = ({
         window.clearInterval(timer);
         stopFollowingEngine();
     };
-  }, [enabled, playerState, currentSong]);
+  }, [enabled, playerState, currentSong, reconciling]);
 };
 
 /**
