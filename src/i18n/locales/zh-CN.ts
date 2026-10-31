@@ -1637,7 +1637,7 @@ export default {
     "loginFeiniuFnId": "FN ID",
     "loginFeiniuFnIdPlaceholder": "例如 abcd1234",
     "loginTitleQishui": "扫码登录汽水音乐",
-    "loginNoteQishui": "打开汽水音乐 App 扫描二维码并确认登录",
+    "loginNoteQishui": "用汽水音乐 App 或抖音 App 扫描二维码并确认登录",
     "loginMethodQishuiCar": "车机协议",
     "loginMethodQishuiPhone": "手机协议",
     "loginServerUrl": "服务器地址",

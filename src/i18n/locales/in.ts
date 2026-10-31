@@ -1636,7 +1636,7 @@ export default {
     "loginFeiniuFnId": "FN ID",
     "loginFeiniuFnIdPlaceholder": "mis. abcd1234",
     "loginTitleQishui": "Pindai untuk masuk ke Qishui Music",
-    "loginNoteQishui": "Pindai kode ini dengan aplikasi Qishui Music dan konfirmasi masuk",
+    "loginNoteQishui": "Pindai kode QR dengan aplikasi Qishui Music atau Douyin, lalu konfirmasi",
     "loginMethodQishuiCar": "Protokol mobil",
     "loginMethodQishuiPhone": "Protokol ponsel",
     "loginServerUrl": "Alamat server",
