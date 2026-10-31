@@ -1,5 +1,5 @@
 import type { SongResult } from '../../../types';
-import { distrustCachedSongAudio } from '../../../services/playbackRecovery/mediaCacheGuard';
+import { distrustCachedSongAudio, isNativeMediaCacheUrl } from '../../../services/playbackRecovery/mediaCacheGuard';
 import { logOnlineFailure, mediaFailureOf, type OnlineFailure } from '../../../services/onlineMusic/failure/onlineFailureCase';
 import { getOnlineProviderIdForSong, getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { startOfAskedSong } from './currentSong';
@@ -44,13 +44,17 @@ export const handleOnlineMediaFailure = async ({
 
     // A copy from the media cache that cannot be decoded is not trusted again in this session: the
     // address is asked of the platform, past the cache.
-    const isBlob = failedSrc.startsWith('blob:');
-    if (isBlob) distrustCachedSongAudio(song);
+    //
+    // 命中私有目录里的缓存时，安卓播放拿到的是回环地址（`http://127.0.0.1:<port>/media-cache/…`），
+    // 不是 `blob:`；两种都是“这份缓存副本读不出来”，所以都要标记，否则安卓上的坏副本
+    // 既不会被绕过、也永远等不到新下载覆盖它（#157）。
+    const failedFromMediaCache = failedSrc.startsWith('blob:') || isNativeMediaCacheUrl(failedSrc);
+    if (failedFromMediaCache) distrustCachedSongAudio(song);
 
     // The retry the listener can press: the address once more (the same file may be asked for again),
     // from where it failed. Failing again, the reason is told again, with this same retry.
     const retry = (): void => {
-        void recoverOnlinePlaybackSource({ force: true, autoplay: true, resumeAt, bypassMediaCache: isBlob })
+        void recoverOnlinePlaybackSource({ force: true, autoplay: true, resumeAt, bypassMediaCache: failedFromMediaCache })
             .then(retried => {
                 if (!retried.recovered && !retried.stale) {
                     skipAfterPlaybackFailure(retried.failure ?? mediaFailure, { failedSongKey, failedStart, retry });
@@ -58,7 +62,7 @@ export const handleOnlineMediaFailure = async ({
             });
     };
 
-    const recovery = await recoverOnlinePlaybackSource({ failedSrc, resumeAt, autoplay, bypassMediaCache: isBlob });
+    const recovery = await recoverOnlinePlaybackSource({ failedSrc, resumeAt, autoplay, bypassMediaCache: failedFromMediaCache });
     if (recovery.recovered || recovery.stale) return;
     // An online song that cannot be played says why: what asking for its address again came to, or
     // else the media error's code.

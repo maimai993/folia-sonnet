@@ -21,6 +21,29 @@ export const isCacheableAudioResponse = (
     return blob.size >= MIN_CACHEABLE_AUDIO_BYTES;
 };
 
+/**
+ * 这个地址是不是安卓回环服务发出来的媒体缓存副本（`http://127.0.0.1:<port>/media-cache/<名字>`）。
+ *
+ * 命中私有目录里的缓存时，播放拿到的不是 `blob:`，而是回环地址（见 mediaCacheStore.ts 的
+ * `buildUrl` 与 onlinePlayback.ts 里 `readNativeMediaCacheUrl` 那段）。失败处理必须认得出来，
+ * 否则“缓存坏了”这件事在安卓上永远判不到，坏副本既不被绕过、也不会被新下载覆盖。
+ *
+ * 只认 `media-cache` 这一条路由：同一个回环服务还对外提供 `/remote-audio/`（远端地址代理）
+ * 与根路径，那些不是缓存副本，不能因为它们是回环地址就把缓存判成坏的。
+ */
+export const isNativeMediaCacheUrl = (value: string | null | undefined): boolean => {
+    const text = String(value ?? '');
+    if (!text) return false;
+    try {
+        const url = new URL(text);
+        if (!/^https?:$/.test(url.protocol)) return false;
+        if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return false;
+        return url.pathname.startsWith('/media-cache/');
+    } catch {
+        return false;
+    }
+};
+
 const distrustedAudioKeys = new Set<string>();
 
 /** 标记这首歌的缓存音频不可信（会话内有效）：之后的加载绕过缓存，缓存写入允许覆盖。 */
