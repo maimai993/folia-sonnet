@@ -385,7 +385,15 @@ export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
         signal: ctx.signal,
     });
     const parts = normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
-    if (!parts) throw new Error('AI 返回的内容里没有可用的主题或动画决策。');
+    if (!parts) {
+        /*
+         * 「解析成功、但没有一样能用的」和「压根不是 JSON」是两回事：前者常是模型回了
+         * 结构不对的对象（空的 theme、只有 description 之类），后者是整段说人话。
+         * 记下要的是哪一半 + 回复开头，日志里一眼能分清，不用再靠猜。
+         */
+        const head = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(`AI 返回的内容里没有可用的主题或动画决策（需要 ${ctx.requirement}）；回复开头：${head || '(空)'}`);
+    }
     return parts;
 };
 
