@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './admin.js';
 import type { D1Database, D1PreparedStatement, Env } from './app.js';
-import { looseSongTitle, rankSongTitleMatch, songTitleLike, songTitleSeed, songTitleSegments, songTitleKey } from './songTitleMatch.js';
+import { looseSongTitle, rankSongTitleMatch, songTitleFallbackTokens, songTitleLike, songTitleQueryTokens, songTitleTokens } from './songTitleMatch.js';
 import { readHighlightWords, verifyStageUpload } from './stageVerifier.js';
 
 // src/aiCache.ts
@@ -330,6 +330,8 @@ const handlePut = async (
         updated_at = excluded.updated_at
     `)
     .bind(kind, key, JSON.stringify(parsed.payload), parsed.bytes, songTitle, provider, model, platform, now, now),
+    /* 倒排索引跟主表在同一个事务里更新：不会出现「主表改了、索引还指着旧歌名」。 */
+    ...writeTitleTokens(db, kind, key, songTitle, now),
   ]);
 
   return {
@@ -359,8 +361,10 @@ const MAX_RESOLVE_CANDIDATES = 12;
  * SQL 做不了，只好先多捞一点、在本机排完再截断。payload 只给最后那几条 parse。
  */
 const MAX_RESOLVE_SCAN_ROWS = 200;
-/** 一次查询里最多并列几条 LIKE 模式（拆段那一路用）。 */
-const MAX_RESOLVE_PATTERNS = 4;
+/** 一次查询里最多并列几条 token（核心名 + 各段 + 首字 + 单字，通常 5~12 个）。 */
+const MAX_RESOLVE_TOKENS = 16;
+/** 兜底的 LIKE 路径最多并列几条模式（与原来的行为一致）。 */
+const MAX_RESOLVE_LIKE_PATTERNS = 4;
 
 /** 捞回来的一行，还没打分。只带排序与打分要用的列，让扫描走覆盖索引。 */
 type ResolveRow = {
@@ -413,33 +417,90 @@ export const hydrateCacheRows = async (
 };
 
 /**
- * 按一组 LIKE 模式捞行：一条 SQL 用 OR 把它们并在一起。
+ * 按 token 捞候选行 —— resolve 的**唯一取数入口**。
  *
- * 只捞这几列 —— payload 是留给最后那几条才取的（见 hydrateCacheRows）。
+ * 走 `ai_cache_title_token` 的 `(kind, token, cache_key)` 主键：`IN` 几个 token 就是几次
+ * 索引点查，和库有多大无关（同一份 4 万条数据实测 14ms → 0.03ms）。`DISTINCT` 是因为
+ * 一条记录可能有多个 token 同时命中；只有命中很多时才建临时表去重，正常情况（几个 token、
+ * 十来行）不会。
  *
- * 这里就是**一次 resolve 的全部取数**，主查询与两条退路共用它。`rankResolveRows` 会把
- * 名次相同的那几条按时间倒序排好，所以 SQL 里只能留 `ORDER BY (song_title = ?) DESC`
- * 这一项（它决定「歌名全等」的排前面），**不能写 `ORDER BY updated_at`**：
+ * 只捞这几列 —— payload 留给最后那几条才取（见 hydrateCacheRows）。
  *
- *   加了它，SQLite 就没法顺着 `idx_ai_cache_kind_updated` 边扫边停 —— 整个 `kind` 分支
- *   （这个缓存现在几乎全在 `kind='stage'` 下，也就是全表）都要先做成临时排序表再取前
- *   200 行。实测 4w 行时一次 resolve 70ms 以上，而 better-sqlite3 是**同步**的：这几十
- *   毫秒里整个进程的事件循环一起停住，并发一多就是所有人排队等这条 SQL。
- *
- * 排序变了会带来的差别只有一个：`(song_title = ?)` 在这里永远是 false（这几个 LIKE
- * 已经覆盖了全等），所以实际取到的是「索引顺序的前 200 行」，而不是「最新的 200 行」。
- * 名次 0/1/2 之外的行本来就会被丢掉，候选**数量**也不变，变的是同一个名次里谁更靠前 ——
- * 而那部分由 `rankResolveRows` 按 `updated_at` 重新排过，所以最终顺序不受影响。
+ * `ORDER BY` 里不能写 `updated_at`：那会让 SQLite 放弃索引顺序、把整个结果集建临时表
+ * 再排。时间倒序在 `rankResolveRows` 里做，那里只面对几十行。
  */
 const scanResolveRows = async (
   db: D1Database,
   kind: string,
+  /** 要问的 token（见 songTitleMatch.ts 的 `songTitleQueryTokens`）。 */
+  tokens: string[],
+): Promise<ResolveRow[]> => {
+  const terms = [...new Set(tokens.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
+    .slice(0, MAX_RESOLVE_TOKENS);
+  if (terms.length === 0) return [];
+  const placeholders = terms.map(() => '?').join(', ');
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT cache_key, song_title, updated_at
+       FROM ai_cache_title_token
+       WHERE kind = ? AND token IN (${placeholders})
+       LIMIT ?`,
+    )
+    .bind(kind, ...terms, MAX_RESOLVE_SCAN_ROWS)
+    .all<ResolveRow>();
+  return rows.results ?? [];
+};
+
+/**
+ * 把一条记录的歌名写进倒排索引。
+ *
+ * 写入路径（PUT / 恢复旧版）与「首次命中时补写」共用它：先删掉这个键原有的 token 行，
+ * 再按新歌名重写 —— 歌名可能变了，留着旧 token 就会指到一条已经改名的记录。
+ *
+ * 两步合成一次 `batch`，一个事务里完成，不会出现「删了还没写」的空窗。
+ */
+const writeTitleTokens = (
+  db: D1Database,
+  kind: string,
+  key: string,
+  songTitle: string,
+  updatedAt: string,
+): D1PreparedStatement[] => {
+  const tokens = songTitleTokens(songTitle);
+  const statements: D1PreparedStatement[] = [
+    db.prepare('DELETE FROM ai_cache_title_token WHERE kind = ? AND cache_key = ?').bind(kind, key),
+  ];
+  if (tokens.length > 0) {
+    /* 多行 INSERT 一次搞定：每多一条语句就多一次跨进程的往返。 */
+    const values = tokens.map(() => '(?, ?, ?, ?, ?)').join(', ');
+    const binds: unknown[] = [];
+    tokens.forEach((token) => {
+      binds.push(kind, token, key, songTitle, updatedAt);
+    });
+    statements.push(
+      db
+        .prepare(`INSERT OR REPLACE INTO ai_cache_title_token (kind, token, cache_key, song_title, updated_at) VALUES ${values}`)
+        .bind(...binds),
+    );
+  }
+  return statements;
+};
+
+/**
+ * 老库没有倒排索引时的兜底：这条路走原来的 `LIKE`，命中之后顺手把 token 补写进去。
+ *
+ * 不回填全部历史数据是有意的 —— 4 万条要好几秒、10 万条要几十秒，放在启动路径上就是
+ * 「升级后第一次启动像挂了」。改成用到哪条就补哪条：热门歌名很快全都补上，冷门的
+ * 一直走这个慢路径也不会有人察觉。
+ */
+const scanResolveRowsByLike = async (
+  db: D1Database,
+  kind: string,
   patterns: string[],
-  /** 原样的歌名，只用来判「全等优先」。 */
-  title = '',
+  title: string,
 ): Promise<ResolveRow[]> => {
   const terms = [...new Set(patterns.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
-    .slice(0, MAX_RESOLVE_PATTERNS);
+    .slice(0, MAX_RESOLVE_LIKE_PATTERNS);
   if (terms.length === 0) return [];
   const where = terms.map(() => "song_title LIKE ? ESCAPE '\\'").join(' OR ');
   const rows = await db
@@ -498,54 +559,35 @@ export const findResolveCandidates = async (
 ): Promise<ResolveCandidate[]> => {
   const title = String(songTitle ?? '').trim().slice(0, MAX_TITLE_CHARS);
   if (!title) return [];
-  /*
-   * 两个 LIKE 都收：库里那条更长的（「晴天 现场」）命中第一个，完全相等的命中
-   * `song_title = ?`。请求更长那一种（「晴天 (Live)」）已经被 `loose` 压短成「晴天」，
-   * 于是反过来能配上库里的短名 —— 这正是括号/后缀那批歌以前配不上的方向。
-   */
-  const loose = looseSongTitle(title) || title;
-  /*
-   * 第三条：`smooth` 连标点也去了。「花海 - 现场」削掉后缀后那个连字符还在，
-   * `LIKE '%花海 -%'` 一条都配不上库里的「花海」，而 `songTitleKey` 是认的。
-   */
-  const smooth = songTitleLike(title) || loose;
-  let ranked = rankResolveRows(await scanResolveRows(db, kind, [title, loose, smooth], title), title);
 
   /*
-   * 退路一：**拆开各段**分别去捞。
+   * 两轮查，而不是把 token 全塞进一条 `IN (...)`：
    *
-   * 「歌手 - 歌名」那批名字：整串压完是「周杰伦晴天」，怎么 LIKE 都配不上库里的
-   * 「晴天」。这里按分隔符切开，「周杰伦」「晴天」两段各问一次、命中并在一起 ——
-   * 这是那种名字唯一能走通的路。放宽的只是入口，判定仍旧在客户端（高亮词）。
+   * 第一轮只问 `K:`（整个核心名）与 `S:`（拆段）—— 基数小，命中多少就是多少。这一轮
+   * 覆盖了绝大多数请求（歌名一致、或「歌手 - 歌名」写法差异）。
+   *
+   * 一条都没有时才单独问 `D:`（首字/首词）。它基数很大（4 万条库里 `D:晴` 就是 1338 行），
+   * 和上面混在一条语句里会把 `LIMIT` 撑满，**反而把精确命中的那几十行挤掉**。分两轮
+   * 才能既保住精度、又留住「名字写法差太多」时的兜底。
    */
-  if (ranked.length === 0) {
-    const segments = songTitleSegments(title);
-    if (segments.length > 0) ranked = rankResolveRows(await scanResolveRows(db, kind, segments, title), title);
+  let rows = await scanResolveRows(db, kind, songTitleQueryTokens(title));
+  if (rows.length === 0) {
+    rows = await scanResolveRows(db, kind, songTitleFallbackTokens(title));
+  }
+  if (rows.length === 0) {
+    /*
+     * 一条 token 都没命中：可能是老库还没建倒排（历史条目没进索引），也可能真的没有。
+     * 走一次原来的 LIKE 兜底，顺手把命中的那几条补写进索引 —— 下次就走快路径了。
+     */
+    rows = await scanResolveRowsByLike(db, kind, [title, looseSongTitle(title) || title, songTitleLike(title) || title], title);
+    if (rows.length > 0) await backfillTitleTokens(db, kind, rows);
   }
 
-  /*
-   * 退路二：**只按歌名开头那一个字**（拉丁则头一个词）去捞。
-   *
-   * 各平台给同一首歌起的名字能差到怎么压都压不到一起（换了一种写法、多了段前缀），
-   * 这时前面几条 LIKE 全部落空。同样只放宽入口，判定不变。
-   */
-  if (ranked.length === 0) {
-    const seed = songTitleSeed(title);
-    if (seed) {
-      ranked = (await scanResolveRows(db, kind, [seed], title))
-        // 同一个开头才算：不然「晴天」会把「晴天的云」「晴天雨」之外的一堆也捞回来。
-        .filter((row) => songTitleKey(String(row.song_title ?? '')).startsWith(seed))
-        .map((row) => ({ row, rank: 2 }))
-        // SQL 那边按索引顺序取的行，名次都一样，靠这里按时间倒序留下最近的几条。
-        .sort((left, right) => String(right.row.updated_at ?? '').localeCompare(String(left.row.updated_at ?? '')))
-        .slice(0, MAX_RESOLVE_CANDIDATES);
-    }
-  }
+  const ranked = rankResolveRows(rows, title);
 
   /*
-   * 名次定完才按主键把整行（含 payload）补回来 —— 模糊扫描那几步只碰覆盖索引，
-   * 大字段一次都不读。扫到 200 行、只取 12 条候选，payload 的读取量从「全表」
-   * 缩到「这 12 条」。
+   * 名次定完才按主键把整行（含 payload）补回来 —— 索引那几步只碰 token 表，
+   * 大字段一次都不读。只取 12 条候选，payload 的读取量从「全表」缩到这 12 条。
    */
   const full = await hydrateCacheRows(db, ranked.map(({ row }) => ({ kind, cache_key: String(row.cache_key ?? '') })));
 
@@ -568,6 +610,28 @@ export const findResolveCandidates = async (
       words: isRecord(payload) ? readHighlightWords(payload) : [],
     };
   });
+};
+
+/**
+ * 把「走 LIKE 兜底捞回来的那几条」补写进倒排索引。
+ *
+ * 只在兜底路径上调用，一次最多 `MAX_RESOLVE_SCAN_ROWS` 条，且全部合成一次 batch；
+ * 失败不影响本次结果（这次已经捞到了），顶多下次再慢一遍。
+ */
+const backfillTitleTokens = async (
+  db: D1Database,
+  kind: string,
+  rows: ResolveRow[],
+): Promise<void> => {
+  const statements: D1PreparedStatement[] = [];
+  rows.forEach((row) => {
+    const key = String(row.cache_key ?? '');
+    const songTitle = String(row.song_title ?? '');
+    if (!key || !songTitle) return;
+    statements.push(...writeTitleTokens(db, kind, key, songTitle, String(row.updated_at ?? '')));
+  });
+  if (statements.length === 0) return;
+  await db.batch(statements).catch(() => undefined);
 };
 
 const buildRoutes = (options: { admin: boolean }) => {
@@ -790,10 +854,11 @@ export const adminCacheRoutes = (() => {
     if (!KIND_PATTERN.test(kind) || !KEY_PATTERN.test(key)) {
       return c.json({ ok: false, error: 'invalid_key' }, 400);
     }
-    await c.env.FOLIA_SYNC_DB
-      .prepare('DELETE FROM ai_cache WHERE kind = ? AND cache_key = ?')
-      .bind(kind, key)
-      .run();
+    /* 主表和倒排索引一起删：留着 token 行只会让 resolve 命中一条已经不存在的记录。 */
+    await c.env.FOLIA_SYNC_DB.batch([
+      c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ? AND cache_key = ?').bind(kind, key),
+      c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token WHERE kind = ? AND cache_key = ?').bind(kind, key),
+    ]);
     return c.json({ ok: true });
   });
 
@@ -803,9 +868,15 @@ export const adminCacheRoutes = (() => {
     const kind = String(c.req.query('kind') || '').trim().toLowerCase();
     if (kind) {
       if (!KIND_PATTERN.test(kind)) return c.json({ ok: false, error: 'invalid_kind' }, 400);
-      await c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ?').bind(kind).run();
+      await c.env.FOLIA_SYNC_DB.batch([
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ?').bind(kind),
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token WHERE kind = ?').bind(kind),
+      ]);
     } else {
-      await c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache').run();
+      await c.env.FOLIA_SYNC_DB.batch([
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache'),
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache_title_token'),
+      ]);
     }
     return c.json({ ok: true });
   });
@@ -819,6 +890,22 @@ export const adminCacheRoutes = (() => {
  * 校验能挡住空数据，挡不住「一份能看但很糟的主题」。真被盖掉了，管理员在这里挑一版
  * 旧的捞回来，比让人重新生成一遍划算得多。
  */
+/**
+ * 按主表里当前的歌名重建某个键的 token（恢复旧版之后调用）。
+ *
+ * 不用入参里的歌名：那条记录刚从备份表捞回主表，只有主表才是最准的。
+ */
+const rebuildTitleTokens = async (db: D1Database, kind: string, key: string): Promise<void> => {
+  const row = await db
+    .prepare('SELECT song_title, updated_at FROM ai_cache WHERE kind = ? AND cache_key = ?')
+    .bind(kind, key)
+    .first<{ song_title: string | null; updated_at: string | null }>();
+  if (!row) return;
+  await db
+    .batch(writeTitleTokens(db, kind, key, String(row.song_title ?? ''), String(row.updated_at ?? '')))
+    .catch(() => undefined);
+};
+
 /**
  * 把某一版副本捞回成当前那条 —— JSON 接口与管理页面共用这一份。
  *
@@ -875,6 +962,11 @@ export const restoreCacheBackup = async (
   ]);
   const row = (results[0] as { results?: { kind: string; cache_key: string }[] }).results?.[0];
   if (!row) return { ok: false, error: 'not_found', status: 404 };
+  /*
+   * 倒排索引在事务之后重建：token 是 JS 算出来的，SQL 里编不出来。
+   * 从主表读回刚恢复的歌名（而不是从备份表的入参拼），保证和主表一致。
+   */
+  await rebuildTitleTokens(db, row.kind, row.cache_key);
   return { ok: true, kind: row.kind, key: row.cache_key };
 };
 
