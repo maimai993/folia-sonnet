@@ -199,7 +199,20 @@ const initializeSchema = async (db: D1Database) => {
     `),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_font_market_enabled ON font_market(enabled)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_updated_at ON ai_cache(updated_at)'),
+    /*
+     * 命中流水只按时间读、也只按时间清（「最近 N 分钟」、24 小时分桶、七天前的那一批），
+     * 而这里**原来从没建过 `at` 上的索引** —— 于是每一条这样的查询都是整表扫。
+     * 命中一多，流水表就是这个库里长得最快的一张：20w 行时一条 `DELETE ... WHERE at <`
+     * 要扫 56ms，每小时一次，每次都把整个进程的事件循环按在地上。
+     */
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_hits_at ON ai_cache_hits(at)'),
+    /*
+     * 管理列表的排序入口：`kind` 在最前面，带 kind 筛选时 SQL 能顺着索引取够一页就停。
+     * 覆盖索引 `idx_ai_cache_kind_updated` 管的是「某个 kind 下按时间 + 只取几列」，
+     * 而管理列表要的是整行的元数据列，用不上它；没有这条索引时带 kind 的列表会把
+     * 整个 kind 分支取回来再排（实测 4w 行 339ms）。
+     */
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_kind_updated_at ON ai_cache(kind, updated_at)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_backups_key ON ai_cache_backups(kind, cache_key, archived_at)'),
     /*
      * 覆盖索引一：按 (kind, updated_at) 排序/扫描的入口 —— 访客检索页、管理列表、
@@ -210,9 +223,9 @@ const initializeSchema = async (db: D1Database) => {
      */
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_kind_updated ON ai_cache(kind, updated_at, song_title, cache_key)'),
     /*
-     * 覆盖索引二：/songs 的 `GROUP BY song_title` + `COUNT(DISTINCT song_title)`。
+     * 覆盖索引二：/songs 的 `GROUP BY song_title`。
      * SELECT 里要的每一列（updated_at/hits/cache_key/platform）都在索引里，
-     * 分组与聚合全程只扫索引，不碰大字段。
+     * 分组与聚合全程只扫索引，不碰大字段；按 `song_title` 排序时也能顺着它取够一页就停。
      */
   ]);
 

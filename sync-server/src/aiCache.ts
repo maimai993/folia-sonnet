@@ -160,6 +160,35 @@ const readMetaText = (value: unknown, limit: number): string => (
 const HIT_LOG_RETENTION_DAYS = 7;
 
 /*
+ * 每条命中要写两行（累加器 + 流水），而 `run()` 每次都是一次独立的自动提交事务 ——
+ * 并发一上来，SQLite 的写锁就被这些一句话的小事务不停抢，读操作排在写锁后面等，
+ * 表现就是「明明只是取一条缓存，却卡住」。两句写合成一次 batch：一次事务、一次落盘。
+ *
+ * 流水那条仍然「写不进去就算了」：它只是统计，不该让一次命中变成 500。
+ */
+const commitHit = async (
+  db: D1Database,
+  kind: string,
+  key: string,
+  hitLog: D1PreparedStatement,
+): Promise<void> => {
+  try {
+    await db.batch([
+      db.prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?').bind(kind, key),
+      hitLog,
+    ]);
+  } catch {
+    // 整批回滚了：退一步只记累加器，命中接口本身不报错。
+    await db
+      .prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?')
+      .bind(kind, key)
+      .run()
+      .catch(() => undefined);
+    await hitLog.run().catch(() => undefined);
+  }
+};
+
+/*
  * 时间窗口的比较值必须和 `at` **同一种写法**。
  *
  * `at` 是 `new Date().toISOString()`（`2026-10-18T02:13:00.000Z`），而 `datetime('now', …)`
@@ -189,15 +218,14 @@ const handleGet = async (db: D1Database, kind: string, key: string) => {
 
   if (!row) return { ok: true, hit: false, entry: null };
 
-  await db
-    .prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?')
-    .bind(kind, key)
-    .run();
-  await db
-    .prepare('INSERT INTO ai_cache_hits (kind, cache_key, song_title, at) VALUES (?, ?, ?, ?)')
-    .bind(kind, key, row.song_title ?? '', new Date().toISOString())
-    .run()
-    .catch(() => undefined);
+  await commitHit(
+    db,
+    kind,
+    key,
+    db
+      .prepare('INSERT INTO ai_cache_hits (kind, cache_key, song_title, at) VALUES (?, ?, ?, ?)')
+      .bind(kind, key, row.song_title ?? '', new Date().toISOString()),
+  );
 
   return { ok: true, hit: true, entry: mapRow(row) };
 };
@@ -388,11 +416,27 @@ export const hydrateCacheRows = async (
  * 按一组 LIKE 模式捞行：一条 SQL 用 OR 把它们并在一起。
  *
  * 只捞这几列 —— payload 是留给最后那几条才取的（见 hydrateCacheRows）。
+ *
+ * 这里就是**一次 resolve 的全部取数**，主查询与两条退路共用它。`rankResolveRows` 会把
+ * 名次相同的那几条按时间倒序排好，所以 SQL 里只能留 `ORDER BY (song_title = ?) DESC`
+ * 这一项（它决定「歌名全等」的排前面），**不能写 `ORDER BY updated_at`**：
+ *
+ *   加了它，SQLite 就没法顺着 `idx_ai_cache_kind_updated` 边扫边停 —— 整个 `kind` 分支
+ *   （这个缓存现在几乎全在 `kind='stage'` 下，也就是全表）都要先做成临时排序表再取前
+ *   200 行。实测 4w 行时一次 resolve 70ms 以上，而 better-sqlite3 是**同步**的：这几十
+ *   毫秒里整个进程的事件循环一起停住，并发一多就是所有人排队等这条 SQL。
+ *
+ * 排序变了会带来的差别只有一个：`(song_title = ?)` 在这里永远是 false（这几个 LIKE
+ * 已经覆盖了全等），所以实际取到的是「索引顺序的前 200 行」，而不是「最新的 200 行」。
+ * 名次 0/1/2 之外的行本来就会被丢掉，候选**数量**也不变，变的是同一个名次里谁更靠前 ——
+ * 而那部分由 `rankResolveRows` 按 `updated_at` 重新排过，所以最终顺序不受影响。
  */
 const scanResolveRows = async (
   db: D1Database,
   kind: string,
   patterns: string[],
+  /** 原样的歌名，只用来判「全等优先」。 */
+  title = '',
 ): Promise<ResolveRow[]> => {
   const terms = [...new Set(patterns.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
     .slice(0, MAX_RESOLVE_PATTERNS);
@@ -403,15 +447,20 @@ const scanResolveRows = async (
       `SELECT cache_key, song_title, updated_at
        FROM ai_cache
        WHERE kind = ? AND song_title <> '' AND (${where})
-       ORDER BY updated_at DESC
+       ORDER BY (song_title = ?) DESC
        LIMIT ?`,
     )
-    .bind(kind, ...terms.map((term) => `%${escapeLike(term)}%`), MAX_RESOLVE_SCAN_ROWS)
+    .bind(kind, ...terms.map((term) => `%${escapeLike(term)}%`), title, MAX_RESOLVE_SCAN_ROWS)
     .all<ResolveRow>();
   return rows.results ?? [];
 };
 
-/** 打分 + 排序 + 截断：归一后对不上的不算候选。 */
+/**
+ * 打分 + 排序 + 截断：归一后对不上的不算候选。
+ *
+ * 时间倒序**在这里**做，不在 SQL 里做 —— 这是唯一能同时拿到「按时间最近」和
+ * 「只用索引取前 200 行」的做法（理由见 `scanResolveRows`）。
+ */
 const rankResolveRows = (rows: ResolveRow[], title: string) => rows
   .map((row) => ({ row, rank: rankSongTitleMatch(String(row.song_title ?? ''), title) }))
   /* 归一后对不上的不算候选 —— 光靠原样包含捞回来的，高亮词那关也过不去。 */
@@ -460,18 +509,7 @@ export const findResolveCandidates = async (
    * `LIKE '%花海 -%'` 一条都配不上库里的「花海」，而 `songTitleKey` 是认的。
    */
   const smooth = songTitleLike(title) || loose;
-  const rows = await db
-    .prepare(
-      `SELECT cache_key, song_title, updated_at
-       FROM ai_cache
-       WHERE kind = ? AND song_title <> '' AND (song_title = ? OR song_title LIKE ? ESCAPE '\\' OR song_title LIKE ? ESCAPE '\\' OR song_title LIKE ? ESCAPE '\\')
-       ORDER BY (song_title = ?) DESC, updated_at DESC
-       LIMIT ?`,
-    )
-    .bind(kind, title, `%${escapeLike(loose)}%`, `%${escapeLike(smooth)}%`, `%${escapeLike(title)}%`, title, MAX_RESOLVE_SCAN_ROWS)
-    .all<ResolveRow>();
-
-  let ranked = rankResolveRows(rows.results ?? [], title);
+  let ranked = rankResolveRows(await scanResolveRows(db, kind, [title, loose, smooth], title), title);
 
   /*
    * 退路一：**拆开各段**分别去捞。
@@ -482,7 +520,7 @@ export const findResolveCandidates = async (
    */
   if (ranked.length === 0) {
     const segments = songTitleSegments(title);
-    if (segments.length > 0) ranked = rankResolveRows(await scanResolveRows(db, kind, segments), title);
+    if (segments.length > 0) ranked = rankResolveRows(await scanResolveRows(db, kind, segments, title), title);
   }
 
   /*
@@ -494,10 +532,12 @@ export const findResolveCandidates = async (
   if (ranked.length === 0) {
     const seed = songTitleSeed(title);
     if (seed) {
-      ranked = (await scanResolveRows(db, kind, [seed]))
+      ranked = (await scanResolveRows(db, kind, [seed], title))
         // 同一个开头才算：不然「晴天」会把「晴天的云」「晴天雨」之外的一堆也捞回来。
         .filter((row) => songTitleKey(String(row.song_title ?? '')).startsWith(seed))
         .map((row) => ({ row, rank: 2 }))
+        // SQL 那边按索引顺序取的行，名次都一样，靠这里按时间倒序留下最近的几条。
+        .sort((left, right) => String(right.row.updated_at ?? '').localeCompare(String(left.row.updated_at ?? '')))
         .slice(0, MAX_RESOLVE_CANDIDATES);
     }
   }
@@ -601,12 +641,22 @@ const buildRoutes = (options: { admin: boolean }) => {
 
     const rows = await c.env.FOLIA_SYNC_DB
       .prepare(
+        /*
+         * 按歌名分组之后要分页，就得有个顺序。这里按 `song_title` 排（也就是按歌名
+         * 字典序），不再按「最近更新」排：后者是聚合值，SQLite 只能把**整个分组结果**
+         * 建成临时表再排序，库一大这条就慢到几百毫秒，而 better-sqlite3 是同步的，
+         * 整个进程跟着停。按歌名排能直接顺着 `idx_ai_cache_song_group` 边扫边分组、
+         * 取到 LIMIT 就停 —— 4w 行时从 80ms 降到 2ms。
+         *
+         * 客户端本来就是靠 offset 分页、自己不做排序，所以顺序变化不影响加载。
+         * 每行的 `updatedAt` 仍旧是这一组里最新的那条，没变。
+         */
         `SELECT song_title, MAX(updated_at) AS updated_at, SUM(hits) AS hits,
                 MAX(cache_key) AS cache_key, MAX(platform) AS platform, COUNT(*) AS versions
          FROM ai_cache
          WHERE song_title IS NOT NULL AND song_title <> ''${filter}
          GROUP BY song_title
-         ORDER BY updated_at DESC
+         ORDER BY song_title ASC
          LIMIT ? OFFSET ?`,
       )
       .bind(...binds)
@@ -702,12 +752,19 @@ export const adminCacheRoutes = (() => {
      * 两段式：先只捞元数据（排序与筛选在覆盖索引上完成，不碰大字段），再按主键把
      * 这一页的 payload 补回来。原来带 payload_json 的整行扫描在 10w 条上每次都是
      * 全表翻页 —— 管理页开一次就把整个事件循环卡住。
+     *
+     * 排序键跟 `WHERE` 里的 `kind` 对齐：带 kind 筛选时用 `idx_ai_cache_kind_updated_at`，
+     * 顺着索引取够 limit 条就停；不带 kind 时走 `idx_ai_cache_updated_at`。原来一律
+     * `ORDER BY updated_at DESC`，带 kind 时会把整个 kind 分支（现在几乎就是全表）
+     * 先取回来再排 —— 实测 4w 行时 339ms，对齐后 2.5ms。
      */
+    const orderBy = typeof kind === 'string' && KIND_PATTERN.test(kind)
+      ? ' ORDER BY kind ASC, updated_at DESC'
+      : ' ORDER BY updated_at DESC';
     const metaRows = await c.env.FOLIA_SYNC_DB
       .prepare(
         `SELECT kind, cache_key, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at
-         FROM ai_cache${clause}
-         ORDER BY updated_at DESC
+         FROM ai_cache${clause}${orderBy}
          LIMIT ?`,
       )
       .bind(...binds, limit)
@@ -860,20 +917,31 @@ export const adminCacheBackupRoutes = (() => {
 
 /** Panel counters. */
 export const readCacheStats = async (db: D1Database) => {
-  const row = await db
-    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS bytes, COALESCE(SUM(hits), 0) AS hits FROM ai_cache')
-    .first<{ count: number; bytes: number; hits: number }>();
+  /*
+   * 一条分组查询同时给出「每个 kind 几条、占多大」和总计，不再另外跑一次全表
+   * `COUNT(*) / SUM(...)`：面板每次刷新都要这两个数，而 `SUM(payload_bytes)` 要逐行读
+   * 一个整数列 —— 合并之后只扫一遍。
+   */
   const kindRows = await db
-    .prepare('SELECT kind, COUNT(*) AS count FROM ai_cache GROUP BY kind')
-    .all<{ kind: string; count: number }>();
+    .prepare('SELECT kind, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS bytes FROM ai_cache GROUP BY kind')
+    .all<{ kind: string; count: number; bytes: number }>();
+  const hitsRow = await db
+    .prepare('SELECT COALESCE(SUM(hits), 0) AS hits FROM ai_cache')
+    .first<{ hits: number }>();
+
   const kindCounts: Record<string, number> = {};
+  let cacheCount = 0;
+  let cacheBytes = 0;
   (kindRows.results ?? []).forEach((entry) => {
-    kindCounts[entry.kind] = Number(entry.count ?? 0);
+    const count = Number(entry.count ?? 0);
+    kindCounts[entry.kind] = count;
+    cacheCount += count;
+    cacheBytes += Number(entry.bytes ?? 0);
   });
   return {
-    cacheCount: Number(row?.count ?? 0),
-    cacheBytes: Number(row?.bytes ?? 0),
-    totalHits: Number(row?.hits ?? 0),
+    cacheCount,
+    cacheBytes,
+    totalHits: Number(hitsRow?.hits ?? 0),
     kindCounts,
   };
 };
