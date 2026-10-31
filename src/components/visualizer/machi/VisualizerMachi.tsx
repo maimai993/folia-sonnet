@@ -57,13 +57,13 @@ const VisualizerMachi: React.FC<VisualizerMachiProps> = (props) => {
         songAlbum,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
-        /* 字幕单/双/三行布局（subtitleOverlayLayout）是另一件，还没搬过来：我们的 overlay 还没有那个
-           字段，落地之后在这里和下面 overlay 的 props 上一并补上。 */
+        /* 底部字幕的单/双/三行布局：与其它样式一致，原样转给 overlay。 */
         subtitleTheme,
         subtitleFontScale,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
+        subtitleOverlayLayout,
         onVisualizerTuningChange,
     } = props;
     const { t } = useTranslation();
@@ -268,6 +268,7 @@ const VisualizerMachi: React.FC<VisualizerMachiProps> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
                 subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                subtitleOverlayLayout={subtitleOverlayLayout}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />

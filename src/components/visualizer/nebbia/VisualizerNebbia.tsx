@@ -26,6 +26,7 @@ const VisualizerNebbia: React.FC<Props> = (props) => {
         showText = true, lyricsFontScale = 1, staticMode = false, paused = false, seed = 'nebbia', songTitle, songArtist,
         isPlayerChromeHidden = false, hideTranslationSubtitle = false,
         subtitleTheme, subtitleFontScale, subtitleOverlayOpacity, subtitleOverlayBackground, subtitleUpcomingLyricsBlur,
+        subtitleOverlayLayout,
         nebbiaTuning = DEFAULT_NEBBIA_TUNING,
     } = props;
     const { t } = useTranslation();
@@ -113,11 +114,7 @@ const VisualizerNebbia: React.FC<Props> = (props) => {
                     </div>
                 )}
             </div>
-            {/*
-                上游这里还转发 subtitleOverlayLayout（底部字幕的单/双/三行布局）。那份布局我们这一版
-                还没有，overlay 也就没有这个 prop —— 少传一个字段，字幕按老样子画；等字幕布局搬过来，
-                在这里补上即可，别的不用动。
-            */}
+            {/* 底部字幕的单/双/三行布局也一并传下去，排布由 overlay 自己算。 */}
             <VisualizerSubtitleOverlay
                 showText={showText}
                 activeLine={activeLine}
@@ -131,6 +128,7 @@ const VisualizerNebbia: React.FC<Props> = (props) => {
                 subtitleOverlayOpacity={subtitleOverlayOpacity}
                 subtitleOverlayBackground={subtitleOverlayBackground}
                 subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                subtitleOverlayLayout={subtitleOverlayLayout}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
             />

@@ -33,6 +33,12 @@ type Input =
     & AppPlaybackQueue
     & AppPlaybackBridges;
 
+/*
+ * 画面自己在横向拖动上做事情的样式：横滑切歌会跟它抢同一次拖动，这些样式里只让画面接手势。
+ * 町景的镜头就是靠横拖绕场景转的（陀螺仪适配开着时更是靠它）。
+ */
+const PLAYER_SWIPE_OWNED_VISUALIZERS = new Set<string>(['machi']);
+
 export const useAppChromeAndGestures = (model: Input) => {
     const {
         activePlaybackContext, audioSrc, autoHideCursorWithPlayerChrome, bgMode, currentSong, currentView,
@@ -58,6 +64,8 @@ export const useAppChromeAndGestures = (model: Input) => {
     });
 
     const isPlayerSwipeEnabled = currentView === 'player' && !isPanelOpen;
+    // 横滑切歌只管「换歌」这一件：画面自己吃横向拖动的样式（见 PLAYER_SWIPE_OWNED_VISUALIZERS）里不接。
+    const isPlayerSwipeSwitchingEnabled = isPlayerSwipeEnabled && !PLAYER_SWIPE_OWNED_VISUALIZERS.has(visualizerMode);
     const isPlayerDoubleTapPauseEnabled = isPlayerSwipeEnabled && !hdrProjectionActive;
 
     /*
@@ -141,7 +149,7 @@ export const useAppChromeAndGestures = (model: Input) => {
         onPointerCancel: handleSwipePointerCancel,
         consumeSuppressedClick: consumeSwipeSuppressedClick,
     } = usePlayerSwipeGesture({
-        enabled: isPlayerSwipeEnabled,
+        enabled: isPlayerSwipeSwitchingEnabled,
         onNext: handlePlayerSwipeNext,
         onPrev: handlePlayerSwipePrev,
     });
