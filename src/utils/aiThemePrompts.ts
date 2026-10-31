@@ -217,6 +217,36 @@ Expected JSON structure:
   "mode": "string (a mode id from the list)",
   "reason": "string (max 30 chars, in Chinese)",
   "params": { "<param key>": <value> }
+}
+
+Filled example — copy the SHAPE, never the values (the words, colours and mode must come from this
+song and the mode list you were given; every "params" key must exist in that mode's parameter list):
+{
+  "theme": {
+    "light": {
+      "name": "慢下来的午后",
+      "description": "褪色米黄衬赭红，像一页夹着旧车票的信纸",
+      "backgroundColor": "#F5EEE2",
+      "primaryColor": "#8C4A32",
+      "accentColor": "#B23A2B",
+      "secondaryColor": "#4A5A46",
+      "wordColors": [ { "word": "slowed", "color": "#B23A2B" }, { "word": "old", "color": "#4A5A46" } ],
+      "lyricsIcons": ["hourglass", "leaf"]
+    },
+    "dark": {
+      "name": "夜里的钟摆",
+      "description": "深夜墨蓝底，暗金指针一下一下地走",
+      "backgroundColor": "#14161C",
+      "primaryColor": "#C9A227",
+      "accentColor": "#E4C560",
+      "secondaryColor": "#5A6B7A",
+      "wordColors": [ { "word": "slowed", "color": "#E4C560" }, { "word": "old", "color": "#C9A227" } ],
+      "lyricsIcons": ["clock", "moon"]
+    }
+  },
+  "mode": "pendolo",
+  "reason": "摆锤逐渐失去动能，正合反复的「慢下来」",
+  "params": { "tickSnappiness": 1.2, "showGearDecor": "subtle" }
 }`;
 
 /** 只生成主题那一版的完整提示词（保持原有形状）。 */
