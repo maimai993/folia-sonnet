@@ -856,7 +856,17 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         override fun onPlayerError(error: PlaybackException) {
             cachedPlaying = false
             stopTicking()
-            emit("error", cachedPositionMs, cachedDurationMs, if (error == null) "unknown" else error.message)
+            /*
+             * 只交 error.message 的话，日志里只剩「Source error」这种通用文案，403 / 404 /
+             * 超时 / 解码全部长得一样（见 #152）。错误码与名字一起交出去，下一次真机日志
+             * 就能定位到具体是哪一类，再决定是重试、重取流还是换源。
+             */
+            val detail = if (error == null) {
+                "unknown"
+            } else {
+                "${error.errorCodeName}(${error.errorCode}): ${error.message}"
+            }
+            emit("error", cachedPositionMs, cachedDurationMs, detail)
         }
     }
 
