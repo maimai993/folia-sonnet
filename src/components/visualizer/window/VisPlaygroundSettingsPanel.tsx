@@ -35,6 +35,7 @@ import RandomPoolGroup from '../random/RandomPoolGroup';
 import { useRandomPool } from '../random/useRandomPool';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import SmartBeatSettingsCard from '../SmartBeatSettingsCard';
+import { isAndroidAppShell } from '../../../platform/runtime';
 import BeatEffectsGroup from '../BeatEffectsGroup';
 
 // src/components/visualizer/window/VisPlaygroundSettingsPanel.tsx
@@ -347,17 +348,21 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                                     <Row notice={missingStyleNotice} />
                                 </Group>
                             )}
-                            {/* 智能动感模式: a setting of the whole picture, above whichever style's own options. */}
-                            <SmartBeatSettingsCard t={t} />
+                            {/* 智能动感模式: a setting of the whole picture, above whichever style's own options.
+                                安卓端没做这套分析（没有 Beat This! 的桥与模型），这里不给入口。 */}
+                            {!isAndroidAppShell() && <SmartBeatSettingsCard t={t} />}
                             {/* The style's own options: kit groups, stacked as they come. */}
                             <div key={visualizerMode} className="st-page-in">
-                                {/* Its 智能动感模式 effects, each named, switched and scaled on its own. */}
-                                <BeatEffectsGroup
-                                    t={t}
-                                    effects={visualizerEntry.beatEffects}
-                                    onSliderPointerDown={onSliderPointerDown}
-                                    onSliderCommit={onSliderCommit}
-                                />
+                                {/* Its 智能动感模式 effects, each named, switched and scaled on its own.
+                                    安卓端没做这套分析，这些开关一并不给。 */}
+                                {!isAndroidAppShell() && (
+                                    <BeatEffectsGroup
+                                        t={t}
+                                        effects={visualizerEntry.beatEffects}
+                                        onSliderPointerDown={onSliderPointerDown}
+                                        onSliderCommit={onSliderCommit}
+                                    />
+                                )}
                                 {stylePanel}
                                 {/* Folium tunings other mods registered for this mode (registries.tunings): cards of the mods' own make. */}
                                 <div className="mt-7 space-y-4 empty:hidden">
