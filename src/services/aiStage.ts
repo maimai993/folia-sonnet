@@ -407,9 +407,14 @@ export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
      * 解析层抠不出来，就再问一次 —— 这次把「只输出 JSON」写在系统提示的末尾，并且只追问
      * 一次：再不行就是模型确实做不了这件事，报错比无限重试有用。
      */
-    if (!parts) {
-        console.info('[AI] stage reply was not usable JSON, asking once more for JSON only');
-        text = await ask(`${ctx.system}\n\n【重要】上一次的回答无法解析为 JSON。这一次只输出 JSON 对象本身：不要解释、不要 Markdown、不要代码块标记、不要在对象外写任何字。`);
+    /*
+     * 两种失败都再问一次：整段不是 JSON，或者解析出来了却缺这次要的那一半
+     * （真机：只回了 `模式：**sonnet（商籁）** 参数：```json {…}``，没有 theme）。
+     * 只追问一次 —— 再不行就是模型做不了，报错比无限重试有用。
+     */
+    if (!parts || !hasRequired(parts, ctx.requirement)) {
+        console.info(`[AI] stage reply was not usable (needs ${ctx.requirement}), asking once more`);
+        text = await ask(`${ctx.system}\n\n【重要】上一次的回答不合要求。这一次只输出一个 JSON 对象，不要解释、不要 Markdown、不要在对象外写任何字；并且必须同时包含 "theme"（含 light 与 dark 两个对象）以及 "mode"、"reason"、"params" 这四个顶层字段。`);
         parts = tryParse(text);
     }
     if (!parts) {

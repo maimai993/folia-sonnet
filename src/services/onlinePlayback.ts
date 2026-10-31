@@ -334,7 +334,14 @@ export async function loadOnlineSongLyrics(
 
     // 原平台没词：去所有来源找一条（自动匹配开关关着就不找）。
     const borrowedLyrics = hasRenderableLyrics(parsedLyrics) ? null : await matchLyricsFromOtherSources(song, processed);
-    let resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, borrowedLyrics ?? parsedLyrics);
+    /*
+     * 借来的词不能被「原平台那份是空的」这个状态盖掉：`resolveOnlineLyrics` 在状态说
+     * 「来源是在线、但没有词」时会返回 null，于是借到的词白借（真机：日志里已经
+     * `Keeping <source> line-by-line lyrics as fallback`，界面上却没有词，得手动匹配）。
+     */
+    let resolvedLyrics = borrowedLyrics
+        ? (resolveOnlineLyrics(onlineLyricsState, borrowedLyrics) ?? borrowedLyrics)
+        : resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
     let finalState = onlineLyricsState;
 
   const settingsLyricSettings = useLyricSettingsStore.getState();
