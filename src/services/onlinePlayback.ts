@@ -115,8 +115,14 @@ export async function loadOnlineSongAudioSource(
     };
     // Where no URL can be had (offline, a sign-in that has ended, a song taken down), the copy that
     // was passed over for its level is what plays: another level is better than no song.
+    //
+    // 不再要求 `level` 有值再救：平台解析不出档位（provider 不声明它区分得出的档位、账号又
+    // 没有权限时会降级返回，见 #158）时 `level` 是 undefined，那时恰恰最需要这份副本 —— 旧写法
+    // 在这里直接放弃，用户看到的是「缓存了但断网播不了」。不传档位时 `getCachedSongAudioBlob`
+    // 不做“另一档就跳过”的判定（resourceCache.ts 的 `isCopyOfAnotherLevel` 对空档位返回 false），
+    // 所以读到的就是盘上那份副本，正是“another level is better than no song”要说的事。
     const playCopyOfAnyLevel = async () => {
-        const played = level ? await playCopy(await readCopy()) : null;
+        const played = await playCopy(await readCopy());
         if (played) console.log(`[Cache] No URL for "${song.name}": its copy of another level plays`);
         return played;
     };

@@ -130,6 +130,30 @@ describe('online audio ReplayGain plumbing', () => {
         warn.mockRestore();
     });
 
+    // #158：平台解析不出档位时（酷狗不声明 audioQualityLevels，账号没权限会降级返回），
+    // 断网也不能放弃已有副本 —— “another level is better than no song” 这条意图
+    // 不能被 `level ?` 挡掉，否则用户看到的就是「缓存了但断网播不了」。
+    it('plays that copy too when the provider resolves no level at all', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const omni = (await import('@/services/onlineMusic/omni')).omni as unknown as {
+            resolveAudioQuality: (providerId: string, preference: string) => string;
+        };
+        const levelSpy = vi.spyOn(omni, 'resolveAudioQuality').mockReturnValue(undefined as unknown as string);
+        let result: Awaited<ReturnType<typeof loadOnlineSongAudioSource>> | undefined;
+        try {
+            cachedAudioMock.mockResolvedValueOnce(null).mockResolvedValueOnce(new Blob(['x']));
+            sourceMock.mockRejectedValueOnce(new OnlineProviderError('network', 'offline', 'kugou'));
+            result = await loadOnlineSongAudioSource(song, 'high', null);
+        } finally {
+            // 只还原这一条 spy；队列与实现一并清掉，失败时也不把 leftover 漏给后面的用例。
+            levelSpy.mockRestore();
+            warn.mockRestore();
+            cachedAudioMock.mockReset();
+            sourceMock.mockReset();
+        }
+        expect(result).toMatchObject({ kind: 'ok', blobUrl: 'blob:test' });
+    });
+
     it('returns provider metadata and stores it with the prefetched URL', async () => {
         sourceMock.mockResolvedValue({
             url: 'https://audio.test/song.flac',
