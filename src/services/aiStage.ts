@@ -382,14 +382,36 @@ export const combineStageParts = (
 
 /** 一次调用问两件事：主题 + 歌词动画。 */
 export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
-    const { text } = await requestAiCompletion({
-        system: ctx.system,
-        prompt: ctx.prompt,
-        maxTokens: STAGE_MAX_TOKENS,
-        json: true,
-        signal: ctx.signal,
-    });
-    const parts = normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
+    const ask = async (system: string): Promise<string> => {
+        const { text } = await requestAiCompletion({
+            system,
+            prompt: ctx.prompt,
+            maxTokens: STAGE_MAX_TOKENS,
+            json: true,
+            signal: ctx.signal,
+        });
+        return text;
+    };
+    const tryParse = (text: string): StageParts | null => {
+        try {
+            return normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
+        } catch {
+            return null;
+        }
+    };
+    let text = await ask(ctx.system);
+    let parts = tryParse(text);
+    /*
+     * 有的端点/模型不认 `response_format: json_object`，整段回散文（真机上见过以
+     * 「**推荐模式：`pendolo`（时计）** 理由：……开头」这种，一个 `{` 都没有）。
+     * 解析层抠不出来，就再问一次 —— 这次把「只输出 JSON」写在系统提示的末尾，并且只追问
+     * 一次：再不行就是模型确实做不了这件事，报错比无限重试有用。
+     */
+    if (!parts) {
+        console.info('[AI] stage reply was not usable JSON, asking once more for JSON only');
+        text = await ask(`${ctx.system}\n\n【重要】上一次的回答无法解析为 JSON。这一次只输出 JSON 对象本身：不要解释、不要 Markdown、不要代码块标记、不要在对象外写任何字。`);
+        parts = tryParse(text);
+    }
     if (!parts) {
         /*
          * 「解析成功、但没有一样能用的」和「压根不是 JSON」是两回事：前者常是模型回了
