@@ -41,7 +41,7 @@ vi.mock('../../../src/services/mediaCacheStore', () => ({
     ),
 }));
 
-const { cachePlayedTrackAssets } = await import('../../../src/services/playedTrackCache');
+const { cachePlayedTrackAssets, isCacheWritePending } = await import('../../../src/services/playedTrackCache');
 const { getSongResourceCacheKey } = await import('../../../src/services/onlineMusic/resourceKeys');
 const {
     clearCachedSongAudioDistrust,
@@ -569,5 +569,50 @@ describe('cachePlayedTrackAssets', () => {
         expect(saveAudioBlob).toHaveBeenCalledTimes(1);
         expect(saveAudioBlob.mock.calls[0][0]).toBe(getSongResourceCacheKey('audio', onlineSong));
         expect(isCachedSongAudioDistrusted(onlineSong)).toBe(false);
+    });
+    // #156：写缓存是「播完之后再整份下载一次」。这一次失败只 console.error 就结束，
+    // 本会话内这首歌再没有第二次写入机会 —— 用户看到的就是「有时能缓存上，有时候缓存不上」。
+    // 这里钉住：失败后要留下「待补」记录，下次有机会时能重试成功。
+    describe('a write that failed in this session is picked up again', () => {
+        const src = 'https://cdn.example/audio.mp3';
+        const stubAudioDownload = (response: ReturnType<typeof audioResponse>) => {
+            vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('.mp3') ? response : audioResponse())));
+            vi.spyOn(console, 'warn').mockImplementation(() => { });
+        };
+
+        it('remembers a failed download so the same song can be written later', async () => {
+            stubAudioDownload(audioResponse({ ok: false, status: 503 }));
+
+            const first = await cachePlayedTrackAssets(onlineSong, src);
+            expect(first.audio).toBe(false);
+            expect(isCacheWritePending(onlineSong)).toBe(true);
+
+            // 源站恢复：同一首歌再有机会写时，应当真的写进去并清掉待补记录。
+            stubAudioDownload(audioResponse());
+            const second = await cachePlayedTrackAssets(onlineSong, src);
+
+            expect(second.audio).toBe(true);
+            expect(isCacheWritePending(onlineSong)).toBe(false);
+        });
+
+        it('does not remember a song that is not meant to be stored at all', async () => {
+            // provider 明确标成试听片段的地址：永远不存，也不该进待补，免得白重试。
+            isPreviewAudioSource.mockReturnValue(true);
+
+            await cachePlayedTrackAssets(onlineSong, src);
+
+            expect(isCacheWritePending(onlineSong)).toBe(false);
+        });
+
+        it('forgets a pending song once it is written', async () => {
+            stubAudioDownload(audioResponse({ ok: false, status: 500 }));
+            await cachePlayedTrackAssets(onlineSong, src);
+            expect(isCacheWritePending(onlineSong)).toBe(true);
+
+            stubAudioDownload(audioResponse());
+            await cachePlayedTrackAssets(onlineSong, src);
+
+            expect(isCacheWritePending(onlineSong)).toBe(false);
+        });
     });
 });

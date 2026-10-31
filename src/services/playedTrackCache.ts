@@ -35,6 +35,29 @@ export type PlayedTrackCacheResult = { audio: boolean; cover: boolean };
 
 const NOTHING_WRITTEN: PlayedTrackCacheResult = { audio: false, cover: false };
 
+/*
+ * 写失败的歌，本会话内记着，下次有机会时再试（#156）。
+ *
+ * 写缓存是「播完之后再整份下载一次」。源站一次 5xx / 超时 / CDN 地址过期，这一次写就失败了；
+ * 旧代码只打一行 console.error 就收工，这首歌在本会话里再也没有第二次写入机会 ——
+ * 用户看到的是「有时候能缓存上，有时候缓存不上」。留个待补记录，下一次播到这首歌时
+ * （或者它被完整播放结束时）再写一次，才算把这一下落空补上。
+ *
+ * 只在会话内有效，和 mediaCacheGuard 的 distrust 标记同一个口径：这是「这次没存成」的
+ * 运行期状态，不是用户数据，不该落盘。
+ */
+const pendingAudioWrites = new Set<string>();
+
+/** 这首歌上次写缓存失败了，本会话内还没补上。 */
+export const isCacheWritePending = (song: SongResult): boolean => (
+    pendingAudioWrites.has(getSongResourceCacheKey('audio', song))
+);
+
+/** 写成功（或被判定为本来就不该存）之后清掉待补记录。 */
+const forgetPendingAudioWrite = (song: SongResult): void => {
+    pendingAudioWrites.delete(getSongResourceCacheKey('audio', song));
+};
+
 /**
  * Stores a fully-played track's audio and cover in the media cache.
  *
@@ -73,6 +96,8 @@ export const cachePlayedTrackAssets = async (
     // to bytes that are either already cached or on disk, so there is nothing to fetch and store.
     if (previewClip) {
         console.log(`[Cache] ${getPlaybackSongKey(song)} not stored, the URL it played from is ${previewClip}`);
+        // 这个地址本来就不该存，重试也没有意义：不留待补记录。
+        forgetPendingAudioWrite(song);
     } else if (src && !src.startsWith('blob:') && keepsOwnSongAudio(song)) {
         // A provider with a cache of its own keeps the file there; nothing of it is read here.
         if (!await hasProviderKeptSongAudio(song, src) && await keepProviderSongAudio(song, src)) {
@@ -83,7 +108,10 @@ export const cachePlayedTrackAssets = async (
     } else if (src && !src.startsWith('blob:') && (!await hasCachedSongAudio(song, level) || isCachedSongAudioDistrusted(song))) {
         // A copy that failed to decode in this session (mediaCacheGuard.ts) is written over by this
         // download where it passes, though a copy is there.
-        console.log('[Cache] Caching fully played song:', song.name);
+        //
+        // 上一次写失败了（#156）也走这里：这正是「补上一次没写成的」那条路。
+        const retrying = isCacheWritePending(song);
+        console.log(retrying ? '[Cache] Retrying a fully played song whose write failed earlier:' : '[Cache] Caching fully played song:', song.name);
         try {
             // 安卓优先走原生下载：字节不出网到 Web 再绕回来，WebView 冻结时这条路
             // 照样能存。试听片段的校验在原生做（MediaExtractor 探时长，同一条
@@ -156,9 +184,15 @@ export const cachePlayedTrackAssets = async (
                 }
             }
         } catch (error) {
-            console.error('[Cache] Failed to download audio for cache', error);
+            // 这一下没存成：记进本会话的待补，下次播到这首歌时再写一次（#156）。
+            // 只记这一次的错，不在这里重试 —— 源站刚失败，立刻重试只会再失败一次。
+            pendingAudioWrites.add(getSongResourceCacheKey('audio', song));
+            console.error('[Cache] Failed to download audio for cache; it will be retried this session', error);
         }
     }
+
+    // 真的写进去了（原生、Web 或 provider 自带缓存任一条）：待补记录可以撤了。
+    if (result.audio) forgetPendingAudioWrite(song);
 
     const rawCover = coverUrl !== undefined ? coverUrl : getProviderSongMetadata(song).coverUrl;
     const cover = rawCover?.startsWith('http:') ? rawCover.replace('http:', 'https:') : rawCover;
