@@ -346,7 +346,12 @@ const parseJsonAnswer = (text: string): unknown => {
     try {
         return JSON.parse(extractJsonText(text));
     } catch (error) {
-        throw new Error(`AI 返回的内容无法解析为 JSON：${String((error as Error)?.message ?? error)}`);
+        /*
+         * 只报「解析失败」查不出是哪种失败：模型可能整段都在说人话（提示词没约束住）、
+         * 也可能被 max_tokens 截断在半个对象上。带上回复开头一段，日志里一眼能分清。
+         */
+        const head = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(`AI 返回的内容无法解析为 JSON：${String((error as Error)?.message ?? error)}；回复开头：${head || '(空)'}`);
     }
 };
 
