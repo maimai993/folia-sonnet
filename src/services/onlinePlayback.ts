@@ -24,6 +24,9 @@ import { useLyricSettingsStore } from '../stores/useLyricSettingsStore';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
 import { saveLyricCacheSongMetadata } from './lyricExport/lyricCacheMetadata';
 import { errorFields } from '../utils/errorText';
+import { hasRenderableLyrics } from '../utils/lyrics/validity';
+import { getLyricSource, isLyricProviderSource } from '../utils/lyrics/lyricSources';
+import type { PlatformLyricSource } from '../utils/lyrics/lyricSources';
 
 // How long playback waits for a stored copy's header to give its play length (`wholeCopy`). Past
 // it the copy plays untested: the check must not hold up a song that starts from the cache.
@@ -190,6 +193,64 @@ export const applyOnlineAudioSourceMetadata = (
     ? { ...song, replayGain: { ...song.replayGain, ...replayGain } }
     : song;
 
+
+/*
+ * 原平台没给词时去别的来源找一条。
+ *
+ * 在线歌曲以前只问自己那个平台：原平台回空（封控、未登录、该曲没有词）就一路空到底，界面上
+ * 就是「匹配不上歌词」。这里把已有的跨来源匹配（`autoMatchBestLyric`，本地歌曲那条路一直在用）
+ * 接进在线这首歌的自动匹配：按设置里的来源优先顺序问一遍、逐字优先于逐行、低于评分阈值
+ * 宁可不显示。`providerCandidate` 把刚拿到的那份原平台结果带进去，省一次重复请求，也让它
+ * 的合唱标记能借给赢家。
+ */
+const matchLyricsFromOtherSources = async (
+    song: SongResult,
+    processed: { lyrics: LyricData | null; isPureMusic: boolean },
+): Promise<LyricData | null> => {
+    const settings = useLyricSettingsStore.getState();
+    console.info('[Lyrics] borrow attempt', {
+        autoUseBestLyric: settings.autoUseBestLyric,
+        preferred: settings.preferredAlternativeLyricSource,
+        title: song.name,
+        artist: (song.artists || []).map((item) => item.name).join(' / '),
+        durationMs: song.durationMs,
+    });
+    if (!settings.autoUseBestLyric) { console.info('[Lyrics] borrow skipped: autoUseBestLyric is off'); return null; }
+    const rawProvider = (song.sourceRef as { providerId?: string } | undefined)?.providerId;
+    const providerId = isLyricProviderSource(rawProvider) && getLyricSource(rawProvider).platform
+        ? rawProvider as PlatformLyricSource
+        : undefined;
+    const preferred = isLyricProviderSource(settings.preferredAlternativeLyricSource)
+        ? settings.preferredAlternativeLyricSource
+        : undefined;
+    const artist = Array.isArray(song.artists) ? song.artists.map(item => item.name).filter(Boolean).join(' / ') : '';
+    try {
+        const match = await autoMatchBestLyric(song.name, artist, Number(song.durationMs ?? 0), {
+            ...(song.album?.name ? { album: song.album.name } : {}),
+            ...(preferred ? { preferredSource: preferred } : {}),
+            ...(providerId
+                ? {
+                    providerCandidate: {
+                        providerId,
+                        song,
+                        lyricsResult: {
+                            lyrics: processed.lyrics,
+                            isPureMusic: processed.isPureMusic,
+                            chorusRanges: [],
+                        },
+                    },
+                }
+                : {}),
+        });
+        if (!match || !('lyrics' in match) || !match.lyrics) return null;
+        console.info('[Lyrics] borrowed lyrics from another source:', match.source);
+        return match.lyrics;
+    } catch (error) {
+        console.warn('[Lyrics] borrowing lyrics from other sources failed:', error);
+        return null;
+    }
+};
+
 export async function loadOnlineSongLyrics(
     song: SongResult,
     prefetched: PrefetchedSongData | null,
@@ -278,7 +339,16 @@ export async function loadOnlineSongLyrics(
 
     if (!isCurrent()) return;
 
-    let resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
+    // 原平台没词：去所有来源找一条（自动匹配开关关着就不找）。
+    const borrowedLyrics = hasRenderableLyrics(parsedLyrics) ? null : await matchLyricsFromOtherSources(song, processed);
+    /*
+     * 借来的词不能被「原平台那份是空的」这个状态盖掉：`resolveOnlineLyrics` 在状态说
+     * 「来源是在线、但没有词」时会返回 null，于是借到的词白借（真机：日志里已经
+     * `Keeping <source> line-by-line lyrics as fallback`，界面上却没有词，得手动匹配）。
+     */
+    let resolvedLyrics = borrowedLyrics
+        ? (resolveOnlineLyrics(onlineLyricsState, borrowedLyrics) ?? borrowedLyrics)
+        : resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
     let finalState = onlineLyricsState;
 
   const settingsLyricSettings = useLyricSettingsStore.getState();

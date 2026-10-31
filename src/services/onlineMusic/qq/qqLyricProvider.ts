@@ -21,17 +21,23 @@ const isElectron = typeof window !== 'undefined' && (window as any).electron;
  */
 async function requestQQ(method: string, module: string, param: any): Promise<any> {
   const payload = {
+    /*
+     * 这段 `comm` 是被实测打过脸的：用 `ct: 11` + `cv: "1003006"` + `tmeAppID: qqmusiclight`
+     * 这套「轻量版」标识，`musicu.fcg` 对搜索一律回 `request.code = 2001`、`item_song` 为空
+     * —— 界面上就是「一搜就未找到结果」。同一份 `request` 换成下面这套
+     * `ct: 19 / cv: 2111`（数字）+ `format: json`，同样的查询能正常返回 6 条（实测对比）。
+     *
+     * 所以别再往这里加 os_ver / phonetype / rom / tmeAppID 这些字段：它们不是「更完整」，
+     * 而是把请求伪装成了另一个客户端，QQ 那边直接拒。
+     */
     comm: {
-      ct: 11,
-      cv: "1003006",
-      v: "1003006",
-      os_ver: "15",
-      phonetype: "24122RKC7C",
-      rom: "Redmi/miro/miro:15/AE3A.240806.005/OS2.0.102.0.VOMCNXM:user/release-keys",
-      tmeAppID: "qqmusiclight",
-      nettype: "NETWORK_WIFI",
-      udid: "0",
+      ct: 19,
+      cv: 2111,
+      uin: "0",
       uid: "0",
+      format: "json",
+      inCharset: "utf-8",
+      outCharset: "utf-8",
     },
     request: {
       method,
@@ -163,7 +169,17 @@ export async function fetchQQLyrics(
   song: SongResult,
   options: { chorusRanges?: ChorusRange[] } = {}
 ): Promise<any | null> {
-  if (!song.id || !song.qqMid) {
+  /*
+   * 这首歌的标识有两个：数字 `songID` 与字符串 `songMID`。接口两个都认（实测：只给 mid、
+   * 只给 id、两个都给，都能取到同一份词；给一个不是数字的 songID 则回 `code 10006` 且没有词）。
+   *
+   * 以前这里只发 `Number(song.id)`、从不发 mid —— 于是「id 不是数字」的那些歌（歌单、详情、
+   * 续播队列里拿到的 mediaId 可能是 mid 字符串或 0）必然失败，表现就是固定的那几首永远没词。
+   */
+  const midText = String(song.qqMid ?? '').trim();
+  const numericId = Number(song.id);
+  const hasNumericId = Number.isFinite(numericId) && numericId > 0;
+  if (!midText && !hasNumericId) {
     throw new Error('Missing song ID or mid');
   }
 
@@ -181,7 +197,8 @@ export async function fetchQQLyrics(
     roma: 1,
     roma_t: 0,
     singerName: toBase64(artistsStr),
-    songID: Number(song.id),
+    ...(hasNumericId ? { songID: numericId } : {}),
+    ...(midText ? { songMID: midText } : {}),
     songName: toBase64(song.name),
     trans: 1,
     trans_t: 0,

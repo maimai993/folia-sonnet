@@ -1636,7 +1636,7 @@ export default {
     "loginFeiniuFnId": "FN ID",
     "loginFeiniuFnIdPlaceholder": "e.g. abcd1234",
     "loginTitleQishui": "Scan to sign in to Qishui Music",
-    "loginNoteQishui": "Scan this code with the Qishui Music app and confirm sign-in",
+    "loginNoteQishui": "Scan the QR code with the Qishui Music or Douyin app, then confirm",
     "loginMethodQishuiCar": "Car protocol",
     "loginMethodQishuiPhone": "Phone protocol",
     "loginServerUrl": "Server address",

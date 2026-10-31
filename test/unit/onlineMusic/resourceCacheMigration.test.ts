@@ -43,7 +43,7 @@ describe('provider-aware resource cache migration', () => {
         ) as any);
 
         await expect(getSongCacheWithLegacyMigration('lyric', legacyNeteaseSong)).resolves.toEqual(lyric);
-        expect(saveToCache).toHaveBeenCalledWith('lyric_online:netease:42', lyric);
+        expect(saveToCache).toHaveBeenCalledWith('lyric_v2_online:netease:42', lyric);
     });
 
     it('reads an old audio key and writes the provider-aware key', async () => {

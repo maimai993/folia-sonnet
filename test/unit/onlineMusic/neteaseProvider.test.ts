@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readProviderSessionValue, removeProviderSessionValue } from '@/services/onlineMusic/providerStorage';
 import { NeteaseLoginHttpError, neteaseApi } from '@/services/onlineMusic/netease/netease';
 import { describeNeteaseFailure } from '@/services/onlineMusic/netease/neteaseFailure';
 import { NETEASE_SONG_DETAIL_BATCH, neteaseProvider } from '@/services/onlineMusic/netease/neteaseProvider';
@@ -380,11 +381,26 @@ describe('neteaseProvider', () => {
     it.each([
         [801, 'waiting'],
         [802, 'scanned'],
-        [803, 'confirmed'],
         [800, 'expired'],
     ])('maps QR code %s to %s', async (code, state) => {
         vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code } as any);
         await expect(neteaseProvider.auth!.checkLogin!('key')).resolves.toMatchObject({ state });
+    });
+
+    // 803 是「手机上点了确认」，登录态是随这份回答回来的 cookie。带了 cookie 才算真的登上。
+    it('takes 803 with a session cookie as confirmed and stores it', async () => {
+        vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code: 803, cookie: 'MUSIC_U=abc' } as any);
+        await expect(neteaseProvider.auth!.checkLogin!('key')).resolves.toMatchObject({ state: 'confirmed' });
+    });
+
+    // 真机诊断里的那一种：803 回来了但没带 cookie（远端 API 只放在 Set-Cookie 里）。
+    // 以前这里照样报「已确认」，会话仍匿名，随后 user/account 一问就不是刚登录的人。
+    it('says so when 803 arrives without a session cookie instead of pretending it signed in', async () => {
+        removeProviderSessionValue('netease', 'cookie');
+        vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code: 803, message: 'ok' } as any);
+        const result = await neteaseProvider.auth!.checkLogin!('key');
+        expect(result.state).toBe('error');
+        expect(readProviderSessionValue('netease', 'cookie')).toBeFalsy();
     });
 
     // NetEase's own 502, which its docs say can follow a scan: the local backend hands it on with HTTP 200

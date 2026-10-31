@@ -68,6 +68,13 @@ const SYSTEM_PROMPT = [
     '  "params": { "<该模式的参数键>": <数值或布尔或枚举字符串>, ... }',
     '}',
     '',
+    '示例（只示范格式，内容必须按这首歌重新判断；id 与参数键都要换成清单里真实存在的）：',
+    '{',
+    '  "mode": "pendolo",',
+    '  "reason": "摆锤逐渐失去动能，正合反复的「慢下来」",',
+    '  "params": { "tickSnappiness": 1.2, "showGearDecor": "subtle" }',
+    '}',
+    '',
     '规则：',
     '1. `mode` 必须精确等于清单里的某个 id。',
     '2. `params` 只放“你选的这个模式”的参数；键名必须来自清单，数值必须落在给定范围内。',
@@ -167,15 +174,49 @@ export const buildSystemPrompt = (userHint?: string): string => (
     userHint ? `${SYSTEM_PROMPT}\n\n用户额外要求（优先满足）：${clipLine(userHint)}` : SYSTEM_PROMPT
 );
 
+/**
+ * 从 `start` 处的 `{` / `[` 开始，按括号配对切出完整的那个对象 —— 引号里的括号不算，
+ * 反斜杠转义跳过。比「第一个 `{` 到最后一个 `}`」稳：回复后面再跟一段说明、或者被截断
+ * 时都不会把范围切错。
+ */
+export const sliceBalancedJson = (text: string, start: number): string | null => {
+    const open = text[start];
+    const close = open === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+        const char = text[index];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (char === '\\') escaped = true;
+            else if (char === '"') inString = false;
+            continue;
+        }
+        if (char === '"') {
+            inString = true;
+            continue;
+        }
+        if (char === open) depth += 1;
+        else if (char === close) {
+            depth -= 1;
+            if (depth === 0) return text.slice(start, index + 1);
+        }
+    }
+    return null;
+};
+
 /** Models answer with prose around the object often enough to be worth handling. */
 export const extractJsonText = (raw: unknown): string => {
-    let text = String(raw ?? '').trim();
-    if (text.startsWith('```')) {
-        text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '').trim();
+    const text = String(raw ?? '').trim();
+    // 说明文字 + ```json 代码块 + 说明文字：优先取代码块里的那一段。
+    const fenced = text.match(/```(?:json|JSON)?\s*([\s\S]*?)```/);
+    if (fenced?.[1]) {
+        const inner = fenced[1].trim();
+        if (inner.startsWith('{') || inner.startsWith('[')) return inner;
     }
-    if (text.startsWith('{')) return text;
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start !== -1 && end > start) return text.slice(start, end + 1);
+    if (text.startsWith('{') || text.startsWith('[')) return text;
+    const start = text.search(/[[{]/);
+    if (start !== -1) return sliceBalancedJson(text, start) ?? text.slice(start);
     return text;
 };

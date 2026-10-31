@@ -346,7 +346,12 @@ const parseJsonAnswer = (text: string): unknown => {
     try {
         return JSON.parse(extractJsonText(text));
     } catch (error) {
-        throw new Error(`AI 返回的内容无法解析为 JSON：${String((error as Error)?.message ?? error)}`);
+        /*
+         * 只报「解析失败」查不出是哪种失败：模型可能整段都在说人话（提示词没约束住）、
+         * 也可能被 max_tokens 截断在半个对象上。带上回复开头一段，日志里一眼能分清。
+         */
+        const head = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(`AI 返回的内容无法解析为 JSON：${String((error as Error)?.message ?? error)}；回复开头：${head || '(空)'}`);
     }
 };
 
@@ -377,15 +382,50 @@ export const combineStageParts = (
 
 /** 一次调用问两件事：主题 + 歌词动画。 */
 export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
-    const { text } = await requestAiCompletion({
-        system: ctx.system,
-        prompt: ctx.prompt,
-        maxTokens: STAGE_MAX_TOKENS,
-        json: true,
-        signal: ctx.signal,
-    });
-    const parts = normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
-    if (!parts) throw new Error('AI 返回的内容里没有可用的主题或动画决策。');
+    const ask = async (system: string): Promise<string> => {
+        const { text } = await requestAiCompletion({
+            system,
+            prompt: ctx.prompt,
+            maxTokens: STAGE_MAX_TOKENS,
+            json: true,
+            signal: ctx.signal,
+        });
+        return text;
+    };
+    const tryParse = (text: string): StageParts | null => {
+        try {
+            return normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
+        } catch {
+            return null;
+        }
+    };
+    let text = await ask(ctx.system);
+    let parts = tryParse(text);
+    /*
+     * 有的端点/模型不认 `response_format: json_object`，整段回散文（真机上见过以
+     * 「**推荐模式：`pendolo`（时计）** 理由：……开头」这种，一个 `{` 都没有）。
+     * 解析层抠不出来，就再问一次 —— 这次把「只输出 JSON」写在系统提示的末尾，并且只追问
+     * 一次：再不行就是模型确实做不了这件事，报错比无限重试有用。
+     */
+    /*
+     * 两种失败都再问一次：整段不是 JSON，或者解析出来了却缺这次要的那一半
+     * （真机：只回了 `模式：**sonnet（商籁）** 参数：```json {…}``，没有 theme）。
+     * 只追问一次 —— 再不行就是模型做不了，报错比无限重试有用。
+     */
+    if (!parts || !hasRequired(parts, ctx.requirement)) {
+        console.info(`[AI] stage reply was not usable (needs ${ctx.requirement}), asking once more`);
+        text = await ask(`${ctx.system}\n\n【重要】上一次的回答不合要求。这一次只输出一个 JSON 对象，不要解释、不要 Markdown、不要在对象外写任何字；并且必须同时包含 "theme"（含 light 与 dark 两个对象）以及 "mode"、"reason"、"params" 这四个顶层字段。`);
+        parts = tryParse(text);
+    }
+    if (!parts) {
+        /*
+         * 「解析成功、但没有一样能用的」和「压根不是 JSON」是两回事：前者常是模型回了
+         * 结构不对的对象（空的 theme、只有 description 之类），后者是整段说人话。
+         * 记下要的是哪一半 + 回复开头，日志里一眼能分清，不用再靠猜。
+         */
+        const head = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(`AI 返回的内容里没有可用的主题或动画决策（需要 ${ctx.requirement}）；回复开头：${head || '(空)'}`);
+    }
     return parts;
 };
 
