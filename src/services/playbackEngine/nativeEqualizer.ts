@@ -71,9 +71,9 @@ const buildSettings = (): NativeEqualizerSettings => {
             q: console_.frontEq.q,
             globalGainDb: console_.frontEq.globalGainDb,
         },
+        // 只发两颗滤波器。punch 与 space 是 v1 的遗留字段：压缩页与混响页已经各自接管，
+        // 再发一次等于让预设在一个看不见的地方开第二台压缩器、或者让「混响关着」也响。
         effects: {
-            punch: heard.effects.punch,
-            space: heard.effects.space,
             highpass: heard.effects.highpass,
             lowpass: heard.effects.lowpass,
         },

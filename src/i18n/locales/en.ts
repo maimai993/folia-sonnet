@@ -1014,10 +1014,8 @@ export default {
     "equalizerDisabled": "Processing off",
     "equalizerGain": "Band gain",
     "equalizerReset": "Reset the active custom slot",
-    "equalizerEffects": "Effect chain",
-    "equalizerEffectsHint": "Applied after the bands",
-    "equalizerEffectNoiseTag": "noise",
-    "equalizerEffectNoiseTagHint": "This slider adds a noise floor of its own - most audible where the music is quietest",
+    "equalizerBounds": "Frequency bounds",
+    "equalizerBoundsHint": "After the bands, before compression",
     "equalizerEffect": {
       "highpass": "Low cut",
       "lowpass": "High cut",
@@ -5220,8 +5218,7 @@ export default {
         "reset": "Clear this slot",
         "bands": "Ten bands",
         "bandFader": "One fader",
-        "effects": "Effect chain",
-        "noiseBadge": "Adds noise"
+        "effects": "Frequency bounds"
       },
       "lyricStyle": {
         "panel": "Lyrics Style",
@@ -5704,7 +5701,7 @@ export default {
       "sidePanelQueueRadio": "On Personal FM this cell is the radio",
       "audioEqualizerPresets": "The switch, the presets, and your two slots",
       "audioEqualizerSilentWrite": "One drag rewrites a slot",
-      "audioEqualizerEffects": "The effect chain below",
+      "audioEqualizerEffects": "The two filters below",
       "visPlaygroundLayout": "Live preview on the left",
       "visPlaygroundHotspots": "Three regions you cannot see",
       "visPlaygroundSections": "The five pages on the right",
@@ -5877,8 +5874,7 @@ export default {
         "bands": "“Band gain” is ten vertical faders, 31 Hz on the left to 16 kHz on the right, ±12 dB each; a curve joins the ten knobs.",
         "silent": "Built-in presets cannot be edited: dragging a fader moves you to a custom slot and writes the value there — the custom slot you have selected, otherwise Custom 1. No prompt, no confirmation. If you keep a setup in Custom 1, switch to Custom 2 before you start nudging a built-in preset.",
         "reset": "The round button at the end clears the custom slot that is active, back to flat with a neutral chain. It only ever touches that one slot, and it is greyed out on a built-in preset \u2014 there is nothing to undo on one you cannot edit.",
-        "effects": "The “Effect chain” is applied after the bands and has nine items: Low cut, High cut, Saturation, Bit crush, Wow & flutter, Vinyl noise, Stereo width, Space and Punch. They are written into the same custom slot as the faders.",
-        "noise": "The two items with a “noise” tag beside the name (Bit crush, Vinyl noise) add noise of their own; the tag does not mean the effect is on."
+        "effects": "“Frequency bounds” sits after the bands and before the compressor, and holds two filters: low cut removes rumble and boom, high cut removes hiss and sibilance. Both are 12 dB/octave slopes rather than brick walls, so even a hard cut leaves a little behind. They are written into the same custom slot as the faders."
       },
       "lyricStyle": {
         "perStyleOwn": "Every lyric style has its own set of settings that apply only to that style. The page on the right is the set for the current style.",

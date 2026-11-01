@@ -3,7 +3,7 @@
 exports[`the stand-ins as recorded before the size table was split > every kind gets the same drawing 1`] = `
 {
   "(none given)": "3347 92ecb1665a57f8af",
-  "audio-equalizer": "29034 768d07b0b851bcf0",
+  "audio-equalizer": "24273 bf5f436ed79030bd",
   "bottom-ui-settings": "4248 bdc5518d657e9dbf",
   "custom-shortcut-settings": "7279 d2a460cf624aef4b",
   "desktop-features": "8249 ee4cdf44c7c6aaa3",
@@ -95,18 +95,6 @@ exports[`the stand-ins as recorded before the size table was split > every size 
       "right": 0.068,
       "top": 0.024,
       "width": 0.17,
-    },
-    "noiseBadge": {
-      "height": 0.085,
-      "left": 0.092,
-      "top": 0.43,
-      "width": 0.04,
-    },
-    "noiseBadgeSecond": {
-      "height": 0.085,
-      "left": 0.754,
-      "top": 0.43,
-      "width": 0.04,
     },
     "presets": {
       "height": 0.04,

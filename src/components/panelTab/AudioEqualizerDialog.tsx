@@ -26,12 +26,12 @@ import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 // src/components/panelTab/AudioEqualizerDialog.tsx
 // 调音台窗口：从控制页打开的那扇「音频效果」。
 //
-// 从一页变成四页（均衡器 / 压缩器 / 空间混响 / 后置均衡器），因为声音的处理已经不在
+// 从一页变成五页（均衡器 / 压缩器 / 空间混响 / 后置均衡器 / 染色），因为声音的处理已经不在
 // Web Audio 里跑了 —— 原生的 ExoPlayer 一次能做的事比一个 `<audio>` 多得多，
-// 界面得跟得上。四页共用同一颗总开关：关掉它，整条链（含压缩与混响）一起让路。
+// 界面得跟得上。五页共用同一颗总开关：关掉它，整条链（含压缩、混响与染色）一起让路。
 //
 // 均衡器那一页的数据仍归 useAudioSettingsStore（十段增益、预设、自定义槽位、mod 曲线），
-// 其余三页归 useAudioConsoleStore。这一层只管草稿与落盘时机：
+// 其余四页归 useAudioConsoleStore。这一层只管草稿与落盘时机：
 // 拖的时候只改草稿，松手才写 store —— 与原来那扇窗口的规矩一样。
 
 type AudioEqualizerDialogProps = {

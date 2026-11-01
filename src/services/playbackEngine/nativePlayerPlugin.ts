@@ -47,8 +47,11 @@ export type NativePlaybackSnapshot = {
  * 原生调音台的设置载荷。
  *
  * 与 Web 的 `AudioEqualizerSettings` + `AudioConsoleSettings` 合起来对齐原生真正会执行的
- * 那几项。drive / crush / wow / noise / width 还没实现，等 P3 再加字段 ——
- * 现在多发原生也只是忽略，不会报错。
+ * 那几项。饱和 / 比特降质 / 抖晃 / 黑胶噪声 / 宽度在原生链上没有对应的站，**不再发**：
+ * 发了原生也只是忽略，而界面若还留着滑杆，用户会以为拖了有用。饱和在「染色」页，
+ * 宽度在「混响 · 声场」，两者各有自己的字段（`saturation` / `stereo`）。
+ * 同理 punch 与 space 这两个 v1 遗留字段也不再发 —— 压缩与混响各有一整页，
+ * 预设若偷偷带上它们，等于在用户看不见的地方开第二台压缩器、或让「混响关着」也响。
  *
  * `gains` 必须正好 10 项；原生会再夹一次 ±12 dB，不依赖这边传得干净。
  * 协议 `version` 2 起才有 `eq` / `reverb` / `compressor` / `postEq` 四块；
@@ -64,9 +67,8 @@ export type NativeEqualizerSettings = {
         q: number;
         globalGainDb: number;
     };
+    /** 只剩两颗滤波器：高频截止与低频截止。 */
     effects: {
-        punch: number;
-        space: number;
         highpass: number;
         lowpass: number;
     };

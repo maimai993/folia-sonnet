@@ -6,7 +6,7 @@ import {
     type AudioEqualizerModeId,
     type AudioEqualizerSettings,
 } from '../../../utils/audioEqualizer';
-import type { AudioEffectId } from '../../../utils/audioEffects';
+import { AUDIO_CONSOLE_EFFECT_IDS, type AudioEffectId } from '../../../utils/audioEffects';
 import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { AUDIO_CONSOLE_GLOBAL_GAIN_MAX, AUDIO_CONSOLE_GLOBAL_GAIN_MIN, AUDIO_CONSOLE_Q_MAX, AUDIO_CONSOLE_Q_MIN } from '../../../utils/audioConsole';
 import { Segmented } from '../../modal/settings/kit';
@@ -17,11 +17,15 @@ import PresetChips from '../equalizer/PresetChips';
 import { ConsoleSlider, formatDb } from './controls';
 
 // src/components/panelTab/console/EqualizerPane.tsx
-// 调音台的第一页：十段增益、预设，以及曲线用什么形状（GEQ 定 Q / PEQ 可变 Q）。
+// 调音台的第一页：十段增益、预设、曲线形状（GEQ 定 Q / PEQ 可变 Q），以及频率边界。
 //
 // 十段增益本身仍归 useAudioSettingsStore 管（那边还有 mod 曲线与自定义槽位），
 // 这里只是多给两个旋钮：Q 值和总增益，它们存在 useAudioConsoleStore 里。
 // 分成两个 store 不影响这一页 —— 用户看到的就是一页均衡器。
+//
+// 「频率边界」只放高频截止与低频截止两颗：这两项真的接在原生链上。原来那九项效果
+// 里的其余七项，要么原生没有一站接手，要么已经被压缩页 / 混响页整块取代（见
+// audioEffects.ts 的 AUDIO_CONSOLE_EFFECT_IDS）。
 
 type EqualizerPaneProps = {
     draft: AudioEqualizerSettings;
@@ -115,7 +119,13 @@ const EqualizerPane: React.FC<EqualizerPaneProps> = ({
                     </EqualizerSection>
                 </div>
 
-                <AudioEffectGrid effects={draft.effects} onEffectChange={onEffectChange} onCommit={onCommit} readOnly={curveHeard} />
+                <AudioEffectGrid
+                    effects={draft.effects}
+                    ids={AUDIO_CONSOLE_EFFECT_IDS}
+                    onEffectChange={onEffectChange}
+                    onCommit={onCommit}
+                    readOnly={curveHeard}
+                />
             </div>
         </div>
     );

@@ -1015,10 +1015,8 @@ export default {
     "equalizerDisabled": "音频处理已关闭",
     "equalizerGain": "频段增益",
     "equalizerReset": "重置当前自定义栏位",
-    "equalizerEffects": "效果链",
-    "equalizerEffectsHint": "在频段之后处理",
-    "equalizerEffectNoiseTag": "噪声",
-    "equalizerEffectNoiseTagHint": "这个滑块本身会产生噪声，音乐越安静越明显",
+    "equalizerBounds": "频率边界",
+    "equalizerBoundsHint": "在十段之后、压缩之前",
     "equalizerEffect": {
       "highpass": "低频截止",
       "lowpass": "高频截止",
@@ -5221,8 +5219,7 @@ export default {
         "reset": "清空这个槽",
         "bands": "十段推子",
         "bandFader": "其中一根",
-        "effects": "效果链",
-        "noiseBadge": "会加噪"
+        "effects": "频率边界"
       },
       "lyricStyle": {
         "panel": "歌词样式",
@@ -5705,7 +5702,7 @@ export default {
       "sidePanelQueueRadio": "私人 FM 下这一格是电台",
       "audioEqualizerPresets": "总开关、预设，和你自己的两个槽",
       "audioEqualizerSilentWrite": "拖一下就覆写一个槽",
-      "audioEqualizerEffects": "底下那条效果链",
+      "audioEqualizerEffects": "底下那两颗滤波器",
       "visPlaygroundLayout": "左边是真的在跑的预览",
       "visPlaygroundHotspots": "三块你看不见的区域",
       "visPlaygroundSections": "右栏那五页",
@@ -5878,8 +5875,7 @@ export default {
         "bands": "「频段增益」是十根竖推子，左端 31 Hz 到右端 16 kHz，每根 ±12 dB；一条曲线连着十个把手。",
         "silent": "内置预设不可编辑；拖动推子会切到一个自定义槽并写入新值：正选着某个自定义槽就写进它，否则写进「自定义 1」。重要设置请先切到「自定义 2」。",
         "reset": "清空当前自定义槽，恢复平直曲线和中性效果。内置预设不能编辑，所以选中时按钮是灰的。",
-        "effects": "「效果链」在频段之后处理，一共九项：低频截止、高频截止、饱和失真、比特降质、抖晃、黑胶噪声、立体声宽度、空间混响、动态压缩。它们和推子写进同一个自定义槽。",
-        "noise": "名字旁边带「噪声」徽章的两项（比特降质、黑胶噪声）自己会加入噪声；徽章不代表它当前已经打开。"
+        "effects": "「频率边界」在十段之后、压缩之前，只剩两颗滤波器：低频截止切掉嗡嗡声与隆隆声，高频截止切掉嘶声与齿音。都是 12 dB/oct 的斜坡，不是砖墙，所以切得再低也仍有余量。它们和推子写进同一个自定义槽。"
       },
       "lyricStyle": {
         "perStyleOwn": "每种歌词样式都有一组专属设置，只对这个样式生效。右边这一页就是当前样式的那一组。",

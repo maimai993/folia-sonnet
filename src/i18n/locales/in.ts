@@ -1014,10 +1014,8 @@ export default {
     "equalizerDisabled": "Pemrosesan nonaktif",
     "equalizerGain": "Penguatan pita",
     "equalizerReset": "Reset slot kustom aktif",
-    "equalizerEffects": "Rantai efek",
-    "equalizerEffectsHint": "Diterapkan setelah pita",
-    "equalizerEffectNoiseTag": "derau",
-    "equalizerEffectNoiseTagHint": "Penggeser ini menambah derau tersendiri - paling terdengar saat musik paling pelan",
+    "equalizerBounds": "Batas frekuensi",
+    "equalizerBoundsHint": "Setelah pita, sebelum kompresi",
     "equalizerEffect": {
       "highpass": "Potong rendah",
       "lowpass": "Potong tinggi",
@@ -5220,8 +5218,7 @@ export default {
         "reset": "Kosongkan slot ini",
         "bands": "Sepuluh pita",
         "bandFader": "Salah satu fader",
-        "effects": "Rantai efek",
-        "noiseBadge": "Menambah derau"
+        "effects": "Batas frekuensi"
       },
       "lyricStyle": {
         "panel": "Gaya Lirik",
@@ -5704,7 +5701,7 @@ export default {
       "sidePanelQueueRadio": "Pada Personal FM sel ini adalah radio",
       "audioEqualizerPresets": "Sakelar, praset, dan dua slotmu",
       "audioEqualizerSilentWrite": "Satu tarikan menimpa satu slot",
-      "audioEqualizerEffects": "Rantai efek di bawahnya",
+      "audioEqualizerEffects": "Dua filter di bawahnya",
       "visPlaygroundLayout": "Pratinjau langsung di kiri",
       "visPlaygroundHotspots": "Tiga area yang tidak terlihat",
       "visPlaygroundSections": "Lima halaman di kanan",
@@ -5877,8 +5874,7 @@ export default {
         "bands": "“Penguatan pita” adalah sepuluh fader tegak, dari 31 Hz di kiri sampai 16 kHz di kanan, masing-masing ±12 dB; sebuah kurva menghubungkan kesepuluh kenopnya.",
         "silent": "Praset bawaan tidak bisa disunting: menarik fader memindahkanmu ke slot kustom dan menulis nilainya di sana — slot kustom yang sedang dipilih, kalau tidak ada maka Kustom 1. Tanpa peringatan, tanpa konfirmasi. Kalau kamu menyimpan setelan di Kustom 1, pindah dulu ke Kustom 2 sebelum mengutak-atik praset bawaan.",
         "reset": "Tombol bulat di ujung mengosongkan slot kustom yang sedang aktif, kembali ke datar dengan rantai netral. Ia hanya menyentuh satu slot itu, dan meredup saat praset bawaan yang aktif \u2014 tidak ada yang bisa dibatalkan pada sesuatu yang tidak bisa disunting.",
-        "effects": "“Rantai efek” diterapkan setelah pita dan berisi sembilan butir: Potong rendah, Potong tinggi, Saturasi, Bit crush, Wow & flutter, Noise vinyl, Lebar stereo, Ruang, dan Pukulan. Semuanya ditulis ke slot kustom yang sama dengan fader.",
-        "noise": "Dua butir dengan tanda “derau” di samping namanya (Bit crush, Noise vinyl) menambah derau sendiri; tanda itu tidak berarti efeknya sedang menyala."
+        "effects": "“Batas frekuensi” berada setelah pita dan sebelum kompresor, isinya dua filter: potong rendah membuang gemuruh dan gebukan, potong tinggi membuang desis dan sibilans. Keduanya lereng 12 dB/oktaf, bukan tembok bata, jadi potongan paling keras pun masih menyisakan sedikit. Nilainya ditulis ke slot kustom yang sama dengan fader."
       },
       "lyricStyle": {
         "perStyleOwn": "Setiap gaya lirik punya satu set pengaturan khusus yang hanya berlaku untuk gaya itu. Halaman di kanan adalah set untuk gaya saat ini.",
