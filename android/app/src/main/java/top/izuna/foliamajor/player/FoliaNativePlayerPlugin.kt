@@ -1,5 +1,6 @@
 package top.izuna.foliamajor.player
 
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -9,6 +10,9 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import android.os.Handler
 import android.os.Looper
 
+import top.izuna.foliamajor.player.dsp.EqSettings
+import top.izuna.foliamajor.player.dsp.NativeEqualizerState
+import top.izuna.foliamajor.settings.FoliaSettingsStore
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState
 
 /**
@@ -269,6 +273,13 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     override fun load() {
         instance = this
+        /*
+         * 均衡器先恢复再建播放器。
+         *
+         * 冷启动时可能是通知栏 / 锁屏先把播放拉起来的（WebView 还没起来），
+         * 那一下的声音也要按用户上次的听感走。顺序反了第一首就是默认曲线。
+         */
+        NativeEqualizerState.restore(FoliaSettingsStore.get(getContext()))
         // load() 在主线程上跑，但播放器自己会起一条专用线程（见 FoliaNativePlayer
         // 文件头的「线程」那一节）—— 这里只是把壳子建出来。
         player = FoliaNativePlayer(getContext(), object : FoliaNativePlayer.Listener {
@@ -592,6 +603,76 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         current?.setRepeatMode(mode)
         call.resolve()
+    }
+
+    /**
+     * Web 推下来的听感设置（10 段 + punch / space / 高通低通）。
+     *
+     * 与 setSettings 分开走：EQ 变化很频繁（拖一次滑杆可能十几条），混进设置快照会把
+     * 其它字段一起重写一遍。它也不依赖 WebView —— 推一次就落盘，冷启动由 load() 恢复。
+     */
+    @PluginMethod
+    fun setEqualizer(call: PluginCall) {
+        val payload = call.getObject("settings")
+        if (payload == null) {
+            call.reject("settings is required.")
+            return
+        }
+        try {
+            val applied = NativeEqualizerState.apply(EqSettings.fromJson(payload))
+            NativeEqualizerState.persist(FoliaSettingsStore.get(getContext()), applied)
+            val result = JSObject()
+            result.put("applied", true)
+            result.put("active", applied.enabled)
+            result.put("seq", applied.seq.toDouble())
+            call.resolve(result)
+        } catch (error: Exception) {
+            call.reject("设置均衡器失败", error)
+        }
+    }
+
+    /**
+     * 诊断用：原生此刻真正在跑的那份设置。
+     *
+     * 不做轮询 —— 只在用户报「手机上没效果」时由界面按需问一次。它的意义是分清
+     * 「Web 没推下来」与「推了但原生没收到/没收下」，日志里一看就知道卡在哪一段。
+     */
+    @PluginMethod
+    fun getEqualizerState(call: PluginCall) {
+        val snapshot = NativeEqualizerState.snapshot()
+        // 整份设置按协议形状回给 Web：诊断时能一次看到「压缩器到底有没有开」，
+        // 不用再分四次问。
+        val result = snapshot.toJson()
+        result.put("seq", snapshot.seq)
+        call.resolve(JSObject.fromJSONObject(result))
+    }
+
+    /**
+     * 开关频谱取样。
+     *
+     * 关掉时音频线程上不跑 FFT —— 频谱是「看」的东西，没人看就不该占 CPU。
+     * 界面进入后置均衡器那一页时打开，离开（或窗口关掉）时关掉。
+     */
+    @PluginMethod
+    fun setSpectrumEnabled(call: PluginCall) {
+        NativeEqualizerState.spectrumEnabled = call.getBoolean("enabled", false) ?: false
+        call.resolve()
+    }
+
+    /**
+     * 取一帧频谱。
+     *
+     * 由界面按动画帧的节奏来问（约 60 ms 一次），不在原生侧主动推事件：
+     * 频谱只在那一页存在时才需要，推事件反而会让桥长期有一条常开的消息流。
+     */
+    @PluginMethod
+    fun getSpectrum(call: PluginCall) {
+        val bands = NativeEqualizerState.spectrum()
+        val array = JSArray()
+        bands.forEach { array.put(it.toDouble()) }
+        val result = JSObject()
+        result.put("bands", array)
+        call.resolve(result)
     }
 
     @PluginMethod

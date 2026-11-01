@@ -122,6 +122,10 @@ class FoliaSettingsStore private constructor(context: Context) {
             "crossfadeEnabled": false,
             "crossfadeMs": 0,
             "playbackFade": true,
+            "eq.version": 1,
+            "eq.enabled": false,
+            "eq.gains": "[0,0,0,0,0,0,0,0,0,0]",
+            "eq.effects": "",
             "audioQuality": "high",
             "preventSleep": false,
             "deviceType": "phone"

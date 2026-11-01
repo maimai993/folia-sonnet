@@ -43,6 +43,76 @@ export type NativePlaybackSnapshot = {
     songKey?: string;
 };
 
+/**
+ * 原生调音台的设置载荷。
+ *
+ * 与 Web 的 `AudioEqualizerSettings` + `AudioConsoleSettings` 合起来对齐原生真正会执行的
+ * 那几项。drive / crush / wow / noise / width 还没实现，等 P3 再加字段 ——
+ * 现在多发原生也只是忽略，不会报错。
+ *
+ * `gains` 必须正好 10 项；原生会再夹一次 ±12 dB，不依赖这边传得干净。
+ * 协议 `version` 2 起才有 `eq` / `reverb` / `compressor` / `postEq` 四块；
+ * 原生对缺席的块按中性处理，所以少传不会让播放失败。
+ */
+export type NativeEqualizerSettings = {
+    version: number;
+    enabled: boolean;
+    gains: number[];
+    /** 前置 EQ 的形状：GEQ 定 Q，PEQ 用下面的 q。 */
+    eq: {
+        mode: 'geq' | 'peq';
+        q: number;
+        globalGainDb: number;
+    };
+    effects: {
+        punch: number;
+        space: number;
+        highpass: number;
+        lowpass: number;
+    };
+    reverb: {
+        enabled: boolean;
+        /** 0 出厂 / 1 音乐厅 / 2 空灵大教堂 / 3 板式。 */
+        preset: number;
+        rt60: number;
+        roomLevelDb: number;
+        tailOnPause: boolean;
+    };
+    compressor: {
+        enabled: boolean;
+        bandCount: number;
+        /** 0 温和 / 1 平直。 */
+        profile: number;
+        bands: Array<{
+            enabled: boolean;
+            thresholdDb: number;
+            ratio: number;
+            attackMs: number;
+            releaseMs: number;
+            makeupDb: number;
+        }>;
+    };
+    postEq: {
+        enabled: boolean;
+        gains: number[];
+        mode: 'geq' | 'peq';
+        q: number;
+        globalGainDb: number;
+    };
+    /** 增益滑入时间（毫秒）：用户改动 15，mod 曲线 250（对齐 Web 的 setTargetAtTime 常数）。 */
+    glideMs: number;
+};
+
+export type NativeEqualizerState = NativeEqualizerSettings & {
+    /** 进程内变更序号：诊断时用来确认「推的这条原生到底收没收到」。 */
+    seq: number;
+};
+
+/** 一帧频谱：32 段，0..1 对应 -90 dB ~ 0 dB。 */
+export type NativeSpectrumFrame = {
+    bands: number[];
+};
+
 interface FoliaNativePlayerPlugin {
     prepare(options: {
         url: string;
@@ -59,6 +129,11 @@ interface FoliaNativePlayerPlugin {
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;
+    setEqualizer(options: { settings: NativeEqualizerSettings }): Promise<{ applied: boolean; active: boolean; seq: number }>;
+    getEqualizerState(): Promise<NativeEqualizerState>;
+    /** 频谱取样开关：只有后置均衡器那一页打开时才开，没人看就不该在音频线程上跑 FFT。 */
+    setSpectrumEnabled(options: { enabled: boolean }): Promise<void>;
+    getSpectrum(): Promise<NativeSpectrumFrame>;
     getSnapshot(): Promise<NativePlaybackSnapshot>;
     release(): Promise<void>;
     addListener(
@@ -91,6 +166,10 @@ export const nativePlayer = {
     setVolume: (volume: number) => FoliaNativePlayer.setVolume({ volume }),
     setSpeed: (speed: number) => FoliaNativePlayer.setSpeed({ speed }),
     setRepeatMode: (repeatMode: number) => FoliaNativePlayer.setRepeatMode({ repeatMode }),
+    setEqualizer: (settings: NativeEqualizerSettings) => FoliaNativePlayer.setEqualizer({ settings }),
+    getEqualizerState: () => FoliaNativePlayer.getEqualizerState(),
+    setSpectrumEnabled: (enabled: boolean) => FoliaNativePlayer.setSpectrumEnabled({ enabled }),
+    getSpectrum: () => FoliaNativePlayer.getSpectrum(),
     getSnapshot: () => FoliaNativePlayer.getSnapshot(),
     release: () => FoliaNativePlayer.release(),
     addListener: (listener: (event: NativePlaybackEvent) => void) =>

@@ -14,21 +14,30 @@ import { AUDIO_SOUND_PRESETS, AUDIO_SOUND_PRESET_IDS } from '../../utils/audioPr
 import { createNeutralAudioEffects, type AudioEffectId, type AudioEffectSettings } from '../../utils/audioEffects';
 import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerModCurve';
 import Sheet from '../shared/Sheet';
-import { Toggle } from '../modal/settings/kit';
-import AudioEffectGrid from './equalizer/AudioEffectGrid';
-import EqualizerBandGrid from './equalizer/EqualizerBandGrid';
-import PresetChips from './equalizer/PresetChips';
+import { Segmented, Toggle } from '../modal/settings/kit';
 import ModCurveNotice from './equalizer/ModCurveNotice';
+import EqualizerPane from './console/EqualizerPane';
+import CompressorPane from './console/CompressorPane';
+import ReverbPane from './console/ReverbPane';
+import PostEqPane from './console/PostEqPane';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 
 // src/components/panelTab/AudioEqualizerDialog.tsx
-// The audio effect window opened from the controls tab, on the app's sheet: the processing switch
-// in the header, then the presets, the ten EQ bands and the effect chain. It owns the draft that
-// the parts edit and writes it to the store when an edit is let go.
+// 调音台窗口：从控制页打开的那扇「音频效果」。
+//
+// 从一页变成四页（均衡器 / 压缩器 / 空间混响 / 后置均衡器），因为声音的处理已经不在
+// Web Audio 里跑了 —— 原生的 ExoPlayer 一次能做的事比一个 `<audio>` 多得多，
+// 界面得跟得上。四页共用同一颗总开关：关掉它，整条链（含压缩与混响）一起让路。
+//
+// 均衡器那一页的数据仍归 useAudioSettingsStore（十段增益、预设、自定义槽位、mod 曲线），
+// 其余三页归 useAudioConsoleStore。这一层只管草稿与落盘时机：
+// 拖的时候只改草稿，松手才写 store —— 与原来那扇窗口的规矩一样。
 
 type AudioEqualizerDialogProps = {
     isDaylight: boolean;
 };
+
+type ConsoleTabId = 'equalizer' | 'compressor' | 'reverb' | 'postEq';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
 
@@ -47,6 +56,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
         [ownSettings, modCurve, modCurveSuspended],
     );
     const curveHeard = Boolean(modCurve) && !modCurveSuspended;
+    const [tab, setTab] = useState<ConsoleTabId>('equalizer');
     const [draft, setDraft] = useState<AudioEqualizerSettings>(settings);
     const draftRef = useRef(draft);
     const mountedRef = useRef(false);
@@ -65,6 +75,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                 effects: { ...settings.effects },
                 customSlots: settings.customSlots.map(slot => ({ gains: [...slot.gains], effects: { ...slot.effects } })),
             });
+            // 每次打开都回到均衡器那一页：绝大多数人进来是来调 EQ 的，
+            // 停在上次看的压缩器上会让人以为「均衡器不见了」。
+            setTab('equalizer');
         }
     }, [isOpen, settings]);
 
@@ -170,8 +183,8 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
             onClose={close}
             isDaylight={isDaylight}
             size="l"
-            title={t('ui.equalizerTitle')}
-            subtitle={t('ui.equalizerDescription')}
+            title={t('ui.consoleTitle')}
+            subtitle={t('ui.consoleDescription')}
             headerActions={(
                 // The switch takes its name from the label it sits in. A narrow window has no room for the words: they stay for a screen reader.
                 <label className="flex cursor-pointer items-center gap-3">
@@ -182,25 +195,43 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                 </label>
             )}
         >
-            {/* 这一层排窗口里的内容（至少和窗口一样高，多出的高度给推子），也让这扇对话框自己能被思索命中。 */}
+            {/* 这一层排窗口里的内容（至少和窗口一样高，多出的高度给推子），也让这扇对话框自己能被思索命中。
+                标记仍叫 audio-equalizer：思索（ponder）的悬停目标按这个名字找，改名会让引导指不到窗口。 */}
             <div data-ponder="audio-equalizer" className="flex min-h-full flex-col">
-                <ModCurveNotice />
-                <PresetChips
-                    presetIds={PRESET_IDS}
-                    chosen={curveHeard ? null : draft.preset}
-                    onChoose={applyPreset}
-                    canReset={!curveHeard && isAudioEqualizerCustomSlotId(draft.preset)}
-                    onReset={resetActiveCustomSlot}
-                />
-                {/* Dimmed while processing is off, and still in reach: an edit turns processing on. */}
-                {/* While a mod's curve plays they are read-only: keep it as a custom slot first. */}
-                {/* The grids take the faders and sliders out of reach themselves: a narrow window must still scroll the bands sideways to show them all. */}
-                <div
-                    className={`st-t-move flex flex-1 flex-col transition-opacity${draft.enabled && !curveHeard ? '' : ' opacity-40'}`}
-                >
-                    <EqualizerBandGrid gains={draft.gains} onBandChange={updateBandDraft} onCommit={commitDraft} readOnly={curveHeard} />
-                    <AudioEffectGrid effects={draft.effects} onEffectChange={updateEffectDraft} onCommit={commitDraft} readOnly={curveHeard} />
+                {/* 页签常驻在顶部：四页之间来回切是这扇窗口最常见的动作。底色与窗口一致，
+                    滚动时下面的内容不会从页签底下透出来。 */}
+                <div className="sticky top-0 z-10 -mx-6 -mt-3 mb-1 bg-[var(--st-win)] px-6 pb-2 pt-3">
+                    <Segmented
+                        value={tab}
+                        options={[
+                            { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
+                            { value: 'compressor', label: t('ui.consoleTabCompressor') },
+                            { value: 'reverb', label: t('ui.consoleTabReverb') },
+                            { value: 'postEq', label: t('ui.consoleTabPostEq') },
+                        ]}
+                        onChange={setTab}
+                        fill
+                    />
                 </div>
+
+                {tab === 'equalizer' && <ModCurveNotice />}
+
+                {tab === 'equalizer' && (
+                    <EqualizerPane
+                        draft={draft}
+                        curveHeard={curveHeard}
+                        presetIds={PRESET_IDS}
+                        onChoosePreset={applyPreset}
+                        canReset={!curveHeard && isAudioEqualizerCustomSlotId(draft.preset)}
+                        onReset={resetActiveCustomSlot}
+                        onBandChange={updateBandDraft}
+                        onEffectChange={updateEffectDraft}
+                        onCommit={commitDraft}
+                    />
+                )}
+                {tab === 'compressor' && <CompressorPane />}
+                {tab === 'reverb' && <ReverbPane />}
+                {tab === 'postEq' && <PostEqPane />}
             </div>
         </Sheet>
     );

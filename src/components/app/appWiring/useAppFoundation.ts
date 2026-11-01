@@ -19,6 +19,7 @@ import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { writeNativeLoopMode } from '../../../services/nativeQueueBridge';
 import { writeNativeSettings } from '../../../services/nativeSettingsBridge';
+import { startNativeEqualizerSync } from '../../../services/playbackEngine/nativeEqualizer';
 import { useNativeAiConfigSync } from '../../../hooks/useNativeAiConfigSync';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
@@ -198,6 +199,16 @@ export const useAppFoundation = () => {
 
     // AI 配置的启动同步与变化跟随：凭据只存原生，真正发请求的是原生。
     useNativeAiConfigSync();
+
+    /*
+     * 原生均衡器：启动对一次表，之后跟随 store。
+     *
+     * 安卓上出声的是 ExoPlayer，Web Audio 图不在信号路径上 —— 界面这边改了参数，
+     * 必须推给原生才有人执行。非安卓 / 桥不在时 start 自己会跳过，这里不用判平台。
+     */
+    useEffect(() => {
+        startNativeEqualizerSync();
+    }, []);
 
     /*
      * 「无法播放时自动跳过」的启动同步，理由同上面的循环模式：这一项原生也读

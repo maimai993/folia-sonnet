@@ -97,7 +97,9 @@ describe('the audio effects window', () => {
 
         it('says whose curve it is, lights no preset and shows the curve on the faders', () => {
             expect(place.textContent).toContain(i18n.t('ui.equalizerModCurve', { name: 'EQ mod' }));
-            expect(place.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+            // The preset strip alone: the console's tabs and its curve switch are pressed-state
+            // buttons too, and counting them here would say nothing about which preset is lit.
+            expect(place.querySelectorAll('[data-folia-presets] [aria-pressed="true"]')).toHaveLength(0);
             expect(sliders().slice(0, 10).map((slider) => Number(slider.getAttribute('aria-valuenow')))).toEqual(SMILE);
         });
 
@@ -166,7 +168,7 @@ describe('the audio effects window', () => {
         expect(place.textContent).toContain(i18n.t('ui.equalizerModCurveDormant', { name: 'EQ mod' }));
         expect(buttonNamed(i18n.t('ui.equalizerModCurveDiscard'))).toBeTruthy();
         sliders().forEach((slider) => expect(slider.closest('[inert]')).toBeNull());
-        const lit = Array.from(place.querySelectorAll('[aria-pressed="true"]')).map((chip) => chip.textContent);
+        const lit = Array.from(place.querySelectorAll('[data-folia-presets] [aria-pressed="true"]')).map((chip) => chip.textContent);
         expect(lit).toEqual([i18n.t('ui.equalizerPreset.custom1')]);
         expect(sliders().slice(0, 10).map((slider) => Number(slider.getAttribute('aria-valuenow')))).toEqual(ownSound().gains);
 
