@@ -80,13 +80,13 @@ describe('the password form of a sign-in', () => {
         draw({ needsServerUrl: true });
         const { url, name, secret } = fields();
         act(() => {
-            type(url!, ' http://192.168.1.5:5666 ');
+            type(url!, ' http://nas.lan:5666 ');
             type(name!, ' someone ');
             type(secret!, 'a-secret');
         });
         act(() => place.querySelector('button[type="submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         // 前后空白不是账号的一部分。
-        expect(submitted).toEqual([{ serverUrl: 'http://192.168.1.5:5666', username: 'someone', password: 'a-secret' }]);
+        expect(submitted).toEqual([{ serverUrl: 'http://nas.lan:5666', username: 'someone', password: 'a-secret' }]);
     });
 
     it('holds the submit back until the name and the password are both filled', () => {

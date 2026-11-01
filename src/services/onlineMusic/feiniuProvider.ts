@@ -60,7 +60,7 @@ const playbackReports: OnlinePlaybackReportProvider = {
  * 但**用户不该先判断自己在哪种网络里**再挑一个入口 —— 挑错的代价是「连不上」，
  * 而那句话对两种错法一模一样。所以第一栏收两种写法，由 `feiniuServerUrlFromFnId`
  * 认：一串不带点的短码当 FN ID 拼中继域名（`abcd1234` → `https://abcd1234.fnos.net`），
- * 带点的一律当地址（`192.168.1.5:5666`）照原样走局域网直连。
+ * 带点的一律当地址（`nas.lan:5666`）照原样走局域网直连。
  *
  * 没有方式可选的平台走的是「一张表单」那条路（`enterPasswordStage(..., null, ...)`）：
  * 不出现方式选择器，点进来直接是账号 + 密码。
