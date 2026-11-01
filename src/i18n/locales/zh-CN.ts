@@ -706,6 +706,8 @@ export default {
       "video-layer-toggle": { "title": "歌词后方视频层", "description": "显示或隐藏歌词后方的静音视频层" },
       "video-layer-pick": { "title": "视频层：选择本地视频", "description": "选择在歌词后方播放的本地视频" },
       "visualizer-toggle-random-per-song": { "title": "每首歌随机歌词动画", "description": "歌曲切换时随机使用一种歌词动画模式" },
+      "visualizer-nebbia-behind-cycle": { "title": "雾笺：切换窗外", "description": "在雨夜街景、梦海流萤和背景之间切换雾笺的窗外，前面的玻璃换成那套的默认搭配" },
+      "visualizer-nebbia-glass-cycle": { "title": "雾笺：切换玻璃", "description": "在雨窗和凝露之间切换雾笺前面的玻璃" },
       "visualizer-toggle-glow-blur-quantize": { "title": "修复 Linux 歌词动画卡死", "description": "改变部分歌词动画的发光绘制方式，修复 Linux 下长时间播放后偶发的卡死问题" },
       "visualizer-toggle-render-pixel-ratio": { "title": "降低渲染分辨率（低配提速）", "description": "把画布的像素比压到上限，低端机与高分屏上通常是最划算的一档" },
       "settings-visualizer": { "title": "歌词动画样式设置", "description": "打开歌词动画实验台" },
