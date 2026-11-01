@@ -37,6 +37,7 @@ import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { useAppViewStore } from '../../stores/useAppViewStore';
 import { countRender } from '../../dev/renderCount';
 import { useLibraryBackdrop } from './useLibraryBackdrop';
+import { useCollectionAudioWarmup } from './useCollectionAudioWarmup';
 import { useLibrarySuiteStore } from '../core/suite/useLibrarySuiteStore';
 import { useLibraryBrowseSessionStore } from '../core/shared/useLibraryBrowseSessionStore';
 import type { LibraryNavigationContext, LibrarySurfaceId } from '../core/suite/suite.contract';
@@ -239,6 +240,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         currentUserId: surfaceProps.user?.id,
         localTracks,
     });
+    useCollectionAudioWarmup(collectionResource);
     // 歌手资源：宿主按导航栈里那一层的 collectionKey 持有（本地描述的 id 会在 catalog 就绪后改写，不拿它算 key），
     // 本地歌手由宿主这一份 catalog 派生（歌手页不再自带第二个 catalog 实例）。宿主同样不订阅它的快照。
     const artistLocalLibrary = useMemo(() => ({

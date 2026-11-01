@@ -7,7 +7,7 @@ import { getSongResourceCacheKey } from '../../../../services/onlineMusic/resour
 import { getPersonalFmSelection } from '../../../../stores/usePersonalFmModeStore';
 import { omni } from '../../../../services/onlineMusic/omni';
 import { getCachedSongCoverUrl, hasCachedSongAudio } from '../../../../services/onlineMusic/resourceCache';
-import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs, refreshPrefetchAfterQueueEdit } from '../../../../services/prefetchService';
+import { getPrefetchedData, invalidateAndRefetch, prefetchNearbySongs, refreshPrefetchAfterQueueEdit, warmupSongAudio } from '../../../../services/prefetchService';
 import { getLocalSong } from '../../../../services/db';
 import { retireBlobUrl } from '../../../../services/playbackBlobUrls';
 import type { ThemeCacheSongKey } from '../../../../services/themeCache';
@@ -564,9 +564,23 @@ export function usePlaybackQueueController({
                      */
                     setPlayQueue(mirrorQueue);
                     try {
+                        // 原生派发只多带这一首已经预热好的 HTTP 地址；没有就保持镜像原样，
+                        // 由原生自己向平台解析（不在这里多等一次）。
+                        const nativePrefetched = getPrefetchedData(song, audioQuality);
+                        const nativeAudioUrl = nativePrefetched?.audioUrl
+                            && nativePrefetched.audioUrl !== 'CACHED_IN_DB'
+                            && /^https?:\/\//i.test(nativePrefetched.audioUrl)
+                            ? nativePrefetched.audioUrl
+                            : null;
+                        const mirrorEntries = buildQueueMirrorEntries(mirrorQueue, nativeLikeStateOf);
+                        const dispatchEntries = nativeAudioUrl
+                            ? mirrorEntries.map((entry, entryIndex) => (
+                                entryIndex === mirrorIndex ? { ...entry, url: nativeAudioUrl } : entry
+                            ))
+                            : mirrorEntries;
                         const { ok } = await FoliaPlayback.playFromQueue({
                             songKey: nativeKey,
-                            queueJson: JSON.stringify(buildQueueMirrorEntries(mirrorQueue, nativeLikeStateOf)),
+                            queueJson: JSON.stringify(dispatchEntries),
                             index: mirrorIndex,
                         });
                         if (ok) {
@@ -591,6 +605,10 @@ export function usePlaybackQueueController({
                             if (arrived) {
                                 makeSongCurrent(song);
                                 setPlayerState(PlayerState.PLAYING);
+                                // 原生已经接住这一单，再轻量预热相邻的一首（只音频地址，
+                                // 不取歌词、不做分析）；拿不到也不影响当前播放。
+                                const nextSong = mirrorQueue[mirrorIndex + 1];
+                                if (nextSong) void warmupSongAudio(nextSong, audioQuality);
                                 return;
                             }
                         }

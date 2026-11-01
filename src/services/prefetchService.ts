@@ -474,6 +474,58 @@ const prefetchSong = async (
     analyseForAutomix(song, data.audioUrl);
 };
 
+// 同一首歌、同一音质只留一个在途的轻量预热；不同音质各自一条，互不覆盖。
+const audioWarmups = new Map<string, Promise<PrefetchedAudioUrl | null>>();
+const audioWarmupControllers = new Map<string, AbortController>();
+
+const audioWarmupKey = (song: SongResult, audioQuality: AudioQualityPreference): string => (
+    `${getPrefetchSongKey(song)}\u0000${audioQuality}`
+);
+
+/**
+ * 轻量预热一首歌的音源地址：只碰音频 URL，不取歌词、不做自动匹配、不触发分析。
+ *
+ * 复用预取缓存与 resolvePrefetchAudioUrl：缓存里同音质的地址还在 TTL 内就直接用；过期或音质
+ * 不同才向平台要一次。同一 songKey + quality 的在途请求合并成一条；失败不写缓存，已有条目的
+ * 歌词、封面与另一音质的地址都原样保留。调用方不需要等它，拿不到时照旧走现有解析兜底。
+ */
+export const warmupSongAudio = (
+    song: SongResult,
+    audioQuality: AudioQualityPreference,
+): Promise<PrefetchedAudioUrl | null> => {
+    const key = audioWarmupKey(song, audioQuality);
+    const running = audioWarmups.get(key);
+    if (running) return running;
+
+    // 不带 requiredQuality 读：音质不同只表示这次要重新要地址，不能先把缓存里另一音质的
+    // 地址与 ReplayGain 抹掉 —— 这次预热失败时，原有音源还要照常可用。
+    const cached = getPrefetchedData(song);
+    if (cached?.audioUrl === 'CACHED_IN_DB') {
+        return Promise.resolve({ audioUrl: 'CACHED_IN_DB' });
+    }
+    if (cached?.audioUrl && cached.audioUrlQuality === audioQuality && isUrlValid(cached.audioUrlFetchedAt)) {
+        return Promise.resolve({ audioUrl: cached.audioUrl, replayGain: cached.replayGain });
+    }
+
+    if (getPlaybackSourceRef(song).kind !== 'online') return Promise.resolve(null);
+
+    const controller = new AbortController();
+    const pending = resolvePrefetchAudioUrl(song, audioQuality, controller.signal)
+        .then(resolved => {
+            if (!resolved || controller.signal.aborted) return null;
+            updatePrefetchedAudioUrl(song, resolved.audioUrl, audioQuality, resolved.replayGain);
+            return resolved;
+        })
+        .finally(() => {
+            if (audioWarmups.get(key) === pending) audioWarmups.delete(key);
+            if (audioWarmupControllers.get(key) === controller) audioWarmupControllers.delete(key);
+        });
+
+    audioWarmups.set(key, pending);
+    audioWarmupControllers.set(key, controller);
+    return pending;
+};
+
 export const updatePrefetchedAudioUrl = (
     song: SongResult,
     audioUrl: string,
@@ -648,6 +700,9 @@ export const invalidatePrefetchedLyrics = (): void => {
 export const clearPrefetchRuntime = (): void => {
     currentPrefetchAbortController?.abort();
     currentPrefetchAbortController = null;
+    for (const controller of audioWarmupControllers.values()) controller.abort();
+    audioWarmupControllers.clear();
+    audioWarmups.clear();
     prefetchCache.clear();
     analysisScopeSongs = [];
 };
