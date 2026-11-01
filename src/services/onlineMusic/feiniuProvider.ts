@@ -22,11 +22,11 @@ import {
     getFeiniuServerUrl,
     getFeiniuTransportAvailability,
     feiniuFnIdFromServerUrl,
-    feiniuServerUrlFromFnId,
     readFeiniuUser,
     rememberFeiniuUser,
     syncFeiniuGatewayCredentials,
 } from './feiniuTransport';
+import { feiniuServerUrlForLoginInput } from './feiniuLoginInput';
 import { feiniuPage, normalizeFeiniuCollection, normalizeFeiniuSong, normalizeFeiniuUser } from './feiniuNormalize';
 import { backfillSongCovers } from './onlineCoverFallback';
 import { feiniuAlbumPage, feiniuArtistPage, feiniuCatalog, feiniuTrackDetail } from './feiniuCatalog';
@@ -54,23 +54,21 @@ const playbackReports: OnlinePlaybackReportProvider = {
 };
 
 /**
- * 登录飞牛的两种方式：连的是同一套账号，区别只在「 NAS 在哪、你怎么找到它」。
+ * 飞牛只有一个登录入口。
  *
- * - `fnid`：FN ID —— 飞牛给这台 NAS 的远程访问 ID，App 只要它就能拼出地址
- *   （`abcd1234` → `https://abcd1234.fnid.cc`），人在外面也能连回家；
- * - `server`：局域网地址 —— 自己手写 `IP:端口`（默认 5666），人在家里用。
+ * 「NAS 在哪」对用户来说是同一件事：人在外面记得住 FN ID，人在家里抄得到 IP，
+ * 但**用户不该先判断自己在哪种网络里**再挑一个入口 —— 挑错的代价是「连不上」，
+ * 而那句话对两种错法一模一样。所以第一栏收两种写法，由 `feiniuServerUrlFromFnId`
+ * 认：一串不带点的短码当 FN ID 拼中继域名（`abcd1234` → `https://abcd1234.fnos.net`），
+ * 带点的一律当地址（`nas.lan:5666`）照原样走局域网直连。
  *
- * 两种方式最后都要用户名 + 密码。
+ * 没有方式可选的平台走的是「一张表单」那条路（`enterPasswordStage(..., null, ...)`）：
+ * 不出现方式选择器，点进来直接是账号 + 密码。
  */
-const FEINIU_LOGIN_METHODS: LoginMethod[] = [
-    { id: 'fnid', labelKey: 'home.loginMethodFeiniuFnid', iconKey: 'feiniu', passwordField: { labelKey: 'home.loginFeiniuFnId', placeholderKey: 'home.loginFeiniuFnIdPlaceholder' } },
-    { id: 'server', labelKey: 'home.loginMethodFeiniuServer', iconKey: 'feiniu', passwordField: { labelKey: 'home.loginServerUrl', placeholderKey: 'home.loginServerUrlPlaceholder' } },
-];
+const FEINIU_LOGIN_METHODS: LoginMethod[] = [];
 
-/** 选了哪一种就把第一栏填的东西翻译成地址：「填 ID」的那一种要拼域名，另一种照原样。 */
-const serverUrlForMethod = (methodId: string | null | undefined, raw: string | undefined): string | undefined => (
-    methodId === 'fnid' ? feiniuServerUrlFromFnId(raw ?? '') : raw
-);
+// 第一栏填的东西怎么变成地址（含「短码当 FN ID」的判定）抽到了 ./feiniuLoginInput，
+// 这样这段「两个口合一」的逻辑能脱离整个 provider 图单独测试。
 
 export const feiniuProvider: OnlineMusicProvider = {
     id: 'feiniu',
@@ -163,8 +161,9 @@ export const feiniuProvider: OnlineMusicProvider = {
         async logout() {
             clearFeiniuSession();
         },
-        async loginWithPassword({ username, password, serverUrl, methodId }) {
-            const data = await feiniuPasswordLogin(username, password, serverUrlForMethod(methodId, serverUrl));
+        // 方式已经合成一个口，methodId 不再参与判断：第一栏填什么，就按内容认。
+        async loginWithPassword({ username, password, serverUrl }) {
+            const data = await feiniuPasswordLogin(username, password, feiniuServerUrlForLoginInput(serverUrl));
             const user = normalizeFeiniuUser(data);
             rememberFeiniuUser(user);
             return user;
@@ -172,11 +171,14 @@ export const feiniuProvider: OnlineMusicProvider = {
         getLoginMethods: () => FEINIU_LOGIN_METHODS,
         /**
          * 上次填过的第一栏预填进表单：登出不清地址，重登时少填一项。
-         * 按方式分开：「填 ID」那一种只认上次的 FN ID（上次填的是 IP 就别往那栏里塞），反之同理。
+         *
+         * 中继的地址落盘时是整条 `https://abcd1234.fnos.net`，但用户当初填的是短码 ——
+         * 还他短码：一栏里那一串 URL 会让人以为要粘贴地址，而短码就是他记得住的那个东西。
+         * 认不出 FN ID 的（IP 地址）原样填回去。
          */
-        getPasswordLoginDefaults: (methodId) => {
+        getPasswordLoginDefaults: () => {
             const last = getFeiniuServerUrl();
-            return methodId === 'fnid' ? { serverUrl: feiniuFnIdFromServerUrl(last) } : { serverUrl: last };
+            return { serverUrl: feiniuFnIdFromServerUrl(last) || last };
         },
     },
 
