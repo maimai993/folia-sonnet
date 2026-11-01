@@ -30,6 +30,7 @@ vi.mock('@/components/shared/Sheet', () => ({
 import i18n from '@/i18n/config';
 import AudioEqualizerDialog from '@/components/panelTab/AudioEqualizerDialog';
 import { AUDIO_EQUALIZER_MOD_CURVE_KEY, useAudioSettingsStore } from '@/stores/useAudioSettingsStore';
+import { useAudioProfilesStore } from '@/stores/useAudioProfilesStore';
 import { AUDIO_EQUALIZER_STORAGE_KEY, resolveAudioEqualizerSettings, type AudioEqualizerSettings } from '@/utils/audioEqualizer';
 import { normalizeAudioEffects } from '@/utils/audioEffects';
 
@@ -220,6 +221,23 @@ describe('the audio effects window', () => {
         draw();
         expect(place.textContent).not.toContain(i18n.t('ui.equalizerModCurveRelease'));
         sliders().forEach((slider) => expect(slider.closest('[inert]')).toBeNull());
+    });
+
+    it('switches headphone profiles without leaving the tab you were on', () => {
+        draw();
+        act(() => useAudioProfilesStore.getState().duplicateActive());
+        press(buttonNamed(i18n.t('ui.consoleTabCompressor')));
+        expect(place.textContent).toContain(i18n.t('ui.consoleCompressorCrossovers'));
+
+        const chips = Array.from(place.querySelectorAll<HTMLElement>('[data-folia-profiles] [aria-pressed]'));
+        expect(chips).toHaveLength(2);
+        act(() => chips[0].dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+        // 两个仓库都换了，但页签留在压缩页 —— 切方案不该把人弹回均衡页。
+        expect(useAudioProfilesStore.getState().activeId).toBe(
+            useAudioProfilesStore.getState().profiles[0].id,
+        );
+        expect(place.textContent).toContain(i18n.t('ui.consoleCompressorCrossovers'));
     });
 
     it('closes the open flag a microtask after it goes away', async () => {

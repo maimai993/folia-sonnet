@@ -171,6 +171,11 @@ describe('store contract', () => {
             // so the settings store drives the position store. Same shape as the edge above, and
             // the reverse edge is likewise absent: the position store imports no store at all.
             useHomeLayoutSettingsStore: ['useHomeCardPositionStore'],
+            // A headphone profile is nothing but a snapshot of the two setting stores: switching
+            // writes the current sound back into the outgoing profile and applies the chosen one.
+            // It owns no sound of its own, so it must read both; neither of them imports it back,
+            // so the edge cannot close a cycle.
+            useAudioProfilesStore: ['useAudioConsoleStore', 'useAudioSettingsStore'],
         };
         const INFRASTRUCTURE = new Set([
             'storagePrimitives', 'useStatusMessageStore', 'visualizerSettingsPersistence', 'motionSignals',

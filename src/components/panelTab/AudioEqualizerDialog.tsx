@@ -16,12 +16,14 @@ import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerMo
 import Sheet from '../shared/Sheet';
 import { Segmented, Toggle } from '../modal/settings/kit';
 import ModCurveNotice from './equalizer/ModCurveNotice';
+import ProfileBar from './console/ProfileBar';
 import EqualizerPane from './console/EqualizerPane';
 import CompressorPane from './console/CompressorPane';
 import ReverbPane from './console/ReverbPane';
 import PostEqPane from './console/PostEqPane';
 import SaturationPane from './console/SaturationPane';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { useAudioProfilesStore } from '../../stores/useAudioProfilesStore';
 
 // src/components/panelTab/AudioEqualizerDialog.tsx
 // 调音台窗口：从控制页打开的那扇「音频效果」。
@@ -49,6 +51,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
     const modCurveSuspended = useAudioSettingsStore(state => state.audioEqualizerModCurveSuspended);
     const isOpen = useAudioSettingsStore(state => state.isAudioEqualizerOpen);
     const close = useAudioSettingsStore(state => state.closeAudioEqualizer);
+    const syncActiveProfile = useAudioProfilesStore(state => state.syncActive);
     const commitSettings = useAudioSettingsStore(state => state.handleSetAudioEqualizerSettings);
     const commitEnabled = useAudioSettingsStore(state => state.handleSetAudioEqualizerEnabled);
     // What is heard: the listener's own settings, with a mod's curve over the gains while it plays (Folium 1.7).
@@ -76,11 +79,14 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                 effects: { ...settings.effects },
                 customSlots: settings.customSlots.map(slot => ({ gains: [...slot.gains], effects: { ...slot.effects } })),
             });
-            // 每次打开都回到均衡器那一页：绝大多数人进来是来调 EQ 的，
-            // 停在上次看的压缩器上会让人以为「均衡器不见了」。
-            setTab('equalizer');
         }
     }, [isOpen, settings]);
+
+    // 只在窗口打开的那一下回到均衡器那一页。不能跟着 settings 一起跑：切换耳机方案会
+    // 更新 settings，若在这里重置页签，人在压缩页切方案就会被弹回均衡页。
+    useEffect(() => {
+        if (isOpen) setTab('equalizer');
+    }, [isOpen]);
 
     /*
      * The window is drawn only while the controls tab is up, and the tab can be switched away under it (a
@@ -178,10 +184,16 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
         commitSettings(draftRef.current);
     };
 
+    // 关窗时把当前设置写回正在用的那套方案：下次切换拿到的就是最后一次听到的声音。
+    const closeWindow = () => {
+        syncActiveProfile();
+        close();
+    };
+
     return (
         <Sheet
             isOpen={isOpen}
-            onClose={close}
+            onClose={closeWindow}
             isDaylight={isDaylight}
             size="l"
             title={t('ui.consoleTitle')}
@@ -199,21 +211,25 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
             {/* 这一层排窗口里的内容（至少和窗口一样高，多出的高度给推子），也让这扇对话框自己能被思索命中。
                 标记仍叫 audio-equalizer：思索（ponder）的悬停目标按这个名字找，改名会让引导指不到窗口。 */}
             <div data-ponder="audio-equalizer" className="flex min-h-full flex-col">
-                {/* 页签常驻在顶部：四页之间来回切是这扇窗口最常见的动作。底色与窗口一致，
-                    滚动时下面的内容不会从页签底下透出来。 */}
+                {/* 页签常驻在顶部：五页之间来回切是这扇窗口最常见的动作。底色与窗口一致，
+                    滚动时下面的内容不会从页签底下透出来。「耳机方案」一行也在这里，切页签
+                    不会把它滚走；它的高度固定，方案多少套都不改变页签的位置。 */}
                 <div className="sticky top-0 z-10 -mx-6 -mt-3 mb-1 bg-[var(--st-win)] px-6 pb-2 pt-3">
-                    <Segmented
-                        value={tab}
-                        options={[
-                            { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
-                            { value: 'compressor', label: t('ui.consoleTabCompressor') },
-                            { value: 'reverb', label: t('ui.consoleTabReverb') },
-                            { value: 'postEq', label: t('ui.consoleTabPostEq') },
-                            { value: 'saturation', label: t('ui.consoleTabSaturation') },
-                        ]}
-                        onChange={setTab}
-                        fill
-                    />
+                    <ProfileBar isDaylight={isDaylight} />
+                    <div className="mt-2">
+                        <Segmented
+                            value={tab}
+                            options={[
+                                { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
+                                { value: 'compressor', label: t('ui.consoleTabCompressor') },
+                                { value: 'reverb', label: t('ui.consoleTabReverb') },
+                                { value: 'postEq', label: t('ui.consoleTabPostEq') },
+                                { value: 'saturation', label: t('ui.consoleTabSaturation') },
+                            ]}
+                            onChange={setTab}
+                            fill
+                        />
+                    </div>
                 </div>
 
                 {tab === 'equalizer' && <ModCurveNotice />}

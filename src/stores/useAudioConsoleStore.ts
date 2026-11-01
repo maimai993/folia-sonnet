@@ -35,6 +35,13 @@ type AudioConsoleStore = {
     setLimiter: (patch: Partial<AudioConsoleLimiter>) => void;
     /** 后置十段全部归零（不动开关与曲线）。 */
     resetPostEqGains: () => void;
+    /**
+     * 整份换掉（切换耳机方案时用）。
+     *
+     * 与逐个 setter 的区别有两点：立即写盘，并且把排队中的那一次撤掉 —— 否则 250 ms 后
+     * 队列里的旧设置会把刚换上的方案覆盖回去。
+     */
+    replaceSettings: (settings: AudioConsoleSettings) => void;
     reset: () => void;
 };
 
@@ -140,6 +147,16 @@ export const useAudioConsoleStore = create<AudioConsoleStore>((set) => ({
             state.settings,
         ),
     })),
+
+    replaceSettings: (settings) => {
+        const next = normalizeAudioConsoleSettings(settings);
+        if (writeTimer !== null) {
+            clearTimeout(writeTimer);
+            writeTimer = null;
+        }
+        writeStoredAudioConsoleSettings(next);
+        set({ settings: next });
+    },
 
     reset: () => {
         const next = normalizeAudioConsoleSettings(null);
