@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
 import { setLyricsState } from '../stores/usePlaybackStore';
 import type { Line, LyricData } from '../types';
+import { parseLRC, parseYRC } from '../utils/lyrics/parserCore';
 
 // src/hooks/useNativeLyricsSubscription.ts
 // 订阅原生推来的歌词。**歌词由原生拉**，这里只把它翻成界面用的结构。
@@ -63,13 +64,26 @@ export const parseLrcLines = (lrc: string, translated: string): Line[] => {
         const next = lines[i + 1];
         lines[i].endTime = next ? next.startTime : lines[i].startTime + 5;
     }
-    return lines;
+    // 兼容多时间戳与无小数的 LRC 后，交给项目解析器生成词块和渲染提示。
+    // 只有 fullText、没有 words 的行能显示字幕，却无法被经典 / 云阶等主歌词样式绘制（#165）。
+    const stamp = (seconds: number): string => {
+        const ms = Math.round(seconds * 1000);
+        return `[${String(Math.floor(ms / 60000)).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}]`;
+    };
+    const normalized = lines.map(line => `${stamp(line.startTime)}${line.fullText}`).join('\n');
+    const translation = lines.filter(line => line.translation)
+        .map(line => `${stamp(line.startTime)}${line.translation}`).join('\n');
+    return parseLRC(normalized, translation, { includeInterludes: false }).lines
+        .map(line => ({ ...line, translation: line.translation ?? '' }));
 };
 
 /** 把一份 LRC 变成 store 要的形状；没有内容时给 null（界面据此显示「暂无歌词」）。 */
 export const toLyricData = (lrc: string, translated: string): LyricData | null => {
-    const lines = parseLrcLines(lrc, translated);
-    return lines.length > 0 ? { lines } : null;
+    // 原生网易网关可能提供 YRC：它的 [开始毫秒,时长] 不是 LRC 时间戳，必须保留逐字时间。
+    const data = /(?:^|\n)\s*\[\d+,\d+\]\(/.test(lrc)
+        ? parseYRC(lrc.trim(), translated, { includeInterludes: false })
+        : { lines: parseLrcLines(lrc, translated), isWordByWord: false };
+    return data.lines.length > 0 ? data : null;
 };
 
 export const useNativeLyricsSubscription = (currentSongKey: string | null): void => {
@@ -84,6 +98,7 @@ export const useNativeLyricsSubscription = (currentSongKey: string | null): void
             };
             const plugin = g.Capacitor?.Plugins?.FoliaPlayback as
                 | {
+                      getQueueState?: () => Promise<{ songKey?: string; lyrics?: NativeLyricsPayload }>;
                       addListener?: (
                           name: string,
                           cb: (payload: NativeLyricsPayload) => void,
@@ -93,7 +108,8 @@ export const useNativeLyricsSubscription = (currentSongKey: string | null): void
             if (!plugin?.addListener) return;
             // Capacitor 的 addListener 返回**句柄对象** `{ remove }`，不是函数：
             // 以前把它当函数在 effect 的清理里调，TypeError 直接把渲染打掉（黑屏）。
-            const handle = await plugin.addListener('foliaPlaybackLyrics', (payload) => {
+            let receivedLivePayload = false;
+            const applyPayload = (payload: NativeLyricsPayload): void => {
                 if (disposed) return;
                 // 只认当前这首：原生可能在我们切歌的同一瞬间推来上一首的结果。
                 if (!payload?.songKey || payload.songKey !== currentSongKey) return;
@@ -103,9 +119,27 @@ export const useNativeLyricsSubscription = (currentSongKey: string | null): void
                     return;
                 }
                 setLyricsState(toLyricData(payload.lrc, payload.translated ?? ''));
+            };
+            const handle = await plugin.addListener('foliaPlaybackLyrics', payload => {
+                if (payload?.songKey === currentSongKey) receivedLivePayload = true;
+                applyPayload(payload);
             });
-            if (disposed) void handle?.remove?.();
-            else unsubscribe = handle;
+            if (disposed) {
+                void handle?.remove?.();
+                return;
+            }
+            unsubscribe = handle;
+            // 先订阅再读快照，补回切歌重挂订阅之前已经推送的结果；晚到快照不覆盖实时事件。
+            if (plugin.getQueueState) {
+                try {
+                    const snapshot = await plugin.getQueueState();
+                    if (!receivedLivePayload && snapshot.songKey === currentSongKey && snapshot.lyrics) {
+                        applyPayload(snapshot.lyrics);
+                    }
+                } catch (error) {
+                    console.warn('[NativeLyrics] 读取当前歌词快照失败，保留实时订阅', error);
+                }
+            }
         };
 
         void subscribe();

@@ -32,10 +32,12 @@ object NativeLyricPresentation {
         if (!enabled || payload.lrc.isEmpty()) return
         val json = org.json.JSONObject().apply {
             put("songName", title); put("artist", artist); put("album", album)
-            put("songId", payload.songKey); put("lyricType", 0); put("lyric", payload.lrc)
+            put("songId", payload.songKey); put("lyricType", 0)
+            put("lyric", top.izuna.foliamajor.online.NativeYrcTimeline.asLineLrc(payload.lrc))
             put("noLyric", false); put("provider", "top.izuna.foliamajor"); put("source", "folia-sonnet")
             put("trackKey", payload.songKey); put("sessionGeneration", 1)
-            if (payload.translated.isNotEmpty()) put("translationLyric", payload.translated)
+            if (payload.translated.isNotEmpty()) put("translationLyric",
+                    top.izuna.foliamajor.online.NativeYrcTimeline.asLineLrc(payload.translated))
         }.toString()
         if (json.length <= 200_000) ColorOsLyricBridge.setPending(json, payload.translated.isNotEmpty(), payload.songKey)
     }

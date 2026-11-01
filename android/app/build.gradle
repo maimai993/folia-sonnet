@@ -138,6 +138,8 @@ apply from: 'capacitor.build.gradle'
  * 但这段在 apply 之后，仍然赢。
  */
 android {
+    // 新增的跨端回归测试统一留在仓库 test/unit，Gradle 仍直接执行真实 Kotlin 实现。
+    sourceSets.test.java.srcDir '../../test/unit/android'
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

@@ -118,6 +118,40 @@ describe('useNativeLyricsSubscription —— 原生歌词订阅的挂与拆', ()
         expect(env.lyrics).toHaveLength(0);
     });
 
+    it('先订阅再取快照，补回新订阅之前已经拉到的当前歌词', async () => {
+        const order: string[] = [];
+        fakeWindow().Capacitor = { Plugins: { FoliaPlayback: {
+            addListener: async (_name: string, cb: (payload: unknown) => void) => {
+                order.push('subscribe'); env.listener = cb; return { remove: () => undefined };
+            },
+            getQueueState: async () => {
+                order.push('snapshot');
+                return { songKey: 'B', lyrics: { songKey: 'B', lrc: '[00:01]第二首' } };
+            },
+        } } };
+        useNativeLyricsSubscription('B');
+        env.effect?.();
+        await flushMicrotasks();
+        expect(order).toEqual(['subscribe', 'snapshot']);
+        expect((env.lyrics[0] as { lines: { fullText: string }[] }).lines[0].fullText).toBe('第二首');
+    });
+
+    it('快照晚于实时歌词返回时，不把新歌词覆盖回旧快照', async () => {
+        let resolve!: (value: unknown) => void;
+        fakeWindow().Capacitor = { Plugins: { FoliaPlayback: {
+            addListener: async (_name: string, cb: (payload: unknown) => void) => {
+                env.listener = cb; return { remove: () => undefined };
+            },
+            getQueueState: () => new Promise(r => { resolve = r; }),
+        } } };
+        useNativeLyricsSubscription('B'); env.effect?.(); await flushMicrotasks();
+        env.listener?.({ songKey: 'B', lrc: '[00:01]实时歌词' });
+        resolve({ songKey: 'B', lyrics: { songKey: 'B', lrc: '' } });
+        await flushMicrotasks();
+        expect(env.lyrics).toHaveLength(1);
+        expect(env.lyrics[0]).not.toBeNull();
+    });
+
     it('插件上没有 addListener 时安静退出，不抛错', async () => {
         installPlugin(undefined);
         useNativeLyricsSubscription('online:netease:1');

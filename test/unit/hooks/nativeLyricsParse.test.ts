@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { parseLrcLines, toLyricData } from '../../../src/hooks/useNativeLyricsSubscription';
+import { buildDisplayWordsFromLayoutUnits, buildPostLyricLayoutUnits } from '../../../src/utils/lyrics/cjkSemanticLayout';
 
 // test/unit/hooks/nativeLyricsParse.test.ts
 // 原生推来的歌词要变成界面能用的行。**纯解析**：这里不测「该不该换歌词」（那归原生），
@@ -51,6 +52,29 @@ describe('native lyric parsing', () => {
         // 平台偶尔在开头返回 `[by:xxx]` 这类元信息，它不是歌词。
         const lines = parseLrcLines('[by:someone]\n[00:10.00]真的词', '');
         expect(lines.map(l => l.fullText)).toEqual(['真的词']);
+    });
+
+    it('普通歌词有可供经典和云阶主画面绘制的词块，而不只是字幕文本（#165）', () => {
+        const data = toLyricData('[00:12]真实歌词\n[00:15]第二行', '')!;
+        expect(data.isWordByWord).toBe(false);
+        for (const line of data.lines) {
+            expect(line.words.length).toBeGreaterThan(0);
+            expect(line.words.map(word => word.text).join('')).toBe(line.fullText);
+            expect(line.renderHints).toBeDefined();
+            const display = buildDisplayWordsFromLayoutUnits(buildPostLyricLayoutUnits(line, { semantic: true, sticky: true }));
+            expect(display.length).toBeGreaterThan(0);
+        }
+    });
+
+    it('原生网易 YRC 保留毫秒逐字时间、行时长与翻译（#165）', () => {
+        const data = toLyricData('[12000,3000](12000,1500,0)第一(13500,1500,0)句\n[15000,2000](15000,2000,0)第二句', '[00:12.000]first')!;
+        expect(data.isWordByWord).toBe(true);
+        expect(data.lines).toHaveLength(2);
+        expect(data.lines[0]).toMatchObject({ startTime: 12, endTime: 15, fullText: '第一句', translation: 'first' });
+        expect(data.lines[0].words).toEqual([
+            { text: '第一', startTime: 12, endTime: 13.5 },
+            { text: '句', startTime: 13.5, endTime: 15 },
+        ]);
     });
 
     it('空歌词返回 null，界面据此显示「暂无歌词」', () => {

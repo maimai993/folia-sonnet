@@ -1637,6 +1637,8 @@ class MusicGateway private constructor() {
          */
         @JvmStatic
         fun parseLrc(mainLrc: String?, transLrc: String?): List<WallpaperLyricsState.TimedLine> {
+            // 网关优先取回的网易逐字歌词是 YRC，不能再按 LRC 判成零行（#165）。
+            NativeYrcTimeline.parse(mainLrc, transLrc)?.let { return it }
             val stamps = ArrayList<LongArray>()
             val texts = ArrayList<String>()
             collectLrcLines(mainLrc, stamps, texts)
