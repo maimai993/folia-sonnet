@@ -1793,6 +1793,7 @@ export default {
     "cloud": "云盘",
     "albums": "专辑",
     "allAlbums": "全部",
+    "gridHomeMoreActions": "更多操作",
     "popular": "时下流行",
     "radio": "电台",
     "explore": "探索",

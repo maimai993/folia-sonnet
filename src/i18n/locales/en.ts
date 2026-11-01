@@ -1792,6 +1792,7 @@ export default {
     "cloud": "Cloud",
     "albums": "Albums",
     "allAlbums": "All",
+    "gridHomeMoreActions": "More actions",
     "popular": "Popular",
     "radio": "Radio",
     "explore": "Explore",

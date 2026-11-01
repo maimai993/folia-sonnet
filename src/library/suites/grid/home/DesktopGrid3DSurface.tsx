@@ -13,7 +13,7 @@ import { DEFAULT_DIRECTORY_SESSION_ID, hasDirectorySessionState } from '../../..
 import { homeCardToDirectoryItem } from '../../../core/directory/directoryItems';
 import { getLibraryDirectorySession, useLibraryDirectorySessionStore } from '../../../core/directory/useLibraryDirectorySessionStore';
 import { useHomeCardPosition } from '../../../../hooks/useHomeCardPosition';
-import { Button } from '../../../../components/ui';
+import { GridHomeActions } from './GridHomeActions';
 
 // src/library/suites/grid/home/DesktopGrid3DSurface.tsx
 // Shared desktop home surface that keeps Grid3D slider and GridMap controls visually consistent.
@@ -166,7 +166,8 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                 types) sits right under the header's view capsule, the library actions on the right
                 under the search box. The row itself lets clicks through to the grid; only the
                 controls take them. */}
-            <div className="pointer-events-none absolute inset-x-0 top-2 z-10">
+            {/* z-40：这一排按钮要一直压在卡片之上，否则窄屏时会被 3D 卡片的层叠上下文盖住（#180）。 */}
+            <div className="pointer-events-none absolute inset-x-0 top-2 z-40">
                 <div className="mx-auto grid w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 md:px-8">
                     <div />
                     <div className="flex justify-center">
@@ -183,24 +184,14 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                     </div>
 
                     <div className="flex min-w-0 justify-end">
-                        {rowActions.length > 0 && (
-                            <div data-ponder={ponderControls} className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-                                {rowActions.map(action => (
-                                    <Button
-                                        key={action.id}
-                                        onClick={action.onClick}
-                                        disabled={action.disabled}
-                                        title={action.title}
-                                        className={`flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium backdrop-blur-md transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${chrome.pill} ${
-                                            action.active ? chrome.strongText : chrome.softText
-                                        }`}
-                                    >
-                                        {action.icon}
-                                        <span className="whitespace-nowrap">{action.label}</span>
-                                    </Button>
-                                ))}
-                            </div>
-                        )}
+                        {/* 多个动作收进一个父级展开按钮：窄屏不再一排平铺挤在一起（#180）。 */}
+                        <GridHomeActions
+                            actions={rowActions}
+                            pillClassName={chrome.pill}
+                            textClassName={chrome.softText}
+                            activeTextClassName={chrome.strongText}
+                            ponderId={ponderControls}
+                        />
                     </div>
                 </div>
             </div>

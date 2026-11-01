@@ -1792,6 +1792,7 @@ export default {
     "cloud": "Cloud",
     "albums": "Album",
     "allAlbums": "Semua",
+    "gridHomeMoreActions": "Tindakan lain",
     "popular": "Populer",
     "radio": "Radio",
     "explore": "Jelajahi",
