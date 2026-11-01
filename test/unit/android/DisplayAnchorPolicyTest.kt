@@ -1,6 +1,5 @@
 package top.izuna.foliamajor.player
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,9 +31,15 @@ class DisplayAnchorPolicyTest {
     }
 
     @Test
+    fun `都停着且位置对得上时不写`() {
+        assertFalse(displayAnchorNeedsWrite(false, 5_000L, false, 5_100L))
+    }
+
+    @Test
     fun `缓冲中不算出声`() {
-        assertEquals(true, playerAudible(true, false))
-        assertEquals(false, playerAudible(true, true))
-        assertEquals(false, playerAudible(false, false))
+        assertTrue(playerAudible(true, false))
+        assertFalse(playerAudible(true, true))
+        assertFalse(playerAudible(false, false))
+        assertFalse(playerAudible(false, true))
     }
 }

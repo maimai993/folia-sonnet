@@ -601,7 +601,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
     /**
      * 当前倍速。写锚点那一侧要拿它决定要不要跳过这一拍 —— 见
-     * FoliaNativePlayerPlugin 里 `anchorStillTrue` 那段说明。
+     * FoliaNativePlayerPlugin 写锚点那段说明（判定在 DisplayAnchorPolicy.kt 的 displayAnchorNeedsWrite）。
      */
     fun getSpeed(): Float {
         return requestedSpeed

@@ -46,9 +46,9 @@ class FoliaNativePlayerPlugin : Plugin() {
          * 改播放器那个 `POSITION_TICK_MS` 时这里要跟着改。
          *
          * 容差与判定已挪到 DisplayAnchorPolicy.kt（DISPLAY_ANCHOR_TOLERANCE_MS /
-         * displayAnchorNeedsWrite），好在 JVM 单测里直接跑。
+         * displayAnchorNeedsWrite），好在 JVM 单测里直接跑：采样值与「墙钟外推出来的
+         * 位置」差不到一个采样周期、且播停一致时，这一拍没有新信息。
          */
-        // 采样值与「墙钟外推出来的位置」差不到一个采样周期：这一拍没有新信息。
 
         /**
          * 服务那边（通知栏 / 锁屏 / 耳机）要能直接碰到播放器，只能走静态引用 ——
