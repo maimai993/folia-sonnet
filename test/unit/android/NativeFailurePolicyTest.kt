@@ -23,4 +23,12 @@ class NativeFailurePolicyTest {
         assertEquals(null, endedIdentity(null))
         assertEquals("kugou:1", endedIdentity("kugou:1"))
     }
+
+    @Test
+    fun `派发中旧曲迟到的错误不处理`() {
+        assertEquals(false, errorBelongsToDispatch("kugou:A", "kugou:B"))
+        assertEquals(true, errorBelongsToDispatch("kugou:B", "kugou:B"))
+        assertEquals(true, errorBelongsToDispatch("kugou:A", null))
+        assertEquals(true, errorBelongsToDispatch("", "kugou:B"))
+    }
 }

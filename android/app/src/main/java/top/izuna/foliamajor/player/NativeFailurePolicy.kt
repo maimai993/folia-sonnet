@@ -9,3 +9,12 @@ fun nativeFailurePolicy(uiVisible: Boolean, autoSkip: Boolean, backgroundSilentS
 
 /** 插件对没有 mediaId 的媒体报空串：空串等同「没带身份」，走旧时间窗，不能当成一个不匹配的身份丢弃（#175）。 */
 fun endedIdentity(raw: String?): String? = raw?.takeIf { it.isNotEmpty() }
+
+/**
+ * 播放器错误是否属于当前这一单派发（#182 审查 M3）。没有在途派发、或错误没带身份时照旧处理；
+ * 派发中且错误身份是别的歌（旧那首迟到的错误）时不处理，免得新派发的那首被跳过。
+ */
+fun errorBelongsToDispatch(errorKey: String?, pendingKey: String?): Boolean {
+    val key = endedIdentity(errorKey) ?: return true
+    return pendingKey == null || pendingKey == key
+}

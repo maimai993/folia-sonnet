@@ -567,6 +567,11 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         return lastMediaId ?: ""
     }
 
+    /** 最近一条 ended / error 事件所属曲目的 mediaId（发出那一刻在播放器线程上取）；没有时是空串。 */
+    @Volatile private var eventMediaId = ""
+
+    fun lastEventMediaId(): String = eventMediaId
+
     /** 装源用的 MediaItem：带身份才认得出「引擎现在装的是谁」。 */
     private fun mediaItemFor(url: String, mediaId: String?): MediaItem {
         return if (mediaId.isNullOrEmpty()) {
@@ -889,6 +894,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     private fun emit(type: String, positionMs: Long, durationMs: Long, message: String?) {
+        /*
+         * ended / error 的身份必须在播放器线程上、事件发出的这一刻取（#182 审查 M1）。
+         * lastMediaId 在 prepare() 的调用线程上就提前换成了新歌，而旧那首排队中的
+         * ended / error 还没发出来；按 lastMediaId 标身份，会把旧歌的结束当成新歌的。
+         */
+        if (type == "ended" || type == "error") {
+            eventMediaId = try { player?.currentMediaItem?.mediaId ?: "" } catch (_: Throwable) { "" }
+        }
         if (type == "buffering") cachedBuffering = true
         else if (type == "playing" || type == "paused" || type == "ended" || type == "error" || type == "idle") {
             cachedBuffering = false
