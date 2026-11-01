@@ -12,7 +12,7 @@ import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationF
 import { resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
 import { calculatePendoloWheelLayout } from './pendoloGeometry';
 import PendoloActiveLyricSweep from './PendoloActiveLyricSweep';
-import { buildPendoloTextLayout } from './pendoloTextLayout';
+import { buildPendoloTextLayout, pendoloTextBlockWidth } from './pendoloTextLayout';
 import { buildPendoloSubtitleFontSpec, resolvePendoloSubtitleTracks, sumPendoloSubtitleTrackHeights } from './pendoloSubtitleTracks';
 import { resolvePendoloChorusPresentation, resolvePendoloMotionProfile } from './pendoloMotionProfile';
 import { resolvePendoloFallbackAnchorIndex } from './pendoloTimeline';
@@ -343,6 +343,13 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const baseRadius = Math.min(viewportSize.width, viewportSize.height) * pendoloTuning.arcRadius;
     const lyricRadiusOffset = Math.min(viewportSize.width, viewportSize.height) * 0.06;
     const lyricRingRadius = baseRadius + lyricRadiusOffset;
+    /*
+     * 字号跟着轮盘直径走。
+     *
+     * 原来是固定 28px（非聚焦行 22px），轮盘半径随视口缩、字却不缩，小屏上字比轮盘还大，
+     * 几行歌词必然挤在一起（#178）。按短边的 0.075 走，大屏仍旧封顶在原来的 28px。
+     */
+    const lyricBaseFontPx = Math.max(13, Math.min(28, Math.round(Math.min(viewportSize.width, viewportSize.height) * 0.075)));
 
     const maxItemX = centerX + baseRadius;
     const availableTextWidth = Math.max(
@@ -369,20 +376,21 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
     const resolvedMode = useMemo(() => resolveSubtitleContentMode(subtitleContentMode, showSubtitleTranslation), [subtitleContentMode, showSubtitleTranslation]);
     const subtitleFontFamily = useMemo(() => resolveThemeTranslationFontStack(subtitleTheme ?? theme), [subtitleTheme, theme]);
 
-    const lineBlockHeights = useMemo(() => {
+    const lineBlockMetrics = useMemo(() => {
         const measureWidth = availableTextWidth / pendoloTuning.activeScale;
         return lines.map((line, index) => {
             if (Math.abs(index - targetLineIndex) > 10) {
-                return 0;
+                return { width: 0, height: 0 };
             }
             // Always pre-allocate space for the focal state to prevent overlapping when scaled up
-            const fontPx = Math.round(28 * lyricsFontScale);
-            const mainHeight = buildPendoloTextLayout(
+            const fontPx = Math.round(lyricBaseFontPx * lyricsFontScale);
+            const mainLayout = buildPendoloTextLayout(
                 line.fullText,
                 `${fontWeight} ${fontPx}px ${fontFamily}`,
                 measureWidth,
                 Math.round(fontPx * 1.2),
-            ).height;
+            );
+            const mainHeight = mainLayout.height;
 
             // Focal-state rows, same as the main lyric above: reserve the largest size the line will take.
             const subtitleTracks = resolvePendoloSubtitleTracks(line, {
@@ -398,9 +406,19 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                 track.lineHeightPx,
             ).height);
 
-            return (mainHeight + translationHeight) * pendoloTuning.activeScale;
+            // 宽只取正文那一块：副行与正文同宽换行，实际不会比它更宽。
+            const mainWidth = pendoloTextBlockWidth(mainLayout) * pendoloTuning.activeScale;
+            return {
+                width: Math.min(availableTextWidth, mainWidth),
+                height: (mainHeight + translationHeight) * pendoloTuning.activeScale,
+            };
         });
-    }, [availableTextWidth, fontFamily, fontWeight, hideTranslationSubtitle, lines, lyricsFontScale, pendoloTuning.activeScale, resolvedMode, subtitleFontFamily, subtitleFontScale, subtitleTheme, targetLineIndex, theme]);
+    }, [availableTextWidth, fontFamily, fontWeight, hideTranslationSubtitle, lines, lyricBaseFontPx, lyricsFontScale, pendoloTuning.activeScale, resolvedMode, subtitleFontFamily, subtitleFontScale, subtitleTheme, targetLineIndex, theme]);
+
+    const lineBlockHeights = useMemo(
+        () => lineBlockMetrics.map(metric => metric.height),
+        [lineBlockMetrics],
+    );
 
     // Calculate line items for wheel
     const lineItems = useMemo(() => {
@@ -413,8 +431,9 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
             pendoloTuning,
             lyricRadiusOffset,
             lineBlockHeights,
+            lineBlockMetrics,
         );
-    }, [lineBlockHeights, lines, targetLineIndex, viewportSize, pendoloTuning]);
+    }, [lineBlockHeights, lineBlockMetrics, lines, targetLineIndex, viewportSize, pendoloTuning]);
 
     const primaryTextColor = theme.primaryColor || '#FFFFFF';
     const accentTextColor = theme.accentColor || '#3B82F6';
@@ -500,7 +519,7 @@ const VisualizerPendolo: React.FC<VisualizerSharedProps> = (props) => {
                                 motionProfile,
                             );
                             const maxTextWidth = availableTextWidth / item.scale;
-                            const fontPx = Math.round((isFocal ? 28 : 22) * lyricsFontScale);
+                            const fontPx = Math.round((isFocal ? lyricBaseFontPx : Math.round(lyricBaseFontPx * 0.78)) * lyricsFontScale);
                             const subtitleTracks = resolvePendoloSubtitleTracks(item.line, {
                                 mode: resolvedMode,
                                 hidden: hideTranslationSubtitle,

@@ -46,3 +46,7 @@ export const buildPendoloTextLayout = (
         height: Math.max(lines.length, 1) * lineHeight,
     };
 };
+
+/** 块宽取最宽那一行：轮盘拿它判断相邻两行会不会横着压到一起（#178）。 */
+export const pendoloTextBlockWidth = (layout: PendoloTextLayout): number =>
+    layout.lines.reduce((widest, line) => Math.max(widest, line.width), 0);

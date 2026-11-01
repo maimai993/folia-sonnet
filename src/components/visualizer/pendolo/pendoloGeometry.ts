@@ -3,6 +3,11 @@ import { type Line, type PendoloTuning } from '../../../types';
 
 // src/components/visualizer/pendolo/pendoloGeometry.ts
 
+export interface PendoloBlockSize {
+    width: number;
+    height: number;
+}
+
 export interface PendoloLineItem {
     line: Line;
     index: number;
@@ -28,6 +33,7 @@ export function calculatePendoloWheelLayout(
     tuning: PendoloTuning,
     radiusOffsetPx = 0,
     lineBlockHeights?: number[],
+    blockSizes?: PendoloBlockSize[],
 ): PendoloLineItem[] {
     const centerX = viewportWidth * tuning.wheelCenterX;
     const centerY = viewportHeight * tuning.wheelCenterY;
@@ -110,7 +116,53 @@ export function calculatePendoloWheelLayout(
         });
     }
 
-    return items;
+    return dropPendoloOverlappingItems(items, blockSizes);
+}
+
+/** 文字块以左中为锚点向右延伸（`transformOrigin: left center`），宽高都乘这一行的 scale。 */
+const pendoloBoxOf = (item: PendoloLineItem, size: PendoloBlockSize) => {
+    const scale = item.scale;
+    return {
+        left: item.x,
+        right: item.x + size.width * scale,
+        top: item.y - (size.height * scale) / 2,
+        bottom: item.y + (size.height * scale) / 2,
+    };
+};
+
+/**
+ * 按真实块尺寸剔除会重叠的行。
+ *
+ * 角间距只按**行高**算（`(prevH + curH + 24) / 2R`），可文字块是**宽**的：越靠近圆弧两端，
+ * 相邻两行的中心越是横向错开，而每块从锚点一直向右铺开上百像素 —— 于是横向压在一起。
+ * 屏幕越小轮盘越窄，这条越明显（#178）。这里从焦点行往外一行行放，放不下的直接不画，
+ * 放得下的与原来完全一致。
+ */
+const dropPendoloOverlappingItems = (
+    items: PendoloLineItem[],
+    blockSizes?: PendoloBlockSize[],
+): PendoloLineItem[] => {
+    if (!blockSizes || blockSizes.length === 0) return items;
+    const ordered = [...items].sort((left, right) => left.distanceFromActive - right.distanceFromActive);
+    const kept: PendoloLineItem[] = [];
+    const boxes: Array<ReturnType<typeof pendoloBoxOf>> = [];
+    for (const item of ordered) {
+        const size = blockSizes[item.index];
+        // 没有尺寸信息的行照旧画：剔除只用于「知道多大却会压住别人」的那些行。
+        if (!size || size.width <= 0 || size.height <= 0) {
+            kept.push(item);
+            continue;
+        }
+        const box = pendoloBoxOf(item, size);
+        const collides = boxes.some(other => (
+            box.left < other.right && other.left < box.right
+            && box.top < other.bottom && other.top < box.bottom
+        ));
+        if (collides) continue;
+        kept.push(item);
+        boxes.push(box);
+    }
+    return kept.sort((left, right) => left.index - right.index);
 }
 
 /**
