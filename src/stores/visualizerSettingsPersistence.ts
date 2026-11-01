@@ -1,4 +1,4 @@
-import { DEFAULT_SMART_BEAT_SETTINGS, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_SMART_BEAT_SETTINGS, type LyricRenderQuality, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 // 只做字符串校验，走 types/visualizerModes 而不是 registry：后者的 eager glob 会把 13 个
 // renderer（含 three.js）拉进来，而这里读的只是一个 localStorage 字符串。
 // mod 模式在启动时本来就看不到——bootstrap.tsx 的 restoreStoredModVisualizer 在 mods 注册完
@@ -12,6 +12,7 @@ import {
 import type { StoredTuning } from '../components/visualizer/tuningDefinition';
 import { resolveSmartBeatSettings, type SmartBeatPatch } from '../services/beatFx/smartBeatSettings';
 import { parseVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
+import { DEFAULT_LYRIC_RENDER_QUALITY, LYRIC_RENDER_QUALITY_STORAGE_KEY, normalizeLyricRenderQuality } from '../utils/lyricRenderQuality';
 
 import { getStoredString } from './storagePrimitives';
 import { normalizeRandomVisualizerModes } from '../utils/randomVisualizerModes';
@@ -433,5 +434,16 @@ export const readStoredSmartBeatSettings = (): SmartBeatSettings => {
         return resolveSmartBeatSettings(JSON.parse(saved) as SmartBeatPatch);
     } catch {
         return DEFAULT_SMART_BEAT_SETTINGS;
+    }
+};
+
+/** 「性能与动效」里的全局歌词画质挡位；没存过就是各样式原来的样子。 */
+export const readStoredLyricRenderQuality = (): LyricRenderQuality => {
+    try {
+        const raw = localStorage.getItem(LYRIC_RENDER_QUALITY_STORAGE_KEY);
+        if (!raw) return DEFAULT_LYRIC_RENDER_QUALITY;
+        return normalizeLyricRenderQuality(JSON.parse(raw));
+    } catch {
+        return DEFAULT_LYRIC_RENDER_QUALITY;
     }
 };

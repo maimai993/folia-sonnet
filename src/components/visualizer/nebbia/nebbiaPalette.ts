@@ -1,8 +1,10 @@
-﻿import type { Theme } from '../../../types';
-import { parseColorChannels } from '../../../utils/visualizer/colorMix';
+import type { Theme } from '../../../types';
+import { parseColorChannels } from '../colorMix';
 
 // src/components/visualizer/nebbia/nebbiaPalette.ts
-// 涓婚 鈫?绐楀鐨勫鏅厤鑹诧細澶╄壊涓ゆ。锛堜富棰樿儗鏅帇鎴愬閲岀殑娣辫壊锛夛紝涓変釜鐏厜鑹诧紙寮鸿皟鑹叉墦澶达紝鏄仛鍏夌伅鍜岄湏铏圭殑棰滆壊锛?// 鍙﹀涓や釜鍙栦富棰橀噷澶熼矞鑹崇殑棰滆壊锛屼笉澶熷氨鎶婂己璋冭壊杞壊鐩歌ˉ涓婏級銆傞兘鏄?0..1 鐨?RGB銆?
+// 主题 → 窗外的夜景配色：天色两档（主题背景压成夜里的深色），三个灯光色（强调色打头，是聚光灯和霓虹的颜色；
+// 另外两个取主题里够鲜艳的颜色，不够就把强调色转色相补上）。都是 0..1 的 RGB。
+
 type Rgb = [number, number, number];
 export interface NebbiaPalette { sky0: Rgb; sky1: Rgb; la: Rgb; lb: Rgb; lc: Rgb }
 
@@ -24,7 +26,7 @@ const fromHsl = ([h, s, l]: Rgb): Rgb => {
     return [f(0), f(8), f(4)];
 };
 
-// 鐏浜€佽鏈夐鑹诧細楗卞拰搴﹀拰浜害閮芥姮鍒板鏅噷鐪嬪緱瑙佺殑鑼冨洿
+// 灯要亮、要有颜色：饱和度和亮度都抬到夜景里看得见的范围
 const asLight = (rgb: Rgb): Rgb => {
     const [h, s, l] = toHsl(rgb);
     return fromHsl([h, Math.max(0.55, s), Math.min(0.78, Math.max(0.6, l))]);

@@ -56,6 +56,7 @@ export const BEAT_EFFECT_IDS = {
     hanabiBeatPulse: 'hanabi.beatPulse',
     temperaInkFlash: 'tempera.inkFlash',
     nebbiaDrizzleRide: 'nebbia.drizzleRide',
+    nebbiaAquaBeat: 'nebbia.aquaBeat',
     machiNeonPulse: 'machi.neonPulse',
     machiDrumRipple: 'machi.drumRipple',
     machiScreenFlash: 'machi.screenFlash',
