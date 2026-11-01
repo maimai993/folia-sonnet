@@ -206,6 +206,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setVisualizerBackgroundMode: vi.fn(),
             setMonetBackgroundTuning: vi.fn(),
             setLatentBackgroundTuning: vi.fn(),
+            cycleNebbiaBehind: vi.fn((): 'night' => 'night'),
+            cycleNebbiaGlass: vi.fn((): 'rain' => 'rain'),
             toggleVideoLayer: vi.fn(),
             pickVideoLayerFile: vi.fn(async () => null),
             usesWordSegmentation: true,

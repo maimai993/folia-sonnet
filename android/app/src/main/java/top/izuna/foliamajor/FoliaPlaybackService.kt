@@ -874,6 +874,8 @@ class FoliaPlaybackService : android.app.Service() {
             if (url != null && !url.isEmpty()) {
                 // 装不上就如实回 false：调用方（JS）据此回退 Web 全流程，别让界面先换歌。
                 val installed = nativePlayMirrorEntry(entry, url)
+                // 装不上 = JS 回退 Web 全流程接手，这一单的 pending 不能留下（#182 审查 M2）。
+                if (!installed && pendingDispatchSongKey == songKey) pendingDispatchSongKey = null
                 preloadMirrorNeighbors(array, target, +1)
                 return installed
             }
@@ -1324,6 +1326,12 @@ class FoliaPlaybackService : android.app.Service() {
                 settings.getBoolean("autoSkipUnplayable", false),
                 settings.getBoolean("backgroundSilentSkip", true))
         if (policy.notifyWeb) {
+            /*
+             * 交回 Web 即派发终止（#182 审查 M2）：之后放什么由 Web 决定，可能是同一首的
+             * Web 全流程，也可能是别的歌。继续挂着 pending，只要 Web 最后放的不是同一首，
+             * 快照与 ended 就会一直被丢掉（通知栏不更新、播完不续播）。
+             */
+            if (pendingDispatchSongKey == songKey) pendingDispatchSongKey = null
             if (songKey.isNotEmpty()) sendCommand("nativePlayFailed", 0L, songKey)
             return
         }
@@ -1339,11 +1347,22 @@ class FoliaPlaybackService : android.app.Service() {
                 lines.joinToString("\n") { it.text })
     }
 
+    /**
+     * Web 直接调插件 prepare 装了一首（前台点歌回退、Web 全流程）：原生在途的派发作废，
+     * pending 改成这一首；没带身份时清空，退回旧的时间窗判定（#182 审查 M2）。
+     */
+    fun onWebPrepared(songKey: String?) {
+        pendingDispatchSongKey = top.izuna.foliamajor.player.endedIdentity(songKey)
+        beginDispatch()
+    }
+
     /** 真正出声才结束连续失败序列，prepare成功但随后error不算成功。 */
     fun onNativePlaybackStarted() { consecutiveSkips = 0 }
 
     /** 原生错误回调只处理当前媒体，不把旧源的延迟错误应用到新歌。 */
     fun onNativePlayerError(songKey: String) {
+        // 正在派发另一首（地址解析中）时，旧那首迟到的错误不能再推进一格，否则新派发的那首被静默跳过（#182 审查 M3）。
+        if (!top.izuna.foliamajor.player.errorBelongsToDispatch(songKey, pendingDispatchSongKey)) return
         val current = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()?.songKey ?: ""
         if (songKey.isNotEmpty() && current.isNotEmpty() && songKey != current) return
         onMirrorEntryFailed(if (songKey.isEmpty()) current else songKey)

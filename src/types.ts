@@ -1490,3 +1490,18 @@ export interface AudioBands {
     treble: MotionValue<number>;  // 3500Hz+ (Crosses)
     spectrum?: MotionValue<Uint8Array<ArrayBuffer>>; // Raw analyser FFT magnitude bins for full-spectrum visualizers
   }
+
+/** 用 canvas / WebGL 画的歌词样式的渲染分辨率：相对样式自己默认像素密度的倍数，大于 1 是超采样。 */
+export type LyricRenderScale = 0.5 | 0.75 | 1 | 1.5 | 2;
+/** 歌词画布的抗锯齿：auto 是各样式自己的默认。 */
+export type LyricAntialias = 'auto' | 'on' | 'off';
+/** 「性能与动效」里的全局挡位：各样式默认跟随它。 */
+export interface LyricRenderQuality {
+    scale: LyricRenderScale;
+    antialias: LyricAntialias;
+}
+/** 一个歌词样式自己的分辨率与抗锯齿（存在样式的 tuning 里）：global 跟随全局挡位。 */
+export interface LyricRenderOverride {
+    scale: 'global' | LyricRenderScale;
+    antialias: 'global' | 'on' | 'off';
+}
