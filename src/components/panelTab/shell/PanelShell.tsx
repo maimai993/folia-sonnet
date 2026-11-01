@@ -35,6 +35,14 @@ const SHORT_TOP_MARGIN_PX = 16;
 /** 又矮又宽时面板摊宽到这个宽度：横向有的是地方，摊宽之后页签能分两栏，纵向才够放。 */
 const WIDE_SURFACE_PX = 560;
 const SURFACE_PX = 360;
+/**
+ * 矮而宽时不必摊到最宽的那些页签：账号、本地、Navidrome、在线歌词、AI 导演。
+ * 它们内容本来就少，摊到 560 只会把右半边留成一大块空白，给回窄一点的宽度。
+ * 封面、控制、队列不在这张表里——封面要封面与文字并排，另外两个要分两栏（见各自组件）。
+ */
+const NARROW_WIDE_TABS: ReadonlySet<string> = new Set(['account', 'local', 'navi', 'onlineLyrics', 'aiDirector']);
+/** 矮而宽时上面那些页签的宽度：比窄屏的 360 稍宽，够放下两栏按钮又不横贯屏幕。 */
+const NARROW_WIDE_SURFACE_PX = 392;
 /** 又矮又宽时页签改成右侧一条竖轨（见 Segments 的 vertical）占的宽度。 */
 const RAIL_WIDTH_PX = 52;
 /** 竖轨的下限：页签内容本身很矮（空状态）时，几个图标也不该被压成一条。 */
@@ -157,7 +165,9 @@ const PanelSurface: React.FC<PanelSurfaceProps> = ({ hasHandle, isCover, tabKey,
             className={`st-window pointer-events-auto @container hide-scrollbar flex max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden rounded-[20px] bg-[var(--pn-glass)] text-[color:var(--st-t1)] shadow-[var(--pn-shadow)] backdrop-blur-[40px] backdrop-saturate-[1.3] [&[data-still]_*]:transition-none ${isWideShort ? 'flex-row' : 'flex-col'}`}
             style={{
                 ...panelTokens(isDaylight, theme, reduced),
-                width: isWideShort ? WIDE_SURFACE_PX : SURFACE_PX,
+                width: isWideShort
+                    ? (NARROW_WIDE_TABS.has(tabKey) ? NARROW_WIDE_SURFACE_PX : WIDE_SURFACE_PX)
+                    : SURFACE_PX,
                 '--pn-under': `${underPx}px`,
                 '--pn-top-margin': `${topMarginPx}px`,
                 '--pn-dock': `${dockAllowancePx}px`,
