@@ -3,15 +3,18 @@ import { Theme, ThemeMode, VisualizerMode } from '../../types';
 import type { ThemeSourceModel } from '../../hooks/themeControllerState';
 import AudioEqualizerDialog from './AudioEqualizerDialog';
 import AppearanceSection from './controls/AppearanceSection';
+import HdrProjectionRow from './controls/HdrProjectionRow';
 import SoundTiles from './controls/SoundTiles';
 import SleepTimerRow from './controls/SleepTimerRow';
+import ThemeNameRow from './controls/ThemeNameRow';
+import ThemeSourceRow from './controls/ThemeSourceRow';
 import VolumeRow from './controls/VolumeRow';
 import { GroupLine } from './shell/GroupLine';
 import { useIsWideShortViewport } from './shell/panelViewport';
 
 // src/components/panelTab/ControlsTab.tsx
-// 控制标签页只负责装配，三组：声音（音量和两块）、外观（歌词样式、背景、播放页透明背景）、主题（来源和当前主题那一行）。
-// 音频效果器的入口在声音组那块「智能过渡」旁边（SoundTiles 的第三格，仅安卓原生）。
+// 控制标签页只负责装配：声音（音量和两块、定时关闭、主题来源与当前主题那一行、HUD 投影）与外观（歌词样式、背景、播放页透明背景）。
+// 音频效果器的入口已从声音组删掉（issue #107）；窗口仍由命令面板打开。
 //
 // 矮而宽（横过来的手机）时**分左右两栏**：那种窗口纵向只剩一百多像素，单栏要滚很久才看到
 // 主题那一行；横向反倒还剩一大半，摊成两栏一屏能看到的控件就多了一倍。竖屏不分 —— 那儿缺的
@@ -98,6 +101,30 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
             <div className="pt-2">
                 <SleepTimerRow theme={theme} isDaylight={isDaylight} />
             </div>
+
+            {/* 主题来源、当前主题那一行与 HUD 投影摆在这里：横屏分两栏时「声音」这一栏到定时关闭就
+                断了，底下一直是空的，右边那栏却挤满——挪过来正好把空档填上（issue #200）。 */}
+            <ThemeSourceRow
+                themeSourceModel={themeSourceModel}
+                onBgModeChange={onBgModeChange}
+                hasCustomTheme={hasCustomTheme}
+                defaultTheme={defaultTheme}
+                daylightTheme={daylightTheme}
+                isDaylight={isDaylight}
+            />
+            <ThemeNameRow
+                theme={theme}
+                themeSourceModel={themeSourceModel}
+                defaultTheme={defaultTheme}
+                daylightTheme={daylightTheme}
+                onGenerateAITheme={onGenerateAITheme}
+                isGeneratingTheme={isGeneratingTheme}
+                canGenerateAITheme={canGenerateAITheme}
+                isDaylight={isDaylight}
+                onToggleDaylight={onToggleDaylight}
+            />
+            {/* HUD 投影：三件事都跟「怎么显示」有关；非安卓自己不渲染。 */}
+            <HdrProjectionRow theme={theme} />
         </>
     );
 
@@ -116,8 +143,6 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                 onToggleTransparentPlayerBackground={onToggleTransparentPlayerBackground}
                 onClosePanel={onClosePanel}
             />
-            {/* 主题来源、当前主题与 HUD 投影搬去了账号页（那里内容少、底下本来就有空白）：横屏摊两栏时
-                这几行会把右半边挤满，而账号页空着大半块。见 AccountTab 文件头的说明。 */}
         </>
     );
 

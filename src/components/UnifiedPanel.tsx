@@ -448,17 +448,6 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             {currentTab === 'account' && (
                 <AccountTab
                     accountController={accountController}
-                    theme={theme}
-                    themeSourceModel={themeSourceModel}
-                    defaultTheme={defaultTheme}
-                    daylightTheme={daylightTheme}
-                    hasCustomTheme={hasCustomTheme}
-                    onBgModeChange={onBgModeChange}
-                    onGenerateAITheme={onGenerateAITheme}
-                    isGeneratingTheme={isGeneratingTheme}
-                    canGenerateAITheme={canGenerateAITheme}
-                    isDaylight={isDaylight}
-                    onToggleDaylight={onToggleDaylight}
                     audioQuality={audioQuality}
                     onAudioQualityChange={onAudioQualityChange}
                     onSyncData={onSyncData}

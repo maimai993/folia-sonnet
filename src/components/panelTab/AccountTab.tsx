@@ -2,8 +2,6 @@ import React from 'react';
 import { LogOut, RefreshCw, Crown, User as UserIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AudioQualityPreference } from '../../types/onlineMusic';
-import type { Theme, ThemeMode } from '../../types';
-import type { ThemeSourceModel } from '../../hooks/themeControllerState';
 import type { LibraryAccountController, LibraryAccountSnapshot } from '../../library/core/account/account.contract';
 import { useLibraryAccountProviders, useLibraryAccountSelector } from '../../library/core/account/useLibraryAccount';
 import { canLogoutProvider } from '../../library/core/account/accountRules';
@@ -16,16 +14,11 @@ import { GroupLine } from './shell/GroupLine';
 import { PanelButton } from './shell/PanelButton';
 import { PanelIconButton } from './shell/PanelIconButton';
 import { PanelRow } from './shell/PanelRow';
-import AppearanceSection from './controls/AppearanceSection';
-import HdrProjectionRow from './controls/HdrProjectionRow';
-import ThemeNameRow from './controls/ThemeNameRow';
-import ThemeSourceRow from './controls/ThemeSourceRow';
 
 // src/components/panelTab/AccountTab.tsx
 // The panel's account tab: who is signed in on the active platform (or that nobody is, or that the
 // sign-in ran out, with the way to the home page and its sign-in window), the default audio quality as one row with a pick list, and the
-// button that syncs the account's data. 主题来源、当前主题那一行与 HUD 投影也在这里：控制页横屏要摊两栏，
-// 这几行摆在那里会把右半边挤满；这个页签内容少，底下本来就有空白。 The platform, its account and the sign-out come from the
+// button that syncs the account's data. The platform, its account and the sign-out come from the
 // account controller (library/core/account/providerAccountController.service.ts), which asks first.
 
 interface AccountTabProps {
@@ -36,18 +29,6 @@ interface AccountTabProps {
     onSyncData: () => void;
     isSyncing: boolean;
     onNavigateHome: () => void;
-    /** 主题来源、当前主题与 HUD 投影那几行（原先在控制页，见文件头的说明）。 */
-    theme: Theme;
-    themeSourceModel: ThemeSourceModel;
-    defaultTheme: Theme;
-    daylightTheme: Theme;
-    hasCustomTheme: boolean;
-    onBgModeChange: (mode: ThemeMode) => void;
-    onGenerateAITheme: () => void;
-    isGeneratingTheme: boolean;
-    canGenerateAITheme: boolean;
-    isDaylight: boolean;
-    onToggleDaylight: () => void;
 }
 
 const AUDIO_QUALITY_OPTIONS: Array<{
@@ -70,17 +51,6 @@ const AccountTab: React.FC<AccountTabProps> = ({
     onSyncData,
     isSyncing,
     onNavigateHome,
-    theme,
-    themeSourceModel,
-    defaultTheme,
-    daylightTheme,
-    hasCustomTheme,
-    onBgModeChange,
-    onGenerateAITheme,
-    isGeneratingTheme,
-    canGenerateAITheme,
-    isDaylight,
-    onToggleDaylight,
 }) => {
     const { t } = useTranslation();
     const reduced = useKitReducedMotion();
@@ -172,30 +142,6 @@ const AccountTab: React.FC<AccountTabProps> = ({
                     </PanelButton>
                 </div>
             )}
-
-            <GroupLine />
-
-            {/* 主题来源、当前主题与 HUD 投影：原先摆在控制页，横屏摊两栏时把右半边挤满；这里内容少，接在这刚好。 */}
-            <ThemeSourceRow
-                themeSourceModel={themeSourceModel}
-                onBgModeChange={onBgModeChange}
-                hasCustomTheme={hasCustomTheme}
-                defaultTheme={defaultTheme}
-                daylightTheme={daylightTheme}
-                isDaylight={isDaylight}
-            />
-            <ThemeNameRow
-                theme={theme}
-                themeSourceModel={themeSourceModel}
-                defaultTheme={defaultTheme}
-                daylightTheme={daylightTheme}
-                onGenerateAITheme={onGenerateAITheme}
-                isGeneratingTheme={isGeneratingTheme}
-                canGenerateAITheme={canGenerateAITheme}
-                isDaylight={isDaylight}
-                onToggleDaylight={onToggleDaylight}
-            />
-            <HdrProjectionRow theme={theme} />
         </div>
     );
 };

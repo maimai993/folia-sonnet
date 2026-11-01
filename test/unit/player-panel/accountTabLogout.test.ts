@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../src/services/baseThemes';
-import type { ThemeSourceModel } from '../../../src/hooks/themeControllerState';
 
 // test/unit/player-panel/accountTabLogout.test.ts
 // 面板账户页（AccountTab）的登出按钮跟账户 controller 的判定走（A4 遗留①）：网易启动 / 首次刷新时，App 的 user
@@ -89,17 +87,6 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-// 账号页顺带画主题来源那几行，这里只要一个形状对得上的模型。
-const sourceOption = { kind: 'default', labelKey: 'theme.sourceDefault', available: true } as never;
-const THEME_SOURCE_MODEL: ThemeSourceModel = {
-    activeSource: 'default' as never,
-    current: sourceOption,
-    options: { default: sourceOption, ai: sourceOption, custom: sourceOption } as never,
-    editableSource: null,
-    canOpenQuickEditor: false,
-    hasLocalAiTheme: false,
-};
-
 const renderAccountTab = (controller: LibraryAccountController) => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -111,17 +98,6 @@ const renderAccountTab = (controller: LibraryAccountController) => {
         onSyncData: () => {},
         isSyncing: false,
         onNavigateHome: () => {},
-        theme: DEFAULT_THEME,
-        themeSourceModel: THEME_SOURCE_MODEL,
-        defaultTheme: DEFAULT_THEME,
-        daylightTheme: DAYLIGHT_THEME,
-        hasCustomTheme: false,
-        onBgModeChange: () => {},
-        onGenerateAITheme: () => {},
-        isGeneratingTheme: false,
-        canGenerateAITheme: false,
-        isDaylight: false,
-        onToggleDaylight: () => {},
     })));
     const logoutButton = () => host.querySelector<HTMLButtonElement>('button[aria-label="account.logout"]');
     return { host, logoutButton };
