@@ -203,6 +203,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     && position + 1_000L < lastTickPositionMs
             lastTickPositionMs = position
             cachedPositionMs = position
+            /*
+             * 缓冲标记只靠事件清（playing / paused / ...），漏一次就一直挂着：
+             * 显示锚点按「在缓冲」把 playing 写成 false，桌面歌词冻在原地，
+             * 只有拖进度条（seek 里重算这个标记）才救得回来。刻度在播放器线程上，
+             * 这里问到的 isPlaying 是真值 —— 真在出声就不是缓冲。
+             */
+            if (current.isPlaying) cachedBuffering = false
             cachedDurationMs = if (duration > 0) duration else 0L
             if (wrapped) {
                 // 下一圈还要能再报一次「快到尾巴」，进度也要从 0 重新算。
@@ -599,7 +606,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
     /**
      * 当前倍速。写锚点那一侧要拿它决定要不要跳过这一拍 —— 见
-     * FoliaNativePlayerPlugin 里 `anchorStillTrue` 那段说明。
+     * FoliaNativePlayerPlugin 写锚点那段说明（判定在 DisplayAnchorPolicy.kt 的 displayAnchorNeedsWrite）。
      */
     fun getSpeed(): Float {
         return requestedSpeed
