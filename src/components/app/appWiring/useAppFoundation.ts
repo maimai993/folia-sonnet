@@ -19,6 +19,7 @@ import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { writeNativeLoopMode } from '../../../services/nativeQueueBridge';
 import { writeNativeSettings } from '../../../services/nativeSettingsBridge';
+import { startNativeEqualizerSync } from '../../../services/playbackEngine/nativeEqualizer';
 import { useNativeAiConfigSync } from '../../../hooks/useNativeAiConfigSync';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
@@ -200,6 +201,16 @@ export const useAppFoundation = () => {
     useNativeAiConfigSync();
 
     /*
+     * 原生均衡器：启动对一次表，之后跟随 store。
+     *
+     * 安卓上出声的是 ExoPlayer，Web Audio 图不在信号路径上 —— 界面这边改了参数，
+     * 必须推给原生才有人执行。非安卓 / 桥不在时 start 自己会跳过，这里不用判平台。
+     */
+    useEffect(() => {
+        startNativeEqualizerSync();
+    }, []);
+
+    /*
      * 「无法播放时自动跳过」的启动同步，理由同上面的循环模式：这一项原生也读
      * （FoliaPlaybackService.onEntryUnplayable），而 Web 这边只写在 localStorage 里。
      * 不推一次的话，原生永远按默认的 true 走 —— Web 侧默认是 false，两边相反：
@@ -214,9 +225,10 @@ export const useAppFoundation = () => {
                 backgroundSilentSkip: useAudioSettingsStore.getState().backgroundSilentSkip,
                 // 「播放淡入淡出」也归原生执行（音量斜坡在播放器里），启动时对一次表。
                 playbackFade: useAudioSettingsStore.getState().playbackFadeEnabled,
-                // 交叉淡化也是原生执行：开关与时长（秒 → 毫秒）在启动时对一次表。
+                // 交叉淡化也是原生执行：开关、时长（秒 → 毫秒）与音量曲线在启动时对一次表。
                 crossfadeEnabled: useAutomixSettingsStore.getState().automixEnabled,
                 crossfadeMs: Math.round(useAutomixSettingsStore.getState().crossfadeMaxSec * 1000),
+                crossfadeCurve: useAutomixSettingsStore.getState().crossfadeCurve,
             });
             if (merged || cancelled || attempts >= 20) return;
             attempts += 1;

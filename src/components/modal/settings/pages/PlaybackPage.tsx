@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import { CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC } from '../../../../services/automix/crossfadePlanner';
+import { CROSSFADE_CURVES, CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC, type CrossfadeCurve } from '../../../../services/automix/crossfadePlanner';
 import { modelsPresent, subscribeModelAvailability } from '../../../../services/analysis/modelAvailability';
 import { ANALYSIS_MODELS_ENABLED, modelStoreSnapshot, subscribeModelStore, importModelFile, type DownloadableModel } from '../../../../services/analysis/modelStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
@@ -46,6 +46,7 @@ const MODELS: SettingsGroupDef = { id: 'analysisModels', titleKey: 'options.anal
 const O = {
     transition: option(TRANSITION, 'transitionEnable', 'options.transitionEnable'),
     crossfadeMax: option(TRANSITION, 'crossfadeMaxSeconds', 'options.crossfadeMaxSeconds'),
+    crossfadeCurve: option(TRANSITION, 'crossfadeCurve', 'options.crossfadeCurve'),
     outputDevice: option(SOUND, 'audioOutputDevice', 'options.audioOutputDevice'),
     replayGain: option(SOUND, 'replayGainSettings', 'options.replayGainMode'),
     fade: option(SOUND, 'playbackFade', 'options.playbackFade'),
@@ -165,8 +166,10 @@ const PlaybackPage: React.FC = () => {
     const automix = useAutomixSettingsStore(useShallow(state => ({
         enabled: state.automixEnabled,
         crossfadeMaxSec: state.crossfadeMaxSec,
+        crossfadeCurve: state.crossfadeCurve,
         setEnabled: state.handleToggleAutomix,
         setCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
+        setCrossfadeCurve: state.handleSetCrossfadeCurve,
     })));
     const audio = useAudioSettingsStore(useShallow(state => ({
         mediaCache: state.enableMediaCache,
@@ -207,6 +210,17 @@ const PlaybackPage: React.FC = () => {
                             max={CROSSFADE_MAX_SEC}
                             onChange={automix.setCrossfadeMaxSec}
                             format={seconds => t('options.crossfadeSecondsValue', { seconds })}
+                        />
+                    </Row>
+                    {/* 曲线只影响重叠那几秒的音量怎么交叠：等功率中点不塌，线性是旧行为。 */}
+                    <Row sub option={O.crossfadeCurve} hint={t('options.crossfadeCurveDesc')}>
+                        <Segmented<CrossfadeCurve>
+                            value={automix.crossfadeCurve}
+                            options={CROSSFADE_CURVES.map(curve => ({
+                                value: curve,
+                                label: t(`options.crossfadeCurve_${curve}`),
+                            }))}
+                            onChange={automix.setCrossfadeCurve}
                         />
                     </Row>
                 </Reveal>

@@ -16,10 +16,13 @@ import { makeProfile } from './trackProfileFixture';
 const bare = (duration: number): TransitionTrack => ({ duration, lines: null, profile: null });
 
 describe('clampCrossfadeSeconds', () => {
-    it('keeps the slider inside its own range and rounds to whole seconds', () => {
+    it('keeps the slider inside its own range and rounds to half seconds', () => {
         expect(clampCrossfadeSeconds(0)).toBe(CROSSFADE_MIN_SEC);
         expect(clampCrossfadeSeconds(1000)).toBe(CROSSFADE_MAX_SEC);
-        expect(clampCrossfadeSeconds(7.4)).toBe(7);
+        // 半秒一格：3 秒和 5 秒的差别在尾奏接前奏时听得出来，整秒太粗。
+        expect(clampCrossfadeSeconds(7.4)).toBe(7.5);
+        expect(clampCrossfadeSeconds(7.2)).toBe(7);
+        expect(clampCrossfadeSeconds(7)).toBe(7);
         // A stored value that was hand-edited, or a Number('') - the setting has to survive both.
         expect(clampCrossfadeSeconds(Number.NaN)).toBe(CROSSFADE_DEFAULT_SEC);
     });

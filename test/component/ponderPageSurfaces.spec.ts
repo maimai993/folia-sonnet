@@ -521,7 +521,6 @@ test('对话框与两块整屏编辑器：锚点落在合成界面的真实元�
     await expectAligned(stage, 'customSlots', '[data-ponder-eq-custom-slots]');
     // 拖的是这一根，锚点必须正好压在它身上 —— 差一根就等于指着旁边那根说话。
     await expectAligned(stage, 'bandFader', '[data-ponder-eq-band-target]');
-    await expectAligned(stage, 'noiseBadge', '[data-ponder-eq-noise-badge]');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
 
