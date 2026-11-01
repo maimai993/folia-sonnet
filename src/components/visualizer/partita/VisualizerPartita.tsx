@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line } from '../../../types';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { useFontsEpoch } from '../../../hooks/useFontsEpoch';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { shouldPreheatLine, useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
@@ -13,9 +15,12 @@ import {
     EMPTY_PARTITA_LAYOUT,
     PARTITA_PREHEAT_WINDOW,
     type PartitaSequentialLayout,
+    type PartitaViewport,
     getOrBuildPartitaLayout,
+    resolvePartitaBaseFontPx,
     resolvePartitaTuning,
 } from './partitaLayout';
+import { clearPartitaTextWidthCache } from './partitaTextWidth';
 import { PartitaChunk } from './PartitaChunk';
 
 // This one is still word-driven, but unlike Classic it needs to pre-build a column/chunk structure first.
@@ -54,16 +59,43 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         subtitleOverlayLayout,
     } = props;
     const { t } = useTranslation();
-    const [windowHeight, setWindowHeight] = useState(800);
+    const [windowSize, setWindowSize] = useState(() => ({
+        width: typeof window === 'undefined' ? 1200 : window.innerWidth,
+        height: typeof window === 'undefined' ? 800 : window.innerHeight,
+    }));
     const resolvedPartitaTuning = useMemo(() => resolvePartitaTuning(partitaTuning), [partitaTuning]);
     const layoutCacheRef = useRef<Map<string, PartitaSequentialLayout>>(new Map());
+    const fontsEpoch = useFontsEpoch();
 
     useEffect(() => {
-        setWindowHeight(window.innerHeight);
-        const handleResize = () => setWindowHeight(window.innerHeight);
+        const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    // 字体加载前后字体串相同但度量不同：作废测宽缓存，布局随后按新度量重建。
+    useEffect(() => {
+        if (fontsEpoch > 0) {
+            clearPartitaTextWidthCache();
+            layoutCacheRef.current.clear();
+        }
+    }, [fontsEpoch]);
+
+    const viewport = useMemo<PartitaViewport>(() => ({
+        height: windowSize.height,
+        width: windowSize.width,
+        fontPx: resolvePartitaBaseFontPx(windowSize.width, lyricsFontScale),
+        fontMetrics: {
+            fontWeight: resolveThemeFontWeight(theme, 700),
+            fontFamily: resolveThemeFontStack(theme),
+        },
+    }), [windowSize, lyricsFontScale, theme]);
+
+    const viewportRef = useRef<PartitaViewport>(viewport);
+    useEffect(() => {
+        viewportRef.current = viewport;
+    }, [viewport]);
 
     const {
         activeLine,
@@ -84,8 +116,8 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
             return EMPTY_PARTITA_LAYOUT;
         }
 
-        return getOrBuildPartitaLayout(layoutCacheRef.current, activeLine, theme, windowHeight, resolvedPartitaTuning);
-    }, [activeLine, theme, windowHeight, resolvedPartitaTuning]);
+        return getOrBuildPartitaLayout(layoutCacheRef.current, activeLine, theme, viewport, resolvedPartitaTuning);
+    }, [activeLine, theme, viewport, resolvedPartitaTuning]);
 
     const nextLineRef = useRef<Line | null>(upcomingLine);
     useEffect(() => {
@@ -102,10 +134,10 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
             return;
         }
 
-        getOrBuildPartitaLayout(layoutCacheRef.current, nextLine, theme, windowHeight, resolvedPartitaTuning);
+        getOrBuildPartitaLayout(layoutCacheRef.current, nextLine, theme, viewportRef.current, resolvedPartitaTuning);
     });
 
-    const densityScale = sequentialLayout.totalGraphemes > 40 ? 0.8 : 1;
+    const densityScale = sequentialLayout.fontDensityScale;
     const mainFontSize = `clamp(${(2.5 * densityScale * lyricsFontScale).toFixed(3)}rem, ${(5.5 * densityScale * lyricsFontScale).toFixed(3)}vw, ${(4.5 * densityScale * lyricsFontScale).toFixed(3)}rem)`;
     const emptyFontSize = `clamp(${(1.2 * lyricsFontScale).toFixed(3)}rem, ${(2.8 * lyricsFontScale).toFixed(3)}vw, ${(1.9 * lyricsFontScale).toFixed(3)}rem)`;
     const translationFontSize = `clamp(${(1.05 * lyricsFontScale).toFixed(3)}rem, ${(2.2 * lyricsFontScale).toFixed(3)}vw, ${(1.2 * lyricsFontScale).toFixed(3)}rem)`;
