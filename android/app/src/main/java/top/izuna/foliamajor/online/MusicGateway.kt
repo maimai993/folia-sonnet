@@ -1556,22 +1556,9 @@ class MusicGateway private constructor() {
             if (cleanHash.isEmpty()) {
                 return null
             }
-            val connection = (URL("https://m.kugou.com/krc/" + cleanHash + ".lrc")
-                    .openConnection()) as HttpURLConnection
-            try {
-                connection.connectTimeout = 8000
-                connection.readTimeout = 10000
-                connection.setRequestProperty("User-Agent", KG_ANDROID_UA)
-                connection.setRequestProperty("Referer", "https://m.kugou.com/")
-                val status = connection.responseCode
-                val text = LikeFallback.readAll(connection)
-                if (status < 200 || status >= 300 || text.isEmpty()) {
-                    return null
-                }
-                return Lyric(text, "")
-            } finally {
-                connection.disconnect()
-            }
+            // 上述简易通道现会 HTTP200 回 No Action Found!；改用 Web 已验证的候选下载（#166）。
+            val text = KugouNativeLyrics.fetch(cleanHash) ?: return null
+            return Lyric(text, "")
         }
 
         /** 精简 cookie：KuGoo 大 Blob 会把网关请求顶爆，只带身份四件套。 */
