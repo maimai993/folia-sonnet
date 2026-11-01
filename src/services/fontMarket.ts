@@ -1,4 +1,5 @@
 import { createAiFetch } from './aiNativeFetch';
+import { createNativeFetch } from './nativeHttpFetch';
 import { resolveCloudApiUrl, resolveCloudBaseUrl } from './foliaCloud';
 import { saveToCache } from './db';
 
@@ -238,9 +239,12 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
  * 落盘用的就是「上传字体」那一个槽位，于是冷启动时
  * `restoreUploadedLyricsFont(fontId)` 能把它重新注册回来 —— 市场字体和本地上传的
  * 字体在播放器眼里是同一件事，只是来路不同。
+ *
+ * 字体文件是二进制，必须走 `createNativeFetch`：安卓的 `aiRequest` 只回字符串，
+ * 原生那边把字节转成文本再交回来，字体就损坏了。目录 JSON 仍走 `createAiFetch`。
  */
 export const installMarketFont = async (font: FontMarketFont): Promise<FontMarketInstallResult> => {
-    const response = await createAiFetch()(absoluteUrl(font.fileUrl), {
+    const response = await createNativeFetch(REQUEST_TIMEOUT_MS)(absoluteUrl(font.fileUrl), {
         method: 'GET',
         signal: withTimeout(REQUEST_TIMEOUT_MS),
     });
