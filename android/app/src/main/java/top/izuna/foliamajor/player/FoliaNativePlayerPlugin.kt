@@ -367,7 +367,9 @@ class FoliaNativePlayerPlugin : Plugin() {
                 payload.put("type", type)
                 payload.put("positionMs", positionMs.toDouble())
                 payload.put("durationMs", durationMs.toDouble())
-                payload.put("songKey", player?.currentMediaId() ?: "")
+                // ended / error 用事件发出时真实装着的那首（见 FoliaNativePlayer.emit），不用已被下一单提前改写的 lastMediaId。
+                val eventKey = if ("ended" == type || "error" == type) player?.lastEventMediaId() ?: "" else player?.currentMediaId() ?: ""
+                payload.put("songKey", eventKey)
                 payload.put("playing", player?.isPlaying() == true)
                 payload.put("buffering", player?.isBuffering() == true)
                 /*
@@ -417,7 +419,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onNativePlaybackStarted() }
         }
         if ("error" == type && !top.izuna.foliamajor.FoliaPlaybackService.appUiVisible) {
-            val failedKey = player?.currentMediaId() ?: ""
+            val failedKey = eventKey
             MAIN.post {
                 top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onNativePlayerError(failedKey)
             }
@@ -491,11 +493,14 @@ class FoliaNativePlayerPlugin : Plugin() {
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
+        val webSongKey = call.getString("songKey")
         current.prepare(
             url,
             if (startPositionMs != null) startPositionMs.toLong() else -1L,
-            call.getString("songKey"),
+            webSongKey,
         )
+        // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
+        MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
         val result = JSObject()
         result.put("ok", true)
         call.resolve(result)
