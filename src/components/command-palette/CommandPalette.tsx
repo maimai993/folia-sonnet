@@ -85,6 +85,29 @@ const pickNextPlaceholderIndex = (currentIndex: number) => {
     return (currentIndex + offset) % IDLE_PLACEHOLDER_COUNT;
 };
 
+/*
+ * Touch-primary devices (phones and tablets: no hover, coarse pointer) raise the soft keyboard the
+ * moment an input is focused. Every programmatic focus in this file would flash that keyboard
+ * without the user asking to type — on open, after a command ran, after picking from the
+ * all-commands list — so on those devices the query input is only focused by tapping it. Devices
+ * with a fine pointer (desktop, touch-screen laptops) keep the autofocus that serves keyboard use.
+ */
+const shouldAutoFocusQueryInput = () => (
+    typeof window === 'undefined'
+    || !window.matchMedia('(hover: none) and (pointer: coarse)').matches
+);
+
+/*
+ * The proactive blur after the entrance animation exists for one iOS Safari quirk (comment at the
+ * call site): an input focused inside a fixed + backdrop-blur panel blocks sibling scrolling. No
+ * other platform has it, and blurring there would only close a keyboard the user just opened by
+ * tapping the input. iPadOS 13+ reports itself as macOS; maxTouchPoints tells it apart.
+ */
+const isIos = () => (
+    /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
 const CommandPalette: React.FC<CommandPaletteProps> = ({
     activeIndex,
     activePreview,
@@ -112,11 +135,21 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
     const { t, i18n } = useTranslation();
     const inputRef = useRef<HTMLInputElement | null>(null);
+    // One gate for every programmatic focus of the query input; see shouldAutoFocusQueryInput.
+    const focusQueryInput = useCallback(() => {
+        if (!shouldAutoFocusQueryInput()) {
+            return;
+        }
+        inputRef.current?.focus();
+    }, []);
     // Puts the focus back into the query input a frame later: a click has put it on what was
     // clicked. While a command runs the input is disabled and cannot take the focus, so a request
     // that finds it disabled is kept, and done in the commit that enables the input again.
     const focusAskedRef = useRef(false);
     const refocusInput = useCallback(() => {
+        if (!shouldAutoFocusQueryInput()) {
+            return;
+        }
         focusAskedRef.current = true;
         window.requestAnimationFrame(() => {
             const input = inputRef.current;
@@ -265,15 +298,18 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             return;
         }
 
-        const frame = window.requestAnimationFrame(() => {
-            inputRef.current?.focus();
-        });
+        // Touch-primary devices open the palette without the keyboard; see shouldAutoFocusQueryInput.
+        if (!shouldAutoFocusQueryInput()) {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(focusQueryInput);
 
         return () => window.cancelAnimationFrame(frame);
         // Switching between the two frames remounts the input, so the focus has to be taken again:
         // picking `filter-view` out of the overlay's list leaves the caret nowhere otherwise. Every
         // other surface keeps the overlay's own input, so this is the one crossing that needs it.
-    }, [isOpen, isInlineFrame]);
+    }, [focusQueryInput, isOpen, isInlineFrame]);
 
     // The grid that handed over its keyboard still has to know the box is up — it used to read its
     // own `showSearchPanel` to keep Enter from opening a card while the listener was typing.
@@ -393,7 +429,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                 renderInput={renderQueryInput}
                 onQueryCommit={onQueryCommit}
                 onClose={onClose}
-                focusInput={() => inputRef.current?.focus()}
+                focusInput={focusQueryInput}
                 suggestions={syntaxSuggestions}
                 syntaxIndex={syntaxIndex}
                 onAcceptSuggestion={acceptSyntaxSuggestion}
@@ -433,7 +469,9 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
                             // iOS Safari blocks overflow scrolling in sibling containers
                             // when an input is focused inside a fixed + backdrop-blur panel.
                             // Blur proactively so the first touch-scroll works immediately.
-                            if ('ontouchstart' in window) {
+                            // iOS-only: no other platform has this quirk, and blurring there
+                            // would just close a keyboard the user opened by tapping the input.
+                            if (isIos()) {
                                 inputRef.current?.blur();
                             }
                         }}
