@@ -122,6 +122,23 @@ type LyricPayload = { songKey: string; lrc: string | null; translated: string | 
    由 Web 编排（它必须拿到生成结果才知道该回传什么），这部分编排留在 Web 是契约使然，
    不是缺口，已做
 
+11. **后台失败与续播自主** —— WebView 冻结时由原生自己处理：
+   - 自然结束：插件 `ended` 带 `songKey`（即 MediaItem `mediaId`），服务 `onTrackFinished(songKey)`
+     只在它与当前曲 / 待派发曲一致时前进；空串视为「没带身份」，退回旧的时间窗去重。
+   - 播放错误：后台（`FoliaPlaybackService.appUiVisible == false`）按设置 `backgroundSilentSkip`
+     （默认开）静默跳下一首，不通知 Web；连续 5 首封顶后暂停。前台仍只发 `nativePlayFailed`，
+     由 Web 决定。判定在 `player/NativeFailurePolicy.kt`。
+   - 派发中的曲目记在 `pendingDispatchSongKey`，到达后由快照清除；派发终止（封顶 / 无下一首）也清除，
+     避免旧曲恢复后的快照与 `ended` 被丢掉。
+12. **大队列镜像** —— `setQueueMirror` 不再把整份 JSON 塞进 Intent extra（超 Binder 1MB 会抛），
+   插件进程内暂存（`stageQueueMirror`），Intent 只带 `EXTRA_QUEUE_MIRROR_STAGED`。
+13. **后台主题** —— `ai/BackgroundThemeWorker.kt` 在切歌且拿到歌词后，于原生先查云缓存、未命中再用
+   `AiCompletion` 生成并应用叠层；Web 经 `FoliaNative.getBackgroundThemeResult({ songKey, policy, lyricText })`
+   认领，结果按歌曲、policy、歌词指纹、配置与 AI 指纹逐项校验，任一不符返回空对象。
+14. **显示时钟** —— `FoliaNativePlayer.getSnapshot()` 增加 `buffering`、`speed`；`seeked` 事件附带
+   `playing` / `buffering`。亮屏与叠层自检调用 `refreshDisplayAnchor()`，只读真实播放器位置
+   重设显示锚点，不 seek、不重新 prepare。
+
 ## 尚未迁移
 
 - **随机播放的尾部重排**（App 内点歌那一次 `shuffleQueue`）：行为与原生一致，仅路径
