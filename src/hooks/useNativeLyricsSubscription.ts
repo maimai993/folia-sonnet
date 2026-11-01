@@ -79,7 +79,7 @@ export const parseLrcLines = (lrc: string, translated: string): Line[] => {
 
 /** 把一份 LRC 变成 store 要的形状；没有内容时给 null（界面据此显示「暂无歌词」）。 */
 export const toLyricData = (lrc: string, translated: string): LyricData | null => {
-    // 原生网易网关可能提供 YRC：它的 [开始毫秒,时长] 不是 LRC 时间戳，必须保留逐字时间。
+    // 原生网关可能提供 YRC：它的 [开始毫秒,时长] 不是 LRC 时间戳，必须保留逐字时间。
     const data = /(?:^|\n)\s*\[\d+,\d+\]\(/.test(lrc)
         ? parseYRC(lrc.trim(), translated, { includeInterludes: false })
         : { lines: parseLrcLines(lrc, translated), isWordByWord: false };
