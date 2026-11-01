@@ -44,14 +44,11 @@ class FoliaNativePlayerPlugin : Plugin() {
          *
          * 见写锚点那一段的说明 —— 差在这么点以内就当作「外推是准的」，不把时间轴往回拽。
          * 改播放器那个 `POSITION_TICK_MS` 时这里要跟着改。
+         *
+         * 容差与判定已挪到 DisplayAnchorPolicy.kt（DISPLAY_ANCHOR_TOLERANCE_MS /
+         * displayAnchorNeedsWrite），好在 JVM 单测里直接跑。
          */
-        private const val POSITION_TICK_MS = 250L
-
-        /** 采样值与「墙钟外推出来的位置」差不到一个采样周期：这一拍没有新信息。 */
-        private fun anchorStillTrue(sampledMs: Long): Boolean {
-            val gap = WallpaperLyricsState.get().positionMs() - sampledMs
-            return gap < POSITION_TICK_MS && gap > -POSITION_TICK_MS
-        }
+        // 采样值与「墙钟外推出来的位置」差不到一个采样周期：这一拍没有新信息。
 
         /**
          * 服务那边（通知栏 / 锁屏 / 耳机）要能直接碰到播放器，只能走静态引用 ——
@@ -106,8 +103,9 @@ class FoliaNativePlayerPlugin : Plugin() {
         @JvmStatic
         fun refreshDisplayAnchor() {
             val media = mediaSnapshot() ?: return
-            val playing = media.playing && !media.buffering
-            if (!anchorStillTrue(media.positionMs) || WallpaperLyricsState.get().playing != playing) {
+            val playing = playerAudible(media.playing, media.buffering)
+            val snapshot = WallpaperLyricsState.get()
+            if (displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, media.positionMs)) {
                 WallpaperLyricsState.setAnchor(media.positionMs, playing)
             }
         }
@@ -330,8 +328,10 @@ class FoliaNativePlayerPlugin : Plugin() {
                      * 真要把倍速也抹平，得让 WallpaperLyricsState 的外推带上速率。
                      */
                     val unityRate = player != null && Math.abs(player!!.getSpeed() - 1f) < 0.01f
-                    if ("position" == type && playing && unityRate && anchorStillTrue(positionMs)) {
-                        // 差在一个采样周期内：这个采样值没有信息量，不写。
+                    val snapshot = WallpaperLyricsState.get()
+                    if ("position" == type && playing && unityRate
+                        && !displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, positionMs)) {
+                        // 差在一个采样周期内、播停也一致：这个采样值没有信息量，不写。
                     } else {
                         WallpaperLyricsState.setAnchor(positionMs, playing)
                     }
