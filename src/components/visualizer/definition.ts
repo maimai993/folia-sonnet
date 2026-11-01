@@ -259,6 +259,14 @@ export interface VisualizerRegistryEntry {
      * pendolo/usePendoloBeatFx.ts). Each model runs for the playing track only while a live effect on
      * screen reads it (beatClockTargets.ts).
      */
+    /** 样式自己画窗外时不要共用背景；窗外的选择是「共用背景」时才由宿主画。 */
+    showsBackground?: (tunings: VisualizerTuningBundle) => boolean;
+    /** 只在真正画着的时候才算这个效果（雾笺：窗外是水族箱时的水母随拍）。省略即全部算。 */
+    beatEffectOnScreen?: (effectId: string, tunings: VisualizerTuningBundle, pageTransparent: boolean) => boolean;
+    /** 样式保存的就是它时，启动后在第一屏之后预热，不阻塞首屏（雾笺的着色器预编译）。 */
+    prewarmWhenIdle?: boolean;
+    /** 空闲预热做的事：把重的东西（着色器、纹理）先编好，第一次切过去就不用等。 */
+    prewarm?: () => void | Promise<void>;
     beatEffects?: readonly BeatEffectDef[];
 }
 

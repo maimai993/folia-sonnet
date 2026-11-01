@@ -13,8 +13,9 @@
 import { create } from 'zustand';
 import type { StoredTuning, VisualizerTuningSettings } from '../components/visualizer/tuningDefinition';
 import { getBackgroundSettingsSlices, getStoredVisualizerTunings } from '../components/visualizer/tuningRegistry';
-import { type RenderPixelRatio, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { type LyricRenderQuality, type RenderPixelRatio, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { VISUALIZER_FRAME_RATE_STORAGE_KEY, setGlobalVisualizerFrameRate } from '../utils/frameRateLimiter';
+import { LYRIC_RENDER_QUALITY_STORAGE_KEY, normalizeLyricRenderQuality } from '../utils/lyricRenderQuality';
 import { RENDER_PIXEL_RATIO_STORAGE_KEY, readStoredRenderPixelRatio, setGlobalRenderPixelRatio } from '../utils/renderPixelRatio';
 import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlurQuantized } from '../utils/glowBlurQuantize';
 // 显示名住在各模式的 entry.tsx（components），由 utils/visualizerModeLabel 持有、registry 注册解析器：
@@ -22,7 +23,7 @@ import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlur
 import { getVisualizerModeLabel } from '../utils/visualizerModeLabel';
 import i18n from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
-import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, readStoredBackgroundOpacity, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperFloatingAvoidOffsetX, readStoredWallpaperFloatingAvoidWidth, readStoredWallpaperFloatingFillSafeArea, readStoredWallpaperFloatingFontSize, readStoredWallpaperFloatingFontSizeMode, readStoredWallpaperFloatingOffsetX, readStoredWallpaperFloatingOpacity, readStoredWallpaperFloatingOverSafeArea, readStoredWallpaperFloatingWidth, readStoredWallpaperLyricsFontMode, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayEnabled, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideCoverArt, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayLockScreen, readStoredWallpaperOverlayLockScreenOnly, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, writeStoredTuning } from './visualizerSettingsPersistence';
+import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, readStoredBackgroundOpacity, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredLyricRenderQuality, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperFloatingAvoidOffsetX, readStoredWallpaperFloatingAvoidWidth, readStoredWallpaperFloatingFillSafeArea, readStoredWallpaperFloatingFontSize, readStoredWallpaperFloatingFontSizeMode, readStoredWallpaperFloatingOffsetX, readStoredWallpaperFloatingOpacity, readStoredWallpaperFloatingOverSafeArea, readStoredWallpaperFloatingWidth, readStoredWallpaperLyricsFontMode, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayEnabled, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideCoverArt, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayLockScreen, readStoredWallpaperOverlayLockScreenOnly, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, writeStoredTuning } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 // 上游 v0.7.22 的随机池：参与随机的样式集合。和 fork 保留的「每首换一种」是同一件事的两半。
 import { RANDOM_VISUALIZER_MODES_STORAGE_KEY, readStoredRandomVisualizerModes } from './visualizerSettingsPersistence';
@@ -69,6 +70,7 @@ type OwnSettingsState = {
     visualizerOpacity: number;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     visualizerFrameRate: VisualizerFrameRate;
+    lyricRenderQuality: LyricRenderQuality;
     /**
      * 画布渲染分辨率的上限，null = 跟随屏幕。
      *
@@ -206,6 +208,7 @@ type OwnSettingsState = {
     handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     handleResetVisualizerBackgroundMode: () => void;
     handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
+    handleSetLyricRenderQuality: (quality: LyricRenderQuality) => void;
     handleSetRenderPixelRatio: (limit: RenderPixelRatio | null) => void;
     handleSetVisualizerMode: (mode: VisualizerMode, options?: SetVisualizerModeOptions) => void;
     handleToggleRandomVisualizerModePerSong: (enable: boolean, options?: { notify?: boolean }) => void;
@@ -315,6 +318,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     visualizerOpacity: readStoredVisualizerOpacity(),
     visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
     visualizerFrameRate: readStoredVisualizerFrameRate(),
+    lyricRenderQuality: readStoredLyricRenderQuality(),
     renderPixelRatio: readStoredRenderPixelRatio(),
     visualizerMode: readStoredVisualizerMode(),
     randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
@@ -412,6 +416,12 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         setGlobalVisualizerFrameRate(frameRate);
         set({ visualizerFrameRate: frameRate });
     },
+    handleSetLyricRenderQuality: (quality) => {
+        const next = normalizeLyricRenderQuality(quality);
+        set({ lyricRenderQuality: next });
+        localStorage.setItem(LYRIC_RENDER_QUALITY_STORAGE_KEY, JSON.stringify(next));
+    },
+
     handleSetRenderPixelRatio: (limit) => {
         if (typeof window !== 'undefined') {
             if (limit === null) {
