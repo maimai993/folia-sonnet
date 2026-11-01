@@ -61,6 +61,17 @@ function LoginAccountTabProbe(props: ProbeProps) {
                     onSyncData={() => { }}
                     isSyncing={false}
                     onNavigateHome={() => setSaid('go home')}
+                    theme={{} as never}
+                    themeSourceModel={{} as never}
+                    defaultTheme={{} as never}
+                    daylightTheme={{} as never}
+                    hasCustomTheme={false}
+                    onBgModeChange={() => {}}
+                    onGenerateAITheme={() => {}}
+                    isGeneratingTheme={false}
+                    canGenerateAITheme={false}
+                    isDaylight={false}
+                    onToggleDaylight={() => {}}
                 />
             </div>
             <output data-testid="said" className="text-xs text-zinc-400">{said}</output>

@@ -34,6 +34,17 @@ const AccountTabPanel: React.FC<{ account: LibraryAccountController }> = ({ acco
                 onSyncData={() => {}}
                 isSyncing={false}
                 onNavigateHome={() => {}}
+                theme={{} as never}
+                themeSourceModel={{} as never}
+                defaultTheme={{} as never}
+                daylightTheme={{} as never}
+                hasCustomTheme={false}
+                onBgModeChange={() => {}}
+                onGenerateAITheme={() => {}}
+                isGeneratingTheme={false}
+                canGenerateAITheme={false}
+                isDaylight={false}
+                onToggleDaylight={() => {}}
             />
         </div>
     );
