@@ -2480,6 +2480,15 @@ class FoliaNativePlugin : Plugin() {
      * 一次性整份返回而不是逐项问：逐项读会让「界面显示一半」成为可能的状态，而设置之间
      * 是有关系的（循环模式与随机、方向与强制横屏），半新半旧最容易出现「明明开了却没效果」。
      */
+    /** 后台任务结果只交给正常前端主题校验入口；不在桥里控制播放。 */
+    @PluginMethod
+    fun getBackgroundThemeResult(call: PluginCall) {
+        val key = call.getString("songKey") ?: ""
+        val policy = call.getString("policy") ?: ""
+        val result = top.izuna.foliamajor.ai.BackgroundThemeWorker.read(getContext(), key, policy, call.getString("lyricText"))
+        call.resolve(if (result == null) JSObject() else JSObject.fromJSONObject(result))
+    }
+
     @PluginMethod
     fun getSettings(call: PluginCall) {
         try {

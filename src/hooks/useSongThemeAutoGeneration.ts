@@ -10,6 +10,7 @@ import {
 } from '../utils/songThemeAutoGeneration';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
 import { isPlaybackInterfaceHidden } from '../services/playbackRecovery/backgroundFailureNotice';
+import { useBackgroundThemeConfig } from './useBackgroundThemeConfig';
 
 // src/hooks/useSongThemeAutoGeneration.ts
 // Coordinates delayed AI theme generation for the real current playback song.
@@ -40,6 +41,7 @@ export function useSongThemeAutoGeneration({
     const currentSong = usePlaybackStore(state => state.currentSong);
     const lyrics = usePlaybackStore(state => state.lyrics);
 
+    useBackgroundThemeConfig(enabled && themeGenerationSource !== 'cover');
     const requiresPromptSource = themeGenerationSource !== 'cover';
     const latestSongKeyRef = useRef<string | null>(null);
     const latestEnabledRef = useRef(enabled);

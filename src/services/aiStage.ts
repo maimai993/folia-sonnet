@@ -32,6 +32,7 @@ import { readDirectorSettings, readRecentModes } from './lyricDirector/state';
 import { isFoliaCloudCacheEnabled } from './foliaCloud';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { md5 } from '../utils/md5';
+import { readBackgroundTheme } from './backgroundThemeBridge';
 
 // src/services/aiStage.ts
 // 一次 AI 调用，两份答案：视觉主题 + 歌词动画决策。
@@ -467,6 +468,11 @@ export const notifyStageResolved = (source: AiCloudCacheSource): void => {
 
 /** 先问云端，没有（或不全）再生成，生成完回传。一次往返，一条缓存。 */
 const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
+    if (!ctx.skipPull) {
+        const native = await readBackgroundTheme(ctx.songTitle, ctx.lyricSource);
+        const parts = native ? normalizeStagePayload(native.payload, ctx.blockedModes) : null;
+        if (native && parts && hasRequired(parts, ctx.requirement)) return { ...parts, source: native.source };
+    }
     const { value, source } = await withAiCloudCache({
         kind: STAGE_CACHE_KIND,
         fingerprint: ctx.fingerprint,
