@@ -2,6 +2,7 @@ import type { AppFoundation } from './useAppFoundation';
 import { useAudioOutputDevice } from '../../../hooks/useAudioOutputDevice';
 import { NATIVE_PLAYBACK_ENABLED, nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { LyricData, StageLoopMode } from '../../../types';
 import { clampMediaVolume } from '../../../utils/appPlaybackHelpers';
 import { createCoverUrlResolver } from '../../../utils/coverUrlResolver';
@@ -119,7 +120,8 @@ export const useAppAudioOutput = (model: Input) => {
 
         if (audioRef.current) {
             audioRef.current.volume = clampedVolume;
-            audioRef.current.muted = isMuted;
+            // A preview frame can belong to an older render; the store holds the current mute state.
+            audioRef.current.muted = useAudioSettingsStore.getState().isMuted;
         }
     }, [isMuted]);
 
@@ -131,6 +133,8 @@ export const useAppAudioOutput = (model: Input) => {
 
     const handlePreviewVolume = useCallback((val: number) => {
         pendingVolumePreviewRef.current = val;
+        // 在用户操作这一刻解除静音，不把延迟到下一帧的预览当作新的静音意图。
+        if (val > 0) useAudioSettingsStore.getState().handleSetMuted(false);
 
         if (volumePreviewFrameRef.current !== null) {
             return;
@@ -140,7 +144,11 @@ export const useAppAudioOutput = (model: Input) => {
             volumePreviewFrameRef.current = null;
             const nextVolume = pendingVolumePreviewRef.current;
             if (nextVolume !== null) {
-                syncOutputGain(nextVolume, 0.015);
+                // A positive preview is an explicit unmute. Read the store inside the frame rather
+                // than using an isMuted captured by an older render, so the gain write cannot mute
+                // the preview again. Zero leaves mute alone.
+                // 若这一帧之前用户又点了静音，新的静音意图优先。
+                syncOutputGain(useAudioSettingsStore.getState().isMuted ? 0 : nextVolume, 0.015);
             }
         });
     }, [syncOutputGain]);
