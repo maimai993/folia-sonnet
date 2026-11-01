@@ -89,8 +89,9 @@ data class NativeQueueEntry(
         /** 第一个非空字段：两套字段名里谁有值用谁。 */
         private fun firstNonEmpty(o: JSONObject, vararg names: String): String {
             for (name in names) {
+                if (o.isNull(name)) continue
                 val value = o.optString(name, "")
-                if (value.isNotEmpty()) return value
+                if (value.isNotEmpty() && value != "null") return value
             }
             return ""
         }

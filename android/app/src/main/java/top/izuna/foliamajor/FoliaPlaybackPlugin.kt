@@ -273,8 +273,11 @@ class FoliaPlaybackPlugin : Plugin() {
         val intent = Intent(activity, FoliaPlaybackService::class.java)
         intent.setAction(FoliaPlaybackService.ACTION_UPDATE_QUEUE_MIRROR)
         val queueJson = call.getString("queueJson")
-        if (queueJson != null) intent.putExtra(FoliaPlaybackService.EXTRA_QUEUE_MIRROR_JSON, queueJson)
         val index = call.getInt("index")
+        if (queueJson != null) {
+            FoliaPlaybackService.stageQueueMirror(queueJson, index ?: -1)
+            intent.putExtra(FoliaPlaybackService.EXTRA_QUEUE_MIRROR_STAGED, true)
+        }
         if (index != null) intent.putExtra(FoliaPlaybackService.EXTRA_QUEUE_MIRROR_INDEX, index)
         startServiceCompat(activity, intent)
         call.resolve()

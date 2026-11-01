@@ -6,6 +6,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "audio_output_device_id",
   "auto_hide_player_chrome",
   "background_opacity",
+  "background_silent_skip",
   "background_throttling",
   "cadenza_tuning",
   "cadenze_tuning",

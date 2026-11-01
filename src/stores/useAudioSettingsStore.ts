@@ -77,6 +77,13 @@ export const KEEP_SCREEN_ON_WHILE_PLAYING_KEY = 'folia_keep_screen_on_while_play
  * a skip, like a taken-down one (services/onlineMusic/failure/onlineFailureCase). Off unless asked for.
  */
 export const AUTO_SKIP_UNPLAYABLE_KEY = 'folia_auto_skip_unplayable';
+/**
+ * 后台自动静默跳过（Android）。
+ *
+ * 开（默认）：应用在后台时遇到无法播放的歌曲，原生直接换下一首，不等前台的倒计时或提示。
+ * 关：后台遇到这类歌曲不自动跳过。
+ */
+export const BACKGROUND_SILENT_SKIP_KEY = 'background_silent_skip';
 
 /**
  * 后台与其他音源同时播放（Android）。
@@ -248,6 +255,8 @@ export type AudioSettingsState = {
     playbackFadeEnabled: boolean;
     /** Count down to a skip when a song is restricted or fails for an unknown reason. Off by default. */
     autoSkipUnplayable: boolean;
+    /** 后台遇到无法播放的歌曲时静默跳过（Android）。默认开，见 BACKGROUND_SILENT_SKIP_KEY。 */
+    backgroundSilentSkip: boolean;
     /** 播放时保持屏幕常亮（Android 的 FLAG_KEEP_SCREEN_ON）。Off by default. */
     keepScreenOnWhilePlaying: boolean;
     /** 后台与其他音源同时播放（Android）。Off by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
@@ -278,6 +287,7 @@ export type AudioSettingsState = {
     handleToggleNeteaseScrobble: (enable: boolean) => void;
     handleTogglePlaybackFade: (enable: boolean) => void;
     handleToggleAutoSkipUnplayable: (enable: boolean) => void;
+    handleToggleBackgroundSilentSkip: (enable: boolean) => void;
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleToggleMixWithOtherAudio: (enable: boolean) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
@@ -369,6 +379,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     playbackFadeEnabled: getStoredBoolean(PLAYBACK_FADE_KEY, true),
     // Off unless asked for: skipping a song the listener picked is not something to do by default.
     autoSkipUnplayable: getStoredBoolean(AUTO_SKIP_UNPLAYABLE_KEY, false),
+    backgroundSilentSkip: getStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, true),
     // 默认关：常亮等于放弃系统那套自动熄屏，该由用户点头，不该替他决定。
     keepScreenOnWhilePlaying: getStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, false),
     mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, false),
@@ -452,6 +463,15 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
          * 后台那条路照样一路跳。
          */
         void writeNativeSettings({ autoSkipUnplayable: enable });
+    },
+    handleToggleBackgroundSilentSkip: (enable) => {
+        setStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, enable);
+        set({ backgroundSilentSkip: enable });
+        /*
+         * 后台那条路由原生自己判断（FoliaPlaybackService），它读的是落盘的原生设置：
+         * 不推过去，界面上关掉它，后台遇到无法播放的歌照样会跳。
+         */
+        void writeNativeSettings({ backgroundSilentSkip: enable });
     },
     handleToggleKeepScreenOnWhilePlaying: (enable) => {
         setStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, enable);

@@ -67,6 +67,10 @@ const O = {
      */
     queueBehavior: option(BEHAVIOR, 'queueDefaultBehavior', 'options.queueDefaultBehavior'),
     autoSkipUnplayable: option(BEHAVIOR, 'autoSkipUnplayable', 'options.autoSkipUnplayable'),
+    backgroundSilentSkip: option(BEHAVIOR, 'backgroundSilentSkip', 'options.backgroundSilentSkip', {
+        noteKey: 'options.backgroundSilentSkipDesc',
+        available: isCapacitorAndroid,
+    }),
     preventSleep: option(BEHAVIOR, 'preventDisplaySleepDuringPlayback', 'options.preventDisplaySleepDuringPlayback', { electronOnly: true }),
     voiceInputPause: option(BEHAVIOR, 'voiceInputPause', 'options.voiceInputPause', { electronOnly: true, available: () => runsOnWindows() }),
     /*
@@ -170,12 +174,14 @@ const PlaybackPage: React.FC = () => {
         transcode: state.enableTranscodeFallback,
         queueBehavior: state.queueAddBehavior,
         autoSkipUnplayable: state.autoSkipUnplayable,
+        backgroundSilentSkip: state.backgroundSilentSkip,
         mixWithOtherAudio: state.mixWithOtherAudio,
         setMediaCache: state.handleToggleMediaCache,
         setFade: state.handleTogglePlaybackFade,
         setTranscode: state.handleToggleTranscodeFallback,
         setQueueBehavior: state.handleSetQueueAddBehavior,
         setAutoSkipUnplayable: state.handleToggleAutoSkipUnplayable,
+        setBackgroundSilentSkip: state.handleToggleBackgroundSilentSkip,
         setMixWithOtherAudio: state.handleToggleMixWithOtherAudio,
     })));
     const preventSleep = useDesktopSettingsStore(state => state.preventDisplaySleepDuringPlayback);
@@ -249,6 +255,11 @@ const PlaybackPage: React.FC = () => {
                 <Row option={O.autoSkipUnplayable} note={t('options.autoSkipUnplayableDesc')}>
                     <Toggle checked={audio.autoSkipUnplayable} onChange={audio.setAutoSkipUnplayable} />
                 </Row>
+                {isCapacitorAndroid() && (
+                    <Row option={O.backgroundSilentSkip} note={t('options.backgroundSilentSkipDesc')}>
+                        <Toggle checked={audio.backgroundSilentSkip} onChange={audio.setBackgroundSilentSkip} />
+                    </Row>
+                )}
                 {isElectron && (
                     <Row option={O.preventSleep} hint={t('options.preventDisplaySleepDuringPlaybackDesc')}>
                         <Toggle checked={preventSleep} onChange={setPreventSleep} />

@@ -109,6 +109,7 @@ class FoliaSettingsStore private constructor(context: Context) {
             "volume": 1.0,
             "queueBehavior": "append",
             "autoSkipUnplayable": true,
+            "backgroundSilentSkip": true,
             "playbackEntryView": "player",
             "phoneFitOrientation": "portrait",
             "autoLandscapeForVisualizer": false,

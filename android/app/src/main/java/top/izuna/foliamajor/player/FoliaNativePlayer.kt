@@ -179,6 +179,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private var cachedDurationMs = 0L
     @Volatile
     private var cachedPlaying = false
+    @Volatile
+    private var cachedBuffering = false
 
     private val positionTick = object : Runnable {
         override fun run() {
@@ -455,7 +457,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             nearEndFloorMs = clamped + NEAR_END_SEEK_GRACE_MS
             // 回绕判定以这次 seek 为基准，别把拖动当成「单曲循环转了一圈」。
             lastTickPositionMs = clamped
-            emit("position", clamped, if (duration > 0) duration else 0L, null)
+            cachedBuffering = current.playWhenReady && !current.isPlaying
+            emit("seeked", current.currentPosition, if (duration > 0) duration else 0L, null)
         }
     }
 
@@ -585,6 +588,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     fun isPlaying(): Boolean {
         return cachedPlaying
     }
+
+    /** 与位置快照一并交付，认领时不得把缓冲误当成正在出声。 */
+    fun isBuffering(): Boolean = cachedBuffering
 
     /**
      * 当前倍速。写锚点那一侧要拿它决定要不要跳过这一拍 —— 见
@@ -814,6 +820,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             val current = player ?: return
             cachedPositionMs = current.currentPosition
+            cachedPlaying = isPlaying
             if (isPlaying) {
                 startTicking()
                 emit("playing", cachedPositionMs, cachedDurationMs, null)
@@ -830,7 +837,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
              * 所以只有**真的按了暂停**（playWhenReady = false）才发 paused；其余一律
              * 当作 buffering：位置照报、计时照走，只是这一刻没有出声。
              */
-            if (!current.playWhenReady) {
+            if (!current.playWhenReady || current.playbackState == Player.STATE_ENDED || current.playbackState == Player.STATE_IDLE) {
                 stopTicking()
                 emit("paused", cachedPositionMs, cachedDurationMs, null)
                 return
@@ -882,6 +889,10 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     private fun emit(type: String, positionMs: Long, durationMs: Long, message: String?) {
+        if (type == "buffering") cachedBuffering = true
+        else if (type == "playing" || type == "paused" || type == "ended" || type == "error" || type == "idle") {
+            cachedBuffering = false
+        }
         if (listener != null) {
             listener.onEvent(type, positionMs, durationMs, message)
         }

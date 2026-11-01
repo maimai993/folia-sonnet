@@ -89,7 +89,7 @@ class NativePlaybackEngine {
         this.durationMs = Math.max(0, snapshot.durationMs);
         this.playing = snapshot.playing;
         this.rate = snapshot.speed ?? 1;
-        this.stalled = false;
+        this.stalled = snapshot.buffering ?? false;
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
     }
@@ -194,7 +194,7 @@ class NativePlaybackEngine {
         const targetMs = Math.max(0, Math.round(seconds * 1000));
         this.positionMs = targetMs;
         this.updatedAtMs = performance.now();
-        this.stalled = false;
+        // seek 是位置意图，不是缓冲结束：保留 stalled，等待原生实际播放状态（#168）。
         // 跳是唯一允许「往回走」的动作，所以这里必须把只进不退的基准一起复位。
         this.lastDeliveredMs = targetMs;
         await nativePlayer.seek(targetMs);
@@ -235,6 +235,9 @@ class NativePlaybackEngine {
     }
 
     setSpeed(speed: number): void {
+        // 切倍速前结算旧速率，不能把过去整段墙钟按新倍速重新计算。
+        this.positionMs = this.getPositionSec() * 1000;
+        this.updatedAtMs = performance.now();
         this.rate = clamp(speed, 0.1, 4);
         if (!this.hasSource) return;
         void nativePlayer.setSpeed(this.rate).catch(() => undefined);
@@ -320,7 +323,8 @@ class NativePlaybackEngine {
                  * 用户 seek / 单曲循环回到开头：位置是**允许往回走**的，
                  * 所以把只进不退的基准一起复位。播放状态不变。
                  */
-                this.stalled = false;
+                if (typeof event.playing === 'boolean') this.playing = event.playing;
+                if (typeof event.buffering === 'boolean') this.stalled = event.buffering;
                 this.lastDeliveredMs = this.positionMs;
                 break;
             default:

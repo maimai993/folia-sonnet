@@ -194,6 +194,9 @@ export const buildSettingsCommandContext = (
         toggleAutoSkipUnplayable: () => audio.handleToggleAutoSkipUnplayable(
             !useAudioSettingsStore.getState().autoSkipUnplayable,
         ),
+        toggleBackgroundSilentSkip: () => audio.handleToggleBackgroundSilentSkip(
+            !useAudioSettingsStore.getState().backgroundSilentSkip,
+        ),
         canAutoScanLocalLibrary: isLocalLibraryAutoScanSupported,
         toggleLocalLibraryAutoScan: () => useLocalLibrarySettingsStore.getState().toggleAutoScan(),
         canReportPlayback: () => isPlaybackReportReady(),

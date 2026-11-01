@@ -280,7 +280,8 @@ class WallpaperLyricsState private constructor() {
          */
         @JvmStatic
         fun publishNativeTrack(title: String?, artist: String?, coverUrl: String?,
-                               durationMs: Long, lines: Array<TimedLine>?) {
+                               durationMs: Long, lines: Array<TimedLine>?,
+                               positionMs: Long = 0L, playing: Boolean = true) {
             if (lines == null || lines.isEmpty()) {
                 return
             }
@@ -296,8 +297,9 @@ class WallpaperLyricsState private constructor() {
                     previous.visualizerMode, previous.blur,
                     previous.showProgress, previous.showTranslation,
                     if (durationMs > 0L) durationMs else previous.durationMs,
-                    lines, true,
-                    SystemClock.elapsedRealtime(), 0L,
+                    // 歌词异步到达时音频可能已播了数秒；只校准显示，不重置播放器（#174）。
+                    lines, playing,
+                    SystemClock.elapsedRealtime(), Math.max(0L, positionMs),
                     System.currentTimeMillis())
         }
 

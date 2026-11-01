@@ -72,6 +72,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val durationMs: Long,
             val playing: Boolean,
             val speed: Float,
+            val buffering: Boolean,
         ) {
             fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
                 put("songKey", songKey)
@@ -80,6 +81,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                 put("durationMs", durationMs)
                 put("playing", playing)
                 put("speed", speed.toDouble())
+                put("buffering", buffering)
             }
         }
 
@@ -96,7 +98,18 @@ class FoliaNativePlayerPlugin : Plugin() {
                 player.getDurationMs(),
                 player.isPlaying(),
                 player.getSpeed(),
+                player.isBuffering(),
             )
+        }
+
+        /** 亮屏/叠层低频核对只改显示锚点，绝不 seek 或重新 prepare 真播放器（#174）。 */
+        @JvmStatic
+        fun refreshDisplayAnchor() {
+            val media = mediaSnapshot() ?: return
+            val playing = media.playing && !media.buffering
+            if (!anchorStillTrue(media.positionMs) || WallpaperLyricsState.get().playing != playing) {
+                WallpaperLyricsState.setAnchor(media.positionMs, playing)
+            }
         }
 
         /**
@@ -281,7 +294,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                     val playing = if ("seeked" == type)
                         player != null && player!!.isPlaying()
                     else
-                        "paused" != type
+                        "paused" != type && player?.isBuffering() != true
                     /*
                      * ⭐ **"position" 这一档不是每次都写锚点。**
                      *
@@ -355,6 +368,8 @@ class FoliaNativePlayerPlugin : Plugin() {
                 payload.put("positionMs", positionMs.toDouble())
                 payload.put("durationMs", durationMs.toDouble())
                 payload.put("songKey", player?.currentMediaId() ?: "")
+                payload.put("playing", player?.isPlaying() == true)
+                payload.put("buffering", player?.isBuffering() == true)
                 /*
                  * ⭐ **播完了自动下一首。**
                  *
@@ -398,6 +413,15 @@ class FoliaNativePlayerPlugin : Plugin() {
                 }
             }
         }
+        if ("playing" == type && durationMs > 0L) {
+            MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onNativePlaybackStarted() }
+        }
+        if ("error" == type && !top.izuna.foliamajor.FoliaPlaybackService.appUiVisible) {
+            val failedKey = player?.currentMediaId() ?: ""
+            MAIN.post {
+                top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onNativePlayerError(failedKey)
+            }
+        }
         if ("ended" == type) {
                     /*
                      * 播完了 = 这首真的走完了。**原生立即决定接下来播什么**，不再等 JS。
@@ -411,13 +435,9 @@ class FoliaNativePlayerPlugin : Plugin() {
                      * 立刻决定（单曲循环重播 / 换下一首 / 顺序播放走到头才停），它自己不叫醒
                      * 前台。装源后以 syncTo 通知界面认领，不再发 next 让 Web 重复切歌。
                      */
+                    val endedKey = payload.optString("songKey", "")
                     MAIN.post {
-                        val context = instance?.getContext()
-                        if (context != null
-                            && top.izuna.foliamajor.FoliaPlaybackService.isRunning()) {
-                            top.izuna.foliamajor.FoliaPlaybackService
-                                    .requestNativeTrackFinished(context)
-                        }
+                        top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onTrackFinished(endedKey)
                     }
                 }
                 if (message != null) {
@@ -580,6 +600,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         result.put("positionMs", current.getPositionMs().toDouble())
         result.put("durationMs", current.getDurationMs().toDouble())
         result.put("playing", current.isPlaying())
+        result.put("buffering", current.isBuffering())
+        result.put("speed", current.getSpeed().toDouble())
         // 引擎此刻装的是哪一首：Web 层判「点歌有没有真的换过去」只信这一个
         // （服务里的 cachedSongKey 会随它自己推的 metadata 变，当判据等于自证）。
         result.put("songKey", current.currentMediaId())

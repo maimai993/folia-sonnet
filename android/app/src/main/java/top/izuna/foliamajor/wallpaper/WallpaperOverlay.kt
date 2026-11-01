@@ -740,6 +740,7 @@ class WallpaperOverlay(private val context: Context) {
                     scheduleWatch()
                 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                     screenOn = true
+                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.refreshDisplayAnchor()
                     /*
                      * 亮屏才是这一层真正"露面"的时刻 —— 它多半在息屏那一刻就已经起好了
                      * （那时屏幕是黑的，看不看得见无所谓）。所以最短可见时长要从**这里**
@@ -2347,6 +2348,7 @@ class WallpaperOverlay(private val context: Context) {
             return
         }
         lastVerifyAtMs = now
+        top.izuna.foliamajor.player.FoliaNativePlayerPlugin.refreshDisplayAnchor()
         val snapshot = WallpaperLyricsState.get()
         if (snapshot.title.isEmpty() && snapshot.lines.size == 0) {
             return
@@ -2369,6 +2371,7 @@ class WallpaperOverlay(private val context: Context) {
                     val pageLineCount = page.optInt("n", -1)
                     val pageFirstLine = page.optString("f", "")
                     val pagePositionMs = page.optLong("p", -1L)
+                    val callbackPositionMs = WallpaperLyricsState.get().positionMs()
                     if (!pageTitle.equals(expectedTitle)) {
                         mismatch = true
                         mismatchWhy = "歌名对不上（页面「" + pageTitle + "」≠ 原生「" + expectedTitle + "」）"
@@ -2389,7 +2392,7 @@ class WallpaperOverlay(private val context: Context) {
                                 pageFirstLine + "」，原生 " + expectedLineCount + " 行 /「" +
                                 expectedFirstLine + "」）"
                     } else if (pagePositionMs >= 0L
-                            && Math.abs(pagePositionMs - expectedPositionMs) > POSITION_DRIFT_TOLERANCE_MS) {
+                            && Math.abs(pagePositionMs - callbackPositionMs) > POSITION_DRIFT_TOLERANCE_MS) {
                         // 歌词和时间轴都对，但两边各推各的、差出好几秒（页面锚点过期）。
                         mismatch = true
                         mismatchWhy = "位置漂移 " + (pagePositionMs - expectedPositionMs) + "ms（容差 " +

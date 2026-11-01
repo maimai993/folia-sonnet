@@ -1081,9 +1081,9 @@ class MusicGateway private constructor() {
             val data = body?.optJSONArray("data")
             if (data != null && data.length() > 0) {
                 val first = data.optJSONObject(0)
-                if (first != null) {
+                if (first != null && !first.isNull("url")) {
                     val url = first.optString("url", "")
-                    if (!url.isEmpty()) {
+                    if (!url.isEmpty() && url != "null") {
                         return url
                     }
                 }

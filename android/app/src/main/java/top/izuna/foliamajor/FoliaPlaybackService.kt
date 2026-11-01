@@ -471,8 +471,9 @@ class FoliaPlaybackService : android.app.Service() {
                     ACTION_UPDATE_METADATA -> updateMetadata(intent)
                     ACTION_UPDATE_STATE -> updatePlaybackState(intent)
                     ACTION_UPDATE_QUEUE_MIRROR -> {
-                        val incomingQueue = intent.getStringExtra(EXTRA_QUEUE_MIRROR_JSON)
-                        val incomingIndex = intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
+                        val staged = if (intent.getBooleanExtra(EXTRA_QUEUE_MIRROR_STAGED, false)) takeStagedQueueMirror() else null
+                        val incomingQueue = staged?.first ?: intent.getStringExtra(EXTRA_QUEUE_MIRROR_JSON)
+                        val incomingIndex = staged?.second ?: intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
                         /*
                          * 队列状态机用 syncEntries 跟上（replace 会把下标重置到队首）。
                          * 原生有明确媒体身份时游标只按它定位；没有才认前台下标（冷启动）。
@@ -482,8 +483,9 @@ class FoliaPlaybackService : android.app.Service() {
                             // 引擎没带 songKey（Web 装源没给身份）时为空串：那一档不拦前台下标。
                             val nativeKey = top.izuna.foliamajor.player.FoliaNativePlayerPlugin
                                     .mediaSnapshot()?.songKey ?: ""
-                            val target = NativeMirrorGuard.mirrorIndex(entries.map { it.songKey }, nativeKey,
-                                    nativeKey.isNotEmpty(), incomingIndex)
+                            val mirrorKey = pendingDispatchSongKey ?: nativeKey
+                            val target = NativeMirrorGuard.mirrorIndex(entries.map { it.songKey }, mirrorKey,
+                                    mirrorKey.isNotEmpty(), incomingIndex)
                             // 旧队列连当前媒体都没有时拒绝整份同步；显式点歌仍走 playFromQueue。
                             if (nativeKey.isEmpty() || target >= 0) {
                                 val hadCurrent = playQueue.current() != null
@@ -659,7 +661,11 @@ class FoliaPlaybackService : android.app.Service() {
      * 界面由 nativePlayMirrorEntry 装的 syncTo 跟上，不再额外广播 "next" ——
      * 那条会让 JS 的播放链跟原生抢同一首歌（#106）。
      */
-    fun onTrackFinished() {
+    fun onTrackFinished(rawEndedSongKey: String? = null) {
+        val endedSongKey = top.izuna.foliamajor.player.endedIdentity(rawEndedSongKey)
+        val pending = pendingDispatchSongKey
+        // 派发中的旧源结束不再推进第二次；新歌真实ended不能被全局20秒时间窗吞掉（#175）。
+        if (pending != null && endedSongKey != null && pending != endedSongKey) return
         /*
          * ⭐ 已经为这一首提前换过了：这条 ended 是**旧那台**放完报上来的，丢掉。
          *
@@ -670,7 +676,7 @@ class FoliaPlaybackService : android.app.Service() {
          * 用时间窗而不是「为哪一首推进过」的标记：提前换歌可能压根没走成
          * （最后一首、单曲循环、地址解析失败），那时候 ended 必须照常处理。
          */
-        if (android.os.SystemClock.elapsedRealtime() - advancedAheadAtMs < ADVANCE_AHEAD_GUARD_MS) {
+        if (endedSongKey == null && android.os.SystemClock.elapsedRealtime() - advancedAheadAtMs < ADVANCE_AHEAD_GUARD_MS) {
             publishSnapshot()
             return
         }
@@ -682,6 +688,7 @@ class FoliaPlaybackService : android.app.Service() {
             return
         }
         val current = playQueue.current()
+        if (endedSongKey != null && current != null && endedSongKey != current.songKey) return
         val mode = playQueue.loopMode
         // 单曲循环：位置归零重播。走 seek 而不是换源 —— 换源会重新解密、重新缓冲，
         // 听感上是「每放完一次就卡一下」，而单曲循环本该是无缝的。
@@ -737,6 +744,7 @@ class FoliaPlaybackService : android.app.Service() {
      * 队列没推进过的时候才有意义。
      */
     private var advancedAheadAtMs = 0L
+    @Volatile private var pendingDispatchSongKey: String? = null
 
     private fun advanceToNextEntry(next: NativeQueueEntry) {
         playQueue.bumpRevision()
@@ -772,6 +780,7 @@ class FoliaPlaybackService : android.app.Service() {
 
     /** 把队列里的一首交给原生播放器换源（地址缺了就走平台解析，见 resolveMirrorEntryAsync）。 */
     private fun playQueueEntry(entry: NativeQueueEntry) {
+        pendingDispatchSongKey = entry.songKey
         val json = entry.toJson()
         var url = entry.url
         if (url.isEmpty()) {
@@ -855,11 +864,12 @@ class FoliaPlaybackService : android.app.Service() {
                 return false
             }
             mirroredIndex = target
+            pendingDispatchSongKey = songKey
             // 这一单开出去：此前在途的解析全部作废（见 resolveMirrorEntryAsync 的代次守卫）。
             val generation = beginDispatch()
             var url = resolvedUrlCache.get(songKey)
             if (url == null || url.isEmpty()) {
-                url = entry.optString("url", "")
+                url = mirrorEntryUrl(entry)
             }
             if (url != null && !url.isEmpty()) {
                 // 装不上就如实回 false：调用方（JS）据此回退 Web 全流程，别让界面先换歌。
@@ -1147,11 +1157,12 @@ class FoliaPlaybackService : android.app.Service() {
             val songKey = entryKey
             var url = if (songKey.isEmpty()) null else resolvedUrlCache.get(songKey)
             if (url == null || url.isEmpty()) {
-                url = entry.optString("url", "")
+                url = mirrorEntryUrl(entry)
             }
             // 先占位再决定要不要异步解析，与上面按 songKey 定位那条路径一致：
             // 解析期间用户又按了下一首的话，这一单的代次已经变了，回来的那份被守卫丢掉。
             mirroredIndex = wrapped
+            pendingDispatchSongKey = songKey
             val generation = beginDispatch()
             if (url != null && !url.isEmpty()) {
                 nativePlayMirrorEntry(entry, url)
@@ -1202,10 +1213,7 @@ class FoliaPlaybackService : android.app.Service() {
              * 与下面「重试也拿不到地址」那条对齐：回执 + 按设置决定跳不跳。
              */
             Log.w(TAG, "解析地址失败：队列条目身份不全 songKey=" + songKey)
-            if (!songKey.isEmpty()) {
-                mainHandler.post { sendCommand("nativePlayFailed", 0L, songKey) }
-            }
-            mainHandler.post { onEntryUnplayable(songKey) }
+            mainHandler.post { onMirrorEntryFailed(songKey) }
             return
         }
         Thread({
@@ -1220,10 +1228,10 @@ class FoliaPlaybackService : android.app.Service() {
                  *   · 关着 → 停下并保留这首，让人自己决定。
                  * 两者都照旧发一条回执给前台：它在场时可以把界面标记出来。
                  */
-                if (!songKey.isEmpty()) {
-                    mainHandler.post { sendCommand("nativePlayFailed", 0L, songKey) }
+                mainHandler.post {
+                    // 旧取流失败不能在用户已选另一首之后再跳一次。
+                    if (generation == dispatchGeneration) onMirrorEntryFailed(songKey)
                 }
-                mainHandler.post { onEntryUnplayable(songKey) }
                 return@Thread
             }
             if (!songKey.isEmpty()) {
@@ -1301,8 +1309,48 @@ class FoliaPlaybackService : android.app.Service() {
      * 跳过的次数有上限（连续 [MAX_CONSECUTIVE_SKIPS] 首都放不了就停），否则遇到整个歌单
      * 都无版权的情况会一路狂奔把队列扫空，用户只看到「自己一直在跳歌」。
      */
-    private fun onEntryUnplayable(songKey: String) {
-        val skip = try {
+    /** JSON null 不是可播放的字符串地址。 */
+    private fun mirrorEntryUrl(entry: org.json.JSONObject): String {
+        if (entry.isNull("url")) return ""
+        val url = entry.optString("url", "")
+        return if (url == "null") "" else url
+    }
+
+    /** 前台失败交回 JS；后台只由原生决定，醒来时不能再重放撤回跳过（#172）。 */
+    private fun onMirrorEntryFailed(songKey: String) {
+        // 失败后仍保留目标身份到下一次派发，旧媒体快照不能把失败目标的游标拉回。
+        val settings = top.izuna.foliamajor.settings.FoliaSettingsStore.get(this)
+        val policy = top.izuna.foliamajor.player.nativeFailurePolicy(appUiVisible,
+                settings.getBoolean("autoSkipUnplayable", false),
+                settings.getBoolean("backgroundSilentSkip", true))
+        if (policy.notifyWeb) {
+            if (songKey.isNotEmpty()) sendCommand("nativePlayFailed", 0L, songKey)
+            return
+        }
+        onEntryUnplayable(songKey, policy.skip)
+    }
+
+    /** 退后台时为已经取得歌词的当前曲目补发主题任务，不只覆盖后台切歌。 */
+    fun requestCurrentBackgroundTheme() {
+        val media = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot() ?: return
+        val lyrics = nativeLyrics.snapshot(media.songKey) ?: return
+        val lines = top.izuna.foliamajor.online.MusicGateway.parseLrc(lyrics.lrc, lyrics.translated)
+        top.izuna.foliamajor.ai.BackgroundThemeWorker.request(this, media.songKey, cachedTitle, cachedArtist,
+                lines.joinToString("\n") { it.text })
+    }
+
+    /** 真正出声才结束连续失败序列，prepare成功但随后error不算成功。 */
+    fun onNativePlaybackStarted() { consecutiveSkips = 0 }
+
+    /** 原生错误回调只处理当前媒体，不把旧源的延迟错误应用到新歌。 */
+    fun onNativePlayerError(songKey: String) {
+        val current = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()?.songKey ?: ""
+        if (songKey.isNotEmpty() && current.isNotEmpty() && songKey != current) return
+        onMirrorEntryFailed(if (songKey.isEmpty()) current else songKey)
+    }
+
+    private fun onEntryUnplayable(songKey: String, shouldSkip: Boolean? = null) {
+        val skip = shouldSkip ?: try {
             top.izuna.foliamajor.settings.FoliaSettingsStore.get(this)
                     .getBoolean("autoSkipUnplayable", true)
         } catch (error: Throwable) {
@@ -1314,13 +1362,30 @@ class FoliaPlaybackService : android.app.Service() {
         if (decision == top.izuna.foliamajor.player.UnplayableDecision.STOP) {
             if (skip) Log.w(TAG, "连续 $consecutiveSkips 首都放不了，停下")
             consecutiveSkips = 0
+            // 派发到此终止：播放器里仍是旧曲，继续挂着 pending 会让旧曲恢复后的快照与 ended 全被丢掉。
+            pendingDispatchSongKey = null
+            top.izuna.foliamajor.player.FoliaNativePlayerPlugin.pauseFromSystem()
+            cachedPlaying = false
             publishSnapshot()
             publishNotification()
             return
         }
         consecutiveSkips += 1
         Log.w(TAG, "跳过放不了的 $songKey（连续第 $consecutiveSkips 首）")
-        onTrackFinished()
+        // 失败不是自然结束：不能被 nearEnd 防重复窗口吞掉，也不能单曲循环重试坏源。
+        val previousIndex = playQueue.currentIndex()
+        val atEnd = playQueue.loopMode == NativeLoopMode.OFF && !playQueue.shuffle
+                && previousIndex + 1 >= playQueue.size()
+        val next = if (atEnd) null else playQueue.onSkip(+1)
+        if (next == null || playQueue.currentIndex() == previousIndex) {
+            // 同上：没有下一首可派发，失败目标的 pending 不能留到下一次恢复播放。
+            pendingDispatchSongKey = null
+            top.izuna.foliamajor.player.FoliaNativePlayerPlugin.pauseFromSystem()
+            cachedPlaying = false
+            publishSnapshot()
+            return
+        }
+        advanceToNextEntry(next)
     }
 
     /**
@@ -1338,7 +1403,7 @@ class FoliaPlaybackService : android.app.Service() {
                 val entry = array.getJSONObject(idx)
                 val key = entry.optString("songKey", "")
                 if (key.isEmpty() || resolvedUrlCache.containsKey(key)) continue
-                val existing = entry.optString("url", "")
+                val existing = mirrorEntryUrl(entry)
                 if (!existing.isEmpty()) {
                     resolvedUrlCache.put(key, existing)
                     continue
@@ -1400,18 +1465,15 @@ class FoliaPlaybackService : android.app.Service() {
                 top.izuna.foliamajor.player.FoliaNativePlayerPlugin.crossfadeFromSystem(url, songKey, fadeMs)
         if (!crossfaded && !top.izuna.foliamajor.player.FoliaNativePlayerPlugin.prepareFromSystem(url, songKey)) {
             Log.w(TAG, "原生播放器不在，地址装不上 songKey=" + songKey)
-            if (!songKey.isEmpty()) {
-                mainHandler.post { sendCommand("nativePlayFailed", 0L, songKey) }
-            }
-            mainHandler.post { onEntryUnplayable(songKey) }
+            mainHandler.post { onMirrorEntryFailed(songKey) }
             return false
         }
-        // 起播成功就把「连续放不了」清掉：那是给自动跳过兜的上限，不该跨歌累计。
-        consecutiveSkips = 0
+        // prepare 受理不等于真的出声；连续失败计数由真实 playing 后再清零。
         // 交叉那条路已经自己起播了；只有 prepare 那条需要显式 resume。
         if (!crossfaded) top.izuna.foliamajor.player.FoliaNativePlayerPlugin.resumeFromSystem()
         val songChanged = !songKey.isEmpty() && songKey != cachedSongKey
         if (songChanged) {
+            top.izuna.foliamajor.ai.BackgroundThemeWorker.updateActiveSong(songKey)
             cachedSongKey = songKey
             cachedArtwork = null
             cachedDurationMs = 0L
@@ -1548,9 +1610,16 @@ class FoliaPlaybackService : android.app.Service() {
                     return@post
                 }
                 nativeLyrics.store(songKey, mainLrc, transLrc)
+                if (!appUiVisible) {
+                    top.izuna.foliamajor.ai.BackgroundThemeWorker.request(this, songKey, title, artist,
+                            lines.joinToString("\n") { it.text })
+                }
                 NativeLyricPresentation.publishColorOs(this, nativeLyrics.snapshot(songKey), title, artist, cachedAlbum, durationMs)
+                val media = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()
                 top.izuna.foliamajor.wallpaper.WallpaperLyricsState.publishNativeTrack(
-                        title, artist, artworkUrl, durationMs, lines.toTypedArray())
+                        title, artist, artworkUrl, durationMs, lines.toTypedArray(),
+                        if (media?.songKey == songKey) media.positionMs else cachedPositionMs,
+                        if (media?.songKey == songKey) media.playing && !media.buffering else cachedPlaying)
                 // 同一份歌词也要给播放页：以前只喂了桌面歌词，播放页靠 JS 自己再拉一次，
                 // 而那次拉取挂在 currentSong 的 React effect 上 —— 原生派发的点歌绕过了
                 // 它，于是「歌词停在上一个歌单那首，要等下一首才翻」。
@@ -1914,6 +1983,10 @@ class FoliaPlaybackService : android.app.Service() {
     /** getQueueState 读快照前重建 metadata / PlaybackState / 通知；不碰播放器、不起服务、不发命令。 */
     fun refreshForSnapshot() {
         top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot()?.let {
+            // 新源还在解析/播放器线程排队时，旧媒体快照只能用于显示，不能撤销队列派发。
+            val pending = pendingDispatchSongKey
+            if (pending != null && it.songKey != pending) return@let
+            if (pending == it.songKey) pendingDispatchSongKey = null
             if (it.songKey.isNotEmpty() && it.songKey != cachedSongKey) {
                 playQueue.all().find { entry -> entry.songKey == it.songKey }?.let { entry ->
                     cachedSongKey = entry.songKey; cachedTitle = entry.title
@@ -2140,6 +2213,9 @@ class FoliaPlaybackService : android.app.Service() {
     }
 
     companion object {
+        @Volatile
+        var appUiVisible = false
+
         private const val TAG = "FoliaPlaybackService"
         private const val CHANNEL_ID = "folia_playback"
         private const val NOTIFICATION_ID = 0x1F01
@@ -2294,7 +2370,7 @@ class FoliaPlaybackService : android.app.Service() {
                     val songKey = entry.optString("songKey", "")
                     var url = if (songKey.isEmpty()) null else service.resolvedUrlCache[songKey]
                     if (url == null || url.isEmpty()) {
-                        url = entry.optString("url", "")
+                        url = service.mirrorEntryUrl(entry)
                     }
                     if (url == null || url.isEmpty()) null else url
                 } catch (ignored: org.json.JSONException) {
@@ -2689,6 +2765,20 @@ class FoliaPlaybackService : android.app.Service() {
         /** JS 活着时把队列快照推过来（WebView 冻结时原生切歌的唯一依据），见镜像区。 */
         const val ACTION_UPDATE_QUEUE_MIRROR = "top.izuna.foliamajor.action.UPDATE_QUEUE_MIRROR"
         const val EXTRA_QUEUE_MIRROR_JSON = "queueMirrorJson"
+        const val EXTRA_QUEUE_MIRROR_STAGED = "queueMirrorStaged"
+        private var stagedQueueMirror: Pair<String, Int>? = null
+        private val stagedQueueMirrorLock = Any()
+
+        /** 同进程交接大歌单，不把数百KB JSON塞入Binder Intent（#164）。 */
+        fun stageQueueMirror(json: String, index: Int) {
+            synchronized(stagedQueueMirrorLock) { stagedQueueMirror = json to index }
+        }
+
+        private fun takeStagedQueueMirror(): Pair<String, Int>? = synchronized(stagedQueueMirrorLock) {
+            val value = stagedQueueMirror
+            stagedQueueMirror = null
+            value
+        }
         const val EXTRA_QUEUE_MIRROR_INDEX = "queueMirrorIndex"
         /** 队列没变、只换正播那首：轻量推游标，见 ACTION_UPDATE_QUEUE_MIRROR。 */
         const val ACTION_UPDATE_QUEUE_INDEX = "top.izuna.foliamajor.action.UPDATE_QUEUE_INDEX"

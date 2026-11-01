@@ -23,12 +23,17 @@ export type NativePlaybackEvent = {
     durationMs?: number;
     message?: string;
     songKey?: string;
+    /** 原生实际出声/缓冲状态，seeked 不再凭位置跳变推断已恢复播放。 */
+    playing?: boolean;
+    buffering?: boolean;
 };
 
 export type NativePlaybackSnapshot = {
     positionMs: number;
     durationMs: number;
     playing: boolean;
+    buffering?: boolean;
+    speed?: number;
     /**
      * 引擎此刻**装的那一首**（装源时写进 MediaItem 的 mediaId），没装东西时为空串。
      *

@@ -439,6 +439,7 @@ class MainActivity : BridgeActivity() {
     override fun onStart() {
         super.onStart()
         // 回前台：把渲染放回来。
+        FoliaPlaybackService.appUiVisible = true
         FoliaNativePlugin.emitAppBackground(false)
     }
 
@@ -448,6 +449,8 @@ class MainActivity : BridgeActivity() {
         //
         // 放在 onStop 而不是 onPause —— 下拉通知栏、切多任务只到 onPause，那时画面还
         // 露着一半，停了会看到动画僵在半途。
+        FoliaPlaybackService.appUiVisible = false
+        FoliaPlaybackService.activeService()?.requestCurrentBackgroundTheme()
         FoliaNativePlugin.emitAppBackground(true)
     }
 
