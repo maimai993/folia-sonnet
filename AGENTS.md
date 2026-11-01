@@ -90,11 +90,12 @@
 
 - 四种分支：`main`（只接受发版合并）、`dev`（日常开发，所有 PR 的目标）、`feat/*` 与 `fix/*`（源分支，合并后删）、`release/x.y.z`（出包，从 main 切）。
 - **main 和 dev 都不直接 push**，一律走 PR。这条靠 GitHub 分支保护落实：Settings → Branches 给 `main`、`dev` 开保护，勾「Require a pull request before merging」与「Do not allow bypassing」。owner 在网页上配一次；CI 用的账号不是 admin，脚本改不了。
-- 日常：从 `dev` 切 `feat/*` 或 `fix/*` → 改 → 本地门禁 → PR 到 `dev` → 远端 CI 全绿 → 合并。不熟 GitHub 的用一条命令跑完推分支和建 PR：`npm run pr -- "fix: 标题"`（只是 `ci/openPr.ts` 的包装，细节见 `ci/README.md`）。
+- 日常：从 `dev` 切 `feat/*` 或 `fix/*` → 改 → 本地门禁 → **真机验过** → PR 到 `dev` → 远端 CI 全绿 → 合并。不熟 GitHub 的用一条命令跑完推分支和建 PR：`npm run pr -- "fix: 标题"`（只是 `ci/openPr.ts` 的包装，细节见 `ci/README.md`）。
 - 发版：先在 `dev` 上把 `package.json` 版本改好（走 PR），再 `dev` → PR → `main`；然后从 `main` 切 `release/<package.json 的 version>`（如 `release/0.7.22`）推上去。推这个分支会触发 `android-release.yml`：校验分支名与版本一致 → 出 APK/AAB → 打 `v<版本>` 标签 → 发 Release。release 分支上不再改版本号。
 
 ### CI
 
+- **开 PR 之前必须在真机上验过。** 门禁和单测只能证明代码没坏，证明不了「用起来没问题」。功能和界面、原生与平台接入、播放与后台行为这类改动，要出包装到真机上把改动涉及的实际路径走一遍，确认没问题才开 PR：安卓端 `npm run cap:sync:android` 后 `gradlew.bat assembleRelease` 出 APK 侧装，桌面端用 `run-desktop` skill 驱动真的 Electron 构建。PR 正文写清机型与系统版本、验了哪几项、结论是什么；截图和量化结论不能代替真机。验过之前代码留在本地分支，不建 PR，也不许先开个「占位 PR 等 CI 绿」。纯文档、纯测试、纯注释的改动不涉及真机，正文写一句「不涉及真机」即可。
 - **开 PR 之前**跑 `npm run ci:local`（控件/体积/版本/密钥扫描 + typecheck + sync-server typecheck + 单测 + `vite build` + 产物密钥扫描，与 `.github/workflows/ci.yml` 同一套），红了不许开 PR。第一次跑之前先装 sync-server 的依赖：`npm --prefix sync-server ci`。Windows 上 `test/unit/mod-system/modSignature.test.ts` 的符号链接用例会因权限失败（要开发者模式/管理员），这是环境限制：其余全绿照常开 PR，这一项以 Linux 的 CI 为准。
 - **开 PR 之后**盯 CI，全绿才合并：有 gh 用 `gh pr checks <编号> --watch`；没有 gh（或走 SSH 认证）就开 PR 页面的 **Checks** 标签。红了当场修，不要交给别人。
 - **合并前必须 review，至少一次 AI review**，而且报告要发在 GitHub 上：有 gh 用 `gh pr review <编号> --comment --body-file review.md`；没有 gh 就在 **Files changed → Review changes → Comment** 里写。只在聊天里说「看过了」不算，PR 的 Reviews 里能查到才算。有未处理的 CHANGES_REQUESTED 不许合。
