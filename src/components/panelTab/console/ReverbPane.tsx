@@ -1,10 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    AUDIO_CONSOLE_DAMPING_MAX,
+    AUDIO_CONSOLE_DAMPING_MIN,
+    AUDIO_CONSOLE_PRE_DELAY_MAX,
     AUDIO_CONSOLE_REVERB_RT60_MAX,
     AUDIO_CONSOLE_REVERB_RT60_MIN,
+    AUDIO_CONSOLE_REVERB_SHAPES,
     AUDIO_CONSOLE_ROOM_LEVEL_MAX,
     AUDIO_CONSOLE_ROOM_LEVEL_MIN,
+    AUDIO_CONSOLE_STEREO_WIDTH_MAX,
+    AUDIO_CONSOLE_STEREO_WIDTH_MIN,
     analyzeImpulseWav,
     type AudioConsoleImpulseProfile,
     type AudioConsoleReverbPreset,
@@ -13,15 +19,18 @@ import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Toggle } from '../../modal/settings/kit';
 import { Button, TextField } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
-import { ConsoleSlider, formatDb, formatSeconds } from './controls';
+import { ConsoleSlider, formatDb, formatMs, formatPercent, formatSeconds } from './controls';
 
 // src/components/panelTab/console/ReverbPane.tsx
-// 调音台的第三页：空间环境混响。
+// 调音台的第三页：空间环境混响，外加声场宽度。
 //
 // 与截图里那个「全局混音（Session 0）」的方案不同的地方：Folia 只处理**自己的**声音，
 // 没有系统级的音频会话可以接管，所以这里没有「跟随外部应用流」那一组开关。
-// 留下的是真正能实现的三个旋钮：房间多大（预设）、尾巴多长（RT60）、湿声多响（room level），
-// 外加一个「暂停时余音自然落下」。
+// 留下的是真正能实现的参数：房间多大（预设）、尾巴多长（RT60）、湿声多响（room level）、
+// 尾巴多暗（damping）、多远（pre-delay）、干湿比（mix），外加一个「暂停时余音自然落下」。
+//
+// 预设在这里只是**起点**：点一下会把该空间的阻尼与预延迟写进设置，之后两个滑杆各调各的。
+// 这样「想要大教堂的空间感但不要那 42 ms 的空档」是能做到的 —— 之前做不到。
 //
 // 导入 IR 走的是**测量**而不是卷积：读一遍 WAV，量出它的 RT60、预延迟与高频阻尼，
 // 再把这三个数折成参数化混响的参数（原因写在 audioConsole.ts 的 analyzeImpulseWav 上）。
@@ -44,10 +53,17 @@ const pickPreset = (profile: AudioConsoleImpulseProfile): AudioConsoleReverbPres
 const ReverbPane: React.FC = () => {
     const { t } = useTranslation();
     const reverb = useAudioConsoleStore(state => state.settings.reverb);
+    const stereo = useAudioConsoleStore(state => state.settings.stereo);
     const setReverb = useAudioConsoleStore(state => state.setReverb);
+    const setStereo = useAudioConsoleStore(state => state.setStereo);
     const fileRef = useRef<HTMLInputElement>(null);
     const [profile, setProfile] = useState<AudioConsoleImpulseProfile | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    /** 换预设 = 把该空间的阻尼与预延迟一起带出来；之后两个滑杆仍可各自微调。 */
+    const choosePreset = (preset: AudioConsoleReverbPreset) => {
+        setReverb({ preset, ...AUDIO_CONSOLE_REVERB_SHAPES[preset] });
+    };
 
     const importImpulse = async (file: File) => {
         setError(null);
@@ -59,6 +75,8 @@ const ReverbPane: React.FC = () => {
                 preset: pickPreset(measured),
                 rt60: Number(measured.rt60.toFixed(2)),
                 roomLevelDb: reverb.roomLevelDb,
+                damping: Number(measured.damping.toFixed(2)),
+                preDelayMs: Number(measured.preDelayMs.toFixed(0)),
             });
         } catch {
             setProfile(null);
@@ -90,7 +108,7 @@ const ReverbPane: React.FC = () => {
                                             key={preset.id}
                                             variant="bare"
                                             aria-pressed={chosen}
-                                            onClick={() => setReverb({ preset: preset.id })}
+                                            onClick={() => choosePreset(preset.id)}
                                             className={`flex h-9 items-center justify-center truncate rounded-lg text-[12px] transition-colors ${chosen
                                                 ? 'bg-[var(--st-fill2)] text-[color:var(--st-t1)] shadow-[0_0_0_1px_var(--st-accent)]'
                                                 : 'bg-[var(--st-fill)] text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)]'}`}
@@ -125,6 +143,42 @@ const ReverbPane: React.FC = () => {
                             onCommit={() => undefined}
                         />
 
+                        <ConsoleSlider
+                            label={t('ui.consoleReverbDamping')}
+                            valueText={formatPercent(reverb.damping)}
+                            value={reverb.damping}
+                            min={AUDIO_CONSOLE_DAMPING_MIN}
+                            max={AUDIO_CONSOLE_DAMPING_MAX}
+                            decimals={2}
+                            onChange={damping => setReverb({ damping })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="-mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleReverbDampingHint')}</p>
+
+                        <ConsoleSlider
+                            label={t('ui.consoleReverbPreDelay')}
+                            valueText={formatMs(reverb.preDelayMs)}
+                            value={reverb.preDelayMs}
+                            min={0}
+                            max={AUDIO_CONSOLE_PRE_DELAY_MAX}
+                            decimals={0}
+                            onChange={preDelayMs => setReverb({ preDelayMs })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="-mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleReverbPreDelayHint')}</p>
+
+                        <ConsoleSlider
+                            label={t('ui.consoleReverbMix')}
+                            valueText={formatPercent(reverb.mix)}
+                            value={reverb.mix}
+                            min={0}
+                            max={1}
+                            decimals={2}
+                            onChange={mix => setReverb({ mix })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="-mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleReverbMixHint')}</p>
+
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <div className="text-[13px] leading-5">{t('ui.consoleReverbTail')}</div>
@@ -138,6 +192,33 @@ const ReverbPane: React.FC = () => {
                                 label={t('ui.consoleReverbTail')}
                             />
                         </div>
+                    </div>
+                </div>
+            </EqualizerSection>
+
+            <EqualizerSection title={t('ui.consoleStereo')} hint={t('ui.consoleStereoHint')}>
+                <div className="space-y-3.5 px-4 pb-4 pt-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-[13px] leading-5">{t('ui.consoleStereoEnabled')}</span>
+                        <Toggle
+                            checked={stereo.enabled}
+                            onChange={enabled => setStereo({ enabled })}
+                            label={t('ui.consoleStereoEnabled')}
+                        />
+                    </div>
+                    <div className={stereo.enabled ? '' : 'opacity-40'}>
+                        <ConsoleSlider
+                            label={t('ui.consoleStereoWidth')}
+                            valueText={formatPercent(stereo.width)}
+                            value={stereo.width}
+                            min={AUDIO_CONSOLE_STEREO_WIDTH_MIN}
+                            max={AUDIO_CONSOLE_STEREO_WIDTH_MAX}
+                            decimals={2}
+                            disabled={!stereo.enabled}
+                            onChange={width => setStereo({ width })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoWidthHint')}</p>
                     </div>
                 </div>
             </EqualizerSection>

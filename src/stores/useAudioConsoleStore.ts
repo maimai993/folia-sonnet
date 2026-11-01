@@ -18,6 +18,7 @@ import {
     type AudioConsolePostEq,
     type AudioConsoleReverb,
     type AudioConsoleSettings,
+    type AudioConsoleStereo,
 } from '../utils/audioConsole';
 
 type AudioConsoleStore = {
@@ -27,6 +28,7 @@ type AudioConsoleStore = {
     setCompressorBand: (id: AudioConsoleCompressorBandId, patch: Partial<AudioConsoleCompressorBand>) => void;
     setFrontEq: (patch: Partial<AudioConsoleFrontEq>) => void;
     setPostEq: (patch: Partial<AudioConsolePostEq>) => void;
+    setStereo: (patch: Partial<AudioConsoleStereo>) => void;
     /** 后置十段全部归零（不动开关与曲线）。 */
     resetPostEqGains: () => void;
     reset: () => void;
@@ -103,6 +105,13 @@ export const useAudioConsoleStore = create<AudioConsoleStore>((set) => ({
     setPostEq: (patch) => set(state => ({
         settings: commit(
             { ...state.settings, postEq: { ...state.settings.postEq, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    setStereo: (patch) => set(state => ({
+        settings: commit(
+            { ...state.settings, stereo: { ...state.settings.stereo, ...patch } },
             state.settings,
         ),
     })),

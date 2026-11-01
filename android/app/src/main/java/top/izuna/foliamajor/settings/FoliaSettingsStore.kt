@@ -121,6 +121,7 @@ class FoliaSettingsStore private constructor(context: Context) {
             "visualizerHighQuality": false,
             "crossfadeEnabled": false,
             "crossfadeMs": 0,
+            "crossfadeCurve": "equalPower",
             "playbackFade": true,
             "eq.version": 1,
             "eq.enabled": false,

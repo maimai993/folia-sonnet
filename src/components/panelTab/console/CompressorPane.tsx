@@ -5,6 +5,8 @@ import {
     AUDIO_CONSOLE_ATTACK_MIN,
     AUDIO_CONSOLE_COMPRESSOR_BANDS,
     AUDIO_CONSOLE_COMPRESSOR_BAND_INFO,
+    AUDIO_CONSOLE_KNEE_MAX,
+    AUDIO_CONSOLE_KNEE_MIN,
     AUDIO_CONSOLE_RATIO_MAX,
     AUDIO_CONSOLE_RATIO_MIN,
     AUDIO_CONSOLE_RELEASE_MAX,
@@ -18,7 +20,7 @@ import { Segmented, Toggle } from '../../modal/settings/kit';
 import { Button } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
 import CompressorCurve from './CompressorCurve';
-import { ConsoleSlider, formatDb, formatMs, formatRatio } from './controls';
+import { ConsoleSlider, formatDb, formatMs, formatPercent, formatRatio } from './controls';
 
 // src/components/panelTab/console/CompressorPane.tsx
 // 调音台的第二页：四段压缩。
@@ -124,6 +126,7 @@ const CompressorPane: React.FC = () => {
                             thresholdDb={band.thresholdDb}
                             ratio={band.ratio}
                             makeupDb={band.makeupDb}
+                            kneeDb={band.kneeDb}
                             dimmed={!band.enabled}
                         />
                     </div>
@@ -196,6 +199,30 @@ const CompressorPane: React.FC = () => {
                             onChange={makeupDb => setBand(activeId, { makeupDb })}
                             onCommit={() => undefined}
                         />
+                        <ConsoleSlider
+                            label={t('ui.consoleKnee')}
+                            valueText={formatDb(band.kneeDb, 0)}
+                            value={band.kneeDb}
+                            min={AUDIO_CONSOLE_KNEE_MIN}
+                            max={AUDIO_CONSOLE_KNEE_MAX}
+                            decimals={1}
+                            disabled={!band.enabled}
+                            onChange={kneeDb => setBand(activeId, { kneeDb })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleKneeHint')}</p>
+                        <ConsoleSlider
+                            label={t('ui.consoleParallel')}
+                            valueText={formatPercent(band.mix)}
+                            value={band.mix}
+                            min={0}
+                            max={1}
+                            decimals={2}
+                            disabled={!band.enabled}
+                            onChange={mix => setBand(activeId, { mix })}
+                            onCommit={() => undefined}
+                        />
+                        <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleParallelHint')}</p>
                     </div>
                 </EqualizerSection>
             </div>

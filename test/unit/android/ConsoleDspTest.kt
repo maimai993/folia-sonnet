@@ -82,6 +82,111 @@ class ConsoleDspTest {
     }
 
     @Test
+    fun `软拐点越宽在阈值附近介入越早`() {
+        // 幅度 0.126 ≈ -18 dBFS，阈值 -20，过载 2 dB —— 正好落在拐点区里。
+        // 这也是软拐点唯一能被听出来的地方：远高于阈值时两条曲线都走直线，没有区别。
+        fun compressedGain(kneeDb: Float): Double {
+            val settings = CompressorSettings(
+                enabled = true,
+                bandCount = 4,
+                profile = CompressorProfile.FLAT,
+                bands = Array(4) {
+                    CompressorBand(
+                        enabled = true, thresholdDb = -20f, ratio = 4f,
+                        attackMs = 1f, releaseMs = 30f, makeupDb = 0f, kneeDb = kneeDb,
+                    )
+                },
+            )
+            val signal = tone(80.0, sampleRate, 0.126)
+            val reference = signal.copyOf()
+            runCompressor(signal, 1, settings)
+            return gainDb(signal, reference)
+        }
+
+        val hard = compressedGain(2f)
+        val soft = compressedGain(18f)
+        assertTrue("宽拐点应在阈值附近压得更多：硬 $hard dB vs 软 $soft dB", soft < hard - 0.5)
+    }
+
+    @Test
+    fun `平行压缩按混合比减少压掉的量`() {
+        fun compressedGain(mix: Float): Double {
+            val settings = CompressorSettings(
+                enabled = true,
+                bandCount = 4,
+                profile = CompressorProfile.FLAT,
+                bands = Array(4) {
+                    CompressorBand(
+                        enabled = true, thresholdDb = -20f, ratio = 4f,
+                        attackMs = 2f, releaseMs = 50f, makeupDb = 0f, kneeDb = 6f, mix = mix,
+                    )
+                },
+            )
+            val signal = tone(80.0, sampleRate, 0.5)
+            val reference = signal.copyOf()
+            runCompressor(signal, 1, settings)
+            return gainDb(signal, reference)
+        }
+
+        val full = compressedGain(1f)
+        val half = compressedGain(0.5f)
+        // 增益在**线性域**插值：1 + (g - 1)·mix。全压 -10.5 dB（g = 0.30）时，
+        // mix = 0.5 应落在 20·log10(0.65) ≈ -3.8 dB，而不是 dB 域的 -5.25。
+        assertTrue("平行压缩必须比全压少压：$full dB vs $half dB", half > full + 3.0)
+        assertEquals(-3.8, half, 0.8)
+    }
+
+    @Test
+    fun `声场加宽只放大侧向分量`() {
+        val stage = StereoStage()
+        // 纯中置（左右相同）不该被改变：这是 M/S 与「左右加延时」的关键区别，
+        // 也是单声道兼容性不塌的原因。
+        val centred = floatArrayOf(0.4f, 0.4f)
+        stage.process(centred, 0, 1, 2, StereoSettings(enabled = true, width = 2f))
+        assertEquals(0.4f, centred[0], 1e-5f)
+        assertEquals(0.4f, centred[1], 1e-5f)
+
+        // 纯侧向（左右相反）加宽到 2 倍，幅度加倍。
+        val sided = floatArrayOf(0.2f, -0.2f)
+        stage.process(sided, 0, 1, 2, StereoSettings(enabled = true, width = 2f))
+        assertEquals(0.4f, sided[0], 1e-5f)
+        assertEquals(-0.4f, sided[1], 1e-5f)
+    }
+
+    @Test
+    fun `声场宽度归零时折成单声道`() {
+        val buffer = floatArrayOf(0.5f, -0.1f, 0.2f, 0.6f)
+        StereoStage().process(buffer, 0, 2, 2, StereoSettings(enabled = true, width = 0f))
+        // 每一帧的左右都变成原来的中点，且两声道相等。
+        assertEquals(0.2f, buffer[0], 1e-5f)
+        assertEquals(0.2f, buffer[1], 1e-5f)
+        assertEquals(0.4f, buffer[2], 1e-5f)
+        assertEquals(0.4f, buffer[3], 1e-5f)
+    }
+
+    @Test
+    fun `声场关闭或宽度为一都不碰样本`() {
+        val stage = StereoStage()
+        val off = floatArrayOf(0.5f, -0.1f)
+        stage.process(off, 0, 1, 2, StereoSettings(enabled = false, width = 2f))
+        assertEquals(0.5f, off[0], 0f)
+        assertEquals(-0.1f, off[1], 0f)
+
+        val untouched = floatArrayOf(0.5f, -0.1f)
+        stage.process(untouched, 0, 1, 2, StereoSettings(enabled = true, width = 1f))
+        assertEquals(0.5f, untouched[0], 0f)
+        assertEquals(-0.1f, untouched[1], 0f)
+    }
+
+    @Test
+    fun `单声道输入直接跳过声场处理`() {
+        val buffer = floatArrayOf(0.3f, -0.3f)
+        StereoStage().process(buffer, 0, 2, 1, StereoSettings(enabled = true, width = 1.8f))
+        assertEquals(0.3f, buffer[0], 0f)
+        assertEquals(-0.3f, buffer[1], 0f)
+    }
+
+    @Test
     fun `后置均衡的十段与总增益叠在一起`() {
         val eq = TenBandEq()
         eq.configure(sampleRate)
@@ -222,17 +327,18 @@ class ConsoleDspTest {
               "gains": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
               "eq": { "mode": "peq", "q": 2.5, "globalGainDb": -3 },
               "effects": { "punch": 0.4, "space": 0.25, "highpass": 30, "lowpass": 18000 },
-              "reverb": { "enabled": true, "preset": 2, "rt60": 4.5, "roomLevelDb": -6, "tailOnPause": false },
+              "reverb": { "enabled": true, "preset": 2, "rt60": 4.5, "roomLevelDb": -6, "damping": 0.34, "preDelayMs": 42, "mix": 0.65, "tailOnPause": false },
               "compressor": {
                 "enabled": true, "bandCount": 4, "profile": 1,
                 "bands": [
-                  { "enabled": true, "thresholdDb": -30, "ratio": 5, "attackMs": 1, "releaseMs": 20, "makeupDb": 2 },
-                  { "enabled": false, "thresholdDb": -18, "ratio": 1.6, "attackMs": 8, "releaseMs": 80, "makeupDb": 0 },
-                  { "enabled": true, "thresholdDb": -20, "ratio": 1.8, "attackMs": 3, "releaseMs": 50, "makeupDb": 1 },
-                  { "enabled": true, "thresholdDb": -22, "ratio": 2, "attackMs": 2, "releaseMs": 40, "makeupDb": 0 }
+                  { "enabled": true, "thresholdDb": -30, "ratio": 5, "attackMs": 1, "releaseMs": 20, "makeupDb": 2, "kneeDb": 12, "mix": 0.5 },
+                  { "enabled": false, "thresholdDb": -18, "ratio": 1.6, "attackMs": 8, "releaseMs": 80, "makeupDb": 0, "kneeDb": 6, "mix": 1 },
+                  { "enabled": true, "thresholdDb": -20, "ratio": 1.8, "attackMs": 3, "releaseMs": 50, "makeupDb": 1, "kneeDb": 4, "mix": 0.8 },
+                  { "enabled": true, "thresholdDb": -22, "ratio": 2, "attackMs": 2, "releaseMs": 40, "makeupDb": 0, "kneeDb": 2, "mix": 1 }
                 ]
               },
-              "postEq": { "enabled": true, "gains": [0,0,0,0,0,4,0,0,0,0], "mode": "geq", "q": 1.2, "globalGainDb": 1.5 }
+              "postEq": { "enabled": true, "gains": [0,0,0,0,0,4,0,0,0,0], "mode": "geq", "q": 1.2, "globalGainDb": 1.5 },
+              "stereo": { "enabled": true, "width": 1.5 }
             }
             """.trimIndent(),
         )
@@ -256,6 +362,9 @@ class ConsoleDspTest {
         assertEquals(first.reverb.preset, second.reverb.preset)
         assertEquals(first.reverb.rt60Seconds, second.reverb.rt60Seconds, 0f)
         assertEquals(first.reverb.roomLevelDb, second.reverb.roomLevelDb, 0f)
+        assertEquals(first.reverb.damping, second.reverb.damping, 1e-4f)
+        assertEquals(first.reverb.preDelayMs, second.reverb.preDelayMs, 1e-4f)
+        assertEquals(first.reverb.mix, second.reverb.mix, 1e-4f)
         assertEquals(first.reverb.tailOnPause, second.reverb.tailOnPause)
 
         assertEquals(first.compressor.enabled, second.compressor.enabled)
@@ -270,6 +379,8 @@ class ConsoleDspTest {
             assertEquals(expected.attackMs, actual.attackMs, 0f)
             assertEquals(expected.releaseMs, actual.releaseMs, 0f)
             assertEquals(expected.makeupDb, actual.makeupDb, 0f)
+            assertEquals(expected.kneeDb, actual.kneeDb, 1e-4f)
+            assertEquals(expected.mix, actual.mix, 1e-4f)
         }
 
         assertEquals(first.postEq.enabled, second.postEq.enabled)
@@ -277,6 +388,9 @@ class ConsoleDspTest {
         assertEquals(first.postEq.mode, second.postEq.mode)
         assertEquals(first.postEq.q, second.postEq.q, 0f)
         assertEquals(first.postEq.globalGainDb, second.postEq.globalGainDb, 0f)
+
+        assertEquals(first.stereo.enabled, second.stereo.enabled)
+        assertEquals(first.stereo.width, second.stereo.width, 1e-4f)
 
         // 再写一次必须与第一次逐字节相同：说明读写两侧对字段集合的认知是一致的。
         assertEquals(first.toJson().toString(), second.toJson().toString())
@@ -291,5 +405,15 @@ class ConsoleDspTest {
             JSONObject("""{"version":2,"enabled":true,"gains":[0,0,0,0,0,0,0,0,0,0],"compressor":{"enabled":true}}"""),
         )
         assertTrue(!withCompressor.isFlat())
+    }
+
+    @Test
+    fun `只开声场加宽也不能按字节直通`() {
+        // 立体声级插在混响之前：漏了这一条，用户开了宽度却听见原样。
+        val widened = EqSettings.fromJson(
+            JSONObject("""{"version":2,"enabled":true,"gains":[0,0,0,0,0,0,0,0,0,0],"stereo":{"enabled":true,"width":1.8}}"""),
+        )
+        assertTrue(!widened.isFlat())
+        assertEquals(1.8f, widened.stereo.width, 1e-4f)
     }
 }

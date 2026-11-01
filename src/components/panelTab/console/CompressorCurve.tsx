@@ -4,7 +4,7 @@ import React from 'react';
 // 一段压缩的静态曲线：横轴输入电平，纵轴输出电平，都是 -48 ~ 0 dB。
 //
 // 画的是「如果信号停在这个电平上，会被压到多少」—— 与原生 MultibandCompressor 里
-// 那条逐块计算的曲线是同一组公式（阈值 / 比率 / 6 dB 软拐点），所以图上看到的折点
+// 那条逐块计算的曲线是同一组公式（阈值 / 比率 / 软拐点宽度），所以图上看到的折点
 // 就是耳朵听到的拐点。
 //
 // 不画网格文字以外的装饰：Folia 的图都是「一条线 + 一条参考线」，靠颜色和刻度说话。
@@ -15,6 +15,8 @@ type CompressorCurveProps = {
     ratio: number;
     /** 补偿增益（dB）。 */
     makeupDb: number;
+    /** 软拐点宽度（dB）：2 硬，18 软。 */
+    kneeDb: number;
     /** 关闭的段画成灰的。 */
     dimmed?: boolean;
     /** 图上要不要标当前增益衰减的读数（右下角）。 */
@@ -27,9 +29,9 @@ const MAX_DB = 0;
 /** dB → 0..1 的纵向位置（0 = 顶部）。 */
 const toUnit = (db: number) => 1 - (Math.min(MAX_DB, Math.max(MIN_DB, db)) - MIN_DB) / (MAX_DB - MIN_DB);
 
-/** 与原生一致的软拐点：6 dB 宽，二次过渡。 */
-const transferDb = (inputDb: number, thresholdDb: number, ratio: number, makeupDb: number): number => {
-    const knee = 6;
+/** 与原生一致的软拐点过渡：以阈值为中心、宽 kneeDb，二次曲线接直线。 */
+const transferDb = (inputDb: number, thresholdDb: number, ratio: number, makeupDb: number, kneeDb: number): number => {
+    const knee = Math.max(2, kneeDb);
     const over = inputDb - thresholdDb;
     const reduction = over <= -knee / 2
         ? 0
@@ -43,6 +45,7 @@ const CompressorCurve: React.FC<CompressorCurveProps> = ({
     thresholdDb,
     ratio,
     makeupDb,
+    kneeDb,
     dimmed = false,
     gainReductionDb,
 }) => {
@@ -50,7 +53,7 @@ const CompressorCurve: React.FC<CompressorCurveProps> = ({
     const steps = 48;
     for (let index = 0; index <= steps; index += 1) {
         const inputDb = MIN_DB + (index / steps) * (MAX_DB - MIN_DB);
-        const outputDb = transferDb(inputDb, thresholdDb, ratio, makeupDb);
+        const outputDb = transferDb(inputDb, thresholdDb, ratio, makeupDb, kneeDb);
         points.push(`${(index / steps) * 100},${toUnit(outputDb) * 100}`);
     }
 

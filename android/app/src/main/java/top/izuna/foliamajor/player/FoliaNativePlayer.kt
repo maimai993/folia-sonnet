@@ -159,6 +159,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      * 用户听到的就是「末尾没有淡出」。所以斜坡要在**还剩这么久**的时候起跑，跑到 0 正好换完。
      */
     @Volatile private var crossfadeAheadMs = 0
+    /** 重叠期间的音量曲线，取值见 [CrossfadeCurve]。 */
+    @Volatile private var crossfadeCurve = CrossfadeCurve.EQUAL_POWER
     /** 这一首的「快到尾巴了」是不是已经报过（每首只报一次，seek 回去要重新上膛）。 */
     private var nearEndFired = false
     /**
@@ -553,6 +555,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         crossfadeAheadMs = if (durationMs > 0) Math.min(durationMs, MAX_CROSSFADE_AHEAD_MS) else 0
     }
 
+    /**
+     * 换曲线。设置里存的是名字（`equalPower` / `linear` / `fast`），换算见 [CrossfadeCurve]。
+     */
+    fun setCrossfadeCurve(name: String?) {
+        crossfadeCurve = CrossfadeCurve.fromName(name)
+    }
+
     fun release() {
         // 收过一次就别再收：线程 quit 之后再往它的 Handler 上 post 会直接抛
         // 「sending message to a Handler on a dead thread」，而系统控件（通知栏 / 耳机）
@@ -762,8 +771,12 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                  * 目标定死的话，坡道跑完就落在一个过时的音量上（补偿白算）。
                  */
                 val target = requestedVolume
-                incoming.setVolume((target * progress).coerceIn(0f, 1f))
-                outgoing.setVolume((target * (1f - progress)).coerceIn(0f, 1f))
+                // 按曲线取两条音量。等功率下两者平方和为 1，中点各 0.707 —— 线性在这里
+                // 只有 0.5，正是「过渡中间音量塌一下」的来源。
+                val incomingGain = CrossfadeCurve.incoming(crossfadeCurve, progress)
+                val outgoingGain = CrossfadeCurve.outgoing(crossfadeCurve, progress)
+                incoming.setVolume((target * incomingGain).coerceIn(0f, 1f))
+                outgoing.setVolume((target * outgoingGain).coerceIn(0f, 1f))
                 if (step >= steps) {
                     fadeTick = null
                     crossfadeOutgoing = null

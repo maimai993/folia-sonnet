@@ -1,6 +1,9 @@
 package top.izuna.foliamajor.player.dsp
 
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.sin
 
 // android/app/src/main/java/top/izuna/foliamajor/player/dsp/ReverbStage.kt
 // 空间环境混响：并联梳状（含阻尼）+ 串联全通，Freeverb 的结构。
@@ -13,9 +16,11 @@ import kotlin.math.pow
 // 参数是怎么来的：
 //   · RT60 —— 梳状反馈量由 g = 10^(-3·T_delay / RT60) 反推，T_delay 是该梳状的真实延迟秒数。
 //     这条式子就是 RT60 的定义（衰减 60 dB 所需时间），所以滑杆上的 2.20 s 是真的 2.20 s。
-//   · 声压级 roomLevelDb —— 湿声相对干声的增益，0 dB 表示同响，-2 dB 是出厂值。
-//   · 预设 —— 只改房间的「形状」：梳状延迟缩放、阻尼、预延迟。RT60 仍由滑杆决定。
-//     这样「换一个空间」和「换一个尾巴长度」是两件独立的事，符合直觉。
+//   · 声压级 roomLevelDb —— 湿声的电平，0 dB 表示与直达声同响，-2 dB 是出厂值。
+//   · 干湿比 mix —— 等功率交叉：dry = cos(θ)，wet = sin(θ)，θ = mix·π/2。
+//     用等功率而不是线性，是因为线性在 mix = 0.5 处会凹下去 3 dB（听感是「开了混响变小」）。
+//   · 阻尼与预延迟 —— 用户直接给值，预设只提供房间大小（[PRESET_SCALES]）。
+//     换预设时 Web 会把该预设的阻尼与预延迟写进设置当起点，之后两个滑杆各调各的。
 //
 // 延迟缓冲按**最大**的预设（大教堂 1.9 倍）一次分配好，切换预设只改读写的长度，
 // 不在音频线程上分配内存。
@@ -92,21 +97,26 @@ class ReverbStage {
             appliedPreset = preset
         }
 
-        val shape = PRESETS[preset]
-        val damping = shape.damping
+        // 阻尼与预延迟由设置直接给。老路径（space 滑杆）没有这两项，用出厂的 0.2 / 0。
+        val damping = if (hasNewReverb) reverb.damping else LEGACY_DAMPING
         val preDelayFrames = if (hasNewReverb) {
-            (shape.preDelayMs / 1000f * sampleRate).toInt().coerceIn(0, preDelayLines.first().size - 1)
+            val ms = reverb.preDelayMs.coerceIn(0f, MAX_PRE_DELAY_SECONDS * 1000f)
+            (ms / 1000f * sampleRate).toInt().coerceIn(0, preDelayLines.first().size - 1)
         } else {
             0
         }
-        // 湿声电平：新参数按 dB 给，老参数按 space 的曲线。
-        val wetGain = if (hasNewReverb) {
-            dbToLinear(reverb.roomLevelDb) * WET_TRIM
+        // 干湿比：新参数走等功率交叉，老参数（space 滑杆）仍是原来的「湿声越大干声让一点路」，
+        // 这样老设置听起来一个字节都不变。
+        val wetGain: Float
+        val dryGain: Float
+        if (hasNewReverb) {
+            val theta = reverb.mix.coerceIn(0f, 1f) * (PI.toFloat() * 0.5f)
+            dryGain = cos(theta)
+            wetGain = sin(theta) * dbToLinear(reverb.roomLevelDb) * WET_TRIM
         } else {
-            0.75f * legacySpace * WET_TRIM
+            wetGain = 0.75f * legacySpace * WET_TRIM
+            dryGain = 1f - (0.15f * wetGain).coerceIn(0f, 0.35f)
         }
-        // 湿声越响，干声让一点路，避免总和顶到限幅器。
-        val dryGain = 1f - (0.15f * wetGain).coerceIn(0f, 0.35f)
 
         val rt60 = if (hasNewReverb) reverb.rt60Seconds.coerceIn(0.3f, 10f) else LEGACY_RT60
         val active = minOf(channels, activeChannels)
@@ -144,10 +154,9 @@ class ReverbStage {
         }
     }
 
-    /** 换预设：改梳状的读写长度（反馈量由 RT60 每次重算，不在这里定）。 */
+    /** 换预设：只改梳状的读写长度（反馈量由 RT60 每次重算，阻尼与预延迟由设置给）。 */
     private fun applyPreset(preset: Int) {
-        val shape = PRESETS[preset]
-        val scale = sampleRate / 44100f * shape.combScale
+        val scale = sampleRate / 44100f * PRESET_SCALES[preset.coerceIn(0, PRESET_SCALES.lastIndex)]
         for (channel in combs.indices) {
             for (index in combs[channel].indices) {
                 val size = ((COMB_TUNING[index] + channel * STEREO_SPREAD) * scale).toInt().coerceAtLeast(1)
@@ -216,15 +225,6 @@ class ReverbStage {
         }
     }
 
-    private class PresetShape(
-        /** 梳状延迟的缩放：越大房间越大。 */
-        val combScale: Float,
-        /** 高频阻尼：越大尾巴越暗。 */
-        val damping: Float,
-        /** 直达声到第一次反射的时间。 */
-        val preDelayMs: Float,
-    )
-
     private companion object {
         val COMB_TUNING = intArrayOf(1116, 1188, 1277, 1356, 1422, 1491)
         val ALLPASS_TUNING = intArrayOf(556, 441, 341)
@@ -241,15 +241,15 @@ class ReverbStage {
         /** 老 space 滑杆的固定尾巴长度，与 Web 的 2.2 s IR 一致。 */
         const val LEGACY_RT60 = 2.2f
 
-        val PRESETS = arrayOf(
-            // 出厂：与 Web 的卷积听感最接近，不加预延迟。
-            PresetShape(combScale = 1.0f, damping = 0.2f, preDelayMs = 0f),
-            // 音乐厅：中等容积，早期反射清楚。
-            PresetShape(combScale = 1.35f, damping = 0.28f, preDelayMs = 18f),
-            // 空灵大教堂：更长的空间、更暗的尾巴、明显的预延迟。
-            PresetShape(combScale = 1.9f, damping = 0.34f, preDelayMs = 42f),
-            // 板式：没有预延迟，密度高、尾巴亮。
-            PresetShape(combScale = 0.62f, damping = 0.1f, preDelayMs = 0f),
-        )
+        /** 老 space 路径没有阻尼概念，用它保持原有听感（等同于出厂的 0.2）。 */
+        const val LEGACY_DAMPING = 0.2f
+
+        /**
+         * 各预设的梳状延迟缩放：越大房间越大。
+         *
+         * 阻尼与预延迟**不在这里**了 —— 它们是用户滑杆，预设只在切换时把一组合理初值
+         * 写进设置（见 EqSettings.ReverbPreset.defaultDamping / defaultPreDelayMs）。
+         */
+        val PRESET_SCALES = floatArrayOf(1.0f, 1.35f, 1.9f, 0.62f)
     }
 }

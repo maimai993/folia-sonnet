@@ -90,4 +90,7 @@ export const formatSeconds = (value: number): string => `${value.toFixed(2)} s`;
 
 export const formatRatio = (value: number): string => `${value.toFixed(1)} : 1`;
 
+/** 0..1 的比例读成百分比：平行压缩的混合比、混响的干湿比都用它。 */
+export const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
+
 export default ConsoleSlider;

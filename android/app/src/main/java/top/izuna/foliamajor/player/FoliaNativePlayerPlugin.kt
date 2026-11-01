@@ -253,6 +253,11 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
 
         @JvmStatic
+        fun applyCrossfadeCurve(name: String?) {
+            instance?.player?.setCrossfadeCurve(name)
+        }
+
+        @JvmStatic
         fun applyPlaybackFade(enabled: Boolean) {
             instance?.player?.setPauseFadeEnabled(enabled)
         }
@@ -476,6 +481,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val crossfadeMs = if (settings.getBoolean("crossfadeEnabled", false))
                 settings.getInt("crossfadeMs", 0) else 0
             player?.setCrossfadeAhead(crossfadeMs)
+            player?.setCrossfadeCurve(settings.getString("crossfadeCurve") ?: "equalPower")
         } catch (error: Throwable) {
             android.util.Log.w("FoliaNativePlayer", "读取淡入淡出设置失败，按开启处理", error)
         }

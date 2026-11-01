@@ -19,9 +19,10 @@ import kotlin.math.exp
 //   ③ punch（Web 遗留的单段压缩）+ 自动 headroom
 //   ④ 四段压缩（Low / Mid / High / Air）
 //   ⑤ 后置十段 EQ
-//   ⑥ 空间混响
-//   ⑦ 前瞻限幅（整条链的最后一步，交给声卡之前不许超过 0 dBFS）
-//   ⑧ 频谱取样（只读，不影响声音）
+//   ⑥ 声场宽度（M/S，只作用于干声）
+//   ⑦ 空间混响
+//   ⑧ 前瞻限幅（整条链的最后一步，交给声卡之前不许超过 0 dBFS）
+//   ⑨ 频谱取样（只读，不影响声音）
 //
 // 顺序为什么是这样：压缩要看到「音色已经定下来」的信号，所以它在两个 EQ 之间；
 // 混响是空间，必须在所有动态处理之后，否则压缩器会把混响的尾巴一起压掉（抽气感）。
@@ -69,6 +70,7 @@ class EqAudioProcessor(
     private val lowPass = BiquadFilter()
     private val dynamics = DynamicsStage()
     private val compressor = MultibandCompressor()
+    private val stereo = StereoStage()
     private val reverb = ReverbStage()
     private val spectrum = SpectrumAnalyzer()
     private val limiter = LookaheadLimiter()
@@ -231,6 +233,7 @@ class EqAudioProcessor(
         lowPass.reset()
         dynamics.reset()
         compressor.reset()
+        stereo.reset()
         reverb.reset()
         spectrum.reset()
         limiter.reset()
@@ -287,13 +290,17 @@ class EqAudioProcessor(
             if (postEq.isActive()) postEq.process(scratch, offset, blockFrames, channels)
         }
 
-        // ⑥ 混响：新参数优先，没开时退回 Web 的 space
+        // ⑥ 声场宽度：只改干声的侧向分量，必须放在混响之前 ——
+        //    混响自己的梳状延时线已经有声道差，再拉一次会像两个房间叠在一起。
+        stereo.process(scratch, offset, blockFrames, channels, settings.stereo)
+
+        // ⑦ 混响：新参数优先，没开时退回 Web 的 space
         reverb.process(scratch, offset, blockFrames, channels, settings.space, settings.reverb)
 
-        // ⑦ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
+        // ⑧ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
         limiter.process(scratch, offset, blockFrames, channels)
 
-        // ⑧ 频谱（只读）
+        // ⑨ 频谱（只读）
         if (state.spectrumEnabled && spectrum.push(scratch, offset, blockFrames, channels)) {
             state.publishSpectrum(spectrum.bands)
         }

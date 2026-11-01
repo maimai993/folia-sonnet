@@ -42,6 +42,21 @@ export type AudioConsoleCompressorBand = {
     releaseMs: number;
     /** 补偿增益 0 ~ 12 dB。 */
     makeupDb: number;
+    /**
+     * 软拐点宽度，2 ~ 18 dB。
+     *
+     * 小拐点（2 dB）进得干脆，适合鼓与贝斯；大拐点（12 dB 以上）过渡非常软，
+     * 人声听不出「什么时候开始压」。出厂 6 dB 是两头都能用的折中。
+     */
+    kneeDb: number;
+    /**
+     * 平行压缩的混合比，0 ~ 1。
+     *
+     * 1 是常规串联压缩（整段都被压）。小于 1 时把压过的信号按比例混回未压的干声，
+     * 瞬态保住、密度上来 —— 混音台上最常用的那招。因为压缩本身不引入延迟，
+     * 这里等价于把增益量按比例缩放，不会产生梳状滤波。
+     */
+    mix: number;
 };
 
 export type AudioConsoleReverb = {
@@ -51,8 +66,21 @@ export type AudioConsoleReverb = {
     rt60: number;
     /** 湿声相对干声的增益，-24 ~ 6 dB。 */
     roomLevelDb: number;
+    /** 高频阻尼 0.02 ~ 0.9：越大尾巴越暗。切预设时跟着预设走，之后可单独调。 */
+    damping: number;
+    /** 预延迟 0 ~ 120 ms：直达声到第一次反射之间的空档，决定「有多远」。 */
+    preDelayMs: number;
+    /** 干湿比 0 ~ 1（等功率）：0 全干，1 全湿。 */
+    mix: number;
     /** 暂停时让余音自然落下，而不是跟着播放器一起断。 */
     tailOnPause: boolean;
+};
+
+/** 声场宽度：M/S 加权。只用在中置之后的干声上，混响尾巴不重复处理。 */
+export type AudioConsoleStereo = {
+    enabled: boolean;
+    /** 0 = 完全单声道，1 = 原样，2 = 侧向加倍（宽到喇叭外面）。 */
+    width: number;
 };
 
 export type AudioConsoleCompressor = {
@@ -88,12 +116,35 @@ export type AudioConsoleSettings = {
     compressor: AudioConsoleCompressor;
     frontEq: AudioConsoleFrontEq;
     postEq: AudioConsolePostEq;
+    stereo: AudioConsoleStereo;
+};
+
+/**
+ * 每个预设自带的阻尼与预延迟。
+ *
+ * 选中预设时这两个值会被**写进设置**（预设只是起点，之后可以单独拧），所以它们
+ * 同时承担两个职责：切换预设时的初值，以及旧存档缺字段时的兜底。原生侧
+ * `ReverbPreset.defaultDamping()` / `defaultPreDelayMs()` 是同一张表，改要一起改。
+ */
+export const AUDIO_CONSOLE_REVERB_SHAPES: Record<
+    AudioConsoleReverbPreset,
+    { damping: number; preDelayMs: number }
+> = {
+    factory: { damping: 0.2, preDelayMs: 0 },
+    hall: { damping: 0.28, preDelayMs: 18 },
+    cathedral: { damping: 0.34, preDelayMs: 42 },
+    plate: { damping: 0.1, preDelayMs: 0 },
 };
 
 export const AUDIO_CONSOLE_REVERB_RT60_MIN = 0.3;
 export const AUDIO_CONSOLE_REVERB_RT60_MAX = 10;
 export const AUDIO_CONSOLE_ROOM_LEVEL_MIN = -24;
 export const AUDIO_CONSOLE_ROOM_LEVEL_MAX = 6;
+export const AUDIO_CONSOLE_DAMPING_MIN = 0.02;
+export const AUDIO_CONSOLE_DAMPING_MAX = 0.9;
+export const AUDIO_CONSOLE_PRE_DELAY_MAX = 120;
+export const AUDIO_CONSOLE_STEREO_WIDTH_MIN = 0;
+export const AUDIO_CONSOLE_STEREO_WIDTH_MAX = 2;
 export const AUDIO_CONSOLE_Q_MIN = 0.3;
 export const AUDIO_CONSOLE_Q_MAX = 8;
 export const AUDIO_CONSOLE_GLOBAL_GAIN_MIN = -24;
@@ -106,13 +157,15 @@ export const AUDIO_CONSOLE_ATTACK_MIN = 0.5;
 export const AUDIO_CONSOLE_ATTACK_MAX = 100;
 export const AUDIO_CONSOLE_RELEASE_MIN = 10;
 export const AUDIO_CONSOLE_RELEASE_MAX = 1000;
+export const AUDIO_CONSOLE_KNEE_MIN = 2;
+export const AUDIO_CONSOLE_KNEE_MAX = 18;
 
 /** 出厂值的每段压缩参数：低频慢一点，空气段快一点 —— 和耳朵对各频段瞬态的容忍度一致。 */
 const BAND_DEFAULTS: Record<AudioConsoleCompressorBandId, AudioConsoleCompressorBand> = {
-    low: { enabled: true, thresholdDb: -16, ratio: 1.5, attackMs: 5, releaseMs: 60, makeupDb: 0 },
-    mid: { enabled: true, thresholdDb: -18, ratio: 1.6, attackMs: 8, releaseMs: 80, makeupDb: 0 },
-    high: { enabled: true, thresholdDb: -20, ratio: 1.8, attackMs: 3, releaseMs: 50, makeupDb: 0 },
-    air: { enabled: true, thresholdDb: -22, ratio: 2, attackMs: 2, releaseMs: 40, makeupDb: 0 },
+    low: { enabled: true, thresholdDb: -16, ratio: 1.5, attackMs: 5, releaseMs: 60, makeupDb: 0, kneeDb: 6, mix: 1 },
+    mid: { enabled: true, thresholdDb: -18, ratio: 1.6, attackMs: 8, releaseMs: 80, makeupDb: 0, kneeDb: 6, mix: 1 },
+    high: { enabled: true, thresholdDb: -20, ratio: 1.8, attackMs: 3, releaseMs: 50, makeupDb: 0, kneeDb: 6, mix: 1 },
+    air: { enabled: true, thresholdDb: -22, ratio: 2, attackMs: 2, releaseMs: 40, makeupDb: 0, kneeDb: 6, mix: 1 },
 };
 
 export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
@@ -121,6 +174,9 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
         preset: 'factory',
         rt60: 2.2,
         roomLevelDb: -2,
+        damping: AUDIO_CONSOLE_REVERB_SHAPES.factory.damping,
+        preDelayMs: AUDIO_CONSOLE_REVERB_SHAPES.factory.preDelayMs,
+        mix: 0.4,
         tailOnPause: true,
     },
     compressor: {
@@ -140,6 +196,10 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
         curve: 'geq',
         q: 0.85,
         globalGainDb: 0,
+    },
+    stereo: {
+        enabled: false,
+        width: 1,
     },
 };
 
@@ -181,6 +241,8 @@ const readBand = (value: unknown, id: AudioConsoleCompressorBandId): AudioConsol
         attackMs: clamp(candidate.attackMs, AUDIO_CONSOLE_ATTACK_MIN, AUDIO_CONSOLE_ATTACK_MAX, fallback.attackMs),
         releaseMs: clamp(candidate.releaseMs, AUDIO_CONSOLE_RELEASE_MIN, AUDIO_CONSOLE_RELEASE_MAX, fallback.releaseMs),
         makeupDb: clamp(candidate.makeupDb, 0, 12, fallback.makeupDb),
+        kneeDb: clamp(candidate.kneeDb, AUDIO_CONSOLE_KNEE_MIN, AUDIO_CONSOLE_KNEE_MAX, fallback.kneeDb),
+        mix: clamp(candidate.mix, 0, 1, fallback.mix),
     };
 };
 
@@ -196,15 +258,23 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
     const compressor = asRecord(root.compressor);
     const frontEq = asRecord(root.frontEq);
     const postEq = asRecord(root.postEq);
+    const stereo = asRecord(root.stereo);
     const bands = asRecord(compressor.bands);
     const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS;
+    // 阻尼与预延迟缺席时按预设兜底：旧存档里这两个字段还不存在，而不同预设的
+    // 「应该有」的数值不一样，用统一默认值会让大教堂听起来像出厂。
+    const preset = readPreset(reverb.preset);
+    const shape = AUDIO_CONSOLE_REVERB_SHAPES[preset];
 
     return {
         reverb: {
             enabled: readBoolean(reverb.enabled, defaults.reverb.enabled),
-            preset: readPreset(reverb.preset),
+            preset,
             rt60: clamp(reverb.rt60, AUDIO_CONSOLE_REVERB_RT60_MIN, AUDIO_CONSOLE_REVERB_RT60_MAX, defaults.reverb.rt60),
             roomLevelDb: clamp(reverb.roomLevelDb, AUDIO_CONSOLE_ROOM_LEVEL_MIN, AUDIO_CONSOLE_ROOM_LEVEL_MAX, defaults.reverb.roomLevelDb),
+            damping: clamp(reverb.damping, AUDIO_CONSOLE_DAMPING_MIN, AUDIO_CONSOLE_DAMPING_MAX, shape.damping),
+            preDelayMs: clamp(reverb.preDelayMs, 0, AUDIO_CONSOLE_PRE_DELAY_MAX, shape.preDelayMs),
+            mix: clamp(reverb.mix, 0, 1, defaults.reverb.mix),
             tailOnPause: readBoolean(reverb.tailOnPause, defaults.reverb.tailOnPause),
         },
         compressor: {
@@ -229,6 +299,10 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             curve: readCurve(postEq.curve),
             q: clamp(postEq.q, AUDIO_CONSOLE_Q_MIN, AUDIO_CONSOLE_Q_MAX, defaults.postEq.q),
             globalGainDb: clamp(postEq.globalGainDb, AUDIO_CONSOLE_GLOBAL_GAIN_MIN, AUDIO_CONSOLE_GLOBAL_GAIN_MAX, defaults.postEq.globalGainDb),
+        },
+        stereo: {
+            enabled: readBoolean(stereo.enabled, defaults.stereo.enabled),
+            width: clamp(stereo.width, AUDIO_CONSOLE_STEREO_WIDTH_MIN, AUDIO_CONSOLE_STEREO_WIDTH_MAX, defaults.stereo.width),
         },
     };
 };
@@ -261,11 +335,14 @@ export const areAudioConsoleSettingsEqual = (left: AudioConsoleSettings, right: 
  * 一段压缩的静态曲线：给定输入电平，返回输出电平（dB）。
  *
  * 只用于画出那条折线；真正的压缩在原生侧按块算，两条曲线用的是同一组
- * 阈值 / 比率 / 6 dB 软拐点，所以界面上看到的就是听到的。
+ * 阈值 / 比率 / 软拐点宽度，所以界面上看到的就是听到的。
+ *
+ * `mix` 不参与这条曲线：它决定的是「压过的信号混回多少」，画在曲线上会把
+ * 一条本该是折线的形状压成两条线的加权平均，反而看不出拐点在哪。
  */
 export const compressorTransferDb = (inputDb: number, band: AudioConsoleCompressorBand): number => {
     if (!band.enabled || band.ratio <= 1.001) return inputDb;
-    const knee = 6;
+    const knee = Math.max(AUDIO_CONSOLE_KNEE_MIN, band.kneeDb);
     const over = inputDb - band.thresholdDb;
     const reduction = over <= -knee / 2
         ? 0

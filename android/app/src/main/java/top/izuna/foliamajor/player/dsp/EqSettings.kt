@@ -10,11 +10,16 @@ import org.json.JSONObject
 // 在界面冻结、甚至 WebView 已经销毁之后仍然要出声（通知栏 / 锁屏 / 冷启动）。
 // 所以设置必须有一份能给播放器线程直接读的、不可变的副本。
 //
-// 协议 v2（本文件）在 v1 的三项（十段增益 / punch / space）之外，加进了调音台的另外三块：
+// 协议 v2（本文件）在 v1 的三项（十段增益 / punch / space）之外，加进了调音台的另外四块：
 //   · 前置均衡器的曲线形状（GEQ 定 Q / PEQ 可变 Q）与总增益；
-//   · 四段压缩器（Low / Mid / High / Air，每段自己的阈值、比率、启动、释放）；
+//   · 四段压缩器（Low / Mid / High / Air，每段自己的阈值、比率、启动、释放，
+//     外加软拐点宽度与平行压缩混合比）；
 //   · 后置均衡器（同一套十段，挂在压缩之后）；
-//   · 混响的物理参数（预设 / RT60 / 声压级 / 暂停后余音）。
+//   · 混响的物理参数（预设 / RT60 / 声压级 / 阻尼 / 预延迟 / 干湿比 / 暂停后余音）；
+//   · 声场宽度（M/S 加权，挂在混响之前）。
+//
+// `kneeDb` / `mix` / `damping` / `preDelayMs` / `stereo` 都是**可缺省的扩展字段**：
+// 老包不带它们时按「不改变原来听感」的值兜底，所以版本号仍是 2。
 // v1 的字段一个没删、一个没改名：老版本 WebView 推上来的包仍然照 v1 解析，
 // 新字段缺席时按「中性」填 —— 冷启动读到的旧设置不会因为升级而变成怪声。
 
@@ -56,6 +61,27 @@ object ReverbPreset {
     const val PLATE = 3
 
     fun clamp(value: Int): Int = value.coerceIn(FACTORY, PLATE)
+
+    /**
+     * 预设自带的高频阻尼。
+     *
+     * 只用作两个地方的默认值：Web 推来的包缺 `damping` 字段时，以及旧存档回读时。
+     * 正常情况下阻尼由用户滑杆决定，预设不再是它的主人 —— 换预设只把这两个值
+     * 写进设置当作起点，之后各调各的。
+     */
+    fun defaultDamping(preset: Int): Float = when (clamp(preset)) {
+        FACTORY -> 0.2f
+        HALL -> 0.28f
+        CATHEDRAL -> 0.34f
+        else -> 0.1f
+    }
+
+    /** 预设自带的预延迟（毫秒），用途同上。 */
+    fun defaultPreDelayMs(preset: Int): Float = when (clamp(preset)) {
+        HALL -> 18f
+        CATHEDRAL -> 42f
+        else -> 0f
+    }
 }
 
 /** 压缩器的整体性格：温和（慢启动、带补偿增益）与平直（快、不做补偿）。 */
@@ -77,6 +103,10 @@ class CompressorBand(
     val attackMs: Float = 5f,
     val releaseMs: Float = 60f,
     val makeupDb: Float = 0f,
+    /** 软拐点宽度（dB）：2 进得干脆，18 听不出接缝。 */
+    val kneeDb: Float = 6f,
+    /** 平行压缩：1 全压；小于 1 时把压过的信号按比例混回干声。 */
+    val mix: Float = 1f,
 )
 
 /** 四段压缩器的一份完整参数。 */
@@ -108,11 +138,28 @@ class ReverbSettings(
     val rt60Seconds: Float = 2.2f,
     /** 湿声相对干声的电平，-24 ~ +6 dB。0 表示与直达声同响。 */
     val roomLevelDb: Float = -2f,
+    /** 高频阻尼 0.02 ~ 0.9：越大尾巴越暗。 */
+    val damping: Float = 0.2f,
+    /** 预延迟 0 ~ 120 ms。 */
+    val preDelayMs: Float = 0f,
+    /** 干湿比 0 ~ 1（等功率）：0 全干，1 全湿。 */
+    val mix: Float = 0.4f,
     /** 暂停时让余音自然衰减（而不是随播放器一起停）。 */
     val tailOnPause: Boolean = true,
 ) {
     companion object {
         val NEUTRAL = ReverbSettings()
+    }
+}
+
+/** 声场宽度：M/S 加权，挂在混响之前，只影响干声。 */
+class StereoSettings(
+    val enabled: Boolean = false,
+    /** 0 单声道 ~ 2 侧向加倍；1 是原样。 */
+    val width: Float = 1f,
+) {
+    companion object {
+        val NEUTRAL = StereoSettings()
     }
 }
 
@@ -153,6 +200,7 @@ class EqSettings(
     val reverb: ReverbSettings = ReverbSettings.NEUTRAL,
     val compressor: CompressorSettings = CompressorSettings.NEUTRAL,
     val postEq: PostEqSettings = PostEqSettings.NEUTRAL,
+    val stereo: StereoSettings = StereoSettings.NEUTRAL,
     val seq: Long = 0L,
 ) {
 
@@ -171,6 +219,7 @@ class EqSettings(
         reverb = reverb,
         compressor = compressor,
         postEq = postEq,
+        stereo = stereo,
         seq = next,
     )
 
@@ -184,6 +233,7 @@ class EqSettings(
         && !reverb.enabled
         && !compressor.enabled
         && !postEq.enabled
+        && !stereo.enabled
 
     /**
      * 回写成 Web 推上来的那种 JSON。
@@ -208,7 +258,14 @@ class EqSettings(
             put("preset", reverb.preset)
             put("rt60", reverb.rt60Seconds.toDouble())
             put("roomLevelDb", reverb.roomLevelDb.toDouble())
+            put("damping", reverb.damping.toDouble())
+            put("preDelayMs", reverb.preDelayMs.toDouble())
+            put("mix", reverb.mix.toDouble())
             put("tailOnPause", reverb.tailOnPause)
+        }
+        val stereoJson = JSONObject().apply {
+            put("enabled", stereo.enabled)
+            put("width", stereo.width.toDouble())
         }
         val compressorJson = JSONObject().apply {
             put("enabled", compressor.enabled)
@@ -232,6 +289,7 @@ class EqSettings(
             put("reverb", reverbJson)
             put("compressor", compressorJson)
             put("postEq", postEqJson)
+            put("stereo", stereoJson)
             put("glideMs", glideMs)
         }
     }
@@ -275,6 +333,8 @@ class EqSettings(
             put("attackMs", attackMs.toDouble())
             put("releaseMs", releaseMs.toDouble())
             put("makeupDb", makeupDb.toDouble())
+            put("kneeDb", kneeDb.toDouble())
+            put("mix", mix.toDouble())
         }
 
         private fun readGains(raw: JSONArray?): FloatArray = FloatArray(EQ_BAND_COUNT) { index ->
@@ -310,17 +370,32 @@ class EqSettings(
                 reverb = readReverb(json.optJSONObject("reverb")),
                 compressor = readCompressor(json.optJSONObject("compressor")),
                 postEq = readPostEq(json.optJSONObject("postEq")),
+                stereo = readStereo(json.optJSONObject("stereo")),
             )
         }
 
         private fun readReverb(json: JSONObject?): ReverbSettings {
             if (json == null) return ReverbSettings.NEUTRAL
+            val preset = ReverbPreset.clamp(json.optInt("preset", ReverbPreset.FACTORY))
             return ReverbSettings(
                 enabled = json.optBoolean("enabled", false),
-                preset = ReverbPreset.clamp(json.optInt("preset", ReverbPreset.FACTORY)),
+                preset = preset,
                 rt60Seconds = json.number("rt60", 2.2, 0.3f, 10f),
                 roomLevelDb = json.number("roomLevelDb", -2.0, -24f, 6f),
+                // 缺席时按预设兜底：旧存档里没有这两个字段，而「大教堂」该有的阻尼
+                // 本来就和「出厂」不一样，用统一默认值会把它悄悄换成出厂的听感。
+                damping = json.number("damping", ReverbPreset.defaultDamping(preset).toDouble(), 0.02f, 0.9f),
+                preDelayMs = json.number("preDelayMs", ReverbPreset.defaultPreDelayMs(preset).toDouble(), 0f, 120f),
+                mix = json.number("mix", 0.4, 0f, 1f),
                 tailOnPause = json.optBoolean("tailOnPause", true),
+            )
+        }
+
+        private fun readStereo(json: JSONObject?): StereoSettings {
+            if (json == null) return StereoSettings.NEUTRAL
+            return StereoSettings(
+                enabled = json.optBoolean("enabled", false),
+                width = json.number("width", 1.0, 0f, 2f),
             )
         }
 
@@ -337,6 +412,8 @@ class EqSettings(
                     attackMs = item.number("attackMs", fallback.attackMs.toDouble(), 0.5f, 100f),
                     releaseMs = item.number("releaseMs", fallback.releaseMs.toDouble(), 10f, 1000f),
                     makeupDb = item.number("makeupDb", 0.0, 0f, 12f),
+                    kneeDb = item.number("kneeDb", 6.0, 2f, 18f),
+                    mix = item.number("mix", 1.0, 0f, 1f),
                 )
             }
             return CompressorSettings(

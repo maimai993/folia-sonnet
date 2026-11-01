@@ -82,6 +82,9 @@ const buildSettings = (): NativeEqualizerSettings => {
             preset: REVERB_PRESET_INDEX[console_.reverb.preset] ?? 0,
             rt60: console_.reverb.rt60,
             roomLevelDb: console_.reverb.roomLevelDb,
+            damping: console_.reverb.damping,
+            preDelayMs: console_.reverb.preDelayMs,
+            mix: console_.reverb.mix,
             tailOnPause: console_.reverb.tailOnPause,
         },
         compressor: {
@@ -99,6 +102,8 @@ const buildSettings = (): NativeEqualizerSettings => {
                     attackMs: band.attackMs,
                     releaseMs: band.releaseMs,
                     makeupDb: band.makeupDb,
+                    kneeDb: band.kneeDb,
+                    mix: band.mix,
                 };
             }),
         },
@@ -108,6 +113,10 @@ const buildSettings = (): NativeEqualizerSettings => {
             mode: console_.postEq.curve,
             q: console_.postEq.q,
             globalGainDb: console_.postEq.globalGainDb,
+        },
+        stereo: {
+            enabled: console_.stereo.enabled,
+            width: console_.stereo.width,
         },
         glideMs: isModCurve ? MOD_GLIDE_MS : USER_GLIDE_MS,
     };

@@ -72,10 +72,16 @@ export type NativeEqualizerSettings = {
     };
     reverb: {
         enabled: boolean;
-        /** 0 出厂 / 1 音乐厅 / 2 空灵大教堂 / 3 板式。 */
+        /** 0 出厂 / 1 音乐厅 / 2 空灵大教堂 / 3 板式。只决定房间大小。 */
         preset: number;
         rt60: number;
         roomLevelDb: number;
+        /** 高频阻尼 0.02 ~ 0.9。 */
+        damping: number;
+        /** 预延迟 0 ~ 120 ms。 */
+        preDelayMs: number;
+        /** 干湿比 0 ~ 1（等功率）。 */
+        mix: number;
         tailOnPause: boolean;
     };
     compressor: {
@@ -90,6 +96,10 @@ export type NativeEqualizerSettings = {
             attackMs: number;
             releaseMs: number;
             makeupDb: number;
+            /** 软拐点 2 ~ 18 dB。 */
+            kneeDb: number;
+            /** 平行压缩混合比 0 ~ 1。 */
+            mix: number;
         }>;
     };
     postEq: {
@@ -98,6 +108,12 @@ export type NativeEqualizerSettings = {
         mode: 'geq' | 'peq';
         q: number;
         globalGainDb: number;
+    };
+    /** 声场宽度：M/S 加权，挂在混响之前。 */
+    stereo: {
+        enabled: boolean;
+        /** 0 单声道 ~ 2 加倍；1 是原样。 */
+        width: number;
     };
     /** 增益滑入时间（毫秒）：用户改动 15，mod 曲线 250（对齐 Web 的 setTargetAtTime 常数）。 */
     glideMs: number;

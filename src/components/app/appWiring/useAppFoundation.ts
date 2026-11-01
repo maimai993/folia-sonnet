@@ -225,9 +225,10 @@ export const useAppFoundation = () => {
                 backgroundSilentSkip: useAudioSettingsStore.getState().backgroundSilentSkip,
                 // 「播放淡入淡出」也归原生执行（音量斜坡在播放器里），启动时对一次表。
                 playbackFade: useAudioSettingsStore.getState().playbackFadeEnabled,
-                // 交叉淡化也是原生执行：开关与时长（秒 → 毫秒）在启动时对一次表。
+                // 交叉淡化也是原生执行：开关、时长（秒 → 毫秒）与音量曲线在启动时对一次表。
                 crossfadeEnabled: useAutomixSettingsStore.getState().automixEnabled,
                 crossfadeMs: Math.round(useAutomixSettingsStore.getState().crossfadeMaxSec * 1000),
+                crossfadeCurve: useAutomixSettingsStore.getState().crossfadeCurve,
             });
             if (merged || cancelled || attempts >= 20) return;
             attempts += 1;

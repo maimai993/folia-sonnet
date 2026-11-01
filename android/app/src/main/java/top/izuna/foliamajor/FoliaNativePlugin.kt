@@ -2532,6 +2532,9 @@ class FoliaNativePlugin : Plugin() {
             top.izuna.foliamajor.player.FoliaNativePlayerPlugin
                     .applyCrossfadeAhead(
                             if (crossfadeOn) snapshot.optInt("crossfadeMs", 0) else 0)
+            // 曲线同理：改完设置立刻生效，不必等下一次建播放器。
+            top.izuna.foliamajor.player.FoliaNativePlayerPlugin
+                    .applyCrossfadeCurve(snapshot.optString("crossfadeCurve", "equalPower"))
             call.resolve(JSObject.fromJSONObject(snapshot))
         } catch (error: Exception) {
             call.reject("写入设置失败", error)

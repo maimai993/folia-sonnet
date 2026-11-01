@@ -6,7 +6,13 @@
 
 import { create } from 'zustand';
 
-import { clampCrossfadeSeconds, CROSSFADE_DEFAULT_SEC } from '../services/automix/crossfadePlanner';
+import {
+    clampCrossfadeSeconds,
+    CROSSFADE_DEFAULT_CURVE,
+    CROSSFADE_DEFAULT_SEC,
+    readCrossfadeCurve,
+    type CrossfadeCurve,
+} from '../services/automix/crossfadePlanner';
 import { DEFAULT_TRANSITION_SETTINGS, type TransitionMode } from '../services/automix/transitionStrategy';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
@@ -14,6 +20,8 @@ import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
 const AUTOMIX_ENABLED_KEY = 'folia_automix_enabled';
 
 const CROSSFADE_MAX_SEC_KEY = 'folia_crossfade_max_sec';
+
+const CROSSFADE_CURVE_KEY = 'folia_crossfade_curve';
 
 const TRANSITION_PERFORMANCE_KEY = 'folia_transition_performance';
 
@@ -53,6 +61,12 @@ const readStoredCrossfadeMaxSec = (): number => {
     return saved === null ? CROSSFADE_DEFAULT_SEC : clampCrossfadeSeconds(Number(saved));
 };
 
+const readStoredCrossfadeCurve = (): CrossfadeCurve => (
+    typeof window === 'undefined'
+        ? CROSSFADE_DEFAULT_CURVE
+        : readCrossfadeCurve(localStorage.getItem(CROSSFADE_CURVE_KEY))
+);
+
 export type AutomixSettingsState = {
     automixEnabled: boolean;
     /**
@@ -66,6 +80,8 @@ export type AutomixSettingsState = {
     transitionMode: TransitionMode;
     /** Seconds. The crossfade mode's ceiling; automix computes its own and ignores this. */
     crossfadeMaxSec: number;
+    /** 重叠期间音量怎么交叉：等功率 / 线性 / 快切。原生按它算每一步的音量。 */
+    crossfadeCurve: CrossfadeCurve;
     /** Let the mix be heard. Only reachable with automix on, and only where stems exist. */
     transitionPerformance: boolean;
     /**
@@ -85,6 +101,7 @@ export type AutomixSettingsState = {
     handleToggleAutomix: (enable: boolean) => void;
     handleSetTransitionMode: (mode: TransitionMode) => void;
     handleSetCrossfadeMaxSec: (seconds: number) => void;
+    handleSetCrossfadeCurve: (curve: CrossfadeCurve) => void;
     handleToggleTransitionPerformance: (enable: boolean) => void;
     handleToggleTransitionAnimation: (enable: boolean) => void;
     handleToggleTransitionAnimationCard: (enable: boolean) => void;
@@ -95,6 +112,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     // 锁在 crossfade：`folia_transition_mode` 里存着的旧值（可能还是 'automix'）不再读。
     transitionMode: 'crossfade',
     crossfadeMaxSec: readStoredCrossfadeMaxSec(),
+    crossfadeCurve: readStoredCrossfadeCurve(),
     transitionPerformance: getStoredBoolean(
         TRANSITION_PERFORMANCE_KEY, DEFAULT_TRANSITION_SETTINGS.performance,
     ),
@@ -123,6 +141,15 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
         // 原生拿毫秒：这边是秒。
         void writeNativeSettings({ crossfadeMs: Math.round(next * 1000) });
     },
+    handleSetCrossfadeCurve: (curve) => {
+        const next = readCrossfadeCurve(curve);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(CROSSFADE_CURVE_KEY, next);
+        }
+        set({ crossfadeCurve: next });
+        // 原生的音量斜坡按名字取曲线，字符串直接过去，不在这边换算成编号。
+        void writeNativeSettings({ crossfadeCurve: next });
+    },
     handleToggleTransitionPerformance: (enable) => {
         setStoredBoolean(TRANSITION_PERFORMANCE_KEY, enable);
         set({ transitionPerformance: enable });
@@ -145,12 +172,14 @@ export const selectAutomixSettingsSnapshot = (state: AutomixSettingsState) => ({
     automixEnabled: state.automixEnabled,
     transitionMode: state.transitionMode,
     crossfadeMaxSec: state.crossfadeMaxSec,
+    crossfadeCurve: state.crossfadeCurve,
     transitionPerformance: state.transitionPerformance,
     transitionAnimation: state.transitionAnimation,
     transitionAnimationCard: state.transitionAnimationCard,
     handleToggleAutomix: state.handleToggleAutomix,
     handleSetTransitionMode: state.handleSetTransitionMode,
     handleSetCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
+    handleSetCrossfadeCurve: state.handleSetCrossfadeCurve,
     handleToggleTransitionPerformance: state.handleToggleTransitionPerformance,
     handleToggleTransitionAnimation: state.handleToggleTransitionAnimation,
     handleToggleTransitionAnimationCard: state.handleToggleTransitionAnimationCard,

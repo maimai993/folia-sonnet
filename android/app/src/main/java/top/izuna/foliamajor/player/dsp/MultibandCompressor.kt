@@ -20,7 +20,8 @@ import kotlin.math.sqrt
 // 2 频段模式只切 250 Hz，Low 与 High（其余全部）两段。
 //
 // 检测器是峰值包络 + 立体声联动（取两声道较大的那个），避免压的时候声像往一边跑。
-// 静态曲线带 6 dB 软拐点（与 punch 共用 [softKneeReductionDb]），块内增益线性斜坡。
+// 静态曲线带可调软拐点（2 ~ 18 dB，与 punch 共用 [softKneeReductionDb]），块内增益线性斜坡。
+// 平行压缩的混合比直接折进增益插值，不额外复制一份干声。
 //
 // 线程：音频渲染线程；每块最多一次 log/pow（每段一次），缓冲只在块长变化时重新分配。
 
@@ -161,7 +162,9 @@ class MultibandCompressor {
 
         val peak = peakOf(segment, 0, count)
         val peakDb = 20f * log10(peak.coerceAtLeast(1e-6f))
-        val reductionDb = softKneeReductionDb(peakDb - band.thresholdDb, band.ratio, KNEE_DB)
+        // 拐点宽度由用户给（2 ~ 18 dB），不再是写死的 6 dB：
+        // 鼓要硬拐点才咬得住，人声要软拐点才听不出接缝。
+        val reductionDb = softKneeReductionDb(peakDb - band.thresholdDb, band.ratio, band.kneeDb)
         // 温和模式自动补回压掉的一半，平直模式不补 —— 前者听感「更响但没变糊」，
         // 后者给母带式的 A/B 对比用。
         val makeup = if (profile == CompressorProfile.GENTLE) {
@@ -170,7 +173,14 @@ class MultibandCompressor {
             band.makeupDb
         }
 
-        val target = dbToLinear(reductionDb + makeup)
+        // 平行压缩：mix = 1 是常规串联压缩；小于 1 时把干声按比例混回来。
+        // 压缩不引入延迟，所以「干声 + 湿声」等价于对增益做线性插值：
+        //   (1 - mix)·1 + mix·g = 1 + mix·(g - 1)
+        // 这一步必须在包络平滑之前做 —— 两者都是线性运算，顺序不影响结果，
+        // 但放在这里只需要平滑一个值，不必为干声另存一份缓冲。
+        val wetTarget = dbToLinear(reductionDb + makeup)
+        val target = 1f + (wetTarget - 1f) * band.mix
+
         val coefficient = if (target < bandGain[slot]) attackCoef[slot] else releaseCoef[slot]
         bandPreviousGain[slot] = bandGain[slot]
         bandGain[slot] = target + (bandGain[slot] - target) * coefficient
@@ -204,8 +214,5 @@ class MultibandCompressor {
 
         /** Butterworth 2 阶的 Q：两级串联就是 LR4。 */
         val BUTTERWORTH_Q = (1.0 / sqrt(2.0)).toFloat()
-
-        /** 软拐点宽度（dB）。 */
-        const val KNEE_DB = 6f
     }
 }
