@@ -110,11 +110,12 @@ describe('the password form of a sign-in', () => {
     });
 
     it('asks for what the chosen method asks for, without knowing which method it is', () => {
-        // 同一个平台的一种连接只要一个 ID、另一种要整条地址：第一栏叫什么、例子写什么，都按选中的方式说。
-        draw({ field: { labelKey: 'home.loginFeiniuFnId', placeholderKey: 'home.loginFeiniuFnIdPlaceholder' } });
+        // 第一栏叫什么、例子写什么，全按传进来的 field 说 —— 表单自己不认识任何平台，
+        // 也不替平台拼地址：填进去的是什么就原样交出去。
+        draw({ field: { labelKey: 'test.customField', placeholderKey: 'test.customFieldPlaceholder' } });
         const { url } = fields();
-        expect(place.textContent).toContain('home.loginFeiniuFnId');
-        expect(url?.getAttribute('placeholder')).toBe('home.loginFeiniuFnIdPlaceholder');
+        expect(place.textContent).toContain('test.customField');
+        expect(url?.getAttribute('placeholder')).toBe('test.customFieldPlaceholder');
         act(() => {
             type(url!, 'abcd1234');
             type(fields().name!, 'someone');
