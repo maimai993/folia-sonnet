@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+    AUDIO_CONSOLE_BASS_MONO_MAX,
     AUDIO_CONSOLE_DAMPING_MAX,
     AUDIO_CONSOLE_DAMPING_MIN,
     AUDIO_CONSOLE_PRE_DELAY_MAX,
@@ -19,7 +20,7 @@ import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Toggle } from '../../modal/settings/kit';
 import { Button, TextField } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
-import { ConsoleSlider, formatDb, formatMs, formatPercent, formatSeconds } from './controls';
+import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent, formatSeconds } from './controls';
 
 // src/components/panelTab/console/ReverbPane.tsx
 // 调音台的第三页：空间环境混响，外加声场宽度。
@@ -219,6 +220,23 @@ const ReverbPane: React.FC = () => {
                             onCommit={() => undefined}
                         />
                         <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoWidthHint')}</p>
+                        {/* 低频单声道：拖到最左边是关。它和宽度是两件事 —— 宽度管「侧向有多少」，
+                            这一根管「多低的频率不算侧向」。 */}
+                        <div className="mt-3">
+                            <ConsoleSlider
+                                label={t('ui.consoleStereoBassMono')}
+                                valueText={stereo.bassMonoHz < 1 ? t('ui.consoleOff') : formatHz(stereo.bassMonoHz)}
+                                value={stereo.bassMonoHz}
+                                min={0}
+                                max={AUDIO_CONSOLE_BASS_MONO_MAX}
+                                log
+                                decimals={0}
+                                disabled={!stereo.enabled}
+                                onChange={bassMonoHz => setStereo({ bassMonoHz })}
+                                onCommit={() => undefined}
+                            />
+                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoBassMonoHint')}</p>
+                        </div>
                     </div>
                 </div>
             </EqualizerSection>

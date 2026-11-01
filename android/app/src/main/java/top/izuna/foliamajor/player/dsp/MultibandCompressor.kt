@@ -15,9 +15,10 @@ import kotlin.math.sqrt
 // 选它而不是「一个高低通各切一刀」，是因为 LR4 的低通支路与高通支路同相，
 // 求和之后幅度是平的（全通）；普通 Butterworth 在分频点上会凹 3 dB，四段就是三个坑。
 //
-// 分频点与界面上的四段一致：
-//   Low  20 ~ 250 Hz    Mid 250 ~ 2000 Hz    High 2000 ~ 8000 Hz    Air 8000 ~ 20000 Hz
-// 2 频段模式只切 250 Hz，Low 与 High（其余全部）两段。
+// 分频点由设置给出（默认 250 / 2000 / 8000 Hz），用户可以把它挪动：
+//   Low 从 20 Hz 到第一级，Mid 到第二级，High 到第三级，Air 到 20 kHz。
+// 2 频段模式只用第一级，Low 与 High（其余全部）两段。
+// 分频点必须严格升序，越界或倒序的值在 [sanitizeCrossovers] 里被推回合法位置。
 //
 // 检测器是峰值包络 + 立体声联动（取两声道较大的那个），避免压的时候声像往一边跑。
 // 静态曲线带可调软拐点（2 ~ 18 dB，与 punch 共用 [softKneeReductionDb]），块内增益线性斜坡。
@@ -42,17 +43,16 @@ class MultibandCompressor {
     private var sampleRate = 0
     private var lastSettings: CompressorSettings? = null
 
+    /** 上一次真正算进系数的那组分频点；内容相同就跳过重算。 */
+    private var appliedCrossovers = FloatArray(0)
+
     fun configure(sampleRate: Int) {
         this.sampleRate = sampleRate
         lastSettings = null
+        // 分频系数等第一次 process 时按 settings 里的分频点算（见 applyCrossovers）：
+        // 这样 configure 不需要知道用户把 Low/Mid 的边界拖到了哪里。
+        appliedCrossovers = FloatArray(0)
         reset()
-        // 分频点固定在 configure 里：采样率变了才需要重算系数。
-        for (level in 0 until CROSSOVER_COUNT) {
-            for (tap in 0 until 2) {
-                splitLow[level][tap].setLowPass(sampleRate, CROSSOVERS[level], BUTTERWORTH_Q)
-                splitHigh[level][tap].setHighPass(sampleRate, CROSSOVERS[level], BUTTERWORTH_Q)
-            }
-        }
     }
 
     fun reset() {
@@ -196,6 +196,10 @@ class MultibandCompressor {
     }
 
     private fun applySettings(settings: CompressorSettings, twoBand: Boolean) {
+        // 分频点只在真的改了的时候重算：拖动阈值滑杆不该顺带把 12 个双二阶全部重来一遍。
+        if (!appliedCrossovers.contentEquals(settings.crossovers)) {
+            applyCrossovers(settings.crossovers)
+        }
         for (slot in 0 until BAND_COUNT) {
             val source = slotBand(settings, twoBand, slot)
             attackCoef[slot] = exp(-DSP_BLOCK_FRAMES / (source.attackMs / 1000f * sampleRate)).toFloat()
@@ -205,12 +209,29 @@ class MultibandCompressor {
         }
     }
 
+    /**
+     * 按用户给的分频点重算三级 LR4 的系数。
+     *
+     * 只换系数、不清状态：正在响的时候拖分频点滑杆，听到的是「分频位置在移动」，
+     * 而不是每拖一格就「啪」一下。
+     */
+    private fun applyCrossovers(crossovers: FloatArray) {
+        val safe = sanitizeCrossovers(crossovers)
+        for (level in 0 until CROSSOVER_COUNT) {
+            val hz = safe[level]
+            for (tap in 0 until 2) {
+                splitLow[level][tap].setLowPass(sampleRate, hz, BUTTERWORTH_Q)
+                splitHigh[level][tap].setHighPass(sampleRate, hz, BUTTERWORTH_Q)
+            }
+        }
+        appliedCrossovers = safe.copyOf()
+    }
+
     private companion object {
         const val BAND_COUNT = CompressorSettings.COMPRESSOR_BAND_COUNT
 
-        /** 三级分频：250 / 2000 / 8000 Hz。 */
-        val CROSSOVERS = floatArrayOf(250f, 2000f, 8000f)
-        val CROSSOVER_COUNT = CROSSOVERS.size
+        /** 三级分频：默认 250 / 2000 / 8000 Hz，实际值由每份设置给出。 */
+        const val CROSSOVER_COUNT = 3
 
         /** Butterworth 2 阶的 Q：两级串联就是 LR4。 */
         val BUTTERWORTH_Q = (1.0 / sqrt(2.0)).toFloat()

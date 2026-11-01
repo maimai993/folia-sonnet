@@ -81,6 +81,42 @@ export type AudioConsoleStereo = {
     enabled: boolean;
     /** 0 = 完全单声道，1 = 原样，2 = 侧向加倍（宽到喇叭外面）。 */
     width: number;
+    /**
+     * 低频单声道：这个频率以下的侧向分量归零，只留中置；0 表示关。
+     *
+     * 唱片里的低频常常两声道相位不一致，叠起来会互相抵消 —— 在外放与单声道蓝牙箱
+     * 上就是「底鼓变薄、贝斯消失」。120 Hz 以下是母带处理的常用起点。
+     */
+    bassMonoHz: number;
+};
+
+/** 饱和的三种传输曲线，编号与 EqSettings.kt 的 SaturationMode 一致。 */
+export const AUDIO_CONSOLE_SATURATION_MODES = ['tape', 'tube', 'diode'] as const;
+export type AudioConsoleSaturationMode = typeof AUDIO_CONSOLE_SATURATION_MODES[number];
+
+/**
+ * 饱和 / 染色：给信号加谐波，EQ 与压缩都做不到这件事。
+ *
+ * 三个参数各管一件事：drive 决定「进曲线多深」，mix 决定「平行的比例」，
+ * output 决定「出口多响」。饱和会把响度顶上去，所以 output 是手动的。
+ */
+export type AudioConsoleSaturation = {
+    enabled: boolean;
+    mode: AudioConsoleSaturationMode;
+    /** 进曲线之前的增益，0 ~ 24 dB。 */
+    driveDb: number;
+    /** 干湿比 0 ~ 1（等功率）。0.3 ~ 0.5 是保留瞬态的平行饱和。 */
+    mix: number;
+    /** 出口电平，-24 ~ +6 dB。 */
+    outputDb: number;
+};
+
+/** 链末前瞻限幅器的两个旋钮（前瞻固定 5 ms）。 */
+export type AudioConsoleLimiter = {
+    /** 输出上限，-6 ~ 0 dBFS。 */
+    ceilingDb: number;
+    /** 峰值过后的回落时间，40 ~ 500 ms。 */
+    releaseMs: number;
 };
 
 export type AudioConsoleCompressor = {
@@ -90,6 +126,13 @@ export type AudioConsoleCompressor = {
     /** gentle：慢启动 + 自动补偿；flat：快、不补偿，用来做 A/B。 */
     profile: 'gentle' | 'flat';
     bands: Record<AudioConsoleCompressorBandId, AudioConsoleCompressorBand>;
+    /**
+     * 三级分频点（Hz），升序：Low|Mid、Mid|High、High|Air。
+     *
+     * 2 段模式只用第一级。改动它等于重画四段的边界，是「这台压缩器适配这套歌」的关键 ——
+     * 男声的 Mid 起点通常比女声低，鼓组的 Air 起点通常比人声高。
+     */
+    crossovers: [number, number, number];
 };
 
 export type AudioConsoleCurve = 'geq' | 'peq';
@@ -117,6 +160,8 @@ export type AudioConsoleSettings = {
     frontEq: AudioConsoleFrontEq;
     postEq: AudioConsolePostEq;
     stereo: AudioConsoleStereo;
+    saturation: AudioConsoleSaturation;
+    limiter: AudioConsoleLimiter;
 };
 
 /**
@@ -160,6 +205,23 @@ export const AUDIO_CONSOLE_RELEASE_MAX = 1000;
 export const AUDIO_CONSOLE_KNEE_MIN = 2;
 export const AUDIO_CONSOLE_KNEE_MAX = 18;
 
+/** 分频点：相邻两级至少差 1.4 倍，否则 LR4 的两条支路会重叠成一团。 */
+export const AUDIO_CONSOLE_CROSSOVER_MIN = 60;
+export const AUDIO_CONSOLE_CROSSOVER_MAX = 16000;
+export const AUDIO_CONSOLE_CROSSOVER_RATIO = 1.4;
+
+export const AUDIO_CONSOLE_BASS_MONO_MAX = 400;
+
+export const AUDIO_CONSOLE_SATURATION_DRIVE_MIN = 0;
+export const AUDIO_CONSOLE_SATURATION_DRIVE_MAX = 24;
+export const AUDIO_CONSOLE_SATURATION_OUTPUT_MIN = -24;
+export const AUDIO_CONSOLE_SATURATION_OUTPUT_MAX = 6;
+
+export const AUDIO_CONSOLE_LIMITER_CEILING_MIN = -6;
+export const AUDIO_CONSOLE_LIMITER_CEILING_MAX = 0;
+export const AUDIO_CONSOLE_LIMITER_RELEASE_MIN = 40;
+export const AUDIO_CONSOLE_LIMITER_RELEASE_MAX = 500;
+
 /** 出厂值的每段压缩参数：低频慢一点，空气段快一点 —— 和耳朵对各频段瞬态的容忍度一致。 */
 const BAND_DEFAULTS: Record<AudioConsoleCompressorBandId, AudioConsoleCompressorBand> = {
     low: { enabled: true, thresholdDb: -16, ratio: 1.5, attackMs: 5, releaseMs: 60, makeupDb: 0, kneeDb: 6, mix: 1 },
@@ -183,6 +245,7 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
         enabled: false,
         bandCount: 4,
         profile: 'gentle',
+        crossovers: [250, 2000, 8000],
         bands: { ...BAND_DEFAULTS },
     },
     frontEq: {
@@ -200,6 +263,18 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
     stereo: {
         enabled: false,
         width: 1,
+        bassMonoHz: 0,
+    },
+    saturation: {
+        enabled: false,
+        mode: 'tape',
+        driveDb: 6,
+        mix: 0.5,
+        outputDb: -6,
+    },
+    limiter: {
+        ceilingDb: -0.3,
+        releaseMs: 120,
     },
 };
 
@@ -231,6 +306,31 @@ const readPreset = (value: unknown): AudioConsoleReverbPreset => (
         : 'factory'
 );
 
+const readSaturationMode = (value: unknown): AudioConsoleSaturationMode => (
+    AUDIO_CONSOLE_SATURATION_MODES.includes(value as AudioConsoleSaturationMode)
+        ? value as AudioConsoleSaturationMode
+        : 'tape'
+);
+
+/**
+ * 分频点夹紧：从低往高逐级往上推，保证严格升序。
+ *
+ * 与原生 `sanitizeCrossovers` 是同一套规则。不夹的话，把第一级拖到第二级右边，
+ * 中间那段会变成负宽度，四段求和就不再是平的 —— 听感是分频点附近塌下去一块。
+ */
+export const clampCrossovers = (value: unknown): [number, number, number] => {
+    const list = Array.isArray(value) ? value : [];
+    const low = clamp(list[0], AUDIO_CONSOLE_CROSSOVER_MIN, 600, 250);
+    const mid = clamp(list[1], low * AUDIO_CONSOLE_CROSSOVER_RATIO, 6000, Math.max(low * AUDIO_CONSOLE_CROSSOVER_RATIO, 2000));
+    const high = clamp(
+        list[2],
+        mid * AUDIO_CONSOLE_CROSSOVER_RATIO,
+        AUDIO_CONSOLE_CROSSOVER_MAX,
+        Math.max(mid * AUDIO_CONSOLE_CROSSOVER_RATIO, 8000),
+    );
+    return [low, mid, high];
+};
+
 const readBand = (value: unknown, id: AudioConsoleCompressorBandId): AudioConsoleCompressorBand => {
     const candidate = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
     const fallback = BAND_DEFAULTS[id];
@@ -259,6 +359,8 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
     const frontEq = asRecord(root.frontEq);
     const postEq = asRecord(root.postEq);
     const stereo = asRecord(root.stereo);
+    const saturation = asRecord(root.saturation);
+    const limiter = asRecord(root.limiter);
     const bands = asRecord(compressor.bands);
     const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS;
     // 阻尼与预延迟缺席时按预设兜底：旧存档里这两个字段还不存在，而不同预设的
@@ -281,6 +383,7 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             enabled: readBoolean(compressor.enabled, defaults.compressor.enabled),
             bandCount: compressor.bandCount === 2 ? 2 : 4,
             profile: compressor.profile === 'flat' ? 'flat' : 'gentle',
+            crossovers: clampCrossovers(compressor.crossovers),
             bands: {
                 low: readBand(bands.low, 'low'),
                 mid: readBand(bands.mid, 'mid'),
@@ -303,6 +406,18 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
         stereo: {
             enabled: readBoolean(stereo.enabled, defaults.stereo.enabled),
             width: clamp(stereo.width, AUDIO_CONSOLE_STEREO_WIDTH_MIN, AUDIO_CONSOLE_STEREO_WIDTH_MAX, defaults.stereo.width),
+            bassMonoHz: clamp(stereo.bassMonoHz, 0, AUDIO_CONSOLE_BASS_MONO_MAX, defaults.stereo.bassMonoHz),
+        },
+        saturation: {
+            enabled: readBoolean(saturation.enabled, defaults.saturation.enabled),
+            mode: readSaturationMode(saturation.mode),
+            driveDb: clamp(saturation.driveDb, AUDIO_CONSOLE_SATURATION_DRIVE_MIN, AUDIO_CONSOLE_SATURATION_DRIVE_MAX, defaults.saturation.driveDb),
+            mix: clamp(saturation.mix, 0, 1, defaults.saturation.mix),
+            outputDb: clamp(saturation.outputDb, AUDIO_CONSOLE_SATURATION_OUTPUT_MIN, AUDIO_CONSOLE_SATURATION_OUTPUT_MAX, defaults.saturation.outputDb),
+        },
+        limiter: {
+            ceilingDb: clamp(limiter.ceilingDb, AUDIO_CONSOLE_LIMITER_CEILING_MIN, AUDIO_CONSOLE_LIMITER_CEILING_MAX, defaults.limiter.ceilingDb),
+            releaseMs: clamp(limiter.releaseMs, AUDIO_CONSOLE_LIMITER_RELEASE_MIN, AUDIO_CONSOLE_LIMITER_RELEASE_MAX, defaults.limiter.releaseMs),
         },
     };
 };

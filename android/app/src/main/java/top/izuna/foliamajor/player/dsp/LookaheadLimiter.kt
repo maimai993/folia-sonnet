@@ -19,8 +19,8 @@ import kotlin.math.roundToInt
 //
 // 峰值窗口比理论需要多算一块（2.7 ms），属于保守取值：宁可早降一点，也不让输出碰到 1.0。
 
-/** 释放时间。慢到听不出「抽气」，快到不会把两拍之间的间隔拖成静音。 */
-private const val RELEASE_SECONDS = 0.12f
+/** 释放时间的出厂值。慢到听不出「抽气」，快到不会把两拍之间的间隔拖成静音。 */
+private const val DEFAULT_RELEASE_SECONDS = 0.12f
 
 /** 最后一道硬夹。设计上永远不该触发，只用来兜住浮点异常（NaN / 极端输入）。 */
 private const val ABSOLUTE_CEILING = 0.9999f
@@ -44,6 +44,18 @@ class LookaheadLimiter {
     var ceiling = 0.97f
         set(value) {
             field = value.coerceIn(0.5f, 1f)
+        }
+
+    /**
+     * 峰值过后的回落时间，40 ~ 500 ms。
+     *
+     * 短了会在鼓点之间「抽气」（gain 快速弹回 1，下一拍又被压下去）；
+     * 长了会把两拍之间的空隙一直压着，听起来像被掐住。
+     * 120 ms 是出厂值，也是原来写死的那个数。
+     */
+    var releaseSeconds = DEFAULT_RELEASE_SECONDS
+        set(value) {
+            field = value.coerceIn(0.04f, 0.5f)
         }
 
     fun configure(sampleRate: Int, channels: Int, lookaheadMs: Float = 5f) {
@@ -99,7 +111,7 @@ class LookaheadLimiter {
         //    释放则慢得多（120 ms），避免在鼓点之间抽出呼吸感。
         val available = (delayFrames - frames).coerceAtLeast(frames / 2)
         val attackTau = available.toFloat() / sampleRate / 4f
-        val tau = if (desired < gain) attackTau else RELEASE_SECONDS
+        val tau = if (desired < gain) attackTau else releaseSeconds
         val coefficient = 1f - exp((-frames / (tau * sampleRate)).toDouble()).toFloat()
         val target = gain + (desired - gain) * coefficient
 

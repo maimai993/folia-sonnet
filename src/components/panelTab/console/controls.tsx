@@ -90,6 +90,12 @@ export const formatSeconds = (value: number): string => `${value.toFixed(2)} s`;
 
 export const formatRatio = (value: number): string => `${value.toFixed(1)} : 1`;
 
+/** 频率读数：1000 Hz 以上换成 kHz，分频点与低频单声道都按这个念。 */
+export const formatHz = (value: number): string => {
+    if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 1 : 2)} kHz`;
+    return `${Math.round(value)} Hz`;
+};
+
 /** 0..1 的比例读成百分比：平行压缩的混合比、混响的干湿比都用它。 */
 export const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
 

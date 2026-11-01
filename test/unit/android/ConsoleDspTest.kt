@@ -1,6 +1,7 @@
 package top.izuna.foliamajor.player.dsp
 
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -330,6 +331,7 @@ class ConsoleDspTest {
               "reverb": { "enabled": true, "preset": 2, "rt60": 4.5, "roomLevelDb": -6, "damping": 0.34, "preDelayMs": 42, "mix": 0.65, "tailOnPause": false },
               "compressor": {
                 "enabled": true, "bandCount": 4, "profile": 1,
+                "crossovers": [180, 1800, 6500],
                 "bands": [
                   { "enabled": true, "thresholdDb": -30, "ratio": 5, "attackMs": 1, "releaseMs": 20, "makeupDb": 2, "kneeDb": 12, "mix": 0.5 },
                   { "enabled": false, "thresholdDb": -18, "ratio": 1.6, "attackMs": 8, "releaseMs": 80, "makeupDb": 0, "kneeDb": 6, "mix": 1 },
@@ -338,7 +340,9 @@ class ConsoleDspTest {
                 ]
               },
               "postEq": { "enabled": true, "gains": [0,0,0,0,0,4,0,0,0,0], "mode": "geq", "q": 1.2, "globalGainDb": 1.5 },
-              "stereo": { "enabled": true, "width": 1.5 }
+              "stereo": { "enabled": true, "width": 1.5, "bassMonoHz": 140 },
+              "saturation": { "enabled": true, "mode": "tube", "driveDb": 14, "mix": 0.35, "outputDb": -8 },
+              "limiter": { "ceilingDb": -1.2, "releaseMs": 260 }
             }
             """.trimIndent(),
         )
@@ -370,6 +374,7 @@ class ConsoleDspTest {
         assertEquals(first.compressor.enabled, second.compressor.enabled)
         assertEquals(first.compressor.bandCount, second.compressor.bandCount)
         assertEquals(first.compressor.profile, second.compressor.profile)
+        assertEquals(first.compressor.crossovers.toList(), second.compressor.crossovers.toList())
         for (index in 0 until CompressorSettings.COMPRESSOR_BAND_COUNT) {
             val expected = first.compressor.bands[index]
             val actual = second.compressor.bands[index]
@@ -391,6 +396,16 @@ class ConsoleDspTest {
 
         assertEquals(first.stereo.enabled, second.stereo.enabled)
         assertEquals(first.stereo.width, second.stereo.width, 1e-4f)
+        assertEquals(first.stereo.bassMonoHz, second.stereo.bassMonoHz, 1e-4f)
+
+        assertEquals(first.saturation.enabled, second.saturation.enabled)
+        assertEquals(first.saturation.mode, second.saturation.mode)
+        assertEquals(first.saturation.driveDb, second.saturation.driveDb, 1e-4f)
+        assertEquals(first.saturation.mix, second.saturation.mix, 1e-4f)
+        assertEquals(first.saturation.outputDb, second.saturation.outputDb, 1e-4f)
+
+        assertEquals(first.limiter.ceilingDb, second.limiter.ceilingDb, 1e-4f)
+        assertEquals(first.limiter.releaseMs, second.limiter.releaseMs, 1e-4f)
 
         // 再写一次必须与第一次逐字节相同：说明读写两侧对字段集合的认知是一致的。
         assertEquals(first.toJson().toString(), second.toJson().toString())
@@ -415,5 +430,142 @@ class ConsoleDspTest {
         )
         assertTrue(!widened.isFlat())
         assertEquals(1.8f, widened.stereo.width, 1e-4f)
+    }
+
+    @Test
+    fun `自定义分频点在无压缩时同样是平的`() {
+        // 分频点可调之后，最容易坏的地方是「四段求和的幅度还平不平」：
+        // LR4 的两条支路只在同一个分频点上才同相，挪位置时必须重算两边。
+        val settings = CompressorSettings(
+            enabled = true,
+            bandCount = 4,
+            profile = CompressorProfile.FLAT,
+            bands = Array(4) { CompressorBand(enabled = false, ratio = 1f) },
+            crossovers = floatArrayOf(180f, 1500f, 6000f),
+        )
+        for (frequency in intArrayOf(80, 180, 800, 1500, 4000, 6000, 11000)) {
+            val signal = tone(frequency.toDouble(), sampleRate)
+            val reference = signal.copyOf()
+            runCompressor(signal, 1, settings)
+            val gain = gainDb(signal, reference)
+            assertTrue("$frequency Hz 处的分频求和偏差过大：$gain dB", abs(gain) < 1.2)
+        }
+    }
+
+    @Test
+    fun `分频点倒序会被推回升序`() {
+        // 手改过的存档、或者把第一级拖过第二级，都不能让中间那段变成负宽度。
+        val safe = sanitizeCrossovers(floatArrayOf(4000f, 300f, 100f))
+        assertTrue(safe[0] < safe[1])
+        assertTrue(safe[1] < safe[2])
+        assertEquals(600f, safe[0], 0f)
+        assertEquals(840f, safe[1], 0.5f)
+        assertEquals(1176f, safe[2], 1f)
+    }
+
+    @Test
+    fun `缺省的新字段按中性补齐`() {
+        val settings = EqSettings.fromJson(
+            JSONObject("""{"version":2,"enabled":true,"gains":[0,0,0,0,0,0,0,0,0,0]}"""),
+        )
+        assertEquals(DEFAULT_COMPRESSOR_CROSSOVERS.toList(), settings.compressor.crossovers.toList())
+        assertEquals(0f, settings.stereo.bassMonoHz, 0f)
+        assertTrue(!settings.saturation.enabled)
+        assertEquals(SaturationMode.TAPE, settings.saturation.mode)
+        assertEquals(-0.3f, settings.limiter.ceilingDb, 1e-4f)
+        assertEquals(120f, settings.limiter.releaseMs, 1e-4f)
+        // 出厂状态下仍然允许整条链直通：限幅器的默认值算「保护」而不是「效果」。
+        assertTrue(settings.isFlat())
+    }
+
+    @Test
+    fun `饱和在干湿比为 0 时逐位不变`() {
+        val stage = SaturationStage()
+        stage.configure(sampleRate)
+        val buffer = tone(1000.0, 9600)
+        val reference = buffer.copyOf()
+        stage.process(
+            buffer,
+            0,
+            buffer.size,
+            1,
+            SaturationSettings(enabled = true, mode = SaturationMode.TUBE, driveDb = 18f, mix = 0f, outputDb = 0f),
+        )
+        assertArrayEquals(reference, buffer, 0f)
+    }
+
+    @Test
+    fun `饱和会加出输入里没有的谐波`() {
+        // 线性处理只能缩放输入。把输出对输入做最小二乘拟合，剩下的残差就是新加的谐波。
+        val stage = SaturationStage()
+        stage.configure(sampleRate)
+        val input = tone(1000.0, 9600)
+        val buffer = input.copyOf()
+        stage.process(
+            buffer,
+            0,
+            buffer.size,
+            1,
+            SaturationSettings(enabled = true, mode = SaturationMode.TAPE, driveDb = 18f, mix = 1f, outputDb = 0f),
+        )
+
+        var dot = 0.0
+        var energy = 0.0
+        for (index in 4800 until input.size) {
+            dot += input[index].toDouble() * buffer[index]
+            energy += input[index].toDouble() * input[index]
+        }
+        val scale = dot / energy
+        var residual = 0.0
+        var outEnergy = 0.0
+        for (index in 4800 until input.size) {
+            val delta = buffer[index] - (scale * input[index]).toFloat()
+            residual += delta * delta
+            outEnergy += buffer[index].toDouble() * buffer[index]
+        }
+        assertTrue("残差占比 ${residual / outEnergy}", residual / outEnergy > 0.01)
+    }
+
+    @Test
+    fun `低频单声道把反相低频折掉`() {
+        // 左右完全反相 = 纯侧向。60 Hz 在 120 Hz 分频点之下，应当被扣掉。
+        val frames = 9600
+        val buffer = FloatArray(frames * 2)
+        for (index in 0 until frames) {
+            val value = (0.4 * sin(2.0 * PI * 60.0 * index / sampleRate)).toFloat()
+            buffer[index * 2] = value
+            buffer[index * 2 + 1] = -value
+        }
+
+        val stage = StereoStage()
+        stage.configure(sampleRate)
+        stage.process(buffer, 0, frames, 2, StereoSettings(enabled = true, width = 1f, bassMonoHz = 120f))
+
+        // 前 4800 帧是滤波器预热的瞬态，只看后面。
+        var peak = 0f
+        for (index in 4800 until frames) {
+            peak = maxOf(peak, abs(buffer[index * 2]), abs(buffer[index * 2 + 1]))
+        }
+        assertTrue("低频侧向残留峰值 $peak", peak < 0.05f)
+    }
+
+    @Test
+    fun `限幅器的天花板生效`() {
+        val frames = 9600
+        val buffer = FloatArray(frames) { (0.9 * sin(2.0 * PI * 220.0 * it / sampleRate)).toFloat() }
+        val limiter = LookaheadLimiter()
+        limiter.configure(sampleRate, 1)
+        limiter.ceiling = 0.5f
+
+        var frame = 0
+        while (frame < frames) {
+            val block = minOf(128, frames - frame)
+            limiter.process(buffer, frame, block, 1)
+            frame += block
+        }
+
+        var peak = 0f
+        for (index in 1024 until frames) peak = maxOf(peak, abs(buffer[index]))
+        assertTrue("限幅后峰值 $peak", peak <= 0.52f)
     }
 }

@@ -17,18 +17,22 @@ import {
     type AudioConsoleFrontEq,
     type AudioConsolePostEq,
     type AudioConsoleReverb,
+    type AudioConsoleSaturation,
     type AudioConsoleSettings,
     type AudioConsoleStereo,
+    type AudioConsoleLimiter,
 } from '../utils/audioConsole';
 
 type AudioConsoleStore = {
     settings: AudioConsoleSettings;
     setReverb: (patch: Partial<AudioConsoleReverb>) => void;
-    setCompressor: (patch: Partial<Pick<AudioConsoleCompressor, 'enabled' | 'bandCount' | 'profile'>>) => void;
+    setCompressor: (patch: Partial<Pick<AudioConsoleCompressor, 'enabled' | 'bandCount' | 'profile' | 'crossovers'>>) => void;
     setCompressorBand: (id: AudioConsoleCompressorBandId, patch: Partial<AudioConsoleCompressorBand>) => void;
     setFrontEq: (patch: Partial<AudioConsoleFrontEq>) => void;
     setPostEq: (patch: Partial<AudioConsolePostEq>) => void;
     setStereo: (patch: Partial<AudioConsoleStereo>) => void;
+    setSaturation: (patch: Partial<AudioConsoleSaturation>) => void;
+    setLimiter: (patch: Partial<AudioConsoleLimiter>) => void;
     /** 后置十段全部归零（不动开关与曲线）。 */
     resetPostEqGains: () => void;
     reset: () => void;
@@ -112,6 +116,20 @@ export const useAudioConsoleStore = create<AudioConsoleStore>((set) => ({
     setStereo: (patch) => set(state => ({
         settings: commit(
             { ...state.settings, stereo: { ...state.settings.stereo, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    setSaturation: (patch) => set(state => ({
+        settings: commit(
+            { ...state.settings, saturation: { ...state.settings.saturation, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    setLimiter: (patch) => set(state => ({
+        settings: commit(
+            { ...state.settings, limiter: { ...state.settings.limiter, ...patch } },
             state.settings,
         ),
     })),

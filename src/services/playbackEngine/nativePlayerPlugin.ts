@@ -89,6 +89,8 @@ export type NativeEqualizerSettings = {
         bandCount: number;
         /** 0 温和 / 1 平直。 */
         profile: number;
+        /** 三级分频点（Hz），升序：Low|Mid、Mid|High、High|Air。2 段模式只用第一级。 */
+        crossovers: number[];
         bands: Array<{
             enabled: boolean;
             thresholdDb: number;
@@ -114,6 +116,27 @@ export type NativeEqualizerSettings = {
         enabled: boolean;
         /** 0 单声道 ~ 2 加倍；1 是原样。 */
         width: number;
+        /** 低频单声道：该频率以下的侧向归零；0 表示关。 */
+        bassMonoHz: number;
+    };
+    /** 饱和 / 染色：给信号加谐波，挂在后置 EQ 之后、立体声之前。 */
+    saturation: {
+        enabled: boolean;
+        /** tape / tube / diode。 */
+        mode: 'tape' | 'tube' | 'diode';
+        /** 进曲线的增益 0 ~ 24 dB。 */
+        driveDb: number;
+        /** 干湿比 0 ~ 1（等功率）。 */
+        mix: number;
+        /** 出口电平 -24 ~ +6 dB。 */
+        outputDb: number;
+    };
+    /** 链末限幅器。 */
+    limiter: {
+        /** 输出上限 -6 ~ 0 dBFS。 */
+        ceilingDb: number;
+        /** 回落时间 40 ~ 500 ms。 */
+        releaseMs: number;
     };
     /** 增益滑入时间（毫秒）：用户改动 15，mod 曲线 250（对齐 Web 的 setTargetAtTime 常数）。 */
     glideMs: number;

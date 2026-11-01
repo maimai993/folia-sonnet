@@ -6,6 +6,7 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import kotlin.math.exp
+import kotlin.math.pow
 
 // android/app/src/main/java/top/izuna/foliamajor/player/dsp/EqAudioProcessor.kt
 // 原生播放层的调音台：解码后的 PCM 在进 AudioTrack 之前经过这里。
@@ -19,12 +20,14 @@ import kotlin.math.exp
 //   ③ punch（Web 遗留的单段压缩）+ 自动 headroom
 //   ④ 四段压缩（Low / Mid / High / Air）
 //   ⑤ 后置十段 EQ
-//   ⑥ 声场宽度（M/S，只作用于干声）
-//   ⑦ 空间混响
-//   ⑧ 前瞻限幅（整条链的最后一步，交给声卡之前不许超过 0 dBFS）
-//   ⑨ 频谱取样（只读，不影响声音）
+//   ⑥ 饱和 / 染色（磁带 / 电子管 / 二极管）
+//   ⑦ 声场宽度（M/S，只作用于干声）+ 低频单声道
+//   ⑧ 空间混响
+//   ⑨ 前瞻限幅（整条链的最后一步，交给声卡之前不许超过 0 dBFS）
+//   ⑩ 频谱取样（只读，不影响声音）
 //
 // 顺序为什么是这样：压缩要看到「音色已经定下来」的信号，所以它在两个 EQ 之间；
+// 饱和放在后置 EQ 之后，是「染色」的最后一道 —— 它加的谐波不该再被 EQ 削回去。
 // 混响是空间，必须在所有动态处理之后，否则压缩器会把混响的尾巴一起压掉（抽气感）。
 // 限幅永远最后 —— 前面任何一站加的增益都要由它兜住。
 //
@@ -70,6 +73,7 @@ class EqAudioProcessor(
     private val lowPass = BiquadFilter()
     private val dynamics = DynamicsStage()
     private val compressor = MultibandCompressor()
+    private val saturation = SaturationStage()
     private val stereo = StereoStage()
     private val reverb = ReverbStage()
     private val spectrum = SpectrumAnalyzer()
@@ -110,6 +114,8 @@ class EqAudioProcessor(
         frontEq.configure(sampleRate)
         postEq.configure(sampleRate)
         compressor.configure(sampleRate)
+        saturation.configure(sampleRate)
+        stereo.configure(sampleRate)
         reverb.configure(sampleRate, channels)
         spectrum.configure(sampleRate)
         dynamics.configure(sampleRate, DSP_BLOCK_FRAMES)
@@ -218,6 +224,11 @@ class EqAudioProcessor(
         targetGlobalGainDb = snapshot.globalGainDb
         applyPostEqNext = true
 
+        // 限幅器的两个旋钮存的是物理量（dBFS / ms），限幅器本身要线性增益与秒。
+        // 在这里换而不是在 process 里换：每块一次 pow 就够了，不该逐样本做。
+        limiter.ceiling = 10f.pow(snapshot.limiter.ceilingDb.coerceIn(-6f, 0f) / 20f)
+        limiter.releaseSeconds = snapshot.limiter.releaseMs.coerceIn(40f, 500f) / 1000f
+
         val glideSeconds = snapshot.glideMs.coerceIn(5, 1000) / 1000f
         smoothingCoef = if (sampleRate > 0) {
             (1.0 - exp(-DSP_BLOCK_FRAMES.toDouble() / (glideSeconds * sampleRate))).toFloat()
@@ -233,6 +244,7 @@ class EqAudioProcessor(
         lowPass.reset()
         dynamics.reset()
         compressor.reset()
+        saturation.reset()
         stereo.reset()
         reverb.reset()
         spectrum.reset()
@@ -290,17 +302,22 @@ class EqAudioProcessor(
             if (postEq.isActive()) postEq.process(scratch, offset, blockFrames, channels)
         }
 
-        // ⑥ 声场宽度：只改干声的侧向分量，必须放在混响之前 ——
+        // ⑥ 饱和 / 染色：只加谐波，不改频响（那是两个 EQ 的事）。
+        if (settings.saturation.enabled) {
+            saturation.process(scratch, offset, blockFrames, channels, settings.saturation)
+        }
+
+        // ⑦ 声场宽度与低频单声道：只改干声的侧向分量，必须放在混响之前 ——
         //    混响自己的梳状延时线已经有声道差，再拉一次会像两个房间叠在一起。
         stereo.process(scratch, offset, blockFrames, channels, settings.stereo)
 
-        // ⑦ 混响：新参数优先，没开时退回 Web 的 space
+        // ⑧ 混响：新参数优先，没开时退回 Web 的 space
         reverb.process(scratch, offset, blockFrames, channels, settings.space, settings.reverb)
 
-        // ⑧ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
+        // ⑨ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
         limiter.process(scratch, offset, blockFrames, channels)
 
-        // ⑨ 频谱（只读）
+        // ⑩ 频谱（只读）
         if (state.spectrumEnabled && spectrum.push(scratch, offset, blockFrames, channels)) {
             state.publishSpectrum(spectrum.bands)
         }

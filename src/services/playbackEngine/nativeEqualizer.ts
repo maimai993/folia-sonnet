@@ -91,6 +91,8 @@ const buildSettings = (): NativeEqualizerSettings => {
             enabled: console_.compressor.enabled,
             bandCount: console_.compressor.bandCount,
             profile: console_.compressor.profile === 'flat' ? 1 : 0,
+            // 三级分频点原样发过去：越界的值由原生侧再夹一次（手改过的存档也进不来）。
+            crossovers: [...console_.compressor.crossovers],
             // 固定发四段：2 频段模式下原生只读前两段，第三、四段留着，
             // 用户来回切 2/4 段时参数不会丢。
             bands: AUDIO_CONSOLE_COMPRESSOR_BANDS.map(id => {
@@ -117,6 +119,18 @@ const buildSettings = (): NativeEqualizerSettings => {
         stereo: {
             enabled: console_.stereo.enabled,
             width: console_.stereo.width,
+            bassMonoHz: console_.stereo.bassMonoHz,
+        },
+        saturation: {
+            enabled: console_.saturation.enabled,
+            mode: console_.saturation.mode,
+            driveDb: console_.saturation.driveDb,
+            mix: console_.saturation.mix,
+            outputDb: console_.saturation.outputDb,
+        },
+        limiter: {
+            ceilingDb: console_.limiter.ceilingDb,
+            releaseMs: console_.limiter.releaseMs,
         },
         glideMs: isModCurve ? MOD_GLIDE_MS : USER_GLIDE_MS,
     };

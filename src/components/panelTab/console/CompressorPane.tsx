@@ -5,6 +5,10 @@ import {
     AUDIO_CONSOLE_ATTACK_MIN,
     AUDIO_CONSOLE_COMPRESSOR_BANDS,
     AUDIO_CONSOLE_COMPRESSOR_BAND_INFO,
+    AUDIO_CONSOLE_CROSSOVER_MAX,
+    AUDIO_CONSOLE_CROSSOVER_MIN,
+    AUDIO_CONSOLE_CROSSOVER_RATIO,
+    clampCrossovers,
     AUDIO_CONSOLE_KNEE_MAX,
     AUDIO_CONSOLE_KNEE_MIN,
     AUDIO_CONSOLE_RATIO_MAX,
@@ -20,7 +24,7 @@ import { Segmented, Toggle } from '../../modal/settings/kit';
 import { Button } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
 import CompressorCurve from './CompressorCurve';
-import { ConsoleSlider, formatDb, formatMs, formatPercent, formatRatio } from './controls';
+import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent, formatRatio } from './controls';
 
 // src/components/panelTab/console/CompressorPane.tsx
 // 调音台的第二页：四段压缩。
@@ -48,6 +52,42 @@ const CompressorPane: React.FC = () => {
     const activeId = visibleBands.includes(selected) ? selected : visibleBands[0];
     const band = compressor.bands[activeId];
     const info = AUDIO_CONSOLE_COMPRESSOR_BAND_INFO[activeId];
+
+    // 分频点滑杆：第二级的下限跟着第一级走，第三级跟着第二级，拖前面的会把后面的推上去
+    // （与原生 sanitizeCrossovers 同一套规则，见 clampCrossovers）。
+    const crossoverList = [
+        {
+            index: 0 as const,
+            label: t('ui.consoleCrossoverLow'),
+            value: compressor.crossovers[0],
+            min: AUDIO_CONSOLE_CROSSOVER_MIN,
+            max: 600,
+        },
+        {
+            index: 1 as const,
+            label: t('ui.consoleCrossoverMid'),
+            value: compressor.crossovers[1],
+            min: compressor.crossovers[0] * AUDIO_CONSOLE_CROSSOVER_RATIO,
+            max: 6000,
+        },
+        {
+            index: 2 as const,
+            label: t('ui.consoleCrossoverHigh'),
+            value: compressor.crossovers[2],
+            min: compressor.crossovers[1] * AUDIO_CONSOLE_CROSSOVER_RATIO,
+            max: AUDIO_CONSOLE_CROSSOVER_MAX,
+        },
+    ].filter(item => compressor.bandCount === 4 || item.index === 0);
+
+    const updateCrossover = (index: 0 | 1 | 2, value: number) => {
+        const next: [number, number, number] = [
+            compressor.crossovers[0],
+            compressor.crossovers[1],
+            compressor.crossovers[2],
+        ];
+        next[index] = value;
+        setCompressor({ crossovers: clampCrossovers(next) });
+    };
 
     return (
         <div className="flex min-h-full flex-col">
@@ -85,6 +125,31 @@ const CompressorPane: React.FC = () => {
                             />
                         </div>
                     </div>
+                </div>
+            </EqualizerSection>
+
+            <EqualizerSection
+                title={t('ui.consoleCompressorCrossovers')}
+                hint={t('ui.consoleCompressorCrossoversHint')}
+            >
+                <div className="space-y-3 px-4 pb-4 pt-3">
+                    {crossoverList.map(item => (
+                        <ConsoleSlider
+                            key={item.label}
+                            label={item.label}
+                            valueText={formatHz(item.value)}
+                            value={item.value}
+                            min={item.min}
+                            max={item.max}
+                            log
+                            decimals={0}
+                            onChange={value => updateCrossover(item.index, value)}
+                            onCommit={() => undefined}
+                        />
+                    ))}
+                    <p className="-mt-1 text-[11px] leading-4 text-[color:var(--st-t3)]">
+                        {t('ui.consoleCompressorCrossoversNote')}
+                    </p>
                 </div>
             </EqualizerSection>
 

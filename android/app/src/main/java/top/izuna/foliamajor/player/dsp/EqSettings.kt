@@ -16,12 +16,15 @@ import org.json.JSONObject
 //     外加软拐点宽度与平行压缩混合比）；
 //   · 后置均衡器（同一套十段，挂在压缩之后）；
 //   · 混响的物理参数（预设 / RT60 / 声压级 / 阻尼 / 预延迟 / 干湿比 / 暂停后余音）；
-//   · 声场宽度（M/S 加权，挂在混响之前）。
+//   · 声场宽度（M/S 加权，挂在混响之前）与低频单声道（该频率以下的侧向归零）；
+//   · 饱和 / 染色（磁带 / 电子管 / 二极管三种传输曲线）；
+//   · 链末限幅器的天花板与释放时间；
+//   · 压缩器的三级分频点（原先写死 250 / 2000 / 8000）。
 //
-// `kneeDb` / `mix` / `damping` / `preDelayMs` / `stereo` 都是**可缺省的扩展字段**：
-// 老包不带它们时按「不改变原来听感」的值兜底，所以版本号仍是 2。
-// v1 的字段一个没删、一个没改名：老版本 WebView 推上来的包仍然照 v1 解析，
-// 新字段缺席时按「中性」填 —— 冷启动读到的旧设置不会因为升级而变成怪声。
+// `kneeDb` / `mix` / `damping` / `preDelayMs` / `stereo` / `crossovers` / `bassMonoHz`
+// / `saturation` / `limiter` 都是**可缺省的扩展字段**：老包不带它们时按「不改变原来听感」
+// 的值兜底，所以版本号仍是 2。v1 的字段一个没删、一个没改名：老版本 WebView 推上来的包
+// 仍然照 v1 解析，新字段缺席时按「中性」填 —— 冷启动读到的旧设置不会因为升级而变成怪声。
 
 /** 段数：与 Web 的 `AUDIO_EQUALIZER_BANDS` 一一对应（src/utils/audioEqualizer.ts）。 */
 const val EQ_BAND_COUNT = 10
@@ -90,6 +93,18 @@ object CompressorProfile {
     const val FLAT = 1
 }
 
+/** 饱和的三种传输曲线，见 [SaturationStage]。 */
+object SaturationMode {
+    /** 磁带：对称的 tanh + 12 kHz 滚降，奇次谐波为主。 */
+    const val TAPE = 0
+    /** 电子管：非对称（带直流偏置），偶次谐波让人耳觉得「暖」。 */
+    const val TUBE = 1
+    /** 二极管：x / √(1 + x²)，膝更硬，颗粒感强。 */
+    const val DIODE = 2
+
+    fun clamp(value: Int): Int = value.coerceIn(TAPE, DIODE)
+}
+
 /**
  * 一段压缩的参数。
  *
@@ -109,13 +124,41 @@ class CompressorBand(
     val mix: Float = 1f,
 )
 
+/** 三级分频点的出厂值：Low / Mid / High / Air 的边界。 */
+val DEFAULT_COMPRESSOR_CROSSOVERS = floatArrayOf(250f, 2000f, 8000f)
+
+/** 分频点允许的范围。相邻两级至少差 1.4 倍，否则 LR4 的两条支路会重叠成一团。 */
+const val CROSSOVER_MIN_HZ = 60f
+const val CROSSOVER_MAX_HZ = 16000f
+const val CROSSOVER_MIN_RATIO = 1.4f
+
+/**
+ * 把用户给的分频点夹成一组合法且严格升序的值。
+ *
+ * 不夹的话，把 250 拖到 8000 会让 Mid 段变成「负宽度」，四段求和的幅度就不再是平的 ——
+ * 听感是分频点附近出现一个深谷。这里从低往高逐级往上推，保证顺序不会反。
+ */
+fun sanitizeCrossovers(raw: FloatArray?): FloatArray {
+    if (raw == null || raw.size < 3) return DEFAULT_COMPRESSOR_CROSSOVERS
+    fun pick(index: Int, fallback: Float): Float {
+        val value = raw[index]
+        return if (value.isFinite()) value else fallback
+    }
+    val low = pick(0, 250f).coerceIn(CROSSOVER_MIN_HZ, 600f)
+    val mid = pick(1, 2000f).coerceIn(low * CROSSOVER_MIN_RATIO, 6000f)
+    val high = pick(2, 8000f).coerceIn(mid * CROSSOVER_MIN_RATIO, CROSSOVER_MAX_HZ)
+    return floatArrayOf(low, mid, high)
+}
+
 /** 四段压缩器的一份完整参数。 */
 class CompressorSettings(
     val enabled: Boolean = false,
-    /** 2 或 4：2 段只分 Low / High，分频点 250 Hz。 */
+    /** 2 或 4：2 段只分 Low / High，只用 [crossovers] 的第一级。 */
     val bandCount: Int = 4,
     val profile: Int = CompressorProfile.GENTLE,
     val bands: Array<CompressorBand> = Array(COMPRESSOR_BAND_COUNT) { CompressorBand() },
+    /** 三级分频点（Hz），升序。改它会让 [MultibandCompressor] 重算 LR4 系数。 */
+    val crossovers: FloatArray = DEFAULT_COMPRESSOR_CROSSOVERS,
 ) {
     companion object {
         const val COMPRESSOR_BAND_COUNT = 4
@@ -157,9 +200,47 @@ class StereoSettings(
     val enabled: Boolean = false,
     /** 0 单声道 ~ 2 侧向加倍；1 是原样。 */
     val width: Float = 1f,
+    /**
+     * 低频单声道：这个频率以下的侧向分量归零，只保留中置。0 表示关。
+     *
+     * 为什么需要：低频在唱片里常常是「两声道相位不一致」的，叠起来会互相抵消，
+     * 在手机外放与单声道蓝牙箱上尤其明显（底鼓变薄、贝斯消失）。把 120 Hz 以下
+     * 折成单声道是母带处理的常规做法，代价是低频不再有宽度 —— 而这个频段本来
+     * 人也听不出方向。
+     */
+    val bassMonoHz: Float = 0f,
 ) {
     companion object {
         val NEUTRAL = StereoSettings()
+    }
+}
+
+/** 饱和 / 染色，见 [SaturationStage]。 */
+class SaturationSettings(
+    val enabled: Boolean = false,
+    /** [SaturationMode]。 */
+    val mode: Int = SaturationMode.TAPE,
+    /** 进曲线之前的增益，0 ~ 24 dB。 */
+    val driveDb: Float = 6f,
+    /** 干湿比（等功率），0 ~ 1。 */
+    val mix: Float = 0.5f,
+    /** 出口电平，-24 ~ +6 dB。饱和本身会把响度顶上去，这里手动补回来。 */
+    val outputDb: Float = -6f,
+) {
+    companion object {
+        val NEUTRAL = SaturationSettings()
+    }
+}
+
+/** 链末的前瞻限幅器：只改「天花板」与「释放」，前瞻固定 5 ms。 */
+class LimiterSettings(
+    /** 输出上限，-6 ~ 0 dBFS。越靠近 0 越响，留给转码的余量越少。 */
+    val ceilingDb: Float = -0.3f,
+    /** 峰值过后的回落时间，40 ~ 500 ms。短了会「抽」，长了会把两拍之间拖成静音。 */
+    val releaseMs: Float = 120f,
+) {
+    companion object {
+        val NEUTRAL = LimiterSettings()
     }
 }
 
@@ -201,6 +282,8 @@ class EqSettings(
     val compressor: CompressorSettings = CompressorSettings.NEUTRAL,
     val postEq: PostEqSettings = PostEqSettings.NEUTRAL,
     val stereo: StereoSettings = StereoSettings.NEUTRAL,
+    val saturation: SaturationSettings = SaturationSettings.NEUTRAL,
+    val limiter: LimiterSettings = LimiterSettings.NEUTRAL,
     val seq: Long = 0L,
 ) {
 
@@ -220,6 +303,8 @@ class EqSettings(
         compressor = compressor,
         postEq = postEq,
         stereo = stereo,
+        saturation = saturation,
+        limiter = limiter,
         seq = next,
     )
 
@@ -234,6 +319,11 @@ class EqSettings(
         && !compressor.enabled
         && !postEq.enabled
         && !stereo.enabled
+        && !saturation.enabled
+        // 限幅器永远在链上，但它出厂时是「保护」而不是「效果」：只有用户动过
+        // 天花板或释放时间，才认为整条链不再是恒等变换（否则动这两个滑杆会没反应）。
+        && kotlin.math.abs(limiter.ceilingDb + 0.3f) < 0.05f
+        && kotlin.math.abs(limiter.releaseMs - 120f) < 1f
 
     /**
      * 回写成 Web 推上来的那种 JSON。
@@ -266,11 +356,24 @@ class EqSettings(
         val stereoJson = JSONObject().apply {
             put("enabled", stereo.enabled)
             put("width", stereo.width.toDouble())
+            put("bassMonoHz", stereo.bassMonoHz.toDouble())
+        }
+        val saturationJson = JSONObject().apply {
+            put("enabled", saturation.enabled)
+            put("mode", saturationModeName(saturation.mode))
+            put("driveDb", saturation.driveDb.toDouble())
+            put("mix", saturation.mix.toDouble())
+            put("outputDb", saturation.outputDb.toDouble())
+        }
+        val limiterJson = JSONObject().apply {
+            put("ceilingDb", limiter.ceilingDb.toDouble())
+            put("releaseMs", limiter.releaseMs.toDouble())
         }
         val compressorJson = JSONObject().apply {
             put("enabled", compressor.enabled)
             put("bandCount", compressor.bandCount)
             put("profile", compressor.profile)
+            put("crossovers", JSONArray().putAll(compressor.crossovers))
             put("bands", JSONArray().apply { compressor.bands.forEach { put(it.toJson()) } })
         }
         val postEqJson = JSONObject().apply {
@@ -290,6 +393,8 @@ class EqSettings(
             put("compressor", compressorJson)
             put("postEq", postEqJson)
             put("stereo", stereoJson)
+            put("saturation", saturationJson)
+            put("limiter", limiterJson)
             put("glideMs", glideMs)
         }
     }
@@ -337,6 +442,17 @@ class EqSettings(
             put("mix", mix.toDouble())
         }
 
+        /** 分频点必须过一遍 [sanitizeCrossovers]：手改过的存档可能给出倒序或越界的值。 */
+        private fun readCrossovers(raw: JSONArray?): FloatArray {
+            if (raw == null) return DEFAULT_COMPRESSOR_CROSSOVERS
+            return sanitizeCrossovers(
+                FloatArray(3) { index ->
+                    val fallback = DEFAULT_COMPRESSOR_CROSSOVERS[index].toDouble()
+                    raw.optDouble(index, fallback).toFloat()
+                },
+            )
+        }
+
         private fun readGains(raw: JSONArray?): FloatArray = FloatArray(EQ_BAND_COUNT) { index ->
             val value = raw?.optDouble(index, 0.0) ?: 0.0
             if (value.isFinite()) {
@@ -371,6 +487,8 @@ class EqSettings(
                 compressor = readCompressor(json.optJSONObject("compressor")),
                 postEq = readPostEq(json.optJSONObject("postEq")),
                 stereo = readStereo(json.optJSONObject("stereo")),
+                saturation = readSaturation(json.optJSONObject("saturation")),
+                limiter = readLimiter(json.optJSONObject("limiter")),
             )
         }
 
@@ -396,6 +514,38 @@ class EqSettings(
             return StereoSettings(
                 enabled = json.optBoolean("enabled", false),
                 width = json.number("width", 1.0, 0f, 2f),
+                // 0 = 关。老包没有这个字段，按「不改变原来听感」处理。
+                bassMonoHz = json.number("bassMonoHz", 0.0, 0f, 400f),
+            )
+        }
+
+        private fun saturationModeName(mode: Int): String = when (SaturationMode.clamp(mode)) {
+            SaturationMode.TUBE -> "tube"
+            SaturationMode.DIODE -> "diode"
+            else -> "tape"
+        }
+
+        private fun readSaturation(json: JSONObject?): SaturationSettings {
+            if (json == null) return SaturationSettings.NEUTRAL
+            val mode = when (json.optString("mode", "tape")) {
+                "tube" -> SaturationMode.TUBE
+                "diode" -> SaturationMode.DIODE
+                else -> SaturationMode.TAPE
+            }
+            return SaturationSettings(
+                enabled = json.optBoolean("enabled", false),
+                mode = mode,
+                driveDb = json.number("driveDb", 6.0, 0f, 24f),
+                mix = json.number("mix", 0.5, 0f, 1f),
+                outputDb = json.number("outputDb", -6.0, -24f, 6f),
+            )
+        }
+
+        private fun readLimiter(json: JSONObject?): LimiterSettings {
+            if (json == null) return LimiterSettings.NEUTRAL
+            return LimiterSettings(
+                ceilingDb = json.number("ceilingDb", -0.3, -6f, 0f),
+                releaseMs = json.number("releaseMs", 120.0, 40f, 500f),
             )
         }
 
@@ -425,6 +575,7 @@ class EqSettings(
                     CompressorProfile.GENTLE
                 },
                 bands = bands,
+                crossovers = readCrossovers(json.optJSONArray("crossovers")),
             )
         }
 
