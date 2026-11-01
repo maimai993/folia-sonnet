@@ -15,11 +15,17 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
-// 当前文件：Folia 在安卓上的原生播放内核（P1：最小闭环）。
+import top.izuna.foliamajor.player.dsp.FoliaAudioSinkFactory
+import top.izuna.foliamajor.player.dsp.NativeEqualizerState
+
+// 当前文件：Folia 在安卓上的原生播放内核。
 //
-// 只做「把这一个地址解码并出声」，不碰任何音效：均衡器、音效链、淡入淡出、automix
-// 交叉淡化都还在 WebView 的 Web Audio 图里，原生接管的那一刻它们整体失效（
-// createMediaElementSource 是单向不可逆的），那些留给后面的阶段。
+// 出声只有这一条路：解码后的 PCM 经 AudioSink（[FoliaAudioSinkFactory]）进 AudioTrack。
+// 均衡器 / punch / space 就挂在那条 AudioSink 的 processor 链上（player/dsp/），
+// 不再依赖 WebView 的 Web Audio 图 —— createMediaElementSource 是单向不可逆的，
+// 原生接管之后那边收不到任何信号。
+//
+// 淡入淡出、交叉淡化在这里自己做（ExoPlayer 没有内建），automix 仍归 Web 侧调度。
 //
 // ⭐⭐ **线程：这是这个文件里最容易出事的一条。**
 //
@@ -72,7 +78,10 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
         /** 斜坡分几步。8 步在 160ms 下约 20ms 一步，听感上没有台阶。 */
         private const val FADE_STEPS = 8
-
+        /** 长斜坡的步数上限：留尾巴的淡出最长 1.2 s，按 20 ms 一步是 60 步。 */
+        private const val MAX_FADE_STEPS = 60
+        /** 交叉淡化按 40 ms 一步算，最长到设置允许的 15 s，封顶 375 步。 */
+        private const val MAX_CROSSFADE_STEPS = 375
         /**
          * 伪装成浏览器的 UA。
          *
@@ -150,6 +159,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      * 用户听到的就是「末尾没有淡出」。所以斜坡要在**还剩这么久**的时候起跑，跑到 0 正好换完。
      */
     @Volatile private var crossfadeAheadMs = 0
+    /** 重叠期间的音量曲线，取值见 [CrossfadeCurve]。 */
+    @Volatile private var crossfadeCurve = CrossfadeCurve.EQUAL_POWER
     /** 这一首的「快到尾巴了」是不是已经报过（每首只报一次，seek 回去要重新上膛）。 */
     private var nearEndFired = false
     /**
@@ -203,6 +214,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     && position + 1_000L < lastTickPositionMs
             lastTickPositionMs = position
             cachedPositionMs = position
+            /*
+             * 缓冲标记只靠事件清（playing / paused / ...），漏一次就一直挂着：
+             * 显示锚点按「在缓冲」把 playing 写成 false，桌面歌词冻在原地，
+             * 只有拖进度条（seek 里重算这个标记）才救得回来。刻度在播放器线程上，
+             * 这里问到的 isPlaying 是真值 —— 真在出声就不是缓冲。
+             */
+            if (current.isPlaying) cachedBuffering = false
             cachedDurationMs = if (duration > 0) duration else 0L
             if (wrapped) {
                 // 下一圈还要能再报一次「快到尾巴」，进度也要从 0 重新算。
@@ -314,9 +332,20 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 stopTicking()
                 return@runOnPlayer
             }
+            /*
+             * 淡出多长：平时是 160 ms；混响开着并且允许留尾巴时，跟着 RT60 走（约三分之一，
+             * 上限 1.2 s）。这不是「真的让混响继续算」—— 播放器一停，processor 就不再被调用；
+             * 但把断音拉长到混响的时间量级，耳朵听到的是尾巴自然收掉，而不是一刀切。
+             */
+            val reverb = NativeEqualizerState.snapshot().reverb
+            val fadeMs = if (reverb.enabled && reverb.tailOnPause) {
+                (reverb.rt60Seconds * 350f).toInt().coerceIn(PAUSE_FADE_MS, 1200)
+            } else {
+                PAUSE_FADE_MS
+            }
             // 从当前音量淡下去，并且显式关掉「跟随音量」：淡入没跑完就暂停时，
             // 那个标记会让这条淡出停在满音量上，一松手就是硬切。
-            rampVolume(current.volume, 0f, PAUSE_FADE_MS, followsVolume = false) {
+            rampVolume(current.volume, 0f, fadeMs, followsVolume = false) {
                 current.setPlayWhenReady(false)
                 // 音量回到「本该是多少」：下一首从 0 淡进来，而不是继承这条斜坡的 0。
                 current.setVolume(requestedVolume)
@@ -347,17 +376,20 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             then?.invoke()
             return
         }
-        val stepMs = (durationMs / FADE_STEPS).coerceAtLeast(1)
+        // 步长固定 20 ms 左右：短坡道保持原来那 8 步，长坡道（留尾巴的淡出）也不能变成
+        // 每 150 ms 跳一格的台阶。
+        val steps = (durationMs / 20).coerceIn(FADE_STEPS, MAX_FADE_STEPS)
+        val stepMs = (durationMs / steps).coerceAtLeast(1)
         var step = 0
         val tick = object : Runnable {
             override fun run() {
                 step++
-                val progress = step.toFloat() / FADE_STEPS
+                val progress = step.toFloat() / steps
                 // 淡入的目标是「此刻该有的音量」：这一首的响度补偿中途到位时，坡道跟着走完，
                 // 而不是被一次 setVolume 当场打断。
                 val target = if (fadeFollowsVolume) requestedVolume else to
                 player?.setVolume((from + (target - from) * progress).coerceIn(0f, 1f))
-                if (step >= FADE_STEPS) {
+                if (step >= steps) {
                     fadeTick = null
                     fadeFollowsVolume = false
                     then?.invoke()
@@ -523,6 +555,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         crossfadeAheadMs = if (durationMs > 0) Math.min(durationMs, MAX_CROSSFADE_AHEAD_MS) else 0
     }
 
+    /**
+     * 换曲线。设置里存的是名字（`equalPower` / `linear` / `fast`），换算见 [CrossfadeCurve]。
+     */
+    fun setCrossfadeCurve(name: String?) {
+        crossfadeCurve = CrossfadeCurve.fromName(name)
+    }
+
     fun release() {
         // 收过一次就别再收：线程 quit 之后再往它的 Handler 上 post 会直接抛
         // 「sending message to a Handler on a dead thread」，而系统控件（通知栏 / 耳机）
@@ -599,7 +638,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
     /**
      * 当前倍速。写锚点那一侧要拿它决定要不要跳过这一拍 —— 见
-     * FoliaNativePlayerPlugin 里 `anchorStillTrue` 那段说明。
+     * FoliaNativePlayerPlugin 写锚点那段说明（判定在 DisplayAnchorPolicy.kt 的 displayAnchorNeedsWrite）。
      */
     fun getSpeed(): Float {
         return requestedSpeed
@@ -717,12 +756,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private fun rampCrossfade(outgoing: ExoPlayer, incoming: ExoPlayer, durationMs: Int) {
         cancelFade()
         crossfadeOutgoing = outgoing
-        val stepMs = (durationMs / FADE_STEPS).coerceAtLeast(1)
+        // 交叉淡化动辄三五秒：步数跟着时长走，否则 8 步会变成每半秒跳一格的可闻台阶。
+        val steps = (durationMs / 40).coerceIn(FADE_STEPS, MAX_CROSSFADE_STEPS)
+        val stepMs = (durationMs / steps).coerceAtLeast(1)
         var step = 0
         val tick = object : Runnable {
             override fun run() {
                 step++
-                val progress = (step.toFloat() / FADE_STEPS).coerceIn(0f, 1f)
+                val progress = (step.toFloat() / steps).coerceIn(0f, 1f)
                 /*
                  * 每拍读一次最新音量，而不是起跑那一刻定死。
                  *
@@ -730,9 +771,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                  * 目标定死的话，坡道跑完就落在一个过时的音量上（补偿白算）。
                  */
                 val target = requestedVolume
-                incoming.setVolume((target * progress).coerceIn(0f, 1f))
-                outgoing.setVolume((target * (1f - progress)).coerceIn(0f, 1f))
-                if (step >= FADE_STEPS) {
+                // 按曲线取两条音量。等功率下两者平方和为 1，中点各 0.707 —— 线性在这里
+                // 只有 0.5，正是「过渡中间音量塌一下」的来源。
+                val incomingGain = CrossfadeCurve.incoming(crossfadeCurve, progress)
+                val outgoingGain = CrossfadeCurve.outgoing(crossfadeCurve, progress)
+                incoming.setVolume((target * incomingGain).coerceIn(0f, 1f))
+                outgoing.setVolume((target * outgoingGain).coerceIn(0f, 1f))
+                if (step >= steps) {
                     fadeTick = null
                     crossfadeOutgoing = null
                     outgoing.stop()
@@ -746,36 +791,32 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         handler.postDelayed(tick, stepMs.toLong())
     }
 
-    /** 交叉淡化用的第二台播放器：与 ensurePlayer 同规格，但不接管 [player]，也不报名事件。 */
-    private fun buildExtraPlayer(): ExoPlayer {
+    /**
+     * 造一台播放器。**所有播放器都必须走这里**：AudioSink 由 [FoliaAudioSinkFactory] 提供，
+     * 均衡器就挂在那个 sink 上。绕开这个函数自己 new 一台，那台就没有 EQ（而且不会报错）。
+     */
+    private fun newPlayer(): ExoPlayer {
         val factory = DefaultHttpDataSource.Factory()
             .setUserAgent(BROWSER_USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
         httpFactory = factory
-        val created = ExoPlayer.Builder(context)
-            .setLooper(playerLooper)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
-            .build()
-        created.setAudioAttributes(AudioAttributes.DEFAULT, true)
-        return created
-    }
-
-    private fun ensurePlayer(): ExoPlayer {
-        val current = player
-        if (current != null) return current
-
-        val factory = DefaultHttpDataSource.Factory()
-            .setUserAgent(BROWSER_USER_AGENT)
-            .setAllowCrossProtocolRedirects(true)
-        httpFactory = factory
-
-        val created = ExoPlayer.Builder(context)
+        return ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
             // 显式钉在播放器那条专用线程上。不写这一句，播放器会绑到「第一次碰它的那个
             // 线程」—— 也就是 Capacitor 的桥线程，而位置上报会跑到别的线程上去，
             // 于是每 250ms 跨线程碰一次播放器。
             .setLooper(playerLooper)
             .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
             .build()
+    }
+
+    /** 交叉淡化用的第二台播放器：与 ensurePlayer 同规格，但不接管 [player]，也不报名事件。 */
+    private fun buildExtraPlayer(): ExoPlayer = newPlayer()
+
+    private fun ensurePlayer(): ExoPlayer {
+        val current = player
+        if (current != null) return current
+
+        val created = newPlayer()
         // 焦点交给 ExoPlayer 自己管。WebView 那套「把 Chromium 的焦点监听器换成空实现」
         // 的反向 hack（audio/FoliaAudioManager）是为 `<audio>` 做的，原生产不出那种问题。
         created.setAudioAttributes(AudioAttributes.DEFAULT, true)
