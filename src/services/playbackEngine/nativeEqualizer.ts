@@ -50,6 +50,20 @@ let lastSignature = '';
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * 推送是串行的，且「最后一次状态」一定会送到。
+ *
+ * 为什么必须串行：Capacitor 的调用虽然是顺序投递的，但 `await` 返回的顺序不保证。
+ * 拖滑杆时 40 ms 就会推一条，两条同时在途时，先发的可能后到 —— 原生最终停在旧值上，
+ * 用户看到的是「滑杆拉到 6，声音还是 3，再动一下才跟上」。这类错位要等下一次变更
+ * 才会自愈，正是「调音器短时失效」的观感来源。
+ *
+ * `pushing` 期间来的新状态只置一个 dirty 标记，等这一趟回来立刻再推一次，
+ * 所以中间被合并掉的只是过期状态，不会丢掉最终状态。
+ */
+let pushing = false;
+let dirty = false;
+
 const buildSettings = (): NativeEqualizerSettings => {
     const state = useAudioSettingsStore.getState();
     const console_ = useAudioConsoleStore.getState().settings;
@@ -153,25 +167,62 @@ const scheduleRetry = (): void => {
 };
 
 /**
+ * 把还在合并窗口里的那条立刻发出去。
+ *
+ * WebView 切到后台时会把 `setTimeout` 节流到秒级、甚至整个暂停：用户拖完滑杆马上锁屏，
+ * 那条 40 ms 的定时器可能要几十秒后才跑，回来听到的还是旧声音 —— 这也是「短时失效」的
+ * 一种。页面要隐藏时不再等合并窗口，直接推。
+ */
+const flushScheduledPush = (): void => {
+    if (pushTimer !== null) {
+        clearTimeout(pushTimer);
+        pushTimer = null;
+    }
+    void pushNativeEqualizer(false);
+};
+
+/**
  * 推一次。`force` 用于启动同步与重试：这两处即使签名没变也要发。
  *
  * 失败不抛：调用方是 store 订阅，抛出去只会变成一条未处理的 rejection。
  */
 export const pushNativeEqualizer = async (force = false): Promise<void> => {
     if (!started || !isNativePlayerAvailable()) return;
-    const settings = buildSettings();
-    const signature = JSON.stringify(settings);
-    if (!force && signature === lastSignature) return;
+
+    // 已经有推送在途：只登记「还有新状态」，由在途那一趟收尾时补发。
+    if (pushing) {
+        dirty = true;
+        return;
+    }
+
+    pushing = true;
     try {
-        await nativePlayer.setEqualizer(settings);
-        lastSignature = signature;
-        pushAttempts = 0;
+        let mustSend = true;
+        while (mustSend) {
+            dirty = false;
+            const settings = buildSettings();
+            const signature = JSON.stringify(settings);
+            if (!force && signature === lastSignature) break;
+            force = false;
+            await nativePlayer.setEqualizer(settings);
+            lastSignature = signature;
+            pushAttempts = 0;
+            // 这一趟在途时用户又拖了滑杆：立刻用最新状态再推一次，直到追上为止。
+            mustSend = dirty;
+        }
     } catch (error) {
         // 清掉签名，下一次（或重试）照旧会推。
         lastSignature = '';
         pushAttempts += 1;
         if (pushAttempts <= MAX_RETRIES) scheduleRetry();
         console.warn('[NativeEQ] 推送调音台设置失败，稍后重试', error);
+    } finally {
+        pushing = false;
+        // 失败与并发之间可能夹着一个没送出去的状态：补一次，别把它留在 dirty 里。
+        if (dirty) {
+            dirty = false;
+            schedulePush();
+        }
     }
 };
 
@@ -205,6 +256,14 @@ export const startNativeEqualizerSync = (): void => {
         if (state.settings === previous.settings) return;
         schedulePush();
     });
+
+    // 页面隐藏 / 卸载前不再等合并窗口：后台的定时器不可信（见 flushScheduledPush）。
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') flushScheduledPush();
+        });
+        window.addEventListener('pagehide', flushScheduledPush);
+    }
 };
 
 /** 诊断用：问一次原生此刻在跑什么（不轮询）。 */
