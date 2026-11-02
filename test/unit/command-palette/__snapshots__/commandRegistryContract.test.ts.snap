@@ -249,6 +249,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "visualizer-classic",
   "visualizer-cadenza",
   "visualizer-partita",
+  "visualizer-kinetic",
   "visualizer-fume",
   "visualizer-tilt",
   "visualizer-claddagh",
