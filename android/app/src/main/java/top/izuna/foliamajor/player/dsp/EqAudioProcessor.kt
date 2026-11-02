@@ -101,9 +101,15 @@ class EqAudioProcessor(
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         // 只处理 16bit。走到别的编码说明链路和预期不一样（见文件头第 3 条），
         // 这时返回 NOT_SET 让 media3 把这条 processor 摘掉：宁可 EQ 不生效，也不能让播放失败。
+        //
+        // 摘链是**静默**的：没有异常、没有日志，表现只是「这首歌没有 EQ」。所以这里记一笔，
+        // 开发者面板上 dspBypassCount > 0 就是这件事发生过的证据（见 AudioPipelineTelemetry）。
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+            AudioPipelineTelemetry.noteDspBypassed()
+            AudioPipelineTelemetry.noteDspConfigured(false)
             return AudioProcessor.AudioFormat.NOT_SET
         }
+        AudioPipelineTelemetry.noteDspConfigured(true)
         sampleRate = inputAudioFormat.sampleRate
         channels = inputAudioFormat.channelCount.coerceAtLeast(1)
         carry = ByteArray(2 * channels)
@@ -169,6 +175,7 @@ class EqAudioProcessor(
         // 关掉、或打开但全平且没有音效：按字节直通，输出与输入逐字节相同。
         // 频谱是「看」不是「听」，直通时照样取样 —— 否则关了效果就看不到曲线，很奇怪。
         if (!settings.enabled || settings.isFlat()) {
+            AudioPipelineTelemetry.noteDspPassthroughFrames(frames)
             if (state.spectrumEnabled) {
                 ensureScratch(sampleCount)
                 pcm.decode(raw, sampleCount, scratch)
@@ -184,6 +191,7 @@ class EqAudioProcessor(
 
         ensureScratch(sampleCount)
         pcm.decode(raw, sampleCount, scratch)
+        AudioPipelineTelemetry.noteDspFrames(frames)
 
         var frame = 0
         while (frame < frames) {

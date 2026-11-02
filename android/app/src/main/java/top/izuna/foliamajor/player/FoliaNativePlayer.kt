@@ -15,6 +15,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
+import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.FoliaAudioSinkFactory
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
 
@@ -202,6 +203,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             }
             val position = current.currentPosition
             val duration = current.duration
+            // 「息屏时这个 250ms 还在空转多少」靠这一笔估：面板上的 ticks 增量除以秒数就是实际频率。
+            AudioPipelineTelemetry.notePositionTick()
             /*
              * ⭐ 单曲循环的回绕：位置从末尾直接跳回 0，而且**什么事件都不发**。
              *
@@ -576,6 +579,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             if (current != null) {
                 current.removeListener(playerListener)
                 current.release()
+                AudioPipelineTelemetry.notePlayerReleased()
             }
             // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
             playbackThread.quitSafely()
@@ -800,13 +804,33 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             .setUserAgent(BROWSER_USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
         httpFactory = factory
-        return ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
+        val created = ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
             // 显式钉在播放器那条专用线程上。不写这一句，播放器会绑到「第一次碰它的那个
             // 线程」—— 也就是 Capacitor 的桥线程，而位置上报会跑到别的线程上去，
             // 于是每 250ms 跨线程碰一次播放器。
             .setLooper(playerLooper)
             .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
             .build()
+        attachTelemetry(created)
+        return created
+    }
+
+    /**
+     * 挂上音频链路诊断监听器（[AudioPipelineTelemetry]）。
+     *
+     * `addAnalyticsListener` 要求在该播放器的 applicationLooper 上调用：`newPlayer()` 会从
+     * Capacitor 的桥线程进来，直接加会抛 IllegalStateException。不在同一条线程时 post 过去，
+     * 并用 runCatching 兜住「post 到时播放器已经 release」那一种情况 —— 诊断代码不该有
+     * 让播放失败的能力。
+     */
+    private fun attachTelemetry(target: ExoPlayer) {
+        AudioPipelineTelemetry.notePlayerCreated()
+        val attach = { target.addAnalyticsListener(AudioPipelineTelemetry.listener) }
+        if (Looper.myLooper() == target.applicationLooper) {
+            attach()
+        } else {
+            Handler(target.applicationLooper).post { runCatching(attach) }
+        }
     }
 
     /** 交叉淡化用的第二台播放器：与 ensurePlayer 同规格，但不接管 [player]，也不报名事件。 */

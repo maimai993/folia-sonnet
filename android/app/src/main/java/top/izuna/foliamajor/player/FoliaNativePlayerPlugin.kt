@@ -10,6 +10,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import android.os.Handler
 import android.os.Looper
 
+import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.EqSettings
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
 import top.izuna.foliamajor.settings.FoliaSettingsStore
@@ -697,6 +698,48 @@ class FoliaNativePlayerPlugin : Plugin() {
         // 引擎此刻装的是哪一首：Web 层判「点歌有没有真的换过去」只信这一个
         // （服务里的 cachedSongKey 会随它自己推的 metadata 变，当判据等于自证）。
         result.put("songKey", current.currentMediaId())
+        call.resolve(result)
+    }
+
+    /**
+     * 原生音频链路的诊断快照（开发者面板 Perf 页读它）。
+     *
+     * 与播放状态无关：没在播也能读（返回的是「上一次播放时的格式」与累计计数）。所以这里
+     * 不像 getSnapshot 那样在 player 为空时 reject —— 诊断最需要的恰恰是「播过之后」。
+     */
+    @PluginMethod
+    fun getAudioPipelineDiagnostics(call: PluginCall) {
+        val appContext = getContext().applicationContext ?: getContext()
+        val snapshot = AudioPipelineTelemetry.snapshot(appContext)
+        val result = JSObject()
+        result.put("players", snapshot.players)
+        result.put("inputSampleRate", snapshot.inputSampleRate)
+        result.put("inputChannels", snapshot.inputChannels)
+        result.put("inputPcm", snapshot.inputPcm)
+        result.put("inputMime", snapshot.inputMime)
+        result.put("inputBitrateKbps", snapshot.inputBitrateKbps)
+        result.put("inputCodecs", snapshot.inputCodecs)
+        result.put("trackSampleRate", snapshot.trackSampleRate)
+        result.put("trackChannels", snapshot.trackChannels)
+        result.put("trackPcm", snapshot.trackPcm)
+        result.put("trackBufferMs", snapshot.trackBufferMs)
+        result.put("trackTunneling", snapshot.trackTunneling)
+        result.put("trackOffload", snapshot.trackOffload)
+        result.put("underrunCount", snapshot.underrunCount.toDouble())
+        result.put("underrunBytes", snapshot.underrunBytes.toDouble())
+        result.put("sinkErrorCount", snapshot.sinkErrorCount.toDouble())
+        result.put("lastSinkError", snapshot.lastSinkError)
+        result.put("dspActive", snapshot.dspActive)
+        result.put("dspFrames", snapshot.dspFrames.toDouble())
+        result.put("dspPassthroughFrames", snapshot.dspPassthroughFrames.toDouble())
+        result.put("dspBypassCount", snapshot.dspBypassCount)
+        result.put("positionTicks", snapshot.positionTicks.toDouble())
+        result.put("cpuMs", snapshot.cpuMs.toDouble())
+        result.put("cpuCores", snapshot.cpuCores)
+        result.put("batteryPercent", snapshot.batteryPercent)
+        result.put("batteryCurrentMa", snapshot.batteryCurrentMa)
+        result.put("interactive", snapshot.interactive)
+        result.put("verdict", snapshot.verdict)
         call.resolve(result)
     }
 

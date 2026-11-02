@@ -154,6 +154,56 @@ export type NativeSpectrumFrame = {
     bands: number[];
 };
 
+/**
+ * 原生音频链路的诊断快照（P0 标尺）。
+ *
+ * 三段格式分开报，因为「音质变差」发生在这条链的不同位置时，听感几乎一样：
+ *
+ * - `input*` —— 解码器交出来的 PCM，也就是**进 DSP 之前**的格式。高解析度源被降位就发生在这里；
+ * - `track*` —— AudioTrack 实际配置，也就是**交给声卡**的格式。设备不支持源采样率时这里会看到别的值；
+ * - `dsp*` —— 处理器链在不在、跑过多少帧、被静默摘链几次。
+ *
+ * 字段名与原生 `AudioPipelineTelemetry.Snapshot` 一一对应，改一处两边都要改。
+ */
+export type NativeAudioPipelineDiagnostics = {
+    /** 活着的播放器数（主播放器 + 交叉淡化那一台）。 */
+    players: number;
+    inputSampleRate: number;
+    inputChannels: number;
+    /** `16-bit` / `24-bit` / `32-bit float` … */
+    inputPcm: string;
+    /** 容器里的编码，如 `audio/flac`。 */
+    inputMime: string;
+    inputBitrateKbps: number;
+    inputCodecs: string;
+    trackSampleRate: number;
+    trackChannels: number;
+    trackPcm: string;
+    /** AudioTrack 缓冲折算成的时间长度。 */
+    trackBufferMs: number;
+    trackTunneling: boolean;
+    trackOffload: boolean;
+    underrunCount: number;
+    underrunBytes: number;
+    sinkErrorCount: number;
+    lastSinkError: string;
+    dspActive: boolean;
+    dspFrames: number;
+    dspPassthroughFrames: number;
+    /** `onConfigure` 因为输入不是 16bit 而摘掉整条链的次数。>0 = 「有些歌没有 EQ」。 */
+    dspBypassCount: number;
+    /** 250ms 位置轮询累计拍数，用来估息屏/后台还在空转多少。 */
+    positionTicks: number;
+    /** 进程累计 CPU 时间（ms）。对比两次快照的差值就是这段时间真正吃掉的 CPU。 */
+    cpuMs: number;
+    cpuCores: number;
+    batteryPercent: number;
+    batteryCurrentMa: number;
+    interactive: boolean;
+    /** 一句话结论：降位 / 重采样 / 摘链 / 欠载发生在哪一段。 */
+    verdict: string;
+};
+
 interface FoliaNativePlayerPlugin {
     prepare(options: {
         url: string;
@@ -176,6 +226,11 @@ interface FoliaNativePlayerPlugin {
     setSpectrumEnabled(options: { enabled: boolean }): Promise<void>;
     getSpectrum(): Promise<NativeSpectrumFrame>;
     getSnapshot(): Promise<NativePlaybackSnapshot>;
+    /**
+     * 音频链路诊断快照。**与播放状态无关**：没在播也能读，返回的是「上一次播放的格式」
+     * 与本次会话的累计计数 —— 诊断最需要的恰恰是「播过之后」。
+     */
+    getAudioPipelineDiagnostics(): Promise<NativeAudioPipelineDiagnostics>;
     release(): Promise<void>;
     addListener(
         eventName: 'foliaNativePlayer',
@@ -212,6 +267,7 @@ export const nativePlayer = {
     setSpectrumEnabled: (enabled: boolean) => FoliaNativePlayer.setSpectrumEnabled({ enabled }),
     getSpectrum: () => FoliaNativePlayer.getSpectrum(),
     getSnapshot: () => FoliaNativePlayer.getSnapshot(),
+    getAudioPipelineDiagnostics: () => FoliaNativePlayer.getAudioPipelineDiagnostics(),
     release: () => FoliaNativePlayer.release(),
     addListener: (listener: (event: NativePlaybackEvent) => void) =>
         FoliaNativePlayer.addListener('foliaNativePlayer', listener),
