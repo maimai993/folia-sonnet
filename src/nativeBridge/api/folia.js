@@ -142,6 +142,14 @@ const EXPLORE_PATHS = new Set([
   '/top/playlist',
 ]);
 
+// 听歌档案那几条读接口的路径（见下面 --- 听歌档案 --- 那段）：与探索页一样留痕，
+// 页面空着的时候先看诊断里有没有这几条。
+const ARCHIVE_PATHS = new Set([
+  '/user/record',
+  '/listen/data/total',
+  '/listen/data/realtime/report',
+]);
+
 async function eapiJson(path, data, cookie) {
   const result = await eapiRequest(path, data || {}, cookie || '');
   const body = result?.body || {};
@@ -225,6 +233,25 @@ async function weapiJson(path, data, cookie) {
   const cookies = parseCookieString(cookie || '');
   const payload = Object.assign({}, data, { csrf_token: cookies.__csrf || '' });
   return await weapiRequest(path, payload, cookie || '');
+}
+
+/**
+ * 听歌档案那几条读接口的统一出口（见下面 `--- 听歌档案 ---` 那段）。
+ *
+ * 上游答 5xx 时不再往外抛，回桥自己的错误码：抛出去会被上面那层一律当成 network
+ * （「连不上，请稍后重试」），而这里其实是「上游没答对」，两者的排查方向完全不同。
+ */
+async function archiveAnswer(path, run) {
+  try {
+    return await run();
+  } catch (error) {
+    console.warn('[FoliaBridge] 听歌档案读取失败', path, error);
+    return {
+      __foliaBridgeError: 'NETWORK',
+      path,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function profileFromLoginInfo(info) {
@@ -1651,9 +1678,10 @@ export async function handleFoliaApiRequest(input) {
    *   /album/new           → albums
    *   /top/playlist        → playlists
    */
-  // 探索页这一组走的路由：留痕能看出哪一条被问过（页面空却一条都没有 = 请求根本没到桥）。
+  // 探索页与听歌档案这两组走的路由：留痕能看出哪一条被问过（页面空却一条都没有 = 请求根本没到桥）。
   // 顺带记 cookie 的长度：0 就是这次请求压根没带登录态，上游只会答 301。
-  if (EXPLORE_PATHS.has(path)) noteLibraryStep('netease', 'explore:route', { path, cookie: cookie ? cookie.length : 0 });
+  const routeTrace = EXPLORE_PATHS.has(path) ? 'explore:route' : ARCHIVE_PATHS.has(path) ? 'archive:route' : '';
+  if (routeTrace) noteLibraryStep('netease', routeTrace, { path, cookie: cookie ? cookie.length : 0 });
   if (path === '/homepage/block/page') {
     // 没有 cursor 时**绝不能带 `cursor: ''`**：首页区块这条带上空游标就答不出 blocks，
     // 探索页于是只剩每日推荐那一栏（看着就是「页面是空的」）。
@@ -1712,6 +1740,51 @@ export async function handleFoliaApiRequest(input) {
       offset: numberValue(params.get('offset')),
       total: true,
     }, cookie);
+  }
+
+  /*
+   * --- 听歌档案（#223）---
+   *
+   * 模组读「听歌档案」不走 omni 的 rpc，而是 `platform.raw` → `omni.requestProviderRaw` →
+   * 平台目录里的 raw 模块（`src/services/onlineMusic/<平台>/` 下那个），落到这个桥。
+   * 路径是上游模块名把下划线换成 `/`：`user_record` → `/user/record`、
+   * `listen_data_total` → `/listen/data/total`、`listen_data_realtime_report` →
+   * `/listen/data/realtime/report`。
+   *
+   * 这三条原先一条都没有，全部落到下面末尾的 `ROUTE_NOT_IMPLEMENTED`。上层见到
+   * `__foliaBridgeError` 就抛错，`raw` 那一层把它归成 network，模组界面于是整页显示
+   * 「无法连接，请稍后重试」—— 看着像断网，其实是桥里没这条路由。桌面端走 Electron
+   * 内置后端，这三条本来就有，所以只补桥这一侧。
+   *
+   * 上游包里这三条模块怎么问就怎么抄（`module/` 下的同名文件）：
+   *   user_record                  → weapi POST /api/v1/play/record                 { uid, type }
+   *   listen_data_total            → eapi  POST /api/content/activity/listen/data/total            {}
+   *   listen_data_realtime_report  → eapi  POST /api/content/activity/listen/data/realtime/report  { type }
+   * 加密方式照上游 `util/option.js` 的 `createOption(query, 'weapi')`：只有 `user_record` 显式写
+   * weapi，另外两条吃该包默认的 eapi（config 里 `encrypt: true`）。所以前者用 `readJson`
+   * （weapi + 未加密网关兜底，与 `/album/new` 那一组读接口一样），后者用 `eapiJson`
+   * （与 `/personalized`、`/fm_trash` 一样）。应答原样交回去：`allData`/`weekData`、
+   * `data.totalDuration`、`data.listenTimeDistributionBlock.playDuration` 都靠上游给。
+   * 其它 `listen_data_*` 模块这次不补：模组只用这三条。
+   */
+  if (path === '/user/record') {
+    // 听歌排行。`uid` 由 omni 的 selfParam 填当前登录账号；没给时回退到会话里的 userId
+    // （与 `/likelist` 那条约定的做法一致）。`type` 是上游的取值：1 最近一周，0 所有时间。
+    const uid = firstValue(params.get('uid'), body.uid) || (await requireLoginInfo(cookie))?.userId || '';
+    const type = numberValue(params.get('type'), body.type);
+    return await archiveAnswer(path, () => readJson('/api/v1/play/record', { uid, type }, cookie));
+  }
+  if (path === '/listen/data/total') {
+    // 总收听时长：上游不带参数，账号只从会话里认。
+    return await archiveAnswer(path, () => eapiJson('/api/content/activity/listen/data/total', {}, cookie));
+  }
+  if (path === '/listen/data/realtime/report') {
+    // 本周/本月收听时长。上游只认 `week` / `month`，缺省是 week。
+    const type = firstValue(params.get('type'), body.type, 'week');
+    return await archiveAnswer(
+      path,
+      () => eapiJson('/api/content/activity/listen/data/realtime/report', { type }, cookie),
+    );
   }
 
   return {
