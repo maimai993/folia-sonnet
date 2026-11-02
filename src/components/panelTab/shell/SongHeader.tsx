@@ -49,7 +49,7 @@ const COVER_TAB_MAX = '30rem';
  */
 const COVER_MAX = '100cqw';
 /** 矮而宽时封面挪到左边，边长压到这个尺寸：右边还要留出写歌名、摆按钮的地方。 */
-const COMPACT_COVER_MAX = 'min(36cqw, 10rem)';
+const COMPACT_COVER_MAX = 'min(26cqw, 8rem)';
 
 type SongHeaderProps = {
     /** The cover tab is open: the large form. */
