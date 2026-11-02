@@ -172,6 +172,20 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             avatarSource: { kind: 'select', options: ['builtin', 'cover', 'color', 'custom'], zh: '头像来源' },
         },
     },
+    kinetic: {
+        setter: 'handleSetKineticTuning',
+        params: {
+            entrance: { kind: 'select', options: ['pop', 'slide', 'drop', 'wipe'], zh: '入场动画' },
+            layout: { kind: 'select', options: ['cascade', 'grid', 'block'], zh: '布局模式' },
+            staggerScale: { kind: 'number', min: 0, max: 2, zh: '逐字错落倍率' },
+            activeScale: { kind: 'number', min: 1, max: 1.6, zh: '弹跳幅度' },
+            offsetAmplitude: { kind: 'number', min: 0, max: 48, zh: '错落位移幅度' },
+            showUnderline: { kind: 'boolean', zh: '下划线' },
+            showEcho: { kind: 'boolean', zh: '残影' },
+            showStroke: { kind: 'boolean', zh: '描边' },
+            cameraShake: { kind: 'number', min: 0, max: 2, zh: '镜头晃动强度' },
+        },
+    },
     tilt: {
         setter: 'handleSetTiltTuning',
         params: {
