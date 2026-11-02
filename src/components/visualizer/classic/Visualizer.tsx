@@ -14,6 +14,7 @@ import { resolveWordColor } from '../wordColoring';
 import { GlowWord } from '../GlowWord';
 import { getGlowWordLineContainerMotion, resolveGlowWordRenderProfile } from '../glowWordTiming';
 import { buildGlowWordLayoutVariants, glowWordBodyVariants } from '../glowWordVariants';
+import { resolveClassicFontDensity, resolveClassicRowGapPx, type ClassicFitWord } from './classicRowSpacing';
 
 // This mode is the most straightforward lyric pipeline in the folder.
 // First we ask runtime which line is active right now, then read renderHints from that line,
@@ -41,10 +42,28 @@ interface LineLayoutConfig {
     justifyContent: string;
     alignItems: string;
     perspective: number;
+    /** 折行后的行距（px）：放大、纵向偏移过的字会溢出词框，行距要把它补上，否则上下两行叠在一起。 */
+    rowGapPx: number;
+    /** 字号档位：1 = 原字号；很矮的屏上整块放不下时按档位降，见 classicRowSpacing 的 DENSITY_LADDER。 */
+    fontDensityScale: number;
 }
 
 const clampClassicBreathingFloatMultiplier = (value: number) => Math.min(2, Math.max(0, value));
 const clampClassicWordSpacing = (value: number) => Math.min(2, Math.max(0, value));
+
+// 折行容器两侧各 32px 的 padding、最宽 72rem；容器高度是 70vh。降档判定要用到它们。
+const CLASSIC_CONTAINER_PADDING_PX = 64;
+const CLASSIC_MAX_LINE_WIDTH_PX = 1152;
+const CLASSIC_CONTAINER_HEIGHT_RATIO = 0.7;
+
+/** marginRight 是 '0.8rem' 或 '12.3px'；按 16px 的 rem 换成 px，和 getPixelFontSize 的口径一致。 */
+const parseCssLengthPx = (value: string) => {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+        return 0;
+    }
+    return value.trim().endsWith('rem') ? parsed * 16 : parsed;
+};
 
 const resolveClassicTuning = (tuning?: ClassicTuning): ClassicTuning => ({
     enableWordRotation: tuning?.enableWordRotation ?? DEFAULT_CLASSIC_TUNING.enableWordRotation,
@@ -120,10 +139,15 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
     const [viewportWidth, setViewportWidth] = useState(() => (
         typeof window === 'undefined' ? 1200 : window.innerWidth
     ));
+    // 折行后整块的高度要跟视口高度比：很矮的屏上放不下就得降一档字号。
+    const [viewportHeight, setViewportHeight] = useState(() => (
+        typeof window === 'undefined' ? 800 : window.innerHeight
+    ));
 
     useEffect(() => {
         const handleResize = () => {
             setViewportWidth(window.innerWidth);
+            setViewportHeight(window.innerHeight);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
@@ -138,14 +162,13 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
         return buildDisplayWordsFromLayoutUnits(layoutUnits);
     }, [activeLine, resolvedClassicTuning.useLegacyLayout]);
 
-    const mainFontSize = `clamp(${(2.25 * lyricsFontScale).toFixed(3)}rem, ${(6 * lyricsFontScale).toFixed(3)}vw, ${(4.5 * lyricsFontScale).toFixed(3)}rem)`;
     const emptyFontSize = `clamp(${(1.5 * lyricsFontScale).toFixed(3)}rem, ${(3.5 * lyricsFontScale).toFixed(3)}vw, ${(2.25 * lyricsFontScale).toFixed(3)}rem)`;
     const { translationFontSize, upcomingFontSize } = resolveSubtitleFontSizes(lyricsFontScale);
 
     // Generate a stable random layout configuration for the current line.
     // Use the line start time as seed so the same lyric does not reshuffle every rerender.
     const { wordConfigs, lineConfig } = useMemo(() => {
-        if (!activeLine) return { wordConfigs: [], lineConfig: { justifyContent: 'center', alignItems: 'center', perspective: 1000 } };
+        if (!activeLine) return { wordConfigs: [], lineConfig: { justifyContent: 'center', alignItems: 'center', perspective: 1000, rowGapPx: 0, fontDensityScale: 1 } };
 
         const seed = activeLine.startTime;
         const intensity = theme.animationIntensity;
@@ -164,7 +187,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
 
         const isInterlude = activeLine.fullText === "......";
 
-        const lineConfig: LineLayoutConfig = {
+        const lineConfig: Omit<LineLayoutConfig, 'rowGapPx' | 'fontDensityScale'> = {
             justifyContent: isInterlude ? 'justify-center' : justifyOptions[Math.floor(seed % justifyOptions.length)], // deterministic random
             alignItems: alignOptions[Math.floor((seed * 2) % alignOptions.length)],
             perspective: isChaotic ? 500 + (seed % 500) : 1000,
@@ -263,8 +286,34 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
             };
         });
 
-        return { wordConfigs, lineConfig };
-    }, [activeLine, displayWords, resolvedClassicTuning.enableWordRotation, resolvedClassicTuning.useLegacyLayout, resolvedClassicTuning.wordSpacing, theme, lyricsFontScale, viewportWidth]);
+        // 窄屏幕上这一行会折成好几行：折行行距只看词框高（1.22em），而字会被 scale 放大、被 y 推开，
+        // 溢出词框的部分上下两行各摊一半就叠在一起了。行距按这一行真实的峰值缩放和最大偏移补上。
+        // 补完行距整块会变高，很矮的屏上首行会被顶出屏幕上沿，所以再按档位降字号重排，直到整块回到可用高度内。
+        const fitWords: ClassicFitWord[] = wordConfigs.map((config, index) => ({
+            width: wordWidths[index] ?? 0,
+            marginRight: parseCssLengthPx(config.marginRight),
+            scale: config.scale,
+            y: config.y,
+        }));
+        const fontDensityScale = resolveClassicFontDensity({
+            baseFontPx: pxFontSize,
+            availableWidth: Math.max(1, Math.min(viewportWidth - CLASSIC_CONTAINER_PADDING_PX, CLASSIC_MAX_LINE_WIDTH_PX)),
+            availableHeight: Math.max(1, viewportHeight * CLASSIC_CONTAINER_HEIGHT_RATIO - CLASSIC_CONTAINER_PADDING_PX),
+            words: fitWords,
+        });
+
+        return {
+            wordConfigs,
+            lineConfig: {
+                ...lineConfig,
+                rowGapPx: resolveClassicRowGapPx(pxFontSize * fontDensityScale, wordConfigs),
+                fontDensityScale,
+            },
+        };
+    }, [activeLine, displayWords, resolvedClassicTuning.enableWordRotation, resolvedClassicTuning.useLegacyLayout, resolvedClassicTuning.wordSpacing, theme, lyricsFontScale, viewportWidth, viewportHeight]);
+
+    // 字号档位：放得下时是 1，字号与改动前完全一致；只有很矮的屏上放不下才降。
+    const mainFontSize = `clamp(${(2.25 * lineConfig.fontDensityScale * lyricsFontScale).toFixed(3)}rem, ${(6 * lineConfig.fontDensityScale * lyricsFontScale).toFixed(3)}vw, ${(4.5 * lineConfig.fontDensityScale * lyricsFontScale).toFixed(3)}rem)`;
 
     const layoutVariants = buildGlowWordLayoutVariants(theme.animationIntensity, resolvedClassicTuning.enableWordRotation);
     const bodyVariants = glowWordBodyVariants;
@@ -323,7 +372,7 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                             variants={{ leave: (hidden: boolean) => (hidden ? TEXT_HIDDEN_EXIT : activeLineContainerMotion.exit) }}
                             exit="leave"
                             className={`flex flex-wrap w-full max-w-6xl content-center ${lineConfig.justifyContent} ${lineConfig.alignItems}`}
-                            style={{ perspective: `${lineConfig.perspective}px`, minHeight: '300px' }}
+                            style={{ perspective: `${lineConfig.perspective}px`, minHeight: '300px', rowGap: `${lineConfig.rowGapPx}px` }}
                         >
                             {displayWords.map((word, idx) => {
                                 const config = wordConfigs[idx] || { id: `fallback-${idx}`, x: 0, y: 0, rotate: 0, scale: 1, marginRight: '0.5rem', alignSelf: 'auto', passedRotate: 0 };
