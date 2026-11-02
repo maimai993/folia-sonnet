@@ -6313,6 +6313,8 @@ export default {
     }
   },
   "listeningArchive": {
+    "entryHint": "How long you have listened, what you played most, and when you listen",
+    "entryOpen": "Open",
     "title": "Listening archive",
     "close": "Close the listening archive",
     "loading": "Reading the archive…",

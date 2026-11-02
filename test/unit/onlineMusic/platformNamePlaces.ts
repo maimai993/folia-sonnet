@@ -29,8 +29,9 @@ export interface PlatformNamePlace {
 }
 
 export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
+    'src/services/listeningArchive/archiveRpc.ts': { n: { netease: 9 }, kind: 'stored', why: 'the mod protocol\'s own rpc names (netease.state/rank/report ...): a wire name on the mod side, not our platform rule' },
     // 模组自己的简介是第三方作者写的话，随包照抄进清单，不是我们这边按平台写的规则。
-    'src/mods/builtin/builtinMods.ts': { n: { netease: 1, qq: 1 }, kind: 'text', why: 'the bundled mods\' own descriptions, copied from their mod.json' },
+    'src/mods/builtin/builtinMods.ts': { n: { netease: 2, qq: 1 }, kind: 'text', why: 'the bundled mods\' own descriptions, copied from their mod.json' },
     'api-ts/lyric-proxy.ts': { n: { qq: 2, kugou: 2 }, kind: 'main', why: 'the hosts the lyric relay may reach; raised by the upstream merge 2026-10-17' },
     'api-ts/qq.ts': { n: { qq: 10 }, kind: 'main', why: 'the serverless entry of the QQ backend; the host finds it by path' },
     'api/lyric-proxy.js': { n: { qq: 2, kugou: 2 }, kind: 'main', why: 'the built copy of api-ts/lyric-proxy.ts; rebuilt 2026-10-25 to match its source again (#58)' },

@@ -6314,6 +6314,8 @@ export default {
     }
   },
   "listeningArchive": {
+    "entryHint": "看了多久、听得最多的是哪些、什么时候听",
+    "entryOpen": "打开",
     "title": "听歌档案",
     "close": "关闭听歌档案",
     "loading": "正在读取档案…",
