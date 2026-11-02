@@ -11,6 +11,7 @@ import {
     type ModRecordQuery,
 } from './modAnalytics';
 import { useListeningArchiveSettingsStore } from '../../stores/useListeningArchiveSettingsStore';
+import { neteaseArchiveRpc } from '../onlineMusic/netease/neteaseArchiveRpc';
 
 // src/services/listeningArchive/archiveRpc.ts
 // 「听歌档案」模组在 `folium.rpc.call` 里问的那些方法，安卓端的回答（接线见 src/mods/builtin/builtinRpc.ts）。
@@ -22,10 +23,11 @@ import { useListeningArchiveSettingsStore } from '../../stores/useListeningArchi
 // 分工是固定的：**写入只有原生采集器一处**。所以 `archive.record`（模组自己的采样回调）只接住不回话，
 // 不落库；两个采集器各写一份会让每次播放记两次。
 //
-// 方法口径与主进程那版逐条对齐（名字、参数、返回字段），差别只在这里做不到的三处：
+// 方法口径与主进程那版逐条对齐（名字、参数、返回字段），差别只在这里做不到的两处：
 //   - `archive.artworks` 的封面直接来自归档行的 coverUrl，不再有主进程的封面缓存目录；
-//   - `archive.export` 没有「文档目录」可写，走浏览器下载，返回的文件名就是给界面看的那一段；
-//   - 网易云云端那一组（`netease.*`）没有主进程的会话缓存，明确回一句不支持，不假装有。
+//   - `archive.export` 没有「文档目录」可写，走浏览器下载，返回的文件名就是给界面看的那一段。
+// 云端档案那一组（账号、排行、报告、时长字段）不写在这里：它按平台分目录，规则和状态都在那个平台的
+// 目录里，这一张表只在末尾把它们合进来（见 `listeningArchiveRpc`）。
 
 /** 读一次库的结果留这么久：模组界面在换范围、翻页、点刷新时会连着问好几次。 */
 const MEMO_MS = 5000;
@@ -120,10 +122,10 @@ const readBackupRows = (text: string): unknown[] => {
 };
 
 /**
- * 这些方法就一整张表：模组的 `folium.rpc.call(name, ...args)` 进来，这里按名字分派。
+ * 本机归档那几行：模组的 `folium.rpc.call(name, ...args)` 进来，这里按名字分派。
  * 抛出去的句子会原样出现在模组界面上，所以用中文写清楚「为什么不行」。
  */
-export const listeningArchiveRpc: Readonly<Record<string, (args: readonly unknown[]) => unknown>> = {
+const localArchiveRpc: Readonly<Record<string, (args: readonly unknown[]) => unknown>> = {
     'archive.query': async ([range]) => {
         const records = await loadRecords();
         return queryArchive(records, readRange(range), records.length);
@@ -189,18 +191,14 @@ export const listeningArchiveRpc: Readonly<Record<string, (args: readonly unknow
         }
         return { added: plays.length, total: known.size + plays.length };
     },
-    /*
-     * 网易云云端那一组：主进程那边是「登录态的镜像 + 报告缓存」。安卓端没有那条通道，
-     * 明确回一句不支持，模组的云端页签会把它显示出来，本机页签不受影响。
-     */
-    'netease.state': rejectCloud,
-    'netease.invalidate': rejectCloud,
-    'netease.configure': rejectCloud,
-    'netease.account': rejectCloud,
-    'netease.rank': rejectCloud,
-    'netease.report': rejectCloud,
 };
 
-function rejectCloud(): never {
-    throw new Error('安卓端暂不支持网易云云端档案（需要桌面端的主进程通道），本机统计照常可用');
-}
+/*
+ * 模组看到的一整张表：本机归档那几行，加上平台目录给的那几行（云端档案的账号、排行、报告、时长字段）。
+ * 云端那一组按平台分目录：规则、状态和报错文案都在平台自己的目录里（src/services/onlineMusic 下各平台的
+ * `*ArchiveRpc.ts`），这里只做合并，不写任何平台规则。
+ */
+export const listeningArchiveRpc: Readonly<Record<string, (args: readonly unknown[]) => unknown>> = {
+    ...localArchiveRpc,
+    ...neteaseArchiveRpc,
+};

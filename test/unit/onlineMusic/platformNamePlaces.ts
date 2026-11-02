@@ -29,7 +29,7 @@ export interface PlatformNamePlace {
 }
 
 export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
-    'src/services/listeningArchive/archiveRpc.ts': { n: { netease: 9 }, kind: 'stored', why: 'the mod protocol\'s own rpc names (netease.state/rank/report ...): a wire name on the mod side, not our platform rule' },
+    'src/services/listeningArchive/archiveRpc.ts': { n: { netease: 2 }, kind: 'stored', why: 'the mod protocol\'s own rpc names: the platform\'s rows are composed into the mod\'s table here (the rules and the state live in src/services/onlineMusic/netease/neteaseArchiveRpc.ts)' },
     // 模组自己的简介是第三方作者写的话，随包照抄进清单，不是我们这边按平台写的规则。
     'src/mods/builtin/builtinMods.ts': { n: { netease: 2, qq: 1 }, kind: 'text', why: 'the bundled mods\' own descriptions, copied from their mod.json' },
     'api-ts/lyric-proxy.ts': { n: { qq: 2, kugou: 2 }, kind: 'main', why: 'the hosts the lyric relay may reach; raised by the upstream merge 2026-10-17' },

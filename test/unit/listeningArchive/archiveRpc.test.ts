@@ -8,7 +8,8 @@ import type { ArchivePlay } from '../../../src/services/listeningArchive/types';
 
 // test/unit/listeningArchive/archiveRpc.test.ts
 // 模组那套 rpc 在渲染进程里的回答：查询 / 分页 / 轨迹读到本机归档；导入写进来；导出在无 DOM 的环境里明确报错；
-// 模组自己的采样写入是空操作（写入只有原生采集器一处）；`folium.rpc.call` 的路由先问内置表。
+// 模组自己的采样写入是空操作（写入只有原生采集器一处）；`folium.rpc.call` 的路由先问内置表；
+// 云端档案那一组由平台目录提供，这里只验它确实合进了同一张表（细节见 neteaseArchiveRpc.test.ts）。
 
 const at = (year: number, month: number, day: number, hour = 0, minute = 0): number => (
     new Date(year, month - 1, day, hour, minute, 0, 0).getTime()
@@ -129,8 +130,10 @@ describe('archiveRpc', () => {
         await expect(call('archive.export')).rejects.toThrow('当前环境无法导出文件');
     });
 
-    it('云端那一组明确回不支持', async () => {
-        await expect(call('netease.state')).rejects.toThrow('安卓端暂不支持网易云云端档案');
+    it('云端那一组由平台目录给表，合进同一张表（规则不写在共用文件里）', async () => {
+        await call('netease.invalidate');
+        const state = await call<{ config: { endpoint: string; accountKey: string }; loggedIn: boolean; reports: Record<string, unknown> }>('netease.state');
+        expect(state).toMatchObject({ config: { endpoint: 'Folium platform.raw', accountKey: '' }, loggedIn: false, reports: {} });
     });
 
     it('参数不对时抛中文原因，不返回半个结果', async () => {
