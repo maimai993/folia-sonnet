@@ -14,6 +14,7 @@ import { runsOnWindows } from '../../../../utils/platform';
 import { Button, Group, Reveal, Row, Segmented, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
 import AndroidAutoLandscapeSetting from '../AndroidAutoLandscapeSetting';
+import AndroidKeepAliveSetting from '../AndroidKeepAliveSetting';
 import { useSettingsPage } from './settingsPageContext';
 import { TextField } from '@/components/ui';
 
@@ -81,6 +82,17 @@ const O = {
      */
     autoLandscapeForVisualizer: option(BEHAVIOR, 'autoLandscapeForVisualizer', 'options.autoLandscapeForVisualizer', {
         noteKey: 'options.autoLandscapeForVisualizerDesc',
+        available: isCapacitorAndroid,
+    }),
+    /*
+     * 后台运行（保活）：一行业务体检 + 两个跳转按钮，不是开关。
+     *
+     * 它读的是系统的真实状态（电池优化白名单），并把用户送到各家 ROM 的自启动 / 耗电页。
+     * 应用侧没有任何办法自己拿到这些授权 —— 所以这一行不承诺「打开就不断」，只负责
+     * 把路铺到用户面前，并如实显示现在过没过。
+     */
+    keepAlive: option(BEHAVIOR, 'keepAlive', 'options.keepAlive', {
+        noteKey: 'options.keepAliveDesc',
         available: isCapacitorAndroid,
     }),
     modelBeatThis: option(MODELS, 'analysisModelBeatThis', 'options.analysisModelBeatThis', { noteKey: 'options.analysisModelBeatThisDesc', available: () => ANALYSIS_MODELS_ENABLED }),
@@ -286,6 +298,8 @@ const PlaybackPage: React.FC = () => {
                 )}
                 {/* 组件内部自己判端：非安卓返回 null。 */}
                 <AndroidAutoLandscapeSetting def={O.autoLandscapeForVisualizer} />
+                {/* 保活体检：只在安卓原生壳里出现，读不到状态时整行不画。 */}
+                <AndroidKeepAliveSetting def={O.keepAlive} />
             </Group>
 
             {/* The whole group answers to ANALYSIS_MODELS_ENABLED, same as the rows inside it say:

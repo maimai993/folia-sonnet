@@ -551,6 +551,32 @@ class FoliaPlaybackService : android.app.Service() {
         return null
     }
 
+    /**
+     * 用户从最近任务里把本应用划掉了。
+     *
+     * 这里**不停止播放** —— 音乐类应用的惯例是「划掉界面 ≠ 停止播放」，通知栏那颗
+     * 播放键还留着，用户随时能回来。但划掉之后各家 ROM 的处理并不一样：
+     * AOSP 只是把 Activity 收掉，前台服务照跑；一部分 ROM（尤其是把「清理后台」
+     * 做成白名单的那几家）会连服务一起清，通知跟着消失 —— 用户看到的就是
+     * 「划一下歌就没了」。
+     *
+     * 能做的只有把自己重新声明成前台服务，让系统知道这颗进程还有活要干：
+     *   · 把前台状态再兑现一次（notification 在这里被摘掉的 ROM 上会被重新贴上）；
+     *   · 重排心跳巡检 —— 巡检决定「通知该不该撤」，被系统打断的循环要接回去。
+     *
+     * 真正的保活仍然要靠用户在系统里给白名单（见 keepalive/KeepAlive 与设置页引导）：
+     * 应用侧没有任何办法绕过 ROM 的省电策略，能做的只是不要自己先放弃。
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "task removed; keeping the foreground service alive")
+        if (running) {
+            promoteToForeground()
+            mainHandler.removeCallbacks(heartbeatTick)
+            mainHandler.postDelayed(heartbeatTick, WALLPAPER_HEARTBEAT_TICK_MS)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         running = false
         if (snapshotSource == this) {
