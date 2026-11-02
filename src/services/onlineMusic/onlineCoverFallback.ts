@@ -85,6 +85,7 @@ const pendingCovers = new Map<string, Promise<string>>();
 onFeiniuResourceSessionChange(() => {
     for (const proxied of proxiedCovers.values()) void unregisterNativeRemoteAudioUrl(proxied);
     proxiedCovers.clear();
+    proxiedCollectionCovers.clear();
     pendingCovers.clear();
 });
 
@@ -133,6 +134,49 @@ const proxyFeiniuCoverUrl = (url: string, session: FeiniuResourceSession): Promi
  * 并广播，界面下一次渲染就是代理地址（歌曲本身仍保留原地址）。渲染路径不能 await（那会把界面卡住），
  * 列表出口那一侧（见 {@link backfillSongCovers}）是 await 的，所以首屏通常直接就是好的。
  */
+/** 集合（歌单 / 专辑）封面的代理缓存：与歌曲共用同一套换址逻辑，只是没有 song 可写回。 */
+const proxiedCollectionCovers = new Map<string, string>();
+
+/**
+ * 集合封面的代理地址。与 {@link resolveProxiedSongCover} 同样的三条规矩（缓存、串行、广播），
+ * 但集合没有可写回的对象，所以这里只回缓存：命中的下一次渲染就拿到代理地址，没命中先给原地
+ * 址并排一次换址。
+ */
+export const resolveProxiedCollectionCover = (coverUrl: string | null | undefined): string => {
+    const url = String(coverUrl ?? '').trim();
+    const session = getFeiniuResourceSession();
+    if (!url || !session || !isFeiniuCoverUrl(url, session)) return url;
+    const cached = proxiedCollectionCovers.get(url);
+    if (cached !== undefined) return cached;
+    void proxyFeiniuCoverUrl(url, session).then((proxied) => {
+        if (proxied === url || getFeiniuResourceSession() !== session) return;
+        proxiedCollectionCovers.set(url, proxied);
+    }).catch(() => {
+        // 换不到就继续用原地址：下一次渲染会再试一次。
+    });
+    return url;
+};
+
+/**
+ * 出列表时预热一批集合封面（{@link resolveProxiedCollectionCover} 的 await 版）：
+ * 等前 {@link PROXY_PER_PAGE_LIMIT} 张换好，首屏直接就有图，不必等异步那一趟回来。
+ */
+export const prewarmCollectionCovers = async (
+    covers: ReadonlyArray<string | null | undefined>,
+): Promise<void> => {
+    const session = getFeiniuResourceSession();
+    if (!session) return;
+    const targets = covers
+        .map(cover => String(cover ?? '').trim())
+        .filter(url => url && isFeiniuCoverUrl(url, session) && !proxiedCollectionCovers.has(url))
+        .slice(0, PROXY_PER_PAGE_LIMIT);
+    await Promise.all(targets.map(url => proxyFeiniuCoverUrl(url, session).then((proxied) => {
+        if (proxied !== url && getFeiniuResourceSession() === session) {
+            proxiedCollectionCovers.set(url, proxied);
+        }
+    }).catch(() => undefined)));
+};
+
 export const resolveProxiedSongCover = (song: SongResult, coverUrl: string): string => {
     const session = coverSession(song, coverUrl);
     if (!session) return coverUrl;
