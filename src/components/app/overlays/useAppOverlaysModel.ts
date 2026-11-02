@@ -5,6 +5,7 @@ import { currentTime, lyricCurrentTime } from '../../../stores/motionSignals';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { useListeningArchiveStore } from '../listeningArchive/listeningArchiveStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -42,6 +43,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
     const isDevDebugOverlayVisible = useAppChromeStore(state => state.isDevDebugOverlayVisible);
     const isMemoryMonitorVisible = useAppChromeStore(state => state.isMemoryMonitorVisible);
     const isSearchOpen = useSearchNavigationStore(state => state.isSearchOpen);
+    const isListeningArchiveOpen = useListeningArchiveStore(state => state.isOpen);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const stageTrackPillMode = useStageSettingsStore(state => state.stageTrackPillMode);
     const stageTrackPillTimeoutSec = useStageSettingsStore(state => state.stageTrackPillTimeoutSec);
@@ -89,6 +91,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         ...deps,
         currentView,
         isSearchOpen,
+        isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,
         isMemoryMonitorVisible,
@@ -127,6 +130,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         cardPositioning,
         currentView,
         isSearchOpen,
+        isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,
         isMemoryMonitorVisible,

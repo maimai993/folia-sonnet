@@ -71,6 +71,8 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "folia_keep_screen_awake",
   "folia_keep_screen_on_while_playing",
   "folia_last_seen_ponder_onboarding_version",
+  "folia_listening_archive_enabled",
+  "folia_listening_archive_low_performance",
   "folia_lyrics_flat",
   "folia_media_cache_limit_gb",
   "folia_mix_with_other_audio",

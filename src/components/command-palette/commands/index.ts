@@ -5,6 +5,7 @@ import { gridCommands } from './gridCommands';
 import { directoryCommands } from './directoryCommands';
 import { artistCommands } from './artistCommands';
 import { searchCommands } from './searchCommands';
+import { archiveCommands } from './archiveCommands';
 import { playbackCommands } from './playbackCommands';
 import { settingsCommands } from './settingsCommands';
 import { navigationCommands } from './navigationCommands';
@@ -82,6 +83,7 @@ export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecu
     ...directoryCommands,
     ...artistCommands,
     ...searchCommands,
+    ...archiveCommands,
     ...playbackCommands,
     ...settingsCommands,
     ...navigationCommands,

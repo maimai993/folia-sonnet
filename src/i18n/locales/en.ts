@@ -642,6 +642,7 @@ export default {
       "search-local": { "title": "Search local songs", "description": "Search local library" },
       "search-navidrome": { "title": "Search Navidrome songs", "description": "Search Navidrome library" },
       "search-netease": { "title": "Search NetEase songs", "description": "Search NetEase Cloud Music" },
+      "open-listening-archive": { "title": "Open the listening archive", "description": "See how long you have listened, what you played most, and when you listen" },
       "queue": { "title": "Queue", "description": "Search the queue; use @ for metadata and -- for batch actions" },
       "playback-volume": { "title": "Volume", "description": "Adjust playback volume" },
       "playback-fm-mode": { "title": "Personal FM mode", "description": "Switch the Personal FM mode or scene" },
@@ -6308,6 +6309,101 @@ export default {
         "switches": "For a local file there are three switches under the cover: “Cover”, “Metadata” and “Lyrics”. A lit one takes that part from the chosen row; an unlit one keeps what the file has.",
         "noMatch": "“Don't use online metadata” at the bottom left makes the song use only what the file has."
       }
+    }
+  },
+  "listeningArchive": {
+    "title": "Listening archive",
+    "close": "Close the listening archive",
+    "loading": "Reading the archive…",
+    "recordedCount_one": "{{count}} record",
+    "recordedCount_other": "{{count}} records",
+    "playsCount_one": "{{count}} play",
+    "playsCount_other": "{{count}} plays",
+    "empty": "Nothing recorded yet. Play something for a while and it will show up here.",
+    "duration": {
+      "hoursMinutes": "{{hours}} h {{minutes}} min",
+      "minutes": "{{minutes}} min",
+      "seconds": "{{seconds}} s"
+    },
+    "tabs": {
+      "label": "Parts of the archive",
+      "rankings": "Rankings",
+      "timeline": "Listening time",
+      "song": "One song",
+      "settings": "Settings"
+    },
+    "ranges": {
+      "week": "Last 7 days",
+      "month": "Last 30 days",
+      "quarter": "Last 90 days",
+      "year": "Last year",
+      "all": "All time"
+    },
+    "rankings": {
+      "kindSong": "Songs",
+      "kindArtist": "Artists",
+      "kindAlbum": "Albums",
+      "sortPlays": "By plays",
+      "sortSeconds": "By time",
+      "sortNewest": "Newly met",
+      "rangeName": "Time range",
+      "searchPlaceholder": "Search the rankings",
+      "noMatches": "Nothing matches that search in this range",
+      "newBadge": "new",
+      "zoomCover": "Show the cover larger",
+      "openTrajectory": "See this song over time"
+    },
+    "timeline": {
+      "granularities": { "day": "Day", "week": "Week", "month": "Month", "year": "Year" },
+      "weekdays": { "mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun" },
+      "cumulativeTitle": "Hours listened, in total",
+      "empty": "No listening time in this range",
+      "heatmapTitle": "When you listen",
+      "heatmapHint": "Monday first, one cell per hour; the deeper the colour, the more time",
+      "heatmapCellLabel": "{{weekday}} {{hour}}:00 · {{duration}}",
+      "songCount_one": "{{count}} song",
+      "songCount_other": "{{count}} songs",
+      "segmentEmpty": "Nothing recorded in this stretch"
+    },
+    "song": {
+      "noData": "No song has been listened to yet",
+      "playsAndTime": "{{plays}} · {{duration}}",
+      "firstHeard": "First heard {{date}}",
+      "lastHeard": "Last heard {{date}}",
+      "monthlyTitle": "Monthly rank, last 24 months",
+      "monthlyEmpty": "Not on any monthly chart yet",
+      "unranked": "not charted",
+      "rankLabel": "#{{rank}}",
+      "weekdayTitle": "By weekday",
+      "hourlyTitle": "By hour",
+      "daysTitle": "Day by day"
+    },
+    "settings": {
+      "recorded_one": "{{count}} play recorded on this device",
+      "recorded_other": "{{count}} plays recorded on this device",
+      "enabled": "Record listening",
+      "enabledNote": "Off stops new plays from being recorded. Everything already here stays.",
+      "lowPerformance": "Low performance mode",
+      "lowPerformanceNote": "Turns off the chart animations. Turn it on if scrolling this page stutters.",
+      "export": "Back up the archive",
+      "exportNote": "Writes a JSON file you can keep, or carry to another device.",
+      "exportAction": "Export",
+      "exported": "Backup saved",
+      "exportFailed": "The backup could not be exported",
+      "import": "Restore a backup",
+      "importNote": "Plays already on this device are skipped, so importing the same file twice changes nothing.",
+      "importAction": "Import",
+      "imported": "{{added}} added, {{skipped}} already here",
+      "importFailed": "That file could not be read as a backup",
+      "clear": "Clear the archive",
+      "clearNote": "Deletes every recorded play on this device. This cannot be undone.",
+      "clearAction": "Clear",
+      "cleared": "The archive is empty",
+      "clearFailed": "The archive could not be cleared",
+      "clearConfirmTitle": "Clear the listening archive?",
+      "clearConfirmDescription": "Every recorded play is deleted from this device; a backup is the only way back.",
+      "clearConfirmAction": "Clear everything",
+      "cancel": "Cancel"
     }
   },
   "testBuild": {
