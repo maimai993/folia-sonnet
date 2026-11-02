@@ -390,6 +390,7 @@ object AudioPipelineTelemetry {
     }
 
     private fun pcmLabel(encoding: Int): String = when (encoding) {
+        C.ENCODING_DEFAULT -> "auto"
         C.ENCODING_PCM_8BIT -> "8-bit"
         C.ENCODING_PCM_16BIT -> "16-bit"
         C.ENCODING_PCM_24BIT -> "24-bit"

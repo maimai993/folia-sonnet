@@ -11,7 +11,7 @@ import {
 } from '../types/visualizerModes';
 import type { StoredTuning } from '../components/visualizer/tuningDefinition';
 import { resolveSmartBeatSettings, type SmartBeatPatch } from '../services/beatFx/smartBeatSettings';
-import { parseVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
+import { resolveInitialVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
 import { DEFAULT_LYRIC_RENDER_QUALITY, LYRIC_RENDER_QUALITY_STORAGE_KEY, normalizeLyricRenderQuality } from '../utils/lyricRenderQuality';
 
 import { getStoredString } from './storagePrimitives';
@@ -403,7 +403,12 @@ export const readStoredVisualizerFrameRate = (): VisualizerFrameRate => {
         return 'off';
     }
 
-    return parseVisualizerFrameRate(localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
+    const stored = localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY);
+    /*
+     * 从没设置过：手机给 60，桌面不限（判据在 frameRateLimiter 里，与启动装限帧器
+     * 用的是同一个函数 —— 两边各写一份的话，会出现「启动不限、设置页显示 60」）。
+     */
+    return resolveInitialVisualizerFrameRate(stored);
 };
 
 export const readStoredVisualizerBackgroundMode = (): VisualizerBackgroundMode | null => {
