@@ -28,7 +28,7 @@ import {
 } from './feiniuTransport';
 import { feiniuServerUrlForLoginInput } from './feiniuLoginInput';
 import { feiniuPage, normalizeFeiniuCollection, normalizeFeiniuSong, normalizeFeiniuUser } from './feiniuNormalize';
-import { backfillSongCovers } from './onlineCoverFallback';
+import { backfillSongCovers, prewarmCollectionCovers, resolveProxiedCollectionCover } from './onlineCoverFallback';
 import { feiniuAlbumPage, feiniuArtistPage, feiniuCatalog, feiniuTrackDetail } from './feiniuCatalog';
 import { feiniuLibrary, feiniuPlayHistory } from './feiniuLibrary';
 import { feiniuMutations, reportFeiniuPlayback } from './feiniuMutations';
@@ -205,7 +205,11 @@ export const feiniuProvider: OnlineMusicProvider = {
         async getRecommendedCollections(limit) {
             try {
                 const data = await feiniuRequest<unknown>('/playlist/list', { query: { page: 1, size: limit } });
-                return pickFeiniuList(data).map(item => normalizeFeiniuCollection(item, 'playlist'));
+                const items = pickFeiniuList(data).map(item => normalizeFeiniuCollection(item, 'playlist'));
+                // 电台页签的卡片走这条出口（feiniuLibrary 那两处修不到它，issue #204 的漏网）：
+                // 与歌单 / 专辑列表同一趟 —— 先预热成代理地址，渲染层兜底不广播，靠出口首屏就有图。
+                await prewarmCollectionCovers(items.map(item => item.coverUrl));
+                return items.map(item => ({ ...item, coverUrl: resolveProxiedCollectionCover(item.coverUrl) }));
             } catch {
                 return [] as ProviderCollection[];
             }
