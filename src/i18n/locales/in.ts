@@ -1091,6 +1091,7 @@ export default {
     "consoleProfileRenameSave": "Simpan nama",
     "consoleProfileRenameCancel": "Batal",
     "consoleProfileNamePlaceholder": "Nama profil",
+    "consoleProfileActions": "Tindakan profil",
     "consoleProfileDelete": "Hapus profil ini",
     "consoleProfileDeleteTitle": "Hapus “{{name}}”?",
     "consoleProfileDeleteDescription": "Setelan EQ, kompresi dan ruangnya ikut terhapus; profil lain tidak berubah.",

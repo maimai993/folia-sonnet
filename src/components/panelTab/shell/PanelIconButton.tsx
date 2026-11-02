@@ -28,7 +28,7 @@ type PanelIconButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 
     children: React.ReactNode;
 };
 
-export const PanelIconButton: React.FC<PanelIconButtonProps> = ({
+export const PanelIconButton = React.forwardRef<HTMLButtonElement, PanelIconButtonProps>(({
     label,
     size = 'm',
     filled,
@@ -38,10 +38,11 @@ export const PanelIconButton: React.FC<PanelIconButtonProps> = ({
     onClick,
     children,
     ...button
-}) => (
+}, ref) => (
     <Tooltip text={label} className={`inline-flex shrink-0${className ? ` ${className}` : ''}`}>
         <Button
             {...button}
+            ref={ref}
             aria-label={label}
             aria-pressed={pressed}
             aria-disabled={disabled || undefined}
@@ -53,6 +54,8 @@ export const PanelIconButton: React.FC<PanelIconButtonProps> = ({
             {children}
         </Button>
     </Tooltip>
-);
+));
+
+PanelIconButton.displayName = 'PanelIconButton';
 
 export default PanelIconButton;

@@ -14,8 +14,9 @@ import { AUDIO_SOUND_PRESETS, AUDIO_SOUND_PRESET_IDS } from '../../utils/audioPr
 import { createNeutralAudioEffects, type AudioEffectId, type AudioEffectSettings } from '../../utils/audioEffects';
 import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerModCurve';
 import Sheet from '../shared/Sheet';
-import { Segmented, Toggle } from '../modal/settings/kit';
+import { Toggle } from '../modal/settings/kit';
 import ModCurveNotice from './equalizer/ModCurveNotice';
+import ConsoleTabs from './console/ConsoleTabs';
 import ProfileBar from './console/ProfileBar';
 import EqualizerPane from './console/EqualizerPane';
 import CompressorPane from './console/CompressorPane';
@@ -211,25 +212,24 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
             {/* 这一层排窗口里的内容（至少和窗口一样高，多出的高度给推子），也让这扇对话框自己能被思索命中。
                 标记仍叫 audio-equalizer：思索（ponder）的悬停目标按这个名字找，改名会让引导指不到窗口。 */}
             <div data-ponder="audio-equalizer" className="flex min-h-full flex-col">
-                {/* 页签常驻在顶部：五页之间来回切是这扇窗口最常见的动作。底色与窗口一致，
-                    滚动时下面的内容不会从页签底下透出来。「耳机方案」一行也在这里，切页签
-                    不会把它滚走；它的高度固定，方案多少套都不改变页签的位置。 */}
-                <div className="sticky top-0 z-10 -mx-6 -mt-3 mb-1 bg-[var(--st-win)] px-6 pb-2 pt-3">
+                {/* 页签与方案都不吸顶，跟正文一起排、一起滚。窗口里没有常驻的横条，
+                    也就不会有它盖住内容、或者底色和窗口对不上时透出正文的问题。
+
+                    顺序按「先说明、再选页、最后细调」：方案条在最上（换耳机是整窗级的动作），
+                    页签紧随其后，两者之间只留间距、不叠底色，看着是一层而不是两层。 */}
+                <div className="flex flex-col gap-2 pb-1 pt-2">
                     <ProfileBar isDaylight={isDaylight} />
-                    <div className="mt-2">
-                        <Segmented
-                            value={tab}
-                            options={[
-                                { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
-                                { value: 'compressor', label: t('ui.consoleTabCompressor') },
-                                { value: 'reverb', label: t('ui.consoleTabReverb') },
-                                { value: 'postEq', label: t('ui.consoleTabPostEq') },
-                                { value: 'saturation', label: t('ui.consoleTabSaturation') },
-                            ]}
-                            onChange={setTab}
-                            fill
-                        />
-                    </div>
+                    <ConsoleTabs
+                        tab={tab}
+                        options={[
+                            { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
+                            { value: 'compressor', label: t('ui.consoleTabCompressor') },
+                            { value: 'reverb', label: t('ui.consoleTabReverb') },
+                            { value: 'postEq', label: t('ui.consoleTabPostEq') },
+                            { value: 'saturation', label: t('ui.consoleTabSaturation') },
+                        ]}
+                        onTabChange={value => setTab(value as typeof tab)}
+                    />
                 </div>
 
                 {tab === 'equalizer' && <ModCurveNotice />}
