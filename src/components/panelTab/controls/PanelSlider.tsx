@@ -6,7 +6,15 @@ import React, { useRef, useState } from 'react';
 // calls onCommit, which may come more than once for one hold. The thumb follows the pointer with no delay and grows a little while it is held.
 // A press on the thumb that does not move it sends no value.
 
-const THUMB_PX = 16;
+/**
+ * 圆点的直径。样式里写的是 `w-4`（Tailwind 的 1rem），**跟着根字号走**：界面缩放把根字号调大，
+ * 圆点就比 16px 宽。所以位移、取值与命中判定都按运行时的 1rem 算，不再写死像素（issue #203）。
+ */
+const THUMB_REM = 1;
+const thumbPx = () => {
+    const root = getComputedStyle(document.documentElement).fontSize;
+    return (Number.parseFloat(root) || 16) * THUMB_REM;
+};
 /** How far an arrow key moves the thumb. */
 const KEY_STEP = 0.05;
 
@@ -35,7 +43,8 @@ export const PanelSlider: React.FC<PanelSliderProps> = ({ value, onPreview, onCo
     /** The value for a thumb whose centre is at `centreX`, in whole hundredths. */
     const valueAt = (centreX: number) => {
         const rect = trackRef.current!.getBoundingClientRect();
-        return Math.round(clampUnit((centreX - rect.left - THUMB_PX / 2) / (rect.width - THUMB_PX)) * 100) / 100;
+        const thumb = thumbPx();
+        return Math.round(clampUnit((centreX - rect.left - thumb / 2) / (rect.width - thumb)) * 100) / 100;
     };
 
     const release = () => {
@@ -75,10 +84,11 @@ export const PanelSlider: React.FC<PanelSliderProps> = ({ value, onPreview, onCo
                 setIsHeld(true);
                 lastXRef.current = event.clientX;
                 const rect = event.currentTarget.getBoundingClientRect();
-                const fromCentre = event.clientX - (rect.left + THUMB_PX / 2 + shown * (rect.width - THUMB_PX));
+                const thumb = thumbPx();
+                const fromCentre = event.clientX - (rect.left + thumb / 2 + shown * (rect.width - thumb));
                 // A press on the thumb takes it where it is and changes nothing until it is moved; a
                 // press on the track brings the thumb's centre there.
-                if (Math.abs(fromCentre) <= THUMB_PX / 2) {
+                if (Math.abs(fromCentre) <= thumb / 2) {
                     grabRef.current = fromCentre;
                     return;
                 }
@@ -106,7 +116,7 @@ export const PanelSlider: React.FC<PanelSliderProps> = ({ value, onPreview, onCo
             </span>
             <span
                 className="st-t-fast absolute top-1 h-4 w-4 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.35)] transition-transform"
-                style={{ left: `calc(${shown} * (100% - ${THUMB_PX}px))`, transform: isHeld ? 'scale(1.15)' : undefined }}
+                style={{ left: `calc(${shown} * (100% - ${THUMB_REM}rem))`, transform: isHeld ? 'scale(1.15)' : undefined }}
             />
         </div>
     );
