@@ -72,15 +72,15 @@ android {
     buildTypes {
         release {
             /*
-             * R8 之前是关的：dex 5.6 MB 里混着大量「只有一条路径会用到」的代码，
-             * 包括整个 media3 的 HLS/DASH/RTSP 模块、OkHttp 的可选协议、Kotlin 的
-             * 反射残留。打开后 dex 直接对半砍。
+             * R8 关着。试过打开（minify + shrinkResources），dex 从 5.6 MB 掉到 1.8 MB，
+             * 但装上去整个应用不可用 —— 说明被裁掉的东西里有 Capacitor 桥依赖的反射入口，
+             * 而这类破坏在编译期完全不报错。
              *
-             * 用 proguard-android.txt 而不是 -optimize 版：优化版会做类内联与激进重写，
-             * 对「靠注解反射装配」的 Capacitor 桥风险高；这里要的只是裁剪与混淆。
+             * 要再试，必须先把「插件方法表在 R8 之后仍然完整」变成一条能跑的自动检查，
+             * 而不是靠肉眼看 proguard 规则。在那之前保持关闭。
              */
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (hasReleaseKeystore) {
                 signingConfig signingConfigs.release
