@@ -2789,6 +2789,8 @@ export default {
     "consoleLogCaptureDesc": "Yang dicatat aplikasi saat berjalan",
     "consoleLogConvention": "Baris dikelompokkan menurut awalan [Modul]. Lihat docs/client-logging.md.",
     "developerTools": "Log sesi & pemantau memori",
+    "audioPipeline": "Pipeline audio (native)",
+    "audioPipelineDesc": "Format aktual dari decoder, rantai efek, dan audio track. Kalau bit depth berkurang, terlihat di sini.",
     "debugLogsToFile": "Simpan ke berkas",
     "debugLogsOpenFolder": "Buka folder log",
     "debugLogModeAppend": "Tambahkan",

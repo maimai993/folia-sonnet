@@ -5,6 +5,7 @@ import { readFrameTimingSnapshot, runCpuProbe } from '../utils/frameTimingDiagno
 import { readAiThemeAttempts } from '../utils/aiThemeDiagnostics';
 import { readMediaDiagnostics } from '../utils/mediaDiagnostics';
 import { readAudioPipelineDiagnostics, type AudioPipelineReading } from '../services/audioPipelineDiagnostics';
+import { audioPipelineRows } from '../utils/audioPipelineFormat';
 import { usePerfDiagnosticsStore } from '../stores/usePerfDiagnosticsStore';
 
 // src/components/PerfDebugPanel.tsx
@@ -184,38 +185,9 @@ export const PerfPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> =
                         <>
                             <div className="pt-2 break-words text-[10px] leading-relaxed opacity-80">{native.verdict}</div>
                             <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
-                                <DebugRow
-                                    label="source"
-                                    value={`${native.inputMime || 'n/a'}${native.inputCodecs ? ` · ${native.inputCodecs}` : ''}${native.inputBitrateKbps > 0 ? ` · ${native.inputBitrateKbps}kbps` : ''}`}
-                                />
-                                <DebugRow
-                                    label="decoded"
-                                    value={`${native.inputSampleRate > 0 ? `${native.inputSampleRate}Hz` : 'n/a'} · ${native.inputPcm} · ${native.inputChannels > 0 ? `${native.inputChannels}ch` : 'n/a'}`}
-                                />
-                                <DebugRow
-                                    label="dsp"
-                                    value={`${native.dspActive ? 'in chain' : 'bypassed'} · ${(native.dspFrames / 1e6).toFixed(1)}M frames · bypass ${native.dspBypassCount}`}
-                                />
-                                <DebugRow
-                                    label="output"
-                                    value={`${native.trackSampleRate > 0 ? `${native.trackSampleRate}Hz` : 'n/a'} · ${native.trackPcm}${native.trackBufferMs > 0 ? ` · buffer ${native.trackBufferMs.toFixed(0)}ms` : ''}${native.trackOffload ? ' · offload' : ''}${native.trackTunneling ? ' · tunneling' : ''}`}
-                                />
-                                <DebugRow
-                                    label="underruns"
-                                    value={`${native.underrunCount} (${(native.underrunBytes / 1024).toFixed(0)}KB) · sink errors ${native.sinkErrorCount}${native.lastSinkError ? ` · ${native.lastSinkError}` : ''}`}
-                                />
-                                <DebugRow
-                                    label="cost"
-                                    value={`cpu ${native.cpuPercent === null ? 'n/a' : `${native.cpuPercent.toFixed(0)}%`} / ${native.cpuCores} cores · tick ${native.positionTickHz === null ? 'n/a' : `${native.positionTickHz.toFixed(2)}Hz`} · ${native.interactive ? 'screen on' : 'screen off'}`}
-                                />
-                                <DebugRow
-                                    label="battery"
-                                    value={`${native.batteryPercent >= 0 ? `${native.batteryPercent}%` : 'n/a'} · ${native.batteryCurrentMa !== 0 ? `${native.batteryCurrentMa}mA` : 'n/a'}`}
-                                />
-                                <DebugRow
-                                    label="players"
-                                    value={`${native.players}${native.dspPassthroughFrames > 0 ? ` · passthrough ${(native.dspPassthroughFrames / 1e6).toFixed(1)}M` : ''}`}
-                                />
+                                {audioPipelineRows(native).map(row => (
+                                    <DebugRow key={row.label} label={row.label} value={row.value} />
+                                ))}
                             </dl>
                         </>
                     )}

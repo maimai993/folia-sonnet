@@ -2789,6 +2789,8 @@ export default {
     "consoleLogCaptureDesc": "What the app logs while it runs",
     "consoleLogConvention": "Lines are grouped by the [Module] prefix they start with, so each can be filtered on its own. See docs/client-logging.md.",
     "developerTools": "Session log & memory monitor",
+    "audioPipeline": "Audio pipeline (native)",
+    "audioPipelineDesc": "What the decoder, the effects chain and the audio track actually run at. A lost bit depth shows up here.",
     "debugLogsToFile": "Save to file",
     "debugLogsOpenFolder": "Open the log folder",
     "debugLogModeAppend": "Append",

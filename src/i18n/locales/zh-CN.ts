@@ -2790,6 +2790,8 @@ export default {
     "consoleLogCaptureDesc": "后台运行时的日志",
     "consoleLogConvention": "日志按开头的 [模块] 前缀分组，可以单独筛选。详见 docs/client-logging.md。",
     "developerTools": "运行日志与内存监控",
+    "audioPipeline": "音频链路（原生）",
+    "audioPipelineDesc": "解码器、效果器链、声卡实际跑的格式 —— 音质在哪一段被削，看这里。",
     "debugLogsToFile": "写入本地文件",
     "debugLogsOpenFolder": "打开日志文件夹",
     "debugLogModeAppend": "追加",
