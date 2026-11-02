@@ -22,6 +22,27 @@ import java.util.concurrent.atomic.AtomicLong
 // 结果只放有界内存等 JS 来 read；不碰播放器、不碰音频进度、不向云端上传任何东西。
 
 /**
+ * 认领结果时采用哪份歌词指纹。
+ *
+ * **只认原生自己那份**（`activeLyricHash`，来自本曲最近一次 `request` 的原始 LRC）。
+ * Web 传进来的歌词是「界面上的那一份」：过了歌词过滤、staff 信用块策略（默认 smart
+ * 会把开头的作词/作曲整块隐藏）、模组 transform，纯音乐时还会被换成歌名 —— 与原生
+ * 生成时喂进模型的正文不是同一个字符串。拿它当身份，原生算好的结果就永远认领不回来，
+ * 表现正是 issue #209 的「后台播放时 AI 主题拉不到」。
+ *
+ * 歌词内容真的变了也不能放过：换歌词时服务会重新 `request`，`activeLyricHash` 跟着
+ * 换新值，旧结果自然对不上键 —— 判定还在，只是换成原生对得上的依据。
+ *
+ * 原生这一侧还没有歌词指纹时（旧调用路径）才退回 Web 传来的那份：宁可退回旧行为，
+ * 也不要让「没传歌词」变成「永远不采用」。
+ */
+internal fun backgroundThemeLyricIdentity(nativeLyricHash: String, webLyricText: String?): String {
+    if (nativeLyricHash.isNotEmpty()) return nativeLyricHash
+    if (webLyricText == null) return ""
+    return BackgroundThemeRules.lyricHash(webLyricText)
+}
+
+/**
  * 原生后台主题 worker。
  *
  * 调用方只做三件事：
@@ -30,7 +51,8 @@ import java.util.concurrent.atomic.AtomicLong
  *  3. 回到前台 / 需要主题时 `read(context, songKey, policy, lyricText?)`，拿到 `{ payload, source }`。
  *
  * 线程模型：一个单线程 executor 顺序处理，队列里最新的请求优先；同一 identity 在飞时
- * 去重，在飞数与排队数都有上限，满了拒绝最新一条（缓存/生成都只是加速器）。
+ * 去重，在飞数与排队数都有上限，满了丢**最旧**那条（缓存/生成都只是加速器，
+ * 但「用户最后点的那首」不能被丢）。
  */
 object BackgroundThemeWorker {
 
@@ -48,9 +70,23 @@ object BackgroundThemeWorker {
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    /** 最新优先：`offer` 插队头，worker 从队头取；满了由 execute 拒绝并清掉 inFlight。 */
-    private class LatestFirstQueue(capacity: Int) : LinkedBlockingDeque<Runnable>(capacity) {
-        override fun offer(runnable: Runnable): Boolean = offerFirst(runnable)
+    /**
+     * 最新优先：`offer` 插队头，worker 从队头取。
+     *
+     * 满队列时**丢最旧那条、留最新那条**。以前是直接 `offerFirst` 失败 → AbortPolicy 拒绝，
+     * 也就是丢掉最新的：用户连点几首歌换主题时，最后点的那首反而没有任务，队列里排着的
+     * 全是「已经听过去的歌」—— 肉眼看到的就是「最新一次点主题没反应」。丢最旧则是少算
+     * 一首切走的歌，缓存与生成本来只是加速器，不该拿它换掉用户当下的那首。
+     */
+    internal class LatestFirstQueue(capacity: Int) : LinkedBlockingDeque<Runnable>(capacity) {
+        override fun offer(runnable: Runnable): Boolean {
+            while (!super.offerFirst(runnable)) {
+                // 队尾就是最旧的那条；删掉它就腾出一个位置。
+                // 删不到（被 worker 抢走 / 队列空）就再来一轮，别在这里放弃。
+                if (pollLast() == null) return false
+            }
+            return true
+        }
     }
 
     private val executor = ThreadPoolExecutor(
@@ -75,7 +111,12 @@ object BackgroundThemeWorker {
     @Volatile
     private var activeSongKey: String = ""
 
-    /** 当前歌最近一次 request 的歌词指纹；`read` 不传歌词时用它保持旧调用可用。 */
+    /**
+     * 当前歌最近一次 request 的歌词指纹 —— **认领结果时以它为准**（见 [backgroundThemeLyricIdentity]）。
+     *
+     * 它来自原生自己拉的原始 LRC，与生成时喂进模型的正文同一份，所以「歌词换了」这件事
+     * 在原生这边能自己判断出来，不必依赖 Web 手上那份被筛选过的歌词。
+     */
     private var activeLyricHash: String = ""
 
     /**
@@ -202,17 +243,25 @@ object BackgroundThemeWorker {
                 }
             }
         } catch (error: RejectedExecutionException) {
+            /*
+             * 兜底分支：`LatestFirstQueue` 自己会腾位置，正常不会再走到这里。
+             * 真撞上（例如队列被判满又删不掉）也只是少算一首，缓存/生成都只是加速器。
+             */
             finishJob(memoryKey)
-            Log.w(TAG, "[BackgroundTheme] 队列已满，跳过本次")
+            Log.w(TAG, "[BackgroundTheme] 队列拒绝任务，跳过本次")
         }
     }
 
     /**
-     * 取当前歌曲的结果。`songKey` 不是当前歌、当前配置关闭、policy / 歌词 / 云端端点 /
-     * system / prompt / AI 密钥模型任一与结果生成时不一致，一律返回 null。
+     * 取当前歌曲的结果。`songKey` 不是当前歌、当前配置关闭、policy / 设置指纹 /
+     * AI 密钥模型任一与结果生成时不一致，一律返回 null。
      *
-     * `lyricText` 传当前歌词时按歌词指纹精确命中；不传（旧桥）时退回本曲最近一次
-     * request 的歌词指纹。返回的是副本，JS 改它不会影响 worker 里那份。
+     * **歌词指纹只按原生自己那份校验**（`activeLyricHash`）：Web 传来的 `lyricText`
+     * 只进日志做对照，不参与判定。原因见 [backgroundThemeLyricIdentity] —— 界面上的
+     * 歌词经过筛选/清洗，和原生生成时用的正文不是同一个字符串，拿它当身份等于永远
+     * 认领不到。这一条是 issue #209 的根因修复点。
+     *
+     * 返回的是副本，JS 改它不会影响 worker 里那份。
      */
     @JvmStatic
     fun read(context: Context, songKey: String, policy: String, lyricText: String? = null): JSONObject? {
@@ -221,31 +270,56 @@ object BackgroundThemeWorker {
 
         val store = FoliaSettingsStore.get(context.applicationContext)
         val config = currentConfig(store)
-        if (!config.enabled || config.policy != policy) return null
+        if (!config.enabled || config.policy != policy) {
+            /*
+             * policy 不一致也要记：它是 issue #209 现场里容易被忽略的一条 ——
+             * Web 读的时候用的是它自己认定的 policy，原生配置被改过就永远对不上。
+             */
+            if (config.enabled) {
+                Log.i(TAG, "[BackgroundTheme] policy 不一致，不认领 songKey=$key 原生=${config.policy.take(32)} Web=${policy.take(32)}")
+            }
+            return null
+        }
         val configFingerprint = BackgroundThemeRules.configFingerprint(config)
         val ai = aiFingerprint(store)
 
-        return synchronized(resultLock) {
+        var nativeHash = ""
+        var outcome: JSONObject? = null
+        var missReason = ""
+        synchronized(resultLock) {
+            nativeHash = activeLyricHash
+            val hash = backgroundThemeLyricIdentity(activeLyricHash, lyricText)
             if (activeSongKey != key) {
-                null
+                missReason = "songKey=$key 不是当前歌 activeSongKey=$activeSongKey"
             } else {
-                val hash = lyricText?.let { BackgroundThemeRules.lyricHash(it) } ?: activeLyricHash
                 val memoryKey = BackgroundThemeRules.resultKey(key, policy, hash, configFingerprint)
                 val entry = results[memoryKey]
                 val generation = generations[memoryKey]
-                if (
-                    entry == null ||
-                    generation == null ||
-                    !entry.matches(key, policy, hash, configFingerprint, ai, generation)
-                ) {
-                    null
+                if (entry == null || generation == null || !entry.matches(key, policy, hash, configFingerprint, ai, generation)) {
+                    missReason = "本曲没有可用的结果 歌词指纹=$hash 配置指纹=$configFingerprint"
                 } else {
-                    JSONObject()
+                    outcome = JSONObject()
                         .put("payload", JSONObject(entry.payload.toString()))
                         .put("source", entry.source)
                 }
             }
         }
+
+        /*
+         * 成功也记：这一行就是 issue #209 要的现场（原生侧取到的命中与歌词指纹）。
+         * 失败时把两侧指纹一起打出来 —— 它们本来就允许不同（Web 那份是界面上的歌词），
+         * 不同不代表结果有问题，但排查时能一眼看出「谁的歌词变了」。
+         */
+        val webHash = lyricText?.let { BackgroundThemeRules.lyricHash(it) } ?: ""
+        if (outcome != null) {
+            Log.i(TAG, "[BackgroundTheme] 采用原生结果 songKey=$key policy=${policy.take(32)} 歌词指纹=$nativeHash")
+        } else {
+            Log.i(
+                TAG,
+                "[BackgroundTheme] 未命中 songKey=$key $missReason 原生歌词指纹=$nativeHash Web 歌词指纹=$webHash",
+            )
+        }
+        return outcome
     }
 
     private fun currentConfig(store: FoliaSettingsStore): BackgroundThemeConfig =
