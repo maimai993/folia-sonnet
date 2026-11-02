@@ -192,6 +192,14 @@ export type NativeAudioPipelineDiagnostics = {
     dspPassthroughFrames: number;
     /** `onConfigure` 因为输入不是 16bit 而摘掉整条链的次数。>0 = 「有些歌没有 EQ」。 */
     dspBypassCount: number;
+    /** 累计处理块数。 */
+    dspBlockCount?: number;
+    /** 每个块的处理耗时（微秒），近 256 块的中位数。旧版原生没有这三个字段。 */
+    dspCostP50Us?: number;
+    /** 同上，99 分位 —— 高但中位数正常，说明卡顿来自长尾。 */
+    dspCostP99Us?: number;
+    /** 处理器占用单核的百分比：100 = 刚好跑得及，再高必然欠载。 */
+    dspLoadPercent?: number;
     /** 250ms 位置轮询累计拍数，用来估息屏/后台还在空转多少。 */
     positionTicks: number;
     /** 进程累计 CPU 时间（ms）。对比两次快照的差值就是这段时间真正吃掉的 CPU。 */

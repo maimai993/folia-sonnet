@@ -196,7 +196,10 @@ class EqAudioProcessor(
         var frame = 0
         while (frame < frames) {
             val block = minOf(DSP_BLOCK_FRAMES, frames - frame)
+            // 计时只包住 processBlock：解码、量化、抖动不算在「处理器负载」里，那几项是固定成本。
+            val startedAt = System.nanoTime()
             processBlock(frame, block)
+            AudioPipelineTelemetry.noteDspCost(System.nanoTime() - startedAt, block, sampleRate)
             frame += block
         }
 

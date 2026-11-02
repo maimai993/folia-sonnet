@@ -33,6 +33,19 @@ export const audioPipelineRows = (reading: AudioPipelineReading): AudioPipelineR
         value: `${reading.dspActive ? 'in chain' : 'bypassed'} · ${(reading.dspFrames / 1e6).toFixed(1)}M frames · bypass ${reading.dspBypassCount}`,
     },
     {
+        /*
+         * 处理器自己花了多少时间。
+         *
+         * 这一行是「CPU 高到底是音频重还是画面重」的分界线：load 是相对**播放这一块
+         * 音频本身需要的时间**的占比（100% = 刚好跑得及），p99 远高于 p50 说明是长尾
+         * （某一段效果器偶发变慢），两个都高才是整条链太重。
+         */
+        label: 'dsp cost',
+        value: reading.dspCostP50Us === undefined
+            ? 'n/a'
+            : `${(reading.dspCostP50Us / 1000).toFixed(2)}ms/block · p99 ${((reading.dspCostP99Us ?? 0) / 1000).toFixed(2)}ms · load ${(reading.dspLoadPercent ?? 0).toFixed(0)}%`,
+    },
+    {
         // 真正交给声卡的格式 —— 设备不支持源采样率时这里会看到别的值。
         label: 'output',
         value: [

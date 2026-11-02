@@ -35,6 +35,9 @@ import androidx.media3.exoplayer.audio.AudioSink
 @UnstableApi
 object AudioPipelineTelemetry {
 
+    /** 耗时采样窗口：256 个块 × 128 帧 ≈ 0.74 秒（44.1kHz），够看出长尾又不占内存。 */
+    private const val DSP_COST_SAMPLES = 256
+
     /**
      * 解码器输出的 PCM 格式，也就是**进 DSP 之前**的格式。
      *
@@ -120,6 +123,28 @@ object AudioPipelineTelemetry {
     @Volatile
     private var playerCount = 0
 
+    /**
+     * 最近 [DSP_COST_SAMPLES] 个块的**处理器耗时**（纳秒）。
+     *
+     * 为什么记这个：整机 CPU 占用（下面的 cpuMs）分不清「音频处理重」还是「WebView 在烧」，
+     * 而这两个的解法完全相反 —— 前者要减处理器，后者要去掉后台动画。把 DSP 这一段的
+     * 耗时单独量出来，再和「一个块本来该占多长时间」比，就是这条链的实时负载。
+     */
+    private val dspCostNs = LongArray(DSP_COST_SAMPLES)
+
+    /** 与 [dspCostNs] 同下标的负载（千分之一，1000 = 一个块的时间全花在 DSP 上）。 */
+    private val dspLoadPermille = IntArray(DSP_COST_SAMPLES)
+
+    @Volatile
+    private var dspCostCursor = 0
+
+    @Volatile
+    private var dspCostFilled = 0
+
+    /** 累计处理块数（诊断用：除以秒数就是实际块率）。 */
+    @Volatile
+    private var dspBlockCount = 0L
+
     // ---- 写入端（全部在音频 / 播放器线程） ----
 
     fun notePlayerCreated() {
@@ -128,6 +153,24 @@ object AudioPipelineTelemetry {
 
     fun notePlayerReleased() {
         if (playerCount > 0) playerCount -= 1
+    }
+
+    /**
+     * 记一个块的处理器耗时。
+     *
+     * `frames` 是这个块包含的帧数，`sampleRate` 是当前采样率 —— 两者一起决定「这个块
+     * 本来要播多久」。负载 = 耗时 / 块时长：超过 1000‰ 就意味着处理器跑不过实时。
+     */
+    fun noteDspCost(costNs: Long, frames: Int, sampleRate: Int) {
+        if (costNs <= 0 || frames <= 0 || sampleRate <= 0) return
+        val blockNs = frames.toLong() * 1_000_000_000L / sampleRate
+        if (blockNs <= 0) return
+        val index = dspCostCursor
+        dspCostNs[index] = costNs
+        dspLoadPermille[index] = ((costNs * 1000L) / blockNs).toInt()
+        dspCostCursor = (index + 1) % DSP_COST_SAMPLES
+        if (dspCostFilled < DSP_COST_SAMPLES) dspCostFilled += 1
+        dspBlockCount += 1
     }
 
     fun noteDspConfigured(active: Boolean) {
@@ -210,6 +253,7 @@ object AudioPipelineTelemetry {
         val resampled = inputSampleRate > 0 && trackSampleRate > 0 && inputSampleRate != trackSampleRate
         val downBit = inputDepth > 0 && trackDepth > 0 && trackDepth < inputDepth
         val trackBufferMs = bufferMs(trackBufferBytes, trackSampleRate, trackChannelCount, trackEncoding)
+        val cost = dspCostSummary()
 
         val verdict = buildString {
             if (inputSampleRate == 0 && trackSampleRate == 0) {
@@ -251,6 +295,10 @@ object AudioPipelineTelemetry {
             dspFrames = dspFrames,
             dspPassthroughFrames = dspPassthroughFrames,
             dspBypassCount = dspBypassCount,
+            dspBlockCount = dspBlockCount,
+            dspCostP50Us = cost.p50Us,
+            dspCostP99Us = cost.p99Us,
+            dspLoadPercent = cost.loadPercent,
             positionTicks = positionTicks,
             cpuMs = Process.getElapsedCpuTime(),
             cpuCores = Runtime.getRuntime().availableProcessors(),
@@ -284,6 +332,13 @@ object AudioPipelineTelemetry {
         val dspFrames: Long,
         val dspPassthroughFrames: Long,
         val dspBypassCount: Int,
+        val dspBlockCount: Long,
+        /** 每个块的处理耗时（微秒），近 [DSP_COST_SAMPLES] 块的中位数。 */
+        val dspCostP50Us: Double,
+        /** 同上，99 分位：这一项高说明偶发卡顿来自长尾，而不是整体太慢。 */
+        val dspCostP99Us: Double,
+        /** 处理器占用单核的比例（%）。到 100 就是「刚好跑得及」，再高必然欠载。 */
+        val dspLoadPercent: Double,
         val positionTicks: Long,
         val cpuMs: Long,
         val cpuCores: Int,
@@ -294,6 +349,30 @@ object AudioPipelineTelemetry {
     )
 
     // ---- 小工具 ----
+
+    private class CostSummary(val p50Us: Double, val p99Us: Double, val loadPercent: Double)
+
+    /**
+     * 把环形缓冲里的耗时采样整理成三个数。
+     *
+     * 读的时候音频线程可能正在写同一个槽：这里先拷一份再排序，读到半个旧值最多让分位数
+     * 差一点点 —— 诊断读数不值得为它上一把锁（那会直接卡住音频线程）。
+     */
+    private fun dspCostSummary(): CostSummary {
+        val count = dspCostFilled
+        if (count <= 0) return CostSummary(0.0, 0.0, 0.0)
+        val costs = LongArray(count)
+        var loadSum = 0L
+        for (index in 0 until count) {
+            costs[index] = dspCostNs[index]
+            loadSum += dspLoadPermille[index]
+        }
+        costs.sort()
+        val p50 = costs[(count * 50 / 100).coerceAtMost(count - 1)] / 1_000.0
+        val p99Index = ((count * 99 + 99) / 100 - 1).coerceIn(0, count - 1)
+        val p99 = costs[p99Index] / 1_000.0
+        return CostSummary(p50, p99, loadSum.toDouble() / count / 10.0)
+    }
 
     private fun describe(sampleRate: Int, depth: Int): String {
         val rate = if (sampleRate > 0) "${sampleRate}Hz" else "?"

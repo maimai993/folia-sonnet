@@ -434,6 +434,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             try {
                 outgoing.stop()
                 outgoing.release()
+                AudioPipelineTelemetry.notePlayerReleased()
             } catch (ignored: Throwable) {
                 // 已经不可用了（重复 release / 线程已停）：没有更好的处理。
             }
@@ -805,6 +806,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     crossfadeOutgoing = null
                     outgoing.stop()
                     outgoing.release()
+                    AudioPipelineTelemetry.notePlayerReleased()
                 } else {
                     handler.postDelayed(this, stepMs.toLong())
                 }
