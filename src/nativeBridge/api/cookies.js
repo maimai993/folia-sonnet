@@ -1,4 +1,4 @@
-const NETEASE_DOMAINS = [
+export const NETEASE_DOMAINS = [
   'music.163.com',
   '.music.163.com',
   'www.music.163.com',
@@ -43,12 +43,12 @@ const KG_COOKIE_KEYS = [
   'vip_endtime', 'vip_end_time', 'su_vip_end_time', 'm_end_time',
   'KUGOU_API_PLATFORM', 'KUGOU_API_GUID', 'KUGOU_API_MID', 'KUGOU_API_DEV', 'KUGOU_API_MAC', 'KUGOU_API_WEBGL',
 ];
-const NETEASE_KEY_NAMES = ['MUSIC_U', 'MUSIC_A', '__csrf', 'NMTID', 'WNMCID', 'WEVNSM', '_ntes_nuid', '_ntes_nnid', 'MUSIC_R_U'];
+export const NETEASE_KEY_NAMES = ['MUSIC_U', 'MUSIC_A', '__csrf', 'NMTID', 'WNMCID', 'WEVNSM', '_ntes_nuid', '_ntes_nnid', 'MUSIC_R_U'];
 
 const COOKIE_CACHE_TTL_MS = 2500;
 const PERSISTENT_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 400;
 const cookieCache = new Map();
-const BRIDGE_COOKIE_STORAGE_KEYS = {
+export const BRIDGE_COOKIE_STORAGE_KEYS = {
   netease: 'foliaBridgeNeteaseCookie',
   qq: 'foliaBridgeQqCookie',
   kg: 'foliaBridgeKgCookie',
