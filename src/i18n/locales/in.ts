@@ -6313,6 +6313,8 @@ export default {
     }
   },
   "listeningArchive": {
+    "entryHint": "Berapa lama kamu mendengarkan, apa yang paling sering diputar, dan kapan",
+    "entryOpen": "Buka",
     "title": "Arsip mendengarkan",
     "close": "Tutup arsip mendengarkan",
     "loading": "Membaca arsip…",
