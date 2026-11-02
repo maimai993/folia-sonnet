@@ -37,6 +37,18 @@ class FoliaAudioSinkFactory(
     private val state: NativeEqualizerState,
 ) : DefaultRenderersFactory(context) {
 
+    init {
+        /*
+         * 硬件解码器失败时允许回退到软解。
+         *
+         * 默认是关的：某个 ROM 的 MediaCodec 声明支持某种编码、实际初始化失败（或者
+         * 只支持到 48 kHz 而源是 96 kHz），播放器就直接抛 DecoderInitializationException，
+         * 表现是「这首歌在这台手机上永远播不了」。打开之后 media3 会按 硬件 → 软解 的顺序
+         * 再试一次，代价只是那一次初始化慢几十毫秒。
+         */
+        setEnableDecoderFallback(true)
+    }
+
     override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
