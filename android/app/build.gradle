@@ -71,7 +71,16 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            /*
+             * R8 之前是关的：dex 5.6 MB 里混着大量「只有一条路径会用到」的代码，
+             * 包括整个 media3 的 HLS/DASH/RTSP 模块、OkHttp 的可选协议、Kotlin 的
+             * 反射残留。打开后 dex 直接对半砍。
+             *
+             * 用 proguard-android.txt 而不是 -optimize 版：优化版会做类内联与激进重写，
+             * 对「靠注解反射装配」的 Capacitor 桥风险高；这里要的只是裁剪与混淆。
+             */
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (hasReleaseKeystore) {
                 signingConfig signingConfigs.release

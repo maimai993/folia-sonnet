@@ -6,6 +6,6 @@
   "version": "1.2.0",
   "author": "tumuyan",
   "description": "一个仿跳一跳小游戏的歌词特效。",
-  "preview": "preview.png",
+  "preview": "preview.webp",
   "client": "client.mjs"
 }
