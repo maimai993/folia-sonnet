@@ -38,6 +38,9 @@ object AudioPipelineTelemetry {
     /** 耗时采样窗口：256 个块 × 128 帧 ≈ 0.74 秒（44.1kHz），够看出长尾又不占内存。 */
     private const val DSP_COST_SAMPLES = 256
 
+    /** 平台 AudioFormat.ENCODING_DEFAULT：编码未指定。media3 的 C 里没有对应常量。 */
+    private const val ENCODING_DEFAULT = 1
+
     /**
      * 解码器输出的 PCM 格式，也就是**进 DSP 之前**的格式。
      *
@@ -390,7 +393,9 @@ object AudioPipelineTelemetry {
     }
 
     private fun pcmLabel(encoding: Int): String = when (encoding) {
-        C.ENCODING_DEFAULT -> "auto"
+        // media3 的 C 里没有公开这个常量（平台侧 AudioFormat.ENCODING_DEFAULT = 1，
+        // 表示「编码未指定」）。Format 里没写 pcmEncoding 时就是它。
+        ENCODING_DEFAULT -> "auto"
         C.ENCODING_PCM_8BIT -> "8-bit"
         C.ENCODING_PCM_16BIT -> "16-bit"
         C.ENCODING_PCM_24BIT -> "24-bit"
