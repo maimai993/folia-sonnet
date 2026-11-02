@@ -1,0 +1,10 @@
+{
+  "format": "folium-signature",
+  "version": 1,
+  "modId": "visualizer-jump",
+  "modVersion": "1.2.0",
+  "digest": "sha256:a6456918bf550ee63a878c017d79778bef46534c7f91eb4a550f8fa2f19a2dda",
+  "keyId": "folium-ci-2026-1",
+  "signedAt": "2026-10-27T02:03:56.913Z",
+  "signature": "lScyLigufaPchQk/CWNi58+uMSYwBtC2DxO4mSyp59bs/Kpzg7K5amSEUXs9sc+cR0cP4hyR6zMZ6wExifbqCA=="
+}
