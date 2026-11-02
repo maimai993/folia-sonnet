@@ -73,6 +73,7 @@ import {
 import { clearQQPlatformSessionCookies } from './qq-login-qr.js';
 import {
   claimKGYouthDayVip,
+  clearKGSessionOnLogout,
   ensureKGCookie,
   getKGYouthUnionVip,
   getKGLoginStatus,
@@ -1271,6 +1272,11 @@ async function routeFoliaQqRequest(operation, params, segments, url, cookie) {
 async function handleFoliaKugouRequest(input, url) {
   const operation = String(input.operation || url.pathname);
   const params = mergeOperationParams(input, url);
+  // 登出不能先恢复会话：宿主读罐不回包时，也必须能进入有界清理。
+  if (operation === 'logout') {
+    await clearKGSessionOnLogout();
+    return { status: 1, error_code: 0, code: 200 };
+  }
   const cookie = await ensureKGCookie();
 
   if (operation === 'register_dev') {
@@ -1282,9 +1288,6 @@ async function handleFoliaKugouRequest(input, url) {
   }
   if (operation === 'login_qr_check') {
     return await handleKGLoginQrCheck(firstValue(params.key, params.qrcode));
-  }
-  if (operation === 'logout') {
-    return { status: 1, error_code: 0, code: 200 };
   }
   if (operation === 'user_detail') {
     const info = await getKGLoginStatus(cookie);
