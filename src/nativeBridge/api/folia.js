@@ -4,6 +4,7 @@ import { weapiRequest, UA } from './weapi.js';
 // 于是都不带 cookie（csrf_token 取不到，上游一律答 301），探索页每一栏都是空的。
 // 具体实现放在这一家自己的目录下（桥的配额只数共享文件里出现的平台名）。
 import { registerAnonymousCookie } from './netease/anonimous.js';
+import { clearSessionOnLogout } from './netease/logout.js';
 import { noteLibraryStep, describePayload } from './libraryTrace.js';
 import {
   getNeteaseCookie,
@@ -1557,7 +1558,11 @@ export async function handleFoliaApiRequest(input) {
   }
   if (path === '/login/status') return await handleLoginStatus(cookie);
   if (path === '/user/account') return await handleUserAccount(cookie);
-  if (path === '/logout') return { code: 200 };
+  // 登出必须连罐里的登录态一起清掉，否则重开应用又被自动登录（见该模块的说明）。
+  if (path === '/logout') {
+    await clearSessionOnLogout();
+    return { code: 200 };
+  }
   if (path === '/login/qr/key') {
     const result = await handleLoginQrKey();
     return { code: 200, data: { code: 200, unikey: result.key } };
