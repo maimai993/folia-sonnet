@@ -9,22 +9,13 @@
 //
 // 清理只是登出的卫生工作：读不到结果、宿主不回包都照常放行，绝不把登出卡在等待上。
 
-import { clearCookieCache, removeBrowserCookiesForHosts } from '../cookies.js';
-
-/** 与 `cookies.js` 里收集登录态时用的同一组域名与键名。 */
-const NETEASE_DOMAINS = [
-  'music.163.com',
-  '.music.163.com',
-  'www.music.163.com',
-  '.163.com',
-  '163.com',
-  'interface.music.163.com',
-  'interface3.music.163.com',
-  '.126.net',
-];
-const NETEASE_KEY_NAMES = ['MUSIC_U', 'MUSIC_A', '__csrf', 'NMTID', 'WNMCID', 'WEVNSM', '_ntes_nuid', '_ntes_nnid', 'MUSIC_R_U'];
-/** `cookies.js` 的 BRIDGE_COOKIE_STORAGE_KEYS.netease；已发布的键名，不改。 */
-const STORAGE_KEY = 'foliaBridgeNeteaseCookie';
+import {
+  BRIDGE_COOKIE_STORAGE_KEYS,
+  NETEASE_DOMAINS,
+  NETEASE_KEY_NAMES,
+  clearCookieCache,
+  removeBrowserCookiesForHosts,
+} from '../cookies.js';
 
 // 硬上限：安卓上逐条删除要几十次过桥，宿主不回包时不能让登出停在等待上。
 const CLEANUP_TIMEOUT_MS = 2500;
@@ -33,8 +24,9 @@ export async function clearSessionOnLogout() {
   let timer = null;
   const cleanup = (async () => {
     await removeBrowserCookiesForHosts(NETEASE_DOMAINS, NETEASE_KEY_NAMES);
-    if (chrome?.storage?.local?.remove) {
-      await chrome.storage.local.remove([STORAGE_KEY]);
+    const storageKey = BRIDGE_COOKIE_STORAGE_KEYS.netease;
+    if (storageKey && chrome?.storage?.local?.remove) {
+      await chrome.storage.local.remove([storageKey]);
     }
     clearCookieCache();
   })().catch((err) => {
