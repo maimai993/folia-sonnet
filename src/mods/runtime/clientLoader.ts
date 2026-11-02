@@ -1,5 +1,6 @@
 import type { ModRuntimeInfo } from '../types';
 import { isModsBridgeAvailable, listMods } from '../ipc';
+import { builtinModRuntimeInfos } from '../builtin/builtinMods';
 import type { FoliumClientApi, FoliumClientModule, FoliumContextKind, FoliumDisposer } from '../folium/contract';
 import { announceFoliumSlowStart, clearFoliumIssues, reportFoliumFault } from './status';
 import { removeFoliumEventHandlers } from '../folium/events';
@@ -253,10 +254,21 @@ export const reconcileFoliumClients = (mods: ModRuntimeInfo[], context: FoliumCo
  * before the app renders, so a saved mod visualizer mode can be restored.
  */
 export const initFoliumClients = async (): Promise<void> => {
-    if (!isModsBridgeAvailable()) return;
+    // 随包的模组不走主进程清单：安卓端没有那条通道，内置的照样要起来。
+    const builtin = builtinModRuntimeInfos();
+    if (!isModsBridgeAvailable()) {
+        if (builtin.length > 0) {
+            try {
+                await reconcileFoliumClients(builtin, 'main');
+            } catch (error) {
+                console.warn('[Folium] builtin client bootstrap failed', error);
+            }
+        }
+        return;
+    }
     try {
         const { mods } = await listMods();
-        await reconcileFoliumClients(mods, 'main');
+        await reconcileFoliumClients([...mods, ...builtin], 'main');
     } catch (error) {
         console.warn('[Folium] client bootstrap failed', error);
     }

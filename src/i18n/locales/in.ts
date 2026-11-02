@@ -642,6 +642,7 @@ export default {
       "search-local": { "title": "Cari lagu lokal", "description": "Cari di perpustakaan lokal" },
       "search-navidrome": { "title": "Cari lagu Navidrome", "description": "Cari di perpustakaan Navidrome" },
       "search-netease": { "title": "Cari lagu NetEase", "description": "Cari di NetEase Cloud Music" },
+      "open-listening-archive": { "title": "Buka arsip mendengarkan", "description": "Lihat berapa lama kamu mendengarkan, apa yang paling sering diputar, dan kapan" },
       "queue": { "title": "Antrean", "description": "Cari antrean; gunakan @ untuk metadata dan -- untuk aksi massal" },
       "playback-volume": { "title": "Volume", "description": "Atur volume pemutaran" },
       "playback-fm-mode": { "title": "Mode FM Pribadi", "description": "Ganti mode atau suasana FM Pribadi" },
@@ -6309,6 +6310,101 @@ export default {
         "switches": "Untuk berkas lokal ada tiga sakelar di bawah sampul: “Sampul”, “Metadata”, dan “Lirik”. Yang menyala mengambil bagian itu dari baris yang dipilih; yang padam mempertahankan milik berkasnya.",
         "noMatch": "“Jangan gunakan metadata online” di kiri bawah membuat lagu ini hanya memakai milik berkasnya."
       }
+    }
+  },
+  "listeningArchive": {
+    "title": "Arsip mendengarkan",
+    "close": "Tutup arsip mendengarkan",
+    "loading": "Membaca arsip…",
+    "recordedCount_one": "{{count}} catatan",
+    "recordedCount_other": "{{count}} catatan",
+    "playsCount_one": "{{count}} kali",
+    "playsCount_other": "{{count}} kali",
+    "empty": "Belum ada catatan. Putar sebuah lagu sebentar, catatannya akan muncul di sini.",
+    "duration": {
+      "hoursMinutes": "{{hours}} jam {{minutes}} menit",
+      "minutes": "{{minutes}} menit",
+      "seconds": "{{seconds}} detik"
+    },
+    "tabs": {
+      "label": "Bagian arsip",
+      "rankings": "Peringkat",
+      "timeline": "Durasi",
+      "song": "Satu lagu",
+      "settings": "Pengaturan"
+    },
+    "ranges": {
+      "week": "7 hari terakhir",
+      "month": "30 hari terakhir",
+      "quarter": "90 hari terakhir",
+      "year": "Setahun terakhir",
+      "all": "Sepanjang waktu"
+    },
+    "rankings": {
+      "kindSong": "Lagu",
+      "kindArtist": "Artis",
+      "kindAlbum": "Album",
+      "sortPlays": "Menurut jumlah",
+      "sortSeconds": "Menurut durasi",
+      "sortNewest": "Baru ditemukan",
+      "rangeName": "Rentang waktu",
+      "searchPlaceholder": "Cari di peringkat",
+      "noMatches": "Tidak ada yang cocok di rentang ini",
+      "newBadge": "baru",
+      "zoomCover": "Perbesar sampul",
+      "openTrajectory": "Lihat lagu ini dari waktu ke waktu"
+    },
+    "timeline": {
+      "granularities": { "day": "Hari", "week": "Minggu", "month": "Bulan", "year": "Tahun" },
+      "weekdays": { "mon": "Sen", "tue": "Sel", "wed": "Rab", "thu": "Kam", "fri": "Jum", "sat": "Sab", "sun": "Min" },
+      "cumulativeTitle": "Total waktu mendengarkan",
+      "empty": "Belum ada waktu mendengarkan di rentang ini",
+      "heatmapTitle": "Kapan kamu mendengarkan",
+      "heatmapHint": "Senin lebih dulu, satu kotak satu jam; makin gelap makin lama",
+      "heatmapCellLabel": "{{weekday}} {{hour}}:00 · {{duration}}",
+      "songCount_one": "{{count}} lagu",
+      "songCount_other": "{{count}} lagu",
+      "segmentEmpty": "Tidak ada catatan di bagian ini"
+    },
+    "song": {
+      "noData": "Belum ada lagu yang didengarkan",
+      "playsAndTime": "{{plays}} · {{duration}}",
+      "firstHeard": "Pertama didengar {{date}}",
+      "lastHeard": "Terakhir didengar {{date}}",
+      "monthlyTitle": "Peringkat bulanan, 24 bulan terakhir",
+      "monthlyEmpty": "Belum masuk tangga lagu bulanan",
+      "unranked": "tidak masuk peringkat",
+      "rankLabel": "#{{rank}}",
+      "weekdayTitle": "Menurut hari",
+      "hourlyTitle": "Menurut jam",
+      "daysTitle": "Hari demi hari"
+    },
+    "settings": {
+      "recorded_one": "{{count}} pemutaran tercatat di perangkat ini",
+      "recorded_other": "{{count}} pemutaran tercatat di perangkat ini",
+      "enabled": "Catat pemutaran",
+      "enabledNote": "Kalau dimatikan, pemutaran baru tidak dicatat. Yang sudah ada tetap tersimpan.",
+      "lowPerformance": "Mode performa rendah",
+      "lowPerformanceNote": "Mematikan animasi grafik. Nyalakan kalau halaman ini tersendat saat digulir.",
+      "export": "Cadangkan arsip",
+      "exportNote": "Menulis berkas JSON yang bisa disimpan sendiri atau dibawa ke perangkat lain.",
+      "exportAction": "Ekspor",
+      "exported": "Cadangan tersimpan",
+      "exportFailed": "Cadangan gagal diekspor",
+      "import": "Pulihkan cadangan",
+      "importNote": "Pemutaran yang sudah ada di perangkat ini dilewati, jadi mengimpor berkas yang sama dua kali tidak menambah apa pun.",
+      "importAction": "Impor",
+      "imported": "{{added}} ditambahkan, {{skipped}} dilewati",
+      "importFailed": "Berkas itu tidak bisa dibaca sebagai cadangan",
+      "clear": "Kosongkan arsip",
+      "clearNote": "Menghapus semua pemutaran yang tercatat di perangkat ini, dan tidak bisa dibatalkan.",
+      "clearAction": "Kosongkan",
+      "cleared": "Arsip sudah kosong",
+      "clearFailed": "Arsip gagal dikosongkan",
+      "clearConfirmTitle": "Kosongkan arsip mendengarkan?",
+      "clearConfirmDescription": "Setiap pemutaran yang tercatat dihapus dari perangkat ini; hanya cadangan yang bisa mengembalikannya.",
+      "clearConfirmAction": "Kosongkan semua",
+      "cancel": "Batal"
     }
   },
   "testBuild": {

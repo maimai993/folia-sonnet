@@ -643,6 +643,7 @@ export default {
       "search-local": { "title": "搜索本地歌曲", "description": "搜索本地音乐库" },
       "search-navidrome": { "title": "搜索 Navidrome", "description": "搜索 Navidrome 音乐库" },
       "search-netease": { "title": "搜索网易云", "description": "搜索网易云音乐" },
+      "open-listening-archive": { "title": "打开听歌档案", "description": "看听了多久、最常听什么、什么时候在听" },
       "queue": { "title": "队列", "description": "搜索队列；使用 @ 筛选元数据，使用 -- 批量操作" },
       "playback-volume": { "title": "音量条", "description": "调整播放音量" },
       "playback-fm-mode": { "title": "私人 FM 模式", "description": "切换私人 FM 的模式或场景" },
@@ -6310,6 +6311,101 @@ export default {
         "switches": "给本地文件匹配时，封面下面多三个开关：「封面」「元数据」「歌词」。亮着的那一项用选中的这一条，关掉的保持文件自己的。",
         "noMatch": "左下角的「不使用在线数据」让这首歌只用文件自己的信息。"
       }
+    }
+  },
+  "listeningArchive": {
+    "title": "听歌档案",
+    "close": "关闭听歌档案",
+    "loading": "正在读取档案…",
+    "recordedCount_one": "{{count}} 条记录",
+    "recordedCount_other": "{{count}} 条记录",
+    "playsCount_one": "{{count}} 次",
+    "playsCount_other": "{{count}} 次",
+    "empty": "还没有记录。放一首听上一会儿，它就会出现在这里。",
+    "duration": {
+      "hoursMinutes": "{{hours}} 小时 {{minutes}} 分",
+      "minutes": "{{minutes}} 分",
+      "seconds": "{{seconds}} 秒"
+    },
+    "tabs": {
+      "label": "档案的分页",
+      "rankings": "排行",
+      "timeline": "时长",
+      "song": "单曲",
+      "settings": "设置"
+    },
+    "ranges": {
+      "week": "最近 7 天",
+      "month": "最近 30 天",
+      "quarter": "最近 90 天",
+      "year": "最近一年",
+      "all": "全部"
+    },
+    "rankings": {
+      "kindSong": "歌曲",
+      "kindArtist": "歌手",
+      "kindAlbum": "专辑",
+      "sortPlays": "按次数",
+      "sortSeconds": "按时长",
+      "sortNewest": "新遇见",
+      "rangeName": "时间范围",
+      "searchPlaceholder": "在排行里找",
+      "noMatches": "这个范围里没有符合的记录",
+      "newBadge": "新",
+      "zoomCover": "放大看封面",
+      "openTrajectory": "看这一首的轨迹"
+    },
+    "timeline": {
+      "granularities": { "day": "日", "week": "周", "month": "月", "year": "年" },
+      "weekdays": { "mon": "周一", "tue": "周二", "wed": "周三", "thu": "周四", "fri": "周五", "sat": "周六", "sun": "周日" },
+      "cumulativeTitle": "累计听了多久",
+      "empty": "这个范围里还没有听歌时长",
+      "heatmapTitle": "你什么时候在听",
+      "heatmapHint": "周一在前，一格一小时；颜色越深听得越多",
+      "heatmapCellLabel": "{{weekday}} {{hour}} 点 · {{duration}}",
+      "songCount_one": "{{count}} 首",
+      "songCount_other": "{{count}} 首",
+      "segmentEmpty": "这一段里没有记录"
+    },
+    "song": {
+      "noData": "还没有听过任何一首",
+      "playsAndTime": "{{plays}} · {{duration}}",
+      "firstHeard": "第一次听 {{date}}",
+      "lastHeard": "最近一次 {{date}}",
+      "monthlyTitle": "最近 24 个月的名次",
+      "monthlyEmpty": "还没进过任何一个月的榜",
+      "unranked": "未上榜",
+      "rankLabel": "第 {{rank}} 名",
+      "weekdayTitle": "按星期",
+      "hourlyTitle": "按小时",
+      "daysTitle": "一天一天"
+    },
+    "settings": {
+      "recorded_one": "本机已记录 {{count}} 次播放",
+      "recorded_other": "本机已记录 {{count}} 次播放",
+      "enabled": "记录听歌",
+      "enabledNote": "关掉之后新的播放不再记录，已经记下的都还在。",
+      "lowPerformance": "低性能模式",
+      "lowPerformanceNote": "关掉图表里的动画。这一页滚动卡顿时打开它。",
+      "export": "备份档案",
+      "exportNote": "写出一份 JSON 文件，可以自己留着，也可以带到别的设备上。",
+      "exportAction": "导出",
+      "exported": "备份已保存",
+      "exportFailed": "备份没能导出",
+      "import": "恢复备份",
+      "importNote": "本机已有的播放会被跳过，同一个文件导入两次不会多出记录。",
+      "importAction": "导入",
+      "imported": "新增 {{added}} 条，跳过 {{skipped}} 条",
+      "importFailed": "这个文件不能当作备份读取",
+      "clear": "清空档案",
+      "clearNote": "删除本机记下的全部播放，删了找不回来。",
+      "clearAction": "清空",
+      "cleared": "档案已经空了",
+      "clearFailed": "没能清空档案",
+      "clearConfirmTitle": "清空听歌档案？",
+      "clearConfirmDescription": "本机记下的每一次播放都会被删除，只有备份能再拿回来。",
+      "clearConfirmAction": "全部清空",
+      "cancel": "取消"
     }
   },
   "testBuild": {

@@ -47,6 +47,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "search-local",
   "search-navidrome",
   "search-netease",
+  "open-listening-archive",
   "execute-mode",
   "queue",
   "queue-keep-open",

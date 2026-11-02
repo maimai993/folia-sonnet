@@ -1,0 +1,11 @@
+{
+  "folium": 1,
+  "folia": ">=0.7.21 <0.8.0",
+  "id": "visualizer-jump",
+  "name": "跳一跳歌词特效",
+  "version": "1.2.0",
+  "author": "tumuyan",
+  "description": "一个仿跳一跳小游戏的歌词特效。",
+  "preview": "preview.png",
+  "client": "client.mjs"
+}

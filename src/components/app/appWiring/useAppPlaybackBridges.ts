@@ -33,6 +33,7 @@ import { useElectronPlaybackBridge } from '../playback/bridges/useElectronPlayba
 import { usePlaybackAudioBridge } from '../playback/bridges/usePlaybackAudioBridge';
 import { usePlaybackInteractionBridge } from '../playback/bridges/usePlaybackInteractionBridge';
 import { usePlaybackReporter } from '../playback/bridges/usePlaybackReporter';
+import { useListeningArchiveRecorder } from '../../../hooks/useListeningArchiveRecorder';
 import { usePlaybackTransportController } from '../playback/bridges/usePlaybackTransportController';
 import { usePlaybackVisualizerBridge } from '../playback/bridges/usePlaybackVisualizerBridge';
 import { useTransportCommandRefs } from '../playback/bridges/useTransportCommandRefs';
@@ -168,6 +169,9 @@ export const useAppPlaybackBridges = (model: Input) => {
         currentSong,
         activeDeck: automix.activeDeck,
     });
+    // 听歌档案的采集就挂在这一处（与上面三个上报同一层）：它读的是全局的播放位置与播放状态，
+    // 不认某个 audio 元素，所以不用 audioRef / activeDeck。
+    useListeningArchiveRecorder();
 
     const {
         mediaSessionPlayRef,

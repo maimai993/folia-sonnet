@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -119,6 +120,63 @@ class BackgroundThemeWorkerTest {
             BackgroundThemeRules.resultKey("song:1", "p", hash),
             BackgroundThemeRules.resultKey("song:1", "p", BackgroundThemeRules.lyricHash("别的歌词")),
         )
+    }
+
+    /*
+     * issue #209 第一条：Web 侧算歌词指纹用的那段正文（界面上的歌词，过过滤/清洗/纯音乐换歌名）
+     * 与原生生成时用的正文不是同一个字符串。所以认领只按原生自己那份指纹，Web 那份只进日志。
+     */
+    @Test
+    fun `认领只用原生自己的歌词指纹，Web 那份不同也照样命中`() {
+        val native = BackgroundThemeRules.lyricHash("作词 : 某人\n故事的小黄花")
+
+        assertEquals(native, backgroundThemeLyricIdentity(native, "故事的小黄花"))
+        assertEquals(native, backgroundThemeLyricIdentity(native, "完全另一段界面歌词"))
+        assertEquals(native, backgroundThemeLyricIdentity(native, null))
+
+        // 同一个原生指纹 + 两份不同的 Web 歌词 = 同一个结果键：认领不会被 Web 那份挡住。
+        assertEquals(
+            BackgroundThemeRules.resultKey("song:1", "p", backgroundThemeLyricIdentity(native, "第一版界面歌词")),
+            BackgroundThemeRules.resultKey("song:1", "p", backgroundThemeLyricIdentity(native, "第二版界面歌词")),
+        )
+
+        // 原生还没有指纹时（旧调用路径）退回 Web 那份：退回旧行为，不是永远不采用。
+        assertEquals(BackgroundThemeRules.lyricHash("Web 歌词"), backgroundThemeLyricIdentity("", "Web 歌词"))
+        assertEquals("", backgroundThemeLyricIdentity("", null))
+
+        // 歌词真的换了：原生指纹跟着变，旧结果键对不上 —— 判定仍然存在。
+        assertNotEquals(
+            BackgroundThemeRules.resultKey("song:1", "p", backgroundThemeLyricIdentity(BackgroundThemeRules.lyricHash("旧歌词"), "x")),
+            BackgroundThemeRules.resultKey("song:1", "p", backgroundThemeLyricIdentity(BackgroundThemeRules.lyricHash("新歌词"), "x")),
+        )
+    }
+
+    /* issue #209 第二条：满队列丢最旧、留最新（以前丢的是最新那条，用户最后点的歌没任务）。 */
+    @Test
+    fun `在途队列满了淘汰最旧的一条并保留最新`() {
+        val queue = BackgroundThemeWorker.LatestFirstQueue(3)
+        // 必须是 4 个不同的实例：无捕获的 lambda 在 JVM 上可能被复用成同一个对象，
+        // 那样 contains / assertSame 都证明不了「淘汰了哪一条」。
+        val jobs = (0 until 4).map { Marker("job-$it") }
+
+        for (job in jobs) {
+            assertTrue(queue.offer(job))
+        }
+
+        assertEquals(3, queue.size)
+        // worker 从队头取，队头必须是最新那条。
+        assertSame(jobs[3], queue.peekFirst())
+        // 最旧的那条让位；中间两条与新那条都还在。
+        assertFalse(queue.contains(jobs[0]))
+        assertTrue(queue.contains(jobs[1]))
+        assertTrue(queue.contains(jobs[2]))
+        assertTrue(queue.contains(jobs[3]))
+    }
+
+    private class Marker(val name: String) : Runnable {
+        override fun run() = Unit
+
+        override fun toString(): String = "Marker($name)"
     }
 
     @Test

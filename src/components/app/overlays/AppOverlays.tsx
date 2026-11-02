@@ -1,6 +1,7 @@
 import React from 'react';
 import FloatingPlayerControls from '../../FloatingPlayerControls';
 import SearchWorkspace from '../search/SearchWorkspace';
+import ListeningArchive from '../listeningArchive/ListeningArchive';
 import DevDebugOverlay from '../../DevDebugOverlay';
 import MemoryMonitorWindow from '../../debug/MemoryMonitorWindow';
 import NowPlayingToast from './NowPlayingToast';
@@ -18,6 +19,7 @@ const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
     const isCurrentSongPosterVisible = useLatticeControlsStore(state => state.isCurrentSongPosterVisible);
     const {
         searchOverlay,
+        listeningArchiveOverlay,
         debugOverlay,
         memoryMonitor,
         floatingControls,
@@ -27,6 +29,8 @@ const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
     return (
         <>
             {searchOverlay && <SearchWorkspace {...searchOverlay} />}
+
+            {listeningArchiveOverlay && <ListeningArchive {...listeningArchiveOverlay} />}
 
             {debugOverlay && <DevDebugOverlay {...debugOverlay} />}
 

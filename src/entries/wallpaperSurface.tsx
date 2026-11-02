@@ -17,6 +17,9 @@ import { afterLayout, forceCanvasChainToFill, forceShellToFill, pinToNativeSize 
 import { installGlobalVisualizerFrameRateLimiter } from '../utils/frameRateLimiter';
 import { installRenderPixelRatioLimit } from '../utils/renderPixelRatio';
 import { syncLyricFlatAttribute, useLyricFlatSettingsStore } from '../stores/useLyricFlatSettingsStore';
+import { builtinModRuntimeInfos } from '../mods/builtin/builtinMods';
+import { reconcileFoliumClients } from '../mods/runtime/clientLoader';
+import { installFoliumFaultNotice } from '../mods/runtime/faultNotice';
 
 /*
  * 把整页底色压回透明。
@@ -72,6 +75,21 @@ installRenderPixelRatioLimit();
  */
 syncLyricFlatAttribute(useLyricFlatSettingsStore.getState().flatLyrics);
 useLyricFlatSettingsStore.subscribe(state => syncLyricFlatAttribute(state.flatLyrics));
+
+/*
+ * 模组也要在这一层起来。
+ *
+ * 叠层挂的是播放页同一个 VisualizerRenderer，但模组客户端本来只在 src/bootstrap.tsx
+ * （主窗口）里启动 —— 于是模组注册的歌词样式与可视化模式在这层 WebView 的注册表里根本不存在，
+ * 用户在设置里选了模组样式，桌面这层却画不出来。
+ *
+ * 这里只起内置模组：叠层没有主进程通道（folia-mod:// 是 Electron 那边的），
+ * 用户自己装的模组在这层无从读取。失败不阻塞渲染 —— 画不出模组样式也比整个叠层白屏好。
+ */
+installFoliumFaultNotice();
+void reconcileFoliumClients(builtinModRuntimeInfos(), 'main').catch((error: unknown) => {
+    console.warn('[Wallpaper] 内置模组启动失败', error);
+});
 
 // src/entries/wallpaperSurface.tsx
 // 动态壁纸里那层 WebView 的页面 —— 挂的就是播放页同一个 VisualizerRenderer。

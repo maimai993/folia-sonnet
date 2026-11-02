@@ -471,7 +471,19 @@ const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
     if (!ctx.skipPull) {
         const native = await readBackgroundTheme(ctx.songTitle, ctx.lyricSource);
         const parts = native ? normalizeStagePayload(native.payload, ctx.blockedModes) : null;
-        if (native && parts && hasRequired(parts, ctx.requirement)) return { ...parts, source: native.source };
+        if (native && parts && hasRequired(parts, ctx.requirement)) {
+            /*
+             * 成功也记：这一行回答的就是 issue #209 第一个问题「后台算出来的主题有没有被
+             * 前台认领」。没有它，日志里只剩「生成完成」，看不出结果是拿到了还是又烧了一次。
+             * 歌词身份由原生侧自己校验（见 BackgroundThemeWorker.read），这里只记决定。
+             */
+            console.log('[BackgroundTheme] 前台采用原生后台结果', { songTitle: ctx.songTitle, source: native.source });
+            return { ...parts, source: native.source };
+        }
+        if (native) {
+            // 拿到了形状可用、但缺了这一趟要的那一半：当没命中，继续走云缓存。
+            console.log('[BackgroundTheme] 原生结果缺本次需要的那一半，回落云缓存', { songTitle: ctx.songTitle, requirement: ctx.requirement });
+        }
     }
     const { value, source } = await withAiCloudCache({
         kind: STAGE_CACHE_KIND,
