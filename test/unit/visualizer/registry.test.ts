@@ -28,6 +28,7 @@ describe('visualizer registry', () => {
             'classic',
             'cadenza',
             'partita',
+            'kinetic',
             'fume',
             'tilt',
             'claddagh',
