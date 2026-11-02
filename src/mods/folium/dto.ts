@@ -124,6 +124,41 @@ const DEFAULT_THEME: Theme = {
     animationIntensity: 'normal',
 };
 
+/** 界面自己的强调色（`--st-accent`）询价结果在这么点时间内复用，避免每次投影主题都读一次样式。 */
+const HOST_ACCENT_TTL_MS = 1000;
+
+let hostAccentCache: { at: number; value: string | null } = { at: 0, value: null };
+let loggedHostAccent: string | null = null;
+
+const readHostAccentColor = (): string | null => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+    const now = Date.now();
+    if (now - hostAccentCache.at < HOST_ACCENT_TTL_MS) return hostAccentCache.value;
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--st-accent').trim();
+    hostAccentCache = { at: now, value: value ? value : null };
+    return hostAccentCache.value;
+};
+
+/**
+ * 投影给模组的强调色。
+ *
+ * 主题的 `accentColor` 与 `primaryColor` 相同时（黑白极简那几套），模组拿到的强调色就是字色，
+ * 于是它画出来的高亮、棱线、声浪全是一个颜色 —— 看起来「没有颜色」。这时改用界面自己的强调色
+ * （`--st-accent`），让模组的高亮重新有颜色；两者不同就按主题原样给。
+ */
+const resolveFoliumAccentColor = (source: Theme): string => {
+    const accent = source.accentColor ?? DEFAULT_THEME.accentColor;
+    const primary = source.primaryColor ?? DEFAULT_THEME.primaryColor;
+    if (String(accent).toLowerCase() !== String(primary).toLowerCase()) return accent;
+    const hostAccent = readHostAccentColor();
+    if (!hostAccent || hostAccent.toLowerCase() === String(primary).toLowerCase()) return accent;
+    if (loggedHostAccent !== hostAccent) {
+        loggedHostAccent = hostAccent;
+        console.info('[Folium] 主题强调色与主色相同，模组改用界面强调色', hostAccent);
+    }
+    return hostAccent;
+};
+
 /** The host Theme field for field (see contract.ts), plus isDaylight. */
 export const toFoliumTheme = (theme: Theme | null | undefined, isDaylight: boolean): FoliumTheme => {
     const source = theme ?? DEFAULT_THEME;
@@ -131,7 +166,7 @@ export const toFoliumTheme = (theme: Theme | null | undefined, isDaylight: boole
         name: source.name ?? DEFAULT_THEME.name,
         backgroundColor: source.backgroundColor ?? DEFAULT_THEME.backgroundColor,
         primaryColor: source.primaryColor ?? DEFAULT_THEME.primaryColor,
-        accentColor: source.accentColor ?? DEFAULT_THEME.accentColor,
+        accentColor: resolveFoliumAccentColor(source),
         secondaryColor: source.secondaryColor ?? DEFAULT_THEME.secondaryColor,
         fontStyle: source.fontStyle ?? DEFAULT_THEME.fontStyle,
         ...(source.fontFamily ? { fontFamily: source.fontFamily } : {}),
