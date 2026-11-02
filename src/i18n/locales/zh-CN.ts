@@ -1092,6 +1092,7 @@ export default {
     "consoleProfileRenameSave": "保存名称",
     "consoleProfileRenameCancel": "取消",
     "consoleProfileNamePlaceholder": "方案名称",
+    "consoleProfileActions": "方案操作",
     "consoleProfileDelete": "删除当前方案",
     "consoleProfileDeleteTitle": "删除「{{name}}」？",
     "consoleProfileDeleteDescription": "这一套的均衡、压缩与空间设置会一起删掉，其他方案不受影响。",

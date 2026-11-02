@@ -1091,6 +1091,7 @@ export default {
     "consoleProfileRenameSave": "Save name",
     "consoleProfileRenameCancel": "Cancel",
     "consoleProfileNamePlaceholder": "Profile name",
+    "consoleProfileActions": "Profile actions",
     "consoleProfileDelete": "Delete this profile",
     "consoleProfileDeleteTitle": "Delete “{{name}}”?",
     "consoleProfileDeleteDescription": "Its EQ, compression and space settings go with it; the other profiles stay as they are.",

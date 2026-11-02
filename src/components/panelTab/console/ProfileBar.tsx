@@ -1,18 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Check, Headphones, Pencil, Plus, Trash2, X } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Check, Ellipsis, Headphones, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AUDIO_PROFILE_LIMIT, AUDIO_PROFILE_NAME_MAX } from '../../../utils/audioProfiles';
 import { useAudioProfilesStore } from '../../../stores/useAudioProfilesStore';
 import ConfirmDialog from '../../shared/ConfirmDialog';
+import { Menu } from '../../modal/settings/kit';
 import { Button } from '../../ui';
 import TextField from '../../ui/TextField';
 import PanelIconButton from '../shell/PanelIconButton';
 
 // src/components/panelTab/console/ProfileBar.tsx
-// 窗口最上面那条「耳机方案」：一行芯片切换，右边三个动作（复制 / 改名 / 删除）。
+// 「耳机方案」那一段：芯片切换 + 三个动作（复制 / 改名 / 删除）。
 //
-// 布局上有意把高度钉死在 32px：芯片只横向滚动、不换行，改名时输入框占据同一条，
-// 所以方案多少套、改不改名，下面的页签都不会上下跳。
+// 它不单独占一行，而是和页签并排在同一条工具行里（见 ConsoleToolbar）：窄窗上一条
+// 就够，两条会把正文顶掉一大截。高度钉死 28px，改名时输入框就地替换芯片条，整行不跳。
 
 type ProfileBarProps = {
     isDaylight: boolean;
@@ -31,22 +32,9 @@ const ProfileBar: React.FC<ProfileBarProps> = ({ isDaylight }) => {
     const [draftName, setDraftName] = useState('');
     // 确认框只在真要删的时候挂上：平时不占一棵隐藏的对话框树。
     const [pendingDelete, setPendingDelete] = useState(false);
-    const stripRef = useRef<HTMLDivElement>(null);
-
-    // 复制出来的那一套在最右端，切过去时如果不在视野里，芯片看着像没动。
-    // 这里直接改 scrollLeft（不带动画），只把当前那枚推回视野，不整条重排。
-    useEffect(() => {
-        const strip = stripRef.current;
-        const chip = strip?.querySelector<HTMLElement>(`[data-profile-id="${activeId}"]`);
-        if (!strip || !chip) return;
-        const left = chip.offsetLeft;
-        const right = left + chip.offsetWidth;
-        if (left < strip.scrollLeft) {
-            strip.scrollLeft = Math.max(0, left - 4);
-        } else if (right > strip.scrollLeft + strip.clientWidth) {
-            strip.scrollLeft = right - strip.clientWidth + 4;
-        }
-    }, [activeId, profiles.length]);
+    // 三个动作收进一枚「⋯」：并排放在手机上是 93px，等于一套半方案，芯片本该滚起来的位置全被它们占了。
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuAnchor = useRef<HTMLButtonElement>(null);
 
     const active = profiles.find(profile => profile.id === activeId) ?? profiles[0];
     const full = profiles.length >= AUDIO_PROFILE_LIMIT;
@@ -62,14 +50,16 @@ const ProfileBar: React.FC<ProfileBarProps> = ({ isDaylight }) => {
     };
 
     return (
-        <div data-folia-profiles className="flex h-8 items-center gap-2">
-            <span className="flex shrink-0 items-center gap-1 text-[11px] text-[color:var(--st-t3)]">
-                <Headphones size={12} />
+        <div data-folia-profiles className="flex min-w-0 items-center gap-1 px-0.5 max-sm:flex-1">
+            {/* 窄窗不写「耳机方案」四个字：这一行还要放芯片与三个动作，四个字占掉的宽度
+                正好是一枚芯片。文字留给读屏。 */}
+            <span className="flex shrink-0 items-center gap-1 text-[11px] text-[color:var(--st-t3)] max-sm:sr-only">
+                <Headphones size={11} aria-hidden />
                 {t('ui.consoleProfiles')}
             </span>
 
             {renaming ? (
-                <div className="flex h-8 min-w-0 flex-1 items-center gap-1.5">
+                <div className="flex h-7 min-w-0 flex-1 items-center gap-1">
                     <TextField
                         autoFocus
                         value={draftName}
@@ -93,43 +83,61 @@ const ProfileBar: React.FC<ProfileBarProps> = ({ isDaylight }) => {
                 </div>
             ) : (
                 <>
-                    <div ref={stripRef} className="hide-scrollbar flex h-8 min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+                    <div
+                        className="flex min-w-0 shrink flex-wrap items-center justify-end gap-1 max-sm:justify-start"
+                    >
                         {profiles.map(profile => (
                             <Button
                                 key={profile.id}
                                 data-profile-id={profile.id}
                                 onClick={() => switchTo(profile.id)}
                                 aria-pressed={profile.id === activeId}
-                                className={`st-t-fast h-7 max-w-[8.5rem] shrink-0 truncate whitespace-nowrap rounded-lg px-3 text-[13px] transition-[background-color,color,scale] active:scale-[0.96] ${profile.id === activeId
-                                    ? 'bg-[var(--st-accent)] text-[color:var(--st-on-accent)]'
+                                className={`st-t-fast h-7 max-w-[9rem] shrink-0 truncate whitespace-nowrap rounded-lg px-2.5 text-[12.5px] transition-[background-color,color,scale] active:scale-[0.96] ${profile.id === activeId
+                                    ? 'bg-[var(--st-accent)] font-medium text-[color:var(--st-on-accent)] shadow-[0_1px_2px_rgba(0,0,0,0.18)]'
                                     : 'bg-[var(--st-fill)] text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]'}`}
                             >
                                 <span className="block truncate">{profile.name}</span>
                             </Button>
                         ))}
+
+                        {/* 分隔线跟着「⋯」走：芯片换行时它落在最后一行的末尾，不会孤零零吊在右边一列。 */}
+                        <span aria-hidden className="ml-0.5 h-4 w-px shrink-0 bg-[var(--st-line)]" />
+                    <PanelIconButton
+                        ref={menuAnchor}
+                        size="s"
+                        label={t('ui.consoleProfileActions')}
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpen}
+                        onClick={() => setMenuOpen(open => !open)}
+                    >
+                        <Ellipsis size={15} />
+                    </PanelIconButton>
+                    <Menu
+                        anchorRef={menuAnchor}
+                        open={menuOpen}
+                        onClose={() => setMenuOpen(false)}
+                        label={t('ui.consoleProfileActions')}
+                        align="end"
+                        items={[
+                            {
+                                id: 'copy',
+                                label: full ? t('ui.consoleProfileFull', { max: AUDIO_PROFILE_LIMIT }) : t('ui.consoleProfileAdd'),
+                                icon: Plus,
+                                disabled: full,
+                                onSelect: duplicateActive,
+                            },
+                            { id: 'rename', label: t('ui.consoleProfileRename'), icon: Pencil, onSelect: beginRename },
+                            {
+                                id: 'delete',
+                                label: t('ui.consoleProfileDelete'),
+                                icon: Trash2,
+                                disabled: profiles.length <= 1,
+                                onSelect: () => setPendingDelete(true),
+                            },
+                        ]}
+                    />
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-0.5">
-                        <PanelIconButton
-                            size="s"
-                            label={full ? t('ui.consoleProfileFull', { max: AUDIO_PROFILE_LIMIT }) : t('ui.consoleProfileAdd')}
-                            disabled={full}
-                            onClick={duplicateActive}
-                        >
-                            <Plus size={14} />
-                        </PanelIconButton>
-                        <PanelIconButton size="s" label={t('ui.consoleProfileRename')} onClick={beginRename}>
-                            <Pencil size={13} />
-                        </PanelIconButton>
-                        <PanelIconButton
-                            size="s"
-                            label={t('ui.consoleProfileDelete')}
-                            disabled={profiles.length <= 1}
-                            onClick={() => setPendingDelete(true)}
-                        >
-                            <Trash2 size={13} />
-                        </PanelIconButton>
-                    </div>
                 </>
             )}
 
