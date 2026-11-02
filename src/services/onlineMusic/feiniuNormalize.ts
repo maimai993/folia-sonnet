@@ -96,6 +96,8 @@ export const normalizeFeiniuCollection = (raw: unknown, type = 'playlist'): Prov
     const id = text(item.guid || item.id);
     if (!id) throw new OnlineProviderError('invalid-response', 'FeiNiu collection has no guid', 'feiniu');
     const coverId = text(item.coverId) || '';
+    // 歌单卡片的封面就靠这一个字段：没有它就拼不出 URL，界面上只剩占位（issue #204）。
+    if (!coverId) console.info('[feiniu] 歌单没有 coverId', text(item.name) || id);
     const albumCount = finite(item.albumCount);
     const publishedAt = finite(item.releaseDate);
     const updatedAt = finite(item.updatedAt);

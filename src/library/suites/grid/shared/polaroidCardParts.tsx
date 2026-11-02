@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Disc, Pause, Play, Plus, X } from 'lucide-react';
 import type { SongResult, UnifiedSong } from '../../../../types';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
+import { resolveProxiedCollectionCover } from '../../../../services/onlineMusic/onlineCoverFallback';
 import { canResolveSongCatalogRef } from '../../../../services/onlineMusic/catalogRefs';
 import { resolveTrackArtistTargetId } from '../../../core/shared/trackLinks';
 import type { GridPlaybackMark } from './useGridStayPlayback';
@@ -56,7 +57,7 @@ export const PolaroidCardCover: React.FC<{
     return (
         <>
             <img
-                src={getSizedCoverUrl(item.coverUrl, 512)}
+                src={getSizedCoverUrl(resolveProxiedCollectionCover(item.coverUrl), 512)}
                 alt={typeof item.name === 'string' ? item.name : ''}
                 loading="lazy"
                 decoding="async"

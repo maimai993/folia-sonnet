@@ -1,11 +1,28 @@
-import type { MediaId, OnlineLibraryProvider, ProviderCollection } from '../../types/onlineMusic';
+import type { MediaId, OnlineLibraryProvider, ProviderCollection, ProviderPage } from '../../types/onlineMusic';
 import { feiniuList, feiniuRequest, pickFeiniuTotal } from './feiniuTransport';
 import { FEINIU_ALL_TRACKS_ID, FEINIU_FAVORITE_ID } from './feiniuCatalog';
 import { feiniuPage, normalizeFeiniuCollection, normalizeFeiniuSong } from './feiniuNormalize';
-import { backfillSongCovers } from './onlineCoverFallback';
+import { backfillSongCovers, prewarmCollectionCovers, resolveProxiedCollectionCover } from './onlineCoverFallback';
 
 // src/services/onlineMusic/feiniuLibrary.ts
 // 用户自己的歌单 / 专辑 / 收藏。飞牛的接口不按 userId 过滤（服务端就认当前登录态），
+
+/**
+ * 集合出列表：先把这一页的封面预热成代理地址，再交给页面。
+ *
+ * 歌曲封面早就有这一趟（{@link backfillSongCovers}），集合一直漏着 —— 卡片拿的是直连地址，
+ * WebView 自己发不出去，于是「歌单卡片没封面、点进去歌曲封面正常」（issue #204）。
+ */
+const feiniuCollectionPage = async (
+    items: ProviderCollection[],
+    total: number,
+    offset: number,
+    limit: number,
+): Promise<ProviderPage<ProviderCollection>> => {
+    await prewarmCollectionCovers(items.map(item => item.coverUrl));
+    return feiniuPage(items.map(item => ({ ...item, coverUrl: resolveProxiedCollectionCover(item.coverUrl) })), total, offset, limit);
+};
+
 // userId 参数在这里没有用处。
 
 /** 「我喜欢的」是一个固定 id 的伪歌单，指向飞牛自己的收藏接口。 */
@@ -89,12 +106,12 @@ export const feiniuLibrary: OnlineLibraryProvider = {
         const pinned = offset === 0
             ? [allTracksCollection(await feiniuTrackCount().catch(() => 0)), favoriteCollection()]
             : [];
-        return feiniuPage([...pinned, ...playlists], total + pinned.length, offset, limit);
+        return feiniuCollectionPage([...pinned, ...playlists], total + pinned.length, offset, limit);
     },
 
     async getUserAlbums(_userId, limit, offset) {
         const { items, total } = await feiniuList<unknown>('/album/list', {}, offset, limit);
-        return feiniuPage(items.map(item => normalizeFeiniuCollection(item, 'album')), total, offset, limit);
+        return feiniuCollectionPage(items.map(item => normalizeFeiniuCollection(item, 'album')), total, offset, limit);
     },
 
     async getLikedSongIds() {

@@ -40,7 +40,7 @@ const SURFACE_PX = 360;
  * 它们内容本来就少，摊到 560 只会把右半边留成一大块空白，给回窄一点的宽度。
  * 封面、控制、队列不在这张表里——封面要封面与文字并排，另外两个要分两栏（见各自组件）。
  */
-const NARROW_WIDE_TABS: ReadonlySet<string> = new Set(['account', 'local', 'navi', 'onlineLyrics', 'aiDirector']);
+const NARROW_WIDE_TABS: ReadonlySet<string> = new Set(['cover', 'account', 'local', 'navi', 'onlineLyrics', 'aiDirector']);
 /** 矮而宽时上面那些页签的宽度：比窄屏的 360 稍宽，够放下两栏按钮又不横贯屏幕。 */
 const NARROW_WIDE_SURFACE_PX = 392;
 /** 又矮又宽时页签改成右侧一条竖轨（见 Segments 的 vertical）占的宽度。 */

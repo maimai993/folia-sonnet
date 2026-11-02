@@ -49,7 +49,7 @@ const COVER_TAB_MAX = '30rem';
  */
 const COVER_MAX = '100cqw';
 /** 矮而宽时封面挪到左边，边长压到这个尺寸：右边还要留出写歌名、摆按钮的地方。 */
-const COMPACT_COVER_MAX = 'min(36cqw, 10rem)';
+const COMPACT_COVER_MAX = 'min(26cqw, 8rem)';
 
 type SongHeaderProps = {
     /** The cover tab is open: the large form. */
@@ -146,7 +146,7 @@ const SongHeader: React.FC<SongHeaderProps> = ({ isBig, currentSong, coverUrl, l
                  * 量的是里面这一层，不是外面那层：并排时外面那层被拉满整个 header 的高度，
                  * 量它等于量自己撑出来的结果（文字一多就永远量不出来，只会被裁掉）。
                  */}
-                <div ref={underRef}>
+                <div ref={underRef} className={sideBySide ? 'w-fit' : undefined}>
                     {children}
                 </div>
             </div>
