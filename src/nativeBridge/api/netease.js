@@ -1244,6 +1244,7 @@ export async function handleLoginQrCheck(key) {
     }
     return Object.assign({}, info, {
       code: 803,
+      cookie: cookieText, // 页面也要保存这次会话，不能等重启后才从桥里读回。
       message: body.message || '授权登录成功',
       nickname: profile.nickname || body.nickname || info.nickname || '网易云用户',
       avatar: profile.avatarUrl || body.avatarUrl || info.avatar || '',
