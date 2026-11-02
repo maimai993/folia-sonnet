@@ -19,6 +19,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 
 import top.izuna.foliamajor.coloros.ColorOsLyricBridge
+import top.izuna.foliamajor.player.BackgroundWork
 import top.izuna.foliamajor.player.NativeLoopMode
 import top.izuna.foliamajor.player.NativeLyricPresentation
 import top.izuna.foliamajor.player.NativeLyricsCache
@@ -1101,7 +1102,7 @@ class FoliaPlaybackService : android.app.Service() {
         applyPlaybackState()
         publishNotification()
         // 网络与 CookieManager 都不能上主线程：桥的线程规则（memory 15）在这里同样适用。
-        Thread({
+        BackgroundWork.io("like-fallback") {
             var ok = false
             try {
                 ok = top.izuna.foliamajor.online.LikeFallback.setLiked(providerId, songId, wanted)
@@ -1118,7 +1119,7 @@ class FoliaPlaybackService : android.app.Service() {
                     applyPlaybackState()
                     publishNotification()
                 }
-                return@Thread
+                return@io
             }
             // 记账：JS 醒来推旧状态时，updateMetadata 按这张表以原生写入为准；
             // 原生兜底切歌也读它（nativePlayMirrorEntry），切歌不打回原形。
@@ -1127,7 +1128,7 @@ class FoliaPlaybackService : android.app.Service() {
             // 落了盘再知会 JS：App 里那颗心按这张表对齐（consume → applyNativeLikeOverrides）。
             // 发早了记录还没落，JS 那边什么都领不到。
             mainHandler.post { sendCommand("likeDone") }
-        }, "folia-like-fallback").start()
+        }
     }
 
     /**
@@ -1244,7 +1245,7 @@ class FoliaPlaybackService : android.app.Service() {
             mainHandler.post { onMirrorEntryFailed(songKey) }
             return
         }
-        Thread({
+        BackgroundWork.io("resolve-url") {
             val url = resolveWithRetry(providerId, songId, mid, hash, albumAudioId)
             if (url == null || url.isEmpty()) {
                 /*
@@ -1260,7 +1261,7 @@ class FoliaPlaybackService : android.app.Service() {
                     // 旧取流失败不能在用户已选另一首之后再跳一次。
                     if (generation == dispatchGeneration) onMirrorEntryFailed(songKey)
                 }
-                return@Thread
+                return@io
             }
             if (!songKey.isEmpty()) {
                 resolvedUrlCache.put(songKey, url)
@@ -1297,7 +1298,7 @@ class FoliaPlaybackService : android.app.Service() {
                 nativePlayMirrorEntry(entry, url)
                 preloadMirrorNeighbors(array, target, direction)
             }
-        }, "folia-resolve-url").start()
+        }
     }
 
     /**
@@ -1459,13 +1460,13 @@ class FoliaPlaybackService : android.app.Service() {
                 val hash = entry.optString("providerHash", "")
                 val albumAudioId = entry.optString("providerAlbumAudioId", "")
                 if (providerId.isEmpty() || (songId.isEmpty() && mid.isEmpty() && hash.isEmpty())) continue
-                Thread({
+                BackgroundWork.io("preload-url") {
                     val url = top.izuna.foliamajor.online.MusicGateway.resolvePlayUrl(
                             providerId, songId, mid, hash, albumAudioId)
                     if (url != null && !url.isEmpty()) {
                         resolvedUrlCache.put(key, url)
                     }
-                }, "folia-preload-url").start()
+                }
             } catch (ignored: org.json.JSONException) {
             }
         }
@@ -1566,10 +1567,10 @@ class FoliaPlaybackService : android.app.Service() {
             val likedSongId = cachedServerSongId
             val likedMid = entry.optString("providerMid", "")
             val likedHash = entry.optString("providerHash", "")
-            Thread({
+            BackgroundWork.io("liked-refresh") {
                 val truth = top.izuna.foliamajor.online.MusicGateway.likedListContains(
                         likedProviderId, likedSongId, likedMid, likedHash)
-                if (truth == null) return@Thread
+                if (truth == null) return@io
                 mainHandler.post {
                     if (likedProviderId != cachedProviderId
                             || likedSongId != cachedServerSongId) return@post
@@ -1582,7 +1583,7 @@ class FoliaPlaybackService : android.app.Service() {
                         publishNotification()
                     }
                 }
-            }, "folia-liked-refresh").start()
+            }
         }
         val entryDuration = entry.optLong("durationMs", 0L)
         if (entryDuration > 0L) cachedDurationMs = entryDuration
@@ -1633,11 +1634,11 @@ class FoliaPlaybackService : android.app.Service() {
         val title = cachedTitle
         val artist = cachedArtist
         val artworkUrl = pendingArtworkUrl
-        Thread({
+        BackgroundWork.io("native-lyric") {
             val lyric =
                     top.izuna.foliamajor.online.MusicGateway.fetchLyric(providerId, songId, mid, hash)
             // 解析这一趟网络的时间里可能又切了一首：只认还在放的那首（晚到的结果丢掉）。
-            if (songKey != cachedSongKey) return@Thread
+            if (songKey != cachedSongKey) return@io
             val mainLrc = lyric?.mainLrc ?: ""
             val transLrc = lyric?.transLrc ?: ""
             val lines = if (mainLrc.isEmpty()) emptyList()
@@ -1671,7 +1672,7 @@ class FoliaPlaybackService : android.app.Service() {
                 FoliaPlaybackPlugin.dispatchLyrics(songKey, mainLrc, transLrc)
                 applyMetadata()
             }
-        }, "folia-native-lyric").start()
+        }
     }
 
     /**
@@ -1916,12 +1917,12 @@ class FoliaPlaybackService : android.app.Service() {
     private var pendingArtworkUrl: String? = null
 
     private fun fetchArtwork(url: String) {
-        Thread({
+        BackgroundWork.io("artwork") {
             val bitmap = downloadBitmap(url)
             // 下载期间可能已经切歌了：pendingArtworkUrl 已经换成新歌的地址，这张晚到的图要丢掉，
             // 否则会把上一首的封面贴到当前歌上。
             if (bitmap == null || url != pendingArtworkUrl) {
-                return@Thread
+                return@io
             }
             cachedArtwork = bitmap
             publishSnapshot()
@@ -1941,7 +1942,7 @@ class FoliaPlaybackService : android.app.Service() {
             applyMetadata()
             // 通知已经发出去了，要再 post 一次才会带上新封面。
             publishNotification()
-        }, "folia-artwork").start()
+        }
     }
 
     private fun updatePlaybackState(intent: Intent) {

@@ -32,6 +32,8 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 
+import top.izuna.foliamajor.player.BackgroundWork
+
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -1396,13 +1398,13 @@ class FoliaNativePlugin : Plugin() {
         }
         if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
         val server = localAudioServer
-        Thread(Runnable {
+        BackgroundWork.bulk("cache-audio") {
             val stored = server!!.storeMediaCacheFromUrl(cacheKey, url,
                 limitBytes.toLong(), minDurationMs.toLong())
             val result = JSObject()
             result.put("stored", stored)
             call.resolve(result)
-        }, "folia-cache-audio").start()
+        }
     }
 
     @PluginMethod
@@ -1450,7 +1452,7 @@ class FoliaNativePlugin : Plugin() {
          * 占住它等于让所有别的方法一起排队，别的平台会集体超时。
          */
         val activity = getActivity()
-        Thread(Runnable {
+        BackgroundWork.bulk("video-layer") {
             var storedName: String? = null
             var storedUrl: String? = null
             try {
@@ -1472,7 +1474,7 @@ class FoliaNativePlugin : Plugin() {
             } else {
                 resolveVideoLayerPick(call, picked, true, name, url)
             }
-        }, "folia-video-layer").start()
+        }
     }
 
     private fun resolveVideoLayerPick(call: PluginCall, picked: Boolean, rejected: Boolean, name: String?, url: String?) {
@@ -1645,7 +1647,7 @@ class FoliaNativePlugin : Plugin() {
         // 拷贝是重活：一次导入几十上百个文件，放在调用线程上会把界面卡死，
         // 所以整个搬进后台线程，完成后再回到 UI 线程交给出口。
         val activity = getActivity()
-        Thread(Runnable {
+        BackgroundWork.bulk("audio-import") {
             try {
                 if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
                 val port = localAudioServer!!.start()
@@ -1729,7 +1731,7 @@ class FoliaNativePlugin : Plugin() {
                 if (activity != null) activity.runOnUiThread { sink.fail(message, error) }
                 else sink.fail(message, error)
             }
-        }, "folia-audio-import").start()
+        }
     }
 
     /**
@@ -2057,7 +2059,7 @@ class FoliaNativePlugin : Plugin() {
         val fileName = call.getString("fileName")
         val fileSize = call.getLong("fileSize", 0L) ?: 0L
         val activity = getActivity()
-        Thread(Runnable {
+        BackgroundWork.bulk("audio-copy") {
             val result = JSObject()
             try {
                 if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
@@ -2084,7 +2086,7 @@ class FoliaNativePlugin : Plugin() {
             }
             if (activity != null) activity.runOnUiThread { call.resolve(result) }
             else call.resolve(result)
-        }, "folia-audio-copy").start()
+        }
     }
 
     /**
@@ -2582,7 +2584,7 @@ class FoliaNativePlugin : Plugin() {
         val prompt = call.getString("prompt") ?: ""
         val maxTokens = call.getInt("maxTokens", 0) ?: 0
         val jsonMode = call.getBoolean("json", true) != false
-        Thread({
+        BackgroundWork.bulk("ai-completion") {
             try {
                 val store = top.izuna.foliamajor.settings.FoliaSettingsStore.get(getContext())
                 val config = top.izuna.foliamajor.ai.AiConfig(
@@ -2604,7 +2606,7 @@ class FoliaNativePlugin : Plugin() {
             } catch (error: Exception) {
                 call.reject("ai-request-failed: ${error.message ?: "unknown"}")
             }
-        }, "folia-ai-completion").start()
+        }
     }
 
     /*

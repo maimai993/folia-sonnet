@@ -215,6 +215,15 @@ class FoliaSpotifyPlugin : Plugin() {
         val settled = AtomicBoolean(false)
         val kept = call
 
+        /*
+         * 这颗线程**故意**不进 BackgroundWork。
+         *
+         * 它是一个 `accept()` 循环：用户可能开一次登录、然后切走几分钟，线程就一直堵在
+         * socket 上等那个回调。共享池只有三颗线程，被它占住一颗，那几分钟里所有
+         * 「解析下一首地址」都要排队 —— 表现是"登录页开着的时候切歌发不出声"。
+         *
+         * 它自己有退出条件（settled / 端口被关），用完即走，不是常驻线程。
+         */
         val thread = Thread({
             try {
                 while (!settled.get()) {
