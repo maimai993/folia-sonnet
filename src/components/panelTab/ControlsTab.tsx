@@ -13,7 +13,8 @@ import { GroupLine } from './shell/GroupLine';
 import { useIsWideShortViewport } from './shell/panelViewport';
 
 // src/components/panelTab/ControlsTab.tsx
-// 控制标签页只负责装配：声音（音量和两块、定时关闭、主题来源与当前主题那一行、HUD 投影）与外观（歌词样式、背景、播放页透明背景）。
+// 控制标签页只负责装配：声音（音量、定时关闭、主题来源与当前主题那一行、HUD 投影）与外观（歌词样式、背景、
+// 播放页透明背景，最后是关闭循环 / 智能过渡 / 音频效果器那三块）。
 // 音频效果器的入口已从声音组删掉（issue #107）；窗口仍由命令面板打开。
 //
 // 矮而宽（横过来的手机）时**分左右两栏**：那种窗口纵向只剩一百多像素，单栏要滚很久才看到
@@ -91,11 +92,6 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                 onVolumeChange={onVolumeChange}
                 onToggleMute={onToggleMute}
             />
-            <SoundTiles
-                loopMode={loopMode}
-                onToggleLoop={onToggleLoop}
-                loopToggleDisabled={loopToggleDisabled}
-            />
             {/* 定时关闭：上游重写控制页时这一行没被挂回来，组件成了孤儿（useSleepTimer 仍在 App 里跑，
                 只是没有入口）。默认收起，标题右侧始终显示当前配置或剩余时间。 */}
             <div className="pt-2">
@@ -142,6 +138,13 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                 transparentPlayerBackground={transparentPlayerBackground}
                 onToggleTransparentPlayerBackground={onToggleTransparentPlayerBackground}
                 onClosePanel={onClosePanel}
+            />
+            {/* 关闭循环 / 智能过渡 / 音频效果器这三块：外观那块以「播放页背景透明」收尾，正好接在它下面。
+                声音那一栏只剩音量、定时关闭与主题那几行，两栏高度也就接近了（issue #200）。 */}
+            <SoundTiles
+                loopMode={loopMode}
+                onToggleLoop={onToggleLoop}
+                loopToggleDisabled={loopToggleDisabled}
             />
         </>
     );
