@@ -1711,6 +1711,19 @@ class WallpaperOverlay(private val context: Context) {
         if (overlayLockScreenOnly()) {
             return false
         }
+        /*
+         * App 在前台：一律不挂。
+         *
+         * 用户开着 App 时，桌面那层没人看得见，画面却照画不误（WebView 与 rAF 白烧）。
+         * 更要紧的是顺序：「在所有应用上叠加」原本排在下面那一支之前 —— 那个开关一开，
+         * App 里也照挂，于是「可视化叠层」看着像关不掉，叠层压在播放页与设置页上面。
+         * 这一支必须放在全应用叠加之前，任何叠加开关都盖不过它。
+         *
+         * 设置页里那个可视化即时预览走的是应用内那条渲染路径，不经过这里，照常显示。
+         */
+        if (_appForeground) {
+            return false
+        }
         // 「在所有应用上叠加」：放宽"必须停在桌面"这个前提。
         if (overlayOnAllApps()) {
             return true
@@ -1729,9 +1742,6 @@ class WallpaperOverlay(private val context: Context) {
          * 现在：拿不到信号就当**不确定**，不挂。要在别的应用上也看得见，
          * 请把「在所有应用上叠加」打开。
          */
-        if (_appForeground) {
-            return false
-        }
         return desktopConfirmed()
     }
 
