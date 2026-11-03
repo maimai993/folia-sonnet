@@ -3,7 +3,7 @@ import { Button } from '../../ui/Button';
 import { type VisualizerSettingsPanelProps } from '../definition';
 import { type KineticTuning } from './tuning';
 import KineticEditorOverlay from './KineticEditorOverlay';
-import { selectDisplayLyrics, usePlaybackStore } from '../../../stores/usePlaybackStore';
+import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { PlayerState } from '../../../types';
@@ -18,10 +18,29 @@ const KineticSettingsPanel: React.FC<VisualizerSettingsPanelProps<KineticTuning>
     theme,
 }) => {
     const [editorOpen, setEditorOpen] = React.useState(false);
-    const lyricLines = usePlaybackStore(selectDisplayLyrics)?.lines ?? [];
+    /*
+     * 直接用 state.lyrics，不走 selectDisplayLyrics。
+     *
+     * selectDisplayLyrics 在切歌过渡期间返回 transitionDisplay.lyrics —— 那是**上一首**的词
+     * （过渡动画要用它做新旧交叉淡入）。编辑台拿着它注入，就是
+     * 「点进去歌词还是旧的那首」；点「随机生成」会覆盖掉，所以看起来像只有它能救。
+     * 编辑台要的是当前这首歌的词，不受过渡动画影响。
+     */
+    const lyricData = usePlaybackStore(state => state.lyrics);
+    const lyricLines = lyricData?.lines ?? [];
     const currentSong = usePlaybackStore(state => state.currentSong);
     // 这首歌的键：编辑台的改动按它存，换歌/重启还原。
     const songKey = React.useMemo(() => (currentSong ? getPlaybackSongKey(currentSong) : null), [currentSong]);
+    /*
+     * 歌词归属校验：state.lyrics 与 currentSong 是两个字段，切歌时先后到达，
+     * 有一瞬间是「新歌 + 旧歌词」的组合 —— 这时候开编辑台，注入的就是旧词。
+     * 歌词的 title 与当前歌名对不上（两边都有值却不同）就不注入，等下一拍。
+     */
+    const lyricsMatchSong = !lyricData?.title
+        || !currentSong?.name
+        || lyricData.title === currentSong.name;
+    // 歌词与歌曲对不上时传 null：覆层会等到匹配的那一拍再注入。
+    const safeSongKey = lyricsMatchSong ? songKey : null;
 
     // 编辑台 ↔ 播放器联动。
     // 设置面板这一层拿不到播放器的 seek 与真实播放头（都在 App.tsx 的 ref 链里），
@@ -87,7 +106,7 @@ const KineticSettingsPanel: React.FC<VisualizerSettingsPanelProps<KineticTuning>
                     key={songKey ?? 'no-song'}
                     lines={lyricLines as Line[]}
                     theme={theme}
-                    songKey={songKey}
+                    songKey={safeSongKey}
                     currentTime={liveTime}
                     playing={isPlaying}
                     onSeek={handleSeek}

@@ -474,6 +474,15 @@ const KineticEditorOverlay: React.FC<Props> = ({
     const inject = () => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
+        /*
+         * 最后防线：songKey 为空说明歌词归属校验没过（面板把 safeSongKey 传成 null），
+         * 此时手里的歌词很可能还是上一首的 —— 注入就是错词。
+         * 直接跳过，等歌词与歌曲对上的那一拍由重新注入的 effect 接手。
+         */
+        if (!injectDataRef.current.songKey) {
+            console.warn('[Kinetic] 歌词与当前歌曲对不上，跳过这次注入');
+            return;
+        }
         try {
             const jizura = (target as unknown as { J?: Record<string, unknown>; J_ui?: { project?: Record<string, unknown> } }).J;
             // 原版把工程暴露在 J.ui.project；直接改它再触发 replan 最可靠。
