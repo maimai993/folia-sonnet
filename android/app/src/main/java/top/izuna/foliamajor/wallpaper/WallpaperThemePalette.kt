@@ -2,6 +2,7 @@ package top.izuna.foliamajor.wallpaper
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Color
 import android.util.Log
 import org.json.JSONObject
 
@@ -56,10 +57,15 @@ class WallpaperThemePalette private constructor() {
          * 看上去就像「主题换了但颜色没换」。JSON 不可用（解析失败 / 里面没这两个键）时
          * 仍然照旧按空串清除，语义不变。
          */
+        // 锁序：save → WallpaperLyricsState；read/readThemeJson 不取此锁，避免 publish 反向取锁。
         @JvmStatic
+        @Synchronized
         fun save(context: Context?, primary: String?, secondary: String?, themeJson: String?) {
             if (context == null) return
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val previousPrimary = prefs.getString(KEY_PRIMARY, "") ?: ""
+            val previousSecondary = prefs.getString(KEY_SECONDARY, "") ?: ""
+            val previousThemeJson = prefs.getString(KEY_THEME_JSON, "") ?: ""
             val editor = prefs.edit()
             var changed = false
             var nextPrimary = primary
@@ -94,6 +100,22 @@ class WallpaperThemePalette private constructor() {
             // 三个字段都没带就别动盘：心跳一次都不落盘，省掉无谓的写放大。
             if (changed) {
                 editor.apply()
+                val nextThemeJson = prefs.getString(KEY_THEME_JSON, "") ?: ""
+                val paletteChanged = previousPrimary != (prefs.getString(KEY_PRIMARY, "") ?: "")
+                    || previousSecondary != (prefs.getString(KEY_SECONDARY, "") ?: "")
+                    || previousThemeJson != nextThemeJson
+                // 后台 AI 没有 Web 整包：主题表落定后也要更新快照底色并通知已挂载的两种样式。
+                if (paletteChanged) {
+                    val theme = try { JSONObject(nextThemeJson) } catch (_: Exception) { null }
+                    fun color(field: String): Int? {
+                        val value = theme?.optString(field, "")?.trim().orEmpty()
+                        if (value.isEmpty()) return null
+                        return try { Color.parseColor(value) } catch (_: IllegalArgumentException) { null }
+                    }
+                    WallpaperLyricsState.applyThemePalette(context, color("accentColor"), color("backgroundColor"))
+                    // 暂停后 Canvas 不再排帧；主题变化也要主动敲一帧，而不是等下次播放。
+                    FloatingLyricsOverlay.shared(context).invalidateOverlay()
+                }
                 logWrite(context, backfilled)
             }
         }
