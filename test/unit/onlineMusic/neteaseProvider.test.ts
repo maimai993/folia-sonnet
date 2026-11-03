@@ -388,9 +388,30 @@ describe('neteaseProvider', () => {
     });
 
     // 803 是「手机上点了确认」，登录态是随这份回答回来的 cookie。带了 cookie 才算真的登上。
-    it('takes 803 with a session cookie as confirmed and stores it', async () => {
-        vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code: 803, cookie: 'MUSIC_U=abc' } as any);
-        await expect(neteaseProvider.auth!.checkLogin!('key')).resolves.toMatchObject({ state: 'confirmed' });
+    it('takes 803 with a session cookie as confirmed, stores it, and keeps it out of diagnostics', async () => {
+        const session = new Map<string, string>();
+        vi.stubGlobal('localStorage', {
+            getItem: (key: string) => session.get(key) ?? null,
+            setItem: (key: string, value: string) => { session.set(key, value); },
+            removeItem: (key: string) => { session.delete(key); },
+        });
+        const cookie = 'MUSIC_U=fixture-qr-session';
+        const logs = ['log', 'info', 'warn', 'error'].map(level => (
+            vi.spyOn(console, level as 'log').mockImplementation(() => undefined)
+        ));
+        try {
+            vi.mocked(neteaseApi.checkQr).mockResolvedValue({ code: 803, cookie } as any);
+            await expect(neteaseProvider.auth!.checkLogin!('key')).resolves.toEqual({ state: 'confirmed' });
+            expect(readProviderSessionValue('netease', 'cookie')).toBe(cookie);
+            const diagnostics = await neteaseProvider.auth!.getLoginDiagnostics!();
+            const report = diagnostics.map(line => line.text).join('\n');
+            expect(report).toContain('login cookie=yes');
+            expect(report).not.toContain('fixture-qr-session');
+            expect(JSON.stringify(logs.flatMap(log => log.mock.calls))).not.toContain('fixture-qr-session');
+        } finally {
+            logs.forEach(log => log.mockRestore());
+            vi.unstubAllGlobals();
+        }
     });
 
     // 真机诊断里的那一种：803 回来了但没带 cookie（远端 API 只放在 Set-Cookie 里）。

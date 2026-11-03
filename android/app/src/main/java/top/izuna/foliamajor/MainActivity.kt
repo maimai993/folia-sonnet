@@ -99,6 +99,9 @@ class MainActivity : BridgeActivity() {
     companion object {
         private const val TAG = "FoliaMainActivity"
 
+        /** 页面底色（与 body / capacitor.config 的 backgroundColor 一致）。窗口、WebView、decor 三层都铺它。 */
+        private const val APP_BACKGROUND_COLOR = "#09090b"
+
         /**
          * 「从别的应用打开 / 分享过来的音频」认哪些后缀：与 LocalAudioServer.isAudioFileName
          * 同源，外加 App 也能播的那几个无损格式。清单里的 intent-filter 按同一份列表注册。
@@ -344,12 +347,32 @@ class MainActivity : BridgeActivity() {
      * 跟着一起失去缩放，而 WebView 上 setSupportZoom 是最终说了算的那一层。
      */
     private fun applyWebViewPlaybackSettings() {
+        // 页面内切视图（首页 ↔ 播放页 ↔ 资料库）时，Chromium 会重建一次合成层，
+        // 那一帧 WebView 自身没有内容可画，露出来的是它下面的窗口底色。
+        // 主 Activity 用的是 Theme.SplashScreen，windowBackground 随系统深浅色走
+        // （浅色模式下接近白），这一帧就是用户看到的「切页闪一下」。
+        //
+        // decorView 是 WebView 的上一级，给它铺上与页面同色的底，空档就看不出来了。
+        // 启动图（SplashScreenView）是 decorView 的子 View，仍然画在它上面，不受影响。
+        // 放在取 bridge 之前：即使 WebView 还没建好，窗口这一层也已经是深色。
+        window?.decorView?.setBackgroundColor(Color.parseColor(APP_BACKGROUND_COLOR))
+
         val webView = bridge?.webView ?: return
         val settings = webView.settings
         settings.setMediaPlaybackRequiresUserGesture(false)
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW)
         settings.setSupportZoom(false)
         settings.setBuiltInZoomControls(false)
+
+        // 这一层是固定铺满整屏的（外壳是 fixed inset-0），页面本身不滚动。
+        // 滚动条与 overscroll 光晕因此永远不该出现：它们在合成时仍会占一层，
+        // 边缘下拉还会额外触发一次系统级回弹动画。关掉不影响任何可见内容。
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
+        // 首帧之前露出的是 WebView 的默认白底。页面底色是 body 的 #09090b，
+        // 两者对齐之后，切页那一瞬间的空档与页面同色，不会再有一帧白/黑的跳变。
+        webView.setBackgroundColor(Color.parseColor(APP_BACKGROUND_COLOR))
     }
 
     /**

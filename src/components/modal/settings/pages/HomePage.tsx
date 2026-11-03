@@ -1,5 +1,5 @@
 import React from 'react';
-import { RotateCcw } from 'lucide-react';
+import { BarChart3, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -14,6 +14,7 @@ import { omni } from '../../../../services/onlineMusic/omni';
 import { useGridViewSettingsStore } from '../../../../stores/useGridViewSettingsStore';
 import { useHomeLayoutSettingsStore } from '../../../../stores/useHomeLayoutSettingsStore';
 import { useOnlineProviderAccountStore } from '../../../../stores/useOnlineProviderAccountStore';
+import { openListeningArchive } from '../../../app/listeningArchive/openListeningArchive';
 import { Button, Chips, Group, PictureChoice, Reveal, Row, Segmented, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import { BRAVAIS_WALL_OPTIONS, BravaisWallGroup } from './BravaisWallGroup';
 import { GridCardsPreview, HomeCardStylePicture } from './pictures';
@@ -115,6 +116,16 @@ const HomePage: React.FC = () => {
                             { id: O.tabCloud.id, label: t('home.aiTheme'), checked: home.tabCloud, onChange: home.setTabCloud },
                         ]}
                     />
+                </Row>
+                {/*
+                  * 「听歌档案」不是一个开关，是一扇门：档案本身是全屏数据页，没有可调的选项，
+                  * 所以这里用一条没有 option 的行做入口，就排在「AI 主题」那一排页签下面。
+                  * 门后是随包模组「听歌档案」的整页（界面以模组为准），模组不在时退回本机那套全屏页。
+                  */}
+                <Row label={t('listeningArchive.title')} hint={t('listeningArchive.entryHint')}>
+                    <Button variant="quiet" icon={BarChart3} onClick={openListeningArchive}>
+                        {t('listeningArchive.entryOpen')}
+                    </Button>
                 </Row>
                 <Row option={O.cardStyle} note={t('options.grid3dCardStyleDesc')}>
                     <PictureChoice

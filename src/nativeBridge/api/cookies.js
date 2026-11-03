@@ -33,9 +33,9 @@ const QQ_COOKIE_KEYS = [
   'luxury_vip_level', 'music_vip_level', 'psrf_qqaccess_token', 'psrf_qqrefresh_token',
   'wxuin', 'wxopenid', 'tmeLoginType',
 ];
-const KG_DOMAINS = ['kugou.com', '.kugou.com', 'www.kugou.com', 'm.kugou.com', '.kugou.net'];
+export const KG_DOMAINS = ['kugou.com', '.kugou.com', 'www.kugou.com', 'm.kugou.com', '.kugou.net'];
 const KG_URLS = ['https://www.kugou.com/', 'https://kugou.com/', 'https://m.kugou.com/'];
-const KG_COOKIE_KEYS = [
+export const KG_COOKIE_KEYS = [
   'userid', 'token', 'KugooID', 'KuGoo', 'Kugoo', 'NickName', 'nickname', 'kg_mid', 'kugouid',
   'pic', 'user_pic', 'avatar', 'headpic', 'userpic', 'dfid', 'DFID', 'KToken', 't', 't1', 'KugooPwd',
   'vip_type', 'vip_token', 'VIPType', 'VipType', 'musicvip', 'MusicPack', 'musicpack', 'is_vip',

@@ -15,6 +15,8 @@ interface BuiltinModSource {
     author: string | null;
     description: string | null;
     permissions: string[];
+    /** 实验接口的 opt-in，和 mod.json 的 `experimental` 同义。 */
+    experimental?: string[];
     folia: string | null;
 }
 
@@ -40,6 +42,18 @@ const BUILTIN_SOURCES: readonly BuiltinModSource[] = [
         permissions: [],
         folia: '>=0.7.21 <0.8.0',
     },
+    {
+        id: 'listening-archive',
+        name: '听歌档案',
+        version: '1.3.3',
+        author: 'imicola',
+        description: '本机听歌统计：听多久、最常听什么、什么时候听、单曲轨迹；界面是模组自己的那套页面。',
+        // 主进程侧的 `filesystem.data` 只管模组自己的数据文件，这里没有主进程，存储走 `archive.*` 的渲染进程实现
+        // （builtinRpc.ts）；`stageLayers` 放封面层，`playback.control` 供排行里的播放/排队，剩下的是云端读接口。
+        permissions: ['filesystem.data', 'stageLayers', 'playback.control', 'platform.netease.read'],
+        experimental: ['platform.raw'],
+        folia: '>=0.7.21 <0.8.0',
+    },
 ];
 
 /** 内置模组的清单项：字段与主进程给的 `ModRuntimeInfo` 同形，只是客户端地址是同源静态地址。 */
@@ -57,7 +71,7 @@ export const builtinModRuntimeInfos = (): ModRuntimeInfo[] => BUILTIN_SOURCES.ma
     trustStale: false,
     signature: { status: 'unsigned', reason: null, keyId: null, keyLabel: null, signedAt: null },
     devSource: false,
-    experimental: [],
+    experimental: [...(source.experimental ?? [])],
     embedOrigins: [],
     folia: source.folia,
     hasMain: false,

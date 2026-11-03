@@ -8,7 +8,9 @@
     "email": "hjm184563@gmail.com"
   },
   "private": true,
-  "version": "0.7.25.1",
+  "version": "0.7.25",
+  "displayVersion": "0.7.25.dev2",
+  "androidVersionCode": 7025011,
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",

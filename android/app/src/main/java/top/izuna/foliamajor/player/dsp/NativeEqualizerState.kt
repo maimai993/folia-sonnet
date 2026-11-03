@@ -4,6 +4,7 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import top.izuna.foliamajor.settings.FoliaSettingsStore
+import java.util.concurrent.Executors
 
 // android/app/src/main/java/top/izuna/foliamajor/player/dsp/NativeEqualizerState.kt
 // 原生调音台的**唯一状态**：桥线程写、音频渲染线程读，中间只有一个 volatile 引用。
@@ -100,12 +101,57 @@ object NativeEqualizerState {
         }
     }
 
-    /** 落盘：整份设置一个键，一次提交，不留半新半旧。 */
+    /**
+     * 落盘：整份设置一个键，一次提交，不留半新半旧。
+     *
+     * ⚠️ 曾经这里是同步写入，且由 [apply] 的调用方（Capacitor 桥线程）直接调用。
+     * 拖动滑杆时 Web 侧每 40 ms 推一条，每条都同步写一次**整份设置**的 blob：
+     * 存储慢的机器上单次 fsync 十几毫秒，几条就排成队，桥线程被堵住，
+     * 表现正是「滑杆拉过去了，声音要等一两秒才跟上，再动一下又好了」。
+     *
+     * 现在拆成两步：内存状态立刻生效（音频线程读到的是同一份），写盘丢给后台线程，
+     * 并在 [PERSIST_DEBOUNCE_MS] 窗口内只保留最后一份。拖动的中间值根本不需要落盘。
+     */
     fun persist(store: FoliaSettingsStore, settings: EqSettings) {
-        try {
-            store.putAll(mapOf(PREF_PAYLOAD to settings.toJson().toString()))
-        } catch (error: Throwable) {
-            Log.w(TAG, "保存调音台设置失败", error)
+        synchronized(persistLock) {
+            pendingStore = store
+            pendingSettings = settings
+            if (persistQueued) return
+            persistQueued = true
+        }
+        persistExecutor.execute {
+            try {
+                // 合并窗口：这段时间里后续的 persist 只覆盖 pending，不再新增任务。
+                Thread.sleep(PERSIST_DEBOUNCE_MS)
+                val (target, snapshot) = synchronized(persistLock) {
+                    persistQueued = false
+                    val queuedStore = pendingStore
+                    val queuedSettings = pendingSettings
+                    pendingStore = null
+                    pendingSettings = null
+                    queuedStore to queuedSettings
+                }
+                if (target != null && snapshot != null) {
+                    target.putAll(mapOf(PREF_PAYLOAD to snapshot.toJson().toString()))
+                }
+            } catch (error: Throwable) {
+                Log.w(TAG, "保存调音台设置失败", error)
+            }
+        }
+    }
+
+    private const val PERSIST_DEBOUNCE_MS = 600L
+
+    private val persistLock = Any()
+    private var persistQueued = false
+    private var pendingStore: FoliaSettingsStore? = null
+    private var pendingSettings: EqSettings? = null
+
+    /** 单线程、守护、最低优先级：写盘只在设备空闲时蹭一点 IO，不和播放抢。 */
+    private val persistExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "folia-eq-persist").apply {
+            isDaemon = true
+            priority = Thread.MIN_PRIORITY
         }
     }
 }

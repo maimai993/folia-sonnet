@@ -863,6 +863,11 @@ class FoliaNativePlugin : Plugin() {
             val name = entry.optString("name", "")
             if (url == null || url.isEmpty() || name == null || name.isEmpty()) continue
             manager.setCookie(url, name + "=; Max-Age=0; path=/")
+            // JS 登录写的是 Domain cookie；只删 host-only 会留下同名登录态（#208）。
+            val host = Uri.parse(url).host
+            if (!host.isNullOrEmpty()) {
+                manager.setCookie(url, name + "=; Max-Age=0; path=/; Domain=" + host + "; Secure; HttpOnly")
+            }
             removed++
         }
         if (removed > 0) manager.flush()

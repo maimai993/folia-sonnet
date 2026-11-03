@@ -202,6 +202,12 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
   const buildKind = resolveDevBuildKindOverride(_config.command, process.env) ?? resolveBuildKind(process.env);
 
   const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'Realeco';
+  // 应用内显示的版本号：测试版写在 package.json 的 displayVersion 里（桌面打包只吃三段 semver，
+  // `.devN` 或四段会被 electron-builder 改写），没写就用 version。
+  const packageVersion = ((): string => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+    return String(pkg.displayVersion ?? pkg.version);
+  })();
   const appReleaseChannel = process.env.APP_RELEASE_CHANNEL?.trim().toLowerCase() || 'realeco';
   const dockerStackVersion = process.env.DOCKER_STACK_VERSION?.trim() || '';
 
@@ -342,7 +348,8 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       '__BUILD_COMMIT__': JSON.stringify(buildCommit),
       '__BUILD_KIND__': JSON.stringify(buildKind.kind),
       '__BUILD_HOST__': JSON.stringify(buildKind.host ?? ''),
-      '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
+      // 测试版的名字在 displayVersion 里（桌面打包只吃三段 semver，见 android/app/build.gradle）。
+      '__APP_VERSION__': JSON.stringify(packageVersion),
       '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel),
       '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel),
       '__DOCKER_STACK_VERSION__': JSON.stringify(dockerStackVersion)

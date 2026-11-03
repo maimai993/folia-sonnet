@@ -50,8 +50,17 @@ android {
         applicationId "top.izuna.foliamajor"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode versionCodeOf(packageJson.version.toString())
-        versionName packageJson.version
+        // 测试版（`0.7.25.dev2` 这种）的 code 由 package.json 的 androidVersionCode 显式给出：
+        // 名字里的 dev 序号与 code 的最后一位是两个计数器，靠名字推不出来。正式版没有这个字段，
+        // 仍旧按 A.B.C.D 推导。
+        versionCode packageJson.containsKey('androidVersionCode') && packageJson.androidVersionCode
+                ? (packageJson.androidVersionCode as int)
+                : versionCodeOf(packageJson.version.toString())
+        // 桌面那边（electron-builder 的产物名）只认三段的 semver，四段或 `.devN` 会被它改写，
+        // 所以测试版的名字单独放 displayVersion：应用里与 Android 上用这个名字，包名仍用 version。
+        versionName packageJson.containsKey('displayVersion') && packageJson.displayVersion
+                ? (packageJson.displayVersion as String)
+                : packageJson.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
