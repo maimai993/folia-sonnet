@@ -10,6 +10,7 @@ import { Button } from './ui';
 import TrackTitleNavigator from './floating-player/TrackTitleNavigator';
 import PlayerControlSlotButton from './floating-player/PlayerControlSlotButton';
 import PlayerBottomBarPositioner from './floating-player/PlayerBottomBarPositioner';
+import { usePlayerBarScrollSlide } from './floating-player/usePlayerBarScrollSlide';
 import { usePlayerBottomBarBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { playerBottomBarLiveOffset } from '../stores/motionSignals';
 import { usePlayerBottomBarLayoutStore } from '../stores/usePlayerBottomBarLayoutStore';
@@ -82,6 +83,11 @@ interface FloatingPlayerControlsProps {
     theme?: Theme;
     isDaylight: boolean;
     isHidden?: boolean;
+    /**
+     * 跟着列表往下滚暂时收到屏幕下面（只用于搜索页这类整屏列表：它末尾的「查看更多」被胶囊压住）。
+     * 和 isHidden 不同，这里只是移出视口，不做淡出 —— 往上一滚就滑回来。
+     */
+    isScrollHidden?: boolean;
     hideControlBar?: boolean;
     controlsDisabled?: boolean;
     trackNavigation?: TrackNavigation | null;
@@ -116,6 +122,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     theme,
     isDaylight,
     isHidden = false,
+    isScrollHidden = false,
     hideControlBar = false,
     controlsDisabled = false,
     trackNavigation = null,
@@ -125,7 +132,11 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     onCommitBottomBarOffset,
 }) => {
     const { t } = useTranslation();
-    const { ref: layoutRef, invalidate: invalidateLayout } = usePlayerOverlayObstacle('player-controls', 'playback', !isHidden);
+    const { ref: layoutRef, invalidate: invalidateLayout } = usePlayerOverlayObstacle(
+        'player-controls',
+        'playback',
+        !isHidden && !isScrollHidden,
+    );
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
     const glassBgExpanded = isDaylight ? 'bg-white/60 border border-white/20 shadow-xl' : 'bg-black/40 border border-white/5';
     const glassBgCollapsed = isDaylight ? 'bg-white/40 border border-white/20 shadow-lg hover:bg-white/50' : 'bg-black/20 border border-white/5 hover:bg-black/30';
@@ -316,6 +327,10 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         0,
         Math.round(HOVER_HITBOX_BOTTOM_BUFFER_PX - (savedBottomBarOffset - PLAYER_BOTTOM_BAR_BASE_OFFSET_PX)),
     );
+    const { isSliding: isScrollSliding, layoutAnimationEnabled, layerStyle: scrollSlideStyle } = usePlayerBarScrollSlide(
+        isScrollHidden,
+        savedBottomBarOffset,
+    );
 
     // 槽位上下文：调用方给的那份，加上胶囊自己掌握的循环模式、歌词时间轴和相邻曲目可用性。
     const resolvedSlotContext = useMemo<PlayerControlSlotContext>(() => ({
@@ -474,8 +489,14 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                 style={{ bottom: bottomBarBottomPx }}
                 onUpdate={invalidateLayout}
             >
+            <div
+                // 收起/放回的位移层：位移走 CSS 过渡（合成线程），和 framer 那层分开，样式见
+                // usePlayerBarScrollSlide。
+                className="w-full flex justify-center pointer-events-none"
+                style={scrollSlideStyle}
+            >
             <motion.div
-                className="w-full flex justify-center transition-all duration-300 pointer-events-none"
+                className="w-full flex justify-center pointer-events-none"
                 onUpdate={invalidateLayout}
                 initial={false}
                 animate={{
@@ -484,7 +505,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     scale: isHidden ? 0.97 : 1,
                 }}
                 transition={{ duration: 0.26, ease: 'easeOut' }}
-                style={{ pointerEvents: isHidden ? 'none' : 'auto' }}
+                style={{ pointerEvents: isHidden || isScrollHidden ? 'none' : 'auto' }}
                 onClick={(e) => e.stopPropagation()}
                 // 手机横屏那档要把这一层和下面那个全宽命中盒一起交回 pass-through：
                 // 悬停展开在触屏上没有意义，可铺满下缘的命中区会把别的贴底控件一起吃掉
@@ -508,7 +529,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                         ref={layoutRef}
                         onUpdate={invalidateLayout}
                         onLayoutAnimationComplete={invalidateLayout}
-                        layout
+                        layout={layoutAnimationEnabled}
                         transition={{ layout: CONTROL_LAYOUT_SPRING }}
                         // 用原生 pointer 事件而不是 framer-motion 的 drag：位移已经由 playerBottomBarLiveOffset
                         // 经外层 lift 表达，再让 drag 往这个节点写一份 y 会叠加成两倍位移；
@@ -522,12 +543,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                         onPointerCancel={handlePositionDragEnd}
                         onClickCapture={handleBarClickCapture}
                         style={{ touchAction: isPositioning ? 'none' : undefined }}
-                        className={`backdrop-blur-xl shadow-2xl overflow-hidden rounded-full relative transition-colors duration-300
+                        className={`overflow-hidden rounded-full relative transition-colors duration-300
+                            ${isScrollSliding ? 'shadow-none' : 'backdrop-blur-xl shadow-2xl'}
                             ${isPositioning ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}
                             ${showExpanded ? `p-3 ${glassBgExpanded} w-full` : `px-4 py-2 ${glassBgCollapsed} ${COLLAPSED_WIDTH_CLASS}`}`}
                     >
                         <motion.div
-                            layout
+                            layout={layoutAnimationEnabled}
                             transition={{ layout: CONTROL_LAYOUT_SPRING }}
                             // 定位模式下 seek 和所有按钮一起失效：这时胶囊是个被拖的物体，不是控件。
                             className={`w-full ${isPositioning ? 'pointer-events-none select-none' : ''}`}
@@ -568,6 +590,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                     </motion.div>
                 </div>
             </motion.div>
+            </div>
             </motion.div>
 
             <AnimatePresence>

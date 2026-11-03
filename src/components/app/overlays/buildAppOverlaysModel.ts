@@ -43,6 +43,8 @@ type AppOverlaysAmbient = {
 
     currentView: FloatingControlsProps['currentView'];
     isSearchOpen: boolean;
+    /** 搜索页列表往下滚时播放条收起（见 SearchWorkspace 的滚动方向判定）。 */
+    isSearchResultsBarHidden: boolean;
     isListeningArchiveOpen: boolean;
     isDaylight: boolean;
     isDevDebugOverlayVisible: boolean;
@@ -132,6 +134,7 @@ type BuildAppOverlaysModelParams = AppOverlaysAmbient & AppOverlaysDeps;
 export const buildAppOverlaysModel = ({
     currentView,
     isSearchOpen,
+    isSearchResultsBarHidden,
     isListeningArchiveOpen,
     theme,
     isDaylight,
@@ -306,6 +309,9 @@ export const buildAppOverlaysModel = ({
             theme,
             isDaylight,
             isHidden: currentView === 'player' && isPlayerChromeHidden,
+            // 搜索页盖住整屏、又不给列表末尾留出胶囊的净空，「查看更多」就在胶囊底下。
+            // 往下滚时把它收到屏幕下面，往上滚（或关掉搜索页）再放回来。
+            isScrollHidden: currentView === 'home' && isSearchOpen && isSearchResultsBarHidden,
             hideControlBar: shouldHidePlayerProgressBar,
             slotPrimary: playerControlSlotPrimary,
             slotSecondary: playerControlSlotSecondary,
