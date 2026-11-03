@@ -117,6 +117,80 @@ const buildTimedWords = (text: string, startTime: number, endTime: number): Word
     return words;
 };
 
+const lyricCharCount = (text: string): number => Array.from(text.replace(/\s+/g, '')).length;
+
+/**
+ * 行级歌词（没有字时间）的字位置是摊出来的，而摊的依据是「本行到下一行之间」的全部时间 ——
+ * 那段里往往夹着间奏。一行八个字横跨二十秒时，每个字被摊到两秒半：字慢得像爬，到下一行
+ * 又突然跳回准位，于是整首歌只剩第一个字是准的。
+ *
+ * 这里拿整首的「每字时长」中位数当常态：明显比常态慢一截的行，把字压回正常语速，
+ * 行尾留在字唱完之后两秒（尾韵），余下的时间还给间奏。慢歌整体每字就长，中位数跟着变长。
+ */
+const LINE_TAIL_SEC = 2;
+
+const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]): void => {
+    if (estimatedIndexes.length === 0) {
+        return;
+    }
+
+    const perCharSamples = lines
+        .map(line => {
+            const count = lyricCharCount(line.fullText);
+            const span = line.endTime - line.startTime;
+            return count > 0 && span > 0 ? span / count : 0;
+        })
+        .filter(value => value >= 0.08 && value <= 1.2);
+
+    /*
+     * 每字 0.5 秒是旧版写死的经验值，样本不够时（整首歌只有几行歌词）继续用它兜底；
+     * 样本够了就跟着这首歌自己的语速走 —— 慢歌每字本来就长，用 0.5 会把整首压快。
+     */
+    let pace = 0.5;
+    if (perCharSamples.length >= 4) {
+        perCharSamples.sort((left, right) => left - right);
+        pace = perCharSamples[Math.floor(perCharSamples.length / 2)];
+    }
+
+    estimatedIndexes.forEach(index => {
+        const line = lines[index];
+        if (!line) {
+            return;
+        }
+        // 最后一行没有「下一句」可参照，它那五秒是个保守默认值 —— 谁也不知道歌还剩多长，
+        // 压短只会在尾奏时把最后一句提前撤掉。
+        if (index === lines.length - 1) {
+            return;
+        }
+        // 五秒以内的行距是正常的句间停顿，不压；压了反而会让正常的句子提前结束。
+        if (line.endTime - line.startTime <= 5) {
+            return;
+        }
+
+        const count = line.fullText.length;
+        if (count === 0) {
+            return;
+        }
+
+        /*
+         * 行尾 = 字唱完 + 两秒尾韵。
+         *
+         * 这两秒是给这一句的尾音留的：
+         *   · 完全按「到下一行为止」定长，后面接间奏的行会把字摊成每字两三秒；
+         *   · 压到字唱完就结束，尾音还在响、屏幕上的词已经撤掉（「词没了还在唱那一句」）。
+         * 字按正常语速走完，行多留两秒，剩下的时间交给 attachInterludes 变成间奏行。
+         */
+        const singEnd = line.startTime + count * pace;
+        const lineEnd = singEnd + LINE_TAIL_SEC;
+        if (line.endTime <= lineEnd) {
+            return;
+        }
+
+        line.words = buildTimedWords(line.fullText, line.startTime, singEnd);
+        line.endTime = lineEnd;
+    });
+};
+
 export const isInterludeLine = (line: Pick<Line, 'fullText'>): boolean => line.fullText === INTERLUDE_FULL_TEXT;
 
 export const attachInterludes = (lines: Line[]): Line[] => {
@@ -467,12 +541,8 @@ export const parseLRC = (
         const next = sortedRawEntries[index + 1];
         const translation = translations[index];
 
-        let duration = next ? next.startTime - current.startTime : 5;
-        const estimatedReadingTime = current.text.length * 0.5;
-        if (duration > estimatedReadingTime + 2 && duration > 5) {
-            duration = Math.min(duration, estimatedReadingTime + 2);
-        }
-
+        // 先按「到下一行为止」定长，间奏那部分交给 rebalanceEstimatedLineTimings 收掉。
+        const duration = next ? next.startTime - current.startTime : 5;
         const endTime = current.startTime + duration;
         lines.push({
             words: buildTimedWords(current.text, current.startTime, endTime),
@@ -483,6 +553,8 @@ export const parseLRC = (
             romanization: romanizations[index]
         });
     }
+
+    rebalanceEstimatedLineTimings(lines, lines.map((_, index) => index));
 
     return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
@@ -906,6 +978,7 @@ export const parseEnhancedLRC = (
         romanizationEntries
     );
 
+    const estimatedIndexes: number[] = [];
     const lines: Line[] = sortedDrafts.map((draft, index) => {
         let lineEndTime = Math.max(draft.endTime ?? sortedDrafts[index + 1]?.startTime ?? (draft.startTime + 5), draft.startTime + 0.001);
 
@@ -922,6 +995,10 @@ export const parseEnhancedLRC = (
             })
             : buildTimedWords(draft.fullText, draft.startTime, lineEndTime);
 
+        if (draft.words.length === 0) {
+            estimatedIndexes.push(index);
+        }
+
         if (words.length > 0) {
             lineEndTime = Math.max(lineEndTime, words[words.length - 1].endTime);
         }
@@ -935,6 +1012,8 @@ export const parseEnhancedLRC = (
             romanization: romanizations[index]
         };
     });
+
+    rebalanceEstimatedLineTimings(lines, estimatedIndexes);
 
     return {
         lines: finalizeParsedLyricLines(lines, options),

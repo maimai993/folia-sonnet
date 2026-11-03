@@ -1,6 +1,7 @@
 import { removeFromCache, saveToCache } from '../../../services/db';
 import type { SongResult, UnifiedSong } from '../../../types';
 import { isStagePlaybackSong, normalizePlaybackSongSource } from '../../../utils/appPlaybackGuards';
+import { forgetPlaybackPosition } from './playbackPositionCache';
 
 // src/components/app/playback/persistPlaybackCache.ts
 
@@ -33,5 +34,8 @@ export const forgetPlaybackCache = async () => {
     await Promise.all([
         removeFromCache('last_song'),
         removeFromCache('last_queue'),
+        // 位置跟着一起清：留着它，下次恢复会拿一条属于「已经不在这台机器上」的那首歌
+        // 的记录去比 songKey，虽然对不上就会作废，但没必要让一条死数据一直躺着。
+        forgetPlaybackPosition(),
     ]);
 };

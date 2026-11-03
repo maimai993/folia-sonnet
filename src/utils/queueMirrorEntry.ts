@@ -128,6 +128,33 @@ export const buildQueueMirrorEntries = (
 ): QueueMirrorEntry[] => list.map(song => buildQueueMirrorEntry(song, likeStateOf));
 
 /**
+ * 按原生镜像队列的顺序重排本地队列：**字段用本地的，顺序用原生的**。
+ *
+ * 打乱、拖动、删歌都是原生先知道（镜像推过去就落盘），而 WebView 那份 `last_queue`
+ * 只要有一次没接上就还停在旧顺序 —— 直接用就成了「歌都在、顺序不对」。
+ * 两条队列对不上八成（换过队列但原生还没跟上）时原样返回，不硬套。
+ *
+ * 镜像条目只有歌名、歌手、封面；本地找不到的那一条才退回去用它。
+ */
+export const orderQueueLikeMirror = (
+    queue: SongResult[],
+    entries: Array<{ songKey: string }> | null | undefined,
+): { queue: SongResult[]; reordered: boolean } => {
+    if (!entries || entries.length === 0 || queue.length === 0) {
+        return { queue, reordered: false };
+    }
+    const byKey = new Map(queue.map(song => [getPlaybackSongKey(song), song]));
+    const matched = entries.filter(entry => byKey.has(entry.songKey)).length;
+    if (matched < entries.length * 0.8) return { queue, reordered: false };
+    const ordered = entries.map(entry => byKey.get(entry.songKey)
+        ?? songFromMirrorEntry(entry as Parameters<typeof songFromMirrorEntry>[0]));
+    const reordered = ordered.some((song, index) => (
+        !queue[index] || getPlaybackSongKey(song) !== getPlaybackSongKey(queue[index])
+    ));
+    return { queue: ordered, reordered };
+};
+
+/**
  * 把原生队列状态里的一条还原回 `SongResult`。
  *
  * 反向映射（buildQueueMirrorEntry 的逆）：JS 醒来对齐队列时用 —— WebView 冻结期间

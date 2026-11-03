@@ -92,6 +92,7 @@
 - **main 和 dev 都不直接 push**，一律走 PR。这条靠 GitHub 分支保护落实：Settings → Branches 给 `main`、`dev` 开保护，勾「Require a pull request before merging」与「Do not allow bypassing」。owner 在网页上配一次；CI 用的账号不是 admin，脚本改不了。
 - 日常：从 `dev` 切 `feat/*` 或 `fix/*` → 改 → 本地门禁 → **真机验过** → PR 到 `dev` → 远端 CI 全绿 → 合并。不熟 GitHub 的用一条命令跑完推分支和建 PR：`npm run pr -- "fix: 标题"`（只是 `ci/openPr.ts` 的包装，细节见 `ci/README.md`）。
 - 发版：先在 `dev` 上把 `package.json` 版本改好（走 PR），再 `dev` → PR → `main`；然后从 `main` 切 `release/<package.json 的 version>`（如 `release/0.7.22`）推上去。推这个分支会触发 `android-release.yml`：校验分支名与版本一致 → 出 APK/AAB → 打 `v<版本>` 标签 → 发 Release。release 分支上不再改版本号。
+- **本地出包不改版本号。** 为了验收、侧装或给别人试而构建的 APK，`version`、`displayVersion`、`androidVersionCode` 一律照抄当前 `package.json`，不自己往上加。版本号只在上面的发版流程里动；上游没动，这一版就还是这个号，`versionCode` 相同只是覆盖安装，不是问题。要区分产物就改文件名（`-lyric-calibration`、`-scanfix` 这种）；一改 `versionCode`，手上那个旧包就装不回去了（`INSTALL_FAILED_VERSION_DOWNGRADE`）。
 
 ### CI
 

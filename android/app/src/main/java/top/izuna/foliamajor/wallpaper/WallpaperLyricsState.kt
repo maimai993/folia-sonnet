@@ -279,6 +279,7 @@ class WallpaperLyricsState private constructor() {
          * 位置从 0 起播（原生刚 prepare 完），playing 置真。
          */
         @JvmStatic
+        @Synchronized
         fun publishNativeTrack(title: String?, artist: String?, coverUrl: String?,
                                durationMs: Long, lines: Array<TimedLine>?,
                                positionMs: Long = 0L, playing: Boolean = true) {
@@ -308,6 +309,7 @@ class WallpaperLyricsState private constructor() {
          * WebView 冻结时 Web 抓 base64 那条路不会跑，只能从通知栏那份位图来。
          */
         @JvmStatic
+        @Synchronized
         fun setCoverData(coverBase64: String?) {
             if (coverBase64 == null || coverBase64.isEmpty()) {
                 return
@@ -348,6 +350,7 @@ class WallpaperLyricsState private constructor() {
          * 位置取自快照自己，不存在回退，照旧走 {@link #setAnchor}。
          */
         @JvmStatic
+        @Synchronized
         fun setSeekAnchor(positionMs: Long, playing: Boolean) {
             nativeSeekAtMs = SystemClock.elapsedRealtime()
             nativeSeekPositionMs = positionMs
@@ -453,6 +456,7 @@ class WallpaperLyricsState private constructor() {
          * 用错地方就会把拖动后的新位置顶回旧值（见 FoliaPlaybackService 里那条注释）。
          */
         @JvmStatic
+        @Synchronized
         fun setPlaying(playing: Boolean) {
             heartbeat()
             val previous = current
@@ -469,6 +473,7 @@ class WallpaperLyricsState private constructor() {
 
         /** 播放位置推进：只更新锚点，不动时间轴，也不落盘。 */
         @JvmStatic
+        @Synchronized
         fun setAnchor(positionMs: Long, playing: Boolean) {
             // 谁能写锚点谁就活着（Web 推送、播放服务、原生 seek），顺手把心跳带上。
             heartbeat()
@@ -531,6 +536,7 @@ class WallpaperLyricsState private constructor() {
             return currentFontKey
         }
 
+        @Synchronized
         private fun applyFontKey() {
             val previous = current
             current = Snapshot(previous.title, previous.artist, previous.cover, previous.accent,
@@ -541,6 +547,7 @@ class WallpaperLyricsState private constructor() {
         }
 
         @JvmStatic
+        @Synchronized
         fun publish(context: Context?, title: String?, artist: String?, cover: String?,
                     accent: Int, baseColor: Int, motion: Float, backgroundMode: String?,
                     imageBase64: String?, visualizerMode: String?, blur: Float,
@@ -593,6 +600,27 @@ class WallpaperLyricsState private constructor() {
             if (context != null && (lines != null || tuningPatch != null)) {
                 persist(context, next)
             }
+        }
+
+        /** 主题表更新独立于歌词/时钟：后台 AI 完成时只改配色和重绘代次，不能重设播放锚点。 */
+        @JvmStatic
+        @Synchronized
+        fun applyThemePalette(context: Context, accent: Int?, baseColor: Int?) {
+            // 不让主题先到的一拍把 EMPTY 变成空白快照，挡住随后服务的时间轴恢复。
+            restore(context)
+            if (current === EMPTY) return
+            val previous = current
+            val next = Snapshot(previous.title, previous.artist, previous.cover,
+                    accent ?: previous.accent,
+                    baseColor ?: previous.baseColor,
+                    previous.motion, previous.backgroundMode, previous.image, previous.font,
+                    previous.visualizerMode, previous.blur, previous.showProgress,
+                    previous.showTranslation, previous.durationMs, previous.lines, previous.playing,
+                    previous.anchorElapsedMs, previous.anchorPositionMs,
+                    maxOf(System.currentTimeMillis(), previous.stamp + 1L))
+            current = next
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putInt(KEY_BASE, next.baseColor).putInt(KEY_ACCENT, next.accent).apply()
         }
 
         /**
@@ -660,6 +688,7 @@ class WallpaperLyricsState private constructor() {
 
         /** 只改外观（背景模式 / 自选图 / 可视化风格），不动时间轴，也避免整条时间轴重新落盘。 */
         @JvmStatic
+        @Synchronized
         fun setAppearance(context: Context?, backgroundMode: String?, imageBase64: String?,
                           visualizerMode: String?, blur: Float, showProgress: Boolean?,
                           showTranslation: Boolean?, durationMs: Long,
@@ -698,6 +727,7 @@ class WallpaperLyricsState private constructor() {
         }
 
         @JvmStatic
+        @Synchronized
         fun clear(context: Context?) {
             current = EMPTY
             if (context != null) {
@@ -708,6 +738,7 @@ class WallpaperLyricsState private constructor() {
 
         /** 忘掉自选图（用户点「清除图片」）。 */
         @JvmStatic
+        @Synchronized
         fun clearBackgroundImage(context: Context?) {
             lastStoredImage = null
             lastStoredKey = null
@@ -752,6 +783,7 @@ class WallpaperLyricsState private constructor() {
          * 冷启动时内存必然是 EMPTY，恢复如期发生；热路径则一律不打断现有状态。
          */
         @JvmStatic
+        @Synchronized
         fun restore(context: Context?) {
             if (context == null || current !== EMPTY) {
                 return

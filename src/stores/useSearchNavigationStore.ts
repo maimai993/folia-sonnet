@@ -71,10 +71,16 @@ interface SearchNavigationState {
     limit: number;
     hasMore: boolean;
     scrollTop: number;
+    /**
+     * 搜索结果列表往下滚时把底部播放条收到屏幕下面（它挡住列表末尾的「查看更多」），
+     * 往上滚再放回来。只在搜索页成立：不写缓存、不持久化，关掉搜索页就复位。
+     */
+    isResultsBarHidden: boolean;
     searchCache: Record<string, SearchCacheEntry>;
     setHomeViewTab: (tab: HomeViewTab) => void;
     setSearchQuery: (query: string) => void;
     setSearchScrollTop: (scrollTop: number) => void;
+    setResultsBarHidden: (hidden: boolean) => void;
     restoreSearch: (payload: { query: string; sourceTab: SearchSource; returnView?: SearchReturnView; }) => void;
     hideSearchOverlay: () => void;
     resetRuntime: (onlineProviderId?: OnlineProviderId) => void;
@@ -408,6 +414,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
     limit: DEFAULT_SEARCH_LIMIT,
     hasMore: false,
     scrollTop: 0,
+    isResultsBarHidden: false,
     searchCache: {},
     setHomeViewTab: (tab) => {
         const resolvedTab = tab === 'local' && !supportsLocalMusicImport() ? 'playlist' : tab;
@@ -430,6 +437,8 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
                 : state.searchCache,
         };
     }),
+    // 相等就原样返回：列表的 onScroll 会反复调用，卸载时也会补一次复位，不能每次都让订阅者重渲染。
+    setResultsBarHidden: (hidden) => set(state => (state.isResultsBarHidden === hidden ? state : { isResultsBarHidden: hidden })),
     restoreSearch: ({ query, sourceTab, returnView = 'home' }) => set(state => {
         const cached = state.searchCache[getSearchCacheKey(query, sourceTab)];
         return {
@@ -440,6 +449,8 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             offset: cached?.offset ?? 0,
             hasMore: cached?.hasMore ?? false,
             scrollTop: cached?.scrollTop ?? 0,
+            // 播放条是否收起跟着这一次滚动，不跟着缓存：重新进这一页时它是露着的。
+            isResultsBarHidden: false,
             searchError: null,
             searchAuthExpiredProvider: null,
             isSearching: false,
@@ -447,7 +458,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             isSearchOpen: true,
         };
     }),
-    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home' }),
+    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home', isResultsBarHidden: false }),
     resetRuntime: (onlineProviderId) => set(state => ({
         searchQuery: '',
         searchSourceTab: onlineProviderId ?? state.searchSourceTab,
@@ -462,6 +473,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         offset: 0,
         hasMore: false,
         scrollTop: 0,
+        isResultsBarHidden: false,
     })),
     // The overlay's online source is the active provider. A switch moves it through resetRuntime, but
     // the active provider also changes without one (startup, session restore, a Folium mod source going
@@ -503,6 +515,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             offset: 0,
             hasMore: false,
             scrollTop: 0,
+            isResultsBarHidden: false,
         });
 
         /*

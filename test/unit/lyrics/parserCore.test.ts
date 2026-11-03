@@ -425,3 +425,34 @@ describe('findTranslationsForSortedStartTimes', () => {
             .toEqual([['Hello', '戊'], ['Yeah', undefined]]);
     });
 });
+
+describe('estimated line timing after an interlude', () => {
+    // 一行十几个字后面接着长间奏：字不能摊到整段（否则唱得像爬），
+    // 但行本身也不能在字唱完那一刻就撤 —— 尾音还在响，屏幕上已经没有词了。
+    const lrc = [
+        '[00:00.00]第一句歌词八个字',
+        '[00:03.00]第二句歌词八个字',
+        '[00:06.00]第三句歌词八个字',
+        '[00:09.00]第四句歌词八个字',
+        '[00:12.00]这一句后面接着长长的间奏呀',
+        '[00:28.00]下一句',
+    ].join('\n');
+
+    it('ends the line a couple of seconds after the words, not at the next line', () => {
+        const line = parseLRC(lrc).lines.find(item => item.fullText === '这一句后面接着长长的间奏呀');
+        expect(line).toBeTruthy();
+        // 行尾落在字唱完之后两秒（尾韵），远早于 28 秒的下一句，余下的时间归间奏。
+        expect(line!.endTime).toBeLessThan(22);
+        expect(line!.endTime).toBeGreaterThan(line!.startTime);
+        const lastWord = line!.words[line!.words.length - 1];
+        expect(line!.endTime - lastWord.endTime).toBeGreaterThan(1.5);
+    });
+
+    it('packs the words into the pace of the rest of the song', () => {
+        const line = parseLRC(lrc).lines.find(item => item.fullText === '这一句后面接着长长的间奏呀');
+        const lastWord = line!.words[line!.words.length - 1];
+        // 前四行每字 0.375 秒；一整句要是摊到十六秒就成每字一秒多，字必须收回来。
+        expect(lastWord.endTime - line!.startTime).toBeLessThan(8);
+        expect(lastWord.endTime).toBeGreaterThan(line!.startTime);
+    });
+});
