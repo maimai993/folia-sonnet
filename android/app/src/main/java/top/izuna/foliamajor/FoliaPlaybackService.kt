@@ -26,6 +26,7 @@ import top.izuna.foliamajor.player.NativeLyricsCache
 import top.izuna.foliamajor.player.NativeMirrorGuard
 import top.izuna.foliamajor.player.NativePlayQueue
 import top.izuna.foliamajor.player.NativeQueueEntry
+import top.izuna.foliamajor.player.SessionSnapshotStore
 
 /**
  * 后台播放的前台服务。
@@ -92,6 +93,14 @@ class FoliaPlaybackService : android.app.Service() {
     @Volatile
     private var lastMetadataAtMs = 0L
 
+    // ===== 会话快照（见 SessionSnapshotStore）=====
+    /** 上一次落盘的队列签名（revision + 下标 + 当前曲）：一样就不再写那份几百 KB 的 JSON。 */
+    private var sessionQueueSignature = ""
+    /** 上一次落盘位置的时刻（elapsedRealtime）：位置那条每十秒写一次就够。 */
+    private var sessionPositionAtMs = 0L
+    /** 上一次落盘时的当前曲：心跳靠它发现「切歌了」，不用每拍都去序列化整份队列。 */
+    private var sessionSongKey = ""
+
     /**
      * 原生平台网关解析出来的地址，按 songKey 记着。
      *
@@ -153,9 +162,19 @@ class FoliaPlaybackService : android.app.Service() {
             }
             val alive = FoliaPlaybackPlugin.isBridgeAlive()
                     || top.izuna.foliamajor.player.FoliaNativePlayerPlugin.isNativePlaying()
+            /*
+             * 间隔跟着「是不是真的在出声」走。
+             *
+             * 播着的时候 2 秒一刀：壁纸歌词每帧读 heartbeatAlive，10 秒不敲就整块停画，
+             * 这个节拍必须比它密。停着的时候（桥断了 / 播放器空手）没有任何东西在动，
+             * 5 秒一刀足够回答「还活着吗」—— 撤回判定是 10 秒，最坏晚 5 秒收通知，
+             * 而主线程的唤醒次数少了一半多，后台待机功耗跟着降。
+             */
+            var nextDelay = IDLE_HEARTBEAT_TICK_MS
             if (alive) {
                 top.izuna.foliamajor.wallpaper.WallpaperLyricsState.heartbeat()
                 lastHeartbeatAtMs = android.os.SystemClock.elapsedRealtime()
+                nextDelay = WALLPAPER_HEARTBEAT_TICK_MS
             } else if (lastHeartbeatAtMs > 0L && !playConfirmPending
                     && !top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()
                     && android.os.SystemClock.elapsedRealtime() - lastHeartbeatAtMs > HEARTBEAT_WITHDRAW_MS) {
@@ -169,7 +188,21 @@ class FoliaPlaybackService : android.app.Service() {
                 // 什么都没有」—— 那时每个键都是死键。
                 withdrawMediaNotification()
             }
-            mainHandler.postDelayed(this, WALLPAPER_HEARTBEAT_TICK_MS)
+            mainHandler.postDelayed(this, nextDelay)
+
+            /*
+             * 会话快照跟着心跳走。
+             *
+             * 队列那份只在「当前曲换了」时才碰 —— `playQueue.snapshot()` 要把几百首
+             * 序列化一遍，两秒一次纯属白烧主线程；签名守卫只能省掉写盘，省不掉序列化。
+             * 位置那份每十秒一次，只有几十字节。
+             */
+            val sessionKey = cachedSongKey ?: ""
+            if (sessionKey.isNotEmpty() && sessionKey != sessionSongKey) {
+                sessionSongKey = sessionKey
+                persistQueueSnapshot()
+            }
+            persistPositionSnapshot()
         }
     }
 
@@ -250,6 +283,58 @@ class FoliaPlaybackService : android.app.Service() {
             playQueue.setShuffle(snapshot.optBoolean("shuffle", false))
         } catch (error: Throwable) {
             Log.w(TAG, "循环模式读取失败，按顺序播放处理", error)
+        }
+    }
+
+    /**
+     * 把当前队列抄一份到磁盘（见 [top.izuna.foliamajor.player.SessionSnapshotStore]）。
+     *
+     * 只在队列内容/游标/当前曲变了之后调：序列化几百首是毫秒级开销，跟着心跳跑就白白
+     * 每两秒烧一次主线程。签名一样直接返回，调用点可以放心多喊。
+     */
+    private fun persistQueueSnapshot() {
+        try {
+            val snapshot = playQueue.snapshot()
+            val entries = snapshot.optJSONArray("entries")
+            if (entries == null || entries.length() == 0) return
+            val index = snapshot.optInt("index", -1)
+            /*
+             * 顶层 songKey 取队列里游标那一首，而不是 `cachedSongKey`。
+             *
+             * 后者是元数据推到 JS 之后才更新的，切歌那一拍还停在上一首；用它写下去，
+             * 磁盘上就成了「新队列 + 旧歌名」，恢复时位置那条直接对不上、整段作废。
+             */
+            val songKey = playQueue.current()?.songKey?.takeIf { it.isNotEmpty() }
+                ?: cachedSongKey ?: ""
+            val signature = "${snapshot.optLong("revision", 0L)}#$index#$songKey"
+            if (signature == sessionQueueSignature) return
+            sessionQueueSignature = signature
+            SessionSnapshotStore.saveQueue(this, entries.toString(), index, songKey)
+        } catch (error: Throwable) {
+            Log.w(TAG, "队列快照落盘失败", error)
+        }
+    }
+
+    /**
+     * 记下「听到第几秒」。
+     *
+     * `commit` 只给收尾那一次用（onDestroy / onTaskRemoved）：那之后没有下一次机会，
+     * 而这条只有几十字节，同步写一次不痛。
+     */
+    private fun persistPositionSnapshot(commit: Boolean = false) {
+        try {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (!commit && now - sessionPositionAtMs < SESSION_POSITION_INTERVAL_MS) return
+            sessionPositionAtMs = now
+            SessionSnapshotStore.savePosition(
+                this,
+                // 与队列快照同一个来源：两边 key 不一致，读回来时会被判成「不是这首歌」。
+                playQueue.current()?.songKey?.takeIf { it.isNotEmpty() } ?: cachedSongKey ?: "",
+                resolvePlaybackPositionMs(),
+                commit,
+            )
+        } catch (error: Throwable) {
+            Log.w(TAG, "位置快照落盘失败", error)
         }
     }
 
@@ -495,6 +580,17 @@ class FoliaPlaybackService : android.app.Service() {
                                 mirroredQueueJson = incomingQueue
                                 mirroredIndex = playQueue.currentIndex()
                                 playQueue.bumpRevision()
+                                // 换队列/换游标这一刻就把会话抄到磁盘：之后进程随时可能被
+                                // 系统收走，等不到下一次心跳。
+                                persistQueueSnapshot()
+                            } else if (incomingQueue != null) {
+                                /*
+                                 * 前台推来一份空队列：用户清掉了播放列表（或者退出登录把
+                                 * 队列撤了）。盘上那份会话跟着作废 —— 不然下次启动会把
+                                 * 一批用户明确删掉的歌装回来。
+                                 */
+                                sessionQueueSignature = ""
+                                SessionSnapshotStore.clear(this)
                             }
                         }
                     }
@@ -509,6 +605,7 @@ class FoliaPlaybackService : android.app.Service() {
                             mirroredIndex = nextIndex
                             if (nextIndex >= 0) {
                                 playQueue.seekTo(nextIndex)?.let { playQueue.bumpRevision() }
+                                persistQueueSnapshot()
                             }
                         }
                     }
@@ -570,6 +667,9 @@ class FoliaPlaybackService : android.app.Service() {
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.i(TAG, "task removed; keeping the foreground service alive")
+        // 用户刚从最近任务里划掉：接下来随时可能连进程一起被收，这一拍必须同步落盘。
+        persistPositionSnapshot(commit = true)
+        persistQueueSnapshot()
         if (running) {
             promoteToForeground()
             mainHandler.removeCallbacks(heartbeatTick)
@@ -580,6 +680,9 @@ class FoliaPlaybackService : android.app.Service() {
 
     override fun onDestroy() {
         running = false
+        // 实例要没了：先把会话收尾写死。这一拍之后再没有任何机会，所以位置那条走同步写。
+        persistPositionSnapshot(commit = true)
+        persistQueueSnapshot()
         if (snapshotSource == this) {
             snapshotSource = null
         }
@@ -690,6 +793,24 @@ class FoliaPlaybackService : android.app.Service() {
      */
     fun onTrackFinished(rawEndedSongKey: String? = null) {
         val endedSongKey = top.izuna.foliamajor.player.endedIdentity(rawEndedSongKey)
+        /*
+         * ⭐ 派发标记**会过期**。
+         *
+         * 这个标记的语义只有一句：「我正在装某一首，还没落地」。装成功、装失败、
+         * 交回 Web，三条路各自会清它；但只要有一次漏清（解析在后台被 Doze 掐断、
+         * 回来时代次已经变了、被守卫丢掉），它就会一直停在上一首上 ——
+         * 而下面那个守卫拿它跟 ended 比，于是**之后每一首播完都被静默丢弃**：
+         * 通知栏停在当前这首、进度条走到末尾、点「下一首」却能切（那条路不看这个标记）。
+         * 用户报的「后台放一会儿就无法推进下一首」就是它。
+         *
+         * 一次完整的派发最长是一次地址解析重试（8+0.4+8+1.2+8 ≈ 26 秒）加装源，
+         * 所以超过 [pendingStaleMs] 一定不是在装，是漏清了。
+         */
+        if (pendingDispatchSongKey != null
+                && android.os.SystemClock.elapsedRealtime() - pendingDispatchAtMs > pendingStaleMs) {
+            Log.w(TAG, "派发标记超时未落地，按陈旧处理 songKey=" + pendingDispatchSongKey)
+            markPending(null)
+        }
         val pending = pendingDispatchSongKey
         // 派发中的旧源结束不再推进第二次；新歌真实ended不能被全局20秒时间窗吞掉（#175）。
         if (pending != null && endedSongKey != null && pending != endedSongKey) return
@@ -714,12 +835,32 @@ class FoliaPlaybackService : android.app.Service() {
             scheduleSkipFallback(+1)
             return
         }
+        /*
+         * ⭐ 游标以**真正放完的那一首**为准，不信状态机自己记的 index。
+         *
+         * 原来这里是一句「对不上就 return」，于是只要游标偏过一格（JS 推游标推晚了一首、
+         * 预取插队、前后台交接的那一下），这一首放完就静默不动了 —— 不写快照、不刷新通知，
+         * 界面就停在「这首还在播、进度条在末尾」。而手动切歌走的是另一条路（handleTransportSkip，
+         * 不看这个守卫），所以「点下一首能切、自己不会走」。
+         *
+         * 能找到就按实际位置纠正，然后照常推进；找不到说明队列刚被整份换掉，
+         * 这一条不推进，等新那一单自己开。
+         */
         val current = playQueue.current()
-        if (endedSongKey != null && current != null && endedSongKey != current.songKey) return
+        if (endedSongKey != null && current != null && endedSongKey != current.songKey) {
+            val endedAt = playQueue.indexOf(endedSongKey)
+            if (endedAt < 0) {
+                Log.w(TAG, "放完的那首不在队列里，不推进 songKey=" + endedSongKey)
+                return
+            }
+            Log.w(TAG, "队列游标与播放器不一致（游标 " + playQueue.currentIndex()
+                    + "，实际放完 " + endedAt + "），按实际纠正")
+            playQueue.seekTo(endedAt)
+        }
         val mode = playQueue.loopMode
         // 单曲循环：位置归零重播。走 seek 而不是换源 —— 换源会重新解密、重新缓冲，
         // 听感上是「每放完一次就卡一下」，而单曲循环本该是无缝的。
-        if (mode == NativeLoopMode.ONE && current != null) {
+        if (mode == NativeLoopMode.ONE && playQueue.current() != null) {
             seekToStartForRepeat()
             return
         }
@@ -773,6 +914,30 @@ class FoliaPlaybackService : android.app.Service() {
     private var advancedAheadAtMs = 0L
     @Volatile private var pendingDispatchSongKey: String? = null
 
+    /**
+     * 上一次设下 [pendingDispatchSongKey] 的时刻（单调时钟）。
+     *
+     * 这个标记没有别的意思，就一句「我正在装某一首、还没落地」。它必须能自己过期：
+     * 只要有一条清理路径漏了（后台解析被掐断、回来时代次已变、被守卫丢掉），
+     * 它就会永远停在上一首上，把之后的每一次 ended 都挡掉 —— 表现就是
+     * 「后台放一会儿就再也不自动下一首，但手动点下一首能切」。
+     */
+    @Volatile private var pendingDispatchAtMs = 0L
+
+    /**
+     * 派发标记的有效期。
+     *
+     * 一次完整派发 = 地址解析最多三轮重试（8+0.4+8+1.2+8 ≈ 26 秒）+ 装源，
+     * 给到 45 秒；正常路径在几百毫秒到几秒内就会清掉它，不会误伤。
+     */
+    private val pendingStaleMs = 45_000L
+
+    /** 设 / 清派发标记，顺手记下时刻。[pendingDispatchSongKey] 只该经这里改。 */
+    private fun markPending(key: String?) {
+        pendingDispatchSongKey = key
+        pendingDispatchAtMs = if (key == null) 0L else android.os.SystemClock.elapsedRealtime()
+    }
+
     private fun advanceToNextEntry(next: NativeQueueEntry) {
         playQueue.bumpRevision()
         // 镜像下标要跟着状态机一起推进：resolveMirrorEntryAsync 的过期守卫按
@@ -782,6 +947,14 @@ class FoliaPlaybackService : android.app.Service() {
             playQueue.all().forEach { put(it.toJson()) }
         }.toString()
         mirroredIndex = playQueue.currentIndex()
+        /*
+         * 换歌这一拍立刻落盘。
+         *
+         * 后台连播时 WebView 是冻着的，JS 那边的快照订阅器根本不跑；用户完全可能
+         * 「下一首刚起就划掉后台」。等心跳那两秒（空闲时五秒）就来不及了 —— 下次打开
+         * 回到的是上一首。这里写一次只是序列化队列 + 一个 JSON，切歌时做一次不痛。
+         */
+        persistQueueSnapshot()
         // 装源成功后 nativePlayMirrorEntry 自己会发 syncTo 让 JS 跟上；
         // 这里再发 "next" 会让 JS 那条播放链跟原生抢同一首歌（#106）。
         playQueueEntry(next)
@@ -807,14 +980,16 @@ class FoliaPlaybackService : android.app.Service() {
 
     /** 把队列里的一首交给原生播放器换源（地址缺了就走平台解析，见 resolveMirrorEntryAsync）。 */
     private fun playQueueEntry(entry: NativeQueueEntry) {
-        pendingDispatchSongKey = entry.songKey
+        markPending(entry.songKey)
         val json = entry.toJson()
         var url = entry.url
         if (url.isEmpty()) {
             url = resolvedUrlCache[entry.songKey] ?: ""
         }
         if (url.isNotEmpty()) {
-            nativePlayMirrorEntry(json, url)
+            // 装不上（播放器壳子不在）立刻把标记放下：留着它，这一首之后每一次 ended
+            // 都会被当成「还在派发」丢掉，直到 45 秒的过期兜底才恢复。
+            if (!nativePlayMirrorEntry(json, url)) markPending(null)
             return
         }
         /*
@@ -858,6 +1033,7 @@ class FoliaPlaybackService : android.app.Service() {
                 if (target >= 0) {
                     playQueue.replace(entries, target)
                     playQueue.bumpRevision()
+                    persistQueueSnapshot()
                 }
             }
         }
@@ -891,7 +1067,7 @@ class FoliaPlaybackService : android.app.Service() {
                 return false
             }
             mirroredIndex = target
-            pendingDispatchSongKey = songKey
+            markPending(songKey)
             // 这一单开出去：此前在途的解析全部作废（见 resolveMirrorEntryAsync 的代次守卫）。
             val generation = beginDispatch()
             var url = resolvedUrlCache.get(songKey)
@@ -1191,7 +1367,7 @@ class FoliaPlaybackService : android.app.Service() {
             // 先占位再决定要不要异步解析，与上面按 songKey 定位那条路径一致：
             // 解析期间用户又按了下一首的话，这一单的代次已经变了，回来的那份被守卫丢掉。
             mirroredIndex = wrapped
-            pendingDispatchSongKey = songKey
+            markPending(songKey)
             val generation = beginDispatch()
             if (url != null && !url.isEmpty()) {
                 nativePlayMirrorEntry(entry, url)
@@ -1379,7 +1555,7 @@ class FoliaPlaybackService : android.app.Service() {
      * pending 改成这一首；没带身份时清空，退回旧的时间窗判定（#182 审查 M2）。
      */
     fun onWebPrepared(songKey: String?) {
-        pendingDispatchSongKey = top.izuna.foliamajor.player.endedIdentity(songKey)
+        markPending(top.izuna.foliamajor.player.endedIdentity(songKey))
         beginDispatch()
     }
 
@@ -1530,6 +1706,18 @@ class FoliaPlaybackService : android.app.Service() {
             cachedServerSongId = ""
             // 上一首的歌词立刻作废：拉不到也要留个显式空结果给快照。
             nativeLyrics.clear(songKey)
+            /*
+             * 界面那一份也要同时作废，不能只清原生缓存。
+             *
+             * `nativeLyrics.clear` 只改了这个进程里的缓存；播放页显示的是它自己
+             * 收到的那份 `EVENT_LYRICS`。不推这一条，界面会一直挂着**上一首**的词，
+             * 直到 `native-lyric` 那一趟网络回来才刷新 —— 网络慢的时候就是十几秒的
+             * 「歌换了、词还是上一首」，也就是用户报的「词曲不同步」。
+             *
+             * 推空串而不是留着不动：让界面立刻进入「这一首还没有词」的状态，
+             * 真歌词到了再填。中间那一段空白比错位的词更容易接受。
+             */
+            FoliaPlaybackPlugin.dispatchLyrics(songKey, "", "")
             /*
              * 界面认领也**主动**发一份，不等 JS 自己推 metadata 时被守卫拦下再补。
              * 通知栏切歌常常就发生在用户盯着 App 的时候 —— 守卫那条路要等 JS 恰好
@@ -2355,40 +2543,122 @@ class FoliaPlaybackService : android.app.Service() {
             val service = snapshotSource
             val out = org.json.JSONObject()
             if (service == null) {
-                out.put("hasSong", false)
-                out.put("revision", 0)
-                out.put("index", -1)
-                out.put("size", 0)
-                out.put("entries", org.json.JSONArray())
-                out.put("loopMode", NativeLoopMode.OFF.wire)
-                out.put("shuffle", false)
-                return out
+                /*
+                 * 服务不在（进程刚起、或者已经被系统收走）：**先看盘上那份会话**。
+                 *
+                 * 这里原来是直接回一份空的，于是「用户从最近任务划掉、重开应用」这条路
+                 * 上，原生这边永远答「没有歌」—— 恢复全压在 WebView 的 IndexedDB 上，
+                 * 那份一旦没来得及落盘，队列、当前曲、秒数就一起归零（用户报的
+                 * 「歌曲信息和秒数和播放列表全部都重置了」）。
+                 *
+                 * 队列本来就在原生手里，抄一份在盘上不费什么，回给前台时标 `fromDisk`，
+                 * 让它知道这是「上次的会话」而不是「现在正在放的东西」—— 前者要重新拉流，
+                 * 后者直接认领就行。
+                 */
+                val disk = diskSessionJson()
+                if (disk == null) {
+                    out.put("hasSong", false)
+                    out.put("revision", 0)
+                    out.put("index", -1)
+                    out.put("size", 0)
+                    out.put("entries", org.json.JSONArray())
+                    out.put("loopMode", NativeLoopMode.OFF.wire)
+                    out.put("shuffle", false)
+                    return out
+                }
+                return disk
             }
             synchronized(service) {
                 val queue = playQueue.snapshot()
-                out.put("entries", queue.optJSONArray("entries") ?: org.json.JSONArray())
-                out.put("index", queue.optInt("index", -1))
-                out.put("size", queue.optInt("size", 0))
+                var entries = queue.optJSONArray("entries") ?: org.json.JSONArray()
+                var index = queue.optInt("index", -1)
+                var songKey = service.cachedSongKey ?: ""
+                var positionMs = service.resolvePlaybackPositionMs()
+                var fromDisk = false
+                /*
+                 * 服务起来了但队列是空的（通知栏那颗播放键把服务拉起来、还没有歌）：
+                 * 同样回落到盘上那份，否则前台以为「原生什么都没有」而丢掉一段能恢复的会话。
+                 */
+                if (entries.length() == 0) {
+                    val disk = diskSessionJson()
+                    if (disk != null) {
+                        entries = disk.optJSONArray("entries") ?: entries
+                        index = disk.optInt("index", index)
+                        songKey = disk.optString("songKey", songKey)
+                        positionMs = disk.optLong("positionMs", positionMs)
+                        fromDisk = true
+                    }
+                }
+                out.put("entries", entries)
+                out.put("index", index)
+                out.put("size", entries.length())
                 out.put("loopMode", queue.optString("loopMode", NativeLoopMode.OFF.wire))
                 out.put("shuffle", queue.optBoolean("shuffle", false))
                 out.put("revision", queue.optLong("revision", 0L))
-                out.put("hasSong", service.cachedSongKey?.isNotEmpty() == true)
-                out.put("songKey", service.cachedSongKey ?: "")
+                out.put("hasSong", songKey.isNotEmpty())
+                out.put("songKey", songKey)
                 out.put("title", service.cachedTitle)
                 out.put("artist", service.cachedArtist)
                 out.put("album", service.cachedAlbum)
                 out.put("durationMs", service.cachedDurationMs)
-                out.put("positionMs", service.resolvePlaybackPositionMs())
+                out.put("positionMs", positionMs)
                 out.put("playing", service.cachedState == PlaybackStateCompat.STATE_PLAYING)
                 out.put("liked", service.cachedLiked)
                 out.put("canLike", service.cachedCanLike)
                 out.put("providerId", service.cachedProviderId)
                 out.put("serverSongId", service.cachedServerSongId)
                 out.put("artworkUrl", service.pendingArtworkUrl ?: "")
+                if (fromDisk) out.put("fromDisk", true)
                 // nativeMedia / lyrics 只在真有值时才带（歌词拉完才给，空串也算拉完）。
                 NativeLyricPresentation.attach(out, service.nativeLyrics, service.cachedSongKey)
             }
             return out
+        }
+
+        /**
+         * 盘上那份会话，摊平成与 [queueStateJson] 同形状的 JSON（不含播放状态）。
+         *
+         * `fromDisk = true` 是给前台看的信号：这不是「原生正在放的东西」，要重新拉流；
+         * `playing` 一律 false —— 冷启动不该凭空响起来。
+         */
+        private fun diskSessionJson(): org.json.JSONObject? {
+            val context = FoliaApplication.instance ?: return null
+            val snapshot = SessionSnapshotStore.load(context) ?: return null
+            val entries = try {
+                org.json.JSONArray(snapshot.entriesJson)
+            } catch (error: Throwable) {
+                return null
+            }
+            if (entries.length() == 0) return null
+            val index = if (snapshot.index in 0 until entries.length()) snapshot.index else 0
+            val current = entries.optJSONObject(index)
+            val settings = try {
+                top.izuna.foliamajor.settings.FoliaSettingsStore.get(context).snapshot()
+            } catch (error: Throwable) {
+                null
+            }
+            return org.json.JSONObject().apply {
+                put("entries", entries)
+                put("index", index)
+                put("size", entries.length())
+                put("loopMode", settings?.optString("loopMode", NativeLoopMode.OFF.wire) ?: NativeLoopMode.OFF.wire)
+                put("shuffle", settings?.optBoolean("shuffle", false) ?: false)
+                put("revision", 0L)
+                put("hasSong", snapshot.songKey.isNotEmpty())
+                put("songKey", snapshot.songKey)
+                put("title", current?.optString("title", "") ?: "")
+                put("artist", current?.optString("artist", "") ?: "")
+                put("album", current?.optString("album", "") ?: "")
+                put("durationMs", current?.optLong("durationMs", 0L) ?: 0L)
+                put("positionMs", snapshot.positionMs)
+                put("playing", false)
+                put("liked", current?.optBoolean("liked", false) ?: false)
+                put("canLike", current?.optBoolean("canLike", false) ?: false)
+                put("providerId", current?.optString("providerId", "") ?: "")
+                put("serverSongId", current?.optString("serverSongId", "") ?: "")
+                put("artworkUrl", current?.optString("artworkUrl", "") ?: "")
+                put("fromDisk", true)
+            }
         }
 
         /** JS 没回话等多久就原生补写红心。要长于 JS 正常处理一次收藏的耗时（写 + 复查），免得慢一点就双写。 */
@@ -2548,6 +2818,23 @@ class FoliaPlaybackService : android.app.Service() {
          * 不再画歌词和进度条（各绘制入口自己读 WallpaperLyricsState.heartbeatAlive）。
          */
         private const val WALLPAPER_HEARTBEAT_TICK_MS = 2000L
+
+        /**
+         * 停着的时候的巡检节拍。
+         *
+         * 这时没有任何东西在动（桥断了、播放器也空手），巡检要回答的只是「是不是又活了」，
+         * 5 秒足够 —— 撤回判定是 [HEARTBEAT_WITHDRAW_MS]，最坏晚 5 秒收通知，换来主线程
+         * 唤醒次数减半，后台待机省一截。
+         */
+        private const val IDLE_HEARTBEAT_TICK_MS = 5000L
+
+        /**
+         * 会话位置多久落一次盘。
+         *
+         * 十秒：划掉后台时最坏丢十秒，而「接着听」不差这十秒；换成两秒就变成后台
+         * 每秒一次 fsync，代价与收益完全不成比例。
+         */
+        private const val SESSION_POSITION_INTERVAL_MS = 10_000L
 
         /**
          * 心跳断了多久之后把播放控制通知收掉。

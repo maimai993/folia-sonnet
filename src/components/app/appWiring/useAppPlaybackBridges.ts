@@ -26,7 +26,9 @@ import { PlayerState } from '../../../types';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
 import { resolveSongLiked } from '../../../utils/resolveSongLiked';
-import { persistPlaybackCache } from '../playback/persistPlaybackCache';
+import { usePlaybackPositionPersistence } from '../playback/usePlaybackPositionPersistence';
+import { usePlaybackSessionSnapshot } from '../playback/usePlaybackSessionSnapshot';
+import { useAutoLyricCalibration } from '../playback/useAutoLyricCalibration';
 import { makeSongCurrent } from '../playback/currentSong';
 import { useRecentPlaysRecorder } from '../home/explore/useRecentPlaysRecorder';
 import { useElectronPlaybackBridge } from '../playback/bridges/useElectronPlaybackBridge';
@@ -221,6 +223,13 @@ export const useAppPlaybackBridges = (model: Input) => {
     const nativeSongLiked = resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
     const nativeCanLikeSong = !resolveLikeAvailability(displaySong, false, isNowPlayingStageActive).disabled;
     const claimNativeSnapshot = (snapshot: NativeQueueState): boolean => {
+        /*
+         * 盘上的会话不是「原生此刻正在放的东西」。
+         *
+         * 认领它只会把界面摆成「一首暂停的歌、没有地址」，而那正是会话恢复要重新拉流的
+         * 起点；两边同时动手就会互相覆盖。交给 useSessionRestoreController 一条路走完。
+         */
+        if (snapshot.fromDisk) return false;
         const claimed = adoptNativePlaybackState(snapshot);
         if (claimed) {
             shouldAutoPlay.current = false;
@@ -228,6 +237,14 @@ export const useAppPlaybackBridges = (model: Input) => {
             if (snapshot.lyrics?.songKey === snapshot.songKey) {
                 setLyricsStable(toLyricData(snapshot.lyrics.lrc, snapshot.lyrics.translated));
             }
+            /*
+             * 这里**不写**会话缓存。
+             *
+             * 认领刚把 `playQueue` 换成了原生那份镜像条目（只有歌名、歌手、封面），
+             * 这时候写下去等于用「壳」覆盖掉磁盘上那份完整队列 —— 下次恢复出来的歌
+             * 会缺专辑、缺音质偏好、缺来源扩展。真正的当前曲与顺序由恢复链路按原生
+             * 快照纠正，不靠这一次写入。
+             */
         }
         return claimed;
     };
@@ -453,10 +470,34 @@ export const useAppPlaybackBridges = (model: Input) => {
      * 它们在 usePlaybackVisualizerBridge 的 rAF 里统一从 `nativePlaybackEngine` 读，
      * 两个写手抢同一个 motion signal 只会互相抹掉。
      */
+    /*
+     * 「听到哪儿了」单独落一条记录，与 last_song / last_queue 并列。
+     *
+     * 位置每几秒就变，塞进歌曲对象会让整份队列（几百首）跟着重写一遍 IndexedDB；单独一条
+     * 只有几十字节，怎么写都不心疼。
+     */
+    usePlaybackPositionPersistence();
+
+    /*
+     * 会话快照统一落盘。
+     *
+     * 「上次放的哪首、队列什么顺序」原来散在十几条业务路径里各写各的 —— 打乱顺序、原生
+     * 接管后切歌这些动作没接上，那份记录就停在上一步，用户清掉后台回来就是全没了。
+     * 订阅 store 之后，只要当前曲或队列真的变了就会写，不必每条路径都记得。
+     */
+    usePlaybackSessionSnapshot();
+
+    /*
+     * 自动歌词校准：播起来之后在后台自己估一次整曲偏移，算完就写进本曲偏移。
+     * 只有这一首还没有任何偏移时才跑（用户手动调过的永远优先）。
+     */
+    useAutoLyricCalibration();
+
     useNativePlaybackRuntime({
         enabled: nativeActive,
         audioSrc,
         shouldAutoPlayRef: shouldAutoPlay,
+        pendingResumeTimeRef,
         isLyricsLoading,
         getTargetPlaybackVolume,
         repeatOne: effectiveLoopMode === 'one',

@@ -2,6 +2,7 @@ import React from 'react';
 import { RotateCcw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ReplayGainMode } from '../../types';
+import LyricCalibrationControl from './LyricCalibrationControl';
 import LyricFileButton from './LyricFileButton';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
 import ReplayGainControl, { type ReplayGainValues } from './ReplayGainControl';
@@ -84,6 +85,7 @@ export const SourceTab = <K extends string>({
                 )}
             </PanelRow>
             <LyricTimelineOffsetControl offsetMs={lyricTimelineOffsetMs} onOffsetChange={onLyricTimelineOffsetChange} />
+            <LyricCalibrationControl />
             <div className="flex flex-wrap gap-2 px-1 py-2">
                 <PanelButton grow icon={Search} onClick={onMatchOnline}>
                     {t('localMusic.matchOnline')}

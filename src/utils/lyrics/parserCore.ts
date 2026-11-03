@@ -117,6 +117,66 @@ const buildTimedWords = (text: string, startTime: number, endTime: number): Word
     return words;
 };
 
+const lyricCharCount = (text: string): number => Array.from(text.replace(/\s+/g, '')).length;
+
+/**
+ * 行级歌词（没有字时间）的字位置是摊出来的，而摊的依据是「本行到下一行之间」的全部时间 ——
+ * 那段里往往夹着间奏。一行八个字横跨二十秒时，每个字被摊到两秒半：字慢得像爬，到下一行
+ * 又突然跳回准位，于是整首歌只剩第一个字是准的。
+ *
+ * 这里拿整首的「每字时长」中位数当常态：明显比常态慢一截的行，把演唱时长压回正常范围，
+ * 多出来的时间还给间奏（`endTime` 一起收短，末字的扫光不会拖到间奏里）。慢歌整体每字就长，
+ * 中位数跟着变长，不会被误压。
+ */
+const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]): void => {
+    if (estimatedIndexes.length === 0) {
+        return;
+    }
+
+    const perCharSamples = lines
+        .map(line => {
+            const count = lyricCharCount(line.fullText);
+            const span = line.endTime - line.startTime;
+            return count > 0 && span > 0 ? span / count : 0;
+        })
+        .filter(value => value >= 0.08 && value <= 1.2);
+    if (perCharSamples.length < 4) {
+        return;
+    }
+
+    perCharSamples.sort((left, right) => left - right);
+
+    const median = perCharSamples[Math.floor(perCharSamples.length / 2)];
+
+
+    estimatedIndexes.forEach(index => {
+        const line = lines[index];
+        if (!line) {
+            return;
+        }
+
+        const count = lyricCharCount(line.fullText);
+        if (count === 0) {
+            return;
+        }
+
+        const expected = count * median * 1.2;
+        // 常态的一点八倍以内都算「唱得慢」，不动它；只有明显混进静默的行才收。
+        if (line.endTime - line.startTime <= expected * 1.8) {
+            return;
+        }
+
+        const singEnd = line.startTime + expected;
+        line.words = buildTimedWords(line.fullText, line.startTime, singEnd);
+        // 只压字，不压行。
+        //
+        // 以前这里连 `line.endTime` 一起收短，结果是这一行在字唱完的那一刻就结束了 ——
+        // 音频还在唱这一句的尾音，屏幕上已经没有词了（用户报的「词没了还在唱那一句」）。
+        // 行必须留到下一句接管为止：字按正常语速唱完，剩下的时间就是这一句的尾音/间奏，
+        // 那一行静静地挂着，比提前消失更接近「一句还没唱完」的直觉。
+    });
+};
+
 export const isInterludeLine = (line: Pick<Line, 'fullText'>): boolean => line.fullText === INTERLUDE_FULL_TEXT;
 
 export const attachInterludes = (lines: Line[]): Line[] => {
@@ -467,12 +527,8 @@ export const parseLRC = (
         const next = sortedRawEntries[index + 1];
         const translation = translations[index];
 
-        let duration = next ? next.startTime - current.startTime : 5;
-        const estimatedReadingTime = current.text.length * 0.5;
-        if (duration > estimatedReadingTime + 2 && duration > 5) {
-            duration = Math.min(duration, estimatedReadingTime + 2);
-        }
-
+        // 先按「到下一行为止」定长，间奏那部分交给 rebalanceEstimatedLineTimings 收掉。
+        const duration = next ? next.startTime - current.startTime : 5;
         const endTime = current.startTime + duration;
         lines.push({
             words: buildTimedWords(current.text, current.startTime, endTime),
@@ -483,6 +539,8 @@ export const parseLRC = (
             romanization: romanizations[index]
         });
     }
+
+    rebalanceEstimatedLineTimings(lines, lines.map((_, index) => index));
 
     return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
@@ -906,6 +964,7 @@ export const parseEnhancedLRC = (
         romanizationEntries
     );
 
+    const estimatedIndexes: number[] = [];
     const lines: Line[] = sortedDrafts.map((draft, index) => {
         let lineEndTime = Math.max(draft.endTime ?? sortedDrafts[index + 1]?.startTime ?? (draft.startTime + 5), draft.startTime + 0.001);
 
@@ -922,6 +981,10 @@ export const parseEnhancedLRC = (
             })
             : buildTimedWords(draft.fullText, draft.startTime, lineEndTime);
 
+        if (draft.words.length === 0) {
+            estimatedIndexes.push(index);
+        }
+
         if (words.length > 0) {
             lineEndTime = Math.max(lineEndTime, words[words.length - 1].endTime);
         }
@@ -935,6 +998,8 @@ export const parseEnhancedLRC = (
             romanization: romanizations[index]
         };
     });
+
+    rebalanceEstimatedLineTimings(lines, estimatedIndexes);
 
     return {
         lines: finalizeParsedLyricLines(lines, options),
