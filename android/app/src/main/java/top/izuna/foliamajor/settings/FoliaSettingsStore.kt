@@ -87,7 +87,10 @@ class FoliaSettingsStore private constructor(context: Context) {
             if (value == null) next.remove(key) else next.put(key, value)
         }
         cached = next
-        prefs.edit().putString(KEY_SETTINGS, next.toString()).commit()
+        // apply() 而不是 commit()：cached 已经同步更新，读的人立刻拿到新值；
+        // commit() 是同步 fsync，在主线程上是 ANR，在 Capacitor 桥线程上会把后续所有调用堵住。
+        // apply() 的落盘由系统在 Activity 停止 / 进程正常退出时保证发出。
+        prefs.edit().putString(KEY_SETTINGS, next.toString()).apply()
         return snapshot()
     }
 
