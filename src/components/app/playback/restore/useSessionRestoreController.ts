@@ -439,7 +439,11 @@ export function useSessionRestoreController({
                  * 长得一样，而在界面上不一样 —— 这一条能区分。
                  */
                 const summary = `${reportStage}｜${report.join('｜')}`;
-                window.setTimeout(() => {
+                /*
+                 * globalThis 而不是 window：单测在 node 环境里直接调 restoreSession，
+                 * 没有 window，这一条就会变成 unhandled rejection，把跑得好好的用例拖下水。
+                 */
+                globalThis.setTimeout(() => {
                     const state = usePlaybackStore.getState();
                     /*
                      * 还没落地就再跑一遍。

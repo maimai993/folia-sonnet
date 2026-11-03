@@ -848,7 +848,7 @@ class FoliaPlaybackService : android.app.Service() {
          */
         val current = playQueue.current()
         if (endedSongKey != null && current != null && endedSongKey != current.songKey) {
-            val endedAt = playQueue.indexOf(endedSongKey)
+            val endedAt = playQueue.all().indexOfFirst { it.songKey == endedSongKey }
             if (endedAt < 0) {
                 Log.w(TAG, "放完的那首不在队列里，不推进 songKey=" + endedSongKey)
                 return
