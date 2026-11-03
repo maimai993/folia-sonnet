@@ -104,7 +104,7 @@
       "shared/**/*",
       "!**/node_modules/youtubei.js/bundle/**",
       "package.json",
-      "build/miao.png",
+      "build/miao.webp",
       "build/thumbar/*.png"
     ],
     "asarUnpack": [

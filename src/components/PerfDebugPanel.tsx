@@ -4,6 +4,8 @@ import { DebugRow, formatMs } from './devDebugPanels';
 import { readFrameTimingSnapshot, runCpuProbe } from '../utils/frameTimingDiagnostics';
 import { readAiThemeAttempts } from '../utils/aiThemeDiagnostics';
 import { readMediaDiagnostics } from '../utils/mediaDiagnostics';
+import { readAudioPipelineDiagnostics, type AudioPipelineReading } from '../services/audioPipelineDiagnostics';
+import { audioPipelineRows } from '../utils/audioPipelineFormat';
 import { usePerfDiagnosticsStore } from '../stores/usePerfDiagnosticsStore';
 
 // src/components/PerfDebugPanel.tsx
@@ -27,6 +29,28 @@ export const PerfPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> =
     useEffect(() => {
         const handle = window.setInterval(() => setTick(value => value + 1), 1000);
         return () => window.clearInterval(handle);
+    }, []);
+
+    /*
+     * 原生音频链路：单独一条 2s 的拉取。
+     *
+     * 它跟上面那条 1s 的 tick 分开，是因为读数要走 Capacitor 的桥 —— 而桥只有一条，
+     * 跟着每个 tick 拉会跟播放控制抢通道。服务内部还有 1.5s 缓存兜底。
+     */
+    const [native, setNative] = useState<AudioPipelineReading | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        const pull = () => {
+            void readAudioPipelineDiagnostics().then(next => {
+                if (!cancelled && next) setNative(next);
+            });
+        };
+        pull();
+        const handle = window.setInterval(pull, 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(handle);
+        };
     }, []);
 
     const perfEnabled = usePerfDiagnosticsStore(state => state.perfDiagnosticsEnabled);
@@ -143,6 +167,30 @@ export const PerfPanel: React.FC<{ isDaylight: boolean; panelClass: string; }> =
                             value={`hint ${media.audioContextLatencyHint} · base ${formatMs(media.audioContextBaseLatencySec)} · out ${formatMs(media.audioContextOutputLatencySec)} · ${media.audioContextState ?? 'n/a'}`}
                         />
                     </dl>
+                </div>
+            </section>
+
+            <section className={panelClass}>
+                <div className="px-3 pt-3 text-[10px] uppercase tracking-[0.16em] opacity-60">Native Audio Pipeline</div>
+                <div className="px-3 pb-3">
+                    {/*
+                     * 这一块是 P0 的标尺：解码格式 / 处理器链 / 声卡格式 / 欠载 / CPU 分四段摆开。
+                     * 「音质变差」发生在这条链的哪一段，靠这四行对比就能定，不用再靠听。
+                     */}
+                    {!native ? (
+                        <div className="pt-2 text-[11px] opacity-70">
+                            非 Android 原生播放，或这次会话还没播过（播一首再看）。
+                        </div>
+                    ) : (
+                        <>
+                            <div className="pt-2 break-words text-[10px] leading-relaxed opacity-80">{native.verdict}</div>
+                            <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-[10px]">
+                                {audioPipelineRows(native).map(row => (
+                                    <DebugRow key={row.label} label={row.label} value={row.value} />
+                                ))}
+                            </dl>
+                        </>
+                    )}
                 </div>
             </section>
 

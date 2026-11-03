@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import android.os.Looper
 
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -15,6 +16,8 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
+import top.izuna.foliamajor.FoliaPlaybackService
+import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.FoliaAudioSinkFactory
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
 
@@ -70,6 +73,12 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          */
         private const val NEAR_END_SEEK_GRACE_MS = 1_000L
         private const val POSITION_TICK_MS = 250L
+
+        /** 后台的位置上报节拍：见 [nextTickInterval]。 */
+        private const val BACKGROUND_POSITION_TICK_MS = 1_000L
+
+        /** 后台也保持前台节拍的「临近结尾」窗口，够覆盖最长的交叉淡化斜坡。 */
+        private const val BACKGROUND_FAST_TAIL_MS = 6_000L
         /** 提前换歌的窗口上限：斜坡太长没有意义，也省得设置里的离谱值把整首吃光。 */
         private const val MAX_CROSSFADE_AHEAD_MS = 15_000
 
@@ -91,6 +100,17 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          */
         private const val BROWSER_USER_AGENT =
             "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+
+        /**
+         * 播放用的音频属性。**每一台播放器（含交叉淡化的第二台）都用同一份。**
+         *
+         * 两台属性不一致时有一处很难查的表现：淡入那台按 MUSIC 处理、淡出那台按 UNKNOWN 处理，
+         * 部分 ROM 的音频后处理会在淡出期间换档，听感是「交叉的那一下音色变了」。
+         */
+        private val PLAYBACK_AUDIO_ATTRIBUTES: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
     }
 
     /**
@@ -202,6 +222,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             }
             val position = current.currentPosition
             val duration = current.duration
+            // 「息屏时这个 250ms 还在空转多少」靠这一笔估：面板上的 ticks 增量除以秒数就是实际频率。
+            AudioPipelineTelemetry.notePositionTick()
             /*
              * ⭐ 单曲循环的回绕：位置从末尾直接跳回 0，而且**什么事件都不发**。
              *
@@ -247,7 +269,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 emit("nearEnd", position, cachedDurationMs, null)
             }
             emit("position", position, cachedDurationMs, null)
-            handler.postDelayed(this, POSITION_TICK_MS)
+            handler.postDelayed(this, nextTickInterval(position))
         }
     }
 
@@ -412,6 +434,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             try {
                 outgoing.stop()
                 outgoing.release()
+                AudioPipelineTelemetry.notePlayerReleased()
             } catch (ignored: Throwable) {
                 // 已经不可用了（重复 release / 线程已停）：没有更好的处理。
             }
@@ -576,6 +599,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             if (current != null) {
                 current.removeListener(playerListener)
                 current.release()
+                AudioPipelineTelemetry.notePlayerReleased()
             }
             // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
             playbackThread.quitSafely()
@@ -782,6 +806,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     crossfadeOutgoing = null
                     outgoing.stop()
                     outgoing.release()
+                    AudioPipelineTelemetry.notePlayerReleased()
                 } else {
                     handler.postDelayed(this, stepMs.toLong())
                 }
@@ -800,13 +825,56 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             .setUserAgent(BROWSER_USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
         httpFactory = factory
-        return ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
+        val created = ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
             // 显式钉在播放器那条专用线程上。不写这一句，播放器会绑到「第一次碰它的那个
             // 线程」—— 也就是 Capacitor 的桥线程，而位置上报会跑到别的线程上去，
             // 于是每 250ms 跨线程碰一次播放器。
             .setLooper(playerLooper)
             .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
+            /*
+             * 耳机拔出 / 蓝牙断开：立刻暂停，不转外放。
+             *
+             * 这是系统级「不该发生的事」里最尴尬的一条 —— 地铁上拔掉耳机、歌从外放响起来。
+             * 播放器自己不监听 ACTION_AUDIO_BECOMING_NOISY，默认行为是继续播。
+             */
+            .setHandleAudioBecomingNoisy(true)
+            /*
+             * 息屏之后还要继续取流：拿网络唤醒锁。
+             *
+             * 默认的 WAKE_MODE_NONE 只保证「有 CPU 唤醒时能解码」，不保证息屏后还能拿到
+             * 新的网络数据 —— 息屏几分钟后 Wi-Fi 进入省电、CPU 睡下去，流就断了，
+             * 表现是「锁屏放着放着没声了」。这里要的是「前台服务在，流就在」。
+             */
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            /*
+             * 音频属性：USAGE_MEDIA + MUSIC，而不是 DEFAULT（CONTENT_TYPE_UNKNOWN）。
+             *
+             * 影响三件事：系统音量键落在「媒体」而不是「通话」；蓝牙 / 车机的 AVRCP
+             * 元数据分类；部分 ROM 的音频后处理（杜比、Hi-Fi 模式）只对 MUSIC 生效。
+             * 焦点交给播放器自己管（第二个参数 true）—— 来电、导航播报会自动让路。
+             */
+            .setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, true)
             .build()
+        attachTelemetry(created)
+        return created
+    }
+
+    /**
+     * 挂上音频链路诊断监听器（[AudioPipelineTelemetry]）。
+     *
+     * `addAnalyticsListener` 要求在该播放器的 applicationLooper 上调用：`newPlayer()` 会从
+     * Capacitor 的桥线程进来，直接加会抛 IllegalStateException。不在同一条线程时 post 过去，
+     * 并用 runCatching 兜住「post 到时播放器已经 release」那一种情况 —— 诊断代码不该有
+     * 让播放失败的能力。
+     */
+    private fun attachTelemetry(target: ExoPlayer) {
+        AudioPipelineTelemetry.notePlayerCreated()
+        val attach = { target.addAnalyticsListener(AudioPipelineTelemetry.listener) }
+        if (Looper.myLooper() == target.applicationLooper) {
+            attach()
+        } else {
+            Handler(target.applicationLooper).post { runCatching(attach) }
+        }
     }
 
     /** 交叉淡化用的第二台播放器：与 ensurePlayer 同规格，但不接管 [player]，也不报名事件。 */
@@ -817,9 +885,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         if (current != null) return current
 
         val created = newPlayer()
-        // 焦点交给 ExoPlayer 自己管。WebView 那套「把 Chromium 的焦点监听器换成空实现」
-        // 的反向 hack（audio/FoliaAudioManager）是为 `<audio>` 做的，原生产不出那种问题。
-        created.setAudioAttributes(AudioAttributes.DEFAULT, true)
+        // 音频属性（含焦点策略）已经在 newPlayer() 里随 Builder 一起定了，这里不再重复设置：
+        // 建完再 set 一次会把焦点重新请一遍，正在播的那一瞬间可能被自己的重申请打断一下。
         created.setVolume(requestedVolume)
         created.addListener(playerListener)
         player = created
@@ -927,6 +994,24 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         if (tickScheduled) return
         tickScheduled = true
         handler.post(positionTick)
+    }
+
+    /**
+     * 下一拍隔多久。
+     *
+     * 前台 250 ms 是给进度条与歌词的平滑用的；后台没有画面，只剩通知栏 / MediaSession
+     * 的进度要更新，那是秒级刷新的东西 —— 4 Hz 是纯浪费：每一拍都要跨一次桥、跑一次
+     * JS 回调、把设备从浅睡里叫醒一次。后台降到 1 Hz，唤醒次数直接少 3/4。
+     *
+     * 例外是「快到尾巴」：交叉淡化靠这一拍算出的 nearEnd 触发，降频后可能整段错过窗口，
+     * 所以最后几秒切回前台节拍。一首歌只多花这几秒的钱。
+     */
+    private fun nextTickInterval(positionMs: Long): Long {
+        if (FoliaPlaybackService.appUiVisible) return POSITION_TICK_MS
+        // 时长未知（直播 / 还没读到 READY）：算不出离尾巴多远，保守用前台节拍。
+        if (cachedDurationMs <= 0L) return POSITION_TICK_MS
+        if (cachedDurationMs - positionMs <= BACKGROUND_FAST_TAIL_MS) return POSITION_TICK_MS
+        return BACKGROUND_POSITION_TICK_MS
     }
 
     private fun stopTicking() {

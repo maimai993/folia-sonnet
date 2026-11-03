@@ -82,7 +82,7 @@ export const builtinModRuntimeInfos = (): ModRuntimeInfo[] => BUILTIN_SOURCES.ma
 export const builtinModPreviewUrl = (modId: string): string | null => {
     const source = BUILTIN_SOURCES.find(item => item.id === modId);
     if (!source) return null;
-    const name = modId === 'visualizer-jump' ? 'preview.png' : 'preview.jpg';
+    const name = modId === 'visualizer-jump' ? 'preview.webp' : 'preview.jpg';
     return `${BUILTIN_BASE}/${source.id}/${name}`;
 };
 

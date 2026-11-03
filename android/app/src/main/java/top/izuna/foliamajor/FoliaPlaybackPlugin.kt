@@ -402,6 +402,61 @@ class FoliaPlaybackPlugin : Plugin() {
     }
 
     /**
+     * 后台保活体检：把「系统到底给了我们多少自由度」读出来给设置页看。
+     *
+     * 三件事，缺一不可：
+     *   · 电池优化是否已豁免 —— AOSP 唯一可读的那一条；
+     *   · 前台服务在不在 —— 服务没起来时，后面所有「保活」都是空谈；
+     *   · ROM 标签 —— 决定设置页要不要显示「你这台小米要去安全中心」那段文字。
+     *
+     * 只读，不触发任何副作用：设置页每次打开都会问一次。
+     */
+    @PluginMethod
+    fun getKeepAliveStatus(call: PluginCall) {
+        val result = JSObject()
+        result.put("ignoringBatteryOptimizations",
+                top.izuna.foliamajor.keepalive.KeepAlive.isIgnoringBatteryOptimizations(context))
+        result.put("rom", top.izuna.foliamajor.keepalive.KeepAlive.romLabel())
+        result.put("sdkInt", Build.VERSION.SDK_INT)
+        result.put("serviceRunning", FoliaPlaybackService.isRunning())
+        call.resolve(result)
+    }
+
+    /**
+     * 弹系统那个「是否允许后台运行」对话框。
+     *
+     * 没有系统对话框可弹的机器上退到「电池优化」列表页（用户自己找本应用）。
+     * `opened` 为 false 表示两条路都不通 —— 前端这时只能显示文字路径，
+     * 不要假装已经跳过去了。
+     */
+    @PluginMethod
+    fun requestBatteryOptimizationExemption(call: PluginCall) {
+        val opened = top.izuna.foliamajor.keepalive.KeepAlive
+                .requestIgnoreBatteryOptimizations(context)
+        val result = JSObject()
+        result.put("opened", opened)
+        result.put("granted", top.izuna.foliamajor.keepalive.KeepAlive
+                .isIgnoringBatteryOptimizations(context))
+        call.resolve(result)
+    }
+
+    /**
+     * 跳到厂商的自启动 / 耗电管理页。
+     *
+     * `target` 见 keepalive/KeepAlive：autostart / battery / details。
+     * 返回的 `landed` 是**实际**跳到的目标：猜不中会退到应用详情页，
+     * 前端据此决定提示语（"跳到了应用详情，请再点 电池 → 后台运行"）。
+     */
+    @PluginMethod
+    fun openKeepAliveSettings(call: PluginCall) {
+        val target = call.getString("target")
+        val landed = top.izuna.foliamajor.keepalive.KeepAlive.open(context, target)
+        val result = JSObject()
+        result.put("landed", landed)
+        call.resolve(result)
+    }
+
+    /**
      * 把服务端的播放/切歌意图派发给 Web 层。
      *
      * 用 Capacitor 的事件通道而不是直接调用 Web 层方法：JS 侧通过
@@ -410,7 +465,6 @@ class FoliaPlaybackPlugin : Plugin() {
     fun dispatchCommand(command: String) {
         dispatchCommand(command, 0L)
     }
-
     fun dispatchCommand(command: String, positionMs: Long) {
         dispatchCommand(command, positionMs, null)
     }
