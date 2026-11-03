@@ -36401,10 +36401,12 @@ function setBadges(d) {
   return (d && d.extra ? '<span class="set-badge ex" title="首个公开版之后新增">新增</span>' : '') + (d && d.wa ? '<span class="set-badge" title="和风特效">和</span>' : '')
     + (d && d.set && SET_UI[d.set] ? `<span class="set-badge set-${d.set}" title="${SET_UI[d.set].name}">${SET_UI[d.set].badge}</span>` : '');
 }
-function loadLocal() { try { const s = localStorage.getItem(LS_KEY); if (s) return mergeProject(JSON.parse(s)); } catch (e) {} return mergeProject(null); }
+/* folia 接管了工程的存取（按歌存在宿主的 kinetic_projects 里），
+   编辑台这份跨歌的 localStorage 缓存会把上一首的歌词/时间轴带进来 —— 读与写都禁掉。 */
+function loadLocal() { return mergeProject(null); }
 let saveTimer = 0;
 function autosave() { clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 700); }
-function flushSave() { clearTimeout(saveTimer); try { localStorage.setItem(LS_KEY, JSON.stringify(S.project)); } catch (e) {} }
+function flushSave() { clearTimeout(saveTimer); /* 不写 LS_KEY：见 loadLocal 处的说明。 */ }
 window.addEventListener('pagehide', () => { if (S.project) flushSave(); });
 
 /* ---------------- planning ---------------- */

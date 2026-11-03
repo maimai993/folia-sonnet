@@ -168,6 +168,23 @@ const KineticEditorOverlay: React.FC<Props> = ({
         return () => {
             timers.forEach(timer => window.clearTimeout(timer));
             send(false);
+            /*
+             * 退出编辑台：把 folia 的当前播放头显式推回渲染页。
+             *
+             * 暂停状态下 folia 的 currentTime 不会变化、也就不会触发跨句 seek，
+             * 渲染页就停在「进编辑台那一刻」的位置 —— 回到播放页就是
+             * 「时间轴对不上，手动重新匹配一下才好」。补一次 seek，两边立刻对齐。
+             */
+            frameRef.current?.contentWindow?.postMessage({
+                target: 'jizura-render',
+                type: 'seek',
+                time: currentTimeRef.current,
+                playing: playingRef.current,
+            }, '*');
+            console.log('[Kinetic] 退出编辑台，已把 folia 播放头推回渲染页', {
+                time: currentTimeRef.current,
+                playing: playingRef.current,
+            });
         };
     }, []);
 
@@ -465,9 +482,18 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 const current = injectDataRef.current;
                 const saved = readKineticProject(current.songKey);
                 if (saved) {
-                    // 存过的工程整份铺上去：样式、种子、fx、配色、字体、逐行覆盖都还原。
-                    Object.assign(ui.project, saved);
-                    console.log('[Kinetic] 已还原这首歌保存的编辑结果', { songKey, style: saved.style, seed: saved.seed });
+                    /*
+                     * 还原参数，但不还原存下来的 plan。
+                     *
+                     * plan 是当次编辑台会话算出来的排版快照，里面的 cuts 对应的是**当时的歌词**。
+                     * 把它也铺回 project，编辑台 replan 时会用它、而不是按新歌词重算 ——
+                     * 歌词就"还是旧的"（画面上是一份排版，文字对不上）。
+                     * plan 只用于宿主与渲染页之间的还原（那边会先校验比例），
+                     * 编辑台内部始终按当前歌词重新 plan。
+                     */
+                    const { plan: _stalePlan, ...params } = saved as Record<string, unknown>;
+                    Object.assign(ui.project, params);
+                    console.log('[Kinetic] 已还原这首歌保存的编辑结果（不含 plan）', { songKey, style: saved.style, seed: saved.seed });
                 }
                 // 歌词永远以 folia 当前的为准（歌换了歌词就变了）。
                 // 从 ref 取：闭包里的 lrc 会停在打开编辑台那一刻。

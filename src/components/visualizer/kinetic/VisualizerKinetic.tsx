@@ -261,6 +261,27 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
          * 硬塞过去渲染页也会拒（比例差 >2%），不如这里就跳过，
          * 让它按当前屏幕重算 —— 否则容易停在一次被拒的消息上，画面就一直拉不回来。
          */
+        /*
+         * 歌词校验：plan 里的 cuts 对应的是**保存那一刻的歌词**。
+         * 换歌/改词之后如果还照它画，画面就是旧歌词 —— 探针里那种
+         * 「重建了但歌词还是旧的」就是这条路径。逐行对不上就放弃还原。
+         */
+        const planLines = Array.isArray((savedPlan as { lines?: unknown }).lines)
+            ? ((savedPlan as { lines: Array<{ text?: unknown }> }).lines)
+            : [];
+        if (lrc) {
+            const lrcTexts = lrc.split('\n').map(row => row.replace(/^\[[^\]]*\]/, '').trim()).filter(Boolean);
+            const planTexts = planLines.map(line => String(line.text ?? '').trim()).filter(Boolean);
+            const same = planTexts.length === lrcTexts.length
+                && planTexts.every((text, index) => text === lrcTexts[index]);
+            if (!same) {
+                console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', {
+                    planLines: planTexts.length,
+                    lrcLines: lrcTexts.length,
+                });
+                return;
+            }
+        }
         const planW = Number(savedPlan.W);
         const planH = Number(savedPlan.H);
         const boxW = windowSize.width;
@@ -293,7 +314,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
             style: savedPlan.styleKey,
             songKey,
         });
-    }, [frameReady, savedPlan, songKey, windowSize.width, windowSize.height]);
+    }, [frameReady, savedPlan, songKey, lrc, windowSize.width, windowSize.height]);
 
     /* ---- 编辑台改完布局：收到 BroadcastChannel 的工程快照就推给渲染页 ---- */
     useEffect(() => {
