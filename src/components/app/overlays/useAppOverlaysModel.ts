@@ -43,6 +43,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
     const isDevDebugOverlayVisible = useAppChromeStore(state => state.isDevDebugOverlayVisible);
     const isMemoryMonitorVisible = useAppChromeStore(state => state.isMemoryMonitorVisible);
     const isSearchOpen = useSearchNavigationStore(state => state.isSearchOpen);
+    const isSearchResultsBarHidden = useSearchNavigationStore(state => state.isResultsBarHidden);
     const isListeningArchiveOpen = useListeningArchiveStore(state => state.isOpen);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const stageTrackPillMode = useStageSettingsStore(state => state.stageTrackPillMode);
@@ -91,6 +92,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         ...deps,
         currentView,
         isSearchOpen,
+        isSearchResultsBarHidden,
         isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,
@@ -130,6 +132,7 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         cardPositioning,
         currentView,
         isSearchOpen,
+        isSearchResultsBarHidden,
         isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,

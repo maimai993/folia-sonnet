@@ -3,6 +3,7 @@ import { List, useListRef } from 'react-window';
 import type { UnifiedSong } from '../../../types';
 import type { MediaId } from '../../../types/onlineMusic';
 import SearchResultRow from './SearchResultRow';
+import { createSearchBarScrollState, resolveSearchBarScrollState } from './searchBarScroll';
 
 // src/components/app/search/SearchResultsList.tsx
 
@@ -11,17 +12,28 @@ type SearchResultsListProps = {
     scrollTop: number;
     isDaylight: boolean;
     onScrollTopChange: (scrollTop: number) => void;
+    /** 往下滚收起底部播放条、往上滚放回来（见 searchBarScroll）。 */
+    onScrollBarHiddenChange: (hidden: boolean) => void;
     onPlayTrack: (track: UnifiedSong) => void;
     onAddTrackToQueue: (track: UnifiedSong) => void;
     onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: MediaId, entityId?: string) => void;
     onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: MediaId, entityId?: string) => void;
+    /**
+     * 接在最后一行后面的那一行（「加载更多」、「重试」、还有平台没回来的提示）。
+     *
+     * 放进列表本身而不是压在列表下面：它是「这一批结果的结尾」，跟着结果一起滚才对；
+     * 钉在屏幕底部时它会永远占着一条，还和浮在上面的播放条抢同一块地方。
+     */
+    trailingRow?: React.ReactNode;
 };
 
-type RowProps = Omit<SearchResultsListProps, 'scrollTop' | 'onScrollTopChange'> & {
+type RowProps = Omit<SearchResultsListProps, 'scrollTop' | 'onScrollTopChange' | 'onScrollBarHiddenChange' | 'trailingRow'> & {
     /** 每行的稳定身份（见 buildRowKeys）：react-window 认它不认下标，行挪位置时组件不会被顶掉。 */
     rowKeys: string[];
     /** 这一轮**新出现**的那些行的身份：只有它们播入场动画。 */
     enterKeys: ReadonlySet<string>;
+    /** 末尾那一行（下标越过 tracks 时画它）。 */
+    trailingRow: React.ReactNode;
 };
 
 /**
@@ -53,6 +65,7 @@ const Row = ({
     tracks,
     rowKeys,
     enterKeys,
+    trailingRow,
     ...props
 }: { index: number; style: React.CSSProperties } & RowProps) => {
     const key = rowKeys[index] ?? String(index);
@@ -65,7 +78,9 @@ const Row = ({
     const entering = useRef(enterKeys.has(key)).current;
     return (
         <div style={{ ...style, transition: ROW_SHIFT_TRANSITION }}>
-            <SearchResultRow track={tracks[index]} entering={entering} {...props} />
+            {index < tracks.length
+                ? <SearchResultRow track={tracks[index]} entering={entering} {...props} />
+                : trailingRow}
         </div>
     );
 };
@@ -74,13 +89,21 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
     tracks,
     scrollTop,
     onScrollTopChange,
+    onScrollBarHiddenChange,
+    trailingRow,
     ...rowProps
 }) => {
     const listRef = useListRef(null);
     const latestScrollTopRef = useRef(scrollTop);
+    /** 方向判定的基准与当前收起状态，只在认下新方向时更新（见 searchBarScroll）。 */
+    const barScrollStateRef = useRef(createSearchBarScrollState(scrollTop));
     const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const stableRowProps = useMemo(() => ({ tracks, ...rowProps }), [rowProps, tracks]);
+    const stableRowProps = useMemo(
+        () => ({ tracks, trailingRow, ...rowProps }),
+        [rowProps, tracks, trailingRow],
+    );
     const rowKeys = useMemo(() => buildRowKeys(tracks), [tracks]);
+    const rowCount = tracks.length + (trailingRow ? 1 : 0);
 
     /*
      * 这一轮新出现的行。认的是**整份 tracks** 里见没见过，不是「这一行渲染过没有」——
@@ -121,12 +144,14 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
             clearTimeout(commitTimerRef.current);
         }
         onScrollTopChange(latestScrollTopRef.current);
-    }, [onScrollTopChange]);
+        // 列表没了（换源、关页面、结果被清空）就没有「正在滚」这件事，播放条必须露回来。
+        onScrollBarHiddenChange(false);
+    }, [onScrollBarHiddenChange, onScrollTopChange]);
 
     return (
         <List
             listRef={listRef}
-            rowCount={tracks.length}
+            rowCount={rowCount}
             rowHeight={76}
             rowComponent={Row as any}
             rowProps={{ ...stableRowProps, rowKeys, enterKeys } as any}
@@ -135,7 +160,17 @@ const SearchResultsList: React.FC<SearchResultsListProps> = ({
             className="custom-scrollbar"
             style={{ height: '100%', width: '100%' }}
             onScroll={(event) => {
-                latestScrollTopRef.current = event.currentTarget.scrollTop;
+                const nextScrollTop = event.currentTarget.scrollTop;
+                latestScrollTopRef.current = nextScrollTop;
+                // 只写 ref、只在方向翻过来时回调一次：onScroll 是高频事件，不能每次都进 React。
+                const nextBarScrollState = resolveSearchBarScrollState(barScrollStateRef.current, nextScrollTop);
+                if (nextBarScrollState !== barScrollStateRef.current) {
+                    const hiddenChanged = nextBarScrollState.isBarHidden !== barScrollStateRef.current.isBarHidden;
+                    barScrollStateRef.current = nextBarScrollState;
+                    if (hiddenChanged) {
+                        onScrollBarHiddenChange(nextBarScrollState.isBarHidden);
+                    }
+                }
                 if (commitTimerRef.current) {
                     clearTimeout(commitTimerRef.current);
                 }

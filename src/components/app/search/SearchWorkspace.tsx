@@ -65,6 +65,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         scrollTop,
         setSearchQuery,
         setSearchScrollTop,
+        setResultsBarHidden,
     } = useSearchNavigationStore(useShallow(state => ({
         searchQuery: state.searchQuery,
         searchSourceTab: state.searchSourceTab,
@@ -78,6 +79,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         scrollTop: state.scrollTop,
         setSearchQuery: state.setSearchQuery,
         setSearchScrollTop: state.setSearchScrollTop,
+        setResultsBarHidden: state.setResultsBarHidden,
     })));
     const results = useMemo(() => {
         const raw = searchResults || [];
@@ -157,6 +159,16 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         }
     }, [isSearchOpen]);
 
+    /*
+     * 关掉搜索页就把播放条放回来。那个「收起来」只属于这一次滚动，留着的话下次进搜索页
+     * 列表明明停在顶上，底下却空着一块控制条。
+     */
+    useEffect(() => {
+        if (!isSearchOpen) {
+            setResultsBarHidden(false);
+        }
+    }, [isSearchOpen, setResultsBarHidden]);
+
     useEffect(() => {
         if (!isSearchOpen || hasCollection) return;
         const trimmedQuery = searchQuery.trim();
@@ -173,6 +185,47 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         && searchResults === null
         && !searchError
         && Boolean(searchQuery.trim());
+
+    /*
+     * 列表末尾那一行：还在搜的提示、「加载更多」、以及这一批失败后的重试。
+     *
+     * 它是**这批结果的结尾**，所以跟着列表一起滚，不再钉在屏幕最下面：钉住时它永远占着一条，
+     * 底下那块列表反而被压短了，还和浮在下面的播放条抢同一块地方。
+     */
+    const trailingRow = isSearching || searchError || hasMore ? (
+        <div className="flex flex-col items-center justify-center gap-2 px-2 py-3">
+            {isSearching && (
+                <div className="flex items-center gap-2 text-xs opacity-55">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>{t('search.streamingMore')}</span>
+                </div>
+            )}
+            {searchError ? (
+                <div className="flex items-center gap-3 text-sm">
+                    <span className="opacity-60">{searchErrorText}</span>
+                    <Button
+                        disabled={isLoadingMore}
+                        onClick={onLoadMore}
+                        className="rounded-full border border-current/15 px-4 py-2 disabled:opacity-50"
+                    >
+                        {t('search.retry')}
+                    </Button>
+                </div>
+            ) : hasMore ? (
+                <Button
+                    disabled={isLoadingMore}
+                    onClick={onLoadMore}
+                    className={`rounded-full border px-5 py-2 text-sm disabled:opacity-50 ${
+                        isDaylight
+                            ? 'border-black/10 bg-black/5 hover:bg-black/10'
+                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                >
+                    {isLoadingMore ? t('localMusic.searching') : t('home.loadMore')}
+                </Button>
+            ) : null}
+        </div>
+    ) : undefined;
 
     return (
         <AnimatePresence>
@@ -285,56 +338,18 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                                 {t('home.noResults')}
                             </div>
                         ) : (
-                            <div className="flex h-full flex-col">
-                                <div className="min-h-0 flex-1">
-                                    <SearchResultsList
-                                        tracks={results}
-                                        scrollTop={scrollTop}
-                                        isDaylight={isDaylight}
-                                        onScrollTopChange={setSearchScrollTop}
-                                        onPlayTrack={onPlayTrack}
-                                        onAddTrackToQueue={onAddTrackToQueue}
-                                        onOpenArtist={onOpenArtist}
-                                        onOpenAlbum={onOpenAlbum}
-                                    />
-                                </div>
-                                {/*
-                                    还有平台没回来：列表已经在长了，所以只补一行小字，
-                                    不再盖一层转圈把刚出来的结果挡住。
-                                */}
-                                {isSearching && (
-                                    <div className="flex shrink-0 items-center justify-center gap-2 py-2.5 text-xs opacity-55">
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        <span>{t('search.streamingMore')}</span>
-                                    </div>
-                                )}
-                                {searchError ? (
-                                    <div className="flex shrink-0 items-center justify-center gap-3 py-3 text-sm">
-                                        <span className="opacity-60">{searchErrorText}</span>
-                                        <Button
-                                            disabled={isLoadingMore}
-                                            onClick={onLoadMore}
-                                            className="rounded-full border border-current/15 px-4 py-2 disabled:opacity-50"
-                                        >
-                                            {t('search.retry')}
-                                        </Button>
-                                    </div>
-                                ) : hasMore && (
-                                    <div className="flex shrink-0 justify-center py-3">
-                                        <Button
-                                            disabled={isLoadingMore}
-                                            onClick={onLoadMore}
-                                            className={`rounded-full border px-5 py-2 text-sm disabled:opacity-50 ${
-                                                isDaylight
-                                                    ? 'border-black/10 bg-black/5 hover:bg-black/10'
-                                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                                            }`}
-                                        >
-                                            {isLoadingMore ? t('localMusic.searching') : t('home.loadMore')}
-                                        </Button>
-                                    </div>
-                                )}
-                            </div>
+                            <SearchResultsList
+                                tracks={results}
+                                scrollTop={scrollTop}
+                                isDaylight={isDaylight}
+                                onScrollTopChange={setSearchScrollTop}
+                                onScrollBarHiddenChange={setResultsBarHidden}
+                                onPlayTrack={onPlayTrack}
+                                onAddTrackToQueue={onAddTrackToQueue}
+                                onOpenArtist={onOpenArtist}
+                                onOpenAlbum={onOpenAlbum}
+                                trailingRow={trailingRow}
+                            />
                         )}
                     </div>
                 </motion.section>
