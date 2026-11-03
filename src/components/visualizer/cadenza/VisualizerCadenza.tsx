@@ -244,6 +244,28 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         // status gives, without the comparator re-deriving every status on every comparison.
         const byStatus: Record<'waiting' | 'passed' | 'active', WordPlacement[]> = { waiting: [], passed: [], active: [] };
         let frameNumber = 0;
+        // 已写进样式的值。每帧无条件写 opacity / filter / transform 会把这一层每帧都标脏：
+        // 即使字符串与上一帧一模一样，浏览器仍要重走样式解析，而 filter 一旦变化就要重新
+        // 栅格化整层。歌词间的空档（opacity 0、filter none）此前也在每帧重写同样的四个值。
+        // 只写变化的值，画面像素完全不变。
+        const writtenStyle = { opacity: '', filter: '', transform: '', perspective: '' };
+        const applyLineStyle = (property: keyof typeof writtenStyle, value: string) => {
+            if (writtenStyle[property] === value) return;
+            writtenStyle[property] = value;
+            lineLayer.style.setProperty(property, value);
+        };
+        /**
+         * 模糊半径每帧都在变，但每写一次 filter，这一层就要重新栅格化一遍。
+         * 0.05px 以下的变化在屏幕上落不到一个像素里，写进去等于白栅格化。
+         * 阈值只挡「看不见的变化」，不改变任何可见的模糊程度。
+         */
+        let writtenBlurPx = 0;
+        const applyBlur = (blurPx: number) => {
+            const next = blurPx > 0.05 ? blurPx : 0;
+            if (Math.abs(next - writtenBlurPx) < 0.05) return;
+            writtenBlurPx = next;
+            applyLineStyle('filter', next > 0 ? `blur(${next.toFixed(2)}px)` : 'none');
+        };
 
         const draw = () => {
             const now = performance.now();
@@ -266,10 +288,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             textContext.clearRect(0, 0, width, height);
 
             if (!showText || !preparedState || !activeLine) {
-                lineLayer.style.opacity = '0';
-                lineLayer.style.filter = 'none';
-                lineLayer.style.transform = 'scale(1)';
-                lineLayer.style.perspective = '1000px';
+                applyLineStyle('opacity', '0');
+                applyBlur(0);
+                applyLineStyle('transform', 'scale(1)');
+                applyLineStyle('perspective', '1000px');
                 clearOverlayWordNodes(overlayNodesRef.current);
                 frameId = window.requestAnimationFrame(draw);
                 return;
@@ -287,10 +309,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             const verticalLift = Math.sin(time * 2.3) * (3 + motionEnergy * 8);
             const focusY = height * 0.42 + verticalLift;
 
-            lineLayer.style.opacity = lineEnvelope.opacity.toString();
-            lineLayer.style.filter = lineEnvelope.blur > 0.05 ? `blur(${lineEnvelope.blur.toFixed(2)}px)` : 'none';
-            lineLayer.style.transform = `scale(${lineEnvelope.scale})`;
-            lineLayer.style.perspective = `${linePerspective}px`;
+            applyLineStyle('opacity', lineEnvelope.opacity.toString());
+            applyBlur(lineEnvelope.blur);
+            applyLineStyle('transform', `scale(${lineEnvelope.scale})`);
+            applyLineStyle('perspective', `${linePerspective}px`);
 
             textContext.font = preparedState.font;
             textContext.textBaseline = 'alphabetic';
