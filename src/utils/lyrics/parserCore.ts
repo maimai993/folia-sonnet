@@ -124,10 +124,11 @@ const lyricCharCount = (text: string): number => Array.from(text.replace(/\s+/g,
  * 那段里往往夹着间奏。一行八个字横跨二十秒时，每个字被摊到两秒半：字慢得像爬，到下一行
  * 又突然跳回准位，于是整首歌只剩第一个字是准的。
  *
- * 这里拿整首的「每字时长」中位数当常态：明显比常态慢一截的行，把演唱时长压回正常范围，
- * 多出来的时间还给间奏（`endTime` 一起收短，末字的扫光不会拖到间奏里）。慢歌整体每字就长，
- * 中位数跟着变长，不会被误压。
+ * 这里拿整首的「每字时长」中位数当常态：明显比常态慢一截的行，把字压回正常语速，
+ * 行尾留在字唱完之后两秒（尾韵），余下的时间还给间奏。慢歌整体每字就长，中位数跟着变长。
  */
+const LINE_TAIL_SEC = 2;
+
 const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]): void => {
     if (estimatedIndexes.length === 0) {
         return;
@@ -140,40 +141,53 @@ const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]
             return count > 0 && span > 0 ? span / count : 0;
         })
         .filter(value => value >= 0.08 && value <= 1.2);
-    if (perCharSamples.length < 4) {
-        return;
+
+    /*
+     * 每字 0.5 秒是旧版写死的经验值，样本不够时（整首歌只有几行歌词）继续用它兜底；
+     * 样本够了就跟着这首歌自己的语速走 —— 慢歌每字本来就长，用 0.5 会把整首压快。
+     */
+    let pace = 0.5;
+    if (perCharSamples.length >= 4) {
+        perCharSamples.sort((left, right) => left - right);
+        pace = perCharSamples[Math.floor(perCharSamples.length / 2)];
     }
-
-    perCharSamples.sort((left, right) => left - right);
-
-    const median = perCharSamples[Math.floor(perCharSamples.length / 2)];
-
 
     estimatedIndexes.forEach(index => {
         const line = lines[index];
         if (!line) {
             return;
         }
+        // 最后一行没有「下一句」可参照，它那五秒是个保守默认值 —— 谁也不知道歌还剩多长，
+        // 压短只会在尾奏时把最后一句提前撤掉。
+        if (index === lines.length - 1) {
+            return;
+        }
+        // 五秒以内的行距是正常的句间停顿，不压；压了反而会让正常的句子提前结束。
+        if (line.endTime - line.startTime <= 5) {
+            return;
+        }
 
-        const count = lyricCharCount(line.fullText);
+        const count = line.fullText.length;
         if (count === 0) {
             return;
         }
 
-        const expected = count * median * 1.2;
-        // 常态的一点八倍以内都算「唱得慢」，不动它；只有明显混进静默的行才收。
-        if (line.endTime - line.startTime <= expected * 1.8) {
+        /*
+         * 行尾 = 字唱完 + 两秒尾韵。
+         *
+         * 这两秒是给这一句的尾音留的：
+         *   · 完全按「到下一行为止」定长，后面接间奏的行会把字摊成每字两三秒；
+         *   · 压到字唱完就结束，尾音还在响、屏幕上的词已经撤掉（「词没了还在唱那一句」）。
+         * 字按正常语速走完，行多留两秒，剩下的时间交给 attachInterludes 变成间奏行。
+         */
+        const singEnd = line.startTime + count * pace;
+        const lineEnd = singEnd + LINE_TAIL_SEC;
+        if (line.endTime <= lineEnd) {
             return;
         }
 
-        const singEnd = line.startTime + expected;
         line.words = buildTimedWords(line.fullText, line.startTime, singEnd);
-        // 只压字，不压行。
-        //
-        // 以前这里连 `line.endTime` 一起收短，结果是这一行在字唱完的那一刻就结束了 ——
-        // 音频还在唱这一句的尾音，屏幕上已经没有词了（用户报的「词没了还在唱那一句」）。
-        // 行必须留到下一句接管为止：字按正常语速唱完，剩下的时间就是这一句的尾音/间奏，
-        // 那一行静静地挂着，比提前消失更接近「一句还没唱完」的直觉。
+        line.endTime = lineEnd;
     });
 };
 

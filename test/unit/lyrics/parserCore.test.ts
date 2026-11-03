@@ -427,8 +427,8 @@ describe('findTranslationsForSortedStartTimes', () => {
 });
 
 describe('estimated line timing after an interlude', () => {
-    // 一行八个字横跨十几秒（后面接着间奏）：字不能摊到整段，否则唱得慢得像爬；
-    // 但**行本身不能被收短** —— 收短了就会在歌还在唱这一句时把词从屏幕上撤掉。
+    // 一行十几个字后面接着长间奏：字不能摊到整段（否则唱得像爬），
+    // 但行本身也不能在字唱完那一刻就撤 —— 尾音还在响，屏幕上已经没有词了。
     const lrc = [
         '[00:00.00]第一句歌词八个字',
         '[00:03.00]第二句歌词八个字',
@@ -438,18 +438,21 @@ describe('estimated line timing after an interlude', () => {
         '[00:28.00]下一句',
     ].join('\n');
 
-    it('keeps the long line on screen until the next line starts', () => {
+    it('ends the line a couple of seconds after the words, not at the next line', () => {
         const line = parseLRC(lrc).lines.find(item => item.fullText === '这一句后面接着长长的间奏呀');
         expect(line).toBeTruthy();
-        // 12s 起、下一行 28s 才开始：行必须撑满这一段，不能在字唱完时就结束。
-        expect(line!.endTime).toBeCloseTo(28, 3);
+        // 行尾落在字唱完之后两秒（尾韵），远早于 28 秒的下一句，余下的时间归间奏。
+        expect(line!.endTime).toBeLessThan(22);
+        expect(line!.endTime).toBeGreaterThan(line!.startTime);
+        const lastWord = line!.words[line!.words.length - 1];
+        expect(line!.endTime - lastWord.endTime).toBeGreaterThan(1.5);
     });
 
-    it('still packs the words into a normal singing pace', () => {
+    it('packs the words into the pace of the rest of the song', () => {
         const line = parseLRC(lrc).lines.find(item => item.fullText === '这一句后面接着长长的间奏呀');
         const lastWord = line!.words[line!.words.length - 1];
-        // 字要在一块合理的时间里唱完，远早于 28 秒的下一句。
-        expect(lastWord.endTime).toBeLessThan(line!.endTime - 5);
+        // 前四行每字 0.375 秒；一整句要是摊到十六秒就成每字一秒多，字必须收回来。
+        expect(lastWord.endTime - line!.startTime).toBeLessThan(8);
         expect(lastWord.endTime).toBeGreaterThan(line!.startTime);
     });
 });
