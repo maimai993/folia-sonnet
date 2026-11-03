@@ -135,6 +135,7 @@ export const useAppLibraryControllers = (model: Input) => {
         loadLocalPlaylists,
         canRestoreSession: windowPlaybackHandoffRestoreStatus === 'none',
         shouldAutoPlayRef: shouldAutoPlay,
+        pendingResumeTimeRef,
         // 「进入应用后自动播放」下面那一项：同一个开关组，起播的同时切到歌词页。
         jumpToPlayerOnLaunch: navigateToPlayer,
     });

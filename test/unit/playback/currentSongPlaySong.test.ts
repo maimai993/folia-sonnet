@@ -361,7 +361,7 @@ describe('playSong and the current song (online)', () => {
         const { refs } = mount();
         vi.mocked(removeFromCache).mockClear();
         emptyThePlayer(refs);
-        expect(vi.mocked(removeFromCache).mock.calls.map(([key]) => key).sort()).toEqual(['last_queue', 'last_song']);
+        expect(vi.mocked(removeFromCache).mock.calls.map(([key]) => key).sort()).toEqual(['last_position', 'last_queue', 'last_song']);
     });
 });
 

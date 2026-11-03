@@ -21,7 +21,21 @@ class FoliaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         FoliaCrashHandler.install(this)
+    }
+
+    companion object {
+        /**
+         * 进程级的 Application 引用。
+         *
+         * 只给「服务还没起来就要读盘」的地方用：会话恢复恰好就是这种场合 —— 冷启动时
+         * `getQueueState` 被调用的那一刻，前台服务实例可能还不存在（用户只是打开应用），
+         * 而没有 Application 就拿不到 SharedPreferences，那份会话快照也就读不出来。
+         */
+        @Volatile
+        var instance: FoliaApplication? = null
+            private set
     }
 
     /**
