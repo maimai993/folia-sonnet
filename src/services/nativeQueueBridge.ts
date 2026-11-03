@@ -56,6 +56,13 @@ export type NativeQueueState = {
     artworkUrl: string;
     nativeMedia?: NativePlaybackSnapshot & { url: string; speed?: number };
     lyrics?: { songKey: string; lrc: string; translated: string };
+    /**
+     * 这份队列是从**盘上的会话快照**答上来的，不是原生此刻正在放的东西。
+     *
+     * 服务不在（进程刚醒、或者已经被系统收走）时原生会给这一份：队列、当前曲、上次的
+     * 秒数都在，但播放器是空的 —— 前台要重新拉流，不能当成「原生还在放」直接认领。
+     */
+    fromDisk?: boolean;
 };
 
 type NativeQueuePlugin = {

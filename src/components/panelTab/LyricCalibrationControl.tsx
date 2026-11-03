@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { usePlaybackStore } from '../../stores/usePlaybackStore';
 import { useLyricCalibrationStore } from '../../stores/useLyricCalibrationStore';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { Button } from '../ui';
 import { PanelIconButton } from './shell/PanelIconButton';
 import { PanelRow } from './shell/PanelRow';
 
@@ -24,8 +25,8 @@ const Switch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void;
     onChange,
     label,
 }) => (
-    <button
-        type="button"
+    <Button
+        variant="bare"
         role="switch"
         aria-checked={checked}
         aria-label={label}
@@ -35,7 +36,7 @@ const Switch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void;
         <span
             className={`st-t-move block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`}
         />
-    </button>
+    </Button>
 );
 
 const LyricCalibrationControl: React.FC = () => {
