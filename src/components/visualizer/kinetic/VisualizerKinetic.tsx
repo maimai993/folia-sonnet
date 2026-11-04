@@ -269,15 +269,23 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         const planLines = Array.isArray((savedPlan as { lines?: unknown }).lines)
             ? ((savedPlan as { lines: Array<{ text?: unknown }> }).lines)
             : [];
-        if (lrc) {
-            const lrcTexts = lrc.split('\n').map(row => row.replace(/^\[[^\]]*\]/, '').trim()).filter(Boolean);
-            const planTexts = planLines.map(line => String(line.text ?? '').trim()).filter(Boolean);
-            const same = planTexts.length === lrcTexts.length
-                && planTexts.every((text, index) => text === lrcTexts[index]);
+        if (lrc && planLines.length > 0) {
+            /*
+             * 归一化签名比对，不逐行比。
+             *
+             * 编辑台 replan 会处理「/ 切分点」「| 注释」等记法，plan.lines[].text
+             * 与 LRC 原始行不逐字相同（上一版逐行比，同一首歌都被判不一致）。
+             * 去掉全部空白后整段比：足以区分"另一首歌"，也不会误伤本曲。
+             */
+            const squeeze = (value: string) => value.replace(/\s+/g, '');
+            const planSig = squeeze(planLines.map(line => String(line.text ?? '')).join(''));
+            const lrcSig = squeeze(lrc.split('\n').map(row => row.replace(/^\[[^\]]*\]/, '')).join(''));
+            const same = planSig.length > 0 && planSig === lrcSig;
             if (!same) {
                 console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', {
-                    planLines: planTexts.length,
-                    lrcLines: lrcTexts.length,
+                    planLines: planLines.length,
+                    planSigHead: planSig.slice(0, 24),
+                    lrcSigHead: lrcSig.slice(0, 24),
                 });
                 return;
             }

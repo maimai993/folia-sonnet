@@ -136,6 +136,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
     /** folia 歌词的原始时间：保存前用它核对编辑台算出来的逐行时间。 */
     const lrcTimesRef = useRef<number[]>([]);
     lrcTimesRef.current = lines.map(line => Math.max(0, line.startTime));
+    /** 上一次发出的 plan 签名：没变就不重发整包。 */
+    const lastPlanSigRef = useRef('');
     const themeColors = useMemo(() => ({
         bg: theme?.backgroundColor || '#0a0a0a',
         fg: theme?.primaryColor || '#f4f4f5',
@@ -212,12 +214,22 @@ const KineticEditorOverlay: React.FC<Props> = ({
 
     /** folia 播放头变了就推给编辑台；同时盯编辑台有没有反过来拖进度。 */
     const lastPushedRef = useRef<number | null>(null);
+    /*
+     * boot 对齐静默期。
+     *
+     * 原版 boot 的最后会 seek() 到第一帧的入场位置（12_ui.js:1935），编辑台的 t
+     * 会从 0 跳到 0.79 之类 —— 距 folia 的播放头差好几秒，正好命中「用户拖动」的
+     * 判据，把播放器拽回开头（就是「开一次编辑台时间轴就乱」的元凶之一）。
+     * 对齐阶段结束前不采信编辑台报来的时间。
+     */
+    const alignUntilRef = useRef(Date.now() + 4000);
     React.useEffect(() => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
         // 编辑台自己拖过进度就别用 folia 的时间盖回去（会把它拖到一半的手感打断）。
         const editorTime = pullTimeFromEditor(target);
         const drifted = editorTime !== null && lastPushedRef.current !== null
+            && Date.now() > alignUntilRef.current
             && Math.abs(editorTime - lastPushedRef.current) > 0.6;
         if (drifted && onSeek) {
             // 用户在编辑台里拖了进度条：让 folia 跟过去。
@@ -379,7 +391,13 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 }
 
                 channel?.postMessage({ type: 'project', project: snapshot });
-                if (editorPlan) {
+                // plan 没变就不重发（快照循环 500ms 一次，plan 大整包重发很浪费）。
+                const planSig = editorPlan
+                    ? JSON.stringify((editorPlan.cuts as unknown[] | undefined)?.length ?? 0) + '|' + String(editorPlan.styleKey ?? '')
+                    : '';
+                const planUnchanged = planSig !== '' && planSig === lastPlanSigRef.current;
+                if (!planUnchanged) lastPlanSigRef.current = planSig;
+                if (editorPlan && !planUnchanged) {
                     channel?.postMessage({ type: 'plan', plan: editorPlan });
                     console.log('[Kinetic] 已发出编辑台 plan', {
                         W: editorPlan.W,
@@ -474,6 +492,20 @@ const KineticEditorOverlay: React.FC<Props> = ({
     const inject = () => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
+        /*
+         * boot 未就绪就重试：iframe 的 onLoad 早于编辑台自己的 boot()
+         * （boot 在 DOMContentLoaded 里跑，还要 bind/replan 一整套），
+         * 此刻 J.ui 还不存在 —— 日志里的「工程对象未找到，跳过注入」就是它。
+         * 空跑一次等于没注入，必须补几次。
+         */
+        if (!(target as unknown as { J?: { ui?: unknown; uiApi?: unknown } }).J?.ui) {
+            [200, 600, 1400, 2600].forEach(delay => window.setTimeout(() => {
+                const t = frameRef.current?.contentWindow;
+                if (t && (t as unknown as { J?: { ui?: unknown } }).J?.ui) inject();
+            }, delay));
+            console.warn('[Kinetic] 编辑台 boot 未就绪，稍后重试注入');
+            return;
+        }
         /*
          * 说明：这里不做「songKey 为空就跳过」的拦截。
          *
