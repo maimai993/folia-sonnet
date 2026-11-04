@@ -344,7 +344,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 if (!current.lyricsReady || current.songKey !== (songKey ?? null) || injectedDocumentRef.current !== target.document
                     || injectedOkRef.current !== `${current.songKey ?? ''}\u0000${current.lrc}`) return;
                 let plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
-                if (final && typeof project.lyrics === 'string' && !kineticPlanMatchesLyrics(plan, project.lyrics)) {
+                if (final && typeof project.lyrics === 'string') {
                     // textarea 的 replanSoon 可能尚未执行，退出前先同步刷新，不能丢最后一次输入。
                     (target as unknown as { J?: { uiApi?: { replan?: () => void } } }).J?.uiApi?.replan?.();
                     plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;

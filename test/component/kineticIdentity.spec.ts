@@ -126,11 +126,12 @@ test('关闭时刷新尚在节流中的改词再保存最后快照', async ({ mo
     await page.evaluate(() => {
         const frame = document.querySelector('iframe[title="JIZURA 原版编辑台"]') as HTMLIFrameElement;
         const textarea = frame.contentDocument!.getElementById('lyrics') as HTMLTextAreaElement;
-        textarea.value = '[00:01]last edited！';
+        textarea.value = '[00:04]Alpha distinct first line\n[00:18]Alpha final line';
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         (document.querySelector('button[aria-label="退出编辑台"]') as HTMLButtonElement).click();
     });
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']?.project.lyrics)).toBe('[00:01]last edited！');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']?.project.lyrics)).toBe('[00:04]Alpha distinct first line\n[00:18]Alpha final line');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']?.project.plan.lines.map((line: any) => line.start))).toEqual([4, 18]);
 });
 
 test('歌词 pending 超过保存静默期也不能覆盖该歌改词存档', async ({ mount, page }) => {
