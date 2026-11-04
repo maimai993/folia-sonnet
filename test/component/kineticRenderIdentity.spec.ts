@@ -9,6 +9,7 @@ test('采用 A 的 plan 后 B 工程必须换词，旧 A plan 不得覆盖 B', a
         const original = w.J.Renderer.prototype.frame;
         w.J.Renderer.prototype.frame = function(ctx: unknown, plan: any, ...rest: unknown[]) {
             w.__drawnLines = plan.lines.map((line: any) => line.text).join('\n');
+            w.__drawnStarts = plan.lines.map((line: any) => line.start);
             return original.call(this, ctx, plan, ...rest);
         };
         w.__project = (name: string) => ({ lyrics: `[00:01]${name} distinct first line`, fonts: {}, seed: 123 });
@@ -25,6 +26,13 @@ test('采用 A 的 plan 后 B 工程必须换词，旧 A plan 不得覆盖 B', a
         w.__send('plan', { plan: w.__plan, songKey: 'a' });
     });
     await expect.poll(() => page.evaluate(() => (window as any).__drawnLines)).toContain('Alpha');
+    await page.evaluate(() => {
+        const w = window as any;
+        w.__send('project', { project: { ...w.__project('Alpha'), lyrics: '[00:04]Alpha distinct first line', sourceLyrics: '[00:04]Alpha distinct first line' }, songKey: 'a' });
+    });
+    await expect.poll(() => page.evaluate(() => (window as any).__drawnStarts[0])).toBe(4);
+    await page.evaluate(() => (window as any).__send('plan', { plan: (window as any).__plan, songKey: 'a', sourceLyrics: '[00:01]Alpha distinct first line' }));
+    await expect.poll(() => page.evaluate(() => (window as any).__drawnStarts[0])).toBe(4);
     await page.evaluate(() => (window as any).__send('project', { project: (window as any).__project('Bravo'), songKey: 'b', playing: false }));
     await expect.poll(() => page.evaluate(() => (window as any).__drawnLines)).toContain('Bravo');
     await page.evaluate(() => (window as any).__send('plan', { plan: (window as any).__plan, songKey: 'a' }));

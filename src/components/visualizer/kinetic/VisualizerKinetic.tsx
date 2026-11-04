@@ -175,7 +175,8 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
     const projectKey = `${lrc}\u0000${songKey ?? ''}\u0000${savedProjectKey}\u0000${themeColors.bg}\u0000${themeColors.fg}\u0000${themeColors.sub}\u0000${themeColors.accent}\u0000${fontFamily}\u0000${fontPayload?.family ?? ''}\u0000${wordColors ? JSON.stringify(wordColors) : ''}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
     /** 上次保存下来的 plan：重启后靠它原样还原排版。 */
-    const savedPlan = (savedProject as { plan?: Record<string, unknown> } | null)?.plan ?? null;
+    // 新工程必须与当前宿主源精确一致（含时间戳），legacy 无来源工程不恢复旧 plan。
+    const savedPlan = savedProject?.sourceLyrics === lrc ? savedProject.plan ?? null : null;
 
     const project = useMemo(() => {
         // 把 plan 从参数里摘掉：它是排版快照，单独通过 'plan' 消息送，
@@ -321,6 +322,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
             target: 'jizura-render',
             type: 'plan',
             songKey,
+            sourceLyrics: lrc,
             plan: savedPlan,
             time: currentTime.get(),
             playing: !pausedRef.current,
@@ -347,11 +349,12 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
             // 编辑台算好的 plan：直接转给渲染页采用，播放页就不再自己重算，
             // 画面必然与编辑台一致（重算会因 audio beats / 背景历史等运行时状态而不同）。
             if (data.type === 'plan' && data.plan) {
-                if (!kineticPlanMatchesLyrics(data.plan, String(projectRef.current.lyrics))) return;
+                if (data.sourceLyrics !== projectRef.current.sourceLyrics || !kineticPlanMatchesLyrics(data.plan, String(projectRef.current.lyrics))) return;
                 target.postMessage({
                     target: 'jizura-render',
                     type: 'plan',
                     songKey: data.songKey,
+                    sourceLyrics: data.sourceLyrics,
                     plan: data.plan,
                     time: currentTime.get(),
                     playing: !pausedRef.current,

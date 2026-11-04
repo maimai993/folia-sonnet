@@ -105,6 +105,7 @@ const KineticSettingsPanel: React.FC<VisualizerSettingsPanelProps<KineticTuning>
                      */
                     key={songKey ?? 'no-song'}
                     lines={lyricLines as Line[]}
+                    lyricsReady={lyricData !== null}
                     theme={theme}
                     songKey={songKey}
                     currentTime={liveTime}

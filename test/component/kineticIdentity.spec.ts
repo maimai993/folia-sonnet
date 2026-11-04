@@ -117,6 +117,58 @@ test('同歌手工改词后仍保存布局，并在重开时保留已归属的�
     await expect(textarea).toHaveValue('[00:01]Alpha edited！\n[00:12]Alpha final line');
 });
 
+test('关闭时刷新尚在节流中的改词再保存最后快照', async ({ mount, page }) => {
+    await mount('kineticIdentity');
+    await open(page);
+    await assertLyrics(page, 'Alpha');
+    await expect.poll(() => page.evaluate(() => Boolean(JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']))).toBe(true);
+    // input 与关闭同一个浏览器任务，不给 replanSoon(260ms) 偷跑的机会。
+    await page.evaluate(() => {
+        const frame = document.querySelector('iframe[title="JIZURA 原版编辑台"]') as HTMLIFrameElement;
+        const textarea = frame.contentDocument!.getElementById('lyrics') as HTMLTextAreaElement;
+        textarea.value = '[00:01]last edited！';
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        (document.querySelector('button[aria-label="退出编辑台"]') as HTMLButtonElement).click();
+    });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']?.project.lyrics)).toBe('[00:01]last edited！');
+});
+
+test('歌词 pending 超过保存静默期也不能覆盖该歌改词存档', async ({ mount, page }) => {
+    await mount('kineticIdentity');
+    await page.evaluate(() => localStorage.setItem('kinetic_projects', JSON.stringify({
+        'online:netease:Bravo': { at: 1, project: {
+            sourceLyrics: '[00:01.00]Bravo distinct first line\n[00:12.00]Bravo final line',
+            lyrics: '[00:01]Bravo edited！', seed: 12345,
+        } },
+    })));
+    await selectTrack(page, 'Bravo', true);
+    await open(page);
+    await expect(page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#lyrics')).toHaveValue('');
+    await page.waitForTimeout(3500);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Bravo'].project.lyrics)).toBe('[00:01]Bravo edited！');
+    await selectTrack(page, 'Bravo');
+    await expect(page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#lyrics')).toHaveValue('[00:01]Bravo edited！');
+});
+
+test('用户轻点同步启动宿主而不是编辑台预览时钟', async ({ mount, page }) => {
+    await mount('kineticIdentity');
+    await page.evaluate(() => {
+        (window as any).__playingRequests = [];
+        window.addEventListener('kinetic:toggle-play', (event: any) => (window as any).__playingRequests.push(event.detail.playing));
+    });
+    await open(page);
+    await assertLyrics(page, 'Alpha');
+    await page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#btnTap').click();
+    await expect.poll(() => page.evaluate(() => (window as any).__playingRequests.at(-1))).toBe(true);
+    expect(await editorFrame(page).evaluate(() => (window as any).J.ui.playing)).toBe(false);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('kinetic:time', { detail: { time: 2 } })));
+    await page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#tapBtn').click();
+    expect(await editorFrame(page).evaluate(() => (window as any).J.ui.project.timing.lineTimes[0])).toBe(2);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('kinetic:time', { detail: { time: 5 } })));
+    await page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#tapBtn').click();
+    expect(await editorFrame(page).evaluate(() => (window as any).J.ui.project.timing.lineTimes[1])).toBe(5);
+});
+
 test('暂停时编辑台跨句 seek 不启动播放页时钟', async ({ page }) => {
     await page.goto('http://127.0.0.1:4173/dev-probe.html?probe=kineticIdentity&render=1');
     await page.waitForSelector('[data-probe-track]');

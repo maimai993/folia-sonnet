@@ -22,6 +22,8 @@ import type { Line, Theme } from '../../../types';
 type Props = {
     /** 当前歌词行（转成 LRC 注入原版）。 */
     lines: Line[];
+    /** null 歌词等待期间只清显示，不覆盖原工程。 */
+    lyricsReady?: boolean;
     /** folia 主题：四色 + 字体 + AI 关键字色。 */
     theme: Theme | undefined;
     /** 右上角退出：关掉编辑台，回到 folia 原样式。 */
@@ -105,6 +107,7 @@ const sanitizeTiming = (
 
 const KineticEditorOverlay: React.FC<Props> = ({
     lines,
+    lyricsReady = true,
     theme,
     onClose,
     songKey,
@@ -131,8 +134,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
      * 切歌时再从 effect 里调它，写进编辑台的仍是打开那一刻的歌词 ——
      * 那就是「编辑台里的歌词不更新」的原因。ref 保证每次都读到最新值。
      */
-    const injectDataRef = useRef({ lrc: '', songKey: null as string | null, lines });
-    injectDataRef.current = { lrc, songKey: songKey ?? null, lines };
+    const injectDataRef = useRef({ lrc: '', songKey: null as string | null, lines, lyricsReady });
+    injectDataRef.current = { lrc, songKey: songKey ?? null, lines, lyricsReady };
     /** folia 歌词的原始时间：保存前用它核对编辑台算出来的逐行时间。 */
     const lrcTimesRef = useRef<number[]>([]);
     lrcTimesRef.current = lines.map(line => Math.max(0, line.startTime));
@@ -224,6 +227,10 @@ const KineticEditorOverlay: React.FC<Props> = ({
         const listener = (event: MessageEvent) => {
             if (event.source !== frameRef.current?.contentWindow) return;
             const data = event.data;
+            if (data?.source === 'jizura-editor' && data.type === 'set-playing' && typeof data.playing === 'boolean') {
+                onTogglePlayRef.current?.(data.playing);
+                return;
+            }
             if (data?.source === 'jizura-editor' && data.type === 'toggle-play') {
                 onTogglePlayRef.current?.(!playingRef.current);
                 return;
@@ -319,8 +326,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
          * 等它稳下来再开始记录。
          */
         const settleAt = Date.now() + SNAPSHOT_SETTLE_MS;
-        const pushSnapshot = () => {
-            if (Date.now() < settleAt) return;
+        const pushSnapshot = (final = false) => {
+            if (!final && Date.now() < settleAt) return;
             try {
                 const ui = (target as unknown as {
                     J?: {
@@ -334,9 +341,14 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 if (!project) return;
                 // boot 的示例工程不能存到当前歌曲；只采集本 iframe 已确认完成注入的工程。
                 const current = injectDataRef.current;
-                if (current.songKey !== (songKey ?? null) || injectedDocumentRef.current !== target.document
+                if (!current.lyricsReady || current.songKey !== (songKey ?? null) || injectedDocumentRef.current !== target.document
                     || injectedOkRef.current !== `${current.songKey ?? ''}\u0000${current.lrc}`) return;
-                const plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                let plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                if (final && typeof project.lyrics === 'string' && !kineticPlanMatchesLyrics(plan, project.lyrics)) {
+                    // textarea 的 replanSoon 可能尚未执行，退出前先同步刷新，不能丢最后一次输入。
+                    (target as unknown as { J?: { uiApi?: { replan?: () => void } } }).J?.uiApi?.replan?.();
+                    plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                }
                 if (typeof project.lyrics !== 'string' || !kineticPlanMatchesLyrics(plan, project.lyrics)) return;
                 const serialized = JSON.stringify({ project, plan });
                 if (serialized === lastSerialized) return;
@@ -399,7 +411,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 const planUnchanged = planSig !== '' && planSig === lastPlanSigRef.current;
                 if (!planUnchanged) lastPlanSigRef.current = planSig;
                 if (editorPlan && !planUnchanged) {
-                    channel?.postMessage({ type: 'plan', songKey, plan: editorPlan });
+                    channel?.postMessage({ type: 'plan', songKey, sourceLyrics: current.lrc, plan: editorPlan });
                     console.log('[Kinetic] 已发出编辑台 plan', {
                         W: editorPlan.W,
                         H: editorPlan.H,
@@ -434,7 +446,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
         return () => {
             window.clearInterval(timer);
             // 必须先抓最后一份再关闭 channel，否则 postMessage 抛错会连保存一起跳过。
-            pushSnapshot();
+            pushSnapshot(true);
             channel?.close();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

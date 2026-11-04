@@ -414,6 +414,7 @@
                 currentProject = data.project || {};
             }
             if (data.type === 'plan' && data.songKey !== undefined && data.songKey !== currentSongKey) return;
+            if (data.type === 'plan' && data.sourceLyrics !== undefined && data.sourceLyrics !== currentProject?.sourceLyrics) return;
             if (data.type === 'frameRate') {
                 // folia「性能与动效」里的帧率上限：'off' 不限，数字是每秒上限。
                 clock.capOff = data.frameCap === 'off' || data.frameCap === undefined;

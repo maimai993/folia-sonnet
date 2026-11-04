@@ -36550,7 +36550,10 @@ function updateTimeUI() {
 const playRate = () => (S.tap && S.tap.rate > 0 ? S.tap.rate : 1);
 function play() {
   // 宿主接管后，随机/历史/拍点等内部入口也不能重启第二个时钟。
-  if (J.__foliaHosted) return;
+  if (J.__foliaHosted) {
+    if (S.tap) window.parent.postMessage({ source: 'jizura-editor', type: 'set-playing', playing: true }, '*');
+    return;
+  }
   refreshLoopHold();
   if (S.audio) AP.play(S.audio.buffer, S.t, playRate());
   else S.t0 = performance.now() - S.t * 1000 / playRate();
@@ -37760,7 +37763,9 @@ function startTap(from = 0) {
   $('tapRate').value = String(opt.rate); $('tapCount').checked = opt.count;
   const prev = from > 0 ? S.plan.lines[from - 1] : null, cur = S.plan.lines[from];
   const t0 = from === 0 ? 0 : Math.max(0, prev.start + 0.01, cur.start - 2.5);      // a little before the line, never before the previous one
-  pause(); seek(t0); updateTap();
+  pause(); seek(t0);
+  if (J.__foliaHosted) notifyHostSeek();
+  updateTap();
   $('tapBtn').focus();
   if (from > 0) toast(`从第 ${from + 1} 行开始轻点同步（从 ${J.fmtTime(t0)} 开始播放）`);
   // カウントダウン: 3, 2, 1 — then the song starts
@@ -37779,7 +37784,7 @@ function startTap(from = 0) {
 function tapOpts() {
   let o = null; try { o = JSON.parse(localStorage.getItem('jizura.tapOpts') || 'null'); } catch (e) {}
   const rate = o && [1, 0.75, 0.5].includes(+o.rate) ? +o.rate : 1;
-  return { rate, count: !!(o && o.count) };
+  return { rate: J.__foliaHosted ? 1 : rate, count: !!(o && o.count) };
 }
 function saveTapOpts() {
   try { localStorage.setItem('jizura.tapOpts', JSON.stringify({ rate: +$('tapRate').value || 1, count: $('tapCount').checked })); } catch (e) {}
@@ -37823,7 +37828,9 @@ function tapBack() {                    // 1つ戻る: undo the last tap and jum
     S.tap.cl = prev ? prev.i : null; S.tap.ck = 1 + S.tap.done.filter(x => x.cut && prev && x.li === prev.i).length;
   }
   replan(); updateTap();
-  seek(Math.max(0, S.t - 3)); if (!S.playing) play();
+  seek(Math.max(0, S.t - 3));
+  if (J.__foliaHosted) notifyHostSeek();
+  if (!S.playing) play();
 }
 function stopTap() {
   const slow = S.tap && S.tap.rate !== 1;
@@ -37877,6 +37884,7 @@ function bind() {
   $('btnTap').addEventListener('click', () => (S.tap ? stopTap() : startTap()));
   $('tapBtn').addEventListener('click', tapNow);
   $('tapRate').addEventListener('change', () => {
+    if (J.__foliaHosted) { $('tapRate').value = '1'; toast('宿主播放时，轻点同步使用正常速度'); }
     saveTapOpts();
     if (!S.tap) return;
     S.tap.rate = +$('tapRate').value || 1;
@@ -37884,7 +37892,10 @@ function bind() {
     $('tapBtn').focus();
   });
   $('tapCount').addEventListener('change', () => { saveTapOpts(); $('tapBtn').focus(); });
-  $('tapStop').addEventListener('click', () => { pause(); stopTap(); });
+  $('tapStop').addEventListener('click', () => {
+    pause(); stopTap();
+    if (J.__foliaHosted) window.parent.postMessage({ source: 'jizura-editor', type: 'set-playing', playing: false }, '*');
+  });
   $('btnPlay').addEventListener('click', () => (S.playing ? pause() : play()));
   const cutPickAuto = $('cutPickAuto'), cutPickClose = $('cutPickClose');
   if (cutPickClose) cutPickClose.addEventListener('click', () => { closeCutPick(); updateCutInfo(); });
