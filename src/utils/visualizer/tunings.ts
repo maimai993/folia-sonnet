@@ -1,7 +1,7 @@
 import type { HanabiTuning } from '../../components/visualizer/hanabi/types';
 import type { NebbiaTuning } from '../../components/visualizer/nebbia/types';
 import type { MachiTuning } from '../../components/visualizer/machi/types';
-import type { KineticTuning } from '../../components/visualizer/kinetic/types';
+import type { KineticTuning } from '../../components/visualizer/kinetic/tuning';
 import type {
     CadenzaTuning,
     CappellaTuning,

@@ -39,6 +39,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -2397,6 +2398,102 @@ class FoliaNativePlugin : Plugin() {
         } catch (error: Exception) {
             call.reject("Write failed: " + error.message, error)
         } finally {
+            if (out != null) {
+                try {
+                    out.close()
+                } catch (ignored: IOException) {
+                    // 关不掉也已经写完了。
+                }
+            }
+        }
+    }
+
+    /*
+     * 导出按路径保存：把「选保存位置 + 写字节」拆成两步，绕开 Binder 的 1MB 上限。
+     *
+     * 为什么不能直接用上面的 saveFile：Capacitor 的 startActivityForResult 会把整个
+     * plugin call 暂存进 activity 的 savedInstanceState（日志里能看到
+     * capacitorLastPluginCallOptions size=753356），几十 MB 的视频导出直接崩在
+     * TransactionTooLargeException。所以字节先由 Web 侧写进应用缓存，这里只带一个路径。
+     */
+    @PluginMethod
+    fun saveFileFromPath(call: PluginCall) {
+        val fileName = call.getString("fileName", "")
+        val sourcePath = call.getString("sourcePath", "")
+        if (fileName == null || fileName.trim().isEmpty()) {
+            call.reject("Missing fileName")
+            return
+        }
+        if (sourcePath == null || sourcePath.trim().isEmpty()) {
+            call.reject("Missing sourcePath")
+            return
+        }
+        val mimeType = call.getString("mimeType", "application/octet-stream")
+        try {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType(mimeType)
+                .putExtra(Intent.EXTRA_TITLE, fileName)
+                .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            startActivityForResult(call, intent, "handleSavedFileFromPath")
+        } catch (error: Exception) {
+            call.reject("Save picker failed: " + error.message, error)
+        }
+    }
+
+    @ActivityCallback
+    private fun handleSavedFileFromPath(call: PluginCall, result: ActivityResult?) {
+        val cancelled = JSObject()
+        cancelled.put("saved", false)
+        cancelled.put("cancelled", true)
+        if (result == null || result.resultCode != Activity.RESULT_OK) {
+            call.resolve(cancelled)
+            return
+        }
+        val data = result.data
+        val uri = if (data != null) data.data else null
+        if (uri == null) {
+            call.resolve(cancelled)
+            return
+        }
+        val sourcePath = call.getString("sourcePath", "") ?: ""
+        // Capacitor 的 Cache 目录就是 context.cacheDir；Filesystem 给的 file:// URI 也能直接读。
+        val sourceFile = when {
+            sourcePath.startsWith("file://") -> File(Uri.parse(sourcePath).path ?: "")
+            sourcePath.startsWith("/") -> File(sourcePath)
+            else -> File(getContext().cacheDir, sourcePath)
+        }
+        if (!sourceFile.exists()) {
+            call.reject("Source file missing: " + sourceFile.absolutePath)
+            return
+        }
+        var out: OutputStream? = null
+        var input: InputStream? = null
+        try {
+            input = FileInputStream(sourceFile)
+            out = getContext().contentResolver.openOutputStream(uri, "w")
+            if (out == null) {
+                call.reject("Cannot open destination")
+                return
+            }
+            // 边读边写：不把整个文件读进内存，几十 MB 的导出也不会 OOM。
+            input.copyTo(out, 64 * 1024)
+            out.flush()
+            val saved = JSObject()
+            saved.put("saved", true)
+            saved.put("uri", uri.toString())
+            saved.put("name", call.getString("fileName", ""))
+            call.resolve(saved)
+        } catch (error: Exception) {
+            call.reject("Write failed: " + error.message, error)
+        } finally {
+            if (input != null) {
+                try {
+                    input.close()
+                } catch (ignored: IOException) {
+                    // 读完了，关不掉也无所谓。
+                }
+            }
             if (out != null) {
                 try {
                     out.close()
