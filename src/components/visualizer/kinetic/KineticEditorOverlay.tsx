@@ -559,7 +559,18 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 if (theme?.wordColors) ui.project.wordColors = theme.wordColors;
                 ui.uiApi?.replan?.();
                 ui.uiApi?.syncUI?.();
-                console.log('[Kinetic] 已注入原版编辑台', { lines: lines.length, accent: themeColors.accent, restored: Boolean(saved) });
+                /*
+                 * 日志带上注入歌词的首行与 songKey：
+                 * 行数区分不了新旧歌（两首都可能 32 行），首行文本一眼可辨。
+                 * 之前「注入成功但用户看到的还是旧词」无法定位是注入错还是显示错，就缺这条。
+                 */
+                console.log('[Kinetic] 已注入原版编辑台', {
+                    songKey: current.songKey,
+                    lines: lines.length,
+                    firstLine: (current.lrc || '').split('\n').find(row => row.replace(/\[[^\]]*\]/, '').trim())?.slice(0, 30) ?? '(空)',
+                    accent: themeColors.accent,
+                    restored: Boolean(saved),
+                });
                 // 顺手接管保存：导出/下载走安卓原生保存。
                 patchSaveFile(target);
             } else {
