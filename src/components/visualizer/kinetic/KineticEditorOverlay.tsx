@@ -500,20 +500,42 @@ const KineticEditorOverlay: React.FC<Props> = ({
      * 再用 folia 当前的歌词与主题补齐没被编辑过的字段 ——
      * 这样「编辑台里看到的」和「播放页画的」是同一份东西，改了才有意义。
      */
+    /*
+     * 注入的代次与去重。
+     *
+     * 之前 inject 的重试链没有门闩：onLoad、[songKey, lrc] effect、重试 setTimeout
+     * 可能并发注入多次；卸载/重挂载后旧闭包的定时器还会跑，向新 iframe 注入旧数据
+     * （切歌时尤其明显 —— 这就是「歌词区还是旧词」的候选元凶之一）。
+     * 现在每次 inject 调用拿一个代次号，重试前比对代次，旧链自动作废；
+     * 同一 key 成功注入过一次就不再重复注入。
+     */
+    const injectionSeqRef = useRef(0);
+    const retryTimersRef = useRef<number[]>([]);
+    const injectedOkRef = useRef('');
+    React.useEffect(() => () => {
+        // 卸载/重挂载：废掉所有未触发的重试。
+        retryTimersRef.current.forEach(timer => window.clearTimeout(timer));
+        retryTimersRef.current = [];
+    }, []);
     const inject = () => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
+        const seq = ++injectionSeqRef.current;
         /*
          * boot 未就绪就重试：iframe 的 onLoad 早于编辑台自己的 boot()
          * （boot 在 DOMContentLoaded 里跑，还要 bind/replan 一整套），
          * 此刻 J.ui 还不存在 —— 日志里的「工程对象未找到，跳过注入」就是它。
-         * 空跑一次等于没注入，必须补几次。
+         * 空跑一次等于没注入，必须补几次。重试前比对代次，旧链作废。
          */
         if (!(target as unknown as { J?: { ui?: unknown; uiApi?: unknown } }).J?.ui) {
-            [200, 600, 1400, 2600].forEach(delay => window.setTimeout(() => {
-                const t = frameRef.current?.contentWindow;
-                if (t && (t as unknown as { J?: { ui?: unknown } }).J?.ui) inject();
-            }, delay));
+            [200, 600, 1400, 2600].forEach(delay => {
+                const timer = window.setTimeout(() => {
+                    if (seq !== injectionSeqRef.current) return; // 已有更新的注入发起，这条链作废
+                    const t = frameRef.current?.contentWindow;
+                    if (t && (t as unknown as { J?: { ui?: unknown } }).J?.ui) inject();
+                }, delay);
+                retryTimersRef.current.push(timer);
+            });
             console.warn('[Kinetic] 编辑台 boot 未就绪，稍后重试注入');
             return;
         }
@@ -564,6 +586,13 @@ const KineticEditorOverlay: React.FC<Props> = ({
                  * 行数区分不了新旧歌（两首都可能 32 行），首行文本一眼可辨。
                  * 之前「注入成功但用户看到的还是旧词」无法定位是注入错还是显示错，就缺这条。
                  */
+                // 同一 key 已成功注入过就跳过：onLoad 与 effect 都会调 inject，别互相覆盖。
+                const okKey = `${current.songKey ?? ''}\u0000${current.lrc}`;
+                if (injectedOkRef.current === okKey) {
+                    console.log('[Kinetic] 该歌词已注入过，跳过重复注入', { songKey: current.songKey });
+                    return;
+                }
+                injectedOkRef.current = okKey;
                 console.log('[Kinetic] 已注入原版编辑台', {
                     songKey: current.songKey,
                     lines: lines.length,

@@ -37901,7 +37901,7 @@ function bind() {
     tl.setPointerCapture(e.pointerId);
     const h = S.tap || S.exporting ? -1 : tlHandleAt(e);
     if (h >= 0) { pushEdit(); TL.drag = h; pause(); tl.style.cursor = 'ew-resize'; return; }
-    drag = true; timelineSeek(e);
+    drag = true; try { window.__foliaUserSeekAt = Date.now(); } catch (e2) {} timelineSeek(e);
   });
   tl.addEventListener('pointermove', e => {
     if (TL.drag >= 0) { const ev = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey }; cancelAnimationFrame(raf); raf = requestAnimationFrame(() => tlDragTo(TL.drag, ev)); return; }
@@ -37910,8 +37910,9 @@ function bind() {
   });
   const endDrag = () => { if (TL.drag >= 0) { TL.drag = -1; flushSave(); renderLines(); drawTimeline(); } drag = false; };
   tl.addEventListener('pointerup', endDrag); tl.addEventListener('pointercancel', endDrag);
-  /* 宿主判定「用户拖了进度」用的标记：只有真实 pointerdown 才更新。 */
-  tl.addEventListener('pointerdown', () => { try { window.__foliaUserSeekAt = Date.now(); } catch (e) {} });
+  /* 宿主判定「用户拖了进度」用的标记：只打在真正改变播放头的 timelineSeek 上（1644/1648），
+     拖行句时间/切点手柄走的是 tlHandleAt 分支，不打标记。 */
+
   tl.addEventListener('pointerleave', () => { if (TL.hover >= 0 && TL.drag < 0) { TL.hover = -1; drawTimeline(); } });
   tl.addEventListener('wheel', e => {
     e.preventDefault();
