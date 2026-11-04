@@ -22,6 +22,15 @@ data class AiProviderPreset(
                 "https://generativelanguage.googleapis.com/v1beta", "gemini-3-flash-preview")
         val DEEPSEEK = AiProviderPreset("deepseek", "openai",
                 "https://api.deepseek.com", "deepseek-flash")
+        /**
+         * 免费渠道：地址与模型写死，密钥是本机的机器码（由 Web 侧生成后推上来）。
+         *
+         * 协议就是普通的 OpenAI 兼容 —— 服务端那把机器码建出来的是一把普通 Key，
+         * 走的也是同一个网关。所以原生这条补全路径**照常适用**，不需要为它开例外；
+         * 它与别家唯一的差别只是「密钥不是用户填的」。
+         */
+        val FOLIAWORK = AiProviderPreset("foliawork", "openai",
+                "https://apiai.tangbot.xyz/v1", "deepseek-v4.1-flash")
         val MIMO = AiProviderPreset("mimo", "openai",
                 "https://api.xiaomimimo.com/v1", "mimo-v2.6-flash")
         val QWEN = AiProviderPreset("qwen", "openai",
@@ -39,7 +48,7 @@ data class AiProviderPreset(
         val CUSTOM = AiProviderPreset("custom", "openai", "", "")
 
         val ALL: Map<String, AiProviderPreset> = listOf(
-                GEMINI, DEEPSEEK, MIMO, QWEN, TENCENTCLOUD,
+                GEMINI, DEEPSEEK, FOLIAWORK, MIMO, QWEN, TENCENTCLOUD,
                 OPENAI, ANTHROPIC, KIMI, GLM, CUSTOM).associateBy { it.id }
 
         fun of(id: String): AiProviderPreset = ALL[id] ?: GEMINI

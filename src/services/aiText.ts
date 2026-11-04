@@ -12,6 +12,16 @@ export {
   resolveAiProviderPreset,
   retiredModelHint,
 } from '../../shared/ai/providerRegistry.mjs';
+/*
+ * 免费渠道的「贡献账号」入口地址。组件不直接 import shared/ai/（见本文件末尾那段说明），
+ * 所以从这一处转出。
+ */
+import { FOLIA_WORK_API_BASE, FOLIA_WORK_MODEL } from '../../shared/ai/foliawork.mjs';
+import { ensureMachineCode } from './foliaMachineCode';
+import { readAiSettings } from './aiSettings';
+export { FOLIA_WORK_SHARE_PAGE_URL, FOLIA_CHECKIN_URL } from '../../shared/ai/foliawork.mjs';
+/** 免费渠道的连接测试在渲染层跑（它没有主进程凭据，请求形状也是原生端点）。 */
+export { testConfiguredAiConnection } from './aiThemeClient';
 
 // src/services/aiText.ts
 
@@ -212,6 +222,52 @@ export const fetchAiModels = (payload: AiConnectionTestPayload): Promise<AiModel
 
 /** Whether the connection test can run here. It is desktop only: there is no web route for it. */
 export const canRunAiConnectionTest = (): boolean => Boolean(window.electron?.testAiConnection);
+
+/**
+ * 桌面端启动时的一次性对齐：把 AI 服务商默认成免费渠道，并把本机机器码交给主进程。
+ *
+ * 为什么放在这个文件（而不是某个 hook 里）：`aiTextArchitecture` 那条门禁规定，只有
+ * `services/aiText.ts` 可以提到 AI 设置的字段名。主进程也不许写死服务商的地址与模型，
+ * 所以「第一次运行该是什么样子」只能由渲染层通过已有的 `save-settings` 通道写进去。
+ *
+ * 只种一次：`AI_PROVIDER` 有值就再也不碰 —— 用户换成别家之后不会被改回来。
+ * 返回 true 表示这次真的种了（测试与日志用得上）。
+ */
+export const seedFreeChannelOnDesktop = async (): Promise<boolean> => {
+  const bridge = window.electron;
+  if (!bridge?.saveSettings) return false;
+  try {
+    /*
+     * **只在什么都没存过时**把服务商默认成免费渠道 —— 这是「默认选免费」，不是「只能免费」。
+     *
+     * 不种这一份的话，设置表单读到的「什么都没存」会退回 Gemini：新装的人看到的是
+     * 「Google Gemini」，免费渠道那一块（机器码、剩余积分、贡献账号）根本不出现。
+     * 存过就再也不碰，用户换成别家之后不会被改回来。
+     */
+    const settings = typeof bridge.getSettings === 'function'
+      ? await bridge.getSettings().catch(() => null)
+      : null;
+    if (settings && settings.AI_PROVIDER !== undefined) {
+      // 已经配过了：只需要保证当前选的是免费渠道时，机器码在凭据库里。
+      if (readAiSettings().provider !== 'foliawork') return false;
+      await bridge.saveSettings('OPENAI_API_KEY', ensureMachineCode());
+      return false;
+    }
+    await bridge.saveSettings('AI_PROVIDER', 'openai');
+    await bridge.saveSettings('AI_PROVIDER_PRESET', 'foliawork');
+    await bridge.saveSettings('OPENAI_API_URL', FOLIA_WORK_API_BASE);
+    await bridge.saveSettings('OPENAI_API_MODEL', FOLIA_WORK_MODEL);
+    // 首次运行必然是免费渠道：顺手把机器码交过去，用户装完就能直接用。
+    await bridge.saveSettings('OPENAI_API_KEY', ensureMachineCode());
+    console.info('[folia] 首次运行：AI 服务商已默认成免费渠道');
+    return true;
+  } catch {
+    // 写不进去（旧版本 / IPC 被拦）：主进程那条路会报「没配 Key」，
+    // 用户能看到明确的提示，比这里静默失败更容易排查。
+    console.warn('[folia] 没能把免费渠道写进主进程设置，桌面端主题生成可能报「未配置」');
+    return false;
+  }
+};
 
 /**
  * Hands the unsaved values of the settings form to the main process, which sends one "hello" with

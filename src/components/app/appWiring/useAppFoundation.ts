@@ -21,6 +21,7 @@ import { writeNativeLoopMode } from '../../../services/nativeQueueBridge';
 import { writeNativeSettings } from '../../../services/nativeSettingsBridge';
 import { startNativeEqualizerSync } from '../../../services/playbackEngine/nativeEqualizer';
 import { useNativeAiConfigSync } from '../../../hooks/useNativeAiConfigSync';
+import { useFoliaMachineCodeSync } from '../../../hooks/useFoliaMachineCodeSync';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
@@ -199,6 +200,8 @@ export const useAppFoundation = () => {
 
     // AI 配置的启动同步与变化跟随：凭据只存原生，真正发请求的是原生。
     useNativeAiConfigSync();
+    // 免费渠道：把本机的机器码同步进桌面端的凭据库（它就是那个渠道的 Key）。
+    useFoliaMachineCodeSync();
 
     /*
      * 原生均衡器：启动对一次表，之后跟随 store。
