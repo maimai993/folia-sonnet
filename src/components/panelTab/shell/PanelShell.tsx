@@ -5,6 +5,7 @@ import { usePlayerBottomBarBottomPx } from '../../../hooks/usePlayerBottomBarBot
 import { usePlayerOverlayObstacle } from '../../../hooks/usePlayerOverlayLayout';
 import { kitTransition, useKitReducedMotion } from '../../modal/settings/kit/motion';
 import { panelTokens } from './panelTheme';
+import { useGlassSurfaceSettingsStore } from '../../../stores/useGlassSurfaceSettingsStore';
 import { FOLDED_PX } from './SongHeader';
 import { PANEL_BOTTOM_LIFT_PX } from './panelBottomBaseline';
 import { useIsShortViewport, useIsWideShortViewport } from './panelViewport';
@@ -83,6 +84,8 @@ type PanelSurfaceProps = Omit<PanelShellProps, 'isOpen' | 'handle'> & {
 
 const PanelSurface: React.FC<PanelSurfaceProps> = ({ hasHandle, isCover, tabKey, theme, isDaylight, header, dock, children, layoutRef, onLayoutUpdate }) => {
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时面板转半透明（panelTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const bottomBarBottomPx = usePlayerBottomBarBottomPx();
     const isShort = useIsShortViewport();
     // 矮而宽：摊宽面板，页签分两栏（见 ControlsTab）。竖屏手机横向没有余量，摊宽只会顶到屏幕边。
@@ -164,7 +167,7 @@ const PanelSurface: React.FC<PanelSurfaceProps> = ({ hasHandle, isCover, tabKey,
             data-still={isStill || undefined}
             className={`st-window pointer-events-auto @container hide-scrollbar flex max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden rounded-[20px] bg-[var(--pn-glass)] text-[color:var(--st-t1)] shadow-[var(--pn-shadow)] backdrop-blur-[40px] backdrop-saturate-[1.3] [&[data-still]_*]:transition-none ${isWideShort ? 'flex-row' : 'flex-col'}`}
             style={{
-                ...panelTokens(isDaylight, theme, reduced),
+                ...panelTokens(isDaylight, theme, reduced, glassOn),
                 width: isWideShort
                     ? (NARROW_WIDE_TABS.has(tabKey) ? NARROW_WIDE_SURFACE_PX : WIDE_SURFACE_PX)
                     : SURFACE_PX,

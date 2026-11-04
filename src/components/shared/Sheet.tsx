@@ -10,6 +10,7 @@ import { Tooltip } from '../modal/settings/kit';
 import { escapeCloses, tabTarget } from './sheetKeys';
 import { isNativeBackKey } from '../../utils/keyboardTargets';
 import { Button } from '../ui';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 
 // src/components/shared/Sheet.tsx
 // The frame of every dialog: a title and the close button at the top, the content in the middle,
@@ -78,9 +79,9 @@ const openSheets: symbol[] = [];
  * of the text on a red button, and the sheet's shadow. The text colour is the app's, or the
  * overlay's stand-in where the sheet is drawn outside the app shell.
  */
-const panelTokens = (isDaylight: boolean, theme: Theme | undefined, reduced: boolean): CSSProperties => ({
+const panelTokens = (isDaylight: boolean, theme: Theme | undefined, reduced: boolean, glass = false): CSSProperties => ({
     '--text-primary': 'var(--sheet-ink)',
-    ...settingsTokens(isDaylight, theme),
+    ...settingsTokens(isDaylight, theme, glass),
     ...kitMotionTokens(reduced),
     '--st-on-err': isDaylight ? '#ffffff' : '#1b1012',
     '--sheet-shadow': isDaylight ? '0 36px 90px rgba(0, 0, 0, 0.26)' : '0 36px 90px rgba(0, 0, 0, 0.6)',
@@ -223,6 +224,8 @@ const SheetFrame: React.FC<SheetFrameProps> = ({
     const isDaylight = isDaylightProp ?? kitTheme.isDaylight;
     const theme = kitTheme.theme;
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时弹层面板转半透明（settingsTokens 的 glass 参数），折射滤镜才有画面可折射。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     // False from the moment the sheet starts to leave: it lets go of the keyboard and the pointer
     // then, not when its exit has finished.
     const isPresent = useIsPresent();
@@ -382,7 +385,7 @@ const SheetFrame: React.FC<SheetFrameProps> = ({
                 initial={cameFrom}
                 animate={{ opacity: 1, x: 0, y: 0, scale: 1, transition: kitTransition('unfold', reduced) }}
                 exit={exit}
-                className={`st-window relative isolate flex max-h-[min(720px,100%)] max-w-full flex-col overflow-hidden rounded-2xl bg-[var(--st-win)] text-[color:var(--st-t1)] shadow-[var(--sheet-shadow),0_0_0_1px_var(--st-line2)] ${SIZE_CLASS[size]}`}
+                className={`st-window relative isolate flex max-h-[min(720px,100%)] max-w-full flex-col overflow-hidden rounded-2xl bg-[var(--st-win)] text-[color:var(--st-t1)] shadow-[var(--sheet-shadow),0_0_0_1px_var(--st-line2)] backdrop-blur-2xl ${SIZE_CLASS[size]}`}
                 // The panel holds focus without a mark of its own.
                 //
                 // isolate 一直挂着，不再等 underlay 出现：underlay 要等选中哪个平台定下来（窗口打开之后
@@ -391,7 +394,7 @@ const SheetFrame: React.FC<SheetFrameProps> = ({
                 //
                 // 面板自己不写 will-change：它是固定的包含块会连带影响里面 fixed 的内容，而容器
                 // （见 COMPOSITED）已经有图层了，面板那几帧的图层生灭落在它上面就够了。
-                style={{ outline: 'none', ...panelTokens(isDaylight, theme, reduced) }}
+                style={{ outline: 'none', ...panelTokens(isDaylight, theme, reduced, glassOn) }}
             >
                 <SettingsKitThemeContext.Provider value={childTheme}>
                     {underlay && <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">{underlay}</div>}

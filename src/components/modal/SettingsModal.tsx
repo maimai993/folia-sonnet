@@ -33,6 +33,7 @@ import type { ThemeCacheSongKey } from '../../services/themeCache';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
 import type { LyricFilterDraft } from './LyricFilterSettingsModal';
 import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
@@ -153,6 +154,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         handleToggleOpenPlayerOnLaunch: onToggleOpenPlayerOnLaunch,
     } = useDesktopSettingsStore(useShallow(selectDesktopSettingsSnapshot));
     const { isDaylight } = useThemeSettingsStore(useShallow(selectThemeSettingsSnapshot));
+    // 液态玻璃开着时设置窗口的表面转成半透明（见 settingsTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const onToggleTransparentPlayerBackgroundFromStore = usePlayerChromeSettingsStore(state => state.handleToggleTransparentPlayerBackground);
     const resolvedToggleTransparentPlayerBackground = onToggleTransparentPlayerBackground ?? onToggleTransparentPlayerBackgroundFromStore;
     const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
@@ -561,7 +564,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 aria-modal="true"
                 aria-label={t('options.settingsWindowName')}
                 className="st-window relative flex h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-[var(--st-win)] text-[color:var(--st-t1)] shadow-[0_36px_90px_rgba(0,0,0,0.5),0_0_0_1px_var(--st-line2)] md:grid md:h-[86vh] md:w-[960px] md:grid-cols-[212px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]"
-                style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reducedKitMotion) }}
+                style={{ ...settingsTokens(isDaylight, theme, glassOn), ...kitMotionTokens(reducedKitMotion) }}
                 onClick={(event) => event.stopPropagation()}
             >
                 <SettingsKitThemeContext.Provider value={kitTheme}>

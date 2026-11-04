@@ -279,6 +279,9 @@ export type CommandPaletteSettingsContext = {
     /** bravais info strip always see-through (useLibraryWallLookStore.seamClear); read live. */
     libraryWallSeamClear: () => boolean;
     toggleLibraryWallSeamClear: () => void;
+    /** 液态玻璃的总开关（useGlassSurfaceSettingsStore.liquidGlassEnabled）；现读。 */
+    liquidGlassEnabled: () => boolean;
+    toggleLiquidGlass: () => void;
     /** bravais solid info strip preset (useLibraryWallLookStore.seamStyle); read live. Ignored while the strip is see-through. */
     libraryWallSeamStyle: () => LibraryWallSeamStyle;
     setLibraryWallSeamStyle: (style: LibraryWallSeamStyle) => void;

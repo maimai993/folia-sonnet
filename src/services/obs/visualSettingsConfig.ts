@@ -8,6 +8,8 @@ import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../stores/useStageSettingsStore';
 import { useLibraryWallLookStore } from '../../stores/useLibraryWallLookStore';
 import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
+import type { LiquidGlassEffects, LiquidGlassParams } from '../../shinoinject/liquidglass';
 
 // src/services/obs/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -119,6 +121,23 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // 播放页标题栏后面那层磨砂底：属于播放页的样子，不给用户例外。OBS 覆盖层不画标题栏，用不上它，
     // 但它跟着一起走，导出的「样子」才是完整的。
     playerHeaderBlur: usePlayerChromeSettingsStore.getState().playerHeaderBlur,
+    // 液态玻璃：总开关、四个参数与两个效果开关。界面材质，属于「长什么样」，随外观配置一起走。
+    // 存成一整对象而不是六个平铺字段，短码只占一个键（llg）。
+    liquidGlass: snapshotLiquidGlass(),
+  };
+}
+
+/** 液态玻璃的当前设置，导出用；没开也照样带走参数，导入方才能原样恢复。 */
+function snapshotLiquidGlass(): LiquidGlassParams & LiquidGlassEffects & { enabled: boolean } {
+  const glass = useGlassSurfaceSettingsStore.getState();
+  return {
+    enabled: glass.liquidGlassEnabled,
+    strength: glass.strength,
+    blur: glass.blur,
+    sat: glass.sat,
+    bend: glass.bend,
+    light: glass.light,
+    jelly: glass.jelly,
   };
 }
 

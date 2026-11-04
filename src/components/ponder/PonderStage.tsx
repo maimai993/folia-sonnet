@@ -18,6 +18,7 @@ import { openPonderActionUrl } from '../../services/ponder/ponderActionUrl';
 import { SettingsKitThemeContext } from '../modal/settings/kit/kitTheme';
 import { ponderLayerMotion } from './ponderMotion';
 import { ponderLayerTokens, ponderWindowTokens } from './ponderTheme';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import { createPonderStageNodes } from './ponderStageNodes';
 import { usePonderTimeline, type PonderTimelineControls } from './usePonderTimeline';
 import PonderActors from './PonderActors';
@@ -81,6 +82,8 @@ const readRect = (selector: string): PonderRect | null => {
 const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
     const { t } = useTranslation();
     const calm = useMotionSettingsStore(state => resolveReducedMotion(state, 'uiMicroMotion'));
+    // 液态玻璃开着时 Ponder 全屏窗口的表面转半透明（ponderWindowTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const liveSession = usePonderStore(state => state.session);
     const isPaused = usePonderStore(state => state.isPaused);
     const closePonder = usePonderStore(state => state.closePonder);
@@ -301,7 +304,7 @@ const PonderStage: React.FC<PonderStageProps> = ({ theme, isDaylight }) => {
             aria-modal="true"
             aria-label={t(target.titleKey)}
         >
-            <div className="st-window absolute inset-0 text-[color:var(--st-t1)]" style={ponderWindowTokens(isDaylight, theme, calm)}>
+            <div className="st-window absolute inset-0 text-[color:var(--st-t1)] backdrop-blur-2xl" style={ponderWindowTokens(isDaylight, theme, calm, glassOn)}>
                 <SettingsKitThemeContext.Provider value={kitTheme}>
                     {/* 画面：一块屏，骨架和会动的那几个都画在它上面。位移和缩放只挂在这一层：底衬要一直铺满，
                         跟着缩会在四边露出没盖住的真实界面；外框那几处只跟着底衬淡入。 */}

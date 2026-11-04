@@ -13,8 +13,8 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     lyricsRenderer: { section: 'appearance' },
     // 歌词动态壁纸那一节（fork 独有，只有安卓画；见 LyricsWallpaperSettingsSection）。
     lyricsWallpaper: { section: 'appearance' },
-    // 显示那四项（fork 独有；后两项只有安卓画，运行时判断在那两个组件里）。
-    glassSurface: { section: 'appearance' },
+    // 显示那几项（fork 独有；设备类型与横竖屏只有安卓画，运行时判断在那两个组件里）。
+    // 液态玻璃的开关与参数搬去了「性能与动效」页那一组（它同时是性能设置），锚点见表里 graphics 那一段。
     lyricFlat: { section: 'appearance' },
     deviceType: { section: 'appearance' },
     // 原来这里还有一条 `phoneFit`（「手机适配」总开关）。那一行按用户要求删掉了 ——
@@ -97,6 +97,9 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     graphicsPerformance: { section: 'graphics' },
     graphicsMotion: { section: 'graphics' },
     gpuPreference: { section: 'graphics' },
+    // 液态玻璃那一组（fork 独有）：总开关、预设、参数与效果开关。
+    liquidGlass: { section: 'graphics' },
+    liquidGlassEnabled: { section: 'graphics' },
 
     // pages/ModsPage
     modSystem: { section: 'mods' },

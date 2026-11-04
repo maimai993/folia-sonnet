@@ -11,12 +11,15 @@ import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../../utils/frameRateLimite
 import { DEFAULT_RENDER_PIXEL_RATIO, RENDER_PIXEL_RATIO_OPTIONS } from '../../../../utils/renderPixelRatio';
 import { Group, Link, Reveal, Row, Segmented, Toggle, option, useSettingsKitTheme, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import { GpuPreferenceRow } from './graphics/GpuPreferenceRow';
+import LiquidGlassGroup, { LIQUID_GLASS_OPTIONS } from './graphics/LiquidGlassGroup';
 import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/GraphicsPage.tsx
 // The 性能与动效 page: what trades picture for smoothness or works around a renderer problem
 // (static mode, the home background, native blur, the frame-rate cap, background throttling, the
-// Linux glow fix, the Windows render GPU), and which parts of the interface play reduced motion.
+// Linux glow fix, the Windows render GPU), which parts of the interface play reduced motion, and
+// liquid glass — which lives here because it is decoration drawn pixel by pixel, so it is a
+// performance choice first (see LiquidGlassGroup).
 
 /** Docs page behind the "Fix lyric animation freeze on Linux" switch. */
 const CHROMIUM_FD_EXHAUSTION_DOCS_URL = 'https://folia-site.cielaniska.top/guide/chromium-fd-exhaustion';
@@ -61,6 +64,7 @@ const SURFACE_ROWS: Record<MotionSurfaceId, { option: SettingsOptionDef; hintKey
 export const OPTIONS: SettingsOptionDef[] = [
     ...Object.values(O).filter(row => row !== O.nativeBlur || !IS_LINUX),
     ...MOTION_SURFACE_IDS.map(surface => SURFACE_ROWS[surface].option),
+    ...LIQUID_GLASS_OPTIONS,
 ];
 
 const FRAME_RATE_CHOICES = VISUALIZER_FRAME_RATE_OPTIONS.map(rate => ({ value: String(rate), label: `${rate} FPS` }));
@@ -172,6 +176,9 @@ const GraphicsPage: React.FC = () => {
                 </Row>
                 {IS_WINDOWS_DESKTOP && <GpuPreferenceRow option={O.gpuPreference} />}
             </Group>
+
+            {/* 液态玻璃：总开关、预设、四个数值参数与光效 / 果冻两个效果开关。 */}
+            <LiquidGlassGroup />
 
             <Group def={MOTION} foot={t('options.reduceMotionSectionDesc')}>
                 <Row option={O.followSystem} hint={t('options.reduceMotionFollowSystemDesc')}>

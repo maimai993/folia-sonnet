@@ -16,6 +16,7 @@ import { hasLibrarySuiteChoice } from '../../../library/registry';
 import { chooseLibrarySuite, getActiveLibrarySuiteId, listLibrarySuiteOptions } from '../../../library/app/librarySuiteChoice';
 import { isBravaisLibraryActive } from '../../../library/app/bravaisLibraryActive';
 import { useLibraryWallLookStore } from '../../../stores/useLibraryWallLookStore';
+import { useGlassSurfaceSettingsStore } from '../../../stores/useGlassSurfaceSettingsStore';
 import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -104,6 +105,12 @@ export const buildSettingsCommandContext = (
         toggleLibraryWallSeamClear: () => {
             const wall = useLibraryWallLookStore.getState();
             wall.setSeamClear(!wall.seamClear);
+        },
+        // 液态玻璃的总开关：现读 store，参数面板开着时也能跟上。
+        liquidGlassEnabled: () => useGlassSurfaceSettingsStore.getState().liquidGlassEnabled,
+        toggleLiquidGlass: () => {
+            const glass = useGlassSurfaceSettingsStore.getState();
+            glass.setLiquidGlassEnabled(!glass.liquidGlassEnabled);
         },
         libraryWallSeamStyle: () => useLibraryWallLookStore.getState().seamStyle,
         setLibraryWallSeamStyle: style => useLibraryWallLookStore.getState().setSeamStyle(style),

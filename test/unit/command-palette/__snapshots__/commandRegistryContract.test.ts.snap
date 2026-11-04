@@ -157,6 +157,8 @@ exports[`command palette registry contract > keeps the registered command order 
   "desktop-unlock-remote-control",
   "settings-graphics",
   "settings-gpu-preference",
+  "liquid-glass-toggle",
+  "settings-liquid-glass",
   "gpu-preference-auto",
   "gpu-preference-high-performance",
   "gpu-preference-low-power",

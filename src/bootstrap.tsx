@@ -27,9 +27,9 @@ import { isMainAppSurface, isObsBrowserSourceSurface, isRemoteControlSurface, ob
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
 import './stores/useMotionSettingsStore';
-// 同上：`<html data-glass='off'>` 也要在画第一帧之前就挂上。原来只被设置弹窗那一支引用
-// （GeneralSettingsSubview → GlassSurfaceSetting），谁先被懒加载谁才生效；挂在 bootstrap 上
-// 之后每个根（App / 遥控 / OBS）一开始就带着这个属性，index.css 那条覆盖才压得住玻璃。
+// 同上：液态玻璃的开关（`<html data-liquid-glass='on'>` + 注入器）也要在画第一帧之前就挂好。
+// 原来只被设置弹窗那一支引用（当时在 AppearancePage，现在在 GraphicsPage 的 LiquidGlassGroup），
+// 谁先被懒加载谁才生效；挂在 bootstrap 上之后每个根（App / 遥控 / OBS）一开始就带着正确的玻璃状态。
 import './stores/useGlassSurfaceSettingsStore';
 
 // src/bootstrap.tsx

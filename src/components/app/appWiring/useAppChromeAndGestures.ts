@@ -236,8 +236,8 @@ export const useAppChromeAndGestures = (model: Input) => {
     }), [bgMode, isDaylight, shouldUseTransparentAppBackground, theme]);
     /*
      * 主题变量原本只挂在 App 根节点的 inline style 上，而弹层、面板这些 portal 到 body 的
-     * 节点读不到它 —— 关掉毛玻璃时它们要靠 --bg-color 撑出不透明底色，拿不到就会掉回
-     * 深色兜底，在浅色主题下变成一块黑板。这里往 <html> 同步一份。
+     * 节点读不到它 —— 半透明面板要靠 --bg-color 撑出兜底底色，拿不到就会掉回深色兜底，
+     * 在浅色主题下变成一块黑板。这里往 <html> 同步一份。
      */
     useEffect(() => {
         const backgroundColor = (appStyle as Record<string, string>)['--bg-color'];

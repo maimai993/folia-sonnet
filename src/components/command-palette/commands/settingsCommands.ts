@@ -16,6 +16,7 @@ import { librarySuitePickerSurface } from '../surfaces/librarySuitePickerSurface
 import { libraryWallLookCommands } from './libraryWallLookCommands';
 import { openCurrentPagePonder } from '../../../services/ponder/pagePonderTarget';
 import { copyText } from '../../../utils/system/clipboard';
+import { LIQUID_GLASS_BLOCKED_BY_GPU_PREFERENCE } from '../../../shinoinject/liquidglass';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
@@ -415,6 +416,17 @@ export const settingsCommands: CommandPaletteCommand[] = [
     },
     createSettingsCommand('settings-graphics', 'Graphics settings', 'Open static mode, frame rate cap, Linux glow fix and reduced motion', ['graphics', 'performance', 'frame rate', 'fps', 'rendering', '图形', '图形设置', '性能', '帧率', '渲染'], 'options', 'graphics'),
     createSettingsAnchorCommand('settings-gpu-preference', 'Render GPU settings', 'Jump to the choice of graphics card the app renders on', ['render gpu', 'graphics card', 'discrete gpu', 'integrated gpu', 'dual gpu', '渲染显卡', '显卡', '独显', '核显', '双显卡'], 'gpuPreference', { platform: ['win'] }),
+    createToggleCommand(
+        'liquid-glass-toggle',
+        'settings',
+        'Liquid glass',
+        'Turn the edge-refracting glass on the interface panels on or off',
+        ['fluid glass', 'glass panels', 'refraction', '液态玻璃', '流体玻璃', '毛玻璃', '玻璃面板', '折射'],
+        context => context.settings.toggleLiquidGlass(),
+        // 渲染显卡选了「省电」时设置面板整组置灰（见 LiquidGlassGroup 的 GPU_BLOCKED），命令照同一判断隐藏。
+        { isAvailable: () => !LIQUID_GLASS_BLOCKED_BY_GPU_PREFERENCE },
+    ),
+    createSettingsAnchorCommand('settings-liquid-glass', 'Liquid glass settings', 'Jump to liquid glass strength, blur, presets and effects', ['liquid glass', 'glass strength', 'glass blur', 'glass preset', '液态玻璃', '玻璃强度', '玻璃模糊', '玻璃预设', '果冻', '光效'], 'liquidGlassEnabled'),
     gpuPreferenceCommand('auto', 'Render GPU: Auto', 'Let Windows choose the graphics card; applies after a restart', ['render gpu auto', 'default gpu', '渲染显卡自动', '显卡自动']),
     gpuPreferenceCommand('high-performance', 'Render GPU: High performance', 'Render on the discrete GPU; applies after a restart', ['render gpu high performance', 'discrete gpu', 'dedicated gpu', 'dgpu', 'nvidia', '渲染显卡高性能', '独显', '独立显卡']),
     gpuPreferenceCommand('low-power', 'Render GPU: Power saving', 'Render on the integrated GPU; applies after a restart', ['render gpu power saving', 'integrated gpu', 'igpu', 'battery', '渲染显卡省电', '核显', '集成显卡']),

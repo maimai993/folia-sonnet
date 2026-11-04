@@ -36,6 +36,7 @@ const GROUP_LABEL_KEYS: Record<ImportGroup, string> = {
     songTheme: 'options.importGroupSongTheme',
     trackCard: 'options.importGroupTrackCard',
     libraryWall: 'options.importGroupLibraryWall',
+    liquidGlass: 'options.liquidGlassSection',
 };
 
 const DERIVED_LABEL_KEYS: Record<string, string> = {
@@ -103,6 +104,9 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     libraryWallBackdropBlur: 'options.bravaisBackdropBlur',
     libraryWallSeamDirection: 'options.bravaisSeamDirection',
     playerHeaderBlur: 'options.playerHeaderBlur',
+    // 液态玻璃整组只报一行：配置里它是一个对象，而应用路径也是整组写回（见 appearanceImportPlan
+    // 的 WHOLE_OBJECT_FIELDS），所以它不展开成子行，一个组标题就是它的名字。
+    liquidGlass: 'options.liquidGlassSection',
 };
 
 // The per-renderer tunings borrow the renderer's own display name instead of inventing one.
