@@ -269,17 +269,31 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         const planLines = Array.isArray((savedPlan as { lines?: unknown }).lines)
             ? ((savedPlan as { lines: Array<{ text?: unknown }> }).lines)
             : [];
-        if (lrc && planLines.length > 0) {
-            /*
-             * 归一化签名比对，不逐行比。
-             *
-             * 编辑台 replan 会处理「/ 切分点」「| 注释」等记法，plan.lines[].text
-             * 与 LRC 原始行不逐字相同（上一版逐行比，同一首歌都被判不一致）。
-             * 去掉全部空白后整段比：足以区分"另一首歌"，也不会误伤本曲。
-             */
-            const squeeze = (value: string) => value.replace(/\s+/g, '');
-            const planSig = squeeze(planLines.map(line => String(line.text ?? '')).join(''));
-            const lrcSig = squeeze(lrc.split('\n').map(row => row.replace(/^\[[^\]]*\]/, '')).join(''));
+        /*
+         * 归一化签名比对，不逐行比。
+         *
+         * plan.lines[].text 是 parseLyrics 归一化后的结果（08_planner.js）：
+         * 剥 | 注释、剥行尾 !、*强调* 去星号、/ 切分按拉丁字母决定拼接方式。
+         * 宿主侧对 LRC 做同样的归一化再比 —— 上一版只去空白，带记法的歌词
+         * 必然误判不一致（review 必须改 #9）。
+         */
+        const normalizeRow = (row: string): string => {
+            let s = row.replace(/\[[^\]]*\]/g, '').trim(); // 剥时间戳/元数据/间奏标签
+            const bar = s.indexOf('|');
+            if (bar >= 0) s = s.slice(0, bar).trim(); // 剥 | 注释
+            s = s.replace(/[!！]+$/, '').trim(); // 剥行尾 impact
+            s = s.replace(/\*([^*]+)\*/g, '$1'); // 剥强调星号
+            if (s.includes('/')) {
+                const parts = s.split('/').map(x => x.trim()).filter(Boolean);
+                const latin = parts.some(x => /[A-Za-z]/.test(x));
+                s = parts.join(latin ? ' ' : ''); // 与 parseLyrics 的 / 切分规则一致
+            }
+            return s;
+        };
+        const squeeze = (value: string) => value.replace(/\s+/g, '');
+        const planSig = squeeze(planLines.map(line => String(line.text ?? '')).join(''));
+        const lrcSig = squeeze(lrc.split('\n').map(row => normalizeRow(row)).join(''));
+        if (lrc) {
             const same = planSig.length > 0 && planSig === lrcSig;
             if (!same) {
                 console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', {
