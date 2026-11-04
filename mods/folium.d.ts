@@ -1504,8 +1504,13 @@ export interface FoliumAiTarget {
      * `deepseek` is an OpenAI-compatible endpoint with a fixed address, exposed
      * as its own provider because the form then only has to ask for a key — the
      * request still goes out through the OpenAI transport.
+     *
+     * `foliawork` is the app's own free channel: a fixed address and a built-in
+     * credential, and it only does AI themes. A mod asking it for anything else
+     * gets a refusal, which is why the segmentation tasks report it as
+     * unconfigured (see buildAiEnv).
      */
-    provider: 'gemini' | 'deepseek' | 'mimo' | 'qwen' | 'tencentcloud' | 'openai' | 'anthropic' | 'kimi' | 'glm' | 'custom';
+    provider: 'foliawork' | 'gemini' | 'deepseek' | 'mimo' | 'qwen' | 'tencentcloud' | 'openai' | 'anthropic' | 'kimi' | 'glm' | 'custom';
     /** The model actually sent; where the settings leave it blank the host fills in its own default. */
     model: string;
 }

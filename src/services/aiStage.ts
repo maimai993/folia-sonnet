@@ -282,6 +282,8 @@ export type StageContext = {
     isPureMusic: boolean;
     /** 平台名，本地歌曲为空串。 */
     platform: string;
+    /** 生成 policy（纯音乐 / 提示词 / 屏蔽的样式）：免费渠道要拿它算它那边的缓存键。 */
+    policy: string;
     skipPull: boolean;
     signal?: AbortSignal;
     generate?: (ctx: StageContext) => Promise<StageParts>;
@@ -337,6 +339,7 @@ const buildStageContext = (request: StageRequest): StageContext => {
         lyricSource,
         isPureMusic,
         platform: String(request.platform ?? '').trim(),
+        policy,
         skipPull: request.force === true,
         signal: request.signal,
         generate: request.generate,

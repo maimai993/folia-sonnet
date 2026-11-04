@@ -99,6 +99,13 @@ const dualTheme = (name: string): DualTheme => ({
 beforeEach(() => {
     state.payload = null;
     state.pushed.length = 0;
+    /*
+     * 明确选一个「要填 Key 的服务商，但没填」。
+     *
+     * 默认服务商现在是免费渠道（foliawork），它自带凭据、永远可用，所以「没填 Key」
+     * 这件事只有在这种组合下才存在。不写死这一行，本文件验的就不是它想验的那条路了。
+     */
+    localStorage.setItem('foliaAiProviderSettings', JSON.stringify({ provider: 'gemini', geminiApiKey: '' }));
     localStorage.setItem('foliaCloudSettings.v2', JSON.stringify({
         enabled: true,
         baseUrl: 'https://cloud.test',

@@ -1,6 +1,7 @@
 import { anthropicAdapter } from './anthropic.mjs';
 import { customAdapter } from './custom.mjs';
 import { deepseekAdapter } from './deepseek.mjs';
+import { foliaWorkAdapter } from './foliawork.mjs';
 import { DEFAULT_GEMINI_MODEL, geminiAdapter } from './gemini.mjs';
 import { glmAdapter } from './glm.mjs';
 import { kimiAdapter } from './kimi.mjs';
@@ -108,7 +109,7 @@ import { tencentcloudAdapter } from './tencentcloud.mjs';
  * @typedef {{
  *   presetId: string,
  *   adapterId: string,
- *   protocol: 'openai' | 'anthropic' | 'gemini',
+ *   protocol: 'openai' | 'anthropic' | 'gemini' | 'folia',
  *   apiUrl: string,
  *   model: string,
  * }} AiConnection
@@ -118,6 +119,7 @@ import { tencentcloudAdapter } from './tencentcloud.mjs';
 const ADAPTERS = Object.freeze([
     anthropicAdapter,
     deepseekAdapter,
+    foliaWorkAdapter,
     geminiAdapter,
     glmAdapter,
     kimiAdapter,
