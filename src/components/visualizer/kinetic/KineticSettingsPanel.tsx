@@ -32,15 +32,15 @@ const KineticSettingsPanel: React.FC<VisualizerSettingsPanelProps<KineticTuning>
     // 这首歌的键：编辑台的改动按它存，换歌/重启还原。
     const songKey = React.useMemo(() => (currentSong ? getPlaybackSongKey(currentSong) : null), [currentSong]);
     /*
-     * 歌词归属校验：state.lyrics 与 currentSong 是两个字段，切歌时先后到达，
-     * 有一瞬间是「新歌 + 旧歌词」的组合 —— 这时候开编辑台，注入的就是旧词。
-     * 歌词的 title 与当前歌名对不上（两边都有值却不同）就不注入，等下一拍。
+     * 说明：这里不做「歌词 title 与歌名」的归属校验。
+     *
+     * 之前试过：歌词数据里的 title 是歌词文件自带的标题标签，与播放器显示名
+     * （可能是翻译名/别名）经常不相等，校验几乎恒为 false，inject 被全部拦掉，
+     * 编辑台就一直显示原版自带的示例歌词（J.SAMPLE_LYRICS 的中文版）。
+     *
+     * 旧词问题的真正根源（过渡歌词 selector）已在上一行修掉：
+     * 这里直接用 state.lyrics，不走 selectDisplayLyrics。
      */
-    const lyricsMatchSong = !lyricData?.title
-        || !currentSong?.name
-        || lyricData.title === currentSong.name;
-    // 歌词与歌曲对不上时传 null：覆层会等到匹配的那一拍再注入。
-    const safeSongKey = lyricsMatchSong ? songKey : null;
 
     // 编辑台 ↔ 播放器联动。
     // 设置面板这一层拿不到播放器的 seek 与真实播放头（都在 App.tsx 的 ref 链里），
@@ -106,7 +106,7 @@ const KineticSettingsPanel: React.FC<VisualizerSettingsPanelProps<KineticTuning>
                     key={songKey ?? 'no-song'}
                     lines={lyricLines as Line[]}
                     theme={theme}
-                    songKey={safeSongKey}
+                    songKey={songKey}
                     currentTime={liveTime}
                     playing={isPlaying}
                     onSeek={handleSeek}

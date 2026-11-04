@@ -475,14 +475,13 @@ const KineticEditorOverlay: React.FC<Props> = ({
         const target = frameRef.current?.contentWindow;
         if (!target) return;
         /*
-         * 最后防线：songKey 为空说明歌词归属校验没过（面板把 safeSongKey 传成 null），
-         * 此时手里的歌词很可能还是上一首的 —— 注入就是错词。
-         * 直接跳过，等歌词与歌曲对上的那一拍由重新注入的 effect 接手。
+         * 说明：这里不做「songKey 为空就跳过」的拦截。
+         *
+         * 之前配合同面板的归属校验加过这道防线，结果校验几乎恒为 false
+         * （歌词文件的标题标签与播放器显示名经常不同），inject 被全部拦掉，
+         * 编辑台一直显示原版示例歌词。旧词的真正根源（过渡歌词 selector）已修，
+         * 这里恢复无条件注入 injectDataRef 里的当前歌词。
          */
-        if (!injectDataRef.current.songKey) {
-            console.warn('[Kinetic] 歌词与当前歌曲对不上，跳过这次注入');
-            return;
-        }
         try {
             const jizura = (target as unknown as { J?: Record<string, unknown>; J_ui?: { project?: Record<string, unknown> } }).J;
             // 原版把工程暴露在 J.ui.project；直接改它再触发 replan 最可靠。
