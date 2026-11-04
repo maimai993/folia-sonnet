@@ -23,6 +23,39 @@ const assertLyrics = async (page: Page, track: string) => {
     )).toContain(`${track} distinct first line`);
 };
 
+test('load 被外部资源阻塞时仍按 boot-ready 注入，晚到 load 不覆盖编辑', async ({ mount, page }) => {
+    // 只让受控资源阻塞 load，排除真实字体网络的不确定性。
+    await page.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
+    await page.route('https://fonts.gstatic.com/**', route => route.abort());
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/__kinetic_pending_resource', async route => {
+        await held;
+        await route.fulfill({ status: 204, body: '' });
+    });
+    await page.route('**/jizura/editor.html', async route => {
+        const response = await route.fetch();
+        const html = (await response.text()).replace('</body>', '<img src="/__kinetic_pending_resource" hidden></body>');
+        await route.fulfill({ response, body: html });
+    });
+    try {
+        await mount('kineticIdentity');
+        await open(page);
+        await assertLyrics(page, 'Alpha');
+        expect(await editorFrame(page).evaluate(() => document.readyState)).toBe('interactive');
+        await editorFrame(page).evaluate(() => {
+            (window as any).J.ui.project.seed = 456789;
+            (window as any).J.uiApi.replan();
+        });
+        release();
+        await expect.poll(() => editorFrame(page).evaluate(() => document.readyState)).toBe('complete');
+        expect(await editorFrame(page).evaluate(() => (window as any).J.ui.project.seed)).toBe(456789);
+        await assertLyrics(page, 'Alpha');
+    } finally {
+        release();
+    }
+});
+
 test('首次打开、歌词晚到与快速 A→B→A 同时更新 textarea 和 plan', async ({ mount, page }) => {
     await mount('kineticIdentity');
     await open(page);
