@@ -31,6 +31,7 @@
     let viewport = { width: 0, height: 0, dpr: 1 };
     /** 最近一次宿主给的工程：视口变化（横屏）时用它重建 plan。 */
     let currentProject = null;
+    let currentSongKey = null;
     /** 画布该按什么比例建：容器比例，与 plan 的构图比例无关（构图归编辑台管）。 */
     let viewAspect = null;
 
@@ -214,6 +215,12 @@
         if (!incoming || typeof incoming !== 'object') return false;
         if (typeof incoming.W !== 'number' || typeof incoming.H !== 'number') return false;
         if (!Array.isArray(incoming.cuts)) return false;
+        // sharedPlan 只能服务当前歌词。旧异步消息不得把刚切换的工程又画回上一首。
+        if (currentProject) {
+            const expected = J.parseLyrics(String(currentProject.lyrics || '')).lines.map(line => line.text).join('').replace(/\s+/g, '');
+            const actual = (incoming.lines || []).map(line => String(line.text || '')).join('').replace(/\s+/g, '');
+            if (actual !== expected) return false;
+        }
         /*
          * 比例校验：plan 是和尺寸绑定的快照，不能跨比例直接复用。
          *
@@ -396,6 +403,17 @@
         const data = event.data;
         if (!data || data.target !== 'jizura-render') return;
         try {
+            if (data.type === 'project' || data.type === 'init') {
+                const nextSongKey = data.songKey ?? null;
+                const nextLyrics = String(data.project?.lyrics || '');
+                if (currentSongKey !== nextSongKey || String(currentProject?.lyrics || '') !== nextLyrics) {
+                    sharedPlan = null;
+                    lastKey = '';
+                }
+                currentSongKey = nextSongKey;
+                currentProject = data.project || {};
+            }
+            if (data.type === 'plan' && data.songKey !== undefined && data.songKey !== currentSongKey) return;
             if (data.type === 'frameRate') {
                 // folia「性能与动效」里的帧率上限：'off' 不限，数字是每秒上限。
                 clock.capOff = data.frameCap === 'off' || data.frameCap === undefined;

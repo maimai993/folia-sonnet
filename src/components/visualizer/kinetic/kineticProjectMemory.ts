@@ -75,6 +75,7 @@ export const writeKineticProject = (songKey: string | null | undefined, project:
             .forEach((key) => { delete map[key]; });
     }
     writeMap(map);
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('kinetic:project-saved'));
 };
 
 /** 清掉所有歌曲的编辑记录（设置里的「重置」用）。 */

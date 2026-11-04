@@ -13,6 +13,7 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { pickConcreteFontFamily, resolveKineticFontPayload } from './kineticFontBridge';
 import type { KineticFontPayload } from './kineticFontBridge';
+import { kineticPlanMatchesLyrics } from './kineticEditorIdentity';
 
 // src/components/visualizer/kinetic/VisualizerKinetic.tsx
 // 文字PV：渲染完全交给 JIZURA 原版引擎（public/jizura/render.html，iframe 桥）。
@@ -162,7 +163,13 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
      * 没存过就用 folia 主题的四色与字体做初始值。换歌时会重新读一次，
      * 所以每首歌各记各的，不会串味。
      */
-    const savedProject = useMemo(() => readKineticProject(songKey), [songKey]);
+    const [projectRevision, setProjectRevision] = useState(0);
+    useEffect(() => {
+        const refresh = () => setProjectRevision(revision => revision + 1);
+        window.addEventListener('kinetic:project-saved', refresh);
+        return () => window.removeEventListener('kinetic:project-saved', refresh);
+    }, []);
+    const savedProject = useMemo(() => readKineticProject(songKey), [songKey, projectRevision]);
     const savedProjectKey = savedProject ? JSON.stringify(savedProject) : '';
 
     const projectKey = `${lrc}\u0000${songKey ?? ''}\u0000${savedProjectKey}\u0000${themeColors.bg}\u0000${themeColors.fg}\u0000${themeColors.sub}\u0000${themeColors.accent}\u0000${fontFamily}\u0000${fontPayload?.family ?? ''}\u0000${wordColors ? JSON.stringify(wordColors) : ''}`;
@@ -192,7 +199,13 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
     const [frameReady, setFrameReady] = useState(false);
     const handshakeRef = useRef<number>(0);
     const projectRef = useRef(project);
-    projectRef.current = project;
+    const projectInputRef = useRef(project);
+    if (projectInputRef.current !== project) {
+        projectInputRef.current = project;
+        projectRef.current = project;
+    }
+    const songKeyRef = useRef(songKey);
+    songKeyRef.current = songKey;
     const projectRefKey = useRef(projectKey);
     projectRefKey.current = projectKey;
     const viewportRef = useRef({ width: windowSize.width, height: windowSize.height, dpr: 1 });
@@ -231,6 +244,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         target.postMessage({
             target: 'jizura-render',
             type: 'project',
+            songKey: songKeyRef.current,
             project: projectRef.current,
             viewport: viewportRef.current,
             time: currentTime.get(),
@@ -277,32 +291,9 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
          * 宿主侧对 LRC 做同样的归一化再比 —— 上一版只去空白，带记法的歌词
          * 必然误判不一致（review 必须改 #9）。
          */
-        const normalizeRow = (row: string): string => {
-            let s = row.replace(/\[[^\]]*\]/g, '').trim(); // 剥时间戳/元数据/间奏标签
-            const bar = s.indexOf('|');
-            if (bar >= 0) s = s.slice(0, bar).trim(); // 剥 | 注释
-            s = s.replace(/[!！]+$/, '').trim(); // 剥行尾 impact
-            s = s.replace(/\*([^*]+)\*/g, '$1'); // 剥强调星号
-            if (s.includes('/')) {
-                const parts = s.split('/').map(x => x.trim()).filter(Boolean);
-                const latin = parts.some(x => /[A-Za-z]/.test(x));
-                s = parts.join(latin ? ' ' : ''); // 与 parseLyrics 的 / 切分规则一致
-            }
-            return s;
-        };
-        const squeeze = (value: string) => value.replace(/\s+/g, '');
-        const planSig = squeeze(planLines.map(line => String(line.text ?? '')).join(''));
-        const lrcSig = squeeze(lrc.split('\n').map(row => normalizeRow(row)).join(''));
-        if (lrc) {
-            const same = planSig.length > 0 && planSig === lrcSig;
-            if (!same) {
-                console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', {
-                    planLines: planLines.length,
-                    planSigHead: planSig.slice(0, 24),
-                    lrcSigHead: lrcSig.slice(0, 24),
-                });
-                return;
-            }
+        if (!kineticPlanMatchesLyrics(savedPlan, lrc)) {
+            console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', { songKey, planLines: planLines.length });
+            return;
         }
         const planW = Number(savedPlan.W);
         const planH = Number(savedPlan.H);
@@ -320,12 +311,15 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
                 return;
             }
         }
-        const key = String(planW) + 'x' + String(planH) + '|' + (songKey ?? '');
+        const key = `${songKey ?? ''}|${JSON.stringify(savedPlan)}`;
         if (sentPlanKeyRef.current === key) return;
         sentPlanKeyRef.current = key;
+        // 歌曲/歌词身份先于 plan 到达；否则渲染页仍持有上一首，会正确拒掉这份新 plan。
+        sendProject();
         target.postMessage({
             target: 'jizura-render',
             type: 'plan',
+            songKey,
             plan: savedPlan,
             time: currentTime.get(),
             playing: !pausedRef.current,
@@ -344,15 +338,19 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         const channel = new BroadcastChannel('kinetic-project');
         channel.onmessage = (event: MessageEvent) => {
             const data = event.data;
-            if (!data) return;
+            const activeSong = usePlaybackStore.getState().currentSong;
+            const activeKey = activeSong ? getPlaybackSongKey(activeSong) : null;
+            if (!data || data.songKey !== activeKey) return;
             const target = frameRef.current?.contentWindow;
             if (!target) return;
             // 编辑台算好的 plan：直接转给渲染页采用，播放页就不再自己重算，
             // 画面必然与编辑台一致（重算会因 audio beats / 背景历史等运行时状态而不同）。
             if (data.type === 'plan' && data.plan) {
+                if (!kineticPlanMatchesLyrics(data.plan, String(projectRef.current.lyrics))) return;
                 target.postMessage({
                     target: 'jizura-render',
                     type: 'plan',
+                    songKey: data.songKey,
                     plan: data.plan,
                     time: currentTime.get(),
                     playing: !pausedRef.current,
@@ -364,12 +362,14 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
                 });
                 return;
             }
-            if (data.type !== 'project' || !data.project) return;
-            // 编辑台的工程整份覆盖：样式、种子、fx、配色、字体、逐行覆盖都算在内。
+            if (data.type !== 'project' || !data.project || data.project.lyrics !== projectRef.current.lyrics) return;
+            // 同步 ref，后续 ready/viewport 重发不能再覆盖回打开编辑台前的工程。
+            projectRef.current = { ...projectRef.current, ...data.project };
             target.postMessage({
                 target: 'jizura-render',
                 type: 'project',
-                project: { ...projectRef.current, ...data.project },
+                songKey: data.songKey,
+                project: projectRef.current,
                 viewport: viewportRef.current,
                 time: currentTime.get(),
                 frameCap: frameCapRef.current,
@@ -384,7 +384,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
     useEffect(() => {
         const onMessage = (event: MessageEvent) => {
             const data = event.data;
-            if (data && data.source === 'jizura-render') {
+            if (event.source === frameRef.current?.contentWindow && data && data.source === 'jizura-render') {
                 if (data.type === 'boot' || data.type === 'ready') {
                     console.log('[Kinetic] 原版引擎', data.type, { ready: data.ready, cuts: data.cuts });
                     setFrameReady(true);

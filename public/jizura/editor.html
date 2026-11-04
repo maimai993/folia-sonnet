@@ -36646,7 +36646,9 @@ function tlTime(ev) {
   const r = $('timeline').getBoundingClientRect(), { vd, off } = tlView();
   return off + J.clamp((ev.clientX - r.left) / r.width, 0, 1) * vd;
 }
-function timelineSeek(ev) { seek(tlTime(ev)); }
+// 只从真实用户 seek 路径通知宿主；boot/replan/宿主校时调用 seek() 不回写播放器。
+function notifyHostSeek() { window.parent.postMessage({ source: 'jizura-editor', type: 'user-seek', time: S.t }, '*'); }
+function timelineSeek(ev) { seek(tlTime(ev)); notifyHostSeek(); }
 /* the line whose start handle is under the pointer (top band, ±7px) */
 function tlHandleAt(ev) {
   const c = $('timeline'), r = c.getBoundingClientRect(), { vd, off } = tlView();
@@ -37893,7 +37895,7 @@ function bind() {
   });
   $('btnShuffle').addEventListener('click', () => { remember(); S.project.seed = (Math.random() * 1e9) | 0; $('seed').value = S.project.seed; replan(); commit(); });
   const sc = $('scrub');
-  sc.addEventListener('input', () => { S.scrubbing = true; seek(sc.value / 10000 * S.plan.duration); });
+  sc.addEventListener('input', () => { S.scrubbing = true; seek(sc.value / 10000 * S.plan.duration); notifyHostSeek(); });
   sc.addEventListener('change', () => { S.scrubbing = false; });
   const tl = $('timeline');
   let drag = false, raf = 0;
@@ -38081,9 +38083,13 @@ function bind() {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !typing && !S.tap) { e.preventDefault(); edGo(e.shiftKey ? 1 : -1); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY' && !typing && !S.tap) { e.preventDefault(); edGo(1); return; }
     if (typing || $('termsDlg').open || $('resetDlg').open) return;
-    if (e.code === 'Space') { e.preventDefault(); S.playing ? pause() : play(); }
-    else if (e.code === 'ArrowRight') seek(S.t + (e.shiftKey ? 1 : 1 / S.plan.fps));
-    else if (e.code === 'ArrowLeft') seek(S.t - (e.shiftKey ? 1 : 1 / S.plan.fps));
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (J.__foliaHosted) window.parent.postMessage({ source: 'jizura-editor', type: 'toggle-play' }, '*');
+      else S.playing ? pause() : play();
+    }
+    else if (e.code === 'ArrowRight') { seek(S.t + (e.shiftKey ? 1 : 1 / S.plan.fps)); notifyHostSeek(); }
+    else if (e.code === 'ArrowLeft') { seek(S.t - (e.shiftKey ? 1 : 1 / S.plan.fps)); notifyHostSeek(); }
     else if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey && !e.altKey && !S.exporting) { e.preventDefault(); omakase(); }
   });
   window.addEventListener('resize', () => { sizeViewport(); drawTimeline(); });
@@ -38197,6 +38203,8 @@ function boot() {
   const c0 = S.plan.cuts.find(c => c.line >= 0);
   if (c0) seek(c0.start + Math.min(c0.dur * 0.6, c0.inDur + 0.25));
   requestAnimationFrame(tick);
+  // iframe load 还会等外部字体；宿主应在工程与 API 已建立时注入，不等待网络资源。
+  window.parent.postMessage({ source: 'jizura-editor', type: 'ready' }, '*');
   // the song used last time (same name as the saved project's) comes back after a reload
   if (J.loadSong && S.project.audioName) J.loadSong().then(f => { if (f && f.name === S.project.audioName && !S.audio) loadAudioFile(f, true); });
 }
