@@ -36549,6 +36549,11 @@ function updateTimeUI() {
 // タップ同期の速さ (0.5× / 0.75×): only while tapping — the song's own time is what gets stored
 const playRate = () => (S.tap && S.tap.rate > 0 ? S.tap.rate : 1);
 function play() {
+  // 宿主接管后，随机/历史/拍点等内部入口也不能重启第二个时钟。
+  if (J.__foliaHosted) {
+    if (S.tap) window.parent.postMessage({ source: 'jizura-editor', type: 'set-playing', playing: true }, '*');
+    return;
+  }
   refreshLoopHold();
   if (S.audio) AP.play(S.audio.buffer, S.t, playRate());
   else S.t0 = performance.now() - S.t * 1000 / playRate();
@@ -36646,7 +36651,9 @@ function tlTime(ev) {
   const r = $('timeline').getBoundingClientRect(), { vd, off } = tlView();
   return off + J.clamp((ev.clientX - r.left) / r.width, 0, 1) * vd;
 }
-function timelineSeek(ev) { seek(tlTime(ev)); }
+// 只从真实用户 seek 路径通知宿主；boot/replan/宿主校时调用 seek() 不回写播放器。
+function notifyHostSeek() { window.parent.postMessage({ source: 'jizura-editor', type: 'user-seek', time: S.t }, '*'); }
+function timelineSeek(ev) { seek(tlTime(ev)); notifyHostSeek(); }
 /* the line whose start handle is under the pointer (top band, ±7px) */
 function tlHandleAt(ev) {
   const c = $('timeline'), r = c.getBoundingClientRect(), { vd, off } = tlView();
@@ -37369,7 +37376,10 @@ function lockBtn(k, anchor) {                     // lock button for effects tha
 }
 
 /* ---------------- 一键随机 ---------------- */
-function restartPreview() { seek(0); if (!S.playing && S.mode !== 'pro') play(); }
+function restartPreview() {
+  if (J.__foliaHosted) return; // 改样式保留宿主当前播放头，不自行 seek(0)。
+  seek(0); if (!S.playing && S.mode !== 'pro') play();
+}
 const themeName = th => { const o = document.querySelector(`.themeSel option[value="${th}"]`); return o ? o.textContent : th; };
 function omakase() {
   if (S.exporting || S.tap) return;
@@ -37753,7 +37763,9 @@ function startTap(from = 0) {
   $('tapRate').value = String(opt.rate); $('tapCount').checked = opt.count;
   const prev = from > 0 ? S.plan.lines[from - 1] : null, cur = S.plan.lines[from];
   const t0 = from === 0 ? 0 : Math.max(0, prev.start + 0.01, cur.start - 2.5);      // a little before the line, never before the previous one
-  pause(); seek(t0); updateTap();
+  pause(); seek(t0);
+  if (J.__foliaHosted) notifyHostSeek();
+  updateTap();
   $('tapBtn').focus();
   if (from > 0) toast(`从第 ${from + 1} 行开始轻点同步（从 ${J.fmtTime(t0)} 开始播放）`);
   // カウントダウン: 3, 2, 1 — then the song starts
@@ -37772,7 +37784,7 @@ function startTap(from = 0) {
 function tapOpts() {
   let o = null; try { o = JSON.parse(localStorage.getItem('jizura.tapOpts') || 'null'); } catch (e) {}
   const rate = o && [1, 0.75, 0.5].includes(+o.rate) ? +o.rate : 1;
-  return { rate, count: !!(o && o.count) };
+  return { rate: J.__foliaHosted ? 1 : rate, count: !!(o && o.count) };
 }
 function saveTapOpts() {
   try { localStorage.setItem('jizura.tapOpts', JSON.stringify({ rate: +$('tapRate').value || 1, count: $('tapCount').checked })); } catch (e) {}
@@ -37816,7 +37828,9 @@ function tapBack() {                    // 1つ戻る: undo the last tap and jum
     S.tap.cl = prev ? prev.i : null; S.tap.ck = 1 + S.tap.done.filter(x => x.cut && prev && x.li === prev.i).length;
   }
   replan(); updateTap();
-  seek(Math.max(0, S.t - 3)); if (!S.playing) play();
+  seek(Math.max(0, S.t - 3));
+  if (J.__foliaHosted) notifyHostSeek();
+  if (!S.playing) play();
 }
 function stopTap() {
   const slow = S.tap && S.tap.rate !== 1;
@@ -37870,6 +37884,7 @@ function bind() {
   $('btnTap').addEventListener('click', () => (S.tap ? stopTap() : startTap()));
   $('tapBtn').addEventListener('click', tapNow);
   $('tapRate').addEventListener('change', () => {
+    if (J.__foliaHosted) { $('tapRate').value = '1'; toast('宿主播放时，轻点同步使用正常速度'); }
     saveTapOpts();
     if (!S.tap) return;
     S.tap.rate = +$('tapRate').value || 1;
@@ -37877,7 +37892,10 @@ function bind() {
     $('tapBtn').focus();
   });
   $('tapCount').addEventListener('change', () => { saveTapOpts(); $('tapBtn').focus(); });
-  $('tapStop').addEventListener('click', () => { pause(); stopTap(); });
+  $('tapStop').addEventListener('click', () => {
+    pause(); stopTap();
+    if (J.__foliaHosted) window.parent.postMessage({ source: 'jizura-editor', type: 'set-playing', playing: false }, '*');
+  });
   $('btnPlay').addEventListener('click', () => (S.playing ? pause() : play()));
   const cutPickAuto = $('cutPickAuto'), cutPickClose = $('cutPickClose');
   if (cutPickClose) cutPickClose.addEventListener('click', () => { closeCutPick(); updateCutInfo(); });
@@ -37893,7 +37911,7 @@ function bind() {
   });
   $('btnShuffle').addEventListener('click', () => { remember(); S.project.seed = (Math.random() * 1e9) | 0; $('seed').value = S.project.seed; replan(); commit(); });
   const sc = $('scrub');
-  sc.addEventListener('input', () => { S.scrubbing = true; seek(sc.value / 10000 * S.plan.duration); });
+  sc.addEventListener('input', () => { S.scrubbing = true; seek(sc.value / 10000 * S.plan.duration); notifyHostSeek(); });
   sc.addEventListener('change', () => { S.scrubbing = false; });
   const tl = $('timeline');
   let drag = false, raf = 0;
@@ -38081,9 +38099,13 @@ function bind() {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !typing && !S.tap) { e.preventDefault(); edGo(e.shiftKey ? 1 : -1); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY' && !typing && !S.tap) { e.preventDefault(); edGo(1); return; }
     if (typing || $('termsDlg').open || $('resetDlg').open) return;
-    if (e.code === 'Space') { e.preventDefault(); S.playing ? pause() : play(); }
-    else if (e.code === 'ArrowRight') seek(S.t + (e.shiftKey ? 1 : 1 / S.plan.fps));
-    else if (e.code === 'ArrowLeft') seek(S.t - (e.shiftKey ? 1 : 1 / S.plan.fps));
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (J.__foliaHosted) window.parent.postMessage({ source: 'jizura-editor', type: 'toggle-play' }, '*');
+      else S.playing ? pause() : play();
+    }
+    else if (e.code === 'ArrowRight') { seek(S.t + (e.shiftKey ? 1 : 1 / S.plan.fps)); notifyHostSeek(); }
+    else if (e.code === 'ArrowLeft') { seek(S.t - (e.shiftKey ? 1 : 1 / S.plan.fps)); notifyHostSeek(); }
     else if (e.code === 'KeyR' && !e.metaKey && !e.ctrlKey && !e.altKey && !S.exporting) { e.preventDefault(); omakase(); }
   });
   window.addEventListener('resize', () => { sizeViewport(); drawTimeline(); });
@@ -38197,6 +38219,8 @@ function boot() {
   const c0 = S.plan.cuts.find(c => c.line >= 0);
   if (c0) seek(c0.start + Math.min(c0.dur * 0.6, c0.inDur + 0.25));
   requestAnimationFrame(tick);
+  // iframe load 还会等外部字体；宿主应在工程与 API 已建立时注入，不等待网络资源。
+  window.parent.postMessage({ source: 'jizura-editor', type: 'ready' }, '*');
   // the song used last time (same name as the saved project's) comes back after a reload
   if (J.loadSong && S.project.audioName) J.loadSong().then(f => { if (f && f.name === S.project.audioName && !S.audio) loadAudioFile(f, true); });
 }

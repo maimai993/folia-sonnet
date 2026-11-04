@@ -6,12 +6,12 @@ import { saveExportFile } from './saveExportFile';
 import { readKineticProject, writeKineticProject } from './kineticProjectMemory';
 import {
     handOverPlayback,
-    pullTimeFromEditor,
     pushTimeToEditor,
     readEditorVolume,
     syncEditorTransport,
 } from './kineticEditorBridge';
 import type { KineticProjectSnapshot } from './kineticProjectTypes';
+import { kineticPlanMatchesLyrics, resolveKineticProjectLyrics } from './kineticEditorIdentity';
 import type { Line, Theme } from '../../../types';
 
 // src/components/visualizer/kinetic/KineticEditorOverlay.tsx
@@ -22,6 +22,8 @@ import type { Line, Theme } from '../../../types';
 type Props = {
     /** 当前歌词行（转成 LRC 注入原版）。 */
     lines: Line[];
+    /** null 歌词等待期间只清显示，不覆盖原工程。 */
+    lyricsReady?: boolean;
     /** folia 主题：四色 + 字体 + AI 关键字色。 */
     theme: Theme | undefined;
     /** 右上角退出：关掉编辑台，回到 folia 原样式。 */
@@ -105,6 +107,7 @@ const sanitizeTiming = (
 
 const KineticEditorOverlay: React.FC<Props> = ({
     lines,
+    lyricsReady = true,
     theme,
     onClose,
     songKey,
@@ -131,8 +134,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
      * 切歌时再从 effect 里调它，写进编辑台的仍是打开那一刻的歌词 ——
      * 那就是「编辑台里的歌词不更新」的原因。ref 保证每次都读到最新值。
      */
-    const injectDataRef = useRef({ lrc: '', songKey: null as string | null, lines });
-    injectDataRef.current = { lrc, songKey: songKey ?? null, lines };
+    const injectDataRef = useRef({ lrc: '', songKey: null as string | null, lines, lyricsReady });
+    injectDataRef.current = { lrc, songKey: songKey ?? null, lines, lyricsReady };
     /** folia 歌词的原始时间：保存前用它核对编辑台算出来的逐行时间。 */
     const lrcTimesRef = useRef<number[]>([]);
     lrcTimesRef.current = lines.map(line => Math.max(0, line.startTime));
@@ -212,53 +215,40 @@ const KineticEditorOverlay: React.FC<Props> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    /** folia 播放头变了就推给编辑台；同时盯编辑台有没有反过来拖进度。 */
-    const lastPushedRef = useRef<number | null>(null);
-    /*
-     * boot 对齐静默期。
-     *
-     * 原版 boot 的最后会 seek() 到第一帧的入场位置（12_ui.js:1935），编辑台的 t
-     * 会从 0 跳到 0.79 之类 —— 距 folia 的播放头差好几秒，正好命中「用户拖动」的
-     * 判据，把播放器拽回开头（就是「开一次编辑台时间轴就乱」的元凶之一）。
-     * 对齐阶段结束前不采信编辑台报来的时间。
-     */
+    /** folia 播放头只向编辑台单向校时；boot 的代表帧 seek 不再参与用户操作判断。 */
     React.useEffect(() => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
-        /*
-         * 「用户拖了进度」只认真实拖动标记。
-         *
-         * 之前比播放头差值（>0.6s 就算拖动）：编辑台自己的预览时钟也在走，
-         * handOverPlayback 的 pause 压不住它（日志里 playing:true），
-         * 两条时间线一比就误判，用户根本没碰进度条也被 onSeek 拽回开头。
-         * 现在拖动判定只认编辑台 #timeline 的 pointerdown 标记
-         * （__foliaUserSeekAt，编辑台里打的点），标记之后 1.5 秒内的漂移才算数。
-         */
-        const editorTime = pullTimeFromEditor(target);
-        const seekMark = (target as unknown as {
-            document?: { defaultView?: { __foliaUserSeekAt?: number } };
-        })?.document?.defaultView?.__foliaUserSeekAt ?? 0;
-        const recentUserSeek = Date.now() - seekMark < 1500;
-        const drifted = editorTime !== null && lastPushedRef.current !== null
-            && recentUserSeek
-            && Math.abs(editorTime - lastPushedRef.current) > 0.6;
-        if (drifted && onSeek) {
-            // 用户在编辑台里拖了进度条：让 folia 跟过去。
-            lastPushedRef.current = editorTime;
-            console.log('[Kinetic] 编辑台拖了进度，同步到播放器', { time: editorTime });
-            onSeek(editorTime);
-            return;
-        }
-        lastPushedRef.current = currentTime;
         pushTimeToEditor(target, currentTime);
-    }, [currentTime, onSeek]);
+    }, [currentTime]);
+
+    // 不靠播放器下一次 tick 轮询：暂停时没有 tick，也必须响应真实 timeline/scrub 操作。
+    React.useEffect(() => {
+        const listener = (event: MessageEvent) => {
+            if (event.source !== frameRef.current?.contentWindow) return;
+            const data = event.data;
+            if (data?.source === 'jizura-editor' && data.type === 'set-playing' && typeof data.playing === 'boolean') {
+                onTogglePlayRef.current?.(data.playing);
+                return;
+            }
+            if (data?.source === 'jizura-editor' && data.type === 'toggle-play') {
+                onTogglePlayRef.current?.(!playingRef.current);
+                return;
+            }
+            if (data?.source !== 'jizura-editor' || data.type !== 'user-seek'
+                || typeof data.time !== 'number' || !Number.isFinite(data.time)) return;
+            console.log('[Kinetic] 编辑台用户跳转，同步到播放器', { time: data.time, songKey });
+            onSeek?.(Math.max(0, data.time));
+        };
+        window.addEventListener('message', listener);
+        return () => window.removeEventListener('message', listener);
+    }, [onSeek, songKey]);
 
     /** 播放 / 暂停：folia 的状态变了就同步给编辑台（让它的播放键显示对的状态）。 */
     React.useEffect(() => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
-        // 让编辑台的播放键显示与 folia 一致（▶ 还是 ❚❚），但不强行改它的播放状态：
-        // 强行 pause 会让图标显示"暂停中"、画面却还在动，点起来就错乱。
+        // 只显示宿主状态，原版 tick 仍保持暂停，避免两个时钟争夺播放头。
         syncEditorTransport(target, playing);
     }, [playing]);
 
@@ -336,8 +326,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
          * 等它稳下来再开始记录。
          */
         const settleAt = Date.now() + SNAPSHOT_SETTLE_MS;
-        const pushSnapshot = () => {
-            if (Date.now() < settleAt) return;
+        const pushSnapshot = (final = false) => {
+            if (!final && Date.now() < settleAt) return;
             try {
                 const ui = (target as unknown as {
                     J?: {
@@ -349,7 +339,18 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 }).J?.ui;
                 const project = ui?.project;
                 if (!project) return;
-                const serialized = JSON.stringify(project);
+                // boot 的示例工程不能存到当前歌曲；只采集本 iframe 已确认完成注入的工程。
+                const current = injectDataRef.current;
+                if (!current.lyricsReady || current.songKey !== (songKey ?? null) || injectedDocumentRef.current !== target.document
+                    || injectedOkRef.current !== `${current.songKey ?? ''}\u0000${current.lrc}`) return;
+                let plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                if (final && typeof project.lyrics === 'string') {
+                    // textarea 的 replanSoon 可能尚未执行，退出前先同步刷新，不能丢最后一次输入。
+                    (target as unknown as { J?: { uiApi?: { replan?: () => void } } }).J?.uiApi?.replan?.();
+                    plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                }
+                if (typeof project.lyrics !== 'string' || !kineticPlanMatchesLyrics(plan, project.lyrics)) return;
+                const serialized = JSON.stringify({ project, plan });
                 if (serialized === lastSerialized) return;
                 lastSerialized = serialized;
                 // 说明：下面先发 project、再发 plan。plan 是编辑台算好的排版快照，
@@ -372,6 +373,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 );
                 const snapshot = {
                     lyrics: project.lyrics,
+                    sourceLyrics: current.lrc,
                     style: project.style,
                     seed: project.seed,
                     aspect: project.aspect,
@@ -401,15 +403,15 @@ const KineticEditorOverlay: React.FC<Props> = ({
                     console.warn('[Kinetic] 读取编辑台 plan 失败', planReadError);
                 }
 
-                channel?.postMessage({ type: 'project', project: snapshot });
+                channel?.postMessage({ type: 'project', songKey, project: snapshot });
                 // plan 没变就不重发（快照循环 500ms 一次，plan 大整包重发很浪费）。
                 const planSig = editorPlan
-                    ? JSON.stringify((editorPlan.cuts as unknown[] | undefined)?.length ?? 0) + '|' + String(editorPlan.styleKey ?? '')
+                    ? JSON.stringify(editorPlan)
                     : '';
                 const planUnchanged = planSig !== '' && planSig === lastPlanSigRef.current;
                 if (!planUnchanged) lastPlanSigRef.current = planSig;
                 if (editorPlan && !planUnchanged) {
-                    channel?.postMessage({ type: 'plan', plan: editorPlan });
+                    channel?.postMessage({ type: 'plan', songKey, sourceLyrics: current.lrc, plan: editorPlan });
                     console.log('[Kinetic] 已发出编辑台 plan', {
                         W: editorPlan.W,
                         H: editorPlan.H,
@@ -443,9 +445,9 @@ const KineticEditorOverlay: React.FC<Props> = ({
         const timer = window.setInterval(pushSnapshot, 500);
         return () => {
             window.clearInterval(timer);
+            // 必须先抓最后一份再关闭 channel，否则 postMessage 抛错会连保存一起跳过。
+            pushSnapshot(true);
             channel?.close();
-            // 退出编辑台时再抓一次：最后一次改动可能还没被 500ms 的采样捞到。
-            pushSnapshot();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [songKey]);
@@ -512,6 +514,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
     const injectionSeqRef = useRef(0);
     const retryTimersRef = useRef<number[]>([]);
     const injectedOkRef = useRef('');
+    const injectedDocumentRef = useRef<Document | null>(null);
     React.useEffect(() => () => {
         // 卸载/重挂载：废掉所有未触发的重试。
         retryTimersRef.current.forEach(timer => window.clearTimeout(timer));
@@ -527,7 +530,9 @@ const KineticEditorOverlay: React.FC<Props> = ({
          * 此刻 J.ui 还不存在 —— 日志里的「工程对象未找到，跳过注入」就是它。
          * 空跑一次等于没注入，必须补几次。重试前比对代次，旧链作废。
          */
-        if (!(target as unknown as { J?: { ui?: unknown; uiApi?: unknown } }).J?.ui) {
+        const editor = (target as unknown as { J?: { ui?: { project?: unknown }; uiApi?: { replan?: unknown; syncUI?: unknown } } }).J;
+        if (!editor?.ui?.project
+            || typeof editor.uiApi?.replan !== 'function' || typeof editor.uiApi.syncUI !== 'function') {
             [200, 600, 1400, 2600].forEach(delay => {
                 const timer = window.setTimeout(() => {
                     if (seq !== injectionSeqRef.current) return; // 已有更新的注入发起，这条链作废
@@ -553,6 +558,11 @@ const KineticEditorOverlay: React.FC<Props> = ({
             const ui = (target as unknown as { J?: { ui?: { project?: Record<string, unknown>; uiApi?: { replan?: () => void; syncUI?: () => void } } } }).J?.ui;
             if (ui && ui.project) {
                 const current = injectDataRef.current;
+                const api = (target as unknown as { J?: { uiApi?: { replan?: () => void; syncUI?: () => void } } }).J?.uiApi;
+                // J.ui 在脚本末尾已暴露，但 project 要等 DOMContentLoaded boot 才建立。
+                if (!api?.replan || !api.syncUI) return;
+                const okKey = `${current.songKey ?? ''}\u0000${current.lrc}`;
+                if (injectedDocumentRef.current === target.document && injectedOkRef.current === okKey) return;
                 const saved = readKineticProject(current.songKey);
                 if (saved) {
                     /*
@@ -570,7 +580,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 }
                 // 歌词永远以 folia 当前的为准（歌换了歌词就变了）。
                 // 从 ref 取：闭包里的 lrc 会停在打开编辑台那一刻。
-                ui.project.lyrics = current.lrc;
+                ui.project.lyrics = resolveKineticProjectLyrics(saved, current.lrc);
                 // 没存过配色才用主题四色；存过就尊重用户在编辑台里调的那份。
                 if (!saved?.colors) {
                     ui.project.colors = { ...(ui.project.colors as Record<string, unknown> || {}), ...themeColors, accentOn: true, enabled: true };
@@ -579,20 +589,25 @@ const KineticEditorOverlay: React.FC<Props> = ({
                     ui.project.fonts = { ...(ui.project.fonts as Record<string, unknown> || {}), display: fontFamily };
                 }
                 if (theme?.wordColors) ui.project.wordColors = theme.wordColors;
-                ui.uiApi?.replan?.();
-                ui.uiApi?.syncUI?.();
+                api.replan();
+                api.syncUI();
                 /*
                  * 日志带上注入歌词的首行与 songKey：
                  * 行数区分不了新旧歌（两首都可能 32 行），首行文本一眼可辨。
                  * 之前「注入成功但用户看到的还是旧词」无法定位是注入错还是显示错，就缺这条。
                  */
-                // 同一 key 已成功注入过就跳过：onLoad 与 effect 都会调 inject，别互相覆盖。
-                const okKey = `${current.songKey ?? ''}\u0000${current.lrc}`;
-                if (injectedOkRef.current === okKey) {
-                    console.log('[Kinetic] 该歌词已注入过，跳过重复注入', { songKey: current.songKey });
+                const actualPlan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
+                const textarea = target.document.getElementById('lyrics') as HTMLTextAreaElement | null;
+                if (textarea?.value !== ui.project.lyrics || !kineticPlanMatchesLyrics(actualPlan, String(ui.project.lyrics))) {
+                    console.warn('[Kinetic] 注入未确认，暂不保存工程', { songKey: current.songKey, seq });
                     return;
                 }
                 injectedOkRef.current = okKey;
+                injectedDocumentRef.current = target.document;
+                if (jizura) jizura.__foliaHosted = true;
+                handOverPlayback(target);
+                pushTimeToEditor(target, currentTimeRef.current);
+                syncEditorTransport(target, playingRef.current);
                 console.log('[Kinetic] 已注入原版编辑台', {
                     songKey: current.songKey,
                     lines: lines.length,
@@ -618,6 +633,17 @@ const KineticEditorOverlay: React.FC<Props> = ({
      * 之前 inject 只挂在 iframe 的 onLoad 上，切歌时 iframe 不重载，歌词就一直是旧的。
      * 这里跟着 songKey / lrc 变化再注入一次，并把当前播放头对齐过去。
      */
+    const injectRef = useRef(inject);
+    injectRef.current = inject;
+    React.useEffect(() => {
+        const onReady = (event: MessageEvent) => {
+            if (event.source !== frameRef.current?.contentWindow || event.data?.source !== 'jizura-editor'
+                || event.data.type !== 'ready') return;
+            injectRef.current();
+        };
+        window.addEventListener('message', onReady);
+        return () => window.removeEventListener('message', onReady);
+    }, []);
     const injectedKeyRef = useRef('');
     React.useEffect(() => {
         const target = frameRef.current?.contentWindow;
@@ -628,8 +654,8 @@ const KineticEditorOverlay: React.FC<Props> = ({
         if (injectedKeyRef.current === key) return;
         injectedKeyRef.current = key;
         inject();
-        // 换歌后播放头从 0 开始，顺便把编辑台预览也拉回开头。
-        pushTimeToEditor(target, 0);
+        // 歌词可能在暂停/恢复进度后才到达，不能假设这次变化等于从 0 开始播放。
+        pushTimeToEditor(target, currentTimeRef.current);
         console.log('[Kinetic] 歌曲/歌词变了，已重新注入编辑台', { songKey, lines: lines.length });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [songKey, lrc]);

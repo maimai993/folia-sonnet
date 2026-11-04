@@ -5,6 +5,8 @@
 export type KineticProjectSnapshot = {
     /** 歌词 LRC 文本。 */
     lyrics?: string;
+    /** 编辑时宿主的原始 LRC：仅同一源歌词可还原手工改词，旧存档无此字段不覆盖宿主。 */
+    sourceLyrics?: string;
     /** 原版样式 id（'noir' 等）。 */
     style?: string;
     /** 随机种子：决定布局编排。 */

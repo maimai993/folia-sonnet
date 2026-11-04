@@ -86,7 +86,8 @@ export const syncEditorTransport = (target: Window | null | undefined, playing: 
     const ui = editor?.J?.ui;
     if (!ui) return;
     try {
-        ui.playing = playing;
+        // playing 是原版 tick() 的时钟开关，不是按钮状态。保持暂停，只同步按钮。
+        editor?.J?.uiApi?.pause?.();
         // 原版按钮在自家文档里：按 id 取，改的就是它显示的那个图标。
         const doc = target?.document;
         const button = doc ? doc.getElementById('btnPlay') : null;
@@ -112,23 +113,8 @@ export const pushTimeToEditor = (target: Window | null | undefined, time: number
     const api = editor?.J?.uiApi;
     if (!api || !Number.isFinite(time)) return;
     const planReady = Boolean((editor?.J?.ui as { plan?: unknown } | undefined)?.plan);
-    if (!planReady) {
-        // plan 未就绪：seek 必然失败，等它算完再说（最多补一次，避免堆积）。
-        if (typeof window !== 'undefined') {
-            window.setTimeout(() => {
-                const later = asEditor(target);
-                const laterApi = later?.J?.uiApi;
-                if (!laterApi) return;
-                if (!(later?.J?.ui as { plan?: unknown } | undefined)?.plan) return;
-                try {
-                    laterApi.seek?.(Math.max(0, time));
-                } catch (error) {
-                    console.warn('[Kinetic] 同步播放头到编辑台失败', error);
-                }
-            }, 400);
-        }
-        return;
-    }
+    // 未就绪时不排捕获旧 time 的定时器；ready 注入成功后会用最新宿主时间校准。
+    if (!planReady) return;
     try {
         api.seek?.(Math.max(0, time));
     } catch (error) {
