@@ -37910,6 +37910,8 @@ function bind() {
   });
   const endDrag = () => { if (TL.drag >= 0) { TL.drag = -1; flushSave(); renderLines(); drawTimeline(); } drag = false; };
   tl.addEventListener('pointerup', endDrag); tl.addEventListener('pointercancel', endDrag);
+  /* 宿主判定「用户拖了进度」用的标记：只有真实 pointerdown 才更新。 */
+  tl.addEventListener('pointerdown', () => { try { window.__foliaUserSeekAt = Date.now(); } catch (e) {} });
   tl.addEventListener('pointerleave', () => { if (TL.hover >= 0 && TL.drag < 0) { TL.hover = -1; drawTimeline(); } });
   tl.addEventListener('wheel', e => {
     e.preventDefault();

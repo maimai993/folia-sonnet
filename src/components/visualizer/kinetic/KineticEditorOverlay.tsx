@@ -222,14 +222,25 @@ const KineticEditorOverlay: React.FC<Props> = ({
      * 判据，把播放器拽回开头（就是「开一次编辑台时间轴就乱」的元凶之一）。
      * 对齐阶段结束前不采信编辑台报来的时间。
      */
-    const alignUntilRef = useRef(Date.now() + 4000);
     React.useEffect(() => {
         const target = frameRef.current?.contentWindow;
         if (!target) return;
-        // 编辑台自己拖过进度就别用 folia 的时间盖回去（会把它拖到一半的手感打断）。
+        /*
+         * 「用户拖了进度」只认真实拖动标记。
+         *
+         * 之前比播放头差值（>0.6s 就算拖动）：编辑台自己的预览时钟也在走，
+         * handOverPlayback 的 pause 压不住它（日志里 playing:true），
+         * 两条时间线一比就误判，用户根本没碰进度条也被 onSeek 拽回开头。
+         * 现在拖动判定只认编辑台 #timeline 的 pointerdown 标记
+         * （__foliaUserSeekAt，编辑台里打的点），标记之后 1.5 秒内的漂移才算数。
+         */
         const editorTime = pullTimeFromEditor(target);
+        const seekMark = (target as unknown as {
+            document?: { defaultView?: { __foliaUserSeekAt?: number } };
+        })?.document?.defaultView?.__foliaUserSeekAt ?? 0;
+        const recentUserSeek = Date.now() - seekMark < 1500;
         const drifted = editorTime !== null && lastPushedRef.current !== null
-            && Date.now() > alignUntilRef.current
+            && recentUserSeek
             && Math.abs(editorTime - lastPushedRef.current) > 0.6;
         if (drifted && onSeek) {
             // 用户在编辑台里拖了进度条：让 folia 跟过去。
