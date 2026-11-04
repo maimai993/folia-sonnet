@@ -20,9 +20,9 @@ export const ponderLayerTokens = (isDaylight: boolean, theme?: Theme): CSSProper
 } as CSSProperties);
 
 /** For the element inside it: the kit's colours and motion, and Ponder's motion. */
-export const ponderWindowTokens = (isDaylight: boolean, theme: Theme | undefined, calm: boolean): CSSProperties => ({
+export const ponderWindowTokens = (isDaylight: boolean, theme: Theme | undefined, calm: boolean, glass = false): CSSProperties => ({
     '--text-primary': 'var(--pd-ink)',
-    ...settingsTokens(isDaylight, theme),
+    ...settingsTokens(isDaylight, theme, glass),
     ...kitMotionTokens(calm),
     ...ponderMotionTokens(calm),
 } as CSSProperties);

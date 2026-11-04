@@ -21,6 +21,7 @@ exports[`config surface contract > keeps every field of the exportable visual co
   "libraryWallSeamDirection",
   "libraryWallSeamStyle",
   "libraryWallStackEdges",
+  "liquidGlass",
   "lumiereTuning",
   "lyricsCustomFontFamily",
   "lyricsFontFallbackFamilies",

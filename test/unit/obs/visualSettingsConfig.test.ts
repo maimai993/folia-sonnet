@@ -22,6 +22,7 @@ import { useThemeSettingsStore } from '@/stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '@/stores/useStageSettingsStore';
 import { useLibraryWallLookStore } from '@/stores/useLibraryWallLookStore';
 import { usePlayerChromeSettingsStore } from '@/stores/usePlayerChromeSettingsStore';
+import { useGlassSurfaceSettingsStore } from '@/stores/useGlassSurfaceSettingsStore';
 
 const switchMock = vi.mocked(readStoredThemeAutoSwitchEnabled);
 const generateMock = vi.mocked(readStoredThemeAutoGenerateEnabled);
@@ -283,5 +284,33 @@ describe('buildVisualSettingsConfig', () => {
         expect(decompressConfig(JSON.stringify({ phb: false }))).toEqual({ playerHeaderBlur: false });
         expect(decompressConfig(JSON.stringify({ playerHeaderBlur: true }))).toMatchObject({ playerHeaderBlur: true });
         usePlayerChromeSettingsStore.setState({ playerHeaderBlur: false });
+    });
+
+    // 液态玻璃是界面材质，随「样子」一起走（短键 llg，整个对象一格）。总开关与两个效果开关都是
+    // 布尔，false 也是真值，所以配置能明确把某一项关掉，而不是靠缺键。
+    it('carries liquid glass, switch and effects alike', () => {
+        // 这里只改 state，不走 setter：setter 会落 localStorage，而这个测试跑在 node 环境（没有 localStorage）。
+        // 编解码只看 config 的形状与值，state 里放着什么就够了。
+        useGlassSurfaceSettingsStore.setState({
+            liquidGlassEnabled: true,
+            strength: 3,
+            blur: 8,
+            sat: 150,
+            bend: 40,
+            light: false,
+            jelly: true,
+        });
+
+        const config = buildVisualSettingsConfig();
+        expect(config.liquidGlass).toMatchObject({ enabled: true, strength: 3, blur: 8, sat: 150, bend: 40, light: false, jelly: true });
+
+        const restored = decompressConfig(compressConfig(config));
+        expect(restored.liquidGlass).toMatchObject({ enabled: true, strength: 3, blur: 8, sat: 150, bend: 40, light: false, jelly: true });
+
+        // JSON 形式（长键）也认，且同样是 true/false 原样进出。
+        expect(decompressConfig(JSON.stringify({ liquidGlass: { enabled: false, blur: 12 } })).liquidGlass)
+            .toMatchObject({ enabled: false, blur: 12 });
+
+        useGlassSurfaceSettingsStore.setState({ liquidGlassEnabled: false });
     });
 });

@@ -535,6 +535,29 @@ const decompressLumiere = (o: any) => normalizeLumiereTuning(Object.fromEntries(
     Object.entries(LUMIERE_SHORT_KEYS).map(([key, short]) => [key, o?.[short]]),
 ));
 
+// 液态玻璃：一个对象里七个数（总开关 + 四个参数 + 光效 + 果冻），键名缩到一两个字。
+// 读回来时不在这里钳制：store 的 handleSetLiquidGlassParams 会按各参数量程钳一遍，
+// 画不了位移图的平台也在那里钉回固定值，所以旧配置或手改的短码不会把值带出界。
+const LIQUID_GLASS_SHORT_KEYS = {
+    enabled: 'e',
+    strength: 'st',
+    blur: 'b',
+    sat: 'sa',
+    bend: 'be',
+    light: 'li',
+    jelly: 'je',
+} as const;
+const compressLiquidGlass = (g: any): any => Object.fromEntries(
+    Object.entries(LIQUID_GLASS_SHORT_KEYS)
+        .filter(([key]) => g?.[key] !== undefined)
+        .map(([key, short]) => [short, g[key]]),
+);
+const decompressLiquidGlass = (o: any) => Object.fromEntries(
+    Object.entries(LIQUID_GLASS_SHORT_KEYS)
+        .filter(([, short]) => o?.[short] !== undefined)
+        .map(([key, short]) => [key, o[short]]),
+);
+
 export const compressConfig = (config: any): string => {
     const minified: any = {};
     if (config.theme) {
@@ -614,6 +637,8 @@ export const compressConfig = (config: any): string => {
     if (config.libraryWallBackdropBlur !== undefined) minified.lwbb = config.libraryWallBackdropBlur;
     if (config.libraryWallSeamDirection !== undefined) minified.lwsd = config.libraryWallSeamDirection;
     if (config.playerHeaderBlur !== undefined) minified.phb = config.playerHeaderBlur;
+    // 液态玻璃：总开关、参数与效果开关存成一整对（键名短到一两个字），短码里只占一格。
+    if (config.liquidGlass) minified.llg = compressLiquidGlass(config.liquidGlass);
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -685,7 +710,8 @@ export const decompressConfig = (str: string): any => {
         || parsed.lwbl !== undefined
         || parsed.lwbb !== undefined
         || parsed.lwsd !== undefined
-        || parsed.phb !== undefined;
+        || parsed.phb !== undefined
+        || parsed.llg !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -764,6 +790,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lwbb !== undefined) decompressed.libraryWallBackdropBlur = parsed.lwbb;
         if (parsed.lwsd !== undefined) decompressed.libraryWallSeamDirection = parsed.lwsd;
         if (parsed.phb !== undefined) decompressed.playerHeaderBlur = parsed.phb;
+        if (parsed.llg !== undefined) decompressed.liquidGlass = decompressLiquidGlass(parsed.llg);
         /*
          * lwdr：旧的反向开关（只翻「自动」那一支）。它已经并进方向取值成为 'auto-reverse'，所以不再原样带出来，
          * 只在旧配置的「自动 + 反向」这一组合上折算一次：lwsd 是 'auto'（或没写，那时旧版默认就是自动）而
@@ -797,6 +824,8 @@ export const decompressConfig = (str: string): any => {
             'libraryWallSeamClear', 'libraryWallSeamStyle', 'libraryWallBackdropLyrics', 'libraryWallBackdropBlur',
             'libraryWallSeamDirection',
             'playerHeaderBlur',
+            // 液态玻璃：总开关、四个参数、光效与果冻，存成一整对象（短码 llg）。属于「界面长什么样」。
+            'liquidGlass',
             // 旧的反向开关（已并进 libraryWallSeamDirection 的 'auto-reverse'）。留着这一格只为一件事：
             // 只带 lwdr 的旧 JSON 配置仍算「认得的外观配置」，不至于整份被当成非法。取值本身由
             // visualConfigTransfer 折算，别的地方不要读它。

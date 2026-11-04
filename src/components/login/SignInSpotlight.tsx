@@ -9,6 +9,7 @@ import { openLoginWindow } from './loginWindowStore';
 import { PlatformMark } from './PlatformMark';
 import { orderRows, rowStatus } from './platformRows';
 import { Button } from '../ui/Button';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import './login.css';
 
 // src/components/login/SignInSpotlight.tsx
@@ -46,6 +47,8 @@ const SignInSpotlight: React.FC<SignInSpotlightProps> = ({ isOpen, account, onPr
     const { t } = useTranslation();
     const { isDaylight, theme } = useSettingsKitTheme();
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时表面转半透明（见 settingsTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const { providers, activeProviderId } = useLibraryAccountProviders(account);
     // 按钮前面那几个记号：与首页那个按钮同一个来路（排好序、去掉不能登录的、取前三家）。
     const rows = orderRows(providers, activeProviderId);
@@ -112,7 +115,7 @@ const SignInSpotlight: React.FC<SignInSpotlightProps> = ({ isOpen, account, onPr
     return createPortal(
         <div
             className="fixed inset-0 z-[200] flex flex-col items-center justify-center px-6 text-center text-[color:var(--st-t1)]"
-            style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reduced), background: 'rgba(0, 0, 0, 0.62)' }}
+            style={{ ...settingsTokens(isDaylight, theme, glassOn), ...kitMotionTokens(reduced), background: 'rgba(0, 0, 0, 0.62)' }}
             data-login-still={reduced || undefined}
             role="dialog"
             aria-modal="true"

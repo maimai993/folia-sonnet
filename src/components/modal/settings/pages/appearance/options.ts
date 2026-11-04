@@ -31,9 +31,10 @@ export const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'option
 export const AI: SettingsGroupDef = { id: 'electronSettings', titleKey: 'options.electronSettings', electronOnly: true };
 
 /**
- * 显示那一组（fork 独有）：毛玻璃、歌词扁平两端都画；设备类型与手机适配只有安卓有。
+ * 显示那一组（fork 独有）：歌词扁平两端都画；设备类型与横竖屏只有安卓有。
  * 原在「通用」页，那里剩下的都是语言、启动、更新这类「行为」，这几项讲的是「长什么样」，
- * 所以搬到这里，排在歌词那组之后。
+ * 所以搬到这里，排在歌词那组之后。液态玻璃的开关与参数不在这里：它同时是性能设置，
+ * 挂在「性能与动效」页（pages/graphics/LiquidGlassGroup.tsx）。
  */
 export const VIEW: SettingsGroupDef = { id: 'surfaceView', titleKey: 'options.settingsHeadingView' };
 
@@ -98,7 +99,6 @@ export const O = {
         noteKey: 'options.cloudCacheBaseUrlDesc',
         available: () => !hasElectronBridge(),
     }),
-    glassSurface: option(VIEW, 'glassSurface', 'options.glassSurface', { noteKey: 'options.glassSurfaceDesc' }),
     lyricFlat: option(VIEW, 'lyricFlat', 'options.lyricFlat', { noteKey: 'options.lyricFlatDesc' }),
     deviceType: option(VIEW, 'deviceType', 'options.deviceType', {
         noteKey: 'options.deviceTypeDesc',

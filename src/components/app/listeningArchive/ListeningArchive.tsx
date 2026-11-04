@@ -7,6 +7,7 @@ import type { Theme } from '../../../types';
 import { Button } from '@/components/ui';
 import { Tabs } from '@/components/modal/settings/kit';
 import { settingsTokens } from '@/components/modal/settings/kit/kitTheme';
+import { useGlassSurfaceSettingsStore } from '@/stores/useGlassSurfaceSettingsStore';
 import { useListeningArchiveStore, type ListeningArchiveTab } from './listeningArchiveStore';
 import { useArchivePlays } from './useArchivePlays';
 import RankingsTab from './RankingsTab';
@@ -61,7 +62,8 @@ const ListeningArchive: React.FC<ListeningArchiveProps> = ({ theme, isDaylight, 
         { id: 'settings', label: t('listeningArchive.tabs.settings') },
     ]), [t]);
 
-    const tokens = useMemo(() => settingsTokens(isDaylight, theme), [isDaylight, theme]);
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
+    const tokens = useMemo(() => settingsTokens(isDaylight, theme, glassOn), [isDaylight, theme, glassOn]);
 
     return (
         <AnimatePresence>
@@ -74,7 +76,11 @@ const ListeningArchive: React.FC<ListeningArchiveProps> = ({ theme, isDaylight, 
                     style={{
                         ...tokens,
                         color: 'var(--st-t1)',
-                        backgroundColor: isDaylight ? 'rgba(250,250,250,0.97)' : 'rgba(8,8,10,0.95)',
+                        // 玻璃开着时整片背景压透（0.95/0.97 → 72% 档位），折射有画面可看，
+                        // 又不至于透出后面的层；关掉时保持原来的近实底。
+                        backgroundColor: glassOn
+                            ? 'color-mix(in srgb, var(--bg-color) 72%, transparent)'
+                            : (isDaylight ? 'rgba(250,250,250,0.97)' : 'rgba(8,8,10,0.95)'),
                         backdropFilter: 'blur(24px)',
                     }}
                     aria-label={t('listeningArchive.title')}

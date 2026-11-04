@@ -17,9 +17,9 @@ import type { UrlBackgroundItem } from '../types';
 // auto-switch value can also flip "prefer custom theme" — a setting that is not in the config at
 // all and would otherwise change with no warning.
 
-export type ImportGroup = 'theme' | 'visualizer' | 'fonts' | 'background' | 'songTheme' | 'trackCard' | 'libraryWall';
+export type ImportGroup = 'theme' | 'visualizer' | 'fonts' | 'background' | 'songTheme' | 'trackCard' | 'libraryWall' | 'liquidGlass';
 
-export const IMPORT_GROUPS: ImportGroup[] = ['theme', 'visualizer', 'fonts', 'background', 'songTheme', 'trackCard', 'libraryWall'];
+export const IMPORT_GROUPS: ImportGroup[] = ['theme', 'visualizer', 'fonts', 'background', 'songTheme', 'trackCard', 'libraryWall', 'liquidGlass'];
 
 export interface ImportChange {
     group: ImportGroup;
@@ -155,6 +155,10 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     // 播放页标题栏后面的磨砂底。归在 visualizer 组，和同样会跟着导出的
     // hidePlayerTranslationSubtitle 一起：它属于「播放页长什么样」。
     playerHeaderBlur: 'visualizer',
+
+    // 液态玻璃自成一组：它改的是整个界面的材质，不是播放页的画面；只换配色的人没有理由
+    // 连它也一起换过来，而想要这套观感的人会一次全取。
+    liquidGlass: 'liquidGlass',
 };
 
 // Fields the import applies only when the incoming value is truthy, so an incoming null means "the
@@ -345,6 +349,12 @@ const diffLeaves = (from: unknown, to: unknown, group: ImportGroup, prefix = '')
     return leaves;
 };
 
+// Fields carried as one object that the apply path writes whole, so the plan reports them as a
+// single row instead of opening them into leaves. A child key here is a dotted path
+// (`liquidGlass.blur`), which `applyImportedConfig`'s `keys` never contains — the row would be
+// checkable and do nothing.
+const WHOLE_OBJECT_FIELDS = new Set(['liquidGlass']);
+
 export interface ImportPlanInput {
     // decompressConfig output.
     incoming: Record<string, unknown>;
@@ -481,7 +491,9 @@ export function buildImportPlan({
             const children = diffLeaves(current[key], incoming[key], group)
                 .filter(child => !isPinnedLeaf(key, child.key, child.to, assets));
             same = children.length === 0;
-            if (!same) change.children = children;
+            // 液态玻璃整组应用（applyImportedConfig 一次写回整对象），所以不展开子行：子行的 key 是
+            // `liquidGlass.blur` 这样的路径，不在 keys 里，勾了也不会生效。
+            if (!same && !WHOLE_OBJECT_FIELDS.has(key)) change.children = children;
         }
 
         record(change, same);

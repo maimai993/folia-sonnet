@@ -3,6 +3,8 @@ import { importFoliumParams, snapshotFoliumParams } from '../../../../../mods/pa
 import { buildVisualSettingsConfig } from '../../../../../services/obs/visualSettingsConfig';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../../../services/themePreferences';
 import { useLibraryWallLookStore } from '../../../../../stores/useLibraryWallLookStore';
+import { useGlassSurfaceSettingsStore } from '../../../../../stores/useGlassSurfaceSettingsStore';
+import type { LiquidGlassEffects, LiquidGlassParams } from '../../../../../shinoinject/liquidglass';
 import { usePlayerChromeSettingsStore } from '../../../../../stores/usePlayerChromeSettingsStore';
 import { useStageSettingsStore } from '../../../../../stores/useStageSettingsStore';
 import { useThemeSettingsStore } from '../../../../../stores/useThemeSettingsStore';
@@ -140,6 +142,21 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     }
     if (has('playerHeaderBlur')) {
         usePlayerChromeSettingsStore.getState().handleTogglePlayerHeaderBlur(Boolean(config.playerHeaderBlur));
+    }
+    // 液态玻璃：整对象一次写回。参数按各参数量程钳制、画不了位移图的平台回落到固定值，都在
+    // store 的 commit 里做；总开关单独走 setLiquidGlassEnabled，因为它还要挂 / 拆注入器。
+    if (has('liquidGlass') && config.liquidGlass && typeof config.liquidGlass === 'object') {
+        const incoming = config.liquidGlass as Partial<LiquidGlassParams & LiquidGlassEffects & { enabled: boolean }>;
+        const glass = useGlassSurfaceSettingsStore.getState();
+        glass.handleSetLiquidGlassParams({
+            ...(typeof incoming.strength === 'number' ? { strength: incoming.strength } : {}),
+            ...(typeof incoming.blur === 'number' ? { blur: incoming.blur } : {}),
+            ...(typeof incoming.sat === 'number' ? { sat: incoming.sat } : {}),
+            ...(typeof incoming.bend === 'number' ? { bend: incoming.bend } : {}),
+            ...(typeof incoming.light === 'boolean' ? { light: incoming.light } : {}),
+            ...(typeof incoming.jelly === 'boolean' ? { jelly: incoming.jelly } : {}),
+        });
+        if (typeof incoming.enabled === 'boolean') glass.setLiquidGlassEnabled(incoming.enabled);
     }
     if (has('hidePlayerTranslationSubtitle')) {
         storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));

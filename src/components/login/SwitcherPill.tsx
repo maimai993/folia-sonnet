@@ -8,6 +8,7 @@ import { useLibraryAccountProviders } from '../../library/core/account/useLibrar
 import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, resolvePlayerBottomComponentBottomPx } from '../../utils/playerBottomBarLayout';
 import { Tooltip } from '../modal/settings/kit';
 import { settingsTokens, useSettingsKitTheme } from '../modal/settings/kit/kitTheme';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import { kitMotionTokens, useKitReducedMotion } from '../modal/settings/kit/motion';
 import { openLoginWindow, useLoginWindowStore } from './loginWindowStore';
 import { AccountPicture, PlatformMark } from './PlatformMark';
@@ -33,6 +34,8 @@ const SwitcherPill: React.FC<SwitcherPillProps> = ({ account, onBackToPlayer }) 
     const { providers, activeProviderId } = useLibraryAccountProviders(account);
     const { isDaylight, theme } = useSettingsKitTheme();
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时表面转半透明（见 settingsTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const rootRef = useRef<HTMLDivElement>(null);
     const baseBottomPxRef = useRef(16);
     const provider = pillProvider(providers, activeProviderId);
@@ -112,7 +115,7 @@ const SwitcherPill: React.FC<SwitcherPillProps> = ({ account, onBackToPlayer }) 
             ref={setRootNode}
             data-testid="online-provider-switcher"
             className="pointer-events-auto absolute bottom-4 right-4 z-[100] md:bottom-6 md:right-6"
-            style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reduced), '--login-edge': 'var(--st-menu)' } as React.CSSProperties}
+            style={{ ...settingsTokens(isDaylight, theme, glassOn), ...kitMotionTokens(reduced), '--login-edge': 'var(--st-menu)' } as React.CSSProperties}
         >
             <div className="flex items-center rounded-[26px] bg-[var(--st-menu)] p-0.5 text-[color:var(--st-t1)] shadow-lg md:p-1.5">
                 <Tooltip text={t('home.switchOnlineProvider')} className="inline-flex">

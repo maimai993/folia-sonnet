@@ -5,6 +5,7 @@ import { useLibraryAccountProviders } from '../../library/core/account/useLibrar
 import { settingsTokens, useSettingsKitTheme } from '../modal/settings/kit/kitTheme';
 import { kitMotionTokens, useKitReducedMotion } from '../modal/settings/kit/motion';
 import { openLoginWindow } from './loginWindowStore';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import { PlatformMark } from './PlatformMark';
 import { orderRows, rowStatus } from './platformRows';
 import './login.css';
@@ -23,6 +24,8 @@ const HomeLoginPanel: React.FC<HomeLoginPanelProps> = ({ account }) => {
     const { t } = useTranslation();
     const { isDaylight, theme } = useSettingsKitTheme();
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时表面转半透明（见 settingsTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const { providers, activeProviderId } = useLibraryAccountProviders(account);
     const rows = orderRows(providers, activeProviderId);
     const active = rows.find(row => row.providerId === activeProviderId);
@@ -38,7 +41,7 @@ const HomeLoginPanel: React.FC<HomeLoginPanelProps> = ({ account }) => {
     return (
         <div
             className="flex w-full flex-1 flex-col items-center justify-center px-4 text-center text-[color:var(--st-t1)]"
-            style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reduced) }}
+            style={{ ...settingsTokens(isDaylight, theme, glassOn), ...kitMotionTokens(reduced) }}
             data-login-still={reduced || undefined}
         >
             <h2 className="login-rise text-xl font-semibold leading-7 [text-wrap:balance]">
