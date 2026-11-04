@@ -41,6 +41,8 @@ export const Segmented = <T extends string>({ value, options, onChange, fill, di
     const startYRef = useRef(0);
     const activeRef = useRef(false); // 过了 slop、正式开始的滑动
     const deadRef = useRef(false); // 竖向让位，本次按下不再做滑动选择
+    // 本次滑动最近一次真正切换过去的选项：拖动中同一选项不重复调 onChange。
+    const lastSweptRef = useRef<T | null>(null);
 
     // —— 胶囊果冻 ——
     // scaleX 沿拖动方向拉伸，scaleY 反向回缩（果冻的体积感）；都走弹簧，松手回 1。
@@ -75,28 +77,36 @@ export const Segmented = <T extends string>({ value, options, onChange, fill, di
         startYRef.current = e.clientY;
         activeRef.current = false;
         deadRef.current = false;
+        lastSweptRef.current = null;
     };
 
     const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
         if (pointerIdRef.current !== e.pointerId || deadRef.current) return;
         const dx = e.clientX - startXRef.current;
         const dy = e.clientY - startYRef.current;
+        // 竖向让位要一直判，不能只在起手时判一次：起手是横向、后面转成竖向（页面滚动）时
+        // 也得放手，否则滚动中手指划过别的选项会偷偷改设置。
+        if (Math.abs(dy) > Math.abs(dx) * SWEEP_YIELD_RATIO + SWEEP_SLOP) {
+            deadRef.current = true;
+            scaleX.set(1);
+            scaleY.set(1);
+            return;
+        }
         if (!activeRef.current) {
             if (Math.abs(dx) < SWEEP_SLOP) return;
-            // 竖向先走就放手：这是滚动，不是选择。
-            if (Math.abs(dy) > Math.abs(dx) * SWEEP_YIELD_RATIO) {
-                deadRef.current = true;
-                return;
-            }
             activeRef.current = true;
         }
-        // 果冻：拉伸量跟横向位移，封顶 ~6%，方向随拖动；纵向轻微回缩。
+        // 果冻：拉伸量跟横向位移，封顶 ~6%；纵向轻微回缩。
         const stretch = Math.max(-0.06, Math.min(0.06, dx / 900));
         scaleX.set(1 + Math.abs(stretch));
         scaleY.set(1 - Math.abs(stretch) * 0.6);
-        // 滑到哪个选项就选中哪个。
+        // 滑到哪个选项就选中哪个。只在越过选项边界时才调一次 onChange：拖动期间每个
+        // pointermove 都写一次会让切主题/切语言这类重的 onChange 反复执行。
         const hovered = optionAt(e.clientX, e.clientY);
-        if (hovered && hovered !== value) onChange(hovered);
+        if (hovered && hovered !== value && hovered !== lastSweptRef.current) {
+            lastSweptRef.current = hovered;
+            onChange(hovered);
+        }
     };
 
     const endGesture = () => {
