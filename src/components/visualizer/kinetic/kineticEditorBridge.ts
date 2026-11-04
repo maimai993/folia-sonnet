@@ -100,10 +100,35 @@ export const syncEditorTransport = (target: Window | null | undefined, playing: 
     }
 };
 
-/** 把 folia 的播放头推给编辑台（拖进度、换句、播放中定速对齐都用它）。 */
+/**
+ * 把 folia 的播放头推给编辑台（拖进度、换句、播放中定速对齐都用它）。
+ *
+ * 原版 seek() 里第一件事是读 S.plan.duration（12_ui.js:301）——
+ * plan 还没算出来时直接抛错，日志里那几条「同步播放头到编辑台失败 {}」就是它。
+ * 所以先确认 plan 就绪；没就绪就等下一拍，不当作失败。
+ */
 export const pushTimeToEditor = (target: Window | null | undefined, time: number) => {
-    const api = asEditor(target)?.J?.uiApi;
+    const editor = asEditor(target);
+    const api = editor?.J?.uiApi;
     if (!api || !Number.isFinite(time)) return;
+    const planReady = Boolean((editor?.J?.ui as { plan?: unknown } | undefined)?.plan);
+    if (!planReady) {
+        // plan 未就绪：seek 必然失败，等它算完再说（最多补一次，避免堆积）。
+        if (typeof window !== 'undefined') {
+            window.setTimeout(() => {
+                const later = asEditor(target);
+                const laterApi = later?.J?.uiApi;
+                if (!laterApi) return;
+                if (!(later?.J?.ui as { plan?: unknown } | undefined)?.plan) return;
+                try {
+                    laterApi.seek?.(Math.max(0, time));
+                } catch (error) {
+                    console.warn('[Kinetic] 同步播放头到编辑台失败', error);
+                }
+            }, 400);
+        }
+        return;
+    }
     try {
         api.seek?.(Math.max(0, time));
     } catch (error) {
