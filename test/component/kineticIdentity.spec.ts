@@ -56,6 +56,16 @@ test('load 被外部资源阻塞时仍按 boot-ready 注入，晚到 load 不覆
     }
 });
 
+test('稳定打开后随机/预览操作不能重启编辑台独立时钟', async ({ mount, page }) => {
+    await mount('kineticIdentity');
+    await open(page);
+    await assertLyrics(page, 'Alpha');
+    await page.waitForTimeout(3000); // 经过原有接管定时器，避免初始 pause 偶然掩盖 restartPreview。
+    await editorFrame(page).evaluate(() => (window as any).J.uiApi.restartPreview());
+    expect(await editorFrame(page).evaluate(() => (window as any).J.ui.playing)).toBe(false);
+    await expect(page.locator('[data-probe-track]')).toHaveAttribute('data-probe-seek', '');
+});
+
 test('首次打开、歌词晚到与快速 A→B→A 同时更新 textarea 和 plan', async ({ mount, page }) => {
     await mount('kineticIdentity');
     await open(page);
@@ -91,6 +101,37 @@ test('旧存档 plan 不覆盖新词，最后一次编辑在关闭时保存并�
     await open(page);
     await assertLyrics(page, 'Alpha');
     expect(await editorFrame(page).evaluate(() => (window as any).J.ui.project.seed)).toBe(987654);
+});
+
+test('同歌手工改词后仍保存布局，并在重开时保留已归属的改词', async ({ mount, page }) => {
+    await mount('kineticIdentity');
+    await open(page);
+    await assertLyrics(page, 'Alpha');
+    const textarea = page.frameLocator('iframe[title="JIZURA 原版编辑台"]').locator('#lyrics');
+    await textarea.fill('[00:01]Alpha edited！\n[00:12]Alpha final line');
+    await expect.poll(() => editorFrame(page).evaluate(() => (window as any).J.ui.plan.lines[0].text)).toBe('Alpha edited！');
+    await editorFrame(page).evaluate(() => { (window as any).J.ui.project.seed = 887766; (window as any).J.uiApi.replan(); });
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('kinetic_projects') || '{}')['online:netease:Alpha']?.project.seed)).toBe(887766);
+    await page.getByRole('button', { name: '退出编辑台' }).click();
+    await open(page);
+    await expect(textarea).toHaveValue('[00:01]Alpha edited！\n[00:12]Alpha final line');
+});
+
+test('暂停时编辑台跨句 seek 不启动播放页时钟', async ({ page }) => {
+    await page.goto('http://127.0.0.1:4173/dev-probe.html?probe=kineticIdentity&render=1');
+    await page.waitForSelector('[data-probe-track]');
+    await page.evaluate(() => {
+        (window as any).__seeks = [];
+        const frame = document.querySelector('iframe[title="文字PV"]') as HTMLIFrameElement;
+        frame.contentWindow!.addEventListener('message', event => {
+            if (event.data?.type === 'seek') (window as any).__seeks.push(event.data);
+        });
+    });
+    await open(page);
+    await assertLyrics(page, 'Alpha');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('kinetic:seek', { detail: { time: 14 } })));
+    await expect.poll(() => page.evaluate(() => (window as any).__seeks.at(-1)?.time)).toBe(14);
+    expect(await page.evaluate(() => (window as any).__seeks.at(-1)?.playing)).toBe(false);
 });
 
 test('同歌保存后 viewport 重发使用新工程，旧歌广播不能污染当前歌', async ({ page }) => {

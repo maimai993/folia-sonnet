@@ -21,7 +21,11 @@ function KineticIdentityProbe() {
     const [track, setTrack] = useState('Alpha');
     const [seek, setSeek] = useState<number | null>(null);
     useEffect(() => {
-        const listener = (event: Event) => setSeek((event as CustomEvent).detail.time);
+        const listener = (event: Event) => {
+            const time = (event as CustomEvent).detail.time;
+            setSeek(time);
+            clock.set(time); // 暂停时用户 seek 也反馈到真实 renderer MotionValue，覆盖完整时钟回路。
+        };
         window.addEventListener('kinetic:seek', listener);
         return () => window.removeEventListener('kinetic:seek', listener);
     }, []);

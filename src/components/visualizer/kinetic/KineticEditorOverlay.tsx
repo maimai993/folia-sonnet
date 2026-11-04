@@ -11,7 +11,7 @@ import {
     syncEditorTransport,
 } from './kineticEditorBridge';
 import type { KineticProjectSnapshot } from './kineticProjectTypes';
-import { kineticPlanMatchesLyrics } from './kineticEditorIdentity';
+import { kineticPlanMatchesLyrics, resolveKineticProjectLyrics } from './kineticEditorIdentity';
 import type { Line, Theme } from '../../../types';
 
 // src/components/visualizer/kinetic/KineticEditorOverlay.tsx
@@ -335,9 +335,9 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 // boot 的示例工程不能存到当前歌曲；只采集本 iframe 已确认完成注入的工程。
                 const current = injectDataRef.current;
                 if (current.songKey !== (songKey ?? null) || injectedDocumentRef.current !== target.document
-                    || !injectedOkRef.current || project.lyrics !== current.lrc) return;
+                    || injectedOkRef.current !== `${current.songKey ?? ''}\u0000${current.lrc}`) return;
                 const plan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
-                if (!kineticPlanMatchesLyrics(plan, current.lrc)) return;
+                if (typeof project.lyrics !== 'string' || !kineticPlanMatchesLyrics(plan, project.lyrics)) return;
                 const serialized = JSON.stringify({ project, plan });
                 if (serialized === lastSerialized) return;
                 lastSerialized = serialized;
@@ -361,6 +361,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 );
                 const snapshot = {
                     lyrics: project.lyrics,
+                    sourceLyrics: current.lrc,
                     style: project.style,
                     seed: project.seed,
                     aspect: project.aspect,
@@ -567,7 +568,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                 }
                 // 歌词永远以 folia 当前的为准（歌换了歌词就变了）。
                 // 从 ref 取：闭包里的 lrc 会停在打开编辑台那一刻。
-                ui.project.lyrics = current.lrc;
+                ui.project.lyrics = resolveKineticProjectLyrics(saved, current.lrc);
                 // 没存过配色才用主题四色；存过就尊重用户在编辑台里调的那份。
                 if (!saved?.colors) {
                     ui.project.colors = { ...(ui.project.colors as Record<string, unknown> || {}), ...themeColors, accentOn: true, enabled: true };
@@ -585,7 +586,7 @@ const KineticEditorOverlay: React.FC<Props> = ({
                  */
                 const actualPlan = (target as unknown as { J?: { ui?: { plan?: Record<string, unknown> } } }).J?.ui?.plan ?? null;
                 const textarea = target.document.getElementById('lyrics') as HTMLTextAreaElement | null;
-                if (textarea?.value !== current.lrc || !kineticPlanMatchesLyrics(actualPlan, current.lrc)) {
+                if (textarea?.value !== ui.project.lyrics || !kineticPlanMatchesLyrics(actualPlan, String(ui.project.lyrics))) {
                     console.warn('[Kinetic] 注入未确认，暂不保存工程', { songKey: current.songKey, seq });
                     return;
                 }

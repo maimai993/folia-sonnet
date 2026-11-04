@@ -36549,6 +36549,8 @@ function updateTimeUI() {
 // タップ同期の速さ (0.5× / 0.75×): only while tapping — the song's own time is what gets stored
 const playRate = () => (S.tap && S.tap.rate > 0 ? S.tap.rate : 1);
 function play() {
+  // 宿主接管后，随机/历史/拍点等内部入口也不能重启第二个时钟。
+  if (J.__foliaHosted) return;
   refreshLoopHold();
   if (S.audio) AP.play(S.audio.buffer, S.t, playRate());
   else S.t0 = performance.now() - S.t * 1000 / playRate();
@@ -37371,7 +37373,10 @@ function lockBtn(k, anchor) {                     // lock button for effects tha
 }
 
 /* ---------------- 一键随机 ---------------- */
-function restartPreview() { seek(0); if (!S.playing && S.mode !== 'pro') play(); }
+function restartPreview() {
+  if (J.__foliaHosted) return; // 改样式保留宿主当前播放头，不自行 seek(0)。
+  seek(0); if (!S.playing && S.mode !== 'pro') play();
+}
 const themeName = th => { const o = document.querySelector(`.themeSel option[value="${th}"]`); return o ? o.textContent : th; };
 function omakase() {
   if (S.exporting || S.tap) return;

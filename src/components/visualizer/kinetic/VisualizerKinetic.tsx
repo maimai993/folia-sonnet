@@ -13,7 +13,7 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { pickConcreteFontFamily, resolveKineticFontPayload } from './kineticFontBridge';
 import type { KineticFontPayload } from './kineticFontBridge';
-import { kineticPlanMatchesLyrics } from './kineticEditorIdentity';
+import { kineticPlanMatchesLyrics, resolveKineticProjectLyrics } from './kineticEditorIdentity';
 
 // src/components/visualizer/kinetic/VisualizerKinetic.tsx
 // 文字PV：渲染完全交给 JIZURA 原版引擎（public/jizura/render.html，iframe 桥）。
@@ -183,7 +183,8 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         const { plan: _savedPlan, ...rest } = (savedProject || {}) as Record<string, unknown>;
         return {
         ...rest,
-        lyrics: lrc,
+        lyrics: resolveKineticProjectLyrics(savedProject, lrc),
+        sourceLyrics: lrc,
         seed: savedProject?.seed ?? 20260922,
         // 配色：存过的优先（用户在编辑台改过），否则用 folia 主题四色。
         colors: savedProject?.colors ?? { ...themeColors, accentOn: true },
@@ -291,7 +292,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
          * 宿主侧对 LRC 做同样的归一化再比 —— 上一版只去空白，带记法的歌词
          * 必然误判不一致（review 必须改 #9）。
          */
-        if (!kineticPlanMatchesLyrics(savedPlan, lrc)) {
+        if (!kineticPlanMatchesLyrics(savedPlan, String(project.lyrics))) {
             console.log('[Kinetic] 保存的 plan 与当前歌词不一致，跳过还原', { songKey, planLines: planLines.length });
             return;
         }
@@ -362,7 +363,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
                 });
                 return;
             }
-            if (data.type !== 'project' || !data.project || data.project.lyrics !== projectRef.current.lyrics) return;
+            if (data.type !== 'project' || !data.project || data.project.sourceLyrics !== projectRef.current.sourceLyrics) return;
             // 同步 ref，后续 ready/viewport 重发不能再覆盖回打开编辑台前的工程。
             projectRef.current = { ...projectRef.current, ...data.project };
             target.postMessage({
@@ -451,7 +452,7 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
         const next = resolveLineAt(lines, latest, cutLineIndex);
         if (next !== cutLineIndex) {
             setCutLineIndex(next);
-            postSeek(latest, true);
+            postSeek(latest, !pausedRef.current);
         }
     });
 
