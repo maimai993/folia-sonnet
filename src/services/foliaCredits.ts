@@ -23,6 +23,11 @@ export interface FoliaCredits {
      * 两边共用同一条记录（folia_checkins 的 (机器码, 日期) 唯一索引）。
      */
     checkedInToday: boolean;
+    /**
+     * 上次实际用的模型。`auto` 会换模型，所以界面上要单独显示「这次跑的是哪个」——
+     * 光写「自动」会让人不知道到底降级没有。
+     */
+    lastModel: string;
 }
 
 const ME_URL = `${FOLIA_WORK_API_ROOT}/api/folia/machine/me`;
@@ -51,11 +56,12 @@ export const fetchFoliaCredits = async (): Promise<FoliaCredits | null> => {
             bound?: unknown;
             disabled?: unknown;
             checkedInToday?: unknown;
+            lastModel?: unknown;
             key?: { remaining?: unknown; creditLimit?: unknown; creditUsed?: unknown; unlimited?: unknown };
         } | null;
         if (!body || body.ok === false) return null;
         if (body.bound !== true) {
-            return { bound: false, disabled: false, remaining: null, limit: 0, used: 0, checkedInToday: false };
+            return { bound: false, disabled: false, remaining: null, limit: 0, used: 0, checkedInToday: false, lastModel: '' };
         }
         const key = body.key ?? {};
         return {
@@ -65,6 +71,7 @@ export const fetchFoliaCredits = async (): Promise<FoliaCredits | null> => {
             limit: asNumber(key.creditLimit),
             used: asNumber(key.creditUsed),
             checkedInToday: body.checkedInToday === true,
+            lastModel: typeof body.lastModel === 'string' ? body.lastModel : '',
         };
     } catch {
         return null;

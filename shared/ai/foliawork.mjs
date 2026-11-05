@@ -28,7 +28,16 @@ export const FOLIA_WORK_API_ROOT = 'https://apiai.tangbot.xyz';
  */
 export const FOLIA_CHECKIN_URL = 'https://rzai.tangbot.xyz/';
 /** 写死的模型。**不要**改成 auto：见文件头。 */
-export const FOLIA_WORK_MODEL = 'deepseek-v4.1-flash';
+/**
+ * 发给服务端的模型：**`auto`**。
+ *
+ * 为什么不再写死一个名字：服务端要按倍率挑、失败要自动换下一个、还要跳过被封的模型 ——
+ * 这些都发生在服务端。客户端写死一个名字，就等于把「挑模型」这件事锁死了，用户看到的
+ * 名字也会和实际跑的模型对不上（换过了界面还写着原来那个）。
+ *
+ * 「这次到底用的哪个」由 `/me` 回报 `lastModel`，界面上单独显示。
+ */
+export const FOLIA_WORK_MODEL = 'auto';
 /**
  * 「贡献账号」页：任何人都能打开，里面给出一条 /join 登录链接。
  *

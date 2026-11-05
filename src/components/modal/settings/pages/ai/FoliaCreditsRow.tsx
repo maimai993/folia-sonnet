@@ -139,7 +139,11 @@ export const FoliaCreditsRow: React.FC<{ option?: SettingsOptionDef }> = ({ opti
 
     return (
         <>
-            <Row option={option}>
+            <Row
+                option={option}
+                /* 上次实际跑的是哪个模型 —— auto 会换，只写「自动」等于什么都没说。 */
+                hint={credits?.lastModel ? t('options.aiLastModel', { model: credits.lastModel }) : undefined}
+            >
                 <Value>{label}</Value>
                 <Button icon={RefreshCw} onClick={() => { void load(); }} disabled={state === 'loading'}>
                     {t('options.aiCreditsRefresh')}
