@@ -2337,6 +2337,7 @@ export default {
     "aiProvider_foliaworkHint": "Tema disimpan di cache cloud dan dipakai bersama. Selain lirik, tidak ada yang dikirim.",
     "aiCheckinAction": "Absen",
     "aiCheckinFailed": "Absen gagal, coba lagi",
+    "aiLastModel": "Terakhir dipakai: {{model}}",
     "aiCheckinDone": "Sudah absen hari ini",
     "aiCreditsTitle": "Sisa kredit",
     "aiCreditsRemaining": "Sisa {{remaining}} kredit",

@@ -2337,6 +2337,7 @@ export default {
     "aiProvider_foliaworkHint": "Themes are cached in the cloud and reused by everyone. Nothing but the lyrics is sent.",
     "aiCheckinAction": "Check in",
     "aiCheckinFailed": "Check-in failed, try again",
+    "aiLastModel": "Last used: {{model}}",
     "aiCheckinDone": "Checked in today",
     "aiCreditsTitle": "Credits left",
     "aiCreditsRemaining": "{{remaining}} credits left",

@@ -2338,6 +2338,7 @@ export default {
     "aiProvider_foliaworkHint": "生成过的主题会存进云缓存给所有人复用；除了歌词，不会发送别的内容。",
     "aiCheckinAction": "签到",
     "aiCheckinFailed": "签到没成功，请重试",
+    "aiLastModel": "上次实际使用：{{model}}",
     "aiCheckinDone": "今日已签到",
     "aiCreditsTitle": "剩余积分",
     "aiCreditsRemaining": "剩余 {{remaining}} 积分",

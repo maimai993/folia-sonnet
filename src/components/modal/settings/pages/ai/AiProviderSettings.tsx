@@ -180,7 +180,11 @@ const AiProviderSettings: React.FC = () => {
             {/* 免费渠道的模型写死（白名单里倍率为 0 的还有视频模型，让用户挑会换来「生成失败」）。 */}
             {isFreeChannel ? (
                 <Row option={O.model} note={t('options.aiProvider_foliaworkModelNote')}>
-                    <Value>{resolved.model || preset.recommendedModel}</Value>
+                    <Value>
+                        {(resolved.model || preset.recommendedModel) === 'auto'
+                            ? t('options.aiModelAuto')
+                            : (resolved.model || preset.recommendedModel)}
+                    </Value>
                 </Row>
             ) : (
                 <AiModelPicker option={gemini ? O.geminiModel : O.model} payload={payload} keySaved={usableSavedKey} presetId={preset.id}
