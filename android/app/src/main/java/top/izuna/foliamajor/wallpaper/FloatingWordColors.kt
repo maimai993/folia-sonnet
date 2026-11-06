@@ -183,6 +183,13 @@ class FloatingWordColors private constructor() {
             return out.requireNoNulls()
         }
 
+        /** 没有逐词时间轴时，仍按实际正文匹配精确关键词区间，不把整句当成一个词染色。 */
+        @JvmStatic
+        fun highlights(lineText: String?, rules: Array<Rule>?): Array<Segment> {
+            if (lineText.isNullOrEmpty() || rules.isNullOrEmpty()) return emptyArray()
+            return rangesOf(rules, lineText).map { Segment(it.start, it.end, it.color) }.toTypedArray()
+        }
+
         /** 这一行上所有被着色的区间（已去重）。 */
         private fun rangesOf(rules: Array<Rule>, lineText: String): List<Range> {
             val ranges = ArrayList<Range>()

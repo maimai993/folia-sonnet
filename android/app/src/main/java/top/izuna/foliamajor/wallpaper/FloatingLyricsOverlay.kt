@@ -1744,7 +1744,7 @@ class FloatingLyricsOverlay private constructor(context: Context) {
 
             val words: Array<WallpaperLyricsState.TimedWord>? = if (line == null) null else line.words
             val segments: Array<FloatingWordColors.Segment>? =
-                    if (words != null && words.isNotEmpty() && line != null) segmentsFor(line) else null
+                    if (line != null) segmentsFor(line) else null
 
             /*
              * 横向滚动跟随：句子比可视区宽时，跟着唱到的位置往左推。
@@ -1963,6 +1963,20 @@ class FloatingLyricsOverlay private constructor(context: Context) {
                     textPaint.color = accentColor
                     textPaint.alpha = textAlpha
                     canvas.drawText(text, x, baseline, textPaint)
+                    // 纯LRC/后台恢复没有words也有AI标记；保留整句扫光，只覆盖命中区间。
+                    for (segment in segments ?: emptyArray()) {
+                        val start = segment.startOffset.coerceIn(0, text.length)
+                        val end = segment.endOffset.coerceIn(start, text.length)
+                        if (end <= start || segment.color == FloatingWordColors.NO_COLOR) continue
+                        val left = x + textPaint.measureText(text, 0, start)
+                        val right = x + textPaint.measureText(text, 0, end)
+                        canvas.save()
+                        canvas.clipRect(left, clipTop, right, clipBottom)
+                        textPaint.color = segment.color
+                        textPaint.alpha = textAlpha
+                        canvas.drawText(text, x, baseline, textPaint)
+                        canvas.restore()
+                    }
                     canvas.restore()
                 }
                 drawUnderlines(canvas, text, x, baseline, fontSize, wordBounds(text),
@@ -2146,7 +2160,8 @@ class FloatingLyricsOverlay private constructor(context: Context) {
             }
             cachedSegmentLine = line
             cachedSegmentRules = wordRules
-            val result = FloatingWordColors.segments(line.text, line.words, wordRules)
+            val result = if (line.words.isNullOrEmpty()) FloatingWordColors.highlights(line.text, wordRules)
+                else FloatingWordColors.segments(line.text, line.words, wordRules)
             cachedSegments = result
             return result
         }
