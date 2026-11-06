@@ -63,6 +63,11 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/app/search/SearchWorkspace.tsx': { n: { netease: 2 }, kind: 'doc' },
     'src/components/command-palette/commands/searchCommands.ts': { n: { netease: 2 }, kind: 'text', why: 'the command that searches the online platforms: its id and its source label (both i18n keys), English title and search words carry the name of the first platform' },
     'src/components/command-palette/commands/settingsCommands.ts': { n: { netease: 5 }, kind: 'text', why: 'two commands of the listening report: their ids (also i18n keys), English titles and search words name the one platform that takes reports' },
+    // 洛雪自定义音源工作台（#251）：这里的三个名字是用户导入的音源脚本自己声明的 source id，
+    // 不是 Folia 内置平台在本项目里的规则。它们跟着导入的脚本走，没法拆进各家平台自己的文件夹。
+    'src/components/lxmusic/LxSourcePanel.tsx': { n: { netease: 2, qq: 2, kugou: 2 }, kind: 'stored', why: 'the source ids a 洛雪 script declares, listed in the import panel' },
+    'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 6, qq: 3, kugou: 5 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
+    'src/components/lxmusic/lxUi.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the labels drawn for the 洛雪 source ids' },
     'src/components/modal/FreeSoftwareNoticeModal.tsx': { n: { qq: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/LocalSongMetadataMatchDialog.tsx': { n: { netease: 4, qq: 3, kugou: 2 }, kind: 'lyric', why: 'the metadata dialog\'s own list of sources' },
     'src/components/modal/lyric-match/LocalSongLyricMatch.tsx': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
@@ -127,7 +132,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/lyricExport/types.ts': { n: { netease: 1 }, kind: 'doc' },
     'src/services/lyricProxy.ts': { n: { qq: 2, kugou: 2 }, kind: 'doc' },
     'src/services/mediaCacheStore.ts': { n: { qq: 1 }, kind: 'doc' },
-    'src/services/nativeAndroidBridge.ts': { n: { netease: 1, qq: 8, kugou: 4 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
+    'src/services/nativeAndroidBridge.ts': { n: { netease: 2, qq: 11, kugou: 4 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the four extra hosts a 洛雪 script reaches for audio and cover bytes, added with #251' },
     'src/services/nativeRemoteAudio.ts': { n: { bodian: 3 }, kind: 'doc' },
     'src/services/navidromeService.ts': { n: { netease: 1 }, kind: 'doc' },
     'src/services/onlineMetadataSearchService.ts': { n: { netease: 6, qq: 8, kugou: 5 }, kind: 'lyric', why: 'the order in which a local song\'s metadata is searched, and the id each source knows a song by' },
@@ -138,6 +143,11 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/onlineMusic/feiniuTransport.ts': { n: { netease: 2, qq: 1, kugou: 2 }, kind: 'doc' },
     'src/services/onlineMusic/fmModes.ts': { n: { netease: 1 }, kind: 'doc' },
     'src/services/onlineMusic/loginSelfCheck.ts': { n: { netease: 1 }, kind: 'doc' },
+    // 同上：洛雪音源模块的三个名字都是脚本协议里的 source id（#251），不是平台规则。
+    'src/services/onlineMusic/lxmusic/lxPublicApi.ts': { n: { netease: 39, qq: 38, kugou: 36 }, kind: 'stored', why: 'the 洛雪 script protocol: its per-source song, playlist and chart endpoints' },
+    'src/services/onlineMusic/lxmusic/lxSquareCollections.ts': { n: { netease: 2, qq: 1, kugou: 1 }, kind: 'doc' },
+    'src/services/onlineMusic/lxmusic/lxTypes.ts': { n: { netease: 4, qq: 4, kugou: 4 }, kind: 'stored', why: 'the union of 洛雪 source ids and the types each one answers with' },
+    'src/services/onlineMusic/lxmusic/lxmusicProvider.ts': { n: { netease: 7, qq: 3, kugou: 4 }, kind: 'stored', why: 'maps a song back to the 洛雪 script source it came from' },
     'src/services/onlineMusic/omni/accountLikes.ts': { n: { netease: 3 }, kind: 'doc', why: 'raised by the upstream merge 2026-10-17' },
     'src/services/onlineMusic/omni/libraryMethods.ts': { n: { qq: 1 }, kind: 'doc', why: 'raised by the upstream merge 2026-10-17' },
     'src/services/onlineMusic/omni/mutationMethods.ts': { n: { netease: 3 }, kind: 'doc', why: 'raised by the upstream merge 2026-10-17' },

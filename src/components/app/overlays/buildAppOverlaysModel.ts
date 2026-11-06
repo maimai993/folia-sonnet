@@ -30,6 +30,13 @@ type NowPlayingToastProps = React.ComponentProps<typeof NowPlayingToast>;
 export type AppOverlaysModel = {
     searchOverlay?: SearchOverlayProps | null;
     listeningArchiveOverlay?: ListeningArchiveProps | null;
+    /** 洛雪工作台（歌单 / 榜单 / 搜索 / 音源）：开合在 useLxWorkspaceStore，这里只放播放器回调。 */
+    lxWorkspace?: {
+        theme: any;
+        isDaylight: boolean;
+        onPlayTrack: (track: UnifiedSong) => void;
+        onAddToQueue: (track: UnifiedSong) => void;
+    } | null;
     debugOverlay?: DebugOverlayProps | null;
     memoryMonitor?: MemoryMonitorProps | null;
     floatingControls?: FloatingControlsProps | null;
@@ -224,6 +231,13 @@ export const buildAppOverlaysModel = ({
                     : stageTrackPillOpenSongCardLabel,
         }
         : null,
+    // 洛雪工作台不限页面：登录页选中洛雪音源那一行就能开，开在播放页上面也说得通。
+    lxWorkspace: {
+        theme,
+        isDaylight,
+        onPlayTrack: handleSearchResultPlay,
+        onAddToQueue: handleSearchResultAddToQueue,
+    },
     searchOverlay: currentView === 'home'
         ? {
             theme,

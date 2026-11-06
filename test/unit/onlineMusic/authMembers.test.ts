@@ -52,7 +52,15 @@ describe('the sign-in members of each built-in platform', () => {
         expect(Object.keys(getOnlineMusicProvider(providerId)!.auth!).sort()).toEqual(members);
     });
 
-    it('has a row for every built-in platform', () => {
-        expect(listOnlineMusicProviders().map(provider => provider.id).sort()).toEqual(Object.keys(AUTH_MEMBERS).sort());
+    it('has a row for every built-in platform that signs in', () => {
+        expect(listOnlineMusicProviders()
+            .filter(provider => provider.capabilities.auth)
+            .map(provider => provider.id).sort()).toEqual(Object.keys(AUTH_MEMBERS).sort());
+    });
+
+    it('an accountless platform declares no sign-in members', () => {
+        const accountless = listOnlineMusicProviders().filter(provider => !provider.capabilities.auth);
+        expect(accountless.length).toBeGreaterThan(0);
+        for (const provider of accountless) expect(provider.auth, provider.id).toBeUndefined();
     });
 });
