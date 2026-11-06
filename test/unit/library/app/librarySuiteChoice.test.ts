@@ -67,6 +67,7 @@ describe('effective library suite', () => {
         expect(listLibrarySuiteOptions()).toEqual([
             { id: 'grid', labelKey: 'libraryTui.rendererGrid' },
             { id: 'bravais', labelKey: 'libraryBravais.suiteName' },
+            { id: 'rhine', labelKey: 'libraryRhine.rendererRhine' },
             { id: 'tui', labelKey: 'libraryTui.rendererTui' },
         ]);
         expect(listLibrarySuiteOptions()).toBe(listLibrarySuiteOptions());
@@ -164,12 +165,18 @@ describe('whether there is a choice', () => {
                 const actual = await importOriginal<typeof import('@/library/suites/bravais/entry')>();
                 return { ...actual, default: { ...actual.default, available: false } };
             });
+            // rhine 也是正式 suite，同样标成不可用，才复现得出「只剩 grid」的构建。
+            vi.doMock('@/library/suites/rhine/entry', async importOriginal => {
+                const actual = await importOriginal<typeof import('@/library/suites/rhine/entry')>();
+                return { ...actual, default: { ...actual.default, available: false } };
+            });
             const registry = await import('@/library/registry');
             expect(registry.listLibrarySuites().map(suite => suite.id)).toEqual(['grid']);
             expect(registry.hasLibrarySuiteChoice()).toBe(false);
             // 初始选择不可用时回退网格（B0 合入时 bravais 不在 registry 里）。
             expect(registry.resolveActiveLibrarySuiteId('bravais')).toBe('grid');
             vi.doUnmock('@/library/suites/bravais/entry');
+            vi.doUnmock('@/library/suites/rhine/entry');
         });
     });
 });

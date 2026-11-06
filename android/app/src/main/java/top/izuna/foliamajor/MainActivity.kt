@@ -256,6 +256,7 @@ class MainActivity : BridgeActivity() {
         registerPlugin(FilesystemPlugin::class.java)
         // 汽水音乐：签名宿主（隐藏 WebView + bdms.js）的原生桥。
         registerPlugin(FoliaQishuiPlugin::class.java)
+        // 「莱茵生命」三维专辑架现在走内嵌网页（RhineLabUI），原生渲染桥已移除。
         // YouTube Music：只管「登录一次、把 YouTube 的 cookie 交出来」，取数不经过原生
         // （youtubei.js 跑在主 WebView 里，见 FoliaYtmPlugin 的说明）。
         registerPlugin(FoliaYtmPlugin::class.java)

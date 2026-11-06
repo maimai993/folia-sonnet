@@ -115,6 +115,15 @@ export default {
     },
     "special": {"liked": "我喜欢的音乐", "cloud": "云盘", "personal-fm": "私人FM", "daily": "每日推荐", "all-songs": "全部歌曲", "local-favorites": "我喜欢", "navidrome-random": "随机音乐", "navidrome-favorites": "收藏"}
   },
+  "libraryRhine": {
+    "rendererRhine": "莱茵生命",
+    "stageTitle": "莱茵生命",
+    "stageHint": "三维专辑架",
+    "rotateHint": "正在切换到横屏…",
+    "play": "播放",
+
+
+  },
   "libraryTui": {
     "back": "返回",
     "sourceOnline": "在线 · {{provider}}",
@@ -2350,7 +2359,7 @@ export default {
     "aiCreditsRefresh": "刷新",
     "aiCreditsNote": "额度由群里的机器人记账：发「签到」每天领一次，发「查积分」看余额。",
     "aiMachineCodeTitle": "机器码",
-    "aiMachineCodeHint": "把这串发到群里即可绑定，之后每天发「签到」领 30 积分",
+    "aiMachineCodeHint": "把这串发到群里即可绑定，之后每天签到获取积分",
     "aiMachineCodeNote": "机器码就是这台设备的密钥：发到群里绑定，额度靠签到攒。换设备或重装会得到新的机器码，旧的自然作废。",
     "aiMachineCodeCopy": "复制",
     "aiMachineCodeCopied": "机器码已复制，去群里发它就能绑定",
@@ -5041,6 +5050,11 @@ export default {
       "title": "Bravais",
       "tag": "无限",
       "description": "一整面没有尽头的磁贴墙，拖动着浏览；内容在墙上翻牌更替，这一页的信息和操作在墙中间的缝里。"
+    },
+    "rhine": {
+      "title": "Rhine Lab",
+      "tag": "立体",
+      "description": "一座三维的档案架：歌单排成列，每张专辑是一份带光学环的档案卡。开屏动画、翻卡与检索都在这套终端界面里。"
     }
   },
   "deviceTypeOnboarding": {

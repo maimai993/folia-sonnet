@@ -21,6 +21,8 @@ installConsoleLogCapture();
 // buffer. Both no-op off Electron. See services/debug/debugModule.ts.
 installDebugModule();
 installMemorySampleFeed();
+// 只在安卓原生端有作用；桌面/网页会立刻返回，不会碰 Capacitor。
+// 莱茵生命的原生桥由插件 load() 自启动，入口不再需要唤醒（分层边界：只有 registry 能碰 suite）。
 // Cover size audit, left wired but switched off: it answered whether the provider CDNs honour the
 // size in a cover URL - they do - and that is not a question worth re-asking every session. The
 // collector and its panel are still in the tree, and `?probe=coverSizeAudit` still reaches them.

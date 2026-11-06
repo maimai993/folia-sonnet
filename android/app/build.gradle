@@ -41,10 +41,11 @@ def versionCodeOf = { String name ->
 
 android {
     namespace = "top.izuna.foliamajor"
+    // compileSdk 用 37：Filament 1.77.2 的 AAR 要求 37+，而「莱茵生命」的材质是
+    // 用它编的 —— 运行时降到 1.74 会让 .filamat 版本对不上（Filament 会直接 abort）。
+    // targetSdk 仍是 36，行为面不变，只是编译时能用新 API。
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
     defaultConfig {
         applicationId "top.izuna.foliamajor"
@@ -109,6 +110,15 @@ repositories {
     }
 }
 
+// Filament 1.77.2 会拖进来 kotlin-stdlib 2.4.0，而本项目的 Kotlin 编译器是 2.2.0 ——
+// 元数据版本读不了，整个 app 的 Kotlin 编译都会失败。它的 AAR 主体是 Java + 原生库，
+// 对 stdlib 没有 2.4 才有的依赖，钉回 2.2.0 是安全的。
+configurations.configureEach {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:2.2.0"
+    }
+}
+
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
@@ -137,6 +147,8 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // 「莱茵生命」的三维专辑架已改为内嵌网页（RhineLabUI），不再用 Filament 原生渲染，
+    // 对应的 filament-android 依赖一并去掉。
 }
 
 apply from: 'capacitor.build.gradle'

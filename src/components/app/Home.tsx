@@ -31,9 +31,18 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
     // 首页资源（在线收藏专辑、电台 feed、Navidrome 概览、文件夹树、导入与打开等首页动作）：首页一份，任何 suite 的
     // 首页都订阅同一份，换 suite 不重新请求；首页整个藏起或卸载时才作废（回来重新读）。
     const homeResources = useLibraryHomeResources(model.surfaceProps, { active: !isHomeFullyHidden });
-    if (isHomeFullyHidden) {
-        return null;
-    }
+    /*
+     * 首页藏起来时不卸载，只让它隐形。
+     *
+     * 原来是直接 `return null`，等于把整个首页 surface 连根拔掉。三维曲库
+     * （rhine）是内嵌的 iframe，卸载就意味着整个 WebView 上下文被销毁 ——
+     * 从歌词页退回来要重新加载、重新建 3D 场景、相机也回到初始位置，于是
+     * 就有了「退回来 3D 是空的、过一会儿才出来一点、位置还不对」。
+     *
+     * 现在隐藏只做视觉上的 `hidden` + 不可交互：iframe 原地留着，返回时
+     * 画面、镜头、播放指针全都在原来的地方。
+     */
+    const hidden = Boolean(isHomeFullyHidden);
 
     const homeSurface = resolveLibrarySurface('home', suiteId);
     const HomeSurface = homeSurface.component;
@@ -43,7 +52,12 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
             {/* 模组页面开着时原生首页整层 inert，并且自成层叠上下文（isolate）：集合层（GridView / GridMap / TUI 的
                 z-[110]）、宿主对话框（z-[120]/[140]）、开发版 suite 切换浮层只在这一层里比高低，整层压在页面（z-[60]）
                 下面——集合开着时 openHomeTab 打开的页面不会被它盖住。就地渲染的登录弹窗不在这一层里，仍在页面之上。 */}
-            <div className={activeEntry ? 'absolute inset-0 isolate' : 'absolute inset-0'} inert={Boolean(activeEntry)}>
+            <div
+                className={activeEntry ? 'absolute inset-0 isolate' : 'absolute inset-0'}
+                inert={Boolean(activeEntry) || hidden}
+                aria-hidden={hidden || undefined}
+                style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}
+            >
                 <GridViewOverlayHost
                     surfaceProps={model.surfaceProps}
                     onOpenCollection={model.onOpenCollection}

@@ -115,6 +115,15 @@ export default {
     },
     "special": {"liked": "Lagu Disukai", "cloud": "Cloud Drive", "personal-fm": "FM Pribadi", "daily": "Harian", "all-songs": "Semua Lagu", "local-favorites": "Favorit", "navidrome-random": "Acak", "navidrome-favorites": "Berbintang"}
   },
+  "libraryRhine": {
+    "rendererRhine": "Rhine Lab",
+    "stageTitle": "Rhine Lab",
+    "stageHint": "Rak album 3D",
+    "rotateHint": "Beralih ke lanskap…",
+    "play": "Putar",
+
+
+  },
   "libraryTui": {
     "back": "Kembali",
     "sourceOnline": "online · {{provider}}",
@@ -2349,7 +2358,7 @@ export default {
     "aiCreditsRefresh": "Segarkan",
     "aiCreditsNote": "Saldo dicatat bot di grup: kirim absen harian untuk menambah, dan perintah cek kredit untuk melihatnya.",
     "aiMachineCodeTitle": "Kode mesin",
-    "aiMachineCodeHint": "Kirim ini di grup untuk mengikat, lalu kirim absen harian untuk mendapat 30 kredit",
+    "aiMachineCodeHint": "Kirim ini di grup untuk mengikat, lalu absen setiap hari untuk mendapat kredit",
     "aiMachineCodeNote": "Kode mesin adalah kunci perangkat ini: ikat di grup dan kumpulkan kredit dengan absen. Perangkat baru atau pemasangan ulang menghasilkan kode baru, dan yang lama tidak berlaku.",
     "aiMachineCodeCopy": "Salin",
     "aiMachineCodeCopied": "Kode mesin disalin — kirim di grup untuk mengikat",
@@ -5040,6 +5049,11 @@ export default {
       "title": "Bravais",
       "tag": "Tanpa batas",
       "description": "Satu dinding ubin tanpa ujung yang bisa digeser. Konten berganti di dinding, sementara info dan tindakan halaman ada di celah di tengahnya."
+    },
+    "rhine": {
+      "title": "Rhine Lab",
+      "tag": "Ruang",
+      "description": "Rak tiga dimensi: playlist tersusun sebagai kolom dan setiap album adalah kartu arsip dengan cincin optik. Animasi pembuka, balik kartu, dan pencarian semuanya ada di antarmuka terminal ini."
     }
   },
   "deviceTypeOnboarding": {

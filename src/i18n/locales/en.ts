@@ -115,6 +115,15 @@ export default {
     },
     "special": {"liked": "Liked Songs", "cloud": "Cloud Drive", "personal-fm": "Personal FM", "daily": "Daily Picks", "all-songs": "All Songs", "local-favorites": "Favorites", "navidrome-random": "Random", "navidrome-favorites": "Starred"}
   },
+  "libraryRhine": {
+    "rendererRhine": "Rhine Lab",
+    "stageTitle": "Rhine Lab",
+    "stageHint": "3D album shelf",
+    "rotateHint": "Switching to landscape…",
+    "play": "Play",
+
+
+  },
   "libraryTui": {
     "back": "Back",
     "sourceOnline": "online · {{provider}}",
@@ -2349,7 +2358,7 @@ export default {
     "aiCreditsRefresh": "Refresh",
     "aiCreditsNote": "The bot in the group keeps the balance: send the daily check-in to earn, and the credit query to see it.",
     "aiMachineCodeTitle": "Machine code",
-    "aiMachineCodeHint": "Send this in the group to bind, then send the daily check-in to earn 30 credits",
+    "aiMachineCodeHint": "Send this in the group to bind, then check in every day to earn credits",
     "aiMachineCodeNote": "The machine code is this device's key: bind it in the group and earn credits by checking in. A new device or a reinstall gets a new code, and the old one stops working.",
     "aiMachineCodeCopy": "Copy",
     "aiMachineCodeCopied": "Machine code copied — send it in the group to bind",
@@ -5040,6 +5049,11 @@ export default {
       "title": "Bravais",
       "tag": "Infinite",
       "description": "One endless wall of tiles you drag around. Content flips into place on the wall, and the page's info and actions sit in a seam in the middle."
+    },
+    "rhine": {
+      "title": "Rhine Lab",
+      "tag": "Spatial",
+      "description": "A shelf in three dimensions: playlists line up as columns and every album is an archive card with optical rings. Boot sequence, card flips and search all live inside this terminal interface."
     }
   },
   "deviceTypeOnboarding": {

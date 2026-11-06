@@ -42,7 +42,7 @@ describe('library suite store', () => {
     it('uses the built-in initial choice (bravais) when the build does not override it', async () => {
         vi.stubEnv('VITE_LIBRARY_INITIAL_SUITE', undefined);
         const { useLibrarySuiteStore, setItem } = await loadStore();
-        expect(useLibrarySuiteStore.getState().suite).toBe('bravais');
+        expect(useLibrarySuiteStore.getState().suite).toBe('rhine');
         expect(setItem).not.toHaveBeenCalled();
     });
 

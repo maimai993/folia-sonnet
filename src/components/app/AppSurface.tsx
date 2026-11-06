@@ -411,7 +411,15 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                     transition: isHomeSurfaceRevealed
                         ? 'visibility 0s linear 0s'
                         : 'visibility 0s linear 0.25s',
-                    display: isHomeFullyHidden && !wallHandoff.keepsHome ? 'none' : 'block',
+                    /*
+                     * 不用 `display: none`。
+                     *
+                     * 首页里嵌着三维曲库（rhine）的 iframe，`display: none` 会让
+                     * 浏览器暂停它的渲染、甚至丢掉 WebGL 上下文；切到歌词页再
+                     * 回来，3D 场景就得重建，镜头位置也跟着回到初始值。
+                     * 保持 `display: block` 只改 `visibility`，页面原地待命。
+                     */
+                    display: 'block',
                 }}
             >
                 <motion.div
@@ -424,13 +432,26 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                     // lets what is under them through.
                     transition={{ duration: wallHandoff.active || !visualizerAroundWall.hasWallLeft ? 0 : 0.25, ease: 'easeInOut' }}
                 >
-                    {currentView === 'home' || currentView === 'player' || wallHandoff.keepsHome || holdsHomeForFlight ? (
-                        <Home
-                            model={homeModel}
-                            isHomeFullyHidden={isHomeFullyHidden && !wallHandoff.keepsHome}
-                            isInteractive={shouldShowHomeSurface}
-                        />
-                    ) : null}
+                    {/*
+                        首页常驻挂载。
+
+                        原来这里是个三元表达式，视图切到集合页 / 歌单页时整个
+                        `Home` 被卸载，里面内嵌的三维曲库 iframe 也跟着销毁 ——
+                        从歌词可视化退回来就是重新加载一遍、3D 场景重建、镜头
+                        归位。改成一直挂着，只靠外层的 visibility / inert 控制
+                        显示与交互，返回时画面原封不动。
+                    */}
+                    <Home
+                        model={homeModel}
+                        isHomeFullyHidden={
+                            isHomeFullyHidden ||
+                            (currentView !== 'home' &&
+                                currentView !== 'player' &&
+                                !wallHandoff.keepsHome &&
+                                !holdsHomeForFlight)
+                        }
+                        isInteractive={shouldShowHomeSurface}
+                    />
                 </motion.div>
             </div>
 

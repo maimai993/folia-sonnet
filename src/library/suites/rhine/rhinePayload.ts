@@ -249,3 +249,58 @@ export const buildRhinePayload = async (props: LibraryHomeSurfaceProps): Promise
         currentId,
     };
 };
+
+/* ───────────── 平台搜索 ───────────── */
+
+/**
+ * 平台搜索结果的稳定 id。
+ *
+ * 歌单里的档案用 `X-001` 这种编号，搜索结果没有编号可用，就用平台 + 曲目
+ * id 现拼一个 —— 只要同一首歌每次拼出来一样，「选中 / 播放 / 入队」就能
+ * 靠它找回原始曲目。
+ */
+export const searchIdOf = (song: unknown): string => {
+    const item = song as { source?: unknown; platform?: unknown; id?: unknown; songmid?: unknown } | null;
+    const platform = text(item?.source) || text(item?.platform) || 'search';
+    const id = text(item?.id) || text(item?.songmid);
+    return `S:${platform}:${id}`;
+};
+
+/**
+ * 把一首平台搜索结果包装成 RhineLab 认得的档案。
+ *
+ * 字段尽量复用歌单那条路径的口径（歌手、时长、能否播放），这样搜索结果在
+ * 三维阵列里和普通档案长得一样，不需要额外的渲染分支。
+ */
+export const songToSearchRecord = (song: unknown): RhineRecord => {
+    const item = song as {
+        name?: unknown;
+        title?: unknown;
+        album?: unknown;
+        al?: { name?: unknown };
+        cover?: unknown;
+        pic?: unknown;
+    } | null;
+    const title = text(item?.name) || text(item?.title) || '未知曲目';
+    const albumName = text((item?.album as { name?: unknown } | undefined)?.name) ?? text(item?.al?.name);
+    const cover =
+        text((item?.album as { picUrl?: unknown } | undefined)?.picUrl) ??
+        text(item?.cover) ??
+        text(item?.pic);
+    const artists = artistsOf(song);
+    return {
+        id: searchIdOf(song),
+        title,
+        en: albumName || '',
+        department: '平台搜索',
+        category: '平台搜索',
+        date: durationOf(song),
+        lead: artists || '未知艺术家',
+        clearance: 'ONLINE',
+        abstract: albumName ? `平台搜索 · ${albumName}` : '平台搜索结果',
+        findings: [],
+        source: '',
+        cover,
+        playable: playableOf(song),
+    };
+};

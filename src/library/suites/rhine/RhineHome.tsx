@@ -1,7 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryHomeSurfaceProps } from '../../core/suite/suite.contract';
-import { buildRhinePayload, queueOf, type RhinePayload } from './rhinePayload';
+import { buildRhinePayload, queueOf, searchIdOf, songToSearchRecord, type RhinePayload } from './rhinePayload';
+import { omni } from '../../../services/onlineMusic/omni';
+import { activeProviderId } from '../../../services/onlineMusic/omni/activeProvider';
+import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
+import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
+import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
+import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { getPhoneInsets, subscribePhoneInsets } from '../../../services/phoneInsets';
+
+/**
+ * 当前是否有一个**登录了**的在线平台。
+ *
+ * `omni.searchSongs` 在没登录时不会报错，只是安静地回一个空页；界面那边就
+ * 分不清「搜不到」和「没登录」。这里补上这个判断，好让提示说人话。
+ */
+const hasActiveOnlineProvider = (): boolean => {
+    const accounts = useOnlineProviderAccountStore.getState();
+    const id = activeProviderId();
+    const record = (accounts as { accounts?: Record<string, { loggedIn?: boolean }> }).accounts?.[id];
+    return Boolean(record?.loggedIn);
+};
 import { openLoginWindow } from '../../../components/login/loginWindowStore';
 import { Button } from '../../../components/ui/Button';
 import { LogIn } from 'lucide-react';
@@ -21,11 +41,13 @@ import { LogIn } from 'lucide-react';
 const RHINE_PAGE = './rhinelab/rhine.htm#folia';
 
 const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const [ready, setReady] = useState(false);
     /** 转换好的曲库载荷；iframe 就绪后推给它。 */
     const payloadRef = useRef<RhinePayload | null>(null);
+    /** 当前界面语言，跟着 Folia 的设置走。 */
+    const language = i18n.resolvedLanguage || i18n.language || 'en';
     /** 把载荷 postMessage 进 iframe。曲目对象原样带走，点开档案时要用它播放。 */
     const pushPayload = useCallback((): void => {
         const frame = frameRef.current;
@@ -33,6 +55,56 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
         if (!frame?.contentWindow || !payload) return;
         frame.contentWindow.postMessage({ type: 'rhine-library', payload }, '*');
     }, []);
+
+    /*
+     * 把语言、明暗主题和安全区送进三维阵列。
+     *
+     * 那边是独立的网页，取不到 Folia 的 i18n / 主题 store / CSS 变量，只能
+     * 由这里推过去。单独发一条消息而不是塞进载荷：换语言或切主题时不用重算
+     * 整个曲库，那边收到就地重绘。
+     *
+     * 安全区尤其重要：安卓 WebView 里 `env(safe-area-inset-*)` 基本报 0，
+     * iframe 里更拿不到宿主的 `--folia-safe-area-*` 变量。真实值由原生侧算好
+     * （phoneInsets），这里必须显式送进去，否则顶部那排按钮永远压在状态栏下面。
+     */
+    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
+    const pushInsets = useCallback((frame: HTMLIFrameElement | null): void => {
+        if (!frame?.contentWindow) return;
+        const insets = getPhoneInsets();
+        frame.contentWindow.postMessage({ type: 'rhine-insets', insets }, '*');
+    }, []);
+    useEffect(() => {
+        const frame = frameRef.current;
+        if (!frame?.contentWindow) return;
+        frame.contentWindow.postMessage({ type: 'rhine-language', language }, '*');
+        frame.contentWindow.postMessage(
+            { type: 'rhine-theme', theme: isDaylight ? 'light' : 'dark' },
+            '*',
+        );
+        pushInsets(frame);
+    }, [language, isDaylight, ready, pushInsets]);
+    // 转屏、进全屏、状态栏收放都会改变安全区，跟着推。
+    useEffect(() => subscribePhoneInsets(() => pushInsets(frameRef.current)), [pushInsets]);
+
+    /*
+     * 首页被盖住时让三维场景停下来。
+     *
+     * 首页现在是常驻挂载的（为了从歌词页退回来时 iframe 不被销毁），代价是
+     * 它会在后台继续跑 raf：一边是 Three.js 的全速渲染，一边是歌词可视化
+     * 自己在画的东西，两个抢 GPU，表现出来就是「进了可视化特别卡」。
+     *
+     * `isInteractive` 就是「首页此刻真的在台前」——它由宿主的可见性算出来，
+     * 进集合页、进歌词页、被弹窗盖住都会变 false。跟着它暂停/恢复最省心，
+     * 也不用在 iframe 里猜自己是不是被挡住了。
+     */
+    useEffect(() => {
+        const frame = frameRef.current;
+        if (!frame?.contentWindow) return;
+        frame.contentWindow.postMessage(
+            { type: 'rhine-visibility', visible: Boolean(props.isInteractive) },
+            '*',
+        );
+    }, [props.isInteractive, ready]);
 
     /*
      * 曲库 → 三维阵列。
@@ -72,8 +144,98 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
         const play = props.onPlaySong;
         const enqueueAll = props.onAddAllToQueue;
         const onMessage = (event: MessageEvent): void => {
-            const data = event.data as { type?: string; id?: string } | null;
-            if (!data || typeof data.id !== 'string') return;
+            const data = event.data as { type?: string; id?: string; query?: string } | null;
+            if (!data) return;
+
+            /*
+             * 平台搜索。
+             *
+             * 三维阵列里的 ARCHIVE INDEX 原本只能搜已经进了歌单的歌。这里让
+             * 它直接问 Folia 的在线曲库（`omni.searchSongs`），结果按同一套
+             * 档案格式回传 —— 搜到什么就能直接播、直接入队。
+             */
+            /*
+             * 直接开 Folia 自己的设置 / 搜索。
+             *
+             * 三维阵列里那套 SYSTEM SETTINGS 和 ARCHIVE INDEX 只覆盖它自己
+             * 那几个项；Folia 的设置（主题、语言、资料库界面、播放……）和原版
+             * 搜索框才是完整的那一份。与其在 iframe 里复刻一遍，不如把这两个
+             * 入口指回宿主 —— 用户点「设置」看到的就是他熟悉的那个设置。
+             */
+            if (data.type === 'rhine-open-settings') {
+                useSettingsModalStore.getState().openSettings('options');
+                return;
+            }
+            if (data.type === 'rhine-open-search') {
+                const query = typeof data.query === 'string' ? data.query.trim() : '';
+                if (query) {
+                    const store = useSearchNavigationStore.getState();
+                    store.setSearchQuery(query);
+                    void store.submitSearch({
+                        query,
+                        sourceTab: 'all',
+                        deps: {
+                            localSongs: props.localSongs,
+                            localLibraryCatalog: props.localLibraryCatalog,
+                            t: (key: string, fallback?: string) => fallback ?? t(key),
+                        },
+                        returnView: 'player',
+                    });
+                }
+                return;
+            }
+
+            if (data.type === 'rhine-search') {
+                const query = typeof data.query === 'string' ? data.query.trim() : '';
+                const frame = event.source as Window | null;
+                if (!frame) return;
+                if (!query) {
+                    frame.postMessage({ type: 'rhine-search-result', query, records: [] }, '*');
+                    return;
+                }
+                void omni
+                    .searchSongs(query, { limit: 24, offset: 0 })
+                    .then(page => {
+                        const songs = (page?.items ?? []) as unknown[];
+                        /*
+                         * `omni.searchSongs` 在没有登录平台、或者当前平台不支持
+                         * 搜索时**不抛错**，直接回一个空页。那种情况下界面只是
+                         * 「没结果」，用户完全看不出是没登录还是真的搜不到。
+                         * 带上 `reason` 让三维阵列那边把话说清楚。
+                         */
+                        const reason = songs.length
+                            ? undefined
+                            : hasActiveOnlineProvider()
+                              ? 'empty'
+                              : 'no-provider';
+                        frame.postMessage(
+                            {
+                                type: 'rhine-search-result',
+                                query,
+                                records: songs.map(songToSearchRecord),
+                                songs: Object.fromEntries(
+                                    songs.map(song => [searchIdOf(song), song]),
+                                ),
+                                reason,
+                            },
+                            '*',
+                        );
+                    })
+                    .catch((error: unknown) => {
+                        frame.postMessage(
+                            {
+                                type: 'rhine-search-result',
+                                query,
+                                records: [],
+                                error: String((error as { message?: string })?.message ?? error),
+                            },
+                            '*',
+                        );
+                    });
+                return;
+            }
+
+            if (typeof data.id !== 'string') return;
             if (data.type !== 'rhine-play' && data.type !== 'rhine-enqueue') return;
             const payload = payloadRef.current;
             const song = payload?.songs[data.id];
@@ -108,10 +270,19 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
      */
     const loginButton = (
         <div
-            className="lattice-back absolute z-50"
+            /*
+             * 不要 `lattice-back`：那个类是别的 suite 给「浮在磁贴墙上」的按钮
+             * 配的毛玻璃圆环底。这里背后是一整块浅色三维场景，圆环和 Button
+             * 自己的实心底叠在一起就是两个形状打架。
+             *
+             * 位置让开顶部安全区：三维阵列的 `.brand` 就在左上角，按钮压在它
+             * 身上会盖住大半个 RHINE LAB 标题。往下放到品牌块下面那一带，
+             * 仍然贴着左边，不挡任何东西。
+             */
+            className="absolute z-50"
             style={{
-                left: 'calc(16px + var(--folia-safe-area-left, 0px))',
-                top: 'calc(16px + var(--folia-safe-area-top, 0px))',
+                left: 'calc(12px + var(--folia-safe-area-left, 0px))',
+                top: 'calc(96px + var(--folia-safe-area-top, 0px))',
             }}
         >
             <Button
