@@ -26,7 +26,7 @@ import { assertLibrarySuiteChromeActions } from './suiteChrome';
 export const DEFAULT_LIBRARY_SUITE_ID: LibrarySuiteId = 'grid';
 
 /** 没有构建变量覆盖时的初始选择：bravais（下一版起的默认，2026-10-10 用户定）。 */
-const LIBRARY_SUITE_INITIAL_CHOICE_FALLBACK: LibrarySuiteId = 'bravais';
+const LIBRARY_SUITE_INITIAL_CHOICE_FALLBACK: LibrarySuiteId = 'rhine';
 
 /**
  * 初始选择的取值：构建变量（VITE_LIBRARY_INITIAL_SUITE）给了非空值就用它，否则用内置的初始选择。
