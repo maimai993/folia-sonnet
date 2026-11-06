@@ -1,8 +1,7 @@
-import type { LibraryHomeSurfaceProps } from '../../core/suite/suite.contract';
 import { omni } from '../../../services/onlineMusic/omni';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
-import { collectCollections } from './rhineLibrary';
+import { collectCollections, type RhineCollectionInputs } from './rhineLibrary';
 
 // src/library/suites/rhine/rhinePayload.ts
 //
@@ -151,7 +150,7 @@ const playableOf = (song: unknown): boolean => {
  * 组装注入用的载荷。没有任何歌单时返回 `null` —— 那种情况就让 RhineLab 用它自己的
  * 示例档案，至少屏上不是空的。
  */
-export const buildRhinePayload = async (props: LibraryHomeSurfaceProps): Promise<RhinePayload | null> => {
+export const buildRhinePayload = async (props: RhineCollectionInputs): Promise<RhinePayload | null> => {
     const entries = collectCollections(props).slice(0, MAX_COLUMNS);
     if (!entries.length) return null;
 
