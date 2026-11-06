@@ -8,6 +8,7 @@ import type { LibraryAccountController } from '../account/account.contract';
 import { isOnlineHomeTab, resolveHomeOnlineSource, resolveHomeTabs, translateHomeTabs } from './homeSources';
 import { resolveActiveProviderSummary } from '../account/accountRules';
 import { readOnlineProviderCapabilities, readOnlineProviderLabel } from './online/onlineHomeProvider.service';
+import { useLxSquareCollections } from './online/useLxSquareCollections';
 import {
     mergeProviderCollections,
     mergeProviderFeedOwners,
@@ -74,6 +75,13 @@ export const useLibraryHomeSources = ({
     const provider = useMemo(() => resolveActiveProviderSummary(providers, providerId), [providerId, providers]);
     const capabilities = readOnlineProviderCapabilities(providerId);
     const { userLibrary, playlists: canListPlaylists, userAlbums, recommendations, personalFmModes, explore } = capabilities;
+    /*
+     * 洛雪没有账号，也就没有「我的收藏歌单」—— 但它的歌单页不该是空的：
+     * 选中洛雪时，这一屏换成四家平台的歌单广场（四家交替，点进去就是真实曲目）。
+     * 这跟「全部」是同一套数据（ProviderCollection），只是来源换成了公开歌单广场。
+     */
+    const isLxmusic = providerId === 'lxmusic';
+    const lxSquare = useLxSquareCollections(isLxmusic);
     const online = useMemo(() => {
         const base = resolveHomeOnlineSource({
             providerId,
@@ -85,7 +93,16 @@ export const useLibraryHomeSources = ({
             fallbackCloud: cloudPlaylist,
             platformAvailable: true,
         });
-        if (!allProviders) return base;
+        // 洛雪：歌单页直接给广场内容。哪怕还没取到，也先把页签当成可用（否则会显示「该平台不支持」）。
+        const own = isLxmusic
+            ? {
+                ...base,
+                collections: lxSquare.length > 0 ? lxSquare : base.collections,
+                canUsePlaylists: true,
+                ...(lxSquare.length > 0 ? { accountView: 'authenticated' as const, providerLabel: readOnlineProviderLabel(providerId) } : {}),
+            }
+            : base;
+        if (!allProviders) return own;
         /*
          * 「全部」：当前平台不变（登录、搜索、播放仍按它走），只有首页这一屏的数据换成各家歌单的合并结果。
          *
@@ -97,7 +114,9 @@ export const useLibraryHomeSources = ({
          * - `accountView` 同理：当前平台没登录时它是 guest，墙会整个空着、只剩登录入口，
          *   而别的平台是登录着的。合并出东西了就按「有内容」显示（登录入口仍在缝里的账户位上）。
          */
-        const merged = mergeProviderCollections(providers);
+        // 洛雪也在这个范围里：它没有账号，「全部」时把广场排在其它家前面。
+        const mergedOthers = mergeProviderCollections(providers);
+        const merged = isLxmusic && lxSquare.length > 0 ? [...lxSquare, ...mergedOthers] : mergedOthers;
         /*
          * 收藏专辑与电台跟歌单一样要合并：只换 collections 的话，这两份数据还按「当前平台」
          * 去读 —— 当前这家居然不支持（或没登录）时，专辑与电台两个页签就是空的，明明别的平台
@@ -106,7 +125,7 @@ export const useLibraryHomeSources = ({
          */
         const feedOwners = mergeProviderFeedOwners(providers, id => readOnlineProviderCapabilities(id));
         return {
-            ...base,
+            ...own,
             collections: merged,
             canUsePlaylists: merged.length > 0,
             canUseAlbums: (feedOwners.albums?.length ?? 0) > 0,
@@ -117,7 +136,7 @@ export const useLibraryHomeSources = ({
     }, [
         // capabilities 每次读都是新对象：按用到的几个开关比较。
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        allProviders, canListPlaylists, cloudPlaylist, explore, personalFmModes, playlists, provider, providers, providerId,
+        allProviders, canListPlaylists, cloudPlaylist, explore, isLxmusic, lxSquare, personalFmModes, playlists, provider, providers, providerId,
         recommendations, t, user, userAlbums, userLibrary,
     ]);
 

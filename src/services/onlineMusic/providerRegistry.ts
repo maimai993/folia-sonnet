@@ -17,6 +17,7 @@ import { feiniuProvider } from './feiniuProvider';
  * 上游那份连同 `test/unit/qishui/` 先留着（vite-env 的桥类型还引它），不注册。
  */
 import { qishuiProvider } from './qishuiProvider';
+import { installLxAudioRouting, lxmusicProvider } from './lxmusic/lxmusicProvider';
 
 // src/services/onlineMusic/providerRegistry.ts
 
@@ -121,3 +122,8 @@ registerOnlineMusicProvider(ytmProvider);
 registerOnlineMusicProvider(spotifyProvider);
 registerOnlineMusicProvider(feiniuProvider);
 registerOnlineMusicProvider(qishuiProvider);
+// 洛雪音源：用户导入的自定义音源聚合 provider（搜索复用原生 provider，播放 / 歌词用导入的音源续地址）。
+registerOnlineMusicProvider(lxmusicProvider);
+// 装上 omni 的「取地址之前」扩展点：导入音源后，其它 provider 的歌也先问音源，
+// 音源交不出地址才回落到各家自己的播放接口。没导入音源时这层直接让路。
+installLxAudioRouting();

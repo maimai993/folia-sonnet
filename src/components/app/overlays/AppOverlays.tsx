@@ -2,12 +2,14 @@ import React from 'react';
 import FloatingPlayerControls from '../../FloatingPlayerControls';
 import SearchWorkspace from '../search/SearchWorkspace';
 import ListeningArchive from '../listeningArchive/ListeningArchive';
+import LxWorkspace from '../../lxmusic/LxWorkspace';
 import DevDebugOverlay from '../../DevDebugOverlay';
 import MemoryMonitorWindow from '../../debug/MemoryMonitorWindow';
 import NowPlayingToast from './NowPlayingToast';
 import type { AppOverlaysModel } from './buildAppOverlaysModel';
 import { countRender } from '../../../dev/renderCount';
 import { useLatticeControlsStore } from '../../../stores/useLatticeControlsStore';
+import { useLxWorkspaceStore } from '../../../stores/useLxWorkspaceStore';
 
 // Centralized app-level overlay renderer so App.tsx does not mount leaf overlays directly.
 type AppOverlaysProps = {
@@ -17,9 +19,12 @@ type AppOverlaysProps = {
 const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
     countRender('AppOverlays');
     const isCurrentSongPosterVisible = useLatticeControlsStore(state => state.isCurrentSongPosterVisible);
+    const isLxWorkspaceOpen = useLxWorkspaceStore(state => state.isOpen);
+    const closeLxWorkspace = useLxWorkspaceStore(state => state.close);
     const {
         searchOverlay,
         listeningArchiveOverlay,
+        lxWorkspace,
         debugOverlay,
         memoryMonitor,
         floatingControls,
@@ -99,6 +104,9 @@ const AppOverlays: React.FC<AppOverlaysProps> = ({ model }) => {
             {searchOverlay && <SearchWorkspace {...searchOverlay} />}
 
             {listeningArchiveOverlay && <ListeningArchive {...listeningArchiveOverlay} />}
+
+            {/* 洛雪工作台：入口在登录页（选洛雪音源那一行），播放器回调只有这一层拿得到。 */}
+            {isLxWorkspaceOpen && lxWorkspace && <LxWorkspace {...lxWorkspace} onClose={closeLxWorkspace} />}
 
             {debugOverlay && <DevDebugOverlay {...debugOverlay} />}
 

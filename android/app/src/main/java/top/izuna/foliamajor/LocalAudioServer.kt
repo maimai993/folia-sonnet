@@ -270,6 +270,10 @@ class LocalAudioServer(context: Context) {
     private val remoteAudioClient: OkHttpClient = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
+        // OkHttp 默认 10s 读超时：音源/CDN 限速时两次数据间隔很容易超过它，
+        // 一超时流就被掐断，WebView 看到的是「歌播到一半没了」。流式转发要用长读超时。
+        .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
     /** 凭据类资源不放行重定向：跟着跳转走会把请求头里的凭据带往别的主机。 */
     private val credentialResourceClient: OkHttpClient = remoteAudioClient.newBuilder()
@@ -629,8 +633,14 @@ class LocalAudioServer(context: Context) {
         // 有些 CDN 看 UA / Referer 决定给不给资源，不带的话会回一段 HTML 而不是音频
         // —— 那种回包喂进 <audio> 正是「Format error」的经典来源。
         request.header("User-Agent", REMOTE_AUDIO_USER_AGENT)
-        request.header("Referer", remoteAudioReferer(target))
-        // 调用方带来的头（飞牛的 music-token）最后写：同名的以它为准。
+        // 默认 Referer 只给白名单主机（酷我 / 网易）：那是它们 CDN 的防盗链要求。
+        // 对任意主机（洛雪音源给出的地址）塞一个 kuwo 的 Referer 反而会被回 403，
+        // 所以那边只用调用方带来的头，没带就不加。
+        val host = try { URL(target).host?.lowercase(Locale.ROOT) ?: "" } catch (ignored: Exception) { "" }
+        if (isRemoteAudioHostAllowed(host)) {
+            request.header("Referer", remoteAudioReferer(target))
+        }
+        // 调用方带来的头（飞牛的 music-token、音源要求的 Referer）最后写：同名的以它为准。
         if (extraHeaders != null) {
             for ((key, headerValue) in extraHeaders) {
                 request.header(key, headerValue)
@@ -650,18 +660,11 @@ class LocalAudioServer(context: Context) {
             }
             val contentType = body.contentType()?.toString() ?: "audio/mpeg"
             val contentRange = upstream.header("Content-Range")
-            var size = body.contentLength()
-            // 上游不给长度（chunked）时，拿 Content-Range 里的 total 兜底。
-            if (size < 0 && contentRange != null) {
-                val slash = contentRange.indexOf('/')
-                if (slash >= 0 && slash + 1 < contentRange.length) {
-                    try {
-                        size = contentRange.substring(slash + 1).trim().toLong()
-                    } catch (ignored: NumberFormatException) {
-                        size = -1
-                    }
-                }
-            }
+            // 只信上游给的「本次响应体」长度。上游 chunked 时保持 -1（不写 Content-Length，
+            // 靠 Connection: close 收尾）。绝不能拿 Content-Range 里的 total 冒充本次长度：
+            // 206 分片时 body 只有那一段，写整首的长度会让 WebView 一直等剩余字节，
+            // 连接一关就被判成流异常中断 —— 表现正是「一首歌播一半就停」。
+            val size = body.contentLength()
             val partial = upstream.code == 206 || contentRange != null
 
             Log.i(TAG, "remote " + target + " -> " + upstream.code +
@@ -679,9 +682,11 @@ class LocalAudioServer(context: Context) {
             response.append("Connection: close\r\n")
             if (size >= 0) {
                 response.append("Content-Length: ").append(size).append("\r\n")
-                if (contentRange != null) {
-                    response.append("Content-Range: ").append(contentRange).append("\r\n")
-                }
+            }
+            // Content-Range 必须独立转发：拖进度条、算总时长全靠它，
+            // 即使上游 chunked（没有 Content-Length）也要给，否则播放器只认得「一小段」。
+            if (contentRange != null) {
+                response.append("Content-Range: ").append(contentRange).append("\r\n")
             }
             response.append("\r\n")
             output.write(response.toString().toByteArray(StandardCharsets.US_ASCII))
