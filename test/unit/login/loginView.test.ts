@@ -364,6 +364,8 @@ describe('the texts the window can ask for', () => {
         const notes = Object.fromEntries(listOnlineMusicProviders().map(provider => [provider.id, omni.getLoginTexts(provider.id)?.caseNotes ?? null]));
         expect(notes).toEqual({
             netease: null, kugou: null, bodian: null, qishui: null, feiniu: null,
+            // 洛雪自定义音源不登录，也就没有为某一种失败另写的一句话。
+            lxmusic: null,
             // 扫错 App 的那一句按后端有没有 QQ 音乐 App 扫码说（这里还没问到后端）。
             qq: { 'local-service-unavailable': 'home.loginCaseQqRestart', 'wrong-scan-app': 'home.loginCaseQqWrongScanAppMobileOnly', 'device-limit': 'home.loginCaseQqDeviceLimit' },
             ytm: { 'browser-unfinished': 'home.loginCaseYtmUnfinished', 'no-browser': 'home.loginNoBrowserYtm' },

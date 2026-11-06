@@ -44,15 +44,23 @@ describe('what each platform declares for the sign-in window', () => {
             // 汽水与飞牛是我们自己接的平台：登录窗口要认得它们，不然会退化成中性灰的第一个字。
             qishui: { letter: '汽', color: '#f97316' },
             feiniu: { letter: '飞', color: '#0ea5e9' },
+            // 洛雪免登录，但登录窗口仍要画出它这一行的记号（点它直接打开音源工作台）。
+            lxmusic: { letter: '雪', color: '#e11d48' },
         });
     });
 
     it('its title and note, as text keys', () => {
         // The second lines a platform declares for single cases are pinned in loginView.test.ts.
-        const texts = Object.fromEntries(listOnlineMusicProviders().map(provider => {
-            const { title, note } = omni.getLoginTexts(provider.id)!;
-            return [provider.id, { title, note }];
-        }));
+        // A provider with capabilities.auth === false has no sign-in window at all: it declares no
+        // texts, and asking omni for them answers null. Only the platforms that sign in are pinned.
+        const texts: Record<string, { title: string; note: string }> = {};
+        for (const provider of listOnlineMusicProviders()) {
+            const declared = omni.getLoginTexts(provider.id);
+            if (declared) texts[provider.id] = { title: declared.title, note: declared.note };
+        }
+        for (const provider of listOnlineMusicProviders().filter(item => !item.capabilities.auth)) {
+            expect(omni.getLoginTexts(provider.id), provider.id).toBeNull();
+        }
         expect(texts).toEqual({
             netease: { title: 'home.loginTitle', note: 'home.loginNote' },
             kugou: { title: 'home.loginTitleKugou', note: 'home.loginNoteKugou' },
