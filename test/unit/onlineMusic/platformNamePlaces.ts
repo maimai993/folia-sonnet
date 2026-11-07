@@ -53,7 +53,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'electron/qishuiApiBridge.cjs': { n: { netease: 1, qishui: 142 }, kind: 'doc' },
     'electron/stageApi.cjs': { n: { netease: 18 }, kind: 'main', why: 'the stage API: its lyric source type and its search through the local service' },
     'electron/tempDirEnvironment.cjs': { n: { netease: 1 }, kind: 'doc' },
-    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the icons of the two desktop-only platforms' },
+    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2, appleMusic: 3 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the icons of the two desktop-only platforms, and the Apple Music icon added with that platform' },
     'src/components/Carousel3D.tsx': { n: { netease: 2 }, kind: 'doc' },
     'src/components/app/appWiring/useAppPlaybackQueue.ts': { n: { netease: 1, kugou: 1 }, kind: 'file', why: 'the playback-queue wiring: it carries the per-platform queue quirks that live in the wiring rather than in a platform folder' },
     'src/components/app/appWiring/useAppAccountsAndStage.ts': { n: { netease: 5 }, kind: 'file', why: 'the account/stage wiring: it opens the sign-in window and names 网易云 as the account that is always there' },
