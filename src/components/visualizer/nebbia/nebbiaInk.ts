@@ -3,6 +3,7 @@ import { windDrift, type NebbiaGlassMotion } from './nebbiaDrops';
 import { type Drip, type LaidChar } from './nebbiaScene';
 import { pointAt, type GlyphStroke } from './nebbiaGlyphs';
 import type { NebbiaSegments } from './nebbiaSegments';
+import { nebbiaInkWidth } from './nebbiaInkWidth';
 import { putInkBead } from './nebbiaInkIce';
 
 // src/components/visualizer/nebbia/nebbiaInk.ts
@@ -126,9 +127,8 @@ export const drawChar = (ink: InkContext, c: LaidChar, T: number, clarityIn: num
     let local = T - (fadeIn ? c.t : c.wt);
     const k = MASK_SCALE, cs = Math.cos(c.rot), sn = Math.sin(c.rot);
     ctx.setTransform(cs * c.s * k, sn * c.s * k, -sn * c.s * k, cs * c.s * k, (c.x - c.s / 2 * (cs - sn)) * k, (c.y - c.s / 2 * (sn + cs)) * k);
-    // 笔画多的字笔画收细一点，不然挤在一起糊成一团；最细 8 像素的下限也跟着收，不然字小时下限盖过了收细
-    const thin = clamp(Math.sqrt(9 / g.strokes.length), 0.55, 1);
-    const width = Math.max(ink.strokeWidth * thin, 8 * thin / c.s);
+    // 笔画多的字收细一点，不然挤在一起糊成一团；下限只防「细到看不见」，不再盖过用户设的宽度（#257）
+    const width = nebbiaInkWidth(ink.strokeWidth, c.s, g.strokes.length);
     const drips: [GlyphStroke, Drip, number][] = [];
     g.strokes.forEach((st, si) => {
         const dur = fadeIn ? 0 : inkTime * st.len / g.total;
