@@ -4,6 +4,7 @@ import kugouIcon from './kugou.webp';
 import bodianIcon from './bodian.webp';
 import feiniuIcon from './feiniu.png';
 import qishuiIcon from './qishui.png';
+import lxmusicIcon from './lxmusic.png';
 import spotifyIcon from './spotify.png';
 import ytmIcon from './ytm.png';
 import foliaIcon from './folia.svg';
@@ -26,6 +27,8 @@ export const PROVIDER_APP_ICONS: Record<string, string> = {
     bodian: bodianIcon,
     feiniu: feiniuIcon,
     qishui: qishuiIcon,
+    // 洛雪音源（免登录）：登录窗口那一行与切换器都亮这颗图标。
+    lxmusic: lxmusicIcon,
     // Spotify 与 YouTube Music 只在桌面端（Electron）跑得起来（它们要 `folia-spotify:` /
     // `folia-ytm:` 那种本地协议），但登录窗口那一列平台在两端都画，没图就只剩一个彩色的字。
     spotify: spotifyIcon,

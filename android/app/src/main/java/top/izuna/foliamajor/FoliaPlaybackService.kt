@@ -2976,6 +2976,8 @@ class FoliaPlaybackService : android.app.Service() {
                 "feiniu" -> return R.drawable.ic_provider_feiniu
                 // 汽水音乐：Electron-only，但通知栏角标资源仍保留一份白色剪影，保持全量接入。
                 "qishui" -> return R.drawable.ic_provider_qishui
+                // 洛雪音源（免登录）：绿色音符图标去色后的白色剪影（alpha 取三通道最大值）。
+                "lxmusic" -> return R.drawable.ic_provider_lxmusic
                 else -> return R.mipmap.ic_launcher
             }
         }
