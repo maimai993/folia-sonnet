@@ -332,6 +332,9 @@ class WallpaperLyricsState private constructor() {
         @Volatile
         private var current: Snapshot = EMPTY
 
+        /** 上一次记「锚点跳了」的时刻（#264 的诊断节流）。 */
+        private var lastAnchorDriftLogAtMs = 0L
+
         // ===== seek 回弹守卫 =====
         // 通知栏进度条拖动时，服务（onSeekTo）先把锚点对齐到目标位置；随后 JS 那边才收到
         // seek 命令、音频还没真 seek 过去，timeupdate 报的还是旧位置。这一份「位置回退」的
@@ -343,6 +346,20 @@ class WallpaperLyricsState private constructor() {
         private var nativeSeekPositionMs = 0L
         private const val SEEK_GUARD_WINDOW_MS = 600L
         private const val SEEK_GUARD_TOLERANCE_MS = 400L
+
+        /**
+         * 锚点被拽动的诊断阈值（#264）。
+         *
+         * 壁纸 / 叠层的歌词是「锚点 + 墙钟」自己往前推的，所以任何一次写锚点都等于把
+         * 时间轴重设一次。写入方不止一个（Web 每 500ms 推一次、原生在状态边界推、播放
+         * 服务的乐观播放/冻结），它们给出的位置略有差异时，屏幕上就是一次可见的跳动。
+         * 这里只把「播放中、位移超过 250ms」的那几次记下来，方便对日志判断是谁在跳 ——
+         * 不拦截：换源、seek、暂停本来就会让锚点跳。
+         */
+        private const val ANCHOR_DRIFT_LOG_MS = 250L
+
+        /** 上面那条日志最多两秒一行，别把 logcat 刷满。 */
+        private const val ANCHOR_DRIFT_LOG_INTERVAL_MS = 2_000L
 
         /**
          * 原生侧的一次「真 seek」：写锚点的同时打开回弹守卫窗。
@@ -483,6 +500,16 @@ class WallpaperLyricsState private constructor() {
                 // seek 守卫窗内的旧位置回推：位置丢弃，playing 照收 —— 那是独立的事实。
                 // 锚点沿用快照里已有的（原生 seek 刚写进去的那个）。
                 anchorPosition = previous.anchorPositionMs
+            }
+            // 诊断（#264）：播放中被拽动超过阈值就记一笔，节流见 ANCHOR_DRIFT_LOG_MS。
+            val drift = anchorPosition - previous.positionMs()
+            if (playing && previous.playing && Math.abs(drift) > ANCHOR_DRIFT_LOG_MS) {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastAnchorDriftLogAtMs > ANCHOR_DRIFT_LOG_INTERVAL_MS) {
+                    lastAnchorDriftLogAtMs = now
+                    android.util.Log.i("FoliaWallpaper",
+                            "lyrics anchor jumped " + drift + "ms while playing")
+                }
             }
             current = Snapshot(previous.title, previous.artist, previous.cover, previous.accent,
                     previous.baseColor, previous.motion, previous.backgroundMode, previous.image,

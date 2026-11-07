@@ -38,6 +38,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -46,6 +47,9 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.lang.reflect.Method
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.ArrayList
 import java.util.HashMap
@@ -124,6 +128,32 @@ class FoliaNativePlugin : Plugin() {
 
         /** 进度事件节流间隔。 */
         const val UPDATE_PROGRESS_INTERVAL_MS = 100L
+
+        /**
+         * 一次 httpRequest 允许回传的响应体上限（字节）。
+         *
+         * 走桥的整段响应在 Java heap 里会被放大好几倍：原始 byte[] → base64 字符串（1.33×）
+         * → `PluginResult.toString()` 再把整份 JSON 序列化成一条完整字符串。实测 256MB 堆
+         * 的机器上 20MB 左右就会 OOM（#261，`Failed to allocate 150994952 byte`）。
+         * 所以默认只给 8MiB：接口 JSON 远小于它，真更大的东西本来就不该走桥（#262）。
+         */
+        const val DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+        /**
+         * 调用方可以按需放宽到这么大，但不会再大。
+         *
+         * 32MiB 已经是「8 倍放大后仍然可能撞穿 256MB 堆」的临界值，只留给调用方明确知道
+         * 自己在干什么的场景（例如导出用的文本），不作为默认值。
+         */
+        const val HARD_MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+        /**
+         * 超限时给 JS 的那句话。
+         *
+         * 不复用底层异常的文字：那条里没有任何对调用方有意义的信息，而这句话会出现在
+         * 界面的错误提示里，得说清楚「是响应太大，不是网络坏了」。
+         */
+        const val RESPONSE_TOO_LARGE_MESSAGE = "Native HTTP response exceeds the bridge size limit"
 
         /** 外部 intent 带来、还没开拷的 uri（冷启动时 Web 层可能比intent 晚一步）。 */
         private val pendingExternalUris: MutableList<String> = ArrayList()
@@ -885,6 +915,20 @@ class FoliaNativePlugin : Plugin() {
         val bodyText = call.getString("bodyText", "")
         val bodyBase64 = call.getString("bodyBase64", "")
         val redirect = call.getString("redirect", "follow")
+        /*
+         * 响应怎么回给 JS：
+         *  · auto（默认）—— 文本类 Content-Type 且能按 UTF-8 严格解码时回 `bodyText`，
+         *    其余一律回 `bodyBase64`；
+         *  · text / base64 —— 调用方明确指定，不再猜。
+         *
+         * 为什么要分流：文本走 base64 等于白付 1.33× 的内存和一次解码，而走桥的整段响应
+         * 在 heap 里本来就要放大好几倍（见 DEFAULT_MAX_RESPONSE_BYTES 的说明）。
+         */
+        // getString(name, default) 在 Kotlin 侧仍是可空返回，取不到就按 auto 走。
+        val responseMode = call.getString("responseMode", "auto") ?: "auto"
+        val requestedMaxBytes = call.getInt("maxBytes") ?: DEFAULT_MAX_RESPONSE_BYTES
+        // 低于 64KiB 的上限只可能是调用方写错，抬到 64KiB；超过硬上限的按硬上限算。
+        val maxResponseBytes = requestedMaxBytes.coerceIn(64 * 1024, HARD_MAX_RESPONSE_BYTES)
         if (url == null || url.isEmpty()) {
             call.reject("Missing request url")
             return
@@ -1021,13 +1065,41 @@ class FoliaNativePlugin : Plugin() {
                             }
                             storeResponseCookies(requestUrl, response)
                             val responseBody = response.body
-                            val bytes = if (responseBody == null) ByteArray(0) else responseBody.bytes()
+                            /*
+                             * 先看 Content-Length：声明就超限的直接断开，连读都不读。
+                             * 分块（-1）的读不了声明，交给 readCappedBody 边读边数。
+                             */
+                            val declaredLength = responseBody?.contentLength() ?: -1L
+                            if (declaredLength > maxResponseBytes.toLong()) {
+                                Log.w(TAG, "httpRequest response too large: " + declaredLength + " bytes")
+                                call.reject(RESPONSE_TOO_LARGE_MESSAGE)
+                                return
+                            }
+                            val bytes = if (responseBody == null) {
+                                ByteArray(0)
+                            } else {
+                                readCappedBody(responseBody, maxResponseBytes)
+                            }
                             val result = JSObject()
                             result.put("status", response.code)
                             result.put("headers", responseHeaders)
-                            result.put("bodyBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                            // 实际字节数：排查「谁把响应撑大了」时唯一可信的口径。
+                            result.put("byteLength", bytes.size)
+                            val text = if (wantsTextPayload(responseMode, response.headers.get("Content-Type"))) {
+                                decodeUtf8Strict(bytes)
+                            } else {
+                                null
+                            }
+                            if (text != null) {
+                                result.put("bodyText", text)
+                            } else {
+                                result.put("bodyBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                            }
                             call.resolve(result)
                         }
+                    } catch (error: ResponseTooLargeException) {
+                        Log.w(TAG, "httpRequest response too large: " + error.observedBytes + " bytes")
+                        call.reject(RESPONSE_TOO_LARGE_MESSAGE)
                     } catch (error: IOException) {
                         call.reject(error.message, error)
                     } catch (error: IllegalArgumentException) {
@@ -1038,6 +1110,77 @@ class FoliaNativePlugin : Plugin() {
         } catch (error: IllegalArgumentException) {
             // 拼 URL / 建请求这一步才会抛（响应相关的 IOException 在回调里各自处理）。
             call.reject(error.message, error)
+        }
+    }
+
+    /**
+     * 响应超过桥上限定。
+     *
+     * 单独一类而不是直接抛 IOException：回调里要把「太大，别重试」和「网络坏了，可以重试」
+     * 分开，前者重试多少次都一样。
+     */
+    private class ResponseTooLargeException(val observedBytes: Long) : IOException("response too large")
+
+    /**
+     * 读响应体，边读边数，超限立刻停。
+     *
+     * 不能用 `ResponseBody.bytes()`：它读到 EOF 为止，一条几十 MB 的响应会把 heap 直接吃掉
+     * （#261）。声明了 Content-Length 时按它开初始缓冲，省掉 ByteArrayOutputStream 一路翻倍。
+     */
+    private fun readCappedBody(body: ResponseBody, limitBytes: Int): ByteArray {
+        val declared = body.contentLength()
+        val initialCapacity = if (declared in 1..limitBytes.toLong()) declared.toInt() else minOf(16 * 1024, limitBytes)
+        val output = ByteArrayOutputStream(initialCapacity)
+        val buffer = ByteArray(16 * 1024)
+        var total = 0
+        body.byteStream().use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count == -1) break
+                total += count
+                if (total > limitBytes) throw ResponseTooLargeException(total.toLong())
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toByteArray()
+    }
+
+    /** 这次响应该回 `bodyText` 还是 `bodyBase64`（mode 由调用方指定，默认按 Content-Type 猜）。 */
+    private fun wantsTextPayload(mode: String, contentType: String?): Boolean {
+        if ("base64".equals(mode, ignoreCase = true)) return false
+        if ("text".equals(mode, ignoreCase = true)) return true
+        return isTextualContentType(contentType)
+    }
+
+    /**
+     * Content-Type 看起来是不是文本。
+     *
+     * 只认明确的文本类型：`application/octet-stream`、图片、音视频都算二进位。猜错的代价
+     * 已经由 [decodeUtf8Strict] 兜住 —— 解不出来就当二进位回 base64，不会给出坏字符串。
+     */
+    private fun isTextualContentType(contentType: String?): Boolean {
+        if (contentType == null || contentType.isEmpty()) return false
+        val lower = contentType.lowercase(Locale.US)
+        return lower.startsWith("text/") ||
+                lower.startsWith("application/json") ||
+                lower.startsWith("application/xml") ||
+                lower.startsWith("application/javascript") ||
+                lower.startsWith("application/x-www-form-urlencoded") ||
+                lower.contains("+json") ||
+                lower.contains("+xml")
+    }
+
+    /** 严格 UTF-8 解码：解不出来说明是二进位，返回 null 让调用方退回 base64。 */
+    private fun decodeUtf8Strict(bytes: ByteArray): String? {
+        if (bytes.isEmpty()) return ""
+        return try {
+            StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString()
+        } catch (error: CharacterCodingException) {
+            null
         }
     }
 

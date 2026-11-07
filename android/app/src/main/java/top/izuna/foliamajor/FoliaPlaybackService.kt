@@ -118,6 +118,11 @@ class FoliaPlaybackService : android.app.Service() {
     /** 那次乐观播放切的那一刻的位置：冻回去要落在这儿，不能落在已经被推出去的地方。 */
     private var playConfirmAnchorMs = 0L
     private var playNudges = 0
+    /** 最近一次「暂停」是哪个入口来的、什么时候来的：用来挡同一次手势的第二条命令（#263）。 */
+    private var lastPauseAtMs = 0L
+    private var lastPauseSource: String? = null
+    /** 这一次暂停已经丢掉过一条回声 play 了：同一次暂停最多丢一条，别把真实操作也吃掉。 */
+    private var echoPlayDroppedForPause = false
     private val playConfirmCheck: Runnable = object : Runnable {
         override fun run() {
             if (!playConfirmPending) return
@@ -352,93 +357,11 @@ class FoliaPlaybackService : android.app.Service() {
         mediaSession = session
         session.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                /*
-                 * 原生播放（P1）：命令同时**直接**给原生播放器一份。
-                 *
-                 * 老路是「广播 → 插件 → JS → resumePlayback」，而挂了很久之后 WebView 那侧的
-                 * JS 会被节流甚至整个挂起 —— 用户原话：「长时间暂停后，通知中心点播放还是
-                 * 拉不起来」。原生这一路不吃那条限制。JS 那条命令照样发：界面、歌词、
-                 * 以及 Web 那条链路还得靠它。两边各管一半，重复一次 play 不会有副作用。
-                 */
-                try {
-                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.resumeFromSystem()
-                } catch (ignored: Throwable) {
-                    // 原生播放器不在（没开原生播放 / 插件没编进来）：交给 Web 那条路。
-                }
-                sendCommand("play")
-                /*
-                 * 锚点**这里就切回播放**，不等 Web 层回话 —— 原因见 onSeekTo 那条注释。
-                 *
-                 * 具体到这里：通知栏的播放/暂停是**在后台**按下的，而后台 WebView 的 JS
-                 * 定时器会被系统挂起，`useLyricsWallpaperFeed` 里负责推 playing 的那几个
-                 * effect 一个都跑不起来。壁纸那一侧是「锚点 + 墙钟」自己往前推的，
-                 * 缺这一次同步，它就一直冻在暂停那个锚点上 —— 表现就是
-                 * 「暂停后重新播放，歌词进度不动」（用户原话）。
-                 *
-                 * 但「按下播放」不等于「真的播起来了」：所以同时记下这一刻的位置，并挂一个
-                 * 宽限检查（见 PLAY_CONFIRM_GRACE_MS）。Web 层真起来了会推 playing 回来，
-                 * 那一次就把检查作废；没起来就把锚点冻回去 —— 否则就是用户看到的
-                 * 「状态栏、叠层的进度一直在走，实际一点声音都没有」。
-                 */
-                playConfirmAnchorMs = clampedAnchorPosition()
-                playConfirmPending = true
-                // 这是用户新按下的一次播放：允许再补发一次。
-                playNudges = 0
-                mainHandler.removeCallbacks(playConfirmCheck)
-                mainHandler.postDelayed(playConfirmCheck, PLAY_CONFIRM_GRACE_MS)
-                syncWallpaperAnchor(true)
-                /*
-                 * 与 onPause 对称：原生这一路已经接手在放了，快照就该说在放。
-                 *
-                 * 但**不要**顺手把 cachedPlaying 置 true —— 它同时是 playConfirmCheck
-                 * 里「Web 层回过话没有」的判据，置 true 会把锚点回收与补发一起关掉，
-                 * 那条「长时间暂停后播放拉不起来」的兜底就废了。cachedPlaying 只由
-                 * Web 推上来的状态写（见 updatePlaybackState）。
-                 */
-                if (top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()) {
-                    cachedState = PlaybackStateCompat.STATE_PLAYING
-                    cachedPositionMs = resolvePlaybackPositionMs()
-                    publishSnapshot()
-                    applyPlaybackState()
-                    publishNotification()
-                }
+                handlePlayCommand("mediaSession")
             }
 
             override fun onPause() {
-                // 同上（见 onPlay 那条注释）：直接停原生播放器，别只指望后台里那侧 JS。
-                try {
-                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.pauseFromSystem()
-                } catch (ignored: Throwable) {
-                    // 同上。
-                }
-                sendCommand("pause")
-                // 暂停按下就撤回那次乐观播放的确认：方向相反，不需要再等，也不会再补发。
-                playConfirmPending = false
-                playNudges = 0
-                mainHandler.removeCallbacks(playConfirmCheck)
-                // 同上，方向相反：不在这里冻结，壁纸会按 playing=true 一路外推到时间轴
-                // 尽头，那一句歌词就永远停在那儿 —— 这时候再点播放也回不来了，
-                // 因为锚点早就飞出去了。
-                syncWallpaperAnchor(false)
-                /*
-                 * 原生真的停下来了，就把状态就地写回来。
-                 *
-                 * cachedState 原先只有 Web 推状态那一条路会改，而这一下暂停常常发生在
-                 * WebView 被系统冻结的时候（退到后台、锁屏），那条推送根本不会到 ——
-                 * 于是快照里一直是 playing=true：界面按它在播继续外推进度条，播放键也
-                 * 变成「已经是播放中」，用户再点只是又发一次 pause，表现为
-                 * 「暂停了进度条还在走，而且点不动/无法播放」（用户报的就是这个）。
-                 *
-                 * 只在原生手上真有歌时改：走 <audio> 的那首归 Web 管，别抢。
-                 */
-                if (top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()) {
-                    cachedState = PlaybackStateCompat.STATE_PAUSED
-                    cachedPlaying = false
-                    cachedPositionMs = resolvePlaybackPositionMs()
-                    publishSnapshot()
-                    applyPlaybackState()
-                    publishNotification()
-                }
+                handlePauseCommand("mediaSession")
             }
 
             override fun onSkipToNext() {
@@ -491,6 +414,150 @@ class FoliaPlaybackService : android.app.Service() {
                 .setActions(supportedActions())
                 .setState(PlaybackStateCompat.STATE_NONE, 0, 1.0f)
                 .build())
+    }
+
+    /**
+     * 通知栏 / 锁屏 / 耳机的「播放」。
+     *
+     * 两条入口共用这一段：MediaSession 的回调（`onPlay`）与通知按钮那条广播
+     * （`handleMediaCommand("play")`）。以前只有前者做收尾，后者只把命令转给 JS ——
+     * 同一个手势被两条路各收一次时状态与兜底计时器就会对不上（#263）。
+     *
+     * @param source 命令来路，只进日志：排查「谁又发了一次 play」时唯一的分辨依据。
+     */
+    private fun handlePlayCommand(source: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (shouldDropEchoPlay(source, now)) {
+            Log.i(TAG, "dropping an echo play from " + source + " right after a pause")
+            return
+        }
+        Log.i(TAG, "play from " + source + " (state=" + cachedState +
+                ", confirmPending=" + playConfirmPending + ")")
+        /*
+         * 原生播放（P1）：命令同时**直接**给原生播放器一份。
+         *
+         * 老路是「广播 → 插件 → JS → resumePlayback」，而挂了很久之后 WebView 那侧的
+         * JS 会被节流甚至整个挂起 —— 用户原话：「长时间暂停后，通知中心点播放还是
+         * 拉不起来」。原生这一路不吃那条限制。JS 那条命令照样发：界面、歌词、
+         * 以及 Web 那条链路还得靠它。两边各管一半，重复一次 play 不会有副作用。
+         */
+        try {
+            top.izuna.foliamajor.player.FoliaNativePlayerPlugin.resumeFromSystem()
+        } catch (ignored: Throwable) {
+            // 原生播放器不在（没开原生播放 / 插件没编进来）：交给 Web 那条路。
+        }
+        sendCommand("play")
+        /*
+         * 锚点**这里就切回播放**，不等 Web 层回话 —— 原因见 onSeekTo 那条注释。
+         *
+         * 具体到这里：通知栏的播放/暂停是**在后台**按下的，而后台 WebView 的 JS
+         * 定时器会被系统挂起，`useLyricsWallpaperFeed` 里负责推 playing 的那几个
+         * effect 一个都跑不起来。壁纸那一侧是「锚点 + 墙钟」自己往前推的，
+         * 缺这一次同步，它就一直冻在暂停那个锚点上 —— 表现就是
+         * 「暂停后重新播放，歌词进度不动」（用户原话）。
+         *
+         * 但「按下播放」不等于「真的播起来了」：所以同时记下这一刻的位置，并挂一个
+         * 宽限检查（见 PLAY_CONFIRM_GRACE_MS）。Web 层真起来了会推 playing 回来，
+         * 那一次就把检查作废；没起来就把锚点冻回去 —— 否则就是用户看到的
+         * 「状态栏、叠层的进度一直在走，实际一点声音都没有」。
+         */
+        playConfirmAnchorMs = clampedAnchorPosition()
+        playConfirmPending = true
+        // 这是用户新按下的一次播放：允许再补发一次。
+        playNudges = 0
+        mainHandler.removeCallbacks(playConfirmCheck)
+        mainHandler.postDelayed(playConfirmCheck, PLAY_CONFIRM_GRACE_MS)
+        syncWallpaperAnchor(true)
+        /*
+         * 与 handlePauseCommand 对称：原生这一路已经接手在放了，快照就该说在放。
+         *
+         * 但**不要**顺手把 cachedPlaying 置 true —— 它同时是 playConfirmCheck
+         * 里「Web 层回过话没有」的判据，置 true 会把锚点回收与补发一起关掉，
+         * 那条「长时间暂停后播放拉不起来」的兜底就废了。cachedPlaying 只由
+         * Web 推上来的状态写（见 updatePlaybackState）。
+         */
+        if (top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()) {
+            cachedState = PlaybackStateCompat.STATE_PLAYING
+            cachedPositionMs = resolvePlaybackPositionMs()
+            publishSnapshot()
+            applyPlaybackState()
+            publishNotification()
+        }
+    }
+
+    /**
+     * 通知栏 / 锁屏 / 耳机的「暂停」。
+     *
+     * 与 [handlePlayCommand] 同一段收尾，两条入口共用（#263）：MediaSession 的 `onPause`
+     * 与通知按钮的 `handleMediaCommand("pause")`。以前通知按钮那条**只**停原生播放器并
+     * 转命令，不清 `playConfirmPending`、不撤补发计时器、也不更新 cachedState ——
+     * 于是「刚按过播放、4 秒宽限还没走完」时按暂停，计时器到点仍会补发一次 play，
+     * 表现就是「暂停后自己又响了」。
+     */
+    private fun handlePauseCommand(source: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        lastPauseAtMs = now
+        lastPauseSource = source
+        // 新的一次暂停，重新给「丢一条回声」的额度。
+        echoPlayDroppedForPause = false
+        Log.i(TAG, "pause from " + source + " (state=" + cachedState +
+                ", confirmPending=" + playConfirmPending + ")")
+        // 见 handlePlayCommand：直接停原生播放器，别只指望后台里那侧 JS。
+        try {
+            top.izuna.foliamajor.player.FoliaNativePlayerPlugin.pauseFromSystem()
+        } catch (ignored: Throwable) {
+            // 同上。
+        }
+        sendCommand("pause")
+        // 暂停按下就撤回那次乐观播放的确认：方向相反，不需要再等，也不会再补发。
+        playConfirmPending = false
+        playNudges = 0
+        mainHandler.removeCallbacks(playConfirmCheck)
+        // 同上，方向相反：不在这里冻结，壁纸会按 playing=true 一路外推到时间轴
+        // 尽头，那一句歌词就永远停在那儿 —— 这时候再点播放也回不来了，
+        // 因为锚点早就飞出去了。
+        syncWallpaperAnchor(false)
+        /*
+         * 原生真的停下来了，就把状态就地写回来。
+         *
+         * cachedState 原先只有 Web 推状态那一条路会改，而这一下暂停常常发生在
+         * WebView 被系统冻结的时候（退到后台、锁屏），那条推送根本不会到 ——
+         * 于是快照里一直是 playing=true：界面按它在播继续外推进度条，播放键也
+         * 变成「已经是播放中」，用户再点只是又发一次 pause，表现为
+         * 「暂停了进度条还在走，而且点不动/无法播放」（用户报的就是这个）。
+         *
+         * 只在原生手上真有歌时改：走 <audio> 的那首归 Web 管，别抢。
+         */
+        if (top.izuna.foliamajor.player.FoliaNativePlayerPlugin.hasActiveMedia()) {
+            cachedState = PlaybackStateCompat.STATE_PAUSED
+            cachedPlaying = false
+            cachedPositionMs = resolvePlaybackPositionMs()
+            publishSnapshot()
+            applyPlaybackState()
+            publishNotification()
+        }
+    }
+
+    /**
+     * 同一次手势被两条路各收一次时，把紧跟着暂停冒出来的那条 play 丢掉。
+     *
+     * 通知栏的播放键有两条到达路径（MediaSession 回调、通知 Action 的广播）。部分 ROM 的
+     * 媒体卡一次点击两条都走，而暂停的收尾里会重贴通知、把按钮换成「播放」——
+     * 于是「按暂停」变成 pause → play，用户听到的就是「暂停后自己又响了」（#263）。
+     *
+     * 只丢**不同来源**、**紧贴暂停**、且**这一次暂停还没丢过**的那一条：
+     *  · 同一来源的连续点击是用户真的按了两次；
+     *  · 间隔稍长的播放是用户真的想播；
+     *  · 一次暂停最多丢一条 —— 万一真丢了用户的播放，他再按一次就通了，
+     *    而不会出现「怎么按都没反应」。
+     */
+    private fun shouldDropEchoPlay(source: String, now: Long): Boolean {
+        if (source == lastPauseSource) return false
+        if (lastPauseAtMs <= 0L) return false
+        if (echoPlayDroppedForPause) return false
+        if (now - lastPauseAtMs > PLAY_AFTER_PAUSE_ECHO_MS) return false
+        echoPlayDroppedForPause = true
+        return true
     }
 
     /**
@@ -1186,30 +1253,17 @@ class FoliaPlaybackService : android.app.Service() {
             }
             "play" -> {
                 /*
-                 * 与 MediaSession 的 onPlay 同一条纪律：命令同时直接给原生播放器一份。
+                 * 与 MediaSession 的 onPlay 走**同一段**收尾（#263）：以前这里只把命令
+                 * 转给 JS，不清 playConfirmPending、也不更新 cachedState —— 于是
+                 * 「刚按过播放、宽限还没走完」时从通知按钮暂停，4 秒后仍会补发一次 play。
                  *
-                 * 之前这里和 pause 一起落在下面的 else 里，只转给 JS —— 而通知栏 / 锁屏按
-                 * 播放的时候 WebView 在后台，JS 定时器被系统挂起，`resumePlayback` 压根
-                 * 跑不起来。表现就是「后台按了播放，一点反应都没有」。上一首 / 下一首
-                 * 早就有原生兜底了，播放 / 暂停反而没有，这条链路一直是断的。
+                 * 原生这一路先动播放器、再由 handlePlayCommand 统一发 JS 命令。
                  */
-                try {
-                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.resumeFromSystem()
-                } catch (ignored: Throwable) {
-                    // 原生播放器不在（没开原生播放 / 插件没编进来）：交给 Web 那条路。
-                }
-                FoliaPlaybackPlugin.dispatchCommandFromReceiver(command,
-                        intent.getLongExtra(EXTRA_COMMAND_POSITION, 0L), null)
+                handlePlayCommand("notification")
             }
             "pause" -> {
-                // 同上，方向相反（见 MediaSession 的 onPause）。
-                try {
-                    top.izuna.foliamajor.player.FoliaNativePlayerPlugin.pauseFromSystem()
-                } catch (ignored: Throwable) {
-                    // 同上。
-                }
-                FoliaPlaybackPlugin.dispatchCommandFromReceiver(command,
-                        intent.getLongExtra(EXTRA_COMMAND_POSITION, 0L), null)
+                // 同上，方向相反：与 MediaSession 的 onPause 共用 handlePauseCommand。
+                handlePauseCommand("notification")
             }
             else -> {
                 // stop 没有原生兜底可做，原路转给 JS。
@@ -2802,6 +2856,15 @@ class FoliaPlaybackService : android.app.Service() {
         private const val PLAY_CONFIRM_GRACE_MS = 4000L
         /** 一次「按下播放」最多补发几次。补发不是死循环：试过一次还起不来就不再打扰 Web 层。 */
         private const val MAX_PLAY_NUDGES = 1
+
+        /**
+         * 暂停之后多久之内、来自**另一条**入口的 play 视为同一次手势的回声（#263）。
+         *
+         * 一次点击被两条路各收一次时，两条命令之间的间隔是毫秒级，但不同 ROM 的媒体卡
+         * 会隔着一次通知重贴才派第二条，实测用户感知到的恢复在 1 秒上下，所以窗口取 1s。
+         * 误伤由「同一次暂停最多丢一条」兜住：真按下播放的人再按一次就通了。
+         */
+        private const val PLAY_AFTER_PAUSE_ECHO_MS = 1000L
 
         /**
          * 壁纸心跳的巡检节拍（2 秒一敲），只在「真有东西在出声」时敲下去。
