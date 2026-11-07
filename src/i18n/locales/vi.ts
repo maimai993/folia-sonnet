@@ -1,6 +1,42 @@
-﻿// Vietnamese (vi) interface text, laid out line for line like en.ts.
+// Vietnamese (vi) interface text, laid out line for line like en.ts.
 
 export default {
+  "lxmusic": {
+    "importTitle": "Nhập nguồn nhạc",
+    "importNotice": "Nguồn đã nhập cung cấp địa chỉ phát và lời bài hát, được ưu tiên hơn API phát mặc định: tìm kiếm, danh sách phát và bảng xếp hạng vẫn lấy từ endpoint công khai sẵn có của LX Music. Chỉ khi mọi nguồn đều không đưa ra được địa chỉ thì mới (với công tắc cho phép) lùi về liên kết miễn phí công khai. Script nguồn chạy trực tiếp trong ứng dụng này, cùng mô hình tin cậy như LX Music desktop: chỉ nhập script bạn tin tưởng.",
+    "importFromUrl": "Từ URL",
+    "importFromFile": "Từ tệp",
+    "urlPlaceholder": "Địa chỉ script nguồn, https://…/xxx.js",
+    "import": "Nhập",
+    "importing": "Đang nhập…",
+    "chooseFile": "Chọn tệp .js / .json",
+    "dropFileHere": "Kéo tệp nguồn vào đây, hoặc",
+    "multipleFilesHint": "Có thể chọn nhiều tệp một lúc",
+    "importedOk": "Đã nhập nguồn «{{name}}»",
+    "importedWithError": "Đã nhập nguồn «{{name}}» nhưng script tải lỗi (xem bên dưới)",
+    "routeAllSongs": "Mọi bài hát ưu tiên qua nguồn đã nhập",
+    "routeAllSongsDesc": "Mọi bài hát thử nguồn đã nhập trước (kể cả bài từ NetEase, Kugou, QQ và nơi khác); API phát cũ chỉ là phương án dự phòng.",
+    "allowPublicFallback": "Cho phép liên kết miễn phí công khai làm dự phòng",
+    "allowPublicFallbackDesc": "Khi mọi nguồn đều lỗi thì được dùng liên kết miễn phí công khai. Tắt đi thì chỉ tính nguồn: không phát được là không phát.",
+    "importedSources": "Nguồn đã nhập",
+    "importedSourcesDesc": "Mỗi nguồn bật/tắt riêng; nguồn đã tắt không còn cấp địa chỉ nhưng vẫn nằm trong danh sách.",
+    "noSources": "Chưa nhập nguồn nào.",
+    "enabled": "Bật",
+    "delete": "Xóa",
+    "author": "Tác giả: {{name}}",
+    "loadFailed": "Tải lỗi",
+    "coverage": "Phạm vi phát",
+    "diagnosticsTitle": "Chẩn đoán phát nhạc",
+    "copyDiagnostics": "Sao chép chẩn đoán",
+    "clearDiagnostics": "Xóa nhật ký",
+    "copiedDiagnostics": "Đã sao chép chẩn đoán vào bộ nhớ tạm — dán ra đây.",
+    "clearedDiagnostics": "Đã xóa nhật ký phát nhạc.",
+    "diagnosticsHint": "Khi có bài không phát được, bấm «Sao chép chẩn đoán» rồi gửi 40 lần lấy địa chỉ gần nhất.",
+    "lastAttempt": "Lần lấy địa chỉ gần nhất",
+    "unknownSource": "nguồn không rõ",
+    "succeeded": "thành công",
+    "failed": "thất bại"
+  },
   "appleMusic": {
     "libraryPlaylistName": "Tất cả bài hát"
   },

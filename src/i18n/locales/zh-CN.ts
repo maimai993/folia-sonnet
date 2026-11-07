@@ -1,6 +1,42 @@
-﻿
+
 
 export default {
+  "lxmusic": {
+    "importTitle": "导入音源",
+    "importNotice": "导入的音源负责取播放地址与歌词，且优先于默认播放接口；搜索、歌单广场、榜单仍由洛雪内置的公开接口提供。只有所有音源都交不出地址时，才会（在开关允许的前提下）退回公开免费直链。音源脚本在本应用内直接执行，与洛雪桌面端同一个信任模型：只导入你信得过的脚本。",
+    "importFromUrl": "在线导入",
+    "importFromFile": "本地文件",
+    "urlPlaceholder": "音源脚本地址，https://…/xxx.js",
+    "import": "导入",
+    "importing": "导入中…",
+    "chooseFile": "选择 .js / .json 文件",
+    "dropFileHere": "把音源文件拖到这里，或",
+    "multipleFilesHint": "支持一次选多个文件",
+    "importedOk": "已导入音源「{{name}}」",
+    "importedWithError": "已导入音源「{{name}}」（但脚本加载出错，见下方）",
+    "routeAllSongs": "所有歌曲优先走音源",
+    "routeAllSongsDesc": "所有歌曲都先走导入的音源（含网易云 / 酷狗 / QQ 等其它来源）；音源都失败才回落原来的播放接口。",
+    "allowPublicFallback": "允许公开直链兜底",
+    "allowPublicFallbackDesc": "音源全失败时允许公开免费直链兜底。关掉后严格只用音源，放不出来就是放不出来。",
+    "importedSources": "已导入音源",
+    "importedSourcesDesc": "每一份音源可以单独启用或停用；停用的不参与取地址，但仍然留在列表里。",
+    "noSources": "还没有导入任何音源。",
+    "enabled": "启用",
+    "delete": "删除",
+    "author": "作者：{{name}}",
+    "loadFailed": "加载失败",
+    "coverage": "播放覆盖",
+    "diagnosticsTitle": "播放诊断",
+    "copyDiagnostics": "复制播放诊断",
+    "clearDiagnostics": "清空记录",
+    "copiedDiagnostics": "播放诊断已复制到剪贴板，粘贴发出来即可。",
+    "clearedDiagnostics": "播放记录已清空。",
+    "diagnosticsHint": "有歌放不出来时点「复制播放诊断」，把最近 40 次取地址的现场发给开发者。",
+    "lastAttempt": "最近一次取地址",
+    "unknownSource": "未知来源",
+    "succeeded": "成功",
+    "failed": "失败"
+  },
   "appleMusic": {
     "libraryPlaylistName": "全部歌曲"
   },

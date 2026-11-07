@@ -48,6 +48,7 @@ const MODE_HINTS: Record<string, string> = {
     prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
     nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
     machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
+    kinetic: '动画 PV 分镜：跳切、故障错位与装饰元素，节奏感极强',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -70,6 +71,7 @@ const MODE_NAMES: Record<string, string> = {
     prompt: '提示词',
     nebbia: '雾笺',
     machi: '町景',
+    kinetic: '文字PV',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -92,6 +94,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     prompt: 'ui.visualizerPrompt',
     nebbia: 'ui.visualizerNebbia',
     machi: 'ui.visualizerMachi',
+    kinetic: 'ui.visualizerKinetic',
 };
 
 export type DirectorParamSpec =
@@ -490,14 +493,34 @@ export const isBlockedDirectorMode = (mode: string, blockedModes: readonly strin
     Array.isArray(blockedModes) && blockedModes.includes(mode)
 );
 
-/** The modes the AI may choose from, with the label to show for each. */
-export const listDirectorModes = (t?: (key: string) => string): DirectorModeInfo[] => (
-    (BUILTIN_VISUALIZER_MODES as readonly string[]).map((id) => ({
+/**
+ * The modes the AI may choose from, with the label to show for each.
+ *
+ * `extra` carries the mod-contributed modes (`mod:<modId>:<id>`) the host has registered, so the
+ * AI's own "never use these" list can show them too. This module stays free of the visualizer
+ * registry: the host that has it hands the entries in (see listDirectorModesWithHost).
+ */
+export const listDirectorModes = (
+    t?: (key: string) => string,
+    extra: readonly DirectorModeInfo[] = [],
+): DirectorModeInfo[] => [
+    ...(BUILTIN_VISUALIZER_MODES as readonly string[]).map((id) => ({
         id,
         label: modeLabel(id, t),
         hint: MODE_HINTS[id] ?? '',
-    }))
-);
+    })),
+    ...extra,
+];
+
+/** A mod mode's label comes from the registry entry (mods declare their own), not from the tables above. */
+export const describeHostDirectorMode = (
+    id: string,
+    label: string,
+): DirectorModeInfo => ({
+    id,
+    label,
+    hint: MODE_HINTS[id] ?? '',
+});
 
 export const modeLabel = (mode: string, t?: (key: string) => string): string => {
     const key = MODE_LABEL_KEYS[mode];

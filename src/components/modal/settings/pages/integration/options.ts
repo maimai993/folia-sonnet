@@ -8,6 +8,11 @@ import { peekColorOsLyricsSupport } from '../../../../../platform/foliaColorOsLy
 // discordRichPresence, scrobbleSettings, obsBrowserSource, lyricApi, stageMode) are rows here.
 
 export const SERVICES: SettingsGroupDef = { id: 'services', titleKey: 'options.settingsHeadingServices' };
+/**
+ * 洛雪音源（fork 独有）：导入的脚本负责「取播放地址与歌词」，与那几家平台是同一层的东西 ——
+ * 所以它跟 navidrome、同步服务一样留在服务组里，只是每一项都单独成行（以前是一整块自绘面板，
+ * 行列都对不齐，跟这一页别的行风格割裂）。
+ */
 export const STREAMING: SettingsGroupDef = { id: 'streaming', titleKey: 'options.settingsHeadingStreaming' };
 /**
  * 系统歌词（fork 独有，安卓）：状态栏歌词（Lyricon）与 ColorOS 原生锁屏歌词。
@@ -64,4 +69,12 @@ export const O = {
         noteKey: 'options.colorOsLyricsDesc',
         available: () => isCapacitorAndroid() && peekColorOsLyricsSupport()?.supported === true,
     }),
+    /*
+     * 洛雪音源那几项。面板本身还是 LxSourcePanel（音源列表是有状态的，做成一行控件反而不像样），
+     * 但它的每一块都在这里登记一次：设置搜索要能搜到「音源」「播放路由」，行上的名字也只有一个来源。
+     */    lxImport: option(SERVICES, 'lxSourceImport', 'lxmusic.importTitle', { noteKey: 'lxmusic.importNotice' }),
+    lxRouteAll: option(SERVICES, 'lxRouteAllSongs', 'lxmusic.routeAllSongs', { noteKey: 'lxmusic.routeAllSongsDesc' }),
+    lxPublicFallback: option(SERVICES, 'lxAllowPublicFallback', 'lxmusic.allowPublicFallback', { noteKey: 'lxmusic.allowPublicFallbackDesc' }),
+    lxSources: option(SERVICES, 'lxSourceList', 'lxmusic.importedSources', { noteKey: 'lxmusic.importedSourcesDesc' }),
+    lxDiagnostics: option(SERVICES, 'lxDiagnostics', 'lxmusic.diagnosticsTitle'),
 };

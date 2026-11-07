@@ -53,7 +53,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'electron/qishuiApiBridge.cjs': { n: { netease: 1, qishui: 142 }, kind: 'doc' },
     'electron/stageApi.cjs': { n: { netease: 18 }, kind: 'main', why: 'the stage API: its lyric source type and its search through the local service' },
     'electron/tempDirEnvironment.cjs': { n: { netease: 1 }, kind: 'doc' },
-    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the icons of the two desktop-only platforms' },
+    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2, appleMusic: 2 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the icons of the two desktop-only platforms — plus the v0.7.27 one, whose icon row this fork added' },
     'src/components/Carousel3D.tsx': { n: { netease: 2 }, kind: 'doc' },
     'src/components/app/appWiring/useAppPlaybackQueue.ts': { n: { netease: 1, kugou: 1 }, kind: 'file', why: 'the playback-queue wiring: it carries the per-platform queue quirks that live in the wiring rather than in a platform folder' },
     'src/components/app/appWiring/useAppAccountsAndStage.ts': { n: { netease: 5 }, kind: 'file', why: 'the account/stage wiring: it opens the sign-in window and names 网易云 as the account that is always there' },
@@ -69,7 +69,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/command-palette/commands/settingsCommands.ts': { n: { netease: 5 }, kind: 'text', why: 'two commands of the listening report: their ids (also i18n keys), English titles and search words name the one platform that takes reports' },
     // 洛雪自定义音源工作台（#251）：这里的三个名字是用户导入的音源脚本自己声明的 source id，
     // 不是 Folia 内置平台在本项目里的规则。它们跟着导入的脚本走，没法拆进各家平台自己的文件夹。
-    'src/components/lxmusic/LxSourcePanel.tsx': { n: { netease: 2, qq: 2, kugou: 2 }, kind: 'stored', why: 'the source ids a 洛雪 script declares, listed in the import panel' },
+    'src/components/lxmusic/LxSourcePanel.tsx': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the source ids a 洛雪 script declares, listed in the import panel' },
     'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 6, qq: 3, kugou: 5 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
     'src/components/lxmusic/lxUi.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the labels drawn for the 洛雪 source ids' },
     'src/components/modal/FreeSoftwareNoticeModal.tsx': { n: { qq: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
