@@ -559,9 +559,16 @@ class WallpaperLyricsState private constructor() {
             tuning = resolveTuning(tuningPatch)
             // seek 守卫窗内的位置回退：整包推送也照丢。锚点沿用快照里已有的（原生 seek
             // 刚写进去的那个），其余字段照常更新。
+            //
+            // positionMs < 0 是调用方明确的「位置别听我的」：原生自己在播时，它每 250ms
+            // 报一次采样值写锚点，Web 那份是插值出来的，两边交替写就会把时间轴拽得来回抖
+            // （桌面歌词「突然往回走又恢复」）。这时沿用旧锚点，但时间轴、封面、主题照常换。
             var anchorElapsedMs = SystemClock.elapsedRealtime()
             var anchorPositionMs = positionMs
-            if (isSeekRegression(positionMs)) {
+            if (positionMs < 0L) {
+                anchorElapsedMs = previous.anchorElapsedMs
+                anchorPositionMs = previous.anchorPositionMs
+            } else if (isSeekRegression(positionMs)) {
                 anchorElapsedMs = previous.anchorElapsedMs
                 anchorPositionMs = previous.anchorPositionMs
             }

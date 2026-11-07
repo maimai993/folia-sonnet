@@ -1,6 +1,6 @@
 import {
-    DIORAMA_STEP_DISTANCE,
     composeLocal,
+    DIORAMA_STEP_DISTANCE,
     hashSeed,
     seededUnit,
     type DioramaFrame,

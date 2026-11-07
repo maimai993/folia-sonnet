@@ -10,18 +10,15 @@ import { selectVisualizerSettingsSnapshot, useVisualizerSettingsStore } from '..
 import { PictureGrid, Tooltip } from '../../modal/settings/kit';
 import { kitTransition, useKitReducedMotion } from '../../modal/settings/kit/motion';
 import StudioWindow from '../../shared/StudioWindow';
-import { Button } from '../../ui';
 import { visualizersRegistry } from '@/mods/folium/registries/visualizers';
 import { useFoliumRegistryEntries } from '@/mods/runtime/registry';
-import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
+import { colorWithAlpha } from '../colorMix';
 import { type PreviewPlaceholderId } from '../PreviewPlaceholder';
 import { VISUALIZER_REGISTRY, getVisualizerModeLabel, getVisualizerRegistryEntry } from '../registry';
 import VisPlaygroundPreviewHotspots, { type VisPlaygroundEditSection, type VisPlaygroundHotspotSection } from './VisPlaygroundPreviewHotspots';
-import VisPlaygroundSampleStage from './VisPlaygroundSampleStage';
+import VisPlaygroundSampleStage, { SampleBox } from './VisPlaygroundSampleStage';
 import VisPlaygroundSettingsPanel from './VisPlaygroundSettingsPanel';
 import FontPicker, { type LocalFontEntry } from './FontPicker';
-import FontMarketDialog from '../../modal/FontMarketDialog';
-import { type FontMarketInstallResult, writeFontMarketChoice } from '../../../services/fontMarket';
 import { useTuningDrafts } from './useTuningDrafts';
 import { useVisualizerStyleAssets } from '../useVisualizerStyleAssets';
 import type { VisualizerBackgroundActions, VisualizerBackgroundConfig } from '../backgrounds/definition';
@@ -188,13 +185,13 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const [isPreviewPaused, setIsPreviewPaused] = useState(false);
     const [previewSource, setPreviewSource] = useState<PreviewSource>('builtin');
     const previewBoxRef = useRef<HTMLDivElement>(null);
-    // 内置示例让位给「实时」时，这里放播放器现在显示的内容；没有歌词就是 null。
+    // What the player shows now, when the sample is set aside for it; null while it has no lyrics.
     const livePreview = useLivePreviewFeed({ enabled: previewSource === 'live', paused: isPreviewPaused, stageRef: previewBoxRef });
     const live = livePreview.content;
-    // 内置示例的时钟；右边那一列小图也跟着它。实时画面在画的时候它歇着。
-    const previewClock = usePreviewClock({ mode: visualizerMode, placeholderId: previewPlaceholderId, paused: isPreviewPaused || live !== null });
+    // The small pictures still use the sample's clock while the big preview shows the live picture.
+    const previewClock = usePreviewClock({ mode: visualizerMode, placeholderId: previewPlaceholderId, paused: isPreviewPaused });
     const previewPlaceholder = previewClock.placeholder;
-    // 示例暂停时时间不动，而刚挂上去的样式要一次变化才会画出来（从实时切回来时就是这种情况）。
+    // The sample, paused, has no change of time for a style mounted anew (a switch from the live picture).
     useStillClockPulse({ time: previewClock.currentTime, still: isPreviewPaused && live === null, boxRef: previewBoxRef, restartKey: previewSource });
     const shown = live
         ? {
@@ -219,7 +216,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             lines: previewPlaceholder.lines,
             songTitle: previewPlaceholder.title,
             coverUrl: previewPlaceholder.coverUrl,
-            // 一个示例歌一个 seed，和播放器按歌给 seed 一样：跟着样式变的 seed 会让背景每次切换重排。
+            // One seed per sample song, as the player's is the song's: a seed that changed
+            // with the style would lay the background out again on every switch.
             seed: `vis-playground-${previewPlaceholderId}`,
         };
     const [fontPickerTarget, setFontPickerTarget] = useState<'lyrics' | 'subtitle' | 'none'>('none');
@@ -364,34 +362,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     };
 
 
-    /*
-     * 字体市场：装好的 family 和系统字体走同一条路，只是来路记成 `uploaded` ——
-     * 字节本来就落在「上传字体」那个槽位，冷启动的恢复流程原样认得。
-     * 挑的是歌词还是字幕，看这层是为了哪个打开的。
-     */
-    const [isFontMarketOpen, setIsFontMarketOpen] = useState(false);
-
-    const handleUseMarketFont = (result: FontMarketInstallResult) => {
-        if (fontPickerTarget === 'subtitle') {
-            onSubtitleFontFamilyChange?.(result.family);
-        } else {
-            onCustomFontChange({
-                source: 'uploaded',
-                family: result.family,
-                label: result.label,
-                fontId: result.id,
-            });
-        }
-        writeFontMarketChoice({
-            id: result.id,
-            family: result.family,
-            label: result.label,
-            previewUrl: result.previewUrl,
-        });
-        setIsFontMarketOpen(false);
-        setFontPickerTarget('none');
-    };
-
     const handleSelectFontStyle = (next: Theme['fontStyle'] | 'custom') => {
         if (next === 'custom') {
             setFontPickerTarget('lyrics');
@@ -512,16 +482,11 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
 
     const stage = (
         <>
-            {/*
-             * The sample always shows the theme being previewed, whatever the window's own colours.
-             *
-             * `max-h`：窄窗口（手机）时预览和参数区是上下排的，`flex-1` 会把剩下的高度全吃
-             * 掉，参数那一栏被挤成一条 —— 滑块只有几像素高，根本拖不动。给预览封个顶，多出来
-             * 的高度就让给下面那栏。
-             */}
-            <div
+            {/* The sample always shows the theme being previewed, whatever the window's own colours. */}
+            <SampleBox
                 ref={previewBoxRef}
-                className="relative min-h-[150px] max-h-[38vh] flex-1 overflow-hidden rounded-xl shadow-[0_0_0_1px_var(--st-line)]"
+                room="min-h-[160px] flex-1"
+                className="relative overflow-hidden rounded-xl shadow-[0_0_0_1px_var(--st-line)]"
                 style={{ backgroundColor: previewTheme.backgroundColor }}
             >
                 {/* The style is drawn as large as the app's window and scaled to fit. */}
@@ -581,15 +546,16 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                 />
                 <PreviewSourceSwitch value={previewSource} onChange={setPreviewSource} liveEmpty={previewSource === 'live' && live === null} />
                 <Tooltip text={t(isPreviewPaused ? 'options.resumePreview' : 'options.pausePreview')} className="absolute right-3 top-3 z-40 inline-flex">
-                    <Button
+                    <button
+                        type="button"
                         onClick={() => setIsPreviewPaused(previous => !previous)}
                         aria-label={t(isPreviewPaused ? 'options.resumePreview' : 'options.pausePreview')}
                         className="st-t-fast grid h-8 w-8 place-items-center rounded-full bg-black/45 text-white transition-colors hover:bg-black/65"
                     >
                         {isPreviewPaused ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
-                    </Button>
+                    </button>
                 </Tooltip>
-            </div>
+            </SampleBox>
             <div className="flex shrink-0 flex-col">
                 <h3 className="mb-2 flex min-h-6 items-center px-1 text-[13px] font-semibold leading-5 text-[color:var(--st-t2)]">
                     {t('options.lyricStyles')}
@@ -605,9 +571,7 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
                         setActiveEditSection('visualizer');
                     }}
                     label={t('ui.animationMode')}
-                    // 样式网格自己也滚：它一高，预览就被顶没、那一栏也放不下（StudioWindow
-                    // 在窄屏给整块的房间只有 52vh）。压到 180，上下都留得出来。
-                    maxHeight={180}
+                    maxHeight={250}
                     className="-mx-4"
                 />
             </div>
@@ -695,7 +659,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             onChoose={handleChooseSystemFont}
             onClear={() => (pickingSubtitleFont ? onSubtitleFontFamilyChange?.(null) : onCustomFontChange(null))}
             onUpload={onUploadCustomFont}
-            onOpenFontMarket={() => setIsFontMarketOpen(true)}
             onClose={() => setFontPickerTarget('none')}
         />
     );
@@ -715,14 +678,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
             >
                 {column}
             </StudioWindow>
-            {/* 市场弹层自己 portal 到 body（z-[220]），压在这层字体选择层之上。 */}
-            <FontMarketDialog
-                isOpen={isFontMarketOpen}
-                onClose={() => setIsFontMarketOpen(false)}
-                isDaylight={isDaylight}
-                currentFamily={pickingSubtitleFont ? subtitleFontFamily : customFontFamily}
-                onUseFont={handleUseMarketFont}
-            />
         </LyricPreviewProvider>
     );
 };

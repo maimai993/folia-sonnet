@@ -17,3 +17,8 @@ export const useGlobalLyricRenderQuality = (): LyricRenderQuality => {
     const global = useVisualizerSettingsStore(state => state.lyricRenderQuality);
     return pinned ?? global;
 };
+
+
+
+
+/** 全局挡位：钉住时用钉住的值，否则是「动画与性能」里的设置。 */

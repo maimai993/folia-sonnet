@@ -21,13 +21,12 @@ import {
 import { getVisualizerScopedSeed } from '../../visualizer/registry';
 import type { VisualizerTuningBundle } from '../../visualizer/tuningRegistry';
 import type { VisualizerBackgroundConfig } from '../../visualizer/backgrounds/definition';
-import VisPlaygroundSampleStage from '../../visualizer/window/VisPlaygroundSampleStage';
+import VisPlaygroundSampleStage, { SampleBox } from '../../visualizer/window/VisPlaygroundSampleStage';
 import PreviewSourceSwitch, { type PreviewSource } from '../../visualizer/preview/PreviewSourceSwitch';
 import type { LivePreviewContent } from '../../visualizer/preview/livePreviewFeed';
 import { Tooltip } from '../settings/kit';
 import { SAMPLE_COLOR_MOTION_CLASS, ThemeSampleButton, ThemeSampleCard, themeSampleVars } from './ThemeSample';
 import type { EditableMode } from './themeParkDraft';
-import { Button } from '@/components/ui';
 
 // src/components/modal/theme-park/ThemeParkPreview.tsx
 // The sample of the Theme Park editor: the draft theme through the same VisualizerRenderer the
@@ -38,22 +37,22 @@ import { Button } from '@/components/ui';
 
 type PreviewClock = ReturnType<typeof useMotionValue<number>>;
 
-/** 时钟读数取整秒：不会是负数，也不是非数。 */
+/** Whole seconds of a clock reading, never below zero or short of a number. */
 const wholeSeconds = (time: number) => (Number.isFinite(time) ? Math.max(0, Math.floor(time)) : 0);
 
-/** 走到哪了：长度不是正数时算 0（流媒体在播放器那边也是这样）。 */
+/** How far along the line is: nothing while the length is not a positive number, as the player knows it for a stream. */
 const progressOf = (time: number, duration: number) => (
     Number.isFinite(duration) && duration > 0 && Number.isFinite(time) ? Math.min(1, Math.max(0, time / duration)) : 0
 );
 
 /** The progress line and the time beside it, read from the clock the preview runs on. */
 const ThemeSampleProgress: React.FC<{ currentTime: PreviewClock; duration: number }> = ({ currentTime, duration }) => {
-    // transform 只建一次；长度在时间移动时才读。
+    // The transform is made once; it reads the length when the time moves.
     const durationRef = useRef(duration);
     durationRef.current = duration;
     const progress = useTransform(currentTime, time => progressOf(time, durationRef.current));
     const [seconds, setSeconds] = useState(() => wholeSeconds(currentTime.get()));
-    // 时钟可能是另一只（实时画面与示例轮流用），它是不动的。
+    // The clock can be another one (the live picture and the sample take turns) that stands still.
     useEffect(() => setSeconds(wholeSeconds(currentTime.get())), [currentTime]);
     useMotionValueEvent(currentTime, 'change', (latest) => {
         const next = wholeSeconds(latest);
@@ -99,6 +98,7 @@ const ThemePreview: React.FC<{
     subtitleOverlayLayout?: SubtitleOverlayLayout;
     lyricsFontScale: number;
     currentTime: PreviewClock;
+    progressTime: PreviewClock;
     currentLineIndex: number;
     audioPower: PreviewClock;
     audioBands: AudioBands;
@@ -106,9 +106,9 @@ const ThemePreview: React.FC<{
     onTogglePause: () => void;
     previewSource: PreviewSource;
     onPreviewSourceChange: (source: PreviewSource) => void;
-    /** 播放器现在显示的内容，画在示例的位置上；null 表示用示例。 */
+    /** What the player shows now, drawn in place of the sample; null for the sample. */
     liveContent: LivePreviewContent | null;
-    /** 预览这块的盒子，实时画面停住时它盯着这里改。 */
+    /** The box of the preview, which the live picture watches while it is held still. */
     boxRef: RefObject<HTMLDivElement | null>;
 }> = ({
     theme,
@@ -128,6 +128,7 @@ const ThemePreview: React.FC<{
     subtitleOverlayLayout,
     lyricsFontScale,
     currentTime,
+    progressTime,
     currentLineIndex,
     audioPower,
     audioBands,
@@ -142,15 +143,16 @@ const ThemePreview: React.FC<{
         const pauseLabel = isPaused ? t('ui.playPreview') : t('ui.pausePreview');
 
         return (
-            <div
+            <SampleBox
                 ref={boxRef}
-                className="relative isolate h-full overflow-hidden rounded-xl bg-[var(--ts-bg)] shadow-[0_0_0_1px_var(--st-line)]"
+                room="h-full"
+                className="relative isolate overflow-hidden rounded-xl bg-[var(--ts-bg)] shadow-[0_0_0_1px_var(--st-line)]"
                 style={themeSampleVars(theme)}
             >
                 {/* Styles lay out from the app's window (vw, window.innerWidth), so the style is drawn
-                    as large as the window and scaled to fit, as in the lyric style window, then zoomed
-                    in a little. The song card below is not scaled, so the subtitle keeps
-                    a set height above it (SUBTITLE_BOTTOM_PX). */}
+                    as large as the window and scaled to fit, as in the lyric style window. The song
+                    card below is not scaled, so the subtitle keeps a set height above it
+                    (SUBTITLE_BOTTOM_PX). */}
                 <VisPlaygroundSampleStage subtitleBottomPx={SUBTITLE_BOTTOM_PX}>
                     <div className="absolute inset-0">
                         <VisualizerRenderer
@@ -192,7 +194,7 @@ const ThemePreview: React.FC<{
                     </div>
                     <div className="absolute inset-x-5 bottom-[18px] flex items-center gap-4">
                         <ThemeSampleCard />
-                        <ThemeSampleProgress currentTime={currentTime} duration={liveContent ? liveContent.duration : VIS_PLAYGROUND_PREVIEW_LOOP_DURATION} />
+                        <ThemeSampleProgress currentTime={progressTime} duration={liveContent ? liveContent.duration : VIS_PLAYGROUND_PREVIEW_LOOP_DURATION} />
                         <ThemeSampleButton />
                     </div>
                 </div>
@@ -204,7 +206,8 @@ const ThemePreview: React.FC<{
                     className="absolute right-[60px] top-3 z-30 inline-flex"
                 />
                 <Tooltip text={pauseLabel} className="absolute right-3 top-3 z-30 inline-flex">
-                    <Button
+                    <button
+                        type="button"
                         onClick={(e) => {
                             e.stopPropagation();
                             onTogglePause();
@@ -213,9 +216,9 @@ const ThemePreview: React.FC<{
                         className="st-t-fast grid h-8 w-8 place-items-center rounded-full bg-black/45 text-white transition-colors hover:bg-black/65"
                     >
                         {isPaused ? <Play size={14} className="translate-x-[1px]" fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
-                    </Button>
+                    </button>
                 </Tooltip>
-            </div>
+            </SampleBox>
         );
     };
 

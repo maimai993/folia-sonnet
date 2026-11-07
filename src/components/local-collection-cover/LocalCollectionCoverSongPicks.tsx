@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../ui/Button';
 import type { LocalSong } from '../../types';
 import { buildLocalSongCoverPicks } from '../../library/core/collection/cover/localCollectionCover';
 import { getLocalCoverAssetUrl } from '../../services/localCoverAssetUrl';
@@ -30,7 +29,7 @@ const LocalCollectionCoverSongPicks: React.FC<LocalCollectionCoverSongPicksProps
                 // The list scrolls; the lines above it stay.
                 <div className="st-card st-scroll min-h-0 overflow-y-auto rounded-xl bg-[var(--st-card)] shadow-[0_0_0_1px_var(--st-line)]">
                     {picks.map(pick => (
-                        <Button
+                        <button
                             key={pick.songId}
                             type="button"
                             disabled={disabled}
@@ -53,7 +52,7 @@ const LocalCollectionCoverSongPicks: React.FC<LocalCollectionCoverSongPicksProps
                                     {t('localCollectionCover.songCount', { count: pick.songCount })}
                                 </div>
                             </div>
-                        </Button>
+                        </button>
                     ))}
                 </div>
             ) : (

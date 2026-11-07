@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { getActiveLibrarySuiteId, isWallLibrarySuite, useActiveLibrarySuiteId } from '../../../../library/app/librarySuiteChoice';
 import { PLAYER_CONTROL_SLOT_OPTIONS } from '../../../floating-player/playerControlSlotActions';
 import FastColorPicker from '../../../shared/FastColorPicker';
 import { useColorPreviewThrottle } from '../../../shared/useColorPreviewThrottle';
@@ -24,7 +25,8 @@ import { useSettingsPage } from './settingsPageContext';
 // src/components/modal/settings/pages/PlayerPage.tsx
 // The 播放页 page: what the playing screen looks like. Which view play opens and the look of the
 // queue collage, the control bar, the now-playing card, the video behind the lyrics, and a folded
-// group of switches that hide or pin parts of the player.
+// group of switches that hide or pin parts of the player. The card's 在首页显示 switch is not drawn
+// while the home screen is a wall (bravais): the card is always on the wall, whatever it says.
 
 const VIEW: SettingsGroupDef = { id: 'playbackEntryView', titleKey: 'options.settingsHeadingView' };
 const BAR: SettingsGroupDef = { id: 'bottomUiSettings', titleKey: 'options.settingsHeadingControlBar' };
@@ -39,6 +41,7 @@ const O = {
     tintCustomColor: option(VIEW, 'latticePosterTintCustomColor', 'options.latticePosterTintCustomColor'),
     tintColor: option(VIEW, 'latticePosterTintColor', 'options.latticePosterTintColor'),
     tintIntensity: option(VIEW, 'latticePosterTintIntensity', 'options.latticePosterTintIntensity'),
+    badgeCurrentOnly: option(VIEW, 'latticeBadgeCurrentOnly', 'options.latticeBadgeCurrentOnly'),
     autoHide: option(BAR, 'autoHidePlayerChrome', 'options.autoHidePlayerChrome'),
     autoHideCursor: option(BAR, 'autoHideCursorWithPlayerChrome', 'options.autoHideCursorWithPlayerChrome'),
     idleCursorHide: option(BAR, 'hideCursorWhenIdle', 'options.hideCursorWhenIdle'),
@@ -48,7 +51,8 @@ const O = {
     cardMode: option(CARD, 'stageTrackPillMode', 'options.stageTrackPillMode'),
     cardTimeout: option(CARD, 'stageTrackPillTimeout', 'options.stageTrackPillTimeout'),
     cardPosition: option(CARD, 'stageTrackPillReposition', 'options.stageTrackPillReposition'),
-    cardOnHome: option(CARD, 'stageTrackPillOnHome', 'options.stageTrackPillOnHome'),
+    cardOnHome: option(CARD, 'stageTrackPillOnHome', 'options.stageTrackPillOnHome', { available: () => !isWallLibrarySuite(getActiveLibrarySuiteId()) }),
+    cardInObs: option(CARD, 'stageTrackPillInObs', 'options.stageTrackPillInObs'),
     cardCloseButton: option(CARD, 'showOpenPanelCloseButton', 'options.showOpenPanelCloseButton'),
     videoEnabled: option(VIDEO, 'videoLayerEnabled', 'options.videoLayerEnabled'),
     videoFile: option(VIDEO, 'videoLayerLocalFile', 'options.videoLayerLocalFile'),
@@ -60,7 +64,7 @@ const O = {
     hidePanelButton: option(PLAYER_UI, 'hidePlayerRightPanelButton', 'options.hidePlayerRightPanelButton'),
     alwaysBackButton: option(PLAYER_UI, 'alwaysShowPlayerBackButton', 'options.alwaysShowPlayerBackButton'),
     alwaysTrackSwitch: option(PLAYER_UI, 'alwaysShowTrackSwitchButtons', 'options.alwaysShowTrackSwitchButtons'),
-    // 它垫的那条标题栏只有桌面窗口才画。
+    // The titlebar it sits behind is only drawn by the desktop window.
     headerBlur: option(PLAYER_UI, 'playerHeaderBlur', 'options.playerHeaderBlur', { electronOnly: true }),
 };
 
@@ -81,11 +85,13 @@ const PlayerPage: React.FC = () => {
         tintUseCustomColor: state.latticePosterTintUseCustomColor,
         tintColor: state.latticePosterTintColor,
         tintIntensity: state.latticePosterTintIntensity,
+        badgeCurrentOnly: state.latticeBadgeCurrentOnly,
         setVignette: state.handleToggleLatticeVignette,
         setTintEnabled: state.handleToggleLatticePosterTint,
         setTintUseCustomColor: state.handleToggleLatticePosterTintCustomColor,
         setTintColor: state.handleSetLatticePosterTintColor,
         setTintIntensity: state.handleSetLatticePosterTintIntensity,
+        setBadgeCurrentOnly: state.handleToggleLatticeBadgeCurrentOnly,
     })));
     const chrome = usePlayerChromeSettingsStore(useShallow(state => ({
         autoHide: state.autoHidePlayerChrome,
@@ -116,9 +122,11 @@ const PlayerPage: React.FC = () => {
         mode: state.stageTrackPillMode,
         timeoutSec: state.stageTrackPillTimeoutSec,
         onHome: state.stageTrackPillOnHome,
+        inObs: state.stageTrackPillInObs,
         setMode: state.handleSetStageTrackPillMode,
         setTimeoutSec: state.handleSetStageTrackPillTimeoutSec,
         setOnHome: state.handleToggleStageTrackPillOnHome,
+        setInObs: state.handleToggleStageTrackPillInObs,
     })));
     const video = useVideoLayerSettingsStore(useShallow(state => ({
         enabled: state.videoLayerEnabled,
@@ -141,6 +149,8 @@ const PlayerPage: React.FC = () => {
     const hasCurrentSong = usePlaybackStore(state => Boolean(state.currentSong));
     const canPositionCard = usePlaybackStore(hasNowPlayingCardSong);
     const requestCardPosition = useNowPlayingCardLayoutStore(state => state.requestPositioning);
+    // Same test App asks the card with (homeIsWall).
+    const homeIsWall = isWallLibrarySuite(useActiveLibrarySuiteId());
     const requestPositioning = usePlayerBottomBarLayoutStore(state => state.requestPositioning);
     const tintColorPreview = useColorPreviewThrottle(lattice.setTintColor);
 
@@ -222,6 +232,9 @@ const PlayerPage: React.FC = () => {
                         <Slider value={lattice.tintIntensity} min={0} max={1} step={0.01} onChange={lattice.setTintIntensity} format={percent} />
                     </Row>
                 </Reveal>
+                <Row option={O.badgeCurrentOnly} note={t('options.latticeBadgeCurrentOnlyDesc')}>
+                    <Toggle checked={lattice.badgeCurrentOnly} onChange={lattice.setBadgeCurrentOnly} />
+                </Row>
             </Group>
 
             <Group def={BAR}>
@@ -296,9 +309,16 @@ const PlayerPage: React.FC = () => {
                         <Slider value={card.timeoutSec} min={3} max={60} onChange={card.setTimeoutSec} format={value => `${value}s`} />
                     </Row>
                 </Reveal>
+                {!homeIsWall && (
+                    <Reveal when={card.mode !== 'never'}>
+                        <Row option={O.cardOnHome} note={t('options.stageTrackPillOnHomeDesc')}>
+                            <Toggle checked={card.onHome} onChange={card.setOnHome} />
+                        </Row>
+                    </Reveal>
+                )}
                 <Reveal when={card.mode !== 'never'}>
-                    <Row option={O.cardOnHome} note={t('options.stageTrackPillOnHomeDesc')}>
-                        <Toggle checked={card.onHome} onChange={card.setOnHome} />
+                    <Row option={O.cardInObs} note={t('options.stageTrackPillInObsDesc')}>
+                        <Toggle checked={card.inObs} onChange={card.setInObs} />
                     </Row>
                 </Reveal>
                 <Row option={O.cardCloseButton} hint={t('options.showOpenPanelCloseButtonDesc')}>

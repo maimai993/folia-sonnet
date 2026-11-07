@@ -170,6 +170,45 @@ export const feiniuProvider: OnlineMusicProvider = {
         },
         getLoginMethods: () => FEINIU_LOGIN_METHODS,
         /**
+         * 表单式登录的声明。
+         *
+         * 这一项是**必需的**：登录窗口按 `omni.getLoginForm(providerId)` 有没有返回值决定走哪一幕
+         * （见 login/window/loginView.ts 里 `lead === 'sign-in' && omni.getLoginForm(providerId)` 那行）。
+         * 没有它就落到扫码那一幕 —— 飞牛根本没有二维码，扫的框里永远等不来东西。本 fork 早先
+         * 靠 dev 自己那条 `'password'` 场景撑住，合并到上游 v0.7.26 后被表单式取代，所以声明要补上。
+         *
+         * 字段与 `FEINIU_LOGIN_METHODS` 为空这件事是一回事：NAS 在哪对用户是同一件事，第一栏
+         * 由内容自己认（短码 / IP:端口 / 整条 URL），不再先选一种登录方式。
+         */
+        getLoginForm: () => ({
+            fields: [
+                { key: 'serverUrl', type: 'url', labelKey: 'fnmusic.serverUrl', placeholderKey: 'fnmusic.serverUrlPlaceholder', required: true },
+                { key: 'username', type: 'text', labelKey: 'fnmusic.username', placeholderKey: 'fnmusic.usernamePlaceholder', required: true },
+                { key: 'password', type: 'password', labelKey: 'fnmusic.password', required: true },
+            ],
+            submitLabelKey: 'fnmusic.login',
+            noteKey: 'fnmusic.loginNote',
+            errorKeys: {
+                'auth-required': 'fnmusic.errorBadCredentials',
+                network: 'fnmusic.errorNetwork',
+                'invalid-response': 'fnmusic.errorBadResponse',
+            },
+        }),
+        /**
+         * 表单提交：与 `loginWithPassword` 同一条路，只是值从表单来。
+         * 第一栏照样过 `feiniuServerUrlForLoginInput`（短码 → 中继域名），所以填什么都认得。
+         */
+        async submitLoginForm(values) {
+            const data = await feiniuPasswordLogin(
+                String(values.username ?? ''),
+                String(values.password ?? ''),
+                feiniuServerUrlForLoginInput(String(values.serverUrl ?? '')),
+            );
+            const user = normalizeFeiniuUser(data);
+            rememberFeiniuUser(user);
+            return user;
+        },
+        /**
          * 上次填过的第一栏预填进表单：登出不清地址，重登时少填一项。
          *
          * 中继的地址落盘时是整条 `https://abcd1234.fnos.net`，但用户当初填的是短码 ——

@@ -50,6 +50,7 @@
 // a lost device or a failed run only drops this worker, and the next track tries a fresh one.
 
 import { readModelWeights } from './modelStore';
+import { noteGpuAnalysisUnit } from './gpuActivity';
 import { createScheduler, watchFrames, type UnitRequest } from './scheduler';
 
 const IDLE_MS = 120_000;
@@ -186,6 +187,7 @@ const makeRoom = (model: GpuModel) => {
 const scheduler = createScheduler({
     isLoaded: kind => (kind === 'percussive' ? worker !== null : ready.has(kind as GpuModel)),
     frames: watchFrames(),
+    onUnit: active => noteGpuAnalysisUnit(active),
 });
 
 /** Who asks for a GPU run and how urgently: the scheduler's fields bar the work itself. */

@@ -97,6 +97,7 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     stageTrackPillTimeoutSec: 'options.stageTrackPillTimeout',
     stageTrackPillOnHome: 'options.stageTrackPillOnHome',
     stageTrackPillPosition: 'options.stageTrackPillPosition',
+    stageTrackPillInObs: 'options.stageTrackPillInObs',
     libraryWallStackEdges: 'options.bravaisStackEdges',
     libraryWallSeamClear: 'options.bravaisSeamClear',
     libraryWallSeamStyle: 'options.bravaisSeamStyle',
@@ -107,6 +108,7 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     // 液态玻璃整组只报一行：配置里它是一个对象，而应用路径也是整组写回（见 appearanceImportPlan
     // 的 WHOLE_OBJECT_FIELDS），所以它不展开成子行，一个组标题就是它的名字。
     liquidGlass: 'options.liquidGlassSection',
+    latticeBadgeCurrentOnly: 'options.latticeBadgeCurrentOnly',
 };
 
 // The per-renderer tunings borrow the renderer's own display name instead of inventing one.

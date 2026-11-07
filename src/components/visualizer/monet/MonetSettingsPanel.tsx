@@ -1,17 +1,21 @@
 import React, { useRef, useState } from 'react';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
-import { DEFAULT_MONET_TUNING, type MonetPortraitSource, type MonetTuning } from '../../../types';
-import { Button, Group, PictureGrid, Row, Segmented, type SettingsGroupDef } from '../../modal/settings/kit';
-import { TextField } from '../../ui';
+import { DEFAULT_MONET_TUNING, type MonetAudioStyle, type MonetPortraitSource, type MonetTuning } from '../../../types';
+import { DEFAULT_LYRIC_RENDER_OVERRIDE } from '../../../utils/lyricRenderQuality';
+import { Button, Group, PictureGrid, Reveal, Row, Segmented, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
 import { SliderRow, times, ToggleRow } from '../panelRows';
+import LyricRenderQualityRows from '../renderQuality/LyricRenderQualityRows';
 
 // src/components/visualizer/monet/MonetSettingsPanel.tsx
-// Monet-specific lyric, audio, and portrait controls, as three groups of the settings kit.
+// Monet-specific lyric, audio, portrait and render controls, as four groups of the settings kit.
 // Background controls live in the shared background panel.
 const LYRICS_GROUP: SettingsGroupDef = { id: 'vis-monet-lyrics', titleKey: 'options.lyricsStyleSettings' };
 const PORTRAIT_GROUP: SettingsGroupDef = { id: 'vis-monet-portrait', titleKey: 'options.cappellaAvatarSource' };
+const AUDIO_GROUP: SettingsGroupDef = { id: 'vis-monet-audio', titleKey: 'options.monetAudioStyle' };
+// 只有底部音频条是 canvas 2D：只给分辨率一行（#929）。
+const RENDER_GROUP: SettingsGroupDef = { id: 'vis-monet-render', titleKey: 'options.lyricRenderSection' };
 
 type MonetPortraitStyle = 'rectangular' | 'square';
 
@@ -26,6 +30,17 @@ const portraitStylePicture = (style: MonetPortraitStyle) => (
     <span className="absolute inset-0 grid place-items-center">
         <span className={`rounded-sm bg-[var(--st-t2)] ${style === 'square' ? 'aspect-square h-[56%]' : 'aspect-[3/4] h-[76%]'}`} />
     </span>
+);
+
+/** The spectrum at the bottom: bars, or one line. */
+const audioStylePicture = (style: MonetAudioStyle) => (
+    <svg viewBox="0 0 64 40" className="absolute inset-0 h-full w-full text-[color:var(--st-t2)]" fill="none" stroke="currentColor" strokeLinecap="round">
+        {style === 'bar' ? (
+            <path strokeWidth="3" d="M14 30V22M22 30V14M30 30V19M38 30V10M46 30V17M54 30V24" />
+        ) : (
+            <path strokeWidth="2" strokeLinejoin="round" d="M10 26L18 21L26 24L34 12L42 19L50 15L56 23" />
+        )}
+    </svg>
 );
 
 export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuning>> = ({
@@ -45,7 +60,10 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
     const resolvedTuning = {
+        keywordColoringEnabled: monetTuning.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
         showDescription: monetTuning.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+        showAudioVisualization: monetTuning.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
+        audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
         portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
@@ -82,6 +100,11 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                     onChange={(value) => onMonetTuningChange?.({ fontScale: value })}
                     onDragStart={onSliderPointerDown}
                     onDragEnd={onSliderCommit}
+                />
+                <ToggleRow
+                    label={t('options.monetKeywordColoring')}
+                    checked={resolvedTuning.keywordColoringEnabled}
+                    onChange={(value) => onMonetTuningChange?.({ keywordColoringEnabled: value })}
                 />
                 <ToggleRow
                     label={t('options.monetShowDescription')}
@@ -123,7 +146,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                     >
                         {t('options.monetClearPortrait')}
                     </Button>
-                    <TextField
+                    <input
                         ref={fileInputRef}
                         type="file"
                         accept=".png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
@@ -155,6 +178,35 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                 />
             </Group>
 
+            <Group def={AUDIO_GROUP}>
+                {/* 频谱开关（monetShowAudioVisualization）已删：手机拿不到 Web Audio 分析数据，
+                    频谱永远趴着不动 —— VisualizerMonet 里在安卓上直接不画它。桌面不受影响。 */}
+                <Row
+                    label={t('options.monetAudioStyle')}
+                    below={(
+                        <PictureGrid<MonetAudioStyle>
+                            className="-mx-4"
+                            columns={4}
+                            label={t('options.monetAudioStyle')}
+                            value={resolvedTuning.audioStyle}
+                            options={[
+                                { value: 'bar', label: t('options.monetAudioStyleBar') },
+                                { value: 'line', label: t('options.monetAudioStyleLine') },
+                            ]}
+                            picture={audioStylePicture}
+                            onChange={(value) => onMonetTuningChange?.({ audioStyle: value })}
+                        />
+                    )}
+                />
+            </Group>
+
+            <Group def={RENDER_GROUP}>
+                <LyricRenderQualityRows
+                    value={monetTuning.render ?? DEFAULT_LYRIC_RENDER_OVERRIDE}
+                    onChange={(patch) => onMonetTuningChange?.({ render: { ...(monetTuning.render ?? DEFAULT_LYRIC_RENDER_OVERRIDE), ...patch } })}
+                    antialias={false}
+                />
+            </Group>
         </>
     );
 };

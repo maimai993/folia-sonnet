@@ -2,8 +2,6 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line } from '../../../types';
-import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
-import { useFontsEpoch } from '../../../hooks/useFontsEpoch';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { shouldPreheatLine, useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
@@ -20,8 +18,16 @@ import {
     resolvePartitaBaseFontPx,
     resolvePartitaTuning,
 } from './partitaLayout';
-import { clearPartitaTextWidthCache } from './partitaTextWidth';
 import { PartitaChunk } from './PartitaChunk';
+import { OVERLAP_FIT_LINE_ATTRIBUTE, useOverlapFit } from '../useOverlapFit';
+import { measureGlowWordWidth } from '../glowWordOverlap';
+import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
+import { buildPartitaWordConfigs } from './partitaLayout';
+import { getPartitaOverlapSpacing, type PartitaRowSpacing } from './partitaOverlap';
+
+/** Words are measured at this size and divided back down to em. */
+const OVERLAP_MEASURE_PX = 100;
 
 // This one is still word-driven, but unlike Classic it needs to pre-build a column/chunk structure first.
 // The flow is basically: ask runtime for the active line, optionally preheat the upcoming line,
@@ -59,39 +65,37 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         subtitleOverlayLayout,
     } = props;
     const { t } = useTranslation();
-    const [windowSize, setWindowSize] = useState(() => ({
-        width: typeof window === 'undefined' ? 1200 : window.innerWidth,
-        height: typeof window === 'undefined' ? 800 : window.innerHeight,
-    }));
+    const [windowHeight, setWindowHeight] = useState(800);
     const resolvedPartitaTuning = useMemo(() => resolvePartitaTuning(partitaTuning), [partitaTuning]);
     const layoutCacheRef = useRef<Map<string, PartitaSequentialLayout>>(new Map());
-    const fontsEpoch = useFontsEpoch();
 
     useEffect(() => {
-        const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-        handleResize();
+        setWindowHeight(window.innerHeight);
+        const handleResize = () => setWindowHeight(window.innerHeight);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // 字体加载前后字体串相同但度量不同：作废测宽缓存，布局随后按新度量重建。
+    const [windowWidth, setWindowWidth] = useState(() => (typeof window === 'undefined' ? 1200 : window.innerWidth));
     useEffect(() => {
-        if (fontsEpoch > 0) {
-            clearPartitaTextWidthCache();
-            layoutCacheRef.current.clear();
-        }
-    }, [fontsEpoch]);
+        const handleWidthResize = () => setWindowWidth(window.innerWidth);
+        handleWidthResize();
+        window.addEventListener('resize', handleWidthResize);
+        return () => window.removeEventListener('resize', handleWidthResize);
+    }, []);
 
+    // 布局要的是视口三件套（高、宽、基准字号）加字体度量：宽度只影响密度分档和缓存键，与字号无关。
     const viewport = useMemo<PartitaViewport>(() => ({
-        height: windowSize.height,
-        width: windowSize.width,
-        fontPx: resolvePartitaBaseFontPx(windowSize.width, lyricsFontScale),
+        height: windowHeight,
+        width: windowWidth,
+        fontPx: resolvePartitaBaseFontPx(windowWidth, lyricsFontScale),
         fontMetrics: {
             fontWeight: resolveThemeFontWeight(theme, 700),
             fontFamily: resolveThemeFontStack(theme),
         },
-    }), [windowSize, lyricsFontScale, theme]);
+    }), [windowHeight, windowWidth, lyricsFontScale, theme]);
 
+    // 预热是在事件回调里读的：用 ref 拿最新视口，免得闭包里的旧值。
     const viewportRef = useRef<PartitaViewport>(viewport);
     useEffect(() => {
         viewportRef.current = viewport;
@@ -137,7 +141,35 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
         getOrBuildPartitaLayout(layoutCacheRef.current, nextLine, theme, viewportRef.current, resolvedPartitaTuning);
     });
 
-    const densityScale = sequentialLayout.fontDensityScale;
+    // avoidOverlap: every chunk's gaps, worked out once per line from its words measured in em.
+    const overlapSpacing = useMemo<Map<string, PartitaRowSpacing> | null>(() => {
+        if (!resolvedPartitaTuning.avoidOverlap) return null;
+        const fontStack = resolveThemeFontStack(theme);
+        const fontWeight = resolveThemeFontWeight(theme, 700);
+        const spacing = new Map<string, PartitaRowSpacing>();
+        sequentialLayout.columns.forEach(column => {
+            const rows = column.words.map(({ displayWords, config }) => ({
+                widthsEm: displayWords.map(w => measureGlowWordWidth(w.text, OVERLAP_MEASURE_PX, fontStack, fontWeight) / OVERLAP_MEASURE_PX),
+                wordConfigs: buildPartitaWordConfigs(displayWords, config, theme.animationIntensity),
+                config,
+                rtl: resolveLyricTextDirection(displayWords.map(w => w.text).join(' ')) === 'rtl',
+            }));
+            getPartitaOverlapSpacing(rows).forEach((rowSpacing, index) => {
+                spacing.set(column.words[index].config.id, rowSpacing);
+            });
+        });
+        return spacing;
+    }, [resolvedPartitaTuning.avoidOverlap, sequentialLayout, theme]);
+
+    // With avoidOverlap the spaced-out line may outgrow the lyric area; it then shrinks to fit.
+    const lyricAreaRef = useRef<HTMLDivElement>(null);
+    const overlapFit = useOverlapFit(
+        Boolean(resolvedPartitaTuning.avoidOverlap),
+        activeLine?.startTime,
+        lyricAreaRef,
+        [sequentialLayout, lyricsFontScale, windowHeight, theme],
+    );
+    const densityScale = (sequentialLayout.totalGraphemes > 40 ? 0.8 : 1) * overlapFit;
     const mainFontSize = `clamp(${(2.5 * densityScale * lyricsFontScale).toFixed(3)}rem, ${(5.5 * densityScale * lyricsFontScale).toFixed(3)}vw, ${(4.5 * densityScale * lyricsFontScale).toFixed(3)}rem)`;
     const emptyFontSize = `clamp(${(1.2 * lyricsFontScale).toFixed(3)}rem, ${(2.8 * lyricsFontScale).toFixed(3)}vw, ${(1.9 * lyricsFontScale).toFixed(3)}rem)`;
     const translationFontSize = `clamp(${(1.05 * lyricsFontScale).toFixed(3)}rem, ${(2.2 * lyricsFontScale).toFixed(3)}vw, ${(1.2 * lyricsFontScale).toFixed(3)}rem)`;
@@ -176,6 +208,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
             sharedProps={props}
         >
             <motion.div
+                ref={lyricAreaRef}
                 className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none will-change-transform"
                 animate={lyricContainerFloat.animate}
                 transition={lyricContainerFloat.transition}
@@ -191,18 +224,20 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                             custom={!showText}
                             variants={{ leave: (hidden: boolean) => (hidden ? TEXT_HIDDEN_EXIT : activeLineContainerMotion.exit) }}
                             exit="leave"
+                            {...{ [OVERLAP_FIT_LINE_ATTRIBUTE]: activeLine.startTime }}
                             className="flex flex-row-reverse items-stretch justify-center w-full max-w-5xl"
                             style={{
                                 perspective: `${sequentialLayout.lineConfig.perspective}px`,
                                 gap: sequentialLayout.lineConfig.columnGap,
-                                minHeight: '320px',
+                                // The fit measures the content: the line is centred either way.
+                                minHeight: overlapSpacing ? undefined : '320px',
                             }}
                         >
                             {sequentialLayout.columns.map((column) => {
                                 return (
                                     <div
                                         key={column.id}
-                                        className="relative flex min-h-[24rem] min-w-[3.8rem] items-center justify-center px-3"
+                                        className={`relative flex ${overlapSpacing ? '' : 'min-h-[24rem] '}min-w-[3.8rem] items-center justify-center px-3`}
                                     >
                                         <div className="relative z-10 flex flex-col items-center justify-start">
                                             {column.words.map(({ chunkWords, displayWords, config, order, rowIndex }) => (
@@ -220,6 +255,7 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                                                     renderProfile={activeLineRenderProfile}
                                                     isChorus={activeLine.isChorus}
                                                     showGuideLines={resolvedPartitaTuning.showGuideLines}
+                                                    overlapSpacing={overlapSpacing?.get(config.id)}
                                                     fontSize={mainFontSize}
                                                 />
                                             ))}

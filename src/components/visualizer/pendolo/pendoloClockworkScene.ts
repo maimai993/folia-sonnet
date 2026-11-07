@@ -1,4 +1,4 @@
-import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
+import { colorWithAlpha } from '../colorMix';
 
 // src/components/visualizer/pendolo/pendoloClockworkScene.ts
 // Frame inputs and color palette for Pendolo clockwork decor.
@@ -18,6 +18,7 @@ export interface PendoloClockworkFrameInput extends PendoloClockworkLayout {
     bassOscillation: number;
     secondGearAngle: number;
     /** 智能动感模式's turn of the transmission gear on the beats, added to its usual one; absent or 0 otherwise. */
+    transBeatAngle?: number;
     primaryTextColor: string;
     accentTextColor: string;
     backgroundColor: string;

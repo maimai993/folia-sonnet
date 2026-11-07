@@ -11,6 +11,7 @@ import {
 } from '../../../types';
 import { Group, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
+import { normalizeLyricRenderOverride } from '../../../utils/lyricRenderQuality';
 import { DioramaGeometrySettings } from './DioramaGeometrySettings';
 import { DioramaBackgroundParticleSettings } from './DioramaBackgroundParticleSettings';
 import { DioramaEffectSettings } from './DioramaEffectSettings';
@@ -69,6 +70,10 @@ export const DioramaSettingsPanel: React.FC<VisualizerSettingsPanelProps<Diorama
         soulActiveEnabled: dioramaTuning.soulActiveEnabled ?? DEFAULT_DIORAMA_TUNING.soulActiveEnabled,
         gradientEnabled: dioramaTuning.gradientEnabled ?? DEFAULT_DIORAMA_TUNING.gradientEnabled,
         gradientIntensity: Math.min(1.5, Math.max(0.1, dioramaTuning.gradientIntensity ?? DEFAULT_DIORAMA_TUNING.gradientIntensity)),
+        // 关键词着色是全局开关（设置 → 外观），这里只是把存下来的值原样带过去。
+        keywordColoringEnabled: dioramaTuning.keywordColoringEnabled ?? DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
+        // 分辨率 / 抗锯齿覆盖（#929）：缺省即全跟随全局挡位。
+        render: normalizeLyricRenderOverride(dioramaTuning.render),
     };
 
     const handleDioramaTuningChange = (patch: Partial<DioramaTuning>) => {

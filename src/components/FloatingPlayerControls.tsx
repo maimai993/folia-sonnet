@@ -6,19 +6,31 @@ import { MotionValue } from 'framer-motion';
 import ProgressBar from './ProgressBar';
 import { PlayerState, LyricData, Theme } from '../types';
 import LyricsTimelineModal from './modal/LyricsTimelineModal';
-import { Button } from './ui';
 import TrackTitleNavigator from './floating-player/TrackTitleNavigator';
 import PlayerControlSlotButton from './floating-player/PlayerControlSlotButton';
 import PlayerBottomBarPositioner from './floating-player/PlayerBottomBarPositioner';
 import { usePlayerBarScrollSlide } from './floating-player/usePlayerBarScrollSlide';
+import PlayerControlSlotPicker from './floating-player/PlayerControlSlotPicker';
+import PlayerControlSlotSuggestion from './floating-player/PlayerControlSlotSuggestion';
+import CapsuleQuickActions, { useCapsuleQuickActionsDwell } from './floating-player/CapsuleQuickActions';
+import { usePlayerControlSlotCustomization } from './floating-player/usePlayerControlSlotCustomization';
 import { usePlayerBottomBarBottomPx } from '../hooks/usePlayerBottomBarBottomPx';
 import { playerBottomBarLiveOffset } from '../stores/motionSignals';
 import { usePlayerBottomBarLayoutStore } from '../stores/usePlayerBottomBarLayoutStore';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
+import { openSettings } from '../stores/useSettingsModalStore';
 import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, clampPlayerBottomBarOffset, resolvePlayerBottomBarMaxOffset } from '../utils/playerBottomBarLayout';
 import type { PlayerControlSlotActionId, PlayerControlSlotContext } from './floating-player/playerControlSlotActions';
 import { usePlayerOverlayObstacle } from '../hooks/usePlayerOverlayLayout';
+import { useSupportsFinePointer } from '../hooks/useSupportsFinePointer';
+import { resolvePlayerCapsuleNavigationTarget } from '../hooks/useAppNavigation';
+import { useCapsulePaletteStore } from '../stores/useCapsulePaletteStore';
+import { openCommandPalette } from '../stores/useAppViewStore';
+import { usePlaybackEntryViewStore } from '../stores/usePlaybackEntryViewStore';
+import { usePlaybackStore } from '../stores/usePlaybackStore';
 import { resolveLyricSeekMediaTime } from '../utils/lyrics/lyricSeekTime';
+import { HifiProgressRow } from './hifi/HifiBadge';
+import { useIsHifiRoute } from './hifi/useHifiSignalPath';
 
 export interface TrackNavigation {
     /** 当前曲目的稳定身份，用于识别「确实换歌了」；相邻两首同名时标题字符串不变，不能拿标题判断 */
@@ -42,10 +54,18 @@ const CONTROL_LAYOUT_SPRING = {
 const HOVER_EXPAND_DELAY_MS = 20;
 const HOVER_COLLAPSE_DELAY_MS = 100;
 const HOVER_HITBOX_BOTTOM_BUFFER_PX = 32;
-/** 暂停时自动展开露出的时间：够看见并点到控件，之后自己缩回一条进度条。 */
-const AUTO_EXPAND_DURATION_MS = 4000;
-/** 按下与松手之间超过这个距离就算拖动，不再当成点击（进度条 seek 完不该触发胶囊的动作）。 */
-const CLICK_SLOP_PX = 8;
+/** 手指浮出的那排命令（连同它撑开的胶囊）这么久没碰就收起。 */
+const TOUCH_REVEAL_MS = 4000;
+/** 手指按下到抬起挪得比这少才算点了一下胶囊，多了是在拖进度条。 */
+const TOUCH_TAP_SLOP_PX = 10;
+/** 手指点出那排之后，这么久内补发的那一下 click 不算数（见 swallowStrayClick）。 */
+const TOUCH_STRAY_CLICK_MS = 400;
+/** 鼠标或手指按下到 click 挪得比这多，是拖（多半在拖进度条、拖偏了几像素），不算点胶囊。 */
+const CLICK_DRAG_SLOP_PX = 10;
+/** 进度条的轨道（ProgressBar 的 progress.track，拖动用的 range 就在里面）。 */
+const isOnSeekTrack = (target: EventTarget | null): boolean => (
+    target instanceof Element && target.closest('[data-folium-part="progress.track"]') !== null
+);
 /*
  * 模组可以通过公开变量 --folium-player-bar-extra 加宽胶囊，补回进度条两侧按钮占掉的长度。
  * 外层 max-width 已经加了一份 extra；收起的胶囊是外层的 80% / 60%，所以只再补 (1 - 比例) 份，
@@ -77,6 +97,7 @@ interface FloatingPlayerControlsProps {
     onTogglePlay: () => void;
     onToggleLoop: () => void;
     onNavigateToPlayer: () => void;
+    onFocusLatticeCurrentSong?: () => void;
     noTrackText?: string;
     primaryColor?: string;
     secondaryColor?: string;
@@ -116,12 +137,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     onTogglePlay,
     onToggleLoop,
     onNavigateToPlayer,
+    onFocusLatticeCurrentSong,
     noTrackText = 'No Track',
     primaryColor = 'var(--text-primary)',
     secondaryColor = 'var(--text-secondary)',
     theme,
     isDaylight,
-    isHidden = false,
+    isHidden: isChromeHidden = false,
     isScrollHidden = false,
     hideControlBar = false,
     controlsDisabled = false,
@@ -132,12 +154,32 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     onCommitBottomBarOffset,
 }) => {
     const { t } = useTranslation();
+    const slotCustomization = usePlayerControlSlotCustomization(slotPrimary, slotSecondary);
+    const { slotPicker, closeSlotPicker, slotSuggestion } = slotCustomization;
+    // 自动隐藏播放页控件只看鼠标移动：盯着更换浮层看选项时不动鼠标，浮层不能跟着整条控制条一起淡出。
+    const isHidden = isChromeHidden && slotPicker === null;
     const { ref: layoutRef, invalidate: invalidateLayout } = usePlayerOverlayObstacle(
         'player-controls',
         'playback',
         !isHidden && !isScrollHidden,
     );
+    // 命令面板从胶囊原地长出来时要量它，所以胶囊节点除了交给遮挡登记，也留一份自己的。
+    const capsuleElementRef = useRef<HTMLDivElement | null>(null);
+    const capsuleRef = useCallback((element: HTMLDivElement | null) => {
+        layoutRef(element);
+        capsuleElementRef.current = element;
+    }, [layoutRef]);
+    // 面板正以胶囊为外壳开着：胶囊自己淡出，免得两个叠在一起。
+    const isMorphedIntoPalette = useCapsulePaletteStore(state => state.isMorphed);
+    // 刚从命令面板交还回来的那一次渲染：淡入要快，才能接上面板最后那点淡出。
+    // 动画只在开始时读一次 transition，所以只要翻转的那一次渲染判断对就够了。
+    const wasMorphedRef = useRef(false);
+    const morphJustEnded = wasMorphedRef.current && !isMorphedIntoPalette;
+    useEffect(() => {
+        wasMorphedRef.current = isMorphedIntoPalette;
+    }, [isMorphedIntoPalette]);
     // const isDaylight = theme?.name === 'Daylight Default'; // Deprecated, passed as prop
+    // 胶囊自己的描边和投影；换按钮的浮层、上方的浮动命令照这个底色做成 capsuleGlass，边沿另用面板那条线。
     const glassBgExpanded = isDaylight ? 'bg-white/60 border border-white/20 shadow-xl' : 'bg-black/40 border border-white/5';
     const glassBgCollapsed = isDaylight ? 'bg-white/40 border border-white/20 shadow-lg hover:bg-white/50' : 'bg-black/20 border border-white/5 hover:bg-black/30';
     const trackColor = isDaylight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.1)';
@@ -149,26 +191,64 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     const iconBtnClass = isDaylight ? 'hover:bg-black/5 text-black/60' : 'hover:bg-white/10 opacity-40 hover:opacity-100';
 
     const [isHovered, setIsHovered] = useState(false);
+    // 最近一次进入悬停区的是不是手指。只在进入和按下时写、值不变就不更新，不跟指针移动。
+    const [isTouchHover, setIsTouchHover] = useState(false);
+    // 手指没有悬停：播放页上点开胶囊、或者一暂停，上方那排命令就直接浮出，连同撑开的胶囊
+    // TOUCH_REVEAL_MS 没碰就一起收起；点胶囊以外的地方立刻收。
+    const [isTouchRevealed, setIsTouchRevealed] = useState(false);
+    const touchRevealTimerRef = useRef<number | null>(null);
+    // 悬停区：胶囊和浮在它上方的那两样。在这里面按下算「还在用」，在外面按下就收。
+    const hoverAreaRef = useRef<HTMLDivElement | null>(null);
+    const stopTouchRevealTimer = useCallback(() => {
+        if (touchRevealTimerRef.current !== null) {
+            window.clearTimeout(touchRevealTimerRef.current);
+            touchRevealTimerRef.current = null;
+        }
+    }, []);
+    const startTouchRevealTimer = useCallback(() => {
+        stopTouchRevealTimer();
+        touchRevealTimerRef.current = window.setTimeout(() => {
+            touchRevealTimerRef.current = null;
+            setIsTouchRevealed(false);
+        }, TOUCH_REVEAL_MS);
+    }, [stopTouchRevealTimer]);
+    const revealOnTouch = useCallback(() => {
+        setIsTouchRevealed(true);
+        startTouchRevealTimer();
+    }, [startTouchRevealTimer]);
+    const endTouchReveal = useCallback(() => {
+        stopTouchRevealTimer();
+        setIsTouchRevealed(false);
+    }, [stopTouchRevealTimer]);
+    // 触屏上点胶囊本身：那排命令已经浮着就开命令面板，没浮着这一下只把它（和胶囊）点出来。
+    // 那排此刻出不来（提议条占着、整排失效）时照旧：展开着就开面板，收起着就只展开。
+    const showExpandedRef = useRef(false);
+    const touchRowShownRef = useRef(false);
+    const touchRowAllowedRef = useRef(false);
+    const pressOpensPaletteRef = useRef(true);
+    const clickOpensPaletteRef = useRef(false);
+    // 这一下手指按下时要不要把那排点出来，以及按在哪：抬起时没怎么挪才算点，拖进度条不算。
+    const touchRevealPressRef = useRef<{ x: number; y: number; } | null>(null);
+    const swallowClickUntilRef = useRef(0);
+    // 这一下按在哪、是不是按在进度条上：按在进度条上或按下后拖开了的，是拖进度，不是点胶囊（#1056）。
+    const pressRef = useRef<{ x: number; y: number; onSeek: boolean; } | null>(null);
+    const noteHoverPointer = useCallback((event: React.PointerEvent) => {
+        setIsTouchHover(event.pointerType === 'touch');
+        if (event.type === 'pointerdown') {
+            // 又按下了一次：上一下点出那排补发的 click 早该过去了，这一下的 click 是真的。
+            swallowClickUntilRef.current = 0;
+            pressRef.current = { x: event.clientX, y: event.clientY, onSeek: isOnSeekTrack(event.target) };
+            pressOpensPaletteRef.current = event.pointerType !== 'touch'
+                || touchRowShownRef.current
+                || (showExpandedRef.current && !touchRowAllowedRef.current);
+            touchRevealPressRef.current = event.pointerType === 'touch' && clickOpensPaletteRef.current && !pressOpensPaletteRef.current
+                ? { x: event.clientX, y: event.clientY }
+                : null;
+        }
+    }, []);
     const [isTimelineOpen, setIsTimelineOpen] = useState(false);
     const expandTimeoutRef = useRef<number | null>(null);
     const collapseTimeoutRef = useRef<number | null>(null);
-    const [autoExpanded, setAutoExpanded] = useState(false);
-    const autoCollapseTimeoutRef = useRef<number | null>(null);
-    /** 命中区（含向下那块补丁）的整体：点它以外的地方算「点周围」。 */
-    const hitboxRef = useRef<HTMLDivElement | null>(null);
-    /** 按下时的指针位置：松手时位移超过阈值就是拖动，不算点击。 */
-    const pressOriginRef = useRef<{ x: number; y: number; } | null>(null);
-    /**
-     * 收起态那一下「点开」的尾巴要不要吃掉。
-     *
-     * 展开是在**松手**（pointerup）时做的 —— 收起态几乎整块是进度条那个 range，它会
-     * stopPropagation，click 根本到不了胶囊，只能在 pointerup 上判。于是紧接着浏览器补发的
-     * 那一次 click 落在一个**已经变了**的界面上：展开态的播放键正好顶在手指底下，于是
-     * 「想展开」变成了「展开 + 暂停」。
-     *
-     * 在 pointerdown 上清零（新的一次点按一律重新算），只有「收起态点开」这一条路会置上。
-     */
-    const swallowNextClickRef = useRef(false);
 
     const bottomBarBottomPx = usePlayerBottomBarBottomPx();
     const isPositioning = usePlayerBottomBarLayoutStore(state => state.isPositioning);
@@ -183,54 +263,90 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     ));
 
     const canAutoExpand = canTogglePlay && duration > 0;
-    /**
-     * 暂停（且不在首页）时把控件露出来给用户按，但只露一会儿：原先这里是常驻展开，
-     * 而触屏上根本不会有「指针移开」这件事，胶囊就一直停在展开态回不去。
-     */
-    const wantsAutoExpand = canAutoExpand && !isPositioning && playerState !== PlayerState.PLAYING && currentView !== 'home';
+    const showSlotSuggestion = slotSuggestion !== null && !isHidden && !isPositioning && slotPicker === null;
+    // 浮动命令和提议占同一块地方，提议优先；换按钮的浮层开着时也让开。
+    // 停留浮出只给能悬停的指针：触屏点一下也会补发 mouseenter，不拦的话点胶囊去播放页后这排会一直挂着。
+    // 主指针是触屏的设备不走停留；带触屏的笔记本主指针是鼠标，再按这一次进来的是不是手指拦。
+    // 手指另走下面的 showTouchQuickActions：点开胶囊或暂停时直接浮出。
+    const supportsFinePointer = useSupportsFinePointer();
+    const hasDwelled = useCapsuleQuickActionsDwell(isHovered && !isTouchHover);
+    // 手指浮出的只在播放页：首页点胶囊是去播放页，歌曲墙上是定位到当前歌曲，都不是要这排。
+    const touchRowAllowed = currentView === 'player' && !showSlotSuggestion && slotPicker === null
+        && !isHidden && !isPositioning && !controlsDisabled;
+    const showTouchQuickActions = isTouchRevealed && touchRowAllowed;
+    touchRowShownRef.current = showTouchQuickActions;
+    touchRowAllowedRef.current = touchRowAllowed;
+    const showQuickActions = showTouchQuickActions || (supportsFinePointer && hasDwelled && !showSlotSuggestion && slotPicker === null
+        && !isHidden && !isPositioning && !controlsDisabled);
+    // 播放页上点胶囊本来就在要去的地方，这一下改成把胶囊变成命令面板；播放入口设成歌曲墙时
+    // 这一下仍然去墙，不抢原有的跳转。
+    const playbackEntryView = usePlaybackEntryViewStore(state => state.playbackEntryView);
+    const isFmMode = usePlaybackStore(state => state.isFmMode);
+    const clickOpensPalette = currentView === 'player'
+        && resolvePlayerCapsuleNavigationTarget('player', playbackEntryView, isFmMode) === 'player';
+
+    // 手指点胶囊就点出那排的地方（clickOpensPalette），补发的 mouseenter 不再撑开胶囊，撑开交给浮出计时，
+    // 不然 4 秒后那排收了胶囊还开着。播放入口设成歌曲墙时手指点不出那排，胶囊照旧靠补发的 mouseenter 撑开，
+    // 不然正在放时收起的胶囊里只有进度条，拿不到暂停和切歌。
+    const hoverExpands = isHovered && !(isTouchHover && clickOpensPalette);
     // 定位模式强制展开：用户要看到的是最终形态的胶囊，而不是一条细进度条。
-    const showExpanded = isPositioning || isHovered || autoExpanded;
+    // 更换浮层和提议开着时也展开：两者说的都是槽位按钮，按钮得看得见；提议条贴在胶囊上沿，
+    // 要是悬停才展开，指针移上提议条那一下胶囊长高、提议条被顶走，会在展开和收起之间来回抖。
+    // 刚换完按钮也再展开一会儿，让人看见换上去的结果。
+    // 变成命令面板期间胶囊照常收起或展开，只是看不见：它在面板接手的那一刻就立刻隐去，
+    // 收起时透过遮罩看不到它往下缩；面板收回时量的正是它此刻的样子，收回去的宽度就对得上。
+    const showExpanded = isPositioning || hoverExpands || (isTouchRevealed && currentView === 'player') || slotPicker !== null || showSlotSuggestion || slotCustomization.isShowingChange || (canAutoExpand && playerState !== PlayerState.PLAYING && currentView !== 'home');
+    showExpandedRef.current = showExpanded;
 
-    /** 排一次「过几秒收起」：暂停自动展开与手动展开共用这一条收回路径。 */
-    const scheduleAutoCollapse = useCallback(() => {
-        if (autoCollapseTimeoutRef.current !== null) {
-            window.clearTimeout(autoCollapseTimeoutRef.current);
-        }
-        autoCollapseTimeoutRef.current = window.setTimeout(() => {
-            autoCollapseTimeoutRef.current = null;
-            setAutoExpanded(false);
-        }, AUTO_EXPAND_DURATION_MS);
-    }, []);
-
+    // 一暂停就浮出：只在播放页、主指针是触屏（或者上一次碰胶囊的是手指）时。只认从播放到暂停那一下，
+    // 打开应用、切到播放页时本来就停着的不算。
+    const previousPlayerStateRef = useRef(playerState);
     useEffect(() => {
-        if (!wantsAutoExpand) {
-            setAutoExpanded(false);
+        const wasPlaying = previousPlayerStateRef.current === PlayerState.PLAYING;
+        previousPlayerStateRef.current = playerState;
+        // 控件隐着、胶囊正当着命令面板时不浮：那时收起的 effect 不会再跑，浮出去就没人收。
+        const mustStayDown = isHidden || isPositioning || isMorphedIntoPalette;
+        if (wasPlaying && playerState === PlayerState.PAUSED && currentView === 'player' && !mustStayDown
+            && (!supportsFinePointer || isTouchHover)) {
+            revealOnTouch();
+        }
+    }, [currentView, isHidden, isMorphedIntoPalette, isPositioning, isTouchHover, playerState, revealOnTouch, supportsFinePointer]);
+
+    // 离开播放页、控件自动隐藏、进定位模式、胶囊变成命令面板：浮出的那排都不该留着，面板交还时胶囊照常收着。
+    const touchRevealMustEnd = currentView !== 'player' || isHidden || isPositioning || isMorphedIntoPalette;
+    useEffect(() => {
+        if (touchRevealMustEnd) {
+            endTouchReveal();
+        }
+    }, [endTouchReveal, touchRevealMustEnd]);
+
+    // 浮着的时候：在悬停区里按下先停住计时（拖进度条、长按槽位时不能半路收起），抬起再重新数 4 秒；
+    // 在外面按下（包括命令面板、换按钮的浮层）立刻收。只在浮着时挂监听，都是按下抬起级别的事件。
+    useEffect(() => {
+        if (!isTouchRevealed) {
             return;
         }
-        setAutoExpanded(true);
-        scheduleAutoCollapse();
+        const onPointerDown = (event: PointerEvent) => {
+            if (event.target instanceof Node && hoverAreaRef.current?.contains(event.target)) {
+                stopTouchRevealTimer();
+                return;
+            }
+            endTouchReveal();
+        };
+        const onPointerUp = () => {
+            if (touchRevealTimerRef.current === null) {
+                startTouchRevealTimer();
+            }
+        };
+        window.addEventListener('pointerdown', onPointerDown, true);
+        window.addEventListener('pointerup', onPointerUp, true);
+        window.addEventListener('pointercancel', onPointerUp, true);
         return () => {
-            if (autoCollapseTimeoutRef.current !== null) {
-                window.clearTimeout(autoCollapseTimeoutRef.current);
-                autoCollapseTimeoutRef.current = null;
-            }
+            window.removeEventListener('pointerdown', onPointerDown, true);
+            window.removeEventListener('pointerup', onPointerUp, true);
+            window.removeEventListener('pointercancel', onPointerUp, true);
         };
-    }, [scheduleAutoCollapse, wantsAutoExpand]);
-
-    // 点胶囊以外的任何地方：自动展开的那一下立刻收起，不必等定时器走完。
-    useEffect(() => {
-        if (!autoExpanded) {
-            return;
-        }
-        const dismiss = (event: Event) => {
-            const target = event.target;
-            if (hitboxRef.current && target instanceof Node && !hitboxRef.current.contains(target)) {
-                setAutoExpanded(false);
-            }
-        };
-        document.addEventListener('pointerdown', dismiss);
-        return () => document.removeEventListener('pointerdown', dismiss);
-    }, [autoExpanded]);
+    }, [endTouchReveal, isTouchRevealed, startTouchRevealTimer, stopTouchRevealTimer]);
 
     // 上限依赖视口高度，窗口变矮时要跟着收，否则虚线框会画到屏幕外。
     useEffect(() => {
@@ -293,6 +409,29 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         }
     }, []);
 
+    // 胶囊看得见、能点时才让命令面板从它长出来；隐藏、定位模式或整条不画时面板回到顶上的遮罩。
+    const canAnchorPalette = !isHidden && !isPositioning && !hideControlBar;
+    useEffect(() => {
+        const element = capsuleElementRef.current;
+        if (!canAnchorPalette || !element) {
+            return;
+        }
+        const store = useCapsulePaletteStore.getState();
+        store.setAnchor(element);
+        return () => {
+            if (useCapsulePaletteStore.getState().anchor === element) {
+                useCapsulePaletteStore.getState().setAnchor(null);
+            }
+        };
+    }, [canAnchorPalette]);
+
+    // 进入定位模式或整排失效时，浮层指着的那个按钮已经不能用了。
+    useEffect(() => {
+        if (slotPicker && (isPositioning || controlsDisabled)) {
+            closeSlotPicker();
+        }
+    }, [closeSlotPicker, controlsDisabled, isPositioning, slotPicker]);
+
     const handleCommitPositioning = useCallback(() => {
         onCommitBottomBarOffset(commitPositioning());
     }, [commitPositioning, onCommitBottomBarOffset]);
@@ -327,10 +466,12 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         0,
         Math.round(HOVER_HITBOX_BOTTOM_BUFFER_PX - (savedBottomBarOffset - PLAYER_BOTTOM_BAR_BASE_OFFSET_PX)),
     );
-    const { isSliding: isScrollSliding, layoutAnimationEnabled, layerStyle: scrollSlideStyle } = usePlayerBarScrollSlide(
-        isScrollHidden,
-        savedBottomBarOffset,
-    );
+    // 整屏列表往下滚时把胶囊整条移出视口；位移走 CSS 过渡（合成线程），不跟 framer 那层抢 transform。
+    const {
+        isSliding: isScrollSliding,
+        layoutAnimationEnabled: scrollLayoutAnimationEnabled,
+        layerStyle: scrollSlideStyle,
+    } = usePlayerBarScrollSlide(isScrollHidden, savedBottomBarOffset);
 
     // 槽位上下文：调用方给的那份，加上胶囊自己掌握的循环模式、歌词时间轴和相邻曲目可用性。
     const resolvedSlotContext = useMemo<PlayerControlSlotContext>(() => ({
@@ -353,20 +494,13 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             if (collapseTimeoutRef.current !== null) {
                 window.clearTimeout(collapseTimeoutRef.current);
             }
-            if (autoCollapseTimeoutRef.current !== null) {
-                window.clearTimeout(autoCollapseTimeoutRef.current);
+            if (touchRevealTimerRef.current !== null) {
+                window.clearTimeout(touchRevealTimerRef.current);
             }
         };
     }, []);
 
-    /**
-     * 只用真鼠标的悬停展开。触屏点一下也会合成 mouseenter，但之后不会有任何「指针移开」
-     * 的事件 —— 那样展开就永久卡住，而暂停时的展开另有定时器负责收回（见 wantsAutoExpand）。
-     */
-    const handlePointerEnter = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.pointerType !== 'mouse') {
-            return;
-        }
+    const handleMouseEnter = () => {
         if (collapseTimeoutRef.current !== null) {
             window.clearTimeout(collapseTimeoutRef.current);
             collapseTimeoutRef.current = null;
@@ -382,10 +516,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         }, HOVER_EXPAND_DELAY_MS);
     };
 
-    const handlePointerLeave = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.pointerType !== 'mouse') {
-            return;
-        }
+    const handleMouseLeave = () => {
         if (expandTimeoutRef.current !== null) {
             window.clearTimeout(expandTimeoutRef.current);
             expandTimeoutRef.current = null;
@@ -401,72 +532,61 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
         }, HOVER_COLLAPSE_DELAY_MS);
     };
 
-    const handleBarPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-        // 新的一次点按：上一轮的「尾巴」到这里为止，不能再吃掉这一轮的 click。
-        swallowNextClickRef.current = false;
-        pressOriginRef.current = { x: event.clientX, y: event.clientY };
-        handlePositionDragStart(event);
-    }, [handlePositionDragStart]);
+    clickOpensPaletteRef.current = clickOpensPalette && !isPositioning;
 
-    /**
-     * 吃掉刚被「点开」的那一次 click。
-     *
-     * 捕获阶段就拦：展开态那些按钮是这一层的后代，等冒泡到它们身上再判，播放已经被切了。
-     * （见 swallowNextClickRef 的说明。）
-     */
-    const handleBarClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-        if (!swallowNextClickRef.current) {
-            return;
-        }
-        swallowNextClickRef.current = false;
-        event.preventDefault();
-        event.stopPropagation();
-    }, []);
-
-    /**
-     * 「点了一下」在松手时判，不在 click 上判：进度条那个 range 会 stopPropagation，
-     * 收起态的胶囊几乎整块都是它，click 根本到不了这里 —— 而用户点胶囊想的是先把控件
-     * 露出来（原先在队列磁贴里这一下直接跳去聚焦当前歌）。
-     */
-    const handleBarPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-        const origin = pressOriginRef.current;
-        pressOriginRef.current = null;
-        handlePositionDragEnd(event);
-        if (isPositioning || !origin) {
-            return;
-        }
-        // 拖进度条、拖胶囊之后松手也会来一次 pointerup：动过就不算点。
-        if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > CLICK_SLOP_PX) {
-            return;
-        }
+    // 手指抬起时点出来：收起的胶囊大半是进度条（range input），点它浏览器不发 click，只能看抬起。
+    // 只认点在胶囊本身上、又不是里面的按钮：暂停着胶囊本来就开着，点播放键是要继续放，不是要这排。
+    const handleTouchRevealRelease = (event: React.PointerEvent) => {
+        const press = touchRevealPressRef.current;
+        touchRevealPressRef.current = null;
         const target = event.target instanceof Element ? event.target : null;
-        // 展开态里这些元素各管各的：按钮有自己的 onClick，进度条那一下只 seek ——
-        // 都不该再被当成「点了胶囊」（否则调个进度就被送去播放页）。
-        if (showExpanded && target?.closest('button, a, [role="button"], [data-folium-part^="progress"]')) {
+        if (!press || !target || !capsuleElementRef.current?.contains(target) || target.closest('button')) {
             return;
         }
-        if (!showExpanded) {
-            // 这一次点按的目的已经达到了（把控件露出来）；补发的 click 落在展开后的按钮上
-            // 会被当成第二次操作，见 handleBarClickCapture。
-            swallowNextClickRef.current = true;
-            setAutoExpanded(true);
-            scheduleAutoCollapse();
+        if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < TOUCH_TAP_SLOP_PX) {
+            revealOnTouch();
+            // 胶囊这就撑开了；点在别处时浏览器随后补发的 click 按手指位置落到展开后的内容上，
+            // 多半是播放键，点一下歌就停了。这一下 click 在捕获阶段吞掉。
+            swallowClickUntilRef.current = performance.now() + TOUCH_STRAY_CLICK_MS;
+        }
+    };
+    const swallowStrayClick = (event: React.MouseEvent) => {
+        if (performance.now() < swallowClickUntilRef.current) {
+            swallowClickUntilRef.current = 0;
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    };
+
+    // 拖进度条松开时浏览器补发的 click 落到胶囊上，就成了点胶囊开命令面板（#1056）。进度条只有
+    // 6px 高，按偏几像素就按在了胶囊空白处，按下和松开都在胶囊里，click 照常补发；按准了的，
+    // 进度条在拖动中展开时被换掉、按住的元素没了，click 也会落到两处的共同祖先上。所以到了胶囊
+    // 这里的 click，按下后挪开过、或者按在进度条上的，都不算点胶囊。按钮、模组的按钮和图层、
+    // 进度条自己的 click 各自拦着，到不了这里，不受影响；键盘和读屏发的 click 没有按下（detail 为 0），照常算。
+    const isDragRelease = (event: React.MouseEvent): boolean => {
+        const press = pressRef.current;
+        pressRef.current = null;
+        if (!press || event.detail === 0) return false;
+        return press.onSeek || Math.hypot(event.clientX - press.x, event.clientY - press.y) > CLICK_DRAG_SLOP_PX;
+    };
+
+    const handleClick = (event: React.MouseEvent) => {
+        if (isDragRelease(event) || isPositioning) {
             return;
         }
-        // 展开态：队列磁贴里再点一下收起（那里不该跳走），其余视图照旧进播放页。
-        if (currentView === 'lattice') {
-            setAutoExpanded(false);
+        if (clickOpensPalette) {
+            // 手指这一下没开面板的，抬起时已经把那排点出来了（handleTouchRevealRelease）。
+            if (pressOpensPaletteRef.current) {
+                openCommandPalette();
+            }
             return;
         }
-        onNavigateToPlayer();
-    }, [
-        currentView,
-        handlePositionDragEnd,
-        isPositioning,
-        onNavigateToPlayer,
-        scheduleAutoCollapse,
-        showExpanded,
-    ]);
+        if (currentView !== 'lattice') {
+            onNavigateToPlayer();
+        } else {
+            onFocusLatticeCurrentSong?.();
+        }
+    };
 
     if (hideControlBar) {
         return null;
@@ -489,35 +609,37 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                 style={{ bottom: bottomBarBottomPx }}
                 onUpdate={invalidateLayout}
             >
+            {/* 收起/放回的位移层：位移走 CSS 过渡（合成线程），和 framer 那层分开，样式见
+                usePlayerBarScrollSlide。 */}
             <div
-                // 收起/放回的位移层：位移走 CSS 过渡（合成线程），和 framer 那层分开，样式见
-                // usePlayerBarScrollSlide。
                 className="w-full flex justify-center pointer-events-none"
                 style={scrollSlideStyle}
             >
+            {/* 这一层的透明度、位移和缩放全由下面的 animate 驱动，不再叠一层 CSS transition：
+                那样 framer 每帧写的值又被 CSS 拖慢 300ms，变成命令面板那一刻胶囊没法立刻让出来。 */}
             <motion.div
                 className="w-full flex justify-center pointer-events-none"
                 onUpdate={invalidateLayout}
                 initial={false}
                 animate={{
-                    opacity: isHidden ? 0 : 1,
+                    opacity: isHidden || isMorphedIntoPalette ? 0 : 1,
                     y: isHidden ? 24 : 0,
                     scale: isHidden ? 0.97 : 1,
                 }}
-                transition={{ duration: 0.26, ease: 'easeOut' }}
-                style={{ pointerEvents: isHidden || isScrollHidden ? 'none' : 'auto' }}
+                // 面板接手的那一刻胶囊立刻让出来；交还时在面板最后的淡出里很快接上，两边只交叉一下。
+                transition={{ duration: isMorphedIntoPalette ? 0 : morphJustEnded ? 0.1 : 0.26, ease: 'easeOut' }}
+                style={{ pointerEvents: isHidden || isScrollHidden || isMorphedIntoPalette ? 'none' : 'auto' }}
                 onClick={(e) => e.stopPropagation()}
-                // 手机横屏那档要把这一层和下面那个全宽命中盒一起交回 pass-through：
-                // 悬停展开在触屏上没有意义，可铺满下缘的命中区会把别的贴底控件一起吃掉
-                // （侧切入面板的最低一排按钮就是这么点不到的）。
-                data-folia-player-bar-hitbox-host="true"
             >
                 <div
-                    ref={hitboxRef}
-                    data-folia-player-bar-hitbox="true"
-                    className="pointer-events-auto w-full flex justify-center"
-                    onPointerEnter={handlePointerEnter}
-                    onPointerLeave={handlePointerLeave}
+                    ref={hoverAreaRef}
+                    className="pointer-events-auto relative w-full flex justify-center"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                    onPointerEnter={noteHoverPointer}
+                    onPointerDown={noteHoverPointer}
+                    onPointerUp={handleTouchRevealRelease}
+                    onClickCapture={swallowStrayClick}
                     style={{
                         // 这块向下的命中区补丁只在胶囊贴底时才有意义；抬高之后按当前偏移量收敛，
                         // 否则胶囊下方会留一条既不可点也挡不住东西的死区。
@@ -525,23 +647,52 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                         marginBottom: `${-hoverHitboxBufferPx}px`,
                     }}
                 >
+                    {/* 定位层和动画层分开，理由同上：提示条的 y 动画不能盖掉居中用的布局。 */}
+                    <div className="pointer-events-none absolute bottom-full left-0 right-0 mb-3 flex justify-center">
+                        <AnimatePresence>
+                            {showSlotSuggestion && slotSuggestion && (
+                                <PlayerControlSlotSuggestion
+                                    key={slotSuggestion}
+                                    actionId={slotSuggestion}
+                                    slotPrimary={slotPrimary}
+                                    slotSecondary={slotSecondary}
+                                    onReplace={slotCustomization.acceptSuggestion}
+                                    onDismiss={slotCustomization.dismissSuggestion}
+                                    isDaylight={isDaylight}
+                                />
+                            )}
+                        </AnimatePresence>
+                    </div>
+                    <div className="pointer-events-none absolute bottom-full left-0 right-0 flex justify-center">
+                        <AnimatePresence>
+                            {showQuickActions && (
+                                <CapsuleQuickActions
+                                    key="quick-actions"
+                                    slotPrimary={slotPrimary}
+                                    slotSecondary={slotSecondary}
+                                    context={resolvedSlotContext}
+                                    isDaylight={isDaylight}
+                                    touch={showTouchQuickActions}
+                                />
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <motion.div
-                        ref={layoutRef}
+                        ref={capsuleRef}
+                        title={clickOpensPalette && !isPositioning ? t('player.capsuleOpensPalette') : undefined}
                         onUpdate={invalidateLayout}
                         onLayoutAnimationComplete={invalidateLayout}
-                        layout={layoutAnimationEnabled}
+                        layout
                         transition={{ layout: CONTROL_LAYOUT_SPRING }}
+                        onClick={handleClick}
                         // 用原生 pointer 事件而不是 framer-motion 的 drag：位移已经由 playerBottomBarLiveOffset
                         // 经外层 lift 表达，再让 drag 往这个节点写一份 y 会叠加成两倍位移；
                         // 而且 dragConstraints 依赖的起始值放在 ref 里不会触发重渲染，读到的会是上一帧的。
                         data-ponder="player-bar"
-                        // 手机适配的 CSS 靠它区分展开态与收起态（两者的内边距/高度规则不同）。
-                        data-folia-player-bar-expanded={showExpanded ? 'true' : 'false'}
-                        onPointerDown={handleBarPointerDown}
+                        onPointerDown={handlePositionDragStart}
                         onPointerMove={handlePositionDragMove}
-                        onPointerUp={handleBarPointerUp}
+                        onPointerUp={handlePositionDragEnd}
                         onPointerCancel={handlePositionDragEnd}
-                        onClickCapture={handleBarClickCapture}
                         style={{ touchAction: isPositioning ? 'none' : undefined }}
                         className={`overflow-hidden rounded-full relative transition-colors duration-300
                             ${isScrollSliding ? 'shadow-none' : 'backdrop-blur-xl shadow-2xl'}
@@ -549,7 +700,7 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                             ${showExpanded ? `p-3 ${glassBgExpanded} w-full` : `px-4 py-2 ${glassBgCollapsed} ${COLLAPSED_WIDTH_CLASS}`}`}
                     >
                         <motion.div
-                            layout={layoutAnimationEnabled}
+                            layout
                             transition={{ layout: CONTROL_LAYOUT_SPRING }}
                             // 定位模式下 seek 和所有按钮一起失效：这时胶囊是个被拖的物体，不是控件。
                             className={`w-full ${isPositioning ? 'pointer-events-none select-none' : ''}`}
@@ -574,6 +725,8 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
                                     slotPrimary={slotPrimary}
                                     slotSecondary={slotSecondary}
                                     slotContext={resolvedSlotContext}
+                                    onCustomizePrimary={slotCustomization.openPrimaryPicker}
+                                    onCustomizeSecondary={slotCustomization.openSecondaryPicker}
                                 />
                             ) : (
                                 <CollapsedView
@@ -592,6 +745,25 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
             </motion.div>
             </div>
             </motion.div>
+
+            {slotPicker && (
+                <PlayerControlSlotPicker
+                    anchorRect={slotPicker.anchorRect}
+                    side={slotPicker.side}
+                    current={slotPicker.side === 'primary' ? slotPrimary : slotSecondary}
+                    other={slotPicker.side === 'primary' ? slotSecondary : slotPrimary}
+                    onSelect={(actionId) => {
+                        slotCustomization.assignSlot(slotPicker.side, actionId);
+                        closeSlotPicker();
+                    }}
+                    onOpenSettings={() => {
+                        closeSlotPicker();
+                        openSettings('options', 'player', null, 'bottomUiSettings', 'playerControlSlots');
+                    }}
+                    onClose={closeSlotPicker}
+                    isDaylight={isDaylight}
+                />
+            )}
 
             <AnimatePresence>
                 {isPositioning && (
@@ -631,6 +803,9 @@ const FloatingPlayerControls: React.FC<FloatingPlayerControlsProps> = ({
     );
 };
 
+/** 展开视图里进度那一行在网格中的位置；HiFi 路线和 Web 路线共用。 */
+const PROGRESS_ROW_CLASS = 'col-span-3 row-start-3 w-full px-2 sm:col-start-2 sm:col-span-1 sm:row-start-2';
+
 // 展开视图组件
 interface ExpandedViewProps {
     currentSong: { name: string; } | null;
@@ -651,6 +826,8 @@ interface ExpandedViewProps {
     slotPrimary: PlayerControlSlotActionId;
     slotSecondary: PlayerControlSlotActionId;
     slotContext: PlayerControlSlotContext;
+    onCustomizePrimary: (anchorRect: DOMRect) => void;
+    onCustomizeSecondary: (anchorRect: DOMRect) => void;
 }
 
 const ExpandedView: React.FC<ExpandedViewProps> = ({
@@ -672,13 +849,28 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
     slotPrimary,
     slotSecondary,
     slotContext,
+    onCustomizePrimary,
+    onCustomizeSecondary,
 }) => {
+    const isHifiRoute = useIsHifiRoute();
+    const progressBar = (
+        <ProgressBar
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={onSeek}
+            primaryColor={primaryColor}
+            secondaryColor={secondaryColor}
+            trackColor={trackColor}
+            disabled={controlsDisabled}
+        />
+    );
+
     return (
         <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-x-4 gap-y-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
             {/* Desktop Layout - responsive grid positions apply from the sm breakpoint */}
             {/* Mobile Layout - base grid positions apply below the sm breakpoint */}
             {/* Row 1: Centered Title */}
-            <div data-folia-player-bar-title="true" className="col-span-3 row-start-1 min-w-0 px-2 sm:col-start-2 sm:col-span-1">
+            <div className="col-span-3 row-start-1 min-w-0 px-2 sm:col-start-2 sm:col-span-1">
                 {trackNavigation ? (
                     <TrackTitleNavigator
                         title={currentSong?.name || noTrackText}
@@ -703,8 +895,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
             </div>
 
             {/* Row 3: Loop Button, Play Button, Lyrics Button */}
-            <Button
-                data-folia-player-bar-play="true"
+            <button
                 onClick={(e) => {
                     e.stopPropagation();
                     onTogglePlay();
@@ -718,7 +909,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                 ) : (
                     <Play size={20} fill="currentColor" className="ml-1" />
                 )}
-            </Button>
+            </button>
 
             {/* 两个可自定义槽位。默认仍是循环模式 + 歌词时间轴，和改动前一致。 */}
             <div
@@ -732,6 +923,7 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                     isDaylight={isDaylight}
                     controlsDisabled={controlsDisabled}
                     className="col-start-1 row-start-2 justify-self-end sm:justify-self-auto"
+                    onCustomize={onCustomizePrimary}
                 />
 
                 <PlayerControlSlotButton
@@ -741,21 +933,19 @@ const ExpandedView: React.FC<ExpandedViewProps> = ({
                     isDaylight={isDaylight}
                     controlsDisabled={controlsDisabled}
                     className="col-start-3 row-start-2 justify-self-start sm:justify-self-auto"
+                    onCustomize={onCustomizeSecondary}
                 />
             </div>
 
             {/* Row 2: Current Time, Progress Bar, Duration */}
-            <div data-folia-player-bar-progress="true" className="col-span-3 row-start-3 w-full px-2 sm:col-start-2 sm:col-span-1 sm:row-start-2">
-                <ProgressBar
-                    currentTime={currentTime}
-                    duration={duration}
-                    onSeek={onSeek}
-                    primaryColor={primaryColor}
-                    secondaryColor={secondaryColor}
-                    trackColor={trackColor}
-                    disabled={controlsDisabled}
-                />
-            </div>
+            {/* HiFi 路线上时长后面多一块 HiFi 徽标，按这一行的宽度换长短，进度条留够最小宽度；Web 路线和原来一模一样。 */}
+            {isHifiRoute ? (
+                <HifiProgressRow className={PROGRESS_ROW_CLASS} isDaylight={isDaylight} disabled={controlsDisabled}>
+                    {progressBar}
+                </HifiProgressRow>
+            ) : (
+                <div className={PROGRESS_ROW_CLASS}>{progressBar}</div>
+            )}
         </div>
     );
 };

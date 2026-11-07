@@ -21,6 +21,7 @@ import {
 // 见 utils/libraryWallSeamDirection。
 // 「反向」从前是这里的独立开关 seamDirectionReverse（只翻自动那一支，默认开，用户定 2026-10-24），现已并进取值列表
 // 成为 'auto-reverse'（用户定 2026-10-30）：默认方向就是它，旧存档由 readStoredSeamDirection 迁移。
+// 信息条的方向 seamDirection：竖向 / 横向（从块的横向缝隙裂开成横条）/ 自动（按视口宽高比，默认）/ 自动（反向），见 utils/libraryWallSeamDirection。
 // 放在 app 层而不是 suite 里，因为设置 UI（components/modal/settings）不能 import suite；bravais 的 stage 读这里。
 // 只在 bravais 是生效 suite 时才有界面入口（library/app/bravaisLibraryActive；界面设置的「Bravais」分组）。
 //

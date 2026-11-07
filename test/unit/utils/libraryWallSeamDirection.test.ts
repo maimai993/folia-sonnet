@@ -22,27 +22,22 @@ const matchesPortraitQuery = (width: number, height: number) => {
 describe('libraryWallSeamDirection', () => {
     it('lists auto / auto-reverse / vertical / horizontal, defaults to the reversed automatic, normalizes anything else to it', () => {
         expect(LIBRARY_WALL_SEAM_DIRECTIONS).toEqual(['auto', 'auto-reverse', 'vertical', 'horizontal']);
+        // 默认「自动（反向）」是 dev 定的观感（见 src/utils/libraryWallSeamDirection.ts 那条注释）。
         expect(DEFAULT_LIBRARY_WALL_SEAM_DIRECTION).toBe('auto-reverse');
         expect(LIBRARY_WALL_SEAM_DIRECTIONS.every(isLibraryWallSeamDirection)).toBe(true);
         expect(normalizeLibraryWallSeamDirection('vertical')).toBe('vertical');
-        expect(normalizeLibraryWallSeamDirection('auto')).toBe('auto');
-        expect(normalizeLibraryWallSeamDirection('auto-reverse')).toBe('auto-reverse');
-        for (const value of [undefined, null, '', 'Horizontal', 'sideways', 1, true]) {
+        for (const value of [undefined, null, '', 'Horizontal', 'sideways', 'autoReverse', 1, true]) {
             expect(normalizeLibraryWallSeamDirection(value)).toBe('auto-reverse');
         }
     });
 
-    it('opens rows on portrait screens only when automatic, and follows a fixed choice otherwise', () => {
+    it('opens rows on portrait screens when automatic, on landscape ones when reversed, and follows a fixed choice otherwise', () => {
         expect(resolveLibraryWallSeamHorizontal('auto', true)).toBe(true);
         expect(resolveLibraryWallSeamHorizontal('auto', false)).toBe(false);
-        expect(resolveLibraryWallSeamHorizontal('horizontal', false)).toBe(true);
-        expect(resolveLibraryWallSeamHorizontal('vertical', true)).toBe(false);
-    });
-
-    // 「自动（反向）」= 同一个判断、结果反过来：竖着拿的手机用竖缝，横着的桌面窗口 / 手机横屏用横条。
-    it('reverses the automatic branch for auto-reverse', () => {
         expect(resolveLibraryWallSeamHorizontal('auto-reverse', true)).toBe(false);
         expect(resolveLibraryWallSeamHorizontal('auto-reverse', false)).toBe(true);
+        expect(resolveLibraryWallSeamHorizontal('horizontal', false)).toBe(true);
+        expect(resolveLibraryWallSeamHorizontal('vertical', true)).toBe(false);
     });
 
     it('counts only clearly tall viewports as portrait, so near-square windows do not flip back and forth', () => {

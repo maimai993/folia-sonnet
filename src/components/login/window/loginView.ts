@@ -1,6 +1,7 @@
 import type { LibraryLoginPhase } from '../../../library/core/account/account.contract';
 import type { LoginFailure } from '../../../types/loginFailure';
-import type { LoginMethod, LoginTexts, ProviderAccountSummary } from '../../../types/onlineMusic';
+import type { LoginTexts, OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
+import { omni } from '../../../services/onlineMusic/omni';
 import type { RowStatus } from '../platformRows';
 import { LOGIN_CASE_TEXTS } from './loginCaseTexts';
 
@@ -10,10 +11,16 @@ import { LOGIN_CASE_TEXTS } from './loginCaseTexts';
 // 等待再试等到什么时候在账户 controller 的快照和 library/core/account/accountRules 里。
 // 一行的状态和那一列的顺序在 ../platformRows.ts：主页的按钮和切换器也用它们。
 
-/** 搜索框里的字筛出的行：名字或短名里有它，不分大小写。 */
-export const filterRows = (rows: readonly ProviderAccountSummary[], query: string): ProviderAccountSummary[] => {
+/** 搜索框里的字筛出的行：名字、短名或界面上显示的名字（可能是翻译过的）里有它，不分大小写。 */
+export const filterRows = (
+    rows: readonly ProviderAccountSummary[],
+    query: string,
+    shownName?: (row: ProviderAccountSummary) => string,
+): ProviderAccountSummary[] => {
     const wanted = query.trim().toLowerCase();
-    return wanted ? rows.filter(row => `${row.shortName}\n${row.displayName}`.toLowerCase().includes(wanted)) : [...rows];
+    return wanted
+        ? rows.filter(row => `${row.shortName}\n${row.displayName}\n${shownName?.(row) ?? ''}`.toLowerCase().includes(wanted))
+        : [...rows];
 };
 
 /**
@@ -35,14 +42,13 @@ export type LoginScene =
     | 'account'
     | 'accountless'
     | 'methods'         // 等用的人选登录方式
+    | 'form'            // 账号密码类平台：表单式登录（字段按 provider 声明的 getLoginForm 渲染）
     | 'browser-ready'   // 浏览器登录，等用的人点按钮
     | 'preparing'       // 正在取二维码，或者正在打开浏览器
     | 'code'            // 二维码等着扫
     | 'browser'         // 等浏览器里确认
     | 'scanned'
     | 'reading'         // 确认了，正在读账号
-    /** 密码登录（飞牛这类自建服务没有二维码）：等用的人填地址 / 用户名 / 密码。 */
-    | 'password'
     | 'failed';
 
 /**
@@ -53,7 +59,7 @@ export const accountView = (status: RowStatus | null, hasUser: boolean): 'user' 
     status !== 'signed-in' ? 'gone' : hasUser ? 'user' : 'nameless'
 );
 
-export const loginScene = ({ lead, phase, inBrowser, failed, password }: {
+export const loginScene = ({ lead, phase, inBrowser, failed, providerId }: {
     /** 选中的那一行通向什么；null 是没有选。 */
     lead: RowLead | null;
     /** 这一行的登录走到哪一步；还没有登录会话（正在开始）是 null。 */
@@ -61,25 +67,20 @@ export const loginScene = ({ lead, phase, inBrowser, failed, password }: {
     inBrowser: boolean;
     /** 登录交出了一种失败。「浏览器没有打开」时登录还在等，也算。 */
     failed: boolean;
-    /**
-     * 这一次登录是密码登录（快照里有 `passwordForm`）。密码登录提交中 phase 会变成 'loading'
-     * （账户 controller 借它表示「界面转圈」），但那一幅仍然是表单 —— 少了这一个判断，飞牛点下
-     * 「登录」之后表单会当场消失、退回「正在取二维码」那个转圈，再也回不来。
-     */
-    password?: boolean;
+    /** 选中的平台；null 是没有选。表单式登录平台（账号密码类）不自动开始登录，直接给表单。 */
+    providerId?: OnlineProviderId | null;
 }): LoginScene => {
     if (lead === null) return 'none';
     if (lead === 'account' || lead === 'accountless') return lead;
     if (failed) return 'failed';
+    // 表单式登录平台：弹窗右侧直接给账号密码表单，不在弹窗里自动开始登录。
+    if (lead === 'sign-in' && providerId && omni.getLoginForm(providerId)) return 'form';
     switch (phase) {
         case 'choosing-method': return 'methods';
         case 'ready': return 'browser-ready';
         case 'waiting': return inBrowser ? 'browser' : 'code';
         case 'scanned': return 'scanned';
         case 'confirmed': return 'reading';
-        case 'password': return 'password';
-        // 密码登录提交中：还是表单那一幅，转圈由表单自己画。
-        case 'loading': return password ? 'password' : 'preparing';
         default: return 'preparing';
     }
 };
@@ -93,13 +94,12 @@ export const sceneHeadline = (scene: LoginScene, inBrowser: boolean): string => 
         case 'none': return 'login.choosePlatform';
         case 'account': case 'accountless': return 'name';
         case 'methods': return 'home.loginMethodTitle';
-        // 密码登录用平台自己的登录标题（飞牛是「登录飞牛音乐」）。
-        case 'password': return 'title';
         case 'preparing': return inBrowser ? 'home.loginBrowserLoading' : 'title';
         case 'browser': return 'home.loginCodeWaiting';
         case 'scanned': return 'home.qrScanned';
         case 'reading': return 'login.readingAccount';
         case 'failed': return 'case';
+        case 'form': return 'title';
         default: return 'title';
     }
 };
@@ -123,16 +123,6 @@ export const failureQuote = (failure: LoginFailure, serviceError: string | null)
     const serviceSaid = failure.case.action === 'restart-service' ? serviceError || undefined : undefined;
     return serviceSaid ? { text: serviceSaid } : undefined;
 };
-
-/**
- * 等用的人选方式时，那一小块上说的是什么：通常是「选了方式之后生成二维码」，但指向密码表单的
- * 那些方式后面没有二维码可言 —— 那会儿要说「选了方式之后接着填」。
- */
-export const methodsPendingKey = (methods: readonly LoginMethod[]): string => (
-    methods.length > 0 && methods.every(method => Boolean(method.passwordField))
-        ? 'home.loginMethodPendingPassword'
-        : 'home.loginMethodPending'
-);
 
 export type StepMark = 'code' | 'browser' | 'phone' | 'account';
 

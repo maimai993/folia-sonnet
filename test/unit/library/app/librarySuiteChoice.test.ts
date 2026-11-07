@@ -182,14 +182,16 @@ describe('whether there is a choice', () => {
 });
 
 // 2026-10-10：首启引导第一页只问网格（经典）与 bravais（无限）；TUI 在测试构建里可用也不出现。
+// 之后 ffc42c8d1「首启引导补上 Rhine Lab 选项」把 rhine 也加了进去（仍排在最后、且不默认选中）。
 describe('first-run onboarding suite page', () => {
     it('lists grid and bravais, in that order, and leaves the dev TUI out', () => {
         expect(listLibrarySuiteOptions().map(option => option.id)).toContain('tui');
-        expect(listOnboardingLibrarySuiteIds()).toEqual(['grid', 'bravais']);
+        expect(listOnboardingLibrarySuiteIds()).toEqual(['grid', 'bravais', 'rhine']);
         expect(hasOnboardingLibrarySuiteChoice()).toBe(true);
     });
 
     it('keeps the fixed order whatever the registry order is, and drops suites the build lacks', () => {
+        expect(pickOnboardingLibrarySuiteIds(['rhine', 'tui', 'bravais', 'grid'])).toEqual(['grid', 'bravais', 'rhine']);
         expect(pickOnboardingLibrarySuiteIds(['tui', 'bravais', 'grid'])).toEqual(['grid', 'bravais']);
         expect(pickOnboardingLibrarySuiteIds(['grid', 'tui'])).toEqual(['grid']);
         expect(pickOnboardingLibrarySuiteIds(['grid'])).toEqual(['grid']);

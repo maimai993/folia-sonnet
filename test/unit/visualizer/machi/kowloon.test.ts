@@ -131,6 +131,9 @@ describe('kowloon facades', () => {
     // 两个盒子相交（各往里收 1 mm，只是贴着不算）。
     const overlap = (a: THREE.Box3, b: THREE.Box3) => a.clone().expandByScalar(-0.001).intersectsBox(b.clone().expandByScalar(-0.001));
 
+    // Every pipe against every piece it must keep clear of, for each seed: like the laundry below, this
+    // is well past the suite's 5 s (about 5–13 s depending on the machine), so it gets its own timeout
+    // rather than failing whichever PR happens to run on a slow runner.
     it('keeps the drainpipes off the lyric screen, the signs, the bar front, the shopfronts and the window clutter', () => {
         const bar = BLOCKS.find(block => block.hollow)!;
         const opening = new THREE.Box3(new THREE.Vector3(bar.hollow!.x0, 0, bar.z1 - 0.05), new THREE.Vector3(bar.hollow!.x1, bar.hollow!.y1, bar.z1 + 0.5));
@@ -144,8 +147,10 @@ describe('kowloon facades', () => {
             const outward = ['AC', 'Cage', 'Addition', 'Bamboo'].flatMap(name => named(blocks.group, name));
             pipes.forEach(pipe => outward.forEach(box => expect(overlap(pipe, box), seed).toBe(false)));
         });
-    });
+    }, 30_000);
 
+    // Every piece of laundry against every other, for each seed: close to 5 s on a CI runner, so it
+    // gets its own timeout rather than failing whichever PR happens to run on a slow machine.
     it('hangs the laundry side by side and keeps the poles, air conditioners and window cages apart', () => {
         const unit = new THREE.Box3(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
         const matrix = new THREE.Matrix4();
@@ -165,5 +170,5 @@ describe('kowloon facades', () => {
             pieces.forEach(piece => [...units, ...cages].forEach(other => expect(overlap(piece, other), seed).toBe(false)));
             units.forEach(unit => cages.forEach(cage => expect(overlap(unit, cage), seed).toBe(false)));
         });
-    });
+    }, 30_000);
 });

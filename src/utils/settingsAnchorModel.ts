@@ -39,6 +39,8 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // the Bravais group only while bravais is the one in effect.
     librarySuite: { section: 'home' },
     bravaisSettings: { section: 'home' },
+    // 速记簿那一组（fork 独有）：总开关、画布与排序。
+    scratchpadSettings: { section: 'home' },
     homeTabsVisibility: { section: 'home' },
     grid3dCardStyle: { section: 'home' },
     rememberHomeCardPosition: { section: 'home' },
@@ -96,7 +98,11 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // pages/GraphicsPage; the render GPU row only in the Windows desktop app.
     graphicsPerformance: { section: 'graphics' },
     graphicsMotion: { section: 'graphics' },
+    // 歌词画布分辨率与抗锯齿那一行（见 renderQuality/LyricRenderQualityRows）。
+    lyricRenderScale: { section: 'graphics' },
     gpuPreference: { section: 'graphics' },
+    // HiFi 引擎那一组（fork 独有，只在桌面 Electron 里画）。
+    hifiEngine: { section: 'playback' },
     // 液态玻璃那一组（fork 独有）：总开关、预设、参数与效果开关。
     liquidGlass: { section: 'graphics' },
     liquidGlassEnabled: { section: 'graphics' },

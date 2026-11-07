@@ -39,11 +39,16 @@ describe('what each platform declares for the sign-in window', () => {
             kugou: { letter: 'K', color: '#2563eb' },
             qq: { letter: 'Q', color: '#16a34a' },
             bodian: { letter: '波', color: '#0d9488' },
+            // 飞牛只注册本 fork 这一份（feiniu，走 foliaNative 原生 HTTP，安卓与桌面都能用）；
+            // 上游那份 fnmusic（Electron 主进程桥）文件保留但未注册 —— 两份都注册会让平台列里
+            // 出现两个「飞牛」，用户分不清点哪个。
+            feiniu: { letter: '飞', color: '#0ea5e9' },
             ytm: { letter: 'Y', color: '#e11d48' },
             spotify: { letter: 'S', color: '#22c55e' },
-            // 汽水与飞牛是我们自己接的平台：登录窗口要认得它们，不然会退化成中性灰的第一个字。
+            // providerRegistry 保留的是 fork 这份 qishui（手机协议扫码），它的记号颜色是橙 #f97316；
+            // 上游 qishui/qishuiProvider 那份（桌面 electron 桥）才是青 #19a58c，未注册。
             qishui: { letter: '汽', color: '#f97316' },
-            feiniu: { letter: '飞', color: '#0ea5e9' },
+            appleMusic: { letter: 'A', color: '#fa243c' },
         });
     });
 
@@ -58,11 +63,12 @@ describe('what each platform declares for the sign-in window', () => {
             kugou: { title: 'home.loginTitleKugou', note: 'home.loginNoteKugou' },
             qq: { title: 'home.loginTitleQq', note: 'home.loginNoteQq' },
             bodian: { title: 'home.loginTitleBodian', note: 'home.loginNoteBodian' },
+            feiniu: { title: 'home.loginTitleFeiniu', note: 'home.loginNoteFeiniu' },
             // The test runs where no browser tells the system: the note is the one for Windows and Linux.
             ytm: { title: 'home.loginTitleYtm', note: 'home.loginNoteYtmBrowser' },
             spotify: { title: 'home.loginTitleSpotify', note: 'home.loginNoteSpotify' },
             qishui: { title: 'home.loginTitleQishui', note: 'home.loginNoteQishui' },
-            feiniu: { title: 'home.loginTitleFeiniu', note: 'home.loginNoteFeiniu' },
+            appleMusic: { title: 'home.loginTitleAppleMusic', note: 'home.loginNoteAppleMusic' },
         });
     });
 

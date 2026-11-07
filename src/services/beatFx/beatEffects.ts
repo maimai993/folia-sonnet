@@ -55,11 +55,11 @@ export const BEAT_EFFECT_IDS = {
     hanabiBeatBursts: 'hanabi.beatBursts',
     hanabiBeatPulse: 'hanabi.beatPulse',
     temperaInkFlash: 'tempera.inkFlash',
-    nebbiaDrizzleRide: 'nebbia.drizzleRide',
-    nebbiaAquaBeat: 'nebbia.aquaBeat',
     machiNeonPulse: 'machi.neonPulse',
     machiDrumRipple: 'machi.drumRipple',
     machiScreenFlash: 'machi.screenFlash',
+    nebbiaDrizzleRide: 'nebbia.drizzleRide',
+    nebbiaAquaBeat: 'nebbia.aquaBeat',
 } as const;
 
 /**
@@ -68,15 +68,15 @@ export const BEAT_EFFECT_IDS = {
  */
 export const LEGACY_BEAT_LIST_EFFECT_IDS: readonly string[] = [BEAT_EFFECT_IDS.sonnetLensTear, BEAT_EFFECT_IDS.dioramaRipple];
 
-/** The effect's setting, or the default for one never touched. */
-export const resolveBeatEffectSetting = (settings: SmartBeatSettings, id: string): BeatEffectSetting =>
-    settings.effects[id] ?? BEAT_EFFECT_DEFAULT;
-
 /** The id a part plays under in the live strengths (beatFxLive.ts `getBeatEffectStrength`). */
 export const beatEffectPartId = (id: string, part: string): string => `${id}:${part}`;
 
 /** A part's strength in an effect's setting, 1 for one never touched. */
 export const resolveBeatEffectPartStrength = (setting: BeatEffectSetting, part: string): number => setting.parts?.[part] ?? 1;
+
+/** The effect's setting, or the default for one never touched. */
+export const resolveBeatEffectSetting = (settings: SmartBeatSettings, id: string): BeatEffectSetting =>
+    settings.effects[id] ?? BEAT_EFFECT_DEFAULT;
 
 /**
  * The effects that read drum hits (`source: 'drums'`), on any picture. Their declarations live on the

@@ -45,6 +45,9 @@ const OTHER_SETTER_OF_THAT_NAME: Record<string, string> = {
 
 // Files that may take the two steps apart: how many pairs each has, and why. Every other file
 // makes a song current with the one call, `makeSongCurrent`.
+//
+// 取消混音那一对（先 `showSong` 把画面放回在放的那首，最后 `askForSong(..., { putBack: true })`
+// 才把 key 移回去）在 appWiring/useAppPlaybackActions.ts：App.tsx 是薄壳，这一对跟着接线走。
 const TWO_STEPS: Record<string, { pairs: number; why: string }> = {
     'src/components/app/playback/start/usePlaybackQueueController.ts': { pairs: 1, why: 'playSong waits for the stored lyrics state between asking and showing' },
     'src/components/app/playback/start/useLibraryPlaybackController.ts': { pairs: 2, why: 'a local play and a Navidrome play each write the lyrics between asking and showing' },

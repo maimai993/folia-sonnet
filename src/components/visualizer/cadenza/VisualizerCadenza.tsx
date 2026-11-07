@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_CADENZA_TUNING, Line } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
-import { colorWithAlpha, mixColors } from '../../../utils/visualizer/colorMix';
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
+import { colorWithAlpha, mixColors } from '../colorMix';
 import { prepareActiveAndUpcoming, useVisualizerRuntime } from '../runtime';
 import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import type {
@@ -74,8 +76,16 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
         subtitleOverlayLayout,
+        isPreviewMode = false,
     } = props;
     const { t } = useTranslation();
+    // 文字画布的分辨率倍数（#929）：全局挡位叠上这个样式的覆盖，预览不跟。经 ref 交给绘制循环，
+    // 每帧照原样按设备像素比算尺寸，倍数变了下一帧就地改画布尺寸，不重启循环。
+    const renderQuality = useLyricRenderQuality(cadenzaTuning.render);
+    const renderScaleRef = useRef(isPreviewMode ? 1 : renderQuality.scale);
+    useEffect(() => {
+        renderScaleRef.current = isPreviewMode ? 1 : renderQuality.scale;
+    }, [isPreviewMode, renderQuality.scale]);
     const [viewport, setViewport] = useState({ width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
     const lineLayerRef = useRef<HTMLDivElement>(null);
@@ -244,28 +254,6 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         // status gives, without the comparator re-deriving every status on every comparison.
         const byStatus: Record<'waiting' | 'passed' | 'active', WordPlacement[]> = { waiting: [], passed: [], active: [] };
         let frameNumber = 0;
-        // 已写进样式的值。每帧无条件写 opacity / filter / transform 会把这一层每帧都标脏：
-        // 即使字符串与上一帧一模一样，浏览器仍要重走样式解析，而 filter 一旦变化就要重新
-        // 栅格化整层。歌词间的空档（opacity 0、filter none）此前也在每帧重写同样的四个值。
-        // 只写变化的值，画面像素完全不变。
-        const writtenStyle = { opacity: '', filter: '', transform: '', perspective: '' };
-        const applyLineStyle = (property: keyof typeof writtenStyle, value: string) => {
-            if (writtenStyle[property] === value) return;
-            writtenStyle[property] = value;
-            lineLayer.style.setProperty(property, value);
-        };
-        /**
-         * 模糊半径每帧都在变，但每写一次 filter，这一层就要重新栅格化一遍。
-         * 0.05px 以下的变化在屏幕上落不到一个像素里，写进去等于白栅格化。
-         * 阈值只挡「看不见的变化」，不改变任何可见的模糊程度。
-         */
-        let writtenBlurPx = 0;
-        const applyBlur = (blurPx: number) => {
-            const next = blurPx > 0.05 ? blurPx : 0;
-            if (Math.abs(next - writtenBlurPx) < 0.05) return;
-            writtenBlurPx = next;
-            applyLineStyle('filter', next > 0 ? `blur(${next.toFixed(2)}px)` : 'none');
-        };
 
         const draw = () => {
             const now = performance.now();
@@ -275,7 +263,7 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             lastFrameTimeRef.current = now;
             const width = Math.max(Math.floor(viewport.width), 1);
             const height = Math.max(Math.floor(viewport.height), 1);
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = resolveLyricPixelRatio(window.devicePixelRatio || 1, renderScaleRef.current);
 
             if (textCanvas.width !== Math.floor(width * dpr) || textCanvas.height !== Math.floor(height * dpr)) {
                 textCanvas.width = Math.floor(width * dpr);
@@ -288,10 +276,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             textContext.clearRect(0, 0, width, height);
 
             if (!showText || !preparedState || !activeLine) {
-                applyLineStyle('opacity', '0');
-                applyBlur(0);
-                applyLineStyle('transform', 'scale(1)');
-                applyLineStyle('perspective', '1000px');
+                lineLayer.style.opacity = '0';
+                lineLayer.style.filter = 'none';
+                lineLayer.style.transform = 'scale(1)';
+                lineLayer.style.perspective = '1000px';
                 clearOverlayWordNodes(overlayNodesRef.current);
                 frameId = window.requestAnimationFrame(draw);
                 return;
@@ -309,10 +297,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             const verticalLift = Math.sin(time * 2.3) * (3 + motionEnergy * 8);
             const focusY = height * 0.42 + verticalLift;
 
-            applyLineStyle('opacity', lineEnvelope.opacity.toString());
-            applyBlur(lineEnvelope.blur);
-            applyLineStyle('transform', `scale(${lineEnvelope.scale})`);
-            applyLineStyle('perspective', `${linePerspective}px`);
+            lineLayer.style.opacity = lineEnvelope.opacity.toString();
+            lineLayer.style.filter = lineEnvelope.blur > 0.05 ? `blur(${lineEnvelope.blur.toFixed(2)}px)` : 'none';
+            lineLayer.style.transform = `scale(${lineEnvelope.scale})`;
+            lineLayer.style.perspective = `${linePerspective}px`;
 
             textContext.font = preparedState.font;
             textContext.textBaseline = 'alphabetic';
@@ -449,9 +437,10 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
 
                     writeOverlayWord(overlayWord, {
                         outerTransform: `translate3d(${overlayAnchorX}px, ${overlayAnchorY}px, 0) rotate(${animatedState.rotation}deg) scale(${animatedState.scale})`,
-                        // 任何平台都自己占一层合成层：否则每次新的 scale 都要按新的设备尺寸重新光栅化这个词和它
-                        // 40px 的 text-shadow，Chromium 的字形缓存按 strike 泄漏共享内存（Linux 上会致命，见
-                        // utils/glowBlurQuantize.ts），120Hz 的 Mac 上也让光栅线程每秒烧掉约 150ms。
+                        // Own compositing layer on every platform: otherwise every new scale re-rasterizes the word and
+                        // its 40px text-shadow at a new device size. That leaks shared memory in Chromium's glyph cache
+                        // (fatal on Linux, see utils/glowBlurQuantize.ts) and, on a 120 Hz Mac, kept the raster worker
+                        // at ~150 ms a second. Pixel-checked against the non-composited word: same up to edge AA.
                         willChange: 'transform',
                         font: preparedState.font,
                         innerTransform: `translate3d(${overlayOffsetX}px, ${overlayOffsetY}px, 0)`,

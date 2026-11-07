@@ -5,11 +5,7 @@ import { createCollectionTrackSnapshot } from '@/library/core/collection/resourc
 import type { OnlineTracksCacheEntry } from '@/library/core/collection/resource/onlineCollectionCache.service';
 import type { OnlineGridViewCollectionDescriptor } from '@/library/core/collection/collection.contract';
 
-// test/unit/qq/playlistCache.test.ts
-// 来自上游 #879。盯的是「账号缓存往返之后，磁盘快照的版本还是不是同一个」：
-// QQ 的 updateTime 是秒，账号缓存那一趟把它变成毫秒之后，如果归一化没有认回来，
-// 每次重进歌单都会当成新版本重新拉一遍 —— 缓存等于白存。
-
+// Verify that QQ account hydration preserves the version used by the shared disk snapshot cache.
 const descriptor = (updateTime: number): OnlineGridViewCollectionDescriptor => ({
     ...normalizeQqCollection({ tid: 7, dirId: 1, dirName: 'Playlist', songNum: 1, updateTime }),
     source: 'online',
@@ -18,8 +14,8 @@ const settle = async () => {
     for (let i = 0; i < 40; i += 1) await Promise.resolve();
 };
 
-describe('QQ 歌单的快照缓存', () => {
-    it('账号缓存往返后复用已存的快照，上游版本变了才重新读', async () => {
+describe('QQ playlist snapshot cache', () => {
+    it('reuses a saved snapshot after hydration, and reads again when the upstream version changes', async () => {
         let cache: OnlineTracksCacheEntry = { tracks: [], snapshotTime: 0, schemaVersion: 0 };
         const deps: OnlineCollectionResourceDeps = {
             getCollectionTracks: vi.fn(async () => ({ items: [], nextOffset: 0, hasMore: false, total: 0 })),
@@ -32,7 +28,7 @@ describe('QQ 歌单的快照缓存', () => {
             }),
         };
         const collection = descriptor(1792948025);
-        // 用一页真的非空数据：空页按设计不会落盘。
+        // Use a real nonempty page: empty pages are intentionally not persisted by the resource.
         const track = { id: 'song', name: 'Song', artists: [], album: { id: '', name: '' }, durationMs: 1 };
         vi.mocked(deps.getCollectionTracks).mockResolvedValue({ items: [track], nextOffset: 1, hasMore: false, total: 1 });
         const first = createOnlineCollectionResource('k', deps);

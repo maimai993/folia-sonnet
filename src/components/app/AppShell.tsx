@@ -7,10 +7,11 @@ import { SettingsKitThemeContext } from '../modal/settings/kit/kitTheme';
 import { SheetLayerContext } from '../shared/Sheet';
 import TitlebarDragZone from '../TitlebarDragZone';
 import WindowControls from '../WindowControls';
+import ClickThroughMediaControls from './ClickThroughMediaControls';
+import type { TransportButtonAction } from './playback/bridges/useTransportCommandRefs';
 import { usePlayerOverlayRoot, usePlayerOverlayReservation } from '../../hooks/usePlayerOverlayLayout';
 import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 import type { FoliumLayoutRect } from '../../mods/folium/contract';
-import { Button } from '@/components/ui';
 
 // Shared shell for the app container, Electron titlebar, and mounted audio node.
 type AppShellProps = {
@@ -26,6 +27,7 @@ type AppShellProps = {
     isMainWindowClickThroughEnabled: boolean;
     showMainWindowClickThroughToggle: boolean;
     onToggleMainWindowClickThrough: () => void;
+    onClickThroughTransportAction: (action: TransportButtonAction) => void;
     isDaylight: boolean;
     theme: Theme;
     audioElement: React.ReactNode;
@@ -56,6 +58,7 @@ const AppShell: React.FC<AppShellProps> = ({
     isMainWindowClickThroughEnabled,
     showMainWindowClickThroughToggle,
     onToggleMainWindowClickThrough,
+    onClickThroughTransportAction,
     isDaylight,
     theme,
     audioElement,
@@ -144,13 +147,13 @@ const AppShell: React.FC<AppShellProps> = ({
 
     const shouldApplyWindowRadius = useCustomWindowRadius && !isWindowMaximized && !isWindowFullscreen;
     const areTitlebarControlsVisible = isTitlebarRevealed || alwaysShowMainWindowTitlebar;
-    // 播放页顶栏模糊背景：浅色主题压在深色画面上时标题栏按钮看不清，开了就给播放页也垫上主页那层磨砂底。
-    // 跟着按钮一起出现（悬停顶部，或「始终显示标题栏控制按钮」）；点击穿透时按钮都藏了，底也不画。
+    // 播放页顶栏模糊背景：浅色主题压在深色画面上时，标题栏按钮看不清，开了就给播放页也垫上主页那层磨砂底。
+    // 跟着按钮一起出现（悬停顶部或「始终显示标题栏控制按钮」），点击穿透时按钮都藏了，底也不画。
     const showsPlayerHeaderBlur = isPlayerView && playerHeaderBlur && !isMainWindowClickThroughEnabled;
     const shouldRenderTitlebarBackdrop = !isPlayerView || showsPlayerHeaderBlur || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
     const isTitlebarBackdropVisible = isTitlebarRevealed || (showsPlayerHeaderBlur && alwaysShowMainWindowTitlebar);
-    // 开着顶栏模糊时用更实的一层：0.18 的白压在深色画面上只混成深灰，浅色主题的深色按钮照样看不清，
-    // 底色得抬到接近浅色主题的底；深色主题同理压暗。透明窗口原有的 0.18 样式不动。
+    // 开了顶栏模糊时用更实的一层：0.18 的白在深色画面上只会混成深灰，浅色主题的深色按钮照样看不清，
+    // 得把底色抬到接近浅色主题的底；深色主题同理压暗。透明窗口原有的 0.18 样式不变。
     const titlebarBackdropClassName = showsPlayerHeaderBlur
         ? `absolute inset-0 backdrop-blur-md border-b ${
             isDaylight
@@ -169,7 +172,6 @@ const AppShell: React.FC<AppShellProps> = ({
 
     return (
         <div
-            data-folia-app-shell="true"
             ref={layoutRootRef}
             className="fixed inset-0 w-full h-full flex flex-col overflow-hidden font-sans transition-colors duration-500"
             style={{
@@ -193,14 +195,15 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className={`pointer-events-auto absolute top-0 z-20 h-full flex items-center ${
+                            className={`pointer-events-auto absolute ${window.electron?.platform === 'darwin' ? 'top-1' : 'top-0'} z-20 h-full flex items-center ${
                                 hasFullscreenTitlebarButton ? 'right-[224px]' : 'right-[180px]'
                             }`}
                             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
-                            <Button
+                            <button
+                                type="button"
                                 aria-label={isMainWindowClickThroughEnabled ? 'Disable click-through' : 'Enable click-through'}
-                                tip={isMainWindowClickThroughEnabled ? t('remote.disableClickThrough') : t('remote.enableClickThrough')}
+                                title={isMainWindowClickThroughEnabled ? t('remote.disableClickThrough') : t('remote.enableClickThrough')}
                                 onClick={onToggleMainWindowClickThrough}
                                 className={`flex h-7 w-7 items-center justify-center rounded-full border shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all duration-200 ${
                                     showMainWindowClickThroughToggle
@@ -217,7 +220,23 @@ const AppShell: React.FC<AppShellProps> = ({
                                 }`}
                             >
                                 {isMainWindowClickThroughEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
-                            </Button>
+                            </button>
+                        </div>
+                        {/* 点击穿透时窗口按钮都藏了，切歌按钮放在锁的左边，跟锁一起出现（#471）。
+                            右缘离锁 6px：锁在 right-[180px]/right-[224px]、宽 28px，这组宽 86px。
+                            不放锁右边：那样热区要伸到离右边 84px，压住下面窗口的最小化/最大化按钮。 */}
+                        <div
+                            className={`pointer-events-none absolute ${window.electron?.platform === 'darwin' ? 'top-1' : 'top-0'} z-20 h-full flex items-center ${
+                                hasFullscreenTitlebarButton ? 'right-[258px]' : 'right-[214px]'
+                            }`}
+                            // 只在点击穿透时扣出不可拖的区域：平时这组按钮不出现，标题栏这一段照常能拖窗口。
+                            style={isMainWindowClickThroughEnabled ? { WebkitAppRegion: 'no-drag' } as React.CSSProperties : undefined}
+                        >
+                            <ClickThroughMediaControls
+                                visible={isMainWindowClickThroughEnabled && showMainWindowClickThroughToggle}
+                                isDaylight={isDaylight}
+                                onAction={onClickThroughTransportAction}
+                            />
                         </div>
                         <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
                             <WindowControls

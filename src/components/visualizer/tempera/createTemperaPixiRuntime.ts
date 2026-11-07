@@ -1,5 +1,6 @@
 import type { MotionValue } from 'framer-motion';
-import type { TemperaTuning, Theme } from '../../../types';
+import type { LyricRenderScale, TemperaTuning, Theme } from '../../../types';
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import {
     destroyPixiDisplayTree,
     setPixiDisplayTreeVisibility,
@@ -22,7 +23,7 @@ import { setTemperaTransitionBlur } from './temperaSceneFilters';
 import { destroyTemperaGradientFills } from './temperaShapes';
 import { TemperaImageTextures } from './temperaImageTextures';
 import { TemperaOverlay } from './temperaOverlay';
-import { createTemperaInkFlashFrame, TemperaInkFlash } from './temperaInkFlash';
+import { TemperaInkFlash } from './temperaInkFlash';
 import { getBeatEffectStrength, getBeatFxHeard } from '../../../services/beatFx/beatFxLive';
 import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { getDrumHits } from '../../../services/analysis/drumHits';
@@ -79,6 +80,13 @@ export interface TemperaRuntimeOptions {
     program: TemperaProgram;
     theme: Theme;
     tuning: TemperaTuning;
+    /**
+     * 分辨率倍数（#929，全局挡位叠上样式覆盖）：乘在 `textureResolution` 上再做纹理池吸附。
+     * 就地改，见 setRenderScale。
+     */
+    renderScale: LyricRenderScale;
+    /** 画布开不开 MSAA（#929）：「自动」时就是原来的 `!postProcessEnabled`。只在建上下文时定，变了由外壳重建。 */
+    antialias: boolean;
     currentTime: MotionValue<number>;
     lyricsFontScale: number;
     staticMode: boolean;
@@ -92,6 +100,17 @@ export interface TemperaRuntimeOptions {
     signal?: AbortSignal;
 }
 
+
+/**
+ * 渲染器实际用的 resolution：`textureResolution` 是样式原来的像素密度（base），乘上分辨率倍数（#929）
+ * 后再吸附到纹理池档位。
+ */
+const resolveTemperaRenderResolution = (
+    width: number,
+    height: number,
+    tuning: TemperaTuning,
+    renderScale: LyricRenderScale,
+) => snapResolutionToTexturePool(width, height, resolveLyricPixelRatio(tuning.textureResolution, renderScale));
 
 /** The incoming scene and poster, built a frame before the cut needs them. */
 interface TemperaStagedSong {
@@ -123,7 +142,8 @@ export class TemperaPixiRuntime {
     private lastWidth = 0;
     private lastHeight = 0;
     /**
-     * What the renderer is actually running at: `textureResolution` after the texture-pool snap.
+     * What the renderer is actually running at: `textureResolution` times the 分辨率 multiplier
+     * (#929), after the texture-pool snap.
      * It depends on the viewport as well as the setting, so it is recomputed on every resize and
      * every tuning change rather than read off the tuning - and the fixed-resolution filter
      * passes are derived from this, never from `tuning.textureResolution`.
@@ -137,9 +157,6 @@ export class TemperaPixiRuntime {
     /** 智能动感模式「墨染奥行」's ink: the stain and the ink flash, between the scenes and the overlay. */
     private inkFlash!: TemperaInkFlash;
     private inkFlashSupported: boolean | undefined;
-    /** 墨层上一次是不是亮着：关掉的那一拍要补一发 strength 0 让它收起来。 */
-    private inkFlashShown = false;
-    private readonly inkFrame = createTemperaInkFlashFrame();
     /**
      * 墨染奥行 also owns the depth: the baked depth blur, the parallax, the per-shot camera pan and the
      * size-as-depth glyphs. Off, Tempera looks as it did before the effect.
@@ -176,8 +193,9 @@ export class TemperaPixiRuntime {
             // With post-processing the scene is drawn into the filters' own multisampled target and
             // the back buffer only gets the filtered picture and the frame marks: its 4-sample buffer
             // would cost about 70 MB of video memory for those. The marks' edges are then not
-            // smoothed. Switching post-processing rebuilds this runtime (rebuildKey in VisualizerTempera).
-            antialias: !options.tuning.postProcessEnabled,
+            // smoothed. That is the default; the 抗锯齿 setting (#929) can force it either way. The
+            // resolved value is in VisualizerTempera's rebuildKey, so a change rebuilds this runtime.
+            antialias: options.antialias,
             powerPreference: 'high-performance',
             // The lyric layer's difference filter declares blendRequired; without the back
             // buffer the WebGL renderer skips the whole filter stack for that container.
@@ -187,7 +205,7 @@ export class TemperaPixiRuntime {
         const app = new pixi.Application();
         const width = Math.max(options.host.clientWidth, 320);
         const height = Math.max(options.host.clientHeight, 240);
-        const resolution = snapResolutionToTexturePool(width, height, options.tuning.textureResolution);
+        const resolution = resolveTemperaRenderResolution(width, height, options.tuning, options.renderScale);
         await app.init({
             width,
             height,
@@ -259,7 +277,7 @@ export class TemperaPixiRuntime {
     private resolveRenderResolution(tuning: TemperaTuning) {
         const width = this.lastWidth || Math.max(this.options.host.clientWidth, 320);
         const height = this.lastHeight || Math.max(this.options.host.clientHeight, 240);
-        return snapResolutionToTexturePool(width, height, tuning.textureResolution);
+        return resolveTemperaRenderResolution(width, height, tuning, this.options.renderScale);
     }
 
     private resizeToHost() {
@@ -574,34 +592,17 @@ export class TemperaPixiRuntime {
         this.inkFlashSupported ??= typeof WebGL2RenderingContext !== 'undefined'
             && (this.app.renderer as { gl?: unknown }).gl instanceof WebGL2RenderingContext;
         const strength = this.options.staticMode || !this.inkFlashSupported ? 0 : getBeatEffectStrength(BEAT_EFFECT_IDS.temperaInkFlash);
-        // 关着时每帧什么都不做：这条是逐帧路径，getBeatFxHeard() 每次返回新对象。
-        // 只在刚关掉的那一拍补一发 strength 0，让墨层收起来。
-        if (strength <= 0) {
-            if (this.inkFlashShown) {
-                this.inkFlashShown = false;
-                this.inkFrame.strength = 0;
-                this.inkFlash.update(this.inkFrame);
-            }
-            return;
-        }
         const heard = getBeatFxHeard();
-        const known = getDrumHits(heard.key);
+        const known = strength > 0 ? getDrumHits(heard.key) : null;
         const hitTime = heard.time ?? time;
         const hits = known && (known.until === undefined || hitTime < known.until) ? known : null;
-        // 帧对象逐帧复用（字段就地改）；没拿到 hits 时 strength 照样发下去 ——
-        // 效果开着的时候，墨的噪声要先开始堆。
-        const frame = this.inkFrame;
-        frame.time = hitTime;
-        frame.width = width;
-        frame.height = height;
-        frame.strength = strength;
-        frame.hits = hits;
-        frame.paragraphIndex = paragraphIndex;
-        frame.inkColor = hits
-            ? this.sceneCache.get(paragraphIndex)?.palette.accent ?? this.options.theme.accentColor
-            : '';
-        this.inkFlashShown = true;
-        this.inkFlash.update(frame);
+        if (!hits) {
+            // The strength still goes in: with the effect on, the ink's noise starts building before the hits are in.
+            this.inkFlash.update({ time: hitTime, width, height, strength, hits: null, paragraphIndex, inkColor: '' });
+            return;
+        }
+        const inkColor = this.sceneCache.get(paragraphIndex)?.palette.accent ?? this.options.theme.accentColor;
+        this.inkFlash.update({ time: hitTime, width, height, strength, hits, paragraphIndex, inkColor });
     }
 
     renderOnce() {
@@ -717,16 +718,7 @@ export class TemperaPixiRuntime {
             this.app.renderer.resolution = resolution;
         }
         if (requiresTemperaSceneRebuild(previous, tuning)) {
-            this.cancelDepthBlurRebake();
-            // Staged against the old tuning, so it can no longer be adopted.
-            this.songSwap.dropStaged();
-            this.clearScenes();
-            // Before the first resize pass there is nothing sized to redraw; the install pass
-            // will draw both against real dimensions.
-            if (this.lastWidth > 0 && this.lastHeight > 0) {
-                this.drawOverlay(this.lastWidth, this.lastHeight);
-                this.drawCredits(this.lastWidth, this.lastHeight);
-            }
+            this.rebuildScenes();
         } else {
             this.sceneCache.forEach(scene => {
                 scene.shots.forEach(shot => shot.images.applyPool(tuning.layerImages));
@@ -738,6 +730,35 @@ export class TemperaPixiRuntime {
             }
         }
         if (this.options.paused) this.renderOnce();
+    }
+
+    /**
+     * 换分辨率倍数（#929）：和 textureResolution 一样就地改渲染器的 resolution，不重建 WebGL 上下文、
+     * 不重新解码图片；场景上的定分辨率滤镜都由 renderResolution 推出，所以吸附后的值变了就重建场景。
+     */
+    setRenderScale(renderScale: LyricRenderScale) {
+        if (this.destroyed || this.options.renderScale === renderScale) return;
+        this.options.renderScale = renderScale;
+        const resolution = this.resolveRenderResolution(this.options.tuning);
+        if (resolution === this.renderResolution) return;
+        this.renderResolution = resolution;
+        this.app.renderer.resolution = resolution;
+        this.rebuildScenes();
+        if (this.options.paused) this.renderOnce();
+    }
+
+    /** Drops every cached scene (they are rebuilt as playback reaches them) and redraws the overlay and poster. */
+    private rebuildScenes() {
+        this.cancelDepthBlurRebake();
+        // Staged against the old tuning or resolution, so it can no longer be adopted.
+        this.songSwap.dropStaged();
+        this.clearScenes();
+        // Before the first resize pass there is nothing sized to redraw; the install pass
+        // will draw both against real dimensions.
+        if (this.lastWidth > 0 && this.lastHeight > 0) {
+            this.drawOverlay(this.lastWidth, this.lastHeight);
+            this.drawCredits(this.lastWidth, this.lastHeight);
+        }
     }
 
     /**

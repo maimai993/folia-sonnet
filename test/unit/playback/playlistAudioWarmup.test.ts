@@ -17,6 +17,8 @@ vi.mock('@/services/onlineMusic/omni', () => ({
     omni: {
         getAudioSource: (...args: unknown[]) => mocks.getAudioSource(...args),
         canPlaySong: () => true,
+        // 平台自带播放器的歌（ytm 这类）不走预取：预热前会先问这一句。
+        canPlayExternally: () => false,
         resolveAudioQuality: (_providerId: string, quality: string) => quality,
     },
 }));

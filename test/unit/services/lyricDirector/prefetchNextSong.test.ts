@@ -113,12 +113,20 @@ const loadDirector = async () => {
     return { director, stage, playback };
 };
 
-/** 当前歌跑完一次决策 —— 预取就挂在它 finally 的尾巴上。 */
+/**
+ * 当前歌跑完一次决策 —— 预取就挂在它 finally 的尾巴上。
+ *
+ * 预取是 `void prefetchNextSong()`，不返回句柄。v0.7.26 又在它前面垫了两层 await
+ * （先问原生后台算过没有，再问云缓存），早先「等一个 setTimeout(0) 就断言」的写法
+ * 已经等不到它跑完。这里让事件循环真多空转几轮，压掉那两层排队。
+ */
 const runOnce = async (
     director: typeof import('@/services/lyricDirector/director'),
 ) => {
     await director.runLyricDirectorDecision({ announce: false });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let turn = 0; turn < 8; turn += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 };
 
 let calls: CloudCall[] = [];

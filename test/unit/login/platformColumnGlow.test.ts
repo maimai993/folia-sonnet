@@ -48,15 +48,23 @@ describe('the highlight of the row of platforms', () => {
     });
 
     it('is placed on the block itself, not through a render of its own', () => {
-        const real = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!;
+        // 量的是 getBoundingClientRect（上游 #913 起不再用 offset*：它取整，各行平分列高时最后一行
+        // 取整后的底边会把列表撑出滚动条，滚动条让行变窄、再量又变回去，来回不停）。所以这里
+        // mock 的是宽度本身，而且「每次读都不一样」。
+        const real = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect')!;
         let reads = 0;
-        Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        const rect = (width: number, height: number): DOMRect => ({
+            x: 0, y: 0, top: 0, left: 0, width, height, bottom: height, right: width,
+            toJSON: () => ({}),
+        }) as DOMRect;
+        Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
             configurable: true,
-            get() {
+            value(this: Element) {
                 // The stopper: measuring one's way through the render reads forever, and a loop
                 // that never ends hangs the whole run instead of failing it.
                 if ((reads += 1) > 200) throw new Error('the highlight measured its way through a render');
-                return 120 + (reads % 2);
+                // 行有宽没高：高亮块的高度就是 0，位置在原点（jsdom 不排版，两个都量成 0）。
+                return this instanceof HTMLElement && this.dataset.row ? rect(120 + (reads % 2), 0) : rect(0, 0);
             },
         });
         try {
@@ -70,10 +78,10 @@ describe('the highlight of the row of platforms', () => {
             expect(glow.style.height).toBe('0px');
             expect(glow.style.transform).toBe('translate(0px, 0px)');
             expect(glow.style.opacity).toBe('1');
-            // Four numbers of the one row the highlight is on, read after the one render there was.
+            // 只量了一轮：列表与它选中的那一行各一次（走到 state 那条路上时会一直量下去）。
             expect(reads).toBeLessThanOrEqual(8);
         } finally {
-            Object.defineProperty(HTMLElement.prototype, 'offsetWidth', real);
+            Object.defineProperty(Element.prototype, 'getBoundingClientRect', real);
         }
     });
 });

@@ -21,11 +21,12 @@ import { probeAccountController } from './probeAccountController';
  * state of the sign-in is made up here and handed to the window's screen. Nothing is requested;
  * the code is a pattern drawn in this file, the accounts are samples.
  *
- * Opened by hand: ?probe=loginWindow&state=<state>&theme=dark|light&count=6|12&lang=zh|en
+ * Opened by hand: ?probe=loginWindow&state=<state>&theme=dark|light&count=6…12&lang=zh|en
  * state: none, preparing, code, scanned, reading, expired, methods, methods-code, browser-ready,
- * browser-opening, browser, account, account-other, account-nameless (signed in, no profile),
+ * browser-opening, browser, account (syncing=1: its data is syncing; syncing=other: another platform's is), account-other, account-nameless (signed in, no profile),
  * account-gone (the sign-in ran out while the account was shown), accountless, off, or fail-<case id>.
- * count=12 adds stand-in platforms (the search field shows from 12 up). A test passes the same as props.
+ * count=7–12 fills the column up to that many platforms with stand-ins (the search field shows from 12 up).
+ * A test passes the same as props.
  *
  * state=play walks through a sign-in by itself, at the mock-up's pace: the code, scanned after
  * 0.3 s, confirmed 1.3 s after the scan, the account read 2.1 s after it; then the animation, the
@@ -235,7 +236,7 @@ function LoginWindowProbe(props: ProbeProps) {
         : played && step === 3
             ? PLATFORMS.map(entry => (entry.providerId === played ? { ...entry, status: 'authenticated' as const, user: SAMPLE_USER } : entry))
             : PLATFORMS;
-    const rows = orderRows(count > 6 ? [...platforms, ...STAND_INS] : platforms, played ?? activeProviderId);
+    const rows = orderRows([...platforms, ...STAND_INS.slice(0, Math.max(0, count - platforms.length))], played ?? activeProviderId);
     const view: Shown = played
         ? {
             chosen: chosen(played, 'sign-in'),
@@ -261,8 +262,6 @@ function LoginWindowProbe(props: ProbeProps) {
                     chosen={view.chosen}
                     login={view.login}
                     buildReport={async () => '### Folia QR login diagnostics (a sample made by the probe)'}
-                    // 密码登录（飞牛）：探针里只记一句，不真的去登。
-                    onSubmitPassword={credentials => setSaid(`password for ${credentials.username}`)}
                     onChoose={providerId => {
                         setSaid(`chosen ${providerId}`);
                         const picked = rows.find(entry => entry.providerId === providerId);
@@ -290,8 +289,17 @@ function LoginWindowProbe(props: ProbeProps) {
                     }}
                     onReopenBrowser={() => setSaid('reopen the browser')}
                     onRestartService={() => setSaid('restart the local service')}
+                    // 密码登录（飞牛）：探针里只记一句，不真的去登（上游把提交口收成了 onSubmitForm 一处，
+                    // 参数是平台和表单里的键值，返回这次登录的结局）。
+                    onSubmitForm={async (submitProviderId, values) => {
+                        setSaid(values.username ? `password for ${values.username} on ${submitProviderId}` : 'form submitted');
+                        return { sessionId: 0, providerId: submitProviderId, outcome: 'completed' as const };
+                    }}
                     onSwitch={() => setSaid('switch')}
                     onSignOut={() => setSaid('sign out')}
+                    onSync={() => setSaid('sync')}
+                    // syncing=1: the shown account's data is being synced (the button spins); syncing=other: another platform's is.
+                    syncingProviderId={query.get('syncing') === '1' ? view.chosen?.providerId ?? null : query.get('syncing') === 'other' ? 'probe-other' : null}
                     // origin=pill: as if the window was opened from the switcher pill at the bottom right.
                     origin={query.get('origin') === 'pill' && view.chosen
                         ? { x: window.innerWidth - 44, y: window.innerHeight - 44, size: 40, providerId: view.chosen.providerId }

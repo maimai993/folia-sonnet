@@ -41,9 +41,19 @@ const AUTH_MEMBERS: Record<string, string[]> = {
         'cancelLogin', 'checkLogin', 'createQr', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'resolveLoginMethods', 'startLogin',
     ],
-    // 两种登录方式（FN ID 云连接 / 局域网地址）由 provider 声明：要不要先停在「选择方式」那一屏，由 controller 按它决定。
+    // Signs in inside the companion window: no code to show, and the window is gone when the
+    // attempt is cancelled, so there is no TTL of its own.
+    appleMusic: [
+        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginStatus', 'getLoginTexts', 'logout', 'openLoginPage',
+        'opensLoginPageItself', 'signInRanOut', 'startLogin',
+    ],
+    // 表单式登录：不扫码不开浏览器，登录窗口按 getLoginForm 声明渲染账号密码表单。
+    // 这份是**本 fork** 的飞牛（feiniuProvider.ts），靠 foliaNative 的原生 HTTP 发请求，
+    // 安卓与桌面都能用；上游那份 fnmusic（Electron 主进程桥）文件保留但未注册 —— 两份都注册
+    // 会让平台列里出现两个「飞牛」。第一栏由 feiniuServerUrlForLoginInput 自己认短码 / 地址。
     feiniu: [
-        'getLoginMethods', 'getLoginStatus', 'getLoginTexts', 'getPasswordLoginDefaults', 'loginWithPassword', 'logout',
+        'getLoginForm', 'getLoginMethods', 'getLoginStatus', 'getLoginTexts', 'getPasswordLoginDefaults',
+        'loginWithPassword', 'logout', 'submitLoginForm',
     ],
 };
 

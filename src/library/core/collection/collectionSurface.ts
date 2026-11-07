@@ -59,6 +59,8 @@ export type CoreSurfaceParams = {
 
     playFiltered: () => void;
     enqueueFiltered: () => void;
+    /** 收进速记簿；没有时（宿主没给 collectTracks）不发布 collect-filtered。 */
+    collectFiltered?: () => void;
     setSortField: (field: SongSortField) => void;
     setSortDirection: (direction: SongSortDirection) => void;
     /** 一次设好字段与方向（菜单里选的就是一个完整的排序方式）。 */
@@ -115,6 +117,8 @@ export type CoreSurfaceInputs = {
     canReloadOnlineCollection: boolean;
     playFiltered: () => void;
     enqueueFiltered: () => void;
+    /** 收进速记簿（useCollectionActions 的 collectScope）；宿主不支持时不给。 */
+    collectFiltered?: () => void;
     reloadOnlineCollection: () => void;
 
     /** renderer 订阅到的控制器快照（没有控制器时是 EMPTY_COLLECTION_MUTATION_SNAPSHOT：什么都不支持）。 */
@@ -176,6 +180,7 @@ export const buildCoreSurfaceParams = (
 
         playFiltered: inputs.playFiltered,
         enqueueFiltered: inputs.enqueueFiltered,
+        collectFiltered: inputs.collectFiltered,
         setSortField: inputs.setSortField,
         setSortDirection: inputs.setSortDirection,
         setSortPreset: inputs.setSortPreset ?? ((preset) => {
@@ -201,6 +206,7 @@ export const buildCoreSurfaceParams = (
 export const GRID_SURFACE_ACTION_SOURCES: Readonly<Record<GridSurfaceActionId, { action: LibraryActionId } | { extra: string }>> = {
     'play-filtered': { action: 'play-scope' },
     'enqueue-filtered': { action: 'enqueue-scope' },
+    'collect-filtered': { action: 'collect-scope' },
     'sort-newest': { action: 'sort' },
     'sort-oldest': { action: 'sort' },
     'sort-title': { action: 'sort' },
@@ -211,7 +217,7 @@ export const GRID_SURFACE_ACTION_SOURCES: Readonly<Record<GridSurfaceActionId, {
     'sort-play-count-asc': { action: 'sort' },
     'sort-default': { action: 'sort' },
     'sort-file-name': { action: 'sort' },
-    'sort-file-modified': { action: 'sort' },
+    'sort-modified-date': { action: 'sort' },
     'sort-album-track': { action: 'sort' },
     'sort-toggle-direction': { action: 'sort' },
     'toggle-info-panel': { extra: 'toggle-info-panel' },
@@ -248,7 +254,7 @@ const SORT_ACTION_BY_PRESET_ID: Partial<Record<SongSortPreset['id'], GridSurface
     playCountAsc: 'sort-play-count-asc',
     default: 'sort-default',
     fileNameAsc: 'sort-file-name',
-    fileLastModifiedDesc: 'sort-file-modified',
+    fileLastModifiedDesc: 'sort-modified-date',
     albumTrackAsc: 'sort-album-track',
 };
 
@@ -270,9 +276,10 @@ export const buildGridSurfaceState = (params: GridSurfaceParams): GridSurfaceSta
     const availableActions: GridSurfaceActionId[] = [];
     if (hasTracks) {
         availableActions.push('play-filtered', 'enqueue-filtered');
+        if (params.collectFiltered) availableActions.push('collect-filtered');
     }
     if (params.supportsLocalTrackSorting) {
-        availableActions.push('sort-file-name', 'sort-file-modified', 'sort-album-track', 'sort-toggle-direction');
+        availableActions.push('sort-file-name', 'sort-modified-date', 'sort-album-track', 'sort-toggle-direction');
     }
     // 排序命令与菜单同一个来源：这个列表排得了哪些项，命令面板就有哪几条（去重后追加）。
     const sortPresets = params.availableSortPresets ?? [];
@@ -360,6 +367,7 @@ export const runGridSurfaceAction = (action: GridSurfaceActionId, params: GridSu
     switch (action) {
         case 'play-filtered': return params.playFiltered();
         case 'enqueue-filtered': return params.enqueueFiltered();
+        case 'collect-filtered': return params.collectFiltered?.();
         case 'sort-toggle-direction': return params.setSortDirection(params.sortDirection === 'asc' ? 'desc' : 'asc');
         case 'toggle-info-panel': return params.toggleInfoPanel();
         case 'toggle-track-list': return params.toggleTrackList();

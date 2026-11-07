@@ -3,6 +3,7 @@ import { Ghost } from 'lucide-react';
 import type { DioramaTuning } from '../../../types';
 import { QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { DioramaSettingsPanel } from '../settingsPanels';
 
 const VisualizerDiorama = React.lazy(() => import('./VisualizerDiorama'));
@@ -30,6 +31,13 @@ export default defineVisualizer({
         description: 'Switch to Diorama visualizer',
         keywords: ['diorama', '镜台', '切换到可视化：镜台', '切换到可视化镜台'],
     },
+    // 智能动感模式: beat_this' beats spawn the particle ripples and drive the breath (dioramaBeatRipples.ts).
+    beatEffects: [{
+        id: BEAT_EFFECT_IDS.dioramaRipple,
+        nameKey: 'options.beatEffect_dioramaRipple',
+        descKey: 'options.beatEffect_dioramaRippleDesc',
+        source: 'beats',
+    }],
     render: props => <VisualizerDiorama {...props} />,
     renderSettingsPanel: props => <DioramaSettingsPanel {...props} />,
     renderQuickControls: ({ tuning, onTuningChange, t }: VisualizerQuickControlsProps<DioramaTuning>) => (

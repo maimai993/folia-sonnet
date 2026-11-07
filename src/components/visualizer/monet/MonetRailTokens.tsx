@@ -26,7 +26,9 @@ export const MonetTimedTokenSpan: React.FC<{
     chorusAccentColor?: string;
     audioPower?: MotionValue<number>;
     renderStaticPassed?: boolean;
-}> = ({ entry, currentTime, accentColor, fontPx, fontStack, fontsEpoch, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false }) => {
+    /** The line runs right to left: each word's sweep fills from its right edge. */
+    rtl?: boolean;
+}> = ({ entry, currentTime, accentColor, fontPx, fontStack, fontsEpoch, wordColorMatchers, isChorus, chorusAccentColor, audioPower, renderStaticPassed = false, rtl = false }) => {
     const lineRenderEndTime = useMemo(() => getLineRenderEndTime(entry.line), [entry.line]);
     const tokens = useMemo(() => buildMonetDisplayTokens(entry.line), [entry.line]);
     const wordColorRanges = useMemo(
@@ -77,6 +79,7 @@ export const MonetTimedTokenSpan: React.FC<{
                         fontsEpoch={fontsEpoch}
                         isChorus={isChorus}
                         audioPower={audioPower}
+                        rtl={rtl}
                     />
                 ) : (
                     <span key={token.key} style={{ color: entry.tone.baseColor }}>
@@ -104,6 +107,7 @@ const MonetWordSweep: React.FC<{
     fontsEpoch: number;
     isChorus?: boolean;
     audioPower?: MotionValue<number>;
+    rtl: boolean;
 }> = ({
     text,
     startTime,
@@ -119,8 +123,10 @@ const MonetWordSweep: React.FC<{
     fontsEpoch,
     isChorus,
     audioPower,
+    rtl,
 }) => {
         const isLineActive = lineStatus === 'active';
+        const sweepAngle = rtl ? '270deg' : '90deg';
         const canRenderGlow = lineStatus === 'active' || lineStatus === 'passed';
         const graphemeOffsets = useMemo(
             () => measureMonetGraphemeOffsets(text, fontPx, fontSpec),
@@ -157,12 +163,13 @@ const MonetWordSweep: React.FC<{
             const solidEnd = Math.max(sweepEnd - edgeSoftness, 0);
             const featherStart = Math.max(sweepEnd - edgeSoftness * 0.55, 0);
             const featherEnd = Math.max(sweepEnd, 0);
-            return `linear-gradient(90deg, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
+            // Offsets run from the word's start: its left edge, or its right edge in an RTL word.
+            return `linear-gradient(${sweepAngle}, rgba(0, 0, 0, 1) 0px, rgba(0, 0, 0, 1) ${solidEnd}px, rgba(0, 0, 0, 0.92) ${featherStart}px, rgba(0, 0, 0, 0) ${featherEnd}px, rgba(0, 0, 0, 0) 100%)`;
         });
 
         const fillGradient = useTransform(wordProgress, progress => {
             const color = mixColors(baseColor, wordColor, Math.min(progress, 1));
-            return `linear-gradient(90deg, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
+            return `linear-gradient(${sweepAngle}, ${color} 0%, ${colorWithAlpha(color, 0.92)} 68%, ${colorWithAlpha(color, 0.72)} 100%)`;
         });
 
         const resolvedBaseColor = useTransform(wordStatus, status =>
@@ -180,6 +187,12 @@ const MonetWordSweep: React.FC<{
         // 只在亮着的时候给合成层，免得轨道上每个闲置的词都占一层。
         const glowWillChange = useTransform(glowOpacity, opacity => (opacity > 0 ? 'opacity' : 'auto'));
         const glowHalo = useMemo(() => {
+        // The glow is its own layer under the text: a halo fixed at full strength, faded by opacity.
+        // Interpolating the text-shadow itself repainted and re-rasterized every glowing word on every
+        // frame (on a 120 Hz Mac, most of this mode's raster and ~70 ms/s of GPU process); opacity on
+        // its own compositing layer is applied by the compositor. At full strength it is the old halo
+        // exactly; below it the halo keeps the word colour instead of leaning towards the base colour.
+        // Composited only while it is lit, so idle words on the rail do not each hold a layer.
             const radiusOne = Math.round(fontPx * (isChorus ? 0.45 : 0.28));
             const radiusTwo = Math.round(fontPx * (isChorus ? 0.90 : 0.65));
             const glowColor = mixColors(baseColor, wordColor, 1, isChorus ? 1.0 : 0.88);
@@ -206,6 +219,7 @@ const MonetWordSweep: React.FC<{
                 ) : null}
                 {/* relative 让正文压在绝对定位的光晕层上面，和它当年压在自己影子上一样。 */}
                 <motion.span className="relative" style={{ color: resolvedBaseColor }}>
+                {/* relative so the text paints above the absolutely positioned glow, as it did above its own shadow. */}
                     {text}
                 </motion.span>
                 {isLineActive ? (

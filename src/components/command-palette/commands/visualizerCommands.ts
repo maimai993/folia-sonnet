@@ -1,13 +1,12 @@
 import { defineCommand } from '../commandFactories';
 import { backgroundPickerSurface, visualizerPickerSurface } from '../surfaces/pickerSurface';
-import { LayoutGrid, Wallpaper } from 'lucide-react';
+import { Camera, LayoutGrid, Wallpaper } from 'lucide-react';
 import type { CommandPaletteCommand } from '../types';
 import { createBackgroundCommand, createToggleCommand, createVisualizerCommand } from '../commandFactories';
 import { lyricSegmentationCommand } from './lyricSegmentationCommand';
-import { openLyricsWallpaperPicker } from '../../../platform/foliaWallpaper';
 import { VISUALIZER_REGISTRY } from '../../visualizer/registry';
 import { VISUALIZER_BACKGROUND_REGISTRY } from '../../visualizer/backgrounds/registry';
-import { isAndroidAppShell } from '../../../platform/runtime';
+import { isMachiCameraBarOpen, toggleMachiCameraBar } from '../../visualizer/machi/cameraBar';
 
 // src/components/command-palette/commands/visualizerCommands.ts
 // Commands in the `visualizer` group: switching lyric animation modes and background layouts.
@@ -59,7 +58,7 @@ const LATENT_VARIANT_COMMANDS: CommandPaletteCommand[] = [
 // What finds any of 智能动感模式's three commands (Sonnet and Diorama on the beats, Pendolo on the drums).
 const SMART_BEAT_KEYWORDS = ['smart beat', 'beat fx', 'beat this', 'sonnet beat', 'diorama beat', 'pendolo drums', '智能动感模式', '动感', '节拍', '鼓点', '推镜裂光', '水镜涟漪', '仿真鼓面', '商籁动感', '镜台涟漪', '时计'];
 
-const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
+export const visualizerCommands: CommandPaletteCommand[] = [
     lyricSegmentationCommand,
     defineCommand({
         id: 'visualizer-picker',
@@ -69,6 +68,7 @@ const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
         description: 'Browse lyric animation modes and click one to switch',
         keywords: ['visualizer picker', 'pick visualizer', 'browse visualizers', '可视化选择器', '选择可视化', '歌词动画选择'],
         icon: LayoutGrid,
+        capsuleAction: true,
         requiresInput: true,
         surface: visualizerPickerSurface,
         placeholder: context => context.shared.t('commandPalette.pickerFilterPlaceholder', 'Type to filter, then click or press Enter'),
@@ -87,30 +87,37 @@ const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
         placeholder: context => context.shared.t('commandPalette.pickerFilterPlaceholder', 'Type to filter, then click or press Enter'),
         execute: () => false,
     }),
-    defineCommand({
-        // 安卓：直接呼起系统的动态壁纸选择器并定位到 Folia 的歌词壁纸（桌面端没有对应的系统入口，
-        // 这里的按钮只在安卓生效，见 platform/foliaWallpaper 的 openLyricsWallpaperPicker）。
-        id: 'lyrics-wallpaper',
-        group: 'visualizer',
-        title: 'Lyrics as the system wallpaper',
-        description: 'Open the Android live wallpaper picker to apply the lyrics wallpaper',
-        keywords: ['wallpaper', 'live wallpaper', 'lyrics wallpaper', 'system wallpaper', '壁纸', '动态壁纸', '歌词壁纸', '系统壁纸', '设置壁纸'],
-        icon: Wallpaper,
-        execute: () => {
-            void openLyricsWallpaperPicker();
-            return false;
-        },
-    }),
-    createToggleCommand('smart-beat-toggle', 'visualizer', 'Smart beat mode', 'Turn the beat effects (Sonnet and Diorama on the beats, Pendolo on the drums) on or off', ['smart beat', 'beat fx', 'beat this', 'sonnet beat', 'diorama beat', 'pendolo drums', '智能动感模式', '动感', '节拍', '鼓点', '推镜裂光', '水镜涟漪', '仿真鼓面', '商籁动感', '镜台涟漪', '时计'], context => context.visualizer.toggleSmartBeat()),
+    // 智能动感模式's on / off toggle, as v0.7.21 shipped it (from the PR #750 review): kept, and visible,
+    // so the shortcuts and pinned slots bound to its id keep working (pinned slots only resolve visible commands).
+    createToggleCommand('smart-beat-toggle', 'visualizer', 'Smart beat mode on / off', 'Turn the beat effects (Sonnet and Diorama on the beats, Pendolo on the drums) on or off', SMART_BEAT_KEYWORDS, context => context.visualizer.toggleSmartBeat()),
+    // 智能动感模式, one command per mode (SmartBeatMode), listed off -> stored only -> on as in its settings.
+    createToggleCommand('smart-beat-off', 'visualizer', 'Smart beat mode: Off', 'Turn the beat effects off; every picture as it was', [...SMART_BEAT_KEYWORDS, 'off', '关闭', '关'], context => context.visualizer.setSmartBeatMode('off')),
+    createToggleCommand('smart-beat-cached', 'visualizer', 'Smart beat mode: Analysed only', 'Play the beat effects from tracks already analysed only; smart beat itself analyses nothing new and leaves the GPU alone (automix is not affected)', [...SMART_BEAT_KEYWORDS, 'cached', 'cache only', 'analysed only', '只用已分析', '缓存', '半开'], context => context.visualizer.setSmartBeatMode('cached')),
+    createToggleCommand('smart-beat-on', 'visualizer', 'Smart beat mode: On', 'Play the beat effects, analysing a track not analysed yet on the GPU', [...SMART_BEAT_KEYWORDS, 'on', '开启', '开', '全开'], context => context.visualizer.setSmartBeatMode('on')),
     ...VISUALIZER_REGISTRY.flatMap(({ mode, command }) => (
         command ? [createVisualizerCommand(mode, command.title, command.description, command.keywords)] : []
     )),
+    // 町景的取景控制条（machi/MachiCameraBar.tsx）：只在播放页、正在画町景时有；打开时收起侧边面板，让出画面。
+    defineCommand({
+        id: 'visualizer-machi-camera-bar',
+        group: 'visualizer',
+        title: 'Machi: Viewfinder',
+        description: "Show or hide Machi's viewfinder bar on the player page to set the view, focus, aperture and drift",
+        keywords: ['viewfinder', 'photo mode', 'camera', 'aperture', 'bokeh', 'depth of field', 'focus', 'machi camera', '取景', '取景控制条', '拍照模式', '摄影机', '镜头', '光圈', '景深', '对焦', '町景'],
+        icon: Camera,
+        isAvailable: context => (context ? context.scope.view === 'player' && context.visualizer.visualizerMode === 'machi' : false),
+        execute: (_input, context) => {
+            toggleMachiCameraBar();
+            if (isMachiCameraBarOpen()) context.panel.setIsPanelOpen(false);
+            return true;
+        },
+    }),
     // 雾笺的窗外和前面的玻璃：只在正在画雾笺时有，换完在状态栏报一声换成了哪个
     defineCommand({
         id: 'visualizer-nebbia-behind-cycle',
         group: 'visualizer',
         title: 'Nebbia: Switch window scene',
-        description: "Switch what is outside Nebbia's window: night street, Dream Sea Glow or the background; the front glass changes to the scene's usual pair",
+        description: "Switch what is outside Nebbia's window: night street, Dream Sea Glow or the background; the front glass stays as it is",
         keywords: ['nebbia scene', 'window scene', 'outside the window', 'aquarium', 'night street', 'dream sea glow', '雾笺', '窗外', '切换窗外', '背景样式', '梦海流萤', '雨夜街景', '水族箱'],
         icon: Wallpaper,
         isAvailable: context => (context ? context.visualizer.visualizerMode === 'nebbia' : false),
@@ -158,14 +165,6 @@ const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
         ['lyric freeze', 'freeze fix', 'linux', 'glow', 'fd leak', 'stepped glow', '歌词卡死', '动画卡死', '画面定格', '发光半径分档', '发光', 'faguangbanjing', 'fgbj'],
         context => context.visualizer.toggleGlowBlurQuantize(),
     ),
-    createToggleCommand(
-        'visualizer-toggle-render-pixel-ratio',
-        'visualizer',
-        'Lower render resolution to speed up slow machines',
-        'Cap the pixel ratio canvases draw at, the biggest single win on weak GPUs and high-DPI laptops',
-        ['render resolution', 'pixel ratio', 'dpr', 'performance', 'low end', 'lag', 'slow', 'render scale', '渲染分辨率', '像素比', '性能', '卡顿', '低配', '糊一点'],
-        context => context.visualizer.toggleRenderPixelRatio(),
-    ),
     createToggleCommand('visualizer-toggle-random-per-song', 'visualizer', 'Random visualizer for every song', 'Toggle a random lyric animation mode whenever the song changes', ['random visualizer', 'random animation', 'per song', '随机歌词动画', '每首歌随机动画'], context => context.visualizer.toggleRandomVisualizerModePerSong()),
     {
         id: 'background-monet-full-overlay',
@@ -197,11 +196,3 @@ const ALL_VISUALIZER_COMMANDS: CommandPaletteCommand[] = [
         ...(mode === 'latent' ? LATENT_VARIANT_COMMANDS : []),
     ]),
 ];
-
-/*
- * 安卓端没做智能动感模式的分析（没有 Beat This! 的桥与模型），开关本身不显示，
- * 这条「智能动感模式 开 / 关」命令也就没有意义 —— 一并摘掉，免得调了没反应。
- */
-export const visualizerCommands: CommandPaletteCommand[] = isAndroidAppShell()
-    ? ALL_VISUALIZER_COMMANDS.filter(command => command.id !== 'smart-beat-toggle')
-    : ALL_VISUALIZER_COMMANDS;

@@ -20,6 +20,7 @@ import { installNativeDragGuard } from './utils/nativeDragGuard';
 // 安卓的安全区必须在画第一帧之前就落进 CSS 变量：env(safe-area-inset-*) 在安卓 WebView 上
 // 不可信（只报挖孔不报系统栏，无刘海全 0），顶部控件会被状态栏压住。
 import { installPhoneInsets } from './services/phoneInsets';
+import { prewarmSavedVisualizer, prewarmVisualizersWhenIdle } from './components/visualizer/prewarmVisualizers';
 import { bootNavidromeServerPreset } from './services/navidromeServerPreset';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { setNavidromeEnabledState } from './stores/useLibraryStore';
@@ -76,6 +77,7 @@ const isMainApp = isMainAppSurface;
 const FirstScreenMounted: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     React.useEffect(() => {
         noteFoliumFirstScreenMounted();
+        prewarmVisualizersWhenIdle();
     }, []);
     return <>{children}</>;
 };
@@ -100,6 +102,10 @@ const renderApp = () => root.render(
 // registry, so the commands are put into its list here, before anything renders (main window only,
 // like the mod commands below). A clashing execute shortcut throws here, at startup.
 if (isMainApp) installLibrarySuiteChromeCommands();
+
+// 保存的歌词样式可以趁首屏加载遮罩还在时先准备（雾笺在后台编着色器，见 visualizer/prewarmVisualizers.ts）。
+// 不等它，和下面的 mod 加载一起跑；别的启动慢的样式等首屏出来、页面空闲时再准备（FirstScreenMounted）。
+if (isMainApp) prewarmSavedVisualizer();
 
 const bootFolium = async () => {
     if (!isMainApp) return;

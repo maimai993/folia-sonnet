@@ -141,6 +141,7 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     stageTrackPillTimeoutSec: 'trackCard',
     stageTrackPillOnHome: 'trackCard',
     stageTrackPillPosition: 'trackCard',
+    stageTrackPillInObs: 'trackCard',
 
     // The bravais wall's collection stack edges. Its own group: it styles the library wall, not the
     // picture or the card, and someone taking a look for its colours has a reason to leave it alone.
@@ -159,6 +160,12 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     // 液态玻璃自成一组：它改的是整个界面的材质，不是播放页的画面；只换配色的人没有理由
     // 连它也一起换过来，而想要这套观感的人会一次全取。
     liquidGlass: 'liquidGlass',
+    // Numbering only the playing song styles the tiles of both walls (queue collage and bravais): the
+    // library wall group is where the other tile looks are.
+    latticeBadgeCurrentOnly: 'libraryWall',
+
+    // The frosted bar behind the player page's titlebar. Under visualizer with the other player-page
+    // switch that travels (hidePlayerTranslationSubtitle): it is part of how the playing screen looks.
 };
 
 // Fields the import applies only when the incoming value is truthy, so an incoming null means "the

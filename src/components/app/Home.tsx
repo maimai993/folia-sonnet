@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import GridViewOverlayHost from '../../library/app/GridViewOverlayHost';
 import LibraryAccountHost from '../../library/app/LibraryAccountHost';
 import { resolveLibrarySurface } from '../../library/registry';
 import { useLibrarySuiteStore } from '../../library/core/suite/useLibrarySuiteStore';
 import { useLibraryDirectoryBatchController } from '../../library/app/useLibraryDirectoryBatchController';
 import { useLibraryHomeResources } from '../../library/app/useLibraryHomeResources';
+import { createLibraryPlaybackPort } from '../../library/app/createLibraryPlaybackPort';
 import type { HomeViewModel } from './home/buildHomeModel';
 import { useFoliumHomeNavigation } from './home/useFoliumHomeNavigation';
 import { closeFoliumHomeTab } from '../../mods/folium/registries/homeTabs';
@@ -38,11 +39,15 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
      * （rhine）是内嵌的 iframe，卸载就意味着整个 WebView 上下文被销毁 ——
      * 从歌词页退回来要重新加载、重新建 3D 场景、相机也回到初始位置，于是
      * 就有了「退回来 3D 是空的、过一会儿才出来一点、位置还不对」。
-     *
      * 现在隐藏只做视觉上的 `hidden` + 不可交互：iframe 原地留着，返回时
      * 画面、镜头、播放指针全都在原来的地方。
      */
     const hidden = Boolean(isHomeFullyHidden);
+    // 首页的播放端口（探索页歌曲卡片上的速记簿与歌单选择器用它）。
+    const playback = useMemo(() => createLibraryPlaybackPort(model.surfaceProps), [model.surfaceProps]);
+    if (isHomeFullyHidden) {
+        return null;
+    }
 
     const homeSurface = resolveLibrarySurface('home', suiteId);
     const HomeSurface = homeSurface.component;
@@ -78,6 +83,7 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
                                 declaredActions={homeSurface.declaredActions}
                                 directoryActions={directoryActions}
                                 homeResources={homeResources}
+                                playback={playback}
                             />
                         </React.Suspense>
                     )}

@@ -57,19 +57,7 @@ const LocalCollectionCoverDialog: React.FC<LocalCollectionCoverDialogProps> = ({
     const [poster, setPoster] = useState<PosterState | null>(posterFolder ? { status: 'checking' } : null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    // 选图：按需建一个文件输入（选完就丢），不挂在树上，免得每个对话框都留一个隐藏控件。
-    const pickFile = async () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        const file = await new Promise<File | null>(resolve => {
-            input.addEventListener('change', () => resolve(input.files?.[0] ?? null), { once: true });
-            input.addEventListener('cancel', () => resolve(null), { once: true });
-            input.click();
-        });
-        if (file) await apply('upload', async () => file);
-    };
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // 打开时看一眼文件夹里有没有 poster（不要权限：没给时显示「允许读取」，点按钮时再要）。
     useEffect(() => {
@@ -181,7 +169,7 @@ const LocalCollectionCoverDialog: React.FC<LocalCollectionCoverDialogProps> = ({
                                 {t('localCollectionCover.usePoster')}
                             </SheetButton>
                         )}
-                        <SheetButton onClick={() => void pickFile()} disabled={busy}>
+                        <SheetButton onClick={() => fileInputRef.current?.click()} disabled={busy}>
                             <ImageUp size={14} className="mr-1.5 inline" />
                             {t('localCollectionCover.upload')}
                         </SheetButton>
@@ -194,6 +182,17 @@ const LocalCollectionCoverDialog: React.FC<LocalCollectionCoverDialogProps> = ({
                         </div>
                     )}
                 </div>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={event => {
+                        const file = event.target.files?.[0];
+                        event.target.value = '';
+                        if (file) void apply('upload', async () => file);
+                    }}
+                />
             </div>
             <LocalCollectionCoverSongPicks
                 songs={songs}

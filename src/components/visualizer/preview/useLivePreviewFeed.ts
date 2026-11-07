@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore, type RefObject } from 'react';
-import { audioBands, audioPower, lyricCurrentTime } from '../../../stores/motionSignals';
+import { audioBands, audioPower, currentTime, lyricCurrentTime } from '../../../stores/motionSignals';
 import {
     selectDisplayCoverUrl,
     selectDisplayDuration,
@@ -35,6 +35,7 @@ const playerSource: LivePreviewSource = {
     read: () => readLivePreviewContent(),
     subscribe: listener => usePlaybackStore.subscribe(() => listener()),
     signals: { currentTime: lyricCurrentTime, audioPower, audioBands },
+    playbackTime: currentTime,
 };
 
 type UseLivePreviewFeedOptions = {
@@ -65,6 +66,7 @@ export const useLivePreviewFeed = ({ enabled, paused, stageRef }: UseLivePreview
     return {
         content: enabled ? content : null,
         currentTime: feed.currentTime,
+        playbackTime: feed.playbackTime,
         audioPower: feed.audioPower,
         audioBands: feed.audioBands,
     };

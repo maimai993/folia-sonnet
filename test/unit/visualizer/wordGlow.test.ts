@@ -46,6 +46,8 @@ describe('stepped glow radius', () => {
         // waiting / active / passed 三态用的是同一串，动的只有 opacity。
         const halos = ['0 0 14px #ffd54f, 0 0 24px #ffd54f', '0 0 18px #ffd54f, 0 0 32px #ffd54f', '0 0 20px #ffd54f, 0 0 40px #ffd54f', '0 0 20px #ffd54f, 0 0 40px #ffd54f'];
         targets.forEach((target, i) => {
+        // A text-shadow that changes re-rasters the glyph every frame; the halo is one fixed string
+        // per mode, the same in waiting, active and passed, and only opacity moves.
             expect(target.color).toBe('transparent');
             expect(target.filter).toBeUndefined();
             expect(target.textShadow).toBe(halos[i]);

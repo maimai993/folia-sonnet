@@ -124,6 +124,18 @@ class FoliaWallpaperPlugin : Plugin() {
             val motion: Float? = call.getFloat("motion")
             val blur: Float? = call.getFloat("blur")
             val durationSeconds: Float? = call.getFloat("durationMs")
+            /*
+             * 整包推送同样要让位给原生在播的位置 —— 与上面那条心跳同一个理由，
+             * 而这条更严重：它带着时间轴，覆盖得更彻底。
+             *
+             * 原生在播时 Web 给的位置是插值出来的（`nativePlaybackEngine.getPositionSec()`
+             * 往后补的那一截），播放器自己另有每 250ms 一次的采样值在写锚点。两边交替写，
+             * 界面上就是桌面歌词「突然往回走一下、又恢复正常」—— 用户报的抽搐。
+             *
+             * 只把位置这一项让出去：时间轴、标题、封面、主题都得照常更新，否则换歌之后
+             * 叠层会挂着上一首的歌词和封面。
+             */
+            val nativeOwnsPosition = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.isNativePlaying()
             WallpaperLyricsState.publish(
                     context,
                     call.getString("title"),
@@ -141,7 +153,7 @@ class FoliaWallpaperPlugin : Plugin() {
                     if (durationSeconds == null) -1L else durationSeconds.toDouble().toLong(),
                     timeline,
                     tuning,
-                    Math.max(0L, positionMs),
+                    if (nativeOwnsPosition) -1L else Math.max(0L, positionMs),
                     isPlaying)
         }
         call.resolve()

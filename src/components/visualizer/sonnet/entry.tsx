@@ -3,6 +3,7 @@ import { WandSparkles } from 'lucide-react';
 import type { SonnetOuterFrameMode, SonnetTuning } from '../../../types';
 import { cycleValue, QuickControlChip, QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import SonnetSettingsPanel from './SonnetSettingsPanel';
 
 const VisualizerSonnet = React.lazy(() => import('./VisualizerSonnet'));
@@ -39,6 +40,13 @@ export default defineVisualizer({
         keywords: ['sonnet', '商籁', '文字 pv', 'mg pv', 'vocaloid'],
     },
     usesWordSegmentation: true,
+    // 智能动感模式: beat_this' beats drive the camera, tear and glow (sonnetBeatFx.ts).
+    beatEffects: [{
+        id: BEAT_EFFECT_IDS.sonnetLensTear,
+        nameKey: 'options.beatEffect_sonnetLensTear',
+        descKey: 'options.beatEffect_sonnetLensTearDesc',
+        source: 'beats',
+    }],
     // Folium tunables read by createSonnetPixiRuntime's mod(key). Names are public API.
     foliumTunables: {
         cameraScale: SONNET_TUNABLE,

@@ -6,7 +6,7 @@ import { PlayerState } from '../../../../types';
 import type { LyricData, SongResult, StageSource, StageStatus, StatusMessage } from '../../../../types';
 import type { AudioQualityPreference, MediaId } from '../../../../types/onlineMusic';
 import type { ThemeCacheSongKey } from '../../../../services/themeCache';
-import { getPlaybackSongKey, isStagePlaybackSong } from '../../../../utils/appPlaybackGuards';
+import { getOnlineProviderIdForSong, getPlaybackSongKey, isStagePlaybackSong } from '../../../../utils/appPlaybackGuards';
 import type {
     PlaybackSnapshot,
     StageLyricsClockState,
@@ -17,25 +17,42 @@ import { setActivePlaybackContext, setAudioSrc, setCachedCoverUrl, setCurrentLin
 import { askedSongKeyRef, makeSongCurrent, startRestore } from '../currentSong';
 import { useStableActionSurface } from '../../../../hooks/useStableCallbacks';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { captureActiveStations, restoreActiveStations } from '../../../../stores/usePersonalFmModeStore';
 import { useAppViewStore } from '../../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../../stores/useAppChromeStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { currentTime } from '../../../../stores/motionSignals';
 import { untransformedLyrics } from '../../../../services/hostExtensionHooks';
+import { lyricsBeforeRules } from '../../../../utils/lyrics/lyricLineRules';
 import { reportYieldedQueue, wholeQueueWritesSoFar } from '../../../../services/wholeQueueWrites';
+import { getHifiPosition, installHifiPlayback, isHifiRoute, releaseUnclaimedHifiTrack } from '../../../../services/hifi/hifiPlayback';
+import { getExternalPosition, isExternalPlaybackSounding, isExternalRoute, pauseExternalPlayback } from '../../../../services/onlineMusic/externalPlayback';
+import { hifiEngine } from '../../../../services/hifi/hifiEngine';
 
 // src/components/app/playback/restore/useElectronWindowPlaybackHandoff.ts
 // Captures and restores renderer playback state across Electron BrowserWindow rebuilds.
 
-// Snapshots cross IPC, so transformed lyrics arrive as a new object the new window's pipeline
-// cannot recognise and would transform again. Hand off the pre-transform lyrics instead; the
-// restore goes through setLyrics, which applies the extension transform once. Without an
-// extension transform in play this returns the snapshot unchanged.
-const withUntransformedLyrics = <Snapshot extends PlaybackSnapshot | null>(snapshot: Snapshot): Snapshot => {
+// Snapshots cross IPC, so the lyrics on screen arrive as a new object the new window's pipeline
+// cannot recognise and would transform and filter again. Hand off the lyrics as they were before
+// the extension transform and the line rules instead; the restore goes through setLyrics, which
+// applies both once.
+export const withUntransformedLyrics = <Snapshot extends PlaybackSnapshot | null>(snapshot: Snapshot): Snapshot => {
     if (!snapshot) return snapshot;
-    const lyrics = untransformedLyrics(snapshot.lyrics);
+    const lyrics = lyricsBeforeRules(untransformedLyrics(snapshot.lyrics));
     return lyrics === snapshot.lyrics ? snapshot : { ...snapshot, lyrics };
+};
+
+/**
+ * Nothing the old window played is restored here, so a track it left playing in mpv is nobody's now:
+ * stopped. The hand-off is asked for before this window's first look at mpv (the HiFi bridge, which
+ * takes that look, mounts further down in App), and the main process answers in order: a snapshot asked
+ * for after that look comes back after it, once the track the old window left is known.
+ */
+const releaseTrackLeftInMpv = async () => {
+    installHifiPlayback();
+    await hifiEngine.getSnapshot();
+    releaseUnclaimedHifiTrack('nothing to restore');
 };
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -99,7 +116,9 @@ const buildPlaybackSnapshot = ({
     playQueue,
     isFmMode,
     playerState,
-    currentTime: audioRef.current?.currentTime ?? currentTime.get(),
+    // On the HiFi route <audio> sits idle: the position is mpv's, as its clock reads it now.
+    // The external player's clock answers for itself the same way.
+    currentTime: isHifiRoute() ? getHifiPosition() : isExternalPlaybackSounding() ? getExternalPosition() : (audioRef.current?.currentTime ?? currentTime.get()),
     duration,
     currentLineIndex,
 });
@@ -161,6 +180,9 @@ export function useElectronWindowPlaybackHandoff({
     const handoffQueueWritesRef = useRef<number | null>(null);
 
     const captureWindowPlaybackHandoff = useCallback((): WindowPlaybackHandoff => {
+        // The provider's player cannot be adopted by the next window: stop it sounding under a
+        // window that will show the song paused.
+        if (isExternalRoute()) pauseExternalPlayback();
         const activePlayback = withUntransformedLyrics(buildPlaybackSnapshot({
             audioRef,
             audioSrc,
@@ -174,7 +196,9 @@ export function useElectronWindowPlaybackHandoff({
             isFmMode,
             lyrics,
             playQueue,
-            playerState,
+            // Read after the external player was paused above: the handoff must not claim a
+            // playing song when nothing of the next window will sound it.
+            playerState: isExternalRoute() ? usePlaybackStore.getState().playerState : playerState,
         }));
         const mainPlayback = activePlaybackContext === 'main'
             ? activePlayback
@@ -186,6 +210,8 @@ export function useElectronWindowPlaybackHandoff({
             activePlaybackContext,
             mainPlayback,
             activePlayback,
+            // Which extra radio the FM queue came from, so the new window tops it up from the same one.
+            ...(mainPlayback?.isFmMode ? { fmStations: captureActiveStations(getOnlineProviderIdForSong(mainPlayback.currentSong)) } : {}),
             stage: {
                 status: stageStatus,
                 source: stageSource,
@@ -235,13 +261,17 @@ export function useElectronWindowPlaybackHandoff({
         transparentPlayerBackground,
     ]);
 
-    const restoreMainPlaybackSnapshot = useCallback(async (snapshot: PlaybackSnapshot | null) => {
+    const restoreMainPlaybackSnapshot = useCallback(async (snapshot: PlaybackSnapshot | null, fmStations?: unknown) => {
         mainPlaybackSnapshotRef.current = snapshot;
         // A song asked for in the new window while the handoff was being read stands.
-        if (askedSongKeyRef.current !== null) return;
+        if (askedSongKeyRef.current !== null) {
+            void releaseTrackLeftInMpv();
+            return;
+        }
         const queueWritesAtStart = handoffQueueWritesRef.current ?? undefined;
         const queueRewritten = queueWritesAtStart !== undefined && wholeQueueWritesSoFar() !== queueWritesAtStart;
         if (!snapshot?.currentSong) {
+            void releaseTrackLeftInMpv();
             pendingResumeTimeRef.current = null;
             shouldAutoPlayRef.current = false;
             lastAudioRecoverySourceRef.current = null;
@@ -278,6 +308,7 @@ export function useElectronWindowPlaybackHandoff({
         if (!queueRewritten) {
             setPlayQueue(restoredQueue);
             setIsFmMode(snapshot.isFmMode);
+            if (snapshot.isFmMode) restoreActiveStations(fmStations);
         } else {
             // Saved again now that a song is current, as the session restore does: the replacement's own save
             // found none, so it kept nothing, and the source's restore saves only on some of its paths.
@@ -292,6 +323,8 @@ export function useElectronWindowPlaybackHandoff({
         setDuration(snapshot.duration);
 
         if (isStagePlaybackSong(snapshot.currentSong)) {
+            // A Stage song never plays through mpv.
+            void releaseTrackLeftInMpv();
             if (snapshot.audioSrc && !snapshot.audioSrc.startsWith('blob:')) {
                 setAudioSrc(snapshot.audioSrc);
             }
@@ -313,6 +346,7 @@ export function useElectronWindowPlaybackHandoff({
             stillWanted,
             hasFallbackSource: fallbackAudioSrc !== null,
             queueWritesAtStart,
+            pendingResumeTimeRef,
         }).catch((error): RestorePlaybackSourceOutcome => {
             console.warn('[Electron] Failed to restore window playback handoff source', error);
             return 'failed';
@@ -362,12 +396,16 @@ export function useElectronWindowPlaybackHandoff({
 
         if (handoff.activePlaybackContext === 'stage') {
             mainPlaybackSnapshotRef.current = handoff.mainPlayback;
+            if (handoff.mainPlayback?.isFmMode) restoreActiveStations(handoff.fmStations);
+            // The Stage plays on the Web engine, and the main song waits in the snapshot until it ends:
+            // a track the old window left playing in mpv is stopped before the Stage sounds.
+            await releaseTrackLeftInMpv();
             await restoreStagePlaybackHandoff(handoff);
             return true;
         }
 
         setActivePlaybackContext('main');
-        await restoreMainPlaybackSnapshot(handoff.mainPlayback ?? handoff.activePlayback);
+        await restoreMainPlaybackSnapshot(handoff.mainPlayback ?? handoff.activePlayback, handoff.fmStations);
         return true;
     }, [
         mainPlaybackSnapshotRef,

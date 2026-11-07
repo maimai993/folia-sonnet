@@ -8,9 +8,7 @@
     "email": "hjm184563@gmail.com"
   },
   "private": true,
-  "version": "0.7.25",
-  "displayVersion": "0.7.25.dev8",
-  "androidVersionCode": 7025108,
+  "version": "0.7.26",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -85,7 +83,9 @@
     "electronLanguages": [
       "en-US",
       "zh-CN",
-      "id"
+      "zh-TW",
+      "id",
+      "vi"
     ],
     "generateUpdatesFilesForAllChannels": true,
     "directories": {
@@ -167,6 +167,13 @@
       }
     ],
     "mac": {
+      "electronLanguages": [
+        "en",
+        "zh_CN",
+        "zh_TW",
+        "id",
+        "vi"
+      ],
       "extraResources": [
         {
           "from": "build/koffi/darwin_${arch}",
@@ -175,6 +182,10 @@
         {
           "from": "build/mac-helper/darwin-${arch}",
           "to": "."
+        },
+        {
+          "from": "build/apple-music-native/darwin-${arch}/FoliaAppleMusicCompanion.app",
+          "to": "apple-music/FoliaAppleMusicCompanion.app"
         }
       ],
       "target": [
@@ -209,6 +220,17 @@
           "filter": [
             "folia-wallpaper-helper.exe"
           ]
+        },
+        {
+          "from": "build/apple-music-native/windows",
+          "to": "apple-music/windows",
+          "filter": [
+            "FoliaAppleMusicCompanion.exe",
+            "FoliaAppleMusicCompanion.exe.config",
+            "Microsoft.Web.WebView2.Core.dll",
+            "Microsoft.Web.WebView2.WinForms.dll",
+            "WebView2Loader.dll"
+          ]
         }
       ]
     },
@@ -218,9 +240,16 @@
       "installerLanguages": [
         "en_US",
         "zh_CN",
-        "id"
+        "id",
+        "vi_VN"
       ],
       "include": "build/installer.nsh"
+    },
+    "rpm": {
+      "fpm": [
+        "--rpm-rpmbuild-define",
+        "_build_id_links none"
+      ]
     },
     "linux": {
       "artifactName": "${name}-${version}-linux-${arch}.${ext}",
@@ -255,7 +284,7 @@
     "@google/genai": "^2.24.0",
     "@neteasecloudmusicapienhanced/api": "4.41.1",
     "@xhayper/discord-rpc": "^1.5.1",
-    "@yakult-green-tea/qq-music-api": "3.3.3",
+    "@yakult-green-tea/qq-music-api": "3.3.6",
     "axios": "^1.20.0",
     "bgutils-js": "4.0.3",
     "bodian-music-api": "0.1.2",
@@ -312,7 +341,6 @@
     "framer-motion": "^13.4.3",
     "hono": "^4.13.13",
     "i18next": "^26.4.2",
-    "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^1.48.0",
     "opencc-js": "^1.4.2",
     "pinyin-pro": "3.29.3",

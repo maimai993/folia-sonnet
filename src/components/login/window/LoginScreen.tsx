@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LibraryLoginSessionSnapshot } from '../../../library/core/account/account.contract';
+import type { LibraryLoginCompletion, LibraryLoginSessionSnapshot } from '../../../library/core/account/account.contract';
 import { resolveLoginSessionReportRoute, translateLoginSelfCheck } from '../../../library/core/account/useLibraryAccount';
 import { LOGIN_REPORT_ELSEWHERE_COPY, retryOpensAt } from '../../../library/core/account/accountRules';
+import { providerDisplayName } from '../../../i18n/providerName';
 import type { LoginFailure } from '../../../types/loginFailure';
-import type { OnlineProviderId, PasswordLoginCredentials, ProviderAccountSummary } from '../../../types/onlineMusic';
+import type { OnlineProviderId, ProviderAccountSummary } from '../../../types/onlineMusic';
 import { useKitReducedMotion } from '../../modal/settings/kit/motion';
 import { Unfold } from '../../modal/settings/kit/Reveal';
 import { LoginDoneFlight, LoginDoneFlood, LoginDoneTile, loginDoneColours, useLoginDone } from '../done/LoginDone';
@@ -15,8 +16,9 @@ import { rowStatus } from '../platformRows';
 import { LOGIN_CASE_TEXTS } from './loginCaseTexts';
 import LoginMessage, { LoginDetails, type MessageAction } from './LoginMessage';
 import LoginTile from './LoginTile';
-import PasswordLoginForm from './PasswordLoginForm';
-import { accountView, failureNoteKey, failureQuote, loginScene, methodsPendingKey, sceneHeadline, stepMarks, type RowLead } from './loginView';
+import { shortAccountId } from '../../../utils/accountIdDisplay';
+import { accountView, failureNoteKey, failureQuote, loginScene, sceneHeadline, stepMarks, type RowLead } from './loginView';
+import FormLogin from './FormLogin';
 import LoginWindow from './LoginWindow';
 import PlatformColumn from './PlatformColumn';
 
@@ -41,6 +43,8 @@ export type LoginScreenProps = {
     onAllProvidersChosen?: () => void;
     /** 开始（浏览器登录的那一下），或者重来，保留选过的登录方式。 */
     onStart: () => void;
+    /** 表单式登录提交（走账户 controller 的完整链路：提交 → 读账号 → 报完成）；返回登录完成结局。 */
+    onSubmitForm: (providerId: OnlineProviderId, values: Record<string, string>) => Promise<LibraryLoginCompletion>;
     /** 用这种登录方式开始（任何时候都可以换）。 */
     onSelectMethod: (methodId: string) => void;
     onReopenBrowser: () => void;
@@ -48,8 +52,10 @@ export type LoginScreenProps = {
     onRestartService: () => void;
     onSwitch: () => void;
     onSignOut: () => void;
-    /** 提交一次密码登录（飞牛这类没有二维码的自建服务）。 */
-    onSubmitPassword: (credentials: PasswordLoginCredentials) => void;
+    /** 账号那一幅的「同步数据」：重新读选中的这个平台的账号、歌单与红心。 */
+    onSync: () => void;
+    /** 正在同步数据的平台（同一时间一个）：是选中的这个就转圈，是别的就只是不可按。 */
+    syncingProviderId?: OnlineProviderId | null;
     /** 这一次登录的诊断报告（生成不了是空串）。 */
     buildReport: () => Promise<string>;
     /** 按下去打开窗口的那个东西在哪：窗口从那一边出来。 */
@@ -78,28 +84,18 @@ const useReached = (at: number): boolean => {
 };
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
-    isOpen, onClose, rows, activeProviderId, chosen, login, onChoose, onAllProvidersChosen, onStart, onSelectMethod, onReopenBrowser, onRestartService, onSwitch, onSignOut, onSubmitPassword,
-    buildReport, origin, done = false, onDoneLeave = nothing, onDoneEnd = nothing,
+    isOpen, onClose, rows, activeProviderId, chosen, login, onChoose, onAllProvidersChosen, onStart, onSubmitForm, onSelectMethod, onReopenBrowser, onRestartService, onSwitch, onSignOut,
+    onSync, syncingProviderId = null, buildReport, origin, done = false, onDoneLeave = nothing, onDoneEnd = nothing,
 }) => {
     const { t } = useTranslation();
     const still = useKitReducedMotion();
     const providerId = chosen?.providerId ?? null;
     const summary = rows.find(row => row.providerId === providerId) ?? null;
-    const label = summary?.shortName || summary?.displayName || providerId || '';
+    const label = summary ? providerDisplayName(t, summary, providerId ?? '') : providerId ?? '';
     const inBrowser = login?.inBrowser ?? false;
     const service = login?.localService ?? null;
     const failure: LoginFailure | null = providerId ? login?.failure ?? null : null;
-    // 密码登录（飞牛）没有二维码：快照里的 passwordForm 非空就是它。提交中 phase 会变成 'loading'，
-    // 这一幅仍然是表单，所以要把 password 一并告诉 loginScene，否则表单当场消失、退回转圈。
-    const passwordLogin = login?.passwordForm ?? null;
-    const scene = loginScene({
-        lead: chosen?.lead ?? null,
-        phase: login?.phase ?? null,
-        inBrowser,
-        failed: Boolean(failure),
-        password: passwordLogin !== null,
-    });
-    const submittingPassword = passwordLogin !== null && login?.phase === 'loading';
+    const scene = loginScene({ lead: chosen?.lead ?? null, phase: login?.phase ?? null, inBrowser, failed: Boolean(failure), providerId });
     const texts = login?.texts ?? null;
     const retry = onStart;
     const retryLabel = t(inBrowser ? 'home.loginBrowserRetry' : 'home.retryQr');
@@ -153,8 +149,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             if (summary && rowStatus(summary) === 'ran-out') note = t('status.loginExpired');
             if (summary) actions = [{ label: t('home.loginBrowserRetry'), primary: true, onClick: () => onChoose(providerId) }];
         } else {
-            if (summary?.user) note = `${label} · ID: ${String(summary.user.id)}`;
-            actions = [...switchAction, { label: t('account.logout'), onClick: onSignOut }];
+            if (summary?.user) note = `${label} · ID: ${shortAccountId(String(summary.user.id))}`;
+            const syncing = syncingProviderId === providerId;
+            const syncAction: MessageAction = {
+                label: t(syncing ? 'account.syncing' : 'account.syncData'),
+                onClick: onSync,
+                busy: syncing,
+                disabled: syncingProviderId !== null,
+            };
+            actions = [...switchAction, syncAction, { label: t('account.logout'), onClick: onSignOut }];
         }
     } else if (scene === 'accountless') {
         headline = label;
@@ -165,6 +168,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         // 'title'：平台自己的登录标题；没有声明的平台是「登录到 平台名」。
         headline = key.includes('.') ? t(key) : texts ? t(texts.title) : t('home.loginToProvider', { provider: label });
         if (texts && scene !== 'none' && scene !== 'scanned' && scene !== 'reading') note = t(texts.note);
+        if (scene === 'form' && texts) {
+            // 表单式登录：窗口标题条已经说了「登录到 平台名」，这里用平台的说明当标题，不再重复「登录…」。
+            headline = t(texts.note);
+            note = undefined;
+        }
         if (scene === 'browser-ready') actions = [{ label: t('login.openBrowser'), primary: true, onClick: onStart }];
         if (scene === 'browser' && login?.canReopenLoginPage) actions = [{ label: t('home.loginBrowserOpen'), onClick: onReopenBrowser }];
     }
@@ -235,11 +243,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     failedKind={failure?.case.kind ?? null}
                     onRefreshCode={expiredCode && retryOpen ? retry : undefined}
                     refreshLabel={retryLabel}
-                    pendingText={t(methodsPendingKey(login?.methods ?? []))}
+                    pendingText={t('home.loginMethodPending')}
                 />
             )}
-            message={(
-                <div className="flex min-w-0 flex-1 flex-col gap-3">
+            message={scene === 'form' && providerId
+                ? <FormLogin providerId={providerId} onSubmitForm={values => onSubmitForm(providerId, values)} />
+                : (
                     <LoginMessage
                         sceneKey={sceneKey}
                         headline={headline}
@@ -255,21 +264,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         details={details ? { open: detailsOpen, onToggle: () => setDetailsOpen(open => !open) } : undefined}
                         steps={stepMarks(scene, inBrowser)}
                     />
-                    {scene === 'password' && passwordLogin && (
-                        <PasswordLoginForm
-                            // 换了一个平台、换了登录方式、或者重开一次登录（会话代次变了），就是另一张空表：
-                            // 方式换了，第一栏问的就不是同一件事，预填的值也得跟着换。
-                            key={`${providerId}:${login?.id ?? 0}:${login?.selectedMethodId ?? ''}`}
-                            needsServerUrl={passwordLogin.needsServerUrl}
-                            field={passwordLogin.field}
-                            serverUrl={passwordLogin.serverUrl}
-                            error={passwordLogin.error}
-                            busy={submittingPassword}
-                            onSubmit={onSubmitPassword}
-                        />
-                    )}
-                </div>
-            )}
+                )}
             below={details ? <Unfold open={detailsOpen}>{details}</Unfold> : undefined}
         />
         {shownDone && providerId && <LoginDoneFlight parts={doneParts} providerId={providerId} label={label} user={summary?.user ?? null} />}

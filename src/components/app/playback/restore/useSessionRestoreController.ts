@@ -13,9 +13,10 @@ import type { LyricData, SongResult, StatusMessage } from '../../../../types';
 import type { AudioQualityPreference, MediaId } from '../../../../types/onlineMusic';
 import { setStatusMessage as setStatusMsg } from '../../../../stores/useStatusMessageStore';
 import { setPlayQueue, usePlaybackStore } from '../../../../stores/usePlaybackStore';
-import { askedSongKeyRef, makeSongCurrent, startRestore } from '../currentSong';
+import { askedSongKeyRef, keepSongsOfProvidersStanding, makeSongCurrent, providerDropsSoFar, startRestore } from '../currentSong';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { isRestoredSongPlayable } from '../playableSong';
+import { releaseUnclaimedHifiTrack } from '../../../../services/hifi/hifiPlayback';
 import { readNativeQueueState } from '../../../../services/nativeQueueBridge';
 import { adoptNativePlaybackState } from './adoptNativePlaybackState';
 import { getPositionWriteProbe, readPlaybackPositionForSong, savePlaybackPosition } from '../playbackPositionCache';
@@ -124,6 +125,9 @@ export function useSessionRestoreController({
              */
             const report: string[] = [];
             let reportStage = '未走完';
+            // 有没有把「上一个窗口留在 mpv 里的那首」交出去：交出去了它就归这次恢复管，
+            // 没交出去（没恢复任何东西）它就是无主的，finally 里要放掉。
+            let handedToSourceRestore = false;
             try {
                 // WebView 重建不等于播放器重启：先问原生，不能把磁盘里的旧歌装回去。
                 const native = await readNativeQueueState();
@@ -166,6 +170,10 @@ export function useSessionRestoreController({
                         return;
                     }
                 }
+                // 读会话的这一刻记下平台下线计数：读完之后逐一核对，登出过的平台的歌
+                // 不再回填（上游 v0.7.26 的语义；dev 原版没有这道闸）。
+                const providerDropsAtStart = providerDropsSoFar();
+                const signedOut = (song: SongResult) => keepSongsOfProvidersStanding([song], providerDropsAtStart).length === 0;
                 let lastSong = await getFromCache<SongResult>('last_song');
                 let lastQueue = await getFromCache<SongResult[]>('last_queue');
                 report.push(`库:${lastSong ? '有歌' : '无歌'} q=${lastQueue?.length ?? 0}`);
@@ -303,16 +311,23 @@ export function useSessionRestoreController({
                     };
                     lastSong = rebuild(lastSong);
                     lastQueue = (lastQueue || []).map(rebuild).filter((song): song is SongResult => Boolean(song));
-                    if (!lastSong) {
-                        reportStage = '本地曲库缺歌';
+                    if (!lastSong || signedOut(lastSong)) {
+                        reportStage = '当前曲已登出';
                         return;
                     }
+                    lastQueue = keepSongsOfProvidersStanding(lastQueue, providerDropsAtStart);
                     const lastSongKey = getPlaybackSongKey(lastSong);
                     if (!lastQueue.some(song => getPlaybackSongKey(song) === lastSongKey)) {
                         lastQueue.unshift(lastSong);
                     }
                     await persistLastPlaybackCache(lastSong, rewritten() ? usePlaybackStore.getState().playQueue : lastQueue);
                 }
+
+                if (signedOut(lastSong)) {
+                    reportStage = '当前曲已登出';
+                    return;
+                }
+                lastQueue = lastQueue && keepSongsOfProvidersStanding(lastQueue, providerDropsAtStart);
 
                 // A song asked for while the remembered one was being read stands: the restore gives up.
                 if (askedSongKeyRef.current !== null) {
@@ -397,6 +412,7 @@ export function useSessionRestoreController({
 
                 let outcome: RestorePlaybackSourceOutcome = 'failed';
                 try {
+                    handedToSourceRestore = true;
                     outcome = await restorePlaybackSourceForSong(lastSong, {
                         audioQuality,
                         userId,
@@ -428,12 +444,20 @@ export function useSessionRestoreController({
                 // are cold, and neither track has been measured for automix. That makes the first
                 // song change of every session the slowest one and the only one that blends blind.
                 // Every other entry into playback prefetches; this one was simply never wired to.
-                void prefetchNearbySongs(lastSong, rewritten() ? usePlaybackStore.getState().playQueue : lastQueue || [lastSong], audioQuality, userId);
+                // Around the store's queue as it is now: the remembered one less what a mod's
+                // replacement or a sign-out of a platform took out of it while the source was restored.
+                // The mark is the one from the start of the restore: the drop happened before this line,
+                // a fresh mark would see nothing and keep the signed-out songs.
+                const queueForPrefetch = rewritten() ? usePlaybackStore.getState().playQueue : (lastQueue || [lastSong]);
+                void prefetchNearbySongs(lastSong, keepSongsOfProvidersStanding(queueForPrefetch, providerDropsAtStart), audioQuality, userId);
                 reportStage = `已恢复(${outcome})`;
             } catch (error) {
                 console.error('Session restore failed', error);
                 reportStage = '异常';
             } finally {
+                // 没东西可恢复（没记住歌 / 已被别的点歌打断 / 本地文件没了 / Stage 会话）：
+                // 上一个窗口留在 mpv 里的那首现在没人认领，放掉它。
+                if (!handedToSourceRestore) releaseUnclaimedHifiTrack('nothing to restore');
                 /*
                  * 一秒半之后再看一眼 store：恢复「做完了又被别人覆盖」和「压根没做」在日志里
                  * 长得一样，而在界面上不一样 —— 这一条能区分。

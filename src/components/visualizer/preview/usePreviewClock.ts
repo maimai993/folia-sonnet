@@ -97,7 +97,7 @@ export const HELD_TIME_STEP = 0.0001;
 export type ClockValues = Pick<PreviewClock, 'currentTime' | 'audioPower' | 'audioBands'>;
 
 /** The motion values of a clock, in one fixed order. */
-export const valuesOf = (clock: ClockValues): MotionValue<unknown>[] => [
+export const valuesOf =(clock: ClockValues): MotionValue<unknown>[] => [
     clock.currentTime,
     clock.audioPower,
     clock.audioBands.bass,

@@ -1,5 +1,6 @@
 {
   "providers": [
+    "appleMusic",
     "bodian",
     "feiniu",
     "kugou",

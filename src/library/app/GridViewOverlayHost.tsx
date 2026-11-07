@@ -29,6 +29,7 @@ import { LocalSongMetadataMatchDialog } from '../../components/modal/LocalSongMe
 import LocalCollectionCoverDialog from '../../components/local-collection-cover/LocalCollectionCoverDialog';
 import { resolveLocalCollectionCover } from '../core/collection/cover/localCollectionCover';
 import { useLocalCollectionCoverUrls } from '../core/collection/cover/useLocalCollectionCoverUrls';
+import { useScratchpadStore } from '../../stores/useScratchpadStore';
 import { followEntityRedirect } from '../../utils/localLibraryIndex';
 import { buildLocalCatalogIndex, resolveLocalCatalogLink } from '../core/shared/localCatalogLinks';
 import { resolveSongCatalogRef } from '../../services/onlineMusic/catalogRefs';
@@ -180,6 +181,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
     const [coverEditingCollection, setCoverEditingCollection] = useState<LocalGridViewCollectionDescriptor | null>(null);
     // 本地集合的自定义封面（键 → URL）：盖在由曲目推出来的自动封面上。
     const localCollectionCoverUrls = useLocalCollectionCoverUrls();
+    // 本地集合的自定义封面（键 → URL）：盖在下面由曲目推出来的自动封面上。
     const selectedCollectionKey = collectionKey(selectedCollection);
     const refreshedSelectedCollection = useMemo(() => {
         if (!selectedCollection || !isLocalGridViewCollection(selectedCollection)) {
@@ -219,6 +221,8 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
         // getPersistentCoverUrl 不会把导航栈里带着的那张当成自动封面。）
         const automaticCoverUrl = resolvedLocalCollectionCoverUrl || getPersistentCoverUrl(liveSelectedCollection.coverUrl);
         const coverUrl = resolveLocalCollectionCover(liveSelectedCollection, automaticCoverUrl, localCollectionCoverUrls);
+        // （Bravais 的专辑墙）用它：集合封面不影响集合里的歌。（自定义封面是 blob: 地址，getPersistentCoverUrl
+        // 不会把导航栈里带着的那张当成自动封面。）
 
         return {
             ...liveSelectedCollection,
@@ -612,6 +616,13 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
             .map(songId => songsById.get(songId))
             .filter((song): song is LocalSong => Boolean(song));
     }, [coverEditingTarget, surfaceProps.localSongs]);
+    // 本地实体、歌曲信息、手动匹配这几个弹窗和首页层在同一个层叠上下文里，盖不过左边的速记簿：开着时让它藏起来。
+    const isScratchpadCovered = Boolean(editingEntity || organizingFolder || matchingSong);
+    useEffect(() => {
+        useScratchpadStore.getState().setCovered(isScratchpadCovered);
+    }, [isScratchpadCovered]);
+    useEffect(() => () => useScratchpadStore.getState().setCovered(false), []);
+
     const matchingSongAssignment = matchingSongId
         ? localLibraryCatalog.assignments.find(assignment => assignment.songId === matchingSongId)
         : undefined;
@@ -680,6 +691,7 @@ const GridViewOverlayHost: React.FC<GridViewOverlayHostProps> = ({
                                 onDone={handleDoneCollection}
                                 onOpenAlbum={handlePushAlbumCollection}
                                 onOpenArtist={handlePushArtistCollection}
+                                onOpenCollection={handlePushCollection}
                                 onPopTo={onPopCollectionTo}
                             />
                         </React.Suspense>

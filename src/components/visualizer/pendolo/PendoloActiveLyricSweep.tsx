@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion, useTransform, type MotionValue } from 'framer-motion';
 import { type Line, type Theme } from '../../../types';
-import { colorWithAlpha, mixColors } from '../../../utils/visualizer/colorMix';
+import { colorWithAlpha, mixColors } from '../colorMix';
 import { buildLineGraphemeTimeline, splitLyricGraphemes } from '../../../utils/lyrics/graphemeTiming';
 import { measureMonetGraphemeOffsets } from '../monet/monetLyricsModel';
 import { buildPendoloTextLayout, type PendoloWrappedTextLine } from './pendoloTextLayout';
@@ -100,8 +100,6 @@ const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
                 >
                     <motion.span
                         className="absolute inset-0 block whitespace-pre"
-                        // 逐字扫光的叠加层：扁平档要留着这里的颜色（见 index.css 的 [data-folia-lyric-sweep] 段）。
-                        data-folia-lyric-sweep="1"
                         style={{
                             boxSizing: 'border-box',
                             padding: `${glowPaddingPx}px`,

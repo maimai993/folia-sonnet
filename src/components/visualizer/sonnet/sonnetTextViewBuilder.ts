@@ -1,7 +1,7 @@
 import { layoutWithLines, prepareWithSegments } from '@chenglou/pretext';
 import 'pixi.js/advanced-blend-modes';
 import type { Theme } from '../../../types';
-import { resolveGlowColorStrength } from '../../../utils/visualizer/colorMix';
+import { resolveGlowColorStrength } from '../colorMix';
 import { buildSonnetGlyphLayout } from './sonnetGlyphLayout';
 import { resolveSonnetSegmentDepth, resolveSonnetSegmentNormalOffset } from './sonnetMotion';
 import { hashSonnetSeed } from './sonnetRandom';
@@ -171,7 +171,8 @@ export const buildSonnetTextView = (
         stroke: isDecoration ? { color: glowColor, width: Math.max(1, Math.min(8, fontSize * 0.006)) } : undefined,
         align: 'center',
         dropShadow: baseDropShadow,
-        padding: baseDropShadow ? Math.max(20, baseDropShadow.blur * 2.5) : 0,
+        // Keep the glyph bounds stable when only the glow color becomes dark.
+        padding: hasGlow ? Math.max(20, glowBlur * 2.5) : 0,
     });
 
     // Semi-hero echo ghosts: hollow (stroke-only) copies that split along the

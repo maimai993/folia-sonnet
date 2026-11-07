@@ -10,6 +10,7 @@ import { useLibraryWallLookStore } from '../../stores/useLibraryWallLookStore';
 import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
 import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import type { LiquidGlassEffects, LiquidGlassParams } from '../../shinoinject/liquidglass';
+import { useLatticeSettingsStore } from '../../stores/useLatticeSettingsStore';
 
 // src/services/obs/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -104,6 +105,9 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     stageTrackPillTimeoutSec: storeStageSettings.stageTrackPillTimeoutSec,
     stageTrackPillOnHome: storeStageSettings.stageTrackPillOnHome,
     stageTrackPillPosition: storeStageSettings.stageTrackPillPosition,
+    // Whether the web link's overlay draws the card at all: without it the three legs above travel
+    // but the overlay has no word on whether the streamer wanted the card in the source.
+    stageTrackPillInObs: storeStageSettings.stageTrackPillInObs,
     // The bravais wall's collection stack edges (a tile look, so it travels with a shared look by the
     // settings rule). The wall's transparency and windows per block deliberately stay out — the user
     // decided so; see useLibraryWallLookStore.
@@ -124,6 +128,7 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // 液态玻璃：总开关、四个参数与两个效果开关。界面材质，属于「长什么样」，随外观配置一起走。
     // 存成一整对象而不是六个平铺字段，短码只占一个键（llg）。
     liquidGlass: snapshotLiquidGlass(),
+    ...snapshotTileLooks(),
   };
 }
 
@@ -138,6 +143,23 @@ function snapshotLiquidGlass(): LiquidGlassParams & LiquidGlassEffects & { enabl
     bend: glass.bend,
     light: glass.light,
     jelly: glass.jelly,
+    // The frosted bar behind the player page's titlebar: a look of the player page, no user exception.
+    // The OBS overlay draws no titlebar and ignores it; it rides along so a copied look keeps it.
+  };
+}
+
+/**
+ * 液态玻璃之外、但同样属于「长什么样」的几项。
+ *
+ * 它们不是一个 tunin 对象、也不归液态玻璃，所以跟着外观配置走的是顶层的平铺字段
+ * （短码里各占一个键、导入计划里各自归组，见 utils/appearanceCodec 与 appearanceImportPlan）。
+ * 放在这里而不是塞进 snapshotLiquidGlass：塞进去就只覆盖到液态玻璃那一块，导入方拿不到。
+ */
+function snapshotTileLooks(): Record<string, unknown> {
+  return {
+    // Numbering only the playing song on both tile walls (the queue collage and the bravais wall): a tile
+    // look with no user exception, so it travels too (#930).
+    latticeBadgeCurrentOnly: useLatticeSettingsStore.getState().latticeBadgeCurrentOnly,
   };
 }
 
