@@ -302,6 +302,15 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        局域网音响投送（FoliaLanCastPlugin）：SSDP 设备发现走 UDP 组播，不拿
+        WifiManager.MulticastLock 的话不少 ROM 会直接把组播包丢掉，表现是「一台都搜不到」。
+        CHANGE_WIFI_MULTICAST_STATE 是拿锁的前提，ACCESS_WIFI_STATE / ACCESS_NETWORK_STATE
+        用来取 WiFi 状态与本机所在网段。三个都是 normal 级，安装即授予，无需运行时弹窗。
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 前台服务 + 通知：后台播放时占住前台优先级并在通知栏显示播放控制 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />

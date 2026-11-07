@@ -1360,6 +1360,36 @@ class FoliaNativePlugin : Plugin() {
         }
     }
 
+    /**
+     * 投送前的准备：把转发服务临时对局域网开放，并把手机 IP / 端口交给 Web 层。
+     *
+     * 安卓上歌曲地址大多是 `http://127.0.0.1:<port>/remote-audio/<token>`（CORS 转发），
+     * 音响把 127.0.0.1 当成它自己，直接推过去必然无声。这里给出可替换的局域网地址，
+     * Web 层把 host 换掉即可；端口和 token 都是本次会话的，不会持久化。
+     */
+    @PluginMethod
+    fun lanCastPrepare(call: PluginCall) {
+        try {
+            if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
+            val port = localAudioServer!!.start()
+            localAudioServer!!.setLanClientsAllowed(true)
+            val result = JSObject()
+            result.put("port", port)
+            val lanIp = LocalAudioServer.lanIpv4()
+            if (lanIp != null) result.put("lanIp", lanIp)
+            call.resolve(result)
+        } catch (error: Exception) {
+            call.reject(error.message, error)
+        }
+    }
+
+    /** 停止投送后收口：局域网设备重新连不进来，本机回环播放不受影响。 */
+    @PluginMethod
+    fun lanCastRelease(call: PluginCall) {
+        localAudioServer?.setLanClientsAllowed(false)
+        call.resolve()
+    }
+
     /*
      * 媒体缓存（App 私有目录）。
      *

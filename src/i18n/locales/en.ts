@@ -7655,4 +7655,16 @@ export default {
     "unknownBranch": "an unknown branch",
     "ok": "Got it"
   },
+  "lanCastTitle": "Cast to a speaker",
+  "lanCastHint": "Find DLNA / UPnP speakers on this Wi-Fi",
+  "lanCastNoTrack": "Nothing is playing",
+  "lanCastScanning": "Scanning…",
+  "lanCastDevices": "{{count}} speakers found",
+  "lanCastRescan": "Rescan",
+  "lanCastNoDevice": "No speakers found. Make sure the phone and the speaker share the same Wi-Fi and DLNA is enabled on the speaker.",
+  "lanCastPlaying": "Sound is on {{name}}; the phone is muted",
+  "lanCastFollowed": "Track change sent to {{name}}",
+  "lanCastLocalHint": "The phone is muted, but the progress bar and lyrics keep running. Changing tracks follows on the speaker.",
+  "lanCastStop": "Stop casting and restore phone audio",
+  "lanCastClose": "Close"
 } as const;
