@@ -53,13 +53,19 @@ export function parseVersion(version: string): ParsedVersion | null {
     };
 }
 
-// 与 android/app/build.gradle 同一套算法：patch 和 build 超过 99 会被截断。
+// 与 android/app/build.gradle 的 versionCodeOf 逐字一致：
+//     minor * 1000000 + patch * 10000 + build
+// major 恒为 0（0.x），不占位；patch/build 超过 99 会被截断。
+//
+// 以前这里写的是 minor * 100000 + patch * 100，0.7.27.2 算出 702702，比装过的
+// dev 版（7025108）还小 —— 系统判定「降级安装」直接拒绝覆盖
+// （INSTALL_FAILED_VERSION_DOWNGRADE）。build.gradle 已经改成上面那套，这边的
+// 镜像没跟上；现在两边算同一串数字。
 export function versionCodeOf(version: string): number {
     const parsed = parseVersion(version);
     if (!parsed) return 0;
-    return parsed.major * 1000000
-        + parsed.minor * 100000
-        + Math.min(parsed.patch, 99) * 100
+    return parsed.minor * 1000000
+        + Math.min(parsed.patch, 99) * 10000
         + Math.min(parsed.build, 99);
 }
 

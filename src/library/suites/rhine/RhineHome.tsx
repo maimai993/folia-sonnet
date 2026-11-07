@@ -107,6 +107,33 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     }, [props.isInteractive, ready]);
 
     /*
+     * 渲染策略。
+     *
+     * 三维阵列自己已经有视锥剔除和「画面没变就不重画」，缺的是**上限**：它在
+     * 台前时按屏幕刷新率全速跑，安卓上一小时就是实打实的发热和耗电。
+     *
+     * 这里只给上限，不规定它内部怎么画：台前 60 帧 / 静止 12 帧 / DPR 压到 1.5。
+     * 像素比是这里面最有效的一条 —— 高 DPR 屏按 2.5 倍画，像素量是 1.5 倍的近三倍。
+     * 补丁脚本在 rhinelab/folia-rhine-patch.js，消息在 rhine.htm 的桥里落地。
+     */
+    useEffect(() => {
+        const frame = frameRef.current;
+        if (!frame?.contentWindow) return;
+        frame.contentWindow.postMessage(
+            {
+                type: 'rhine-policy',
+                policy: {
+                    maxFps: 60,
+                    idleFps: 12,
+                    activeMs: 900,
+                    maxPixelRatio: 1.5,
+                },
+            },
+            '*',
+        );
+    }, [ready]);
+
+    /*
      * 曲库 → 三维阵列。
      *
      * iframe 一上来就加载，开屏动画立刻开始播 —— 它本身就是这期间的加载动画，
