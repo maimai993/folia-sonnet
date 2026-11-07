@@ -2978,6 +2978,8 @@ class FoliaPlaybackService : android.app.Service() {
                 "qishui" -> return R.drawable.ic_provider_qishui
                 // 洛雪音源（免登录）：绿色音符图标去色后的白色剪影（alpha 取三通道最大值）。
                 "lxmusic" -> return R.drawable.ic_provider_lxmusic
+                // Apple Music（v0.7.27 上游新增）：官方图标去色后的白色剪影。
+                "appleMusic" -> return R.drawable.ic_provider_applemusic
                 else -> return R.mipmap.ic_launcher
             }
         }

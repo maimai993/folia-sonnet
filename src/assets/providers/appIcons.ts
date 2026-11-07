@@ -7,6 +7,7 @@ import qishuiIcon from './qishui.png';
 import lxmusicIcon from './lxmusic.png';
 import spotifyIcon from './spotify.png';
 import ytmIcon from './ytm.png';
+import appleMusicIcon from './applemusic.png';
 import foliaIcon from './folia.svg';
 
 // src/assets/providers/appIcons.ts
@@ -33,6 +34,8 @@ export const PROVIDER_APP_ICONS: Record<string, string> = {
     // `folia-ytm:` 那种本地协议），但登录窗口那一列平台在两端都画，没图就只剩一个彩色的字。
     spotify: spotifyIcon,
     ytm: ytmIcon,
+    // Apple Music（v0.7.27 上游新增，macOS / Windows 桌面端）：登录窗口那一列与切换器画本尊。
+    appleMusic: appleMusicIcon,
 };
 
 /** 本地曲库等"自家人"来源统一用的图标 key。 */
