@@ -45,7 +45,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'electron/backendLifecycle.cjs': { n: { netease: 1, qq: 1 }, kind: 'doc' },
     'electron/linuxPasswordStore.cjs': { n: { qq: 1, kugou: 1 }, kind: 'doc' },
     'electron/loginBackendIpc.cjs': { n: { netease: 6, qq: 6 }, kind: 'main', why: 'the IPC channels of the two embedded backends and the table that finds a backend by its platform id' },
-    'electron/main.cjs': { n: { netease: 8, qq: 15, kugou: 25, bodian: 13, ytm: 23, spotify: 24, qishui: 23, appleMusic: 6, fnmusic: 15 }, kind: 'main', why: 'starts each platform\'s local service and bridge, its IPC channels, its media hosts; raised by the upstream merge 2026-10-17; raised by the upstream merge 2026-10-17' },
+    'electron/main.cjs': { n: { netease: 8, qq: 15, kugou: 25, bodian: 13, ytm: 23, spotify: 25, qishui: 23, appleMusic: 7, fnmusic: 15 }, kind: 'main', why: 'starts each platform\'s local service and bridge, its IPC channels, its media hosts; raised by the upstream merge 2026-10-17; spotify +1 and appleMusic +1 by the v0.7.27 sync (quit wait list, companion client); bodian/qishui kept at our fork\'s own counts' },
     'electron/networkRecorder.cjs': { n: { netease: 4, qq: 3 }, kind: 'main', why: 'the hosts by which a request is filed under the backend that sent it' },
     'electron/preload.cjs': { n: { netease: 6, qq: 5, kugou: 2, bodian: 1, ytm: 1, spotify: 1, qishui: 1, appleMusic: 1, fnmusic: 1 }, kind: 'main', why: 'the bridge methods and IPC channels of each platform' },
     'electron/qishui/qishui-api.js': { n: { netease: 1 }, kind: 'doc' },

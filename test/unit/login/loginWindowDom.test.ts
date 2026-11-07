@@ -82,6 +82,7 @@ describe('the sign-in window, drawn', () => {
                 backend: { failed: false, detail: null, restarting: false, canRestart: false },
                 copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: null },
                 texts: null,
+                checksAfterLogin: false,
             },
             onChoose: () => { }, onStart: () => { }, onSubmitForm: async () => ({ sessionId: 0, providerId: 'a', outcome: 'completed' }), onSelectMethod: () => { }, onReopenBrowser: () => { }, onRestartService: () => { },
             onSwitch: () => { }, onSignOut: () => { }, onSync: () => { }, buildReport: async () => '',

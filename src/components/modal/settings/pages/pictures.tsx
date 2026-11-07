@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { ImagePlus } from 'lucide-react';
 import { Button } from '../../../ui/Button';
 import { computeHexCardFrame } from '../../../../utils/hexCardFalloff';
+import type { ScratchpadHandleStyle } from '../../../../stores/useScratchpadSettingsStore';
+import ScratchpadHandleRest from '../../../app/scratchpad/ScratchpadHandleRest';
 import { SAMPLE_COVERS } from '../kit';
 import type { LiquidGlassPresetId } from '../../../../shinoinject/liquidglass';
 
@@ -229,4 +231,21 @@ export const GlassPresetGrid: React.FC<{
             );
         })}
     </div>
+);
+
+/**
+ * One of the scratchpad side tab's resting looks (scratchpadHandleStyle): two covers stand for the wall,
+ * and on the frame's left edge sits what the tab shows while the pointer is away. A static mark, not a
+ * live preview of the tab.
+ */
+export const ScratchpadHandleStylePicture: React.FC<{ handleStyle: ScratchpadHandleStyle }> = ({ handleStyle }) => (
+    // The tab lives on the dark wall, so the frame is that wall whatever the settings theme is.
+    // scratchpad-look gives it the scratchpad's accent marks (defined in scratchpad.css).
+    <span className="scratchpad-look relative block h-full w-full" style={{ background: '#121114' }}>
+        <span className="absolute right-2 top-2 h-9 w-9 rounded-[3px] opacity-60" style={{ background: SAMPLE_COVERS[1] }} />
+        <span className="absolute right-12 top-6 h-7 w-7 rounded-[3px] opacity-60" style={{ background: SAMPLE_COVERS[2] }} />
+        <span className="absolute left-0 top-0 flex h-full items-center">
+            <ScratchpadHandleRest handleStyle={handleStyle} scale={0.75} vivid />
+        </span>
+    </span>
 );

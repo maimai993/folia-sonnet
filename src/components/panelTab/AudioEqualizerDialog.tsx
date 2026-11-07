@@ -16,6 +16,7 @@ import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerMo
 import Sheet from '../shared/Sheet';
 import { Toggle } from '../modal/settings/kit';
 import HifiBypassNotice from '../hifi/HifiBypassNotice';
+import ExternalPlayerNotice, { useIsExternalPlayerRoute } from './ExternalPlayerNotice';
 import { useIsHifiRoute } from '../hifi/useHifiSignalPath';
 import ModCurveNotice from './equalizer/ModCurveNotice';
 import ConsoleTabs from './console/ConsoleTabs';
@@ -68,7 +69,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
     const curveHeard = Boolean(modCurve) && !modCurveSuspended;
     // 走 HiFi 时这首歌由 mpv 放，均衡器与音效都听不到：窗口只显示设置，留着给原来的引擎用。
     const isHifiRoute = useIsHifiRoute();
-    const readOnly = curveHeard || isHifiRoute;
+    // A platform's own player sounds the song on the external route: nothing here reaches it either.
+    const isExternalRoute = useIsExternalPlayerRoute();
+    const readOnly = curveHeard || isHifiRoute || isExternalRoute;
     const [tab, setTab] = useState<ConsoleTabId>('equalizer');
     const [draft, setDraft] = useState<AudioEqualizerSettings>(settings);
     const draftRef = useRef(draft);
@@ -227,6 +230,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
 
                     顺序按「先说明、再选页、最后细调」：方案条在最上（换耳机是整窗级的动作），
                     页签紧随其后，两者之间只留间距、不叠底色，看着是一层而不是两层。 */}
+                <ExternalPlayerNotice />
                 <div className="flex flex-col gap-2 pb-1 pt-2">
                     <ProfileBar isDaylight={isDaylight} />
                     <ConsoleTabs

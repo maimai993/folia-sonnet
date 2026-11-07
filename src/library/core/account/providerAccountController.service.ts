@@ -6,6 +6,7 @@ import type {
     PasswordLoginCredentials,
     ProviderAccountSummary,
     ProviderCapabilities,
+    ProviderSetupView,
 } from '../../../types/onlineMusic';
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import type {
@@ -28,8 +29,11 @@ import type {
     LibraryLogoutResult,
     LibraryPasswordLoginError,
     LibraryPasswordLoginResult,
+    LibraryProviderSetupSnapshot,
     LibraryProviderSwitchReason,
     LibrarySelectProviderResult,
+    LibrarySetupActionResult,
+    LibrarySetupOpenResult,
     LibraryStartLoginResult,
     LibrarySwitchCancelResult,
     LibrarySwitchConfirmResult,
@@ -66,11 +70,18 @@ import {
 //   确认后的回调只读账号，回调结束后由 controller 决定收起、显示没读到账号或切到登录的平台；
 // - 登出：先经宿主问用的人，答应后把这个平台的歌移出播放器，再退出；
 // - 同步数据：只对有账号的平台，同一时间一个；重新读账号，没读成时按账户 store 说的分出登录失效；
+// - 登录之后的检查与配置清单：平台声明了 checkAfterLogin 时，读到账号之后多查一步（checking），平台回了清单就
+//   停在清单上，用的人做完（finishSetup）才报这一次登录的完成；清单也能从账号那一幅打开（openSetup）。清单开着时
+//   每隔一会儿重新问一次平台（状态可能在应用之外变了，例如本机程序配对好了）；
 // - 当前平台：存的平台不在列表里时回落默认平台并写回（不经确认、不清空、不动账户缓存）；
 // - 快照在没有变化时保持对象身份（useSyncExternalStore 友好）。
 
 const IDLE_LOGOUT: LibraryAccountLogoutState = Object.freeze({ providerId: null, status: 'idle' });
 const IDLE_SYNC: LibraryAccountSyncState = Object.freeze({ providerId: null, status: 'idle' });
+/** 登录之后的检查最多等这么久：超时当作没有要做的，登录照常完成。 */
+export const LOGIN_CHECK_LIMIT_MS = 20_000;
+/** 配置清单开着时多久重新问一次平台。 */
+export const SETUP_POLL_MS = 2_000;
 
 /** 控制器自己的日志出口（未注入时打到 console，前缀与会话的 [ProviderLogin] 区分）。 */
 const consoleAccountLogger: LibraryAccountLogger = (level, event, detail) => {
@@ -91,7 +102,9 @@ type LoginState = {
     selectedMethodId: string | null;
     inBrowser: boolean;
     texts: LoginTexts | null;
-    stage: 'resolving-methods' | 'choosing-method' | 'password' | 'ready' | 'session';
+    checksAfterLogin: boolean;
+    /** checking：确认了、账号读到了，正在做登录之后的检查（会话已经走完，sessionId 留着）。 */
+    stage: 'resolving-methods' | 'choosing-method' | 'password' | 'ready' | 'session' | 'checking';
     sessionId: number | null;
     /**
      * 只有 password 阶段有：表单第一栏要不要填（自建服务的地址每家不同）、那一栏叫什么
@@ -105,6 +118,11 @@ type LoginState = {
         submitting: boolean;
         error: LibraryPasswordLoginError | null;
     } | null;
+};
+
+/** 开着的配置清单。sign-in 的那一份带着这一次登录还没报的完成（切没切到这个平台还在路上时是一个 promise）。 */
+type SetupState = LibraryProviderSetupSnapshot & {
+    pending: { sessionId: number; outcome: Promise<LibraryLoginOutcome> } | null;
 };
 
 const NO_METHODS: readonly LoginMethod[] = Object.freeze([]);
@@ -168,6 +186,7 @@ const sameLoginSnapshot = (a: LibraryLoginSessionSnapshot, b: LibraryLoginSessio
     // copy 由 providerId / phase / methods / selectedMethodId / failure / retryCooldownSeconds / backend.failed 派生，
     // 上面都相等时它也相等。
     && a.texts === b.texts
+    && a.checksAfterLogin === b.checksAfterLogin
     && a.localService.available === b.localService.available
     && a.localService.failed === b.localService.failed
     && a.localService.error === b.localService.error
@@ -188,6 +207,14 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
     let logout: LibraryAccountLogoutState = IDLE_LOGOUT;
     let sync: LibraryAccountSyncState = IDLE_SYNC;
     let lastLoginCompletion: LibraryLoginCompletion | null = null;
+    let setup: SetupState | null = null;
+    // 清单的代次：开、关、换一份都前进，晚到的清单按它作废。
+    let setupSeq = 0;
+    // 每次向平台要清单（重新问、做操作）编一个号，只认比已显示的那一份更晚问的回答：先问的晚到不能盖住后问的。
+    let setupAsk = 0;
+    let setupShown = 0;
+    let setupPoll: unknown = null;
+    let snapshotSetup: LibraryProviderSetupSnapshot | null = null;
     let snapshot: LibraryAccountSnapshot;
     // 内部一次改多处时只在最外层结束后重建一次快照，避免中间态（例如会话 start 同步发出的通知）漏到界面。
     let batchDepth = 0;
@@ -210,6 +237,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
     const deriveLogin = (previous: LibraryLoginSessionSnapshot | null): LibraryLoginSessionSnapshot | null => {
         if (!login) return null;
         let phase: LibraryLoginPhase = login.stage === 'session' ? 'loading' : login.stage;
+        // 检查的时候会话已经走完（停在 confirmed），阶段是 controller 自己的。
         let codeImage = '';
         let canReopenLoginPage = true;
         let failure: LibraryLoginSessionSnapshot['failure'] = null;
@@ -261,8 +289,26 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
                 passwordForm,
             }),
             texts: login.texts,
+            checksAfterLogin: login.checksAfterLogin,
         };
         return previous && sameLoginSnapshot(previous, next) ? previous : next;
+    };
+
+    // 清单的快照：内容没变时沿用旧对象（每次重新问平台都会拿到新对象）。
+    const deriveSetup = (): LibraryProviderSetupSnapshot | null => {
+        if (!setup) return (snapshotSetup = null);
+        const previous = snapshotSetup;
+        if (
+            previous
+            && previous.providerId === setup.providerId
+            && previous.busy === setup.busy
+            && previous.origin === setup.origin
+            && (previous.view === setup.view || JSON.stringify(previous.view) === JSON.stringify(setup.view))
+        ) {
+            return previous;
+        }
+        snapshotSetup = { providerId: setup.providerId, view: setup.view, busy: setup.busy, origin: setup.origin };
+        return snapshotSetup;
     };
 
     const buildSnapshot = (previous: LibraryAccountSnapshot | null): LibraryAccountSnapshot => {
@@ -274,6 +320,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             logout,
             sync,
             lastLoginCompletion,
+            setup: deriveSetup(),
         };
         if (
             previous
@@ -284,6 +331,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             && previous.logout === next.logout
             && previous.sync === next.sync
             && previous.lastLoginCompletion === next.lastLoginCompletion
+            && previous.setup === next.setup
         ) {
             return previous;
         }
@@ -432,6 +480,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         batch(() => {
             // 单一在途登录：先停旧会话（keyed 取消），旧会话不会再在后台替旧平台确认。
             session.stop();
+            closeSetup();
             login = {
                 id: attempt,
                 providerId,
@@ -439,6 +488,7 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
                 selectedMethodId: null,
                 inBrowser: askSafely(() => auth.confirmsLoginInBrowser(providerId), false),
                 texts: askSafely(() => auth.getLoginTexts(providerId), null),
+                checksAfterLogin: askSafely(() => auth.checksAfterLogin(providerId), false),
                 stage: 'resolving-methods',
                 sessionId: null,
                 password: null,
@@ -468,6 +518,12 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         if (attempt !== loginSeq || disposed || !login) return { status: 'superseded', providerId };
         const resolved: LoginState = { ...login, methods: methods.length > 0 ? methods : NO_METHODS };
         log('info', 'login:chosen', { providerId, methods: methods.length, inBrowser: resolved.inBrowser });
+        if (methods.length > 0 && resolved.inBrowser) {
+            // 在浏览器里确认的几种方式：先替用的人选上平台标的那一种（没标就是第一种），停在「打开浏览器」；按下去之前还能换。
+            const first = (methods.find(method => method.preferred) ?? methods[0]).id;
+            batch(() => { login = { ...resolved, stage: 'ready', selectedMethodId: first }; });
+            return { status: 'started', providerId, sessionId: attempt, step: 'ready' };
+        }
         if (methods.length > 0) {
             // 多种方式：停在第一步，选定之前不向平台要码。
             batch(() => { login = { ...resolved, stage: 'choosing-method' }; });
@@ -562,6 +618,18 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             batch(() => { login = enterPasswordStage(login!, sessionId, method, true); });
             return { status: 'requested', sessionId };
         }
+        // 平台已经确认（正在读账号）或账号已经读到、正在做登录之后的检查：这一次登录已经成了，不再换。
+        if (login.stage === 'checking' || deriveLogin(null)?.phase === 'confirmed') return { status: 'rejected', reason: 'not-retryable' };
+        if (login.inBrowser) {
+            // 浏览器登录的方式只在开始之前选：换了就停下已经开始的那一次，回到「打开浏览器」，由用的人按下去再开始。
+            if (methodId === login.selectedMethodId && login.stage === 'ready') return { status: 'requested', sessionId: login.id };
+            const id = ++loginSeq;
+            batch(() => {
+                if (login!.stage === 'session') session.stop();
+                login = { ...login!, id, stage: 'ready', selectedMethodId: methodId, sessionId: null };
+            });
+            return { status: 'requested', sessionId: id };
+        }
         return { status: 'requested', sessionId: beginSession(++loginSeq, login, methodId) };
     };
 
@@ -585,13 +653,18 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
     };
 
     const closeLogin = (): LibraryLoginCloseResult => {
-        if (disposed || !login) return { status: 'no-session' };
-        const sessionId = login.id;
+        if (disposed || (!login && !setup)) {
+            // 从账号那一幅打开、还在等平台回清单的那一次也作废。
+            setupSeq += 1;
+            return { status: 'no-session' };
+        }
+        const sessionId = login?.id ?? 0;
         batch(() => {
             loginSeq += 1;
             session.stop();
             login = null;
             watchLocalService(null);
+            closeSetup();
         });
         return { status: 'closed', sessionId };
     };
@@ -662,16 +735,188 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
             batch(() => complete('refresh-failed'));
             return;
         }
+        let view: ProviderSetupView | null = null;
+        if (login!.checksAfterLogin) {
+            const methodId = login!.selectedMethodId;
+            batch(() => { login = { ...login!, stage: 'checking' }; });
+            view = await checkAfterLogin(event.providerId, methodId);
+            // 检查的时候关了窗、换了一行：不再收尾（账号照样读到了，只是不切过去、不放动画）。
+            if (disposed || login?.id !== loginId || login.stage !== 'checking') return;
+        }
         const needsActivation = event.providerId !== activeProviderId();
         batch(() => {
             login = null;
             watchLocalService(null);
-            if (!needsActivation) complete('completed');
+            // 平台回了清单：停在清单上，做完才报完成（finishSetup）。
+            if (view) showSetup(event.providerId, view, 'sign-in', loginId);
+            else if (!needsActivation) complete('completed');
         });
         if (!needsActivation) return;
-        const result = await openSwitchRequest(event.providerId, 'activate-after-login');
+        const outcome = openSwitchRequest(event.providerId, 'activate-after-login')
+            .then((result): LibraryLoginOutcome => (result.status === 'switched' ? 'completed' : 'activation-declined'));
+        if (view) {
+            if (setup?.pending?.sessionId === loginId) setup.pending.outcome = outcome;
+            return;
+        }
+        const settled = await outcome;
         if (disposed) return;
-        batch(() => complete(result.status === 'switched' ? 'completed' : 'activation-declined'));
+        batch(() => complete(settled));
+    };
+
+    /** 登录之后的检查：有时限，超时、抛错都当作没有要做的（只记日志），这一步挡不住登录。 */
+    const checkAfterLogin = async (providerId: OnlineProviderId, methodId: string | null): Promise<ProviderSetupView | null> => {
+        let timer: unknown = null;
+        try {
+            const view = await Promise.race([
+                auth.checkAfterLogin(providerId, methodId),
+                new Promise<'timeout'>(resolve => { timer = clock.setTimeout(() => resolve('timeout'), LOGIN_CHECK_LIMIT_MS); }),
+            ]);
+            if (view === 'timeout') {
+                log('warn', 'login:check-timeout', { providerId, limitMs: LOGIN_CHECK_LIMIT_MS });
+                return null;
+            }
+            log('info', 'login:checked', { providerId, methodId, setup: view !== null });
+            return view;
+        } catch (error) {
+            log('warn', 'login:check-error', { providerId, ...describeLoginError(error) });
+            return null;
+        } finally {
+            if (timer !== null) clock.clearTimeout(timer);
+        }
+    };
+
+    // ─── 配置清单 ──────────────────────────────────────────────────────
+
+    const stopSetupPoll = (): void => {
+        if (setupPoll === null) return;
+        clock.clearTimeout(setupPoll);
+        setupPoll = null;
+    };
+
+    /** 收起清单（在 batch 里调）。代次总会前进：还在等平台回清单的那一次也作废。 */
+    function closeSetup(): void {
+        setupSeq += 1;
+        stopSetupPoll();
+        setup = null;
+    }
+
+    /** 开一份清单（在 batch 里调）。sessionId：登录之后的那一份是那一次登录的代次，从账号那一幅打开的是 null。 */
+    const showSetup = (providerId: OnlineProviderId, view: ProviderSetupView, origin: 'sign-in' | 'account', sessionId: number | null): void => {
+        closeSetup();
+        // 在这之前问的清单都比它旧。
+        setupShown = setupAsk;
+        setup = {
+            providerId,
+            view,
+            busy: false,
+            origin,
+            pending: sessionId === null ? null : { sessionId, outcome: Promise.resolve<LibraryLoginOutcome>('completed') },
+        };
+        scheduleSetupPoll();
+    };
+
+    const scheduleSetupPoll = (): void => {
+        stopSetupPoll();
+        const seq = setupSeq;
+        setupPoll = clock.setTimeout(() => {
+            setupPoll = null;
+            void refreshSetup(seq);
+        }, SETUP_POLL_MS);
+    };
+
+    /** 重新问一次平台的清单；正在做操作时跳过这一次。平台此刻回 null 时留着原来那一份。 */
+    const refreshSetup = async (seq: number): Promise<void> => {
+        if (disposed || !setup || seq !== setupSeq) return;
+        if (setup.busy) {
+            scheduleSetupPoll();
+            return;
+        }
+        const { providerId } = setup;
+        const ask = ++setupAsk;
+        let view: ProviderSetupView | null = null;
+        try {
+            view = await auth.getSetup(providerId);
+        } catch (error) {
+            log('warn', 'setup:refresh-error', { providerId, ...describeLoginError(error) });
+        }
+        if (disposed || !setup || seq !== setupSeq) return;
+        if (view && ask > setupShown) {
+            setupShown = ask;
+            const shown = view;
+            batch(() => { setup = { ...setup!, view: shown }; });
+        }
+        scheduleSetupPoll();
+    };
+
+    const openSetup = async (providerId: OnlineProviderId): Promise<LibrarySetupOpenResult> => {
+        if (disposed || !findProvider(providerId) || !askSafely(() => auth.hasSetup(providerId), false)) {
+            return { status: 'unavailable', providerId };
+        }
+        batch(() => {
+            loginSeq += 1;
+            session.stop();
+            login = null;
+            watchLocalService(null);
+            closeSetup();
+        });
+        const seq = setupSeq;
+        let view: ProviderSetupView | null = null;
+        try {
+            view = await auth.getSetup(providerId);
+        } catch (error) {
+            log('warn', 'setup:open-error', { providerId, ...describeLoginError(error) });
+        }
+        // 等的时候关了窗、换了一行或者又开了一份：这一次作废。
+        if (disposed || seq !== setupSeq || !view) return { status: 'none', providerId };
+        const shown = view;
+        batch(() => showSetup(providerId, shown, 'account', null));
+        log('info', 'setup:open', { providerId });
+        return { status: 'opened', providerId };
+    };
+
+    const runSetupAction = async (stepId: string, actionId: string, value?: string): Promise<LibrarySetupActionResult> => {
+        if (disposed || !setup) return { status: 'no-setup' };
+        if (setup.busy) return { status: 'busy' };
+        const seq = setupSeq;
+        const { providerId } = setup;
+        const ask = ++setupAsk;
+        batch(() => { setup = { ...setup!, busy: true }; });
+        try {
+            const view = await auth.runSetupAction(providerId, stepId, actionId, value);
+            if (disposed || !setup || seq !== setupSeq) return { status: 'no-setup' };
+            // 交出的内容（密钥）不进日志。
+            log('info', 'setup:action', { providerId, stepId, actionId });
+            batch(() => {
+                if (ask > setupShown) {
+                    setupShown = ask;
+                    setup = { ...setup!, view, busy: false };
+                } else {
+                    setup = { ...setup!, busy: false };
+                }
+            });
+            return { status: 'done' };
+        } catch (error) {
+            log('warn', 'setup:action-error', { providerId, stepId, actionId, ...describeLoginError(error) });
+            if (!disposed && setup && seq === setupSeq) batch(() => { setup = { ...setup!, busy: false }; });
+            return { status: 'failed' };
+        }
+    };
+
+    const finishSetup = async (): Promise<void> => {
+        if (disposed || !setup) return;
+        const { pending, providerId } = setup;
+        if (!pending) {
+            batch(closeSetup);
+            return;
+        }
+        // 登录之后的那一份：等切没切到这个平台有了结果，再收起清单、报完成（同一次提交，窗口不会先闪回别的样子）。
+        batch(() => { setup = { ...setup!, busy: true }; });
+        const outcome = await pending.outcome;
+        if (disposed || setup?.pending !== pending) return;
+        batch(() => {
+            closeSetup();
+            lastLoginCompletion = { sessionId: pending.sessionId, providerId, outcome };
+        });
     };
 
     // ─── 表单式登录 ────────────────────────────────────────────────────
@@ -792,6 +1037,8 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         session.dispose();
         login = null;
         watchLocalService(null);
+        stopSetupPoll();
+        setup = null;
         logout = IDLE_LOGOUT;
         sync = IDLE_SYNC;
         for (const unsubscribe of unsubscribes) unsubscribe();
@@ -823,6 +1070,9 @@ export const createProviderAccountController = (deps: LibraryAccountControllerDe
         buildLoginDiagnosticReport,
         logout: logoutProvider,
         syncAccount,
+        openSetup,
+        runSetupAction,
+        finishSetup,
         dispose,
     };
 };

@@ -12,6 +12,7 @@ import type {
     PasswordLoginCredentials,
     ProviderAccountSummary,
     ProviderCapabilities,
+    ProviderSetupView,
     ProviderUser,
 } from '../../../types/onlineMusic';
 import type { LibraryHomeMessage } from '../home/homeModel.contract';
@@ -32,7 +33,8 @@ import type { LibraryHomeMessage } from '../home/homeModel.contract';
  * - choosing-method：provider 声明了多种方式、还没选，不向平台要码（QQ 两步式的第一步）；
  * - password：密码登录（飞牛这类自建服务没有二维码），等用户填表；提交中也是它，由表单自己显示转圈；
  * - ready：在浏览器里确认的登录，等用的人按「打开浏览器」（沿着平台那一列走不会开出浏览器）；
- * - loading：正在要二维码或开始浏览器登录；waiting / scanned / confirmed / expired / error：平台报的状态（`LoginState`）。
+ * - loading：正在要二维码或开始浏览器登录；waiting / scanned / confirmed / expired / error：平台报的状态（`LoginState`）；
+ * - checking：账号读到了，正在做平台声明的登录后检查（`checkAfterLogin`），之后要么完成，要么停在配置清单上。
  */
 export type LibraryLoginPhase =
     | 'resolving-methods'
@@ -40,7 +42,8 @@ export type LibraryLoginPhase =
     | 'password'
     | 'ready'
     | 'loading'
-    | LoginState['state'];
+    | LoginState['state']
+    | 'checking';
 
 /** 密码登录提交失败的原因。界面按它给一句能照做的提示，而不是统一的「登录失败」。 */
 export type LibraryPasswordLoginError =
@@ -187,6 +190,20 @@ export type LibraryLoginSessionSnapshot = {
     localService: LibraryLoginLocalServiceState;
     /** 这个平台自己的登录标题和说明（i18n key）；没有声明时为 null。 */
     texts: LoginTexts | null;
+    /** 读到账号之后平台还要多查一步（步骤标记多一格）。 */
+    checksAfterLogin: boolean;
+};
+
+/**
+ * 开着的配置清单（同一时间最多一份）。sign-in：登录之后的检查给的，做完（finishSetup）才报这一次登录的完成；
+ * account：从账号那一幅打开的，做完就收起，回到账号那一幅。
+ */
+export type LibraryProviderSetupSnapshot = {
+    providerId: OnlineProviderId;
+    view: ProviderSetupView;
+    /** 正在做一个操作：清单上的按钮都不可按。 */
+    busy: boolean;
+    origin: 'sign-in' | 'account';
 };
 
 /**
@@ -240,6 +257,7 @@ export type LibraryAccountSnapshot = {
     logout: LibraryAccountLogoutState;
     sync: LibraryAccountSyncState;
     lastLoginCompletion: LibraryLoginCompletion | null;
+    setup: LibraryProviderSetupSnapshot | null;
 };
 
 // ─── 动作结果（判别式，文案由 UI 自己翻译） ─────────────────────────────
@@ -332,6 +350,19 @@ export type LibraryLocalServiceRestartResult =
     | { status: 'no-session' }
     | { status: 'rejected'; reason: 'not-restartable' };
 
+/** 打开配置清单：平台此刻没有要配置的是 none；平台不在列表里、或者没有清单是 unavailable。 */
+export type LibrarySetupOpenResult =
+    | { status: 'opened'; providerId: OnlineProviderId }
+    | { status: 'none'; providerId: OnlineProviderId }
+    | { status: 'unavailable'; providerId: OnlineProviderId };
+
+/** 做清单上的一个操作：没有开着的清单是 no-setup；另一个操作还没做完是 busy；平台抛了错是 failed（清单不变）。 */
+export type LibrarySetupActionResult =
+    | { status: 'done' }
+    | { status: 'no-setup' }
+    | { status: 'busy' }
+    | { status: 'failed' };
+
 /** 诊断报告（services/onlineMusic/login/loginDiagnosticReport 的格式）；从没开始过登录时 no-session。 */
 export type LibraryLoginDiagnosticResult =
     | { status: 'ok'; report: string }
@@ -412,6 +443,12 @@ export interface LibraryAccountController {
     logout(providerId: OnlineProviderId): Promise<LibraryLogoutResult>;
     /** 只对有账号的平台：重新读它的账号、歌单与红心（面板账户页与登录窗口账号那一幅的「同步数据」）。 */
     syncAccount(providerId: OnlineProviderId): Promise<LibraryAccountSyncResult>;
+    /** 从账号那一幅打开这个平台的配置清单（先停下正在进行的登录）。 */
+    openSetup(providerId: OnlineProviderId): Promise<LibrarySetupOpenResult>;
+    /** 做开着的清单上的一个操作；value 是密码框交出的内容。 */
+    runSetupAction(stepId: string, actionId: string, value?: string): Promise<LibrarySetupActionResult>;
+    /** 收起清单。登录之后的那一份：再报这一次登录的完成（登录窗口据它放动画、关窗）。 */
+    finishSetup(): Promise<void>;
     /** 宿主卸载：关闭登录会话（keyed 取消），待确认切换按 declined / disposed 结算。 */
     dispose(): void;
 }
@@ -448,6 +485,13 @@ export type LibraryAccountAuthPort = {
     /** 密码登录表单的预填值（上次填过的服务器地址）；按选中的登录方式问，没有时为 null（而不是每次新建的空对象）。 */
     getPasswordLoginDefaults?(providerId: OnlineProviderId, methodId?: string | null): { serverUrl?: string } | null;
     getProviderCapabilities(providerId: OnlineProviderId): Pick<ProviderCapabilities, 'auth' | 'passwordLogin' | 'passwordLoginServerUrl'>;
+    /** 读到账号之后还要不要多查一步（同步回答，步骤标记据此多一格）。 */
+    checksAfterLogin(providerId: OnlineProviderId): boolean;
+    /** 登录之后的检查：回配置清单或 null；可能 reject。 */
+    checkAfterLogin(providerId: OnlineProviderId, methodId: string | null): Promise<ProviderSetupView | null>;
+    hasSetup(providerId: OnlineProviderId): boolean;
+    getSetup(providerId: OnlineProviderId): Promise<ProviderSetupView | null>;
+    runSetupAction(providerId: OnlineProviderId, stepId: string, actionId: string, value?: string): Promise<ProviderSetupView>;
     /** 此刻还在计时的登录请求不再计时（services/onlineMusic/login/loginRequestLimit）；停下一次登录时调。 */
     dropRequestLimits(): void;
 };

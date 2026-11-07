@@ -40,6 +40,11 @@ export const omniAccountAuthPort: LibraryAccountAuthPort = {
     /** 密码登录表单的预填值（上次填过的服务器地址）；按选中的登录方式问。 */
     getPasswordLoginDefaults: (providerId, methodId) => omni.getPasswordLoginDefaults(providerId, methodId ?? null),
     getProviderCapabilities: providerId => omni.getProviderCapabilities(providerId),
+    checksAfterLogin: providerId => omni.checksAfterLogin(providerId),
+    checkAfterLogin: (providerId, methodId) => omni.checkAfterLogin(providerId, methodId),
+    hasSetup: providerId => omni.hasSetup(providerId),
+    getSetup: providerId => omni.getSetup(providerId),
+    runSetupAction: (providerId, stepId, actionId, value) => omni.runSetupAction(providerId, stepId, actionId, value),
     dropRequestLimits: dropLoginRequestLimits,
 };
 

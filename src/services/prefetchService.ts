@@ -11,6 +11,7 @@ import { isPureMusicLyricText } from '../utils/lyrics/pureMusic';
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { getPlatformLyricSource } from '../utils/lyrics/lyricSources';
 import { resolveLyricSourcePreference } from '../utils/lyrics/lyricSourcePreference';
+import { settlesOnOwnWordTiming } from '../utils/lyrics/ownWordTiming';
 import { loadOnlineLyricsState, markOnlineLyricsPureMusic, resolveOnlineLyrics, saveOnlineLyricsState } from '../utils/onlineLyricsState';
 import type { AudioQualityPreference, MediaId } from '../types/onlineMusic';
 import { getPlaybackSongKey, getPlaybackSourceRef, resolveNavidromePlaybackCarrier } from '../utils/appPlaybackGuards';
@@ -408,9 +409,15 @@ const prefetchSong = async (
                 const autoUseBest = settingsLyricSettings.autoUseBestLyric;
                 // 「跟随播放平台来源」在这里落地成一个真能发请求的平台：下游只认具体平台。
                 const preferredSource = resolveLyricSourcePreference(settingsLyricSettings, song);
-                // A provider's own word-level timing is not searched for another source (the
-                // matcher enforces this too; skipping the search here also avoids the requests).
-                const keepsOwnWordTiming = parsedLyrics?.isWordByWord === true && omni.prefersOwnWordByWordLyrics(song);
+                // A provider's own word-level timing is not searched for another source while it
+                // is also the preferred one (the matcher enforces this too; skipping the search
+                // here also avoids the requests). Any other preferred source is still asked.
+                const keepsOwnWordTiming = settlesOnOwnWordTiming({
+                    ownSource: getPlatformLyricSource(sourceRef.providerId)?.id,
+                    prefersOwn: omni.prefersOwnWordByWordLyrics(song),
+                    lyrics: parsedLyrics,
+                    keepOwn: settingsLyricSettings.keepProviderWordTiming,
+                }, preferredSource);
                 const shouldAutoMatch = autoUseBest && !onlineLyricsState?.hasOnlineOverride && !keepsOwnWordTiming;
 
                 if (shouldAutoMatch) {
@@ -421,6 +428,7 @@ const prefetchSong = async (
                         const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
                             album: metadata.album?.name,
                             preferredSource,
+                            keepOwnWordTiming: settingsLyricSettings.keepProviderWordTiming,
                             alternateArtist: () => omni.getAlternateArtistName(song),
                             searchAlias: () => omni.getLyricSearchAlias(song),
                             ...(ownLyricSource

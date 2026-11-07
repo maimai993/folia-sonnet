@@ -11,6 +11,7 @@ import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettin
 import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
 import type { LiquidGlassEffects, LiquidGlassParams } from '../../shinoinject/liquidglass';
 import { useLatticeSettingsStore } from '../../stores/useLatticeSettingsStore';
+import { useScratchpadSettingsStore } from '../../stores/useScratchpadSettingsStore';
 
 // src/services/obs/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -160,6 +161,12 @@ function snapshotTileLooks(): Record<string, unknown> {
     // Numbering only the playing song on both tile walls (the queue collage and the bravais wall): a tile
     // look with no user exception, so it travels too (#930).
     latticeBadgeCurrentOnly: useLatticeSettingsStore.getState().latticeBadgeCurrentOnly,
+    // The frosted bar behind the player page's titlebar: a look of the player page, no user exception.
+    // The OBS overlay draws no titlebar and ignores it; it rides along so a copied look keeps it.
+    playerHeaderBlur: usePlayerChromeSettingsStore.getState().playerHeaderBlur,
+    // How the scratchpad's side tab looks while the pointer is away: a look of the library chrome, no user
+    // exception, so it travels with a shared look. The OBS overlay draws no scratchpad and ignores it.
+    scratchpadHandleStyle: useScratchpadSettingsStore.getState().handleStyle,
   };
 }
 

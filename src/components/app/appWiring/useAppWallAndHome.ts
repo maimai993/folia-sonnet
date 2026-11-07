@@ -41,7 +41,7 @@ export const useAppWallAndHome = (model: Input) => {
         onRefreshLocalSongs, openHomeCollection, openStagePlayer, playOnlineQueueFromStart, playQueue, playSong,
         playlists, popCollectionTo, pushCollection, refreshActiveProviderPlaylists, removeQueueSong,
         saveCurrentQueueAsLocalPlaylist, setFocusedPlaylistIndex, setLocalMusicState, setNavidromeFocusedAlbumIndex,
-        setQueueOrder, stageSource, theme, togglePlay, user
+        setQueueOrder, shuffleQueue, stageSource, theme, togglePlay, user
     } = model;
     // 两面墙（bravais 与 Lattice）右下角工具面板的宿主动作：命令面板的同一套命令与队列操作，host 身份稳定。
     const wallToolsHost = useAppWallToolsHost({
@@ -102,7 +102,7 @@ export const useAppWallAndHome = (model: Input) => {
         homeModel, wallToolsHost,
         // 速记簿的两个动作端口，ScratchpadHost 在 AppSurface 里吃这两份。
         scratchpadPlayback: useScratchpadPlayback(homeModel.surfaceProps, handleQueueAddAndPlay),
-        scratchpadQueue: useScratchpadQueuePort(playSong, setQueueOrder),
+        scratchpadQueue: useScratchpadQueuePort(playSong, setQueueOrder, shuffleQueue),
     };
 };
 

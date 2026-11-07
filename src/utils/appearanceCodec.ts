@@ -653,6 +653,7 @@ export const compressConfig = (config: any): string => {
     if (config.latticeBadgeCurrentOnly !== undefined) minified.lbco = config.latticeBadgeCurrentOnly;
     if (config.playerHeaderBlur !== undefined) minified.phb = config.playerHeaderBlur;
     if (config.liquidGlass) minified.llg = compressLiquidGlass(config.liquidGlass);
+    if (config.scratchpadHandleStyle !== undefined) minified.sphs = config.scratchpadHandleStyle;
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -728,7 +729,9 @@ export const decompressConfig = (str: string): any => {
         // Numbering only the playing song on both tile walls (#930), for the same reason.
         || parsed.lbco !== undefined
         || parsed.phb !== undefined
-        || parsed.llg !== undefined;
+        || parsed.llg !== undefined
+        // The scratchpad side tab's resting look, for the same reason.
+        || parsed.sphs !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -810,6 +813,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lbco !== undefined) decompressed.latticeBadgeCurrentOnly = parsed.lbco;
         if (parsed.phb !== undefined) decompressed.playerHeaderBlur = parsed.phb;
         if (parsed.llg !== undefined) decompressed.liquidGlass = decompressLiquidGlass(parsed.llg);
+        if (parsed.sphs !== undefined) decompressed.scratchpadHandleStyle = parsed.sphs;
 
         return decompressed;
     } else {
@@ -838,6 +842,7 @@ export const decompressConfig = (str: string): any => {
             'playerHeaderBlur',
             // 液态玻璃：总开关、四个参数、光效与果冻，存成一整对象（短码 llg）。属于「界面长什么样」。
             'liquidGlass',
+            'scratchpadHandleStyle',
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {

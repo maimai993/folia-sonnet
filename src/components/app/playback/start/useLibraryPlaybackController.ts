@@ -1629,6 +1629,7 @@ export function useLibraryPlaybackController({
             const bestMatch = await autoMatchBestLyric(currentSong.name, artistName, currentSongMetadata.durationMs, {
                 album: albumName,
                 preferredSource: resolveLyricSourcePreference(settingsLyricSettings, currentSong),
+                keepOwnWordTiming: settingsLyricSettings.keepProviderWordTiming,
                 alternateArtist: () => omni.getAlternateArtistName(currentSong),
                 searchAlias: () => omni.getLyricSearchAlias(currentSong),
                 providerCandidate: ownLyricSource

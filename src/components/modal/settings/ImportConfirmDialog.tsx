@@ -8,6 +8,7 @@ import { getVisualizerBackgroundModeLabel, hasVisualizerBackgroundMode } from '.
 import { ACTIVATE_CUSTOM_THEME_KEY, THEME_DARK_KEY, THEME_LIGHT_KEY, type ImportChange, type ImportGroup, type ImportPlan } from '../../../utils/appearanceImportPlan';
 import { resolveSettingLabelKey, resolveSettingValueLabelKey } from '../../../utils/settingLabelLookup';
 import { isLibraryWallSeamStyle, LIBRARY_WALL_SEAM_STYLE_LABEL_KEYS } from '../../../utils/libraryWallSeamStyle';
+import { isScratchpadHandleStyle, SCRATCHPAD_HANDLE_STYLE_LABEL_KEYS } from '../../../stores/useScratchpadSettingsStore';
 import { isLibraryWallSeamDirection, LIBRARY_WALL_SEAM_DIRECTION_TEXT } from '../../../utils/libraryWallSeamDirection';
 import { Button } from '@/components/ui';
 
@@ -104,11 +105,12 @@ const FIELD_LABEL_KEYS: Record<string, string> = {
     libraryWallBackdropLyrics: 'options.bravaisBackdropLyrics',
     libraryWallBackdropBlur: 'options.bravaisBackdropBlur',
     libraryWallSeamDirection: 'options.bravaisSeamDirection',
+    latticeBadgeCurrentOnly: 'options.latticeBadgeCurrentOnly',
+    scratchpadHandleStyle: 'options.scratchpadHandleStyle',
     playerHeaderBlur: 'options.playerHeaderBlur',
     // 液态玻璃整组只报一行：配置里它是一个对象，而应用路径也是整组写回（见 appearanceImportPlan
     // 的 WHOLE_OBJECT_FIELDS），所以它不展开成子行，一个组标题就是它的名字。
     liquidGlass: 'options.liquidGlassSection',
-    latticeBadgeCurrentOnly: 'options.latticeBadgeCurrentOnly',
 };
 
 // The per-renderer tunings borrow the renderer's own display name instead of inventing one.
@@ -298,6 +300,9 @@ const ImportConfirmDialog: React.FC<ImportConfirmDialogProps> = ({
         }
         if (key === 'libraryWallSeamStyle' && isLibraryWallSeamStyle(value)) {
             return <span className={cls}>{t(LIBRARY_WALL_SEAM_STYLE_LABEL_KEYS[value])}</span>;
+        }
+        if (key === 'scratchpadHandleStyle' && isScratchpadHandleStyle(value)) {
+            return <span className={cls}>{t(SCRATCHPAD_HANDLE_STYLE_LABEL_KEYS[value])}</span>;
         }
         if (key === 'libraryWallSeamDirection' && isLibraryWallSeamDirection(value)) {
             return <span className={cls}>{t(LIBRARY_WALL_SEAM_DIRECTION_TEXT[value].label)}</span>;

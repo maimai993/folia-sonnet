@@ -224,6 +224,10 @@ export const buildSettingsCommandContext = (
             const lyric = useLyricSettingsStore.getState();
             lyric.handleToggleAutoAiLyricSegmentation(!lyric.autoAiLyricSegmentation);
         },
+        toggleKeepProviderWordTiming: () => {
+            const lyric = useLyricSettingsStore.getState();
+            lyric.handleToggleKeepProviderWordTiming(!lyric.keepProviderWordTiming);
+        },
         voiceInputPauseSupported: deps.voiceInputPauseSupported,
         modSystemEnabled: desktop.modSystemEnabled,
         toggleVoiceInputPause: () => desktop.handleToggleVoiceInputPause(
