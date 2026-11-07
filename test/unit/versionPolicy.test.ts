@@ -15,11 +15,12 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 describe('versionCode 推导与 android/app/build.gradle 一致', () => {
     it('三段版本号', () => {
-        expect(versionCodeOf('0.7.22')).toBe(702200);
+        // minor*1000000 + patch*10000 + build：0.7.22 → 7_000_000 + 220_000 = 7_220_000。
+        expect(versionCodeOf('0.7.22')).toBe(7220000);
     });
 
     it('第四位也进 versionCode', () => {
-        expect(versionCodeOf('0.7.19.1')).toBe(701901);
+        expect(versionCodeOf('0.7.19.1')).toBe(7190001);
     });
 
     it('patch 到三位数被截断，与上一版同 code', () => {

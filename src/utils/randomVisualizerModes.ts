@@ -13,10 +13,23 @@ export const normalizeRandomVisualizerModesWith = (
     value: unknown,
     isKnown: (mode: string) => boolean,
 ): VisualizerMode[] => {
-    const selected = (Array.isArray(value) ? value : []).filter(
-        (mode): mode is VisualizerMode => typeof mode === 'string' && isKnown(mode),
+    /*
+     * 去重，并按 BUILTIN 的声明顺序输出（mod 的排在内建之后）。
+     *
+     * 顺序不跟着输入走：存下来的是池子，不是播放顺序，按声明顺序落盘才能让
+     * 「同一组选择」在存储里是同一个数组，比较起来才有意义。同一个 id 出现两次
+     * 只算一次 —— 否则随机池里它的权重会翻倍。
+     */
+    const chosen = new Set(
+        (Array.isArray(value) ? value : []).filter(
+            (mode): mode is VisualizerMode => typeof mode === 'string' && isKnown(mode),
+        ),
     );
-    return selected.length > 0 ? selected : [...BUILTIN_VISUALIZER_MODES];
+    if (chosen.size === 0) return [...BUILTIN_VISUALIZER_MODES];
+    const ordered = BUILTIN_VISUALIZER_MODES.filter(mode => chosen.has(mode));
+    // mod 样式不在内建表里，按它们第一次出现的顺序补在后面。
+    const extras = [...chosen].filter(mode => !(BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode));
+    return [...ordered, ...extras];
 };
 
 /**
