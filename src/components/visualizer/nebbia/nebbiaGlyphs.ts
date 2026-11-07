@@ -3,6 +3,7 @@ import { clamp } from './nebbiaConstants';
 import { ICON_PREFIX } from './nebbiaChars';
 import { skeletonPolys } from './nebbiaSkeleton';
 import { getNebbiaStrokeMedians } from './nebbiaStrokes';
+import type { NebbiaGlyphSource } from './types';
 
 // src/components/visualizer/nebbia/nebbiaGlyphs.ts
 // 字形 = 按书写顺序的几笔中线（em 坐标 0..1，y 向下）。来源依次是：lucide 图标（每个 SVG 元素一笔）、
@@ -76,15 +77,26 @@ const iconPolys = (name: string): Pt[][] | null => {
 export class NebbiaGlyphCache {
     private cache = new Map<string, Glyph | null>();
     private font = '';
+    /** 'font'：中日文也用主题字体追骨架（字体市场换了字体，字形跟着变）；'strokes'：有笔顺数据的字用笔顺数据。 */
+    private source: NebbiaGlyphSource = 'strokes';
 
-    constructor(private fontFamily: string, private fontWeight: number) {
+    constructor(private fontFamily: string, private fontWeight: number, private customFamilies: string[] = []) {
         this.font = `${fontWeight} ${fontFamily}`;
     }
 
+    /** 换字形来源时清空缓存；返回是否真的变了。 */
+    setSource(source: NebbiaGlyphSource): boolean {
+        if (source === this.source) return false;
+        this.source = source;
+        this.cache.clear();
+        return true;
+    }
+
     /** 换字体时清空缓存；返回字体是否真的变了。 */
-    setFont(fontFamily: string, fontWeight: number): boolean {
+    setFont(fontFamily: string, fontWeight: number, customFamilies: string[] = []): boolean {
         const font = `${fontWeight} ${fontFamily}`;
         if (font === this.font) return false;
+        this.customFamilies = customFamilies;
         this.fontFamily = fontFamily;
         this.fontWeight = fontWeight;
         this.font = font;
@@ -97,9 +109,26 @@ export class NebbiaGlyphCache {
     }
 
     /** 主题字体是否已经能用（没在等加载）；没有 FontFaceSet 时当作能用。 */
+    /**
+     * 主题字体是否已经能用（没在等加载）；没有 FontFaceSet 时当作能用。
+     *
+     * 不能只看 `document.fonts.check(整个字体栈)`：栈里带着通用回退（serif、sans-serif…），
+     * 只要有一个能解析它就返回 true，字体市场刚注册、还在下载的那个字体因此永远等不到「到了」，
+     * 骨架就一直是拿回退字体追的。所以主题自己带的字体（fontFamily / fontFamilyStack 里的）
+     * 有注册过 FontFace 时，要等它真的 loaded 才算就绪。
+     */
     fontReady(): boolean {
         try {
-            return document.fonts?.check(`${this.fontWeight} 16px ${this.fontFamily}`) ?? true;
+            const set = document.fonts;
+            if (!set) return true;
+            if (!this.customFamilies.length) return set.check(`${this.fontWeight} 16px ${this.fontFamily}`);
+            const wanted = new Set(this.customFamilies.map(name => name.replace(/^['"]|['"]$/g, '').trim().toLowerCase()));
+            let pending = false;
+            set.forEach(face => {
+                const family = face.family.replace(/^['"]|['"]$/g, '').trim().toLowerCase();
+                if (wanted.has(family) && face.status !== 'loaded' && face.status !== 'error') pending = true;
+            });
+            return !pending;
         } catch {
             return true;
         }
@@ -109,7 +138,8 @@ export class NebbiaGlyphCache {
         const hit = this.cache.get(ch);
         if (hit !== undefined) return hit;
         let polys: Pt[][] | null = null;
-        const medians = getNebbiaStrokeMedians(ch);
+        // 跟随字体时不取笔顺数据：中日文也走下面的骨架追踪，字形就是主题字体画出来的那个
+        const medians = this.source === 'font' ? null : getNebbiaStrokeMedians(ch);
         if (ch.startsWith(ICON_PREFIX)) polys = iconPolys(ch.slice(ICON_PREFIX.length));
         else if (medians) polys = medians.map(m => catmull(m.map(([x, y]): Pt => [x / 1024, y / 1024]), 6));
         else if (ch.trim()) polys = skeletonPolys(ch, this.fontFamily, this.fontWeight);

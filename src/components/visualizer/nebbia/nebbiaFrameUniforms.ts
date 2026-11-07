@@ -1,4 +1,3 @@
-import { NEBBIA_FIXED } from './nebbiaConstants';
 import type { NebbiaAquaUniforms, NebbiaUniforms } from './nebbiaGlUtils';
 import type { NebbiaSpot } from './nebbiaSpot';
 import type { NebbiaRain, NebbiaSceneryPart, NebbiaTuning } from './types';
@@ -19,7 +18,7 @@ export const nebbiaFrameUniforms = (
     const srcY = aqua ? -0.04 : 0.595;
     return {
         time,
-        mist: t.mist, edge: NEBBIA_FIXED.edge, refract: NEBBIA_FIXED.refract, bus: t.busSpeed, glint: NEBBIA_FIXED.glint, neon: t.neon,
+        mist: t.mist, edge: t.edge, refract: t.refract, bus: t.busSpeed, glint: t.glint, neon: t.neon, breathThick: t.breathThick,
         glassShift: [-sx * 0.35 / W, -sy * 0.35 / H], sceneShift: [-sx / W, -sy / H],
         spotSrc: [t.spotX * asp, srcY], spotSrc2: [(1 - t.spotX) * asp, srcY],
         spotTgt: [spot.x / W * asp, spot.y / H],

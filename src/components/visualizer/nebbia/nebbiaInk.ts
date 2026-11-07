@@ -15,6 +15,9 @@ export interface InkContext {
     strokeWidth: number;
     writeSpeed: number;
     busSpeed: number;
+    /** 风把下淌水珠往旁边推的程度、收笔大水珠的大小倍数（tuning.wind / tuning.endBead）。 */
+    wind: number;
+    endBead: number;
     /** 雪窗、凝露时收这一帧扫过的几段（笔尖、往下淌的水珠头；nebbiaSnow.ts 的 PEN_FLOATS 格式）：抹雪、吸水。雨窗 null。 */
     sweeps: number[] | null;
     /** 雪窗、凝露时收这一帧写好、边上还挂着水珠的笔画（同样格式）：吸走挨着的雪水、小水珠。雨窗 null。 */
@@ -85,7 +88,7 @@ const drawDrip = (ink: InkContext, c: LaidChar, st: GlyphStroke, d: Drip, age: n
     by += width * c.s * 0.35;
     const u = clamp(age / d.dur), f = u - Math.sin(u * 6 * Math.PI) / (6 * Math.PI);
     const dist = d.len * f, r = d.r * (1 - 0.35 * u);
-    const wob = (y: number) => Math.sin(y * 0.07 + d.seed) * 1.6 + Math.sin(y * 0.023 + d.seed * 2) * 2.5 + windDrift(y, ink.busSpeed);
+    const wob = (y: number) => Math.sin(y * 0.07 + d.seed) * 1.6 + Math.sin(y * 0.023 + d.seed * 2) * 2.5 + windDrift(y, ink.busSpeed, ink.wind);
     if (dist > 1 && clarity > 0.002) strokeTrail(ink.ctx, bx, by, by + dist, r * 1.5, clarity * 0.95, d.seed, y => wob(y - by));
     // 哈气盖掉的旧字只留擦痕的印子，水珠已经没了
     if (beadV <= 0.002) return;
@@ -147,13 +150,13 @@ export const drawChar = (ink: InkContext, c: LaidChar, T: number, clarityIn: num
                 putInkBead(ink, x, y, b.r * (0.55 + 0.45 * bv), bv, p >= 1 ? local - dur : -1, b.x * 131.7 + b.y * 71.3 + si, 1 + b.j * 0.25, 1 + (1 - b.j) * 0.3);
             }
             // 收笔水珠：笔尖推着走的水越堆越多，写到哪跟到哪；大小跟字号走，字太小就不留
-            if (NEBBIA_FIXED.endBead > 0 && drawn > 0 && c.s >= NEBBIA_FIXED.endBeadMin) {
+            if (ink.endBead > 0 && drawn > 0 && c.s >= NEBBIA_FIXED.endBeadMin) {
                 const e = c.ends[si];
                 const [ux, uy] = pointAt(st, drawn), [vx, vy] = pointAt(st, Math.max(0, drawn - 2 / c.s));
                 let dx = ux - vx, dy = uy - vy;
                 const dl = Math.hypot(dx, dy) || 1;
                 dx /= dl; dy /= dl;
-                const r = c.s * (0.031 + 0.018 * e.h) * NEBBIA_FIXED.endBead * (0.5 + 0.5 * smooth(p));
+                const r = c.s * (0.031 + 0.018 * e.h) * ink.endBead * (0.5 + 0.5 * smooth(p));
                 const [x, y] = toScreen(c, ux + (dx * r * 0.35) / c.s, uy + (dy * r * 0.35 + r * 0.15) / c.s);
                 const ev = alive && beadV > 0.002 ? beadV * alive(x, y) : beadV;
                 if (ev > 0.002) putInkBead(ink, x, y, r * (0.6 + 0.4 * ev), ev, p >= 1 ? local - dur : -1, c.x * 3.1 + c.y * 5.7 + si * 11, 1, 1.12 + e.j * 0.12);

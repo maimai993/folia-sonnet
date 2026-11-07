@@ -1,10 +1,9 @@
 import type { LyricRenderScale, Theme } from '../../../types';
 import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import { loadLucideIcons, resolveLucideIconNames } from '../../../services/lucideIconResolver';
-import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { resolveThemeFontStack, resolveThemeFontWeight, normalizeFontFamilyStack } from '../../../utils/fontStacks';
 import { buildNebbiaLines, collectEmojiIcons, NEBBIA_DEFAULT_DOODLES } from './nebbiaChars';
 import { appendNebbiaCredits } from './nebbiaCredits';
-import { NEBBIA_FIXED } from './nebbiaConstants';
 import { NebbiaGlassMotion } from './nebbiaDrops';
 import { NebbiaGl } from './nebbiaGl';
 import { NebbiaGlyphCache } from './nebbiaGlyphs';
@@ -39,7 +38,12 @@ const AQUA_SPOT = beatEffectPartId(AQUA_BEAT, 'spot');
 // 水族箱里没有雨打窗、车也不颠（疏雨轻车不算）。玻璃是雪窗时雪花和雪化成的水归 nebbiaSnow.ts，写字的手指经过时把雪抹开。
 
 // 改了要重排整首的 tuning 项
-const LAYOUT_KEYS: (keyof NebbiaTuning)[] = ['appear', 'fade', 'layouts', 'credits', 'jitter', 'warp', 'hold', 'refog', 'writeSpeed', 'doodle'];
+const LAYOUT_KEYS: (keyof NebbiaTuning)[] = ['appear', 'fade', 'layouts', 'credits', 'jitter', 'warp', 'hold', 'refog', 'writeSpeed', 'doodle', 'beads', 'drip', 'breathSpread', 'breathHold', 'glyphSource'];
+/**
+ * 主题自己带的字体名（字体市场、自选字体）：字形缓存靠它判断「主题字体到了没」——
+ * 只看整条字体栈的话，回退字体一能解析就算就绪，字体市场的字体还没下载完也会被当成到了。
+ */
+const customFontFamilies = (theme: Theme) => normalizeFontFamilyStack([theme.fontFamily, ...(theme.fontFamilyStack ?? [])]);
 // 开关组是数组，每次合并都是新的一份：按内容比
 const sameValue = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.join() === b.join() : a === b);
 
@@ -102,9 +106,11 @@ export class NebbiaRuntime {
         // 雪窗：写字留下的水珠也会结冰（nebbiaInkIce.ts）
         if (input.glass === 'snow') this.mask.ice = [];
         // setTuning 只在 tuning 变了才调：上下文恢复后重建的运行时要自己带上颠簸强度
-        this.motion.bump = tuning.bump;
+        this.syncMotion(tuning);
         this.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
-        this.glyphs = new NebbiaGlyphCache(resolveThemeFontStack(theme), resolveThemeFontWeight(theme, 600));
+        this.glyphs = new NebbiaGlyphCache(resolveThemeFontStack(theme), resolveThemeFontWeight(theme, 600), customFontFamilies(theme));
+        // 上下文恢复后重建的运行时要自己带上存着的字形来源
+        this.glyphs.setSource(tuning.glyphSource);
         input.host.appendChild(this.canvas);
         try {
             this.gl = new NebbiaGl(this.canvas, input.seeThrough, input.scene, input.glass);
@@ -133,7 +139,12 @@ export class NebbiaRuntime {
         this.fontReady = this.glyphs.fontReady();
         document.fonts?.addEventListener('loadingdone', this.handleFontsLoaded);
         // 笔顺数据只读一次；到了以后字形缓存作废，下一次排版用上
-        void loadNebbiaStrokes().then(data => { if (data && !this.dead) { this.glyphs.clear(); this.rebuild(); } });
+        // 笔顺数据只读一次；到了以后字形缓存作废，下一次排版用上（跟随字体时用不到它，别把追好的骨架丢掉）
+        void loadNebbiaStrokes().then(data => {
+            if (!data || this.dead || this.tuning.glyphSource !== 'strokes') return;
+            this.glyphs.clear();
+            this.rebuild();
+        });
     }
 
     setSong(song: NebbiaSong) {
@@ -150,7 +161,7 @@ export class NebbiaRuntime {
     setTheme(theme: Theme) {
         const iconsChanged = String(resolveLucideIconNames(theme.lyricsIcons)) !== String(resolveLucideIconNames(this.theme.lyricsIcons));
         this.theme = theme;
-        const fontChanged = this.glyphs.setFont(resolveThemeFontStack(theme), resolveThemeFontWeight(theme, 600));
+        const fontChanged = this.glyphs.setFont(resolveThemeFontStack(theme), resolveThemeFontWeight(theme, 600), customFontFamilies(theme));
         if (fontChanged) this.fontReady = this.glyphs.fontReady();
         this.applyTheme();
         if (fontChanged || iconsChanged) this.rebuild();
@@ -160,9 +171,23 @@ export class NebbiaRuntime {
     setTuning(tuning: NebbiaTuning) {
         const prev = this.tuning;
         this.tuning = tuning;
-        this.motion.bump = tuning.bump;
+        this.syncMotion(tuning);
+        // 字形来源变了（笔顺数据 ⇄ 跟随歌词字体）：字形缓存作废；重排由下面的 LAYOUT_KEYS 负责，这里不再重排一次
+        this.glyphs.setSource(tuning.glyphSource);
+        // 雨窗雾上的凝结水珠密度变了：按新密度重新撒（雪窗、凝露有自己的水珠）
+        if (prev.fieldDrops !== tuning.fieldDrops && this.W && !this.condensation && !this.snow) this.motion.buildField(this.W, this.H);
         if (LAYOUT_KEYS.some(k => !sameValue(prev[k], tuning[k]))) this.rebuild();
         this.requestFrame();
+    }
+
+    /** 把 tuning 里管玻璃水珠和颠簸的几项交给 motion。 */
+    private syncMotion(tuning: NebbiaTuning) {
+        const m = this.motion;
+        m.bump = tuning.bump;
+        m.fieldDensity = tuning.fieldDrops;
+        m.bumpRate = tuning.bumpRate;
+        m.bumpFall = tuning.bumpFall;
+        m.wind = tuning.wind;
     }
 
     /** 分辨率倍数变了：就地换画布和缓冲的尺寸，不重建上下文。 */
@@ -326,7 +351,7 @@ export class NebbiaRuntime {
             this.rebuildHits();
         }
         const e = this.energy.update(this.input.vocal.get(), Math.max(dt, 1 / 60));
-        this.hits.advance(T, e, this.still ? 0 : t.rainHit * vocalStrength, NebbiaHits.lifeOf(t.refog, NEBBIA_FIXED.beadHold), this.W, this.H);
+        this.hits.advance(T, e, this.still ? 0 : t.rainHit * vocalStrength, NebbiaHits.lifeOf(t.refog, t.beadHold), this.W, this.H);
         this.mask.draw(this.laid, T, now, t, this.motion, this.hits, t.rainBig * vocalStrength);
         this.spot.update(this.laid, T, dt);
         const aqua = this.aquarium?.step(dt, this.clock.time, this.W / this.H, t, this.aquaBeats()) ?? null;
