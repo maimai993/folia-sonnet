@@ -20,23 +20,19 @@ if (hasReleaseKeystore) {
 // INSTALL_FAILED_VERSION_DOWNGRADE（必须先卸载）。原来硬编码 1，等于装过一次就再也
 // 升不上去了 —— 应用内那个「检查更新」也跟着白做。
 //
-// 由 package.json 的 version 推出来：major*1000000 + minor*100000 + patch*100 + build
-// （0.7.18 → 701800）。patch 与 build 各留两位（超过就截断 —— patch 到三位数本就该升 minor）。
-//
-// 第四位（`0.7.19.1` 里的 1）之前是不存在的：四位版本号被当成三段处理，于是
-// `0.7.19` 和 `0.7.19.1` 得到**同一个** versionCode。同 code 覆盖安装算不上降级、
-// 装得上，但系统会认为应用没变，WebView 那边可能照旧吃缓存 —— 装完还是旧页面。
-// 让第四位也进 code，每一版就真的都在往上涨了。
+// 由 package.json 的 version 推出来：minor*1000000 + patch*10000 + build
+// （0.7.26 → 7026000）。major 恒为 0（0.x），不占位；minor 占百万位、patch 占万位、build
+// 两位（超过截断）。之前 patch 只乘 100，0.7.26 算出 702600 —— 比装过的 dev 版
+// （androidVersionCode 7025108）还小，系统判定「降级安装」拒绝覆盖。
 def versionCodeOf = { String name ->
     def matched = (name =~ /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?/)
     if (!matched.find()) {
         return 1
     }
-    int major = matched.group(1) as int
     int minor = matched.group(2) as int
     int patch = Math.min(matched.group(3) as int, 99)
     int build = matched.group(4) ? Math.min(matched.group(4) as int, 99) : 0
-    return major * 1000000 + minor * 100000 + patch * 100 + build
+    return minor * 1000000 + patch * 10000 + build
 }
 
 android {
