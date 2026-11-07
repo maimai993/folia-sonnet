@@ -95,8 +95,15 @@ export class NebbiaGlyphCache {
     /** 换字体时清空缓存；返回字体是否真的变了。 */
     setFont(fontFamily: string, fontWeight: number, customFamilies: string[] = []): boolean {
         const font = `${fontWeight} ${fontFamily}`;
-        if (font === this.font) return false;
+        // 自定义字体名单先记下来：字体栈字符串没变、只有这份名单变了（换了字体市场里的字），
+        // fontReady 也要看新的那份，不然会一直等旧的 FontFace。
+        const familiesChanged = customFamilies.join('\n') !== this.customFamilies.join('\n');
         this.customFamilies = customFamilies;
+        if (font === this.font) {
+            if (!familiesChanged) return false;
+            this.cache.clear();
+            return true;
+        }
         this.fontFamily = fontFamily;
         this.fontWeight = fontWeight;
         this.font = font;
@@ -108,7 +115,6 @@ export class NebbiaGlyphCache {
         this.cache.clear();
     }
 
-    /** 主题字体是否已经能用（没在等加载）；没有 FontFaceSet 时当作能用。 */
     /**
      * 主题字体是否已经能用（没在等加载）；没有 FontFaceSet 时当作能用。
      *
