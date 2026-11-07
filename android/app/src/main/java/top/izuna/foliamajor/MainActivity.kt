@@ -249,6 +249,9 @@ class MainActivity : BridgeActivity() {
         registerPlugin(top.izuna.foliamajor.coloros.FoliaColorOsLyricsPlugin::class.java)
         // 本地登录（内置接口代码 + Cookie/OkHttp）与返回键都在这个插件上。
         registerPlugin(FoliaNativePlugin::class.java)
+        // 局域网音响投送：SSDP 组播发现 DLNA / UPnP 音响 + AVTransport 推送当前歌曲。
+        // 与上面那个插件分开，是因为多播锁与 SOAP 都是独立的一套生命周期。
+        registerPlugin(FoliaLanCastPlugin::class.java)
         registerPlugin(StatusBarPlugin::class.java)
         registerPlugin(SplashScreenPlugin::class.java)
         registerPlugin(BrowserPlugin::class.java)

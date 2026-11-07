@@ -7655,4 +7655,16 @@ export default {
     "unknownBranch": "an unknown branch",
     "ok": "Got it"
   },
+  "lanCastTitle": "Gửi nhạc tới loa",
+  "lanCastHint": "Tìm loa DLNA / UPnP trong cùng mạng Wi-Fi",
+  "lanCastNoTrack": "Không có bài nào đang phát",
+  "lanCastScanning": "Đang tìm…",
+  "lanCastDevices": "Tìm thấy {{count}} loa",
+  "lanCastRescan": "Tìm lại",
+  "lanCastNoDevice": "Không tìm thấy loa. Hãy đảm bảo điện thoại và loa dùng chung Wi-Fi và DLNA đã bật trên loa.",
+  "lanCastPlaying": "Âm thanh phát trên {{name}}, điện thoại đã tắt tiếng",
+  "lanCastFollowed": "Đã gửi bài hát mới tới {{name}}",
+  "lanCastLocalHint": "Điện thoại đã tắt tiếng nhưng thanh tiến độ và lời bài hát vẫn chạy; đổi bài sẽ tự động phát trên loa.",
+  "lanCastStop": "Dừng gửi và bật lại tiếng điện thoại",
+  "lanCastClose": "Đóng"
 } as const;
