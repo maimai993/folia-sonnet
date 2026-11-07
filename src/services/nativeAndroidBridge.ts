@@ -35,6 +35,12 @@ const API_HOSTS = [
   // 经由桥发出的请求必须在这里代理，漏掉一个主机的后果是静默返回空结果而不是报错。
   'kugou.com',
   'kuwo.cn',
+  // 洛雪音源脚本会去各家自己的主机取播放地址（QQ 音乐的 u6/isure、咪咕、网易云图床），
+  // 这些请求同样只能靠原生代理绕开 CORS，漏一个就是「音源取不到地址」。
+  'y.qq.com',
+  'qqmusic.qq.com',
+  'migu.cn',
+  '126.net',
   'api.qrserver.com',
   // 封面：这几个 CDN 不下发 CORS 头，coverCache 用 fetch 取字节存缓存时在浏览器里必然失败。
   // 走原生桥取回字节就没有同源问题了。
@@ -231,6 +237,90 @@ const installCookieShim = (plugin: NativePlugin) => {
   };
 };
 
+/** 能不能把请求交给原生 OkHttp（安卓且插件已注册）。 */
+export const hasNativeHttp = (): boolean => isCapacitorAndroid() && getPlugin() != null;
+
+export type NativeHttpOptions = {
+  method?: string;
+  headers?: Record<string, string>;
+  bodyText?: string;
+  bodyBase64?: string;
+  redirect?: string;
+  /** 读超时。音频地址那类链路常要等 CDN 首包，可以放宽。 */
+  timeoutMs?: number;
+};
+
+/**
+ * 直接走原生 OkHttp 发一个请求，**不设主机白名单**。
+ *
+ * 为什么需要它：洛雪音源脚本会去它自己的服务器（域名千奇百怪）取地址，那些主机
+ * 不可能进 API_HOSTS；而 `resolveProxiedUrl` 在安卓上没有配置 API 基地址时是
+ * 直接抛异常的 —— 于是每个音源的第一步请求就死了，表现就是「导入了一堆音源，
+ * 大部分都取不到地址」。安卓上根本没有可用的转发服务端，能绕开 CORS 的只有原生桥。
+ *
+ * 安全边界和别处一致：请求由页面里已经跑着的代码发起，跟 WebView 自己发 fetch 等价。
+ */
+export const nativeHttpRequest = async (url: string, options: NativeHttpOptions = {}): Promise<Response> => {
+  const plugin = getPlugin();
+  if (!plugin) throw new Error('FoliaNative plugin is not available');
+  const method = (options.method || 'GET').toUpperCase();
+  const timeoutMs = options.timeoutMs ?? BRIDGED_REQUEST_TIMEOUT_MS;
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  const result = await Promise.race([
+    plugin.httpRequest({
+      url,
+      method,
+      headers: options.headers || {},
+      bodyText: options.bodyText || '',
+      bodyBase64: options.bodyBase64 || '',
+      redirect: options.redirect || 'follow',
+    }),
+    new Promise<never>((_resolve, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`Bridged request timed out after ${timeoutMs}ms: ${method} ${url}`)),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  });
+
+  const responseBytes = base64ToBytes(result.bodyBase64);
+  const responseBuffer = responseBytes.buffer.slice(
+    responseBytes.byteOffset,
+    responseBytes.byteOffset + responseBytes.byteLength,
+  ) as ArrayBuffer;
+  const responseHeaders = new Headers();
+  const exposedSetCookies: string[] = [];
+  if (Array.isArray(result.headers)) {
+    result.headers.forEach((entry) => {
+      if (!entry?.name || entry.value == null) return;
+      // Headers.set() 会把重复项折叠成一个，所以 Set-Cookie 要逐个 append，
+      // 否则服务端下发的多个 cookie 只剩最后一个 —— 登录态就是这么丢的。
+      if (entry.name.toLowerCase() === 'set-cookie') {
+        responseHeaders.append(entry.name, String(entry.value));
+        // 但 Set-Cookie 属于禁止暴露给 JS 的响应头，这里构造 Response 时会被静默丢掉。
+        // 内置的接口代码需要这些值（qrsig、p_skey、NMTID …），拿不到就只能从 cookie 罐里
+        // 回捞 —— 而罐里可能还留着上一次会话的旧值，新建的二维码第一次轮询就「已失效」。
+        // 所以把同一批值镜像到一个 JS 能读的头里。
+        exposedSetCookies.push(String(entry.value));
+      } else {
+        responseHeaders.set(entry.name, String(entry.value));
+      }
+    });
+  } else if (result.headers) {
+    Object.entries(result.headers).forEach(([name, value]) => {
+      if (value != null) responseHeaders.set(name, String(value));
+    });
+  }
+  exposedSetCookies.forEach((value) => responseHeaders.append('x-folia-set-cookie', value));
+  return new Response(responseBuffer, {
+    status: result.status,
+    headers: responseHeaders,
+  });
+};
+
 const installFetchShim = (plugin: NativePlugin) => {
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -240,64 +330,20 @@ const installFetchShim = (plugin: NativePlugin) => {
       return originalFetch(input, init);
     }
 
+    // 白名单主机的请求统一从这里出：原生 OkHttp 不受 CORS 约束，
+    // 回包的 Set-Cookie 还会被镜像到 x-folia-set-cookie（见 nativeHttpRequest）。
     const method = (init?.method || request?.method || 'GET').toUpperCase();
     const headers = new Headers(request?.headers || init?.headers || {});
     const serialized = await serializeBody(init?.body ?? null);
     if (serialized.contentType && !headers.has('content-type')) {
       headers.set('content-type', serialized.contentType);
     }
-
-    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-    const result = await Promise.race([
-      plugin.httpRequest({
-        url: rawUrl,
-        method,
-        headers: Object.fromEntries(headers.entries()),
-        bodyText: serialized.bodyText || '',
-        bodyBase64: serialized.bodyBase64 || '',
-        redirect: init?.redirect || request?.redirect || 'follow',
-      }),
-      new Promise<never>((_resolve, reject) => {
-        timeoutHandle = setTimeout(
-          () => reject(new Error(`Bridged request timed out after ${BRIDGED_REQUEST_TIMEOUT_MS}ms: ${method} ${rawUrl}`)),
-          BRIDGED_REQUEST_TIMEOUT_MS,
-        );
-      }),
-    ]).finally(() => {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-    });
-    const responseBytes = base64ToBytes(result.bodyBase64);
-    const responseBuffer = responseBytes.buffer.slice(
-      responseBytes.byteOffset,
-      responseBytes.byteOffset + responseBytes.byteLength,
-    ) as ArrayBuffer;
-    const responseHeaders = new Headers();
-    const exposedSetCookies: string[] = [];
-    if (Array.isArray(result.headers)) {
-      result.headers.forEach((entry) => {
-        if (!entry?.name || entry.value == null) return;
-        // Headers.set() 会把重复项折叠成一个，所以 Set-Cookie 要逐个 append，
-        // 否则服务端下发的多个 cookie 只剩最后一个 —— 登录态就是这么丢的。
-        if (entry.name.toLowerCase() === 'set-cookie') {
-          responseHeaders.append(entry.name, String(entry.value));
-          // 但 Set-Cookie 属于禁止暴露给 JS 的响应头，这里构造 Response 时会被静默丢掉。
-          // 内置的接口代码需要这些值（qrsig、p_skey、NMTID …），拿不到就只能从 cookie 罐里
-          // 回捞 —— 而罐里可能还留着上一次会话的旧值，新建的二维码第一次轮询就「已失效」。
-          // 所以把同一批值镜像到一个 JS 能读的头里。
-          exposedSetCookies.push(String(entry.value));
-        } else {
-          responseHeaders.set(entry.name, String(entry.value));
-        }
-      });
-    } else if (result.headers) {
-      Object.entries(result.headers).forEach(([name, value]) => {
-        if (value != null) responseHeaders.set(name, String(value));
-      });
-    }
-    exposedSetCookies.forEach((value) => responseHeaders.append('x-folia-set-cookie', value));
-    return new Response(responseBuffer, {
-      status: result.status,
-      headers: responseHeaders,
+    return nativeHttpRequest(rawUrl, {
+      method,
+      headers: Object.fromEntries(headers.entries()),
+      bodyText: serialized.bodyText,
+      bodyBase64: serialized.bodyBase64,
+      redirect: init?.redirect || request?.redirect || 'follow',
     });
   };
 };

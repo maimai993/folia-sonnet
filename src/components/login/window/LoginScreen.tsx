@@ -21,6 +21,7 @@ import { accountView, failureNoteKey, failureQuote, loginScene, sceneHeadline, s
 import FormLogin from './FormLogin';
 import LoginWindow from './LoginWindow';
 import PlatformColumn from './PlatformColumn';
+import { useLxWorkspaceStore, isLxWorkspaceProvider } from '../../../stores/useLxWorkspaceStore';
 
 // src/components/login/window/LoginScreen.tsx
 // 登录窗口此刻画什么：从「选中了哪一行、登录走到哪一步、失败是哪一种情况」定出那一块画、标题、
@@ -89,6 +90,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 }) => {
     const { t } = useTranslation();
     const still = useKitReducedMotion();
+    // 洛雪音源不需要账号：选中它是为了让首页的搜索 / 播放落到这个 provider 上，
+    // 真正的浏览界面（歌单 / 榜单 / 搜索 / 音源）是应用级浮层里的那一页。
+    const openLxWorkspace = useLxWorkspaceStore((state) => state.open);
     const providerId = chosen?.providerId ?? null;
     const summary = rows.find(row => row.providerId === providerId) ?? null;
     const label = summary ? providerDisplayName(t, summary, providerId ?? '') : providerId ?? '';
@@ -162,6 +166,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     } else if (scene === 'accountless') {
         headline = label;
         note = t('home.providerNoAccount');
+        // 免账号来源（洛雪、模组音源）只留「换一个平台」：洛雪点这一行就已经进工作台了，
+        // 底下再摆一个「打开洛雪」纯属重复。
         actions = switchAction;
     } else {
         const key = sceneHeadline(scene, inBrowser);
@@ -200,6 +206,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const [detailsOpen, setDetailsOpen] = useState(false);
     useEffect(() => setDetailsOpen(false), [sceneKey]);
 
+    // 洛雪音源不需要登录：点它的那一行时把 provider 选中（首页的搜索与播放都落到它上面），
+    // 同时直接打开洛雪工作台，省掉再点一次。
+    const handleChoose = (providerId: OnlineProviderId) => {
+        if (isLxWorkspaceProvider(providerId)) {
+            onChoose(providerId);
+            openLxWorkspace();
+            return;
+        }
+        onChoose(providerId);
+    };
+
     return (
         <>
         <LoginWindow
@@ -227,7 +244,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     left={narrow ? 24 : 292}
                 />
             )}
-            column={lie => <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => onChoose(row.providerId)} onAllProvidersChosen={onAllProvidersChosen} lie={lie} />}
+            column={lie => <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => handleChoose(row.providerId)} onAllProvidersChosen={onAllProvidersChosen} lie={lie} />}
             tile={(
                 <LoginTile
                     tileRef={element => { doneParts.current.tile = element; }}

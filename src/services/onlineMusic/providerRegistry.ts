@@ -19,6 +19,7 @@ import { qishuiProvider } from './qishuiProvider';
 import { appleMusicProvider } from './appleMusic/appleMusicProvider';
 // 上游 fnmusic 那份没有 import：注册的是本 fork 的 feiniu，见文件末尾的说明。
 import { feiniuProvider } from './feiniuProvider';
+import { installLxAudioRouting, lxmusicProvider } from './lxmusic/lxmusicProvider';
 
 // src/services/onlineMusic/providerRegistry.ts
 
@@ -144,3 +145,8 @@ registerOnlineMusicProvider(appleMusicProvider);
 // 注意：`fnmusic` 的 i18n 键仍被本用于飞牛表单（fnmusic.serverUrl / fnmusic.username 等），
 // 那是共用文案，不是「注册了 fnmusic 平台」。
 registerOnlineMusicProvider(feiniuProvider);
+// 洛雪音源：用户导入的自定义音源聚合 provider（搜索复用原生 provider，播放 / 歌词用导入的音源续地址）。
+registerOnlineMusicProvider(lxmusicProvider);
+// 装上 omni 的「取地址之前」扩展点：导入音源后，其它 provider 的歌也先问音源，
+// 音源交不出地址才回落到各家自己的播放接口。没导入音源时这层直接让路。
+installLxAudioRouting();
