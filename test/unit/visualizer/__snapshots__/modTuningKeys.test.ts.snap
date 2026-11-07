@@ -463,6 +463,16 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
     },
   },
   "nebbia": {
+    "beadHold": {
+      "max": 12,
+      "min": 0,
+      "type": "number",
+    },
+    "beads": {
+      "max": 1,
+      "min": 0,
+      "type": "number",
+    },
     "behind": {
       "options": [
         "night",
@@ -471,6 +481,26 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
       ],
       "type": "choice",
     },
+    "breathFade": {
+      "max": 20,
+      "min": 2,
+      "type": "number",
+    },
+    "breathHold": {
+      "max": 5,
+      "min": 0,
+      "type": "number",
+    },
+    "breathSpread": {
+      "max": 3,
+      "min": 0.4,
+      "type": "number",
+    },
+    "breathThick": {
+      "max": 1,
+      "min": 0.2,
+      "type": "number",
+    },
     "bubbles": {
       "max": 1,
       "min": 0,
@@ -478,6 +508,16 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
     },
     "bump": {
       "max": 2.5,
+      "min": 0,
+      "type": "number",
+    },
+    "bumpFall": {
+      "max": 1,
+      "min": 0,
+      "type": "number",
+    },
+    "bumpRate": {
+      "max": 3,
       "min": 0,
       "type": "number",
     },
@@ -509,11 +549,43 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
       "min": 0,
       "type": "number",
     },
+    "drip": {
+      "max": 1,
+      "min": 0,
+      "type": "number",
+    },
+    "edge": {
+      "max": 1.5,
+      "min": 0,
+      "type": "number",
+    },
+    "endBead": {
+      "max": 2,
+      "min": 0,
+      "type": "number",
+    },
+    "fieldDrops": {
+      "max": 1.5,
+      "min": 0,
+      "type": "number",
+    },
     "glass": {
       "options": [
         "rain",
         "dew",
         "snow",
+      ],
+      "type": "choice",
+    },
+    "glint": {
+      "max": 2,
+      "min": 0,
+      "type": "number",
+    },
+    "glyphSource": {
+      "options": [
+        "strokes",
+        "font",
       ],
       "type": "choice",
     },
@@ -571,6 +643,11 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
       "min": 0.5,
       "type": "number",
     },
+    "refract": {
+      "max": 2,
+      "min": 0,
+      "type": "number",
+    },
     "snow": {
       "max": 3,
       "min": 0,
@@ -603,6 +680,11 @@ exports[`mod tuning keys > are pinned, so a renamed or dropped key is a visible 
     },
     "warp": {
       "max": 1.5,
+      "min": 0,
+      "type": "number",
+    },
+    "wind": {
+      "max": 1,
       "min": 0,
       "type": "number",
     },

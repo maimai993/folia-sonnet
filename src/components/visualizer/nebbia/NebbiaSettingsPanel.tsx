@@ -2,14 +2,24 @@ import React from 'react';
 import { Group, Row, Segmented, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
-import { percent, SliderRow, times, ToggleRow } from '../panelRows';
+import { SliderRow, ToggleRow } from '../panelRows';
 import LyricRenderQualityRows from '../renderQuality/LyricRenderQualityRows';
+import {
+    AQUA_SLIDERS,
+    AQUA_WINDOW_SLIDERS,
+    fogDetailSlidersFor,
+    GLASS_SLIDERS,
+    WINDOW_SLIDERS,
+    WRITING_SLIDERS,
+    type NebbiaSliderSpec,
+} from './nebbiaSliderSpecs';
 import {
     DEFAULT_NEBBIA_TUNING,
     NEBBIA_APPEAR_STYLES,
     NEBBIA_BEHIND,
     NEBBIA_FADE_STYLES,
     NEBBIA_GLASS,
+    NEBBIA_GLYPH_SOURCES,
     NEBBIA_LAYOUTS,
     NEBBIA_LIMITS,
     NEBBIA_RAIN,
@@ -41,56 +51,15 @@ const LAYOUT_LABEL_KEYS = Object.fromEntries(
     NEBBIA_LAYOUTS.map(l => [l, `options.nebbiaLayout_${l}`]),
 ) as Record<NebbiaLayout, string>;
 
-const seconds = (value: number) => `${value.toFixed(1)}s`;
-const count = (value: number) => String(Math.round(value));
-type SliderSpec = [NebbiaNumberKey, string, number, (value: number) => string];
+type SliderSpec = NebbiaSliderSpec;
 
+// 滑块清单（字段、文案、步进、读数）在 nebbiaSliderSpecs.ts：播放页控制面板里的快捷滑块（NebbiaQuickSliders.tsx）画同一份
 const WRITING_GROUP: SettingsGroupDef = { id: 'vis-nebbia-writing', titleKey: 'options.nebbiaWriting' };
-const WRITING_SLIDERS: SliderSpec[] = [
-    ['strokeWidth', 'options.nebbiaStrokeWidth', 0.005, percent],
-    ['writeSpeed', 'options.nebbiaWriteSpeed', 0.05, times],
-    ['jitter', 'options.nebbiaJitter', 0.05, times],
-    ['warp', 'options.nebbiaWarp', 0.05, times],
-    ['doodle', 'options.nebbiaDoodle', 0.05, percent],
-    ['mist', 'options.nebbiaMist', 0.01, percent],
-    ['hold', 'options.nebbiaHold', 0.1, seconds],
-    ['refog', 'options.nebbiaRefog', 0.5, seconds],
-];
 const WINDOW_GROUP: SettingsGroupDef = { id: 'vis-nebbia-window', titleKey: 'options.nebbiaWindow' };
-const WINDOW_SLIDERS: SliderSpec[] = [
-    ['busSpeed', 'options.nebbiaBusSpeed', 0.05, times],
-    ['neon', 'options.nebbiaNeon', 0.05, times],
-    ['bump', 'options.nebbiaBump', 0.05, times],
-    ['spot', 'options.nebbiaSpot', 0.05, times],
-    ['spotX', 'options.nebbiaSpotX', 0.01, percent],
-];
 // 分辨率（#929）：原来窗外一组里的分辨率滑块换成共用的「跟随全局 / 指定倍数」；全屏着色器没有 MSAA，不出抗锯齿那行。
 const RENDER_GROUP: SettingsGroupDef = { id: 'vis-nebbia-render', titleKey: 'options.lyricRenderSection' };
-/** 水族箱里车不颠：这条不显示。 */
-const NOT_IN_AQUARIUM: readonly NebbiaNumberKey[] = ['bump'];
-const AQUA_WINDOW_SLIDERS = WINDOW_SLIDERS.filter(([key]) => !NOT_IN_AQUARIUM.includes(key));
-const AQUA_SLIDERS: SliderSpec[] = [
-    ['jellies', 'options.nebbiaJellies', 1, count],
-    ['jellySize', 'options.nebbiaJellySize', 0.05, times],
-    ['bubbles', 'options.nebbiaBubbles', 0.05, percent],
-];
 const GLASS_GROUP: SettingsGroupDef = { id: 'vis-nebbia-glass', titleKey: 'options.nebbiaGlass' };
-const GLASS_SLIDERS: Record<NebbiaTuning['glass'], SliderSpec[]> = {
-    rain: [
-        ['rainHit', 'options.nebbiaRainHit', 0.05, times],
-        ['rainBig', 'options.nebbiaRainBig', 0.05, times],
-    ],
-    dew: [
-        ['dew', 'options.nebbiaDew', 0.05, times],
-        ['dewSize', 'options.nebbiaDewSize', 0.05, times],
-        ['dewGlint', 'options.nebbiaDewGlint', 0.05, times],
-    ],
-    snow: [
-        ['snow', 'options.nebbiaSnow', 0.05, times],
-        ['snowSize', 'options.nebbiaSnowSize', 0.05, times],
-        ['snowMelt', 'options.nebbiaSnowMelt', 0.05, times],
-    ],
-};
+const FOG_DETAIL_GROUP: SettingsGroupDef = { id: 'vis-nebbia-fog-detail', titleKey: 'options.nebbiaFogDetail' };
 const APPEAR_GROUP: SettingsGroupDef = { id: 'vis-nebbia-appear', titleKey: 'options.nebbiaAppear' };
 const FADE_GROUP: SettingsGroupDef = { id: 'vis-nebbia-fade', titleKey: 'options.nebbiaFade' };
 const LAYOUT_GROUP: SettingsGroupDef = { id: 'vis-nebbia-layouts', titleKey: 'options.nebbiaLayouts' };
@@ -178,7 +147,14 @@ const NebbiaSettingsPanel: React.FC<VisualizerSettingsPanelProps<NebbiaTuning>> 
                     />
                 </Row>
             </Group>
-            <Group def={WRITING_GROUP}>
+            <Group def={WRITING_GROUP} foot={t('options.nebbiaGlyphSourceHint')}>
+                <Row label={t('options.nebbiaGlyphSource')} note={t('options.nebbiaGlyphSourceNote')}>
+                    <Segmented<NebbiaTuning['glyphSource']>
+                        value={resolved.glyphSource}
+                        options={NEBBIA_GLYPH_SOURCES.map(source => ({ value: source, label: t(`options.nebbiaGlyphSource_${source}`) }))}
+                        onChange={glyphSource => onTuningChange({ glyphSource })}
+                    />
+                </Row>
                 {sliders(WRITING_SLIDERS)}
                 <ToggleRow
                     label={t('options.nebbiaCredits')}
@@ -206,6 +182,9 @@ const NebbiaSettingsPanel: React.FC<VisualizerSettingsPanelProps<NebbiaTuning>> 
                     />
                 </Row>
                 {sliders(GLASS_SLIDERS[resolved.glass])}
+            </Group>
+            <Group def={FOG_DETAIL_GROUP} foot={t('options.nebbiaFogDetailHint')}>
+                {sliders(fogDetailSlidersFor(resolved.behind, resolved.glass))}
             </Group>
             <Group def={RENDER_GROUP}>
                 <LyricRenderQualityRows
