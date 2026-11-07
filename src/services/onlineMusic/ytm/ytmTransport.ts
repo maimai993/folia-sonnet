@@ -1,5 +1,6 @@
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import type { ProviderErrorCode } from '../../../types/onlineMusic';
+import { isAndroidAppShell } from '../../../platform/runtime';
 
 // src/services/onlineMusic/ytm/ytmTransport.ts
 // The IPC boundary to electron/ytm/ytmApiBridge.cjs. Google credentials stay in the main process;
@@ -72,10 +73,17 @@ export type YtmWireWebLoginState =
     | { state: 'confirmed'; account: unknown }
     | { state: 'error'; message: string; code?: ProviderErrorCode; reason?: string };
 
+/**
+ * 桌面端看 IPC 桥在不在；安卓 App 壳里当可用 —— 与汽水那边（见 services/onlineMusic 的
+ * 汽水 transport）的理由一样：启动头几秒 `Capacitor.isNativePlatform()` 还没就绪，把它当不可用会把已登录的账号静默清掉。
+ * 真正要等的是发请求那一步；安卓桥（android/ytmAndroidBridge.ts）自己有会话门。
+ */
 export const getYtmTransportAvailability = () => (
     typeof window !== 'undefined' && typeof window.electron?.ytmRequest === 'function'
         ? { configured: true } as const
-        : { configured: false, reason: 'runtime-unavailable' } as const
+        : isAndroidAppShell()
+            ? { configured: true } as const
+            : { configured: false, reason: 'runtime-unavailable' } as const
 );
 
 export async function requestYtm<T = unknown>(operation: YtmOperation, params: YtmParams = {}): Promise<T> {
@@ -84,10 +92,15 @@ export async function requestYtm<T = unknown>(operation: YtmOperation, params: Y
     }
     const startedAt = Date.now();
     let result: YtmBridgeResult;
-    try { result = await window.electron!.ytmRequest(operation, params); }
+    try {
+        result = typeof window !== 'undefined' && typeof window.electron?.ytmRequest === 'function'
+            ? await window.electron.ytmRequest(operation, params)
+            // 安卓 App 壳：WebView 里跑 youtubei.js 的那座桥（README 的「按环境挑一边」）。
+            : await (await import('./android/ytmAndroidBridge')).requestYtmOnAndroid(operation, params);
+    }
     catch {
-        console.warn(`[Ytm] ${operation} did not reach the desktop app`);
-        throw new OnlineProviderError('network', 'YouTube Music desktop request failed', 'ytm');
+        console.warn(`[Ytm] ${operation} did not reach the ${isAndroidAppShell() ? 'native bridge' : 'desktop app'}`);
+        throw new OnlineProviderError('network', 'YouTube Music request failed', 'ytm');
     }
     if (!result.ok) {
         console.warn(`[Ytm] ${operation} failed after ${Date.now() - startedAt}ms: ${result.error.code} (${result.error.message ?? ''})`);
