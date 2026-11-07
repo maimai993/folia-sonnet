@@ -266,6 +266,9 @@ class MainActivity : BridgeActivity() {
         // 原生播放内核（P1，ExoPlayer）：只有「设置 → 原生播放」打开时才被用到，
         // 注册本身不碰任何播放行为。
         registerPlugin(top.izuna.foliamajor.player.FoliaNativePlayerPlugin::class.java)
+        // 原生过渡系统：规划 / 分析 / 执行全部在原生侧，WebView 只保留设置 UI 与 cue 动画。
+        // 注册本身不碰任何播放行为（与 FoliaNativePlayerPlugin 同一条纪律）。
+        registerPlugin(top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin::class.java)
 
         super.onCreate(savedInstanceState)
 

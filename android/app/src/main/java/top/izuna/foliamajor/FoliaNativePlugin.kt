@@ -2643,6 +2643,18 @@ class FoliaNativePlugin : Plugin() {
             // 曲线同理：改完设置立刻生效，不必等下一次建播放器。
             top.izuna.foliamajor.player.FoliaNativePlayerPlugin
                     .applyCrossfadeCurve(snapshot.optString("crossfadeCurve", "equalPower"))
+            /*
+             * 过渡内核的设置缓存同理，而且这一条更容易踩：TransitionRuntime 只在 init / attach
+             * 时读一次 store，而设置页写的是这一份 snapshot。不摊下去的话，用户在设置里把
+             * 「接法」从自动改成低频换手、把强度推到极致，下一次换歌仍是进程启动时那份值 ——
+             * 界面显示改了、声音没变，正好是设置页注释里最忌讳的那类 bug。
+             *
+             * 传的是这次的 values：updateSettings 内部自己 putAll 再重读，与上面那次写入重复
+             * 一遍，但 putAll 是合并语义，多写一次不会抹掉别的键，换取的是「内核设置只有一个
+             * 刷新入口」这条简单纪律。
+             */
+            top.izuna.foliamajor.player.transition.bridge.TransitionRuntime
+                    .updateSettings(getContext(), merged)
             call.resolve(JSObject.fromJSONObject(snapshot))
         } catch (error: Exception) {
             call.reject("写入设置失败", error)
