@@ -9,15 +9,17 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverDir = path.join(repoRoot, 'sync-server');
-const tsc = path.join(serverDir, 'node_modules', '.bin', process.platform === 'win32' ? 'tsc.cmd' : 'tsc');
+// 用 typescript 包里的 tsc 入口（.js，跨平台都能直接交给 node 跑），不用 .bin 里那个 .cmd：
+// Windows 上 spawnSync 不带 shell 跑 .cmd 会回 EINVAL，带 shell 又会因为参数拼接触发 DEP0190。
+const tsc = path.join(serverDir, 'node_modules', 'typescript', 'bin', 'tsc');
 
 if (!fs.existsSync(tsc)) {
     console.error('[ci] sync-server 的依赖还没装。先跑一次：npm --prefix sync-server ci');
     process.exit(1);
 }
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const result = spawnSync(npm, ['run', 'build:node'], { cwd: serverDir, stdio: 'inherit' });
+// 和 sync-server 的 `build:node`（就是一条 tsc）等价
+const result = spawnSync(process.execPath, [tsc], { cwd: serverDir, stdio: 'inherit' });
 if (result.error || result.status !== 0) {
     console.error('[ci] sync-server 的 typecheck 失败了。');
     process.exit(result.status ?? 1);

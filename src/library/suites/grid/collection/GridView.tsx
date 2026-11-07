@@ -30,12 +30,7 @@ import {
     type GridRestoreTarget,
     type StoredGridViewNavigationState,
 } from '../shared/gridViewRestore';
-import {
-    CARD_TITLE_ATTR,
-    GRID_CARD_ITEM_ID_ATTR,
-    MORPH_FRAME_ATTR,
-    MORPH_TARGET_ATTR,
-} from '../transitions/gridMorphContract';
+import { CARD_TITLE_ATTR, GRID_CARD_ITEM_ID_ATTR, MORPH_FRAME_ATTR, MORPH_TARGET_ATTR } from '../transitions/gridMorphContract';
 import { useMorphPageExit } from '../transitions/collectionMorphStore';
 import { playFlyIn } from '../transitions/morphFlyIn';
 import { handOverStandIn, type StandInHandover } from '../transitions/standInHandover';
