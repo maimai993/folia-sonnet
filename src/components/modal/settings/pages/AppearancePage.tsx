@@ -36,18 +36,15 @@ export const OPTIONS: SettingsOptionDef[] = [...Object.values(O), ...LYRICS_WALL
  * 所以整块挂在「歌词动画」那一组下面；组件内部非安卓直接返回 null，这里不用再判端。
  * 它整块落在这一组的 kit 卡片里，所以不自己画卡、不自己带边框；里面的开关、分段器、
  * 按钮都用 kit 的那几个，跟下面「主题」「歌曲主题」两组是同一副样子。
+ *
+ * 滑条不再从外面传长相了：那一串 `rangeInputClass` 是给原生 input 的
+ * `::-webkit-slider-thumb` 伪元素写的，还写死了 `bg-white` / `bg-zinc-700` ——
+ * 换成组件库的滑杆之后这些类既不起作用，又会和主题色打架，所以删掉。
+ * 现在整节里的滑条和设置窗口别处是同一个控件、同一套配色。
  */
 const LyricsWallpaperSection: React.FC<{ isDaylight: boolean }> = ({ isDaylight }) => (
     <LyricsWallpaperSettingsSection
         isDaylight={isDaylight}
-        rangeInputClass={[
-            'w-full h-1.5 rounded-full appearance-none cursor-pointer',
-            '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full',
-            '[&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0',
-            isDaylight
-                ? 'bg-black/15 [&::-webkit-slider-thumb]:bg-zinc-700 [&::-moz-range-thumb]:bg-zinc-700'
-                : 'bg-white/10 [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:bg-white',
-        ].join(' ')}
     />
 );
 

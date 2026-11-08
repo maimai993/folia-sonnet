@@ -81,9 +81,19 @@ const NebbiaQuickSliders: React.FC<NebbiaQuickSlidersProps> = ({ tuning, onTunin
                 const open = !folded[group.titleKey];
                 const changed = group.specs.filter(([key, , step]) => isChanged(key, valueOf(key), step)).length;
                 return (
+                    /*
+                     * 分组不再是一张填色 + 内描边的卡片。
+                     *
+                     * 原来那圈 `bg-[var(--st-fill)]` + 1px 内描边是控制台面板的语汇：
+                     * 面板套面板、框线套框线，和 Folia 播放页那种「大片留白 + 弱分隔」的
+                     * 调子完全两回事 —— 这就是用户说的割裂感。
+                     *
+                     * 现在用一条极细的分隔线起点，组头只是可点的文字行，身体靠留白分开。
+                     * 强调色只留在真正需要它的地方：调过的那条左边的光、徽章、滑块的圆点。
+                     */
                     <section
                         key={group.titleKey}
-                        className="overflow-hidden rounded-xl bg-[var(--st-fill)] shadow-[inset_0_0_0_1px_var(--st-line)]"
+                        className="border-t border-[color:color-mix(in_srgb,var(--st-line)_70%,transparent)] first:border-t-0"
                     >
                         <div className="flex items-center gap-1 pr-1.5">
                             <Button
@@ -153,14 +163,12 @@ const NebbiaQuickSliders: React.FC<NebbiaQuickSlidersProps> = ({ tuning, onTunin
                                                         min={min}
                                                         max={max}
                                                         decimals={decimalsOf(step)}
+                                                        /* 默认值刻度由组件库的滑杆自己画，位置永远跟圆点对得上。 */
+                                                        defaultValue={defaultPosition(key, min, max) === 0
+                                                            ? min
+                                                            : min + defaultPosition(key, min, max) * (max - min)}
                                                         onChange={next => preview(key, next)}
                                                         onCommit={() => commit(key)}
-                                                    />
-                                                    {/* 默认值刻度：一根细线贴着轨道，位置和滑块的行程一致（两端各让出半个圆点） */}
-                                                    <span
-                                                        aria-hidden
-                                                        className="pointer-events-none absolute bottom-[13px] h-2 w-px rounded-full bg-[var(--st-t3)] opacity-60"
-                                                        style={{ left: `calc(0.5rem + 0.5rem + ${defaultPosition(key, min, max)} * (100% - 1rem - 1rem))` }}
                                                     />
                                                 </div>
                                             );

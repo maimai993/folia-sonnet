@@ -369,15 +369,64 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             } else {
                 PAUSE_FADE_MS
             }
-            // 从当前音量淡下去，并且显式关掉「跟随音量」：淡入没跑完就暂停时，
-            // 那个标记会让这条淡出停在满音量上，一松手就是硬切。
-            rampVolume(current.volume, 0f, fadeMs, followsVolume = false) {
-                current.setPlayWhenReady(false)
+            /*
+             * 暂停意图**当场落实**，淡出只负责音量。
+             *
+             * 以前 setPlayWhenReady(false) 放在淡出结束的回呼里：那 160 ms（混响留着尾巴时
+             * 最长 1.2 s）里「暂停」还没有真的生效。期间只要有 play() 进来 —— 通知栏重贴卡片
+             * 补发的、回到前台补发的、部分 ROM 同一次手势派两次的 —— 它会先
+             * setPlayWhenReady(true)，再在 rampVolume 里 cancelFade() 把这一条淡出连同
+             * 它的完成回调一起撤掉。结果 setPlayWhenReady(false) 永远不会执行，
+             * 用户看到的就是「按了暂停、声音停约 1 秒又自己响起来」（issue #263）。
+             *
+             * 现在调换过来：先把播放器停住，再用 rampHoldVolume 只把音量滑下去。
+             * 淡出期间若真的来了 play()，它本来就是一次新的播放意图，取消淡出、
+             * 把音量拉回满正是对的 —— 而「暂停」不再依赖那条可能被撤掉的回调。
+             */
+            current.setPlayWhenReady(false)
+            rampVolumeHold(current.volume, fadeMs) {
                 // 音量回到「本该是多少」：下一首从 0 淡进来，而不是继承这条斜坡的 0。
-                current.setVolume(requestedVolume)
+                if (!cachedPlaying) current.setVolume(requestedVolume)
                 stopTicking()
             }
         }
+    }
+
+    /**
+     * 只做音量下滑，**不碰 playWhenReady**：暂停已经由 [pause] 当场落实，
+     * 这里纯粹是让断音不刺耳。淡出走完（或被 cancelFade 撤掉）都无所谓 ——
+     * 播放器这时已经停了，不会再出现「暂停没生效」。
+     *
+     * 步长与 [rampVolume] 一致：短坡道 8 步，长坡道（留尾巴的淡出）按 20 ms 一格算。
+     */
+    private fun rampVolumeHold(
+        from: Float,
+        durationMs: Int,
+        then: (() -> Unit)? = null,
+    ) {
+        cancelFade()
+        if (!pauseFadeEnabled || durationMs <= 0) {
+            then?.invoke()
+            return
+        }
+        val steps = (durationMs / 20).coerceIn(FADE_STEPS, MAX_FADE_STEPS)
+        val stepMs = (durationMs / steps).coerceAtLeast(1)
+        var step = 0
+        val tick = object : Runnable {
+            override fun run() {
+                step++
+                val progress = step.toFloat() / steps
+                player?.setVolume((from * (1f - progress)).coerceIn(0f, 1f))
+                if (step >= steps) {
+                    fadeTick = null
+                    then?.invoke()
+                } else {
+                    handler.postDelayed(this, stepMs.toLong())
+                }
+            }
+        }
+        fadeTick = tick
+        handler.postDelayed(tick, stepMs.toLong())
     }
 
     /**

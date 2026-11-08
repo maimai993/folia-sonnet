@@ -48,12 +48,10 @@ const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video', strin
 
 type LyricsWallpaperSettingsSectionProps = {
     isDaylight: boolean;
-    rangeInputClass: string;
 };
 
 const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionProps> = ({
     isDaylight,
-    rangeInputClass,
 }) => {
     const { t } = useTranslation();
     const lyricsWallpaperFeed = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
@@ -355,7 +353,6 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                             step={5}
                             value={Math.round(lyricsWallpaperBlur * 100)}
                             onChange={value => onSetLyricsWallpaperBlur(value / 100)}
-                            className={rangeInputClass}
                             ariaLabel={t('options.lyricsWallpaperBlurValue')}
                         />
                     </div>

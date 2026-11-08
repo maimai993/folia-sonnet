@@ -17,7 +17,7 @@ import { useCallback, useRef } from 'react';
 // 元素收到的 pointercancel 把手势收尾。
 
 /** 判出方向之前要攒够的位移：手指落下去总会抖一下，这一小段不算数。 */
-const GESTURE_SLOP_PX = 8;
+export const GESTURE_SLOP_PX = 8;
 
 /** 拇指 16px 宽：它的中心停在离轨道两端这么远的地方。 */
 export const SLIDER_THUMB_INSET = 8;
