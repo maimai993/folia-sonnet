@@ -135,16 +135,35 @@ export const createNativeFetch = (
             headerObject[name] = value;
         });
 
-        const result = await plugin.httpRequest({
-            url,
-            method,
-            headers: headerObject,
-            bodyText,
-            bodyBase64: '',
-            redirect: init?.redirect || request?.redirect || 'follow',
-            timeoutMs,
-            maxBytes,
-        });
+        let result: NativeHttpResponse;
+        try {
+            result = await plugin.httpRequest({
+                url,
+                method,
+                headers: headerObject,
+                bodyText,
+                bodyBase64: '',
+                redirect: init?.redirect || request?.redirect || 'follow',
+                timeoutMs,
+                maxBytes,
+            });
+        } catch (error) {
+            /*
+             * 超上限时原生直接 reject（#261）。这条日志是为了让「某条接口突然失败」
+             * 可诊断：只记主机名，不记 URL 的查询串（里面可能有凭据）。
+             */
+            const message = String((error as { message?: unknown })?.message ?? error);
+            if (message.includes('bridge size limit')) {
+                let host = '';
+                try { host = new URL(url).host; } catch { /* 地址本身不合法，就不记 */ }
+                console.warn('[NativeHttp] response exceeds the bridge size limit', {
+                    host,
+                    maxBytes,
+                    method,
+                });
+            }
+            throw error;
+        }
 
         // 文本响应原生给 bodyText（#262），二进位才是 base64；两种都在这个 helper 里收口。
         const bytes = nativePayloadBytes(result);

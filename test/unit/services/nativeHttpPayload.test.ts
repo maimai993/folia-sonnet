@@ -117,4 +117,32 @@ describe('createNativeFetch 的上限与读取', () => {
         const response = await createNativeFetch(1000)('https://example.com/a.png');
         expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual(bytes);
     });
+
+    /*
+     * 超上限时原生直接 reject（#261）。这里钉两件事：错误照原样抛给调用方，
+     * 以及留一条能定位「哪台主机的响应太大」的日志（不记查询串）。
+     */
+    it('超上限的错误照原样抛出，并记一条带主机名的日志', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const plugin = (globalThis as unknown as {
+            window: { Capacitor: { Plugins: { FoliaNative: { httpRequest: () => Promise<unknown> } } } };
+        }).window.Capacitor.Plugins.FoliaNative;
+        const original = plugin.httpRequest;
+        plugin.httpRequest = async () => {
+            throw new Error('Native HTTP response exceeds the bridge size limit');
+        };
+        try {
+            await expect(
+                createNativeFetch(1000)('https://sync.example.com/themes/list?token=secret'),
+            ).rejects.toThrow('bridge size limit');
+            expect(warn).toHaveBeenCalledTimes(1);
+            const logged = JSON.stringify(warn.mock.calls[0]);
+            expect(logged).toContain('sync.example.com');
+            // 查询串里的凭据不许进日志。
+            expect(logged).not.toContain('secret');
+        } finally {
+            plugin.httpRequest = original;
+            warn.mockRestore();
+        }
+    });
 });
