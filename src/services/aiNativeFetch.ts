@@ -127,8 +127,9 @@ export const requestAiViaNative = async (
  *
  * 原生那条路不通（老版本没这个方法 / 桥出错）：回落 OkHttp 通用转发那条，别把请求丢掉。
  */
-export const createAiFetch = (): typeof fetch => {
-    const base = createNativeFetch(AI_REQUEST_TIMEOUT_MS);
+export const createAiFetch = (maxBytes?: number): typeof fetch => {
+    // 上限默认跟着 nativeHttpFetch 走（8MiB）；调用方知道自己的响应会更大时按需放宽。
+    const base = createNativeFetch(AI_REQUEST_TIMEOUT_MS, maxBytes);
     const plugin = getNativePlugin();
     if (!plugin?.aiRequest) return base;
 

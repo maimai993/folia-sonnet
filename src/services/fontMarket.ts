@@ -1,5 +1,5 @@
 import { createAiFetch } from './aiNativeFetch';
-import { createNativeFetch } from './nativeHttpFetch';
+import { NATIVE_HTTP_MAX_RESPONSE_BYTES, createNativeFetch } from './nativeHttpFetch';
 import { resolveCloudApiUrl, resolveCloudBaseUrl } from './foliaCloud';
 import { saveToCache } from './db';
 
@@ -13,6 +13,13 @@ import { saveToCache } from './db';
 // 目录是公开只读接口。上架 / 下架 / 改名一律走后台那个带登录的面板。
 
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * 字体本体允许过桥的上限：与原生 `HARD_MAX_RESPONSE_BYTES` 对齐。
+ *
+ * 再大就不是字体文件了，按「太大」拒掉比把 heap 撑爆好（#261）。
+ */
+const HARD_FONT_MAX_BYTES = 32 * 1024 * 1024;
 
 /** 与「本地上传字体」共用同一个落盘槽位，冷启动的恢复流程因此原样可用。 */
 const UPLOADED_LYRICS_FONT_KEY = 'lyrics_uploaded_font';
@@ -244,7 +251,16 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
  * 原生那边把字节转成文本再交回来，字体就损坏了。目录 JSON 仍走 `createAiFetch`。
  */
 export const installMarketFont = async (font: FontMarketFont): Promise<FontMarketInstallResult> => {
-    const response = await createNativeFetch(REQUEST_TIMEOUT_MS)(absoluteUrl(font.fileUrl), {
+    /*
+     * 字体本体必须整段进 JS（`FontFace` 要的是 ArrayBuffer），所以还是走桥；但桥现在有
+     * 上限（#261/#262）：默认 8MiB，而 CJK 全字库动辄 10–20MB，照默认值会被直接拒掉。
+     * 按目录里登记的 `fileSize` 放宽，上限与原生硬上限（32MiB）对齐 —— 再大就不是字体了。
+     */
+    const fontMaxBytes = Math.min(
+        HARD_FONT_MAX_BYTES,
+        Math.max(NATIVE_HTTP_MAX_RESPONSE_BYTES, Math.ceil((font.fileSize || 0) * 1.1)),
+    );
+    const response = await createNativeFetch(REQUEST_TIMEOUT_MS, fontMaxBytes)(absoluteUrl(font.fileUrl), {
         method: 'GET',
         signal: withTimeout(REQUEST_TIMEOUT_MS),
     });
