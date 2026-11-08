@@ -26,6 +26,10 @@ import type { LibraryLocalCatalogSnapshot } from '../../../core/home/home.contra
 import type { LibraryHomeResources } from '../../../core/home/homeModel.contract';
 import type { LibraryHomeExtraTab, LibraryDeclaredActions } from '../../../core/suite/suite.contract';
 import type { LibraryHomeCard, LibraryHomeListState } from '../../../core/home/homeModel.contract';
+import { LxSquareToolbar } from '@/components/lxmusic/LxSquareToolbar';
+import { LxChartBoard } from '@/components/lxmusic/LxChartBoard';
+import { LxAlbumWall } from '@/components/lxmusic/LxAlbumWall';
+import { lxChartCollectionId } from '@/services/onlineMusic/lxmusic/lxmusicProvider';
 import { useLibraryHomeSources } from '../../../core/home/useLibraryHomeSources';
 import { useLibraryHomeOnline } from '../../../core/home/online/useLibraryHomeOnline';
 import { useLibraryHomeActions } from '../../../core/home/useLibraryHomeActions';
@@ -496,6 +500,15 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 </div>
             </div>
 
+            {/* 洛雪的歌单页：它在别家没有「我的歌单」这东西，这一屏是四家的公开广场，
+                所以要有一条能换平台、换排序、换分类的筛选。别的平台不出现这一条。 */}
+            {/* 洛雪筛选条固定占一段高度（三行胶囊都放得下）：上面多一行少一行，下面卡片行的中线都不动。 */}
+            {activeProviderId === 'lxmusic' && homeViewTab === 'playlist' && (
+                <div className="w-full mx-auto px-2 shrink-0 overflow-hidden" style={{ height: 84 }}>
+                    <LxSquareToolbar />
+                </div>
+            )}
+
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
                 {isOnlineTab && activeAccountView === 'accountless' ? (
@@ -511,6 +524,31 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 ) : isOnlineTab && activeAccountView === 'guest' ? (
                     // One button: it opens the sign-in window, where the platform is chosen.
                     <HomeLoginPanel account={account} />
+                ) : isOnlineTab && activeProviderId === 'lxmusic' && homeViewTab === 'radio' ? (
+                    // 洛雪没有「推荐内容」这回事：它的推荐页就是排行榜——先出平台行，选了哪家才展开那家的榜单清单。
+                    <LxChartBoard
+                        onOpenChart={chart => onOpenGridView?.(createOnlineGridViewCollection({
+                            providerId: 'lxmusic',
+                            id: lxChartCollectionId(chart.platform, chart.id),
+                            name: chart.name,
+                            type: 'playlist',
+                            coverUrl: chart.coverUrl,
+                            providerData: { platform: chart.platform, nativeId: chart.id, kind: 'chart' },
+                        } as unknown as ProviderCollection, activeProviderId))}
+                    />
+                ) : isOnlineTab && activeProviderId === 'lxmusic' && homeViewTab === 'albums' ? (
+                    // 洛雪也没有「用户专辑库」，但收藏的歌各自属于某张专辑：这一页是那些专辑的封面墙，
+                    // 点一张直接进那家的专辑页（曲目与播放都在那里）。
+                    <LxAlbumWall
+                        onOpenAlbum={(platform, albumId, name, coverUrl) => onOpenGridView?.(createOnlineGridViewCollection({
+                            providerId: 'lxmusic',
+                            id: `${platform}:${albumId}`,
+                            name,
+                            type: 'album',
+                            coverUrl,
+                            providerData: { platform, nativeId: albumId, kind: 'album' },
+                        } as unknown as ProviderCollection, activeProviderId))}
+                    />
                 ) : homeViewTab === 'explore' ? (
                     online.canUseExplore && (
                         <ExploreSurface
@@ -528,6 +566,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         focusMemoryScope={JSON.stringify(['online', activeProviderId, activeUser?.id ?? null, homeViewTab])}
                         title={onlineList.title}
                         mapButtonLabel={t('home.allAlbums')}
+                        hideMapButton={activeProviderId === 'lxmusic'}
                         items={onlineList.items}
                         focusedIndex={focusedIndex}
                         onFocusedIndexChange={setFocusedIndex}

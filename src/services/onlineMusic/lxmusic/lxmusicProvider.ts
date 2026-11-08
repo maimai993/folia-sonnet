@@ -25,6 +25,23 @@ import { hasNativeHttp, nativeHttpRequest } from '../../nativeAndroidBridge';
 import { notePlaybackAttempt } from './lxDiagnostics';
 import { getLxPreferences } from './lxPreferences';
 import { installImportedAudioResolver } from '../importedAudioRouting';
+import { hydrateLxLocalLikes, setLxLocalLiked } from './lxLocalLikes';
+import {
+    getLxLikedSongs,
+    getLxLikedUnifiedSongs,
+    LX_LIKED_PLAYLIST_ID,
+    removeLxLikedSong,
+    setLxLikedSong,
+} from './lxLikedSongs';
+import {
+    addSongToLxPlaylist,
+    createLxSavedPlaylist,
+    fromSavedSong,
+    getLxSavedPlaylists,
+    removeSongFromLxPlaylist,
+    type LxSavedPlaylist,
+} from './lxSavedPlaylists';
+import { lxLyricBySearch, lxLyricFromKg, lxLyricFromTx } from './lxLyric';
 import {
     lxApiAlbumSquare,
     lxApiAlbumTracks,
@@ -39,6 +56,7 @@ import {
     lxApiSearchPlaylists,
     lxApiSearchSongs,
     LX_PUBLIC_PLATFORM_KEYS,
+    LX_PUBLIC_PLATFORMS,
     type LxApiCollection,
     type LxApiPage,
     type LxApiSong,
@@ -72,6 +90,29 @@ const parseSongId = (id: MediaId | string): ParsedId | null => {
 
 const makeId = (platform: LxPlatformKey, nativeId: string): MediaId => `${platform}:${nativeId}` as MediaId;
 
+/**
+ * 首页「推荐」页那排榜单卡点下去，落的是 Folia 自己的集合页，不是洛雪工作台
+ * （工作台是另一套界面，一点像换了个软件）。集合 id 带 `lxchart:` 前缀，
+ * 把榜单和普通歌单分开：曲目按各家的榜单接口取，而网易云的榜本身就是一张歌单。
+ */
+export const LX_CHART_ID_PREFIX = 'lxchart:';
+
+export const lxChartCollectionId = (platform: string, chartId: string): string => (
+    `${LX_CHART_ID_PREFIX}${platform}:${chartId}`
+);
+
+const parseLxChartId = (id: MediaId | string): { platform: LxPublicPlatform; chartId: string } | null => {
+    const raw = String(id ?? '');
+    if (!raw.startsWith(LX_CHART_ID_PREFIX)) return null;
+    const rest = raw.slice(LX_CHART_ID_PREFIX.length);
+    const sep = rest.indexOf(':');
+    if (sep <= 0) return null;
+    const platform = rest.slice(0, sep);
+    const chartId = rest.slice(sep + 1);
+    if (!chartId || !(LX_PUBLIC_PLATFORM_KEYS as ReadonlyArray<string>).includes(platform)) return null;
+    return { platform: platform as LxPublicPlatform, chartId };
+};
+
 const platformOfSong = (song: SongResult): ParsedId | null => {
     const ref = song.sourceRef;
     if (ref?.kind === 'online' && ref.providerData) {
@@ -81,7 +122,22 @@ const platformOfSong = (song: SongResult): ParsedId | null => {
     return parseSongId(song.id);
 };
 
+/** 喜欢落在哪个 id：歌曲自带的 id 就是 `平台:原生 id`；没有时按 providerData 重建。 */
+const likeMediaIdOf = (song: MediaId | SongResult): MediaId | null => {
+    if (typeof song === 'object' && song !== null) {
+        const parsed = platformOfSong(song);
+        if (parsed) return makeId(parsed.platform, parsed.nativeId);
+        return song.id ?? null;
+    }
+    return song;
+};
+
 // ---------------------------------------------------------------- 结构转换
+
+/** 四家平台在界面上怎么称呼：搜索结果是四家混排的，每一行都要说清来自哪一家。 */
+const platformLabelOf = (platform: string): string => (
+    LX_PUBLIC_PLATFORMS.find((entry) => entry.key === platform)?.label ?? platform
+);
 
 const toUnifiedSong = (item: LxApiSong): UnifiedSong => {
     const id = makeId(item.platform, item.id);
@@ -107,8 +163,22 @@ const toUnifiedSong = (item: LxApiSong): UnifiedSong => {
             kind: 'online',
             providerId: 'lxmusic',
             mediaId: String(id),
-            providerData: { platform: item.platform, nativeId: item.id },
+            // platformLabel 是给通用列表用的：搜索结果四家混排，界面不认识平台 id，只读这个短名。
+            providerData: { platform: item.platform, nativeId: item.id, platformLabel: platformLabelOf(item.platform) },
         },
+    };
+};
+
+/** 本机收藏列表 → 全站认的 ProviderCollection（收藏弹层与歌单列表都用这个形状）。 */
+const lxSavedPlaylistToCollection = (playlist: LxSavedPlaylist): ProviderCollection => {
+    const coverUrl = playlist.songs[0]?.coverUrl;
+    return {
+        providerId: 'lxmusic',
+        id: playlist.id as MediaId,
+        name: playlist.name,
+        type: 'playlist',
+        trackCount: playlist.songs.length,
+        ...(coverUrl ? { coverUrl } : {}),
     };
 };
 
@@ -563,14 +633,53 @@ const findNativeIdOn = async (platform: LxPublicPlatform, song: SongResult): Pro
     }
 };
 
+// ---------------------------------------------------------------- 「歌手」页
+//
+// 洛雪公开接口没有单独的歌手接口，只有搜索。所以歌手页用自造 id `lxartist:<平台>:<歌手名>`：
+// 点歌手名时 resolveSongCatalogRefs 把每首歌的演唱者改成这个 ref，那一页再拿该平台的搜索
+// 按名字取歌、只留这位歌手的。平台不提供歌手专辑，专辑区给空页（页面自然留白）。
+
+const LX_ARTIST_ID_PREFIX = 'lxartist';
+
+const lxArtistId = (platform: LxPublicPlatform, name: string): MediaId => `${LX_ARTIST_ID_PREFIX}:${platform}:${name}` as MediaId;
+
+const parseLxArtistId = (id: MediaId): { platform: LxPublicPlatform; name: string } | null => {
+    const raw = String(id ?? '');
+    if (!raw.startsWith(`${LX_ARTIST_ID_PREFIX}:`)) return null;
+    const rest = raw.slice(LX_ARTIST_ID_PREFIX.length + 1);
+    const separator = rest.indexOf(':');
+    if (separator <= 0) return null;
+    const platform = rest.slice(0, separator) as LxPlatformKey;
+    const name = rest.slice(separator + 1).trim();
+    if (!name || !isPublicPlatform(platform)) return null;
+    return { platform, name };
+};
+
+/** 搜索结果里判断一首歌是不是这位歌手唱的：名字相等，或一方包含另一方（「五月天」与「五月天 阿信」）。 */
+const lxArtistNameMatches = (candidate: string, target: string): boolean => {
+    const a = candidate.toLowerCase().replace(/\s+/g, '');
+    const b = target.toLowerCase().replace(/\s+/g, '');
+    if (!a || !b) return false;
+    if (a === b) return true;
+    return a.length > 1 && b.length > 1 && (a.includes(b) || b.includes(a));
+};
+
 // ---------------------------------------------------------------- provider
 
 export const lxmusicProvider: OnlineMusicProvider = {
     id: 'lxmusic',
     displayName: '洛雪音源',
     shortName: '洛雪',
+    shortNameKey: 'onlineProviderName.lxmusic',
     mark: { letter: '雪', color: '#e11d48' },
     getAvailability: () => ({ configured: true }),
+    /*
+     * 洛雪不连账号：导入音源脚本就能用，没有扫码也没有表单。但宿主要求每个 provider 都答得出
+     * 「谁登录了」，所以这里报一个本机的虚拟身份——账号区显示为可用，而不是「未登录」。
+     * 登出不动已导入的音源与偏好（它们存在本机，见 lxSourceStore / lxPreferences）。
+     */
+    // 洛雪不连账号（capabilities.auth 为 false）：按仓库契约，免登录平台不声明 auth 成员，
+    // 否则登录态读取会把它当成一个「有人在登录」的平台去轮询。
     capabilities: {
         search: true,
         playback: true,
@@ -582,10 +691,12 @@ export const lxmusicProvider: OnlineMusicProvider = {
         artists: false,
         recommendations: false,
         userLibrary: false,
-        likes: false,
-        mutations: false,
+        // 喜欢是本机的：音源不连账号，但「这一颗心」要能按下去、要能记住（见 lxLocalLikes）。
+        likes: true,
+        mutations: true,
+        // 收藏到歌单也落在本机（lxSavedPlaylists），所以「新建歌单 / 往歌单里加歌」这条也开。
+        playlistTrackMutations: true,
         wordByWordLyrics: false,
-        passwordLogin: false,
     },
     normalizeSong: (raw: unknown) => raw as UnifiedSong,
 
@@ -800,13 +911,64 @@ export const lxmusicProvider: OnlineMusicProvider = {
         },
     },
 
+    /*
+     * 喜欢落在本机：洛雪不连账号，没有远端能收这一颗心。写本地一份、回灌账号缓存
+     * （likedSongIds），播放器的心形和「我喜欢」都读那份缓存，重启后还在。
+     */
+    mutations: {
+        async likeSong(song, liked) {
+            const mediaId = likeMediaIdOf(song);
+            if (!mediaId) return;
+            setLxLocalLiked(mediaId, liked);
+            // 光有 id 画不出「我的喜欢」那张卡：点喜欢时顺带留一份带歌名/歌手/封面的歌，
+            // 取消喜欢时两边一起删（id 那份在 lxLocalLikes，元数据这份在 lxLikedSongs）。
+            if (typeof song === 'object' && song !== null) {
+                if (liked) setLxLikedSong(song as unknown as UnifiedSong, true);
+                else removeLxLikedSong(String(mediaId));
+            } else if (!liked) {
+                removeLxLikedSong(String(mediaId));
+            }
+        },
+
+        /*
+         * 「收藏到歌单」。洛雪的歌单同样是本机的（lxSavedPlaylists）：没有账号、没有远端能收。
+         * 这三支补齐后，全站的收藏弹层（AddToPlaylistHost）才认这是一家能建列表、能往里放歌的
+         * provider —— 之前只留了 likeSong，于是弹层里永远只有「我喜欢」一行。
+         */
+        async createPlaylist(name) {
+            const created = createLxSavedPlaylist(name);
+            if (!created) throw new Error('lx-playlist-limit');
+            return lxSavedPlaylistToCollection(created);
+        },
+
+        async updatePlaylistTracks(operation, playlist, tracks) {
+            const playlistId = typeof playlist === 'object' && playlist !== null ? String(playlist.id) : String(playlist);
+            for (const track of tracks) {
+                const isSong = typeof track === 'object' && track !== null;
+                const mediaId = isSong ? String((track as { id: unknown }).id) : String(track);
+                if (operation === 'del') {
+                    removeSongFromLxPlaylist(playlistId, mediaId);
+                    continue;
+                }
+                // 只有 id 没有歌名/来源的歌存不进去（toSavedSong 会拒），跳过即可。
+                if (!isSong) continue;
+                addSongToLxPlaylist(playlistId, track as unknown as UnifiedSong);
+            }
+        },
+
+        // 弹层里可选的歌单：本机那些，按最近创建在前。
+        listPlaylists() {
+            return getLxSavedPlaylists().map(lxSavedPlaylistToCollection);
+        },
+    },
+
     lyrics: {
         async getLyrics(song) {
             const parsed = platformOfSong(song);
-            if (!parsed) return { lyrics: null, isPureMusic: false };
 
-            // 1) 公开歌词接口。
-            if (isPublicPlatform(parsed.platform)) {
+            // 1) 公开歌词接口：wy / kw 直接有；tx / kg 各走自己的歌词服务。
+            //    原来这两家落空，于是 tx 上的歌（周杰伦这类）一进来就没词。
+            if (parsed && isPublicPlatform(parsed.platform)) {
                 try {
                     const { main, translation } = await lxApiLyric(parsed.platform, parsed.nativeId);
                     if (main) {
@@ -818,27 +980,125 @@ export const lxmusicProvider: OnlineMusicProvider = {
                         };
                     }
                 } catch (error) {
-                    console.warn('[lxmusic] 公开歌词接口失败，改走音源：', error);
+                    console.warn('[lxmusic] 公开歌词接口失败，改走平台歌词：', error);
+                }
+                if (parsed.platform === 'tx' || parsed.platform === 'kg') {
+                    try {
+                        const side = parsed.platform === 'tx'
+                            ? await lxLyricFromTx(parsed.nativeId)
+                            : await lxLyricFromKg(parsed.nativeId, song.name);
+                        if (side?.main) {
+                            return {
+                                lyrics: parseLrcToLyricData(side.main),
+                                mainText: side.main,
+                                translationText: side.translation ?? undefined,
+                                isPureMusic: false,
+                            };
+                        }
+                    } catch (error) {
+                        console.warn('[lxmusic] 平台歌词接口失败，改走音源：', error);
+                    }
                 }
             }
 
-            // 2) 音源。
-            const raw = await lxSourceStore.resolveLyric(parsed.platform, buildMusicInfo(parsed.platform, parsed.nativeId, song));
-            const record = raw && typeof raw === 'object' ? raw as { lyric?: string; tlyric?: string; rlyric?: string } : null;
-            const main = record?.lyric ?? null;
-            if (!main) return { lyrics: null, isPureMusic: false };
-            return {
-                lyrics: parseLrcToLyricData(main),
-                mainText: main,
-                translationText: record?.tlyric ?? undefined,
-                romanizationText: record?.rlyric ?? undefined,
-                isPureMusic: false,
-            };
+            // 2) 音源（LX 自定义音源自己会续 lyric）。
+            if (parsed) {
+                try {
+                    const raw = await lxSourceStore.resolveLyric(
+                        parsed.platform,
+                        buildMusicInfo(parsed.platform, parsed.nativeId, song),
+                    );
+                    const record = raw && typeof raw === 'object'
+                        ? raw as { lyric?: string; tlyric?: string; rlyric?: string }
+                        : null;
+                    const main = record?.lyric ?? null;
+                    if (main) {
+                        return {
+                            lyrics: parseLrcToLyricData(main),
+                            mainText: main,
+                            translationText: record?.tlyric ?? undefined,
+                            romanizationText: record?.rlyric ?? undefined,
+                            isPureMusic: false,
+                        };
+                    }
+                } catch (error) {
+                    console.warn('[lxmusic] 音源歌词失败，改走按歌名搜同款：', error);
+                }
+            }
+
+            // 3) 按「歌名 + 歌手」在公开库里搜同款：别的平台的同一首歌也能有词。
+            try {
+                const fallback = await lxLyricBySearch(song.name, song.artists?.[0]?.name);
+                if (fallback?.main) {
+                    return {
+                        lyrics: parseLrcToLyricData(fallback.main),
+                        mainText: fallback.main,
+                        translationText: fallback.translation ?? undefined,
+                        isPureMusic: false,
+                    };
+                }
+            } catch (error) {
+                console.warn('[lxmusic] 按歌名找歌词失败：', error);
+            }
+
+            return { lyrics: null, isPureMusic: false };
         },
     },
 
     catalog: {
+        // 歌手页：点一首歌的演唱者时现编 `lxartist:<平台>:<名字>` 的 ref（ref 只挂在歌曲上，
+        // 集合里没有）。不声明 canResolveSongCatalogRefs —— 那是「集合里的歌手也都带 ref」的
+        // 能力，声明了会把歌单/专辑页的歌手名变成不可点。
+        async resolveSongCatalogRefs(song) {
+            const parsed = platformOfSong(song);
+            if (!parsed) return song;
+            const platform = parsed.platform;
+            if (!isPublicPlatform(platform)) return song;
+            return {
+                ...song,
+                artists: song.artists.map((artist) => {
+                    const name = artist.name.trim();
+                    if (!name || name === '未知歌手') return artist;
+                    return {
+                        ...artist,
+                        catalogRef: { providerId: 'lxmusic', kind: 'artist' as const, id: lxArtistId(platform, name) },
+                    };
+                }),
+            };
+        },
+        async getArtistDetail(id) {
+            const parsed = parseLxArtistId(id);
+            if (!parsed) return null;
+            return { providerId: 'lxmusic', id, name: parsed.name, type: 'artist' };
+        },
+        async getArtistSongs(id, limit, offset) {
+            const parsed = parseLxArtistId(id);
+            if (!parsed) return emptyPage(offset);
+            const page = await lxApiSearchSongs(parsed.platform, parsed.name, limit, offset);
+            const items = page.items
+                .filter((item) => item.artists.some((artist) => lxArtistNameMatches(artist.name, parsed.name)))
+                .map(toUnifiedSong);
+            // nextOffset 按搜索这一页的原长度推进，过滤只会让这一页少几首，续页不会重复或跳。
+            return { items, nextOffset: offset + page.items.length, hasMore: page.hasMore };
+        },
+        // 公开接口没有「歌手的专辑」，这一栏就是空的（歌手页自己会给空态）。
+        async getArtistAlbums(_id, _limit, offset) {
+            return emptyPage<ProviderCollection>(offset);
+        },
         async getPlaylistTracks(id, limit, offset) {
+            const take = limit ?? 50;
+            const skip = offset ?? 0;
+            // 「我的喜欢」是本机集合：不走平台，直接读点过喜欢的那份歌。
+            if (String(id) === LX_LIKED_PLAYLIST_ID) {
+                const all = getLxLikedUnifiedSongs();
+                const items = all.slice(skip, skip + take);
+                return { items, nextOffset: skip + items.length, hasMore: skip + items.length < all.length };
+            }
+            const chart = parseLxChartId(id);
+            if (chart) {
+                const page = await lxApiChartTracks(chart.platform, chart.chartId, take, skip);
+                return toProviderPage(page, toUnifiedSong, skip, take);
+            }
             const parsed = parseSongId(id);
             if (!parsed || !isPublicPlatform(parsed.platform)) return emptyPage<UnifiedSong>(offset);
             const page = await lxApiPlaylistTracks(parsed.platform, parsed.nativeId, limit, offset);
@@ -847,6 +1107,9 @@ export const lxmusicProvider: OnlineMusicProvider = {
         async getPlaylistDetail(id, collection) {
             // 歌单卡片本身已经带着名字与封面；没有卡片时给一个能看的占位。
             if (collection) return collection;
+            if (String(id) === LX_LIKED_PLAYLIST_ID) {
+                return { providerId: 'lxmusic', id, name: '我的喜欢', type: 'playlist', trackCount: getLxLikedUnifiedSongs().length };
+            }
             const parsed = parseSongId(id);
             if (!parsed) return null;
             return { providerId: 'lxmusic', id, name: '歌单', type: 'playlist' };
@@ -856,8 +1119,24 @@ export const lxmusicProvider: OnlineMusicProvider = {
             const skip = offset ?? 0;
             const parsed = parseSongId(id);
             if (!parsed || !isPublicPlatform(parsed.platform)) return emptyPage<UnifiedSong>(skip);
-            const page = await lxApiAlbumTracks(parsed.platform, parsed.nativeId, take, skip);
-            return toProviderPage(page, toUnifiedSong, skip, take);
+            // 接口这层可能直接抛（平台拒绝、超时、返回结构不认识），一律不往上冒，
+            // 否则整页会变成「加载失败 / 未知错误」——用户看到的就是"点进去没东西"。
+            let raw: LxApiPage<LxApiSong> = { items: [], hasMore: false };
+            try {
+                raw = await lxApiAlbumTracks(parsed.platform, parsed.nativeId, take, skip);
+            } catch {
+                raw = { items: [], hasMore: false };
+            }
+            const page = { items: raw.items, hasMore: raw.hasMore };
+            if (page.items.length > 0 || skip > 0) return toProviderPage(page, toUnifiedSong, skip, take);
+            // 这家没有专辑曲目接口（酷我：几条公开路径全废）时别给一屏空白：
+            // 收藏里的歌本就带着它属于哪张专辑，同一张专辑的本地收藏直接兜住这一页。
+            const local = getLxLikedSongs().filter(
+                (song) => song.platform === parsed.platform && song.albumId === parsed.nativeId,
+            );
+            if (local.length === 0) return toProviderPage(page, toUnifiedSong, skip, take);
+            const items = local.map(fromSavedSong);
+            return { items, nextOffset: items.length, hasMore: false };
         },
         async getAlbumDetail(id, collection) {
             if (collection) return collection;
@@ -926,6 +1205,8 @@ const asLxSong = (song: SongResult): SongResult | null => {
  * 没导入音源、或用户在音源页关掉开关时，这一层几乎零开销地让路。
  */
 export const installLxAudioRouting = (): void => {
+    // 本机收藏灌回账号缓存：心形与「我喜欢」重启后还在。
+    hydrateLxLocalLikes();
     installImportedAudioResolver(async (song, quality) => {
         if (!getLxPreferences().routeAllSongs) return null;
         const lxSong = asLxSong(song);

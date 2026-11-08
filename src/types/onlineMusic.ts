@@ -1209,6 +1209,8 @@ export interface OnlineMutationProvider {
     ): Promise<void>;
     /** Makes an empty playlist of the account's own; without it, the app offers none to make. */
     createPlaylist?(name: string): Promise<ProviderCollection>;
+    /** The playlists a song can be put into, when they are not the account's own (洛雪把收藏歌单存在本机). */
+    listPlaylists?(): ProviderCollection[];
     /** Whether this album or playlist can be saved to the account's library; without it, any can. */
     canSubscribe?(collection: ProviderCollection): boolean;
     subscribePlaylist?(playlist: MediaId | ProviderCollection, subscribed: boolean): Promise<void>;
