@@ -1145,6 +1145,107 @@ class FoliaNativePlugin : Plugin() {
         return output.toByteArray()
     }
 
+    /**
+     * 把一份远端资源**边读边数**地落到缓存目录，超限就停。
+     *
+     * 为什么不用 `@capacitor/filesystem` 的 `downloadFile`：它在 Android 上是
+     * `HttpURLConnection` + 1024 字节缓冲直接写盘（`LegacyFilesystemImplementation.doDownloadInBackground`），
+     * 本身不进 heap，但**也没有上限**，而调用方只能在事后 `stat` 再删 —— 期间一张
+     * 几百 MB 的图就会把 Cache 撑满。这条方法与桥上的 [readCappedBody] 同一纪律：
+     * 声明的 Content-Length 也会先看一遍，读的过程再数一遍。
+     *
+     * 只给封面这类「小文件、可能拿到超大的东西」的场景用；成功时返回缓存目录下的实际路径。
+     */
+    private fun fetchCappedFile(
+        url: String,
+        relativePath: String,
+        limitBytes: Int,
+        timeoutMs: Int,
+        headers: Map<String, String>,
+    ): File {
+        val requestBuilder = Request.Builder().url(url)
+        headers.forEach { (name, value) -> requestBuilder.header(name, value) }
+        val requestClient = client.newBuilder()
+                .readTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+                .connectTimeout(15_000L, TimeUnit.MILLISECONDS)
+                .build()
+        requestClient.newCall(requestBuilder.build()).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("HTTP " + response.code)
+            val body = response.body ?: throw IOException("Empty body")
+            val declared = body.contentLength()
+            if (declared > limitBytes.toLong()) throw ResponseTooLargeException(declared)
+            val target = File(getContext().cacheDir, relativePath)
+            target.parentFile?.mkdirs()
+            val buffer = ByteArray(16 * 1024)
+            var total = 0
+            body.byteStream().use { input ->
+                FileOutputStream(target, false).use { output ->
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count == -1) break
+                        total += count
+                        if (total > limitBytes) throw ResponseTooLargeException(total.toLong())
+                        output.write(buffer, 0, count)
+                    }
+                }
+            }
+            return target
+        }
+    }
+
+    /**
+     * 把一份远端资源下载到缓存目录并返回**同源可读的地址**，供封面这类大二进制用。
+     *
+     * 走原生而不是把字节回给网页：一张封面几 MB，整段过桥要在 heap 里再放一份 1.33×
+     * 的 base64 副本（#262）。走这条之后网页只拿一个地址，字节始终留在原生侧。
+     *
+     * `relativePath` 必须在缓存目录下（原样拼在 cacheDir 后面），调用方给的是自己算好的
+     * 文件名，不接受绝对路径 —— 这个入口只服务「取资源」，不该成为任意文件写入口。
+     */
+    @PluginMethod
+    fun downloadToCache(call: PluginCall) {
+        val url = call.getString("url", "")
+        val relativePath = call.getString("path", "")
+        if (url == null || url.isEmpty()) {
+            call.reject("Missing download url")
+            return
+        }
+        if (relativePath == null || relativePath.isEmpty() || relativePath.startsWith("/") ||
+                relativePath.contains("..")) {
+            call.reject("Invalid cache path")
+            return
+        }
+        val limitBytes = (call.getInt("maxBytes") ?: DEFAULT_MAX_RESPONSE_BYTES)
+                .coerceIn(64 * 1024, HARD_MAX_RESPONSE_BYTES)
+        val timeoutMs = Math.max(1_000, call.getInt("timeoutMs") ?: 20_000)
+        val headers = LinkedHashMap<String, String>()
+        call.getObject("headers")?.let { headerObject ->
+            val names = headerObject.keys()
+            while (names.hasNext()) {
+                val name = names.next() ?: continue
+                val value = headerObject.opt(name) ?: continue
+                val safeHeader = sanitizeHeaderValue(java.lang.String.valueOf(value))
+                if (safeHeader != null) headers[name] = safeHeader
+            }
+        }
+        BackgroundWork.io("download-to-cache") {
+            try {
+                val file = fetchCappedFile(url, relativePath, limitBytes, timeoutMs, headers)
+                val result = JSObject()
+                result.put("path", "file://" + file.absolutePath)
+                result.put("bytes", file.length().toInt())
+                call.resolve(result)
+            } catch (error: ResponseTooLargeException) {
+                Log.w(TAG, "downloadToCache too large: " + error.observedBytes + " bytes")
+                call.reject(RESPONSE_TOO_LARGE_MESSAGE)
+            } catch (error: IOException) {
+                call.reject("Download failed: " + error.message, error)
+            } catch (error: IllegalArgumentException) {
+                call.reject("Download is invalid: " + error.message, error)
+            }
+        }
+    }
+
     /** 这次响应该回 `bodyText` 还是 `bodyBase64`（mode 由调用方指定，默认按 Content-Type 猜）。 */
     private fun wantsTextPayload(mode: String, contentType: String?): Boolean {
         if ("base64".equals(mode, ignoreCase = true)) return false

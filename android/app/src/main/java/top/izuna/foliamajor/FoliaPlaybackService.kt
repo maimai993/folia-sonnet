@@ -118,17 +118,36 @@ class FoliaPlaybackService : android.app.Service() {
     /** 那次乐观播放切的那一刻的位置：冻回去要落在这儿，不能落在已经被推出去的地方。 */
     private var playConfirmAnchorMs = 0L
     private var playNudges = 0
-    /** 最近一次「暂停」是哪个入口来的、什么时候来的：用来挡同一次手势的第二条命令（#263）。 */
+    /**
+     * 最近一次「暂停」是哪个入口来的、什么时候来的：用来挡同一次手势的第二条命令（#263）。
+     */
     private var lastPauseAtMs = 0L
     private var lastPauseSource: String? = null
     /** 这一次暂停已经丢掉过一条回声 play 了：同一次暂停最多丢一条，别把真实操作也吃掉。 */
     private var echoPlayDroppedForPause = false
+
+    /**
+     * 最近一次「原生这边发起了播放」的时刻（elapsedRealtime）；0 = 没有待确认的播放。
+     *
+     * 与 `cachedPlaying` 分开：那是「Web 报上来的播放态」，这里记的是「我们按下播放之后
+     * Web 有没有反过来报暂停」。`playConfirmCheck` 要判的是后者 —— 用 `cachedPlaying`
+     * 会误判：原生播着、Web 因 seek / 切歌中途推一条 paused，4 秒后就被当成「没回话」，
+     * 冻锚点再补发一条 play（#263 的反向情况）。
+     */
+    private var optimisticPlayAtMs = 0L
     private val playConfirmCheck: Runnable = object : Runnable {
         override fun run() {
             if (!playConfirmPending) return
             playConfirmPending = false
-            // Web 层已经回过话（无论是 playing 还是 paused）：以它为准，这里什么都不做。
-            if (cachedPlaying) return
+            /*
+             * 这段宽限期内 Web 层**有没有回过话**：看 `optimisticPlayAtMs` 有没有被清掉
+             * （`updatePlaybackState` 收到任何一次 Web 推来的状态就清）。
+             *
+             * 不能用 `cachedPlaying`：原生在播、Web 因 seek / 切歌中途推一条 paused 时它
+             * 也是 false，会被当成「没回话」，于是冻锚点再补发一条 play —— 正是 #263 要治
+             * 的那类误判，只是方向反过来。
+             */
+            if (optimisticPlayAtMs == 0L) return
             top.izuna.foliamajor.wallpaper.WallpaperLyricsState.setAnchor(playConfirmAnchorMs, false)
             top.izuna.foliamajor.wallpaper.FloatingLyricsOverlay
                     .shared(this@FoliaPlaybackService).invalidateOverlay()
@@ -463,6 +482,8 @@ class FoliaPlaybackService : android.app.Service() {
          */
         playConfirmAnchorMs = clampedAnchorPosition()
         playConfirmPending = true
+        // 记下这一刻：宽限期内 Web 有没有回过话，就看这个值有没有被清掉（见 playConfirmCheck）。
+        optimisticPlayAtMs = now
         // 这是用户新按下的一次播放：允许再补发一次。
         playNudges = 0
         mainHandler.removeCallbacks(playConfirmCheck)
@@ -511,6 +532,7 @@ class FoliaPlaybackService : android.app.Service() {
         sendCommand("pause")
         // 暂停按下就撤回那次乐观播放的确认：方向相反，不需要再等，也不会再补发。
         playConfirmPending = false
+        optimisticPlayAtMs = 0L
         playNudges = 0
         mainHandler.removeCallbacks(playConfirmCheck)
         // 同上，方向相反：不在这里冻结，壁纸会按 playing=true 一路外推到时间轴
@@ -755,6 +777,7 @@ class FoliaPlaybackService : android.app.Service() {
         }
         // 实例要没了：那次等确认的检查也跟着撤掉（它持着 this）。
         playConfirmPending = false
+        optimisticPlayAtMs = 0L
         mainHandler.removeCallbacks(playConfirmCheck)
         // 心跳巡检也跟着撤：服务都死了，没人有资格替播放管线敲心跳。
         mainHandler.removeCallbacks(heartbeatTick)
@@ -2216,6 +2239,8 @@ class FoliaPlaybackService : android.app.Service() {
          */
         val wasOptimisticPlay = playConfirmPending
         playConfirmPending = false
+        // Web 层回过话（无论是 playing 还是 paused）：宽限期内的补发检查到此为止。
+        optimisticPlayAtMs = 0L
         // Web 层回过话，补发额度也就还回去了：下一次用户真的按下播放才再用。
         playNudges = 0
         mainHandler.removeCallbacks(playConfirmCheck)

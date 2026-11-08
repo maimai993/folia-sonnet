@@ -32,6 +32,18 @@ vi.mock('@/services/nativeHttpFetch', () => ({
         (handlers.nativeFetch as NonNullable<typeof handlers.nativeFetch>)(String(input), init),
 }));
 
+// 原生「边读边数」的下载入口：coverBytes 现在走它，而不是 Filesystem.downloadFile。
+vi.mock('@/platform/foliaNative', () => ({
+    nativeDownloadToCache: async ({ url, path }: { url: string; path: string }) => {
+        const state = handlers.filesystem;
+        if (!state) return null;
+        if (state.failDownload) return null;
+        state.downloads.push(url);
+        state.cached.set(path, 648_936);
+        return { url: `https://localhost/_capacitor_file_/data/user/0/app/cache/${path}`, bytes: 648_936 };
+    },
+}));
+
 vi.mock('@capacitor/core', () => ({
     Capacitor: {
         isNativePlatform: () => handlers.filesystem !== null,

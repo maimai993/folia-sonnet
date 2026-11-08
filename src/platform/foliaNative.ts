@@ -127,6 +127,20 @@ interface FoliaNativePlugin {
         path?: string;
         domain?: string;
     }): Promise<{ ok?: boolean }>;
+    /**
+     * 把一份远端资源**边读边数**地落到缓存目录，返回 `file://` 路径。
+     *
+     * 给封面这类「本来可能拿到一个超大文件」的大二进位用（#262）：字节始终留在原生侧，
+     * 网页只拿地址；超过 `maxBytes` 时原生直接 reject，不会先把整份写进磁盘再删。
+     * `path` 是相对缓存目录的路径，不接受绝对路径。
+     */
+    downloadToCache(options: {
+        url: string;
+        path: string;
+        maxBytes?: number;
+        timeoutMs?: number;
+        headers?: Record<string, string>;
+    }): Promise<{ path?: string; bytes?: number }>;
     /** 删一条 cookie（Max-Age=0）。 */
     cookiesRemove(options: { url: string; name: string }): Promise<{ ok?: boolean }>;
     /**
@@ -409,6 +423,39 @@ export const nativeBase64ToBytes = (bodyBase64?: string): Uint8Array => {
         bytes[index] = binary.charCodeAt(index);
     }
     return bytes;
+};
+
+// ─── 大二进位落地（#262）────────────────────────────────────────────────
+//
+// 封面这类东西不该整段过桥：字节在 Java heap 里会被放大好几倍，而调用方往往只想要
+// 「一个能 fetch 的地址」。所以原生自己边读边数地写进缓存目录，这里只拿地址。
+
+/**
+ * 把一份远端资源下载到应用缓存目录，返回可直接 fetch 的地址。
+ *
+ * - 超过 `maxBytes` 时原生 reject，且**不会**先把整份写进磁盘（与
+ *   `@capacitor/filesystem` 的 `downloadFile` 不同：那个在 Android 上是
+ *   `HttpURLConnection` 无上限直写，只能事后 stat 再删）。
+ * - `relativePath` 是相对缓存目录的路径，不允许绝对路径或 `..`。
+ * - 非 Android（桌面 / 网页）返回 null，调用方自行回落。
+ */
+export const nativeDownloadToCache = async (options: {
+    url: string;
+    path: string;
+    maxBytes?: number;
+    timeoutMs?: number;
+    headers?: Record<string, string>;
+}): Promise<{ url: string; bytes: number } | null> => {
+    if (!isCapacitorAndroid()) return null;
+    try {
+        const result = await FoliaNative.downloadToCache(options);
+        if (!result?.path) return null;
+        return { url: Capacitor.convertFileSrc(result.path), bytes: Number(result.bytes) || 0 };
+    } catch (error) {
+        // 超限与网络失败都当「这条没拿到」，由调用方走自己的兜底。
+        console.warn('[FoliaNative] downloadToCache failed', error);
+        return null;
+    }
 };
 
 /** 原生桥给的 base64 响应体 → UTF-8 文本。清单里可能有中文更新日志，必须按 UTF-8 解。 */

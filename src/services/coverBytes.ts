@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 
 import { createNativeFetch, isNativeHttpFetchAvailable } from './nativeHttpFetch';
+import { nativeDownloadToCache } from '../platform/foliaNative';
 
 // src/services/coverBytes.ts
 // 取**封面字节**这一件事，供「要把封面交给原生」的那几处共用。
@@ -22,8 +23,8 @@ import { createNativeFetch, isNativeHttpFetchAvailable } from './nativeHttpFetch
 // 里再放一份 1.33× 的 base64 副本 —— 那条路的峰值是响应体的 6~8 倍，256MB 堆的机器
 // 几十 MB 就 OOM（#261）。下载到缓存目录后只回一个文件地址，字节不进桥。
 //
-// 自建服务（要 cookie 才给图的地址）下不了：Filesystem 的下载不带 WebView
-// 的 cookie。所以最后仍保留一条过桥的兜底，但带上明确的上限。
+// 自建服务（要 cookie 才给图）下不了：原生下载不带 WebView 的 cookie。所以最后仍保留
+// 一条过桥的兜底，但带上明确的上限。
 
 /** 一张封面而已：卡住就换下一条路，别拖着调用方。 */
 const COVER_FETCH_TIMEOUT_MS = 20_000;
@@ -80,11 +81,7 @@ const looksLikeImage = async (path: string): Promise<boolean> => {
     }
 };
 
-/**
- * 同一个 URL 落到同一个文件名，重复取直接命中磁盘缓存。
- *
- * 用 FNV-1a 而不是把 URL 编进文件名：URL 里有 `?` `/` `:`，当文件名用不了。
- */
+/** 同一个 URL 落到同一个文件名，重复取直接命中磁盘缓存。 */
 const coverFileName = (url: string): string => {
     let hash = 2166136261;
     for (let index = 0; index < url.length; index += 1) {
@@ -133,6 +130,9 @@ const pruneCoverCache = async (): Promise<void> => {
  * 原生下载封面到缓存目录，再按同源地址读回字节。
  *
  * 字节始终在原生那一侧落盘，进 WebView 的只有一张图 —— 这正是 #262 要的分流。
+ * 下载走 `nativeDownloadToCache`（OkHttp + 边读边数），**不是** Filesystem 的
+ * `downloadFile`：后者在 Android 上是 `HttpURLConnection` 无上限直写，只能事后
+ * 删文件，期间一张几百 MB 的图照样能把缓存撑满。
  */
 const fetchCoverViaNativeDownload = async (url: string): Promise<Blob | null> => {
     if (!Capacitor.isNativePlatform()) return null;
@@ -151,33 +151,25 @@ const fetchCoverViaNativeDownload = async (url: string): Promise<Blob | null> =>
         if (!uri) {
             await Filesystem.mkdir({ directory: Directory.Cache, path: COVER_CACHE_DIR, recursive: true })
                 .catch(() => undefined);
-            /*
-             * ⚠️ `Filesystem.downloadFile` 没有「边下边数」的上限参数：它先把整份写进 Cache，
-             * 之后才由下面的 stat 判断大小。所以真正拦住超大文件的是事后这一删 —— 与原生
-             * `readCappedBody` 的边读边数不对称，但 Cache 目录本来就能被系统回收，可以接受。
-             *
-             * 请求头与桥那条兜底保持一致：有的图床见到没有 UA 的请求直接不给图。
-             */
-            const done = await Filesystem.downloadFile({
+            // 请求头与桥那条兜底保持一致：有的图床见到没有 UA 的请求直接不给图。
+            const downloaded = await nativeDownloadToCache({
                 url,
-                directory: Directory.Cache,
                 path,
-                connectTimeout: 15_000,
-                readTimeout: COVER_FETCH_TIMEOUT_MS,
+                maxBytes: COVER_MAX_BYTES,
+                timeoutMs: COVER_FETCH_TIMEOUT_MS,
                 headers: {
                     Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
                     'User-Agent': typeof navigator !== 'undefined' ? navigator.userAgent : '',
                 },
             });
-            const stat = await Filesystem.stat({ directory: Directory.Cache, path });
-            const size = Number(stat.size);
-            if (!(size > 0) || size > COVER_MAX_BYTES || !(await looksLikeImage(path))) {
+            if (!downloaded) return null;
+            if (!(await looksLikeImage(path))) {
                 // 不是图（登录页 / 占位图 / 半截文件）：删掉，交给下面带 cookie 的兜底。
                 await Filesystem.deleteFile({ directory: Directory.Cache, path }).catch(() => undefined);
                 return null;
             }
-            uri = done.path ? `file://${done.path}` : stat.uri;
             void pruneCoverCache();
+            uri = `file://${COVER_CACHE_DIR}/${name}`;
         }
         const response = await fetch(Capacitor.convertFileSrc(uri));
         if (!response.ok) return null;
