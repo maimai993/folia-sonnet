@@ -26,7 +26,8 @@ import {
     subscribeDirectorState,
     updateDirectorSettings,
 } from '../../../services/lyricDirector/state';
-import { listDirectorModes } from '../../../services/lyricDirector/catalog';
+import { listDirectorModes, describeHostDirectorMode } from '../../../services/lyricDirector/catalog';
+import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '@/components/visualizer/registry';
 import {
     testConfiguredAiConnection,
     type AiConnectionTestResult,
@@ -161,6 +162,18 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     const fieldClass = 'w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-white/30 transition-colors';
     const ghostButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-default';
     const rowDividerClass = isDaylight ? 'border-black/5' : 'border-white/5';
+
+    /*
+     * 这份清单要能划掉**所有**样式，包括 mod 投稿的那些（mod:<modId>:<id>）。catalog 在叶子层，
+     * 不认识注册表，所以由这里把 mod 的条目递进去；mod 名字取 entry 的 labelKey/fallback，
+     * 与随机池同一个来源，两边叫法不会打架。
+     */
+    const modModes = VISUALIZER_REGISTRY.filter((entry) => entry.mode.startsWith('mod:'));
+    const modModeIds = new Set(modModes.map((entry) => entry.mode));
+    const directorModes = listDirectorModes(
+        (key) => t(key),
+        modModes.map((entry) => describeHostDirectorMode(entry.mode, getVisualizerModeLabel(entry.mode, t))),
+    );
 
     /* The two switches the AI lyric animation director answers to. They sit
      * under the credential because that is what gates them: no key configured,
@@ -495,7 +508,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                         {t('aiDirector.blockedModesDesc')}
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {listDirectorModes((key) => t(key)).map((mode) => {
+                        {directorModes.map((mode) => {
                             const blocked = directorSettings.blockedModes.includes(mode.id);
                             return (
                                 <Button
@@ -503,7 +516,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                                     aria-pressed={blocked}
                                     onClick={() => toggleBlockedMode(mode.id)}
                                     title={mode.hint}
-                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${isDaylight ? 'border-black/15' : 'border-white/15'} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
+                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {mode.label}

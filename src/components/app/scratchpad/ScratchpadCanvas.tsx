@@ -12,14 +12,13 @@ import {
     dropIndexAt,
     gridHeight,
     previewSlots,
-    rectFromPoints,
-    rectsIntersect,
     slotPosition,
     type Point,
     type Rect,
     type Spacing,
 } from './canvasLayout';
 import { clientToLocal } from './scratchpadTilt';
+import { DRAG_THRESHOLD, LONG_PRESS_MS, TOUCH_SLOP, resolveMarquee, type Marquee } from './marqueeGesture';
 import ScratchpadCanvasSide, { type CanvasSide, type JumpTarget } from './ScratchpadCanvasSide';
 import type { ScratchpadShapeKind } from './scratchpadLook';
 import type { ScratchpadAction } from './scratchpadModel';
@@ -91,12 +90,6 @@ type ScratchpadCanvasProps<E extends CanvasEntry> = {
     currentLabel?: string;
 };
 
-/** 按下之后走过这么远才算拖（以内是点击）。 */
-const DRAG_THRESHOLD = 4;
-/** 手指按住卡片多久拿起来。 */
-const LONG_PRESS_MS = 400;
-/** 手指按住期间走过这么远就算在滚动（拿起来之前）。比鼠标的门槛宽：手指按着总会抖一点。 */
-const TOUCH_SLOP = 10;
 /** 一起被拖的几张卡错开叠放的距离。 */
 const STACK_OFFSET = 6;
 /** 一起拖的卡最多画几张叠在指针下（其余的只在按下那张的角标上算个数）。 */
@@ -128,20 +121,6 @@ type Press = {
  * 不挂几百张卡、不每次移动写几百个 MotionValue。其余要挪的卡在拖动期间不画，松手后在新格子里挂回来。
  */
 type Drag = { groupKey: string; moving: ReadonlySet<string>; stack: readonly string[]; dropIndex: number };
-
-type Marquee = {
-    pointerId: number;
-    start: Point;
-    base: ReadonlySet<string>;
-    moved: boolean;
-    /** 松手时没拖就收回（按下时没有选中什么、不是加选、不在组头上）。 */
-    collapses: boolean;
-    /** 框选开始时各组网格原点（内容坐标）与它们的条目。 */
-    grids: { origin: Point; keys: string[] }[];
-    /** 还没处理的最近一次指针位置（视口坐标）：指针事件可能一帧来好几次（高回报率的鼠标上千次每秒），每帧只算一次。 */
-    pending: { clientX: number; clientY: number } | null;
-    frame: number;
-};
 
 /** 浮动菜单落在哪：选中卡片的外框中线上，外框上方（或放不下时下方）。内容坐标。 */
 type MenuAnchor = { centerX: number; y: number; placement: 'above' | 'below' };
@@ -496,63 +475,82 @@ function ScratchpadCanvas<E extends CanvasEntry>({
         clientToLocal(contentRef.current!, { x: event.clientX, y: event.clientY }, tilt)
     );
 
+    /** 这一次框选作废：清定时器、收框，什么都不选（滚动接管、系统取消手势都走这里）。 */
+    const cancelMarquee = () => {
+        const marquee = marqueeStateRef.current;
+        if (marquee?.holdTimer) clearTimeout(marquee.holdTimer);
+        if (marquee?.frame) cancelAnimationFrame(marquee.frame);
+        marqueeStateRef.current = null;
+        setIsBoxSelecting(false);
+        if (marqueeRef.current) marqueeRef.current.hidden = true;
+    };
+
     const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (event.button !== 0 || !contentRef.current) return;
-        // 手指在空白处是滚动（touch-action: pan-y），不框选。
-        if (event.pointerType === 'touch') return;
         if ((event.target as HTMLElement).closest('button, .scratchpad-card')) return;
         // 按在滚动条上（Chromium 也派发 pointerdown）：是滚动，不框选，也不清掉选择。
         const scroller = scrollRef.current;
         if (scroller && clientToLocal(scroller, { x: event.clientX, y: event.clientY }, tilt).x >= scroller.clientWidth) return;
         scrollRef.current?.focus({ preventScroll: true });
         const additive = event.shiftKey || event.ctrlKey || event.metaKey;
-        marqueeStateRef.current = {
+        const held = event.pointerType === 'touch';
+        const marquee: Marquee = {
             pointerId: event.pointerId,
             start: contentPoint(event),
             base: additive ? selected : new Set(),
             moved: false,
-            // 空着的地方点一下、又没有选中什么：收回（同 Esc，用户要的「点空白处退出」）。组头不算空着的地方。
+            // 空着的地方点一下、又没有选中什么：收回（同 Esc）。组头不算空着的地方。
             collapses: !additive && selected.size === 0 && !(event.target as HTMLElement).closest('.scratchpad-group-header'),
+            held,
+            holdTimer: 0,
+            touchOrigin: held ? { clientX: event.clientX, clientY: event.clientY } : null,
             grids: groups.flatMap(group => {
                 const grid = gridRefs.current.get(group.key);
-                if (!grid) return [];
-                return [{ origin: { x: grid.offsetLeft, y: grid.offsetTop }, keys: group.entries.map(entry => entry.key) }];
+                return grid ? [{ origin: { x: grid.offsetLeft, y: grid.offsetTop }, keys: group.entries.map(entry => entry.key) }] : [];
             }),
             pending: null,
             frame: 0,
         };
+        marqueeStateRef.current = marquee;
         event.currentTarget.setPointerCapture(event.pointerId);
+        if (held) {
+            // 到点才「拿起来」：起点要按那一刻的指针位置重记，按住期间手可能抖过。
+            marquee.holdTimer = window.setTimeout(() => {
+                marquee.holdTimer = 0;
+                if (marqueeStateRef.current !== marquee) return;
+                marquee.held = false;
+                marquee.start = contentPoint(marquee.touchOrigin!);
+                setIsBoxSelecting(true);
+            }, LONG_PRESS_MS);
+        }
     };
 
-    /** 按指针这一刻的位置更新框和选择。读一次内容的外框、写一次框的样式、至多 set 一次选择。 */
+    /** 按指针这一刻的位置更新框和选择。 */
     const applyMarquee = (marquee: Marquee, client: { clientX: number; clientY: number }) => {
-        const point = contentPoint(client);
-        if (!marquee.moved && Math.hypot(point.x - marquee.start.x, point.y - marquee.start.y) < DRAG_THRESHOLD) return;
-        if (!marquee.moved) setIsBoxSelecting(true);
-        marquee.moved = true;
+        const wasMoving = marquee.moved;
+        const hit = resolveMarquee(marquee, contentPoint(client), columns, spacing);
+        if (!hit) return;
+        if (!wasMoving) setIsBoxSelecting(true);
         const box = marqueeRef.current;
-        // 框就是内容坐标里两点围成的矩形（起点按内容坐标记着，滚动过也对得上）；纸斜着时它跟着纸斜。
-        const rect = rectFromPoints(marquee.start, point);
-        const hits = (cardBox: Rect) => rectsIntersect(rect, cardBox);
         if (box) {
-            box.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
-            box.style.width = `${rect.right - rect.left}px`;
-            box.style.height = `${rect.bottom - rect.top}px`;
+            box.style.transform = `translate(${hit.rect.left}px, ${hit.rect.top}px)`;
+            box.style.width = `${hit.rect.right - hit.rect.left}px`;
+            box.style.height = `${hit.rect.bottom - hit.rect.top}px`;
             box.hidden = false;
         }
-        const next = new Set(marquee.base);
-        for (const grid of marquee.grids) {
-            grid.keys.forEach((key, index) => {
-                if (hits(cardRect(grid.origin, index, columns, spacing))) next.add(key);
-            });
-        }
-        setSelected(current => (sameSet(current, next) ? current : next));
+        setSelected(current => (sameSet(current, hit.keys) ? current : hit.keys));
     };
 
     // 指针事件只记下位置，下一帧再算：一帧里来多少次都只重算、重渲染一次。
     const handleCanvasPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         const marquee = marqueeStateRef.current;
         if (!marquee || marquee.pointerId !== event.pointerId) return;
+        // 还没拿起来的手指：走动超过 TOUCH_SLOP 就是滚动，这一次框选作废（把滚动让回去）。
+        if (marquee.held) {
+            const origin = marquee.touchOrigin;
+            if (origin && Math.hypot(event.clientX - origin.clientX, event.clientY - origin.clientY) > TOUCH_SLOP) cancelMarquee();
+            return;
+        }
         marquee.pending = { clientX: event.clientX, clientY: event.clientY };
         if (marquee.frame) return;
         marquee.frame = requestAnimationFrame(() => {
@@ -566,12 +564,18 @@ function ScratchpadCanvas<E extends CanvasEntry>({
     const handleCanvasPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
         const marquee = marqueeStateRef.current;
         if (!marquee || marquee.pointerId !== event.pointerId) return;
-        // 还没轮到的最后一次移动先补上：松手那一刻框到哪就选到哪。
-        if (marquee.frame) cancelAnimationFrame(marquee.frame);
-        if (marquee.pending) applyMarquee(marquee, marquee.pending);
-        marqueeStateRef.current = null;
-        setIsBoxSelecting(false);
-        if (marqueeRef.current) marqueeRef.current.hidden = true;
+        if (marquee.holdTimer) clearTimeout(marquee.holdTimer);
+        marquee.holdTimer = 0;
+        // 还没拿起来就松手了（手指点一下空白处）：当作点击，不当框选。
+        if (marquee.held) cancelMarquee();
+        else {
+            // 还没轮到的最后一次移动先补上：松手那一刻框到哪就选到哪。
+            if (marquee.frame) cancelAnimationFrame(marquee.frame);
+            if (marquee.pending) applyMarquee(marquee, marquee.pending);
+            marqueeStateRef.current = null;
+            setIsBoxSelecting(false);
+            if (marqueeRef.current) marqueeRef.current.hidden = true;
+        }
         // 在空白处点一下（没拖）：取消选择；本来就没选中什么时收回（同 Esc）。
         if (marquee.moved) return;
         if (marquee.collapses) onEscape();
@@ -582,6 +586,7 @@ function ScratchpadCanvas<E extends CanvasEntry>({
     useEffect(() => () => {
         const marquee = marqueeStateRef.current;
         if (marquee?.frame) cancelAnimationFrame(marquee.frame);
+        if (marquee?.holdTimer) clearTimeout(marquee.holdTimer);
     }, []);
 
     // 长按在有的浏览器上还会弹出系统菜单（复制图片、选文字）：拿卡片的那一下不要它。
@@ -733,7 +738,7 @@ function ScratchpadCanvas<E extends CanvasEntry>({
                 onPointerDown={handleCanvasPointerDown}
                 onPointerMove={handleCanvasPointerMove}
                 onPointerUp={handleCanvasPointerUp}
-                onPointerCancel={handleCanvasPointerUp}
+                onPointerCancel={cancelMarquee}
                 onContextMenu={handleContextMenu}
             >
                 <div

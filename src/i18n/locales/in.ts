@@ -1,6 +1,42 @@
-﻿
+
 
 export default {
+  "lxmusic": {
+    "importTitle": "Impor sumber",
+    "importNotice": "Sumber yang diimpor menyediakan URL pemutaran dan lirik, didahulukan dari API pemutaran bawaan: pencarian, playlist dan tangga lagu tetap dari endpoint publik LX Music sendiri. Hanya bila semua sumber gagal memberi URL, pemutaran mundur (bila sakelar menyala) ke tautan gratis publik. Skrip sumber berjalan langsung di dalam aplikasi ini, model kepercayaan yang sama dengan LX Music desktop: impor hanya skrip yang kamu percaya.",
+    "importFromUrl": "Dari URL",
+    "importFromFile": "Dari berkas",
+    "urlPlaceholder": "URL skrip sumber, https://…/xxx.js",
+    "import": "Impor",
+    "importing": "Mengimpor…",
+    "chooseFile": "Pilih berkas .js / .json",
+    "dropFileHere": "Letakkan berkas sumber di sini, atau",
+    "multipleFilesHint": "Beberapa berkas sekaligus tidak masalah",
+    "importedOk": "Sumber «{{name}}» diimpor",
+    "importedWithError": "Sumber «{{name}}» diimpor, tetapi skripnya gagal dimuat (lihat di bawah)",
+    "routeAllSongs": "Semua lagu lewat sumber lebih dulu",
+    "routeAllSongsDesc": "Setiap lagu mencoba sumber yang diimpor lebih dulu (termasuk lagu dari NetEase, Kugou, QQ dan lainnya); API pemutaran lama hanya cadangan.",
+    "allowPublicFallback": "Izinkan tautan gratis publik sebagai cadangan",
+    "allowPublicFallbackDesc": "Bila semua sumber gagal, tautan gratis publik boleh dipakai. Bila dimatikan, hanya sumber yang dihitung: tidak bisa diputar berarti tidak diputar.",
+    "importedSources": "Sumber yang diimpor",
+    "importedSourcesDesc": "Tiap sumber bisa dinyalakan atau dimatikan sendiri; yang dimatikan tidak lagi memberi URL tetapi tetap di daftar.",
+    "noSources": "Belum ada sumber yang diimpor.",
+    "enabled": "Aktif",
+    "delete": "Hapus",
+    "author": "Oleh {{name}}",
+    "loadFailed": "Gagal dimuat",
+    "coverage": "Cakupan pemutaran",
+    "diagnosticsTitle": "Diagnostik pemutaran",
+    "copyDiagnostics": "Salin diagnostik",
+    "clearDiagnostics": "Kosongkan catatan",
+    "copiedDiagnostics": "Diagnostik disalin ke papan klip — tempelkan di sini.",
+    "clearedDiagnostics": "Catatan pemutaran sudah dikosongkan.",
+    "diagnosticsHint": "Bila ada lagu yang tidak mau diputar, tekan «Salin diagnostik» dan kirim 40 permintaan URL terakhir.",
+    "lastAttempt": "Permintaan URL terakhir",
+    "unknownSource": "sumber tidak dikenal",
+    "succeeded": "berhasil",
+    "failed": "gagal"
+  },
   "appleMusic": {
     "libraryPlaylistName": "Semua lagu"
   },
@@ -2850,6 +2886,8 @@ export default {
     "appLanguageSystemHint": "Saat ini: {{language}}",
     "playbackEntryView": "Tampilan yang dibuka Putar",
     "playbackEntryViewDesc": "Tampilan mana yang dibuka secara default setelah Anda menekan putar.",
+    "rhineCardVisualizer": "Kartu menjadi visualisator lirik",
+    "rhineCardVisualizerDesc": "Kartu yang terbuka di pustaka Rhine menjadi visualisator lirik Folia. Saat aktif, menekan putar tetap berada di arsip, bukan membuka pemutar layar penuh.",
     "librarySuite": "Antarmuka pustaka",
     "librarySuiteDesc": "Antarmuka yang dipakai untuk beranda, koleksi, dan halaman artis. Saat diganti, filter, pilihan, dan antrean tetap dipertahankan.",
     "libraryWallLook": "Transparansi dinding",

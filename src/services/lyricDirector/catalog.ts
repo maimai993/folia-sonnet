@@ -1,4 +1,4 @@
-import { VISUALIZER_REGISTRY } from '../../components/visualizer/registry';
+import { BUILTIN_VISUALIZER_MODES } from '../../types/visualizerModes';
 import { SONNET_CAMERA_INTENSITY_MAX, type VisualizerMode } from '../../types';
 
 // src/services/lyricDirector/catalog.ts
@@ -48,6 +48,7 @@ const MODE_HINTS: Record<string, string> = {
     prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
     nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
     machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
+    kinetic: '动画 PV 分镜：跳切、故障错位与装饰元素，节奏感极强',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -70,6 +71,7 @@ const MODE_NAMES: Record<string, string> = {
     prompt: '提示词',
     nebbia: '雾笺',
     machi: '町景',
+    kinetic: '文字PV',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -92,6 +94,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     prompt: 'ui.visualizerPrompt',
     nebbia: 'ui.visualizerNebbia',
     machi: 'ui.visualizerMachi',
+    kinetic: 'ui.visualizerKinetic',
 };
 
 export type DirectorParamSpec =
@@ -482,22 +485,14 @@ export const tuningStateKey = (setter: string | null): string | null => {
 };
 
 /*
- * AI 能选的样式：以注册表为准，**包含模组注册的样式**。
+ * AI 能选的样式。
  *
- * 以前这里读的是 `BUILTIN_VISUALIZER_MODES` —— 一份写死的内置清单。模组通过
- * appendVisualizerEntry 加进注册表的样式（跳一跳、黑胶唱片这些）不在清单里，
- * 于是 AI 永远看不见它们：既不会选中，也不会出现在「禁用某些样式」的列表里。
- * 用户看到的就是「跳一跳和黑胶唱片是模组注册的，但 AI 禁用和随机里面没有」。
- *
- * 注册表是运行时的那一份（registry.tsx 的 VISUALIZER_REGISTRY），模组的条目在
- * 加载后就已在其中，所以这里直接用它，顺序也跟样式列表一致。
+ * 模组注册的样式（跳一跳、黑胶唱片这些，id 形如 `mod:<modId>:<id>`）不在这里列举：
+ * 本模块刻意不依赖视觉注册表（注册表会反过来 import 大量渲染代码），由持有它的宿主
+ * 通过 `listDirectorModes(t, extra)` 的 `extra` 传进来，见 listDirectorModesWithHost。
  */
-const directorModeEntries = (): readonly { mode: string; order: number }[] => (
-    [...VISUALIZER_REGISTRY].sort((left, right) => left.order - right.order)
-);
-
 export const isKnownDirectorMode = (mode: unknown): mode is VisualizerMode => (
-    typeof mode === 'string' && VISUALIZER_REGISTRY.some(entry => entry.mode === mode)
+    typeof mode === 'string' && (BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode)
 );
 
 /** Whether the user has told the AI never to pick this mode. */
@@ -505,33 +500,45 @@ export const isBlockedDirectorMode = (mode: string, blockedModes: readonly strin
     Array.isArray(blockedModes) && blockedModes.includes(mode)
 );
 
-/** The modes the AI may choose from, with the label to show for each. */
-export const listDirectorModes = (t?: (key: string) => string): DirectorModeInfo[] => (
-    directorModeEntries().map(({ mode: id }) => ({
-        id: id as VisualizerMode,
+/**
+ * The modes the AI may choose from, with the label to show for each.
+ *
+ * `extra` carries the mod-contributed modes (`mod:<modId>:<id>`) the host has registered, so the
+ * AI's own "never use these" list can show them too. This module stays free of the visualizer
+ * registry: the host that has it hands the entries in (see listDirectorModesWithHost).
+ */
+export const listDirectorModes = (
+    t?: (key: string) => string,
+    extra: readonly DirectorModeInfo[] = [],
+): DirectorModeInfo[] => [
+    ...(BUILTIN_VISUALIZER_MODES as readonly string[]).map((id) => ({
+        id,
         label: modeLabel(id, t),
         hint: MODE_HINTS[id] ?? '',
-    }))
-);
+    })),
+    ...extra,
+];
+
+/** A mod mode's label comes from the registry entry (mods declare their own), not from the tables above. */
+export const describeHostDirectorMode = (
+    id: string,
+    label: string,
+): DirectorModeInfo => ({
+    id,
+    label,
+    hint: MODE_HINTS[id] ?? '',
+});
 
 export const modeLabel = (mode: string, t?: (key: string) => string): string => {
     /*
-     * 先问注册表：它带着每个样式自己的 labelKey 与 labelFallback，内置的和模组的都有。
-     * 模组样式（跳一跳、黑胶唱片…）的翻译键是模组自己声明的，不在这张 MODE_LABEL_KEYS
-     * 表里 —— 以前这里只查这张表，查不到就回落到 `mod:<id>:<x>` 这种英文 id，
-     * 于是 AI 的设置页里模组样式显示成一串英文。这就是「文字没正常汉化」。
+     * 只管内置样式。模组样式的名字由模组自己声明（labelKey / labelFallback），
+     * 宿主读到之后经 describeHostDirectorMode 传进来 —— 本模块不依赖注册表。
      */
-    const entry = VISUALIZER_REGISTRY.find(candidate => candidate.mode === mode);
-    if (entry && t) {
-        const translated = t(entry.labelKey);
-        if (translated && translated !== entry.labelKey) return translated;
-        return entry.labelFallback;
-    }
     const key = MODE_LABEL_KEYS[mode];
     const translated = t && key ? t(key) : '';
     // A missing translation comes back as the key itself.
     if (translated && translated !== key) return translated;
-    return MODE_NAMES[mode] ?? entry?.labelFallback ?? mode;
+    return MODE_NAMES[mode] ?? mode;
 };
 
 /** One compact string per mode: the prompt has to carry all of them. */

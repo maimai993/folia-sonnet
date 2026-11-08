@@ -34,7 +34,7 @@ export const PROVIDER_APP_ICONS: Record<string, string> = {
     // `folia-ytm:` 那种本地协议），但登录窗口那一列平台在两端都画，没图就只剩一个彩色的字。
     spotify: spotifyIcon,
     ytm: ytmIcon,
-    // Apple Music（v0.7.27 上游新增，macOS / Windows 桌面端）：登录窗口那一列与切换器画本尊。
+    // v0.7.27 上游新增的那一家（macOS / Windows 桌面端）：登录窗口那一列与切换器画本尊。
     appleMusic: appleMusicIcon,
 };
 

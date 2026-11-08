@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, TextField, TextArea, Checkbox } from '../ui';
+import { useTranslation } from 'react-i18next';
+import { TextField as UiTextField } from '@/components/ui';
+import { Button, Row, Segmented, Status, TextField, Toggle } from '../modal/settings/kit';
 import { lxSourceStore } from '../../services/onlineMusic/lxmusic/lxSourceStore';
 import { importLxSourceFromFile, importLxSourceFromUrl, type ImportResult } from '../../services/onlineMusic/lxmusic/lxImportService';
 import type { LxSource } from '../../services/onlineMusic/lxmusic/lxTypes';
@@ -18,11 +20,11 @@ import {
 } from '../../services/onlineMusic/lxmusic/lxPreferences';
 
 // src/components/lxmusic/LxSourcePanel.tsx
-// 洛雪「音源」页：粘贴网址导入 / 选 .js·.json 文件导入，列出已导入的音源并启用、停用、删除。
-
-const PLATFORM_LABELS: Record<string, string> = {
-    wy: '网易云', kg: '酷狗', tx: 'QQ', kw: '酷我', mg: '咪咕', local: '本地',
-};
+// 洛雪「音源」这一组行。以前这里是一整块自绘面板：用自己的 .lx-* 类、自己的一套输入框和按钮，
+// 而那套 CSS 只随洛雪工作台加载 —— 放到设置页里就是「有字没样式」，行列与旁边的设置项也对不上。
+// 现在每一块都画成 kit 的行：左边名字与说明，右边控件，与连接与集成页其它行完全同一套。
+//
+// 音源列表是唯一还用 below 的一行：它是有状态的一串条目，做成「右对齐的一颗控件」不像样。
 
 type ImportTab = 'url' | 'file';
 
@@ -31,12 +33,17 @@ type LxSourcePanelProps = {
     onChanged?: () => void;
 };
 
+/** 音源脚本里 `sources` 那一级的平台短名。名字由脚本自己给，这里只是兜底。 */
+const PLATFORM_KEYS: Record<string, string> = {
+    wy: '网易云', kg: '酷狗', tx: 'QQ', kw: '酷我', mg: '咪咕', local: '本地',
+};
+
 export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
+    const { t } = useTranslation();
     const [tab, setTab] = useState<ImportTab>('url');
     const [url, setUrl] = useState('');
     const [busy, setBusy] = useState(false);
     const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-    const [dragging, setDragging] = useState(false);
     const [sources, setSources] = useState<LxSource[]>(() => lxSourceStore.getSources());
     const [diagText, setDiagText] = useState<string | null>(null);
     const [prefs, setPrefs] = useState<LxPreferences>(getLxPreferences);
@@ -67,7 +74,9 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
         if (result.ok) {
             setFeedback({
                 kind: 'ok',
-                text: `已导入音源「${result.source.meta.name}」${result.source.error ? '（但脚本加载出错，见下方）' : ''}。`,
+                text: result.source.error
+                    ? t('lxmusic.importedWithError', { name: result.source.meta.name })
+                    : t('lxmusic.importedOk', { name: result.source.meta.name }),
             });
         } else {
             setFeedback({ kind: 'err', text: result.error });
@@ -83,19 +92,6 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
         setBusy(false);
     };
 
-    const copyDiagnostics = async () => {
-        refreshLastAttempt();
-        const text = formatPlaybackDiagnostics();
-        try {
-            await navigator.clipboard.writeText(text);
-            setDiagText(null);
-            setFeedback({ kind: 'ok', text: '播放诊断已复制到剪贴板，粘贴发出来即可。' });
-        } catch {
-            // 部分 WebView 不给写剪贴板：把文本摊开在页面上，长按也能复制。
-            setDiagText(text);
-        }
-    };
-
     const doImportFiles = async (files: FileList | File[]) => {
         setBusy(true);
         setFeedback(null);
@@ -106,213 +102,223 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
         setBusy(false);
     };
 
+    const copyDiagnostics = async () => {
+        refreshLastAttempt();
+        const text = formatPlaybackDiagnostics();
+        try {
+            await navigator.clipboard.writeText(text);
+            setDiagText(null);
+            setFeedback({ kind: 'ok', text: t('lxmusic.copiedDiagnostics') });
+        } catch {
+            // 部分 WebView 不给写剪贴板：把文本摊开在页面上，长按也能复制。
+            setDiagText(text);
+        }
+    };
+
     return (
-        <div className="flex flex-col gap-4">
-            <div className="lx-notice">
-                导入的音源负责「取播放地址与歌词」，且优先于默认播放接口：搜索、歌单广场、榜单仍由洛雪内置的公开接口提供。
-                只有所有音源都交不出地址时，才会（在开关允许的前提下）退回公开免费直链。
-            </div>
-
-            <div className="lx-notice flex flex-col gap-2">
-                <div className="text-[12px] font-semibold">播放路由</div>
-                <label className="flex items-start gap-2 text-[11px] leading-4">
-                    <Checkbox
-                        type="checkbox"
-                        className="mt-0.5 shrink-0"
-                        checked={prefs.routeAllSongs}
-                        onChange={(event) => setLxPreferences({ routeAllSongs: event.target.checked })}
-                    />
-                    <span>所有歌曲都先走导入的音源（含网易云 / 酷狗 / QQ 等其它来源）；音源都失败才回落原来的播放接口。</span>
-                </label>
-                <label className="flex items-start gap-2 text-[11px] leading-4">
-                    <Checkbox
-                        type="checkbox"
-                        className="mt-0.5 shrink-0"
-                        checked={prefs.allowPublicFallback}
-                        onChange={(event) => setLxPreferences({ allowPublicFallback: event.target.checked })}
-                    />
-                    <span>音源全失败时允许公开免费直链兜底。关掉后严格只用音源，放不出来就是放不出来。</span>
-                </label>
-                {lastAttempt && (
-                    <p className="text-[10.5px] leading-4 text-[color:var(--lx-faint)]">
-                        最近一次取地址：{lastAttempt.ok ? '成功' : '失败'} · {lastAttempt.via ?? '未知来源'}
-                        {lastAttempt.host ? ` · ${lastAttempt.host}` : ''}
-                        {lastAttempt.name ? ` · ${lastAttempt.name}` : ''}
-                    </p>
-                )}
-            </div>
-
-            <div className="lx-chips">
-                <Button type="button" className="lx-chip" data-active={tab === 'url'} onClick={() => setTab('url')}>在线导入</Button>
-                <Button type="button" className="lx-chip" data-active={tab === 'file'} onClick={() => setTab('file')}>本地文件</Button>
-            </div>
+        <>
+            {/* 导入 */}
+            <Row
+                label={t('lxmusic.importTitle')}
+                note={t('lxmusic.importNotice')}
+            >
+                <Segmented
+                    value={tab}
+                    options={[
+                        { value: 'url' as const, label: t('lxmusic.importFromUrl') },
+                        { value: 'file' as const, label: t('lxmusic.importFromFile') },
+                    ]}
+                    onChange={setTab}
+                />
+            </Row>
 
             {tab === 'url' ? (
-                <div className="flex flex-col gap-2">
-                    <div className="lx-search-row">
-                        <TextField
-                            className="lx-input"
-                            value={url}
-                            onChange={(event) => setUrl(event.target.value)}
-                            onKeyDown={(event) => { if (event.key === 'Enter') void doImportUrl(); }}
-                            placeholder="音源脚本地址，https://…/xxx.js"
-                            inputMode="url"
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
-                        <Button type="button" className="lx-btn" onClick={() => void doImportUrl()} disabled={busy || !url.trim()}>
-                            {busy ? '导入中…' : '导入'}
+                <Row sub>
+                    <span className="flex w-full flex-wrap items-center justify-end gap-2">
+                        <span className="min-w-[180px] flex-[1_1_180px]">
+                            <TextField
+                                type="url"
+                                value={url}
+                                onChange={setUrl}
+                                onCommit={() => void doImportUrl()}
+                                placeholder={t('lxmusic.urlPlaceholder')}
+                                disabled={busy}
+                            />
+                        </span>
+                        <Button variant="primary" onClick={() => void doImportUrl()} disabled={busy || !url.trim()}>
+                            {busy ? t('lxmusic.importing') : t('lxmusic.import')}
                         </Button>
-                    </div>
-                </div>
+                    </span>
+                </Row>
             ) : (
-                <div
-                    onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-                    onDragLeave={() => setDragging(false)}
-                    onDrop={(event) => {
-                        event.preventDefault();
-                        setDragging(false);
-                        if (event.dataTransfer.files.length) void doImportFiles(event.dataTransfer.files);
-                    }}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center ${dragging ? 'border-[var(--lx-accent)]' : 'border-[var(--lx-line)]'}`}
-                >
-                    <p className="text-xs text-[color:var(--lx-soft)]">把音源文件拖到这里，或</p>
-                    <Button type="button" className="lx-btn" onClick={() => fileInputRef.current?.click()}>选择 .js / .json 文件</Button>
-                    <TextField
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".js,.json,application/javascript,application/json"
-                        multiple
-                        className="hidden"
-                        onChange={(event) => {
-                            if (event.target.files?.length) void doImportFiles(event.target.files);
-                            event.target.value = '';
-                        }}
-                    />
-                    <p className="text-[11px] text-[color:var(--lx-faint)]">支持一次选多个文件</p>
-                </div>
+                <Row sub>
+                    <span className="flex w-full flex-wrap items-center justify-end gap-2">
+                        <Button onClick={() => fileInputRef.current?.click()} disabled={busy}>
+                            {t('lxmusic.chooseFile')}
+                        </Button>
+                        <span className="w-full text-right text-xs text-[color:var(--st-t3)]">{t('lxmusic.multipleFilesHint')}</span>
+                        <UiTextField
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".js,.json,application/javascript,application/json"
+                            multiple
+                            className="hidden"
+                            onChange={(event) => {
+                                if (event.target.files?.length) void doImportFiles(event.target.files);
+                                event.target.value = '';
+                            }}
+                        />
+                    </span>
+                </Row>
             )}
 
             {feedback && (
-                <div
-                    className="rounded-lg px-3 py-2 text-[11.5px] leading-5"
-                    style={{
-                        color: feedback.kind === 'ok' ? '#16a34a' : '#e11d48',
-                        background: feedback.kind === 'ok' ? 'rgba(22,163,74,.1)' : 'rgba(225,29,72,.1)',
-                    }}
-                >
-                    {feedback.text}
-                </div>
+                <Row label={<Status tone={feedback.kind === 'ok' ? 'ok' : 'error'}>{feedback.text}</Status>} />
             )}
 
-            <div className="flex items-center gap-3 text-[11px] text-[color:var(--lx-faint)]">
-                <span>播放覆盖：</span>
-                {LX_PUBLIC_PLATFORMS.map((platform) => {
-                    const ok = lxSourceStore.canResolve(platform.key, 'musicUrl') || platform.key === 'kw';
-                    return (
-                        <span key={platform.key} style={{ color: ok ? platform.color : undefined }}>
-                            {platform.label}{ok ? ' ✓' : ' —'}
-                        </span>
-                    );
-                })}
-            </div>
+            {/* 播放路由 */}
+            <Row
+                label={t('lxmusic.routeAllSongs')}
+                note={t('lxmusic.routeAllSongsDesc')}
+            >
+                <Toggle
+                    checked={prefs.routeAllSongs}
+                    onChange={(next: boolean) => setLxPreferences({ routeAllSongs: next })}
+                    label={t('lxmusic.routeAllSongs')}
+                />
+            </Row>
+            <Row
+                label={t('lxmusic.allowPublicFallback')}
+                note={t('lxmusic.allowPublicFallbackDesc')}
+            >
+                <Toggle
+                    checked={prefs.allowPublicFallback}
+                    onChange={(next: boolean) => setLxPreferences({ allowPublicFallback: next })}
+                    label={t('lxmusic.allowPublicFallback')}
+                />
+            </Row>
+            {lastAttempt && (
+                <Row sub>
+                    <span className="w-full text-right text-xs text-[color:var(--st-t3)]">
+                        {t('lxmusic.lastAttempt')}：{lastAttempt.ok ? t('lxmusic.succeeded') : t('lxmusic.failed')}
+                        {' · '}{lastAttempt.via ?? t('lxmusic.unknownSource')}
+                        {lastAttempt.host ? ` · ${lastAttempt.host}` : ''}
+                    </span>
+                </Row>
+            )}
 
-            <div>
-                <div className="mb-2 text-[11px] font-medium text-[color:var(--lx-faint)]">已导入音源（{sources.length}）</div>
-                {sources.length === 0 ? (
-                    <p className="lx-empty">还没有导入任何音源。</p>
-                ) : (
-                    <ul className="flex flex-col gap-2">
-                        {sources.map((source) => (
-                            <li key={source.id} className="rounded-xl border border-[var(--lx-line)] p-3">
-                                <div className="flex items-start gap-3">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="truncate text-[13px] font-semibold">{source.meta.name}</span>
-                                            {source.meta.version && (
-                                                <span className="rounded bg-[var(--lx-fill2)] px-1.5 text-[10px] text-[color:var(--lx-soft)]">
-                                                    v{source.meta.version}
-                                                </span>
+            {/* 播放覆盖：哪些平台现在有音源能取到地址 */}
+            <Row label={t('lxmusic.coverage')}>
+                <span className="flex flex-wrap items-center justify-end gap-2 text-xs">
+                    {LX_PUBLIC_PLATFORMS.map((platform) => {
+                        const ok = lxSourceStore.canResolve(platform.key, 'musicUrl') || platform.key === 'kw';
+                        return (
+                            <span
+                                key={platform.key}
+                                className="rounded bg-[var(--st-fill)] px-1.5 py-0.5 text-[color:var(--st-t2)]"
+                                style={ok ? { color: platform.color } : undefined}
+                            >
+                                {platform.label}{ok ? ' ✓' : ' —'}
+                            </span>
+                        );
+                    })}
+                </span>
+            </Row>
+
+            {/* 已导入音源 */}
+            <Row
+                label={`${t('lxmusic.importedSources')}（${sources.length}）`}
+                note={t('lxmusic.importedSourcesDesc')}
+                below={(
+                    sources.length === 0 ? (
+                        <p className="text-xs leading-5 text-[color:var(--st-t3)]">{t('lxmusic.noSources')}</p>
+                    ) : (
+                        <ul className="flex flex-col gap-2">
+                            {sources.map((source) => (
+                                <li key={source.id} className="rounded-lg bg-[var(--st-fill)] px-3 py-2">
+                                    <div className="flex items-start gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="truncate text-[13px] font-semibold text-[color:var(--st-t1)]">{source.meta.name}</span>
+                                                {source.meta.version && (
+                                                    <span className="rounded bg-[var(--st-raise)] px-1.5 text-[10px] text-[color:var(--st-t2)]">
+                                                        v{source.meta.version}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {source.meta.author && (
+                                                <p className="mt-0.5 truncate text-[11px] text-[color:var(--st-t3)]">
+                                                    {t('lxmusic.author', { name: source.meta.author })}
+                                                </p>
                                             )}
-                                        </div>
-                                        {source.meta.author && (
-                                            <p className="mt-0.5 truncate text-[11px] text-[color:var(--lx-faint)]">作者：{source.meta.author}</p>
-                                        )}
-                                        <div className="mt-1.5 flex flex-wrap gap-1">
-                                            {Object.entries(source.sources).map(([key, info]) => (
-                                                <span key={key} className="rounded bg-[var(--lx-fill2)] px-1.5 py-0.5 text-[10px] text-[color:var(--lx-soft)]">
-                                                    {PLATFORM_LABELS[key] ?? key}
-                                                    {info?.actions?.includes('musicUrl') ? ' · 播放' : ''}
-                                                    {info?.actions?.includes('lyric') ? ' · 歌词' : ''}
-                                                </span>
-                                            ))}
+                                            <div className="mt-1.5 flex flex-wrap gap-1">
+                                                {Object.entries(source.sources).map(([key, info]) => (
+                                                    <span key={key} className="rounded bg-[var(--st-raise)] px-1.5 py-0.5 text-[10px] text-[color:var(--st-t2)]">
+                                                        {PLATFORM_KEYS[key] ?? key}
+                                                        {info?.actions?.includes('musicUrl') ? ' · 播放' : ''}
+                                                        {info?.actions?.includes('lyric') ? ' · 歌词' : ''}
+                                                    </span>
+                                                ))}
+                                                {source.error && (
+                                                    <span className="rounded bg-[#e11d48]/15 px-1.5 py-0.5 text-[10px] text-[#e11d48]">{t('lxmusic.loadFailed')}</span>
+                                                )}
+                                            </div>
                                             {source.error && (
-                                                <span className="rounded bg-[#e11d48]/15 px-1.5 py-0.5 text-[10px] text-[#e11d48]">加载失败</span>
+                                                <p className="mt-1 break-all text-[10px] leading-4 text-[#e11d48]">{source.error}</p>
                                             )}
                                         </div>
-                                        {source.error && (
-                                            <p className="mt-1 break-all text-[10px] leading-4 text-[#e11d48]">{source.error}</p>
-                                        )}
-                                    </div>
-                                    <div className="flex shrink-0 flex-col items-end gap-2">
-                                        <label className="flex items-center gap-1.5 text-[11px] text-[color:var(--lx-soft)]">
-                                            <Checkbox
-                                                type="checkbox"
+                                        <div className="flex shrink-0 flex-col items-end gap-2">
+                                            <Toggle
                                                 checked={source.enabled}
                                                 onChange={() => { void lxSourceStore.setEnabled(source.id, !source.enabled); }}
+                                                label={t('lxmusic.enabled')}
                                             />
-                                            启用
-                                        </label>
-                                        <Button
-                                            type="button"
-                                            onClick={() => { void lxSourceStore.removeSource(source.id); }}
-                                            className="rounded px-2 py-1 text-[11px] text-[#e11d48] transition-colors hover:bg-[#e11d48]/10"
-                                        >
-                                            删除
-                                        </Button>
+                                            <Button
+                                                variant="quiet"
+                                                onClick={() => { void lxSourceStore.removeSource(source.id); }}
+                                            >
+                                                {t('lxmusic.delete')}
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
+                                </li>
+                            ))}
+                        </ul>
+                    )
                 )}
-            </div>
+            />
 
-            <div className="lx-notice flex flex-wrap items-center gap-2">
-                <Button type="button" className="lx-btn-ghost" onClick={() => { void copyDiagnostics(); }}>复制播放诊断</Button>
-                <Button
-                    type="button"
-                    className="lx-btn-ghost"
-                    onClick={() => { clearPlaybackDiagnostics(); setDiagText(null); setLastAttempt(null); setFeedback({ kind: 'ok', text: '播放记录已清空。' }); }}
-                >
-                    清空记录
-                </Button>
-                <span>有歌放不出来时点「复制播放诊断」，把最近 40 次取地址的现场发给开发者。</span>
-            </div>
+            {/* 诊断 */}
+            <Row
+                label={t('lxmusic.diagnosticsTitle')}
+                note={t('lxmusic.diagnosticsHint')}
+            >
+                <span className="flex flex-wrap items-center justify-end gap-2">
+                    <Button onClick={() => { void copyDiagnostics(); }}>{t('lxmusic.copyDiagnostics')}</Button>
+                    <Button
+                        onClick={() => {
+                            clearPlaybackDiagnostics();
+                            setDiagText(null);
+                            setLastAttempt(null);
+                            setFeedback({ kind: 'ok', text: t('lxmusic.clearedDiagnostics') });
+                        }}
+                    >
+                        {t('lxmusic.clearDiagnostics')}
+                    </Button>
+                </span>
+            </Row>
             {diagText && (
-                <TextArea
-                    readOnly
-                    value={diagText}
-                    rows={8}
-                    aria-label="播放诊断文本"
-                    style={{
-                        width: '100%', minHeight: 160, fontSize: 11, lineHeight: 1.5,
-                        background: 'rgba(0,0,0,.35)', color: 'inherit',
-                        border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, padding: 8,
-                    }}
-                />
+                <Row below={(
+                    // 只读的诊断原文：不是输入框，所以是一段可长按选中的文字，不是手写控件。
+                    <pre
+                        aria-label={t('lxmusic.diagnosticsTitle')}
+                        className="st-scroll m-0 max-h-52 w-full select-text overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--st-fill)] px-2.5 py-2 font-mono text-[11px] leading-4 text-[color:var(--st-t1)]"
+                    >
+                        {diagText}
+                    </pre>
+                )} />
             )}
-
-            <p className="text-[10.5px] leading-4 text-[color:var(--lx-faint)]">
-                音源脚本在本应用内直接执行，与洛雪桌面端同一个信任模型：只导入你信得过的脚本。
-            </p>
-
-            <p className="text-[10px] leading-4 text-[color:var(--lx-faint)]">
-                当前安装包 v{typeof __APP_VERSION__ === 'undefined' ? '?' : __APP_VERSION__}
-                {typeof __COMMIT_HASH__ === 'undefined' ? '' : ` · 构建 ${__COMMIT_HASH__.slice(0, 7)}`}
-            </p>
-        </div>
+        </>
     );
 };
 

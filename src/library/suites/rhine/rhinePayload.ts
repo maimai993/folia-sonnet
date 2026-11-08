@@ -67,8 +67,8 @@ export const queueOf = (payload: RhinePayload, id: string): unknown[] => {
         .filter(Boolean);
 };
 
-/** 一列最多放多少条。RhineLab 的阵列高度是固定的，太多会挤。 */
-const TRACKS_PER_COLUMN = 16;
+/** 一列最多放多少条。0 = 不设上限：歌单有多长就取多长。 */
+const TRACKS_PER_COLUMN = 0;
 /**
  * 最多几列。
  *
@@ -160,6 +160,8 @@ export const buildRhinePayload = async (props: RhineCollectionInputs): Promise<R
     const laneOf: Record<string, string> = {};
     // 只保留真的取到曲目的歌单，否则阵列里会出现一整列空白。
     const columns: string[] = [];
+    /** 每列实际取到的条数，用来给档案号排号（不能再用「列序号 × 固定上限」）。 */
+    const laneWidths: number[] = [];
 
     await Promise.all(
         entries.map(async entry => {
@@ -167,26 +169,33 @@ export const buildRhinePayload = async (props: RhineCollectionInputs): Promise<R
             try {
                 const page = await omni.getCollectionTracks(
                     entry.collection as never,
-                    { limit: TRACKS_PER_COLUMN, offset: 0 } as never,
+                    (TRACKS_PER_COLUMN > 0
+                        ? { limit: TRACKS_PER_COLUMN, offset: 0 }
+                        : {}) as never,
                 );
-                items = ((page as { items?: unknown[] } | null)?.items ?? []).slice(0, TRACKS_PER_COLUMN);
+                items = (page as { items?: unknown[] } | null)?.items ?? [];
+                if (TRACKS_PER_COLUMN > 0) items = items.slice(0, TRACKS_PER_COLUMN);
             } catch (error) {
                 console.warn('[rhine] 取歌单曲目失败', entry.name, error);
                 return;
             }
             if (!items.length) return;
 
+            const lane = columns.length;
             columns.push(entry.name);
+            laneWidths[lane] = items.length;
             items.forEach((item, index) => {
                 /*
                  * id 必须是 `X-NNN` 这种形态。
                  *
                  * 界面上「FILE NUMBER: X-027」是直接从 id 解析出来的，
                  * 之前用 `歌单#0` 这种拼接，解析不出数字就显示成 `X-NaN`。
-                 * 这里用「列序号 × 每列上限 + 列内下标」算，不依赖并发完成的先后顺序。
+                 * 这里用「前面各列的条数之和 + 列内下标」算，不依赖并发完成的
+                 * 先后顺序，也不再依赖每列固定 16 条。
                  */
-                const lane = entries.indexOf(entry);
-                const serial = lane * TRACKS_PER_COLUMN + index + 1;
+                const serial = laneWidths
+                    .slice(0, lane)
+                    .reduce((sum, width) => sum + (width || 0), index + 1);
                 const id = `X-${String(serial).padStart(3, '0')}`;
                 const song = item as { name?: unknown; album?: { name?: unknown } };
                 const title = text(song?.name) || `#${index + 1}`;
