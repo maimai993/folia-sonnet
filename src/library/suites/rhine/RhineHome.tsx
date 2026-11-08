@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryHomeSurfaceProps } from '../../core/suite/suite.contract';
+import { useLibraryHomeFeed } from '../../core/home/online/useLibraryHomeOnlineFeeds';
 import { buildRhinePayload, queueOf, searchIdOf, songToSearchRecord, type RhinePayload } from './rhinePayload';
 import { omni } from '../../../services/onlineMusic/omni';
 import { activeProviderId } from '../../../services/onlineMusic/omni/activeProvider';
@@ -42,6 +43,18 @@ const RHINE_PAGE = './rhinelab/rhine.htm#folia';
 
 const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     const { t, i18n } = useTranslation();
+    const { cloudPlaylist } = props;
+    // 宿主会 filter 出新数组；集合对象和顺序没变时沿用输入，切歌不重新读曲目。
+    const playlistsRef = useRef(props.playlists);
+    if (playlistsRef.current !== props.playlists && (
+        playlistsRef.current?.length !== props.playlists?.length
+        || !playlistsRef.current?.every((collection, index) => collection === props.playlists?.[index])
+    )) {
+        playlistsRef.current = props.playlists;
+    }
+    const playlists = playlistsRef.current;
+    // 资源实例寿命稳定，收藏专辑内容的变化必须订阅；只看 data，状态切换不重抓曲目。
+    const { data: favoriteAlbums } = useLibraryHomeFeed(props.homeResources.favoriteAlbums);
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const [ready, setReady] = useState(false);
     /** 转换好的曲库载荷；iframe 就绪后推给它。 */
@@ -117,7 +130,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
      */
     useEffect(() => {
         let disposed = false;
-        void buildRhinePayload(props)
+        void buildRhinePayload({ playlists, cloudPlaylist, favoriteAlbums })
             .then(payload => {
                 if (disposed || !payload) return;
                 payloadRef.current = payload;
@@ -127,8 +140,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
         return () => {
             disposed = true;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [props]);
+    }, [playlists, cloudPlaylist, favoriteAlbums, pushPayload]);
 
     /*
      * 播放 / 入队。
@@ -144,6 +156,8 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
         const play = props.onPlaySong;
         const enqueueAll = props.onAddAllToQueue;
         const onMessage = (event: MessageEvent): void => {
+            const frame = frameRef.current?.contentWindow;
+            if (!frame || event.source !== frame) return;
             const data = event.data as { type?: string; id?: string; query?: string } | null;
             if (!data) return;
 
@@ -187,8 +201,6 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
 
             if (data.type === 'rhine-search') {
                 const query = typeof data.query === 'string' ? data.query.trim() : '';
-                const frame = event.source as Window | null;
-                if (!frame) return;
                 if (!query) {
                     frame.postMessage({ type: 'rhine-search-result', query, records: [] }, '*');
                     return;
@@ -255,7 +267,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
         };
         window.addEventListener('message', onMessage);
         return () => window.removeEventListener('message', onMessage);
-    }, [props.onPlaySong, props.onAddAllToQueue, props.onAddSongToQueue]);
+    }, [props.onPlaySong, props.onAddAllToQueue, props.onAddSongToQueue, props.localSongs, props.localLibraryCatalog, t]);
 
 
     /*
