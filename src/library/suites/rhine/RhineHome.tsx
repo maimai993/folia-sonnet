@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryHomeSurfaceProps } from '../../core/suite/suite.contract';
 import { buildRhinePayload, queueOf, searchIdOf, songToSearchRecord, type RhinePayload } from './rhinePayload';
@@ -40,9 +40,44 @@ import { LogIn } from 'lucide-react';
 
 const RHINE_PAGE = './rhinelab/rhine.htm#folia';
 
+/*
+ * 清掉三维阵列的「续播」标记。
+ *
+ * RhineLabUI 在用户点播放时往 sessionStorage 写 `rhine-resume=1`，之后每次加载
+ * 只要读到它就 `ei("archive")` —— 直接跳到档案阵列，**整段开屏连同 `array`
+ * 阶段（`SELECTING FILES...`）一起跳过**。表现就是「开屏动画还是在完成播放」：
+ * 一进来几秒就到底了，那 22 秒的 ACCESS / LOGO / AUTH 全没有。
+ *
+ * 这个标记本来是给「切走再切回来别重放开屏」用的，但 Folia 这边首页是常驻挂载
+ * 的，iframe 不会重载 —— 能走到这里的都是真正重新进入。所以每次挂载都清掉，
+ * 让开屏老老实实播完。
+ *
+ * 必须由**宿主**清：iframe 是独立 browsing context，读的是同一个 origin 的
+ * sessionStorage，宿主先写掉、它启动时自然读到空。iframe 内联脚本跑得比 onLoad
+ * 早，所以挂在组件挂载期，不能挂在 onLoad 里。
+ */
+const clearResumeFlag = (): void => {
+    try {
+        window.sessionStorage.removeItem('rhine-resume');
+    } catch (error) {
+        // 私密模式等场景下 sessionStorage 可能不可写，开屏本来也就不受影响。
+        console.warn('[rhine] 无法清除续播标记', error);
+    }
+};
+
 const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     const { t, i18n } = useTranslation();
     const frameRef = useRef<HTMLIFrameElement | null>(null);
+    /*
+     * 开屏前先清续播标记：否则整段开屏（含 SELECTING FILES）会被跳过。
+     *
+     * 用 layout effect 而不是普通 effect：iframe 的 src 在首次绘制时就生效了，
+     * 内联脚本随时可能跑；layout effect 在浏览器绘制前、且早于 iframe 加载，
+     * 是能稳定赶在它前面的那一档。
+     */
+    useLayoutEffect(() => {
+        clearResumeFlag();
+    }, []);
     const [ready, setReady] = useState(false);
     /** 转换好的曲库载荷；iframe 就绪后推给它。 */
     const payloadRef = useRef<RhinePayload | null>(null);
@@ -115,9 +150,9 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
      * 这里只给上限，不规定它内部怎么画：台前 60 帧 / 静止 12 帧 / DPR 压到 1.5。
      * 像素比是这里面最有效的一条 —— 高 DPR 屏按 2.5 倍画，像素量是 1.5 倍的近三倍。
      *
-     * `activeMs` 给到 9 秒是有原因的：开屏那 22 秒、卡片入场那约 6 秒的波浪都是
-     * 时间驱动的，没有手指输入。窗口太短（原来是 900ms）它们就被当成「静止」压到
-     * 12 帧，看着就是动画在掉帧。9 秒够盖住一次完整入场，松手后也不会一直不省电。
+     * `activeMs` 给到 9 秒、`bootGraceMs` 给到 40 秒都是有原因的：开屏那 22 秒、
+     * 卡片入场那约 6 秒的波浪都是时间驱动的，没有手指输入。窗口太短（原来是
+     * 900ms / 无宽限期）它们就被当成「静止」压到 12 帧，看着就是动画在掉帧。
      * 补丁脚本在 rhinelab/folia-rhine-patch.js，消息在 rhine.htm 的桥里落地。
      */
     useEffect(() => {
@@ -130,6 +165,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
                     maxFps: 60,
                     idleFps: 12,
                     activeMs: 9000,
+                    bootGraceMs: 40000,
                     maxPixelRatio: 1.5,
                 },
             },
@@ -344,6 +380,8 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
                     pushPayload();
                 }}
             />
+
+
 
             {/*
                 开屏完成前先盖一层同色底，避免 iframe 白闪。

@@ -29,9 +29,9 @@
          *
          * 开屏（n=0 到 22）、SELECTING FILES、卡片入场（到 28.3）全是时间驱动的，
          * 期间一个手势都没有 —— 只靠 activeMs 覆盖不到，整段开屏会被压到 12 帧。
-         * 25 秒足够盖住 whole 开屏 + 入场，之后才开始省电。
+         * 40 秒足够盖住「开屏 22s + 入场 6s」再留余量；之后才开始省电。
          */
-        bootGraceMs: 25000,
+        bootGraceMs: 40000,
         /** devicePixelRatio 上限；0 = 不压。 */
         maxPixelRatio: 1.5,
     };
