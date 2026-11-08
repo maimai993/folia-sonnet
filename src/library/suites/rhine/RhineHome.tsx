@@ -114,6 +114,10 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
      *
      * 这里只给上限，不规定它内部怎么画：台前 60 帧 / 静止 12 帧 / DPR 压到 1.5。
      * 像素比是这里面最有效的一条 —— 高 DPR 屏按 2.5 倍画，像素量是 1.5 倍的近三倍。
+     *
+     * `activeMs` 给到 9 秒是有原因的：开屏那 22 秒、卡片入场那约 6 秒的波浪都是
+     * 时间驱动的，没有手指输入。窗口太短（原来是 900ms）它们就被当成「静止」压到
+     * 12 帧，看着就是动画在掉帧。9 秒够盖住一次完整入场，松手后也不会一直不省电。
      * 补丁脚本在 rhinelab/folia-rhine-patch.js，消息在 rhine.htm 的桥里落地。
      */
     useEffect(() => {
@@ -125,7 +129,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
                 policy: {
                     maxFps: 60,
                     idleFps: 12,
-                    activeMs: 900,
+                    activeMs: 9000,
                     maxPixelRatio: 1.5,
                 },
             },

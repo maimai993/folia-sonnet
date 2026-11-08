@@ -19,10 +19,26 @@ const failures = [];
 const simulate = (idleFps, spanMs) => {
     let now = 0;
     const timers = [];
+    /*
+     * 补丁现在会碰 DOM（SELECTING 动画那一段）：给一个最小 document 桩，
+     * readyState 设成 complete 直接走同步安装分支，installSelectingAnimations
+     * 在 body 缺失时会立刻返回，不影响节流这部分测量。
+     */
+    const fakeDocument = {
+        readyState: 'complete',
+        body: null,
+        head: null,
+        documentElement: null,
+        getElementById: () => null,
+        querySelector: () => null,
+        createElement: () => ({ dataset: {}, style: {}, className: '', textContent: '' }),
+        addEventListener() {},
+    };
     const fake = {
         addEventListener() {},
         matchMedia: () => ({ matches: false }),
         devicePixelRatio: 3,
+        document: fakeDocument,
         setTimeout: (fn, ms) => {
             const timer = { at: now + (ms || 0), fn };
             timers.push(timer);
@@ -49,15 +65,16 @@ const simulate = (idleFps, spanMs) => {
     };
     fake.window = fake;
     const factory = new Function(
-        'window', 'HTMLCanvasElement', 'MessageEvent', 'performance',
+        'window', 'document', 'HTMLCanvasElement', 'MessageEvent', 'performance',
         'setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame',
         `${source}; return window;`,
     );
     const scope = factory(
-        fake, fake.HTMLCanvasElement, fake.MessageEvent, fake.performance,
+        fake, fakeDocument, fake.HTMLCanvasElement, fake.MessageEvent, fake.performance,
         fake.setTimeout, fake.clearTimeout, fake.requestAnimationFrame, fake.cancelAnimationFrame,
     );
-    if (idleFps !== undefined) scope.__FOLIA_RHINE_SET__({ idleFps });
+    // 宽限期会让前 25 秒一律走 maxFps，量 idleFps 时把它关掉。
+    if (idleFps !== undefined) scope.__FOLIA_RHINE_SET__({ idleFps, bootGraceMs: 0 });
 
     let frames = 0;
     const start = now;

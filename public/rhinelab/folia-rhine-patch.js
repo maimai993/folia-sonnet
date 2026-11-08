@@ -23,13 +23,22 @@
         /** 静止时降到几帧；0 = 不降。 */
         idleFps: REDUCED ? 8 : 12,
         /** 最后一次输入之后多久算「还在动」。 */
-        activeMs: 900,
+        activeMs: 9000,
+        /**
+         * 页面加载后的宽限期，这段时间一律按 maxFps 画。
+         *
+         * 开屏（n=0 到 22）、SELECTING FILES、卡片入场（到 28.3）全是时间驱动的，
+         * 期间一个手势都没有 —— 只靠 activeMs 覆盖不到，整段开屏会被压到 12 帧。
+         * 25 秒足够盖住 whole 开屏 + 入场，之后才开始省电。
+         */
+        bootGraceMs: 25000,
         /** devicePixelRatio 上限；0 = 不压。 */
         maxPixelRatio: 1.5,
     };
     window.__FOLIA_RHINE__ = policy;
 
     /* —— 活动期判定 —— */
+    var BOOT_AT = performance.now();
     var moving = false;
     var movingTimer = 0;
     function noteActivity() {
@@ -44,8 +53,13 @@
         window.addEventListener(type, noteActivity, { passive: true, capture: true });
     });
 
+    /** 开屏期间不节流：那一段没有任何输入，只能按加载后经过的时间判断。 */
+    function inBootGrace() {
+        return policy.bootGraceMs > 0 && performance.now() - BOOT_AT < policy.bootGraceMs;
+    }
+
     function targetFps() {
-        return moving ? policy.maxFps : policy.idleFps;
+        return moving || inBootGrace() ? policy.maxFps : policy.idleFps;
     }
 
     /*
@@ -163,12 +177,111 @@
         return context;
     };
 
+    /*
+     * `SELECTING FILES...` 阶段的动画。
+     *
+     * 那一段（n=22 到 25.68，约 3.7 秒）原本只有打字机：一个文本节点被 slice()
+     * 一点点补全，打完就静止等着，屏幕上只剩一行白字，跟前后两段（开屏有扫描线、
+     * 入场有波浪）比显得空。这里不动它的打字逻辑，只在同一个节点上补一层：
+     *
+     *   - 正在打字时：给字末加一个光标块（CSS 伪元素做不到「跟住字符数」，用
+     *     Attr 监听拿到当前文本长度，喂给 ::after 的 width）。
+     *   - 打完之后：字本身开始呼吸，底下一条进度细线走完后一起淡出。
+     *
+     * 全部走 CSS animation（合成层），不占 JS 帧；节流器压到 12 帧时它照样顺滑。
+     */
+    function installSelectingAnimations() {
+        if (!document.body || document.getElementById('folia-selecting-style')) return;
+
+        var style = document.createElement('style');
+        style.id = 'folia-selecting-style';
+        style.textContent = [
+            '@keyframes folia-caret { 0%,49% { opacity: 1 } 50%,100% { opacity: 0 } }',
+            '@keyframes folia-breathe { 0%,100% { opacity: .62 } 50% { opacity: 1 } }',
+            '@keyframes folia-sweep { from { transform: scaleX(0) } to { transform: scaleX(1) } }',
+            /* 打字光标：挂在 .file-title 的文本节点后面。 */
+            '.file-title[data-folia-typing="1"]::after {',
+            '  content: ""; display: inline-block; width: .58em; height: 1em;',
+            '  margin-left: .12em; vertical-align: -.12em;',
+            '  background: currentColor; animation: folia-caret .9s steps(1) infinite;',
+            '}',
+            /* 打完：字呼吸，底下一道线扫过去。 */
+            '.file-title[data-folia-done="1"] { animation: folia-breathe 1.5s ease-in-out infinite; }',
+            '.file-title[data-folia-done="1"] .folia-sweep {',
+            '  position: absolute; left: 0; right: 0; bottom: -.2em; height: 1px;',
+            '  background: currentColor; opacity: .45; transform-origin: left center;',
+            '  animation: folia-sweep .9s cubic-bezier(.2,.8,.2,1) 1 both;',
+            '}',
+            '.file-title { position: relative; }',
+        ].join('\n');
+        document.head.appendChild(style);
+
+        /* 文本节点被 bundle 直接改 textContent，用 MutationObserver 跟它。 */
+        var sweep = document.createElement('i');
+        sweep.className = 'folia-sweep';
+        var title = null;
+        var target = 'SELECTING FILES...';
+        var started = 0;
+
+        var apply = function apply() {
+            if (!title) return;
+            /*
+             * 只读**第一个文本子节点**，不能读 title.textContent。
+             *
+             * .file-title 里除了 "FILE NUMBER: " 这个文本节点，后面还有
+             * <span id="selected-id">X-<span id="selected-code">001</span></span>。
+             * 读整段 textContent 会得到 "SELECTING FILES...X-001"，永远不等于
+             * 目标串，done 永远不成立（这就是第一版没挂上的原因）。
+             */
+            var node = null;
+            for (var i = 0; i < title.childNodes.length; i += 1) {
+                if (title.childNodes[i].nodeType === 3) { node = title.childNodes[i]; break; }
+            }
+            if (!node) return;
+            var text = (node.textContent || '').trim();
+            var typing = target.indexOf(text) === 0 && text.length > 0 && text.length < target.length;
+            var done = text === target;
+            title.dataset.foliaTyping = typing ? '1' : '0';
+            if (done && title.dataset.foliaDone !== '1') {
+                title.dataset.foliaDone = '1';
+                started = performance.now();
+                if (!title.contains(sweep)) title.appendChild(sweep);
+            } else if (!done && title.dataset.foliaDone === '1') {
+                delete title.dataset.foliaDone;
+                if (sweep.parentNode) sweep.parentNode.removeChild(sweep);
+            }
+        };
+
+        var bind = function bind() {
+            var candidate = document.querySelector('.file-title');
+            if (!candidate) return;
+            if (candidate === title) return;
+            title = candidate;
+            new MutationObserver(apply).observe(title, { childList: true, characterData: true, subtree: true });
+            bindObserver.disconnect();
+            apply();
+        };
+
+        // .file-title 在 #archive-ui 里，而 #archive-ui 是 #stage 的兄弟 ——
+        // 整棵 body 一起看，别只盯 #stage。
+        var bindObserver = new MutationObserver(bind);
+        bindObserver.observe(document.body, { childList: true, subtree: true });
+        bind();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installSelectingAnimations, { once: true });
+    } else {
+        installSelectingAnimations();
+    }
+
     /** 宿主改策略的入口。返回生效后的整份策略。 */
     window.__FOLIA_RHINE_SET__ = function applyPolicy(patch) {
         if (!patch || typeof patch !== 'object') return policy;
         if (typeof patch.maxFps === 'number') policy.maxFps = Math.max(0, patch.maxFps);
         if (typeof patch.idleFps === 'number') policy.idleFps = Math.max(0, patch.idleFps);
         if (typeof patch.activeMs === 'number') policy.activeMs = Math.max(0, patch.activeMs);
+        if (typeof patch.bootGraceMs === 'number') policy.bootGraceMs = Math.max(0, patch.bootGraceMs);
         if (typeof patch.maxPixelRatio === 'number') policy.maxPixelRatio = Math.max(0, patch.maxPixelRatio);
         return policy;
     };
