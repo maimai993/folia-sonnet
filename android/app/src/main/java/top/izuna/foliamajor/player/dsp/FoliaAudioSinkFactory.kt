@@ -6,6 +6,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import top.izuna.foliamajor.player.transition.dsp.DeckRole
+import top.izuna.foliamajor.player.transition.dsp.TransitionDspProcessor
 
 // android/app/src/main/java/top/izuna/foliamajor/player/dsp/FoliaAudioSinkFactory.kt
 // 把 EQ 处理器挂进 ExoPlayer 的唯一出口：所有播放器都必须经这里造 AudioSink。
@@ -35,6 +37,12 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 class FoliaAudioSinkFactory(
     context: Context,
     private val state: NativeEqualizerState,
+    /**
+     * 原生过渡系统的 PCM 处理器角色提供者。null = 不挂过渡处理器，行为与改动前完全一致。
+     * FoliaNativePlayer 为每台播放器各持有一个 AtomicReference，过渡期间动态切换
+     * INCOMING / OUTGOING / INACTIVE（见 transition/dsp/TransitionDspProcessor.kt）。
+     */
+    private val transitionRoleProvider: (() -> DeckRole)? = null,
 ) : DefaultRenderersFactory(context) {
 
     init {
@@ -53,11 +61,20 @@ class FoliaAudioSinkFactory(
         context: Context,
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean,
-    ): AudioSink = DefaultAudioSink.Builder(context)
-        // 坑 1：不看入参，永远 false。
-        .setEnableFloatOutput(false)
-        .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+    ): AudioSink {
+        // 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
+        // 否则换手时两路的 EQ 状态会互相干扰。
         // 显式写出元素类型：Kotlin 的 Array<EqAudioProcessor> 不会自动变 Array<AudioProcessor>。
-        .setAudioProcessors(arrayOf<AudioProcessor>(EqAudioProcessor(state)))
-        .build()
+        val processors: Array<AudioProcessor> = if (transitionRoleProvider != null) {
+            arrayOf<AudioProcessor>(EqAudioProcessor(state), TransitionDspProcessor(transitionRoleProvider))
+        } else {
+            arrayOf<AudioProcessor>(EqAudioProcessor(state))
+        }
+        return DefaultAudioSink.Builder(context)
+            // 坑 1：不看入参，永远 false。
+            .setEnableFloatOutput(false)
+            .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(processors)
+            .build()
+    }
 }
