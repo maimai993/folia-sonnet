@@ -50,6 +50,13 @@ export const NEBBIA_MAX_JELLIES = 24;
 /** 着色器里跟拍冒泡最多同时几排（nebbiaBubbleGlsl.ts 的 uBurst）。 */
 export const NEBBIA_MAX_BURSTS = 12;
 
+/**
+ * 字形从哪来：笔顺数据（AnimCJK，中日文的笔顺是真的，默认）或跟随歌词字体（用主题字体、字体市场字体把每个字画出来再追成笔画，
+ * 笔顺是估的，但字形就是用户选的那个字体）。图标和没有笔顺数据的字（拉丁字母、标点）本来就走字体，不受这项影响。
+ */
+export const NEBBIA_GLYPH_SOURCES = ['strokes', 'font'] as const;
+export type NebbiaGlyphSource = typeof NEBBIA_GLYPH_SOURCES[number];
+
 export interface NebbiaTuning {
     /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
     render: LyricRenderOverride;
@@ -114,6 +121,27 @@ export interface NebbiaTuning {
     snow: number;
     snowSize: number;
     snowMelt: number;
+    /** 字形来源：笔顺数据，或跟随歌词字体（字体市场换了字体，汉字也跟着变）。 */
+    glyphSource: NebbiaGlyphSource;
+    /** 雾的细节（原型里写死的参数，现在开放；默认值和原来一样）：擦痕边缘毛糙、擦痕边小水珠、往下淌的水珠、水珠折射、水珠高光。 */
+    edge: number;
+    beads: number;
+    drip: number;
+    refract: number;
+    glint: number;
+    /** 雾上凝结水珠的密度（只雨窗）、风把下淌水珠往旁边推、收笔处堆起的大水珠大小、字被雾吞掉后水珠多挂几秒。 */
+    fieldDrops: number;
+    wind: number;
+    endBead: number;
+    beadHold: number;
+    /** 哈气：白气鼓开用几秒、新句唱完后再留几秒、散掉用几秒、浓度。 */
+    breathSpread: number;
+    breathHold: number;
+    breathFade: number;
+    breathThick: number;
+    /** 颠簸频率、颠簸把大水珠震落的概率。 */
+    bumpRate: number;
+    bumpFall: number;
 }
 
 /** 各个数值项的范围：设置面板的滑块和归一化共用。 */
@@ -142,6 +170,21 @@ export const NEBBIA_LIMITS = {
     snow: { min: 0, max: 3 },
     snowSize: { min: 0.5, max: 2 },
     snowMelt: { min: 0.25, max: 3 },
+    edge: { min: 0, max: 1.5 },
+    beads: { min: 0, max: 1 },
+    drip: { min: 0, max: 1 },
+    refract: { min: 0, max: 2 },
+    glint: { min: 0, max: 2 },
+    fieldDrops: { min: 0, max: 1.5 },
+    wind: { min: 0, max: 1 },
+    endBead: { min: 0, max: 2 },
+    beadHold: { min: 0, max: 12 },
+    breathSpread: { min: 0.4, max: 3 },
+    breathHold: { min: 0, max: 5 },
+    breathFade: { min: 2, max: 20 },
+    breathThick: { min: 0.2, max: 1 },
+    bumpRate: { min: 0, max: 3 },
+    bumpFall: { min: 0, max: 1 },
 } as const satisfies Partial<Record<keyof NebbiaTuning, { min: number; max: number }>>;
 
 export type NebbiaNumberKey = keyof typeof NEBBIA_LIMITS;
@@ -180,6 +223,23 @@ export const DEFAULT_NEBBIA_TUNING: NebbiaTuning = {
     snow: 1,
     snowSize: 1,
     snowMelt: 1,
+    glyphSource: 'strokes',
+    // 下面 15 项的默认值就是原来 nebbiaConstants.ts 的 NEBBIA_FIXED，画面不变
+    edge: 0.6,
+    beads: 0.35,
+    drip: 0.25,
+    refract: 1,
+    glint: 1,
+    fieldDrops: 0.5,
+    wind: 0,
+    endBead: 1,
+    beadHold: 4,
+    breathSpread: 1.2,
+    breathHold: 1,
+    breathFade: 8,
+    breathThick: 0.7,
+    bumpRate: 1,
+    bumpFall: 0.5,
 };
 
 /** 运行时（createNebbiaRuntime.ts）的歌：歌词、随机种子，片尾写的曲名和歌手。 */

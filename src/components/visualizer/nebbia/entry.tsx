@@ -2,6 +2,7 @@ import React from 'react';
 import { QuickControlChip } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { nebbiaBackgroundConfig, nebbiaBeatEffectOnScreen, nebbiaShowsBackground } from './nebbiaBehind';
+import NebbiaQuickSliders from './NebbiaQuickSliders';
 import NebbiaSettingsPanel, { NEBBIA_APPEAR_LABEL_KEYS, NEBBIA_FADE_LABEL_KEYS } from './NebbiaSettingsPanel';
 import nebbiaTuning from './tuning';
 import type { NebbiaTuning } from './types';
@@ -119,6 +120,14 @@ export default defineVisualizer({
                     title={`${t('options.nebbiaFade')}: ${fade}`}
                     onClick={() => onTuningChange({ fade: FADE_PRESETS[(fi + 1) % FADE_PRESETS.length].fade })}
                 />
+                {/* 字形来源：笔顺数据 ⇄ 跟随歌词字体（字体市场换了字体，汉字也跟着变） */}
+                <QuickControlChip
+                    label={t(`options.nebbiaGlyphSource_${tuning.glyphSource}`)}
+                    title={`${t('options.nebbiaGlyphSource')}: ${t(`options.nebbiaGlyphSource_${tuning.glyphSource}`)}`}
+                    onClick={() => onTuningChange({ glyphSource: tuning.glyphSource === 'font' ? 'strokes' : 'font' })}
+                />
+                {/* 画笔粗细、书写、雾和水珠的全部细节：面板可以往下滚，边看画面边拖（NebbiaQuickSliders.tsx） */}
+                <NebbiaQuickSliders tuning={tuning} onTuningChange={onTuningChange} t={t} />
             </>
         );
     },

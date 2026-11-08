@@ -8,6 +8,8 @@ export interface NebbiaUniforms {
     spotSrc: [number, number]; spotSrc2: [number, number]; spotTgt: [number, number]; spotR: number; spotI: number;
     /** 窗外画哪几样，位和着色器的 SCN_* 对应（nebbiaFrameUniforms.ts 的 SCENERY_BITS）。 */
     scenery: number;
+    /** 哈气白气的浓度（tuning.breathThick）。 */
+    breathThick: number;
     /** 凝露玻璃的冷凝水珠高光（tuning.dewGlint；雨窗的程序里没有这个 uniform）。 */
     dewGlint: number;
     /** 窗外是水族箱时：水母（nebbiaJellies.ts 每帧算好）和气泡多少；街景时 null。 */

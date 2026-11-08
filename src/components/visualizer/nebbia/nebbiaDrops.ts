@@ -1,6 +1,7 @@
-import { clamp, NEBBIA_FIXED } from './nebbiaConstants';
+import { clamp } from './nebbiaConstants';
 import { NebbiaDropSpring } from './nebbiaDropSpring';
 import { createVisualizerRng } from '../visualizerSeedHash';
+import { DEFAULT_NEBBIA_TUNING } from './types';
 
 // src/components/visualizer/nebbia/nebbiaDrops.ts
 // 玻璃上的水珠和颠簸。水珠照 raindrop-fx 的做法：每颗是一张法线贴图精灵，实例数据 6 个数
@@ -23,7 +24,7 @@ const SMEAR_MIN = 0.6;
 const SMEAR_REST = 0.3;
 
 /** 风把下淌的水珠往后推：每往下 1 像素横向挪多少。 */
-export const windDrift = (dy: number, busSpeed: number) => -dy * NEBBIA_FIXED.wind * busSpeed;
+export const windDrift = (dy: number, busSpeed: number, wind: number) => -dy * wind * busSpeed;
 
 export class NebbiaGlassMotion {
     /** 这一帧要画进水珠纹理的实例（擦痕边、下淌、雨点）。 */
@@ -40,10 +41,15 @@ export class NebbiaGlassMotion {
     private lastTrigger = -Infinity;
     private readonly spring = new NebbiaDropSpring();
     bump = 1;
+    /** 来自 tuning 的细节（createNebbiaRuntime.ts 同步）：雾上凝结水珠密度、颠簸频率、震落概率、风。默认值同原来写死的常量。 */
+    fieldDensity = DEFAULT_NEBBIA_TUNING.fieldDrops;
+    bumpRate = DEFAULT_NEBBIA_TUNING.bumpRate;
+    bumpFall = DEFAULT_NEBBIA_TUNING.bumpFall;
+    wind = DEFAULT_NEBBIA_TUNING.wind;
 
     /** 雾上的凝结水珠：下半部分略多略大。 */
     buildField(W: number, H: number) {
-        const rnd = createVisualizerRng(4242), n = Math.round(W * H / 2200 * NEBBIA_FIXED.fieldDrops);
+        const rnd = createVisualizerRng(4242), n = Math.round(W * H / 2200 * this.fieldDensity);
         this.fieldDrops = [];
         for (let i = 0; i < n; i += 1) {
             const big = rnd() < 0.12;
@@ -62,10 +68,10 @@ export class NebbiaGlassMotion {
         this.now = now;
         this.drops.length = 0;
         this.spring.step(now, paused, t => this.shakeAt(t));
-        if (paused || !randomBumps || this.bump <= 0 || NEBBIA_FIXED.bumpRate <= 0) return;
+        if (paused || !randomBumps || this.bump <= 0 || this.bumpRate <= 0) return;
         if (now > this.nextBump) {
             if (this.nextBump > 0) this.trigger(now, 0.5 + this.rng() * 0.7);
-            this.nextBump = now + (3 + this.rng() * 9) / NEBBIA_FIXED.bumpRate;
+            this.nextBump = now + (3 + this.rng() * 9) / this.bumpRate;
         }
     }
 
@@ -78,7 +84,7 @@ export class NebbiaGlassMotion {
         this.lastTrigger = now;
         for (const d of this.fieldDrops) {
             if (d.fall || d.w < 26) continue;
-            if (this.rng() < NEBBIA_FIXED.bumpFall * a * fallShare * (d.w - 24) / 45) {
+            if (this.rng() < this.bumpFall * a * fallShare * (d.w - 24) / 45) {
                 // 掉下去的水珠不再接着它原来位置上的甩痕
                 if (d.smear && d.smear.end === null) d.smear.end = now;
                 d.smear = null;
@@ -133,7 +139,7 @@ export class NebbiaGlassMotion {
             if (d.fall) {
                 const f = d.fall, tr = f.trail, u = clamp((this.now - f.t0) / f.dur);
                 y = f.y0 + f.len * (u - Math.sin(u * 6 * Math.PI) / (6 * Math.PI));
-                x = tr.x + Math.sin(y * 0.07 + tr.seed) * 1.4 + Math.sin(y * 0.021 + tr.seed * 2) * 2.2 + windDrift(y - tr.y0, busSpeed);
+                x = tr.x + Math.sin(y * 0.07 + tr.seed) * 1.4 + Math.sin(y * 0.021 + tr.seed * 2) * 2.2 + windDrift(y - tr.y0, busSpeed, this.wind);
                 stretch = 0.4 * (1 - Math.cos(u * 6 * Math.PI)) * (u < 1 ? 1 : 0);
                 tr.y1 = y;
                 if (u >= 1) {

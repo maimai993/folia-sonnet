@@ -6,6 +6,7 @@ import {
     NEBBIA_APPEAR_STYLES,
     NEBBIA_BEHIND,
     NEBBIA_FADE_STYLES,
+    NEBBIA_GLYPH_SOURCES,
     NEBBIA_LAYOUTS,
     NEBBIA_GLASS,
     NEBBIA_GLASS_FOR,
@@ -74,6 +75,7 @@ export const normalizeNebbiaTuning = (stored: unknown): NebbiaTuning => {
         scenery: Array.isArray(values.scenery) ? NEBBIA_SCENERY.filter(c => (values.scenery as unknown[]).includes(c)) : [...base.scenery],
         rain: NEBBIA_RAIN.find(r => r === values.rain) ?? base.rain,
         credits: typeof values.credits === 'boolean' ? values.credits : base.credits,
+        glyphSource: NEBBIA_GLYPH_SOURCES.find(s => s === values.glyphSource) ?? base.glyphSource,
         ...numbers,
     };
 };
@@ -86,6 +88,7 @@ export default defineVisualizerTuning<NebbiaTuning>({
         behind: modChoice(NEBBIA_BEHIND),
         glass: modChoice(NEBBIA_GLASS),
         rain: modChoice(NEBBIA_RAIN),
+        glyphSource: modChoice(NEBBIA_GLYPH_SOURCES),
         credits: MOD_SWITCH,
         ...Object.fromEntries(Object.entries(NEBBIA_LIMITS).map(([key, { min, max }]) => [key, modNumber(min, max)])),
         // A count of jellyfish: whole ones, as the panel's slider steps.

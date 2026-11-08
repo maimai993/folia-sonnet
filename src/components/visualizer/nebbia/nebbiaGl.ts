@@ -1,4 +1,4 @@
-import { FOG_DIV, NEBBIA_FIXED } from './nebbiaConstants';
+import { FOG_DIV } from './nebbiaConstants';
 import raindropSpriteUrl from './nebbiaRaindrop.png';
 import { BLD_FILL_UNIFORMS, NebbiaBuildingCache, type NebbiaBuildingState } from './nebbiaBuildingCache';
 import { NebbiaFogGl } from './nebbiaFogGl';
@@ -129,7 +129,6 @@ export class NebbiaGl {
         const samplers: [string, Tex][] = [['uMask', this.mask.tex], ['uDrop', this.drop], ['uField', this.field], ['uFogBlur', fogBlur.tex], ['uFogGlow', fogGlow.tex], ['uBreath', this.breath], ['uNoise', this.noise.tex]];
         if (fogSharp) samplers.push(['uFogSharp', fogSharp.tex]);
         for (const [name, tex] of samplers) gl.uniform1i(gl.getUniformLocation(main, name), tex.unit);
-        gl.uniform1f(this.U.uBreathThick, NEBBIA_FIXED.breathThick);
         gl.uniform1i(this.U.uSeeThrough, this.seeThrough ? 1 : 0);
         this.bld?.bindSamplers(main);
         if (fog) {
@@ -298,7 +297,7 @@ export class NebbiaGl {
         this.setScene(U, u);
         this.setBuildings(U, buildings);
         gl.uniform1f(U.uMist, u.mist); gl.uniform1f(U.uEdge, u.edge);
-        gl.uniform1f(U.uRefract, u.refract); gl.uniform1f(U.uGlint, u.glint);
+        gl.uniform1f(U.uRefract, u.refract); gl.uniform1f(U.uGlint, u.glint); gl.uniform1f(U.uBreathThick, u.breathThick);
         gl.uniform2fv(U.uGlassShift, u.glassShift);
         gl.uniform1i(U.uBreathOn, breath ? 1 : 0);
         gl.uniform1i(U.uNoiseOn, noiseOn ? 1 : 0);

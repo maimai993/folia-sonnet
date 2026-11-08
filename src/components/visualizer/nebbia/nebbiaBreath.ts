@@ -1,4 +1,5 @@
-import { clamp, NEBBIA_FIXED, smooth } from './nebbiaConstants';
+import { clamp, smooth } from './nebbiaConstants';
+import { DEFAULT_NEBBIA_TUNING } from './types';
 import { lineRect, type LaidLine } from './nebbiaScene';
 import { createVisualizerRng } from '../visualizerSeedHash';
 
@@ -77,8 +78,7 @@ export class NebbiaBreathMask {
      * 再用 breathFade 秒慢慢散。字照常写（nebbiaMask.ts），写过的地方在白气上擦开。这里只记下，end() 时才画。
      * `melt`：让位时盖掉旧句的那口气才把底下的字糊开（B 通道）；「哈气后书写」的出场白气不糊旁边的字。
      */
-    drawLine(line: LaidLine, idx: number, T: number, t0: number, until: number, spread: number, melt: boolean) {
-        const { breathFade } = NEBBIA_FIXED;
+    drawLine(line: LaidLine, idx: number, T: number, t0: number, until: number, spread: number, melt: boolean, breathFade: number = DEFAULT_NEBBIA_TUNING.breathFade) {
         if (T < t0) return;
         const s = 1 - smooth(clamp((T - Math.max(until, t0 + spread)) / breathFade));
         if (s <= 0.002) return;
