@@ -484,6 +484,13 @@ export const tuningStateKey = (setter: string | null): string | null => {
     return `${name.charAt(0).toLowerCase()}${name.slice(1)}Tuning`;
 };
 
+/*
+ * AI 能选的样式。
+ *
+ * 模组注册的样式（跳一跳、黑胶唱片这些，id 形如 `mod:<modId>:<id>`）不在这里列举：
+ * 本模块刻意不依赖视觉注册表（注册表会反过来 import 大量渲染代码），由持有它的宿主
+ * 通过 `listDirectorModes(t, extra)` 的 `extra` 传进来，见 listDirectorModesWithHost。
+ */
 export const isKnownDirectorMode = (mode: unknown): mode is VisualizerMode => (
     typeof mode === 'string' && (BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode)
 );
@@ -523,6 +530,10 @@ export const describeHostDirectorMode = (
 });
 
 export const modeLabel = (mode: string, t?: (key: string) => string): string => {
+    /*
+     * 只管内置样式。模组样式的名字由模组自己声明（labelKey / labelFallback），
+     * 宿主读到之后经 describeHostDirectorMode 传进来 —— 本模块不依赖注册表。
+     */
     const key = MODE_LABEL_KEYS[mode];
     const translated = t && key ? t(key) : '';
     // A missing translation comes back as the key itself.

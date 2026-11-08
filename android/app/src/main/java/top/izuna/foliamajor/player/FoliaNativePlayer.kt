@@ -20,6 +20,10 @@ import top.izuna.foliamajor.FoliaPlaybackService
 import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.FoliaAudioSinkFactory
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
+import top.izuna.foliamajor.player.transition.bridge.TransitionDeckHost
+import top.izuna.foliamajor.player.transition.dsp.DeckRole
+import top.izuna.foliamajor.player.transition.dsp.TransitionDspState
+import java.util.concurrent.atomic.AtomicReference
 
 // 当前文件：Folia 在安卓上的原生播放内核。
 //
@@ -365,15 +369,64 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             } else {
                 PAUSE_FADE_MS
             }
-            // 从当前音量淡下去，并且显式关掉「跟随音量」：淡入没跑完就暂停时，
-            // 那个标记会让这条淡出停在满音量上，一松手就是硬切。
-            rampVolume(current.volume, 0f, fadeMs, followsVolume = false) {
-                current.setPlayWhenReady(false)
+            /*
+             * 暂停意图**当场落实**，淡出只负责音量。
+             *
+             * 以前 setPlayWhenReady(false) 放在淡出结束的回呼里：那 160 ms（混响留着尾巴时
+             * 最长 1.2 s）里「暂停」还没有真的生效。期间只要有 play() 进来 —— 通知栏重贴卡片
+             * 补发的、回到前台补发的、部分 ROM 同一次手势派两次的 —— 它会先
+             * setPlayWhenReady(true)，再在 rampVolume 里 cancelFade() 把这一条淡出连同
+             * 它的完成回调一起撤掉。结果 setPlayWhenReady(false) 永远不会执行，
+             * 用户看到的就是「按了暂停、声音停约 1 秒又自己响起来」（issue #263）。
+             *
+             * 现在调换过来：先把播放器停住，再用 rampHoldVolume 只把音量滑下去。
+             * 淡出期间若真的来了 play()，它本来就是一次新的播放意图，取消淡出、
+             * 把音量拉回满正是对的 —— 而「暂停」不再依赖那条可能被撤掉的回调。
+             */
+            current.setPlayWhenReady(false)
+            rampVolumeHold(current.volume, fadeMs) {
                 // 音量回到「本该是多少」：下一首从 0 淡进来，而不是继承这条斜坡的 0。
-                current.setVolume(requestedVolume)
+                if (!cachedPlaying) current.setVolume(requestedVolume)
                 stopTicking()
             }
         }
+    }
+
+    /**
+     * 只做音量下滑，**不碰 playWhenReady**：暂停已经由 [pause] 当场落实，
+     * 这里纯粹是让断音不刺耳。淡出走完（或被 cancelFade 撤掉）都无所谓 ——
+     * 播放器这时已经停了，不会再出现「暂停没生效」。
+     *
+     * 步长与 [rampVolume] 一致：短坡道 8 步，长坡道（留尾巴的淡出）按 20 ms 一格算。
+     */
+    private fun rampVolumeHold(
+        from: Float,
+        durationMs: Int,
+        then: (() -> Unit)? = null,
+    ) {
+        cancelFade()
+        if (!pauseFadeEnabled || durationMs <= 0) {
+            then?.invoke()
+            return
+        }
+        val steps = (durationMs / 20).coerceIn(FADE_STEPS, MAX_FADE_STEPS)
+        val stepMs = (durationMs / steps).coerceAtLeast(1)
+        var step = 0
+        val tick = object : Runnable {
+            override fun run() {
+                step++
+                val progress = step.toFloat() / steps
+                player?.setVolume((from * (1f - progress)).coerceIn(0f, 1f))
+                if (step >= steps) {
+                    fadeTick = null
+                    then?.invoke()
+                } else {
+                    handler.postDelayed(this, stepMs.toLong())
+                }
+            }
+        }
+        fadeTick = tick
+        handler.postDelayed(tick, stepMs.toLong())
     }
 
     /**
@@ -615,6 +668,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 current.release()
                 AudioPipelineTelemetry.notePlayerReleased()
             }
+            // 过渡进行到一半时插件被销毁：出场那台也得收，否则两首歌一起响到进程结束。
+            val outgoing = transitionOutgoing
+            transitionOutgoing = null
+            if (outgoing != null) {
+                outgoing.release()
+                AudioPipelineTelemetry.notePlayerReleased()
+            }
+            TransitionDspState.clear()
             // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
             playbackThread.quitSafely()
         }
@@ -830,16 +891,164 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         handler.postDelayed(tick, stepMs.toLong())
     }
 
+    // ===================== 原生过渡系统接入点 =====================
+    // 由 player/transition/ 使用。全部沿用本文件的线程纪律：任何碰 ExoPlayer 的动作
+    // 都经 runOnPlayer 回到 playerLooper；判据只用 volatile 缓存字段。
+    //
+    // 与旧 crossfadeTo 的关系：那条双播放器音量斜坡保留，供「用户只开了简单交叉淡化」
+    // 与暂停淡入淡出使用；下面这一组把逐帧控制权交给过渡引擎，能跑 18 种接法 + DSP 链。
+
+    /** 当前主播放器的 DSP 角色。非过渡期 INACTIVE = 逐字节直通，不花一个样本。 */
+    @Volatile private var activeRole = AtomicReference(DeckRole.INACTIVE)
+    /** 过渡期间新造那台播放器的 DSP 角色。 */
+    @Volatile private var handoverRole = AtomicReference(DeckRole.INACTIVE)
+    /**
+     * 过渡期间正在出场的那台播放器。
+     * 与 crossfadeOutgoing 分开：cancelFade() 会释放后者，两条路径不能互相误收。
+     */
+    @Volatile private var transitionOutgoing: ExoPlayer? = null
+
+    /**
+     * 能不能做过场：正在出声、手上有歌。
+     * 只读 volatile 缓存（与 crossfadeTo 同一条纪律：不能从别的线程问 mediaItemCount），
+     * 所以桥线程可以直接问，不必绕回 playerLooper。
+     */
+    fun canTransition(): Boolean = cachedPlaying && hasMedia()
+
+    /**
+     * 起一台额外播放器装新源，把 player 指向它，旧的那台留作出场。
+     * 与 crossfadeTo 的差别：这里不自己跑斜坡，逐帧音量由 TransitionEngine 给。
+     */
+    fun transitionBegin(url: String, mediaId: String?, startMs: Long): Boolean {
+        // 判据只用线程安全的缓存字段，和 crossfadeTo 同一条纪律（不能从别的线程问 mediaItemCount）。
+        if (!canTransition()) return false
+        runOnPlayer {
+            val old = player
+            if (old == null || old.mediaItemCount == 0) {
+                // 旧那台手上已经没东西：没得交接，让调用方按普通换源处理。
+                TransitionDspState.clear()
+                return@runOnPlayer
+            }
+            cancelFade()
+            // 交叉一开始就摘掉旧那台的监听：它之后播到尾巴上的 STATE_ENDED 不该被当成
+            // 「本曲结束」，否则一次换歌会跳两首（crossfadeTo 里已写过同一条理由）。
+            old.removeListener(playerListener)
+            val incoming = buildExtraPlayer()
+            // 新那台必须挂监听：它马上就是 player，不挂就彻底失去 ended / ready / buffering。
+            incoming.addListener(playerListener)
+            lastUrl = url
+            lastMediaId = mediaId
+            cachedPositionMs = startMs
+            cachedDurationMs = 0L
+            cachedPlaying = true
+            nearEndFired = false
+            lastTickPositionMs = 0L
+            nearEndFloorMs = 0L
+            transitionOutgoing = old
+            player = incoming
+            activeRole.set(DeckRole.OUTGOING)
+            handoverRole.set(DeckRole.INCOMING)
+            applySourceHeaders(url)
+            incoming.setMediaItem(mediaItemFor(url, mediaId))
+            incoming.setRepeatMode(requestedRepeatMode)
+            incoming.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            incoming.setVolume(0f)
+            incoming.prepare()
+            incoming.setPlayWhenReady(true)
+            if (startMs > 0) incoming.seekTo(startMs)
+            emit("playing", startMs, 0L, null)
+        }
+        return true
+    }
+
+    /** 一帧：进场 / 出场音量 + 出场曲速度。调用方已保证在播放器线程。 */
+    fun transitionApply(inGain: Float, outGain: Float, tempoOut: Float) {
+        runOnPlayer {
+            player?.setVolume((requestedVolume * inGain).coerceIn(0f, 1f))
+            val outgoing = transitionOutgoing
+            outgoing?.setVolume((requestedVolume * outGain).coerceIn(0f, 1f))
+            outgoing?.setPlaybackParameters(PlaybackParameters(tempoOut.coerceIn(0.25f, 2f)))
+        }
+    }
+
+    /** 交接完成：释放出场播放器，把新播放器扶正，DSP 角色回到直通。 */
+    fun transitionFinish() {
+        runOnPlayer {
+            val outgoing = transitionOutgoing
+            transitionOutgoing = null
+            outgoing?.stop()
+            outgoing?.release()
+            if (outgoing != null) AudioPipelineTelemetry.notePlayerReleased()
+            player?.setVolume(requestedVolume)
+            player?.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            // 新播放器成为主：把它手上那份 role 引用接过来，下一次过渡继续复用。
+            activeRole = handoverRole
+            handoverRole = AtomicReference(DeckRole.INACTIVE)
+            activeRole.set(DeckRole.INACTIVE)
+            TransitionDspState.clear()
+        }
+    }
+
+    /** 交接撤销：释放刚装的那台，把旧播放器扶正并恢复音量 / 速度。 */
+    fun transitionAbort() {
+        runOnPlayer {
+            val outgoing = transitionOutgoing
+            transitionOutgoing = null
+            val incoming = player
+            if (outgoing != null) {
+                player = outgoing
+                outgoing.addListener(playerListener)
+                outgoing.setVolume(requestedVolume)
+                outgoing.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            }
+            incoming?.removeListener(playerListener)
+            incoming?.stop()
+            incoming?.release()
+            if (incoming != null) AudioPipelineTelemetry.notePlayerReleased()
+            activeRole.set(DeckRole.INACTIVE)
+            handoverRole.set(DeckRole.INACTIVE)
+            TransitionDspState.clear()
+        }
+    }
+
+    /** 过渡系统用的门面：所有回调都保证在播放器线程上。 */
+    inner class TransitionDeck : TransitionDeckHost {
+        override fun runOnPlayer(action: Runnable) = this@FoliaNativePlayer.runOnPlayer(action)
+        override fun scheduleOnPlayer(delayMs: Long, action: Runnable) {
+            handler.postDelayed(action, delayMs)
+        }
+        override fun cancelOnPlayer(action: Runnable) {
+            handler.removeCallbacks(action)
+        }
+        override fun nowMs(): Long = android.os.SystemClock.elapsedRealtime()
+        override fun canHandover(): Boolean = this@FoliaNativePlayer.canTransition()
+        override fun fallbackPrepare(url: String, mediaId: String?) =
+            this@FoliaNativePlayer.prepare(url, -1L, mediaId)
+        override fun begin(url: String, mediaId: String?, startMs: Long): Boolean =
+            transitionBegin(url, mediaId, startMs)
+        override fun apply(incomingGain: Float, outgoingGain: Float, tempoOut: Float) =
+            transitionApply(incomingGain, outgoingGain, tempoOut)
+        override fun finish() = transitionFinish()
+        override fun abort() = transitionAbort()
+        override fun positionMs(): Long = getPositionMs()
+        override fun isPlaying(): Boolean = this@FoliaNativePlayer.isPlaying()
+    }
+
+    fun transitionDeck(): TransitionDeckHost = TransitionDeck()
+
     /**
      * 造一台播放器。**所有播放器都必须走这里**：AudioSink 由 [FoliaAudioSinkFactory] 提供，
      * 均衡器就挂在那个 sink 上。绕开这个函数自己 new 一台，那台就没有 EQ（而且不会报错）。
      */
-    private fun newPlayer(): ExoPlayer {
+    private fun newPlayer(roleProvider: () -> DeckRole = { DeckRole.INACTIVE }): ExoPlayer {
         val factory = DefaultHttpDataSource.Factory()
             .setUserAgent(BROWSER_USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
         httpFactory = factory
-        val created = ExoPlayer.Builder(context, FoliaAudioSinkFactory(context, NativeEqualizerState))
+        val created = ExoPlayer.Builder(
+            context,
+            FoliaAudioSinkFactory(context, NativeEqualizerState, roleProvider),
+        )
             // 显式钉在播放器那条专用线程上。不写这一句，播放器会绑到「第一次碰它的那个
             // 线程」—— 也就是 Capacitor 的桥线程，而位置上报会跑到别的线程上去，
             // 于是每 250ms 跨线程碰一次播放器。
@@ -900,13 +1109,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     /** 交叉淡化用的第二台播放器：与 ensurePlayer 同规格，但不接管 [player]，也不报名事件。 */
-    private fun buildExtraPlayer(): ExoPlayer = newPlayer()
+    private fun buildExtraPlayer(): ExoPlayer = newPlayer { handoverRole.get() }
 
     private fun ensurePlayer(): ExoPlayer {
         val current = player
         if (current != null) return current
 
-        val created = newPlayer()
+        val created = newPlayer { activeRole.get() }
         // 音频属性（含焦点策略）已经在 newPlayer() 里随 Builder 一起定了，这里不再重复设置：
         // 建完再 set 一次会把焦点重新请一遍，正在播的那一瞬间可能被自己的重申请打断一下。
         created.setVolume(requestedVolume)

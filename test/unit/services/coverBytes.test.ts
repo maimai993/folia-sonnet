@@ -14,6 +14,15 @@ const { handlers } = vi.hoisted(() => ({
     handlers: {
         nativeAvailable: false,
         nativeFetch: null as null | ((url: string, init?: RequestInit) => Promise<Response>),
+        /** #262：原生下载那条路。`null` = 不在原生平台（桌面 / 网页）。 */
+        filesystem: null as null | {
+            cached: Map<string, number>;
+            downloads: string[];
+            failDownload?: boolean;
+            /** 落盘文件的开头字节；默认给 JPEG 魔数。 */
+            header?: number[];
+            deleted?: string[];
+        },
     },
 }));
 
@@ -21,6 +30,46 @@ vi.mock('@/services/nativeHttpFetch', () => ({
     isNativeHttpFetchAvailable: () => handlers.nativeAvailable,
     createNativeFetch: () => (input: RequestInfo | URL, init?: RequestInit) =>
         (handlers.nativeFetch as NonNullable<typeof handlers.nativeFetch>)(String(input), init),
+}));
+
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: () => handlers.filesystem !== null,
+        // 测试里只关心「拿到一个可 fetch 的地址」，具体形状由 App 的 scheme 决定。
+        convertFileSrc: (path: string) => `https://localhost/_capacitor_file_${path}`,
+    },
+    registerPlugin: () => ({}),
+}));
+
+vi.mock('@capacitor/filesystem', () => ({
+    Directory: { Cache: 'CACHE' },
+    Filesystem: {
+        stat: async ({ path }: { path: string }) => {
+            const size = handlers.filesystem?.cached.get(path);
+            if (size == null) throw new Error('not found');
+            return { size, uri: `file:///data/user/0/app/cache/${path}` };
+        },
+        mkdir: async () => undefined,
+        readdir: async () => ({ files: [] }),
+        deleteFile: async ({ path }: { path: string }) => {
+            handlers.filesystem?.deleted?.push(path);
+            handlers.filesystem?.cached.delete(path);
+        },
+        // 默认回 JPEG 魔数（FF D8 FF）；测试可以换成 HTML 之类。
+        readFile: async () => {
+            const header = handlers.filesystem?.header ?? [0xff, 0xd8, 0xff, 0xe0];
+            return { data: btoa(String.fromCharCode(...header)) };
+        },
+        downloadFile: async ({ url, path }: { url: string; path: string }) => {
+            const state = handlers.filesystem;
+            if (!state) throw new Error('no filesystem');
+            if (state.failDownload) throw new Error('404');
+            state.downloads.push(url);
+            // 一张 640×640 的 JPEG 大概这么大，够区分「有落盘」与「没落盘」。
+            state.cached.set(path, 648_936);
+            return { path: `/data/user/0/app/cache/${path}` };
+        },
+    },
 }));
 
 const { fetchCoverBytes } = await import('@/services/coverBytes');
@@ -47,7 +96,83 @@ describe('fetchCoverBytes', () => {
     beforeEach(() => {
         handlers.nativeAvailable = false;
         handlers.nativeFetch = null;
+        handlers.filesystem = null;
         setFetch(async () => corsFailure());
+    });
+
+    /*
+     * #262：封面是几 MB 的二进位，整段过桥要在 Java heap 里再放一份 1.33× 的 base64
+     * 副本。改由原生下载到缓存目录，进 WebView 的只有一张图。
+     */
+    it('downloads the cover natively before asking the bridge', async () => {
+        handlers.filesystem = { cached: new Map(), downloads: [] };
+        handlers.nativeAvailable = true;
+        handlers.nativeFetch = async () => {
+            throw new Error('有原生下载这条路时不该再过桥');
+        };
+        setFetch(async (url) => (
+            url.startsWith('https://localhost/_capacitor_file_') ? okResponse() : corsFailure()
+        ));
+
+        const blob = await fetchCoverBytes(COVER_URL);
+
+        expect(blob?.type).toBe('image/jpeg');
+        expect(handlers.filesystem.downloads).toEqual([COVER_URL]);
+    });
+
+    it('reuses the file already downloaded for the same url', async () => {
+        handlers.filesystem = { cached: new Map(), downloads: [] };
+        setFetch(async (url) => (
+            url.startsWith('https://localhost/_capacitor_file_') ? okResponse() : corsFailure()
+        ));
+
+        await fetchCoverBytes(COVER_URL);
+        await fetchCoverBytes(COVER_URL);
+
+        expect(handlers.filesystem.downloads).toEqual([COVER_URL]);
+    });
+
+    /* 自建服务那类「要 cookie 才给图」的地址下不了：Filesystem 的下载不带 WebView 的 cookie。 */
+    it('still falls back to the bridge when the native download fails', async () => {
+        handlers.filesystem = { cached: new Map(), downloads: [], failDownload: true };
+        handlers.nativeAvailable = true;
+        handlers.nativeFetch = async () => okResponse();
+        setFetch(async () => corsFailure());
+
+        const blob = await fetchCoverBytes(COVER_URL);
+
+        expect(blob?.type).toBe('image/jpeg');
+    });
+
+    /*
+     * 同一类地址更隐蔽的一种：网关不给 404，而是回一张 200 的登录页。
+     * 不校验文件头就会把这张 HTML 当封面落盘、并按 URL 哈希永久复用。
+     */
+    it('rejects a non-image download and falls back to the bridge', async () => {
+        handlers.filesystem = {
+            cached: new Map(),
+            downloads: [],
+            deleted: [],
+            // "<html>"
+            header: [0x3c, 0x68, 0x74, 0x6d, 0x6c, 0x3e],
+        };
+        handlers.nativeAvailable = true;
+        let bridgeUsed = false;
+        handlers.nativeFetch = async () => {
+            bridgeUsed = true;
+            return okResponse();
+        };
+        setFetch(async (url) => (
+            url.startsWith('https://localhost/_capacitor_file_') ? okResponse() : corsFailure()
+        ));
+
+        const blob = await fetchCoverBytes(COVER_URL);
+
+        expect(blob?.type).toBe('image/jpeg');
+        expect(bridgeUsed).toBe(true);
+        // 坏文件必须删掉，否则下次还会命中它。
+        expect(handlers.filesystem.deleted?.length).toBe(1);
+        expect(handlers.filesystem.cached.size).toBe(0);
     });
 
     it('takes the in-page answer without asking the native bridge', async () => {

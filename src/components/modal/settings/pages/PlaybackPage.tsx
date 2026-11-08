@@ -11,7 +11,7 @@ import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsSt
 import { isCapacitorAndroid } from '../../../../platform/runtime';
 
 import { runsOnWindows } from '../../../../utils/platform';
-import { Button, Group, Reveal, Row, Segmented, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import { Button, Group, Reveal, Row, Segmented, Select, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
 import AndroidAutoLandscapeSetting from '../AndroidAutoLandscapeSetting';
 import AndroidKeepAliveSetting from '../AndroidKeepAliveSetting';
@@ -44,11 +44,39 @@ const MODELS: SettingsGroupDef = { id: 'analysisModels', titleKey: 'options.anal
  * AutoMix（那种按节拍对齐、能上分轨的过渡）与它那一组开关（性能档、过渡动画）已经删掉：
  * 出声交给原生 ExoPlayer 之后，这些都是 Web Audio 图上的东西，开关在那儿也只是空跑。
  * crossfade 与暂停 / 继续的淡化改由原生做音量斜坡（见 FoliaNativePlayer）。
+ *
+ * 上面那段是 Web 侧 AutoMix 退场时的原话，保留着当历史。现在安卓上多了一层东西：
+ * player/transition/ 里的原生内核接管了换歌，它不依赖 Web Audio，所以「智能过渡」这一档
+ * 在安卓是可用的 —— 档位、接法、强度、表现手势、增强包这五行只在安卓画（见下面的
+ * androidSmart），桌面端仍是固定交叉淡化，一行没变。
  */
+
+/** 18 种接法的顺序与原生 EffectCatalog.ALL 一致：分组连在一起，Select 里读起来成块。 */
+const EFFECT_IDS = [
+    'plainBlend', 'hardCut', 'fadeOutIn', 'plateauBlend',
+    'bassSwap', 'threeBandSeam', 'filterSweepIn', 'vocalRecede',
+    'beatCut', 'barAlignedBlend', 'tempoBend',
+    'tailRide', 'echoThrow', 'reverbCarry',
+    'buildUp', 'riserDrop', 'vinylBrake', 'reverseCrescendo',
+] as const;
+
+/** 强度四档：值用字符串是因为 Segmented 只吃 string，取用时再 Number 回去。 */
+const INTENSITY_LEVELS = [
+    { value: '0.25', labelKey: 'options.transitionIntensity_light' },
+    { value: '0.5', labelKey: 'options.transitionIntensity_normal' },
+    { value: '0.75', labelKey: 'options.transitionIntensity_strong' },
+    { value: '1', labelKey: 'options.transitionIntensity_max' },
+] as const;
+
 const O = {
     transition: option(TRANSITION, 'transitionEnable', 'options.transitionEnable'),
     crossfadeMax: option(TRANSITION, 'crossfadeMaxSeconds', 'options.crossfadeMaxSeconds'),
     crossfadeCurve: option(TRANSITION, 'crossfadeCurve', 'options.crossfadeCurve'),
+    handoffMode: option(TRANSITION, 'handoffMode', 'options.handoffMode'),
+    transitionEffect: option(TRANSITION, 'transitionEffect', 'options.transitionEffect'),
+    transitionIntensity: option(TRANSITION, 'transitionIntensity', 'options.transitionIntensity'),
+    transitionPerformance: option(TRANSITION, 'transitionPerformance', 'options.transitionPerformance'),
+    transitionEnhancer: option(TRANSITION, 'transitionEnhancer', 'options.transitionEnhancer'),
     outputDevice: option(SOUND, 'audioOutputDevice', 'options.audioOutputDevice'),
     replayGain: option(SOUND, 'replayGainSettings', 'options.replayGainMode'),
     fade: option(SOUND, 'playbackFade', 'options.playbackFade'),
@@ -180,9 +208,19 @@ const PlaybackPage: React.FC = () => {
         enabled: state.automixEnabled,
         crossfadeMaxSec: state.crossfadeMaxSec,
         crossfadeCurve: state.crossfadeCurve,
+        nativeMode: state.nativeTransitionMode,
+        effect: state.transitionEffect,
+        intensity: state.transitionIntensity,
+        performance: state.transitionPerformance,
+        enhancer: state.transitionEnhancer,
         setEnabled: state.handleToggleAutomix,
         setCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
         setCrossfadeCurve: state.handleSetCrossfadeCurve,
+        setNativeMode: state.handleSetNativeTransitionMode,
+        setEffect: state.handleSetTransitionEffect,
+        setIntensity: state.handleSetTransitionIntensity,
+        setPerformance: state.handleToggleTransitionPerformance,
+        setEnhancer: state.handleToggleTransitionEnhancer,
     })));
     const audio = useAudioSettingsStore(useShallow(state => ({
         mediaCache: state.enableMediaCache,
@@ -207,6 +245,14 @@ const PlaybackPage: React.FC = () => {
     // open, and the subscription below only makes the page render again when it does.
     React.useSyncExternalStore(subscribeModelAvailability, modelsPresent);
 
+    /*
+     * 原生过渡内核只在安卓的壳里。桌面端没有这个内核，两档都是老的固定交叉淡化，
+     * 所以这里用一对方便读的布尔值把「有没有这层东西」和「它现在是不是智能档」分开，
+     * 下面的条件就不是一串混在一起的平台判断。
+     */
+    const hasNativeHandoff = isCapacitorAndroid();
+    const smartHandoff = hasNativeHandoff && automix.nativeMode === 'smart';
+
     return (
         <>
             {isElectron && <HifiSettings />}
@@ -215,9 +261,35 @@ const PlaybackPage: React.FC = () => {
                     <Toggle checked={automix.enabled} onChange={automix.setEnabled} />
                 </Row>
                 <Reveal when={automix.enabled}>
-                    {/* 只剩 crossfade 一档，所以「过渡要淡多久」直接跟着开关出现，
-                        不再挂在「选了哪个模式」下面。 */}
-                    <Row sub option={O.crossfadeMax} hint={t('options.transitionCrossfadeDesc')}>
+                    {/* 安卓：换歌方式。桌面端整行不画，那里只有固定淡化一种。 */}
+                    {hasNativeHandoff && (
+                        <Row sub option={O.handoffMode} hint={t('options.handoffModeDesc')}>
+                            <Segmented
+                                value={automix.nativeMode}
+                                options={[
+                                    { value: 'crossfade' as const, label: t('options.handoffMode_crossfade') },
+                                    { value: 'smart' as const, label: t('options.handoffMode_smart') },
+                                ]}
+                                onChange={automix.setNativeMode}
+                            />
+                        </Row>
+                    )}
+                    {/* 接法：18 种，末尾的「自动」放在最前面 —— 绝大多数人用这一项。 */}
+                    {smartHandoff && (
+                        <Row sub option={O.transitionEffect} hint={t('options.transitionEffectDesc')}>
+                            <Select
+                                value={automix.effect ?? 'auto'}
+                                options={[
+                                    { value: 'auto', label: t('options.transitionEffectAuto') },
+                                    ...EFFECT_IDS.map(id => ({ value: id as string, label: t(`options.transitionEffect_${id}`) })),
+                                ]}
+                                onChange={next => automix.setEffect(next === 'auto' ? null : next)}
+                                name={t('options.transitionEffect')}
+                            />
+                        </Row>
+                    )}
+                    {/* 时长：固定淡化是「淡多久」，智能过渡是「最长允许多久」。 */}
+                    <Row sub option={O.crossfadeMax} hint={t(smartHandoff ? 'options.transitionMaxDesc' : 'options.transitionCrossfadeDesc')}>
                         <Slider
                             value={automix.crossfadeMaxSec}
                             min={CROSSFADE_MIN_SEC}
@@ -226,17 +298,38 @@ const PlaybackPage: React.FC = () => {
                             format={seconds => t('options.crossfadeSecondsValue', { seconds })}
                         />
                     </Row>
-                    {/* 曲线只影响重叠那几秒的音量怎么交叠：等功率中点不塌，线性是旧行为。 */}
-                    <Row sub option={O.crossfadeCurve} hint={t('options.crossfadeCurveDesc')}>
-                        <Segmented<CrossfadeCurve>
-                            value={automix.crossfadeCurve}
-                            options={CROSSFADE_CURVES.map(curve => ({
-                                value: curve,
-                                label: t(`options.crossfadeCurve_${curve}`),
-                            }))}
-                            onChange={automix.setCrossfadeCurve}
-                        />
-                    </Row>
+                    {/* 曲线只影响重叠那几秒的音量怎么交叠：等功率中点不塌，线性是旧行为。
+                        智能过渡下曲线由效果自己定（平台混音要 plateau、回声抛掷要快切），
+                        所以这一行在智能档收起，免得写着一个不起作用的选项。 */}
+                    {!smartHandoff && (
+                        <Row sub option={O.crossfadeCurve} hint={t('options.crossfadeCurveDesc')}>
+                            <Segmented<CrossfadeCurve>
+                                value={automix.crossfadeCurve}
+                                options={CROSSFADE_CURVES.map(curve => ({
+                                    value: curve,
+                                    label: t(`options.crossfadeCurve_${curve}`),
+                                }))}
+                                onChange={automix.setCrossfadeCurve}
+                            />
+                        </Row>
+                    )}
+                    {smartHandoff && (
+                        <>
+                            <Row sub option={O.transitionIntensity} hint={t('options.transitionIntensityDesc')}>
+                                <Segmented
+                                    value={String(automix.intensity)}
+                                    options={INTENSITY_LEVELS.map(level => ({ value: level.value as string, label: t(level.labelKey) }))}
+                                    onChange={next => automix.setIntensity(Number(next))}
+                                />
+                            </Row>
+                            <Row sub option={O.transitionPerformance} hint={t('options.transitionPerformanceDesc')}>
+                                <Toggle checked={automix.performance} onChange={automix.setPerformance} />
+                            </Row>
+                            <Row sub option={O.transitionEnhancer} hint={t('options.transitionEnhancerDesc')}>
+                                <Toggle checked={automix.enhancer} onChange={automix.setEnhancer} />
+                            </Row>
+                        </>
+                    )}
                 </Reveal>
             </Group>
 

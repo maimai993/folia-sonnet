@@ -249,6 +249,9 @@ class MainActivity : BridgeActivity() {
         registerPlugin(top.izuna.foliamajor.coloros.FoliaColorOsLyricsPlugin::class.java)
         // 本地登录（内置接口代码 + Cookie/OkHttp）与返回键都在这个插件上。
         registerPlugin(FoliaNativePlugin::class.java)
+        // 局域网音响投送：SSDP 组播发现 DLNA / UPnP 音响 + AVTransport 推送当前歌曲。
+        // 与上面那个插件分开，是因为多播锁与 SOAP 都是独立的一套生命周期。
+        registerPlugin(FoliaLanCastPlugin::class.java)
         registerPlugin(StatusBarPlugin::class.java)
         registerPlugin(SplashScreenPlugin::class.java)
         registerPlugin(BrowserPlugin::class.java)
@@ -266,6 +269,9 @@ class MainActivity : BridgeActivity() {
         // 原生播放内核（P1，ExoPlayer）：只有「设置 → 原生播放」打开时才被用到，
         // 注册本身不碰任何播放行为。
         registerPlugin(top.izuna.foliamajor.player.FoliaNativePlayerPlugin::class.java)
+        // 原生过渡系统：规划 / 分析 / 执行全部在原生侧，WebView 只保留设置 UI 与 cue 动画。
+        // 注册本身不碰任何播放行为（与 FoliaNativePlayerPlugin 同一条纪律）。
+        registerPlugin(top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin::class.java)
 
         super.onCreate(savedInstanceState)
 

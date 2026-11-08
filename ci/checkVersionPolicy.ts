@@ -53,14 +53,12 @@ export function parseVersion(version: string): ParsedVersion | null {
     };
 }
 
-// 与 android/app/build.gradle 的 versionCodeOf 逐字一致：
-//     minor * 1000000 + patch * 10000 + build
-// major 恒为 0（0.x），不占位；patch/build 超过 99 会被截断。
+// 与 android/app/build.gradle 的 versionCodeOf 一个字不差：**major 不参与**，
+// minor 占 10^6，patch 占 10^4，build 占 10^0，patch / build 超过 99 截断。
 //
-// 以前这里写的是 minor * 100000 + patch * 100，0.7.27.2 算出 702702，比装过的
-// dev 版（7025108）还小 —— 系统判定「降级安装」直接拒绝覆盖
-// （INSTALL_FAILED_VERSION_DOWNGRADE）。build.gradle 已经改成上面那套，这边的
-// 镜像没跟上；现在两边算同一串数字。
+// 位宽必须和 gradle 对齐。`0.7.27.2` 在 gradle 里是 `7*1000000 + 27*10000 + 2 = 7270002`；
+// 这里早先是按 100/1 进位的（`minor*100000 + patch*100 + build`），算出 702702 ——
+// 差一个数量级，门禁于是「通过」了一个系统会判成降级安装的号。
 export function versionCodeOf(version: string): number {
     const parsed = parseVersion(version);
     if (!parsed) return 0;

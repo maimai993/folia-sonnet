@@ -77,7 +77,13 @@ const placeholderBoard = (): { albums: RhineShelfAlbum[]; sources: AlbumSource[]
     return { albums, sources, columns };
 };
 
-export const collectCollections = (props: LibraryHomeSurfaceProps) => {
+/** 网页首页传已订阅的数据；原生架子仍可直接传宿主资源，保持旧入口兼容。 */
+export type RhineCollectionInputs = Pick<LibraryHomeSurfaceProps, 'playlists' | 'cloudPlaylist'> & {
+    favoriteAlbums?: LibraryHomeSurfaceProps['playlists'];
+    homeResources?: Pick<LibraryHomeSurfaceProps['homeResources'], 'favoriteAlbums'>;
+};
+
+export const collectCollections = (props: RhineCollectionInputs) => {
     const out: { collection: unknown; id: string; name: string }[] = [];
     const seen = new Set<string>();
     const push = (collection: { id?: unknown; name?: unknown } | null | undefined): void => {
@@ -89,7 +95,7 @@ export const collectCollections = (props: LibraryHomeSurfaceProps) => {
     };
     for (const collection of props.playlists ?? []) push(collection);
     push(props.cloudPlaylist ?? null);
-    const favorites = props.homeResources?.favoriteAlbums?.getSnapshot?.().data;
+    const favorites = props.favoriteAlbums ?? props.homeResources?.favoriteAlbums?.getSnapshot?.().data;
     if (Array.isArray(favorites)) for (const collection of favorites) push(collection);
     return out.slice(0, MAX_LANES);
 };

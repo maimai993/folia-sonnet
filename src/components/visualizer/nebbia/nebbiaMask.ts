@@ -48,21 +48,21 @@ export class NebbiaMask {
         if (this.ice) this.ice.length = 0;
         const wetDue = !!this.wet && now - this.wetAt >= WET_EVERY;
         if (wetDue) { this.wet!.length = 0; this.wetAt = now; }
-        const ink: InkContext = { ctx, motion, strokeWidth: tuning.strokeWidth, writeSpeed: tuning.writeSpeed, busSpeed: tuning.busSpeed, sweeps: this.sweeps, wet: wetDue ? this.wet : null,
+        const ink: InkContext = { ctx, motion, strokeWidth: tuning.strokeWidth, writeSpeed: tuning.writeSpeed, busSpeed: tuning.busSpeed, wind: tuning.wind, endBead: tuning.endBead, sweeps: this.sweeps, wet: wetDue ? this.wet : null,
             ice: this.ice ? { out: this.ice, k: this.H / 1000, H: this.H } : null };
         laid.forEach((line, i) => {
-            if (line.breathAt < Infinity) this.breath.drawLine(line, i, T, line.breathAt, line.breathUntil, line.breathDur, true);
-            if (line.appearBreathAt < Infinity) this.breath.drawLine(line, i, T, line.appearBreathAt, line.appearBreathUntil, NEBBIA_FIXED.breathSpread, false);
+            if (line.breathAt < Infinity) this.breath.drawLine(line, i, T, line.breathAt, line.breathUntil, line.breathDur, true, tuning.breathFade);
+            if (line.appearBreathAt < Infinity) this.breath.drawLine(line, i, T, line.appearBreathAt, line.appearBreathUntil, tuning.breathSpread, false, tuning.breathFade);
             if (T >= line.t - 0.5) this.drawLine(ink, line, i, T, tuning);
         });
         this.breath.end();
-        hits.draw(ctx, motion, T, tuning.refog, NEBBIA_FIXED.beadHold, rainSize);
+        hits.draw(ctx, motion, T, tuning.refog, tuning.beadHold, rainSize);
         this.drawTrails(motion, now, tuning);
     }
 
     // 一句：慢慢起雾，或手指抹除（另画拖痕，拖过的地方字边水珠被带走）
     private drawLine(ink: InkContext, line: LaidLine, idx: number, T: number, tuning: NebbiaTuning) {
-        const { refog } = tuning, beadHold = NEBBIA_FIXED.beadHold;
+        const { refog, beadHold } = tuning;
         const { fogAt } = line;
         const yf = yieldFactor(line, T), ym = yieldMask(line, T);
         // 被哈气盖掉的手指句不搓（不然先搓开、又哈上白气，两个效果打架）：和起雾的一样慢慢淡进雾里
@@ -131,7 +131,7 @@ export class NebbiaMask {
             // 太短的、整条在屏幕下面的不画（照样按时间回雾、丢掉）
             if (tr.y1 - tr.y0 < 2 || tr.y0 > this.H) continue;
             ctx.setTransform(MASK_SCALE, 0, 0, MASK_SCALE, 0, 0);
-            const wob = (y: number) => Math.sin(y * 0.07 + tr.seed) * 1.4 + Math.sin(y * 0.021 + tr.seed * 2) * 2.2 + windDrift(y - tr.y0, tuning.busSpeed);
+            const wob = (y: number) => Math.sin(y * 0.07 + tr.seed) * 1.4 + Math.sin(y * 0.021 + tr.seed * 2) * 2.2 + windDrift(y - tr.y0, tuning.busSpeed, tuning.wind);
             strokeTrail(ctx, tr.x, tr.y0, tr.y1, tr.w * 0.18, v * 0.95, tr.seed, wob);
             for (let y = tr.y0 + 10 + (tr.seed % 9); y < tr.y1 - tr.w * 0.25; y += 16 + ((y * 7 + tr.seed * 13) % 13)) {
                 motion.put(tr.x + wob(y), y, tr.w * (0.03 + 0.03 * (((y + tr.seed) * 0.37) % 1)), v);

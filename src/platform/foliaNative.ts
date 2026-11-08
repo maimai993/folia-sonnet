@@ -25,11 +25,20 @@ export type UpdateDownloadProgress = {
     done: boolean;
 };
 
-/** 原生桥 `httpRequest` 的返回。headers 两种形状都可能出现（见 FoliaNativePlugin 那边）。 */
+/**
+ * 原生桥 `httpRequest` 的返回。headers 两种形状都可能出现（见 FoliaNativePlugin 那边）。
+ *
+ * 响应体是二选一（#262）：文本类回 `bodyText`，其余回 `bodyBase64`。读它一律走
+ * `nativePayloadBytes` / `decodeNativePayload`，不要自己猜是哪一种。
+ */
 export type NativeHttpResponse = {
     status: number;
     headers?: Array<{ name?: string; value?: string }> | Record<string, string>;
+    /** 文本类响应：原生已按 UTF-8 解好（严格解码失败时会退回 base64）。 */
+    bodyText?: string;
     bodyBase64?: string;
+    /** 原生读到的实际字节数；排查「谁把响应撑大了」时用。 */
+    byteLength?: number;
 };
 
 interface FoliaNativePlugin {
@@ -105,6 +114,10 @@ interface FoliaNativePlugin {
         bodyBase64: string;
         redirect: string;
         timeoutMs?: number;
+        /** 允许回传的最大字节数；原生还会按硬上限再夹一次（见 FoliaNativePlugin）。 */
+        maxBytes?: number;
+        /** auto（默认，按 Content-Type 猜）| text | base64。 */
+        responseMode?: 'auto' | 'text' | 'base64';
     }): Promise<NativeHttpResponse>;
     /** 往 WebView 的 cookie 罐里写一条。`<img>` / `<audio>` 加不了请求头，只能靠它带凭据。 */
     cookiesSet(options: {
@@ -384,19 +397,55 @@ export const installUpdate = (
     options: { path: string },
 ): Promise<{ status: string }> => FoliaNative.installUpdate(options);
 
-/** 原生桥给的 base64 响应体 → UTF-8 文本。清单里可能有中文更新日志，必须按 UTF-8 解。 */
-export const decodeNativeBody = (bodyBase64?: string): string => {
-    if (!bodyBase64) return '';
+/** base64 里偶尔会带换行（Java 的 MIME 编码器），atob 不认，先清掉。 */
+const body64Safe = (value: string): string => value.replace(/\s+/g, '');
+
+/** 原生桥给的 base64 → 字节。空值给空数组。 */
+export const nativeBase64ToBytes = (bodyBase64?: string): Uint8Array => {
+    if (!bodyBase64) return new Uint8Array();
     const binary = atob(body64Safe(bodyBase64));
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) {
         bytes[index] = binary.charCodeAt(index);
     }
-    return new TextDecoder().decode(bytes);
+    return bytes;
 };
 
-/** base64 里偶尔会带换行（Java 的 MIME 编码器），atob 不认，先清掉。 */
-const body64Safe = (value: string): string => value.replace(/\s+/g, '');
+/** 原生桥给的 base64 响应体 → UTF-8 文本。清单里可能有中文更新日志，必须按 UTF-8 解。 */
+export const decodeNativeBody = (bodyBase64?: string): string => (
+    new TextDecoder().decode(nativeBase64ToBytes(bodyBase64))
+);
+
+/**
+ * 原生回包 → 字节。
+ *
+ * 文本类响应原生直接给 `bodyText`（#262），这里按 UTF-8 编回字节即可 —— 不再走
+ * 「先 base64 再 atob」那条 1.33× 的往返；二进位才是 `bodyBase64`。
+ */
+export const nativePayloadBytes = (payload: NativeHttpResponse | null | undefined): Uint8Array => {
+    if (!payload) return new Uint8Array();
+    if (typeof payload.bodyText === 'string') return new TextEncoder().encode(stripUtf8Bom(payload.bodyText));
+    return nativeBase64ToBytes(payload.bodyBase64);
+};
+
+/** 原生回包 → UTF-8 文本（文本响应直接用原生解好的那一份）。 */
+export const decodeNativePayload = (payload: NativeHttpResponse | null | undefined): string => {
+    if (!payload) return '';
+    if (typeof payload.bodyText === 'string') return stripUtf8Bom(payload.bodyText);
+    return decodeNativeBody(payload.bodyBase64);
+};
+
+/**
+ * 去掉开头的 UTF-8 BOM。
+ *
+ * 走 base64 的旧路径由 `TextDecoder` 负责剥（默认 ignoreBOM = false），而 #262 之后
+ * 文本响应是原生用 `CharsetDecoder` 严格解码出来的 —— 它**不剥** BOM。不在这里补一刀，
+ * 带 BOM 的 JSON（更新清单、自建 NAS 的资料库接口）就会 `JSON.parse` 失败，被误报成
+ * 「不是接口 / 非 JSON 响应」。
+ */
+const stripUtf8Bom = (value: string): string => (
+    value.charCodeAt(0) === 0xfeff ? value.slice(1) : value
+);
 
 /** 一次原生转发的结果：状态码 + 按 UTF-8 解出来的响应体。 */
 export type NativeHttpRequestResult = {
@@ -441,7 +490,7 @@ export const nativeHttpRequest = async (options: {
     });
     return {
         status: Number(response?.status) || 0,
-        text: decodeNativeBody(response?.bodyBase64),
+        text: decodeNativePayload(response),
         ...(response?.headers ? { headers: response.headers } : {}),
     };
 };

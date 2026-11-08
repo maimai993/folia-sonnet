@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NebbiaBreathMask, type NebbiaBreath } from '@/components/visualizer/nebbia/nebbiaBreath';
-import { NEBBIA_FIXED } from '@/components/visualizer/nebbia/nebbiaConstants';
+import { DEFAULT_NEBBIA_TUNING } from '@/components/visualizer/nebbia/types';
 import type { LaidLine } from '@/components/visualizer/nebbia/nebbiaScene';
 
 // test/unit/visualizer/nebbiaBreath.test.ts
@@ -9,7 +9,7 @@ import type { LaidLine } from '@/components/visualizer/nebbia/nebbiaScene';
 // 挂着的那段不重画，慢慢散时只在浓淡变了一级时重画，改尺寸后照画，白气没了清一次就停；
 // 同一句的让位白气（糊开旧字）和出场白气共用一个 breath 对象，只差 B 通道时也要重画。
 
-const { breathSpread, breathFade } = NEBBIA_FIXED;
+const { breathSpread, breathFade } = DEFAULT_NEBBIA_TUNING;
 
 /** 只数清屏和画圆的次数，别的绘图调用都是空的。 */
 const fakeContext = () => {

@@ -216,6 +216,24 @@ export function usePlaybackInteractionBridge({
             } else {
                 startPlaybackFromInteraction();
             }
+            return;
+        }
+
+        /*
+         * 没有 `<audio>` 元素可问 —— 但**不能**因此什么都不做。
+         *
+         * 以前这里直接落下去（除了我后来加的那行日志）：舞台 / hifi / 外部播放器 / 原生
+         * 四条路都没接手、`<audio>` 又是空的时候，按播放键是彻底无操作。用户看到的就是
+         * 「无法暂停和播放」——按下按钮没有任何反应，也没有报错。
+         *
+         * 这时唯一还知道「现在到底在不在放」的就是 `playerState`（它由各处统一维护，
+         * 包括原生播放事件）。照着它反过来做：在播就停，不在播就开始。这和上面
+         * 原生分支的取舍一致 —— 宁可这一下按了有点偏差，也不要按了没反应。
+         */
+        if (playerState === PlayerState.PLAYING) {
+            pausePlayback();
+        } else {
+            startPlaybackFromInteraction();
         }
     }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, isTransitionAudible, nativeTakesRef, pausePlayback, playerState, startPlaybackFromInteraction, stageActiveEntryKind]);
 

@@ -15,6 +15,9 @@ import top.izuna.foliamajor.player.dsp.EqSettings
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
 import top.izuna.foliamajor.settings.FoliaSettingsStore
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState
+import top.izuna.foliamajor.player.transition.bridge.TransitionDeckHost
+import top.izuna.foliamajor.player.transition.bridge.TransitionRuntime
+import top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin
 
 /**
  * 原生播放内核的桥（P1）。
@@ -86,6 +89,13 @@ class FoliaNativePlayerPlugin : Plugin() {
                 put("buffering", buffering)
             }
         }
+
+        /**
+         * 原生过渡系统的门面：FoliaTransitionPlugin 通过它拿到播放器能力，
+         * 过渡引擎因此不需要 import ExoPlayer，也不关心播放器实例的生命周期。
+         */
+        @JvmStatic
+        fun transitionHost(): TransitionDeckHost? = instance?.player?.transitionDeck()
 
         /** 原生手上真有歌时给一份快照；没有播放器 / 没装过源时返回 null。 */
         @JvmStatic
@@ -495,6 +505,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         } catch (error: Throwable) {
             android.util.Log.w("FoliaNativePlayer", "读取淡入淡出设置失败，按开启处理", error)
         }
+        // 插件加载顺序不保证：过渡插件可能比播放器插件先起来。播放器就绪后在这里补挂引擎。
+        TransitionRuntime.attachIfNeeded { transitionHost() }
     }
 
     override fun handleOnDestroy() {
@@ -517,10 +529,29 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         val startPositionMs = call.getDouble("startPositionMs")
         val repeatMode = call.getInt("repeatMode")
+        val webSongKey = call.getString("songKey")
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
-        val webSongKey = call.getString("songKey")
+        /*
+         * 换歌（不是同一首重新装源）优先进原生过渡引擎：接法、曲线、节拍对齐、PCM 效果链
+         * 全在原生侧跑，WebView 不需要知道这次换歌长什么样。
+         *
+         * 判据不成立时返回 false，继续走下面的普通装源 —— 与加这段之前的行为完全一致。
+         * 同一首重装（恢复进度、切画质）必须走普通路径，否则会被当成一次换歌交叉两次。
+         */
+        if (url != current.currentUrl() &&
+            FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)
+        ) {
+            MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
+            val handled = JSObject()
+            handled.put("ok", true)
+            handled.put("transition", true)
+            call.resolve(handled)
+            return
+        }
+        // 撤销条件：Web 亲自装源 = 手动换歌，进行中的过渡必须让位并恢复播放器状态。
+        FoliaTransitionPlugin.interrupt("Web 亲自装源")
         current.prepare(
             url,
             if (startPositionMs != null) startPositionMs.toLong() else -1L,
@@ -546,6 +577,7 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     @PluginMethod
     fun pause(call: PluginCall) {
+        FoliaTransitionPlugin.interrupt("暂停")
         val current = player
         if (current == null) {
             call.reject("The player is not ready.")
@@ -557,6 +589,7 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     @PluginMethod
     fun stop(call: PluginCall) {
+        FoliaTransitionPlugin.interrupt("停止")
         val current = player
         if (current == null) {
             call.reject("The player is not ready.")
@@ -568,6 +601,7 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     @PluginMethod
     fun seek(call: PluginCall) {
+        FoliaTransitionPlugin.interrupt("拖动进度条")
         val current = player
         val positionMs = call.getDouble("positionMs")
         if (current == null || positionMs == null) {

@@ -57,7 +57,10 @@ type NativePlugin = {
   httpRequest: (options: Record<string, unknown>) => Promise<{
     status: number;
     headers?: Array<{ name?: string; value?: string }> | Record<string, string>;
+    /** 文本类响应（#262）：原生已按 UTF-8 解好，优先用它。 */
+    bodyText?: string;
     bodyBase64?: string;
+    byteLength?: number;
   }>;
 };
 
@@ -286,7 +289,10 @@ export const nativeHttpRequest = async (url: string, options: NativeHttpOptions 
     if (timeoutHandle) clearTimeout(timeoutHandle);
   });
 
-  const responseBytes = base64ToBytes(result.bodyBase64);
+  // 文本响应原生给 bodyText（#262），二进位才是 base64 —— 两种都在这里收口。
+  const responseBytes = typeof result.bodyText === 'string'
+    ? new TextEncoder().encode(result.bodyText)
+    : base64ToBytes(result.bodyBase64);
   const responseBuffer = responseBytes.buffer.slice(
     responseBytes.byteOffset,
     responseBytes.byteOffset + responseBytes.byteLength,
