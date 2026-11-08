@@ -2886,6 +2886,8 @@ export default {
     "appLanguageSystemHint": "Current: {{language}}",
     "playbackEntryView": "View opened by Play",
     "playbackEntryViewDesc": "Which view opens by default after you press play.",
+    "rhineCardVisualizer": "Card becomes a lyric visualizer",
+    "rhineCardVisualizerDesc": "The card that opens in the Rhine library becomes Folia's lyric visualizer. While this is on, pressing play keeps you in the archive instead of opening the full-screen player.",
     "librarySuite": "Library interface",
     "librarySuiteDesc": "Which interface the home screen, collections and artist pages are browsed in. Switching keeps your filters, selection and queue.",
     "libraryWallLook": "Wall transparency",

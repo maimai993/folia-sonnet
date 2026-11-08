@@ -2886,6 +2886,8 @@ export default {
     "appLanguageSystemHint": "Theo ngôn ngữ trình duyệt hoặc hệ thống. Hiện tại: {{language}}",
     "playbackEntryView": "Giao diện khi phát",
     "playbackEntryViewDesc": "Giao diện mặc định mở ra sau khi nhấn phát.",
+    "rhineCardVisualizer": "Thẻ thành trình trực quan lời bài hát",
+    "rhineCardVisualizerDesc": "Thẻ mở ra trong thư viện Rhine trở thành trình trực quan lời bài hát của Folia. Khi bật, nhấn phát sẽ ở lại kho lưu trữ thay vì mở trình phát toàn màn hình.",
     "librarySuite": "Giao diện thư viện",
     "librarySuiteDesc": "Giao diện duyệt trang chủ, tuyển tập và trang nghệ sĩ. Khi chuyển đổi vẫn giữ bộ lọc, lựa chọn và hàng đợi.",
     "libraryWallLook": "Độ trong suốt thư viện",

@@ -2887,6 +2887,8 @@ export default {
     "appLanguageSystemHint": "当前生效：{{language}}",
     "playbackEntryView": "播放后进入的视图",
     "playbackEntryViewDesc": "点击播放后默认打开哪个视图。",
+    "rhineCardVisualizer": "卡片变成歌词可视化",
+    "rhineCardVisualizerDesc": "莱茵曲库首页里展开的那张卡片，整块换成 Folia 的歌词可视化。开着的时候点播放会留在档案首页，不再跳进全屏播放页。",
     "librarySuite": "资料库界面",
     "librarySuiteDesc": "首页、集合与歌手页用哪套界面浏览。切换时保留筛选、选中项和播放队列。",
     "libraryWallLook": "透光",

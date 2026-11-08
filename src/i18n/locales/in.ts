@@ -2886,6 +2886,8 @@ export default {
     "appLanguageSystemHint": "Saat ini: {{language}}",
     "playbackEntryView": "Tampilan yang dibuka Putar",
     "playbackEntryViewDesc": "Tampilan mana yang dibuka secara default setelah Anda menekan putar.",
+    "rhineCardVisualizer": "Kartu menjadi visualisator lirik",
+    "rhineCardVisualizerDesc": "Kartu yang terbuka di pustaka Rhine menjadi visualisator lirik Folia. Saat aktif, menekan putar tetap berada di arsip, bukan membuka pemutar layar penuh.",
     "librarySuite": "Antarmuka pustaka",
     "librarySuiteDesc": "Antarmuka yang dipakai untuk beranda, koleksi, dan halaman artis. Saat diganti, filter, pilihan, dan antrean tetap dipertahankan.",
     "libraryWallLook": "Transparansi dinding",

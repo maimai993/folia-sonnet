@@ -17,6 +17,7 @@
     <title>RHINE LAB · ANALYSIS OS</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <script src="./folia-rhine-patch.js"></script>
+    <script src="./folia-rhine-overlay.js"></script>
     <script>
       /*
        * Folia 侧的策略桥。补丁脚本把入口挂在 window 上，这里只做消息转发 ——
@@ -24,11 +25,21 @@
        */
       window.addEventListener('message', function (event) {
         var data = event && event.data;
-        if (!data || data.type !== 'rhine-policy') return;
-        try {
-          window.__FOLIA_RHINE_SET__(data.policy);
-        } catch (error) {
-          console.warn('[rhine] 应用渲染策略失败', error);
+        if (!data) return;
+        if (data.type === 'rhine-policy') {
+          try {
+            window.__FOLIA_RHINE_SET__(data.policy);
+          } catch (error) {
+            console.warn('[rhine] 应用渲染策略失败', error);
+          }
+          return;
+        }
+        if (data.type === 'rhine-overlay') {
+          try {
+            window.__FOLIA_OVERLAY_SET__(data.overlay);
+          } catch (error) {
+            console.warn('[rhine] 应用可视化叠层失败', error);
+          }
         }
       });
     </script>

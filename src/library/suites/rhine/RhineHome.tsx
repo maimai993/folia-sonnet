@@ -9,6 +9,10 @@ import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useSettingsModalStore } from '../../../stores/useSettingsModalStore';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
 import { getPhoneInsets, subscribePhoneInsets } from '../../../services/phoneInsets';
+import { usePlaybackStore, selectDisplayPlayerState } from '../../../stores/usePlaybackStore';
+import { useRhineOverlayStore } from '../../../stores/useRhineOverlayStore';
+import { PlayerState } from '../../../types';
+import RhineVisualOverlay, { type RhineCardRect } from './RhineVisualOverlay';
 
 /**
  * 当前是否有一个**登录了**的在线平台。
@@ -81,6 +85,80 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     const [ready, setReady] = useState(false);
     /** 转换好的曲库载荷；iframe 就绪后推给它。 */
     const payloadRef = useRef<RhinePayload | null>(null);
+    /*
+     * 叠层显不显示。
+     *
+     * 两个条件都要满足：用户在设置里打开了「卡片变成歌词可视化」，且有歌可显示。
+     * 开关在设置 → 播放页里（见 useRhineOverlayStore 的注释）。
+     */
+    const currentSong = usePlaybackStore(state => state.currentSong);
+    const cardVisualizer = useRhineOverlayStore(state => state.cardVisualizer);
+    const overlayVisible = cardVisualizer && Boolean(currentSong);
+    /*
+     * 卡片的屏幕矩形。
+     *
+     * 卡片在三维空间里，位置由相机投影决定，**不跟屏幕尺寸成比例**，宿主算不出来。
+     * 所以由 iframe 那边用 bundle 自己的 projectCard 投影四个角，postMessage 送过来
+     * （见 folia-rhine-overlay.js 的 publishCardRect）。
+     *
+     * 它跟着渲染循环跑，但只在像素级变化时才发，静止时没有消息。
+     */
+    const [overlayRect, setOverlayRect] = useState<RhineCardRect | null>(null);
+    /** iframe 那边量矩形失败的原因；有值就说明链路断在里面。 */
+    const [overlayRectError, setOverlayRectError] = useState<string | null>(null);
+    useEffect(() => {
+        const onMessage = (event: MessageEvent) => {
+            const data = event.data as
+                | { type?: string; rect?: RhineCardRect; reason?: string }
+                | null;
+            if (!data) return;
+            if (data.type === 'rhine-card-rect-failed') {
+                setOverlayRectError(String(data.reason ?? '未知原因'));
+                return;
+            }
+            if (data.type !== 'rhine-card-rect' || !data.rect) return;
+            const { left, top, width, height } = data.rect;
+            if (![left, top, width, height].every(value => Number.isFinite(value))) return;
+            setOverlayRectError(null);
+            setOverlayRect({ left, top, width, height });
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, []);
+
+    /*
+     * 临时自检：把叠层链路的状态写到 document.title。
+     *
+     * 上一版把诊断画在屏幕上，结果「左上角什么都没有」—— 要么组件没渲染，要么
+     * 被别的层盖住，屏幕上分不出来。title 不受任何层叠、裁切影响，写上去就一定
+     * 反映真实执行情况。确认完删掉。
+     */
+    useEffect(() => {
+        document.title = [
+            'R',
+            `v=${overlayVisible ? 1 : 0}`,
+            `cv=${cardVisualizer ? 1 : 0}`,
+            `s=${currentSong ? 1 : 0}`,
+            `r=${overlayRect ? Math.round(overlayRect.width) : 0}`,
+            `e=${overlayRectError ? 1 : 0}`,
+        ].join(' ');
+    }, [overlayVisible, cardVisualizer, currentSong, overlayRect, overlayRectError]);
+
+    /*
+     * 告诉 iframe「叠层要不要占这块卡片」。
+     *
+     * 开关打开时它会把两个圆环藏掉 —— 不藏的话，环和宿主那层可视化会叠成双层图，
+     * 看起来像画面花掉。有歌就开、没歌就关，圆环恢复原样。
+     */
+    useEffect(() => {
+        const frame = frameRef.current;
+        if (!frame?.contentWindow) return;
+        frame.contentWindow.postMessage(
+            { type: 'rhine-overlay', overlay: { enabled: overlayVisible } },
+            '*',
+        );
+    }, [overlayVisible, ready]);
+
     /** 当前界面语言，跟着 Folia 的设置走。 */
     const language = i18n.resolvedLanguage || i18n.language || 'en';
     /** 把载荷 postMessage 进 iframe。曲目对象原样带走，点开档案时要用它播放。 */
@@ -120,6 +198,57 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     }, [language, isDaylight, ready, pushInsets]);
     // 转屏、进全屏、状态栏收放都会改变安全区，跟着推。
     useEffect(() => subscribePhoneInsets(() => pushInsets(frameRef.current)), [pushInsets]);
+
+    /*
+     * 开屏只从 SELECTING FILES 那一段开始播。
+     *
+     * 完整开屏是 22 秒：ACCESS → LOGO → AUTH → SCAN → WELCOME，然后才轮到
+     * `SELECTING FILES...`（n=22）和卡片入场（n≈25.7）。用户要的是**跳过前面那段**，
+     * 直接看后面这部分。
+     *
+     * RhineLabUI 自己暴露了 `window.rhine.seek(n)`：它做的是 `Gi = now - n`，
+     * 于是时间轴立刻落到第 n 秒。这里等 iframe 就绪后调一次，n 取 22。
+     *
+     * 为什么不是更早或更晚：
+     *   - 开屏的解锁条件是 `e - Gi >= 22.76`。seek 到 22 之后，这个条件在
+     *     0.76 秒后自然满足，`Sf` 正常置位，时间轴继续往前走 —— 不会卡死。
+     *   - 取 22 是因为那正是 `SELECTING FILES...` 开始打字的时刻；更早会带出
+     *     WELCOME 那一段，更晚就错过打字机了。
+     *
+     * 只在这一个挂载周期里跳一次：iframe 常驻挂载，重复 seek 会把已经走到的
+     * 动画拽回去。
+     */
+    const bootSeekedRef = useRef(false);
+    useEffect(() => {
+        const frame = frameRef.current;
+        if (!ready || !frame?.contentWindow || bootSeekedRef.current) return;
+
+        /*
+         * `window.rhine` 是 bundle 尾部才挂上的，比 iframe 的 load 事件晚一档；
+         * 场景就绪（`ri`）之前调 seek 也没有意义。所以这里短轮询几次，
+         * 拿到就跳、跳完就停 —— 不是无限轮询，5 秒还没等到就放弃。
+         */
+        let tries = 0;
+        const timer = window.setInterval(() => {
+            tries += 1;
+            const target = frame.contentWindow as (Window & {
+                rhine?: { seek?: (seconds: number) => void };
+            }) | null;
+            if (typeof target?.rhine?.seek === 'function') {
+                try {
+                    target.rhine.seek(22);
+                    bootSeekedRef.current = true;
+                } catch (error) {
+                    console.warn('[rhine] 跳过开屏失败', error);
+                }
+                window.clearInterval(timer);
+                return;
+            }
+            if (tries >= 25) window.clearInterval(timer);
+        }, 200);
+
+        return () => window.clearInterval(timer);
+    }, [ready]);
 
     /*
      * 首页被盖住时让三维场景停下来。
@@ -363,7 +492,7 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
     );
 
     return (
-        <div className="relative h-full w-full overflow-hidden" style={{ background: '#e8e5e1' }}>
+        <div className="relative h-full w-full overflow-hidden" data-rhine-home="1" style={{ background: '#e8e5e1' }}>
             {/*
                 内嵌的三维档案阵列。不带 sandbox：它要自己用 WebAudio / localStorage /
                 IndexedDB 缓存模型和音频，sandbox 一加这些全被挡掉、开屏动画直接静音失败。
@@ -381,7 +510,14 @@ const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
                 }}
             />
 
-
+            {/*
+                可视化叠层：压在三维画布上，盖住那两个圆环（见 RhineVisualOverlay.tsx）。
+                它是 `pointer-events-none`，不抢 iframe 的手势 —— 拖动仍然由里面的
+                三维阵列处理，叠层只是跟着 `rotation` 平移。
+            */}
+            <RhineVisualOverlay
+                state={{ visible: overlayVisible, rect: overlayRect, rectError: overlayRectError }}
+            />
 
             {/*
                 开屏完成前先盖一层同色底，避免 iframe 白闪。

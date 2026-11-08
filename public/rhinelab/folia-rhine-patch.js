@@ -11,7 +11,33 @@
 (function foliaRhinePatch() {
     'use strict';
 
+    /*
+     * 清掉续播标记。
+     *
+     * RhineLabUI 在用户点播放时写 sessionStorage['rhine-resume']='1'，之后加载只要
+     * 读到它就 `ei("archive")`，**整段开屏连同 array 阶段一起跳过** —— 表现是
+     * 「开屏一进来几秒就到底」。
+     *
+     * 宿主（RhineHome）也会清一次，但那是新装的包才生效；升级前已经写进去的旧标记
+     * 会一直留着（sessionStorage 跨页面加载存活）。这里在 bundle 之前再清一次，
+     * 保证无论从哪进来的都不受历史状态影响。
+     */
+    try {
+        window.sessionStorage.removeItem('rhine-resume');
+    } catch (error) {
+        // 私密模式 / 存储被禁用：读不到标记，也就不会跳过开屏。
+    }
+
     var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /*
+     * 真实时钟，**在任何劫持之前**取下来。
+     *
+     * installTimelineRate() 会把 performance.now 换成「开屏期间走得更快」的版本。
+     * 补丁自己的帧率闸门与活跃判定必须继续按真实时间走 —— 否则节拍被一起放大，
+     * 60 帧的间隔会按错误的步子算，限流直接失效。
+     */
+    var realNow = performance.now.bind(performance);
 
     /*
      * 策略。默认值按「安卓手机」定：60 帧上限、静止 12 帧、DPR 压到 1.5。
@@ -34,6 +60,15 @@
         bootGraceMs: 40000,
         /** devicePixelRatio 上限；0 = 不压。 */
         maxPixelRatio: 1.5,
+        /**
+         * 开屏动画倍速。1 = 原速，3 = 三倍速。
+         *
+         * 开屏那 22 秒（扫描线、编号滚动、SELECTING FILES、卡片入场）是纯时间驱动的，
+         * bundle 里只有一个时间原点 `Gi`：每帧算的是 `performance.now()/1e3 - Gi`。
+         * 所以加速不必碰任何动画代码 —— 只要让时钟随真实时间走得更快，
+         * 「动画已经过了多久」就跟着走得快，见 installTimelineRate。
+         */
+        bootSpeed: 3,
     };
     window.__FOLIA_RHINE__ = policy;
 
@@ -55,12 +90,71 @@
 
     /** 开屏期间不节流：那一段没有任何输入，只能按加载后经过的时间判断。 */
     function inBootGrace() {
-        return policy.bootGraceMs > 0 && performance.now() - BOOT_AT < policy.bootGraceMs;
+        // 真实时间：这个「宽限期」量的是真实秒数，不该跟着开屏倍速一起被放大。
+        return policy.bootGraceMs > 0 && realNow() - BOOT_AT < policy.bootGraceMs;
     }
 
     function targetFps() {
         return moving || inBootGrace() ? policy.maxFps : policy.idleFps;
     }
+
+    /*
+     * 开屏倍速。
+     *
+     * bundle 里的时间轴只有一个原点：`Gi`（`Gi = performance.now()/1e3 - 偏移`），
+     * 每帧的开屏时间算作 `performance.now()/1e3 - Gi`。`Gi` 是模块内的局部变量，
+     * 补丁层拿不到 —— 但它**只经由 `performance.now()` 被读**。
+     *
+     * 所以这里劫持 `performance.now()`：开屏期间让它比真实时间跑得快。
+     * 设倍速 k，则返回 `t0 + (real - t0) * k`。
+     *
+     * 为什么这样是安全的：
+     *   - `Gi` 与每帧的 `e` 都从同一支 `performance.now()` 取值，两边同时被放大，
+     *     差值 `e - Gi` 正好按 k 倍增长 —— 动画加速，而「何时解锁」的判定
+     *     （`e - Gi >= ic`）语义不变，只是来得更早。
+     *   - 开屏结束（`#stage` 的 `data-mode` 不再是 `boot`，由 bundle 自己写）后
+     *     立刻恢复真实时间，之后的交互、粒子、配色都不受影响。
+     *   - 只影响这个 iframe 内的时序：宿主页面是另一个文档，用的是它自己的
+     *     `performance.now()`，不受牵连。
+     *
+     * 判定用 `data-mode` 而不是「用户有没有点过」：后者会让动画在开屏中途忽然
+     * 变回原速，看起来是卡了一下 —— 那不叫加速，叫掉帧。
+     */
+    function installTimelineRate() {
+        var speed = Number(policy.bootSpeed);
+        if (!isFinite(speed) || speed <= 0 || speed === 1) return;
+
+        // realNow 是文件头取下的真实时钟；这里绝不能再包一次 performance.now。
+        var t0 = realNow();
+        var active = true;
+
+        /** 开屏真的结束了就收手。#stage 的 data-mode 由 bundle 自己在切场景时写。 */
+        function bootOver() {
+            var stage = document.getElementById('stage');
+            return Boolean(stage) && stage.dataset.mode !== 'boot';
+        }
+
+        performance.now = function patchedNow() {
+            var real = realNow();
+            if (!active) return real;
+            if (bootOver()) {
+                active = false;
+                return real;
+            }
+            return t0 + (real - t0) * speed;
+        };
+
+        /*
+         * 兜底：万一 data-mode 一直停在 boot（比如加载卡住），到点也恢复，
+         * 免得这一帧的时钟被永久放大 —— 那会让之后所有计时都不准。
+         * 开屏整段约 35 秒，留足余量。
+         */
+        setTimeout(function () {
+            active = false;
+        }, (policy.bootGraceMs || 40000) + 5000);
+    }
+
+    installTimelineRate();
 
     /*
      * 帧率闸门。
@@ -109,7 +203,7 @@
             return id;
         }
         var gap = 1000 / fps;
-        var now = performance.now();
+        var now = realNow();
         // 首帧：lastPaint 还是 0，直接放行并定下节拍起点。
         if (!lastPaint) {
             lastPaint = now;
@@ -244,7 +338,8 @@
             title.dataset.foliaTyping = typing ? '1' : '0';
             if (done && title.dataset.foliaDone !== '1') {
                 title.dataset.foliaDone = '1';
-                started = performance.now();
+                // 真实时间：这个时刻只用于调试记录，不该跟着开屏倍速被放大。
+                started = realNow();
                 if (!title.contains(sweep)) title.appendChild(sweep);
             } else if (!done && title.dataset.foliaDone === '1') {
                 delete title.dataset.foliaDone;
@@ -283,6 +378,13 @@
         if (typeof patch.activeMs === 'number') policy.activeMs = Math.max(0, patch.activeMs);
         if (typeof patch.bootGraceMs === 'number') policy.bootGraceMs = Math.max(0, patch.bootGraceMs);
         if (typeof patch.maxPixelRatio === 'number') policy.maxPixelRatio = Math.max(0, patch.maxPixelRatio);
+        /*
+         * 开屏倍速。只记录，不重装：installTimelineRate 在加载时就按当时的倍速装好了，
+         * 之后再改这个字段要重载 iframe 才生效。
+         */
+        if (typeof patch.bootSpeed === 'number' && isFinite(patch.bootSpeed) && patch.bootSpeed > 0) {
+            policy.bootSpeed = patch.bootSpeed;
+        }
         return policy;
     };
 }());

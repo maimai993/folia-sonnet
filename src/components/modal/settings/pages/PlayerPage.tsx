@@ -10,6 +10,7 @@ import { playerBottomBarLiveOffset } from '../../../../stores/motionSignals';
 import { useLatticeSettingsStore } from '../../../../stores/useLatticeSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../../stores/usePlaybackEntryViewStore';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { useRhineOverlayStore } from '../../../../stores/useRhineOverlayStore';
 import { usePlayerBottomBarLayoutStore } from '../../../../stores/usePlayerBottomBarLayoutStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
@@ -36,6 +37,7 @@ const PLAYER_UI: SettingsGroupDef = { id: 'labPlayerUi', titleKey: 'options.labP
 
 const O = {
     entryView: option(VIEW, 'playbackEntryViewChoice', 'options.playbackEntryView'),
+    rhineCardVisualizer: option(VIEW, 'rhineCardVisualizer', 'options.rhineCardVisualizer'),
     vignette: option(VIEW, 'latticeSettings', 'options.latticeVignette'),
     tint: option(VIEW, 'latticePosterTint', 'options.latticePosterTint'),
     tintCustomColor: option(VIEW, 'latticePosterTintCustomColor', 'options.latticePosterTintCustomColor'),
@@ -78,6 +80,10 @@ const PlayerPage: React.FC = () => {
     const { playbackEntryView, setPlaybackEntryView } = usePlaybackEntryViewStore(useShallow(state => ({
         playbackEntryView: state.playbackEntryView,
         setPlaybackEntryView: state.setPlaybackEntryView,
+    })));
+    const { rhineCardVisualizer, handleToggleRhineCardVisualizer } = useRhineOverlayStore(useShallow(state => ({
+        rhineCardVisualizer: state.cardVisualizer,
+        handleToggleRhineCardVisualizer: state.handleToggleCardVisualizer,
     })));
     const lattice = useLatticeSettingsStore(useShallow(state => ({
         vignette: state.latticeVignette,
@@ -203,6 +209,15 @@ const PlayerPage: React.FC = () => {
                             { value: 'stay', label: t('playbackEntryView.stay.title'), picture: <EntryViewPicture view="stay" /> },
                         ]}
                         onChange={setPlaybackEntryView}
+                    />
+                </Row>
+                <Row
+                    option={O.rhineCardVisualizer}
+                    note={t('options.rhineCardVisualizerDesc')}
+                >
+                    <Toggle
+                        checked={rhineCardVisualizer}
+                        onChange={handleToggleRhineCardVisualizer}
                     />
                 </Row>
                 <Row option={O.vignette} note={t('options.latticeVignetteDesc')}>

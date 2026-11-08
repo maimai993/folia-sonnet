@@ -45,9 +45,18 @@ const Home: React.FC<AppHomeProps> = ({ model, isHomeFullyHidden, isInteractive 
     const hidden = Boolean(isHomeFullyHidden);
     // 首页的播放端口（探索页歌曲卡片上的速记簿与歌单选择器用它）。
     const playback = useMemo(() => createLibraryPlaybackPort(model.surfaceProps), [model.surfaceProps]);
-    if (isHomeFullyHidden) {
-        return null;
-    }
+    /*
+     * 注意这里**不能** `if (isHomeFullyHidden) return null`。
+     *
+     * 上面那段注释（「首页藏起来时不卸载，只让它隐形」）描述的就是这件事，但代码
+     * 在这个判据上又直接返回 null —— 等于把那次修复整个绕过去了。表现：
+     *
+     *   - 进全屏可视化 / 歌词页 → 首页卸载 → rhine 的 iframe 跟着销毁；
+     *   - 退回来 → 整个三维场景重新加载、重新建，开屏动画从头再放一遍，相机复位；
+     *   - 内嵌页面里的状态（`ready`、叠层收到的卡片矩形）全丢，叠层也就不显示了。
+     *
+     * 所以隐藏一律走下面的 `hidden`（visibility + inert），让 surface 留在原地。
+     */
 
     const homeSurface = resolveLibrarySurface('home', suiteId);
     const HomeSurface = homeSurface.component;
