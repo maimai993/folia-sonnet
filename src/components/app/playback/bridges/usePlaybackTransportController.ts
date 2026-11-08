@@ -15,6 +15,8 @@ import { onlineFailureToast } from '../source/onlineFailureToast';
 import { hifiTransport, isHifiRoute } from '../../../../services/hifi/hifiPlayback';
 import { resumeHifiPlayback } from '../../../hifi/hifiRouteTransport';
 import { isExternalRoute, pauseExternalPlayback, resumeExternalPlayback } from '../../../../services/onlineMusic/externalPlayback';
+import { nativePlaybackEngine } from '../../../../services/playbackEngine/nativePlaybackEngine';
+import { errorFields } from '../../../../utils/errorText';
 
 // src/components/app/playback/bridges/usePlaybackTransportController.ts
 
@@ -102,6 +104,25 @@ export function usePlaybackTransportController({
         // The provider's own player sounds this song: no deck is involved.
         if (isExternalRoute()) {
             if (resumeExternalPlayback()) setPlayerState(PlayerState.PLAYING);
+            return;
+        }
+
+        /*
+         * 原生播放（Android / ExoPlayer）：先把这条排掉，别落到下面那条
+         * `omni.canPlayExternally` 的分支上 —— 原生已经拿着这首歌了，让它继续就行。
+         *
+         * 原生播放时 `audioRef.current` 是空的（声音由 ExoPlayer 出），
+         * 以前这里一路走到 `if (!audio) return`，暂停之后再按播放毫无反应。
+         */
+        if (nativePlaybackEngine.ownsPlayback()) {
+            try {
+                await nativePlaybackEngine.play();
+                if (revision !== transportRevision.current) return;
+                setPlayerState(PlayerState.PLAYING);
+            } catch (error) {
+                if (revision !== transportRevision.current) return;
+                console.error('[Playback] Native resume failed', errorFields(error));
+            }
             return;
         }
 
@@ -241,6 +262,26 @@ export function usePlaybackTransportController({
         // The external player pauses at once too, and has no fade graph of ours.
         if (isExternalRoute()) {
             pauseExternalPlayback();
+            setPlayerState(PlayerState.PAUSED);
+            return;
+        }
+
+        /*
+         * 原生播放（Android / ExoPlayer）：**必须在这里停下**。
+         *
+         * 之前这段没有原生分支。原生播放时 `audioRef.current` 是空的（声音由原生那边出），
+         * 于是往下走到 `settlePause()`，它在 `!audioRef.current` 时返回 false，
+         * 结果**一个都没暂停**。而 `togglePlay` 那边已经把这一下判成「该暂停」了，
+         * 图标跟着 `playerState` 变过去 —— 用户看到的就是「按了暂停、图标也变了，
+         * 但声音还在放」；再按一次仍判成「该暂停」，而暂停什么也不做，
+         * 于是「再次点击就没反应」。
+         *
+         * 原生引擎自己维护播放状态，这里直接让它停，并且把 `playerState` 落到 PAUSED。
+         */
+        if (nativePlaybackEngine.ownsPlayback()) {
+            void nativePlaybackEngine.pause().catch(error => {
+                console.error('[Playback] Native pause failed', errorFields(error));
+            });
             setPlayerState(PlayerState.PAUSED);
             return;
         }

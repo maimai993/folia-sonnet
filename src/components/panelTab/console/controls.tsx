@@ -22,6 +22,8 @@ type ConsoleSliderProps = {
     log?: boolean;
     /** 保留几位小数后取整，避免 0.30000000000000004 这种值进数组。 */
     decimals?: number;
+    /** 默认值（实际刻度）：滑杆上画一根细线标出来，不画就不给。 */
+    defaultValue?: number;
     disabled?: boolean;
     onChange: (value: number) => void;
     onCommit: () => void;
@@ -40,6 +42,7 @@ export const ConsoleSlider: React.FC<ConsoleSliderProps> = ({
     max,
     log = false,
     decimals = 2,
+    defaultValue,
     disabled = false,
     onChange,
     onCommit,
@@ -68,6 +71,8 @@ export const ConsoleSlider: React.FC<ConsoleSliderProps> = ({
                     value={toPosition(value)}
                     label={label}
                     valueText={valueText}
+                    /* 默认值刻度由组件库的滑杆自己画，位置永远和圆点的行程一致。 */
+                    defaultValue={defaultValue === undefined ? undefined : toPosition(defaultValue)}
                     onPreview={position => onChange(fromPosition(position))}
                     onCommit={onCommit}
                 />
