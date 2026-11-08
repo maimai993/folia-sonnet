@@ -416,7 +416,7 @@ test.describe(`[${renderer}] filter, play and enqueue`, () => {
         const order = (indexes: readonly number[]) => indexes.map(localKey);
 
         expect(await playFilteredIds(page)).toEqual(order(LOCAL_SORT_ORDERS.fileNameAsc));
-        await runSurface(page, 'sort-file-modified');
+        await runSurface(page, 'sort-modified-date');
         await expect.poll(() => playFilteredIds(page)).toEqual(order(LOCAL_SORT_ORDERS.modifiedAsc));
         await runSurface(page, 'sort-toggle-direction');
         await expect.poll(() => playFilteredIds(page)).toEqual(order(LOCAL_SORT_ORDERS.modifiedDesc));
@@ -1473,7 +1473,7 @@ test.describe('renderer switch', () => {
         await mountProbe(mount, page);
         await open(page, 'local-all');
         await waitForScope(page, 8);
-        await runSurface(page, 'sort-file-modified');
+        await runSurface(page, 'sort-modified-date');
         await expect.poll(() => playFilteredIds(page)).toEqual(LOCAL_SORT_ORDERS.modifiedAsc.map(localKey));
 
         await setRenderer(page, 'tui');
@@ -2010,6 +2010,25 @@ test.describe('[bravais-only] collection page', () => {
         // 恢复到折叠前的等级（完整信息条）。
         await expect(seam).toHaveAttribute('data-bravais-seam-level', 'full');
         await expect(seam).toHaveAttribute('data-bravais-seam', 'full');
+    });
+
+    test('reloading is the track count itself, not an entry of the more menu', async ({ mount, page }) => {
+        await openPublic(mount, page);
+        const seam = seamOf(page);
+        const count = seam.locator('.bravais-seam-full .bravais-seam-meta > button');
+        await expect(count).toHaveAttribute('data-bravais-seam-action', 'reload');
+        await expect(count).toHaveAttribute('title', 'Reload');
+        await expect(count).toContainText(/\d/);
+        await expect(count.locator('svg')).toHaveCount(1);
+        await seam.locator('.bravais-seam-full [data-bravais-seam-action="more"]').click();
+        await expect(seam.locator('[data-bravais-seam-menu]')).toBeVisible();
+        await expect(seam.locator('[data-bravais-seam-menu] [data-bravais-seam-action="reload"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        await clearLog(page);
+        await count.click();
+        await expect.poll(async () => (await requests(page, 'playlistTracks')).some(request => request.offset === 0)).toBe(true);
+        await waitForScope(page, publicScope());
     });
 
     test('the more menu floats above the buttons: nothing in the strip moves, and a click elsewhere or Escape closes it', async ({ mount, page }) => {

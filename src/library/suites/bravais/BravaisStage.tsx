@@ -131,10 +131,11 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
     const leftRef = useRef<HTMLDivElement>(null);
     const rightRef = useRef<HTMLDivElement>(null);
     const seamRef = useRef<HTMLDivElement>(null);
+    const seamTrackRef = useRef<HTMLDivElement>(null);
     const seamContentRef = useRef<HTMLDivElement>(null);
     const tabRef = useRef<HTMLButtonElement>(null);
     const hintRef = useRef<HTMLDivElement>(null);
-    const frameRefs = useMemo(() => ({ left: leftRef, right: rightRef, seam: seamRef, seamContent: seamContentRef, tab: tabRef, hint: hintRef }), []);
+    const frameRefs = useMemo(() => ({ left: leftRef, right: rightRef, seam: seamRef, seamTrack: seamTrackRef, seamContent: seamContentRef, tab: tabRef, hint: hintRef }), []);
     const { stateRef: frameRef, renderFrame } = useBravaisFrame(frameRefs);
     const { wallLook, seamLook } = useBravaisWallLook(reportPlayerOcclusion, reportPlayerBackdrop);
     // 墙面的缩放倍率（双指捏合 / Ctrl+滚轮，与 Lattice 共用一份）：档位 × 倍率才是这一刻的 scale。
@@ -151,6 +152,7 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
     const tintCustom = useLatticeSettingsStore(state => state.latticePosterTintUseCustomColor);
     const tintColor = useLatticeSettingsStore(state => state.latticePosterTintColor);
     const tintIntensity = useLatticeSettingsStore(state => state.latticePosterTintIntensity);
+    const badgeCurrentOnly = useLatticeSettingsStore(state => state.latticeBadgeCurrentOnly);
     const stackEdges = useLibraryWallLookStore(state => state.collectionStackEdges);
     const seamDirection = useLibraryWallLookStore(state => state.seamDirection);
     // 竖着还是横着，按**墙面自己的实测尺寸**判（见 isPortraitWall 的注释：媒体查询在个别
@@ -193,8 +195,8 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
             panelOpen: current.panelFor === target.key && Boolean(target.entries?.hasPanel),
             filterOpen: current.filterOpen,
             searchOpen: current.searchOpen,
-            // 海报（歌手页、专辑页）只画在无限拼贴上：过滤生效（有限拼贴）时 rank 围着锚点两边排，海报会挡住一半。
-            poster: (target.surface === 'artist' || Boolean(target.seam.album)) && target.mode !== 'finite',
+            // 海报（歌手页、歌手的「全部歌曲」、专辑页）只画在无限拼贴上：过滤生效（有限拼贴）时 rank 围着锚点两边排，海报会挡住一半。
+            poster: (target.surface === 'artist' || Boolean(target.seam.artistSongs) || Boolean(target.seam.album)) && target.mode !== 'finite',
             horizontal: seamHorizontalRef.current,
         };
     }, [frameRef]);
@@ -531,6 +533,8 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
         lightsOn ? '' : 'is-lights-out',
         tintEnabled ? 'has-poster-tint' : '',
         tintCustom ? 'uses-custom-poster-tint' : '',
+        // 「只显示正在播放的序号」（#930）：歌曲序号（.is-index）只留正在播放那张，wall.css。
+        badgeCurrentOnly ? 'has-badge-current-only' : '',
         stackEdges ? 'has-stack-edges' : '',
         layer?.wall?.loading ? 'is-loading' : '',
         seeThrough ? 'is-see-through' : '',
@@ -562,6 +566,9 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
             data-library-stage="bravais"
             data-bravais-layer={display?.layer.key}
             data-bravais-active={active || undefined}
+            // 缝在轨道里自己写回了 pointer-events: auto（轨道不挡点击），宿主藏起首页、翻牌交接时祖先给的 none 传不到它，
+            // 由这里补上（bravais.css 的 .bravais-seam-track）。
+            data-bravais-seam-pointer={isInteractive && handoff.role === null ? undefined : 'off'}
             data-bravais-settling={settling || undefined}
             data-wall-handoff={handoff.role ?? undefined}
             data-wall-handoff-phase={handoff.phase ?? undefined}
@@ -616,6 +623,7 @@ const BravaisStage: React.FC<LibrarySuiteStageProps> = ({
             </div>
             <BravaisSeam
                 seamRef={seamRef}
+                trackRef={seamTrackRef}
                 contentRef={seamContentRef}
                 tabRef={tabRef}
                 variant={seam.rendered.variant}

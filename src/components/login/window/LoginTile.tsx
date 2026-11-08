@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppWindow, Ban, CircleHelp, Clock, RefreshCw, ServerOff, Smartphone, User, UserX, WifiOff, type LucideIcon } from 'lucide-react';
+import { AppWindow, Ban, CircleHelp, Clock, ListChecks, RefreshCw, ServerOff, Smartphone, User, UserX, WifiOff, type LucideIcon } from 'lucide-react';
 import type { LoginCaseKind } from '../../../types/loginFailure';
 import type { OnlineProviderId, ProviderUser } from '../../../types/onlineMusic';
 import { AccountPicture, PlatformMark } from '../PlatformMark';
@@ -84,12 +84,10 @@ export const LoginTile: React.FC<LoginTileProps> = ({
         picture = <span className="px-6 text-center text-xs leading-[18px] text-[color:var(--st-t3)]">{pendingText}</span>;
     } else if (scene === 'account' && user) {
         picture = <AccountPicture user={user} size={88} providerId={providerId} />;
-    } else if (scene === 'password') {
-        // 密码登录：平台的记号。**不能带那道转着的弧** —— 它说的是「正在取二维码」，
-        // 而这里是等用的人填表，转起来就是「二维码加载中」，表单却又一个都没有。
-        picture = <PlatformMark providerId={providerId} label={label} size={56} />;
-    } else if (scene === 'accountless' || scene === 'account') {
-        // 不用登录的平台，和没有账号资料可画的账号那一幅：平台的记号。
+    } else if (scene === 'form' || scene === 'accountless' || scene === 'account') {
+        // 表单式登录（dev 的「账号密码 / 自建服务」那一档）、不用登录的平台，和没有账号资料可画的
+        // 账号那一幅：都只是平台的记号。表单这一幅**不能带那道转着的弧** —— 它说的是「正在取二维码」，
+        // 而这里正等用的人填表，转起来就成了「二维码加载中」，表单却又一个都没有。
         picture = <PlatformMark providerId={providerId} label={label} size={56} />;
     } else if (expiredCode) {
         picture = (
@@ -112,6 +110,12 @@ export const LoginTile: React.FC<LoginTileProps> = ({
         picture = <Disc tone="calm"><Smartphone size={34} className="text-[color:var(--st-t1)]" /></Disc>;
     } else if (scene === 'reading') {
         picture = <Disc tone="calm" arc><User size={34} className="text-[color:var(--st-t1)]" /></Disc>;
+    } else if (scene === 'checking') {
+        // 账号读到了，正在做平台的登录后检查（动效开着时这一块由登录成功的动画画，见 doneLayer）。
+        picture = <Disc tone="calm" arc><ListChecks size={34} className="text-[color:var(--st-t1)]" /></Disc>;
+    } else if (scene === 'setup') {
+        // 配置清单：账号的头像（有的话），没有就是平台的记号。清单画在下面。
+        picture = user ? <AccountPicture user={user} size={88} providerId={providerId} /> : <PlatformMark providerId={providerId} label={label} size={56} />;
     } else {
         // 正在取二维码：平台的记号，外面一道转着的弧。
         picture = <span className="login-arc relative grid h-[54px] w-[54px] place-items-center"><PlatformMark providerId={providerId} label={label} size={30} /></span>;

@@ -175,6 +175,7 @@ const compressDiorama = (t: any): any => ({
     sae: t.soulActiveEnabled,
     gre: t.gradientEnabled,
     gri: t.gradientIntensity,
+    kce: t.keywordColoringEnabled,
 });
 const decompressDiorama = (o: any): any => ({
     cameraSpeed: o.cs !== undefined ? o.cs : DEFAULT_DIORAMA_TUNING.cameraSpeed,
@@ -202,6 +203,7 @@ const decompressDiorama = (o: any): any => ({
     soulActiveEnabled: o.sae !== undefined ? o.sae : DEFAULT_DIORAMA_TUNING.soulActiveEnabled,
     gradientEnabled: o.gre !== undefined ? o.gre : DEFAULT_DIORAMA_TUNING.gradientEnabled,
     gradientIntensity: o.gri !== undefined ? o.gri : DEFAULT_DIORAMA_TUNING.gradientIntensity,
+    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_DIORAMA_TUNING.keywordColoringEnabled,
 });
 
 const compressMonetBackground = (t: any): any => ({
@@ -333,7 +335,10 @@ const decompressSoraBackground = (o: any): any => ({
 });
 
 const compressMonet = (t: any): any => ({
+    kce: t.keywordColoringEnabled,
     msd: t.showDescription,
+    mav: t.showAudioVisualization,
+    mas: t.audioStyle,
     mfs: t.fontScale,
     mps: t.portraitSource,
     pox: t.portraitOffsetX,
@@ -341,7 +346,10 @@ const compressMonet = (t: any): any => ({
     mpdh: t.showPortraitDragHanger,
 });
 const decompressMonet = (o: any): any => ({
+    keywordColoringEnabled: o.kce !== undefined ? o.kce : DEFAULT_MONET_TUNING.keywordColoringEnabled,
     showDescription: o.msd !== undefined ? o.msd : DEFAULT_MONET_TUNING.showDescription,
+    showAudioVisualization: o.mav !== undefined ? o.mav : DEFAULT_MONET_TUNING.showAudioVisualization,
+    audioStyle: o.mas || DEFAULT_MONET_TUNING.audioStyle,
     fontScale: o.mfs !== undefined ? o.mfs : DEFAULT_MONET_TUNING.fontScale,
     portraitSource: o.mps || DEFAULT_MONET_TUNING.portraitSource,
     portraitOffsetX: o.pox !== undefined ? o.pox : DEFAULT_MONET_TUNING.portraitOffsetX,
@@ -430,19 +438,23 @@ const decompressSonnet = (o: any): any => ({
     postProcessLensDispersion: o.pplx !== undefined ? o.pplx : DEFAULT_SONNET_TUNING.postProcessLensDispersion,
 });
 
-// 智能动感模式 is one setting for every visualizer, not a Sonnet tuning, so it has its own key. Each
-// effect's setting is `[on ? 1 : 0, strength]`; a config from before effects had their own carries
-// the shared 轻拍 / 重拍 pair (`bi` / `dbi`), passed on for the store to fold (resolveSmartBeatSettings).
+// 智能动感模式 is one setting for every visualizer, not a Sonnet tuning, so it has its own key. Its
+// mode is `md` ('off' | 'cached' | 'on'); `on` is the one switch a build before the modes reads
+// (toStoredSmartBeat), and a config from such a build has only it. Each effect's setting is
+// `[on ? 1 : 0, strength]`, with its part strengths after for an effect that has them
+// (`[on, strength, { part: strength }]`); a config from before effects had their own carries the shared
+// 轻拍 / 重拍 pair (`bi` / `dbi`). Both legacy forms are passed on for the store to fold
+// (resolveSmartBeatSettings).
 const compressSmartBeat = (t: any): any => ({
     ...(t.mode !== undefined ? { md: t.mode } : {}),
     on: t.enabled ?? t.mode === 'on',
-    ef: Object.fromEntries(Object.entries(t.effects ?? {}).map(([id, e]: [string, any]) => [id, [e.on ? 1 : 0, e.strength]])),
+    ef: Object.fromEntries(Object.entries(t.effects ?? {}).map(([id, e]: [string, any]) => [id, e.parts ? [e.on ? 1 : 0, e.strength, e.parts] : [e.on ? 1 : 0, e.strength]])),
 });
 const decompressSmartBeat = (o: any): any => ({
     ...(o.md !== undefined ? { mode: o.md } : {}),
     enabled: o.on !== undefined ? o.on : DEFAULT_SMART_BEAT_SETTINGS.mode === 'on',
     ...(o.ef && typeof o.ef === 'object'
-        ? { effects: Object.fromEntries(Object.entries(o.ef).map(([id, e]: [string, any]) => [id, Array.isArray(e) ? { on: e[0] === 1, strength: e[1] } : e])) }
+        ? { effects: Object.fromEntries(Object.entries(o.ef).map(([id, e]: [string, any]) => [id, Array.isArray(e) ? { on: e[0] === 1, strength: e[1], ...(e[2] && typeof e[2] === 'object' ? { parts: e[2] } : {}) } : e])) }
         : {}),
     ...(o.bi !== undefined ? { beatIntensity: o.bi } : {}),
     ...(o.dbi !== undefined ? { downbeatIntensity: o.dbi } : {}),
@@ -524,6 +536,7 @@ const LUMIERE_SHORT_KEYS = {
     seamlessTransitions: 'st',
     overlayFrame: 'of',
     textOnly: 'txo',
+    keywordColors: 'kc',
     themeIcons: 'thi',
     themeColorMix: 'tcm',
     renderQuality: 'rq',
@@ -629,6 +642,7 @@ export const compressConfig = (config: any): string => {
     if (config.stageTrackPillMode !== undefined) minified.stp = config.stageTrackPillMode;
     if (config.stageTrackPillTimeoutSec !== undefined) minified.stpt = config.stageTrackPillTimeoutSec;
     if (config.stageTrackPillOnHome !== undefined) minified.stph = config.stageTrackPillOnHome;
+    if (config.stageTrackPillInObs !== undefined) minified.stpo = config.stageTrackPillInObs;
     if (config.stageTrackPillPosition !== undefined) minified.stpp = normalizeNowPlayingCardPosition(config.stageTrackPillPosition);
     if (config.libraryWallStackEdges !== undefined) minified.lwse = config.libraryWallStackEdges;
     if (config.libraryWallSeamClear !== undefined) minified.lwsc = config.libraryWallSeamClear;
@@ -636,9 +650,10 @@ export const compressConfig = (config: any): string => {
     if (config.libraryWallBackdropLyrics !== undefined) minified.lwbl = config.libraryWallBackdropLyrics;
     if (config.libraryWallBackdropBlur !== undefined) minified.lwbb = config.libraryWallBackdropBlur;
     if (config.libraryWallSeamDirection !== undefined) minified.lwsd = config.libraryWallSeamDirection;
+    if (config.latticeBadgeCurrentOnly !== undefined) minified.lbco = config.latticeBadgeCurrentOnly;
     if (config.playerHeaderBlur !== undefined) minified.phb = config.playerHeaderBlur;
-    // 液态玻璃：总开关、参数与效果开关存成一整对（键名短到一两个字），短码里只占一格。
     if (config.liquidGlass) minified.llg = compressLiquidGlass(config.liquidGlass);
+    if (config.scratchpadHandleStyle !== undefined) minified.sphs = config.scratchpadHandleStyle;
 
     const jsonStr = JSON.stringify(minified);
     const bytes = new TextEncoder().encode(jsonStr);
@@ -703,6 +718,7 @@ export const decompressConfig = (str: string): any => {
         || parsed.stpt !== undefined
         || parsed.stph !== undefined
         || parsed.stpp !== undefined
+        || parsed.stpo !== undefined
         // The bravais wall's collection stack edges, info strip and backdrop, for the same reason.
         || parsed.lwse !== undefined
         || parsed.lwsc !== undefined
@@ -710,8 +726,12 @@ export const decompressConfig = (str: string): any => {
         || parsed.lwbl !== undefined
         || parsed.lwbb !== undefined
         || parsed.lwsd !== undefined
+        // Numbering only the playing song on both tile walls (#930), for the same reason.
+        || parsed.lbco !== undefined
         || parsed.phb !== undefined
-        || parsed.llg !== undefined;
+        || parsed.llg !== undefined
+        // The scratchpad side tab's resting look, for the same reason.
+        || parsed.sphs !== undefined;
     if (isMinified) {
         const decompressed: any = {};
         if (parsed.t) {
@@ -782,6 +802,7 @@ export const decompressConfig = (str: string): any => {
         if (parsed.stp !== undefined) decompressed.stageTrackPillMode = parsed.stp;
         if (parsed.stpt !== undefined) decompressed.stageTrackPillTimeoutSec = parsed.stpt;
         if (parsed.stph !== undefined) decompressed.stageTrackPillOnHome = parsed.stph;
+        if (parsed.stpo !== undefined) decompressed.stageTrackPillInObs = parsed.stpo;
         if (parsed.stpp !== undefined) decompressed.stageTrackPillPosition = normalizeNowPlayingCardPosition(parsed.stpp);
         if (parsed.lwse !== undefined) decompressed.libraryWallStackEdges = parsed.lwse;
         if (parsed.lwsc !== undefined) decompressed.libraryWallSeamClear = parsed.lwsc;
@@ -789,17 +810,10 @@ export const decompressConfig = (str: string): any => {
         if (parsed.lwbl !== undefined) decompressed.libraryWallBackdropLyrics = parsed.lwbl;
         if (parsed.lwbb !== undefined) decompressed.libraryWallBackdropBlur = parsed.lwbb;
         if (parsed.lwsd !== undefined) decompressed.libraryWallSeamDirection = parsed.lwsd;
+        if (parsed.lbco !== undefined) decompressed.latticeBadgeCurrentOnly = parsed.lbco;
         if (parsed.phb !== undefined) decompressed.playerHeaderBlur = parsed.phb;
         if (parsed.llg !== undefined) decompressed.liquidGlass = decompressLiquidGlass(parsed.llg);
-        /*
-         * lwdr：旧的反向开关（只翻「自动」那一支）。它已经并进方向取值成为 'auto-reverse'，所以不再原样带出来，
-         * 只在旧配置的「自动 + 反向」这一组合上折算一次：lwsd 是 'auto'（或没写，那时旧版默认就是自动）而
-         * lwdr 不是 false 时，方向记成 'auto-reverse'。旧配置导入后的观感与导出它时一致，不会因为少了个键
-         * 就突然翻回「自动」。
-         */
-        if (parsed.lwdr !== undefined && parsed.lwdr !== false) {
-            if (parsed.lwsd === undefined || parsed.lwsd === 'auto') decompressed.libraryWallSeamDirection = 'auto-reverse';
-        }
+        if (parsed.sphs !== undefined) decompressed.scratchpadHandleStyle = parsed.sphs;
 
         return decompressed;
     } else {
@@ -820,16 +834,15 @@ export const decompressConfig = (str: string): any => {
             'urlBackgroundList', 'urlBackgroundSelectedId',
             'songThemeAutoSwitchEnabled', 'songThemeAutoGenerateEnabled', 'themeGenerationSource', 'followSystemTheme',
             'stageTrackPillMode', 'stageTrackPillTimeoutSec', 'stageTrackPillOnHome', 'stageTrackPillPosition',
+            'stageTrackPillInObs',
             'libraryWallStackEdges',
             'libraryWallSeamClear', 'libraryWallSeamStyle', 'libraryWallBackdropLyrics', 'libraryWallBackdropBlur',
             'libraryWallSeamDirection',
+            'latticeBadgeCurrentOnly',
             'playerHeaderBlur',
             // 液态玻璃：总开关、四个参数、光效与果冻，存成一整对象（短码 llg）。属于「界面长什么样」。
             'liquidGlass',
-            // 旧的反向开关（已并进 libraryWallSeamDirection 的 'auto-reverse'）。留着这一格只为一件事：
-            // 只带 lwdr 的旧 JSON 配置仍算「认得的外观配置」，不至于整份被当成非法。取值本身由
-            // visualConfigTransfer 折算，别的地方不要读它。
-            'libraryWallSeamDirectionReverse',
+            'scratchpadHandleStyle',
         ];
         const hasValidKey = validKeys.some(k => parsed[k] !== undefined);
         if (!hasValidKey) {
@@ -837,6 +850,9 @@ export const decompressConfig = (str: string): any => {
         }
         if (parsed.randomVisualizerModes !== undefined) {
             parsed.randomVisualizerModes = normalizeRandomVisualizerModes(parsed.randomVisualizerModes);
+        }
+        if (parsed.stageTrackPillPosition !== undefined) {
+            parsed.stageTrackPillPosition = normalizeNowPlayingCardPosition(parsed.stageTrackPillPosition);
         }
         return parsed;
     }

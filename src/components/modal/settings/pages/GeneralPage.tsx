@@ -12,6 +12,7 @@ import { Button, Group, Reveal, Row, Segmented, Select, Toggle, type SettingsOpt
 import AndroidScreenAwakeSetting from '../AndroidScreenAwakeSetting';
 import { FoundUpdateRow } from './FoundUpdateRow';
 import { ANDROID, LANGUAGE, LAUNCH, O, PONDER, UPDATE } from './general/options';
+import { ChinaDrivesRow } from './ChinaDrivesRow';
 import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/GeneralPage.tsx
@@ -42,7 +43,11 @@ const GeneralPage: React.FC = () => {
         ? t('options.appLanguageZhTW')
         : resolvedLanguage?.startsWith('zh')
             ? t('options.appLanguageZhCN')
-            : resolvedLanguage === 'in' || resolvedLanguage?.startsWith('id') ? t('options.appLanguageInID') : t('options.appLanguageEnUS');
+            : resolvedLanguage === 'in' || resolvedLanguage?.startsWith('id')
+                ? t('options.appLanguageInID')
+                : resolvedLanguage === 'vi'
+                    ? t('options.appLanguageViVN')
+                    : t('options.appLanguageEnUS');
 
     const isInternalBuild = electronSettings.UPDATE_CHANNEL === 'internal';
     const autoUpdateSupported = Boolean(updateStatus?.autoUpdateSupported);
@@ -62,6 +67,7 @@ const GeneralPage: React.FC = () => {
                             { value: 'zh-TW', label: t('options.appLanguageZhTW') },
                             { value: 'en', label: t('options.appLanguageEnUS') },
                             { value: 'in', label: t('options.appLanguageInID') },
+                            { value: 'vi', label: t('options.appLanguageViVN') },
                         ]}
                         onChange={preference => void setLanguagePreference(preference)}
                     />
@@ -100,6 +106,7 @@ const GeneralPage: React.FC = () => {
                     foot={t(autoUpdateSupported ? 'options.autoUpdateGithubNotice' : 'options.updateCheckGithubNotice')}
                 >
                     <FoundUpdateRow />
+                    <ChinaDrivesRow />
                     <Row
                         option={O.updateCheck}
                         hint={t(updateStatus?.updateCheckSupportReason === 'channel' ? 'options.updateUnsupportedChannel' : 'options.enableUpdateCheckDesc')}

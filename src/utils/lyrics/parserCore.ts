@@ -1,6 +1,7 @@
 import { LyricData, Line, Word } from '../../types';
 import type { TimedLyricFormat } from './formatDetection';
 import { annotateLyricLines } from './renderHints';
+import { buildTimedWords, estimateLrcLineEndTime } from './estimatedLineTiming';
 import type { LyricProcessingOptions } from './types';
 import { TTMLParser } from '@applemusic-like-lyrics/ttml';
 import { DOMParser } from '@xmldom/xmldom';
@@ -27,97 +28,17 @@ interface DraftLine {
     fullText: string;
 }
 
-interface TimestampMarker {
-    time: number;
-    index: number;
-    endIndex: number;
-}
-
-interface LrcMetadata {
-    title?: string;
-    artist?: string;
-}
-
-interface ParsedTimedEntriesResult {
-    entries: TimedTextEntry[];
-    isSorted: boolean;
-}
-
-// Minutes have two digits, or three in a track of a hundred minutes and more.
-const GLOBAL_LRC_TIME_REGEX = /\[(\d{2,3}):(\d{2})[.:](\d{2,3})\]/g;
-const GLOBAL_ANGLE_TIME_REGEX = /<(\d{2,3}):(\d{2})[.:](\d{2,3})>/g;
-const LRC_LINE_TIME_REGEX = /^\[(\d{2,3}):(\d{2})[.:](\d{2,3})\]/;
-const LEADING_LRC_TAGS_REGEX = /^((?:\[(?:\d{2,3}):(?:\d{2})[.:](?:\d{2,3})\])+)(.*)$/;
-const LRC_METADATA_REGEX = /^\[(ti|ar):([^\]]*)\]$/i;
-// Mirrors LX Music's own `timeExp` (lrc-file-parser): 1..3 colon-separated fields plus a fraction,
-// so `[ss.ms]`, `[mm:ss.ms]` and `[hh:mm:ss.ms]` all parse.
-const AWLRC_LINE_REGEX = /^\[(\d{1,3}(?::\d{1,3}){0,2})\.(\d{1,3})\](.*)$/;
-// LX normalises KRC's three-field syllable tag down to two fields, but accept the original as well.
-const AWLRC_WORD_REGEX = /<(\d+),(\d+)(?:,\d+)?>([^<]*)/g;
-export const INTERLUDE_FULL_TEXT = '......';
-
-const buildTimedWords = (text: string, startTime: number, endTime: number): Word[] => {
-    const duration = Math.max(endTime - startTime, 0.1);
-    const rawTokens = text.split(/\s+/).filter(token => token);
-    const words: Word[] = [];
-    const tokens: Array<{ text: string; weight: number }> = [];
-    let totalWeight = 0;
-
-    for (const token of rawTokens) {
-        if (/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(token)) {
-            token.split('').forEach(char => {
-                const isPunctuation = /[，。！？、：；"'）]/.test(char);
-                const weight = isPunctuation ? 0 : 1;
-                tokens.push({ text: char, weight });
-                totalWeight += weight;
-            });
-        } else {
-            const weight = 1 + (token.length * 0.15);
-            tokens.push({ text: token, weight });
-            totalWeight += weight;
-        }
-    }
-
-    if (totalWeight === 0) {
-        totalWeight = 1;
-    }
-
-    const activeDuration = duration * 0.9;
-    const timePerWeight = activeDuration / totalWeight;
-    let currentWordStart = startTime;
-
-    tokens.forEach(token => {
-        const wordDuration = token.weight * timePerWeight;
-        const finalDuration = Math.max(wordDuration, 0.05);
-
-        words.push({
-            text: token.text,
-            startTime: currentWordStart,
-            endTime: currentWordStart + finalDuration
-        });
-
-        if (token.weight > 0) {
-            currentWordStart += wordDuration;
-        } else {
-            currentWordStart += 0.05;
-        }
-    });
-
-    if (words.length > 0) {
-        const lastWord = words[words.length - 1];
-        if (lastWord.endTime > endTime) {
-            const scale = (endTime - startTime) / (lastWord.endTime - startTime);
-            words.forEach(word => {
-                word.startTime = startTime + ((word.startTime - startTime) * scale);
-                word.endTime = startTime + ((word.endTime - startTime) * scale);
-            });
-        }
-    }
-
-    return words;
-};
-
+/** 一行歌词里真正要唱的字数：空白不算。 */
 const lyricCharCount = (text: string): number => Array.from(text.replace(/\s+/g, '')).length;
+
+/**
+ * 行尾尾韵：字唱完之后行还留多久。
+ *
+ * 这两秒是给这一句的尾音留的：
+ *   · 完全按「到下一行为止」定长，后面接间奏的行会把字摊成每字两三秒；
+ *   · 压到字唱完就结束，尾音还在响、屏幕上的词已经撤掉（「词没了还在唱那一句」）。
+ */
+const LINE_TAIL_SEC = 2;
 
 /**
  * 行级歌词（没有字时间）的字位置是摊出来的，而摊的依据是「本行到下一行之间」的全部时间 ——
@@ -127,8 +48,6 @@ const lyricCharCount = (text: string): number => Array.from(text.replace(/\s+/g,
  * 这里拿整首的「每字时长」中位数当常态：明显比常态慢一截的行，把字压回正常语速，
  * 行尾留在字唱完之后两秒（尾韵），余下的时间还给间奏。慢歌整体每字就长，中位数跟着变长。
  */
-const LINE_TAIL_SEC = 2;
-
 const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]): void => {
     if (estimatedIndexes.length === 0) {
         return;
@@ -172,14 +91,7 @@ const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]
             return;
         }
 
-        /*
-         * 行尾 = 字唱完 + 两秒尾韵。
-         *
-         * 这两秒是给这一句的尾音留的：
-         *   · 完全按「到下一行为止」定长，后面接间奏的行会把字摊成每字两三秒；
-         *   · 压到字唱完就结束，尾音还在响、屏幕上的词已经撤掉（「词没了还在唱那一句」）。
-         * 字按正常语速走完，行多留两秒，剩下的时间交给 attachInterludes 变成间奏行。
-         */
+        // 字按正常语速走完，行多留两秒，剩下的时间交给 attachInterludes 变成间奏行。
         const singEnd = line.startTime + count * pace;
         const lineEnd = singEnd + LINE_TAIL_SEC;
         if (line.endTime <= lineEnd) {
@@ -190,6 +102,35 @@ const rebalanceEstimatedLineTimings = (lines: Line[], estimatedIndexes: number[]
         line.endTime = lineEnd;
     });
 };
+
+interface TimestampMarker {
+    time: number;
+    index: number;
+    endIndex: number;
+}
+
+interface LrcMetadata {
+    title?: string;
+    artist?: string;
+}
+
+interface ParsedTimedEntriesResult {
+    entries: TimedTextEntry[];
+    isSorted: boolean;
+}
+
+// Minutes have two digits, or three in a track of a hundred minutes and more.
+const GLOBAL_LRC_TIME_REGEX = /\[(\d{2,3}):(\d{2})[.:](\d{2,3})\]/g;
+const GLOBAL_ANGLE_TIME_REGEX = /<(\d{2,3}):(\d{2})[.:](\d{2,3})>/g;
+const LRC_LINE_TIME_REGEX = /^\[(\d{2,3}):(\d{2})[.:](\d{2,3})\]/;
+const LEADING_LRC_TAGS_REGEX = /^((?:\[(?:\d{2,3}):(?:\d{2})[.:](?:\d{2,3})\])+)(.*)$/;
+const LRC_METADATA_REGEX = /^\[(ti|ar):([^\]]*)\]$/i;
+// Mirrors LX Music's own `timeExp` (lrc-file-parser): 1..3 colon-separated fields plus a fraction,
+// so `[ss.ms]`, `[mm:ss.ms]` and `[hh:mm:ss.ms]` all parse.
+const AWLRC_LINE_REGEX = /^\[(\d{1,3}(?::\d{1,3}){0,2})\.(\d{1,3})\](.*)$/;
+// LX normalises KRC's three-field syllable tag down to two fields, but accept the original as well.
+const AWLRC_WORD_REGEX = /<(\d+),(\d+)(?:,\d+)?>([^<]*)/g;
+export const INTERLUDE_FULL_TEXT = '......';
 
 export const isInterludeLine = (line: Pick<Line, 'fullText'>): boolean => line.fullText === INTERLUDE_FULL_TEXT;
 
@@ -536,14 +477,19 @@ export const parseLRC = (
         romanizationEntries
     );
 
+    // 末行没有「下一句」可参照，先按保守的默认值定长；哪些行的字位置是摊出来的记下来，
+    // 等整首排好了再按这首歌自己的语速做一次收尾（见 rebalanceEstimatedLineTimings）。
+    const estimatedIndexes: number[] = [];
+
     for (let index = 0; index < sortedRawEntries.length; index += 1) {
         const current = sortedRawEntries[index];
         const next = sortedRawEntries[index + 1];
         const translation = translations[index];
 
-        // 先按「到下一行为止」定长，间奏那部分交给 rebalanceEstimatedLineTimings 收掉。
-        const duration = next ? next.startTime - current.startTime : 5;
-        const endTime = current.startTime + duration;
+        const endTime = estimateLrcLineEndTime(current.text, current.startTime, next?.startTime);
+        if (!next || (next.startTime - current.startTime) > 5) {
+            estimatedIndexes.push(index);
+        }
         lines.push({
             words: buildTimedWords(current.text, current.startTime, endTime),
             startTime: current.startTime,
@@ -554,7 +500,7 @@ export const parseLRC = (
         });
     }
 
-    rebalanceEstimatedLineTimings(lines, lines.map((_, index) => index));
+    rebalanceEstimatedLineTimings(lines, estimatedIndexes);
 
     return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
@@ -888,6 +834,42 @@ export const parseVTT = (
     return { lines: finalizeParsedLyricLines(lines, options), isWordByWord: false };
 };
 
+const ITUNES_TTML_NAMESPACE = 'http://music.apple.com/lyric-ttml-internal';
+
+type XmlDomElement = NonNullable<ReturnType<InstanceType<typeof DOMParser>['parseFromString']>['documentElement']>;
+
+const getLocalName = (node: { localName?: string | null; nodeName: string; }): string =>
+    node.localName || node.nodeName.split(':').pop() || '';
+
+// The AMLL parser silently drops every <p> without an `itunes:key`. AMLL TTML Tool and the store's
+// own lyric TTML always write one, but TTML from other tools (LRC converters and the like) usually does not, and
+// such a file would parse to zero lines. Give unkeyed lines a unique key before AMLL reads them.
+const ensureTtmlLineKeys = (documentElement: XmlDomElement | null): void => {
+    if (!documentElement) return;
+    const lines = Array.from(documentElement.getElementsByTagName('*'))
+        .filter(element => getLocalName(element) === 'p');
+    // Same lookup as AMLL's getAttr: any attribute whose local name is `key`.
+    const readKey = (element: XmlDomElement) => Array.from(element.attributes)
+        .find(attribute => getLocalName(attribute) === 'key')?.value;
+    const usedKeys = new Set(lines.map(readKey).filter((key): key is string => Boolean(key)));
+    let nextIndex = 1;
+    lines.forEach((line) => {
+        if (readKey(line)) return;
+        while (usedKeys.has(`L${nextIndex}`)) nextIndex += 1;
+        const key = `L${nextIndex}`;
+        usedKeys.add(key);
+        line.setAttributeNS(ITUNES_TTML_NAMESPACE, 'itunes:key', key);
+    });
+};
+
+const ttmlDomParser = {
+    parseFromString: (source: string, mimeType: string) => {
+        const document = new DOMParser().parseFromString(source, mimeType as 'application/xml');
+        ensureTtmlLineKeys(document.documentElement);
+        return document;
+    },
+};
+
 export const parseTTML = (
     ttmlString: string,
     _translationString: string = '',
@@ -895,7 +877,7 @@ export const parseTTML = (
     _romanizationString: string = ''
 ): LyricData => {
     const ttmlResult = TTMLParser.parse(ttmlString.replace(/^\uFEFF/, ''), {
-        domParser: new DOMParser(),
+        domParser: ttmlDomParser as unknown as globalThis.DOMParser,
     });
     const parsed = buildLyricDataFromTTMLResult(ttmlResult, buildTimedWords);
     const adapted = {
@@ -903,7 +885,7 @@ export const parseTTML = (
         lines: finalizeParsedLyricLines(parsed.lines, options),
     };
 
-    console.log('[TTML] Adapted lyric data for visualizers:', adapted);
+    console.log('[TTML] Adapted lyric data for visualizers:', { lineCount: adapted.lines.length });
 
     return adapted;
 };
@@ -978,7 +960,6 @@ export const parseEnhancedLRC = (
         romanizationEntries
     );
 
-    const estimatedIndexes: number[] = [];
     const lines: Line[] = sortedDrafts.map((draft, index) => {
         let lineEndTime = Math.max(draft.endTime ?? sortedDrafts[index + 1]?.startTime ?? (draft.startTime + 5), draft.startTime + 0.001);
 
@@ -995,10 +976,6 @@ export const parseEnhancedLRC = (
             })
             : buildTimedWords(draft.fullText, draft.startTime, lineEndTime);
 
-        if (draft.words.length === 0) {
-            estimatedIndexes.push(index);
-        }
-
         if (words.length > 0) {
             lineEndTime = Math.max(lineEndTime, words[words.length - 1].endTime);
         }
@@ -1012,8 +989,6 @@ export const parseEnhancedLRC = (
             romanization: romanizations[index]
         };
     });
-
-    rebalanceEstimatedLineTimings(lines, estimatedIndexes);
 
     return {
         lines: finalizeParsedLyricLines(lines, options),

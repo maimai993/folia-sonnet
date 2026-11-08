@@ -50,8 +50,11 @@ const ALLOWED: Record<string, Kind[]> = {
     'src/services/aiSettings.ts': ['setting', 'address'],
     'src/services/aiThemeClient.ts': ['route', 'setting'],
     'src/services/gemini.ts': ['bridge', 'setting'],
+    // 各语言的设置面板文案里会写死接口地址（「地址固定为 api.deepseek.com」这类说明），
+    // 那是给用户看的解释，不是发请求的地方 —— 四份语言都要在这里列全。
     'src/i18n/locales/en.ts': ['address'],
     'src/i18n/locales/in.ts': ['address'],
+    'src/i18n/locales/vi.ts': ['address'],
     'src/i18n/locales/zh-CN.ts': ['address'],
 };
 

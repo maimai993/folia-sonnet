@@ -2,17 +2,22 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, useMotionValueEvent, useDragControls, useMotionValue } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
+import { Tooltip } from '../../modal/settings/kit/Tooltip';
+import { SettingsKitThemeContext } from '../../modal/settings/kit/kitTheme';
 import { useElementWidth } from '../../../hooks/useElementWidth';
 import { DEFAULT_MONET_TUNING } from '../../../types';
+import { isCapacitorAndroid } from '../../../platform/runtime';
 import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
 import { Button } from '../../ui';
 import { type VisualizerSharedProps } from '../definition';
 import { useVisualizerRuntime } from '../runtime';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import VisualizerShell from '../VisualizerShell';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
 import { resolveSubtitleContentMode } from '../../../utils/lyrics/alternateText';
+import AudioOverlay from './AudioOverlay';
 import MonetFloatingDecor from './MonetFloatingDecor';
 import MonetLyricsRail from './MonetLyricsRail';
 import MonetPortraitImage from './MonetPortraitImage';
@@ -54,6 +59,10 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     const { t } = useTranslation();
     // 关键词着色是全局开关（useVisualizerSettingsStore），不再看莫奈自己的 tuning。
     const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    const tooltipTheme = useMemo(() => ({ isDaylight: props.isDaylight ?? false }), [props.isDaylight]);
+    // 底部音频条的分辨率倍数（#929）：全局挡位叠上这个样式的覆盖；预览不跟。
+    const renderQuality = useLyricRenderQuality(monetTuning.render);
+    const audioRenderScale = isPreviewMode ? 1 : renderQuality.scale;
 
     // Through a blend the words stay on the song on screen until the audio crossover, then show the
     // incoming one (monetSongHandoff.ts). Held as state so the hand-off's every frame renders nothing.
@@ -238,14 +247,20 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
             )}
 
             <div ref={shellRef} className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden">
+                {/* Not clipped: the cover's shadow reaches past the row's edge, and the shell above clips at the screen. */}
                 <div
-                    className="flex h-full w-full flex-row items-center overflow-hidden"
+                    className="flex h-full w-full flex-row items-center"
                     style={{ maxWidth: `${rowMaxWidthPx}px` }}
                 >
                     {showText && (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center px-5 py-5 sm:px-8 sm:py-6 lg:px-14 lg:py-8 2xl:px-20">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center px-5 py-5 sm:px-8 sm:py-6 lg:px-14 lg:py-8 2xl:px-20"
+                            data-folia-safe-top="nudge"
+                            data-folia-safe-left="shift"
+                            data-folia-safe-right="shift"
+                        >
                             {/* 安全区：曲目信息（歌手 / 曲名 / 专辑）。这一列是 justify-center，
-                                加内外边距只挪一半，所以用 nudge（relative; top）—— 见 androidPhoneFit.css ⑥。 */}
+                                加内外边距只挪一半，所以用 nudge（relative; top）—— 见 androidPhoneFit.css ⑥。
+                                横屏时挖孔在左右两侧，整列再用 shift 让出左右 inset（描述胶囊跟着列走）。 */}
                             <div className="mb-3 space-y-1.5" style={{ maxWidth: headerMaxWidth }}>
                                 <motion.div
                                     key={`artist-${introKey}`}
@@ -349,10 +364,10 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     initial={{ opacity: 0, scale: 0.9, y: 10 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     transition={{ duration: 1.0, ease: [0.25, 1, 0.5, 1], delay: 0.95 }}
-                                    className="mt-auto pt-4"
+                                    className="group/monet-description relative mt-auto w-fit pt-4 before:absolute before:-inset-x-6 before:top-0 before:-bottom-6 before:content-['']"
                                 >
                                         <div
-                                            className="inline-flex items-center gap-3 rounded-full border px-4 py-2 backdrop-blur-md"
+                                            className="inline-flex items-center gap-3 rounded-full border px-4 py-2 opacity-0 backdrop-blur-md transition-opacity duration-200 group-hover/monet-description:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
                                             style={{
                                                 borderColor: colorWithAlpha(theme.primaryColor, 0.16),
                                                 backgroundColor: colorWithAlpha(theme.backgroundColor, 0.18),
@@ -458,7 +473,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                 ? { duration: 9, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }
                                                 : { duration: 0.8, ease: 'easeOut' }
                                         }
-                                        className="relative"
+                                        className="group/monet-cover relative"
                                         style={{
                                             width: monetTuning.portraitStyle === 'square' ? '135.135%' : '100%',
                                             marginLeft: monetTuning.portraitStyle === 'square' ? '-35.135%' : '0%',
@@ -468,7 +483,20 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     >
                                         {/* Hanger / Black-White Bar */}
                                         {monetTuning.showPortraitDragHanger && (
-                                            <motion.div
+                                            <SettingsKitThemeContext.Provider value={tooltipTheme}>
+                                              <Tooltip
+                                                text={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
+                                                className="group/monet-hanger absolute -top-6 right-5 z-20 flex h-20 w-9 justify-center pt-3"
+                                              >
+                                            <motion.button
+                                                type="button"
+                                                aria-label={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
+                                                aria-pressed={isEditingPosition}
+                                                onKeyDown={(e) => {
+                                                    if (!isEditingPosition || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+                                                    e.preventDefault();
+                                                    offsetX.set(Math.min(0, Math.max(-150, offsetX.get() + (e.key === 'ArrowLeft' ? -5 : 5))));
+                                                }}
                                                 onPointerDown={(e) => {
                                                     if (isEditingPosition) {
                                                         e.preventDefault();
@@ -492,7 +520,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                 }}
                                                 onMouseEnter={() => setIsHangerHovered(true)}
                                                 onMouseLeave={() => setIsHangerHovered(false)}
-                                                className="absolute -top-3 right-8 z-20 h-14 w-3 rounded-full shadow-md cursor-pointer transition-transform duration-200 hover:scale-y-105 active:scale-y-95"
+                                                className={`h-14 w-3 cursor-pointer rounded-full shadow-md transition-[opacity,transform] duration-200 hover:scale-y-105 active:scale-y-95 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${isEditingPosition ? 'opacity-100' : 'opacity-0 group-hover/monet-cover:opacity-100'}`}
                                                 animate={isEditingPosition ? {
                                                     borderColor: [
                                                         colorWithAlpha(theme.accentColor, 0.3),
@@ -522,6 +550,8 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                                     touchAction: isEditingPosition ? 'none' : 'auto',
                                                 }}
                                             />
+                                              </Tooltip>
+                                            </SettingsKitThemeContext.Provider>
                                         )}
 
                                         {/* Square cover with enhanced shadow, no transparent border. Its theme
@@ -563,6 +593,30 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 </div>
             </div>
 
+            {/* 手机（安卓 App）拿不到 Web Audio 的分析数据：频谱永远趴着不动，干脆不画。
+                设置里那个开关也一并隐藏（见 MonetSettingsPanel）。 */}
+            {showText && monetTuning.showAudioVisualization && !isCapacitorAndroid() && (
+                <motion.div
+                    key={`audio-${introKey}`}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 1.2, ease: [0.25, 1, 0.5, 1], delay: 0.8 }}
+                    className="absolute bottom-0 left-0 z-20 h-10 overflow-hidden px-5 sm:px-8 lg:px-14"
+                    style={{ width: 'min(450px, 55vw)' }}
+                >
+                    <div className="h-full w-full">
+                        <AudioOverlay
+                            audioPower={audioPower}
+                            audioBands={audioBands}
+                            theme={theme}
+                            mode={monetTuning.audioStyle}
+                            staticMode={staticMode}
+                            isPreviewMode={isPreviewMode}
+                            renderScale={audioRenderScale}
+                        />
+                    </div>
+                </motion.div>
+            )}
         </VisualizerShell>
     );
 };

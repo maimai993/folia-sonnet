@@ -1,5 +1,10 @@
 import type { AppFoundation } from './useAppFoundation';
 import { useAudioOutputDevice } from '../../../hooks/useAudioOutputDevice';
+// HiFi 路线上开了软件音量时，拖动音量条要直接下发给 mpv —— 那才是出声的那一路，
+// Web Audio 的增益只影响网页解码（HiFi 上根本没有回声）。
+import { hifiEngine } from '../../../services/hifi/hifiEngine';
+import { isHifiRoute } from '../../../services/hifi/hifiPlayback';
+import { selectHifiEngineConfig, useHifiSettingsStore } from '../../../stores/useHifiSettingsStore';
 import { NATIVE_PLAYBACK_ENABLED, nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
@@ -24,19 +29,19 @@ export const useAppAudioOutput = (model: Input) => {
     const {
         audioContextRef, audioQuality, audioRef, audioSrc, blobUrlRef, cachedCoverUrl,
         currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongFullRef, gainNodeRef, globalLyricTimelineOffsetMs,
-        isMuted, lastAudioRecoverySourceRef, loopMode, lyricFilterEnabled, lyricFilterPattern, lyricStaffAbsorbMode,
+        isMuted, lastAudioRecoverySourceRef, loopMode, lyricLineRules, lyricStaffAbsorbMode,
         lyricStaffMinDwellSeconds, lyricStaffPattern, lyricStaffPolicy, lyricTimelineOffsetMs,
         onlinePlaybackRecoveryRef, pendingResumeTimeRef, pendingVolumePreviewRef, setAudioSrc, setCurrentSong,
         setLyricTimelineOffsetMs, setLyricsState, setPlayQueue, shouldAutoPlay, volume, volumePreviewFrameRef
     } = model;
     const setLyrics = useMemo(
-        () => createLyricsSetter(setLyricsState, lyricFilterEnabled ? lyricFilterPattern : '', currentSongFullRef, {
+        () => createLyricsSetter(setLyricsState, lyricLineRules, currentSongFullRef, {
             policy: lyricStaffPolicy,
             minDwellSeconds: lyricStaffMinDwellSeconds,
             absorbMode: lyricStaffAbsorbMode,
             pattern: lyricStaffPattern,
         }),
-        [lyricFilterEnabled, lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
+        [lyricLineRules, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
     );
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
@@ -148,7 +153,14 @@ export const useAppAudioOutput = (model: Input) => {
                 // than using an isMuted captured by an older render, so the gain write cannot mute
                 // the preview again. Zero leaves mute alone.
                 // 若这一帧之前用户又点了静音，新的静音意图优先。
-                syncOutputGain(useAudioSettingsStore.getState().isMuted ? 0 : nextVolume, 0.015);
+                const mutedNow = useAudioSettingsStore.getState().isMuted;
+                syncOutputGain(mutedNow ? 0 : nextVolume, 0.015);
+                // HiFi 上开了软件音量时，拖动的这一下是从 mpv 里听到的；引擎同配置不重复下发。
+                // 静音同样现读：与上面那一次写一致，避免下发的配置和网页增益说的不是一件事。
+                const hifiSettings = useHifiSettingsStore.getState();
+                if (isHifiRoute() && hifiSettings.softwareVolume) {
+                    void hifiEngine.configure(selectHifiEngineConfig(hifiSettings, nextVolume, mutedNow));
+                }
             }
         });
     }, [syncOutputGain]);

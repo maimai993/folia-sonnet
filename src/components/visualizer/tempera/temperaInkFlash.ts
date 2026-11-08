@@ -59,26 +59,6 @@ const seededRandom = (seed: number) => {
     };
 };
 
-/**
- * 每帧都要用的伪随机序列（[seededRandom] 那个闭包版的常驻写法）。
- *
- * 形状与纸面污渍每帧都要重算，用 `seededRandom(seed)` 现造就是每帧两次分配 —— 而这条
- * 路径是逐帧的。序列仍然只由 seed 决定（同一发命中重绘出来完全一样），但对象不再新建：
- * 换 seed 只 reset 一下内部状态。
- */
-const createSeededGenerator = () => {
-    let state = 1;
-    return {
-        reset(seed: number) {
-            state = (seed * 2654435761 + 12345) >>> 0 || 1;
-        },
-        next() {
-            state = (state * 1664525 + 1013904223) >>> 0;
-            return state / 4294967296;
-        },
-    };
-};
-
 /** Value noise whose lattice wraps at (periodX, periodY), so fBm built from it tiles. */
 const tileableNoise = (seed: number) => {
     const random = seededRandom(seed);
@@ -265,17 +245,6 @@ export interface TemperaInkFlashFrame {
     inkColor: string;
 }
 
-/** A frame to reuse across updates: the per-frame path must not allocate one each time. */
-export const createTemperaInkFlashFrame = (): TemperaInkFlashFrame => ({
-    time: 0,
-    width: 0,
-    height: 0,
-    strength: 0,
-    hits: null,
-    paragraphIndex: 0,
-    inkColor: '',
-});
-
 // GLSL ES 3.0 on purpose: without the version line Pixi compiles ES 1.0, which has no fwidth.
 const vertex = `#version 300 es
 in vec2 aPosition;
@@ -354,9 +323,6 @@ export class TemperaInkFlash {
     private readonly alphas = new Float32Array(3);
     private readonly ink = new Float32Array(3);
     private inkKey = '';
-    // 逐帧复用，见 createSeededGenerator 的说明。
-    private readonly shapeRandom = createSeededGenerator();
-    private readonly stainRandom = createSeededGenerator();
 
     constructor(private readonly pixi: PixiModule) {
         this.container = new pixi.Container({ isRenderGroup: true });
@@ -467,20 +433,18 @@ export class TemperaInkFlash {
             }
             lift = Math.max(lift, envelope);
             // The shape is a function of the hit's own time, so a re-pick of the same hits keeps it.
-            const random = this.shapeRandom;
-            random.reset(Math.round(hitTime * 100));
-            const texture = this.textures[Math.floor(random.next() * this.textures.length)];
-            const rotation = (random.next() - 0.5) * 0.7;
-            const scale = cover * (1 + random.next() * 0.15);
-            const mirror = random.next() < 0.5 ? -1 : 1;
-            this.placeLayer(layer, layer === 2 ? 'uFlashTextureB' : 'uFlashTextureA', texture, rotation, scale * mirror, scale, random.next() * TEX_W * scale, random.next() * TEX_H * scale);
+            const random = seededRandom(Math.round(hitTime * 100));
+            const texture = this.textures[Math.floor(random() * this.textures.length)];
+            const rotation = (random() - 0.5) * 0.7;
+            const scale = cover * (1 + random() * 0.15);
+            const mirror = random() < 0.5 ? -1 : 1;
+            this.placeLayer(layer, layer === 2 ? 'uFlashTextureB' : 'uFlashTextureA', texture, rotation, scale * mirror, scale, random() * TEX_W * scale, random() * TEX_H * scale);
             this.alphas[layer] = clamp01(envelope * FLASH_ALPHA * strength);
         }
-        const stainRandom = this.stainRandom;
-        stainRandom.reset(Math.max(0, frame.paragraphIndex) * 7 + 3);
-        const stainTexture = this.textures[Math.floor(stainRandom.next() * this.textures.length)];
+        const stainRandom = seededRandom(Math.max(0, frame.paragraphIndex) * 7 + 3);
+        const stainTexture = this.textures[Math.floor(stainRandom() * this.textures.length)];
         // A slow drift, so the paper is not frozen between paragraphs.
-        this.placeLayer(0, 'uStainTexture', stainTexture, 0, cover, cover, stainRandom.next() * frame.width, stainRandom.next() * frame.height - frame.time * unit * 0.006);
+        this.placeLayer(0, 'uStainTexture', stainTexture, 0, cover, cover, stainRandom() * frame.width, stainRandom() * frame.height - frame.time * unit * 0.006);
         this.alphas[0] = STAIN_ALPHA * Math.min(1, strength) * (1 - STAIN_LIFT * lift);
         this.container.visible = Math.max(this.alphas[0], this.alphas[1], this.alphas[2]) >= MIN_VISIBLE_ALPHA;
     }

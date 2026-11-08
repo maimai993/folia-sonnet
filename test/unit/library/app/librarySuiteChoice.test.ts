@@ -181,7 +181,8 @@ describe('whether there is a choice', () => {
     });
 });
 
-// 首启引导第一页问网格（经典）、bravais（无限）与 rhine（莱茵生命）；TUI 在测试构建里可用也不出现。
+// 2026-10-10：首启引导第一页只问网格（经典）与 bravais（无限）；TUI 在测试构建里可用也不出现。
+// 之后 ffc42c8d1「首启引导补上 Rhine Lab 选项」把 rhine 也加了进去（仍排在最后、且不默认选中）。
 describe('first-run onboarding suite page', () => {
     it('lists grid, bravais and rhine, in that order, and leaves the dev TUI out', () => {
         expect(listLibrarySuiteOptions().map(option => option.id)).toContain('tui');

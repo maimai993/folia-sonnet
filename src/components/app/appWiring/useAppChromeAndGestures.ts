@@ -12,6 +12,9 @@ import { usePersonalFmModeController } from '../../../hooks/usePersonalFmModeCon
 import { usePlayerSwipeGesture } from '../../../hooks/usePlayerSwipeGesture';
 import { usePlayerTapGesture } from '../../../hooks/usePlayerTapGesture';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
+import { useHifiTrackStore } from '../../../services/hifi/hifiPlayback';
+import { omni } from '../../../services/onlineMusic/omni';
+import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { disableHdrProjection } from '../../../services/hdrProjection';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import type { TapEvent } from '../../../utils/doubleTap';
@@ -282,6 +285,12 @@ export const useAppChromeAndGestures = (model: Input) => {
     ]);
     const isNowPlayingControlDisabled = isNowPlayingStageActive;
 
+    // Which engine sounds the current song, and whether the song on screen plays outside this app:
+    // buildPlayerViewFlags needs both to tell "nothing to toggle" from "someone else is playing".
+    const playbackRoute = usePlaybackStore(state => state.playbackRoute);
+    const hasHifiTrack = useHifiTrackStore(state => state.current !== null);
+    const hasExternalSong = Boolean(currentSong && omni.canPlayExternally(currentSong));
+
     useElectronWindowChrome();
     const {
         isPlayerView,
@@ -301,16 +310,22 @@ export const useAppChromeAndGestures = (model: Input) => {
         stageActiveEntryKind,
         audioSrc,
         duration,
+        playbackRoute,
+        hasHifiTrack,
+        hasExternalSong,
     }), [
         activePlaybackContext,
         audioSrc,
         currentView,
         disableHomeDynamicBackground,
         duration,
+        hasExternalSong,
+        hasHifiTrack,
         hidePlayerProgressBar,
         hidePlayerRightPanelButton,
         hidePlayerTranslationSubtitle,
         isNowPlayingControlDisabled,
+        playbackRoute,
         stageActiveEntryKind,
     ]);
     // 播放页空闲时连指针一起隐藏。复用控制栏的自动隐藏时钟（3 秒无鼠标移动），不新开计时器：

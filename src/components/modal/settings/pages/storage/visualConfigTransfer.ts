@@ -2,10 +2,10 @@ import { applyVisualizerTuningsToSettings } from '../../../../visualizer/tuningR
 import { importFoliumParams, snapshotFoliumParams } from '../../../../../mods/params/paramStore';
 import { buildVisualSettingsConfig } from '../../../../../services/obs/visualSettingsConfig';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../../../services/themePreferences';
+import { useLatticeSettingsStore } from '../../../../../stores/useLatticeSettingsStore';
 import { useLibraryWallLookStore } from '../../../../../stores/useLibraryWallLookStore';
-import { useGlassSurfaceSettingsStore } from '../../../../../stores/useGlassSurfaceSettingsStore';
-import type { LiquidGlassEffects, LiquidGlassParams } from '../../../../../shinoinject/liquidglass';
 import { usePlayerChromeSettingsStore } from '../../../../../stores/usePlayerChromeSettingsStore';
+import { isScratchpadHandleStyle, useScratchpadSettingsStore } from '../../../../../stores/useScratchpadSettingsStore';
 import { useStageSettingsStore } from '../../../../../stores/useStageSettingsStore';
 import { useThemeSettingsStore } from '../../../../../stores/useThemeSettingsStore';
 import { useTypographySettingsStore } from '../../../../../stores/useTypographySettingsStore';
@@ -142,21 +142,6 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     }
     if (has('playerHeaderBlur')) {
         usePlayerChromeSettingsStore.getState().handleTogglePlayerHeaderBlur(Boolean(config.playerHeaderBlur));
-    }
-    // 液态玻璃：整对象一次写回。参数按各参数量程钳制、画不了位移图的平台回落到固定值，都在
-    // store 的 commit 里做；总开关单独走 setLiquidGlassEnabled，因为它还要挂 / 拆注入器。
-    if (has('liquidGlass') && config.liquidGlass && typeof config.liquidGlass === 'object') {
-        const incoming = config.liquidGlass as Partial<LiquidGlassParams & LiquidGlassEffects & { enabled: boolean }>;
-        const glass = useGlassSurfaceSettingsStore.getState();
-        glass.handleSetLiquidGlassParams({
-            ...(typeof incoming.strength === 'number' ? { strength: incoming.strength } : {}),
-            ...(typeof incoming.blur === 'number' ? { blur: incoming.blur } : {}),
-            ...(typeof incoming.sat === 'number' ? { sat: incoming.sat } : {}),
-            ...(typeof incoming.bend === 'number' ? { bend: incoming.bend } : {}),
-            ...(typeof incoming.light === 'boolean' ? { light: incoming.light } : {}),
-            ...(typeof incoming.jelly === 'boolean' ? { jelly: incoming.jelly } : {}),
-        });
-        if (typeof incoming.enabled === 'boolean') glass.setLiquidGlassEnabled(incoming.enabled);
     }
     if (has('hidePlayerTranslationSubtitle')) {
         storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
@@ -347,6 +332,9 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     if (has('stageTrackPillOnHome')) {
         storeStageSettings.handleToggleStageTrackPillOnHome(Boolean(config.stageTrackPillOnHome));
     }
+    if (has('stageTrackPillInObs')) {
+        storeStageSettings.handleToggleStageTrackPillInObs(Boolean(config.stageTrackPillInObs));
+    }
     // The bravais wall: the collections' stack edges, the seam's material and direction, and the picture behind
     // the wall, through the setters the Bravais group on the 主页与歌单 page uses. The seam style
     // is taken only when it is a known preset, as the import plan's guard does.
@@ -368,11 +356,13 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     }
     if (has('libraryWallSeamDirection') && isLibraryWallSeamDirection(config.libraryWallSeamDirection)) {
         storeLibraryWall.setSeamDirection(config.libraryWallSeamDirection);
-    } else if (has('libraryWallSeamDirectionReverse') && config.libraryWallSeamDirectionReverse !== false) {
-        /*
-         * 旧配置只带「反向」开关（没有方向，或方向是不可认的取值）：那时的「自动 + 反向」等价于现在的
-         * 'auto-reverse'。压缩格式由 appearanceCodec 折算了，这里接的是旧 JSON 配置那条路。
-         */
-        storeLibraryWall.setSeamDirection('auto-reverse');
+    }
+    // The scratchpad side tab's resting look (the 主页与歌单 page's scratchpad group writes it).
+    if (has('scratchpadHandleStyle') && isScratchpadHandleStyle(config.scratchpadHandleStyle)) {
+        useScratchpadSettingsStore.getState().setHandleStyle(config.scratchpadHandleStyle);
+    }
+    // Numbering only the playing song, on both tile walls (the 播放页 page's tile wall group writes it).
+    if (has('latticeBadgeCurrentOnly')) {
+        useLatticeSettingsStore.getState().handleToggleLatticeBadgeCurrentOnly(Boolean(config.latticeBadgeCurrentOnly));
     }
 };

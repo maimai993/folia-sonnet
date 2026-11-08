@@ -414,21 +414,30 @@ async function handleSearch(url, cookie) {
   if (!keywords) return { code: 200, result: { songs: [], songCount: 0 } };
   const limit = Math.max(1, Math.min(100, numberValue(url.searchParams.get('limit'), 30)));
   const offset = Math.max(0, numberValue(url.searchParams.get('offset'), 0));
+  /*
+   * 搜什么：1 单曲（默认，URL 上可以不给）、10 专辑、1000 歌单。之前这里写死 1，
+   * 于是安卓上专辑和歌单的搜索永远是空 —— 页面侧的 cloudSearch 把 type 拼进 URL，
+   * 这一侧却只按单曲搜。每种的回答字段不同（songs / albums / playlists），
+   * 按种类取列表、回种类的计数。
+   */
+  const searchType = numberValue(url.searchParams.get('type'), 1);
+  const kindOf = (t) => (t === 10 ? 'albums' : t === 1000 ? 'playlists' : 'songs');
+  const kind = kindOf(searchType);
   const body = await eapiJson('/api/cloudsearch/pc', {
     s: keywords,
-    type: 1,
+    type: searchType,
     limit,
     offset,
     total: true,
   }, cookie);
-  if (Array.isArray(body?.result?.songs) && body.result.songs.length > 0) return body;
+  if (Array.isArray(body?.result?.[kind]) && body.result[kind].length > 0) return body;
   const fallback = await eapiJson('/api/search/pc', {
     s: keywords,
-    type: 1,
+    type: searchType,
     limit,
     offset,
   }, cookie);
-  if (Array.isArray(fallback?.result?.songs) && fallback.result.songs.length > 0) return fallback;
+  if (Array.isArray(fallback?.result?.[kind]) && fallback.result[kind].length > 0) return fallback;
 
   const response = await fetch('https://music.163.com/api/search/get/web', {
     method: 'POST',
@@ -440,15 +449,15 @@ async function handleSearch(url, cookie) {
     },
     body: new URLSearchParams({
       s: keywords,
-      type: '1',
+      type: String(searchType),
       limit: String(limit),
       offset: String(offset),
       total: 'true',
     }).toString(),
   });
-  if (!response.ok) return { code: response.status, result: { songs: [], songCount: 0 } };
+  if (!response.ok) return { code: response.status, result: { [kind]: [], songCount: 0, albumCount: 0, playlistCount: 0 } };
   const publicBody = await response.json();
-  return publicBody?.result ? publicBody : { code: 200, result: { songs: [], songCount: 0 } };
+  return publicBody?.result ? publicBody : { code: 200, result: { [kind]: [], songCount: 0, albumCount: 0, playlistCount: 0 } };
 }
 
 async function handleSongDetail(url, cookie) {

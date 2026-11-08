@@ -264,6 +264,15 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
 
         /**
+         * 「与其他音源同时播放」切换后的那一半：handleAudioFocus = !mixWithOthers。
+         * 落盘那半在 FoliaNativePlugin.setAudioFocusPolicy（FoliaAudioFocus），这里管正在用的播放器。
+         */
+        @JvmStatic
+        fun applyAudioFocusPolicy(handleAudioFocus: Boolean) {
+            instance?.player?.setHandleAudioFocus(handleAudioFocus)
+        }
+
+        /**
          * 原生播放器此刻的位置（毫秒）；没有播放器时给 -1。
          *
          * 通知栏 / 锁屏那条进度条用它：原生在放的时候位置只有播放器知道，而 Web 那一推

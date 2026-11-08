@@ -39,6 +39,8 @@ const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string
     bodian: { label: '波', iconUrl: getProviderAppIcon('bodian'), className: 'bg-teal-600' },
     feiniu: { label: '飞', iconUrl: getProviderAppIcon('feiniu'), className: 'bg-zinc-600' },
     qishui: { label: '汽', iconUrl: getProviderAppIcon('qishui'), className: 'bg-cyan-600' },
+    // 洛雪免登录，也没有账号头像：亮它自己的应用图标。
+    lxmusic: { label: '雪', iconUrl: getProviderAppIcon('lxmusic'), className: 'bg-zinc-600' },
 };
 
 // Providers without a builtin badge (Folium mod sources) get their name's first letter, like the

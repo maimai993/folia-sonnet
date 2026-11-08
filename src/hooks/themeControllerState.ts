@@ -131,6 +131,7 @@ export const resolveBgModeTheme = ({
     daylightTheme,
     // 接住但不读：高亮词 / 歌词图标改回「跟着选中的主题走」之后这里不再需要它
     // （见下面 default 分支的注释）。留在签名里，调用方与既有测试照旧传。
+    previousTheme,
 }: {
     mode: 'default' | 'ai';
     aiTheme: DualTheme | null;
@@ -139,12 +140,14 @@ export const resolveBgModeTheme = ({
     daylightTheme: Theme;
     previousTheme?: Theme;
 }): Theme => {
+    // "default" once meant only the default background under the AI foreground; it is now a theme
+    // source of its own, so it returns the built-in theme whole even while an AI theme is loaded.
     if (mode === 'default') {
         const baseTheme = getBaseThemeForMode({ defaultTheme, daylightTheme, isDaylight });
         if (!aiTheme) {
             return baseTheme;
         }
-        const selectedAiTheme = isDaylight ? aiTheme.light : aiTheme.dark;
+        const selectedAiTheme = getSelectedDualTheme(aiTheme, isDaylight);
         /*
          * 背景就是默认主题的那一份，文字、强调色、按钮这些也都用默认的 —— 只把**这首歌**的
          * 高亮词与歌词图标带过来（它们跟着这首歌的主题走，缺了就没有 AI 高亮）。
@@ -159,10 +162,11 @@ export const resolveBgModeTheme = ({
         };
     }
 
-    const selectedAiTheme = aiTheme
+    // AI 模式整份用 AI 主题：高亮词与歌词图标也一样。以前这两项从 previousTheme 继承，于是
+    // AI 主题生效了、歌词却没有 AI 高亮（第一次就继承了默认主题那份空的，之后再也回不来）。
+    return aiTheme
         ? getSelectedDualTheme(aiTheme, isDaylight)
         : getSelectedDualTheme(FALLBACK_AI_DUAL_THEME, isDaylight);
-    return selectedAiTheme;
 };
 
 // Cover-derived fallback theme used when no AI API key is configured; the color/name work lives

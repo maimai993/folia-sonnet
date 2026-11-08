@@ -1,6 +1,7 @@
 import React from 'react';
 import { Group, Row, Segmented, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
+import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import { percent, SliderRow, times, ToggleRow } from '../panelRows';
 import LyricRenderQualityRows from '../renderQuality/LyricRenderQualityRows';
 import {
@@ -9,7 +10,6 @@ import {
     NEBBIA_BEHIND,
     NEBBIA_FADE_STYLES,
     NEBBIA_GLASS,
-    NEBBIA_GLASS_FOR,
     NEBBIA_LAYOUTS,
     NEBBIA_LIMITS,
     NEBBIA_RAIN,
@@ -22,8 +22,8 @@ import {
 } from './types';
 
 // src/components/visualizer/nebbia/NebbiaSettingsPanel.tsx
-// 雾笺的设置：雾上写字（笔画、手写歪斜和变形、雾、片尾写曲名），字怎么出现、怎么消失、一句怎么构图（每种一个开关，开几种用几种），
-// 窗外（车、霓虹、聚光灯），窗外画哪几样（聚光灯、楼群、光斑、车灯、马路各一个开关，雨斜着、竖直或不下），渲染（分辨率，
+// 雾笺的设置：最上面是窗外（选背景：街景、梦海流萤或共用背景，连同窗外画哪几样），然后是雾上写字（笔画、手写歪斜和变形、雾、片尾写曲名），字怎么出现、怎么消失、一句怎么构图（每种一个开关，开几种用几种），
+// 窗外（车、霓虹、聚光灯），窗外画哪几样在最上面那组（聚光灯、楼群、光斑、车灯、马路各一个开关，雨斜着、竖直或不下），渲染（分辨率，
 // 默认跟随全局）。用设置窗口的共用控件画成几组。
 // 窗外选了水族箱时多三个滑块（水母数量、大小、气泡多少），开关和雨换成水族箱的说法（同一组位，见 nebbiaAquaGlsl.ts）。
 // 前面雾玻璃上的水单独一组：雨窗（小雨点密度、大雨点大小）或凝露（冷凝水珠多少、大小、高光）；换窗外时玻璃换成那套的默认搭配。
@@ -85,6 +85,11 @@ const GLASS_SLIDERS: Record<NebbiaTuning['glass'], SliderSpec[]> = {
         ['dewSize', 'options.nebbiaDewSize', 0.05, times],
         ['dewGlint', 'options.nebbiaDewGlint', 0.05, times],
     ],
+    snow: [
+        ['snow', 'options.nebbiaSnow', 0.05, times],
+        ['snowSize', 'options.nebbiaSnowSize', 0.05, times],
+        ['snowMelt', 'options.nebbiaSnowMelt', 0.05, times],
+    ],
 };
 const APPEAR_GROUP: SettingsGroupDef = { id: 'vis-nebbia-appear', titleKey: 'options.nebbiaAppear' };
 const FADE_GROUP: SettingsGroupDef = { id: 'vis-nebbia-fade', titleKey: 'options.nebbiaFade' };
@@ -107,6 +112,8 @@ const NebbiaSettingsPanel: React.FC<VisualizerSettingsPanelProps<NebbiaTuning>> 
     const resolved = tuning ?? DEFAULT_NEBBIA_TUNING;
     const drag = { onDragStart: onSliderPointerDown, onDragEnd: onSliderCommit };
     const aquarium = resolved.behind === 'aquarium';
+    // 播放页透明时窗外固定透出后面：提示换一句，说明这里选的只决定水珠里折射什么（开着原生模糊也算透明，和 App.tsx 的 isPlayerPageTransparent 一样）
+    const transparent = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground || state.enablePlayerPageNativeBlur);
     // 开关和雨的文案：水族箱换一套说法
     const sceneryKey = aquarium ? 'options.nebbiaAquaScenery' : 'options.nebbiaScenery';
     const rainKey = aquarium ? 'options.nebbiaAquaRain' : 'options.nebbiaRain';
@@ -141,6 +148,36 @@ const NebbiaSettingsPanel: React.FC<VisualizerSettingsPanelProps<NebbiaTuning>> 
 
     return (
         <>
+            {/* 选窗外（背景）放在最上面，后面几组的说法和可调项都跟着它变；窗外每样单独开关，和下面几组不同，可以全关 */}
+            <Group def={SCENERY_GROUP} foot={t(`${sceneryKey}Hint`)}>
+                <Row label={t('options.nebbiaBehind')} note={t(transparent ? 'options.nebbiaBehindTransparentHint' : 'options.nebbiaBehindHint')}>
+                    <Segmented<NebbiaTuning['behind']>
+                        value={resolved.behind}
+                        options={NEBBIA_BEHIND.map(behind => ({ value: behind, label: t(`options.nebbiaBehind_${behind}`) }))}
+                        onChange={behind => onTuningChange({ behind })}
+                    />
+                </Row>
+                {aquarium && sliders(AQUA_SLIDERS)}
+                {/* 窗外用共用背景时街景不画，下面几项看不出来（聚光灯照在雾上的那圈光还在） */}
+                {NEBBIA_SCENERY.map(part => (
+                    <ToggleRow
+                        key={part}
+                        disabled={resolved.behind === 'backdrop' && part !== 'spot'}
+                        label={t(`${sceneryKey}_${part}`)}
+                        checked={resolved.scenery.includes(part)}
+                        onChange={next => onTuningChange({ scenery: NEBBIA_SCENERY.filter(c => (c === part ? next : resolved.scenery.includes(c))) })}
+                    />
+                ))}
+                {/* 街景的雨只画在聚光灯光柱里（被照亮的雨丝），聚光灯关着或强度为 0 时这项看不出来；水族箱的细气泡不看聚光灯；雪窗时街景窗外不下雨，这项不管用 */}
+                <Row label={t(rainKey)} note={t(`${rainKey}Hint`)}>
+                    <Segmented<NebbiaTuning['rain']>
+                        disabled={resolved.behind === 'backdrop' || (!aquarium && (resolved.glass === 'snow' || !resolved.scenery.includes('spot') || resolved.spot <= 0))}
+                        value={resolved.rain}
+                        options={NEBBIA_RAIN.map(rain => ({ value: rain, label: t(`${rainKey}_${rain}`) }))}
+                        onChange={rain => onTuningChange({ rain })}
+                    />
+                </Row>
+            </Group>
             <Group def={WRITING_GROUP}>
                 {sliders(WRITING_SLIDERS)}
                 <ToggleRow
@@ -169,36 +206,6 @@ const NebbiaSettingsPanel: React.FC<VisualizerSettingsPanelProps<NebbiaTuning>> 
                     />
                 </Row>
                 {sliders(GLASS_SLIDERS[resolved.glass])}
-            </Group>
-            {/* 窗外每样单独开关，和上面几组不同，可以全关 */}
-            <Group def={SCENERY_GROUP} foot={t(`${sceneryKey}Hint`)}>
-                <Row label={t('options.nebbiaBehind')} note={t('options.nebbiaBehindHint')}>
-                    <Segmented<NebbiaTuning['behind']>
-                        value={resolved.behind}
-                        options={NEBBIA_BEHIND.map(behind => ({ value: behind, label: t(`options.nebbiaBehind_${behind}`) }))}
-                        onChange={behind => onTuningChange({ behind, glass: NEBBIA_GLASS_FOR[behind] ?? resolved.glass })}
-                    />
-                </Row>
-                {aquarium && sliders(AQUA_SLIDERS)}
-                {/* 窗外用共用背景时街景不画，下面几项看不出来（聚光灯照在雾上的那圈光还在） */}
-                {NEBBIA_SCENERY.map(part => (
-                    <ToggleRow
-                        key={part}
-                        disabled={resolved.behind === 'backdrop' && part !== 'spot'}
-                        label={t(`${sceneryKey}_${part}`)}
-                        checked={resolved.scenery.includes(part)}
-                        onChange={next => onTuningChange({ scenery: NEBBIA_SCENERY.filter(c => (c === part ? next : resolved.scenery.includes(c))) })}
-                    />
-                ))}
-                {/* 街景的雨只画在聚光灯光柱里（被照亮的雨丝），聚光灯关着或强度为 0 时这项看不出来；水族箱的细气泡不看聚光灯 */}
-                <Row label={t(rainKey)} note={t(`${rainKey}Hint`)}>
-                    <Segmented<NebbiaTuning['rain']>
-                        disabled={resolved.behind === 'backdrop' || (!aquarium && (!resolved.scenery.includes('spot') || resolved.spot <= 0))}
-                        value={resolved.rain}
-                        options={NEBBIA_RAIN.map(rain => ({ value: rain, label: t(`${rainKey}_${rain}`) }))}
-                        onChange={rain => onTuningChange({ rain })}
-                    />
-                </Row>
             </Group>
             <Group def={RENDER_GROUP}>
                 <LyricRenderQualityRows

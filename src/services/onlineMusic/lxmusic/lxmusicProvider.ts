@@ -35,6 +35,8 @@ import {
     lxApiPlaylistSquare,
     lxApiPlaylistTracks,
     lxApiRadioPrograms,
+    lxApiSearchAlbums,
+    lxApiSearchPlaylists,
     lxApiSearchSongs,
     LX_PUBLIC_PLATFORM_KEYS,
     type LxApiCollection,
@@ -155,6 +157,17 @@ const dedupeSongs = (songs: UnifiedSong[]): UnifiedSong[] => {
         out.push(song);
     }
     return out;
+};
+
+/** 歌单 / 专辑搜索结果的去重：同一个集合 id 只留第一次出现的那家。 */
+const dedupeCollections = (collections: ProviderCollection[]): ProviderCollection[] => {
+    const seen = new Set<string>();
+    return collections.filter((collection) => {
+        const key = String(collection.id);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 };
 
 // ---------------------------------------------------------------- 音源
@@ -598,9 +611,41 @@ export const lxmusicProvider: OnlineMusicProvider = {
                 hasMore: pages.some((page) => page.hasMore),
             };
         },
-        // 歌单 / 专辑搜索由「洛雪工作台」自己走 lxPublicApi（广场、榜单、详情页都在那儿）。
-        // 官方底包的 OnlineSearchProvider 只有 searchSongs 这一个入口，多出来的方法
-        // 既不会被搜索页调用，也会因为对象字面量的多余属性检查编译不过。
+        /*
+         * 歌单 / 专辑搜索：洛雪要像其它平台一样走主线的搜索页（专辑 / 歌单页签），
+         * 而不是只在它自己的工作台里搜。四家交替排开，与 searchSongs 同一套规则；
+         * 酷我没有歌单搜索、专辑只有一家公开接口给，交白卷的那几家照常跳过。
+         * `limit` 同样是「每家各取多少」，翻页时各家的 offset 才能对齐。
+         */
+        async searchPlaylists(query, limit, offset) {
+            if (!query.trim()) return emptyPage<ProviderCollection>(offset);
+            const results = await Promise.allSettled(
+                LX_PUBLIC_PLATFORM_KEYS.map((platform) => lxApiSearchPlaylists(platform, query, limit, offset)),
+            );
+            const pages = results
+                .filter((result): result is PromiseFulfilledResult<LxApiPage<LxApiCollection>> => result.status === 'fulfilled')
+                .map((result) => result.value);
+            return {
+                items: dedupeCollections(interleave(pages.map((page) => page.items.map(toProviderCollection)))),
+                nextOffset: offset + limit,
+                hasMore: pages.some((page) => page.hasMore),
+            };
+        },
+
+        async searchAlbums(query, limit, offset) {
+            if (!query.trim()) return emptyPage<ProviderCollection>(offset);
+            const results = await Promise.allSettled(
+                LX_PUBLIC_PLATFORM_KEYS.map((platform) => lxApiSearchAlbums(platform, query, limit, offset)),
+            );
+            const pages = results
+                .filter((result): result is PromiseFulfilledResult<LxApiPage<LxApiCollection>> => result.status === 'fulfilled')
+                .map((result) => result.value);
+            return {
+                items: dedupeCollections(interleave(pages.map((page) => page.items.map(toProviderCollection)))),
+                nextOffset: offset + limit,
+                hasMore: pages.some((page) => page.hasMore),
+            };
+        },
     },
 
     playback: {

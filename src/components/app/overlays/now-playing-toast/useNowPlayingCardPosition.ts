@@ -11,8 +11,11 @@ export const useNowPlayingCardPosition = (
     bottom: MotionValue<number>,
     visible: boolean,
     invalidate: () => void,
+    /** A position from elsewhere (an OBS source has no copy of the settings store); undefined reads the store. */
+    savedOverride?: NowPlayingCardPosition | null,
 ) => {
-    const saved = useStageSettingsStore(state => state.stageTrackPillPosition);
+    const stored = useStageSettingsStore(state => state.stageTrackPillPosition);
+    const saved = savedOverride === undefined ? stored : savedOverride;
     const positioning = useNowPlayingCardLayoutStore(state => state.isPositioning);
     const left = useMotionValue(24);
     const top = useMotionValue(0);
@@ -106,10 +109,8 @@ export const useNowPlayingCardPosition = (
         update({ x: left.get() + delta[0], y: top.get() + delta[1] });
     };
 
-    // positioning 不往外给：要用它的地方直接读 store（`isPositioning`），
-    // 从这里再导一份只是又一条会过期的副本。
     return {
-        save, cancel: finish, reset,
+        positioning, save, cancel: finish, reset,
         style: saved !== null || positioning ? { left, top } : { left: 24, bottom },
         handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onLostPointerCapture: () => { dragging.current = null; }, onKeyDown },
     };

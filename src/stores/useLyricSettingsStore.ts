@@ -1,13 +1,13 @@
-// src/stores/useLyricSettingsStore.ts
+﻿// src/stores/useLyricSettingsStore.ts
 // How lyrics are sourced, filtered and timed: which provider wins, the staff-credits policy,
-// the saved filter pattern, and this machine's timeline offset.
+// the rules that remove lyric lines, and this machine's timeline offset.
 //
 // Split out of useSettingsUiStore. Deliberately separate from typography, which is about how
 // lyrics look rather than which lyrics are chosen.
 
 import { create } from 'zustand';
-import { getLyricFilterError } from '../utils/lyrics/filtering';
 import { getLyricStaffPatternError } from '../utils/lyrics/staffCredits';
+import { legacyLyricFilterSetting, readLyricLineRules, storedLyricLineRules, type LyricLineRule } from '../utils/lyrics/lyricLineRules';
 import i18n from '../i18n/config';
 import { type LocalLyricsPriority, type LyricProviderSource, type LyricSourcePreference } from '../types';
 import { getLyricSourcePreferenceLabel } from '../utils/lyrics/lyricSourceLabels';
@@ -15,7 +15,7 @@ import { normalizeLocalLyricFormatOrder, type LocalLyricFileFormat } from '../ut
 import { isLyricProviderSource } from '../utils/lyrics/lyricSources';
 import { DEFAULT_LOCAL_LYRIC_SOURCE, DEFAULT_PREFERRED_LYRIC_SOURCE, migratePreferredLyricSource } from '../utils/lyrics/sourcePriority';
 import { DEFAULT_LYRIC_STAFF_ABSORB_MODE, DEFAULT_LYRIC_STAFF_MIN_DWELL_SECONDS, DEFAULT_LYRIC_STAFF_POLICY, LYRIC_STAFF_MIN_DWELL_RANGE, type LyricStaffAbsorbMode, type LyricStaffPolicy } from '../utils/lyrics/staffCreditsPolicy';
-import { getStoredBoolean, getStoredString, setStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, getStoredString, removeStoredKey, setStoredBoolean, setStoredString } from './storagePrimitives';
 import { setStatusMessage } from './useStatusMessageStore';
 
 export const GLOBAL_LYRIC_TIMELINE_OFFSET_STORAGE_KEY = 'global_lyric_timeline_offset_ms';
@@ -82,21 +82,24 @@ const readStoredPreferredAlternativeLyricSource = (): LyricSourcePreference => {
     return migrated;
 };
 
-const readStoredLyricFilterPattern = (): string => {
+const LYRIC_LINE_RULES_KEY = 'lyrics_filter_rules';
+const AUTO_AI_LYRIC_SEGMENTATION_KEY = 'lyrics_auto_ai_segmentation';
+const KEEP_PROVIDER_WORD_TIMING_KEY = 'lyrics_keep_provider_word_timing';
+// The single expression older versions saved. Read once into a rule; written back on every save
+// (or removed with that rule), so an older version still filters the same lines.
+const LEGACY_LYRIC_FILTER_PATTERN_KEY = 'lyrics_filter_pattern';
+const LEGACY_LYRIC_FILTER_ENABLED_KEY = 'lyrics_filter_enabled';
+
+const readStoredLyricLineRules = (): LyricLineRule[] => {
     if (typeof window === 'undefined') {
-        return '';
+        return [];
     }
 
-    return localStorage.getItem('lyrics_filter_pattern')?.trim() || '';
-};
-
-const readStoredLyricFilterEnabled = (pattern: string): boolean => {
-    if (typeof window === 'undefined') {
-        return false;
-    }
-
-    const saved = localStorage.getItem('lyrics_filter_enabled');
-    return saved === null ? Boolean(pattern) : saved === 'true';
+    return readLyricLineRules({
+        rules: localStorage.getItem(LYRIC_LINE_RULES_KEY),
+        pattern: localStorage.getItem(LEGACY_LYRIC_FILTER_PATTERN_KEY),
+        enabled: localStorage.getItem(LEGACY_LYRIC_FILTER_ENABLED_KEY),
+    });
 };
 
 const readStoredLyricStaffPolicy = (): LyricStaffPolicy => {
@@ -134,45 +137,52 @@ export type LyricSettingsState = {
     autoUseBestLyric: boolean;
     preferredAlternativeLyricSource: LyricSourcePreference;
     localLyricProviderSource: LyricProviderSource;
+    /**
+     * Keep a platform's own word-level lyrics (`prefersOwnWordByWord`) over every source but the preferred
+     * one in the automatic pick; off, they are matched like any other source's (issue #1127).
+     */
+    keepProviderWordTiming: boolean;
     localLyricsPriority: LocalLyricsPriority;
     localLyricFormatOrder: LocalLyricFileFormat[];
     globalLyricTimelineOffsetMs: number;
-    lyricFilterPattern: string;
-    lyricFilterEnabled: boolean;
+    lyricLineRules: LyricLineRule[];
     // 开头制作人员信息的处理策略，与上面的通用逐行过滤是两套独立机制。
     lyricStaffPolicy: LyricStaffPolicy;
     lyricStaffMinDwellSeconds: number;
     lyricStaffAbsorbMode: LyricStaffAbsorbMode;
     lyricStaffPattern: string;
+    /** Run AI word segmentation by itself on a song that has none saved yet (issue #960). */
+    autoAiLyricSegmentation: boolean;
     handleToggleAutoUseBestLyric: (enable: boolean) => void;
     handleSetPreferredAlternativeLyricSource: (source: LyricSourcePreference) => void;
     handleSetLocalLyricProviderSource: (source: LyricProviderSource) => void;
+    handleToggleKeepProviderWordTiming: (enable: boolean) => void;
     handleSetLocalLyricsPriority: (priority: LocalLyricsPriority) => void;
     handleSetLocalLyricFormatOrder: (order: LocalLyricFileFormat[]) => void;
     handleSetGlobalLyricTimelineOffsetMs: (offsetMs: number) => void;
-    handleSetLyricFilterPattern: (pattern: string) => void;
-    handleSetLyricFilterEnabled: (enabled: boolean) => void;
+    handleSetLyricLineRules: (rules: LyricLineRule[]) => void;
     handleSetLyricStaffPolicy: (policy: LyricStaffPolicy) => void;
     handleSetLyricStaffMinDwellSeconds: (seconds: number) => void;
     handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
+    handleToggleAutoAiLyricSegmentation: (enable: boolean) => void;
 };
-
-const initialLyricFilterPattern = readStoredLyricFilterPattern();
 
 export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
     autoUseBestLyric: getStoredBoolean('auto_use_best_lyric', true),
     preferredAlternativeLyricSource: readStoredPreferredAlternativeLyricSource(),
     localLyricProviderSource: readStoredLocalLyricProviderSource(),
+    keepProviderWordTiming: getStoredBoolean(KEEP_PROVIDER_WORD_TIMING_KEY, true),
     localLyricsPriority: readStoredLocalLyricsPriority(),
     localLyricFormatOrder: readStoredLocalLyricFormatOrder(),
     globalLyricTimelineOffsetMs: readStoredGlobalLyricTimelineOffsetMs(),
-    lyricFilterPattern: initialLyricFilterPattern,
-    lyricFilterEnabled: readStoredLyricFilterEnabled(initialLyricFilterPattern),
+    lyricLineRules: readStoredLyricLineRules(),
     lyricStaffPolicy: readStoredLyricStaffPolicy(),
     lyricStaffMinDwellSeconds: readStoredLyricStaffMinDwellSeconds(),
     lyricStaffAbsorbMode: readStoredLyricStaffAbsorbMode(),
     lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
+    // Off by default: every song it runs on is a paid model request.
+    autoAiLyricSegmentation: getStoredBoolean(AUTO_AI_LYRIC_SEGMENTATION_KEY, false),
     handleToggleAutoUseBestLyric: (enable) => {
         setStoredBoolean('auto_use_best_lyric', enable);
         set({ autoUseBestLyric: enable });
@@ -201,6 +211,14 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
             text: i18n.t('notifications.lyricSourceChanged', { source: getLyricSourcePreferenceLabel(source) }),
         });
     },
+    handleToggleKeepProviderWordTiming: (enable) => {
+        setStoredBoolean(KEEP_PROVIDER_WORD_TIMING_KEY, enable);
+        set({ keepProviderWordTiming: enable });
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'keepProviderWordTimingOn' : 'keepProviderWordTimingOff')),
+        });
+    },
     handleSetLocalLyricsPriority: (priority) => {
         if (typeof window !== 'undefined') {
             localStorage.setItem(LOCAL_LYRICS_PRIORITY_STORAGE_KEY, priority);
@@ -221,23 +239,17 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
         }
         set({ globalLyricTimelineOffsetMs: nextOffsetMs });
     },
-    handleSetLyricFilterPattern: (pattern) => {
-        const next = pattern.trim();
-        set({ lyricFilterPattern: next });
-
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (next) {
-            localStorage.setItem('lyrics_filter_pattern', next);
+    handleSetLyricLineRules: (rules) => {
+        set({ lyricLineRules: rules });
+        setStoredString(LYRIC_LINE_RULES_KEY, storedLyricLineRules(rules, typeof window === 'undefined' ? null : localStorage.getItem(LYRIC_LINE_RULES_KEY)));
+        const legacy = legacyLyricFilterSetting(rules);
+        if (legacy) {
+            setStoredString(LEGACY_LYRIC_FILTER_PATTERN_KEY, legacy.pattern);
+            setStoredBoolean(LEGACY_LYRIC_FILTER_ENABLED_KEY, legacy.enabled);
         } else {
-            localStorage.removeItem('lyrics_filter_pattern');
+            removeStoredKey(LEGACY_LYRIC_FILTER_PATTERN_KEY);
+            removeStoredKey(LEGACY_LYRIC_FILTER_ENABLED_KEY);
         }
-    },
-    handleSetLyricFilterEnabled: (enabled) => {
-        setStoredBoolean('lyrics_filter_enabled', enabled);
-        set({ lyricFilterEnabled: enabled });
     },
     handleSetLyricStaffPolicy: (policy) => {
         set({ lyricStaffPolicy: policy });
@@ -284,6 +296,14 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
             localStorage.removeItem('lyrics_staff_pattern');
         }
     },
+    handleToggleAutoAiLyricSegmentation: (enable) => {
+        setStoredBoolean(AUTO_AI_LYRIC_SEGMENTATION_KEY, enable);
+        set({ autoAiLyricSegmentation: enable });
+        setStatusMessage({
+            type: 'info',
+            text: i18n.t('notifications.' + (enable ? 'autoAiLyricSegmentationOn' : 'autoAiLyricSegmentationOff')),
+        });
+    },
 }));
 
 /** The lyric-sourcing half of the former settings snapshot. */
@@ -291,27 +311,28 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     autoUseBestLyric: state.autoUseBestLyric,
     preferredAlternativeLyricSource: state.preferredAlternativeLyricSource,
     localLyricProviderSource: state.localLyricProviderSource,
+    keepProviderWordTiming: state.keepProviderWordTiming,
     localLyricsPriority: state.localLyricsPriority,
     localLyricFormatOrder: state.localLyricFormatOrder,
     globalLyricTimelineOffsetMs: state.globalLyricTimelineOffsetMs,
-    lyricFilterPattern: state.lyricFilterPattern,
-    lyricFilterEnabled: state.lyricFilterEnabled,
+    lyricLineRules: state.lyricLineRules,
     lyricStaffPolicy: state.lyricStaffPolicy,
     lyricStaffMinDwellSeconds: state.lyricStaffMinDwellSeconds,
     lyricStaffAbsorbMode: state.lyricStaffAbsorbMode,
     lyricStaffPattern: state.lyricStaffPattern,
+    autoAiLyricSegmentation: state.autoAiLyricSegmentation,
     handleToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
     handleSetPreferredAlternativeLyricSource: state.handleSetPreferredAlternativeLyricSource,
     handleSetLocalLyricProviderSource: state.handleSetLocalLyricProviderSource,
+    handleToggleKeepProviderWordTiming: state.handleToggleKeepProviderWordTiming,
     handleSetLocalLyricsPriority: state.handleSetLocalLyricsPriority,
     handleSetLocalLyricFormatOrder: state.handleSetLocalLyricFormatOrder,
     handleSetGlobalLyricTimelineOffsetMs: state.handleSetGlobalLyricTimelineOffsetMs,
-    handleSetLyricFilterPattern: state.handleSetLyricFilterPattern,
-    handleSetLyricFilterEnabled: state.handleSetLyricFilterEnabled,
+    handleSetLyricLineRules: state.handleSetLyricLineRules,
     handleSetLyricStaffPolicy: state.handleSetLyricStaffPolicy,
     handleSetLyricStaffMinDwellSeconds: state.handleSetLyricStaffMinDwellSeconds,
     handleSetLyricStaffAbsorbMode: state.handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
-    lyricFilterPatternError: state.lyricFilterEnabled ? getLyricFilterError(state.lyricFilterPattern) : null,
+    handleToggleAutoAiLyricSegmentation: state.handleToggleAutoAiLyricSegmentation,
     lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
 });

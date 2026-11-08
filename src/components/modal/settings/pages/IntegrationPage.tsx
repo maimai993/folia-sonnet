@@ -13,6 +13,7 @@ import { isCapacitorAndroid } from '../../../../platform/runtime';
 import { DesktopStageRows, WebStageRows } from './integration/StageModeRows';
 import SyncServerRows from './integration/SyncServerRows';
 import { useSettingsPage } from './settingsPageContext';
+import { LxSourcePanel } from '../../../lxmusic/LxSourcePanel';
 
 // src/components/modal/settings/pages/IntegrationPage.tsx
 // The 连接与集成 page: what Folia connects to and what it shows to other programs. Services first
@@ -44,6 +45,11 @@ const IntegrationPage: React.FC = () => {
             <Group def={SERVICES}>
                 <NavidromeRows />
                 <SyncServerRows />
+                {/*
+                 * 洛雪音源：导入 / 启停音源脚本。选中洛雪（免登录）后首页的搜索、歌单广场、榜单
+                 * 与其它平台走同一套主页流程，音源管理在这里，不再依赖那个独立工作台。
+                 */}
+                <LxSourcePanel />
                 {isElectron && (
                     <>
                         <Row option={O.discord} hint={t('options.discordRichPresenceDesc')}>

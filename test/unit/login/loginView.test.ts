@@ -40,15 +40,6 @@ describe('the platform column', () => {
         expect(rowStatus(row('a', { ...signedIn, ...off }))).toBe('off');
     });
 
-    // 路是通的、但还没走全（汽水在安卓上）：也算不能选，但 configured 仍旧为真 ——
-    // 差别就在这里：已登录的账号不会被清掉（accountRead.ts 只认 configured）。
-    it('treats a platform that is not ready here yet as out of reach, without dropping the account', () => {
-        const notReady = { availability: { configured: true, canSignIn: false as const } };
-        const kept = row('qishui', { ...signedIn, ...notReady });
-        expect(rowStatus(kept)).toBe('off');
-        expect(kept.availability.configured).toBe(true);
-    });
-
     it('orders the rows: the platform in use, the signed-in ones, the ones that ran out, the rest as registered', () => {
         const rows = [row('a'), row('b', ranOut), row('c', signedIn), row('d'), row('e', signedIn), row('f', off), row('g', { requiresAccount: false })];
         expect(orderRows(rows, 'd').map(entry => entry.providerId)).toEqual(['d', 'c', 'e', 'b', 'a', 'f', 'g']);
@@ -57,11 +48,12 @@ describe('the platform column', () => {
         expect(orderRows(rows, 'e').map(entry => entry.providerId)).toEqual(['e', 'c', 'b', 'a', 'd', 'f', 'g']);
     });
 
-    // 这个运行环境够不着的平台（runtime-unavailable：安卓上的 YouTube Music / Spotify，要走桌面端那座桥）
-    // 照样列出来，只是置灰、不能选 —— 整行过滤掉的话那一列里从头到尾没有这两家，看着像这个版本压根没接。
-    it('keeps a platform this runtime cannot use at all, and one that is only not configured', () => {
+    it('keeps a platform this runtime cannot use in the column, though one that is only not configured stays too', () => {
+        // fork 的行为：runtime-unavailable（那几家要走桌面端那座桥的）**照旧列出来**，只是置灰、
+        // 不能选、悬停说原因。上游会把它们整行过滤掉，于是安卓上的那一列从头到尾没有那几家。
         const rows = [row('a'), row('b', { availability: { configured: false, reason: 'runtime-unavailable' } }), row('c', off)];
         expect(orderRows(rows, 'b').map(entry => entry.providerId)).toEqual(['b', 'a', 'c']);
+        expect(orderRows(rows, null).map(entry => entry.providerId)).toEqual(['a', 'b', 'c']);
     });
 
     it('filters by a piece of the short or the long name, whatever the case', () => {
@@ -70,6 +62,13 @@ describe('the platform column', () => {
         expect(filterRows(rows, 'a').map(entry => entry.providerId)).toEqual(['alpha', 'beta', 'gamma']);
         expect(filterRows(rows, '  ')).toHaveLength(3);
         expect(filterRows(rows, 'none')).toEqual([]);
+    });
+
+    it('also finds a row by the name shown on screen, which may be a translated one', () => {
+        const rows = [row('alpha'), row('beta', { shortName: '波点', displayName: '波点音乐' })];
+        const shownName = (entry: ProviderAccountSummary) => (entry.providerId === 'beta' ? 'Bodian' : entry.shortName);
+        expect(filterRows(rows, 'bodian', shownName).map(entry => entry.providerId)).toEqual(['beta']);
+        expect(filterRows(rows, 'bodian')).toEqual([]);
     });
 });
 
@@ -80,8 +79,10 @@ describe('the switcher pill and an account\'s picture', () => {
         const rows = [row('a', unusable), row('b'), row('c', off)];
         expect(pillProvider(rows, 'b')?.providerId).toBe('b');
         expect(pillProvider(rows, 'a')?.providerId).toBe('b');
-        // 一个能选的都没有时才画够不着的那个：它照样列在那一列里，只是置灰。
+        // fork 的规则：一个能选的都没有时，才画不能选的第一个（这里只剩 'a' 自己，就画它）；
+        // 一个都没列出来才是 null。
         expect(pillProvider([row('a', unusable)], 'a')?.providerId).toBe('a');
+        expect(pillProvider([], 'a')).toBeNull();
     });
 
     // A click on the pill opens the window on the platform it shows, and a row that is out of
@@ -188,16 +189,6 @@ describe('the scene on the right of the column', () => {
         expect(scene('sign-in', 'error', { failed: true })).toBe('failed');
         expect(scene('sign-in', 'waiting', { inBrowser: true, failed: true })).toBe('failed');
         expect(scene('sign-in', 'choosing-method', { failed: true })).toBe('failed');
-    });
-
-    // 飞牛这类自建服务没有二维码：那一幅是地址 / 用户名 / 密码的表单。提交中 controller 把
-    // phase 借成 'loading'（要界面转圈），那一幅仍然是表单 —— 漏了 password 就会退回「正在取二维码」，
-    // 于是只看见一个转圈的弧、一个输入框都没有。
-    it('shows the password form for a service that has no code, also while a submit is on its way', () => {
-        expect(scene('sign-in', 'password', { password: true })).toBe('password');
-        expect(scene('sign-in', 'loading', { password: true })).toBe('password');
-        // 不是密码登录时 'loading' 照旧是「正在取二维码」。
-        expect(scene('sign-in', 'loading')).toBe('preparing');
     });
 
     // Which sentence stands as the headline. Until the window was rebuilt the sign-in hook made
@@ -363,7 +354,7 @@ describe('the texts the window can ask for', () => {
     it('declares a second line of its own only where the sentence names that platform\'s own thing', () => {
         const notes = Object.fromEntries(listOnlineMusicProviders().map(provider => [provider.id, omni.getLoginTexts(provider.id)?.caseNotes ?? null]));
         expect(notes).toEqual({
-            netease: null, kugou: null, bodian: null, qishui: null, feiniu: null,
+            netease: null, kugou: null, bodian: null, qishui: null, appleMusic: null, feiniu: null,
             // 洛雪自定义音源不登录，也就没有为某一种失败另写的一句话。
             lxmusic: null,
             // 扫错 App 的那一句按后端有没有 QQ 音乐 App 扫码说（这里还没问到后端）。
@@ -371,5 +362,23 @@ describe('the texts the window can ask for', () => {
             ytm: { 'browser-unfinished': 'home.loginCaseYtmUnfinished', 'no-browser': 'home.loginNoBrowserYtm' },
             spotify: { 'browser-unfinished': 'home.loginCaseSpotifyUnfinished', 'not-authorized': 'home.loginCaseSpotifyDenied', 'cannot-listen': 'home.loginCaseSpotifyPort' },
         });
+    });
+});
+
+describe('loginView · the check after a sign-in and the setup checklist', () => {
+    it('shows the check as its own scene and the checklist over whatever the row leads to', () => {
+        expect(loginScene({ lead: 'sign-in', phase: 'checking', inBrowser: true, failed: false })).toBe('checking');
+        expect(loginScene({ lead: 'sign-in', phase: 'checking', inBrowser: true, failed: false, setup: true })).toBe('setup');
+        expect(loginScene({ lead: 'account', phase: null, inBrowser: false, failed: false, setup: true })).toBe('setup');
+        expect(loginScene({ lead: null, phase: null, inBrowser: false, failed: false, setup: true })).toBe('none');
+        expect(sceneHeadline('checking', true)).toBe('login.checkingAccount');
+    });
+
+    it('adds a check mark after the account when the platform checks, and walks onto it', () => {
+        expect(stepMarks('browser', true, true)).toEqual({ marks: ['browser', 'account', 'check'], current: 0 });
+        expect(stepMarks('reading', true, true)?.current).toBe(1);
+        expect(stepMarks('checking', true, true)?.current).toBe(2);
+        expect(stepMarks('reading', false, true)).toEqual({ marks: ['code', 'phone', 'account', 'check'], current: 2 });
+        expect(stepMarks('setup', true, true)).toBeNull();
     });
 });

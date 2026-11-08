@@ -33,6 +33,7 @@ const content = (overrides: Partial<LivePreviewContent> = {}): LivePreviewConten
 const makePlayer = (initial: LivePreviewContent | null) => {
     const state = { content: initial };
     const listeners = new Set<() => void>();
+    const playbackTime = motionValue(1);
     const signals = {
         currentTime: motionValue(1),
         audioPower: motionValue(0.5),
@@ -52,10 +53,12 @@ const makePlayer = (initial: LivePreviewContent | null) => {
             return () => { listeners.delete(listener); };
         },
         signals,
+        playbackTime,
     };
     return {
         source,
         signals,
+        playbackTime,
         listeners,
         /** One write of the player's store, which tells its listeners. */
         write: (next: LivePreviewContent | null) => {
@@ -98,6 +101,27 @@ const makeScheduler = () => {
 };
 
 describe('live preview feed: following', () => {
+    it('keeps media progress separate from the lyric clock of a preview clip', () => {
+        const player = makePlayer(content({ duration: 30 }));
+        player.playbackTime.set(5);
+        // A clip starts 60 seconds into the song, with a 500 ms manual lyric offset.
+        player.signals.currentTime.set(64.5);
+        const feed = createLivePreviewFeed(player.source, makeScheduler().scheduler);
+        const detach = feed.attach(true);
+
+        expect(feed.playbackTime.get()).toBe(5);
+        expect(feed.currentTime.get()).toBe(64.5);
+
+        player.playbackTime.set(6);
+        player.signals.currentTime.set(65.5);
+        expect(feed.playbackTime.get()).toBe(6);
+        expect(feed.currentTime.get()).toBe(65.5);
+
+        detach();
+        player.playbackTime.set(7);
+        expect(feed.playbackTime.get()).toBe(6);
+    });
+
     it('takes what the player shows and its signals on attach', () => {
         const player = makePlayer(content());
         const feed = createLivePreviewFeed(player.source, makeScheduler().scheduler);
@@ -178,6 +202,34 @@ describe('live preview feed: following', () => {
 });
 
 describe('live preview feed: holding', () => {
+    it('freezes media progress without pulsing it, then catches up on resume', () => {
+        const player = makePlayer(content({ duration: 30 }));
+        player.playbackTime.set(5);
+        player.signals.currentTime.set(64.5);
+        const loop = makeScheduler();
+        const feed = createLivePreviewFeed(player.source, loop.scheduler);
+        const detach = feed.attach(false);
+        const progressChanges: number[] = [];
+        const stop = feed.playbackTime.on('change', latest => progressChanges.push(latest));
+
+        player.playbackTime.set(12);
+        player.signals.currentTime.set(71.5);
+        loop.advance(PULSE_MS + 100);
+        feed.nudge();
+        loop.advance(PULSE_MS + 100);
+
+        expect(feed.playbackTime.get()).toBe(5);
+        expect(feed.currentTime.get()).toBe(64.5);
+        expect(progressChanges).toEqual([]);
+
+        detach();
+        const resume = feed.attach(true);
+        expect(feed.playbackTime.get()).toBe(12);
+        expect(feed.currentTime.get()).toBe(71.5);
+        stop();
+        resume();
+    });
+
     it('holds the picture of the moment it is attached, and subscribes to nothing', () => {
         const player = makePlayer(content());
         const feed = createLivePreviewFeed(player.source, makeScheduler().scheduler);

@@ -677,7 +677,15 @@ describe('buildImportPlan', () => {
         expect(keys(plan({ libraryWallSeamDirection: '' }, { libraryWallSeamDirection: 'auto' }, unpinned))).toEqual([]);
     });
 
-    // 播放页顶栏模糊底属于「播放页长什么样」，归在 visualizer 组；false 是个真值，不能被当成「没写」。
+    // Numbering only the playing song styles the tiles of both walls: offered under the library wall group; false is a real value.
+    it('plans numbering only the playing song under the library wall group', () => {
+        const p = plan({ latticeBadgeCurrentOnly: true }, { latticeBadgeCurrentOnly: false }, unpinned);
+        expect(keys(p)).toEqual(['latticeBadgeCurrentOnly']);
+        expect(p.groups).toEqual(['libraryWall']);
+        expect(keys(plan({ latticeBadgeCurrentOnly: false }, { latticeBadgeCurrentOnly: true }, unpinned))).toEqual(['latticeBadgeCurrentOnly']);
+    });
+
+    // The blurred player header is a player-page look, offered under visualizer; false is a real value.
     it('plans the blurred player header under the visualizer group', () => {
         const p = plan({ playerHeaderBlur: false }, { playerHeaderBlur: true }, unpinned);
         expect(keys(p)).toEqual(['playerHeaderBlur']);

@@ -19,3 +19,6 @@ export const useLyricRenderQuality = (override?: LyricRenderOverride | null): Ly
         [global, scale, antialias],
     );
 };
+
+// 歌词样式的渲染器取自己实际用的分辨率倍数与抗锯齿：全局挡位（「动画与性能」）叠上样式 tuning 里的覆盖。
+

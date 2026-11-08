@@ -1,7 +1,8 @@
 // src/services/analysis/beatGridKeys.ts
 // The storage key prefixes of the stored beat lists. A module of its own, importing nothing, so services/repositories/cacheRepository.ts can route and categorise these keys
 // without importing beatGrid.ts and, through it, the database it is part of. The drum hits htdemucs
-// reads for 智能动感模式 (drumHits.ts) are kept beside them, for the same reason.
+// reads for 智能动感模式 (drumHits.ts) are kept beside them, for the same reason, and so is the vocal
+// envelope the same separation reads for 雾笺 (vocalEnvelope.ts).
 
 /** final0's lists, which automix and the beat FX share; the prefix they always had. */
 export const BEAT_GRID_PREFIX = 'beat_this_grid_';
@@ -30,3 +31,6 @@ export const VOCAL_ENVELOPE_PREFIX = 'vocal_envelope_v1_';
 
 /** Whether `key` is a track's stored vocal envelope. */
 export const isVocalEnvelopeKey = (key: string): boolean => key.startsWith(VOCAL_ENVELOPE_PREFIX);
+
+/** A track's vocal envelope off htdemucs' vocal stem (vocalEnvelope.ts), for 雾笺; versioned likewise. */
+

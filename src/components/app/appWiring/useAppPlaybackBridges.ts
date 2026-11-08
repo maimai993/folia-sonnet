@@ -37,8 +37,9 @@ import { usePlaybackInteractionBridge } from '../playback/bridges/usePlaybackInt
 import { usePlaybackReporter } from '../playback/bridges/usePlaybackReporter';
 import { useListeningArchiveRecorder } from '../../../hooks/useListeningArchiveRecorder';
 import { usePlaybackTransportController } from '../playback/bridges/usePlaybackTransportController';
+import { startExternalSong } from '../playback/start/externalSongStart';
 import { usePlaybackVisualizerBridge } from '../playback/bridges/usePlaybackVisualizerBridge';
-import { useTransportCommandRefs } from '../playback/bridges/useTransportCommandRefs';
+import { runTransportButtonAction, useTransportCommandRefs, type TransportButtonAction } from '../playback/bridges/useTransportCommandRefs';
 import { useRef, useCallback } from 'react';
 import type { SongResult } from '../../../types';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
@@ -68,7 +69,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         getSyntheticStageLyricsTime, getTargetPlaybackVolume, handleLike, handleNextTrack, handlePrevTrack,
         handleStageExternalPlayRequest, handleToggleLoopMode, incomingLyricTimelineOffsetMs, isElectronWindow,
         isLocalSongLiked, isLyricsLoading, isNowPlayingControlDisabledRef, isNowPlayingStageActive,
-        isPlayerCapStageActive, likedSongIds, localSongs, lyrics, nativeActive, nativeFailedKeysRef, nativeTakesRef,
+        isPlayerCapStageActive, localSongs, lyrics, nativeActive, nativeFailedKeysRef, nativeTakesRef,
         playQueue,
         navigateBackFromPlayer, navigateToPlayer, pendingResumeTimeRef, playerChromeVisibilityMode, playSong,
         recoverOnlinePlaybackSource, restoreCachedThemeForSong, setLyricsStable, setPlayerChromeVisibilityModeTo, setPlayerState, shouldAutoPlay,
@@ -154,7 +155,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         syncStageLyricsClock,
         pauseDuringTransition: handlePauseDuringTransition,
         isTransitionAudible: automix.isTransitionAudible,
-        nativeTakesRef,
+        startExternalSong: () => startExternalSong(playSong),
     });
     useNavidromeScrobbleReporter({
         audioRef,
@@ -175,6 +176,7 @@ export const useAppPlaybackBridges = (model: Input) => {
     // 不认某个 audio 元素，所以不用 audioRef / activeDeck。
     useListeningArchiveRecorder();
 
+    const transportCommandRefs = useTransportCommandRefs({ resumePlayback, pausePlayback, handlePrevTrack, handleNextTrack });
     const {
         mediaSessionPlayRef,
         mediaSessionPauseRef,
@@ -182,7 +184,13 @@ export const useAppPlaybackBridges = (model: Input) => {
         mediaSessionNextRef,
         taskbarHasTrackRef,
         taskbarPlayerStateRef,
-    } = useTransportCommandRefs({ resumePlayback, pausePlayback, handlePrevTrack, handleNextTrack });
+    } = transportCommandRefs;
+
+    // The window's own media buttons (taskbar thumbbar, and the ones beside the click-through lock)
+    // press the same transport refs the media session does.
+    const onClickThroughTransportAction = useCallback((action: TransportButtonAction) => {
+        runTransportButtonAction({ ...transportCommandRefs, isNowPlayingControlDisabledRef, audioRef }, action);
+    }, [audioRef, isNowPlayingControlDisabledRef, transportCommandRefs]);
 
     useMediaSessionBridge({
         audioRef,
@@ -220,7 +228,7 @@ export const useAppPlaybackBridges = (model: Input) => {
     // 通知栏却能点，点下去只得到一个「收藏失败」。
     // 「混音过渡中 / 无音源」那一档传 false：它是面板里的一瞬间，通知栏感知不到，
     // 而且它会随下一次元数据推送自己纠正回来。
-    const nativeSongLiked = resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
+    const nativeSongLiked = resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds });
     const nativeCanLikeSong = !resolveLikeAvailability(displaySong, false, isNowPlayingStageActive).disabled;
     const claimNativeSnapshot = (snapshot: NativeQueueState): boolean => {
         /*
@@ -324,7 +332,7 @@ export const useAppPlaybackBridges = (model: Input) => {
          */
         queue: playQueue,
         likeStateOf: (song) => ({
-            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds }),
             canLike: !resolveLikeAvailability(song, false, isNowPlayingStageActive).disabled,
         }),
     });
@@ -435,7 +443,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         isTrackTransitionAudible: automix.isTransitionAudible,
         // Keyed on the displayed track, so the like state matches the song the remote is showing
         // while a blend is held rather than the one arriving underneath it.
-        isLiked: resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+        isLiked: resolveSongLiked(displaySong, { isLocalSongLiked, starredNavidromeSongIds }),
         onLike: handleLike,
     });
 
@@ -546,7 +554,8 @@ export const useAppPlaybackBridges = (model: Input) => {
     return {
         ...model,
         adoptActiveDeckSource, cacheSongAssets, handleChangeReplayGainMode, handleContainerClick, handleFmTrash,
-        handleTranscodeFallback, pauseDuringTransitionRef, pausePlayback, publishStagePlayerPlaybackUpdate,
+        handleTranscodeFallback, onClickThroughTransportAction, pauseDuringTransitionRef, pausePlayback,
+        publishStagePlayerPlaybackUpdate,
         resumePlayback, seekDuringTransitionRef, seekMainAudioRef, setupAudioAnalyzer, toggleLoop, togglePlay
     };
 };

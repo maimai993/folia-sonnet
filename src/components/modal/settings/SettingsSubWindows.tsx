@@ -125,8 +125,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
         handleSetSubtitleFontFallbackFamilies: onSubtitleFontFallbackFamiliesChange,
     } = useTypographySettingsStore(useShallow(selectTypographySettingsSnapshot));
     const {
-        lyricFilterPattern,
-        lyricFilterEnabled,
+        lyricLineRules,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
         lyricStaffAbsorbMode,
@@ -139,12 +138,6 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
         handleSetVisualizerOpacity: setVisualizerOpacity,
         handleSetVisualizerBackgroundMode: onVisualizerBackgroundModeChange,
         handleSetVisualizerMode: onVisualizerModeChange,
-        handleUploadMonetBackgroundImage: onUploadMonetBackgroundImage,
-        handleClearMonetBackgroundImage: onClearMonetBackgroundImage,
-        handleAddUrlBackgroundItem: onAddUrlBackgroundItem,
-        handleUpdateUrlBackgroundItem: onUpdateUrlBackgroundItem,
-        handleDeleteUrlBackgroundItem: onDeleteUrlBackgroundItem,
-        handleSetUrlBackgroundSelectedId: onSetUrlBackgroundSelectedId,
     } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
     const {
         disableVisualizerVignette,
@@ -153,9 +146,9 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
         visualizerOpacity,
         visualizerBackgroundMode,
         visualizerMode,
-        urlBackgroundList,
-        urlBackgroundSelectedId,
     } = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
+    // 自定义背景图的上传与清除回到「外观」页处理了（存储与选项搬去了那边），
+    // 调参台只套用它现在的取值与加载态，不再传这两个动作。
     // The store's fields as one object: the backgrounds' tunings are taken from it by their declarations.
     const visualizerSettings = useVisualizerSettingsStore(useShallow(selectVisualizerSettingsSnapshot));
     const visualizerTunings = useVisualizerTunings();
@@ -189,10 +182,6 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                             },
                             customImage: monetBackgroundImage,
                             ...backgroundTuningConfig(visualizerSettings),
-                            url: {
-                                items: urlBackgroundList,
-                                selectedId: urlBackgroundSelectedId,
-                            },
                         }}
                         backgroundActions={{
                             onModeChange: onVisualizerBackgroundModeChange,
@@ -203,15 +192,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                                 onDisableGeometricChange: onToggleDisableVisualizerGeometricBackground,
                             },
                             customImage: {
-                                onUpload: onUploadMonetBackgroundImage,
-                                onClear: onClearMonetBackgroundImage,
                                 isLoading: isLoadingMonetBackgroundImage,
-                            },
-                            url: {
-                                onAdd: onAddUrlBackgroundItem,
-                                onUpdate: onUpdateUrlBackgroundItem,
-                                onDelete: onDeleteUrlBackgroundItem,
-                                onSelect: onSetUrlBackgroundSelectedId,
                             },
                         }}
                         hideTranslationSubtitle={hidePlayerTranslationSubtitle}
@@ -281,10 +262,6 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                             },
                             customImage: monetBackgroundImage,
                             ...backgroundTuningConfig(visualizerSettings),
-                            url: {
-                                items: urlBackgroundList,
-                                selectedId: urlBackgroundSelectedId,
-                            },
                         }}
                         cappellaCustomEmojiImages={cappellaCustomEmojiImages}
                         cappellaCustomAvatarImages={cappellaCustomAvatarImages}
@@ -313,8 +290,7 @@ const SettingsSubWindows: React.FC<SettingsSubWindowsProps> = ({
                 isOpen={open.lyricFilter}
                 isDaylight={isDaylight}
                 currentSongTitle={currentSongTitle}
-                initialPattern={lyricFilterPattern}
-                initialFilterEnabled={lyricFilterEnabled}
+                initialRules={lyricLineRules}
                 initialStaffPolicy={lyricStaffPolicy}
                 initialStaffMinDwellSeconds={lyricStaffMinDwellSeconds}
                 initialStaffAbsorbMode={lyricStaffAbsorbMode}

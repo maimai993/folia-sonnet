@@ -77,14 +77,11 @@ export const usePlayerPanelModel = ({
     // 冗余但保留的订阅：`omni.isSongLiked` 走 getState 读账号 store，读不到变化。今天 App 已经
     // 通过 useOnlineProviderPlatform 订阅了整张 accounts 表，所以这里其实总会被重渲染带到；
     // 万一哪天那条链断了，这一行仍能保证收藏成功后心形当场更新。取值没有用处。
+    // （上游的 omni.isSongLiked 只接一个参数，红心的来源不再由这里挑，所以只留订阅本身。）
     const currentSongProviderId = getOnlineProviderIdForSong(currentSong);
-    const likedOnlineSongIds = useOnlineProviderAccountStore(state => (
+    useOnlineProviderAccountStore(state => (
         currentSongProviderId ? state.accounts[currentSongProviderId]?.likedSongIds : undefined
     ));
-    const likedSongIds = useMemo(
-        () => new Set<string | number>(likedOnlineSongIds ?? []),
-        [likedOnlineSongIds],
-    );
     // The same for a heart just pressed: what it asked for is shown until its request is settled.
     useOnlineProviderAccountStore(state => (
         currentSongProviderId ? state.accounts[currentSongProviderId]?.wantedLikes : undefined
@@ -94,7 +91,7 @@ export const usePlayerPanelModel = ({
     // useStableActionSurface, so its identity is permanent (see the warning in
     // useStableCallbacks.ts) and a memo keyed on it answers with the first render's value forever:
     // favouriting a local song left this heart dark while the bottom bar's inline copy updated.
-    const isLiked = resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds });
+    const isLiked = resolveSongLiked(currentSong, { isLocalSongLiked, starredNavidromeSongIds });
 
     const collectionEntries = useMemo(() => createPlayerPanelCollectionEntries({
         currentSong,

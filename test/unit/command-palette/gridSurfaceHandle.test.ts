@@ -174,6 +174,9 @@ const fakeController = (snapshot: CollectionMutationSnapshot) => {
         organizeSongInfo: vi.fn(ok),
         matchSong: vi.fn(ok),
         setDailyDate: vi.fn(ok),
+        showDailyStyle: vi.fn(ok),
+        setDailyStyle: vi.fn(ok),
+        loadDailyStyleGroups: vi.fn(),
         dispose: vi.fn(),
     } satisfies CollectionMutationController;
 };
@@ -233,7 +236,7 @@ describe('core surface actions across suites', () => {
             'play-filtered',
             'enqueue-filtered',
             'sort-file-name',
-            'sort-file-modified',
+            'sort-modified-date',
             'sort-album-track',
             'sort-toggle-direction',
             'reload-online-collection',

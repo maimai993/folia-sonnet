@@ -63,6 +63,8 @@ const glowRadii = (wordRevealMode?: string | null): [number, number] => (
     wordRevealMode === 'instant' ? [14, 24] : wordRevealMode === 'fast' ? [18, 32] : [20, 40]
 );
 
+/** text-shadow halo radii per reveal mode: [inner, outer]. */
+
 /**
  * One glow ramp as framer keyframes: from nothing to the halo (or back), with `peaks[i]` in 0..1.
  * text-shadow: the halo stays at its peak radii and opacity carries the ramp. text-shadow is a paint
@@ -103,6 +105,8 @@ export const wordGlowVariants: Variants = {
         // 光晕一开始就按满半径摆好、靠 opacity 藏住，所以变 active 时只动 opacity。
         // filter 也一起复位，给「开关刚关掉时还留着上一轮」的词用。
         : { color: 'transparent', textShadow: textShadowAt(activeColor, ...glowRadii(wordRevealMode)), opacity: 0, filter: 'none', transition: { duration: 0 } }),
+        // The halo is already in place at full size, hidden by opacity, so turning active animates
+        // opacity only. filter resets too, for words left over from before the switch was turned off.
     active: ({ activeColor = '', duration, index, total, charStartTime, charEndTime, wordStartTime, wordRevealMode }: WordGlowCustom) => {
         if (wordRevealMode === 'instant') {
             return {
@@ -164,6 +168,7 @@ export const wordGlowVariants: Variants = {
         if (!isGlowBlurQuantized()) {
             // 同样只让 opacity 收掉光晕，影子字符串保持不变 —— 不变就不会重新光栅化。
             return { color: 'transparent', textShadow: textShadowAt(activeColor, ...glowRadii(wordRevealMode)), opacity: 0, transition };
+            // Fade the halo out by opacity; the shadow string stays as it was so nothing re-rasters.
         }
         // Fade out from wherever the ramp is, shrinking the halo with it the way `none` used to. The
         // colour must be restated: framer resets a key the new variant leaves out to its `initial`

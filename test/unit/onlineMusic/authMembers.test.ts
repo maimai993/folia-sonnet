@@ -24,11 +24,12 @@ const AUTH_MEMBERS: Record<string, string[]> = {
     bodian: [
         'cancelLogin', 'checkLogin', 'createQr', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout', 'startLogin',
     ],
-    // 安卓上登录诊断报告要说出「卡在哪」：Spotify 在安卓没有桌面端那座桥，
-    // 报告原来那一段是空的（"(none)"），所以补上 getLoginDiagnostics（与汽水 / QQ 同）。
+    // Two ways to play, picked at the sign-in; after it, whether the account gets audio keys is
+    // checked, and the Soloist setup is a checklist of its own. 安卓诊断报告的 getLoginDiagnostics
+    // 是本 fork 自己的（Spotify 在安卓没有桌面端那座桥，报告需要说出「卡在哪」）。
     spotify: [
-        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
-        'openLoginPage', 'startLogin',
+        'cancelLogin', 'checkAfterLogin', 'checkLogin', 'describeLoginFailure', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'getSetup',
+        'logout', 'openLoginPage', 'resolveLoginMethods', 'runSetupAction', 'startLogin',
     ],
     // YTM 在安卓有一份登录诊断（账号没读出来时说清卡在哪）；上游把它去掉过，本分支这个 fork 保留着。
     ytm: [
@@ -41,9 +42,20 @@ const AUTH_MEMBERS: Record<string, string[]> = {
         'cancelLogin', 'checkLogin', 'createQr', 'getLoginDiagnostics', 'getLoginStatus', 'getLoginTexts', 'getLoginTtlMs', 'logout',
         'resolveLoginMethods', 'startLogin',
     ],
-    // 两种登录方式（FN ID 云连接 / 局域网地址）由 provider 声明：要不要先停在「选择方式」那一屏，由 controller 按它决定。
+    // Signs in inside the companion window: no code to show, and the window is gone when the
+    // attempt is cancelled, so there is no TTL of its own. The sign-in lives in the companion's
+    // profile on this machine, so the kept account shows at app start.
+    appleMusic: [
+        'cancelLogin', 'checkLogin', 'describeLoginFailure', 'getLoginStatus', 'getLoginTexts', 'logout', 'openLoginPage',
+        'opensLoginPageItself', 'showsKeptAccountAtStart', 'signInRanOut', 'startLogin',
+    ],
+    // 表单式登录：不扫码不开浏览器，登录窗口按 getLoginForm 声明渲染账号密码表单。
+    // 这份是**本 fork** 的飞牛（feiniuProvider.ts），靠 foliaNative 的原生 HTTP 发请求，
+    // 安卓与桌面都能用；上游那份 fnmusic（Electron 主进程桥）文件保留但未注册 —— 两份都注册
+    // 会让平台列里出现两个「飞牛」。第一栏由 feiniuServerUrlForLoginInput 自己认短码 / 地址。
     feiniu: [
-        'getLoginMethods', 'getLoginStatus', 'getLoginTexts', 'getPasswordLoginDefaults', 'loginWithPassword', 'logout',
+        'getLoginForm', 'getLoginMethods', 'getLoginStatus', 'getLoginTexts', 'getPasswordLoginDefaults',
+        'loginWithPassword', 'logout', 'submitLoginForm',
     ],
 };
 

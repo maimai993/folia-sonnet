@@ -15,6 +15,9 @@ import { createNeutralAudioEffects, type AudioEffectId, type AudioEffectSettings
 import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerModCurve';
 import Sheet from '../shared/Sheet';
 import { Toggle } from '../modal/settings/kit';
+import HifiBypassNotice from '../hifi/HifiBypassNotice';
+import ExternalPlayerNotice, { useIsExternalPlayerRoute } from './ExternalPlayerNotice';
+import { useIsHifiRoute } from '../hifi/useHifiSignalPath';
 import ModCurveNotice from './equalizer/ModCurveNotice';
 import ConsoleTabs from './console/ConsoleTabs';
 import ProfileBar from './console/ProfileBar';
@@ -36,6 +39,9 @@ import { useAudioProfilesStore } from '../../stores/useAudioProfilesStore';
 // 均衡器那一页的数据仍归 useAudioSettingsStore（十段增益、预设、自定义槽位、mod 曲线），
 // 其余四页归 useAudioConsoleStore。这一层只管草稿与落盘时机：
 // 拖的时候只改草稿，松手才写 store —— 与原来那扇窗口的规矩一样。
+//
+// 走 HiFi 时 mpv 把歌直接送到输出设备，这条链整个被绕过：窗口只留着显示设置，给原来的引擎用。
+// 那时开关、频段与效果都不许动，顶上多一行 HifiBypassNotice 说明缘由。
 
 type AudioEqualizerDialogProps = {
     isDaylight: boolean;
@@ -61,6 +67,11 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
         [ownSettings, modCurve, modCurveSuspended],
     );
     const curveHeard = Boolean(modCurve) && !modCurveSuspended;
+    // 走 HiFi 时这首歌由 mpv 放，均衡器与音效都听不到：窗口只显示设置，留着给原来的引擎用。
+    const isHifiRoute = useIsHifiRoute();
+    // A platform's own player sounds the song on the external route: nothing here reaches it either.
+    const isExternalRoute = useIsExternalPlayerRoute();
+    const readOnly = curveHeard || isHifiRoute || isExternalRoute;
     const [tab, setTab] = useState<ConsoleTabId>('equalizer');
     const [draft, setDraft] = useState<AudioEqualizerSettings>(settings);
     const draftRef = useRef(draft);
@@ -180,7 +191,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
     // A let-go with nothing edited (a key, focus passing through, a press on a thumb) writes nothing either: any
     // write ends a curve on hold, and only an edit of the listener's own sound is meant to.
     const commitDraft = () => {
-        if (curveHeard) return;
+        if (readOnly) return;
         if (areAudioEqualizerSettingsEqual(resolveAudioEqualizerSettings(draftRef.current), ownSettings)) return;
         commitSettings(draftRef.current);
     };
@@ -205,18 +216,21 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     <span className="whitespace-nowrap text-xs text-[color:var(--st-t2)] max-sm:sr-only">
                         {t(draft.enabled ? 'ui.equalizerEnabled' : 'ui.equalizerDisabled')}
                     </span>
-                    <Toggle checked={draft.enabled} onChange={setEnabled} />
+                    <Toggle checked={draft.enabled} onChange={setEnabled} disabled={isHifiRoute} />
                 </label>
             )}
         >
             {/* 这一层排窗口里的内容（至少和窗口一样高，多出的高度给推子），也让这扇对话框自己能被思索命中。
                 标记仍叫 audio-equalizer：思索（ponder）的悬停目标按这个名字找，改名会让引导指不到窗口。 */}
             <div data-ponder="audio-equalizer" className="flex min-h-full flex-col">
+                {/* HiFi 时顶上多一行说明：整条链被绕过，下面的开关与滑块只是显示。 */}
+                <HifiBypassNotice />
                 {/* 页签与方案都不吸顶，跟正文一起排、一起滚。窗口里没有常驻的横条，
                     也就不会有它盖住内容、或者底色和窗口对不上时透出正文的问题。
 
                     顺序按「先说明、再选页、最后细调」：方案条在最上（换耳机是整窗级的动作），
                     页签紧随其后，两者之间只留间距、不叠底色，看着是一层而不是两层。 */}
+                <ExternalPlayerNotice />
                 <div className="flex flex-col gap-2 pb-1 pt-2">
                     <ProfileBar isDaylight={isDaylight} />
                     <ConsoleTabs
@@ -234,23 +248,33 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
 
                 {tab === 'equalizer' && <ModCurveNotice />}
 
-                {tab === 'equalizer' && (
-                    <EqualizerPane
-                        draft={draft}
-                        curveHeard={curveHeard}
-                        presetIds={PRESET_IDS}
-                        onChoosePreset={applyPreset}
-                        canReset={!curveHeard && isAudioEqualizerCustomSlotId(draft.preset)}
-                        onReset={resetActiveCustomSlot}
-                        onBandChange={updateBandDraft}
-                        onEffectChange={updateEffectDraft}
-                        onCommit={commitDraft}
-                    />
-                )}
-                {tab === 'compressor' && <CompressorPane />}
-                {tab === 'reverb' && <ReverbPane />}
-                {tab === 'postEq' && <PostEqPane />}
-                {tab === 'saturation' && <SaturationPane />}
+                {/* 五页摆在同一个位置，只有均衡页拿得到草稿与落盘的口子：其余四页自己读写
+                    useAudioConsoleStore，不经过这一层的草稿。
+
+                    HiFi 时整块让路（inert 加压暗）：那一刻的编辑写的是听不到的声音。
+                    压暗的判断跟原来一致 —— 总开关关掉、或者曲线在接管时，正文都淡下去。 */}
+                <div
+                    inert={isHifiRoute}
+                    className={`flex flex-1 flex-col${draft.enabled && !readOnly ? '' : ' opacity-40'}`}
+                >
+                    {tab === 'equalizer' && (
+                        <EqualizerPane
+                            draft={draft}
+                            curveHeard={curveHeard}
+                            presetIds={PRESET_IDS}
+                            onChoosePreset={applyPreset}
+                            canReset={!readOnly && isAudioEqualizerCustomSlotId(draft.preset)}
+                            onReset={resetActiveCustomSlot}
+                            onBandChange={updateBandDraft}
+                            onEffectChange={updateEffectDraft}
+                            onCommit={commitDraft}
+                        />
+                    )}
+                    {tab === 'compressor' && <CompressorPane />}
+                    {tab === 'reverb' && <ReverbPane />}
+                    {tab === 'postEq' && <PostEqPane />}
+                    {tab === 'saturation' && <SaturationPane />}
+                </div>
             </div>
         </Sheet>
     );

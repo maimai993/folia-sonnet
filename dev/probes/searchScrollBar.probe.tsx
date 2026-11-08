@@ -69,6 +69,8 @@ const SearchScrollBarProbe: React.FC = () => {
                 onAddTrackToQueue={() => { }}
                 onOpenArtist={() => { }}
                 onOpenAlbum={() => { }}
+                onOpenCollection={() => { }}
+                hasLocalSongs
             />
 
             <FloatingPlayerControls
@@ -87,7 +89,9 @@ const SearchScrollBarProbe: React.FC = () => {
                 onNavigateToPlayer={() => { }}
                 noTrackText="无曲目"
                 isDaylight={false}
-                isScrollHidden={BAR_HIDING_DISABLED ? false : isBarHidden}
+                // 上游把「往下滚收起胶囊」这一项从 FloatingPlayerControls 的 props 里拿掉了：胶囊只剩
+                // isHidden 一条淡出。探针仍按 store 的 isResultsBarHidden 开关它，接的还是同一份状态。
+                isHidden={BAR_HIDING_DISABLED ? false : isBarHidden}
                 slotPrimary="loop"
                 slotSecondary="lyrics-timeline"
                 slotContext={{

@@ -32,6 +32,8 @@ export type LivePreviewSource = {
     subscribe: (listener: () => void) => () => void;
     /** The player's own signals: the lyric clock and the audio levels. */
     signals: ClockValues;
+    /** Media position, before lyric offsets and preview clip starts are applied. */
+    playbackTime: MotionValue<number>;
 };
 
 export type LivePreviewScheduler = {
@@ -114,6 +116,7 @@ export const createLivePreviewFeed = (source: LivePreviewSource, scheduler: Live
     const sourceValues = valuesOf(signals);
     // The feed's own values, the same objects for its life, so a renderer never re-subscribes.
     const currentTime = motionValue(signals.currentTime.get());
+    const playbackTime = motionValue(source.playbackTime.get());
     const audioPower = motionValue(signals.audioPower.get());
     const audioBands: ClockValues['audioBands'] = {
         bass: motionValue(signals.audioBands.bass.get()),
@@ -133,7 +136,10 @@ export const createLivePreviewFeed = (source: LivePreviewSource, scheduler: Live
         content = next;
         listeners.forEach(listener => listener());
     };
-    const copySignals = () => ownValues.forEach((own, index) => own.set(sourceValues[index].get()));
+    const copySignals = () => {
+        ownValues.forEach((own, index) => own.set(sourceValues[index].get()));
+        playbackTime.set(source.playbackTime.get());
+    };
 
     // While attached: whether the picture is held, the time it stands at, and when the player's clock last moved.
     let attached = false;
@@ -158,6 +164,7 @@ export const createLivePreviewFeed = (source: LivePreviewSource, scheduler: Live
         if (follow) {
             stops.push(source.subscribe(() => setContent(source.read())));
             sourceValues.forEach((value, index) => stops.push(value.on('change', latest => ownValues[index].set(latest))));
+            stops.push(source.playbackTime.on('change', latest => playbackTime.set(latest)));
             stops.push(signals.currentTime.on('change', () => { lastSourceMove = scheduler.now(); }));
         } else {
             heldTime = currentTime.get();
@@ -176,6 +183,7 @@ export const createLivePreviewFeed = (source: LivePreviewSource, scheduler: Live
 
     return {
         currentTime,
+        playbackTime,
         audioPower,
         audioBands,
         getContent: () => content,

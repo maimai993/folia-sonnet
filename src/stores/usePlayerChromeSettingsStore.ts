@@ -57,6 +57,7 @@ export type PlayerChromeSettingsState = {
     alwaysShowMainWindowTitlebar: boolean;
     /** 播放页窗口标题栏后面垫一层磨砂底，按钮压在什么画面上都看得清。 */
     playerHeaderBlur: boolean;
+    /** A frosted bar behind the window titlebar on the player page, so its buttons read over any picture. */
     hideFullscreenButton: boolean;
     useNativeMacFullscreenButton: boolean;
     transparentPlayerBackground: boolean;

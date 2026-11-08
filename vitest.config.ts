@@ -28,25 +28,14 @@ export default defineConfig({
     // 初始选择钉在 grid：现有用例都假设没选过 suite 的人看到网格（开发阶段的初始选择是 bravais）。
     env: { VITE_LIBRARY_TUI: 'true', VITE_LIBRARY_INITIAL_SUITE: 'grid' },
     include: ['test/unit/**/*.test.ts'],
+    // Node 25 起自带的 localStorage 占位会盖住 jsdom 的那份：jsdom 用例在这里统一补内存实现，node 用例删掉占位。
+    setupFiles: ['test/unit/jsdomLocalStorage.ts'],
     /*
-     * 单测的默认超时从 vitest 的 5 秒放宽到 20 秒。
-     *
-     * 5 秒是「一个用例该多快跑完」的判断，不是「这台机器最慢的一次要多久」：跑全量时
-     * 一千多个测试文件并行、各自还要加载几千行的模块图，落在那 5 秒里的工作量跟单跑
-     * 一个文件完全不是一回事。实际的失败长这样——同一个用例单跑 3 秒过，全量跑就
-     * `Test timed out in 5000ms`，报的还是**随机某个**文件，谁的 CPU 被抢到了谁超时。
-     *
-     * 放宽不会盖住真的挂死：真挂死的是 20 秒也回不来，只是晚一点报。
+     * 默认 5 秒是给「逻辑跑多久」定的预算。有几个用例每个都要 `vi.resetModules()` 重走一遍
+     * 整张模块图（导演 → omni → providerRegistry → 各平台 transport，v0.7.26 之后还要加上
+     * appleMusic / fnmusic / hifi 几条链），冷启动那一次十几秒都算正常 —— 那是加载成本，
+     * 不是断言变慢。放松到 20 秒只影响这类冷启动用例，逻辑挂住照样会超时。
      */
-    testTimeout: 20_000,
-    /*
-     * 限制并发，别让一千多个文件把 8 核抢穿。
-     *
-     * vitest 默认按 CPU 数量开 worker，每个 worker 还要自己加载模块图 + jsdom。
-     * 在真实开发机上这就是上面那些「单跑 3 秒、全量 20 秒都不够」的来源：不是用例变慢，
-     * 是同一时刻有十几个进程在抢同一批核和同一块内存。留出余量之后，全量跑的总时长
-     * 反而更短（少了互相把对方挤出超时的重试）。
-     */
-    maxWorkers: 4,
+    testTimeout: 20_000
   }
 });

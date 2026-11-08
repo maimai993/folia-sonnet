@@ -13,7 +13,7 @@ import { currentTime } from '../../../stores/motionSignals';
 import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { SongResult, UnifiedSong, LocalSong } from '../../../types';
-import { MediaId } from '../../../types/onlineMusic';
+import { MediaId, ProviderCollection } from '../../../types/onlineMusic';
 import { isLocalPlaybackSong } from '../../../utils/appPlaybackGuards';
 import { toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
 import { resolveSongLiked } from '../../../utils/resolveSongLiked';
@@ -24,7 +24,8 @@ import { resolveNextUpTrack } from '../overlays/now-playing-toast/resolveNextUpT
 import { useLyricReadHead } from '../playback/bridges/useLyricReadHead';
 import { usePlaybackUiEffects } from '../playback/bridges/usePlaybackUiEffects';
 import { usePlaybackQueueController } from '../playback/start/usePlaybackQueueController';
-import { createSearchAlbumCollection, createSearchArtistCollection } from '../search/searchCollectionAdapters';
+import { createSearchAlbumCollection, createSearchArtistCollection, createSearchResultCollection } from '../search/searchCollectionAdapters';
+import { useWebEngineYield } from '../../hifi/useWebEngineYield';
 import { useMotionValueEvent } from 'framer-motion';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
@@ -47,7 +48,7 @@ export const useAppPlaybackQueue = (model: Input) => {
         addNavidromeSongsToQueue, audioContextRef, audioRef, audioSrc, automixEnabled, automixRef, blobUrlRef,
         coverUrl, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, currentView, effectiveLoopMode,
         globalLyricTimelineOffsetMs, handleLocalQueueAdd, interruptStagePlaybackForMainTransition, isFmMode,
-        isNowPlayingStageActive, isLocalSongLiked, lastAudioRecoverySourceRef, likedSongIds, loadLocalPlaylists, loadLocalSongs,
+        isNowPlayingStageActive, isLocalSongLiked, lastAudioRecoverySourceRef, loadLocalPlaylists, loadLocalSongs,
         loadMoreSearchResults, localLibraryCatalog, localSongs, mainPlaybackSnapshotRef, nativeActive,
         nativeFailedKeysRef, nativeTakesRef,
         navigateToCollection, navigateToPlaybackView, navigateToSearch, onPlayLocalSong, onPlayNavidromeSong,
@@ -124,7 +125,7 @@ export const useAppPlaybackQueue = (model: Input) => {
         nativePlaybackRef: nativeTakesRef,
         // 队列里每首歌的红心状态：同步读账号缓存，随队列一起落进原生镜像。
         nativeLikeStateOf: (song) => ({
-            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }),
+            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds }),
             canLike: !resolveLikeAvailability(song, false, false).disabled,
         }),
         nativeFailedKeysRef,
@@ -163,6 +164,11 @@ export const useAppPlaybackQueue = (model: Input) => {
         }
         setStatusMsg({ type: 'error', text: t('search.catalogUnavailable') });
     }, [navigateToCollection, setStatusMsg, t]);
+    // A provider collection from the search overlay opens as a page of its own, not as an album or
+    // an artist: nothing is resolved first, the adapter describes it straight away.
+    const handleSearchResultCollectionOpen = useCallback((collection: ProviderCollection) => {
+        navigateToCollection(createSearchResultCollection(collection), 'search');
+    }, [navigateToCollection]);
 
     usePlaybackUiEffects({
         statusMsg,
@@ -229,6 +235,10 @@ export const useAppPlaybackQueue = (model: Input) => {
     });
 
     automixRef.current = automix;
+    // 路线翻到 HiFi 时，在 mpv 打开设备之前就把两块 deck 静音、挂起 AudioContext。
+    // 上游 v0.7.26 把它挂在 App.tsx 的 automix 之后；本 fork 的 automix 住在这里，
+    // 所以跟着搬过来 —— App.tsx 是薄壳，这一步不能只留在上游那个被删掉的单体里。
+    useWebEngineYield({ audioRef, audioContextRef, automix });
 
     /**
      * The now-playing picture, which lags the app's own idea of what is playing.
@@ -403,7 +413,9 @@ export const useAppPlaybackQueue = (model: Input) => {
         addOnlineSongToQueue, addOnlineSongsToQueue, automix, cachePlayedOutRef, clearQueue, displayCoverUrl,
         displayDuration, displayPlayerState, displaySong, handleNextTrack, handlePrevTrack, handleSearchLoadMore,
         handleSearchOverlaySubmit, handleSearchResultAddToQueue, handleSearchResultAlbumOpen,
-        handleSearchResultArtistOpen, handleSearchResultPlay, handleStageExternalPlayRequest,
+        handleSearchResultArtistOpen, handleSearchResultCollectionOpen, handleSearchResultPlay,
+        // 速记簿要用：「插进队列并播这一首」（playback 页）与「拖动重排队列」（queue 页）。
+        handleQueueAddAndPlay, handleStageExternalPlayRequest,
         handleUnavailableReplacementConfirm, incomingLyricTimelineOffsetMs, isShowingTail, loopPositionRef,
         openSongCardPanel, pendingUnavailableReplacement, playOnlineQueueFromStart, playSong,
         setPendingUnavailableReplacement, shuffleQueue, skipAfterPlaybackFailure, stageIsNextUp, stageNextUp,

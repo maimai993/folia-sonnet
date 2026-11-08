@@ -454,6 +454,20 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         }
     }
 
+    /**
+     * 「与其他音源同时播放」切换后让**正在用的**播放器立刻跟上。
+     *
+     * newPlayer() 建的时候按落盘开关定焦点策略，但播放器是复用的 —— 不在这里补一刀的话，
+     * 切了开关要等下一次建播放器（换歌不一定重建）才生效，用户就是「拨了没反应」。
+     * setAudioAttributes(attrs, handleAudioFocus) 随时可调；handleAudioFocus 从 true 翻到
+     * false 时 ExoPlayer 会把自己占着的焦点 abandon 掉，翻回去时下次播放重新请求。
+     */
+    fun setHandleAudioFocus(handle: Boolean) {
+        runOnPlayer {
+            player?.setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, handle)
+        }
+    }
+
     /** 停下来并丢掉当前媒体（换歌之前的收尾，以及「没有歌了」）。 */
     fun stop() {
         runOnPlayer {
@@ -851,9 +865,17 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
              *
              * 影响三件事：系统音量键落在「媒体」而不是「通话」；蓝牙 / 车机的 AVRCP
              * 元数据分类；部分 ROM 的音频后处理（杜比、Hi-Fi 模式）只对 MUSIC 生效。
-             * 焦点交给播放器自己管（第二个参数 true）—— 来电、导航播报会自动让路。
+             *
+             * 焦点：第二个参数（handleAudioFocus）按「与其他音源同时播放」的落盘开关走。
+             * 之前写死 true —— ExoPlayer 自己请求焦点并响应丢失，别的应用一出声就把我们
+             * 暂停了，设置里那个开关因此对原生播放完全无效（WebView 那套 FoliaAudioFocus
+             * 只管 WebView 的 AudioManager，管不到这里）。开着「同时播放」时传 false：
+             * ExoPlayer 不请求焦点也不响应丢失，两个音源真的同时响。
              */
-            .setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, true)
+            .setAudioAttributes(
+                PLAYBACK_AUDIO_ATTRIBUTES,
+                !top.izuna.foliamajor.audio.FoliaAudioFocus.mixWithOthers(context),
+            )
             .build()
         attachTelemetry(created)
         return created
