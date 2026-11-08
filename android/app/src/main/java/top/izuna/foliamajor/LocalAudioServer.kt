@@ -15,7 +15,6 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
@@ -41,13 +40,39 @@ import okhttp3.ResponseBody
  *   /video-layer/<anything>         歌词后方视频层那一个视频（VideoLayerFile 的私有副本）
  *
  * WebView 的 <audio> / <video> 播不了 content:// 这种 URI，也不认 App 私有目录里的路径，
- * 所以原生起一个只监听 127.0.0.1 的小服务，把音频以 http 的形式喂回去。
+ * 所以原生起一个小服务，把音频以 http 的形式喂回去。
+ * 监听所有接口，但默认只让回环连接进来（见 handle() 里的 allowLanClients 收口）；
+ * 投送到局域网音响时才临时放开 /remote-audio/ 一路。
  * 必须支持 Range：<audio> 拖进度、以及某些格式要先读文件尾部的元数据，都靠它。
  */
 class LocalAudioServer(context: Context) {
 
     companion object {
         private const val TAG = "LocalAudioServer"
+
+        /**
+         * 手机在局域网里的 IPv4 地址。投送时音响要反过来连手机上的转发服务，
+         * 127.0.0.1 对它是「自己」，必须换成这个地址。拿不到就返回 null，
+         * 前端会退回「只推公网地址」的路径并给出提示。
+         */
+        fun lanIpv4(): String? {
+            try {
+                val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+                if (interfaces != null) {
+                    for (candidate in interfaces) {
+                        if (!candidate.isUp || candidate.isLoopback) continue
+                        for (address in candidate.inetAddresses) {
+                            if (address is java.net.Inet4Address && !address.isLoopbackAddress && address.isSiteLocalAddress) {
+                                return address.hostAddress
+                            }
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "lan ipv4 lookup failed", error)
+            }
+            return null
+        }
         private const val AUDIO_PATH_PREFIX = "/audio/"
         private const val REMOTE_AUDIO_PATH_PREFIX = "/remote-audio/"
         private const val VIDEO_LAYER_PATH_PREFIX = "/video-layer/"
@@ -65,8 +90,8 @@ class LocalAudioServer(context: Context) {
         /*
          * 只能代哪些主机的远端音频。
          *
-         * 这个服务监听在 127.0.0.1 上，设备上任何应用都能连上来 —— 放行任意 URL 就等于
-         * 开了一个「任读全网」的口子，所以按主机白名单收口。目前只有 Kuwo（波点）需要它：
+         * 这个服务同网段也能连（投送时），放行任意 URL 就等于开了一个「任读全网」的口子，
+         * 所以按主机白名单收口。目前只有 Kuwo（波点）需要它：
          * 它的 CDN 不下发 CORS 头，而 <audio> 带 crossOrigin="anonymous"，
          * 于是播放被同源策略挡掉（表现是 MEDIA_ELEMENT_ERROR: Format error）。
          */
@@ -284,6 +309,18 @@ class LocalAudioServer(context: Context) {
     private var serverSocket: ServerSocket? = null
     private var _port = 0
 
+    /**
+     * 投送期间才打开：允许局域网里的音响来取 `/remote-audio/` 转发地址。
+     * 默认关闭时，非回环连接一律在 handle() 里被挡掉，外面看和只监听 127.0.0.1 一样。
+     * 本地文件 / 媒体缓存 / 导入音频这几路**永远**不对局域网开放。
+     */
+    @Volatile
+    private var allowLanClients = false
+
+    fun setLanClientsAllowed(allowed: Boolean) {
+        allowLanClients = allowed
+    }
+
     @Synchronized
     @Throws(IOException::class)
     fun start(): Int {
@@ -291,7 +328,9 @@ class LocalAudioServer(context: Context) {
         if (socket != null && !socket.isClosed) return _port
         // 端口交给系统分配（0）：写死一个的话，被别的进程占了就起不来，
         // 而每次启动拿到的端口都可能不同，所以 URL 不能持久化，播放前要重新拼（见插件的 localAudioServerPort）。
-        val server = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        // 投送需要音响能连进来，所以监听所有接口；安全由 handle() 里的 allowLanClients 收口，
+        // 不投送时对外部连接和以前只绑 127.0.0.1 等价。
+        val server = ServerSocket(0, 50)
         serverSocket = server
         _port = server.localPort
         executor.execute {
@@ -445,6 +484,18 @@ class LocalAudioServer(context: Context) {
                         val queryString = if (queryAt >= 0) rawPath.substring(queryAt + 1) else ""
                         val path = if (queryAt >= 0) rawPath.substring(0, queryAt) else rawPath
                         /*
+                         * 投送时的对外边界：必须「投送已打开」且只访问 `/remote-audio/` 转发地址，
+                         * 才放局域网里的音响进来。本地曲库、媒体缓存、导入文件这几路永远拒绝，
+                         * 免得为了投一首歌把整个手机曲库暴露到同一个 WiFi 上。
+                         */
+                        if (!client.inetAddress.isLoopbackAddress
+                            && (!allowLanClients || !path.startsWith(REMOTE_AUDIO_PATH_PREFIX))) {
+                            val denied = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            output.write(denied.toByteArray(StandardCharsets.US_ASCII))
+                            output.flush()
+                            return
+                        }
+                        /*
                          * 预检（OPTIONS）必须自己答。
                          *
                          * 跨源请求只要带了 Range 之外的头、或者某些 WebView 版本对 Range 也走预检，
@@ -550,8 +601,8 @@ class LocalAudioServer(context: Context) {
         headers: Map<String, String>,
         fileName: String
     ) {
-        // 现在传进来的是完整文件名（含 imported- 前缀）。这个服务监听在 127.0.0.1 上，
-        // 设备上任何应用都能连，名字来自 URL，必须挡掉路径穿越。
+        // 现在传进来的是完整文件名（含 imported- 前缀）。这个服务同网段也能连（投送时），
+        // 名字来自 URL，必须挡掉路径穿越。
         if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
             Log.w(TAG, "imported audio refused: " + fileName)
             writeStatus(output, 404, "Not Found")
@@ -576,8 +627,8 @@ class LocalAudioServer(context: Context) {
     /**
      * 按绝对路径流用户自己的音频（文件系统兜底扫描的歌）。
      *
-     * 只放行外存根目录下的音频文件，别的一律 404 —— 这个服务监听在 127.0.0.1 上，
-     * 设备上任何应用都能连上来，不能让它变成一个任读全盘的口子。
+     * 只放行外存根目录下的音频文件，别的一律 404 —— 这个服务同网段也能连（投送时），
+     * 不能让它变成一个任读全盘的口子。
      * 走这条路的歌要求已授予「所有文件访问」，没授权时读流会自己失败。
      */
     @Throws(IOException::class)
@@ -710,7 +761,7 @@ class LocalAudioServer(context: Context) {
      * 歌词后方视频层那一个视频（私有目录里的副本，见 VideoLayerFile）。
      *
      * 不像音频那样拿 URL 里的名字去拼路径：这一层永远只有一份，名字不作数 ——
-     * 这个服务监听在 127.0.0.1 上，设备上任何应用都能连，名字来自 URL 就别拿它拼路径。
+     * 这个服务同网段也能连（投送时），名字来自 URL 就别拿它拼路径。
      * <video> 一样吃 Range 与 CORS，所以走的是与音频同一条 writeResponse。
      */
     @Throws(IOException::class)

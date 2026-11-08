@@ -7680,4 +7680,16 @@ export default {
     "unknownBranch": "无法识别的分支",
     "ok": "我知道了"
   },
+  "lanCastTitle": "投送到音响",
+  "lanCastHint": "搜索同一 WiFi 下支持 DLNA / UPnP 的音响",
+  "lanCastNoTrack": "当前没有播放的歌曲",
+  "lanCastScanning": "正在搜索…",
+  "lanCastDevices": "找到 {{count}} 台音响",
+  "lanCastRescan": "重新搜索",
+  "lanCastNoDevice": "没搜到音响。请确认手机和音响在同一个 WiFi、且音响已开启 DLNA 投送。",
+  "lanCastPlaying": "声音已交给 {{name}}，手机已静音",
+  "lanCastFollowed": "切歌已自动推送到 {{name}}",
+  "lanCastLocalHint": "手机已静音，进度条和歌词照常走，声音只在音响上；切歌会自动跟着换。",
+  "lanCastStop": "停止投送并恢复手机声音",
+  "lanCastClose": "关闭"
 } as const;
