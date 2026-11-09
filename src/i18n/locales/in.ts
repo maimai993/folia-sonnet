@@ -1169,6 +1169,7 @@ export default {
       "background-latent-both": { "title": "Latent: Campuran", "description": "Tampilkan kedua lapisan shader" },
       "background-url": { "title": "Latar: Latar Tertanam", "description": "Alihkan latar ke mode halaman web tertanam" },
       "background-sora": { "title": "Latar: Sora", "description": "Alihkan latar ke latar belakang medan bintang Sora" },
+      "background-particles": { "title": "Latar: Partikel", "description": "Pecahkan sampul menjadi partikel yang beriak dan melonjak" },
       "settings-toggle-transparent": { "title": "Alihkan transparansi", "description": "Alihkan latar belakang pemutar transparan" },
       "settings-toggle-daylight": { "title": "Alihkan terang/gelap", "description": "Alihkan mode siang/malam tema" },
       "settings-toggle-player-back-button": { "title": "Selalu tampilkan tombol kembali pemutar", "description": "Alihkan apakah tombol kembali tetap terlihat" },

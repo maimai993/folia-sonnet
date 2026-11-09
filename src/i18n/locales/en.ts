@@ -1169,6 +1169,7 @@ export default {
       "background-latent-both": { "title": "Latent: Mixed", "description": "Show both shader layers" },
       "background-url": { "title": "Background: Embedded Background", "description": "Switch background to embedded webpage mode" },
       "background-sora": { "title": "Background: Sora", "description": "Switch background to Sora starfield" },
+      "background-particles": { "title": "Background: Particles", "description": "Cover broken into particles that ripple and jump" },
       "settings-toggle-transparent": { "title": "Toggle transparency", "description": "Toggle transparent player background" },
       "settings-toggle-daylight": { "title": "Toggle light/dark", "description": "Toggle theme daylight/midnight mode" },
       "settings-toggle-player-back-button": { "title": "Always show player back button", "description": "Toggle whether the player page back button stays visible" },

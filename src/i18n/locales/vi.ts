@@ -1169,6 +1169,7 @@ export default {
       "background-latent-both": { "title": "Latent: Kết hợp", "description": "Hiển thị cả hai lớp shader" },
       "background-url": { "title": "Nền: Trang Web", "description": "Chuyển nền sang chế độ trang web" },
       "background-sora": { "title": "Nền: Sora", "description": "Chuyển nền sang bầu trời sao Sora" },
+      "background-particles": { "title": "Nền: Hạt", "description": "Tách ảnh bìa thành các hạt gợn sóng và nhảy múa" },
       "settings-toggle-transparent": { "title": "Bật/tắt trong suốt", "description": "Bật/tắt nền trong suốt cho trình phát" },
       "settings-toggle-daylight": { "title": "Chuyển đổi sáng/tối", "description": "Chuyển đổi chủ đề ngày/đêm" },
       "settings-toggle-player-back-button": { "title": "Luôn hiện nút quay lại trình phát", "description": "Bật/tắt hiển thị cố định nút quay lại trang phát" },

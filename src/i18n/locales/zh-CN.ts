@@ -1181,6 +1181,7 @@ export default {
       "background-latent-both": { "title": "背景切换到隐现：混合", "description": "同时显示 隐现 像素与流体层" },
       "background-url": { "title": "背景切换到 嵌入背景", "description": "切换背景到嵌入网页模式" },
       "background-sora": { "title": "背景切换：空", "description": "将背景切换到星空 (Sora)" },
+      "background-particles": { "title": "背景切换：粒子", "description": "将封面打散成会起伏跳动的粒子" },
       "settings-toggle-transparent": { "title": "透明化", "description": "切换播放器背景透明度" },
       "settings-toggle-daylight": { "title": "切换明暗", "description": "切换主题日夜模式" },
       "settings-toggle-player-back-button": { "title": "始终显示播放页返回按钮", "description": "切换播放页左上角返回按钮的常驻显示" },
