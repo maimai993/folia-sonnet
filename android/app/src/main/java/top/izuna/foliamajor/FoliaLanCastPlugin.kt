@@ -5,6 +5,10 @@ package top.izuna.foliamajor
 // 这两步只能放在原生侧；Web 层只负责挑设备、给地址和元数据。
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.util.Log
 import android.util.Xml
@@ -36,6 +40,7 @@ class FoliaLanCastPlugin : Plugin() {
         private const val SSDP_ADDRESS = "239.255.255.250"
         private const val SSDP_PORT = 1900
         private const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport:1"
+        private const val RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1"
         private const val MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1"
         private val SOAP_XML = "text/xml; charset=\"utf-8\"".toMediaType()
     }
@@ -53,6 +58,8 @@ class FoliaLanCastPlugin : Plugin() {
         val location: String,
         val controlUrl: String,
         val manufacturer: String,
+        /** RenderingControl 的 controlURL；为空表示这台音响不支持手机调音量。 */
+        val volumeControlUrl: String? = null,
     )
 
     /** 扫一遍局域网里能当播放器的 UPnP 设备。网络操作全部放到后台线程。 */
@@ -70,6 +77,7 @@ class FoliaLanCastPlugin : Plugin() {
                         put("location", speaker.location)
                         put("controlUrl", speaker.controlUrl)
                         put("manufacturer", speaker.manufacturer)
+                        if (speaker.volumeControlUrl != null) put("volumeControlUrl", speaker.volumeControlUrl)
                     })
                 }
                 val payload = JSObject()
@@ -149,6 +157,138 @@ class FoliaLanCastPlugin : Plugin() {
                 call.reject("停止失败：${error.message ?: "unknown"}", error)
             }
         }.start()
+    }
+
+    /** RenderingControl：读回音响当前音量（0-100）。 */
+    @PluginMethod
+    fun getVolume(call: PluginCall) {
+        val url = call.getString("volumeControlUrl")
+        if (url.isNullOrEmpty()) {
+            call.reject("这台音响不支持音量控制")
+            return
+        }
+        Thread {
+            try {
+                val body = "<u:GetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
+                    "<InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>"
+                val value = soapNumber(url, "GetVolume", body, "CurrentVolume")
+                if (value == null) call.reject("音响没有返回音量")
+                else call.resolve(JSObject().put("volume", value))
+            } catch (error: Exception) {
+                Log.w(TAG, "getVolume failed", error)
+                call.reject("读取音量失败：${error.message ?: "unknown"}", error)
+            }
+        }.start()
+    }
+
+    /** RenderingControl：把手机上的音量条映射到音响。 */
+    @PluginMethod
+    fun setVolume(call: PluginCall) {
+        val url = call.getString("volumeControlUrl")
+        val volume = call.getInt("volume")?.coerceIn(0, 100)
+        if (url.isNullOrEmpty() || volume == null) {
+            call.reject("缺少音响地址或音量")
+            return
+        }
+        Thread {
+            try {
+                val body = "<u:SetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
+                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
+                    "<DesiredVolume>$volume</DesiredVolume></u:SetVolume>"
+                val ok = soap(url, "SetVolume", body, RENDERING_CONTROL)
+                call.resolve(JSObject().put("ok", ok))
+            } catch (error: Exception) {
+                Log.w(TAG, "setVolume failed", error)
+                call.reject("设置音量失败：${error.message ?: "unknown"}", error)
+            }
+        }.start()
+    }
+
+    /** RenderingControl：静音开关。音量条归零时也走这条路，兼容只读音量的老设备。 */
+    @PluginMethod
+    fun setMute(call: PluginCall) {
+        val url = call.getString("volumeControlUrl")
+        if (url.isNullOrEmpty()) {
+            call.reject("这台音响不支持静音控制")
+            return
+        }
+        val muted = call.getBoolean("muted") ?: false
+        Thread {
+            try {
+                val body = "<u:SetMute xmlns:u=\"$RENDERING_CONTROL\">" +
+                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
+                    "<DesiredMute>${if (muted) 1 else 0}</DesiredMute></u:SetMute>"
+                val ok = soap(url, "SetMute", body, RENDERING_CONTROL)
+                call.resolve(JSObject().put("ok", ok))
+            } catch (error: Exception) {
+                Log.w(TAG, "setMute failed", error)
+                call.reject("设置静音失败：${error.message ?: "unknown"}", error)
+            }
+        }.start()
+    }
+
+    // ------------------------------------------------------------------ WiFi 自动投送
+
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /** 打开/关闭「连上 WiFi 自动投送」的原生网络监听。 */
+    @PluginMethod
+    fun setWifiAutoCast(call: PluginCall) {
+        val enabled = call.getBoolean("enabled") ?: false
+        if (enabled) startWifiWatch() else stopWifiWatch()
+        call.resolve()
+    }
+
+    /** 前端刚挂载时用它确认当前是不是已经在 WiFi 上。 */
+    @PluginMethod
+    fun getWifiState(call: PluginCall) {
+        call.resolve(JSObject().put("wifi", isOnWifi()))
+    }
+
+    private fun isOnWifi(): Boolean {
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
+    private fun startWifiWatch() {
+        if (networkCallback != null) return
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                val data = JSObject()
+                data.put("wifi", true)
+                notifyListeners("wifiCastChange", data)
+            }
+            override fun onLost(network: Network) {
+                val data = JSObject()
+                data.put("wifi", false)
+                notifyListeners("wifiCastChange", data)
+            }
+        }
+        try {
+            cm.registerNetworkCallback(request, callback)
+            networkCallback = callback
+        } catch (error: Exception) {
+            Log.w(TAG, "register network callback failed", error)
+        }
+    }
+
+    private fun stopWifiWatch() {
+        val callback = networkCallback ?: return
+        val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        try {
+            cm?.unregisterNetworkCallback(callback)
+        } catch (error: Exception) {
+            Log.w(TAG, "unregister network callback failed", error)
+        }
+        networkCallback = null
     }
 
     // ------------------------------------------------------------------ SSDP
@@ -250,6 +390,7 @@ class FoliaLanCastPlugin : Plugin() {
                     location = location,
                     controlUrl = absolute,
                     manufacturer = parsed.manufacturer,
+                    volumeControlUrl = parsed.volumeControlUrl?.let { absoluteUrl(location, it, parsed.urlBase) },
                 )
             }
         } catch (error: Exception) {
@@ -264,6 +405,7 @@ class FoliaLanCastPlugin : Plugin() {
         var deviceType: String = "",
         var urlBase: String = "",
         var controlUrl: String? = null,
+        var volumeControlUrl: String? = null,
     )
 
     /** 只挑需要的几个元素；嵌套的 embedded device 也一起扫，有些音响把服务挂在子设备下。 */
@@ -287,6 +429,9 @@ class FoliaLanCastPlugin : Plugin() {
                         val path = parser.nextText().trim()
                         if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:AVTransport") && result.controlUrl == null) {
                             result.controlUrl = path
+                        }
+                        if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:RenderingControl") && result.volumeControlUrl == null) {
+                            result.volumeControlUrl = path
                         }
                     }
                 }
@@ -319,13 +464,13 @@ class FoliaLanCastPlugin : Plugin() {
 
     // ------------------------------------------------------------------ SOAP
 
-    private fun soap(controlUrl: String, action: String, body: String): Boolean {
+    private fun soapRaw(controlUrl: String, action: String, body: String, service: String): String? {
         val envelope = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
             "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
             "<s:Body>$body</s:Body></s:Envelope>"
         val request = Request.Builder()
             .url(controlUrl)
-            .header("SOAPACTION", "\"$AV_TRANSPORT#$action\"")
+            .header("SOAPACTION", "\"$service#$action\"")
             .header("Content-Type", "text/xml; charset=\"utf-8\"")
             .header("User-Agent", "Folia/1.0 UPnP/1.0")
             .post(envelope.toByteArray(Charsets.UTF_8).toRequestBody(SOAP_XML))
@@ -333,8 +478,18 @@ class FoliaLanCastPlugin : Plugin() {
         return httpClient.newCall(request).execute().use { response ->
             val text = response.body?.string() ?: ""
             // UPnP 的错误用 500 + SOAP Fault 回，别把「设备收到了但拒绝」当成成功。
-            response.isSuccessful && !text.contains("<s:Fault", true) && !text.contains("UPnPError", true)
+            if (response.isSuccessful && !text.contains("<s:Fault", true) && !text.contains("UPnPError", true)) text else null
         }
+    }
+
+    private fun soap(controlUrl: String, action: String, body: String, service: String = AV_TRANSPORT): Boolean =
+        soapRaw(controlUrl, action, body, service) != null
+
+    /** GetVolume 的响应形如 <CurrentVolume>42</CurrentVolume>，命名空间前缀各家不一样。 */
+    private fun soapNumber(controlUrl: String, action: String, body: String, tag: String): Int? {
+        val text = soapRaw(controlUrl, action, body, RENDERING_CONTROL) ?: return null
+        val pattern = Regex("<(?:[A-Za-z0-9_]+:)?$tag[^>]*>\\s*([0-9]+)\\s*</", RegexOption.IGNORE_CASE)
+        return pattern.find(text)?.groupValues?.get(1)?.toIntOrNull()
     }
 
     private fun setUriBody(audioUrl: String, metadata: String): String =

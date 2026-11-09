@@ -1181,6 +1181,7 @@ export default {
       "background-latent-both": { "title": "背景切换到隐现：混合", "description": "同时显示 隐现 像素与流体层" },
       "background-url": { "title": "背景切换到 嵌入背景", "description": "切换背景到嵌入网页模式" },
       "background-sora": { "title": "背景切换：空", "description": "将背景切换到星空 (Sora)" },
+      "background-particles": { "title": "背景切换：粒子", "description": "将封面打散成会起伏跳动的粒子" },
       "settings-toggle-transparent": { "title": "透明化", "description": "切换播放器背景透明度" },
       "settings-toggle-daylight": { "title": "切换明暗", "description": "切换主题日夜模式" },
       "settings-toggle-player-back-button": { "title": "始终显示播放页返回按钮", "description": "切换播放页左上角返回按钮的常驻显示" },
@@ -7852,5 +7853,18 @@ export default {
   "lanCastFollowed": "切歌已自动推送到 {{name}}",
   "lanCastLocalHint": "手机已静音，进度条和歌词照常走，声音只在音响上；切歌会自动跟着换。",
   "lanCastStop": "停止投送并恢复手机声音",
-  "lanCastClose": "关闭"
+  "lanCastClose": "关闭",
+  "lanCastRemoteTitle": "投送遥控器",
+  "lanCastRemotePlayingOn": "声音在 {{name}} 上",
+  "lanCastRemoteHint": "手机已静音，进度条和歌词照常走；在播放页切歌会自动同步到音响。",
+  "lanCastRemoteSwitch": "切换音响",
+  "lanCastRemoteMinimize": "收起",
+  "lanCastRemoteExpand": "展开遥控器",
+  "lanCastVolume": "音响音量",
+  "lanCastVolumeMute": "音响静音",
+  "lanCastVolumeUnsupported": "这台音响不支持手机调节音量。",
+  "lanCastWifiAuto": "连上 WiFi 自动投送",
+  "lanCastWifiAutoOn": "已开启",
+  "lanCastWifiAutoOff": "已关闭",
+  "lanCastWifiAutoRestored": "已自动投送到 {{name}}"
 } as const;

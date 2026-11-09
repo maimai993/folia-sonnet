@@ -296,6 +296,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "background-latent-both",
   "background-url",
   "background-sora",
+  "background-particles",
   "ai-director-decide",
   "ai-director-decide-again",
   "ai-director-restore",

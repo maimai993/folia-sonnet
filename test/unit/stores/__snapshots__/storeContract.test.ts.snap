@@ -55,6 +55,8 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "folia.wallpaperOverlayLockScreenOnly",
   "folia.wallpaperOverlayOpacity",
   "folia.wallpaperOverlaySkipInstrumental",
+  "folia.wallpaperVideoRotation",
+  "foliaMarketRotation",
   "folia_analysis_models_asked",
   "folia_audio_equalizer_mod_curve",
   "folia_auto_jump_to_visualizer_on_launch",
