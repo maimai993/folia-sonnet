@@ -2,7 +2,6 @@ import { Button } from '../ui/Button';
 import { useEffect, useRef, useState, type FC } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
-import { useGlass } from '@/shinoinject/useGlass';
 import { glassSurface } from './LxPlatformPicker';
 
 // src/components/lxmusic/LxCategoryPicker.tsx
@@ -13,7 +12,7 @@ import { glassSurface } from './LxPlatformPicker';
 // 右边同一个高度上：平时只显示「热门标签」这样的当前组，点开才铺开整棵目录——
 // 上半层是组，下半层是这组的标签，选完自动收起，页面高度一格不动。
 //
-// 玻璃壳、定位、Esc/滚轮/点遮罩收起都跟平台浮层同一套（glassSurface + useGlass），
+// 玻璃壳、定位、Esc/滚轮/点遮罩收起都跟平台浮层同一套（glassSurface），
 // 浮层挂 body，免得被横向滚动容器裁掉。
 
 export type LxCategoryGroup = { title: string; tags: ReadonlyArray<{ id: string; name: string }> };
@@ -44,7 +43,6 @@ export const LxCategoryPicker: FC<LxCategoryPickerProps> = ({
     const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
     const anchor = useRef<HTMLButtonElement | null>(null);
 
-    useGlass();
 
     const activeGroup = groups.find((group) => group.title === groupTitle) ?? groups[0] ?? null;
     const activeTagName = activeGroup?.tags.find((tag) => tag.id === tagId)?.name ?? '全部';

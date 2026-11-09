@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type CSSProperties, type FC, type ReactNod
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { LX_PUBLIC_PLATFORMS, type LxPublicPlatform } from '../../services/onlineMusic/lxmusic/lxPublicApi';
-import { useGlass } from '@/shinoinject/useGlass';
 
 // src/components/lxmusic/LxPlatformPicker.tsx
 // 洛雪那几家平台（网易云 / QQ / 酷狗 / 酷我，外加「全部平台」）的统一选择器。
@@ -13,8 +12,8 @@ import { useGlass } from '@/shinoinject/useGlass';
 // 页面排版一点不动。歌单页、推荐页、专辑页共用这一个组件，免得几处长得不一样。
 //
 // 胶囊与浮层都挂全局那套液态玻璃（data-glass / -jelly / -light + 页头搜索框同款底子）：
-// 半透明底 + 上下描边 + 外描边 + 投影，玻璃层由 shinoinject 的 useGlass 补上高光与折射。
-// 浮层是 createPortal 挂到 body 的，Grid3D 那一次 useGlass 扫不到它，所以自己再扫一遍。
+// 半透明底 + 上下描边 + 外描边 + 投影，外加一层 backdrop-filter：全站的 installGlassSurfaces
+// 会按「看起来是玻璃」的选择器把滤镜挂上去，浮层是 createPortal 挂到 body 的，也照样能被扫到。
 
 /** 「全部平台」没有单一品牌色，用一条灰度渐变占位。 */
 const ALL_DOT = 'linear-gradient(135deg,#a3a3a3,#525252)';
@@ -37,6 +36,8 @@ export const glassSurface = (isDaylight: boolean): CSSProperties => ({
     borderBottom: isDaylight ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.12)',
     outline: '1px solid rgba(40,40,40,0.2)',
     boxShadow: '2px 2px 8px 2px rgba(40,40,40,0.4)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
     color: isDaylight ? '#000' : '#fff',
 });
 
@@ -54,9 +55,6 @@ export const LxPlatformPicker: FC<{
     const [open, setOpen] = useState(false);
     const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
     const anchor = useRef<HTMLButtonElement | null>(null);
-
-    // 条件渲染的面板只能等一次 commit 之后才被扫到：浮层一开，自己再挂一遍玻璃。
-    useGlass();
 
     // 面板挂到 body 上：这排胶囊大多处在横向滚动容器里，直接挂在里面会被裁掉。
     const openSheet = (): void => {
