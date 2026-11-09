@@ -496,12 +496,24 @@ const buildAndStoreImportedTracks = async (tracks: NativeAudioTrack[]): Promise<
 export const pickAndroidLocalMusic = async (): Promise<LocalSong[]> => {
     const plugin = getPlugin();
     if (!plugin) {
+        const platform = Capacitor.getPlatform();
+        const available = Capacitor.isPluginAvailable('FoliaNative');
         noteLibraryStep('local', 'pick:no-plugin', {
             hasPlugin: false,
-            platform: Capacitor.getPlatform(),
-            pluginAvailable: Capacitor.isPluginAvailable('FoliaNative'),
+            platform,
+            pluginAvailable: available,
         });
-        throw new Error('Android audio picker is unavailable');
+        /*
+         * 把判据一起说出来。
+         *
+         * 以前这里只抛一句「Android audio picker is unavailable」，
+         * 真机上用户看到的就是「点了没反应」—— 分不清是
+         * 「跑在浏览器里」、「原生插件没注册」还是「插件注册了但方法不在」。
+         * 这三种的修法完全不同，所以把 platform / available 一起带上。
+         */
+        throw new Error(
+            `Android audio picker is unavailable（platform=${platform}, pluginAvailable=${available}）`,
+        );
     }
     // 代理上任何名字都是 function，所以「选文件夹」这条入口默认就在；挑不到时原生侧会 reject，
     // 那一次再回落成「选单个文件」。这份回落只为「插件比页面旧」这一种情况留着。
