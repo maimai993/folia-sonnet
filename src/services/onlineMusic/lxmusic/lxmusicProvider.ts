@@ -40,6 +40,7 @@ import {
     getLxSavedPlaylists,
     removeSongFromLxPlaylist,
     type LxSavedPlaylist,
+    type LxSavedSong,
 } from './lxSavedPlaylists';
 import { lxLyricBySearch, lxLyricFromKg, lxLyricFromTx } from './lxLyric';
 import {
@@ -167,6 +168,56 @@ const toUnifiedSong = (item: LxApiSong): UnifiedSong => {
             providerData: { platform: item.platform, nativeId: item.id, platformLabel: platformLabelOf(item.platform) },
         },
     };
+};
+
+/** UnifiedSong 的原生身份（平台 + 平台侧 id），用来跟本机收藏对账。 */
+const nativeKeyOfUnified = (song: UnifiedSong): string => {
+    const data = song.sourceRef?.providerData as Record<string, unknown> | undefined;
+    return `${String(data?.platform ?? '')}:${String(data?.nativeId ?? '')}`;
+};
+
+/**
+ * 「专辑」页里那些只存到专辑名、没存到平台专辑 id 的收藏，自己凑成一张虚拟专辑。
+ * 集合 id 编成 `平台:saved:<专辑名>`——平台那侧根本没有这张专辑页可跳，只能看本机收藏。
+ */
+export const LX_SAVED_ALBUM_PREFIX = 'saved:';
+
+export const lxSavedAlbumCollectionId = (platform: string, albumName: string): string => (
+    `${platform}:${LX_SAVED_ALBUM_PREFIX}${encodeURIComponent(albumName)}`
+);
+
+/** 本机收藏（喜欢 + 自建歌单）里落在某张专辑下的歌，按 mediaId 去重。 */
+const collectSavedForAlbum = (platform: string, albumId: string): LxSavedSong[] => {
+    const seen = new Set<string>();
+    const out: LxSavedSong[] = [];
+    const push = (song: LxSavedSong): void => {
+        if (!song?.mediaId || seen.has(song.mediaId)) return;
+        if (song.platform !== platform || song.albumId !== albumId) return;
+        seen.add(song.mediaId);
+        out.push(song);
+    };
+    getLxLikedSongs().forEach(push);
+    getLxSavedPlaylists().forEach((playlist) => playlist.songs.forEach(push));
+    return out;
+};
+
+/** 本机收藏里「没有平台专辑 id、只能按专辑名认」的那批歌（同平台同名才算一张）。 */
+const collectSavedByAlbumName = (platform: string, albumName: string): LxSavedSong[] => {
+    const want = albumName.trim();
+    const seen = new Set<string>();
+    const out: LxSavedSong[] = [];
+    const push = (song: LxSavedSong): void => {
+        if (!song?.mediaId || seen.has(song.mediaId)) return;
+        if (song.platform !== platform) return;
+        // 有原生 id 的歌属于真专辑页，不混进这张虚拟专辑里重复出现。
+        if (song.albumId) return;
+        if ((song.albumName ?? '').trim() !== want) return;
+        seen.add(song.mediaId);
+        out.push(song);
+    };
+    getLxLikedSongs().forEach(push);
+    getLxSavedPlaylists().forEach((playlist) => playlist.songs.forEach(push));
+    return out;
 };
 
 /** 本机收藏列表 → 全站认的 ProviderCollection（收藏弹层与歌单列表都用这个形状）。 */
@@ -1119,6 +1170,18 @@ export const lxmusicProvider: OnlineMusicProvider = {
             const skip = offset ?? 0;
             const parsed = parseSongId(id);
             if (!parsed || !isPublicPlatform(parsed.platform)) return emptyPage<UnifiedSong>(skip);
+            if (parsed.nativeId.startsWith(LX_SAVED_ALBUM_PREFIX)) {
+                // 这张「专辑」平台那侧没有 id 可查，只在本机收藏里存在：直接按专辑名取收藏。
+                let albumName = '';
+                try {
+                    albumName = decodeURIComponent(parsed.nativeId.slice(LX_SAVED_ALBUM_PREFIX.length));
+                } catch {
+                    albumName = '';
+                }
+                const savedOnly = collectSavedByAlbumName(parsed.platform, albumName);
+                const items = skip === 0 ? savedOnly.map(fromSavedSong) : [];
+                return { items, nextOffset: skip + items.length, hasMore: false };
+            }
             // 接口这层可能直接抛（平台拒绝、超时、返回结构不认识），一律不往上冒，
             // 否则整页会变成「加载失败 / 未知错误」——用户看到的就是"点进去没东西"。
             let raw: LxApiPage<LxApiSong> = { items: [], hasMore: false };
@@ -1128,20 +1191,37 @@ export const lxmusicProvider: OnlineMusicProvider = {
                 raw = { items: [], hasMore: false };
             }
             const page = { items: raw.items, hasMore: raw.hasMore };
-            if (page.items.length > 0 || skip > 0) return toProviderPage(page, toUnifiedSong, skip, take);
-            // 这家没有专辑曲目接口（酷我：几条公开路径全废）时别给一屏空白：
-            // 收藏里的歌本就带着它属于哪张专辑，同一张专辑的本地收藏直接兜住这一页。
-            const local = getLxLikedSongs().filter(
-                (song) => song.platform === parsed.platform && song.albumId === parsed.nativeId,
-            );
-            if (local.length === 0) return toProviderPage(page, toUnifiedSong, skip, take);
-            const items = local.map(fromSavedSong);
-            return { items, nextOffset: items.length, hasMore: false };
+            // 我在这个平台上收进本机、且属于这张专辑的歌（喜欢 + 自建歌单里都算）。
+            const saved = collectSavedForAlbum(parsed.platform, parsed.nativeId);
+            if (page.items.length === 0) {
+                // 这家没有专辑曲目接口（酷我：几条公开路径全废）时别给一屏空白：
+                // 同一张专辑的本地收藏直接兜住这一页。
+                if (saved.length === 0) return toProviderPage(page, toUnifiedSong, skip, take);
+                const items = saved.map(fromSavedSong);
+                return { items, nextOffset: skip + items.length, hasMore: false };
+            }
+            const result = toProviderPage(page, toUnifiedSong, skip, take);
+            if (skip > 0 || saved.length === 0) return result;
+            // 接口给的专辑曲目未必含用户收藏的那个版本（不同版号、版权缺歌），
+            // 收藏那几首提到最前，保证「从收藏进来」一定找得到自己那首。
+            const shown = new Set(result.items.map(nativeKeyOfUnified));
+            const extra = saved
+                .filter((song) => !shown.has(`${song.platform}:${song.nativeId}`))
+                .map(fromSavedSong);
+            return extra.length === 0 ? result : { ...result, items: [...extra, ...result.items] };
         },
         async getAlbumDetail(id, collection) {
             if (collection) return collection;
             const parsed = parseSongId(id);
             if (!parsed) return null;
+            if (parsed.nativeId.startsWith(LX_SAVED_ALBUM_PREFIX)) {
+                try {
+                    const albumName = decodeURIComponent(parsed.nativeId.slice(LX_SAVED_ALBUM_PREFIX.length));
+                    if (albumName) return { providerId: 'lxmusic', id, name: albumName, type: 'album' };
+                } catch {
+                    // 名字解不开就走下面的兜底标题。
+                }
+            }
             return { providerId: 'lxmusic', id, name: '专辑', type: 'album' };
         },
     },
