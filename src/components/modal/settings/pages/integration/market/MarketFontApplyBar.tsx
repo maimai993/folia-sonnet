@@ -10,6 +10,7 @@
 // 桌面端没有这一层，所以那里要禁用而不是假装支持。
 
 import React from 'react';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { isCapacitorAndroid } from '../../../../../../platform/runtime';
 import type { AppliedMarketFont, FontMarketTarget } from './useFontMarketTarget';
@@ -60,9 +61,8 @@ const MarketFontApplyBar: React.FC<MarketFontApplyBarProps> = ({ target, onChang
                     const disabled = entry.androidOnly && !android;
                     const active = target.appliesTo.includes(entry.id);
                     return (
-                        <button
+                        <Button
                             key={entry.id}
-                            type="button"
                             disabled={disabled}
                             onClick={() => toggle(entry.id)}
                             className={`rounded-full px-2.5 py-1 text-[11.5px] transition disabled:opacity-40 ${
@@ -72,7 +72,7 @@ const MarketFontApplyBar: React.FC<MarketFontApplyBarProps> = ({ target, onChang
                             }`}
                         >
                             {t(entry.labelKey)}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>

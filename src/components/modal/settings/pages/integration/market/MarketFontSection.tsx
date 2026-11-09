@@ -9,6 +9,8 @@
 // 这里分类直接照抄源站导航（见 FONTS_CN_CATEGORIES），并带搜索。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TextField } from '../../../../../../components/ui';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import { FONTS_CN_CATEGORIES, categoryPreviewText, describeFontsCnError, type FontsCnItem } from '../../../../../../services/fontMarket/fontsNetCn';
@@ -17,13 +19,29 @@ import { isCapacitorAndroid } from '../../../../../../platform/runtime';
 import FontCardPreview from './FontCardPreview';
 import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
 import { applyFontTargets } from './applyFontTargets';
+import { useMarketFilterStore } from './MarketFilterSlot';
 import { useFontMarketTarget, type FontMarketTarget } from './useFontMarketTarget';
 import { useFontsCnCatalog } from './useFontsCnCatalog';
 
-const MarketFontSection: React.FC = () => {
+/**
+ * part 决定这一个实例画哪一部分：
+ *   · 'all'     竖屏 / 默认：筛选 + 卡片，从头到尾
+ *   · 'filters' 横屏左栏：只画筛选（搜索 / 分类 / 风格 / 字库）
+ *   · 'content' 横屏右栏：只画卡片网格，筛选交给左栏
+ *
+ * 两栏是同一组状态的两次消费（见 MarketFilterSlot），所以不会各走各的。
+ */
+const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({ part = 'all' }) => {
     const { t } = useTranslation();
-    const [category, setCategory] = useState('zh');
-    const [keyword, setKeyword] = useState('');
+    /*
+     * 筛选条件放在共享 store 里，而不是本组件 state。
+     *
+     * 横屏时左边那一栏是**另一个实例**在渲染同一套筛选（见 MarketPage），
+     * 状态留在内部的话，左边点了分类右边不会跟着变。
+     */
+    const { fontCategory: category, fontKeyword: keyword, set: setFilter } = useMarketFilterStore();
+    const setCategory = (next: string) => setFilter({ fontCategory: next });
+    const setKeyword = (next: string) => setFilter({ fontKeyword: next });
     const { items, loading, error, hasMore, loadMore, reload } = useFontsCnCatalog(category, keyword);
     const { target, setTarget, updateAppliesTo } = useFontMarketTarget();
     const [previewText, setPreviewText] = useState(categoryPreviewText('zh'));
@@ -166,9 +184,8 @@ const MarketFontSection: React.FC = () => {
                 {entries.map((entry) => {
                     const active = category === entry.slug;
                     return (
-                        <button
+                        <Button
                             key={entry.slug}
-                            type="button"
                             onClick={() => {
                                 setCategory(entry.slug);
                                 setPreviewTouched(false);
@@ -181,33 +198,38 @@ const MarketFontSection: React.FC = () => {
                             }`}
                         >
                             {entry.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
         </div>
     );
 
-    return (
-        <div className="space-y-3">
+    /*
+     * 筛选那一段（搜索 + 三排胶囊），横屏时会挪到左栏。
+     *
+     * 抽成变量是因为要在两处用：part==='filters' 时是全部内容，
+     * part==='all' 时是顶部一段，part==='content' 时整段不画。
+     */
+    const filterBlock = (
+        <>
             {/* 搜索 */}
             <div className="relative">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--st-t2)]" />
-                <input
+                <TextField
                     value={keyword}
                     onChange={(event) => setKeyword(event.target.value)}
                     placeholder={t('options.marketSearchPlaceholder')}
                     className="h-8 w-full rounded-lg bg-[var(--st-fill)] pl-7 pr-8 text-[12.5px] text-[var(--st-t1)] outline-none placeholder:text-[var(--st-t2)]"
                 />
                 {keyword !== '' && (
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => setKeyword('')}
                         aria-label={t('options.marketSearchClear')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--st-t2)]"
                     >
                         <X size={13} />
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -221,7 +243,7 @@ const MarketFontSection: React.FC = () => {
             )}
 
             {/* 自定义预览文字 */}
-            <input
+            <TextField
                 value={previewText}
                 onChange={(event) => {
                     setPreviewTouched(true);
@@ -235,8 +257,7 @@ const MarketFontSection: React.FC = () => {
             {target && (
                 <div className="flex items-center gap-2 rounded-lg bg-[var(--st-fill)] px-2.5 py-1.5 text-[11.5px] text-[var(--st-t2)]">
                     <span className="truncate">{t('options.marketAppliedFont')}：{target.name}</span>
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => {
                             /*
                              * 重挑应用范围：只改记录，不重新下载。
@@ -251,7 +272,7 @@ const MarketFontSection: React.FC = () => {
                         className="ml-auto shrink-0 text-[var(--st-accent)]"
                     >
                         {t('options.marketApplyTargets')}
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -264,35 +285,51 @@ const MarketFontSection: React.FC = () => {
                     {t('options.marketSearchEmpty')}
                 </div>
             )}
+        </>
+    );
 
+    /*
+     * 卡片网格 + 底部加载/重试。
+     *
+     * 和 filterBlock 对称：part==='content' 时是全部，'all' 时在下半段，
+     * 'filters' 时整段不画（左栏只放筛选）。
+     */
+    const contentBlock = (
+        <>
             {/* 卡片：列数跟着可用宽度走，横屏时不会只在左边堆两列。 */}
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
                 {items.map((item) => (
-                    <button
+                    <Button
                         key={item.id}
-                        type="button"
                         onClick={() => handleCardClick(item)}
                         className="overflow-hidden rounded-xl bg-[var(--st-fill)] p-1.5 text-left transition-colors hover:bg-[var(--st-fill2)]"
                     >
                         <FontCardPreview item={item} text={previewText} />
                         <div className="mt-1 truncate px-0.5 text-[11.5px] text-[var(--st-t1)]">{item.name}</div>
-                    </button>
+                    </Button>
                 ))}
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-1">
                 {loading && <span className="text-[11.5px] text-[var(--st-t2)]">{t('options.marketLoading')}</span>}
                 {!loading && hasMore && (
-                    <button type="button" onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketLoadMore')}
-                    </button>
+                    </Button>
                 )}
                 {!loading && error && items.length > 0 && (
-                    <button type="button" onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketRetry')}
-                    </button>
+                    </Button>
                 )}
             </div>
+        </>
+    );
+
+    return (
+        <div className="space-y-3">
+            {part !== 'content' && filterBlock}
+            {part !== 'filters' && contentBlock}
 
             <MarketApplyDialog<FontMarketTarget>
                 isOpen={pending !== null}

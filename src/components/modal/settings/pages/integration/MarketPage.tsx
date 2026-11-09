@@ -14,6 +14,7 @@
 //     右边整块让给卡片网格。之前横屏也是上下堆叠，两边大片空白，看着很糟。
 
 import React, { useEffect, useState } from 'react';
+import { Button } from '../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import MarketBackgroundSection from './market/MarketBackgroundSection';
 import MarketFontSection from './market/MarketFontSection';
@@ -63,9 +64,8 @@ const MarketPage: React.FC<MarketPageProps> = ({ initialTab }) => {
             {tabs.map((entry) => {
                 const active = tab === entry.id;
                 return (
-                    <button
+                    <Button
                         key={entry.id}
-                        type="button"
                         onClick={() => setTab(entry.id)}
                         className={`rounded-lg border px-3 py-2 text-[13px] transition-colors ${
                             wide ? 'w-full text-left' : 'flex-1'
@@ -76,7 +76,7 @@ const MarketPage: React.FC<MarketPageProps> = ({ initialTab }) => {
                         }`}
                     >
                         {t(entry.labelKey)}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
@@ -85,18 +85,29 @@ const MarketPage: React.FC<MarketPageProps> = ({ initialTab }) => {
     /*
      * 横屏：左窄右宽。
      *
-     * 左边固定 168px —— 够放下「背景 / 字体」两个按钮和来源名，
-     * 再多就是在挤占卡片的地盘（用户要的是「大部分让给旁边的挑选」）。
-     * 右边 min-w-0 是关键：不加的话网格会把容器撑开，横向溢出。
+     * 左边 = 导航 + 筛选。竖栏以前只放两个 tab，底下空成一大块；
+     * 用户要的是「筛选也放左边」，右边只留挑东西的卡片。
+     *
+     * 两栏用的是同一组筛选状态（MarketFilterSlot 里的 store），
+     * 所以左边点分类、右边立刻换卡片，不会各走各的。
+     *
+     * 右边 min-w-0 是关键：不加的话网格会把容器撑开、横向溢出。
      */
     if (wide) {
         return (
-            <div className="flex h-full gap-3">
-                <aside className="w-[168px] shrink-0 space-y-2">
+            <div className="flex h-full gap-4">
+                <aside className="flex w-[196px] shrink-0 flex-col gap-2 overflow-y-auto pr-0.5">
                     {tabButtons}
+                    <div className="mt-1 space-y-2 border-t border-[var(--st-fill2)] pt-2">
+                        {tab === 'background'
+                            ? <MarketBackgroundSection part="filters" />
+                            : <MarketFontSection part="filters" />}
+                    </div>
                 </aside>
                 <div className="min-w-0 flex-1 overflow-y-auto pr-0.5">
-                    {tab === 'background' ? <MarketBackgroundSection /> : <MarketFontSection />}
+                    {tab === 'background'
+                        ? <MarketBackgroundSection part="content" />
+                        : <MarketFontSection part="content" />}
                 </div>
             </div>
         );

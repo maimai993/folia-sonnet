@@ -16,6 +16,7 @@
 // 交给原生按同样比例裁切。
 
 import React, { useCallback, useState } from 'react';
+import { Button } from '../../../../../../components/ui';
 import Cropper, { type Area } from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
 
@@ -114,13 +115,12 @@ const CropFrame: React.FC<CropFrameProps> = ({
 
             <div className="flex items-center justify-between">
                 <span className="text-[11px] text-[var(--st-t2)]">{hintLabel}</span>
-                <button
-                    type="button"
+                <Button
                     onClick={handleRotate}
                     className="rounded-lg bg-[var(--st-fill)] px-2.5 py-1 text-[11.5px] text-[var(--st-t2)] hover:bg-[var(--st-fill2)]"
                 >
                     {rotateLabel}
-                </button>
+                </Button>
             </div>
         </div>
     );

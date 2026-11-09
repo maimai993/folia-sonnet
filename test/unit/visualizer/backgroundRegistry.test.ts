@@ -19,6 +19,8 @@ describe('visualizer background registry', () => {
             'latent',
             'url',
             'sora',
+            // fork 自有：封面粒子（移植自 Mineradio）
+            'particles',
         ]);
     });
 

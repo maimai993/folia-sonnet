@@ -7,6 +7,8 @@
 // 视频动辄几十上百 MB，所以下载一律走原生，界面只显示进度与结果。
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { TextField } from '../../../../../../components/ui';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import {
@@ -16,6 +18,7 @@ import {
     type BackgroundMarketSourceId,
 } from '../../../../../../services/backgroundMarket';
 import { useBackgroundMarket } from './useBackgroundMarket';
+import { useMarketFilterStore } from './MarketFilterSlot';
 import { useBackgroundApplyTarget, type BackgroundTarget } from './useBackgroundApplyTarget';
 import { applyMarketBackground } from '../../../../../../services/backgroundMarket/apply';
 import { subscribeBackgroundProgress } from '../../../../../../services/backgroundMarket/progress';
@@ -23,11 +26,21 @@ import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
 import type { CropRect } from './CropFrame';
 import MarketRotationSection from './MarketRotationSection';
 
-const MarketBackgroundSection: React.FC = () => {
+/**
+ * part 同 MarketFontSection：'all' 整段、'filters' 只画筛选、'content' 只画卡片。
+ */
+const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({ part = 'all' }) => {
     const { t } = useTranslation();
-    const [source, setSource] = useState<BackgroundMarketSourceId>('moewalls');
-    const [category, setCategory] = useState('');
-    const [keyword, setKeyword] = useState('');
+    /* 同字体区块：筛选条件放共享 store，横屏时左右两栏才是同一份状态。 */
+    const {
+        backgroundSource: source,
+        backgroundCategory: category,
+        backgroundKeyword: keyword,
+        set: setFilter,
+    } = useMarketFilterStore();
+    const setSource = (next: BackgroundMarketSourceId) => setFilter({ backgroundSource: next });
+    const setCategory = (next: string) => setFilter({ backgroundCategory: next });
+    const setKeyword = (next: string) => setFilter({ backgroundKeyword: next });
     const { items, loading, error, hasMore, loadMore, reload } = useBackgroundMarket(source, category, keyword);
     const { target, setTarget } = useBackgroundApplyTarget();
 
@@ -92,8 +105,12 @@ const MarketBackgroundSection: React.FC = () => {
         setApplyError(null);
     };
 
-    return (
-        <div className="space-y-3">
+    /*
+     * 筛选那一段：随机轮换 + 来源 + 搜索 + 分类。
+     * 横屏时整体挪到左栏，右栏只留卡片（见 MarketPage）。
+     */
+    const filterBlock = (
+        <>
             {/* 随机轮换：隔一段时间自己换一张 */}
             <MarketRotationSection />
 
@@ -102,9 +119,8 @@ const MarketBackgroundSection: React.FC = () => {
                 {BACKGROUND_MARKET_SOURCES.map((entry) => {
                     const active = source === entry.id;
                     return (
-                        <button
+                        <Button
                             key={entry.id}
-                            type="button"
                             onClick={() => {
                                 setSource(entry.id);
                                 setCategory('');
@@ -117,7 +133,7 @@ const MarketBackgroundSection: React.FC = () => {
                             }`}
                         >
                             {entry.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
@@ -125,21 +141,20 @@ const MarketBackgroundSection: React.FC = () => {
             {/* 搜索 */}
             <div className="relative">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--st-t2)]" />
-                <input
+                <TextField
                     value={keyword}
                     onChange={(event) => setKeyword(event.target.value)}
                     placeholder={t('options.marketSearchBackgroundPlaceholder')}
                     className="h-8 w-full rounded-lg bg-[var(--st-fill)] pl-7 pr-8 text-[12.5px] text-[var(--st-t1)] outline-none placeholder:text-[var(--st-t2)]"
                 />
                 {keyword !== '' && (
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => setKeyword('')}
                         aria-label={t('options.marketSearchClear')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--st-t2)]"
                     >
                         <X size={13} />
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -149,9 +164,8 @@ const MarketBackgroundSection: React.FC = () => {
                     {categories.map((entry) => {
                         const active = category === entry.slug;
                         return (
-                            <button
+                            <Button
                                 key={entry.slug}
-                                type="button"
                                 onClick={() => setCategory(entry.slug)}
                                 className={`rounded-full px-2.5 py-1 text-[11.5px] ${
                                     active
@@ -160,7 +174,7 @@ const MarketBackgroundSection: React.FC = () => {
                                 }`}
                             >
                                 {entry.label}
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>
@@ -190,7 +204,11 @@ const MarketBackgroundSection: React.FC = () => {
                     {t('options.marketSearchEmpty')}
                 </div>
             )}
+        </>
+    );
 
+    const contentBlock = (
+        <>
             {loading && items.length === 0 && (
                 <div className="py-10 text-center text-[13px] text-[var(--st-t2)]">{t('options.marketLoading')}</div>
             )}
@@ -204,9 +222,8 @@ const MarketBackgroundSection: React.FC = () => {
              */}
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
                 {items.map((item) => (
-                    <button
+                    <Button
                         key={item.id}
-                        type="button"
                         onClick={() => {
                             setApplyError(null);
                             setProgress(null);
@@ -230,23 +247,30 @@ const MarketBackgroundSection: React.FC = () => {
                             )}
                         </div>
                         <div className="mt-1 truncate px-0.5 text-[11.5px] text-[var(--st-t1)]">{item.name}</div>
-                    </button>
+                    </Button>
                 ))}
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-1">
                 {loading && items.length > 0 && <span className="text-[11.5px] text-[var(--st-t2)]">{t('options.marketLoading')}</span>}
                 {!loading && hasMore && (
-                    <button type="button" onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketLoadMore')}
-                    </button>
+                    </Button>
                 )}
                 {!loading && error && items.length > 0 && (
-                    <button type="button" onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketRetry')}
-                    </button>
+                    </Button>
                 )}
             </div>
+        </>
+    );
+
+    return (
+        <div className="space-y-3">
+            {part !== 'content' && filterBlock}
+            {part !== 'filters' && contentBlock}
 
             <MarketApplyDialog<BackgroundTarget>
                 isOpen={pending !== null}

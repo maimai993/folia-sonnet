@@ -7,7 +7,7 @@ import { defineVisualizerBackground } from '../definition';
 
 export default defineVisualizerBackground({
     mode: 'particles',
-    order: 45,
+    order: 55,
     labelKey: 'options.visualizerBackgroundModeParticles',
     labelFallback: '粒子',
     // 粒子：一堆小点
