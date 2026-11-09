@@ -7794,4 +7794,17 @@ export default {
   "marketCropHint": "双指缩放 · 单指拖动",
   "marketPanelTitle": "市场",
   "visualizerBackgroundModeParticles": "粒子",
+  "lanCastRemoteTitle": "Remote kiriman",
+  "lanCastRemotePlayingOn": "Suara ada di {{name}}",
+  "lanCastRemoteHint": "Ponsel dibisukan. Bilah progres dan lirik tetap berjalan; ganti lagu di pemutar ikut di speaker.",
+  "lanCastRemoteSwitch": "Ganti speaker",
+  "lanCastRemoteMinimize": "Kecilkan",
+  "lanCastRemoteExpand": "Buka remote kiriman",
+  "lanCastVolume": "Volume speaker",
+  "lanCastVolumeMute": "Bisukan speaker",
+  "lanCastVolumeUnsupported": "Speaker ini tidak mendukung pengaturan volume dari ponsel.",
+  "lanCastWifiAuto": "Kirim otomatis saat WiFi",
+  "lanCastWifiAutoOn": "Aktif",
+  "lanCastWifiAutoOff": "Nonaktif",
+  "lanCastWifiAutoRestored": "Otomatis mengirim ke {{name}}"
 } as const;

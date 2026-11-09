@@ -7852,5 +7852,18 @@ export default {
   "lanCastFollowed": "切歌已自动推送到 {{name}}",
   "lanCastLocalHint": "手机已静音，进度条和歌词照常走，声音只在音响上；切歌会自动跟着换。",
   "lanCastStop": "停止投送并恢复手机声音",
-  "lanCastClose": "关闭"
+  "lanCastClose": "关闭",
+  "lanCastRemoteTitle": "投送遥控器",
+  "lanCastRemotePlayingOn": "声音在 {{name}} 上",
+  "lanCastRemoteHint": "手机已静音，进度条和歌词照常走；在播放页切歌会自动同步到音响。",
+  "lanCastRemoteSwitch": "切换音响",
+  "lanCastRemoteMinimize": "收起",
+  "lanCastRemoteExpand": "展开遥控器",
+  "lanCastVolume": "音响音量",
+  "lanCastVolumeMute": "音响静音",
+  "lanCastVolumeUnsupported": "这台音响不支持手机调节音量。",
+  "lanCastWifiAuto": "连上 WiFi 自动投送",
+  "lanCastWifiAutoOn": "已开启",
+  "lanCastWifiAutoOff": "已关闭",
+  "lanCastWifiAutoRestored": "已自动投送到 {{name}}"
 } as const;

@@ -12,6 +12,8 @@ export type LanSpeaker = {
     location: string;
     controlUrl: string;
     manufacturer: string;
+    /** RenderingControl 的 controlURL；没有就是这台音响不支持手机调音量。 */
+    volumeControlUrl?: string;
 };
 
 export type LanCastTrack = {
@@ -32,6 +34,11 @@ type CastPlugin = {
     discover?: (options: { timeoutMs?: number }) => Promise<{ devices?: LanSpeaker[] }>;
     play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{ ok?: boolean }>;
     stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean }>;
+    getVolume?: (options: { volumeControlUrl: string }) => Promise<{ volume?: number }>;
+    setVolume?: (options: { volumeControlUrl: string; volume: number }) => Promise<{ ok?: boolean }>;
+    setMute?: (options: { volumeControlUrl: string; muted: boolean }) => Promise<{ ok?: boolean }>;
+    getWifiState?: () => Promise<{ wifi?: boolean }>;
+    setWifiAutoCast?: (options: { enabled: boolean }) => Promise<unknown>;
 };
 
 const nativePlugin = <T>(name: string): T | null => {
@@ -163,6 +170,85 @@ const restoreCastingMute = () => {
     else undoMutePersistence(session.storedMuted);
 };
 
+// ------------------------------------------------------------------ 音响音量 / WiFi 自动投送
+
+export const supportsSpeakerVolume = (speaker: LanSpeaker | null): boolean => (
+    Boolean(speaker?.volumeControlUrl) && cast()?.setVolume != null
+);
+
+export const getSpeakerVolume = async (speaker: LanSpeaker): Promise<number> => {
+    const plugin = cast();
+    if (!speaker.volumeControlUrl || !plugin?.getVolume) throw new Error('这台音响不支持音量控制');
+    const result = await plugin.getVolume({ volumeControlUrl: speaker.volumeControlUrl });
+    const value = Number(result?.volume);
+    if (!Number.isFinite(value)) throw new Error('音响没有返回音量');
+    return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+export const setSpeakerVolume = async (speaker: LanSpeaker, volume: number): Promise<void> => {
+    const plugin = cast();
+    if (!speaker.volumeControlUrl || !plugin?.setVolume) throw new Error('这台音响不支持音量控制');
+    await plugin.setVolume({
+        volumeControlUrl: speaker.volumeControlUrl,
+        volume: Math.max(0, Math.min(100, Math.round(volume))),
+    });
+};
+
+export const setSpeakerMuted = async (speaker: LanSpeaker, muted: boolean): Promise<void> => {
+    const plugin = cast();
+    if (!speaker.volumeControlUrl || !plugin?.setMute) return;
+    await plugin.setMute({ volumeControlUrl: speaker.volumeControlUrl, muted });
+};
+
+const WIFI_AUTO_KEY = 'lanCastWifiAutoEnabled';
+const LAST_SPEAKER_KEY = 'lanCastLastSpeaker';
+
+export const getWifiAutoCastEnabled = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    try { return localStorage.getItem(WIFI_AUTO_KEY) === '1'; } catch { return false; }
+};
+
+export const setWifiAutoCastEnabled = (enabled: boolean): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        if (enabled) localStorage.setItem(WIFI_AUTO_KEY, '1');
+        else localStorage.removeItem(WIFI_AUTO_KEY);
+    } catch { /* 存储不可用时只影响持久化，不影响本次会话。 */ }
+    void cast()?.setWifiAutoCast?.({ enabled });
+};
+
+export const getLastSpeaker = (): LanSpeaker | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(LAST_SPEAKER_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as LanSpeaker;
+        return parsed?.controlUrl ? parsed : null;
+    } catch { return null; }
+};
+
+export const rememberSpeaker = (speaker: LanSpeaker): void => {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem(LAST_SPEAKER_KEY, JSON.stringify(speaker)); } catch { /* 忽略 */ }
+};
+
+/** 原生 NetworkCallback 在 WiFi 连上 / 断开时推事件；返回取消订阅函数。 */
+export const subscribeWifiCast = (listener: (wifi: boolean) => void): (() => void) => {
+    type ListenerHandle = { remove?: () => Promise<void> };
+    type ListenerCapable = CastPlugin & {
+        addListener?: (event: string, cb: (data: { wifi?: boolean }) => void) =>
+            Promise<ListenerHandle> | ListenerHandle;
+    };
+    const plugin = cast() as ListenerCapable | null;
+    if (!plugin?.addListener) return () => {};
+    let handle: ListenerHandle | null = null;
+    try {
+        const pending = plugin.addListener('wifiCastChange', data => listener(Boolean(data?.wifi)));
+        void Promise.resolve(pending).then(value => { handle = value ?? null; }).catch(() => {});
+    } catch { return () => {}; }
+    return () => { void Promise.resolve(handle).then(value => value?.remove?.()).catch(() => {}); };
+};
+
 // ------------------------------------------------------------------ 对外能力
 
 export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[]> => {
@@ -198,6 +284,7 @@ export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrac
     };
     notifyCasting();
     applyCastingMute();
+    rememberSpeaker(speaker);
 };
 
 /** 停止音响播放、关掉对局域网开放的转发入口、把手机声音还原。 */

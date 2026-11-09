@@ -7840,4 +7840,17 @@ export default {
   "marketCropHint": "双指缩放 · 单指拖动",
   "marketPanelTitle": "市场",
   "visualizerBackgroundModeParticles": "粒子",
+  "lanCastRemoteTitle": "Điều khiển từ xa",
+  "lanCastRemotePlayingOn": "Âm thanh phát trên {{name}}",
+  "lanCastRemoteHint": "Điện thoại đã tắt tiếng. Thanh tiến độ và lời bài hát vẫn chạy; đổi bài trong trình phát sẽ tự phát trên loa.",
+  "lanCastRemoteSwitch": "Đổi loa",
+  "lanCastRemoteMinimize": "Thu nhỏ",
+  "lanCastRemoteExpand": "Mở điều khiển từ xa",
+  "lanCastVolume": "Âm lượng loa",
+  "lanCastVolumeMute": "Tắt tiếng loa",
+  "lanCastVolumeUnsupported": "Loa này không hỗ trợ chỉnh âm lượng từ điện thoại.",
+  "lanCastWifiAuto": "Tự động phát khi có WiFi",
+  "lanCastWifiAutoOn": "Bật",
+  "lanCastWifiAutoOff": "Tắt",
+  "lanCastWifiAutoRestored": "Đã tự động phát trên {{name}}"
 } as const;

@@ -7840,4 +7840,17 @@ export default {
   "marketCropHint": "双指缩放 · 单指拖动",
   "marketPanelTitle": "市场",
   "visualizerBackgroundModeParticles": "粒子",
+  "lanCastRemoteTitle": "Cast remote",
+  "lanCastRemotePlayingOn": "Sound is on {{name}}",
+  "lanCastRemoteHint": "Phone is muted. Progress and lyrics keep running here; changing tracks in the player follows on the speaker.",
+  "lanCastRemoteSwitch": "Switch speaker",
+  "lanCastRemoteMinimize": "Minimize",
+  "lanCastRemoteExpand": "Open cast remote",
+  "lanCastVolume": "Speaker volume",
+  "lanCastVolumeMute": "Mute speaker",
+  "lanCastVolumeUnsupported": "This speaker does not allow volume control from the phone.",
+  "lanCastWifiAuto": "Auto cast on WiFi",
+  "lanCastWifiAutoOn": "On",
+  "lanCastWifiAutoOff": "Off",
+  "lanCastWifiAutoRestored": "Automatically casting to {{name}}"
 } as const;
