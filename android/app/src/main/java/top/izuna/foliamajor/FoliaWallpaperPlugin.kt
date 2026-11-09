@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.provider.Settings
+import android.util.Log
 
 import androidx.activity.result.ActivityResult
 
@@ -19,7 +21,9 @@ import com.getcapacitor.annotation.CapacitorPlugin
 
 import org.json.JSONException
 
+import top.izuna.foliamajor.wallpaper.FontArchiveDownloader
 import top.izuna.foliamajor.wallpaper.LyricsWallpaperService
+import top.izuna.foliamajor.wallpaper.WallpaperBackgroundImage
 import top.izuna.foliamajor.wallpaper.WallpaperBackgroundVideo
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsFont
 import top.izuna.foliamajor.wallpaper.WallpaperLyricsState
@@ -443,10 +447,205 @@ class FoliaWallpaperPlugin : Plugin() {
         call.resolve(out)
     }
 
+    /**
+     * 按地址下载一个视频当壁纸背景（背景市场用）。
+     *
+     * 为什么不让网页层下载：市场里的视频几十到上百 MB，走 WebView 的 fetch 再转 base64
+     * 既慢又容易把内存打爆。这里由原生下载并落盘，和 [pickVideo] 走同一套存储。
+     *
+     * 参数：url（必填）、progressId（可选，用来回传进度事件）。
+     */
+    @PluginMethod
+    fun downloadVideo(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) {
+            call.reject("缺少 url")
+            return
+        }
+        val progressId = call.getString("progressId")
+        /*
+         * 旋转角度（0 / 90 / 180 / 270）。
+         *
+         * 视频不像图片那样能在这里重编码 —— 几十 MB 转一遍太慢，也没法保证画质。
+         * 所以只把角度记下来，由壁纸渲染那一层在画的时候转
+         * （见 LyricsRenderer 的 drawVideo 读 wp.videoRotation）。
+         */
+        val rotation = call.getInt("rotation", 0) ?: 0
+        // 下载是阻塞 IO，必须离开主线程；进度通过事件回传，Web 侧按 id 对应。
+        Thread {
+            val key = WallpaperBackgroundVideo.storeFromUrl(context, url) { percent ->
+                if (progressId != null) {
+                    val payload = JSObject()
+                    payload.put("id", progressId)
+                    payload.put("percent", percent)
+                    notifyListeners("videoDownloadProgress", payload)
+                }
+            }
+            val out = JSObject()
+            out.put("downloaded", key != null)
+            call.resolve(out)
+        }.start()
+    }
+
+    /**
+     * 按地址下载一张图当壁纸背景（背景市场用）。
+     *
+     * 和 downloadVideo 同一个道理：不让 WebView 碰字节，原生下完直接解码压成 JPEG 落盘，
+     * 之后壁纸层读的还是那个文件。
+     */
+    @PluginMethod
+    fun downloadImage(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) {
+            call.reject("缺少 url")
+            return
+        }
+        // 裁切与旋转：壁纸多是横屏，手机是竖屏，让用户在界面上选要保留哪一块。
+        val rotation = call.getInt("rotation", 0) ?: 0
+        val cropLeft = call.getFloat("cropLeft", 0f) ?: 0f
+        val cropTop = call.getFloat("cropTop", 0f) ?: 0f
+        val cropRight = call.getFloat("cropRight", 1f) ?: 1f
+        val cropBottom = call.getFloat("cropBottom", 1f) ?: 1f
+        Thread {
+            val key = WallpaperBackgroundImage.storeFromUrl(
+                context, url, rotation, cropLeft, cropTop, cropRight, cropBottom,
+            )
+            val out = JSObject()
+            out.put("downloaded", key != null)
+            call.resolve(out)
+        }.start()
+    }
+
+    /**
+     * 下载字体天下（fonts.net.cn）的字体包并解出可用字体。
+     *
+     * 为什么必须原生做：包是几 MB 的 zip，要下载、要解 deflate、要按后缀挑文件。
+     * WebView 里既没有文件系统，也扛不住这个内存。原生下完解完，只回结果。
+     *
+     * 参数：fontId（字体天下的数字 ID）。
+     * 返回：{ downloaded, fileName, error }，error 是接口的原始失败码
+     *      （FontDownloadPurchaseRequired 等），由 Web 侧翻译成文案。
+     */
+    @PluginMethod
+    fun downloadFontArchive(call: PluginCall) {
+        val fontId = call.getString("fontId")
+        if (fontId.isNullOrBlank()) {
+            call.reject("缺少 fontId")
+            return
+        }
+        // 下载 + 解压都是阻塞 IO，必须离开主线程。
+        Thread {
+            // 游标放在线程里，两个字体同时下也不会互相踩。
+            var lastReported = 0L
+            val result = FontArchiveDownloader.download(fontId, context.filesDir) { downloaded, total ->
+                /*
+                 * 下载进度按字节节流上报：每 128 KB 一次。
+                 *
+                 * 不节流的话一个小包能刷上千条事件过桥，反而卡界面；
+                 * 而字体包通常几 MB，这个粒度看着已经是连续的。
+                 */
+                if (downloaded - lastReported >= PROGRESS_STEP_BYTES || (total > 0 && downloaded >= total)) {
+                    lastReported = downloaded
+                    val payload = JSObject()
+                    payload.put("fontId", fontId)
+                    payload.put("downloaded", downloaded)
+                    payload.put("total", total)
+                    notifyListeners("fontDownloadProgress", payload)
+                }
+            }
+            val out = JSObject()
+            out.put("downloaded", result.fontFile != null)
+            out.put("fileName", result.fileName)
+            // 绝对路径要给回 Web 侧：filesDir 在 JS 里拿不到，拼不出文件地址。
+            out.put("path", result.fontFile?.absolutePath ?: "")
+            out.put("error", result.error)
+            call.resolve(out)
+        }.start()
+    }
+
+    /** 进度事件的最小间隔字节数。 */
+    private val PROGRESS_STEP_BYTES = 128L * 1024L
+
+    /**
+     * 把下载好的字体文件内容读回来（base64）。
+     *
+     * 为什么要多这一步：Web 侧要让它走**用户上传字体**那条既有链路
+     * （handleUploadLyricsCustomFont），那条链路收的是 File 对象。
+     * 只有绝对路径的话 JS 拿不到内容 —— WebView 读不了 file://。
+     *
+     * 会有大小上限：base64 过桥是字符串，几十 MB 的字体传过去
+     * 既慢又可能被桥截断，截断后的数据在 FontFace 里就是
+     * 「Invalid font data in ArrayBuffer」—— 和文件本身完好时的报错一模一样，
+     * 完全看不出是被截断的。所以宁可在这里明确拒绝。
+     */
+    @PluginMethod
+    fun readFontFile(call: PluginCall) {
+        val path = call.getString("path")
+        if (path.isNullOrBlank()) {
+            call.reject("缺少 path")
+            return
+        }
+        Thread {
+            val file = java.io.File(path)
+            val out = JSObject()
+            if (!file.exists() || !file.isFile) {
+                out.put("found", false)
+                out.put("error", "FileMissing")
+                call.resolve(out)
+                return@Thread
+            }
+            if (file.length() > MAX_FONT_READ_BYTES) {
+                out.put("found", false)
+                out.put("error", "FontTooLarge")
+                call.resolve(out)
+                return@Thread
+            }
+            try {
+                val bytes = file.readBytes()
+                // 先确认真的是字体，别把坏数据推过桥让 FontFace 去猜。
+                if (!looksLikeFontBytes(bytes)) {
+                    out.put("found", false)
+                    out.put("error", "NotAFontFile")
+                    call.resolve(out)
+                    return@Thread
+                }
+                out.put("found", true)
+                out.put("base64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+                out.put("mime", when (file.extension.lowercase()) {
+                    "otf" -> "font/otf"
+                    "ttc" -> "font/collection"
+                    "woff" -> "font/woff"
+                    "woff2" -> "font/woff2"
+                    else -> "font/ttf"
+                })
+                out.put("fileName", file.name)
+                out.put("size", bytes.size)
+            } catch (error: Throwable) {
+                out.put("found", false)
+                out.put("error", error.message ?: "ReadFailed")
+            }
+            call.resolve(out)
+        }.start()
+    }
+
+    /** 过桥上限：6 MB 的字体（base64 后 8 MB 左右）已经够大，再大就该走别的路子。 */
+    private val MAX_FONT_READ_BYTES = 6L * 1024L * 1024L
+
+    /** 文件头是否是字体（与 FontArchiveDownloader 里同一套判断）。 */
+    private fun looksLikeFontBytes(bytes: ByteArray): Boolean {
+        if (bytes.size < 4) return false
+        fun at(index: Int) = bytes[index].toInt() and 0xFF
+        if (at(0) == 0x00 && at(1) == 0x01 && at(2) == 0x00 && at(3) == 0x00) return true
+        if (at(0) == 0x74 && at(1) == 0x72 && at(2) == 0x75 && at(3) == 0x65) return true
+        if (at(0) == 0x4F && at(1) == 0x54 && at(2) == 0x54 && at(3) == 0x4F) return true
+        if (at(0) == 0x74 && at(1) == 0x74 && at(2) == 0x63 && at(3) == 0x66) return true
+        if (at(0) == 0x77 && at(1) == 0x4F && at(2) == 0x46 && (at(3) == 0x46 || at(3) == 0x32)) return true
+        return false
+    }
+
     /** 有没有上传过视频背景：决定按钮显示「上传」还是「更换 / 清除」。 */
     @PluginMethod
-    fun getVideo(call: PluginCall) {
-        val out = JSObject()
+    fun getVideo(call: PluginCall) {        val out = JSObject()
         out.put("has", WallpaperBackgroundVideo.key(context) != null)
         call.resolve(out)
     }
@@ -534,16 +733,42 @@ class FoliaWallpaperPlugin : Plugin() {
         call.resolve(result)
     }
 
-    /** 打开系统壁纸选择器，并直接定位到歌词壁纸。 */
+    /**
+     * 打开系统壁纸选择器，并直接定位到歌词壁纸。
+     *
+     * 为什么要把失败原因带回去：
+     * 部分 ROM 在没有「设为壁纸」相关权限 / 没装壁纸服务时，startActivity 会直接抛异常。
+     * 这里原来把异常吞掉只返回 opened=false，界面又不看这个字段 ——
+     * 用户看到的就是「点了没反应」，完全没有线索。
+     * 现在返回 opened + reason + active，界面据此决定提示还是引导去授权。
+     */
     @PluginMethod
     fun openPicker(call: PluginCall) {
-        val opened = openLiveWallpaperPicker()
+        val already = isOurWallpaperActive()
+        if (already) {
+            val result = JSObject()
+            result.put("opened", true)
+            result.put("active", true)
+            result.put("reason", "already-active")
+            call.resolve(result)
+            return
+        }
+        val failure = openLiveWallpaperPicker()
         val result = JSObject()
-        result.put("opened", opened)
+        result.put("opened", failure == null)
+        result.put("active", false)
+        if (failure != null) {
+            result.put("reason", failure)
+        }
         call.resolve(result)
     }
 
-    private fun openLiveWallpaperPicker(): Boolean {
+    /**
+     * 打开动态壁纸选择器。
+     *
+     * @return null 表示成功；否则是失败原因字符串。
+     */
+    private fun openLiveWallpaperPicker(): String? {
         val component = ComponentName(
                 context.getPackageName(), LyricsWallpaperService::class.java.getName())
         try {
@@ -551,17 +776,27 @@ class FoliaWallpaperPlugin : Plugin() {
             intent.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, component)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
-            return true
+            return null
         } catch (error: Throwable) {
-            // 少数 ROM 没有实现上面那个 action，退回老的选择器入口。
-            try {
-                val intent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return true
-            } catch (fallbackError: Throwable) {
-                return false
-            }
+            Log.w(TAG, "ACTION_CHANGE_LIVE_WALLPAPER failed, falling back", error)
+        }
+        // 少数 ROM 没实现上面那个 action，退回老的选择器入口。
+        try {
+            val intent = Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return null
+        } catch (error: Throwable) {
+            Log.w(TAG, "ACTION_LIVE_WALLPAPER_CHOOSER failed too", error)
+        }
+        // 两个入口都进不去：多半是被系统权限拦了。直接给出可以去授权的设置页。
+        return try {
+            val intent = Intent(Settings.ACTION_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            "settings-opened"
+        } catch (error2: Throwable) {
+            "unavailable"
         }
     }
 
@@ -573,6 +808,7 @@ class FoliaWallpaperPlugin : Plugin() {
     }
 
     companion object {
+        private const val TAG = "FoliaWallpaper"
 
         /**
          * 读一行的翻译。没有翻译的行一律返回 null（不是空串）——

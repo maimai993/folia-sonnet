@@ -1,6 +1,15 @@
 // Vietnamese (vi) interface text, laid out line for line like en.ts.
 
 export default {
+  "common": {
+    "cancel": "Huỷ",
+    "confirm": "Xác nhận",
+    "close": "Đóng",
+    "done": "Xong",
+    "retry": "Thử lại",
+    "ok": "OK",
+    "back": "Quay lại"
+  },
   "lxmusic": {
     "importTitle": "Nhập nguồn nhạc",
     "importNotice": "Nguồn đã nhập cung cấp địa chỉ phát và lời bài hát, được ưu tiên hơn API phát mặc định: tìm kiếm, danh sách phát và bảng xếp hạng vẫn lấy từ endpoint công khai sẵn có của LX Music. Chỉ khi mọi nguồn đều không đưa ra được địa chỉ thì mới (với công tắc cho phép) lùi về liên kết miễn phí công khai. Script nguồn chạy trực tiếp trong ứng dụng này, cùng mô hình tin cậy như LX Music desktop: chỉ nhập script bạn tin tưởng.",
@@ -570,6 +579,8 @@ export default {
     "fontUploadFailed": "Tải phông chữ lên thất bại",
     "uploadedFontUnavailable": "Phông chữ tải lên không khả dụng, đã khôi phục phông tích hợp",
     "uploadedFontLoadFailed": "Tải phông chữ thất bại, đã khôi phục phông mặc định",
+    "marketFontUnavailable": "Phông chữ từ cửa hàng không khả dụng (đã bị gỡ hoặc mạng lỗi); đã khôi phục phông mặc định",
+    "marketFontLoadFailed": "Tải phông chữ từ cửa hàng thất bại; đã khôi phục phông mặc định",
     "langSwitched": "Đã đổi ngôn ngữ giao diện",
     "langFollowSystem": "Đã đổi ngôn ngữ giao diện theo hệ thống",
     "langManual": "Đã đổi ngôn ngữ giao diện sang {{language}}",
@@ -3227,6 +3238,7 @@ export default {
     "lyricsWallpaperReplaceFont": "Replace font",
     "lyricsWallpaperClearFont": "Back to the system font",
     "lyricsWallpaperFontApplied": "Font applied",
+    "lyricsWallpaperFontAppliedAppOnly": "Applied inside the app. The wallpaper layer needs a local font file — market fonts are streamed in slices, so they cannot be handed over.",
     "lyricsWallpaperFontFailed": "That file is not a usable font; try another .ttf / .otf",
     "graphicsSettings": "Graphics",
     "graphicsSettingsDesc": "Static mode, dynamic backgrounds, native blur, the frame rate cap, the Linux glow fix and reduced motion.",
@@ -3575,6 +3587,7 @@ export default {
     "visualizerBackgroundModeLatent": "Latent",
     "visualizerBackgroundModeUrl": "Embed",
     "visualizerBackgroundModeSora": "Sora",
+    "visualizerBackgroundModeParticles": "Hạt",
     "urlBackgroundSettings": "Nền nhúng",
     "urlBackgroundSettingsDesc": "Hiển thị trang web làm nền trình phát. Lưu ý: một số trang web chặn nhúng vào iframe và có thể không hiển thị.",
     "urlBackgroundNotePlaceholder": "Ghi chú (dễ nhận biết)",

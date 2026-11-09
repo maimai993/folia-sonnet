@@ -376,7 +376,7 @@ export interface ImportPlanInput {
     // Only a system font family is portable, so an uploaded font is never in the config — but
     // accepting a family replaces it and deletes the stored file. Pass the current source so that
     // loss can be shown rather than discovered afterwards.
-    customFontSource?: 'system' | 'uploaded' | null;
+    customFontSource?: 'system' | 'uploaded' | 'market' | null;
     // What the user sees named in the font picker. An uploaded font exports as null, so without this
     // the row would claim the user currently has no font at all.
     customFontLabel?: string | null;
@@ -510,9 +510,14 @@ export function buildImportPlan({
         record(change, same);
     }
 
-    // Derived: taking a system font family evicts an uploaded one, and the stored file is deleted
-    // with it. The config cannot carry an uploaded font, so this loss is invisible in the diff above.
-    if (incoming.lyricsCustomFontFamily && customFontSource === 'uploaded') {
+    /*
+     * Derived: taking a system font family evicts an uploaded one, and the stored file is deleted
+     * with it. The config cannot carry an uploaded font, so this loss is invisible in the diff above.
+     *
+     * The market font goes the same way, and for the same reason: a config only names a family,
+     * never the font itself (market families are injected @font-face rules, restored by id).
+     */
+    if (incoming.lyricsCustomFontFamily && (customFontSource === 'uploaded' || customFontSource === 'market')) {
         changes.push({
             group: 'fonts',
             key: 'uploadedLyricsFont',

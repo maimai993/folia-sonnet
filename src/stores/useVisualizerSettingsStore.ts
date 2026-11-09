@@ -21,7 +21,7 @@ import { RENDER_PIXEL_RATIO_STORAGE_KEY, readStoredRenderPixelRatio, setGlobalRe
 import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlurQuantized } from '../utils/glowBlurQuantize';
 import i18n from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
-import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress } from './visualizerSettingsPersistence';
+import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress, WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, readStoredWallpaperVideoRotation } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 import { RANDOM_VISUALIZER_MODES_STORAGE_KEY, readStoredRandomVisualizerModes } from './visualizerSettingsPersistence';
 import { normalizeRandomVisualizerModes, type RandomVisualizerMode } from '../utils/randomVisualizerModes';
@@ -95,6 +95,13 @@ type OwnSettingsState = {
     lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video';
     /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
     lyricsWallpaperImage: string | null;
+    /**
+     * 桌面壁纸视频背景的旋转角度（0/90/180/270）。
+     *
+     * 存在这里而不是只下发一次：原生那份 tuning 每次 setAppearance 都会整体重建，
+     * 不持久化的话重启后角度就没了。
+     */
+    wallpaperVideoRotation: number;
     /** 背景模糊强度 0..1：同时作用于模糊封面与自选背景图。 */
     lyricsWallpaperBlur: number;
     /** 是否在歌词区顶部下方显示整首歌的进度条。 */
@@ -201,6 +208,8 @@ type OwnSettingsState = {
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
     handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video') => void;
     handleSetLyricsWallpaperImage: (image: string | null) => void;
+    /** 设定桌面壁纸视频的旋转角度（0/90/180/270），会持久化。 */
+    handleSetWallpaperVideoRotation: (degrees: number) => void;
     handleSetLyricsWallpaperBlur: (blur: number) => void;
     handleToggleLyricsWallpaperProgress: (enable: boolean) => void;
     handleToggleLyricsWallpaperTranslation: (enable: boolean) => void;
@@ -297,6 +306,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     lyricsWallpaperBackground: resolveWallpaperBackground(
         getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover')),
     lyricsWallpaperImage: getStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, '') || null,
+    wallpaperVideoRotation: readStoredWallpaperVideoRotation(),
     lyricsWallpaperBlur: clampWallpaperBlur(Number(getStoredString(LYRICS_WALLPAPER_BLUR_STORAGE_KEY, ''))),
     lyricsWallpaperProgress: getStoredBoolean(LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY, true),
     lyricsWallpaperTranslation: getStoredBoolean(LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY, true),
@@ -469,6 +479,11 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     handleSetLyricsWallpaperImage: (image) => {
         setStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, image || '');
         set({ lyricsWallpaperImage: image });
+    },
+    handleSetWallpaperVideoRotation: (degrees) => {
+        const normalized = ((Math.round(degrees / 90) * 90) % 360 + 360) % 360;
+        setStoredString(WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, String(normalized));
+        set({ wallpaperVideoRotation: normalized });
     },
     handleSetLyricsWallpaperBlur: (blur) => {
         const next = clampWallpaperBlur(blur);

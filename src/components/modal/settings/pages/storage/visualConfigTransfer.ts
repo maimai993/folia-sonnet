@@ -16,6 +16,7 @@ import { decompressConfig, readSavedCustomTheme } from '../../../../../utils/app
 import { parseSubtitleOverlayLayout } from '../../../../../utils/lyrics/subtitleOverlayLayout';
 import { ACTIVATE_CUSTOM_THEME_KEY, buildImportPlan, THEME_DARK_KEY, THEME_LIGHT_KEY, type ImportPlan } from '../../../../../utils/appearanceImportPlan';
 import { isFontFamilyAvailable } from '../../../../../utils/fontAvailability';
+import { isMarketFontFamily } from '../../../../../services/fontMarket';
 import { isLibraryWallSeamStyle } from '../../../../../utils/libraryWallSeamStyle';
 import { isLibraryWallSeamDirection } from '../../../../../utils/libraryWallSeamDirection';
 import { extractCfgFromInput } from '../../../../../utils/obsUrl';
@@ -85,8 +86,14 @@ export const planConfigImport = (text: string, theme: ConfigThemeControls): { co
         },
         customFontSource: customFont?.source ?? null,
         customFontLabel: customFont?.label ?? customFont?.family ?? null,
+        /*
+         * 市场字体的 family 是运行时注入的 @font-face（`zsft-full-<id>-<style>`），
+         * 只有登记过之后 canvas 才量得出来。配置里出现它时本机多半还没登记，
+         * 硬量会误报「字体不可用」—— 交给冷启动的 restore 去取，这里直接认为可用。
+         */
         incomingFontAvailable: config.lyricsCustomFontFamily
-            ? isFontFamilyAvailable(String(config.lyricsCustomFontFamily))
+            ? (isMarketFontFamily(String(config.lyricsCustomFontFamily))
+                || isFontFamilyAvailable(String(config.lyricsCustomFontFamily)))
             : undefined,
         isCustomThemeActive: theme.bgMode === 'custom',
         // A config names an uploaded image or emoji pack by source, but never carries it.

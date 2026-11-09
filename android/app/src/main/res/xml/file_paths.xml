@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 应用私有目录：市场下载的字体就放这里。缺这一条会让 fontsDir 里的文件加载失败。 -->
+    <files-path name="internal_files" path="." />
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
 </paths>
