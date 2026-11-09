@@ -70,8 +70,10 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     // 洛雪自定义音源工作台（#251）：这里的三个名字是用户导入的音源脚本自己声明的 source id，
     // 不是 Folia 内置平台在本项目里的规则。它们跟着导入的脚本走，没法拆进各家平台自己的文件夹。
     'src/components/lxmusic/LxSourcePanel.tsx': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the source ids a 洛雪 script declares, listed in the import panel' },
+    'src/components/lxmusic/LxAlbumWall.tsx': { n: { kugou: 2 }, kind: 'doc', why: 'the wall groups saved songs by platform: the comment that explains why a saved song without a native album id still needs a card names one source' },
     'src/components/lxmusic/LxChartBoard.tsx': { n: { netease: 2, qq: 1, kugou: 1 }, kind: 'doc', why: 'the 首页「推荐」页签在洛雪下是榜单板，注释里说明四家榜表各自来自那家自己的目录接口' },
-    'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 6, qq: 3, kugou: 5 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
+    'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 5, qq: 2, kugou: 4 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
+    'src/components/lxmusic/LxPlatformPicker.tsx': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc', why: 'the comment that says which sources the picker lists comes from LX_PUBLIC_PLATFORMS instead of spelling them out' },
     'src/components/lxmusic/lxUi.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the labels drawn for the 洛雪 source ids' },
     'src/components/modal/FreeSoftwareNoticeModal.tsx': { n: { qq: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/LocalSongMetadataMatchDialog.tsx': { n: { netease: 4, qq: 3, kugou: 2 }, kind: 'lyric', why: 'the metadata dialog\'s own list of sources' },
@@ -156,7 +158,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/onlineMusic/omni.ts': { n: { netease: 5, kugou: 2, fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },
     // 同上：洛雪音源模块的三个名字都是脚本协议里的 source id（#251），不是平台规则。
     'src/services/onlineMusic/lxmusic/lxLyric.ts': { n: { netease: 3, qq: 7, kugou: 6 }, kind: 'file', why: '洛雪自己只有一个歌词接口，另外两家各有一份自己的歌词服务：这个文件就是那两份的适配，它属于洛雪的目录，不在任何一家的目录里' },
-    'src/services/onlineMusic/lxmusic/lxPublicApi.ts': { n: { netease: 57, qq: 59, kugou: 49, ytm: 1 }, kind: 'stored', why: 'the 洛雪 script protocol: its per-source song, playlist, album and chart endpoints. The 首页横滑卡流 (榜单板 / 专辑墙 / 分类标签) needed the per-source chart catalogue, album tracks and tag catalogue, so three more groups of endpoints landed in the same file and its own count went up with them' },
+    'src/services/onlineMusic/lxmusic/lxPublicApi.ts': { n: { netease: 72, qq: 62, kugou: 59, ytm: 1 }, kind: 'stored', why: 'the 洛雪 script protocol: its per-source song, playlist, album and chart endpoints. The 首页横滑卡流 (榜单板 / 专辑墙 / 分类标签) needed the per-source chart catalogue, album tracks and tag catalogue, so three more groups of endpoints landed in the same file and its own count went up with them; the album wall then needed the per-source album lookup and cover borrowing, and the square toolbar the per-source tag catalogue keyed by the source prefix' },
     'src/services/onlineMusic/lxmusic/lxSquareCollections.ts': { n: { netease: 3, qq: 1, kugou: 1 }, kind: 'doc' },
     'src/services/onlineMusic/lxmusic/lxTypes.ts': { n: { netease: 4, qq: 4, kugou: 4 }, kind: 'stored', why: 'the union of 洛雪 source ids and the types each one answers with' },
     'src/services/onlineMusic/lxmusic/lxmusicProvider.ts': { n: { netease: 8, qq: 3, kugou: 4 }, kind: 'stored', why: 'maps a song back to the 洛雪 script source it came from; the comment that names it says 网易家' },

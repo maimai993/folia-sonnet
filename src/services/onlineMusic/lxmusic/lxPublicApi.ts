@@ -112,7 +112,10 @@ const toNumber = (value: unknown): number => {
 const normalizeCover = (value: unknown, size = 240): string | undefined => {
     const raw = toText(value);
     if (!raw) return undefined;
-    const sized = raw.replace('{size}', String(size));
+    const sized = raw
+        .replace('{size}', String(size))
+        // 酷我另一个 CDN（img1.kwcdn.kuwo.cn）在桌面端 TLS 握手不过，卡面会渲染成破图；同路径换成 img1.kuwo.cn 就正常。
+        .replace(/^https?:\/\/(img\d+\.)?kwcdn\.kuwo\.cn/i, 'https://img1.kuwo.cn');
     if (sized.startsWith('//')) return `https:${sized}`;
     if (/^http:\/\//i.test(sized)) return `https://${sized.slice('http://'.length)}`;
     return sized;
@@ -133,6 +136,212 @@ const normalizeKuwoCover = (value: unknown, size = 240): string | undefined => {
     if (/^star\//i.test(path) && !/^https?:/i.test(raw)) return `https://img1.kuwo.cn/${path}`;
     if (KUWO_COVER_SHORT_PATH.test(path)) return `${KUWO_COVER_BASE}${path}`;
     return normalizeCover(raw, size);
+};
+
+/**
+ * 酷我的歌手头像短路径长得跟专辑封面一样（`120/xx/xx/xxx.jpg`），只是前缀是 `star/starheads`。
+ * 榜单接口没有专辑图时用歌手图顶一下，总比一整墙空块强。
+ */
+const normalizeKuwoArtistCover = (value: unknown): string | undefined => {
+    const raw = toText(value);
+    if (!raw) return undefined;
+    const path = raw.replace(/^\/+/, '');
+    if (/^star\//i.test(path) && !/^https?:/i.test(raw)) return `https://img1.kuwo.cn/${path}`;
+    if (KUWO_COVER_SHORT_PATH.test(path)) return `https://img1.kuwo.cn/star/starheads/${path}`;
+    return normalizeCover(raw);
+};
+
+/**
+ * 自绘封面：渐变底 + 歌名首字，跟各家 App 缺图时的字母封面一个路数。
+ * 酷我榜单接口根本不带单曲封面，真图补不到时至少整墙都是「封面」，而不是一排灰圆环。
+ */
+const escapeXml = (value: string): string => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const gradientCover = (label: string, seed: string): string => {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 1000000007;
+    const hue = hash % 360;
+    const second = (hue + 46) % 360;
+    const letter = escapeXml((Array.from(label.trim())[0] ?? '?').toUpperCase());
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">'
+        + `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="hsl(${hue},52%,40%)"/>`
+        + `<stop offset="100%" stop-color="hsl(${second},46%,14%)"/></linearGradient></defs>`
+        + '<rect width="320" height="320" fill="url(#g)"/>'
+        + '<circle cx="290" cy="30" r="150" fill="rgba(255,255,255,0.05)"/>'
+        + '<circle cx="160" cy="160" r="112" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>'
+        + '<text x="160" y="160" text-anchor="middle" dominant-baseline="central"'
+        + ' font-family="Noto Sans SC, Microsoft YaHei, PingFang SC, sans-serif" font-size="118" font-weight="600"'
+        + ' fill="rgba(255,255,255,0.86)">'
+        + letter
+        + '</text></svg>';
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+
+/** 补过的封面记一份内存缓存：同一个榜单翻页/退回再进来不重复请求。
+ *  `null` 表示查过但确实没有，别每次都重新问一遍。
+ */
+const kuwoCoverCache = new Map<string, string | null>();
+
+/** 小并发跑一批异步任务：酷我的接口连发太快会被限流，6 是实测稳的上限。 */
+const mapConcurrent = async <T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> => {
+    const results: R[] = new Array(items.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (cursor < items.length) {
+            const index = cursor;
+            cursor += 1;
+            results[index] = await task(items[index]);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+};
+
+/**
+ * 借来的封面：酷狗给的是 `.../stdmusic/{size}/...` 模板路径，得把尺寸占位换掉；
+ * 两家 CDN 都是 http，统一提到 https，免得将来页面切到安全上下文被拦。
+ */
+const normalizeBorrowedCover = (value: unknown): string | undefined => {
+    const raw = toText(value);
+    if (!raw) return undefined;
+    const fixed = raw.replace('{size}', '400');
+    const secure = fixed.startsWith('http://') ? `https://${fixed.slice('http://'.length)}` : fixed;
+    return normalizeCover(secure);
+};
+
+/** 歌名比对要松一点：`晴天` 和 `晴天 (Live)`、`月半小夜曲` 和 `月半小夜曲 (Live)` 算同一首。 */
+const normalizeSongName = (value: string): string => value
+    .replace(/[（(【[].*?[）)】\]]/g, '')
+    .replace(/[`\s\-_·.,，。!！?？&/\\'"]/g, '')
+    .toLowerCase();
+
+const sameSongName = (candidate: string, target: string): boolean => {
+    const left = normalizeSongName(candidate);
+    const right = normalizeSongName(target);
+    if (!left || !right) return false;
+    if (left === right) return true;
+    return left.length >= 2 && right.length >= 2 && (left.includes(right) || right.includes(left));
+};
+
+/** 酷狗搜索取同名曲封面。它的封面字段常常第 2、3 条才有图，所以逐条比对歌名而不是盲取首条。 */
+const borrowKugouCover = async (song: LxApiSong): Promise<string | undefined> => {
+    const keyword = [song.name, song.artists.map((artist) => artist.name).join(' ')].filter(Boolean).join(' ').trim();
+    if (!keyword) return undefined;
+    try {
+        const payload = asRecord(await fetchJson(
+            `${KUGOU_SEARCH_HOST}/api/v3/search/song?format=json&keyword=${encodeURIComponent(keyword)}`
+            + '&page=1&pagesize=5&showtype=1',
+            8000,
+            'https://m.kugou.com/',
+        ));
+        for (const item of asArray(asRecord(payload?.data)?.info)) {
+            const name = stripTags(pick(item, 'songname', 'song_name', 'name'))
+                || stripTags(pick(item, 'filename')).split(' - ').slice(1).join(' - ');
+            const cover = normalizeBorrowedCover(
+                pick(item, 'imgurl', 'album_sizable_cover',
+                    'img_9', 'album_img', 'cover')
+                ?? pick(asRecord(item.trans_param), 'union_cover', 'album_sizable_cover'),
+            );
+            if (cover && sameSongName(name, song.name)) return cover;
+        }
+    } catch {
+        // 借不到就往下走网易云
+    }
+    return undefined;
+};
+
+/** 网易云用 cloudsearch（`search/get/web` 的 songs 里连封面字段都没有）。 */
+const borrowNeteaseCover = async (song: LxApiSong): Promise<string | undefined> => {
+    const keyword = [song.name, song.artists.map((artist) => artist.name).join(' ')].filter(Boolean).join(' ').trim();
+    if (!keyword) return undefined;
+    try {
+        const payload = asRecord(await fetchJson(
+            `${NETEASE_BASE}/api/cloudsearch/pc?s=${encodeURIComponent(keyword)}&type=1&limit=5&offset=0`,
+            8000,
+            'https://music.163.com/',
+        ));
+        for (const item of asArray(asRecord(payload?.result)?.songs)) {
+            const name = stripTags(pick(item, 'name'));
+            const cover = normalizeBorrowedCover(pick(asRecord(item.al), 'picUrl'));
+            if (cover && sameSongName(name, song.name)) return cover;
+        }
+    } catch {
+        // 两家都借不到，退回酷我自己的搜索
+    }
+    return undefined;
+};
+
+/**
+ * 酷我榜单接口（`kbangserver.ksong.s`）的 musiclist 条目只给 albumid，一个封面字段都没有，
+ * 所以榜单曲目进来时 `coverUrl` 恒空、集合页整墙灰块。这里补两条：
+ * 先用搜索接口回头捞这首歌的专辑图（捞不到退歌手图），还捞不到就自绘一条渐变。
+ */
+const kuwoSearchCover = async (song: LxApiSong): Promise<string | undefined> => {
+    const keyword = [song.name, song.artists.map((artist) => artist.name).join(' ')].filter(Boolean).join(' ').trim();
+    if (!keyword) return undefined;
+    if (kuwoCoverCache.has(keyword)) return kuwoCoverCache.get(keyword) ?? undefined;
+    // 先跟隔壁两个平台借：酷我榜单接口一条封面字段都没有，而同一首歌在酷狗 / 网易云搜索里
+    // 基本都有专辑图（实测 30 首样本：酷狗 30/30、网易云 28/30）。借不到再回头问酷我自己。
+    let found = await borrowKugouCover(song) ?? await borrowNeteaseCover(song);
+    if (found) {
+        if (kuwoCoverCache.size > 800) kuwoCoverCache.clear();
+        kuwoCoverCache.set(keyword, found);
+        return found;
+    }
+    try {
+        const payload = asRecord(await fetchJson(
+            `https://search.kuwo.cn/r.s?all=${encodeURIComponent(keyword)}&ft=music&itemset=web_2013`
+            + '&client=kt&pn=0&rn=3&rformat=json&encoding=utf8',
+            8000,
+            'https://www.kuwo.cn/',
+        ));
+        const list = asArray(payload?.abslist);
+        for (const item of list) {
+            const albumCover = normalizeKuwoCover(pick(item, 'web_albumpic_short', 'albumpic'));
+            if (albumCover) {
+                found = albumCover;
+                break;
+            }
+        }
+        if (!found) {
+            for (const item of list) {
+                const artistCover = normalizeKuwoArtistCover(pick(item, 'web_artistpic_short', 'artistPic'));
+                if (artistCover) {
+                    found = artistCover;
+                    break;
+                }
+            }
+        }
+    } catch {
+        // 搜索接口偶尔抽风，走下面的渐变兜底
+    }
+    if (kuwoCoverCache.size > 800) kuwoCoverCache.clear();
+    kuwoCoverCache.set(keyword, found ?? null);
+    return found;
+};
+
+const fillKuwoChartCovers = async (songs: LxApiSong[]): Promise<LxApiSong[]> => {
+    const missing = songs.filter((song) => !song.coverUrl);
+    if (missing.length === 0) return songs;
+    const resolved = await mapConcurrent(missing, 6, async (song) => ({
+        id: song.id,
+        cover: await kuwoSearchCover(song),
+    }));
+    const byId = new Map(resolved.map((entry) => [entry.id, entry.cover]));
+    return songs.map((song) => {
+        if (song.coverUrl) return song;
+        const cover = byId.get(song.id)
+            ?? gradientCover(song.name, `${song.name}|${song.artists.map((artist) => artist.name).join(',')}`);
+        return {
+            ...song,
+            coverUrl: cover,
+            album: { ...song.album, coverUrl: song.album.coverUrl || cover },
+        };
+    });
 };
 
 const splitArtists = (value: unknown): LxApiArtist[] => toText(value)
@@ -435,6 +644,100 @@ const KUWO_CHARTS: ReadonlyArray<{ id: string; name: string }> = [
     { id: '15', name: '日本公信榜' },
     { id: '151', name: '腾讯音乐人原创榜' },
 ];
+
+/** 网易云反过来很便宜：一个 `/api/toplist` 就带回全部榜单的 `coverImgUrl`，一次填满。 */
+/** 不在官方榜目录里的那几个榜，`/api/playlist/detail?id=` 仍能给出 `coverImgUrl`。 */
+const neteasePlaylistCover = async (id: string): Promise<string | undefined> => {
+    try {
+        const payload = asRecord(await fetchJson(`${NETEASE_BASE}/api/playlist/detail?id=${encodeURIComponent(id)}`, 8000, 'https://music.163.com/'));
+        const playlist = asRecord(payload?.result ?? payload?.playlist);
+        return normalizeCover(pick(playlist, 'coverImgUrl', 'coverImageUrl'), 400);
+    } catch {
+        return undefined;
+    }
+};
+
+const withNeteaseChartCovers = async (charts: LxApiChart[]): Promise<LxApiChart[]> => {
+    const covers = new Map<string, string>();
+    try {
+        const payload = asRecord(await fetchJson(`${NETEASE_BASE}/api/toplist`, 8000, 'https://music.163.com/'));
+        for (const item of asArray(payload?.list)) {
+            const id = toText(pick(item, 'id'));
+            const cover = normalizeCover(pick(item, 'coverImgUrl', 'coverImageUrl'), 400);
+            if (id && cover) covers.set(id, cover);
+        }
+    } catch {
+        // 目录接口不通就只走下面的逐榜兜底
+    }
+    // 少数榜（国电榜、中国新乡村音乐榜、抖音热歌榜…）不在 `/api/toplist` 的 65 条里，改按歌单详情单独取封面。
+    const missing = charts.filter((chart) => !chart.coverUrl && !covers.has(chart.id));
+    if (missing.length > 0) {
+        const extra = await mapConcurrent(missing, 6, async (chart) => ({ id: chart.id, url: await neteasePlaylistCover(chart.id) }));
+        for (const item of extra) if (item.url) covers.set(item.id, item.url);
+    }
+    return charts.map((chart) => (chart.coverUrl || !covers.has(chart.id) ? chart : { ...chart, coverUrl: covers.get(chart.id) }));
+};
+
+/**
+ * 榜单卡自己的封面：同一条 content 接口里带 `v9_pic2`（就是酷我 App 里那张榜单图），
+ * 但目录只给 id/name，所以只能逐榜问一次。先把首屏能看到的几张补上，其余继续自绘；
+ * 结果按 id 存 localStorage，第二次进来不再发请求。
+ */
+const KUWO_CHART_COVER_HEAD = 999;
+const KUWO_CHART_COVER_CACHE_KEY = 'folia.lx.kuwo.chart-cover.v1';
+
+const readKuwoChartCoverCache = (): Record<string, string> => {
+    try {
+        const raw = globalThis.localStorage?.getItem(KUWO_CHART_COVER_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) as unknown : undefined;
+        if (!parsed || typeof parsed !== 'object') return {};
+        // 旧缓存里可能存的是桌面端连不上的 kwcdn 域名，读出来先过一遍域名归一，否则卡面继续破图。
+        const out: Record<string, string> = {};
+        for (const [id, url] of Object.entries(parsed as Record<string, unknown>)) {
+            const fixed = normalizeCover(url);
+            if (fixed) out[id] = fixed;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+};
+
+const writeKuwoChartCoverCache = (value: Record<string, string>): void => {
+    try {
+        globalThis.localStorage?.setItem(KUWO_CHART_COVER_CACHE_KEY, JSON.stringify(value));
+    } catch {
+        // 隐私模式 / 配额满：写不进去就算了
+    }
+};
+
+const kuwoChartCover = async (id: string): Promise<string | undefined> => {
+    try {
+        const payload = asRecord(await fetchJson(
+            'https://kbangserver.kuwo.cn/ksong.s?from=pc&fmt=json&pn=0&rn=1&type=bang&data=content'
+            + `&id=${encodeURIComponent(id)}&show_copyright_off=1`,
+            8000,
+            'https://www.kuwo.cn/',
+        ));
+        const raw = toText(pick(payload, 'v9_pic2', 'pic2'));
+        if (!raw) return undefined;
+        // 120 是列表缩略图，卡面放大后会糊，要 240 那张
+        return normalizeCover(raw.replace('/120/', '/240/'));
+    } catch {
+        return undefined;
+    }
+};
+
+const withKuwoChartCovers = async (charts: LxApiChart[]): Promise<LxApiChart[]> => {
+    const cache = readKuwoChartCoverCache();
+    const missing = charts.slice(0, KUWO_CHART_COVER_HEAD).filter((chart) => !cache[chart.id]);
+    if (missing.length > 0) {
+        const fresh = await mapConcurrent(missing, 12, async (chart) => ({ id: chart.id, url: await kuwoChartCover(chart.id) }));
+        for (const item of fresh) if (item.url) cache[item.id] = item.url;
+        writeKuwoChartCoverCache(cache);
+    }
+    return charts.map((chart) => (chart.coverUrl || !cache[chart.id] ? chart : { ...chart, coverUrl: cache[chart.id] }));
+};
 
 /** 酷我的歌曲 id 在接口里写作 `MUSIC_123456`。 */
 const kuwoIdOf = (value: unknown): string => toText(value).replace(/^MUSIC_/i, '');
@@ -922,9 +1225,10 @@ export const lxApiCharts = async (platform: LxPublicPlatform): Promise<LxApiChar
         if (list.length > 0) return list;
     }
     if (platform === 'wy') {
-        return NETEASE_CHARTS.map((chart) => ({ platform, id: chart.id, name: chart.name }));
+        // 榜名和榜图都从官方目录一次取回，比手抄的固定表更不会跑偏；取不到才退回固定表。
+        return withNeteaseChartCovers(NETEASE_CHARTS.map((chart) => ({ platform, id: chart.id, name: chart.name })));
     }
-    return KUWO_CHARTS.map((chart) => ({ platform, id: chart.id, name: chart.name }));
+    return withKuwoChartCovers(KUWO_CHARTS.map((chart) => ({ platform, id: chart.id, name: chart.name })));
 };
 
 export const lxApiChartTracks = async (
@@ -960,8 +1264,9 @@ export const lxApiChartTracks = async (
     const payload = asRecord(await fetchJson(
         `https://kbangserver.kuwo.cn/ksong.s?from=pc&fmt=json&pn=${page - 1}&rn=${limit}&type=bang&data=content&id=${encodeURIComponent(chartId)}&show_copyright_off=1`,
     ));
+    // 这个接口一条封面都不给，补图这一步放在取完数据之后（见 fillKuwoChartCovers）。
     const songs = asArray(payload?.musiclist).map(kuwoSong).filter((s) => s.id && s.name);
-    return pageOf(songs, limit);
+    return pageOf(await fillKuwoChartCovers(songs), limit);
 };
 
 export const lxApiPlaylistTracks = async (
@@ -1040,6 +1345,58 @@ export const lxApiAlbumTracks = async (
         return { items: songs, hasMore: songs.length >= limit };
     }
     return { items: [], hasMore: false };
+};
+
+/**
+ * 专辑名（「专辑」页里那种只存到专辑 id、名字丢了的老收藏卡靠它补卡面）。
+ * 三家字段不一样：酷狗 album/info 的 `albumname`、QQ 专辑详情的 `data.name`、
+ * 网易云 album 接口的 `album.name`。拿不到就回空对象——调用方宁可继续写「未知专辑」，
+ * 也不要画一个猜出来的错名字。
+ */
+export const lxApiAlbumName = async (
+    platform: LxPublicPlatform,
+    albumId: string,
+): Promise<{ name?: string; coverUrl?: string }> => {
+    const id = toText(albumId);
+    if (!id) return {};
+    try {
+        if (platform === 'kg') {
+            const payload = asRecord(await fetchJson(
+                `${KUGOU_SEARCH_HOST}/api/v3/album/info?albumid=${encodeURIComponent(id)}&plat=0&version=8000`,
+            ));
+            const info = asRecord(payload?.data);
+            return {
+                name: stripTags(pick(info, 'albumname', 'album_name')) || undefined,
+                coverUrl: normalizeCover(pick(info, 'imgurl')),
+            };
+        }
+        if (platform === 'tx') {
+            const param = /^\d+$/.test(id) ? 'albumid' : 'albummid';
+            const payload = asRecord(await fetchJson(
+                `${QQ_CGI}/v8/fcg-bin/fcg_v8_album_info_cp.fcg?${param}=${encodeURIComponent(id)}&format=json`,
+                REQUEST_TIMEOUT_MS,
+                QQ_REFERER,
+            ));
+            const data = asRecord(payload?.data);
+            const mid = toText(pick(data, 'mid'));
+            return {
+                name: stripTags(pick(data, 'name', 'albumName')) || undefined,
+                coverUrl: normalizeCover(pick(data, 'picurl', 'cover'))
+                    ?? (mid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${mid}.jpg` : undefined),
+            };
+        }
+        if (platform === 'wy') {
+            const raw = ensureNetease(await fetchJson(`${NETEASE_BASE}/api/album/${encodeURIComponent(id)}`));
+            const album = asRecord(raw?.album) ?? asRecord(raw?.data);
+            return {
+                name: stripTags(pick(album, 'name', 'albumName')) || undefined,
+                coverUrl: normalizeCover(pick(album, 'picUrl', 'blurPicUrl')),
+            };
+        }
+    } catch {
+        // 补名字是锦上添花：接口抖一下或要求验证时保持原样，不该让整面墙报错。
+    }
+    return {};
 };
 
 /** 新碟 / 热门专辑：网易云与酷狗有公开入口，QQ 与酷我没有。 */

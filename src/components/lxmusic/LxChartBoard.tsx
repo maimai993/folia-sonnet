@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import {
     LX_PUBLIC_PLATFORM_KEYS,
     LX_PUBLIC_PLATFORMS,
@@ -8,14 +7,16 @@ import {
     type LxPublicPlatform,
 } from '../../services/onlineMusic/lxmusic/lxPublicApi';
 import { useLxWorkspaceStore } from '../../stores/useLxWorkspaceStore';
-import { LxGlassCardRail, LxGlassChipRail, type LxCardItem, type LxChipItem } from './LxGlassRail';
+import { Grid3DSlider, type Grid3DSliderItem } from '../../library/suites/grid/home/Grid3DSlider';
+import { LxPlatformPicker, type LxPlatformKey } from './LxPlatformPicker';
 
 // src/components/lxmusic/LxChartBoard.tsx
 // 首页「推荐」页签在洛雪下的形态：洛雪的排行榜。
 //
-// 照首页的手感来，不再铺一屏三列按钮：
-//   · 第一行是四家平台，横向滑动的液态玻璃胶囊；
-//   · 点某一家，下面才出一条横滑的榜单海报卡（封面 + 榜名 + 平台）；
+// 卡片流跟歌单页是同一套东西——直接复用首页那个 Grid3DSlider（居中那张放大、两侧渐小变暗、
+// 一样的卡大小、一样的滑动惯性），不再自己维护一条导轨。差别只在数据：
+//   · 第一行只有一颗「当前平台」胶囊，点开在浮层里选四家（不再铺成一整排）；
+//   · 点某一家，这条卡流换成那家的榜单海报卡（封面 + 榜名 + 平台）；
 //   · 点榜单直接进那一屏的曲目，走的是 Folia 自己的集合页，不跳洛雪工作台
 //     （工作台是另一套界面，点一下像换了个软件，用户明确否掉了）。
 //
@@ -24,17 +25,11 @@ import { LxGlassCardRail, LxGlassChipRail, type LxCardItem, type LxChipItem } fr
 
 export type LxChartTarget = { platform: LxPublicPlatform; id: string; name: string; coverUrl?: string };
 
-type ChartPlatformChoice = LxPublicPlatform | 'all' | '';
-const PLATFORM_KEYS: ReadonlyArray<Exclude<ChartPlatformChoice, ''>> = ['all', 'wy', 'tx', 'kg', 'kw'];
+const PLATFORM_KEYS: ReadonlyArray<LxPlatformKey> = ['all', ...LX_PUBLIC_PLATFORM_KEYS];
 
 const platformLabel = (key: LxPublicPlatform): string => (
     LX_PUBLIC_PLATFORMS.find((item) => item.key === key)?.label ?? key
 );
-
-const PLATFORM_CHIPS: ReadonlyArray<LxChipItem> = PLATFORM_KEYS.map((key) => ({
-    key,
-    label: key === 'all' ? '全部平台' : platformLabel(key),
-}));
 
 /** 榜单目录十分钟内不重复拉：来回切页签不该每次都打一遍四家接口。 */
 const CACHE_TTL = 10 * 60 * 1000;
@@ -87,24 +82,31 @@ type ChartGroup = { platform: LxPublicPlatform; items: LxApiChart[] };
 interface LxChartBoardProps {
     /** 点榜单之后去哪：由首页交给 Folia 自己的集合页（album/playlist/chart 那套路由）。 */
     onOpenChart?: (chart: LxChartTarget) => void;
+    /** 日间/夜间：跟首页同一个主题，卡面与平台胶囊都靠它取色。 */
+    isDaylight?: boolean;
+    hasFloatingPlayer?: boolean;
+    isInteractive?: boolean;
 }
 
-export const LxChartBoard = ({ onOpenChart }: LxChartBoardProps) => {
-    // 照洛雪那套层级：先选平台，再一条横导轨看这家的榜单。
+export const LxChartBoard = ({
+    onOpenChart,
+    isDaylight = false,
+    hasFloatingPlayer = false,
+    isInteractive = true,
+}: LxChartBoardProps) => {
+    // 照洛雪那套层级：先选平台，再一条卡流看这家的榜单。
     // 默认落在「全部平台」，进来就有一条能滑的榜单卡流，而不是一片空白等人点。
-    const [platform, setPlatform] = useState<ChartPlatformChoice>('all');
+    const [platform, setPlatform] = useState<LxPlatformKey>('all');
     const [groups, setGroups] = useState<ChartGroup[] | null>(null);
     const [failed, setFailed] = useState(false);
+    const [focusedIndex, setFocusedIndex] = useState(0);
 
     useEffect(() => {
-        if (!platform) {
-            setGroups(null);
-            setFailed(false);
-            return;
-        }
         let alive = true;
         setGroups(null);
         setFailed(false);
+        // 换了平台就是换了一条卡流：焦点回到正中第一张，别停在上一家的第 12 个榜。
+        setFocusedIndex(0);
         const targets = platform === 'all' ? [...LX_PUBLIC_PLATFORM_KEYS] : [platform];
         void Promise.all(targets.map(async (key) => ({ platform: key, items: await loadCharts(key) })))
             .then((result) => {
@@ -125,49 +127,45 @@ export const LxChartBoard = ({ onOpenChart }: LxChartBoardProps) => {
         useLxWorkspaceStore.getState().open('chart', { platform: key, chartId: item.id });
     };
 
-    const cardsFor = (group: ChartGroup): LxCardItem[] => group.items.map((item) => ({
-        key: `${group.platform}:${item.id}`,
-        title: item.name,
-        caption: platformLabel(group.platform),
+    // 一条卡流装完：选一家就是这家的榜，选「全部平台」就是四家混排这一条。
+    // 不再分平台立小标题、叠好几条卡流——那是自造的层级，官方是点一家看一家。
+    const items: Grid3DSliderItem[] = (groups ?? []).flatMap((group) => group.items.map((item) => ({
+        id: `${group.platform}:${item.id}`,
+        name: item.name,
+        description: platformLabel(group.platform),
         coverUrl: chartCoverUrl(item),
-    }));
+    })));
 
-    // 一条导轨装完：选一家就是这家的榜，选「全部平台」就是四家混排这一条。
-    // 不再分平台立小标题、叠好几条导轨——那是自造的层级，官方是点一家看一家。
-    const flatCards: LxCardItem[] = groups ? groups.flatMap((group) => cardsFor(group)) : [];
+    const openByKey = (key: string): void => {
+        const parts = key.split(':');
+        const group = (groups ?? []).find((entry) => entry.platform === parts[0]);
+        const item = group?.items.find((entry) => entry.id === parts.slice(1).join(':'));
+        if (group && item) openChart(group.platform, item);
+    };
 
     return (
-        <div className="w-full h-full flex flex-col gap-1 pt-1 min-h-0" data-lx-chart-board>
-            <LxGlassChipRail
-                items={PLATFORM_CHIPS}
-                activeKey={platform}
-                onSelect={(key) => setPlatform(key as ChartPlatformChoice)}
-                testId="chart-platform"
+        <div className="w-full h-full flex-1 flex flex-col min-h-0" data-lx-chart-board>
+            <div className="shrink-0 pt-1">
+                <LxPlatformPicker
+                    keys={PLATFORM_KEYS}
+                    value={platform}
+                    onSelect={(key) => setPlatform(key)}
+                    isDaylight={isDaylight}
+                />
+            </div>
+            <Grid3DSlider
+                key={platform}
+                items={items}
+                focusedIndex={focusedIndex}
+                onFocusedIndexChange={setFocusedIndex}
+                onSelect={(item) => openByKey(String(item.id))}
+                isInteractive={isInteractive}
+                isLoading={groups === null}
+                emptyMessage={failed ? '榜单没取到，稍后再试。' : '这家暂时没有榜单目录'}
+                isDaylight={isDaylight}
+                hasFloatingPlayer={hasFloatingPlayer}
+                openOnAnyCardClick
             />
-            {!platform ? (
-                <div className="py-10 text-center text-xs opacity-45">选一家平台，看它的榜单。</div>
-            ) : groups === null ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-xs opacity-50">
-                    <Loader2 className="animate-spin" size={14} />
-                    正在读取榜单…
-                </div>
-            ) : failed ? (
-                <div className="py-8 text-center text-xs opacity-50">榜单没取到，稍后再试。</div>
-            ) : (
-                <div className="flex-1 min-h-0 flex items-center">
-                    <LxGlassCardRail
-                        items={flatCards}
-                        onSelect={(key) => {
-                            const parts = key.split(':');
-                            const group = groups.find((entry) => entry.platform === parts[0]);
-                            const item = group?.items.find((entry) => entry.id === parts.slice(1).join(':'));
-                            if (group && item) openChart(group.platform, item);
-                        }}
-                        width={262}
-                        testId="charts"
-                    />
-                </div>
-            )}
         </div>
     );
 };

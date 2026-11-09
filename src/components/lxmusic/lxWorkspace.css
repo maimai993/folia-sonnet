@@ -290,6 +290,157 @@
     letter-spacing: 0.01em;
 }
 
+/* ------------------------------------------------- 平台浮层 */
+
+/* 头部只挂一个「当前平台」胶囊；点开才在整页之上浮一层，不占排版高度。 */
+.lx-platform-trigger {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 9px 0 3px;
+    border-radius: 999px;
+    border: 1px solid var(--lx-line);
+    background: var(--lx-fill);
+    color: var(--lx-fg);
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lx-platform-trigger:hover,
+.lx-platform-trigger[aria-expanded='true'] {
+    background: var(--lx-fill2);
+    border-color: color-mix(in srgb, var(--lx-accent) 32%, transparent);
+}
+
+.lx-platform-trigger-label {
+    max-width: 88px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lx-platform-trigger-caret {
+    color: var(--lx-soft);
+    transition: transform 0.18s ease;
+}
+
+.lx-platform-trigger-caret[data-open='true'] {
+    transform: rotate(180deg);
+}
+
+.lx-platform-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: 60px 12px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    animation: lx-layer-in 0.16s ease;
+}
+
+.lx-platform-sheet {
+    width: min(312px, 84vw);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 16px;
+    border: 1px solid var(--lx-line);
+    background: var(--lx-sheet);
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.42);
+    animation: lx-sheet-in 0.18s ease;
+}
+
+.lx-platform-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 2px 2px 7px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--lx-soft);
+}
+
+.lx-platform-sheet-head .lx-icon-btn {
+    width: 28px;
+    height: 28px;
+}
+
+.lx-platform-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.lx-platform-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px 7px 6px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    text-align: left;
+    color: var(--lx-soft);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.lx-platform-option:hover {
+    background: var(--lx-fill);
+    color: var(--lx-fg);
+}
+
+.lx-platform-option[data-active='true'] {
+    color: var(--lx-fg);
+    /* 老 WebView 不认 color-mix 时退回灰底，不会变成透明。 */
+    background: var(--lx-fill2);
+    background: color-mix(in srgb, var(--lx-platform-color, var(--lx-accent)) 16%, transparent);
+    border-color: color-mix(in srgb, var(--lx-platform-color, var(--lx-accent)) 40%, transparent);
+}
+
+.lx-platform-option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.lx-platform-option-text b {
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.lx-platform-option-text em {
+    font-style: normal;
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: var(--lx-faint);
+}
+
+.lx-platform-option > svg {
+    flex: none;
+    color: var(--lx-accent);
+}
+
+@keyframes lx-layer-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes lx-sheet-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+
 .lx-dot {
     width: 7px;
     height: 7px;
