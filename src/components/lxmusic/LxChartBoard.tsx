@@ -7,7 +7,8 @@ import {
     type LxPublicPlatform,
 } from '../../services/onlineMusic/lxmusic/lxPublicApi';
 import { useLxWorkspaceStore } from '../../stores/useLxWorkspaceStore';
-import { Grid3DSlider, type Grid3DSliderItem } from '../../library/suites/grid/home/Grid3DSlider';
+import { resolveCardRail } from '../../library/registry';
+import type { LibraryCardRailItem } from '../../library/core/suite/suite.contract';
 import { LxPlatformPicker, type LxPlatformKey } from './LxPlatformPicker';
 
 // src/components/lxmusic/LxChartBoard.tsx
@@ -94,6 +95,7 @@ export const LxChartBoard = ({
     hasFloatingPlayer = false,
     isInteractive = true,
 }: LxChartBoardProps) => {
+    const CardRail = resolveCardRail() ?? (() => null);
     // 照洛雪那套层级：先选平台，再一条卡流看这家的榜单。
     // 默认落在「全部平台」，进来就有一条能滑的榜单卡流，而不是一片空白等人点。
     const [platform, setPlatform] = useState<LxPlatformKey>('all');
@@ -129,7 +131,7 @@ export const LxChartBoard = ({
 
     // 一条卡流装完：选一家就是这家的榜，选「全部平台」就是四家混排这一条。
     // 不再分平台立小标题、叠好几条卡流——那是自造的层级，官方是点一家看一家。
-    const items: Grid3DSliderItem[] = (groups ?? []).flatMap((group) => group.items.map((item) => ({
+    const items: LibraryCardRailItem[] = (groups ?? []).flatMap((group) => group.items.map((item) => ({
         id: `${group.platform}:${item.id}`,
         name: item.name,
         description: platformLabel(group.platform),
@@ -153,7 +155,7 @@ export const LxChartBoard = ({
                     isDaylight={isDaylight}
                 />
             </div>
-            <Grid3DSlider
+            <CardRail
                 key={platform}
                 items={items}
                 focusedIndex={focusedIndex}

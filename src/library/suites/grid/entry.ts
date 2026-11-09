@@ -1,6 +1,7 @@
 import type { LibraryAccountActionId } from '../../core/account/account.contract';
-import type { LibraryHomeActionId, LibrarySuiteManifest } from '../../core/suite/suite.contract';
+import type { LibraryHomeActionId, LibraryCardRailProps, LibrarySurfaceComponent, LibrarySuiteManifest } from '../../core/suite/suite.contract';
 import Grid3D from './home/Grid3D';
+import { Grid3DSlider } from './home/Grid3DSlider';
 import GridCollectionSurface from './collection/GridCollectionSurface';
 import GridArtistSurface from './artist/GridArtistSurface';
 import GridAccountSurface from './account/GridAccountSurface';
@@ -127,6 +128,9 @@ const grid: LibrarySuiteManifest = {
     },
     // 「完成」时宿主让网格忘掉这一层的集合 / 歌手页布局记录（sessionStorage）。
     layout: gridLayout,
+    // 首页这套横滑卡流也给宿主之外的界面复用（洛雪工作台的歌单 / 电台 / 专辑 / 榜单页），只能经 registry 取到。
+    // 两边 props 同形；契约在 core 层、不引 React 的节点类型，所以在这里桥接一次。
+    cardRail: Grid3DSlider as unknown as LibrarySurfaceComponent<LibraryCardRailProps>,
 };
 
 export default grid;

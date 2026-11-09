@@ -28,7 +28,7 @@ export const PLATFORM_HINTS: Record<LxPublicPlatform, string> = {
     kw: '只有歌单广场',
 };
 
-// 一页 30：酷狗的歌单广场接口固定每页 30 条，页大小对不上的话翻页会漏歌。
+// 一页 30：其中一家的歌单广场接口固定每页 30 条，页大小对不上的话翻页会漏歌。
 export const PAGE_SIZE = 30;
 export const TRACK_PAGE_SIZE = 60;
 /** 搜索时每个平台各取多少（四家交替，一屏大概 4 倍条数）。 */

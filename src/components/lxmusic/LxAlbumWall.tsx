@@ -8,7 +8,8 @@ import {
 import { ensureLxLikedSongsHydrated, getLxLikedSongs, subscribeLxLikedSongs } from '../../services/onlineMusic/lxmusic/lxLikedSongs';
 import { getLxSavedPlaylists, subscribeLxSavedPlaylists, type LxSavedSong } from '../../services/onlineMusic/lxmusic/lxSavedPlaylists';
 import { lxSavedAlbumCollectionId } from '../../services/onlineMusic/lxmusic/lxmusicProvider';
-import { Grid3DSlider, type Grid3DSliderItem } from '../../library/suites/grid/home/Grid3DSlider';
+import { resolveCardRail } from '../../library/registry';
+import type { LibraryCardRailItem } from '../../library/core/suite/suite.contract';
 import { LxPlatformPicker, type LxPlatformKey } from './LxPlatformPicker';
 
 // src/components/lxmusic/LxAlbumWall.tsx
@@ -136,6 +137,7 @@ export const LxAlbumWall = ({
     hasFloatingPlayer = false,
     isInteractive = true,
 }: LxAlbumWallProps) => {
+    const CardRail = resolveCardRail() ?? (() => null);
     const [albums, setAlbums] = useState<AlbumEntry[]>(() => buildAlbums(collectSavedSongs(), readAlbumMeta()));
     const [hydrating, setHydrating] = useState(false);
     const [platform, setPlatform] = useState<LxPlatformKey>('all');
@@ -194,7 +196,7 @@ export const LxAlbumWall = ({
         setFocusedIndex(0);
     }, [platform, visible.length]);
 
-    const items: Grid3DSliderItem[] = visible.map((album) => ({
+    const items: LibraryCardRailItem[] = visible.map((album) => ({
         id: album.key,
         name: album.name,
         // 这里的数字是「你在这张专辑里收了几首」，不是专辑总曲目数：点进去看到的是整张专辑，
@@ -224,7 +226,7 @@ export const LxAlbumWall = ({
                     isDaylight={isDaylight}
                 />
             </div>
-            <Grid3DSlider
+            <CardRail
                 key={platform}
                 items={items}
                 focusedIndex={focusedIndex}

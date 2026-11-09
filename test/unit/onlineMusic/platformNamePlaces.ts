@@ -72,7 +72,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/lxmusic/LxSourcePanel.tsx': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the source ids a 洛雪 script declares, listed in the import panel' },
     'src/components/lxmusic/LxAlbumWall.tsx': { n: { kugou: 2 }, kind: 'doc', why: 'the wall groups saved songs by platform: the comment that explains why a saved song without a native album id still needs a card names one source' },
     'src/components/lxmusic/LxChartBoard.tsx': { n: { netease: 2, qq: 1, kugou: 1 }, kind: 'doc', why: 'the 首页「推荐」页签在洛雪下是榜单板，注释里说明四家榜表各自来自那家自己的目录接口' },
-    'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 5, qq: 2, kugou: 4 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
+    'src/components/lxmusic/LxWorkspace.tsx': { n: { netease: 5, qq: 2, kugou: 3 }, kind: 'stored', why: 'the 洛雪 source ids behind the playlist and chart tabs' },
     'src/components/lxmusic/LxPlatformPicker.tsx': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc', why: 'the comment that says which sources the picker lists comes from LX_PUBLIC_PLATFORMS instead of spelling them out' },
     'src/components/lxmusic/lxUi.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'stored', why: 'the labels drawn for the 洛雪 source ids' },
     'src/components/modal/FreeSoftwareNoticeModal.tsx': { n: { qq: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },

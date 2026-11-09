@@ -181,6 +181,35 @@ export type LibraryDeclaredActions = {
 export type LibrarySurfaceComponent<Props> = (props: Props) => unknown;
 
 /**
+ * 横滑卡流的条目：首页那套「居中那张放大、两侧渐小变暗」的卡片流把它画成一张卡。
+ * 只放数据不放节点——契约在 core 层，这里不引 React 的节点类型；主标题按文案传。
+ */
+export type LibraryCardRailItem = {
+    id: string | number;
+    name: string;
+    coverUrl?: string;
+    description?: string;
+    summary?: string;
+    trackCount?: number;
+    trackIds?: string[];
+    type?: string;
+    isVirtual?: boolean;
+};
+
+/** 横滑卡流的入参：与首页那套卡流同形，`cardRail` 声明了它的 suite 才提供。 */
+export type LibraryCardRailProps = {
+    items: LibraryCardRailItem[];
+    focusedIndex: number;
+    onFocusedIndexChange: (index: number) => void;
+    onSelect: (item: LibraryCardRailItem, index: number) => void;
+    isInteractive?: boolean;
+    isLoading?: boolean;
+    emptyMessage?: string;
+    isDaylight: boolean;
+    hasFloatingPlayer?: boolean;
+};
+
+/**
  * 集合层的导航动作：宿主实现（压栈、返回、解析目录引用）。
  *
  * 返回分两种，同一个手势在每套 suite 里含义相同（P4.5，由宿主执行，suite 只按手势选一个调用）：
@@ -468,4 +497,10 @@ export type LibrarySuiteManifest = {
      * 那套 suite 的动作可用。不声明则没有外观动作（grid 与 TUI 都不声明：网格的局部动作走 grid surface）。
      */
     chromeActions?: readonly LibrarySuiteChromeActionMeta[];
+    /**
+     * 供其它界面复用的独立部件：不挂 surface、不带动作表，props 由部件自己定。
+     * 目前只有首页那套横滑卡流——洛雪工作台的歌单 / 电台 / 专辑 / 榜单页要的正是它，
+     * 宿主只能经 registry 取到，所以这里给它一个声明位。
+     */
+    cardRail?: LibrarySurfaceComponent<LibraryCardRailProps>;
 };
