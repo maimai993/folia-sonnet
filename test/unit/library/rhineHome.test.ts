@@ -16,19 +16,47 @@ const ports = vi.hoisted(() => ({
     t: (key: string) => key,
     language: 'en', daylight: false,
 }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: ports.t, i18n: { language: ports.language } }) }));
+// 组件这边把几个 store 都当 hook 用（`useX(select)`），测试还要能 `getState()`：
+// 统一包成「可调用 + 带 getState」的形状，两边都满足。工厂会被提升，所以用 vi.hoisted。
+const { asHookStore } = vi.hoisted(() => ({
+    asHookStore: <T extends object>(state: T) => Object.assign(
+        (select: (value: T) => unknown) => select(state),
+        { getState: () => state },
+    ),
+}));
+// 设置 kit 的链上还会 `i18n.use(initReactI18next)`，这个插件一并给出来。
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({ t: ports.t, i18n: { language: ports.language } }),
+    initReactI18next: { type: '3rdParty', init: () => {} },
+}));
 vi.mock('@/services/onlineMusic/omni', () => ({ omni: { getCollectionTracks: ports.tracks, searchSongs: ports.search } }));
 vi.mock('@/services/onlineMusic/omni/activeProvider', () => ({ activeProviderId: () => 'test' }));
-vi.mock('@/stores/useOnlineProviderAccountStore', () => ({ useOnlineProviderAccountStore: { getState: () => ({ accounts: {} }) } }));
+vi.mock('@/stores/useOnlineProviderAccountStore', () => ({ useOnlineProviderAccountStore: asHookStore({ accounts: {} }) }));
 vi.mock('@/stores/useThemeSettingsStore', () => ({ useThemeSettingsStore: (select: (state: { isDaylight: boolean }) => unknown) => select({ isDaylight: ports.daylight }) }));
-vi.mock('@/stores/useSettingsModalStore', () => ({ openSettings: ports.settings, useSettingsModalStore: { getState: () => ({ openSettings: ports.settings }) } }));
-vi.mock('@/stores/useSearchNavigationStore', () => ({ useSearchNavigationStore: { getState: () => ({ setSearchQuery: ports.setQuery, submitSearch: ports.submitSearch }) } }));
-vi.mock('@/stores/usePlaybackStore', () => ({ usePlaybackStore: { getState: () => ({ currentSong: null }) } }));
+// 可视化装配那几个 hook 会读 settingsModalState.isOpen / isSubSettingsViewOpen 之类，一并给默认值。
+vi.mock('@/stores/useSettingsModalStore', () => ({
+    openSettings: ports.settings,
+    useSettingsModalStore: asHookStore({
+        openSettings: ports.settings,
+        settingsModalState: { isOpen: false },
+        isSubSettingsViewOpen: false,
+        isUserGuideModalOpen: false,
+        pinnedCommandIds: [],
+        appLanguagePreference: 'auto',
+        setIsSubSettingsViewOpen: () => {},
+        handleSetAppLanguagePreference: () => {},
+    }),
+}));
+vi.mock('@/stores/useSearchNavigationStore', () => ({ useSearchNavigationStore: asHookStore({ setSearchQuery: ports.setQuery, submitSearch: ports.submitSearch }) }));
+// RhineHome 与可视化装配都把 usePlaybackStore 当 hook 用、还会取多个具名导出：用真实 store
+// （测试环境里没有在播的歌，选择器结果就是空）。原来只给 getState 的 mock 已经不匹配了。
+vi.mock('@/stores/usePlaybackStore', async (importOriginal) => ({ ...(await importOriginal<object>()) }));
 vi.mock('@/utils/appPlaybackGuards', () => ({ getPlaybackSongKey: (song: { id: string }) => song.id }));
 vi.mock('@/services/phoneInsets', () => ({ getPhoneInsets: () => ({}), subscribePhoneInsets: () => () => {} }));
 vi.mock('@/components/login/loginWindowStore', () => ({ openLoginWindow: vi.fn() }));
 vi.mock('@/components/ui/Button', () => ({ Button: () => null }));
-vi.mock('lucide-react', () => ({ LogIn: () => null }));
+// 设置 kit（CopyButton 等）从图标库拿一堆图标：用真实模块，只把登录那个换掉。
+vi.mock('lucide-react', async (importOriginal) => ({ ...(await importOriginal<object>()), LogIn: () => null }));
 vi.mock('@/components/app/playing-song-locator/playingSongLocator', () => ({ noteQueueStarted: vi.fn() }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
