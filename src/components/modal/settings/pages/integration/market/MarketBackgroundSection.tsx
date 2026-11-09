@@ -16,6 +16,7 @@ import {
     type BackgroundMarketSourceId,
 } from '../../../../../../services/backgroundMarket';
 import { useBackgroundMarket } from './useBackgroundMarket';
+import { useMarketFilterStore } from './MarketFilterSlot';
 import { useBackgroundApplyTarget, type BackgroundTarget } from './useBackgroundApplyTarget';
 import { applyMarketBackground } from '../../../../../../services/backgroundMarket/apply';
 import { subscribeBackgroundProgress } from '../../../../../../services/backgroundMarket/progress';
@@ -23,11 +24,21 @@ import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
 import type { CropRect } from './CropFrame';
 import MarketRotationSection from './MarketRotationSection';
 
-const MarketBackgroundSection: React.FC = () => {
+/**
+ * part 同 MarketFontSection：'all' 整段、'filters' 只画筛选、'content' 只画卡片。
+ */
+const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({ part = 'all' }) => {
     const { t } = useTranslation();
-    const [source, setSource] = useState<BackgroundMarketSourceId>('moewalls');
-    const [category, setCategory] = useState('');
-    const [keyword, setKeyword] = useState('');
+    /* 同字体区块：筛选条件放共享 store，横屏时左右两栏才是同一份状态。 */
+    const {
+        backgroundSource: source,
+        backgroundCategory: category,
+        backgroundKeyword: keyword,
+        set: setFilter,
+    } = useMarketFilterStore();
+    const setSource = (next: BackgroundMarketSourceId) => setFilter({ backgroundSource: next });
+    const setCategory = (next: string) => setFilter({ backgroundCategory: next });
+    const setKeyword = (next: string) => setFilter({ backgroundKeyword: next });
     const { items, loading, error, hasMore, loadMore, reload } = useBackgroundMarket(source, category, keyword);
     const { target, setTarget } = useBackgroundApplyTarget();
 
@@ -92,8 +103,12 @@ const MarketBackgroundSection: React.FC = () => {
         setApplyError(null);
     };
 
-    return (
-        <div className="space-y-3">
+    /*
+     * 筛选那一段：随机轮换 + 来源 + 搜索 + 分类。
+     * 横屏时整体挪到左栏，右栏只留卡片（见 MarketPage）。
+     */
+    const filterBlock = (
+        <>
             {/* 随机轮换：隔一段时间自己换一张 */}
             <MarketRotationSection />
 
@@ -190,7 +205,11 @@ const MarketBackgroundSection: React.FC = () => {
                     {t('options.marketSearchEmpty')}
                 </div>
             )}
+        </>
+    );
 
+    const contentBlock = (
+        <>
             {loading && items.length === 0 && (
                 <div className="py-10 text-center text-[13px] text-[var(--st-t2)]">{t('options.marketLoading')}</div>
             )}
@@ -247,6 +266,13 @@ const MarketBackgroundSection: React.FC = () => {
                     </button>
                 )}
             </div>
+        </>
+    );
+
+    return (
+        <div className="space-y-3">
+            {part !== 'content' && filterBlock}
+            {part !== 'filters' && contentBlock}
 
             <MarketApplyDialog<BackgroundTarget>
                 isOpen={pending !== null}
