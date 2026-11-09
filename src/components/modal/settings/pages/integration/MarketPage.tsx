@@ -14,6 +14,7 @@
 //     右边整块让给卡片网格。之前横屏也是上下堆叠，两边大片空白，看着很糟。
 
 import React, { useEffect, useState } from 'react';
+import { Button } from '../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import MarketBackgroundSection from './market/MarketBackgroundSection';
 import MarketFontSection from './market/MarketFontSection';
@@ -63,9 +64,8 @@ const MarketPage: React.FC<MarketPageProps> = ({ initialTab }) => {
             {tabs.map((entry) => {
                 const active = tab === entry.id;
                 return (
-                    <button
+                    <Button
                         key={entry.id}
-                        type="button"
                         onClick={() => setTab(entry.id)}
                         className={`rounded-lg border px-3 py-2 text-[13px] transition-colors ${
                             wide ? 'w-full text-left' : 'flex-1'
@@ -76,7 +76,7 @@ const MarketPage: React.FC<MarketPageProps> = ({ initialTab }) => {
                         }`}
                     >
                         {t(entry.labelKey)}
-                    </button>
+                    </Button>
                 );
             })}
         </div>

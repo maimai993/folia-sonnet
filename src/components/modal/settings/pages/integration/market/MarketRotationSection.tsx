@@ -10,6 +10,7 @@
 // 打开开关后立刻跑一轮，否则用户会盯着一个「已开启」却什么都没变的开关以为没生效。
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import {
     useMarketRotationStore,
@@ -91,8 +92,7 @@ const MarketRotationSection: React.FC = () => {
                 <span className="text-[13px] font-medium text-[var(--text-primary)]">
                     {t('options.marketRotation')}
                 </span>
-                <button
-                    type="button"
+                <Button
                     onClick={() => setEnabled(!enabled)}
                     className={`rounded-full px-3 py-1 text-[12px] ${
                         enabled
@@ -101,7 +101,7 @@ const MarketRotationSection: React.FC = () => {
                     }`}
                 >
                     {t(enabled ? 'options.marketRotationOn' : 'options.marketRotationOff')}
-                </button>
+                </Button>
             </div>
 
             {enabled && (
@@ -115,9 +115,8 @@ const MarketRotationSection: React.FC = () => {
                             {TARGETS.map((entry) => {
                                 const active = targets.includes(entry.id);
                                 return (
-                                    <button
+                                    <Button
                                         key={entry.id}
-                                        type="button"
                                         onClick={() => toggleTarget(entry.id)}
                                         className={`rounded-full px-2.5 py-1 text-[11.5px] ${
                                             active
@@ -126,7 +125,7 @@ const MarketRotationSection: React.FC = () => {
                                         }`}
                                     >
                                         {t(entry.labelKey)}
-                                    </button>
+                                    </Button>
                                 );
                             })}
                         </div>
@@ -141,9 +140,8 @@ const MarketRotationSection: React.FC = () => {
                             {KINDS.map((entry) => {
                                 const active = mediaKind === entry.id;
                                 return (
-                                    <button
+                                    <Button
                                         key={entry.id}
-                                        type="button"
                                         onClick={() => setMediaKind(entry.id)}
                                         className={`rounded-full px-2.5 py-1 text-[11.5px] ${
                                             active
@@ -152,7 +150,7 @@ const MarketRotationSection: React.FC = () => {
                                         }`}
                                     >
                                         {t(entry.labelKey)}
-                                    </button>
+                                    </Button>
                                 );
                             })}
                         </div>
@@ -172,9 +170,8 @@ const MarketRotationSection: React.FC = () => {
                             {INTERVALS.map((seconds) => {
                                 const active = intervalSeconds === seconds;
                                 return (
-                                    <button
+                                    <Button
                                         key={seconds}
-                                        type="button"
                                         onClick={() => setIntervalSeconds(seconds)}
                                         className={`rounded-full px-2.5 py-1 text-[11.5px] ${
                                             active
@@ -183,21 +180,20 @@ const MarketRotationSection: React.FC = () => {
                                         }`}
                                     >
                                         {t('options.marketRotationMinutes', { count: Math.round(seconds / 60) })}
-                                    </button>
+                                    </Button>
                                 );
                             })}
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button
-                            type="button"
+                        <Button
                             disabled={busy}
                             onClick={() => void step()}
                             className="rounded-lg bg-[var(--glass-bg)] px-2.5 py-1 text-[11.5px] disabled:opacity-50"
                         >
                             {busy ? t('options.marketApplying') : t('options.marketRotationSwitchNow')}
-                        </button>
+                        </Button>
                         {lastResult && (
                             <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-secondary)]">
                                 {lastResult}

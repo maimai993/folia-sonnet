@@ -57,8 +57,7 @@ import { selectThemeSettingsSnapshot, useThemeSettingsStore } from '../../stores
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
-import MarketPanel from './settings/pages/integration/market/MarketPanel';
-import { OPEN_MARKET_EVENT } from './settings/pages/integration/market/MarketEntryButton';
+import MarketMount from './settings/MarketMount';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 
@@ -283,22 +282,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const setIsSubSettingsViewOpen = useSettingsModalStore(state => state.setIsSubSettingsViewOpen);
     // Help is a page of the same window, reached from the foot of the side list.
     const [activeTab, setActiveTab] = useState<'help' | 'options'>(initialTab);
-    /*
-     * 市场是独立面板，从设置内任意位置都能叫出来。
-     * 监听器放在这一层（而不是「连接与集成」页里），
-     * 否则从别的页面点「打开市场」就没有人接事件。
-     */
-    const [marketOpen, setMarketOpen] = useState(false);
-    const [marketTab, setMarketTab] = useState<'background' | 'font'>('background');
-    useEffect(() => {
-        const handler = (event: Event) => {
-            const detail = (event as CustomEvent<{ tab?: 'background' | 'font' }>).detail;
-            setMarketTab(detail?.tab ?? 'background');
-            setMarketOpen(true);
-        };
-        window.addEventListener(OPEN_MARKET_EVENT, handler);
-        return () => window.removeEventListener(OPEN_MARKET_EVENT, handler);
-    }, []);
     // A bare open (no subview, no anchor) restores the last section the user entered; any named target wins.
     const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => resolveInitialSettingsSection({
         initialSubview,
@@ -1290,20 +1273,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                 </AnimatePresence>
             </motion.div>
-            {/*
-             * 市场面板挂在这里，不是挂进「连接与集成」页。
-             *
-             * 各处自定义设置旁边的「打开市场」是广播事件来请求的，
-             * 而设置页是按需挂载的 —— 监听器若只写在某一页里，
-             * 从别的页面（播放页的视频层、外观页的莫奈背景）点按钮就没人接，
-             * 表现就是「按钮点了没反应」。
-             * 放在弹窗这一层，只要设置开着就一定有监听者。
-             */}
-            <MarketPanel
-                isOpen={marketOpen}
-                onClose={() => setMarketOpen(false)}
-                initialTab={marketTab}
-            />
+            <MarketMount />
             <AnimatePresence>
                 {showVisPlayground && (
                     <VisPlayground

@@ -13,7 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import ThemedDialog from '../../../../../shared/ThemedDialog';
-import { Button } from '../../../../settings/kit';
+import { Button } from '../../../../../../components/ui';
 import CropFrame, { type CropRect } from './CropFrame';
 
 export interface ApplyTargetChoice<T extends string> {
@@ -120,9 +120,8 @@ const MarketApplyDialog = <T extends string>({
                         const active = picked.includes(choice.id);
                         const unavailable = Boolean(choice.disabled);
                         return (
-                            <button
+                            <Button
                                 key={choice.id}
-                                type="button"
                                 onClick={() => !unavailable && toggle(choice.id)}
                                 aria-pressed={active}
                                 aria-disabled={unavailable || running}
@@ -153,7 +152,7 @@ const MarketApplyDialog = <T extends string>({
                                         </span>
                                     )}
                                 </span>
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>

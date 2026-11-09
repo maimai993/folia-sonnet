@@ -9,6 +9,8 @@
 // 这里分类直接照抄源站导航（见 FONTS_CN_CATEGORIES），并带搜索。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TextField } from '../../../../../../components/ui';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import { FONTS_CN_CATEGORIES, categoryPreviewText, describeFontsCnError, type FontsCnItem } from '../../../../../../services/fontMarket/fontsNetCn';
@@ -182,9 +184,8 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
                 {entries.map((entry) => {
                     const active = category === entry.slug;
                     return (
-                        <button
+                        <Button
                             key={entry.slug}
-                            type="button"
                             onClick={() => {
                                 setCategory(entry.slug);
                                 setPreviewTouched(false);
@@ -197,7 +198,7 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
                             }`}
                         >
                             {entry.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
@@ -215,21 +216,20 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
             {/* 搜索 */}
             <div className="relative">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--st-t2)]" />
-                <input
+                <TextField
                     value={keyword}
                     onChange={(event) => setKeyword(event.target.value)}
                     placeholder={t('options.marketSearchPlaceholder')}
                     className="h-8 w-full rounded-lg bg-[var(--st-fill)] pl-7 pr-8 text-[12.5px] text-[var(--st-t1)] outline-none placeholder:text-[var(--st-t2)]"
                 />
                 {keyword !== '' && (
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => setKeyword('')}
                         aria-label={t('options.marketSearchClear')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--st-t2)]"
                     >
                         <X size={13} />
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -243,7 +243,7 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
             )}
 
             {/* 自定义预览文字 */}
-            <input
+            <TextField
                 value={previewText}
                 onChange={(event) => {
                     setPreviewTouched(true);
@@ -257,8 +257,7 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
             {target && (
                 <div className="flex items-center gap-2 rounded-lg bg-[var(--st-fill)] px-2.5 py-1.5 text-[11.5px] text-[var(--st-t2)]">
                     <span className="truncate">{t('options.marketAppliedFont')}：{target.name}</span>
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => {
                             /*
                              * 重挑应用范围：只改记录，不重新下载。
@@ -273,7 +272,7 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
                         className="ml-auto shrink-0 text-[var(--st-accent)]"
                     >
                         {t('options.marketApplyTargets')}
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -300,29 +299,28 @@ const MarketFontSection: React.FC<{ part?: 'all' | 'filters' | 'content' }> = ({
             {/* 卡片：列数跟着可用宽度走，横屏时不会只在左边堆两列。 */}
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
                 {items.map((item) => (
-                    <button
+                    <Button
                         key={item.id}
-                        type="button"
                         onClick={() => handleCardClick(item)}
                         className="overflow-hidden rounded-xl bg-[var(--st-fill)] p-1.5 text-left transition-colors hover:bg-[var(--st-fill2)]"
                     >
                         <FontCardPreview item={item} text={previewText} />
                         <div className="mt-1 truncate px-0.5 text-[11.5px] text-[var(--st-t1)]">{item.name}</div>
-                    </button>
+                    </Button>
                 ))}
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-1">
                 {loading && <span className="text-[11.5px] text-[var(--st-t2)]">{t('options.marketLoading')}</span>}
                 {!loading && hasMore && (
-                    <button type="button" onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketLoadMore')}
-                    </button>
+                    </Button>
                 )}
                 {!loading && error && items.length > 0 && (
-                    <button type="button" onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketRetry')}
-                    </button>
+                    </Button>
                 )}
             </div>
         </>

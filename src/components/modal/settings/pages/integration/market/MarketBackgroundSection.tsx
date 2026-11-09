@@ -7,6 +7,8 @@
 // 视频动辄几十上百 MB，所以下载一律走原生，界面只显示进度与结果。
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { TextField } from '../../../../../../components/ui';
+import { Button } from '../../../../../../components/ui';
 import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import {
@@ -117,9 +119,8 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 {BACKGROUND_MARKET_SOURCES.map((entry) => {
                     const active = source === entry.id;
                     return (
-                        <button
+                        <Button
                             key={entry.id}
-                            type="button"
                             onClick={() => {
                                 setSource(entry.id);
                                 setCategory('');
@@ -132,7 +133,7 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                             }`}
                         >
                             {entry.label}
-                        </button>
+                        </Button>
                     );
                 })}
             </div>
@@ -140,21 +141,20 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
             {/* 搜索 */}
             <div className="relative">
                 <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--st-t2)]" />
-                <input
+                <TextField
                     value={keyword}
                     onChange={(event) => setKeyword(event.target.value)}
                     placeholder={t('options.marketSearchBackgroundPlaceholder')}
                     className="h-8 w-full rounded-lg bg-[var(--st-fill)] pl-7 pr-8 text-[12.5px] text-[var(--st-t1)] outline-none placeholder:text-[var(--st-t2)]"
                 />
                 {keyword !== '' && (
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => setKeyword('')}
                         aria-label={t('options.marketSearchClear')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--st-t2)]"
                     >
                         <X size={13} />
-                    </button>
+                    </Button>
                 )}
             </div>
 
@@ -164,9 +164,8 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                     {categories.map((entry) => {
                         const active = category === entry.slug;
                         return (
-                            <button
+                            <Button
                                 key={entry.slug}
-                                type="button"
                                 onClick={() => setCategory(entry.slug)}
                                 className={`rounded-full px-2.5 py-1 text-[11.5px] ${
                                     active
@@ -175,7 +174,7 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                                 }`}
                             >
                                 {entry.label}
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>
@@ -223,9 +222,8 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
              */}
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
                 {items.map((item) => (
-                    <button
+                    <Button
                         key={item.id}
-                        type="button"
                         onClick={() => {
                             setApplyError(null);
                             setProgress(null);
@@ -249,21 +247,21 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                             )}
                         </div>
                         <div className="mt-1 truncate px-0.5 text-[11.5px] text-[var(--st-t1)]">{item.name}</div>
-                    </button>
+                    </Button>
                 ))}
             </div>
 
             <div className="flex items-center justify-center gap-2 pt-1">
                 {loading && items.length > 0 && <span className="text-[11.5px] text-[var(--st-t2)]">{t('options.marketLoading')}</span>}
                 {!loading && hasMore && (
-                    <button type="button" onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={loadMore} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketLoadMore')}
-                    </button>
+                    </Button>
                 )}
                 {!loading && error && items.length > 0 && (
-                    <button type="button" onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
+                    <Button onClick={reload} className="rounded-lg bg-[var(--st-fill)] px-3 py-1 text-[11.5px] text-[var(--st-t2)]">
                         {t('options.marketRetry')}
-                    </button>
+                    </Button>
                 )}
             </div>
         </>
