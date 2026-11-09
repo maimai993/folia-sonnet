@@ -413,13 +413,105 @@ const responsePayload = (response: any): any => response?.data || response?.body
 const confirmedSignIn = (operation: KugouOperation, response: any): { token?: string; userId: string } | null => {
     if (operation !== 'login_qr_check') return null;
     const payload = responsePayload(response);
-    if (Number(payload?.status) !== 4) return null;
-    const userId = payload?.userid ?? payload?.user_id;
-    return userId ? { token: payload?.token ? String(payload.token) : undefined, userId: String(userId) } : null;
+    /*
+     * 判定必须和 kugouProvider.checkLogin 那侧**完全一致**，否则就会出现
+     * 「界面说扫上了、账号却永远出不来」。
+     *
+     * 以前这里是 `Number(payload?.status) !== 4` 直接 return null，而 checkLogin 认的是
+     * `status === 4 || data?.token` —— 两种情况下两边会打架：
+     *   · status 是字符串 "4"（酷狗有时就这么给）→ checkLogin 认，这里 Number 后其实是 4，
+     *     但只要有 token 而 status 缺失，这里就直接判死；
+     *   · **status 缺失但给了 token** → checkLogin 判 confirmed，这里判 null，
+     *     于是 token / userid 一个都没写进会话，随后 getLoginStatus 因为
+     *     `!userId && !hasElectronTransport` 直接 return null，账号面板永远显示未登录。
+     *
+     * 现在统一成「有 token 就算确认」，status 只作为辅助信号。
+     */
+    const status = Number(payload?.status ?? payload?.code ?? response?.status);
+    const token = payload?.token ? String(payload.token) : '';
+    const confirmed = status === 4 || Boolean(token);
+    if (!confirmed) return null;
+
+    /*
+     * userId 可能藏在不同字段里：酷狗不同版本分别叫 userid / user_id / uid，
+     * 有时候干脆只给在 cookie 或外层 data 上。挨个试，别因为缺一个字段就整单作废
+     * （作废的代价是凭据全部留不下来，用户得重新扫一次）。
+     */
+    /*
+     * userId 的字段名各家不一样，**必须包含驼峰 `userId`**。
+     *
+     * 真机抓到的确认响应长这样（status=4）：
+     *   keys=[provider,status,code,loggedIn,message,userId,token,hasAppToken,
+     *         hasVipToken,hasCookie,nickname,avatar,vipType,isVip,vipLevel,
+     *         vipLabel,expireTime,session,hasKuGooSession]
+     *
+     * 以前只认 `userid` / `user_id`，于是驼峰这个**唯一存在的**字段被漏掉，
+     * userId 解析成空串 → token/userid 都不落盘 → 随后 getLoginStatus 里
+     * `!userId && !hasElectronTransport` 直接 return null →
+     * 「扫码成功了却一直显示未登录」。
+     */
+    const directUserId = payload?.userId ?? payload?.userid ?? payload?.user_id ?? payload?.uid
+        ?? response?.userId ?? response?.userid ?? response?.user_id;
+    const userId = directUserId != null && String(directUserId).length > 0
+        ? String(directUserId)
+        : readUserIdFromResponseCookies(response);
+    return { token: token || undefined, userId: userId ?? '' };
+};
+
+/** 从响应带回的 cookie 里把 userid 抠出来（有些版本只在这里给）。 */
+const readUserIdFromResponseCookies = (response: any): string => {
+    const cookies = response?.cookie || response?.data?.cookie;
+    const entries: string[] = typeof cookies === 'string' ? cookies.split(';')
+        : Array.isArray(cookies) ? cookies.map(String) : [];
+    for (const entry of entries) {
+        const separator = entry.indexOf('=');
+        if (separator <= 0) continue;
+        const key = entry.slice(0, separator).trim().toLowerCase();
+        if (key !== 'userid' && key !== 'user_id') continue;
+        const value = entry.slice(separator + 1).trim();
+        if (value) return value;
+    }
+    return '';
 };
 
 const persistWebSession = (operation: KugouOperation, response: any): void => {
     const signIn = confirmedSignIn(operation, response);
+    /*
+     * 扫码这一步必须留下现场。
+     *
+     * 「扫上了却登不上」只有一个可能：确认响应里的凭据没被认出来 / 没落盘。
+     * 之前这条路上一点日志都没有，只能靠猜响应的形状 —— 现在把关键字段和
+     * 解析结果一起打出来，一眼就能看出是哪一步断的。
+     */
+    if (operation === 'login_qr_check') {
+        const payload = responsePayload(response);
+        /*
+         * 打成一行人话，别用对象 —— 对象在控制台里是折叠的，真机上根本看不到值，
+         * 之前就是这么一直查不出形状的。
+         */
+        const rawToken = payload?.token ?? response?.token;
+        const rawUserId = payload?.userid ?? payload?.user_id ?? payload?.uid
+            ?? response?.userid ?? response?.user_id;
+        const cookieValue = response?.cookie ?? response?.data?.cookie;
+        console.info(
+            '[KugouTransport] qr_check |'
+            + ' status=' + String(payload?.status ?? payload?.code ?? response?.status)
+            + ' token=' + (rawToken ? String(rawToken).slice(0, 12) + '…' : 'none')
+            + ' userid=' + (rawUserId != null ? String(rawUserId) : 'none')
+            + ' cookie=' + (typeof cookieValue === 'string'
+                ? cookieValue.slice(0, 80) + (cookieValue.length > 80 ? '…' : '')
+                : Array.isArray(cookieValue) ? 'array(' + cookieValue.length + ')' : String(typeof cookieValue))
+            + ' keys=[' + Object.keys(payload || {}).slice(0, 30).join(',') + ']'
+            + ' outerKeys=[' + Object.keys(response || {}).slice(0, 15).join(',') + ']',
+        );
+    }
+    if (signIn) {
+        console.info(
+            '[KugouTransport] sign-in accepted |'
+            + ' token=' + (signIn.token ? 'yes' : 'NO')
+            + ' userid=' + (signIn.userId || 'EMPTY'),
+        );
+    }
     const cookies = response?.cookie || response?.data?.cookie;
     const cookieEntries: string[] = typeof cookies === 'string' ? cookies.split(';')
         : Array.isArray(cookies) ? cookies.map(String) : [];
@@ -429,10 +521,30 @@ const persistWebSession = (operation: KugouOperation, response: any): void => {
         .filter(entry => entry && (signIn?.token || !/^(token|userid|user_id)=/i.test(entry)));
     if (keptCookies.length) writeProviderSessionValue('kugou', 'cookie', keptCookies.join('; '));
 
-    // Half of a pair is not taken: the other half would be the previous account's.
-    if (signIn?.token) {
-        writeProviderSessionValue('kugou', 'token', signIn.token);
-        writeProviderSessionValue('kugou', 'userid', signIn.userId);
+    // 半对不取：缺一半会把上一个账号的另一半留下。
+    // 但「有 userid 没 token」是真实存在的形态（酷狗某些版本只回 userid，token 在 cookie 里），
+    // 这时 userid 一定要落盘 —— getLoginStatus 就是靠它判断有没有登录。
+    if (signIn) {
+        if (signIn.token) writeProviderSessionValue('kugou', 'token', signIn.token);
+        if (signIn.userId) writeProviderSessionValue('kugou', 'userid', signIn.userId);
+        /*
+         * 写完立刻回读一次。
+         *
+         * 「write 调过了、库里却什么都没有」是有可能的（localStorage 不可用、
+         * 键名拼错、被其它模块清掉），只打「accepted」永远发现不了。
+         * 这里直接把落盘后的真值读回来，对不上就说明写这一层有问题。
+         */
+        const readBack = {
+            token: readProviderSessionValue('kugou', 'token'),
+            userid: readProviderSessionValue('kugou', 'userid'),
+            cookie: readProviderSessionValue('kugou', 'cookie'),
+        };
+        console.info(
+            '[KugouTransport] session persisted |'
+            + ' token=' + (readBack.token ? 'yes' : 'NO')
+            + ' userid=' + (readBack.userid || 'EMPTY')
+            + ' cookie=' + (readBack.cookie ? 'yes' : 'NO'),
+        );
     }
     const dfid = responsePayload(response)?.dfid;
     if (dfid) writeProviderSessionValue('kugou', 'dfid', String(dfid));

@@ -85,6 +85,12 @@ class LocalAudioServer(context: Context) {
          */
         private const val MEDIA_CACHE_PATH_PREFIX = "/media-cache/"
         private const val IMPORTED_PREFIX = "imported-"
+        /**
+         * 新格式导入副本的前缀：`local-<id>`。
+         *
+         * 不能直接用裸数字：MediaStore 那一路的 ref 就是纯数字媒体 id，两边会撞。
+         */
+        private const val LOCAL_IMPORTED_PREFIX = "local-"
         /** 直接按绝对路径流原文件的 ref 前缀（文件系统兜底扫描出来的歌，不复制进私有目录）。 */
         private const val FILE_PREFIX = "file-"
         /*
@@ -541,11 +547,22 @@ class LocalAudioServer(context: Context) {
                         }
 
                         val token = URLDecoder.decode(path.substring(AUDIO_PATH_PREFIX.length), "UTF-8")
-                        if (token.startsWith(IMPORTED_PREFIX)) {
+                        /*
+                         * 新格式（导入副本）：token 是 `local-<id>`，如 `local-3`。
+                         *
+                         * 必须带这个前缀：MediaStore 那一路的 ref 是**纯数字**的媒体 id，
+                         * 两边都用裸数字会撞车 —— 一首导入的歌会被当成媒体库里的另一首歌。
+                         * 前缀把两个命名空间彻底分开。
+                         *
+                         * 老格式 `imported-<净化名>-<hash>.<ext>` 继续认 —— 用户升级上来的库里
+                         * 还有一批那样的文件，不能让它们变成「升级后全不能播」。
+                         * 两者都由 ImportedAudioIndex.resolve 统一按磁盘实际名字解出来。
+                         */
+                        if (token.startsWith(IMPORTED_PREFIX) || token.startsWith(LOCAL_IMPORTED_PREFIX)) {
                             /*
-                             * 传**完整的** token，别先剥掉 imported- 再拼路径。
+                             * 传**完整的** token，别先剥掉前缀再拼路径。
                              *
-                             * 磁盘上的副本名本身就是 "imported-<稳定名>"（导入那边 safeName 就是这么起的，
+                             * 磁盘上的旧副本名本身就是 "imported-<稳定名>"（导入那边 safeName 就是这么起的，
                              * 删副本的 resolveImportedFile 也是按完整 ref 拼的），而这里剥掉前缀之后
                              * 拼出来的是 "imported-audio/<稳定名>" —— 少了一段，永远 isFile() == false，
                              * 于是每一首手动导入的歌都回 404：<audio> 报 Format error、
@@ -601,16 +618,48 @@ class LocalAudioServer(context: Context) {
         headers: Map<String, String>,
         fileName: String
     ) {
-        // 现在传进来的是完整文件名（含 imported- 前缀）。这个服务同网段也能连（投送时），
-        // 名字来自 URL，必须挡掉路径穿越。
-        if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
+        /*
+         * 挡路径穿越，但**不能连正常文件名一起挡掉**。
+         *
+         * 以前这里写的是 `fileName.contains("..")`。可是旧副本名是
+         * `imported-<净化后的原文件名>-<hash>.<ext>`，而净化只把 `[^A-Za-z0-9._-]`
+         * 换成下划线 —— 点号是**允许**保留的。于是原文件名里只要有连续两个点
+         * （`Pt.2..`、`A..B`、`歌名...` 这类），副本名里就带 `..`，
+         * 每一首这样的歌都被当成攻击挡回去，回 404，播不出来还查不出原因
+         * （用户看到的就是「文件明明在，就是播不了」）。
+         *
+         * 真正的穿越防护只需要：不带任何分隔符、名字不能是 `.` / `..`。
+         * `..` 出现在名字中间完全无害 —— 解析出来的仍然是 imported-audio 下的一个文件。
+         */
+        val nameForCheck = fileName.trim()
+        if (nameForCheck.contains("/") || nameForCheck.contains("\\")
+            || nameForCheck == "." || nameForCheck == "..") {
             Log.w(TAG, "imported audio refused: " + fileName)
             writeStatus(output, 404, "Not Found")
             return
         }
-        val target = File(importedAudioDirectory(), fileName)
-        if (!target.isFile) {
-            Log.w(TAG, "imported audio missing: " + fileName)
+        val directory = importedAudioDirectory()
+        /*
+         * 一次解析同时服务两种命名：
+         *   · 新格式纯数字 id → 查 index.json 拿到真实文件名；
+         *   · 老格式 imported-xxx → 直接当文件名。
+         */
+        val target = ImportedAudioIndex.resolve(directory, nameForCheck)
+        if (target == null || !target.isFile) {
+            /*
+             * 只报一句 missing 根本查不出原因，这里把关键信息一次打全：
+             * 收到的 token、目录里的实际内容、目录是否可读。
+             * 「文件明明在却播不了」这种问题，靠这几行就能立刻定位。
+             */
+            val all = directory.listFiles()
+            Log.w(
+                TAG,
+                "imported audio missing: token=" + fileName
+                + " | dir=" + directory.absolutePath
+                + " | dirExists=" + directory.isDirectory
+                + " | count=" + (all?.size ?: -1)
+                + " | files=" + (all?.take(20)?.joinToString(", ") { it.name }.orEmpty())
+            )
             writeStatus(output, 404, "Not Found")
             return
         }

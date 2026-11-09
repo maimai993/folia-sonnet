@@ -10,6 +10,7 @@ import { resolveExplicitFileTimedLyricFormat, type ExplicitFileTimedLyricFormat 
 import { applyMatchedMetadata } from './localLibraryCatalogService';
 import { buildLyricSearchQuery } from '../utils/lyrics/searchQuery';
 import { buildLocalSongLyricMatchContext, shouldRefreshLocalSongLyricsFromMetadata } from '../utils/lyrics/localSongMatchContext';
+import { isAndroidNativeRuntime, pickAndroidLocalMusic } from './nativeLocalMusic';
 import { buildImportedMetadataSnapshot } from '../utils/localSongMetadata';
 import { getLocalLibraryCatalogSnapshot } from './localLibraryEntityRepository';
 import { resolveLocalSongMetadata } from './playbackAdapters';
@@ -1128,6 +1129,21 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 
 // Import folder using File System Access API (if supported)
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
+    /*
+     * 安卓走原生选择器。
+     *
+     * 这一条以前**漏了**：`localMusic/importFolders.ts` 里那份 importFolder
+     * 是有安卓分支的，但首页实际调的是这里这份 —— 它只会调
+     * getImportDirectoryHandle（File System Access API），而安卓 WebView
+     * 一个都不给。表现就是：点「导入文件夹」，加载动画闪一下就没了，
+     * 系统文件管理器根本不弹。
+     *
+     * 判断放最前面：要在任何 Web API 调用之前分叉，否则会在安卓上先抛。
+     */
+    if (isAndroidNativeRuntime()) {
+        return await pickAndroidLocalMusic();
+    }
+
     // Request access in the user gesture before waiting for other library writes.
     try {
         const dirHandle = await getImportDirectoryHandle(expectedRootName);
@@ -1613,35 +1629,18 @@ async function cleanupDirHandleIfUnused(rootFolderName: string): Promise<void> {
 
 // Get audio blob from local song using fileHandle
 // Returns blob URL if fileHandle exists, null otherwise
-export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
-    const fileHandle = await getAccessibleFileHandle(song);
-
-    if (fileHandle) {
-        try {
-            const file = await fileHandle.getFile();
-            return await getAudioFromFile(file);
-        } catch (error) {
-            console.error('[LocalMusic] Failed to get file from handle:', error);
-            // File may have been moved or the stored handle may have become stale.
-            fileHandleMap.delete(song.id);
-        }
-    }
-
-    const recoveredHandle = await recoverFileHandleFromPersistedDirectory(song);
-    if (recoveredHandle) {
-        try {
-            const file = await recoveredHandle.getFile();
-            return await getAudioFromFile(file);
-        } catch (error) {
-            console.error('[LocalMusic] Failed to get file from recovered directory handle:', error);
-            fileHandleMap.delete(song.id);
-        }
-    }
-
-    // No accessible handle available - permission may need to be restored or the file moved.
-    console.warn(`[LocalMusic] No accessible handle for song ${song.id}. Permission restore or re-import is required.`);
-    return null;
-}
+/**
+ * ⚠️ 这里以前有**第二份**实现，而且完全没有安卓分支 —— 它只认 File System Access API
+ * 拿到的 fileHandle，安卓 WebView 根本没有这种东西。
+ *
+ * `components/app/playback/source/songAudioSource.ts` 导入的是**这一份**，
+ * 于是安卓上每首歌都会落到「No accessible handle … 请重新导入」：
+ * 原生明明把音频复制进了私有目录、回环服务也能正常吐 206，Web 层却从来没去问过它。
+ *
+ * 现在一律委托给 `localMusic/playbackFiles.ts` —— 那里先看 `song.nativeAudioRef`
+ * 走原生回环，再退回 fileHandle，两套运行环境都能走对路。**不要再在这里长第二份实现**。
+ */
+export { getAudioFromLocalSong } from './localMusic/playbackFiles';
 
 /** Resolves the current File for playback recovery without changing the song or minting a URL. */
 export async function getFileFromLocalSong(song: LocalSong): Promise<File | null> {

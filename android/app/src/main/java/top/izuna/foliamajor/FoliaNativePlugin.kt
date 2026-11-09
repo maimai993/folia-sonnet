@@ -359,9 +359,14 @@ class FoliaNativePlugin : Plugin() {
 
         /** 只认自己拷进去的那些文件名，挡掉 ../ 这类越界的 ref。 */
         private fun resolveImportedFile(directory: File, ref: String?): File? {
-            if (ref == null || !ref.startsWith("imported-")) return null
-            if (ref.contains("/") || ref.contains("\\") || ref.contains("..")) return null
-            return File(directory, ref)
+            if (ref == null || ref.isEmpty()) return null
+            /*
+             * 新旧两种 ref 都要认：新格式 `local-<id>` 走索引，老格式 `imported-xxx`
+             * 名字即文件名。删除副本时如果只认老格式，新导入的文件永远删不掉。
+             */
+            if (!ref.startsWith("imported-") && !ref.startsWith(ImportedAudioIndex.REF_PREFIX)) return null
+            if (ref.contains("/") || ref.contains("\\") || ref == "." || ref == "..") return null
+            return ImportedAudioIndex.resolve(directory, ref)
         }
 
         /**
@@ -1942,15 +1947,30 @@ class FoliaNativePlugin : Plugin() {
                             var displayName = queryDisplayName(resolver, uri)
                             val fileSize = queryFileSize(resolver, uri)
                             if (displayName == null || displayName.isEmpty()) displayName = "track-" + System.currentTimeMillis()
-                            val safeName = "imported-" + stableFileId(displayName, fileSize, directory)
-                            val target = File(directory, safeName)
-                            val alreadyThere = target.isFile && target.length() > 0
-                                && (fileSize <= 0 || target.length() == fileSize)
-                            if (!alreadyThere) {
-                                // 这里不能再叫 sink：外层方法的回调参数就叫 sink（AudioImportSink）。
-                                val source = resolver.openInputStream(uri)
-                                FileOutputStream(target).use { copyOut ->
-                                    if (source == null) return@run
+
+                            /*
+                             * 副本名只由**自增 id** 决定（1.mp3、2.flac……），原名记进 index.json。
+                             *
+                             * 以前的名字是 `imported-<净化后的原名>-<哈希>`，哈希取自
+                             * (displayName + ':' + fileSize)。provider 报的大小与实际写入差一个
+                             * 字节、或者同名文件净化后撞车，哈希就变 —— 磁盘上文件明明在，
+                             * 播放侧算出的名字却对不上，回 404，表现就是「文件在但播不了」。
+                             * id 一旦分配就不再变化，这层不确定性被彻底拿掉。
+                             */
+                            val extension = displayName.substringAfterLast('.', "")
+                                .lowercase(Locale.US)
+                                .let { if (it.isEmpty() || it.length > 8) "bin" else it }
+                            val tempFile = File(directory, "incoming-" + System.currentTimeMillis() + "." + extension)
+                            val source = resolver.openInputStream(uri)
+                            if (source == null) {
+                                val failure = JSObject()
+                                failure.put("uri", java.lang.String.valueOf(uri))
+                                failure.put("message", "Cannot open input stream: " + displayName)
+                                failures.put(failure)
+                                return@run
+                            }
+                            try {
+                                FileOutputStream(tempFile).use { copyOut ->
                                     source.use {
                                         val buffer = ByteArray(128 * 1024)
                                         var read = source.read(buffer)
@@ -1960,14 +1980,18 @@ class FoliaNativePlugin : Plugin() {
                                         }
                                     }
                                 }
+                            } catch (error: Exception) {
+                                tempFile.delete()
+                                throw error
                             }
+
                             /*
                              * 拷出来是 0 字节（provider 授权失效、openInputStream 静默失败等）绝对不能进库：
                              * <audio> 播它会报一句莫名的 MEDIA_ELEMENT_ERROR: Format error，用户只会看到
                              * "本地播放有 bug"。这里删掉空文件、记进 failures，让上层能看见。
                              */
-                            if (target.length() <= 0) {
-                                target.delete()
+                            if (tempFile.length() <= 0) {
+                                tempFile.delete()
                                 val failure = JSObject()
                                 failure.put("uri", java.lang.String.valueOf(uri))
                                 failure.put("message", "Copied file is empty: " + displayName)
@@ -1975,12 +1999,23 @@ class FoliaNativePlugin : Plugin() {
                                 return@run
                             }
 
+                            val entry = ImportedAudioIndex.register(directory, tempFile, displayName, "." + extension)
+                            if (entry == null) {
+                                val failure = JSObject()
+                                failure.put("uri", java.lang.String.valueOf(uri))
+                                failure.put("message", "Failed to register imported audio: " + displayName)
+                                failures.put(failure)
+                                return@run
+                            }
+
                             val track = JSObject()
-                            track.put("id", safeName)
+                            // ref 是 `local-<id>`；播放侧原样传给 /audio/<ref>，不再和文件名纠缠。
+                            val ref = ImportedAudioIndex.refFor(entry.id)
+                            track.put("id", ref)
                             track.put("fileName", displayName)
-                            track.put("fileSize", target.length())
-                            track.put("mimeType", LocalAudioServer.guessMimeType(safeName))
-                            track.put("url", "http://127.0.0.1:" + port + "/audio/" + safeName)
+                            track.put("fileSize", entry.fileSize)
+                            track.put("mimeType", LocalAudioServer.guessMimeType(entry.fileName))
+                            track.put("url", "http://127.0.0.1:" + port + "/audio/" + ref)
                             tracks.put(track)
                             copied += 1
                         }
@@ -2345,14 +2380,28 @@ class FoliaNativePlugin : Plugin() {
                 val directory = localAudioServer!!.importedAudioDirectory()
                 val copied = materializeAudioCopy(directory, ref, fileName, fileSize)
                 if (copied == null) {
-                    val target = File(directory, ref)
-                    val why = if (ref.startsWith("imported-") && !target.isFile)
-                        "private copy is gone and the original was not found in the media store"
-                    else
-                        "source is unreachable"
-                    Log.w(TAG, "copyLocalAudio failed for " + ref + ": " + why)
-                    result.put("copied", false)
-                    result.put("error", why + ": " + ref)
+                    /*
+                     * null 有两种意思，必须分开：
+                     *   1. 已经是私有副本且文件**还在** —— 本来就不用拷，ref 直接可用；
+                     *   2. 真的取不到源文件 —— 这才是失败。
+                     *
+                     * 以前不区分，一律当失败返回 copied=false，于是播放层拿到 null 后
+                     * 继续往下掉到「No accessible handle」，用户看到的就是
+                     * 「导入过的歌播不了」—— 而副本明明好好地躺在私有目录里。
+                     */
+                    val existing = ImportedAudioIndex.resolve(directory, ref)
+                    if (existing != null && existing.isFile && existing.length() > 0) {
+                        result.put("copied", true)
+                        result.put("ref", ref)
+                    } else {
+                        val why = if (ref.startsWith(ImportedAudioIndex.REF_PREFIX) || ref.startsWith("imported-"))
+                            "private copy is gone and the original was not found in the media store"
+                        else
+                            "source is unreachable"
+                        Log.w(TAG, "copyLocalAudio failed for " + ref + ": " + why)
+                        result.put("copied", false)
+                        result.put("error", why + ": " + ref)
+                    }
                 } else {
                     result.put("copied", true)
                     result.put("ref", copied)
@@ -2378,39 +2427,61 @@ class FoliaNativePlugin : Plugin() {
     private fun copyFromMediaStoreByName(directory: File, fileName: String?, fileSize: Long): String? {
         if (fileName == null || fileName.isEmpty()) return null
         val resolver = getContext().contentResolver
-        val selection = if (fileSize > 0)
-            MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.SIZE + "=?"
-        else
-            MediaStore.Audio.Media.DISPLAY_NAME + "=?"
-        val args = if (fileSize > 0)
-            arrayOf(fileName, java.lang.String.valueOf(fileSize))
-        else
-            arrayOf(fileName)
-        try {
-            resolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media._ID),
-                selection, args, null
-            ).use { cursor ->
-                if (cursor == null || !cursor.moveToFirst()) return null
-                val id = cursor.getLong(0)
-                return materializeAudioCopy(directory, java.lang.String.valueOf(id), fileName, fileSize)
+
+        /*
+         * 三级查找，从严到宽。
+         *
+         * 只做「文件名 + 大小」那一级太脆：记录下来的 fileSize 与实际入库的大小
+         * 只要差一个字节（转码、provider 报了近似值），查询就空手而归，
+         * 用户看到的就是「导入过的歌播不了」。文件名本身已经足够有辨识度，
+         * 所以逐级放宽，能救回来就救。
+         */
+        val attempts: List<Pair<String, Array<String>?>> = buildList {
+            if (fileSize > 0) {
+                add(
+                    (MediaStore.Audio.Media.DISPLAY_NAME + "=? AND " + MediaStore.Audio.Media.SIZE + "=?")
+                        to arrayOf(fileName, java.lang.String.valueOf(fileSize)),
+                )
             }
-        } catch (error: Exception) {
-            Log.w(TAG, "media store lookup failed for " + fileName, error)
-            return null
+            add(MediaStore.Audio.Media.DISPLAY_NAME + "=?" to arrayOf(fileName))
+            // 最后按 "包含" 找一次：有些 provider 会给名字加前缀（如 "01 - "）。
+            add(MediaStore.Audio.Media.DISPLAY_NAME + " LIKE ?" to arrayOf("%$fileName%"))
         }
+
+        for ((selection, args) in attempts) {
+            try {
+                resolver.query(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Audio.Media._ID),
+                    selection, args, null
+                ).use { cursor ->
+                    if (cursor == null || !cursor.moveToFirst()) return@use
+                    val id = cursor.getLong(0)
+                    val copied = materializeAudioCopy(directory, java.lang.String.valueOf(id), fileName, fileSize)
+                    // 找到且拷出来了才算数；拷失败就继续按下一级更宽的规则找。
+                    if (copied != null) return copied
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "media store lookup failed for " + fileName, error)
+            }
+        }
+        return null
     }
 
-    /** 返回新 ref（imported-xxx）；源取不到、或拷出来是空的，都返回 null。 */
+    /** 返回新 ref（`local-<id>`）；源取不到、或拷出来是空的，都返回 null。 */
     @Throws(IOException::class)
     private fun materializeAudioCopy(directory: File, ref: String, fileName: String?, fileSize: Long): String? {
         // （Java 在这里直接重新赋值参数，Kotlin 参数不可变，用局部变量 size 代替。）
         var size = fileSize
-        if (ref.startsWith("imported-")) {
-            // 副本还在就没什么可做的；没了才回媒体库按文件名把原文件找回来重拷。
-            val existing = File(directory, ref)
-            if (existing.isFile && existing.length() > 0) return null
+        if (ref.startsWith(ImportedAudioIndex.REF_PREFIX) || ref.startsWith("imported-")) {
+            /*
+             * 已经是私有副本：还在就没什么可做的（返回 null 表示「不需要新 ref」）；
+             * 没了才回媒体库按文件名把原文件找回来重拷一份。
+             *
+             * 新旧两种前缀都走这里 —— 升级上来的库里还有 `imported-` 的老副本。
+             */
+            val existing = ImportedAudioIndex.resolve(directory, ref)
+            if (existing != null && existing.isFile && existing.length() > 0) return null
             return copyFromMediaStoreByName(directory, fileName, size)
         }
 
@@ -2421,7 +2492,20 @@ class FoliaNativePlugin : Plugin() {
 
         if (ref.startsWith("file-")) {
             sourceFile = File(ref.substring("file-".length))
-            if (!sourceFile.isFile) return null
+            if (!sourceFile.isFile) {
+                /*
+                 * 直接按路径读不到 —— 多半是「所有文件访问」权限被收走了
+                 * （换版本、用户手动关掉、ROM 清理），而库里存的是 file-<绝对路径>。
+                 *
+                 * 以前这里直接 return null，于是播放只剩一句
+                 * 「无法访问文件，请重新导入文件夹」，可用户的文件根本没动过。
+                 * 现在降级一次：让调用方按**文件名**去 MediaStore 里把原文件找回来，
+                 * 复制进私有目录 —— 之后这首歌就与权限无关了。
+                 */
+                val byName = copyFromMediaStoreByName(directory, fileName, size)
+                if (byName != null) return byName
+                return null
+            }
             displayName = sourceFile.name
             size = sourceFile.length()
         } else {
@@ -2444,9 +2528,6 @@ class FoliaNativePlugin : Plugin() {
         }
         if (displayName == null || displayName.isEmpty()) displayName = "track-" + System.currentTimeMillis()
 
-        val target = File(directory, "imported-" + stableFileId(displayName!!, size, directory))
-        if (target.isFile && target.length() > 0) return target.name
-
         // 取本地 val 再判：sourceUri / sourceFile 各对应一种 ref 形态，正常只会有一个非空。
         // 老写法是 `FileInputStream(sourceFile!!)` —— ref 既不是 file- 前缀也不是数字时
         // 两个都是 null，当场 NPE；改成显式判空后这条路变成「返回 null（拷不了）」。
@@ -2457,22 +2538,39 @@ class FoliaNativePlugin : Plugin() {
             java.io.FileInputStream(localSourceFile)
         else null
         if (source == null) return null
-        source.use { `in` ->
-            FileOutputStream(target).use { sink ->
-                val buffer = ByteArray(128 * 1024)
-                var read = `in`.read(buffer)
-                while (read != -1) {
-                    sink.write(buffer, 0, read)
-                    read = `in`.read(buffer)
+
+        /*
+         * 拷贝走和导入同一条命名路径：临时文件 → 分配 id → 改名。
+         *
+         * 不再用 `imported-<净化名>-<hash>`：那个名字取决于导入那一刻的 displayName 和
+         * fileSize，任一方变动就与 ref 错位，磁盘上有文件却播不了。
+         */
+        val extension = displayName!!.substringAfterLast('.', "")
+            .lowercase(Locale.US)
+            .let { if (it.isEmpty() || it.length > 8) "bin" else it }
+        val temp = File(directory, "incoming-" + System.currentTimeMillis() + "." + extension)
+        try {
+            source.use { `in` ->
+                FileOutputStream(temp).use { sink ->
+                    val buffer = ByteArray(128 * 1024)
+                    var read = `in`.read(buffer)
+                    while (read != -1) {
+                        sink.write(buffer, 0, read)
+                        read = `in`.read(buffer)
+                    }
                 }
             }
+        } catch (error: Exception) {
+            temp.delete()
+            throw error
         }
         // 拷出来是 0 字节（授权失效 / provider 静默失败）等于没拷：删掉，别留个坏文件。
-        if (target.length() <= 0) {
-            target.delete()
+        if (temp.length() <= 0) {
+            temp.delete()
             return null
         }
-        return target.name
+        val entry = ImportedAudioIndex.register(directory, temp, displayName!!, "." + extension)
+        return entry?.let { ImportedAudioIndex.refFor(it.id) }
     }
 
     /**
