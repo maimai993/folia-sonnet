@@ -5,6 +5,7 @@ import { List, useListRef } from 'react-window';
 import type { Theme } from '../../../types';
 import { resolveThemeFontStack } from '../../../utils/fontStacks';
 import { Button, FIELD_CLASS } from '../../modal/settings/kit';
+import { openMarketPanel } from '../../modal/settings/pages/integration/market/MarketEntryButton';
 import { Button as UiButton, TextField } from '../../ui';
 import FontFallbackStackControl from './FontFallbackStackControl';
 
@@ -41,8 +42,6 @@ type FontPickerProps = {
     /** Back to the built-in font. */
     onClear: () => void;
     onUpload?: (file: File) => Promise<{ ok: boolean; error?: string; }>;
-    /** Opens the font market over this picker: the fonts published from the admin panel. */
-    onOpenFontMarket?: () => void;
     onClose: () => void;
 };
 
@@ -146,7 +145,7 @@ const FontRow = ({ index, style, ariaAttributes, fonts, family, fontStyle, onCho
 };
 
 export const FontPicker: React.FC<FontPickerProps> = ({
-    family, label, fallbackFamilies, onFallbackFamiliesChange, fontStyle, onChoose, onClear, onUpload, onOpenFontMarket, onClose,
+    family, label, fallbackFamilies, onFallbackFamiliesChange, fontStyle, onChoose, onClear, onUpload, onClose,
 }) => {
     const { t } = useTranslation();
     const [fonts, setFonts] = useState<LocalFontEntry[]>(knownFonts ?? []);
@@ -264,11 +263,6 @@ export const FontPicker: React.FC<FontPickerProps> = ({
                             {t(uploadsInstead ? 'options.uploadCustomFontDesc' : 'options.chooseSystemFontDesc')}
                         </p>
                     </div>
-                    {onOpenFontMarket && (
-                        <Button icon={Store} onClick={onOpenFontMarket}>
-                            {t('options.fontMarket')}
-                        </Button>
-                    )}
                     <Button variant="quiet" icon={X} tip={t('ui.close')} onClick={onClose} />
                 </div>
 
@@ -323,6 +317,16 @@ export const FontPicker: React.FC<FontPickerProps> = ({
                                         {t('options.clearSystemFont')}
                                     </Button>
                                 )}
+                                {/* 动画设置里的字体选择器也要能进市场，否则只能手动找字体文件。 */}
+                                <Button
+                                    icon={Store}
+                                    onClick={() => {
+                                        onClose();
+                                        openMarketPanel('font');
+                                    }}
+                                >
+                                    {t('options.marketOpen')}
+                                </Button>
                             </div>
                         </>
                     ) : isLoading ? (

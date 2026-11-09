@@ -7,6 +7,9 @@ import { useStageSettingsStore } from '../../../../stores/useStageSettingsStore'
 import { Button, CopyValue, Group, Reveal, Row, Status, Toggle, Value, type SettingsOptionDef } from '../kit';
 import NavidromeRows from './integration/NavidromeRows';
 import { O, SERVICES, STREAMING, SYSTEM_LYRICS } from './integration/options';
+import { MARKET, M } from './integration/market';
+import MarketPage from './integration/MarketPage';
+import { openMarketPanel } from './integration/market/MarketEntryButton';
 import AndroidLyriconSetting from '../AndroidLyriconSetting';
 import AndroidColorOsLyricsSetting from '../AndroidColorOsLyricsSetting';
 import { isCapacitorAndroid } from '../../../../platform/runtime';
@@ -133,6 +136,22 @@ const IntegrationPage: React.FC = () => {
                     </>
                 )}
                 {isElectron ? <DesktopStageRows /> : <WebStageRows />}
+            </Group>
+
+            {/*
+             * 背景与字体市场。
+             *
+             * 这两个市场原先散在多处（壁纸设置的字体市场、歌词设置的字体市场、
+             * 可视化字体选择器里的「字体市场」按钮），同一件事三个入口、行为还各不一样。
+             * 现在统一收到这里，应用范围也在这里改。
+             */}
+            <Group def={MARKET}>
+                <Row option={M.background} hint={t('options.backgroundMarketDesc')}>
+                    {/* 市场面板挂在 SettingsModal 顶层，这里只负责广播打开请求。 */}
+                    <Button onClick={() => openMarketPanel('background')}>
+                        {t('options.marketOpen')}
+                    </Button>
+                </Row>
             </Group>
 
             {/*

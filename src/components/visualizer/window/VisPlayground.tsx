@@ -348,7 +348,6 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
         onFontStyleChange(next);
     };
 
-
     const handleChooseSystemFont = (font: LocalFontEntry) => {
         if (fontPickerTarget === 'lyrics') {
             onCustomFontChange({

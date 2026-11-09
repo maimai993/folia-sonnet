@@ -154,6 +154,13 @@ interface FoliaNativePlugin {
      * 与用户取消（`picked` 与 `rejected` 都假）分开，界面才好分别给提示。
      */
     pickVideoLayerFile(): Promise<{ picked?: boolean; rejected?: boolean; name?: string; url?: string }>;
+    /** 下载网络视频并存成视频层文件（市场背景用）。 */
+    downloadVideoLayerFile(options: { url: string; progressId?: string }): Promise<{
+        stored?: boolean;
+        name?: string;
+        url?: string;
+        error?: string;
+    }>;
     /**
      * 挑过的那个视频此刻还在不在，地址是什么。
      *
@@ -354,6 +361,34 @@ export const pickNativeVideoLayerFile = async (): Promise<NativeVideoLayerPick> 
     } catch (error) {
         console.warn('[FoliaNative] pickVideoLayerFile failed', error);
         return { status: 'cancelled' };
+    }
+};
+
+/**
+ * 把一个网络视频下载成视频层文件。
+ *
+ * 走原生：视频地址多半带签名和防盗链，直接塞给 <video> 播，
+ * 过几天签名过期就黑屏；而且边走边播容易被限速卡顿。
+ * 下载完后原生会把它放进视频层自己的位置，回一个回环地址。
+ *
+ * @returns 成功时的回环地址与显示名；失败时 error 有说明。
+ */
+export const downloadNativeVideoLayerFile = async (
+    url: string,
+    progressId?: string,
+): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null }> => {
+    if (!isCapacitorAndroid()) {
+        return { ok: false, url: null, name: null, error: '仅安卓支持' };
+    }
+    try {
+        const result = await FoliaNative.downloadVideoLayerFile({ url, progressId });
+        if (result?.stored && result.url) {
+            return { ok: true, url: result.url, name: result.name ?? '', error: null };
+        }
+        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败' };
+    } catch (error) {
+        console.warn('[FoliaNative] downloadVideoLayerFile failed', error);
+        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败' };
     }
 };
 

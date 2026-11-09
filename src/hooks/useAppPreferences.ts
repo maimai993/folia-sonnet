@@ -6,6 +6,7 @@ import { getCustomCappellaAvatar } from '../services/cappellaAvatarPack';
 import { getMonetBackgroundImage } from '../services/monetBackgroundImage';
 import { getMonetPortraitImage } from '../services/monetPortraitImage';
 import { restoreUploadedLyricsFont } from '../services/customLyricsFont';
+import { warmMarketFontFamily } from '../services/fontMarket/zeosevenFont';
 import { resolveStoredCappellaTuning } from '../components/visualizer/cappella/tuning';
 import { resolveStoredMonetBackgroundTuning } from '../components/visualizer/backgrounds/monet/tuning';
 import { resolveStoredMonetTuning } from '../components/visualizer/monet/tuning';
@@ -316,6 +317,47 @@ export function useAppPreferences() {
         };
     }, [clearLyricsCustomFontAfterRestoreFailure, lyricsCustomFont?.fontId, lyricsCustomFont?.source]);
 
+    /*
+     * 字体市场选的字体：family 由运行时注入的 @font-face 提供，页面一刷新就没了，
+     * 所以冷启动时按 fontId 重新登记一遍。登记失败说明网络不通或那款字体已下架，
+     * 这时清掉设置回到系统字体 —— 否则歌词会拿一个不存在的 family 去渲染，静默落到
+     * 默认字体上，用户只会觉得「我设置的字体自己没了」。
+     */
+    useEffect(() => {
+        if (lyricsCustomFont?.source !== 'market' || !lyricsCustomFont.fontId) {
+            return;
+        }
+
+        let isCancelled = false;
+
+        const restoreMarketFont = async () => {
+            try {
+                const family = await warmMarketFontFamily(lyricsCustomFont.fontId!);
+                if (isCancelled) return;
+
+                if (!family) {
+                    clearLyricsCustomFontAfterRestoreFailure({
+                        type: 'info',
+                        text: i18n.t('notifications.marketFontUnavailable'),
+                    });
+                }
+            } catch (error) {
+                console.warn('[Preferences] Failed to restore market lyrics font:', error);
+                if (isCancelled) return;
+
+                clearLyricsCustomFontAfterRestoreFailure({
+                    type: 'error',
+                    text: i18n.t('notifications.marketFontLoadFailed'),
+                });
+            }
+        };
+
+        void restoreMarketFont();
+        return () => {
+            isCancelled = true;
+        };
+    }, [clearLyricsCustomFontAfterRestoreFailure, lyricsCustomFont?.fontId, lyricsCustomFont?.source]);
+
     useEffect(() => {
         const nextImages = storedCappellaEmojiPack.flatMap(image => {
             const url = createSafeObjectUrl(image.blob);
@@ -341,14 +383,20 @@ export function useAppPreferences() {
     }, [setCappellaCustomAvatarImages, storedCappellaAvatarPack]);
 
     useEffect(() => {
+        /*
+         * 本地存档里有图就换成它。
+         *
+         * 关键：本地没图时**不要清空** store 里的值。
+         * 背景市场写进来的是一张远程 URL，没有 blob，也不会走本地存档 ——
+         * 以前这里直接 setMonetBackgroundImage(null)，等于把市场选的图立刻擦掉，
+         * 表现就是「设了背景没反应，'自定义' 那个按钮永远是灰的」。
+         */
         if (!storedMonetBackgroundImage?.blob) {
-            setMonetBackgroundImage(null);
             return;
         }
 
         const url = createSafeObjectUrl(storedMonetBackgroundImage.blob);
         if (!url) {
-            setMonetBackgroundImage(null);
             return;
         }
         const nextImage = {

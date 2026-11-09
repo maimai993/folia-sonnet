@@ -20,6 +20,7 @@ import { useTypographySettingsStore } from '../../../../stores/useTypographySett
 import { ensureVideoLayerFileRestored, useVideoLayerSettingsStore, VIDEO_LAYER_OPACITY_BOUNDS } from '../../../../stores/useVideoLayerSettingsStore';
 import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, resolvePlayerBottomBarMaxOffset } from '../../../../utils/playerBottomBarLayout';
 import { Button, FoldedGroup, Group, PictureChoice, Reveal, Row, Segmented, Select, Slider, TextField, Toggle, Value, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import MarketEntryButton from './integration/market/MarketEntryButton';
 import { EntryViewPicture } from './pictures';
 import { useSettingsPage } from './settingsPageContext';
 
@@ -370,6 +371,8 @@ const PlayerPage: React.FC = () => {
                             <Button onClick={() => void video.regrantLocalFile()}>{t('options.videoLayerRegrant')}</Button>
                         )}
                         <Button onClick={() => void pickVideo()}>{t('options.videoLayerPickFile')}</Button>
+                        {/* 视频层也要有市场入口：从这里直接挑视频，不用先去别的页面找。 */}
+                        <MarketEntryButton tab="background" />
                     </Row>
                 </Reveal>
                 <Reveal when={video.enabled}>

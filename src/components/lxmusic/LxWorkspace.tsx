@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, TextField } from '../ui';
-import { ArrowLeft, Play, Plus, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, Play, Plus, RefreshCw, Search, X } from 'lucide-react';
 import type { Theme, UnifiedSong } from '../../types';
 import type { ProviderCollection } from '../../types/onlineMusic';
 import { useLxWorkspaceStore, type LxWorkspaceTab } from '../../stores/useLxWorkspaceStore';
@@ -14,6 +14,14 @@ import {
     type LxPublicPlatform,
 } from '../../services/onlineMusic/lxmusic/lxPublicApi';
 import { LxTrackList } from './LxTrackList';
+import { LxMinePanel } from './LxMinePanel';
+import {
+    addSongToLxPlaylist,
+    createLxSavedPlaylist,
+    getLxSavedPlaylists,
+    subscribeLxSavedPlaylists,
+} from '../../services/onlineMusic/lxmusic/lxSavedPlaylists';
+import { ensureSquareCollections, getSquareCollections, subscribeSquareCollections } from '../../services/onlineMusic/lxmusic/lxSquareCollections';
 import { LxSourcePanel } from './LxSourcePanel';
 import { errorText, formatCount, formatDate, platformBadge } from './lxUi';
 import './lxWorkspace.css';
@@ -29,12 +37,13 @@ const PILLS: ReadonlyArray<{ key: LxWorkspaceTab; label: string }> = [
     { key: 'radio', label: '电台' },
     { key: 'album', label: '专辑' },
     { key: 'chart', label: '榜单' },
+    { key: 'mine', label: '我的' },
     { key: 'local', label: '本地' },
     { key: 'search', label: '搜索' },
 ];
 
 /** 这两页不分平台，平台按钮跟着藏起来。 */
-const GLOBAL_TABS: ReadonlyArray<LxWorkspaceTab> = ['search', 'local', 'source'];
+const GLOBAL_TABS: ReadonlyArray<LxWorkspaceTab> = ['mine', 'search', 'local', 'source'];
 
 // 一页 30：酷狗的歌单广场接口固定每页 30 条，页大小对不上的话翻页会漏歌。
 const PAGE_SIZE = 30;
@@ -100,13 +109,40 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
         onPlayTrack(song);
         showHint(hasSources ? `正在播放 · ${song.name}` : `未导入音源，尝试公开直链 · ${song.name}`);
     }, [onPlayTrack, showHint]);
+
+    // 「收进列表」：点曲目行的书签按钮先弹这一层，选一个已有列表，或直接输名字新建一个。
+    const savedPlaylists = useSyncExternalStore(subscribeLxSavedPlaylists, getLxSavedPlaylists, getLxSavedPlaylists);
+    const [saveSong, setSaveSong] = useState<UnifiedSong | null>(null);
+    const [saveName, setSaveName] = useState('');
+    const handleSaveSong = useCallback((song: UnifiedSong) => {
+        setSaveName('');
+        setSaveSong(song);
+    }, []);
+    const addToExisting = useCallback((playlistId: string, playlistName: string) => {
+        if (!saveSong) return;
+        const ok = addSongToLxPlaylist(playlistId, saveSong);
+        setSaveSong(null);
+        showHint(ok ? `已收进「${playlistName}」` : `「${playlistName}」里已经有这首了`);
+    }, [saveSong, showHint]);
+    const createAndSave = useCallback(() => {
+        if (!saveSong) return;
+        const created = createLxSavedPlaylist(saveName);
+        if (!created) {
+            showHint('先给列表起个名字；如果已经建满 60 个，删一个再建。', 3400);
+            return;
+        }
+        addSongToLxPlaylist(created.id, saveSong);
+        setSaveSong(null);
+        setSaveName('');
+        showHint(`已新建「${created.name}」并收进去，之后在「我的」里能打开它`);
+    }, [saveName, saveSong, showHint]);
+
     useEffect(() => () => {
         if (playHintTimer.current) window.clearTimeout(playHintTimer.current);
     }, []);
 
     // 歌单 / 专辑 / 电台 共用一个列表状态
-    const [collections, setCollections] = useState<ProviderCollection[]>([]);
-    const [programs, setPrograms] = useState<LxApiRadioProgram[]>([]);
+    const [collections, setCollections] = useState<ProviderCollection[]>([]);    const [programs, setPrograms] = useState<LxApiRadioProgram[]>([]);
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseHasMore, setBrowseHasMore] = useState(false);
     const [browseOffset, setBrowseOffset] = useState(0);
@@ -175,10 +211,29 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
         void loadBrowse(platform, tab, 0, false);
     }, [tab, platform, refreshTick, loadBrowse]);
 
+    // 「全部」：歌单页默认四家混排（和洛雪官方桌面版一样，一屏能看到各家），
+    // 点了具体平台才只看那一家。混排的名单来自首页也在用的那份广场快照。
+    const [squareAll, setSquareAll] = useState(true);
+    const squareCollections = useSyncExternalStore(subscribeSquareCollections, getSquareCollections, getSquareCollections);
+    const lastSquareRefresh = useRef(refreshTick);
+    useEffect(() => {
+        if (tab !== 'playlist' || !squareAll) return;
+        const force = refreshTick !== lastSquareRefresh.current;
+        lastSquareRefresh.current = refreshTick;
+        void ensureSquareCollections(force);
+    }, [tab, squareAll, refreshTick]);
+
     // ------------------------------------------------------------ 榜单
 
     useEffect(() => {
         if (tab !== 'chart') return undefined;
+        // 首页榜单列表点进来时会在 store 里留一个目标：先把平台切到那一家，
+        // 下一轮（platform 变了）再落到那个榜，别被这里默认的第一个榜顶掉。
+        const pending = useLxWorkspaceStore.getState().pendingChart;
+        if (pending && pending.platform !== platform) {
+            setPlatform(pending.platform);
+            return undefined;
+        }
         let cancelled = false;
         setChartError(null);
         setCharts([]);
@@ -188,7 +243,12 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
             .then((list) => {
                 if (cancelled) return;
                 setCharts(list);
-                setChartId(list[0]?.id ?? null);
+                // 目标榜 id 不一定还在（平台会调表），找不到就退回第一个。
+                const wanted = pending && pending.platform === platform
+                    ? list.find((chart) => chart.id === pending.chartId)?.id ?? list[0]?.id ?? null
+                    : list[0]?.id ?? null;
+                setChartId(wanted);
+                if (pending && pending.platform === platform) useLxWorkspaceStore.getState().clearPendingChart();
                 if (list.length === 0) setChartError('这个平台没有可读的榜单。');
             })
             .catch((error) => {
@@ -311,16 +371,34 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
 
     const platformRow = showPlatformRow ? (
         <div className="lx-platforms" role="tablist" aria-label="平台">
+            {tab === 'playlist' ? (
+                <Button
+                    type="button"
+                    role="tab"
+                    aria-selected={squareAll}
+                    className="lx-platform"
+                    data-active={squareAll}
+                    onClick={() => {
+                        if (squareAll) return;
+                        setSquareAll(true);
+                        setDetail(null);
+                    }}
+                >
+                    <span className="lx-platform-mark" style={{ background: 'linear-gradient(135deg,#a3a3a3,#525252)' }}>全</span>
+                    全部
+                </Button>
+            ) : null}
             {LX_PUBLIC_PLATFORMS.map((item) => (
                 <Button
                     key={item.key}
                     type="button"
                     role="tab"
-                    aria-selected={platform === item.key}
+                    aria-selected={platform === item.key && !(tab === 'playlist' && squareAll)}
                     className="lx-platform"
-                    data-active={platform === item.key}
+                    data-active={platform === item.key && !(tab === 'playlist' && squareAll)}
                     style={{ '--lx-platform-color': item.color } as React.CSSProperties}
                     onClick={() => {
+                        if (tab === 'playlist') setSquareAll(false);
                         if (platform === item.key) return;
                         setPlatform(item.key);
                         setDetail(null);
@@ -370,6 +448,9 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
 
     /** 空状态按「这一页 × 这一家」说清楚，别拿同一句话糊过去。 */
     const emptyText = (): string => {
+        if (tab === 'playlist' && squareAll) {
+            return '四家的歌单广场都没取到。先点右上角刷新一次；还空着就点到某一家单独看。';
+        }
         if (tab === 'radio') {
             return platform === 'wy'
                 ? '网易云暂时没返回电台节目。'
@@ -427,7 +508,7 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
                     ) : detailSongs.length === 0 ? (
                         <p className="lx-empty">没有读到曲目。</p>
                     ) : (
-                        <LxTrackList songs={detailSongs} onPlay={handlePlay} onQueue={onAddToQueue} />
+                        <LxTrackList songs={detailSongs} onPlay={handlePlay} onQueue={onAddToQueue} onSave={handleSaveSong} />
                     )}
                     {detailHasMore ? (
                         <div className="lx-more">
@@ -440,20 +521,23 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
             );
         }
 
-        const empty = tab === 'radio' ? programs.length === 0 : collections.length === 0;
+        const allMode = tab === 'playlist' && squareAll;
+        const shownCollections = allMode ? squareCollections : collections;
+        const empty = tab === 'radio' ? programs.length === 0 : shownCollections.length === 0;
+        const busy = browseLoading || allMode;
         return (
             <>
                 {browseError ? <div className="lx-notice" data-kind="warn">{browseError}</div> : null}
-                {browseLoading && empty ? (
+                {busy && empty ? (
                     <p className="lx-empty">正在读取{tab === 'album' ? '新碟' : tab === 'radio' ? '电台' : '歌单'}…</p>
                 ) : empty ? (
                     <p className="lx-empty">{emptyText()}</p>
                 ) : (
                     <div className="lx-grid">
-                        {tab === 'radio' ? programs.map(renderProgram) : collections.map(renderCard)}
+                        {tab === 'radio' ? programs.map(renderProgram) : shownCollections.map(renderCard)}
                     </div>
                 )}
-                {browseHasMore ? (
+                {browseHasMore && !allMode ? (
                     <div className="lx-more">
                         <Button
                             type="button"
@@ -499,7 +583,7 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
                         ) : chartSongs.length === 0 ? (
                             <p className="lx-empty">这个榜暂时没有曲目。</p>
                         ) : (
-                            <LxTrackList songs={chartSongs} onPlay={handlePlay} onQueue={onAddToQueue} />
+                            <LxTrackList songs={chartSongs} onPlay={handlePlay} onQueue={onAddToQueue} onSave={handleSaveSong} />
                         )}
                     </div>
                 </div>
@@ -532,7 +616,7 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
             ) : (
                 <>
                     <div className="lx-result-head">「{submittedQuery}」的结果 · {searchSongs.length} 首</div>
-                    <LxTrackList songs={searchSongs} onPlay={handlePlay} onQueue={onAddToQueue} />
+                    <LxTrackList songs={searchSongs} onPlay={handlePlay} onQueue={onAddToQueue} onSave={handleSaveSong} />
                 </>
             )}
             {searchHasMore ? (
@@ -627,10 +711,56 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
             <div className="lx-body">
                 {tab === 'playlist' || tab === 'album' || tab === 'radio' ? renderBrowseTab() : null}
                 {tab === 'chart' ? renderChartTab() : null}
+                {tab === 'mine' ? <LxMinePanel onPlay={handlePlay} onQueue={onAddToQueue} onNotice={showHint} /> : null}
                 {tab === 'search' ? renderSearchTab() : null}
                 {tab === 'local' ? renderLocalTab() : null}
                 {tab === 'source' ? <LxSourcePanel onChanged={handleSourceChanged} /> : null}
             </div>
+
+            {saveSong ? (
+                <div className="lx-save-layer" role="dialog" aria-modal="true" aria-label="收进收藏列表">
+                    <div className="lx-save-card">
+                        <div className="lx-save-head">
+                            <span>收进收藏列表</span>
+                            <Button type="button" className="lx-icon-btn" onClick={() => setSaveSong(null)} aria-label="关闭">
+                                <X size={15} />
+                            </Button>
+                        </div>
+                        <div className="lx-card-meta">{saveSong.name}</div>
+                        {savedPlaylists.length > 0 ? (
+                            <div className="lx-chips">
+                                {savedPlaylists.map((playlist) => (
+                                    <Button
+                                        key={playlist.id}
+                                        type="button"
+                                        className="lx-btn-ghost"
+                                        onClick={() => addToExisting(playlist.id, playlist.name)}
+                                    >
+                                        {playlist.name} · {playlist.songs.length}
+                                    </Button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="lx-card-meta">还没有列表，起个名字就建一个。</div>
+                        )}
+                        <div className="lx-search-row">
+                            <TextField
+                                className="lx-input"
+                                value={saveName}
+                                onChange={(event) => setSaveName(event.target.value)}
+                                onKeyDown={(event) => { if (event.key === 'Enter') createAndSave(); }}
+                                placeholder="新建一个列表（例如「下次接着听」）"
+                                autoCapitalize="off"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                            <Button type="button" className="lx-btn" disabled={!saveName.trim()} onClick={createAndSave}>
+                                新建并收进去
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
             {playHint ? <div className="lx-toast" role="status">{playHint}</div> : null}
         </div>

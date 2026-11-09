@@ -102,6 +102,11 @@ class FoliaNativePlugin : Plugin() {
     companion object {
         const val TAG = "FoliaNative"
 
+        /** 下载市场视频时用的 UA：不少站点对默认的 Java UA 直接 403。 */
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/120.0.0.0 Mobile Safari/537.36"
+
         @Volatile
         private var instance: FoliaNativePlugin? = null
 
@@ -1614,6 +1619,100 @@ class FoliaNativePlugin : Plugin() {
         intent.setType("video/*")
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         startActivityForResult(call, intent, "handleVideoLayerPicked")
+    }
+
+    /**
+     * 把一个网络视频下载下来，直接存成「歌词后方视频层」的文件。
+     *
+     * 为什么要有这个而不是让视频层直接播 URL：
+     *
+     *   · 壁纸站的视频地址带签名和防盗链，过期就 403；
+     *     今天设好的背景，过几天就黑屏。
+     *   · 用户要的是「下载保存到本地，再走上传接口」这一条路 ——
+     *     视频层本来就有自己的落盘位置和回环地址，把它当成那条上传接口即可。
+     *   · 逐段播放远程视频还会被 CDN 限速，卡顿明显。
+     *
+     * 下载在独立线程里跑，进度通过 videoDownloadProgress 事件回传，
+     * 和 .part 临时文件配合，失败时不会留下半截文件。
+     */
+    @PluginMethod
+    fun downloadVideoLayerFile(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) {
+            call.reject("缺少 url")
+            return
+        }
+        val progressId = call.getString("progressId")
+        Thread {
+            val out = JSObject()
+            var stored = false
+            var name: String? = null
+            var loopback: String? = null
+            try {
+                val target = java.io.File(getContext().cacheDir, "folia_video_layer_download.mp4")
+                val part = java.io.File(target.absolutePath + ".part")
+                part.delete()
+                val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 20_000
+                    readTimeout = 60_000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "*/*")
+                }
+                connection.requestMethod = "GET"
+                val total = connection.contentLength.toLong()
+                var written = 0L
+                connection.inputStream.use { input ->
+                    java.io.FileOutputStream(part).use { fileOut ->
+                        val buffer = ByteArray(256 * 1024)
+                        var lastPercent = -1
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            fileOut.write(buffer, 0, read)
+                            written += read.toLong()
+                            if (total > 0 && progressId != null) {
+                                val percent = ((written * 100) / total).toInt()
+                                if (percent != lastPercent) {
+                                    lastPercent = percent
+                                    val payload = JSObject()
+                                    payload.put("id", progressId)
+                                    payload.put("percent", percent)
+                                    notifyListeners("videoDownloadProgress", payload)
+                                }
+                            }
+                        }
+                    }
+                }
+                connection.disconnect()
+                if (written <= 0L) {
+                    part.delete()
+                } else if (part.renameTo(target)) {
+                    // 交给视频层那一套：它负责拷进私有目录并给出回环地址。
+                    val key = VideoLayerFile.store(
+                            getContext(),
+                            android.net.Uri.fromFile(target),
+                            "market-video.mp4",
+                            "video/mp4",
+                    )
+                    target.delete()
+                    if (key != null) {
+                        stored = true
+                        name = VideoLayerFile.displayName(getContext())
+                        loopback = videoLayerUrl()
+                    }
+                } else {
+                    part.delete()
+                }
+            } catch (error: Throwable) {
+                Log.w(TAG, "Failed to download the video layer file", error)
+                out.put("error", error.message ?: "DownloadFailed")
+            }
+            out.put("stored", stored)
+            if (name != null) out.put("name", name)
+            if (loopback != null) out.put("url", loopback)
+            call.resolve(out)
+        }.start()
     }
 
     @ActivityCallback

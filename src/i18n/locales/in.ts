@@ -1,6 +1,15 @@
 
 
 export default {
+  "common": {
+    "cancel": "Batal",
+    "confirm": "Konfirmasi",
+    "close": "Tutup",
+    "done": "Selesai",
+    "retry": "Coba lagi",
+    "ok": "OK",
+    "back": "Kembali"
+  },
   "lxmusic": {
     "importTitle": "Impor sumber",
     "importNotice": "Sumber yang diimpor menyediakan URL pemutaran dan lirik, didahulukan dari API pemutaran bawaan: pencarian, playlist dan tangga lagu tetap dari endpoint publik LX Music sendiri. Hanya bila semua sumber gagal memberi URL, pemutaran mundur (bila sakelar menyala) ke tautan gratis publik. Skrip sumber berjalan langsung di dalam aplikasi ini, model kepercayaan yang sama dengan LX Music desktop: impor hanya skrip yang kamu percaya.",
@@ -570,6 +579,8 @@ export default {
     "fontUploadFailed": "Unggah font gagal",
     "uploadedFontUnavailable": "Font yang diunggah tidak tersedia, kembali ke font bawaan",
     "uploadedFontLoadFailed": "Gagal memuat font yang diunggah, kembali ke font bawaan",
+    "marketFontUnavailable": "Font pasar itu tidak tersedia (sudah dihapus atau jaringan mati); kembali ke font bawaan",
+    "marketFontLoadFailed": "Gagal memuat font pasar; kembali ke font bawaan",
     "langSwitched": "Bahasa antarmuka diganti",
     "langFollowSystem": "Bahasa antarmuka mengikuti sistem",
     "langManual": "Bahasa antarmuka diganti ke {{language}}",
@@ -3193,6 +3204,7 @@ export default {
     "lyricsWallpaperReplaceFont": "Ganti font",
     "lyricsWallpaperClearFont": "Kembali ke font sistem",
     "lyricsWallpaperFontApplied": "Font diterapkan",
+    "lyricsWallpaperFontAppliedAppOnly": "Diterapkan di dalam aplikasi. Lapisan wallpaper butuh berkas font lokal — font pasar dialirkan dalam potongan, jadi tidak bisa diserahkan.",
     "lyricsWallpaperFontFailed": "File ini bukan font yang bisa dipakai; coba .ttf / .otf lain",
     "graphicsSettings": "Grafis",
     "graphicsSettingsDesc": "Mode statis, latar dinamis, blur native, batas frame rate, perbaikan glow Linux, dan pengurangan gerak.",
@@ -3541,6 +3553,7 @@ export default {
     "visualizerBackgroundModeLatent": "Latent",
     "visualizerBackgroundModeUrl": "Tanam",
     "visualizerBackgroundModeSora": "Sora",
+    "visualizerBackgroundModeParticles": "Partikel",
     "urlBackgroundSettings": "Latar Belakang Tertanam",
     "urlBackgroundSettingsDesc": "Tampilkan halaman web sebagai latar belakang pemutar. Catatan: beberapa situs web memblokir embedding dalam iframe dan mungkin tidak ditampilkan.",
     "urlBackgroundNotePlaceholder": "Catatan (untuk identifikasi mudah)",

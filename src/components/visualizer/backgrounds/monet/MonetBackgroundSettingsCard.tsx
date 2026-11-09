@@ -10,7 +10,9 @@ import {
     type MonetBackgroundWashColorMode,
 } from '../../../../types';
 import { Button, Group, PictureGrid, Reveal, Row, Segmented, Value, type SettingsGroupDef } from '../../../modal/settings/kit';
+import MarketEntryButton from '../../../modal/settings/pages/integration/market/MarketEntryButton';
 import { TextField } from '../../../ui';
+import { useVisualizerAssetStore } from '../../../../stores/useVisualizerAssetStore';
 import { percent, SliderRow, ToggleRow } from '../../panelRows';
 
 // src/components/visualizer/backgrounds/monet/MonetBackgroundSettingsCard.tsx
@@ -25,6 +27,13 @@ interface MonetBackgroundSettingsCardProps {
     tuning?: MonetBackgroundTuning;
     onTuningChange?: (patch: Partial<MonetBackgroundTuning>) => void;
     monetBackgroundImage?: MonetBackgroundImage | null;
+    /**
+     * 存储里到底有没有图。
+     *
+     * 和 monetBackgroundImage 的区别：后者要等 blob 生成 URL 之后才有，
+     * 而前者一存下就成立。判断「能不能切到自定义」要用这个。
+     */
+    hasStoredBackground?: boolean;
     onUploadMonetBackgroundImage?: (files: File[]) => Promise<{ ok: boolean; error?: string; }>;
     onClearMonetBackgroundImage?: () => Promise<void> | void;
     isLoadingMonetBackgroundImage?: boolean;
@@ -64,6 +73,7 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
     tuning = DEFAULT_MONET_BACKGROUND_TUNING,
     onTuningChange,
     monetBackgroundImage,
+    hasStoredBackground = false,
     onUploadMonetBackgroundImage,
     onClearMonetBackgroundImage,
     isLoadingMonetBackgroundImage = false,
@@ -72,6 +82,15 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
 }) => {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [feedback, setFeedback] = useState<string | null>(null);
+    /*
+     * 直接订阅存储里的那张图，而不是只信 props。
+     *
+     * props 里的 monetBackgroundImage 要等父级把 blob 转成 URL 再传下来，
+     * 中间有异步空窗；市场刚换完图时这里最容易还是旧值，
+     * 结果「自定义」那一项被判成没有图而禁用。订阅列表本身最及时。
+     */
+    const storedBackground = useVisualizerAssetStore((state) => state.storedMonetBackgroundImage);
+    const hasBackgroundImage = Boolean(storedBackground) || hasStoredBackground || Boolean(monetBackgroundImage);
     const resolvedTuning = {
         backgroundSource: tuning.backgroundSource ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundSource,
         backgroundLayout: tuning.backgroundLayout ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundLayout,
@@ -117,7 +136,16 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                             {
                                 value: 'uploaded-global',
                                 label: t('options.monetBackgroundSourceUploaded'),
-                                disabled: !monetBackgroundImage && !isLoadingMonetBackgroundImage,
+                                /*
+                                 * 只要「有没有图」这件事成立就允许切。
+                                 *
+                                 * 以前这里看的是内存里的 monetBackgroundImage，而它是由
+                                 * 存储里的 blob 异步生成 URL 之后才有的。市场刚换完图、
+                                 * 或者冷启动那一瞬间它还是空的，于是这一项被禁用 ——
+                                 * 表现就是「图明明在，就是点不动、换不了」。
+                                 * storedMonetBackgroundImage 一存下就有，用它判定才稳。
+                                 */
+                                disabled: !hasBackgroundImage && !isLoadingMonetBackgroundImage,
                             },
                         ]}
                         onChange={(value) => onTuningChange?.({ backgroundSource: value })}
@@ -141,6 +169,8 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                     >
                         {t('options.monetClearBackground')}
                     </Button>
+                    {/* 自选图旁边给市场入口：找图、换图不用再翻设置。 */}
+                    <MarketEntryButton tab="background" />
                     <TextField
                         ref={fileInputRef}
                         type="file"

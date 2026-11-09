@@ -32,6 +32,8 @@ interface DesktopGrid3DSurfaceProps {
     focusMemoryScope?: string;
     title: string;
     mapButtonLabel: string;
+    /** 洛雪首页自己有一行平台 / 标签胶囊，网格地图那颗「全部」会和胶囊叠在一起，这一页不要它。 */
+    hideMapButton?: boolean;
     items: Grid3DSliderItem[];
     focusedIndex: number;
     onFocusedIndexChange: (index: number) => void;
@@ -66,6 +68,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
     focusMemoryScope,
     title,
     mapButtonLabel,
+    hideMapButton = false,
     items,
     focusedIndex: legacyFocusedIndex,
     onFocusedIndexChange: onLegacyFocusedIndexChange,
@@ -175,7 +178,7 @@ export const DesktopGrid3DSurface: React.FC<DesktopGrid3DSurfaceProps> = ({
                             <GridViewTabs
                                 tabs={tabs}
                                 isDaylight={isDaylight}
-                                onOpenMap={isLoading ? undefined : openGridMap}
+                                onOpenMap={isLoading || hideMapButton ? undefined : openGridMap}
                                 mapLabel={mapButtonLabel}
                                 mapIcon={<MapIcon size={13} />}
                                 ponderId={ponderControls}

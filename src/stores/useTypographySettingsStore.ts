@@ -167,10 +167,19 @@ export const resolveStoredCustomLyricsFont = (parsed: Partial<StoredCustomLyrics
     const family = parsed.family?.trim();
     if (!family) return null;
 
-    const source = parsed.source === 'uploaded' ? 'uploaded' : 'system';
+    /*
+     * 三种来源都要认。`uploaded` 与 `market` 都靠 fontId 才能在冷启动后还原
+     * （前者去 IndexedDB 取字节，后者按 id 重新注入 @font-face），所以它们都必须带 fontId —
+     * 缺了就当设置坏了返回 null，而不是降级成 system 拿一个不存在的 family 去渲染。
+     */
+    const source = parsed.source === 'uploaded'
+        ? 'uploaded'
+        : parsed.source === 'market'
+            ? 'market'
+            : 'system';
     const label = parsed.label?.trim() || family;
 
-    if (source === 'uploaded') {
+    if (source === 'uploaded' || source === 'market') {
         const fontId = parsed.fontId?.trim();
         if (!fontId) return null;
 

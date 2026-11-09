@@ -120,7 +120,14 @@ export interface Theme {
   description?: string;
 }
 
-export type CustomLyricsFontSource = 'system' | 'uploaded';
+/**
+ * 歌词自定义字体的来源。
+ *
+ * `market` 是字体市场（ZeoSeven）选的：它的 family 由运行时注入的 @font-face 提供，
+ * 本机既没有字体文件、也不在系统字体表里，所以冷启动时必须按 fontId 重新登记一遍
+ * （见 services/fontMarket.ts 的 restoreMarketFontChoice / fontMarket/zeosevenFont.ts）。
+ */
+export type CustomLyricsFontSource = 'system' | 'uploaded' | 'market';
 
 export interface StoredCustomLyricsFont {
   source: CustomLyricsFontSource;
@@ -1087,7 +1094,7 @@ export type LatentBackgroundDisplayMode = 'dithering' | 'mesh' | 'both';
 export type LatentBackgroundColorSource = 'cover-theme' | 'cover-only';
 export type MonetAudioStyle = 'bar' | 'line';
 export type MonetPortraitSource = 'cover' | 'custom';
-export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora';
+export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles';
 export type VisualizerBackgroundMode = BuiltinVisualizerBackgroundMode | (string & {});
 
 export interface UrlBackgroundItem {

@@ -659,10 +659,32 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
                 "uniform vec4 uRect;\n" +
                 "uniform vec4 uUvRect;\n" +
                 "uniform mat4 uTexMatrix;\n" +
+                "uniform int uRotation;\n" +
                 "varying vec2 vUv;\n" +
                 "void main() {\n" +
-                "  vec2 uv = vec2(uUvRect.x + aUv.x * uUvRect.z,\n" +
-                "                 uUvRect.y + aUv.y * uUvRect.w);\n" +
+                /*
+                 * 旋转在**归一化 UV 空间**里做，再交给 uUvRect 做 cover 裁剪。
+                 *
+                 * 之前把 1.0-aUv.y 的 Y 翻转先卷进 t，再按 t 转 90°——
+                 * 翻转和旋转的顺序一错，90° 就变成 180°（画面上看到的就是倒了）。
+                 * 这里保持纯几何：先拿到 0..1 的原始 uv，按角度旋转，
+                 * 最后才乘 uUvRect 把范围收进 cover 区域。
+                 *
+                 * 方向约定（顺时针，和界面上「旋转 90°」按钮的效果一致）：
+                 *   0°   (x, y)
+                 *   90°  (1-y, x)
+                 *   180° (1-x, 1-y)
+                 *   270° (y, 1-x)
+                 *
+                 * 这四个式子是逆时针方向的镜像 —— 之前用的是另一套，
+                 * 结果点「旋转 90°」画面反而往另一边转。
+                 */
+                "  vec2 p = aUv;\n" +
+                "  if (uRotation == 1) p = vec2(1.0 - p.y, p.x);\n" +
+                "         else if (uRotation == 2) p = vec2(1.0 - p.x, 1.0 - p.y);\n" +
+                "         else if (uRotation == 3) p = vec2(p.y, 1.0 - p.x);\n" +
+                "  vec2 uv = vec2(uUvRect.x + p.x * uUvRect.z,\n" +
+                "                 uUvRect.y + p.y * uUvRect.w);\n" +
                 "  vUv = (uTexMatrix * vec4(uv, 0.0, 1.0)).xy;\n" +
                 "  vec2 ndc = uRect.xy + aPosition * uRect.zw;\n" +
                 "  gl_Position = vec4(ndc, 0.0, 1.0);\n" +
@@ -827,6 +849,8 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
     private var loadedVideoKey: String? = null
     private var videoWidth = 0
     private var videoHeight = 0
+    /** 视频背景的旋转（0/90/180/270），由 wp.videoRotation 下发。 */
+    private var videoRotationDegrees = 0
     /** SurfaceTexture 给的采样变换（含 Y 轴翻转），每帧跟着 updateTexImage 一起取。 */
     private val videoTransform = FloatArray(16)
     /** 壁纸不可见时把解码器也停掉：视频本身很耗电，没必要在黑屏后面继续解。 */
@@ -1373,6 +1397,11 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
     /**
      * 按 cover 方式铺满：长边对齐、短边裁掉，保持图片自身比例。
      * 直接拉成屏幕尺寸的话，竖图会被压扁、横图会被拉长 —— 这是「拉伸」的来源。
+     *
+     * 裁切的位置可调。壁纸站上的图绝大多数是横屏（16:9），而手机是竖屏，
+     * cover 之后左右会被裁掉一大半 —— 固定居中就会经常裁掉主体（人像的脸、建筑的主体）。
+     * 所以按 `wp.imageFocusX` / `wp.imageFocusY` 决定保留哪一块：
+     *   0 = 贴左 / 贴上，0.5 = 居中（默认），1 = 贴右 / 贴下。
      */
     private fun drawCoverFitted(texture: Int, bitmapWidth: Int, bitmapHeight: Int, alpha: Float) {
         if (texture == 0 || quadProgram == 0 || bitmapWidth <= 0 || bitmapHeight <= 0) {
@@ -1382,8 +1411,11 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
                 surfaceHeight / bitmapHeight.toFloat())
         val width = bitmapWidth * scale
         val height = bitmapHeight * scale
-        val left = (surfaceWidth - width) * 0.5f
-        val top = (surfaceHeight - height) * 0.5f
+        // 多出来的那段（负数）就是能被看见的范围，按 focus 决定露出哪部分。
+        val focusX = clamp(tf("wp.imageFocusX", 0.5f), 0f, 1f)
+        val focusY = clamp(tf("wp.imageFocusY", 0.5f), 0f, 1f)
+        val left = (surfaceWidth - width) * focusX
+        val top = (surfaceHeight - height) * focusY
         drawTexturedQuad(texture, left, top, width, height,
                 1f, 1f, 1f, alpha, -1f, 1f, 1f)
     }
@@ -1594,20 +1626,59 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
         var uvW = 1f
         var uvH = 1f
         if (videoWidth > 0 && videoHeight > 0) {
+            /*
+             * 旋转：90/270 时把宽高对调后再算比例。
+             *
+             * 不能只转画面不换比例 —— 横屏视频转成竖屏后，
+             * 用原来的比例算 cover 会算出错误的裁剪区间，画面还是被压扁。
+             * 这里交换 width/height，让后面的 cover 按「转正后」的形状算，
+             * 再在 UV 取值时把这 90° 转过去。
+             */
+            val rotation = tf("wp.videoRotation", 0f).toInt().let { ((it % 360) + 360) % 360 }
+            val swapped = rotation == 90 || rotation == 270
+            // 旋转后画面的比例（屏幕上真正看到的那块）
+            val sourceWidth = if (swapped) videoHeight else videoWidth
+            val sourceHeight = if (swapped) videoWidth else videoHeight
             val screenAspect = surfaceWidth / surfaceHeight.toFloat()
-            val videoAspect = videoWidth / videoHeight.toFloat()
-            if (videoAspect > screenAspect) {
-                uvW = screenAspect / videoAspect
-                uvX = (1f - uvW) * 0.5f
+            val videoAspect = sourceWidth / sourceHeight.toFloat()
+            val focusX = clamp(tf("wp.imageFocusX", 0.5f), 0f, 1f)
+            val focusY = clamp(tf("wp.imageFocusY", 0.5f), 0f, 1f)
+            /*
+             * 先在「屏幕那块」的坐标里算 cover，再换算回**原始纹理**的 UV 空间。
+             *
+             * 这是之前 90° 显示成 180° 的根因：着色器是在原始 UV 里旋转的
+             * （见 VIDEO_VERTEX），所以 uUvRect 必须描述「原始纹理上的一段」。
+             * 之前直接拿旋转后算出的宽高去用，两个坐标系混在一起，
+             * 90° 时裁出来的窗口宽高对调 —— 画面看着就像又转了半圈。
+             *
+             * 换算：旋转 90/270 时，屏幕上的横向对应纹理的纵向，两个轴互换。
+             */
+            if (swapped) {
+                if (videoAspect > screenAspect) {
+                    // 屏幕上横向会裁：对应纹理纵向的一段
+                    uvH = screenAspect / videoAspect
+                    uvY = (1f - uvH) * focusX
+                } else {
+                    uvW = videoAspect / screenAspect
+                    uvX = (1f - uvW) * focusY
+                }
             } else {
-                uvH = videoAspect / screenAspect
-                uvY = (1f - uvH) * 0.5f
+                if (videoAspect > screenAspect) {
+                    uvW = screenAspect / videoAspect
+                    uvX = (1f - uvW) * focusX
+                } else {
+                    uvH = videoAspect / screenAspect
+                    uvY = (1f - uvH) * focusY
+                }
             }
+            videoRotationDegrees = rotation
         }
         GLES20.glUniform4f(GLES20.glGetUniformLocation(videoProgram, "uRect"),
                 -1f, -1f, 2f, 2f)
         GLES20.glUniform4f(GLES20.glGetUniformLocation(videoProgram, "uUvRect"),
                 uvX, uvY, uvW, uvH)
+        // 0=不转，1=90°，2=180°，3=270°：着色器据此换 UV 轴。
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(videoProgram, "uRotation"), videoRotationDegrees / 90)
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(videoProgram, "uTexMatrix"),
                 1, false, videoTransform, 0)
         // 压一层薄薄的暗色：视频画面亮度没准，不压的话歌词经常看不清。

@@ -865,7 +865,9 @@ export const omni = {
         ) {
             return [];
         }
-        const collections = useOnlineProviderAccountStore.getState().accounts[source.providerId]?.collections || [];
+        const collections = provider.mutations.listPlaylists?.()
+            || useOnlineProviderAccountStore.getState().accounts[source.providerId]?.collections
+            || [];
         return collections.filter(collection => (
             collection.type === 'playlist'
             && (provider.mutations?.canAddToPlaylist?.(collection) ?? true)

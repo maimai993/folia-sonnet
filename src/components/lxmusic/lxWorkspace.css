@@ -167,6 +167,9 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    /* overflow-y 是 auto 时，x 也按 auto 算：内容只要宽出一点点，底部就冒一条横向滚动条。
+       这里把 x 钉死，滚动能力只在竖向保留。 */
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
 }
@@ -177,6 +180,7 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    min-width: 0;
 }
 
 .lx-input {
@@ -711,4 +715,97 @@
         opacity: 1;
         transform: translate(-50%, 0);
     }
+}
+
+/* ------------------------------------------------------------ 滚动条
+
+   Windows / Chromium 下滚动条是那条粗灰条：竖向挨着右边缘，横向压在最底下，右下角还多一块
+   方块。洛雪这套界面里滚动的都是内容区，滚动条本身没有信息，所以一刀切掉——滚轮、触控板、
+   键盘的滚动照旧。 */
+.lx-root,
+.lx-root * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.lx-root *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* 音源面板也会单独挂进设置页（那里没有 .lx-root），所以把同样的规则按类名再写一遍。 */
+.lx-search-row,
+.lx-search-row *,
+.lx-notice,
+.lx-notice *,
+.lx-chips,
+.lx-chips *,
+.lx-track-list,
+.lx-track-list * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.lx-search-row::-webkit-scrollbar,
+.lx-search-row::-webkit-scrollbar-thumb,
+.lx-notice::-webkit-scrollbar,
+.lx-chips::-webkit-scrollbar,
+.lx-track-list::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* ------------------------------------------------------------ 收藏列表 */
+
+/* 列表卡片没有封面图：用同一个封面位放一个图标，右下角仍是曲目数。 */
+.lx-cover-plain {
+    width: 100%;
+    border: none;
+    cursor: pointer;
+    color: var(--lx-soft);
+    background: linear-gradient(135deg, var(--lx-fill2), var(--lx-fill));
+}
+
+/* 「收进列表」的弹层：盖住工作台，点列表名直接收，或现场新建一个。 */
+.lx-save-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 402;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+.lx-save-card {
+    width: min(420px, 100%);
+    max-height: 72vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 18px;
+    background: var(--lx-sheet);
+    border: 1px solid var(--lx-line);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.lx-save-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.lx-save-card .lx-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }

@@ -8,6 +8,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * 壁纸视频背景的落盘副本。
@@ -34,6 +36,16 @@ class WallpaperBackgroundVideo private constructor() {
          * 超过这个大小直接拒绝并告诉用户，免得拷贝半天才失败。
          */
         private const val MAX_BYTES = 512L * 1024L * 1024L
+
+        /**
+         * 下载时用的 UA。
+         *
+         * 壁纸站会按 UA 拦截明显的程序请求，用桌面 Chrome 的串最稳 ——
+         * 拿到的内容是给播放器解释的，与 UA 报什么无关。
+         *
+         * 必须写成一行：`const val` 要能编译期求值，跨行 `+` 拼接会报语法错误。
+         */
+        private const val DOWNLOAD_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
         private fun file(context: Context): File {
             return File(context.filesDir, FILE_NAME)
@@ -83,6 +95,83 @@ class WallpaperBackgroundVideo private constructor() {
                 }
             } catch (error: Throwable) {
                 Log.w(TAG, "Failed to copy the chosen wallpaper video", error)
+            } finally {
+                if (!ok) {
+                    delete(temp)
+                }
+            }
+            return if (ok) key(context) else null
+        }
+
+        /**
+         * 从网络地址下载视频并存成壁纸背景。
+         *
+         * 背景市场的视频有几十 MB（Moewalls 的 4K 源接近 100 MB），绝不走 base64 过桥 ——
+         * 和本地挑选那条路一样，原生自己下、自己落盘，Web 侧只拿到成没成。
+         *
+         * 落盘逻辑与 [store] 完全相同：先写 `.part` 再改名，失败时不会留下半个文件在画面上播。
+         *
+         * @param onProgress 0..100 的进度回调，在 IO 线程上调用。
+         * @return 成功时返回新文件的 key；失败返回 null。
+         */
+        @JvmStatic
+        fun storeFromUrl(
+            context: Context?,
+            url: String?,
+            onProgress: ((Int) -> Unit)? = null,
+        ): String? {
+            if (context == null || url.isNullOrBlank()) {
+                return null
+            }
+            val target = file(context)
+            delete(target)
+            val temp = File(context.filesDir, FILE_NAME + ".part")
+            delete(temp)
+            var ok = false
+            try {
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20_000
+                    readTimeout = 30_000
+                    instanceFollowRedirects = true
+                    // 壁纸站多半按 UA / Referer 拒绝直连，这两个头是必须的。
+                    setRequestProperty("User-Agent", DOWNLOAD_USER_AGENT)
+                    setRequestProperty("Accept", "*/*")
+                }
+                try {
+                    val responseCode = connection.responseCode
+                    if (responseCode !in 200..299) {
+                        Log.w(TAG, "Wallpaper video download failed: HTTP $responseCode")
+                        return null
+                    }
+                    val total = connection.contentLengthLong
+                    connection.inputStream.use { stream ->
+                        var written = 0L
+                        val buffer = ByteArray(256 * 1024)
+                        FileOutputStream(temp).use { out ->
+                            var read = stream.read(buffer)
+                            while (read > 0) {
+                                out.write(buffer, 0, read)
+                                written += read
+                                if (written > MAX_BYTES) {
+                                    Log.w(TAG, "The downloaded wallpaper video is too large")
+                                    return null
+                                }
+                                if (total > 0L && onProgress != null) {
+                                    onProgress(((written * 100L) / total).toInt().coerceIn(0, 100))
+                                }
+                                read = stream.read(buffer)
+                            }
+                        }
+                        if (written <= 0L) {
+                            return null
+                        }
+                    }
+                    ok = temp.renameTo(target)
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (error: Throwable) {
+                Log.w(TAG, "Failed to download the wallpaper video", error)
             } finally {
                 if (!ok) {
                     delete(temp)

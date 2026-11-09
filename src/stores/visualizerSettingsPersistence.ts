@@ -169,6 +169,27 @@ export const readStoredWallpaperLyricsFontMode = (): 'follow' | 'custom' => {
 };
 
 /**
+ * 桌面壁纸视频背景的旋转角度。
+ *
+ * 为什么要单独存一份：
+ *   · 原生渲染层只认 `wp.videoRotation` 这个 tuning 键，而 tuning 是每次
+ *     setAppearance 整体下发的 —— 重启后 Web 侧重建那一份里没有它，
+ *     旋转就丢了（用户看到的是「转过的壁纸重启后自己转回去了」）。
+ *   · 所以角度必须落在 localStorage，重启后由 JS 再下发一次。
+ *
+ * 只允许 0/90/180/270；其它值当没转过。
+ */
+export const WALLPAPER_VIDEO_ROTATION_STORAGE_KEY = 'folia.wallpaperVideoRotation';
+
+export const readStoredWallpaperVideoRotation = (): number => {
+    if (typeof window === 'undefined') return 0;
+    const raw = Number(localStorage.getItem(WALLPAPER_VIDEO_ROTATION_STORAGE_KEY));
+    if (!Number.isFinite(raw)) return 0;
+    const normalized = ((Math.round(raw / 90) * 90) % 360 + 360) % 360;
+    return normalized;
+};
+
+/**
  * 叠加安全区时是否**直接占满整条**（左右不再留空）。默认关 ——
  * 占满会压住整条状态栏，那是比「叠在安全区上」更进一步的选择。
  *
