@@ -48,7 +48,16 @@ describe('settings that only one library UI reads', () => {
         expect(underBravais.has('homeTabsVisibility')).toBe(true);
         expect(underBravais.has('gridPaletteHotkey')).toBe(true);
         // The search module loads the whole command registry the first time.
-    }, 30000);
+        /*
+         * 超时放到 60 秒。
+         *
+         * 原来写的是 30 秒，而这项测试在开发机上实测就要 25~31 秒
+         * （transform 占掉 16~20 秒 —— 它要先加载整个命令注册表）。
+         * 也就是说它本来就骑在超时线上，机器一忙就误报失败。
+         *
+         * 放宽的是时间上限，不是断言：里面的每一条判断都照旧。
+         */
+    }, 60000);
 
     it('offer their commands only while the grid is the effective suite', async () => {
         const { settingsCommands } = await import('@/components/command-palette/commands/settingsCommands');
@@ -70,5 +79,5 @@ describe('settings that only one library UI reads', () => {
             expect(command.isAvailable?.(contextFor(true)), command.id).toBe(true);
             expect(command.isAvailable?.(contextFor(false)), command.id).toBe(false);
         }
-    }, 30000);
+    }, 60000);
 });
