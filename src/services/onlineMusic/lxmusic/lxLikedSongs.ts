@@ -15,7 +15,7 @@ import { fromSavedSong, toSavedSong, type LxSavedSong } from './lxSavedPlaylists
 import { readLxLocalLikes } from './lxLocalLikes';
 import { lxApiSongById, type LxApiSong, type LxPublicPlatform } from './lxPublicApi';
 
-const PUBLIC_PLATFORMS: ReadonlyArray<string> = ['wy', 'tx', 'kg', 'kw'];
+const PUBLIC_PLATFORMS: ReadonlyArray<string> = ['wy', 'tx', 'kg', 'kw', 'mg', 'qs'];
 
 /** 「我喜欢」这张集合在洛雪 provider 里的 id（收藏弹层、首页卡、集合路由都用它）。 */
 export const LX_LIKED_PLAYLIST_ID = 'lxliked';

@@ -9,6 +9,7 @@ import { createClient, QishuiError } from './client.js';
 import { createAuth, createSessions } from './auth.js';
 import { createCatalog, likedPlaylist } from './catalog.js';
 import { createFeed } from './feed.js';
+import { createDiscover } from './discover.js';
 import { createLibrary } from './library.js';
 import { resolveAudio } from './playback.js';
 import { createFetch } from './transport.js';
@@ -34,6 +35,7 @@ export function createQishuiCar(options = {}) {
     const auth = createAuth(client, { log });
     const catalog = createCatalog(client);
     const feed = createFeed(client);
+    const discover = createDiscover({ client });
     const library = createLibrary(client);
     const { platform } = client;
 
@@ -493,13 +495,18 @@ export function createQishuiCar(options = {}) {
             return { provider: 'qishui', artist, songs, total: page.total, nextOffset: page.nextOffset, hasMore: page.hasMore };
         },
 
-        async feed(limit) {
-            const page = await feed.songs({ count: Math.max(limit, 6) });
+        async feed(limit, scene) {
+            // scene 是场景分类 id（来自 /feed/mode/）；给了就按这个场景拉歌，否则是默认 FM。
+            const page = await feed.songs({ count: Math.max(limit, 6), ...(scene != null ? { scene } : {}) });
             const songs = toFoliaSongs(page.items);
             return { provider: 'qishui', songs, hasMore: Boolean(page.hasMore) };
         },
 
         feedModes: () => feed.modes(),
+
+        // 手机端「发现 → 模式探索」：public /luna/discover，每次请求内容会换。
+        discoverModes: () => discover.modes(),
+        discoverTracks: (id, limit, cursor) => discover.tracks(id, limit, cursor),
 
         likedSongs: () => library.likedSongs(),
         recentPlayed: (limit, offset) => library.recentPlayed({ limit, offset }).then(page => ({

@@ -6,6 +6,7 @@ import {
     type LxSquareFilter,
 } from '../../services/onlineMusic/lxmusic/lxSquareCollections';
 import {
+    LX_PUBLIC_PLATFORM_KEYS,
     lxApiPlaylistTags,
     type LxPublicPlatform,
     type LxSquareTagCatalog,
@@ -26,7 +27,8 @@ import { LxCategoryPicker } from './LxCategoryPicker';
 // 分类组与标签都来自那家自己的分类目录接口，不是写死的文案：
 // 见 lxPublicApi 的 lxApiPlaylistTags —— 拿到的 id 直接就是该家「按标签取歌单」的参数。
 
-const PLATFORM_KEYS: ReadonlyArray<LxPublicPlatform | 'all'> = ['all', 'wy', 'tx', 'kg', 'kw'];
+// 平台列表一律从公开平台常量派生（含咪咕/汽水），别在这里写死四家 —— 之前写死导致新平台加不进浮层。
+const PLATFORM_KEYS: ReadonlyArray<LxPublicPlatform | 'all'> = ['all', ...LX_PUBLIC_PLATFORM_KEYS];
 
 /** 标签目录每家只拉一次；空目录不缓存，下次进来还有机会重试。 */
 const catalogCache = new Map<LxPublicPlatform, Promise<LxSquareTagCatalog>>();

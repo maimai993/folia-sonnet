@@ -26,6 +26,8 @@ export const PLATFORM_HINTS: Record<LxPublicPlatform, string> = {
     tx: '歌单 · 新碟（没有电台）',
     kg: '歌单 · 新碟（没有电台）',
     kw: '只有歌单广场',
+    mg: '歌单广场 · 分类 · 搜索',
+    qs: '场景分类 · 推荐 · 搜索',
 };
 
 // 一页 30：其中一家的歌单广场接口固定每页 30 条，页大小对不上的话翻页会漏歌。
@@ -53,6 +55,6 @@ export type LxWorkspaceProps = {
 
 export const platformOfCollection = (collection: ProviderCollection, fallback: LxPublicPlatform): LxPublicPlatform => {
     const raw = collection.providerData?.platform;
-    if (raw === 'wy' || raw === 'kg' || raw === 'kw' || raw === 'tx') return raw;
+    if (raw === 'wy' || raw === 'kg' || raw === 'kw' || raw === 'tx' || raw === 'mg' || raw === 'qs') return raw;
     return fallback;
 };

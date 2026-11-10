@@ -11,6 +11,7 @@ const PLATFORM_META: Record<string, LxPlatformBadge> = {
     kw: { label: '酷我', color: '#f59e0b' },
     tx: { label: 'QQ', color: '#16a34a' },
     mg: { label: '咪咕', color: '#7c3aed' },
+    qs: { label: '汽水', color: '#111827' },
     local: { label: '本地', color: '#64748b' },
 };
 

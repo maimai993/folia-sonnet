@@ -7,7 +7,7 @@ import type { LxSourceMeta, LxPlatformKey } from './lxTypes';
 
 const HEADER_RE = /@(\w+)\s+(.+)/g;
 
-const KNOWN_PLATFORMS: LxPlatformKey[] = ['wy', 'kg', 'tx', 'kw', 'mg', 'local'];
+const KNOWN_PLATFORMS: LxPlatformKey[] = ['wy', 'kg', 'tx', 'kw', 'mg', 'qs', 'local'];
 
 /** 从脚本头部注释里抽取 @name 等元信息。 */
 export const parseLxHeader = (code: string): LxSourceMeta => {

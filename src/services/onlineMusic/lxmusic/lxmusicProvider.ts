@@ -23,6 +23,7 @@ import { raceCandidates, type LxRaceTask } from './lxRace';
 import { proxyNativeRemoteAudioUrl } from '../../nativeRemoteAudio';
 import { hasNativeHttp, nativeHttpRequest } from '../../nativeAndroidBridge';
 import { notePlaybackAttempt } from './lxDiagnostics';
+import { backfillSongCovers } from '../onlineCoverFallback';
 import { getLxPreferences } from './lxPreferences';
 import { installImportedAudioResolver } from '../importedAudioRouting';
 import { hydrateLxLocalLikes, setLxLocalLiked } from './lxLocalLikes';
@@ -68,7 +69,7 @@ import {
 
 type ParsedId = { platform: LxPlatformKey; nativeId: string };
 
-const KNOWN_ID_PLATFORMS = new Set<string>(['wy', 'kg', 'kw', 'tx', 'mg']);
+const KNOWN_ID_PLATFORMS = new Set<string>(['wy', 'kg', 'kw', 'tx', 'mg', 'qs']);
 
 /** `wy:123` → { platform: 'wy', nativeId: '123' }；同时兼容上一版的 `netease|123`。 */
 const parseSongId = (id: MediaId | string): ParsedId | null => {
@@ -256,6 +257,23 @@ const toProviderPage = <T, U>(page: LxApiPage<T>, map: (item: T) => U, offset: n
     return { items, nextOffset: offset + items.length, hasMore: page.hasMore };
 };
 
+/**
+ * 出列表前给缺封面的洛雪歌曲补一张图。
+ *
+ * 咪咕 / 汽水的曲目里有一小撮（尤其榜单、按标签翻页的歌单）上游压根不给封面地址，
+ * 落进 folia 就是一片占位图。这里复用全站那套「按歌名去网易 / QQ / 酷狗借一张」的兜底：
+ * 有缓存的同步填上，没有的挂异步那一路、拿到后广播让界面重画。只认在线歌曲，
+ * 且不改变本来就带封面的那些，所以网易云 / QQ 这些封面齐全的平台零成本通过。
+ */
+const withCovers = async (items: UnifiedSong[]): Promise<UnifiedSong[]> => backfillSongCovers(items);
+
+const toProviderPageWithCovers = async <T>(
+    page: LxApiPage<T>, map: (item: T) => UnifiedSong, offset: number, limit: number,
+): Promise<ProviderPage<UnifiedSong>> => {
+    const items = await withCovers(page.items.map(map));
+    return { items, nextOffset: offset + items.length, hasMore: page.hasMore };
+};
+
 /** 多平台结果交替排列（wy, kg, kw, wy …），一屏里能同时看到各家，而不是先把网易云翻完。 */
 const interleave = <T>(lists: T[][]): T[] => {
     const out: T[] = [];
@@ -381,6 +399,7 @@ const parseLrcToLyricData = (lrc: string): LyricData => {
 
 const isPublicPlatform = (platform: LxPlatformKey): platform is LxPublicPlatform => (
     platform === 'wy' || platform === 'kg' || platform === 'kw' || platform === 'tx'
+    || platform === 'mg' || platform === 'qs'
 );
 
 /**
@@ -770,7 +789,7 @@ export const lxmusicProvider: OnlineMusicProvider = {
             // `limit` 是「每个平台各取多少」，不是总数：各家的 offset 才能对齐，翻页不会漏歌。
             const songs = dedupeSongs(interleave(pages.map((page) => page.items.map(toUnifiedSong))));
             return {
-                items: songs,
+                items: await withCovers(songs),
                 nextOffset: offset + limit,
                 hasMore: pages.some((page) => page.hasMore),
             };
@@ -1150,12 +1169,12 @@ export const lxmusicProvider: OnlineMusicProvider = {
             const chart = parseLxChartId(id);
             if (chart) {
                 const page = await lxApiChartTracks(chart.platform, chart.chartId, take, skip);
-                return toProviderPage(page, toUnifiedSong, skip, take);
+                return toProviderPageWithCovers(page, toUnifiedSong, skip, take);
             }
             const parsed = parseSongId(id);
             if (!parsed || !isPublicPlatform(parsed.platform)) return emptyPage<UnifiedSong>(offset);
             const page = await lxApiPlaylistTracks(parsed.platform, parsed.nativeId, limit, offset);
-            return toProviderPage(page, toUnifiedSong, offset, limit);
+            return toProviderPageWithCovers(page, toUnifiedSong, offset, limit);
         },
         async getPlaylistDetail(id, collection) {
             // 歌单卡片本身已经带着名字与封面；没有卡片时给一个能看的占位。
@@ -1198,11 +1217,15 @@ export const lxmusicProvider: OnlineMusicProvider = {
             if (page.items.length === 0) {
                 // 这家没有专辑曲目接口（酷我：几条公开路径全废）时别给一屏空白：
                 // 同一张专辑的本地收藏直接兜住这一页。
-                if (saved.length === 0) return toProviderPage(page, toUnifiedSong, skip, take);
+                if (saved.length === 0) {
+                    const blank = toProviderPage(page, toUnifiedSong, skip, take);
+                    return { ...blank, items: await withCovers(blank.items) };
+                }
                 const items = saved.map(fromSavedSong);
                 return { items, nextOffset: skip + items.length, hasMore: false };
             }
             const result = toProviderPage(page, toUnifiedSong, skip, take);
+            result.items = await withCovers(result.items);
             if (skip > 0 || saved.length === 0) return result;
             // 接口给的专辑曲目未必含用户收藏的那个版本（不同版号、版权缺歌），
             // 收藏那几首提到最前，保证「从收藏进来」一定找得到自己那首。

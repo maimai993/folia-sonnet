@@ -37,6 +37,15 @@ const CACHE_TTL = 10 * 60 * 1000;
 const chartCache = new Map<LxPublicPlatform, { at: number; items: LxApiChart[] }>();
 
 const loadCharts = async (platform: LxPublicPlatform): Promise<LxApiChart[]> => {
+    // 汽水「模式探索」每次拉都是新的一批卡（上游自己会换），缓存十分钟就等于把这
+    // 个特性关掉；它只走一次网络、不设缓存，其余平台照旧吃十分钟缓存。
+    if (platform === 'qs') {
+        try { return await lxApiCharts(platform); }
+        catch (error) {
+            console.warn('[lxmusic] 模式探索拉取失败：', error);
+            return chartCache.get(platform)?.items ?? [];
+        }
+    }
     const cached = chartCache.get(platform);
     if (cached && Date.now() - cached.at < CACHE_TTL) return cached.items;
     try {
