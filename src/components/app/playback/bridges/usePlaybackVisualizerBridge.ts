@@ -25,6 +25,7 @@ import { getExternalPosition, isExternalPlaybackSounding } from '../../../../ser
 // 原生播放（安卓 ExoPlayer）时 WebView 里那块 <audio> 是空的、currentTime 恒为 0，
 // 进度与歌词只能从引擎读它插值后的位置。
 import { nativePlaybackEngine } from '../../../../services/playbackEngine/nativePlaybackEngine';
+import { pollNativeSpectrum } from '../../../../services/playbackEngine/nativeSpectrumBridge';
 import { readLatestSpectrum } from '../../../../services/spectrumTap';
 
 // src/components/app/playback/bridges/usePlaybackVisualizerBridge.ts
@@ -272,6 +273,32 @@ export function usePlaybackVisualizerBridge({
 
         if (backgroundHold) {
             // The bands keep their last values: nothing draws from them while held.
+        } else if (usesNativeClock) {
+            /*
+             * ★ 原生播放：频谱从原生 DSP 链路取。
+             *
+             * 原生那一路（mpv / ExoPlayer）的声音根本不进 Web Audio，
+             * 所以 `analyserRef.current` 是 null、下面的 AnalyserNode 分支永远进不来，
+             * 以前就直接掉到最后那条「呼吸」兜底 —— 画面在动，但跟音乐毫无关系。
+             *
+             * 原生那边一直在算：EqAudioProcessor 里的 SpectrumAnalyzer 做 2048 点 FFT、
+             * 压成 32 段，通过 FoliaNativePlayer.getSpectrum 暴露。
+             *
+             * ⚠️ 这里是同步的 rAF 回调，不能 await。所以走**非阻塞**写法：
+             * 发起一次取样，等到手时把结果写进 audioBands；这一帧先用手上最新的值。
+             * 跨桥往返要几毫秒，等它会把这个回调变成异步、每帧都卡在下一次微任务上，
+             * 播放页的抽搐就是这么来的。
+             */
+            if (!pollNativeSpectrum(audioBands, audioPower)) {
+                const time = Date.now() / 2000;
+                const breath = (Math.sin(time) + 1) * 20;
+                audioPower.set(breath);
+                audioBands.bass.set(breath);
+                audioBands.lowMid.set(breath);
+                audioBands.mid.set(breath);
+                audioBands.vocal.set(breath);
+                audioBands.treble.set(breath);
+            }
         } else if (hasAudibleSignal && analyserRef.current) {
             const bufferLength = analyserRef.current.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);

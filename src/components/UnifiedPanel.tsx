@@ -458,6 +458,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     onAudioQualityChange={onAudioQualityChange}
                     onSyncData={onSyncData}
                     isSyncing={isSyncing}
+                    isDaylight={isDaylight}
                     onNavigateHome={() => {
                         onToggle();
                         onNavigateHome();

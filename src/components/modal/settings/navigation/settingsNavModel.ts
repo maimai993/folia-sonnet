@@ -81,8 +81,12 @@ export const SETTINGS_NAV_GROUP_SPECS: GroupSpec[] = [
         id: 'advanced',
         labelKey: 'options.settingsGroupAdvanced',
         sections: [
-            // The loader only exists in the desktop main process; on web there is nothing to switch on.
-            { id: 'mods', icon: Boxes, labelKey: 'options.settingsPageMods', electronOnly: true },
+            /*
+             * 模组页原来挂着 electronOnly：加载器只存在于桌面端主进程。
+             * 安卓 App 里要跑模组，靠的是内置的 nodejs-mobile 运行时
+             * （见 android/.../mods/ 下的 NodeModHost），所以这一项不再只给桌面。
+             */
+            { id: 'mods', icon: Boxes, labelKey: 'options.settingsPageMods' },
             { id: 'developer', icon: Terminal, labelKey: 'options.settingsPageDeveloper' },
         ],
     },

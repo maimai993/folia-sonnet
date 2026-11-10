@@ -179,8 +179,22 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
             </Group>
 
             <Group def={AUDIO_GROUP}>
-                {/* 频谱开关（monetShowAudioVisualization）已删：手机拿不到 Web Audio 分析数据，
-                    频谱永远趴着不动 —— VisualizerMonet 里在安卓上直接不画它。桌面不受影响。 */}
+                {/*
+                 * 频谱开关。
+                 *
+                 * 这个开关曾经被删掉：安卓 App 里拿不到 Web Audio 的分析数据，
+                 * 频谱画出来永远是趴着的一条死线，与其让人打开一个不动的开关，
+                 * 不如根本不显示（VisualizerMonet 里也同时加了安卓判断不画）。
+                 *
+                 * 现在原生播放那一路的频谱由 nativeSpectrumBridge 接进来了
+                 * （SpectrumAnalyzer → getSpectrum → audioBands），两条播放路径都有数据，
+                 * 所以开关和绘制一起恢复。
+                 */}
+                <ToggleRow
+                    label={t('options.monetShowAudioVisualization')}
+                    checked={resolvedTuning.showAudioVisualization ?? true}
+                    onChange={(value) => onMonetTuningChange?.({ showAudioVisualization: value })}
+                />
                 <Row
                     label={t('options.monetAudioStyle')}
                     below={(

@@ -13,6 +13,7 @@ import { runTrackStems, setWantedStemTrack, stemTrackWanted, type StemTask } fro
 import { dropStemDrums, setStemDrumsKeptListener } from './stemRange';
 import { HTDEMUCS_GPU_SEGMENT } from './beatThisGpu';
 import { modelCanRun } from './modelAvailability';
+import { isNativeModelsAvailable } from '../automix/nativeModels';
 
 // src/services/analysis/drumHits.ts
 // A whole track's drum hits, read off htdemucs' drum stem (drumStem.ts, the renderer's GPU) and kept:
@@ -58,12 +59,24 @@ const STEM_RATE = 44100;
 /** The drum hits' kind on a track's stem run (trackStemRun.ts). */
 export const DRUM_HITS_TASK = 'drum hits';
 
-/** Whether the GPU drum stem can run here: htdemucs_gpu installed and a WebGPU to run it on. */
-export const canRunDrumStem = (): boolean =>
-    typeof window !== 'undefined'
-    && typeof window.electron?.getHtdemucsGpuWeights === 'function'
-    && typeof navigator !== 'undefined' && 'gpu' in navigator
-    && modelCanRun('htdemucs_gpu');
+/**
+ * Whether a drum stem can be had here.
+ *
+ * 两条路：
+ *   · 安卓 App —— htdemucs 权重在 APK 里，推理走 onnxruntime-android（原生，不碰 WebGPU）；
+ *   · 桌面 —— htdemucs_gpu 已安装，且有可用的 WebGPU。
+ *
+ * 原来这里只有第二条，`getHtdemucsGpuWeights` 是主进程的桥，
+ * 安卓上不存在，于是每个吃鼓点的效果都判定为「跑不了」。
+ * 仿真鼓面（时计）就是靠这条才动起来的。
+ */
+export const canRunDrumStem = (): boolean => {
+    if (isNativeModelsAvailable()) return true;
+    return typeof window !== 'undefined'
+        && typeof window.electron?.getHtdemucsGpuWeights === 'function'
+        && typeof navigator !== 'undefined' && 'gpu' in navigator
+        && modelCanRun('htdemucs_gpu');
+};
 
 /** 44.1 kHz mono to the 22.05 kHz beat_this rate, by the browser's own resampler; the vocal envelope's too (vocalStemRun.ts). */
 export const resampleStem = async (signal: Float32Array): Promise<Float32Array> => {

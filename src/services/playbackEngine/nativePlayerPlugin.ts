@@ -232,6 +232,13 @@ interface FoliaNativePlayerPlugin {
     getEqualizerState(): Promise<NativeEqualizerState>;
     /** 频谱取样开关：只有后置均衡器那一页打开时才开，没人看就不该在音频线程上跑 FFT。 */
     setSpectrumEnabled(options: { enabled: boolean }): Promise<void>;
+    /**
+     * 关闭人声（中置相消）开关。
+     *
+     * 只改一个原生侧的布尔值，音频线程下一帧就照它处理：不重建音频链、
+     * 不重新加载音频，拨开关即时生效。算法见原生 VocalCancelProcessor.kt。
+     */
+    setVocalCancelEnabled(options: { enabled: boolean }): Promise<void>;
     getSpectrum(): Promise<NativeSpectrumFrame>;
     getSnapshot(): Promise<NativePlaybackSnapshot>;
     /**
@@ -273,6 +280,7 @@ export const nativePlayer = {
     setEqualizer: (settings: NativeEqualizerSettings) => FoliaNativePlayer.setEqualizer({ settings }),
     getEqualizerState: () => FoliaNativePlayer.getEqualizerState(),
     setSpectrumEnabled: (enabled: boolean) => FoliaNativePlayer.setSpectrumEnabled({ enabled }),
+    setVocalCancelEnabled: (enabled: boolean) => FoliaNativePlayer.setVocalCancelEnabled({ enabled }),
     getSpectrum: () => FoliaNativePlayer.getSpectrum(),
     getSnapshot: () => FoliaNativePlayer.getSnapshot(),
     getAudioPipelineDiagnostics: () => FoliaNativePlayer.getAudioPipelineDiagnostics(),

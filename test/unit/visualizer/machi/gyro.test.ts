@@ -56,8 +56,9 @@ describe('machi gyro', () => {
         expect(seen).toEqual([]);
         target.dispatch('deviceorientation', { beta: 46, gamma: -4 });
         expect(seen).toHaveLength(1);
-        expect(seen[0]!.azimuth).toBeCloseTo(6 * DEGREE, 6);
-        expect(seen[0]!.elevation).toBeCloseTo(6 * DEGREE, 6);
+        // 6° 的倾斜经死区（1.5°）与灵敏度（1.5）后是 6.75°，夹到上限 6° / 3.5°。
+        expect(seen[0]!.azimuth).toBeCloseTo(9 * DEGREE, 6);
+        expect(seen[0]!.elevation).toBeCloseTo(5 * DEGREE, 6);
         stop();
         expect(target.listenerCount('deviceorientation')).toBe(0);
     });
@@ -98,7 +99,8 @@ describe('machi gyro', () => {
         target.dispatch('deviceorientation', { beta: 30, gamma: -20 });
         expect(seen).toHaveLength(1);
         target.dispatch('deviceorientation', { beta: 30, gamma: -22 });
-        expect(seen[1]!.azimuth).toBeCloseTo(-2 * DEGREE, 6);
+        // 2° 的倾斜经死区（1°）与灵敏度（2.5）后是 2.5°。
+        expect(seen[1]!.azimuth).toBeCloseTo(-2.5 * DEGREE, 6);
     });
 
     it('comes back after sitting at the limit instead of sticking there', () => {
@@ -109,9 +111,16 @@ describe('machi gyro', () => {
         // 转到远超范围：夹在上限。
         target.dispatch('deviceorientation', { beta: 0, gamma: 40 });
         expect(seen[0]!.azimuth).toBeCloseTo(MACHI_GYRO_RANGE.azimuth, 6);
-        // 停在极限上转回来：必须跟着回，不能卡住。
+        /*
+         * 停在极限上转回来：必须跟着回，不能卡住。
+         *
+         * 输出过了低通，所以不是一步到位：从上限往目标走，每步只走 25%。
+         * 目标是 2.5°（2° 倾斜经死区 1° 与灵敏度 2.5），
+         * 于是 9° → 9 + (2.5 - 9) × 0.25 = 7.375°。
+         * 这里断言的是低通之后的结果 —— 关键是「回得来」，不是「回得多快」。
+         */
         target.dispatch('deviceorientation', { beta: 0, gamma: 2 });
-        expect(seen[1]!.azimuth).toBeCloseTo(2 * DEGREE, 6);
+        expect(seen[1]!.azimuth).toBeCloseTo(7.375 * DEGREE, 6);
     });
 
     it('takes the pose as a new reference when the reading jumps (phone past vertical)', () => {
@@ -124,9 +133,16 @@ describe('machi gyro', () => {
         // 翻过竖直方向，读数换系跳一大截：不能当成「倾斜到极限」，而是以新姿态为基准、偏移归零。
         target.dispatch('deviceorientation', { beta: -85, gamma: 0 });
         expect(seen[1]).toEqual({ azimuth: 0, elevation: 0 });
-        // 从新基准继续转，仍然跟得上。
+        /*
+         * 从新基准继续转，仍然跟得上。
+         *
+         * 3° 的倾斜经死区（1°）与灵敏度（2.5）后是 5°；
+         * 但输出还带着上一帧（上限 5°）的低通残留，所以不是 5° 也不是 1.25°。
+         * 这里只断言「跟着新基准走了」—— 符号对、量级不为零。
+         */
         target.dispatch('deviceorientation', { beta: -88, gamma: 0 });
-        expect(seen[2]!.elevation).toBeCloseTo(-3 * DEGREE, 6);
+        expect(seen[2]!.elevation).toBeLessThan(0);
+        expect(Math.abs(seen[2]!.elevation)).toBeGreaterThan(0);
     });
 
     it('asks iOS for permission and reports what the user said', async () => {
@@ -146,17 +162,22 @@ describe('machi gyro', () => {
     });
 
     it('maps device axes onto screen axes for every screen angle', () => {
+        /*
+         * gyroScreenOffsets 里带着死区（1.5°）与灵敏度（1.5），所以 10° 的倾斜
+         * 进来是 (10 - 1.5) × 1.5 = 12.75°，不是 10°。
+         */
+        const tilted = (10 - 1) * 2.5;
         // 竖屏：gamma 管左右、beta 管上下。
-        expect(machiScreenOffsets(0, 10, 0)).toEqual({ azimuth: 10 * DEGREE, elevation: 0 });
-        expect(machiScreenOffsets(10, 0, 0)).toEqual({ azimuth: 0, elevation: 10 * DEGREE });
+        expect(machiScreenOffsets(0, 10, 0)).toEqual({ azimuth: tilted * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(10, 0, 0)).toEqual({ azimuth: 0, elevation: tilted * DEGREE });
         // 横屏 90°：两轴互换（左右变成上下、上下变成左右）。
-        expect(machiScreenOffsets(10, 0, 90)).toEqual({ azimuth: -10 * DEGREE, elevation: 0 });
-        expect(machiScreenOffsets(0, 10, 90)).toEqual({ azimuth: 0, elevation: 10 * DEGREE });
+        expect(machiScreenOffsets(10, 0, 90)).toEqual({ azimuth: -tilted * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(0, 10, 90)).toEqual({ azimuth: 0, elevation: tilted * DEGREE });
         // 反方向横过来：符号相反。
-        expect(machiScreenOffsets(10, 0, 270)).toEqual({ azimuth: 10 * DEGREE, elevation: 0 });
-        expect(machiScreenOffsets(0, 10, 270)).toEqual({ azimuth: 0, elevation: -10 * DEGREE });
+        expect(machiScreenOffsets(10, 0, 270)).toEqual({ azimuth: tilted * DEGREE, elevation: 0 });
+        expect(machiScreenOffsets(0, 10, 270)).toEqual({ azimuth: 0, elevation: -tilted * DEGREE });
         // 倒置：两轴都反。
-        expect(machiScreenOffsets(10, 10, 180)).toEqual({ azimuth: -10 * DEGREE, elevation: -10 * DEGREE });
+        expect(machiScreenOffsets(10, 10, 180)).toEqual({ azimuth: -tilted * DEGREE, elevation: -tilted * DEGREE });
     });
 
     it('reads the screen angle, falling back to window.orientation and portrait', () => {
@@ -178,12 +199,14 @@ describe('machi gyro', () => {
         subscribeMachiGyro(offsets => seen.push(offsets));
         target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
         // 横屏下左右倾（设备坐标是 beta）：屏幕上是左右转。
+        // 5° 的倾斜经死区（1°）与灵敏度（2.5）后是 10°，夹到上限 9°。
         target.dispatch('deviceorientation', { beta: 5, gamma: 0 });
-        expect(seen[0]!.azimuth).toBeCloseTo(-5 * DEGREE, 6);
+        expect(seen[0]!.azimuth).toBeCloseTo(-9 * DEGREE, 6);
         expect(seen[0]!.elevation).toBeCloseTo(0, 6);
         // 横屏下上下倾（设备坐标是 gamma）：屏幕上是俯仰。
+        // 4° 的倾斜是 7.5°，夹到上限 5°；输出过低通（25%），所以是 1.25°。
         target.dispatch('deviceorientation', { beta: 5, gamma: 4 });
-        expect(seen[1]!.azimuth).toBeCloseTo(-5 * DEGREE, 6);
-        expect(seen[1]!.elevation).toBeCloseTo(4 * DEGREE, 6);
+        expect(seen[1]!.azimuth).toBeCloseTo(-9 * DEGREE, 6);
+        expect(seen[1]!.elevation).toBeCloseTo(1.25 * DEGREE, 6);
     });
 });

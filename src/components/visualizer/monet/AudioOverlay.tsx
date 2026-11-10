@@ -19,6 +19,16 @@ interface AudioOverlayProps {
 const BAR_COUNT = 72;
 const MIN_RAW_SPECTRUM_BIN = 6;
 
+/*
+ * 频谱平滑的时间常数（每秒趋近速率，越大越快）。
+ *
+ * 起得快、落得慢 —— 表头 / 压缩器的经典做法。不做这件事的话，原生频谱
+ * 每帧的跳变会原样画出来，频谱条看起来不是随音乐起伏，而是一直在重排。
+ * 3.2 对应约 0.31 秒的时间常数，肉眼是连续的起伏。
+ */
+const MONET_RISE_RATE = 3.2;
+const MONET_FALL_RATE = 2.0;
+
 const buildSpectrumAnchors = (bands: number[]) => {
     const [bass, lowMid, mid, vocal, treble] = bands;
     return [
@@ -80,17 +90,34 @@ const sampleRawSpectrumProfile = (rawSpectrum: Uint8Array, normalizedIndex: numb
     }
 
     const averaged = weightTotal > 0 ? weightedSum / weightTotal : 0;
-    
-    // Dynamic noise floor based on frequency (higher noise subtraction for lower frequencies)
-    const noiseFloor = 16 + (1 - clampedIndex) * 12;
+
+    /*
+     * 这一段原来把频谱压得太狠，安卓上几乎看不出起伏。
+     *
+     * 三处都在往下压：
+     *   1. 噪声底 16~28 —— 直接从 255 的刻度上刮掉一成多；
+     *   2. 幂压缩 1.8~2.2 —— 对本来就只有 0.3~0.5 的均值再平方一次，
+     *      结果掉到 0.1 附近，画出来就是一条贴着底的平线；
+     *   3. 低频补偿 0.52 起 —— 而低频恰恰是能量最多的部分。
+     *
+     * 原生播放那一路给过来的频谱（nativeSpectrumBridge）本来就比 Web Audio
+     * 的更「瘦」：它是 47fps 的短时 FFT，做了 dB 归一化，不像 AnalyserNode
+     * 那样带 smoothingTimeConstant 的保持。
+     *
+     * 所以这里整体抬一档：噪声底降下来、幂指数压到 1 附近、低频补偿拉平，
+     * 让画面能看出形状，而不是一条平线。数值是照截图里那条曲线定的 ——
+     * 「显示效果可以」大概就是能看到明显的峰谷，而不是满屏糊住。
+     */
+    const noiseFloor = 6 + (1 - clampedIndex) * 6;
     const normalized = Math.max(0, Math.min(1, (averaged - noiseFloor) / (255 - noiseFloor)));
 
-    // Power compression to suppress quiet/humming baseline and increase visual peaks (contrast)
-    const power = 1.8 + (1 - clampedIndex) * 0.4;
+    // 轻压缩：只削掉最底部的绒毛，中段几乎原样，保留动态。
+    const power = 1.15 + (1 - clampedIndex) * 0.15;
     const processed = Math.pow(normalized, power);
 
-    const lowFrequencyCompensation = 0.52 + clampedIndex * 0.62;
-    const presenceLift = 0.92 + Math.sqrt(clampedIndex) * 0.14;
+    // 低频补偿拉平：原来 0.52 起会把最多的那一段砍一半。
+    const lowFrequencyCompensation = 0.86 + clampedIndex * 0.2;
+    const presenceLift = 1.04 + Math.sqrt(clampedIndex) * 0.1;
     return Math.max(0, Math.min(1, processed * lowFrequencyCompensation * presenceLift));
 };
 
@@ -177,6 +204,27 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
             return;
         }
 
+        /*
+         * 频谱的平滑状态。
+         *
+         * ★ 必须平滑，否则频谱条会「一直在重排」。
+         *
+         * 原生频谱每帧给的是瞬时读数，相邻两帧差得很厉害。早先这里是把读数
+         * 直接画出去的（band = audioBands.bass.get() / 255），于是每根柱子
+         * 每帧都在跳，看起来不是随音乐起伏，而是永远在抖动重排。
+         *
+         * 现在每个频段、每根柱子都过一层指数平滑：起得快、落得慢
+         * （表头 / 压缩器的经典做法），并且逐柱平滑 —— 只平滑整段 bass
+         * 是不够的，柱子之间的相对高低仍在乱跳。
+         */
+        const smoothedBands = new Float32Array(5);
+        const smoothedBars = new Float32Array(BAR_COUNT);
+        let lastFrameAt = 0;
+        const smoothTowards = (current: number, target: number, dt: number) => {
+            const rate = target > current ? MONET_RISE_RATE : MONET_FALL_RATE;
+            return current + (target - current) * (1 - Math.exp(-rate * dt));
+        };
+
         let frameId = 0;
         let canvasWidth = 0;
         let canvasHeight = 0;
@@ -225,13 +273,26 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
             }
 
             context.clearRect(0, 0, width, height);
-            const bands = [
+            /*
+             * 先算这一帧的步长，再把读数过一遍平滑。
+             *
+             * dt 上限 0.05（20fps）：页面被挂起很久再回来时，不要让一帧
+             * 吃掉一大段，否则会直接跳到目标值、看起来还是「突然一下」。
+             */
+            const nowMs = performance.now();
+            const dt = lastFrameAt === 0 ? 0.016 : Math.min(0.05, (nowMs - lastFrameAt) / 1000);
+            lastFrameAt = nowMs;
+            const rawBands = [
                 audioBands.bass.get() / 255,
                 audioBands.lowMid.get() / 255,
                 audioBands.mid.get() / 255,
                 audioBands.vocal.get() / 255,
                 audioBands.treble.get() / 255,
             ];
+            for (let index = 0; index < rawBands.length; index += 1) {
+                smoothedBands[index] = smoothTowards(smoothedBands[index], rawBands[index], dt);
+            }
+            const bands = Array.from(smoothedBands);
             const rawSpectrum = audioBands.spectrum?.get() ?? new Uint8Array(0);
             const hasRawSpectrum = rawSpectrum.length > MIN_RAW_SPECTRUM_BIN;
             const energy = Math.min(1, Math.max(0.08, audioPower.get() / 255));
@@ -246,15 +307,21 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
                 for (let index = 0; index < BAR_COUNT; index += 1) {
                     const x = (index / (BAR_COUNT - 1)) * width;
                     const spectrumIndex = index / (BAR_COUNT - 1);
-                    const band = hasRawSpectrum
+                    const bandTarget = hasRawSpectrum
                         ? sampleRawSpectrumProfile(rawSpectrum, spectrumIndex)
                         : sampleSpectrumProfile(bands, spectrumIndex);
+                    /*
+                     * 逐柱平滑：柱子之间的相对高低也在跳，只平滑整段频段是不够的。
+                     */
+                    smoothedBars[index] = smoothTowards(smoothedBars[index], bandTarget, dt);
+                    const band = smoothedBars[index];
                     const wave =
-                        Math.sin(index * 0.24 + performance.now() * 0.004) * 0.08 +
-                        Math.sin(index * 0.68 + performance.now() * 0.0028) * 0.05;
+                        Math.sin(index * 0.24 + nowMs * 0.004) * 0.08 +
+                        Math.sin(index * 0.68 + nowMs * 0.0028) * 0.05;
                     
                     const envelope = Math.sin(spectrumIndex * Math.PI);
-                    const amplitude = energy * 0.04 + band * 0.8 + wave * 0.04;
+                    // 0.8 → 0.95：频谱本身的幅度起来了，这里不必再打折。
+                    const amplitude = energy * 0.04 + band * 0.95 + wave * 0.04;
                     const y = height - Math.max(0, height * amplitude * envelope);
                     points.push({ x, y });
                 }
@@ -295,7 +362,7 @@ const AudioOverlay: React.FC<AudioOverlayProps> = ({
                     const pulse = Math.sin(index * 0.45 + performance.now() * 0.006) * 0.5 + 0.5;
                     
                     const envelope = Math.sin(spectrumIndex * Math.PI);
-                    const barHeight = height * (0.02 + (energy * 0.04 + band * 0.82 + pulse * 0.02) * envelope);
+                    const barHeight = height * (0.02 + (energy * 0.04 + band * 0.95 + pulse * 0.02) * envelope);
                     const x = index * gap + gap * 0.14;
                     context.fillRect(x, height - barHeight, Math.max(1.35, gap * 0.34), barHeight);
                 }

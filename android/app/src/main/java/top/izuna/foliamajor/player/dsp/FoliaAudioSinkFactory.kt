@@ -64,12 +64,26 @@ class FoliaAudioSinkFactory(
     ): AudioSink {
         // 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
         // 否则换手时两路的 EQ 状态会互相干扰。
-        // 显式写出元素类型：Kotlin 的 Array<EqAudioProcessor> 不会自动变 Array<AudioProcessor>。
-        val processors: Array<AudioProcessor> = if (transitionRoleProvider != null) {
-            arrayOf<AudioProcessor>(EqAudioProcessor(state), TransitionDspProcessor(transitionRoleProvider))
-        } else {
-            arrayOf<AudioProcessor>(EqAudioProcessor(state))
+        /*
+         * 关闭人声暂时**不挂在链上**（2026-11-10）。
+         *
+         * 它连续出了两版问题，都是「开不开都滋滋滋」：一次是字节序、一次是
+         * 透传分支的错位与相消后的削波。两次都在原生音频线程上，`logcat`
+         * 里没有任何异常 —— 因为它不是崩溃，只是把样本写坏了。
+         *
+         * 与其继续在生产链上试参数（每一次试错都是用户听一遍噪声），
+         * 不如先把它摘掉：不挂在链上就绝不可能影响任何一首歌的声音。
+         * 这个功能要恢复时，得先在设备上用真实的歌逐样本验证透传分支
+         * 与原信号完全一致，再谈相消效果。
+         *
+         * 显式写出元素类型：toTypedArray 出来的是 Array<AudioProcessor>。
+         */
+        val chain = ArrayList<AudioProcessor>(3)
+        chain.add(EqAudioProcessor(state))
+        if (transitionRoleProvider != null) {
+            chain.add(TransitionDspProcessor(transitionRoleProvider))
         }
+        val processors = chain.toTypedArray()
         return DefaultAudioSink.Builder(context)
             // 坑 1：不看入参，永远 false。
             .setEnableFloatOutput(false)

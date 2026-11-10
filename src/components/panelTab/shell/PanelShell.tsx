@@ -165,7 +165,20 @@ const PanelSurface: React.FC<PanelSurfaceProps> = ({ hasHandle, isCover, tabKey,
             exit={{ ...away, transition: kitTransition('move', reduced) }}
             data-testid="unified-panel-surface"
             data-still={isStill || undefined}
-            className={`st-window pointer-events-auto @container hide-scrollbar flex max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden rounded-[20px] bg-[var(--pn-glass)] text-[color:var(--st-t1)] shadow-[var(--pn-shadow)] backdrop-blur-[40px] backdrop-saturate-[1.3] [&[data-still]_*]:transition-none ${isWideShort ? 'flex-row' : 'flex-col'}`}
+            /*
+             * ★ relative 是必须的：Popover 把 .st-window 当作定位包含块。
+             *
+             * Popover 会 portal 进 `.st-window`，并用 placePopover 算出
+             * 「距离 .st-window 上下边多少像素」的 top / bottom 写进 style。
+             * 但 .st-window 原先没有 position，是 static —— static 的元素
+             * **不是** absolute 子元素的包含块，于是那个 top/bottom 会被解析到
+             * 更外层某个定位祖先（这里正好是 framer 的 motion.div）身上：
+             * 弹层的位置就整体偏了，底部被面板的 overflow-hidden 裁掉，
+             * 里面明明还能滚的内容也就永远滑不到底。
+             *
+             * 加 relative 之后 .st-window 自己成为包含块，两边口径一致。
+             */
+            className={`st-window relative pointer-events-auto @container hide-scrollbar flex max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden rounded-[20px] bg-[var(--pn-glass)] text-[color:var(--st-t1)] shadow-[var(--pn-shadow)] backdrop-blur-[40px] backdrop-saturate-[1.3] [&[data-still]_*]:transition-none ${isWideShort ? 'flex-row' : 'flex-col'}`}
             style={{
                 ...panelTokens(isDaylight, theme, reduced, glassOn),
                 width: isWideShort

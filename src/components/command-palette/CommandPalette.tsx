@@ -20,6 +20,7 @@ import { FILTER_VIEW_COMMAND_ID } from './commands/filterViewCommand';
 import { CAPSULE_HANDBACK_DELAY_MS, capsuleBodyHeight, listArrowStep, readCapsuleFrame, type CapsuleFrame } from './capsuleFrame';
 import CommandPaletteCapsuleFrame from './CommandPaletteCapsuleFrame';
 import { useCapsulePaletteStore } from '../../stores/useCapsulePaletteStore';
+import { GlassLayer } from '../modal/settings/kit/GlassLayer';
 
 // src/components/command-palette/CommandPalette.tsx
 // Full-screen command input overlay with autocomplete and keyboard execution.
@@ -660,31 +661,46 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
             ? (isDaylight ? 'rgba(250,250,249,0.12)' : 'rgba(0,0,0,0.16)')
             : (isDaylight ? 'rgba(250,250,249,0.46)' : 'rgba(0,0,0,0.48)'),
     };
+    /*
+     * 命令面板的主浮层。玻璃拆成两层（和 Sheet / NowPlayingToast 同一个做法）：
+     * 外层管圆角与裁剪，里面那层 span 带同样的 rounded-3xl 承担模糊。
+     *
+     * 为什么不能直接在外层写 backdrop-blur：浏览器把模糊单独合成，
+     * 同一元素上的 border-radius 收不住它的角，四角会露直角（issue #279）。
+     *
+     * 之前它一直没玻璃，是因为两条入口（[class*="backdrop-blur"] 和
+     * .theme-glass-panel）都够不着它 —— 它既没有 blur 类也没有玻璃类。
+     * 底色 panelBg 本来就是半透明的（zinc-950/70、white/70），
+     * 所以加了模糊立刻就有折射可看，不需要再压透。
+     */
     const panelBox = (
         <div
-            className={`overflow-hidden rounded-3xl border shadow-2xl ${panelBg}`}
+            className={`relative isolate overflow-hidden rounded-3xl border shadow-2xl ${panelBg}`}
             data-testid="command-palette-panel"
             style={{
                 borderColor: panelBorderColor,
                 color: 'var(--text-primary)',
             }}
         >
-            {capsuleFrame ? (
-                // 输入行在底，正好落在胶囊原来的位置；内容在外框展开时稍晚一点淡入。
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.16, delay: 0.06 }}
-                >
-                    {bodyBox}
-                    {headerRow}
-                </motion.div>
-            ) : (
-                <>
-                    {headerRow}
-                    {bodyBox}
-                </>
-            )}
+            <GlassLayer radius="rounded-3xl" tint="" blur="backdrop-blur-xl" />
+            <div className="relative z-10">
+                {capsuleFrame ? (
+                    // 输入行在底，正好落在胶囊原来的位置；内容在外框展开时稍晚一点淡入。
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.16, delay: 0.06 }}
+                    >
+                        {bodyBox}
+                        {headerRow}
+                    </motion.div>
+                ) : (
+                    <>
+                        {headerRow}
+                        {bodyBox}
+                    </>
+                )}
+            </div>
         </div>
     );
     const blurInputOnTouch = () => {

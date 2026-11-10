@@ -257,6 +257,9 @@ class MainActivity : BridgeActivity() {
         registerPlugin(BrowserPlugin::class.java)
         // YouTube Music 的音频下载缓存走它（ytm/android/ytmAndroidBridge.ts 的 Filesystem）。
         registerPlugin(FilesystemPlugin::class.java)
+        // Automix 的两个分析模型：权重内置在 assets 里，这个插件负责把它们落到私有目录，
+        // 并把「模型是否就绪」告诉 Web 层（设置页的模型区块据此显示已安装/正在安装）。
+        registerPlugin(top.izuna.foliamajor.automix.FoliaAutomixModelsPlugin::class.java)
         // 汽水音乐：签名宿主（隐藏 WebView + bdms.js）的原生桥。
         registerPlugin(FoliaQishuiPlugin::class.java)
         // 「莱茵生命」三维专辑架现在走内嵌网页（RhineLabUI），原生渲染桥已移除。

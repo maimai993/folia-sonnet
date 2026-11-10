@@ -47,6 +47,16 @@ object NativeEqualizerState {
     @Volatile
     var spectrumEnabled: Boolean = false
 
+    /**
+     * 关闭人声（中置相消）开着没有。
+     *
+     * 和 [spectrumEnabled] 一样是桥线程写、音频线程读的单个 volatile：
+     * 处理器每帧只看一眼这个值，切换不需要重建音频链，
+     * 所以拨开关是即时的，不用重新加载音频。
+     */
+    @Volatile
+    var vocalCancelEnabled: Boolean = false
+
     /** 音频线程用的只读快照。 */
     fun snapshot(): EqSettings = current
 

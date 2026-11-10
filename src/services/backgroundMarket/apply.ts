@@ -208,8 +208,11 @@ export const applyMarketBackground = async (
                  * tuning 是每次 setAppearance 整体下发的，只下发一次的话
                  * 重启后 Web 侧重建的那份里没有它，旋转就丢了。
                  * 写进 store 之后，withGlobalSettings 每次都会带上。
+                 *
+                 * 0 也要写：从 90° 改回 0° 是合法操作，用 `if (rotation)` 判掉的话
+                 * 用户把角度调回「不旋转」时 store 里还留着旧值，下次打开又自己转回去。
                  */
-                if (rotation) {
+                if (Number.isFinite(rotation)) {
                     useVisualizerSettingsStore.getState().handleSetWallpaperVideoRotation(rotation);
                 }
                 applied = true;

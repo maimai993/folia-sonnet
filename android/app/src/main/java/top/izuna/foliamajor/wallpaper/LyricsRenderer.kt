@@ -1633,8 +1633,13 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
              * 用原来的比例算 cover 会算出错误的裁剪区间，画面还是被压扁。
              * 这里交换 width/height，让后面的 cover 按「转正后」的形状算，
              * 再在 UV 取值时把这 90° 转过去。
+             *
+             * tuning 里没有这个键时（Web 侧还没下发 / 刚下载完就切到桌面），
+             * 回落到 downloadVideo 存下来的那份 —— 否则市场里选了「旋转 90°」
+             * 到桌面上还是不转。
              */
-            val rotation = tf("wp.videoRotation", 0f).toInt().let { ((it % 360) + 360) % 360 }
+            val rotation = tf("wp.videoRotation", storedVideoRotationDegrees().toFloat())
+                .toInt().let { ((it % 360) + 360) % 360 }
             val swapped = rotation == 90 || rotation == 270
             // 旋转后画面的比例（屏幕上真正看到的那块）
             val sourceWidth = if (swapped) videoHeight else videoWidth
@@ -2050,6 +2055,23 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
     private fun tb(key: String, fallback: Boolean): Boolean {
         val value = tuning[key] ?: return fallback
         return value >= 0.5f
+    }
+
+    /**
+     * downloadVideo 存下来的视频旋转角度。
+     *
+     * 为什么需要它：Web 侧那份 tuning 是每次 setAppearance 整体下发的，
+     * 而市场里「旋转 90°」是**下载完当场**就要生效的 —— 中间这段时间
+     * tuning 里可能还是旧值（或压根没有这个键），画面就横躺着不动。
+     * 这里在 tuning 缺省时回落到原生自己存的那份，两边最终会一致。
+     */
+    private fun storedVideoRotationDegrees(): Int {
+        return try {
+            val prefs = context?.getSharedPreferences("folia_wallpaper", Context.MODE_PRIVATE)
+            ((prefs?.getInt("video_rotation_degrees", 0) ?: 0) % 360 + 360) % 360
+        } catch (e: Exception) {
+            0
+        }
     }
 
     private fun highlightBoost(): Float {

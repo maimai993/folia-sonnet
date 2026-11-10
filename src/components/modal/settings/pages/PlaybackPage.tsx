@@ -3,16 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { CROSSFADE_CURVES, CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC, type CrossfadeCurve } from '../../../../services/automix/crossfadePlanner';
 import { modelsPresent, subscribeModelAvailability } from '../../../../services/analysis/modelAvailability';
+import { isNativeModelsAvailable, modelCanRun, subscribeModelAvailability as subscribeNativeModels } from '../../../../services/automix/nativeModels';
 import { ANALYSIS_MODELS_ENABLED, modelStoreSnapshot, subscribeModelStore, importModelFile, type DownloadableModel } from '../../../../services/analysis/modelStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { useAnalysisModelStore } from '../../../../stores/useAnalysisModelStore';
 import { useAutomixSettingsStore } from '../../../../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
-import { isCapacitorAndroid } from '../../../../platform/runtime';
+import { isAndroidAppShell, isCapacitorAndroid } from '../../../../platform/runtime';
 
 import { runsOnWindows } from '../../../../utils/platform';
 import { Button, Group, Reveal, Row, Segmented, Select, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
+import NativeModelsSection from '../NativeModelsSection';
 import AndroidAutoLandscapeSetting from '../AndroidAutoLandscapeSetting';
 import AndroidKeepAliveSetting from '../AndroidKeepAliveSetting';
 import HifiSettings, { HIFI_OPTIONS } from './hifi/HifiSettings';
@@ -76,6 +78,15 @@ const O = {
     transitionEffect: option(TRANSITION, 'transitionEffect', 'options.transitionEffect'),
     transitionIntensity: option(TRANSITION, 'transitionIntensity', 'options.transitionIntensity'),
     transitionPerformance: option(TRANSITION, 'transitionPerformance', 'options.transitionPerformance'),
+    /*
+     * 过渡动画：混音时把这次过渡画出来（屏幕圆环 / 卡片描边）。
+     *
+     * 这两项在 store 里一直有完整的读写实现，但设置页里曾经没有入口 ——
+     * 于是它们只能靠导入配置或别处的默认值决定，用户改不了。
+     * 现在补回来，跟着「智能过渡」一起展开。
+     */
+    transitionAnimation: option(TRANSITION, 'transitionAnimation', 'options.transitionAnimation'),
+    transitionAnimationCard: option(TRANSITION, 'transitionAnimationCard', 'options.transitionAnimationCard'),
     transitionEnhancer: option(TRANSITION, 'transitionEnhancer', 'options.transitionEnhancer'),
     outputDevice: option(SOUND, 'audioOutputDevice', 'options.audioOutputDevice'),
     replayGain: option(SOUND, 'replayGainSettings', 'options.replayGainMode'),
@@ -212,6 +223,8 @@ const PlaybackPage: React.FC = () => {
         effect: state.transitionEffect,
         intensity: state.transitionIntensity,
         performance: state.transitionPerformance,
+        animation: state.transitionAnimation,
+        animationCard: state.transitionAnimationCard,
         enhancer: state.transitionEnhancer,
         setEnabled: state.handleToggleAutomix,
         setCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
@@ -220,6 +233,8 @@ const PlaybackPage: React.FC = () => {
         setEffect: state.handleSetTransitionEffect,
         setIntensity: state.handleSetTransitionIntensity,
         setPerformance: state.handleToggleTransitionPerformance,
+        setAnimation: state.handleToggleTransitionAnimation,
+        setAnimationCard: state.handleToggleTransitionAnimationCard,
         setEnhancer: state.handleToggleTransitionEnhancer,
     })));
     const audio = useAudioSettingsStore(useShallow(state => ({
@@ -246,11 +261,30 @@ const PlaybackPage: React.FC = () => {
     React.useSyncExternalStore(subscribeModelAvailability, modelsPresent);
 
     /*
+     * 分轨模型能不能跑。
+     *
+     * 两条来源分开问：安卓问原生（内置在包里），桌面问 WebGPU 那一套。
+     * 上层只关心结果，所以这里压成一个布尔值。
+     */
+    const nativeStems = React.useSyncExternalStore(
+        subscribeNativeModels,
+        () => (isNativeModelsAvailable() ? modelCanRun('htdemucs') : false),
+        () => false,
+    );
+    const wgslStems = React.useSyncExternalStore(subscribeModelAvailability, modelsPresent, modelsPresent).htdemucs_gpu;
+    const stemModelReady = isNativeModelsAvailable() ? nativeStems : wgslStems;
+
+    /*
      * 原生过渡内核只在安卓的壳里。桌面端没有这个内核，两档都是老的固定交叉淡化，
      * 所以这里用一对方便读的布尔值把「有没有这层东西」和「它现在是不是智能档」分开，
      * 下面的条件就不是一串混在一起的平台判断。
+     *
+     * 用 isAndroidAppShell 而不是 isCapacitorAndroid：前者不依赖 Capacitor 桥
+     * 初始化完（后者在启动头几秒会答 false）。用错的话设置页刚打开时
+     * 整块原生选项都不画，看起来就是「这些开关没了」——
+     * 而它们只是还没到能回答的时机。
      */
-    const hasNativeHandoff = isCapacitorAndroid();
+    const hasNativeHandoff = isAndroidAppShell();
     const smartHandoff = hasNativeHandoff && automix.nativeMode === 'smart';
 
     return (
@@ -325,6 +359,16 @@ const PlaybackPage: React.FC = () => {
                             <Row sub option={O.transitionPerformance} hint={t('options.transitionPerformanceDesc')}>
                                 <Toggle checked={automix.performance} onChange={automix.setPerformance} />
                             </Row>
+                            {/*
+                             * 性能档需要 htdemucs 分轨；缺了才提示，有就不画。
+                             *
+                             * 这里原来问的是 modelsPresent（WebGPU 那套），
+                             * 而那一套在安卓整体关着，于是不管装没装都会挂着
+                             * 「这次安装缺少音轨分离模型」。现在问原生那一份。
+                             */}
+                            {automix.performance && !stemModelReady && (
+                                <Row notice={t('options.transitionPerformanceNeedsModel')} />
+                            )}
                             <Row sub option={O.transitionEnhancer} hint={t('options.transitionEnhancerDesc')}>
                                 <Toggle checked={automix.enhancer} onChange={automix.setEnhancer} />
                             </Row>
@@ -397,6 +441,15 @@ const PlaybackPage: React.FC = () => {
                 {/* 保活体检：只在安卓原生壳里出现，读不到状态时整行不画。 */}
                 <AndroidKeepAliveSetting def={O.keepAlive} />
             </Group>
+
+            {/*
+             * 安卓这一条：模型内置在安装包里，所以只要有这层原生能力就画。
+             *
+             * 与上面那组（ANALYSIS_MODELS_ENABLED，从 CDN 取、跑 WebGPU）是两套东西：
+             * 那边关着是因为手机 WebGPU 不稳；这里走 onnxruntime-android，不依赖 WebGPU。
+             * 组件内部自己判端，非安卓返回 null。
+             */}
+            <NativeModelsSection />
 
             {/* The whole group answers to ANALYSIS_MODELS_ENABLED, same as the rows inside it say:
                 while the models are not offered there is nothing here to draw or to offer. */}

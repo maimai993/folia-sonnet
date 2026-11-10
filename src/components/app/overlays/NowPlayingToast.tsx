@@ -208,12 +208,36 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                         animate={{ opacity: 1, x: 0 }}
                         whileTap={onActivate && !isPositioning ? { opacity: 0.85 } : undefined}
                         transition={{ duration: 0.35, ease: 'easeOut' }}
-                        className={`relative flex min-w-[min(240px,calc(100vw-48px))] max-w-[calc(100vw-48px)] items-center gap-3 overflow-hidden rounded-2xl border p-2 pr-4 text-left backdrop-blur-xl shadow-lg transition-colors ${
-                            isDaylight ? 'border-black/10 bg-white/35 text-zinc-900' : 'border-white/10 bg-black/35 text-white'
+                        /*
+                         * 圆角这一组类要小心叠加。
+                         *
+                         * backdrop-blur 的模糊层是浏览器在元素背后单独合成的，**它不跟着父级
+                         * 的 overflow 圆角裁**（Chromium 已知行为）。所以只在卡片上写
+                         * rounded-2xl + overflow-hidden 时，模糊层四个角仍是直角，
+                         * 白底一透出来就在圆角里露出四个尖角（issue #279）。
+                         *
+                         * 解法是把玻璃层拆出来：卡片自己只负责圆角和裁剪，模糊交给里面一层
+                         * 同样带 rounded-2xl 的绝对定位元素 —— 它自己就是圆的，合成时被自己的
+                         * 圆角裁掉。
+                         *
+                         * 注意这层**不能用 -z-10**：负 z-index 会把它推到父级堆叠上下文之下，
+                         * 于是既脱离卡片的圆角裁剪、又会掉到父容器背景后面，直角照样露出来
+                         * （上一版就是栽在这里，改完看起来没变化）。它保持 z-0，内容用
+                         * relative 抬到它上面即可。
+                         */
+                        className={`relative isolate flex min-w-[min(240px,calc(100vw-48px))] max-w-[calc(100vw-48px)] items-center gap-3 overflow-hidden rounded-2xl border p-2 pr-4 text-left shadow-lg transition-colors ${
+                            isDaylight ? 'border-black/10 text-zinc-900' : 'border-white/10 text-white'
                         } ${isPositioning ? 'pointer-events-auto cursor-grab select-none active:cursor-grabbing' : onActivate
                             ? `pointer-events-auto cursor-pointer ${isDaylight ? 'hover:bg-white/55' : 'hover:bg-black/55'}`
                             : ''}`}
                     >
+                        {/* 玻璃层本体：和卡片同一套圆角，模糊只发生在这里，四个角才是圆的。 */}
+                        <span
+                            aria-hidden
+                            className={`pointer-events-none absolute inset-0 z-0 rounded-2xl backdrop-blur-xl ${
+                                isDaylight ? 'bg-white/35' : 'bg-black/35'
+                            }`}
+                        />
                         {/* 顶部光线（进场的横向扫光）。混音期间收掉：描边现在正压在卡片边框上，
                             再叠一条亮线就是同一条边上两层东西，读起来是好几层边框套在一起。 */}
                         <motion.span
@@ -222,7 +246,7 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                             initial={{ scaleX: 0 }}
                             animate={{ scaleX: 1, opacity: transitionCue ? 0 : 1 }}
                             transition={{ duration: 0.5, ease: 'easeOut' }}
-                            className={`absolute inset-x-0 top-0 h-[2px] origin-left ${
+                            className={`absolute inset-x-0 top-0 z-10 h-[2px] origin-left ${
                                 isDaylight
                                     ? 'bg-gradient-to-r from-transparent via-black/40 to-transparent'
                                     : 'bg-gradient-to-r from-transparent via-white/50 to-transparent'
@@ -264,7 +288,7 @@ const NowPlayingToast: React.FC<NowPlayingToastProps> = ({
                             )}
                             {!coverSrc && <Music size={18} className={isDaylight ? 'text-black/35' : 'text-white/35'} />}
                         </motion.div>
-                        <motion.div layout className="min-w-0 max-w-[200px] flex-1">
+                        <motion.div layout className="relative min-w-0 max-w-[200px] flex-1">
                             {/* 正在播放 / 接下来播放：歌名上方。切歌那一刻整张卡片不重挂，所以这
                                 一行是自己淡入淡出换掉的，不跟着进场动画走。
                                 高度写死成和 leading 一样的 10px：mode="wait" 换字的中途这一行是

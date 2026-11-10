@@ -79,16 +79,21 @@ describe('where a popover goes', () => {
             .toEqual({ side: 'under', left: 40, top: 88, maxHeight: 504 });
     });
 
-    it('takes the side with more room in a window shorter than the layer, and is no taller than that room', () => {
+    it('takes the whole window in one shorter than the layer, whatever side was asked for', () => {
         const short = { ...WINDOW, height: 300 };
         const tall = { width: 200, height: 400 };
-        expect(placePopover(anchorAt(140, 180), tall, short, { side: 'over', align: 'start' }))
-            .toMatchObject({ side: 'under', top: 168, maxHeight: 124 });
-        expect(placePopover(anchorAt(140, 230), tall, short, { side: 'under', align: 'start' }))
-            .toMatchObject({ side: 'over', bottom: 126, maxHeight: 166 });
-        // Too tall for both sides, and the side asked for has more room: it stays there.
-        expect(placePopover(anchorAt(140, 180), tall, short, { side: 'under', align: 'start' }))
-            .toMatchObject({ side: 'under', top: 168, maxHeight: 124 });
+        /*
+         * 窗口比弹层矮时，两侧都不可能装下。
+         * 以前是「挑余量更大的那一侧」然后给那个余量 —— 结果是一个很窄的框，
+         * 内容要多滑好几屏才到底。现在改成直接吃满窗口高度。
+         */
+        for (const side of ['over', 'under'] as const) {
+            const place = placePopover(anchorAt(140, 180), tall, short, { side, align: 'start' });
+            expect(place.top).toBe(8);
+            expect(place.maxHeight).toBe(300 - 16);
+        }
+        // 侧边仍然是原来那套对齐规则。
+        expect(placePopover(anchorAt(140, 180), tall, short, { side: 'under', align: 'start' }).left).toBe(40);
     });
 
     it('counts from the scrolled edges of a window whose content is scrolled, with the same room', () => {
@@ -108,6 +113,37 @@ describe('where a popover goes', () => {
         expect(placePopover(anchorAt(104, 100), LAYER, WINDOW, { side: 'under', align: 'end' }).right).toBe(192);
         // A layer wider than the window starts at the gutter.
         expect(placePopover(anchorAt(140, 100), { width: 500, height: 120 }, WINDOW, { side: 'under', align: 'start' }).left).toBe(8);
+    });
+
+    /*
+     * 横屏手机上的控制面板很矮（三百来像素），而「歌词样式 / 背景类型 / 音频效果器」
+     * 这几个下拉的内容有三四百像素。锚点在面板中部：下方只剩一百多像素，
+     * 弹层被压成那么高，内容要在一个很小的框里滚很久才见得到底 ——
+     * 用户感受就是「怎么滑都滑不到底」。
+     *
+     * 一侧装不下时，就该把整个窗口的高度给它，滚在最大的框里。
+     */
+    it('takes the whole window when it does not fit on one side of its anchor', () => {
+        const short = { ...WINDOW, height: 300 };
+        const medium = { width: 200, height: 260 };
+        // 锚点靠下：下方只剩很少，两侧都装不下这份内容。
+        const place = placePopover(anchorAt(140, 210), medium, short, { side: 'under', align: 'start' });
+        // 铺开之后不再分上下 —— top 从窗口顶端留白算起，高度吃满到窗口底端。
+        expect(place.top).toBe(8);
+        expect(place.maxHeight).toBe(300 - 16);
+        // 铺开时不该再给 bottom（否则高度被定死，失去自适应）。
+        expect(place.bottom).toBeUndefined();
+    });
+
+    it('takes the whole window even when the layer is taller than the window itself', () => {
+        const short = { ...WINDOW, height: 300 };
+        const tall = { width: 200, height: 400 };
+        const place = placePopover(anchorAt(140, 180), tall, short, { side: 'under', align: 'start' });
+        // 内容比窗口还高：更要铺开 —— 单侧只会更矮、要多滑一截。
+        expect(place.top).toBe(8);
+        expect(place.maxHeight).toBe(300 - 16);
+        // 仍然不能比窗口还高：超出部分靠内部滚动。
+        expect(place.maxHeight).toBeLessThan(short.height);
     });
 
     it('is as wide as the window, less the gutters, when asked to fill', () => {

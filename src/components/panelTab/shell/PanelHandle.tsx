@@ -7,7 +7,6 @@ import { usePlayerBottomBarBottomPx } from '../../../hooks/usePlayerBottomBarBot
 import { usePlayerOverlayObstacle } from '../../../hooks/usePlayerOverlayLayout';
 import { PANEL_BOTTOM_LIFT_PX } from './panelBottomBaseline';
 import { Button } from '../../ui';
-import LanCastControl from '../../lan-cast/LanCastControl';
 
 // src/components/panelTab/shell/PanelHandle.tsx
 // The round button at the bottom right of the playing page that opens the panel and, white, closes
@@ -326,14 +325,8 @@ const PanelHandle: React.FC<PanelHandleProps> = ({
 
     return (
         <>
-        {/* 投送按钮是右下角那颗的左下镜像：共用隐藏条件、贴底基线、配色，同时出现同时消失。 */}
-        <LanCastControl
-            hidden={hideToggleButton || (isOpen && !showOpenPanelCloseButton) || isCommandPaletteOpen}
-            bottom={handleBottom}
-            isDaylight={isDaylight}
-            isOpen={isOpen}
-            isCommandPaletteOpen={isCommandPaletteOpen}
-        />
+        {/* 投送入口已搬进音质页（和「信号链路」并排），播放页不再放悬浮按钮：
+            那颗按钮是 fixed + z-60，正好压在 z-40 的「正在播放」提示卡上（issue #279）。 */}
         <AnimatePresence>
             {!hideToggleButton && (!isOpen || showOpenPanelCloseButton) && !isCommandPaletteOpen && (
                 <motion.div

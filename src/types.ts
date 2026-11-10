@@ -1094,7 +1094,7 @@ export type LatentBackgroundDisplayMode = 'dithering' | 'mesh' | 'both';
 export type LatentBackgroundColorSource = 'cover-theme' | 'cover-only';
 export type MonetAudioStyle = 'bar' | 'line';
 export type MonetPortraitSource = 'cover' | 'custom';
-export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles';
+export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles' | 'sonic';
 export type VisualizerBackgroundMode = BuiltinVisualizerBackgroundMode | (string & {});
 
 export interface UrlBackgroundItem {
@@ -1169,6 +1169,83 @@ export interface SoraBackgroundTuning {
   /** Skips the WebGL starfield and shows a static solid black (night) / white (daylight) frame. */
   blank: boolean;
 }
+
+/**
+ * 粒子背景（从 Mineradio 的封面粒子搬来）的可调项。
+ *
+ * 只列着色器真的实现了的：Mineradio 那边的 bloom / scatter / twist 在我们这套
+ * 单 pass 渲染里没有对应物，所以不在这里出现 —— 暴露一个不生效的滑条更糟。
+ */
+export interface ParticlesBackgroundTuning {
+  /**
+   * 形态：同一套粒子几何的几种排布。
+   *
+   * auto 自动（按歌挑一种）· silk 丝绸（专辑封面）· tunnel 滚筒 ·
+   * planet 星球 · vinyl 唱片。
+   * 这几个在 Mineradio 里是同一个着色器的几个 preset 分支。
+   */
+  form: 'auto' | 'silk' | 'tunnel' | 'planet' | 'vinyl';
+  /** 每边的格数。越大越细腻，也越吃性能；96 是调好的默认值。 */
+  grid: number;
+  /** 整体强度，乘在频段与尺寸上。1 为标定值。 */
+  intensity: number;
+  /** 单个粒子的大小倍数。 */
+  pointScale: number;
+  /** 主题色染色的强度，0 是完全用封面本身的颜色。 */
+  tintStrength: number;
+  /** 是否随低频自动打涟漪（关掉后只有鼓点爆裂会推一下）。 */
+  autoRipple: boolean;
+}
+
+export const DEFAULT_PARTICLES_BACKGROUND_TUNING: ParticlesBackgroundTuning = {
+  /*
+   * 默认「自动」：按歌挑一种形态（同一首歌总是同一种，换歌才换）。
+   * 用户不用先去设置里选，看几天下来也不会腻。
+   */
+  form: 'auto',
+  grid: 96,
+  intensity: 1,
+  pointScale: 1,
+  tintStrength: 1,
+  autoRipple: true,
+};
+
+/**
+ * 音域回响背景（从 Mineradio 的 sonic-topography-preset 搬来）的可调项。
+ *
+ * 那边的旋钮全是 0..100 的整数（sonicGround*），这里保持同样的取值域，
+ * 默认值直接照抄，不用换算。8 个频段 EQ 与配色不外露 —— 那几个需要
+ * 调音知识才知道怎么调，默认值就能直接用。
+ */
+export interface SonicBackgroundTuning {
+  /** 地形密度：决定每边多少根柱子（平方增长，所以上限卡在 100）。 */
+  density: number;
+  /** 起伏幅度。50 是标定值，往上按平方放大。 */
+  amplitude: number;
+  /** 地面范围。越大铺得越开。 */
+  range: number;
+  /** 垂直位置。越大压得越低。 */
+  lower: number;
+  /** 景深：地形往后推多远。 */
+  depth: number;
+  /** 发光强度。 */
+  glow: number;
+  /** 平滑度：静息起伏更偏噪声（低）还是更偏波纹（高）。 */
+  smoothness: number;
+  /** 锐利度：柱子侧面阴影的陡峭程度。 */
+  sharpness: number;
+}
+
+export const DEFAULT_SONIC_BACKGROUND_TUNING: SonicBackgroundTuning = {
+  density: 46,
+  amplitude: 50,
+  range: 82,
+  lower: 68,
+  depth: 62,
+  glow: 68,
+  smoothness: 50,
+  sharpness: 50,
+};
 
 export interface MonetTuning {
   /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */

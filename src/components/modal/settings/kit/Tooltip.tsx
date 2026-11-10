@@ -103,14 +103,23 @@ export const Tooltip: React.FC<TooltipProps> = ({ text, className, children }) =
                             animate={place ? { opacity: 1, y: [place.side === 'over' ? 4 : -4, 0] } : { opacity: 0 }}
                             exit={{ opacity: 0 }}
                             transition={kitTransition('fast', reduced)}
-                            className="pointer-events-none fixed z-[210] rounded-md px-2 py-1 text-xs leading-[18px] shadow-[0_6px_18px_rgba(0,0,0,0.3)] [overflow-wrap:anywhere]"
+                            // 玻璃：tooltip 是 portal 到 document.body 的，不在设置窗口那层玻璃的
+                            // 屏障里（祖先有 backdrop-filter 时后代采不到背景），所以这里能真的
+                            // 上模糊。底色从内联的实色挪到半透明，让底下透一点点上来。
+                            // 圆角和模糊同元素这里没有别的办法（这是个一行小气泡，拆层不值得），
+                            // 靠 index.css 里 [class*="backdrop-blur"][class*="rounded"] 那条
+                            // overflow:hidden 自裁兜住圆角 —— 所以 backdrop-blur 与 rounded 必须
+                            // 都写在类名里，别改成内联。
+                            className="pointer-events-none fixed z-[210] rounded-md px-2 py-1 text-xs leading-[18px] shadow-[0_6px_18px_rgba(0,0,0,0.3)] backdrop-blur-md [overflow-wrap:anywhere]"
                             style={{
                                 left: place?.left ?? 0,
                                 ...(place?.bottom === undefined ? { top: place?.top ?? 0 } : { bottom: place.bottom }),
                                 maxWidth: Math.min(MAX_WIDTH, window.innerWidth - 2 * POPOVER_GUTTER),
                                 width: 'max-content',
                                 color: isDaylight ? '#ffffff' : '#17171a',
-                                backgroundColor: isDaylight ? '#26262b' : '#ececee',
+                                backgroundColor: isDaylight
+                                    ? 'color-mix(in srgb, #26262b 78%, transparent)'
+                                    : 'color-mix(in srgb, #ececee 82%, transparent)',
                             }}
                         >
                             {text}
