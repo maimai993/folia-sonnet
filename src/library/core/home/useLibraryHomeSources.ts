@@ -99,6 +99,14 @@ export const useLibraryHomeSources = ({
                 ...base,
                 collections: lxSquare.length > 0 ? lxSquare : base.collections,
                 canUsePlaylists: true,
+                /*
+                 * 推荐（榜单）与专辑这两屏在洛雪下也换成了自己的卡流（LxChartBoard / LxAlbumWall），
+                 * 数据全走公开接口，不依赖账号。可 provider 的能力声明里没有「我的专辑 / 私人电台」，
+                 * 于是这两颗页签一直被挂上 disabledReason，字色被压暗、悬停提示是「暂未提供」，
+                 * 明明点得动却像个坏按钮。这里按实际能力把两颗都放行。（对齐桌面端 PR #1177）
+                 */
+                canUseRadio: true,
+                canUseAlbums: true,
                 ...(lxSquare.length > 0 ? { accountView: 'authenticated' as const, providerLabel: readOnlineProviderLabel(providerId) } : {}),
             }
             : base;

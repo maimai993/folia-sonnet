@@ -3,7 +3,6 @@ import type { PersonalFmCatalog } from '../../../types/personalFm';
 import { DEFAULT_PERSONAL_FM_CATALOG } from '../fmModes';
 import { getPersonalFmRequestOptions } from '../../../stores/usePersonalFmModeStore';
 import { requestQishui } from './qishuiTransport';
-import { createQishuiSceneCover } from './qishuiSceneCover';
 import { normalizeQishuiSong, qishuiImage } from './qishuiNormalize';
 
 // The live car scene list supplies both radio cards and the existing FM mode picker.
@@ -52,7 +51,8 @@ export const qishuiRecommendations: OnlineRecommendationProvider = {
         await getQishuiFmCatalog();
         return Promise.all(scenes.slice(0, limit).map(async scene => ({
             providerId: 'qishui', id: `scene-${scene.id}`, type: 'radio', name: scene.name,
-            description: scene.group, coverUrl: await createQishuiSceneCover(scene.id, qishuiImage(scene.coverUrl)), personalFm: { mode: 'SCENE_RCMD', scene: scene.id },
+            // 场景图是公开 CDN 原图（几百 KB），直接给地址；旧的字节内嵌会把大图挡成渐变底。
+            description: scene.group, coverUrl: qishuiImage(scene.coverUrl) || undefined, personalFm: { mode: 'SCENE_RCMD', scene: scene.id },
         })));
     },
 };

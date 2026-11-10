@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, TextField } from '../ui';
-import { ArrowLeft, Play, Plus, RefreshCw, Search, X } from 'lucide-react';
-import type { Theme, UnifiedSong } from '../../types';
+import { ArrowLeft, Check, ChevronDown, Play, Plus, RefreshCw, Search, X } from 'lucide-react';
+import type { UnifiedSong } from '../../types';
 import type { ProviderCollection } from '../../types/onlineMusic';
 import { useLxWorkspaceStore, type LxWorkspaceTab } from '../../stores/useLxWorkspaceStore';
 import { lxBrowse, lxmusicProvider } from '../../services/onlineMusic/lxmusic/lxmusicProvider';
@@ -29,61 +29,38 @@ import './lxWorkspace.css';
 // src/components/lxmusic/LxWorkspace.tsx
 // 洛雪工作台：照洛雪移动端的「歌单」页重排。
 //   头部一行标题 + 音源入口，下面一条分段胶囊（歌单 / 电台 / 专辑 / 榜单 / 本地 / 搜索），
-//   再下面一排平台按钮（网易云 / QQ音乐 / 酷狗 / 酷我）——换平台就换这一页的内容。
+//   平台不再单独占一排按钮：头部挂一个「当前平台」胶囊，点开在整页之上浮一层选四家，
+//   换平台就换这一页的内容。
 //   歌单、专辑、电台都是封面网格，点开是曲目表；榜单左榜右歌；搜索四家一起搜。
 
-const PILLS: ReadonlyArray<{ key: LxWorkspaceTab; label: string }> = [
-    { key: 'playlist', label: '歌单' },
-    { key: 'radio', label: '电台' },
-    { key: 'album', label: '专辑' },
-    { key: 'chart', label: '榜单' },
-    { key: 'mine', label: '我的' },
-    { key: 'local', label: '本地' },
-    { key: 'search', label: '搜索' },
-];
-
-/** 这两页不分平台，平台按钮跟着藏起来。 */
-const GLOBAL_TABS: ReadonlyArray<LxWorkspaceTab> = ['mine', 'search', 'local', 'source'];
-
-// 一页 30：酷狗的歌单广场接口固定每页 30 条，页大小对不上的话翻页会漏歌。
-const PAGE_SIZE = 30;
-const TRACK_PAGE_SIZE = 60;
-/** 搜索时每个平台各取多少（四家交替，一屏大概 4 倍条数）。 */
-const SEARCH_PAGE_SIZE = 24;
-
-type DetailView = {
-    kind: 'playlist' | 'album';
-    platform: LxPublicPlatform;
-    id: string;
-    title: string;
-    subtitle?: string;
-    coverUrl?: string;
-};
-
-type LxWorkspaceProps = {
-    theme: Theme;
-    isDaylight: boolean;
-    onClose: () => void;
-    onPlayTrack: (track: UnifiedSong) => void;
-    onAddToQueue: (track: UnifiedSong) => void;
-};
-
-const platformOfCollection = (collection: ProviderCollection, fallback: LxPublicPlatform): LxPublicPlatform => {
-    const raw = collection.providerData?.platform;
-    if (raw === 'wy' || raw === 'kg' || raw === 'kw' || raw === 'tx') return raw;
-    return fallback;
-};
+import { PILLS, GLOBAL_TABS, PLATFORM_HINTS, PAGE_SIZE, TRACK_PAGE_SIZE, SEARCH_PAGE_SIZE, platformOfCollection, type DetailView, type LxWorkspaceProps } from './LxWorkspaceModel';
 
 export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onClose, onPlayTrack, onAddToQueue }) => {
     const tab = useLxWorkspaceStore((state) => state.tab);
     const setTab = useLxWorkspaceStore((state) => state.setTab);
 
     const [platform, setPlatform] = useState<LxPublicPlatform>('wy');
+    // 平台选择的浮层开关：展开时遮住整页，点空白处或按 Esc 收起。
+    const [platformSheetOpen, setPlatformSheetOpen] = useState(false);
     // 回调里读当前平台：请求回来时若用户已经换了平台，就别把旧结果写进去。
     const platformRef = useRef(platform);
     platformRef.current = platform;
     const tabRef = useRef(tab);
     tabRef.current = tab;
+
+    // 换页签就收起平台浮层：切到「我的 / 搜索 / 本地」时那一层本来就没有意义。
+    useEffect(() => {
+        setPlatformSheetOpen(false);
+    }, [tab]);
+
+    useEffect(() => {
+        if (!platformSheetOpen) return undefined;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setPlatformSheetOpen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [platformSheetOpen]);
 
     // 音源变动后重算「能不能放」的提示（store 不是响应式的，用一个计数逼一次重渲染）。
     const [, bumpSourceTick] = useState(0);
@@ -368,46 +345,98 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
     const canPlayOn = (target: string): boolean => hasFreeDirect(target) || hasAnySource;
 
     const showPlatformRow = !GLOBAL_TABS.includes(tab);
+    // 「全部平台」只在歌单广场有意义（四家混排）；其余页签一律落在具体某一家。
+    const squareActive = tab === 'playlist' && squareAll;
+    const currentPlatform = LX_PUBLIC_PLATFORMS.find((item) => item.key === platform) ?? LX_PUBLIC_PLATFORMS[0];
+    const platformTriggerLabel = squareActive ? '全部平台' : currentPlatform.label;
 
-    const platformRow = showPlatformRow ? (
-        <div className="lx-platforms" role="tablist" aria-label="平台">
-            {tab === 'playlist' ? (
-                <Button
-                    type="button"
-                    role="tab"
-                    aria-selected={squareAll}
-                    className="lx-platform"
-                    data-active={squareAll}
-                    onClick={() => {
-                        if (squareAll) return;
-                        setSquareAll(true);
-                        setDetail(null);
-                    }}
-                >
-                    <span className="lx-platform-mark" style={{ background: 'linear-gradient(135deg,#a3a3a3,#525252)' }}>全</span>
-                    全部
-                </Button>
-            ) : null}
-            {LX_PUBLIC_PLATFORMS.map((item) => (
-                <Button
-                    key={item.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={platform === item.key && !(tab === 'playlist' && squareAll)}
-                    className="lx-platform"
-                    data-active={platform === item.key && !(tab === 'playlist' && squareAll)}
-                    style={{ '--lx-platform-color': item.color } as React.CSSProperties}
-                    onClick={() => {
-                        if (tab === 'playlist') setSquareAll(false);
-                        if (platform === item.key) return;
-                        setPlatform(item.key);
-                        setDetail(null);
-                    }}
-                >
-                    <span className="lx-platform-mark" style={{ background: item.color }}>{item.label.slice(0, 1)}</span>
-                    {item.label}
-                </Button>
-            ))}
+    const platformTrigger = showPlatformRow ? (
+        <Button
+            type="button"
+            className="lx-platform-trigger"
+            aria-haspopup="dialog"
+            aria-expanded={platformSheetOpen}
+            title="切换平台"
+            onClick={() => setPlatformSheetOpen((prev) => !prev)}
+        >
+            <span
+                className="lx-platform-mark"
+                style={{ background: squareActive ? 'linear-gradient(135deg,#a3a3a3,#525252)' : currentPlatform.color }}
+            >
+                {squareActive ? '全' : currentPlatform.label.slice(0, 1)}
+            </span>
+            <span className="lx-platform-trigger-label">{platformTriggerLabel}</span>
+            <ChevronDown size={13} className="lx-platform-trigger-caret" data-open={platformSheetOpen} />
+        </Button>
+    ) : null;
+
+    // 浮层：点空白处收起，面板贴右上角，不参与页面排版，也就不会把卡片流往下推。
+    const platformSheet = showPlatformRow && platformSheetOpen ? (
+        <div className="lx-platform-layer" role="presentation" onClick={() => setPlatformSheetOpen(false)}>
+            <div
+                className="lx-platform-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-label="选择平台"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="lx-platform-sheet-head">
+                    <span>选择平台</span>
+                    <Button type="button" className="lx-icon-btn" onClick={() => setPlatformSheetOpen(false)} aria-label="关闭">
+                        <X size={14} />
+                    </Button>
+                </div>
+                <div className="lx-platform-list">
+                    {tab === 'playlist' ? (
+                        <Button
+                            type="button"
+                            className="lx-platform-option"
+                            data-active={squareActive}
+                            onClick={() => {
+                                if (!squareActive) {
+                                    setSquareAll(true);
+                                    setDetail(null);
+                                }
+                                setPlatformSheetOpen(false);
+                            }}
+                        >
+                            <span className="lx-platform-mark" style={{ background: 'linear-gradient(135deg,#a3a3a3,#525252)' }}>全</span>
+                            <span className="lx-platform-option-text">
+                                <b>全部平台</b>
+                                <em>四家混排，洛雪默认那屏</em>
+                            </span>
+                            {squareActive ? <Check size={15} /> : null}
+                        </Button>
+                    ) : null}
+                    {LX_PUBLIC_PLATFORMS.map((item) => {
+                        const active = platform === item.key && !squareActive;
+                        return (
+                            <Button
+                                key={item.key}
+                                type="button"
+                                className="lx-platform-option"
+                                data-active={active}
+                                style={{ '--lx-platform-color': item.color } as React.CSSProperties}
+                                onClick={() => {
+                                    if (tab === 'playlist') setSquareAll(false);
+                                    if (platform !== item.key) {
+                                        setPlatform(item.key);
+                                        setDetail(null);
+                                    }
+                                    setPlatformSheetOpen(false);
+                                }}
+                            >
+                                <span className="lx-platform-mark" style={{ background: item.color }}>{item.label.slice(0, 1)}</span>
+                                <span className="lx-platform-option-text">
+                                    <b>{item.label}</b>
+                                    <em>{PLATFORM_HINTS[item.key]}</em>
+                                </span>
+                                {active ? <Check size={15} /> : null}
+                            </Button>
+                        );
+                    })}
+                </div>
+            </div>
         </div>
     ) : null;
 
@@ -663,6 +692,7 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
                         <span className="lx-brand-sub">LX MUSIC</span>
                     </div>
                     <div style={{ flex: '1 1 auto' }} />
+                    {platformTrigger}
                     <Button
                         type="button"
                         className="lx-source-btn"
@@ -704,9 +734,9 @@ export const LxWorkspace: React.FC<LxWorkspaceProps> = ({ theme, isDaylight, onC
                         </Button>
                     ))}
                 </nav>
-
-                {platformRow}
             </header>
+
+            {platformSheet}
 
             <div className="lx-body">
                 {tab === 'playlist' || tab === 'album' || tab === 'radio' ? renderBrowseTab() : null}
