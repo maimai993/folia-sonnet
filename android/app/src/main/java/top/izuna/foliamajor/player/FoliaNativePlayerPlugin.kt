@@ -39,6 +39,7 @@ import top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin
 @CapacitorPlugin(name = "FoliaNativePlayer")
 class FoliaNativePlayerPlugin : Plugin() {
 
+    @Volatile
     private var player: FoliaNativePlayer? = null
 
     companion object {
@@ -117,11 +118,14 @@ class FoliaNativePlayerPlugin : Plugin() {
         /** 亮屏/叠层低频核对只改显示锚点，绝不 seek 或重新 prepare 真播放器（#174）。 */
         @JvmStatic
         fun refreshDisplayAnchor() {
-            val media = mediaSnapshot() ?: return
-            val playing = playerAudible(media.playing, media.buffering)
-            val snapshot = WallpaperLyricsState.get()
-            if (displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, media.positionMs)) {
-                WallpaperLyricsState.setAnchor(media.positionMs, playing)
+            val owner = instance ?: return
+            val current = owner.player ?: return
+            current.sampleDisplayAnchor { positionMs, playing ->
+                if (instance !== owner || owner.player !== current) return@sampleDisplayAnchor
+                val snapshot = WallpaperLyricsState.get()
+                if (displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, positionMs)) {
+                    WallpaperLyricsState.setAnchor(positionMs, playing)
+                }
             }
         }
 
