@@ -425,7 +425,8 @@ const confirmedSignIn = (operation: KugouOperation, response: any): { token?: st
      *     于是 token / userid 一个都没写进会话，随后 getLoginStatus 因为
      *     `!userId && !hasElectronTransport` 直接 return null，账号面板永远显示未登录。
      *
-     * 现在统一成「有 token 就算确认」，status 只作为辅助信号。
+     * 现在第一道门统一成「status 4 或带 token」，status 只作为辅助信号；
+     * 能不能真正落盘另有一道成对要求（见函数末尾）。
      */
     const status = Number(payload?.status ?? payload?.code ?? response?.status);
     const token = payload?.token ? String(payload.token) : '';
@@ -455,7 +456,17 @@ const confirmedSignIn = (operation: KugouOperation, response: any): { token?: st
     const userId = directUserId != null && String(directUserId).length > 0
         ? String(directUserId)
         : readUserIdFromResponseCookies(response);
-    return { token: token || undefined, userId: userId ?? '' };
+    /*
+     * 半对不取：落盘的前提是**认得出是谁**。
+     *
+     * 上面那套「有 token 就算确认」只用来过第一道门（status 缺失但给了 token 时别直接判死，
+     * 否则扫码成功了界面却一直显示未登录）。真正写进会话之前，必须能解析出账号 id：
+     * 只带 token、不带 userid 的应答一律不落盘，否则会把新 token 接到旧 userid 上，
+     * 会话变成「别人的账号 + 自己的 token」，正是 #1101 里取歌 20018 的形态。
+     * 真机确认响应本来就带 userId（见上面的 keys 记录），这里不写只是异常形态下不动账号。
+     */
+    if (!userId) return null;
+    return { token: token || undefined, userId };
 };
 
 /** 从响应带回的 cookie 里把 userid 抠出来（有些版本只在这里给）。 */
