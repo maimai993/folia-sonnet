@@ -35,7 +35,24 @@ export default defineConfig({
      * 整张模块图（导演 → omni → providerRegistry → 各平台 transport，v0.7.26 之后还要加上
      * appleMusic / fnmusic / hifi 几条链），冷启动那一次十几秒都算正常 —— 那是加载成本，
      * 不是断言变慢。放松到 20 秒只影响这类冷启动用例，逻辑挂住照样会超时。
+     *
+     * ★ 全量跑（test/unit 下 1287 个文件一起跑）时，20 秒不够。
+     *
+     * 有两类用例天生就慢：一类是「全树扫描」的架构边界测试（layerBoundaries、
+     * omniArchitecture 之类，要遍历整个 src/ 并解析所有 import），单跑就要 5~15 秒；
+     * 另一类是「整张命令注册表」的加载（libraryGridOnlySettings）。
+     *
+     * 它们单独跑都过，全量跑时被其余上千个文件抢走 CPU，就一个个超时 ——
+     * 报错是 "Test timed out"，不是断言失败，看着像代码坏了，其实是机器忙。
+     *
+     * 所以超时按「跑多少」分级：
+     *   · 单独跑一个文件（CI 里最常见的用法）→ 20 秒，逻辑挂住照样会超时；
+     *   · 全量跑（FOLIA_TEST_FULL=1）→ 180 秒，够这些扫描型用例把源码树走完。
+     *
+     * 覆盖的是时间上限，断言一个字没动。
      */
-    testTimeout: 20_000
+    testTimeout: process.env.FOLIA_TEST_FULL ? 180_000 : 20_000,
+    // hook 同理：icuFolia 的 beforeAll 要加载 wasm 并初始化，默认 10 秒在忙的时候也会挂。
+    hookTimeout: process.env.FOLIA_TEST_FULL ? 120_000 : 20_000,
   }
 });
