@@ -60,6 +60,7 @@ function LoginAccountTabProbe(props: ProbeProps) {
                     onAudioQualityChange={() => { }}
                     onSyncData={() => { }}
                     isSyncing={false}
+                    isDaylight={false}
                     onNavigateHome={() => setSaid('go home')}
                 />
             </div>

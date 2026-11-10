@@ -99,6 +99,7 @@ const renderAccountTab = (controller: LibraryAccountController) => {
         onAudioQualityChange: () => {},
         onSyncData: () => {},
         isSyncing: false,
+        isDaylight: false,
         onNavigateHome: () => {},
     })));
     const logoutButton = () => host.querySelector<HTMLButtonElement>('button[aria-label="account.logout"]');

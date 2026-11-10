@@ -23,6 +23,8 @@ import {
     VISUALIZER_BACKGROUND_REGISTRY,
 } from '../backgrounds/registry';
 import BackgroundPicture from '../preview/BackgroundPicture';
+import GyroTiltSettingsCard from '../backgrounds/GyroTiltSettingsCard';
+import { hasFreeCamera } from '../backgrounds/freeCameraModes';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import SmartBeatSettingsCard from '../SmartBeatSettingsCard';
 import BeatEffectsGroup from '../BeatEffectsGroup';
@@ -327,8 +329,19 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                         </>
                     )}
 
-                    {/* 智能动感模式: a setting of the whole picture, with no one style's options. */}
-                    {activeSection === 'global' && <SmartBeatSettingsCard t={t} />}
+                    {/*
+                      * 智能动感模式: a setting of the whole picture, with no one style's options.
+                      *
+                      * 陀螺仪适配也在这里：它同样管的是整个画面，不是某个背景自己的调优项。
+                      * 只有 3D 背景（町景 / 粒子 / 星河 / 安魂 / 音域回响）挂轨道相机，
+                      * 别的背景开了也没有东西可动，所以按当前背景决定显不显示。
+                      */}
+                    {activeSection === 'global' && (
+                        <>
+                            <SmartBeatSettingsCard t={t} />
+                            {hasFreeCamera(resolvedBackgroundMode) && <GyroTiltSettingsCard t={t} />}
+                        </>
+                    )}
 
                     {activeSection === 'background' && (
                         <>

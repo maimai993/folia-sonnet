@@ -469,8 +469,19 @@ class FoliaWallpaperPlugin : Plugin() {
          * 视频不像图片那样能在这里重编码 —— 几十 MB 转一遍太慢，也没法保证画质。
          * 所以只把角度记下来，由壁纸渲染那一层在画的时候转
          * （见 LyricsRenderer 的 drawVideo 读 wp.videoRotation）。
+         *
+         * ⚠️ 这里必须**真的存下来**：以前只把它读进一个局部变量就丢掉了，
+         * 结果市场里「旋转 90°」对桌面壁纸毫无作用 —— 视频横躺着，用户以为功能没做。
+         * 存进 SharedPreferences，LyricsRenderer 读 wp.videoRotation 时用它兜底
+         * （Web 侧下发的 tuning 仍然是首选，两者一致；Web 侧没下发时才用这里这份）。
          */
         val rotation = call.getInt("rotation", 0) ?: 0
+        if (rotation != 0) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_VIDEO_ROTATION, ((rotation % 360) + 360) % 360)
+                .apply()
+        }
         // 下载是阻塞 IO，必须离开主线程；进度通过事件回传，Web 侧按 id 对应。
         Thread {
             val key = WallpaperBackgroundVideo.storeFromUrl(context, url) { percent ->
@@ -809,6 +820,18 @@ class FoliaWallpaperPlugin : Plugin() {
 
     companion object {
         private const val TAG = "FoliaWallpaper"
+
+        /** 视频壁纸的旋转角度存在这里，见 downloadVideo 的注释。 */
+        private const val PREFS = "folia_wallpaper"
+        private const val KEY_VIDEO_ROTATION = "video_rotation_degrees"
+
+        /** 供 LyricsRenderer 在没有 Web 侧 tuning 时兜底读出现已保存的角度。 */
+        @JvmStatic
+        fun storedVideoRotation(context: android.content.Context?): Int {
+            if (context == null) return 0
+            return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+                .getInt(KEY_VIDEO_ROTATION, 0)
+        }
 
         /**
          * 读一行的翻译。没有翻译的行一律返回 null（不是空串）——

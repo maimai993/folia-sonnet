@@ -33,8 +33,13 @@ describe('settingsNavModel', () => {
         const ids = flattenSettingsNavItems(groups).map(item => item.id);
 
         expect(ids).not.toContain('desktop');
-        expect(ids).not.toContain('mods');
-        expect(ids).toHaveLength(ALL_SECTIONS.length - 2);
+        /*
+         * 模组页不再是桌面专属：安卓 App 靠内置的 nodejs-mobile 运行时
+         * （android/.../mods/ 下的 NodeModHost）也能跑模组，所以这个分组
+         * 在 web / 安卓上都该出现。
+         */
+        expect(ids).toContain('mods');
+        expect(ids).toHaveLength(ALL_SECTIONS.length - 1);
         expect(groups.every(group => group.items.length > 0)).toBe(true);
     });
 

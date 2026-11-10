@@ -10,11 +10,13 @@ import { useHdrExitConfirm, useHdrProjectionActive } from '../../../hooks/useHdr
 import { useIdleCursorHide } from '../../../hooks/useIdleCursorHide';
 import { usePersonalFmModeController } from '../../../hooks/usePersonalFmModeController';
 import { usePlayerSwipeGesture } from '../../../hooks/usePlayerSwipeGesture';
+import { hasFreeCamera } from '../../visualizer/backgrounds/freeCameraModes';
 import { usePlayerTapGesture } from '../../../hooks/usePlayerTapGesture';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
 import { useHifiTrackStore } from '../../../services/hifi/hifiPlayback';
 import { omni } from '../../../services/onlineMusic/omni';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { disableHdrProjection } from '../../../services/hdrProjection';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import type { TapEvent } from '../../../utils/doubleTap';
@@ -67,9 +69,28 @@ export const useAppChromeAndGestures = (model: Input) => {
     });
 
     const isPlayerSwipeEnabled = currentView === 'player' && !isPanelOpen;
+    /*
+     * 3D 舞台背景（粒子 / 星河 / 安魂 / 音域回响）自己吃横向拖动 —— 拖动在那里是「转视角」。
+     *
+     * 同一个拖动不能有两种意思，所以这几档里横滑切歌整个关掉。
+     * 判定放在 backgrounds/freeCameraModes.ts：渲染层要用同一份清单决定
+     * 挂不挂拖动监听，两边各写一份迟早对不上。
+     *
+     * ★ 这里必须读 **背景模式**（visualizerBackgroundMode），不是 model.bgMode。
+     *   bgMode 是「主题来源」（default / custom / ai），和背景完全无关 ——
+     *   早先误用了它，于是 hasFreeCamera 永远返回 false，3D 背景里横滑照样切歌。
+     */
+    const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
+    const freeCameraStage = hasFreeCamera(visualizerBackgroundMode);
     // 横滑切歌只管「换歌」这一件：画面自己吃横向拖动的样式（见 PLAYER_SWIPE_OWNED_VISUALIZERS）里不接。
-    const isPlayerSwipeSwitchingEnabled = isPlayerSwipeEnabled && !PLAYER_SWIPE_OWNED_VISUALIZERS.has(visualizerMode);
-    const isPlayerDoubleTapPauseEnabled = isPlayerSwipeEnabled && !hdrProjectionActive;
+    const isPlayerSwipeSwitchingEnabled = isPlayerSwipeEnabled
+        && !PLAYER_SWIPE_OWNED_VISUALIZERS.has(visualizerMode)
+        && !freeCameraStage;
+    /*
+     * 双击在 3D 舞台上改成「回正视角」（由背景层自己接，见 FreeCameraSurface），
+     * 所以双击暂停在这两档里关掉。陀螺仪投影开着时同理。
+     */
+    const isPlayerDoubleTapPauseEnabled = isPlayerSwipeEnabled && !hdrProjectionActive && !freeCameraStage;
 
     /*
      * 单击歌词页的空白：控件显隐翻一下，「再点一下恢复」就是翻回来。

@@ -25,6 +25,8 @@ import { writeNativeLoopMode } from '../services/nativeQueueBridge';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { setStatusMessage } from './useStatusMessageStore';
 import { setAudioFocusPolicy } from '../platform/foliaNative';
+import { isCapacitorAndroid } from '../platform/runtime';
+import { nativePlayer } from '../services/playbackEngine/nativePlayerPlugin';
 import i18n from '../i18n/config';
 
 export const CACHE_SIZE_KEY = 'folia_cache_size';
@@ -96,6 +98,13 @@ export const BACKGROUND_SILENT_SKIP_KEY = 'background_silent_skip';
  * 默认关：会让人家的声音也被压着 / 互相抢焦点，这是用户能听见的行为，该由他点头。
  */
 export const MIX_WITH_OTHER_AUDIO_KEY = 'folia_mix_with_other_audio';
+
+/**
+ * 关闭人声（中置相消）的存储键。
+ *
+ * 从没发布过，是这次新加的，所以名字现在定下来就不改了（见 AGENTS.md「存下来的数据」）。
+ */
+export const VOCAL_CANCEL_KEY = 'folia_vocal_cancel';
 
 /*
  * 原来的 `folia_native_playback`（原生播放开关）已经删掉：安卓上原生播放恒开，
@@ -261,6 +270,13 @@ export type AudioSettingsState = {
     keepScreenOnWhilePlaying: boolean;
     /** 后台与其他音源同时播放（Android）。Off by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
     mixWithOtherAudio: boolean;
+    /**
+     * 关闭人声（中置相消）。Off by default，见 VOCAL_CANCEL_KEY。
+     *
+     * 安卓上由原生 AudioSink 的处理链实时做（VocalCancelProcessor）；
+     * 桌面端没有这条链路，开关不出现。
+     */
+    vocalCancelEnabled: boolean;
     audioOutputDeviceId: string;
     /** The listener's own sound, always: a mod's curve is never written into it. */
     audioEqualizerSettings: AudioEqualizerSettings;
@@ -290,6 +306,7 @@ export type AudioSettingsState = {
     handleToggleBackgroundSilentSkip: (enable: boolean) => void;
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleToggleMixWithOtherAudio: (enable: boolean) => void;
+    handleToggleVocalCancel: (enable: boolean) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     /*
      * The equalizer actions below return whether anything changed: the listener's settings they leave
@@ -383,6 +400,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     // 默认关：常亮等于放弃系统那套自动熄屏，该由用户点头，不该替他决定。
     keepScreenOnWhilePlaying: getStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, false),
     mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, false),
+    // 默认关：它改变的是这首歌本来的样子，该由用户自己拨。
+    vocalCancelEnabled: getStoredBoolean(VOCAL_CANCEL_KEY, false),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
     audioEqualizerModCurve: readStoredAudioEqualizerModCurve(initialAudioEqualizerSettings),
@@ -487,6 +506,19 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
          * 开始播放才生效。被打断后的自动恢复走的是 JS 那条路，不依赖它，拨过去就管用。
          */
         void setAudioFocusPolicy(enable);
+    },
+    handleToggleVocalCancel: (enable) => {
+        setStoredBoolean(VOCAL_CANCEL_KEY, enable);
+        set({ vocalCancelEnabled: enable });
+        /*
+         * 立刻推给原生：处理器每帧读 NativeEqualizerState.vocalCancelEnabled，
+         * 所以拨过去正在响的这首当场就变，不用等下一次播放。
+         *
+         * 只落在安卓：桌面端没有 AudioSink 那条链，也没有这个插件方法。
+         * 失败就忽略 —— 开关状态已经存下了，下次播放时会重新推一次。
+         */
+        if (!isCapacitorAndroid()) return;
+        void nativePlayer.setVocalCancelEnabled(enable).catch(() => undefined);
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });

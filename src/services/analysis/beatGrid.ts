@@ -1,5 +1,7 @@
 import { getFromCache, saveToCache } from '../db';
 import { melSpectrogramOffThread } from '../automix/analysisOffThread';
+import { analyzeBeatsNative, isNativeBeatAnalysisAvailable, type NativeBeat } from '../automix/nativeBeats';
+import { installModel, modelCanRun } from '../automix/nativeModels';
 import { analyseBeatGrid, canRunBeatThis, type BeatGrid } from './beatThis';
 import { raiseGpuUrgency, runPercussiveEnergyGpu } from './beatThisGpu';
 import type { Urgency } from './scheduler';
@@ -123,6 +125,34 @@ export const getTrackBeatGrid = async (
         if (grid || joined.cpuFallback || !cpuFallback || storedOnly) return grid;
     }
     if (storedOnly || !canRunBeatThis()) return null;
+
+    /*
+     * 安卓：走内置的 beat_this（onnxruntime-android）。
+     *
+     * 放在 `canRunBeatThis()` 之后、WebGPU 那条路之前 —— 两条路互斥：
+     * 手机 WebGPU 不稳，原生这条不依赖它；桌面没有原生层，仍走下面那条。
+     *
+     * 与 GPU 路径刻意不同的是**不产出 accents**：
+     * accents 依赖频谱的打击乐能量，那是 GPU 那套顺带算出来的东西。
+     * 原生这次只交了拍点，没有那份频谱，硬凑一个会让动感模式的
+     * 强弱控制失真。没有 accents 时下游会退回按拍点平均分配，
+     * 那是「不知道强弱」该有的样子，不是编一个出来。
+     */
+    if (isNativeBeatAnalysisAvailable()) {
+        return (async () => {
+            const mid = await readMid();
+            if (!mid) return null;
+            // 首次用到才落盘（assets → 私有目录，几十毫秒）；已经就绪就不重复问。
+            if (!modelCanRun('beat_this') && !(await installModel('beat_this'))) return null;
+            const analysis = await analyzeBeatsNative(mid);
+            const found: AccentedBeatGrid = {
+                beats: analysis.beats.map((beat: NativeBeat) => beat.time),
+                downbeats: analysis.beats.filter((beat: NativeBeat) => beat.downbeat).map((beat: NativeBeat) => beat.time),
+            };
+            if (found.beats.length) await storeBeatGrid(key, found);
+            return found.beats.length ? found : null;
+        })();
+    }
 
     const grid = (async () => {
         const mid = await readMid();

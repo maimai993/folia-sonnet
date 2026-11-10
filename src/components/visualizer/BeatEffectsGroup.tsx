@@ -1,6 +1,7 @@
 import React from 'react';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
-import { modelsPresent, subscribeModelAvailability } from '../../services/analysis/modelAvailability';
+import { isNativeModelsAvailable, modelCanRun, refreshModelAvailability, subscribeModelAvailability } from '../../services/automix/nativeModels';
+import { modelsPresent as wgslModelsPresent, subscribeModelAvailability as subscribeWgslModels } from '../../services/analysis/modelAvailability';
 import { BEAT_EFFECT_STRENGTH_MAX, offeredBeatEffects, resolveBeatEffectPartStrength, resolveBeatEffectSetting, smartBeatActive, smartBeatMayAnalyse, type BeatEffectDef } from '../../services/beatFx/beatEffects';
 import { Button, Group, Row, type SettingsGroupDef } from '../modal/settings/kit';
 import { SliderRow, ToggleRow, times } from './panelRows';
@@ -32,7 +33,35 @@ type BeatEffectsGroupProps = {
 const BeatEffectsGroup: React.FC<BeatEffectsGroupProps> = ({ t, effects, onSliderPointerDown, onSliderCommit, onOpenSmartBeat }) => {
     const smartBeat = useVisualizerSettingsStore(state => state.smartBeat);
     const setSmartBeat = useVisualizerSettingsStore(state => state.handleSetSmartBeat);
-    const drumsPresent = React.useSyncExternalStore(subscribeModelAvailability, modelsPresent, modelsPresent).htdemucs_gpu;
+    /*
+     * 鼓声模型在不在。
+     *
+     * 原来这里读的是 modelsPresent().htdemucs_gpu —— 旧的 WebGPU 那一套。
+     * 那套被 ANALYSIS_MODELS_ENABLED = false 整体关着，所以这个值永远是 false，
+     * 于是每个吃鼓点的效果都在喊「这次安装缺少 HTDemucs 模型，请重新安装 Folia」，
+     * 而实际上权重是在包里的，只是从来没人去问过原生那一份。
+     *
+     * 现在分两条：
+     *   · 安卓 App —— 问原生模型（内置在 APK 里，首次用时落到私有目录）；
+     *   · 其它平台 —— 仍旧问 WebGPU 那套，桌面端不受影响。
+     * 两边都取「能不能跑」，不是「有没有下过」，调用点只关心前者。
+     */
+    const nativeDrumsReady = React.useSyncExternalStore(
+        subscribeModelAvailability,
+        () => (isNativeModelsAvailable() ? modelCanRun('htdemucs') : false),
+        () => false,
+    );
+    const wgslDrumsReady = React.useSyncExternalStore(
+        subscribeWgslModels,
+        wgslModelsPresent,
+        wgslModelsPresent,
+    ).htdemucs_gpu;
+    const drumsPresent = isNativeModelsAvailable() ? nativeDrumsReady : wgslDrumsReady;
+
+    /* 进这一组时问一次原生：刚装好 / 别处刚准备好，这里要跟上。 */
+    React.useEffect(() => {
+        if (isNativeModelsAvailable()) void refreshModelAvailability();
+    }, []);
     const offered = offeredBeatEffects(effects);
     const active = smartBeatActive(smartBeat);
     if (!offered.length) return null;

@@ -397,6 +397,26 @@ export const makeGlass = (el: HTMLElement) => {
   };
   new ResizeObserver(() => g.update()).observe(el);
   glasses.set(el, g);
+  // [data-glass] 是 refreshAllGlasses 找「在场的玻璃」的唯一依据（WeakMap 不可遍历）。
+  // 之前没有任何地方写这个属性，于是拖动强度/弯曲距离滑杆时，
+  // 已经在屏幕上的玻璃面板一个都不会重建，只有新挂上的才用新参数 ——
+  // 表现就是「调了滑杆看不出变化」。标记和 id 一起留着，删除时按选择器一并清掉。
+  el.setAttribute("data-glass", id);
+  /*
+   * 记住接管前元素自己的 backdrop-filter。
+   *
+   * 有些面本来就在 CSS 文件里写了模糊（.status-toast、.lattice-sections-list 之类），
+   * 我们接管后把内联值盖在它们头上；关掉液态玻璃时如果只是 removeProperty，
+   * 它们会连原本的模糊一起丢掉，变成一块硬底 —— 比不接管还难看。
+   * 存一份原值，撤销时按它还原。
+   */
+  if (!el.hasAttribute("data-glass-prev-backdrop")) {
+    const inline = el.style.backdropFilter;
+    if (!inline) {
+      const computed = getComputedStyle(el).backdropFilter;
+      el.setAttribute("data-glass-prev-backdrop", computed && computed !== "none" ? computed : "");
+    }
+  }
   return g;
 };
 

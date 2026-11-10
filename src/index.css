@@ -384,6 +384,32 @@ html[data-liquid-glass='on'] [class*="backdrop-blur"][class*="inset-0"] {
   background-color: unset !important;
 }
 
+/* 圆角自裁（issue #279）。
+
+   问题：backdrop-filter 的模糊/折射是浏览器在元素背后**单独合成**的一层，它不跟着
+   元素自身的 border-radius 收角，也不跟父级 overflow-hidden 的圆角裁。于是凡是
+   「rounded + backdrop-blur」的面 —— 设置窗口、各个 Sheet 弹层、正在播放卡、
+   首页胶囊 —— 圆角处都会露出四个直角，玻璃像贴歪了一张方纸。
+
+   这里让这些面**按自己的圆角把自己裁掉**：border-radius 加 !important，是因为
+   Lattice 那套会把墙内子元素的圆角压成直角（和光晕层 border-radius:inherit 同源）。
+   用 :where() 归零特异度，各处具体的圆角值照常生效，这条只补裁切。
+
+   isolation 一并给上：玻璃面要独立成叠加上下文，否则它内部的负 z 子层
+   （underlay、光晕）会漏到父级去，同样把直角带出来。 */
+html[data-liquid-glass='on'] :where([class*="backdrop-blur"], .theme-glass-panel, .theme-polaroid-card) {
+  isolation: isolate;
+}
+
+/* 裁切只给「自身带圆角」的玻璃面。
+
+   不加到所有 .rounded 上：那会把页面里每个圆角小元素都变成 overflow:hidden，
+   滚动容器和超出边界的提示气泡会一起被切掉。
+   这里要求元素同时命中 backdrop-blur 与 rounded —— 正是会露直角的那一类。 */
+html[data-liquid-glass='on'] :where([class*="backdrop-blur"][class*="rounded"]) {
+  overflow: hidden;
+}
+
 /* 播放页侧面板豁免全站压透：它浮在播放层上，压到 55% 会把后面的层透出来；
    自己的 --pn-glass 已按 0.72 收过（panelTheme.ts），这里只让它保持原值。 */
 html[data-liquid-glass='on'] [data-testid='unified-panel-surface'][class*="backdrop-blur"] {

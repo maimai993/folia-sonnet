@@ -21,6 +21,8 @@ describe('visualizer background registry', () => {
             'sora',
             // fork 自有：封面粒子（移植自 Mineradio）
             'particles',
+            // fork 自有：音域回响（移植自 Mineradio，频谱驱动的柱状地形）
+            'sonic',
         ]);
     });
 

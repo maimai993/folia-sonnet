@@ -40,6 +40,7 @@ export const BUILTIN_VISUALIZER_BACKGROUND_MODES = [
     'monet',
     'nomand',
     'particles',
+    'sonic',
     'sora',
     'url',
 ] as const;

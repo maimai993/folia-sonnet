@@ -1,9 +1,11 @@
 import React from 'react';
-import { AnimatePresence, motion, useTransform, type MotionValue } from 'framer-motion';
+import { AnimatePresence, motion, MotionValue, useTransform, type MotionValue as MotionValueType } from 'framer-motion';
+
 import { Cast, ChevronLeft, Loader2, RefreshCw, Speaker, Square, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanCastRemoteBody from './LanCastRemote';
 import { Button } from '../ui';
+import { QuickTile } from '../panelTab/controls/QuickTile';
 import { usePlaybackStore, selectDisplaySong, selectDisplayCoverUrl } from '../../stores/usePlaybackStore';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
@@ -35,14 +37,28 @@ import {
 
 type Panel = 'closed' | 'devices' | 'remote';
 
+/**
+ * 渲染形态。
+ *
+ * - `floating`：播放页左下角那颗悬浮圆钮（旧形态，保留给别处复用）。
+ * - `tile`：音质页里的一张卡片，和「信号链路」排在一起（issue #279 之后播放页走这个）。
+ *
+ * 之所以要分两种：悬浮形态的按钮是 fixed 定位，会压在「正在播放」提示卡上，
+ * 而提示卡是 z-40、按钮是 z-60，用户看到的就是投送钮糊在卡片上。
+ */
+export type LanCastControlVariant = 'floating' | 'tile';
+
 type LanCastControlProps = {
-    /** 与右下角那颗按钮共用的隐藏条件，保证按钮和面板同时出现、同时消失。 */
-    hidden: boolean;
-    /** PanelHandle 的贴底基线，避免和底部控制条 / 右侧按钮错位。 */
-    bottom: MotionValue<number>;
+    /** floating 形态：与右下角那颗按钮共用的隐藏条件。tile 形态忽略。 */
+    hidden?: boolean;
+    /** floating 形态：PanelHandle 的贴底基线。tile 形态忽略。 */
+    bottom?: MotionValueType<number>;
     isDaylight: boolean;
-    isOpen: boolean;
-    isCommandPaletteOpen: boolean;
+    /** floating 形态：面板是否展开。tile 形态忽略。 */
+    isOpen?: boolean;
+    isCommandPaletteOpen?: boolean;
+    /** 渲染形态，默认 floating（向后兼容）。 */
+    variant?: LanCastControlVariant;
 };
 
 const hostOf = (location: string): string => {
@@ -54,11 +70,12 @@ const hostOf = (location: string): string => {
 };
 
 const LanCastControl: React.FC<LanCastControlProps> = ({
-    hidden,
+    hidden = false,
     bottom,
     isDaylight,
-    isOpen,
-    isCommandPaletteOpen,
+    isOpen = false,
+    isCommandPaletteOpen = false,
+    variant = 'floating',
 }) => {
     const { t } = useTranslation();
     const [panel, setPanel] = React.useState<Panel>('closed');
@@ -68,7 +85,13 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
     const [active, setActive] = React.useState<LanSpeaker | null>(() => getCastingSpeaker());
     const [error, setError] = React.useState('');
     const [notice, setNotice] = React.useState('');
-    const panelBottom = useTransform(bottom, value => value + 64);
+    /*
+     * bottom 只有 floating 形态才有（tile 形态没有贴底基线）。
+     * useTransform 不接受 undefined，所以这里给一颗稳定的默认 MotionValue；
+     * tile 形态下它算出来的值根本不会被用到（浮层改成居中定位）。
+     */
+    const fallbackBottom = React.useRef(new MotionValue(32)).current;
+    const panelBottom = useTransform(bottom ?? fallbackBottom, (value: number) => value + 64);
 
     const audioSrc = usePlaybackStore(state => state.audioSrc);
     const song = usePlaybackStore(selectDisplaySong);
@@ -258,11 +281,46 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         : 'border-white/10 bg-black/70 text-white';
     const soft = isDaylight ? 'text-zinc-500' : 'text-white/55';
     const row = isDaylight ? 'hover:bg-black/5 border-black/5' : 'hover:bg-white/10 border-white/10';
-    const cardShell = 'pointer-events-auto fixed left-4 z-[70] md:left-8 backdrop-blur-xl border ' + glass;
+    /*
+     * 外观和定位分开。
+     *
+     * 原来 cardShell 里硬编码了 `fixed left-4 md:left-8`，tile 形态再往后面叠一个
+     * `left-1/2` —— 同一个属性两处写，谁生效看 Tailwind 的类序，实机上就偏出去压到了封面。
+     * 现在这里只管「长什么样 + 是 fixed」，左右/上下由各形态自己给。
+     */
+    const cardShell = 'pointer-events-auto fixed z-[70] backdrop-blur-xl border ' + glass;
     const expandedShell = `${cardShell} flex max-h-[min(60vh,30rem)] w-[min(22rem,calc(100vw-2rem))] flex-col gap-3 rounded-2xl p-4 shadow-2xl`;
+    /*
+     * tile 形态：面板在屏幕右侧，浮层贴右侧、垂直居中。
+     *
+     * 不按屏幕居中 —— 居中会横跨到左边的封面/歌词区。
+     * 宽度沿用 expandedShell 的 w-[min(22rem,calc(100vw-2rem))]，这里不再重复写宽度
+     * （两处写宽度会打架，实机上出现过内容被裁掉一块）。
+     */
+    const tilePosition = 'right-4 top-1/2 -translate-y-1/2 md:right-8';
 
     return (
         <>
+            {variant === 'tile' ? (
+                /*
+                 * tile 形态：音质页里的一张卡片，和「信号链路」并排。
+                 *
+                 * 不做 fixed、不带自己的浮层定位 —— 卡片在面板流里正常排布，
+                 * 点开后由下面那个居中的浮层承载设备列表 / 遥控器。
+                 */
+                <div className="grid min-w-0 px-1 py-2">
+                    <QuickTile
+                        kind="open"
+                        lit={Boolean(active)}
+                        icon={<Cast size={18} />}
+                        label={active
+                            ? t('lanCastCastingTo', { name: active.name })
+                            : t('lanCastTitle')}
+                        aria-haspopup="dialog"
+                        onClick={() => setPanel(effectivePanel !== 'closed' ? 'closed' : (active ? 'remote' : 'devices'))}
+                    />
+                </div>
+            ) : (
             <AnimatePresence>
                 {!hidden && (
                     <motion.div
@@ -272,7 +330,7 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                             ? { opacity: 0, x: 0, y: 0, scale: 1 }
                             : { opacity: 0, x: -20, y: 12, scale: 0.92 }}
                         transition={{ duration: 0.24, ease: 'easeOut' }}
-                        style={{ bottom }}
+                        style={{ bottom: bottom ?? 32 }}
                         data-folia-safe-bottom="shift"
                         data-folia-safe-left="shift"
                         className="pointer-events-auto fixed left-0 z-[60] pl-4 md:pl-8 group w-20 flex justify-start"
@@ -293,6 +351,7 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                     </motion.div>
                 )}
             </AnimatePresence>
+            )}
 
             {/* 唯一的浮层：devices / remote 互斥，mode="wait" 保证不会同时存在两个 DOM；
                 收起态不留任何浮层，投送中状态只体现在左下角按钮的绿点上。 */}
@@ -304,11 +363,17 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.97 }}
                         transition={{ duration: 0.18, ease: 'easeOut' }}
-                        style={{ bottom: panelBottom }}
+                        /*
+                         * floating：贴着左下角那颗按钮往上展开（bottom 由 PanelHandle 的基线推出来）。
+                         * tile：卡片在面板流里、没有固定锚点，所以改成屏幕居中弹出 ——
+                         * 贴底会正好压住底部那排 tab，而用户此刻正在音质页里点它。
+                         */
+                        style={variant === 'tile' ? {} : { bottom: panelBottom }}
                         onPointerDown={keepAlive}
                         onTouchStart={keepAlive}
                         onChange={keepAlive}
-                        className={expandedShell}
+                        data-folia-safe-bottom="shift"
+                        className={`${expandedShell} ${variant === 'tile' ? tilePosition : 'left-4 md:left-8'}`}
                     >
                         {error && (
                             <div className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">

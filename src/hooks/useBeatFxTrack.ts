@@ -9,6 +9,7 @@ import { beginBeatFxTrack, getBeatFxHeard, setBeatFxEvents, setBeatFxIntensities
 import { loadBeatFxTrackBeats, loadBeatFxTrackDrums } from '../services/beatFx/beatFxSource';
 import { getPlaybackAnalysisKey, getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 import { modelsPresent, subscribeModelAvailability } from '../services/analysis/modelAvailability';
+import { isNativeModelsAvailable, modelCanRun, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
 import { drumHitsSettled, setWantedDrumTrack } from '../services/analysis/drumHits';
 import { setStemDrumsWanted } from '../services/analysis/stemRange';
 
@@ -63,6 +64,19 @@ export function useBeatFxTrack(): boolean {
         .join(','));
     // Asked again when htdemucs_gpu's answer arrives (the startup check; the file ships with the app).
     const drumModel = useSyncExternalStore(subscribeModelAvailability, modelsPresent).htdemucs_gpu;
+    /*
+     * 安卓上分轨模型在 APK 里，走原生 onnxruntime，与 WebGPU 那套无关。
+     *
+     * 上面那个 drumModel 问的是 htdemucs_gpu（WebGPU），安卓恒为 false ——
+     * 于是 drumsMayRun 恒为 false、setStemDrumsWanted 恒返回 false，
+     * 分离永远不会启动，仿真鼓面拿不到任何鼓点。这正是「鼓面没效果」的原因。
+     * 这里两个来源分开问，任一可用即可。
+     */
+    const nativeDrumModel = useSyncExternalStore(
+        subscribeNativeModels,
+        () => (isNativeModelsAvailable() ? modelCanRun('htdemucs') : false),
+        () => false,
+    );
 
     // Whether a track's drum hits may still be separated, on any picture (时计 or 凝彩 may come on later): only
     // then are the drums automix's segments leave behind kept (services/analysis/stemRange.ts), and only
@@ -71,7 +85,7 @@ export function useBeatFxTrack(): boolean {
     // A track whose hits are stored but not read this session still counts as not in: the test is
     // synchronous, and its drums go once they are read (dropStemDrums) or by the cache's own limit.
     const drumsMayRun = useVisualizerSettingsStore(state => smartBeatMayAnalyse(state.smartBeat)
-        && anyDrumBeatEffectOn(state.smartBeat)) && drumModel;
+        && anyDrumBeatEffectOn(state.smartBeat)) && (drumModel || nativeDrumModel);
     useEffect(() => {
         setStemDrumsWanted(drumsMayRun
             ? (key) => !drumHitsSettled(key)

@@ -6,7 +6,6 @@ import { Tooltip } from '../../modal/settings/kit/Tooltip';
 import { SettingsKitThemeContext } from '../../modal/settings/kit/kitTheme';
 import { useElementWidth } from '../../../hooks/useElementWidth';
 import { DEFAULT_MONET_TUNING } from '../../../types';
-import { isCapacitorAndroid } from '../../../platform/runtime';
 import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
 import { Button } from '../../ui';
 import { type VisualizerSharedProps } from '../definition';
@@ -593,9 +592,18 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                 </div>
             </div>
 
-            {/* 手机（安卓 App）拿不到 Web Audio 的分析数据：频谱永远趴着不动，干脆不画。
-                设置里那个开关也一并隐藏（见 MonetSettingsPanel）。 */}
-            {showText && monetTuning.showAudioVisualization && !isCapacitorAndroid() && (
+            {/*
+             * 频谱在这一层只受 showAudioVisualization 控制。
+             *
+             * 这里原本还挂着 `!isCapacitorAndroid()`：安卓上拿不到 Web Audio 的分析数据，
+             * 频谱画出来也是永远趴着的死线，所以干脆不画、设置里那个开关也一并删了。
+             *
+             * 那个前提现在不成立了：原生播放那一路的频谱已经由 nativeSpectrumBridge
+             * 接进来（Kotlin 侧 SpectrumAnalyzer → publishSpectrum → getSpectrum），
+             * audioBands 在两条播放路径上都有真实数据，安卓上画出来是会动的。
+             * 所以去掉这个平台判断，把能力交还给开关本身。
+             */}
+            {showText && monetTuning.showAudioVisualization && (
                 <motion.div
                     key={`audio-${introKey}`}
                     initial={{ opacity: 0, y: 15 }}

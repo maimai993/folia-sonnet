@@ -63,6 +63,33 @@ android {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            /*
+             * 模型权重（assets/models/*.onnx，合计约 182MB）不能压缩。
+             *
+             * 两个原因：
+             *   1. 它们是已经量化/压缩过的权重，aapt 的 deflate 基本压不动，
+             *      打包时白花几分钟，装到机器上还得再解一次；
+             *   2. 更关键的是首次启动要把它们解压到私有目录（ONNX Runtime 要一个
+             *      真实文件路径，AssetManager 给不了 fd），noCompress 之后这一步
+             *      就是一比一的字节拷贝，快得多。
+             */
+            noCompress 'onnx'
+        }
+        /*
+         * 只打 arm64-v8a。
+         *
+         * onnxruntime-android 的 AAR 自带四种 ABI，每种一个 23~39MB 的 libonnxruntime.so，
+         * 合计 133.9MB —— 其中 arm64 那份 32.6MB 是我们唯一要用的。
+         * x86 / x86_64 只对模拟器有意义，armeabi-v7a 是 32 位机型（这一版已经不带它）。
+         *
+         * 这个取舍不是凭空做的：加进 ONNX 之后 APK 从 25.7MB 涨到 341.8MB，
+         * 剔掉这三个 ABI 能立刻少掉约 101MB。用户的安装包和下载量直接受影响。
+         *
+         * 代价：x86 模拟器上这个 APK 装不了（adb install 会报 no matching ABI）。
+         * 本机验证一直用真机（arm64），所以不影响发布流程。
+         */
+        ndk {
+            abiFilters 'arm64-v8a'
         }
     }
     signingConfigs {
@@ -134,6 +161,17 @@ dependencies {
     // 只在「设置 → 原生播放」打开时被用到；关着的时候这一层不参与任何播放。
     // ⚠️ 版本改动要看 media3 的 release notes：1.x 之间 API 有移动。
     implementation "androidx.media3:media3-exoplayer:1.11.1"
+    /*
+     * Automix 的两个分析模型（beat_this 节拍分析、htdemucs 四轨分离）跑在原生这一侧。
+     *
+     * 权重已经内置在 assets/models/ 里（约 182MB，构建时打包），所以这里只需要推理引擎，
+     * 不需要任何下载器 —— 用户装上就有，首次用到时把 assets 里的文件拷到私有目录即可。
+     *
+     * 为什么在原生算而不是 WebView 里：htdemucs 一次推理的峰值内存接近 500MB，
+     * 而且时间以秒计。放在 WebView 里既会挤爆渲染进程的堆，也会卡住整个界面。
+     * 用 onnxruntime-android 走 NNAPI/CPU，跑在后台线程，界面不受影响。
+     */
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.31.1"
     implementation project(':capacitor-android')
     // JVM 单测里 android.jar 的 org.json 是空壳（一调用就 "not mocked"），而设置与队列
     // 这两层的数据载体就是 JSONObject —— 它们恰恰最该被单测钉住（合并语义、队列推进）。

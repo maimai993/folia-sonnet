@@ -710,6 +710,19 @@ class FoliaNativePlayerPlugin : Plugin() {
     }
 
     /**
+     * 开关「关闭人声」（中置相消）。
+     *
+     * 只改一个 volatile 布尔值，音频线程下一帧就照它处理，
+     * 不重建音频链、不重新加载音频 —— 所以拨开关是即时的。
+     * 具体算法见 player/dsp/VocalCancelProcessor.kt。
+     */
+    @PluginMethod
+    fun setVocalCancelEnabled(call: PluginCall) {
+        NativeEqualizerState.vocalCancelEnabled = call.getBoolean("enabled", false) ?: false
+        call.resolve()
+    }
+
+    /**
      * 取一帧频谱。
      *
      * 由界面按动画帧的节奏来问（约 60 ms 一次），不在原生侧主动推事件：

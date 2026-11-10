@@ -64,7 +64,15 @@ const applyToVisualizer = (item: BackgroundMarketItem, mediaUrl: string): void =
 /** 把一张背景设进桌面壁纸（原生那层）。 */
 const applyToWallpaper = async (item: BackgroundMarketItem, mediaUrl: string): Promise<boolean> => {
     if (item.kind === 'video') {
-        const ok = await downloadWallpaperVideoFromUrl(mediaUrl);
+        /*
+         * 旋转要带上 —— 壁纸站的视频几乎全是横屏。
+         *
+         * 手动应用那条路（apply.ts）会把用户在裁剪界面选的角度传下来；
+         * 轮换没有界面，就沿用设置里已经存着的那个角度（没有则 0）。
+         * 不传的话这个参数默认 0，等价于「永远不转」。
+         */
+        const rotation = useVisualizerSettingsStore.getState().wallpaperVideoRotation ?? 0;
+        const ok = await downloadWallpaperVideoFromUrl(mediaUrl, rotation);
         if (ok) {
             useVisualizerSettingsStore.getState().handleSetLyricsWallpaperBackground('video');
         }

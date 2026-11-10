@@ -8,6 +8,7 @@ import { groupScratchpadEntries, scratchpadGroupKey, useScratchpadStore, type Sc
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { useScratchpadSettingsStore } from '../../../stores/useScratchpadSettingsStore';
 import { PRIMARY_MODIFIER_LABEL } from '../../../utils/platform';
+import { isNativeBackKey } from '../../../utils/keyboardTargets';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { openAddSongsToPlaylist } from '../../../stores/useAddToPlaylistStore';
 import { canAddScratchpadSongToPlaylist, scratchpadSourceLabel, scratchpadTips, type ScratchpadAction } from './scratchpadModel';
@@ -312,7 +313,11 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
         if (!isOpen || !isExpanded || isCovered) return;
         const onKeyDown = (event: KeyboardEvent) => {
             const active = document.activeElement;
-            if ((active && active !== document.body) || isTabCycleKey(event)) return;
+            /*
+             * 系统返回不让位：焦点在画布里时 React 收不到 window 上派发的合成 Escape
+             * （见上面抽屉 Escape 的注释），这里必须直接接住。
+             */
+            if (!isNativeBackKey(event) && (active && active !== document.body || isTabCycleKey(event))) return;
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
@@ -337,7 +342,21 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
             const active = document.activeElement;
-            if (active?.closest('.scratchpad-root') || active?.closest(OWNS_ESCAPE_SELECTOR) || hasOpenModal()) return;
+            /*
+             * ★ 系统返回（安卓返回键 / 边缘返回手势）不让位给面板内的焦点元素。
+             *
+             * 下面的 `active?.closest('.scratchpad-root')` 让位逻辑是给**键盘 Esc**
+             * 的：焦点在面板里时，面板自己的 onKeyDown（handleKeyDown）会收起它。
+             * 但系统返回走的是 useNativeBackButton 往 window 上派发的合成 Escape ——
+             * target 是 window，React 的 onKeyDown 根本收不到。若这里也让位，
+             * 两边都不接，返回键就退到了后台，速记簿还挂在屏幕上。
+             * 返回的语义是「回退一层」，见 isNativeBackKey 的说明。
+             */
+            if (!isNativeBackKey(event)) {
+                if (active?.closest('.scratchpad-root') || active?.closest(OWNS_ESCAPE_SELECTOR) || hasOpenModal()) return;
+            } else if (hasOpenModal()) {
+                return;
+            }
             event.preventDefault();
             event.stopPropagation();
             setOpen(false);
