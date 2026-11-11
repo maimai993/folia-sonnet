@@ -134,7 +134,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     closeToTray: getStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
-    modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, false),
+    // 模组系统默认开：装完就有内置模组可用，不用先去设置里翻开关。
+    // 存过的值优先（`getStoredBoolean` 只在 localStorage 没有这个键时才用 fallback），
+    // 所以用户显式关掉过的话不会被这里翻回来。
+    modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, true),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     hideRemoteControlTitlebar: getStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY, false),
