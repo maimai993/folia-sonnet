@@ -132,6 +132,48 @@ class ShimWebContents extends EventEmitter {
     }
 }
 
+/**
+ * 把 `data:text/html,...` 这类 URL 里的正文取出来。
+ *
+ * 模组统一用 data URL 把页面塞给窗口（见 lyric-float 的 WIDGET_HTML / POPUP_HTML），
+ * 安卓这边交给原生 `loadDataWithBaseURL`，不走 WebView 的 data: 直载
+ * （部分机型对 data: 有长度限制）。
+ */
+const decodeHtmlUrl = (url) => {
+    const text = String(url || '');
+    const comma = text.indexOf(',');
+    let body = comma >= 0 ? text.slice(comma + 1) : text;
+    try {
+        body = decodeURIComponent(body);
+    } catch {
+        // 不是 URI 编码就原样用。
+    }
+    return body;
+};
+
+/*
+ * 模组 preload 脚本的正文，按路径缓存。
+ *
+ * Electron 的 preload 是「和页面同一窗口、早于页面脚本」跑的一段 Node 代码，
+ * 模组靠它把主进程的能力（通常是 contextBridge）暴露给页面。安卓没有这个概念，
+ * 这里把文件读出来，拼进注入脚本里先跑一遍（见 buildInjectionFor）。
+ *
+ * 读不到就返回 null —— 不能因为缺 preload 让整个窗口起不来。
+ */
+const preloadCache = new Map();
+const readPreloadScript = (filePath) => {
+    if (typeof filePath !== 'string' || !filePath) return null;
+    if (preloadCache.has(filePath)) return preloadCache.get(filePath);
+    let source = null;
+    try {
+        source = require('fs').readFileSync(filePath, 'utf8');
+    } catch {
+        source = null;
+    }
+    preloadCache.set(filePath, source);
+    return source;
+};
+
 class BrowserWindow extends EventEmitter {
     constructor(options = {}) {
         super();
@@ -151,6 +193,13 @@ class BrowserWindow extends EventEmitter {
         this.__owner = (options && typeof options.__foliaModId === 'string')
             ? options.__foliaModId
             : currentOwner;
+        /*
+         * 有些模组把页面直接写在构造参数里（`{ url }` 或 `{ html }`），不再单独调 loadURL。
+         * 这类窗口以前永远拿不到页面 —— 建出来就是一个空白窗。这里接住，
+         * 等 create 完成（那时 __id 才有值）再灌进去。
+         */
+        this.__initialUrl = typeof this.__options.url === 'string' ? this.__options.url : null;
+        this.__initialHtml = typeof this.__options.html === 'string' ? this.__options.html : null;
         this.__creating = this.__create();
     }
 
@@ -172,7 +221,36 @@ class BrowserWindow extends EventEmitter {
             this.__destroyed = true;
             logWarn(`创建悬浮窗失败：${error && error.message ? error.message : error}`);
         }
+        /*
+         * 构造参数里直接带页面的话，现在补上。
+         *
+         * 不能走 `__loadHtml` / `loadURL`：它们开头都 `await this.__creating`，
+         * 而这里正处在 `__create` 内部 —— 等自己会让这个 Promise 永远不 settle。
+         * 所以直接发请求。
+         */
+        if (!this.__destroyed && this.__id != null) {
+            const injection = buildInjectionFor(this.__id, this.__preloadSource());
+            if (this.__initialHtml != null) {
+                void callOverlayImpl('load-html', {
+                    id: this.__id,
+                    html: this.__initialHtml,
+                    injection,
+                }).catch(() => undefined);
+            } else if (this.__initialUrl != null) {
+                void callOverlayImpl('load-html', {
+                    id: this.__id,
+                    html: decodeHtmlUrl(this.__initialUrl),
+                    injection,
+                }).catch(() => undefined);
+            }
+        }
         return this;
+    }
+
+    /** 这个窗口的 preload 脚本正文；没配就是 null（见 buildInjectionFor）。 */
+    __preloadSource() {
+        const prefs = this.__options && this.__options.webPreferences;
+        return prefs ? readPreloadScript(prefs.preload) : null;
     }
 
     async __call(op, args = {}) {
@@ -187,15 +265,7 @@ class BrowserWindow extends EventEmitter {
      * `loadDataWithBaseURL`，不用 WebView 的 data: 直载（部分机型有长度限制）。
      */
     loadURL(url) {
-        const text = String(url || '');
-        const comma = text.indexOf(',');
-        let body = comma >= 0 ? text.slice(comma + 1) : text;
-        try {
-            body = decodeURIComponent(body);
-        } catch {
-            // 不是 URI 编码就原样用。
-        }
-        void this.__loadHtml(body);
+        void this.__loadHtml(decodeHtmlUrl(url));
         return Promise.resolve();
     }
 
@@ -210,7 +280,7 @@ class BrowserWindow extends EventEmitter {
             await callOverlayImpl('load-html', {
                 id: this.__id,
                 html,
-                injection: buildInjection(this.__id),
+                injection: buildInjectionFor(this.__id, this.__preloadSource()),
             });
             // 页面已经灌进去了；Electron 的 ready-to-show 是「首帧可绘」，
             // 这里 onPageFinished 之后原生会再发一次 did-finish-load。
@@ -446,6 +516,36 @@ const buildInjection = (windowId) => `(function(){
   };
   if (bridge && typeof bridge.ready === 'function') bridge.ready();
 })();`;
+
+/**
+ * 某窗口的完整注入脚本 = Electron 替身（require / ipcRenderer）+ 模组自己的 preload。
+ *
+ * preload 单独包一层 IIFE 再跑：给它 `module` / `exports` / `require`，
+ * 让 `contextBridge.exposeInMainWorld` 和 `module.exports` 这两种 Electron 写法都能用。
+ * 外层用 JSON 转义源码，避免里面的引号、反引号或 `</script>` 破坏这段脚本本身。
+ */
+const buildInjectionFor = (windowId, preloadSource) => {
+    const base = buildInjection(windowId);
+    if (!preloadSource) return base;
+    const wrapped = '(function(){\n'
+        + 'var module = { exports: {} };\n'
+        + 'var exports = module.exports;\n'
+        + 'var require = function(name){\n'
+        + '  if (name === "electron") return {\n'
+        + '    ipcRenderer: window.require("electron").ipcRenderer,\n'
+        + '    contextBridge: {\n'
+        + '      exposeInMainWorld: function(key, value){ window[key] = value; },\n'
+        + '    },\n'
+        + '    webFrame: { setZoomFactor: function(){}, setZoomLevel: function(){} },\n'
+        + '  };\n'
+        + '  return window.require(name);\n'
+        + '};\n'
+        + 'try {\n'
+        + String(preloadSource)
+        + '\n} catch (err) { console.error("preload failed", err); }\n'
+        + '})();\n';
+    return base + '\n' + wrapped;
+};
 
 /** `ipcMain`：注册监听即可，事件对象由原生侧（OverlayBridge）构造并带上 sender。 */
 const ipcMain = new EventEmitter();

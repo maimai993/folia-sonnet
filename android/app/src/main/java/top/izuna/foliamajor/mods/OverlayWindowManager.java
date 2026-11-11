@@ -47,8 +47,11 @@ final class OverlayWindowManager {
 
     private static final String TAG = "FoliaOverlay";
     /**
-     * 悬浮窗页面的基地址。必须和宿主页面同源，`/mods/...` 这类相对路径才解析得到；
-     * 给 null 会让页面落在 about:blank，模组的 script 引用全部失效（见 showPage 里的注释）。
+     * 悬浮窗页面的基地址。
+     *
+     * 给 null 会让页面落在 `about:blank`，模组里相对路径的引用一个都发不出去。
+     * 用 `https://localhost/`（宿主自己的 origin）当 base：模组页面本来就把样式与脚本
+     * 全部内联，只看 origin 是否合法，所以这里不需要真实可达。
      */
     private static final String OVERLAY_BASE_URL = "https://localhost/";
 
@@ -367,6 +370,9 @@ final class OverlayWindowManager {
     /** 把 HTML 交给窗口。用 `loadDataWithBaseURL`：`loadUrl("data:")` 在部分 WebView 上有长度限制。 */
     void loadHtml(OverlayWindow window, String html, String injection) {
         if (window == null || window.destroyed) return;
+        Log.d(TAG, "loadHtml id=" + window.id
+                + " htmlLen=" + (html == null ? -1 : html.length())
+                + " attached=" + window.attached);
         window.injection = injection;
         /*
          * 注入脚本要**先于页面自己的脚本**执行：模组的页面里第一件事就是
@@ -426,14 +432,11 @@ final class OverlayWindowManager {
             }
         }
         /*
-         * baseURL 不能给 null。
+         * 用 loadDataWithBaseURL 而不是 loadUrl("data:")：部分 WebView 对 data: URL
+         * 有长度限制，而模组把整页（含样式与脚本）都内联在 HTML 里，动辄几十 KB。
          *
-         * 给 null 的时候页面落在 `about:blank`，相对路径与同源请求全部失效 ——
-         * 模组页面里 `<script type="module" src="client.mjs">` 这类引用根本发不出去，
-         * 表现就是「窗口建出来了，但里面一片空白」。实测桌面歌词 (amll-desktop-lyric)
-         * 就是这样：窗口尺寸、位置都对，body 却是空的，按钮一个都不存在。
-         *
-         * 宿主页面本身就是 `https://localhost/`，用它当 base，`/mods/...` 才解析得到。
+         * baseURL 只用来定 origin（模组页面不引外部资源），给宿主自己的 https://localhost/
+         * 即可；给 null 会让文档落在 about:blank，页面里的相对引用全部失效。
          */
         window.webView.loadDataWithBaseURL(OVERLAY_BASE_URL, merged, "text/html", "utf-8", null);
         // 页面起来之后就开始喂歌词：模组自己的歌词来自宿主 WebView 的 IPC，
