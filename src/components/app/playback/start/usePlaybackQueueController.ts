@@ -176,6 +176,19 @@ type UsePlaybackQueueControllerParams = {
     nativeFailedKeysRef?: MutableRefObject<Set<string>>;
 };
 
+/**
+ * 这次切歌要不要先探一遍能不能播。
+ *
+ * 只在「用户没法立刻插手」的时候探：自动接播、失败后自动跳过、混音推进。
+ * 用户手按「下一首」时不探 —— 那会平白多等一次网络往返，而他正盯着界面等反应；
+ * 那种情况就让下一首照常播，真失败了自己走失败分支。
+ */
+const shouldProbeBeforePlay = (options?: NextTrackOptions): boolean => (
+    options?.isAutomixAdvance === true
+    || options?.unavailableSkipCount !== undefined
+    || options?.allowStopOnMissing === true
+);
+
 const MAX_UNAVAILABLE_AUTO_SKIP_COUNT = 2;
 const UNAVAILABLE_SKIP_CONFIRM_TIMEOUT_MS = 5000;
 const UNAVAILABLE_SKIP_CONFIRM_INTERVAL_MS = 1000;
@@ -429,6 +442,49 @@ export function usePlaybackQueueController({
     const getNextPlayableQueueSong = useCallback((queue: SongResult[], song: SongResult, isFm: boolean) => {
         const currentIndex = queueIndexOf(queue, song);
         return nextPlayableQueueSong(queue, currentIndex, queueLoopMode(loopMode, isFm), isQueueSongPlayable);
+    }, [loopMode]);
+
+    /**
+     * 从 `fromSong` 往后逐首问 provider「这首给不给播放地址」，返回第一首给得出的整下标。
+     *
+     * 为什么要提前问：一首 VIP / 不可播的歌要到**真正开始播**才失败，那时才跳就慢了一拍，
+     * 连着的几首还会被连跳上限卡住。这里在切歌之前就把地址拉一遍 —— 拿不到就继续往下一首问，
+     * 直到碰上一首给得出地址的，直接把播放器指过去。
+     *
+     * 逐首串行（不并行）：并行会一次发好几个播放地址请求，容易被平台判成异常流量；
+     * 而且多数情况下第一首就是好的，串行反而更省请求。
+     *
+     * 拿到的地址不浪费：`warmupSongAudio` 那条路会命中同一次解析留下的缓存。
+     */
+    const findNextPlayableIndex = useCallback(async (
+        queue: SongResult[],
+        fromIndex: number,
+        isFm: boolean,
+    ): Promise<number> => {
+        const loop = queueLoopMode(loopMode, isFm);
+        const quality = useAudioSettingsStore.getState().audioQuality;
+        let index = fromIndex;
+        // 最多走完整圈：整队都不可播时不要无限转。
+        for (let step = 0; step < queue.length; step += 1) {
+            index = nextQueueIndex(index, queue.length, loop);
+            if (index < 0) return -1;
+            const candidate = queue[index];
+            if (!candidate) return -1;
+            // 本地 / Navidrome 不走网络，没什么可提前问的。
+            if (isLocalPlaybackSong(candidate) || isNavidromePlaybackSong(candidate)) return index;
+            // 元数据已经写明不可用的，直接算过。
+            if (isSongUnavailable(candidate)) continue;
+            if (!omni.canPlaySong(candidate)) continue;
+            // 已经有缓存字节的，一定放得出来。
+            if (await hasCachedSongAudio(candidate).catch(() => false)) return index;
+            try {
+                const source = await omni.getAudioSource(candidate, quality);
+                if (source?.url) return index;
+            } catch {
+                // 这首拿不到地址（VIP、地区限制、平台拒绝）：问下一首。
+            }
+        }
+        return -1;
     }, [loopMode]);
 
     const buildQueueWithReplacementSong = useCallback((
@@ -1523,7 +1579,19 @@ export function usePlaybackQueueController({
         const nextIndex = nextPlayableQueueIndex(playQueue, currentIndex, indexLoopMode, isQueueSongPlayable);
 
         if (nextIndex >= 0) {
-            void playSong(playQueue[nextIndex], playQueue, isFmMode, {
+            /*
+             * 提前把地址问一遍，跳过那些拿不到播放地址的（VIP、地区限制、平台拒绝）。
+             *
+             * `nextPlayableQueueIndex` 只看元数据，VIP 歌的元数据往往还是正常的，于是会被选中、
+             * 一播就失败 —— 连着的几首还会撞上连跳上限。这里逐首往后问，选中第一首真能放的。
+             * 全部问完都不行（-1）就按原样播下一首：让它走自己的失败路径，至少用户看得到原因。
+             */
+            let targetIndex = nextIndex;
+            if (shouldProbeBeforePlay(options)) {
+                const playable = await findNextPlayableIndex(playQueue, currentIndex, isFmMode);
+                if (playable >= 0) targetIndex = playable;
+            }
+            void playSong(playQueue[targetIndex], playQueue, isFmMode, {
                 shouldNavigateToPlayer,
                 unavailableSkipCount: options?.unavailableSkipCount,
                 isAutomixAdvance: options?.isAutomixAdvance,
@@ -1531,7 +1599,7 @@ export function usePlaybackQueueController({
         } else if (options?.allowStopOnMissing) {
             stopAtQueueEnd();
         }
-    }, [audioRef, currentSong, endHeldTransition, getDisplaySong, isFmMode, isNowPlayingStageActive, loopMode, navigateToPlaybackView, nativePlaybackRef, playQueue, playSong, setPlayQueue, setPlayerState, shouldNavigateToPlayerOnTrackChange]);
+    }, [audioRef, currentSong, endHeldTransition, findNextPlayableIndex, getDisplaySong, isFmMode, isNowPlayingStageActive, loopMode, navigateToPlaybackView, nativePlaybackRef, playQueue, playSong, setPlayQueue, setPlayerState, shouldNavigateToPlayerOnTrackChange]);
 
     const handlePrevTrack = useCallback(async () => {
         if (isNowPlayingStageActive) return;
@@ -1585,6 +1653,16 @@ export function usePlaybackQueueController({
         const skipCount = playbackAutoSkipCountRef.current;
         const currentIndex = queueIndexOf(playQueue, currentSong);
         const hasNextTrack = hasTrackToSkipTo(playQueue.length, currentIndex, loopMode, isFmMode);
+        /*
+         * 后台不设连跳上限。
+         *
+         * 上限（MAX_UNAVAILABLE_AUTO_SKIP_COUNT）是为了别让一页全是 VIP 的队列在眼前一首首
+         * 闪过去；而界面不可见时没人看得见那个「闪」，停下来只会让播放无声消失。后台的语义
+         * 应该是「尽量放下去」，所以这里把上限拿掉，同时把 VIP / 不可播这类也一律放行
+         * （后台没有「让用户点一下」的余地）。
+         */
+        const isBackground = isPlaybackInterfaceHidden();
+        const autoSkipUnplayable = readAutoSkipUnplayable() || isBackground;
         const said: StatusMessage = shown ? onlineFailureToast(shown, t) : { type: 'error', text: t('status.playbackError') };
         const tell = (willAutoSkip: boolean) => {
             notifyPlaybackFailed({ song: currentSong, reason: shown?.case ?? null, phase: 'mid-playback', willAutoSkip });
@@ -1597,14 +1675,15 @@ export function usePlaybackQueueController({
             setStatusMsg(withSignInAction(stopped, said, t));
         };
 
-        if (shown && stopsPlayback(shown, readAutoSkipUnplayable())) {
-            if (isPlaybackInterfaceHidden()) notifyBackgroundPlaybackNotice(said.text);
+        if (shown && stopsPlayback(shown, autoSkipUnplayable)) {
+            if (isBackground) notifyBackgroundPlaybackNotice(said.text);
             stopHere(shown);
             tell(false);
             return;
         }
 
-        if (!hasNextTrack || skipCount >= MAX_UNAVAILABLE_AUTO_SKIP_COUNT) {
+        // 后台不看连跳次数：见上面 isBackground 那段说明。
+        if (!hasNextTrack || (!isBackground && skipCount >= MAX_UNAVAILABLE_AUTO_SKIP_COUNT)) {
             if (shown && stopsPlayback(shown)) {
                 stopHere(shown);
                 tell(false);
@@ -1612,7 +1691,7 @@ export function usePlaybackQueueController({
             }
             // 跳不动了（没有下一首，或连跳次数用尽）：后台照样补一句气泡，
             // 否则用户连「为什么没声了」都无从知道。
-            if (isPlaybackInterfaceHidden()) notifyBackgroundPlaybackNotice(said.text);
+            if (isBackground) notifyBackgroundPlaybackNotice(said.text);
             setPlayerState(PlayerState.IDLE);
             // Where asking again may help: the caller's retry (the same address once more, where it
             // played), else the song from its start.
@@ -1649,7 +1728,7 @@ export function usePlaybackQueueController({
             });
         };
         // 后台不排倒计时（timer 会被节流甚至冻结）：当场跳走，原因交给系统气泡。
-        if (isPlaybackInterfaceHidden()) {
+        if (isBackground) {
             notifyBackgroundPlaybackNotice(`${said.text} · ${t('status.autoSkippedNext')}`);
             skipNow();
             tell(true);
