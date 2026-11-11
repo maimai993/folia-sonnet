@@ -352,7 +352,16 @@ const app = {
     getAppMetrics: () => {
         const snapshot = readDeviceMetrics();
         if (!snapshot) return [];
-        const cpu = typeof snapshot.cpuPercent === 'number' ? snapshot.cpuPercent : 0;
+        // 给「整机占用」：模组问 CPU 时指望的是这一项，别的进程吃掉的部分也看得见。
+        // 拿不到整机才退回本应用读数（`cpuSelfPercent`，与桌面端 percentCPUUsage 同口径）。
+        // 只给一条 —— 模组按 type 分组把各条加起来当总量，多给一条就是翻倍。
+        const system = typeof snapshot.cpuSystemPercent === 'number'
+            ? snapshot.cpuSystemPercent
+            : null;
+        const self = typeof snapshot.cpuSelfPercent === 'number'
+            ? snapshot.cpuSelfPercent
+            : (typeof snapshot.cpuPercent === 'number' ? snapshot.cpuPercent : 0);
+        const cpu = system == null ? self : system;
         const memoryKb = typeof snapshot.memoryKb === 'number' ? snapshot.memoryKb : 0;
         return [
             { pid: 0, type: 'Browser', cpu: { percentCPUUsage: cpu }, memory: { workingSetSize: memoryKb } },

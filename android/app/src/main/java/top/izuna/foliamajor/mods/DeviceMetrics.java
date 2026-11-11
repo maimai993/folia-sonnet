@@ -16,6 +16,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 设备侧的 CPU / 内存 / GPU 指标。
@@ -24,11 +26,14 @@ import java.io.InputStream;
  * `memory.workingSetSize`）和 `nvidia-smi`。安卓上两者都没有，但同样的信息其实都能从
  * 内核里读出来，这个类就是那个读取处：
  *
- *   · CPU 占用 —— `/proc/stat` 两次采样的差值。绝对计数器必须差分才有意义，
- *     所以这里记住上一次的快照，第一次调用给 0%（和桌面端「先打一次底」同理）。
+ *   · CPU 占用 —— **两个口径都给**：
+ *     `cpuPercent` / `cpuSystemPercent` 是整机（`/proc/stat` 差分，被 SELinux 挡住时
+ *     用 `/proc/loadavg` 折算）；`cpuSelfPercent` 是本应用（`/proc/self/stat` 差分，
+ *     与桌面端 `percentCPUUsage` 同口径）。模组问「CPU」要的是整机 —— 单进程读数在
+ *     别的进程吃满时只会显示个位数，与用户观感对不上。
  *   · 内存 —— 本进程的 `Pss`（`/proc/self/smaps_rollup`），拿不到就退到 `statm`。
- *   · 温度 —— `/sys/class/thermal/thermal_zone*` 里的 `cpu-*` 与 `gpuss-*`。
- *     毫摄氏度，负值（未接传感器，常见 -273000）直接丢掉。
+ *   · 温度 —— `/sys/class/thermal/thermal_zone*` 里的 `cpu-*` 与 `gpuss-*`，
+ *     取各自 zone 集合的**中位数**（取最大值会被个别坏传感器带偏，见 medianThermal）。
  *   · GPU 占用 —— 安卓没有通用接口，按项目决定用整机 CPU 占用近似。
  *
  * 读不到的一律给 null 而不是 0：0% 和「不知道」在界面上是两件事。
@@ -55,16 +60,23 @@ final class DeviceMetrics {
     static JSONObject snapshot(Context context) {
         JSONObject out = new JSONObject();
         try {
-            final double cpuPercent = readCpuPercent();
+            // 本应用占用：桌面端 `percentCPUUsage` 的口径，单进程。
+            final double selfPercent = readSelfCpuPercent();
+            // 整机占用：模组问「CPU」时想看的那个。`/proc/stat` 读不到时用 loadavg 折算。
+            Double systemPercent = readSystemLoadPercent();
+            final double cpuPercent = systemPercent == null ? selfPercent : systemPercent;
             final long memoryKb = readMemoryKb(context);
 
             // 宿主那边（host.js 的 device-metrics 处理）按这几个平铺字段读。
             out.put("cpuPercent", cpuPercent);
+            // 两个口径都给出去，模组要哪个都有得挑。
+            putNullable(out, "cpuSystemPercent", systemPercent);
+            out.put("cpuSelfPercent", selfPercent);
             out.put("memoryKb", memoryKb);
 
-            // 温度：CPU 取各核最大值，GPU 取 gpuss，电池单独一项。
-            putNullable(out, "cpuTempC", maxThermal("cpu-"));
-            putNullable(out, "gpuTempC", maxThermal("gpuss"));
+            // 温度：CPU 与 GPU 都取各自 zone 的中位数，电池单独一项。
+            putNullable(out, "cpuTempC", medianThermal("cpu-"));
+            putNullable(out, "gpuTempC", medianThermal("gpuss"));
             putNullable(out, "batteryTempC", readBatteryTempC(context));
             putNullable(out, "batteryLevel", readBatteryLevel(context));
 
@@ -92,18 +104,32 @@ final class DeviceMetrics {
     }
 
     /**
-     * 整机 CPU 占用百分比。
+     * 整机 CPU 占用（0~100）。
      *
-     * 首选 `/proc/stat` 的差分（那是真正的整机口径）。但 **Android 10 起 SELinux 把
-     * `proc_stat` 挡在应用域之外**，普通应用打开会直接失败 —— 所以再退一层：用本进程
-     * 的 CPU 时间（`/proc/self/stat`，自有文件，一定可读）除以墙钟时间，再按核数归一。
-     * 这条退路给出的是「本应用占整机多少」，和桌面端 `app.getAppMetrics()` 的口径
-     * 其实一致（那也是单个进程的占用），只是拿不到别的进程。
+     * `/proc/stat` 被 SELinux 挡住时，`/proc/loadavg` 仍然可读 —— 第一项是最近 1 分钟
+     * 的可运行任务数均值，也就是「平均有几个核在忙」。除以核数即整机占用率。
+     *
+     * 这是**整机**口径，和 `readSelfCpuPercent()`（只算本应用）是两件事。
+     * 性能卡片要的是这个：用户说「我把 CPU 吃满了」指的是整机，别的进程吃掉的那部分
+     * 单进程读数看不见。
      */
-    private static synchronized double readCpuPercent() {
-        Double system = readSystemCpuPercent();
-        if (system != null) return system;
-        return readSelfCpuPercent();
+    private static Double readSystemLoadPercent() {
+        String stat = firstLine("/proc/stat");
+        if (stat != null) {
+            Double viaStat = readSystemCpuPercent();
+            if (viaStat != null) return viaStat;
+        }
+        String line = firstLine("/proc/loadavg");
+        if (line == null) return null;
+        String[] parts = line.trim().split("\\s+");
+        if (parts.length == 0) return null;
+        try {
+            double load1 = Double.parseDouble(parts[0]);
+            final int cores = Math.max(1, Runtime.getRuntime().availableProcessors());
+            return clampPercent(100.0 * load1 / cores);
+        } catch (NumberFormatException error) {
+            return null;
+        }
     }
 
     /** `/proc/stat` 差分。读不到（SELinux）或首次采样时回 null。 */
@@ -233,11 +259,21 @@ final class DeviceMetrics {
      * 节点单位是毫摄氏度；`-273000` 这类是「未接传感器」的哨兵值，必须丢掉，
      * 否则算出来的最大值永远是 -273°C。
      */
-    private static Double maxThermal(String prefix) {
+    /**
+     * 匹配前缀的 thermal zone 温度（摄氏度），**取中位数**而不是最大值。
+     *
+     * 这台机器（REDMI K80）的 `cpu-*` 有一二十个按核分的 zone，其中个别传感器
+     * 读数不可信（偏移未标定、单位不是毫摄氏度）。取 `max` 就等于「哪个传感器坏了
+     * 就跟哪个走」——表现是温度飙到早该过热保护的数值，而 `gpuss` 那边正常。
+     *
+     * 中位数只要求「多数 zone 是好的」，个别离群值带不偏。先按合理区间过滤，
+     * 越界的一律丢弃；一个都不剩才回 null（宁可不显示，也不报假数）。
+     */
+    private static Double medianThermal(String prefix) {
         File root = new File("/sys/class/thermal");
         File[] zones = root.listFiles();
         if (zones == null) return null;
-        double best = Double.NEGATIVE_INFINITY;
+        List<Double> readings = new ArrayList<>();
         for (File zone : zones) {
             String name = zone.getName();
             if (!name.startsWith("thermal_zone")) continue;
@@ -247,15 +283,21 @@ final class DeviceMetrics {
             if (raw == null) continue;
             try {
                 double celsius = Long.parseLong(raw.trim()) / 1000.0;
-                // 低于 -40 或高于 200 的一律当成坏读数。
-                if (celsius < -40 || celsius > 200) continue;
-                if (celsius > best) best = celsius;
+                // 手机上的 SoC 温度不会低于 0、也不会到 120；越界的当坏读数丢掉
+                // （未接传感器的哨兵值是 -273，某些 zone 还会给出几百）。
+                if (celsius < 0 || celsius > 120) continue;
+                readings.add(celsius);
             } catch (NumberFormatException ignored) {
                 // 下一个 zone。
             }
         }
-        if (best == Double.NEGATIVE_INFINITY) return null;
-        return Math.round(best * 10) / 10.0;
+        if (readings.isEmpty()) return null;
+        java.util.Collections.sort(readings);
+        int size = readings.size();
+        double median = size % 2 == 1
+                ? readings.get(size / 2)
+                : (readings.get(size / 2 - 1) + readings.get(size / 2)) / 2.0;
+        return Math.round(median * 10) / 10.0;
     }
 
     /** 电池温度（摄氏度）。安卓的 `EXTRA_TEMPERATURE` 是 0.1°C 为单位。 */
