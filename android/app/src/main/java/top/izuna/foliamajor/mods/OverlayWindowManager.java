@@ -803,6 +803,25 @@ final class OverlayWindowManager {
             return false;
         }
 
+        /**
+         * 告诉页面「这次按压取消了」。
+         *
+         * 按下那一下总是先转发给页面（否则拼不出点击），等真正判定成拖动时，
+         * 得补一个 CANCEL 把页面那半截手势收掉，不然松手时它还会当成一次点击。
+         */
+        private void cancelInPage() {
+            if (window == null || window.destroyed) return;
+            try {
+                long now = android.os.SystemClock.uptimeMillis();
+                MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL,
+                        downRawX, downRawY, 0);
+                window.webView.onTouchEvent(cancel);
+                cancel.recycle();
+            } catch (Throwable error) {
+                Log.w(TAG, "撤销页面按压失败", error);
+            }
+        }
+
         private void sendHover(boolean on) {
             if (window == null || window.destroyed) return;
             String type = on ? "mouseenter" : "mouseleave";
@@ -849,9 +868,13 @@ final class OverlayWindowManager {
                      *
                      * View 的 onTouch 一旦在 ACTION_DOWN 返回 false，系统就认为这个 View 不要
                      * 这串手势了，后面 ACTION_MOVE 不再派发过来 —— 拖动分支永远走不到，
-                     * 表现就是「窗口完全拖不动」。这里先接管，再把非拖动的移动/抬起手
-                     * 动转发给 WebView（见下面的 forward 调用），页面照常收到点击与滚动。
+                     * 表现就是「窗口完全拖不动」。
+                     *
+                     * 但收下来之后，**按下这一下也要先转发给 WebView**：页面要靠 DOWN 才知道
+                     * 手指落下了，只收到后面的 MOVE/UP 是拼不成一次点击的（按钮全都没反应）。
+                     * 真判定成拖动时，再给页面补一个 CANCEL 把它的这次按压撤销掉。
                      */
+                    forwardToPage(event);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     if (dragging && stole) {
@@ -874,6 +897,8 @@ final class OverlayWindowManager {
                     }
                     dragging = true;
                     stole = true;
+                    // 认定是拖动：把刚才转发给页面的那一下按下撤销掉，别让它变成一次点击。
+                    cancelInPage();
                     window.params.x = clampX(startX + (int) dx, window.params.width);
                     window.params.y = clampY(startY + (int) dy, window.params.height);
                     update(window);
@@ -884,7 +909,7 @@ final class OverlayWindowManager {
                     boolean wasDragging = dragging;
                     dragging = false;
                     if (!wasDragging) {
-                        // 这一下不是拖动：把它当普通点击交给页面。
+                        // 这一下不是拖动：把手势收尾也交给页面，点击才算完整（DOWN 已经转发过）。
                         forwardToPage(event);
                     }
                     boolean handled = wasDragging || stole;
