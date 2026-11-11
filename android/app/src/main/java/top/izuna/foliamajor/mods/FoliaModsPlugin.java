@@ -44,6 +44,10 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
     /** 一个请求最多挂多久。下载 64MB 的包偶尔要慢一点，给足余量。 */
     private static final long REQUEST_TIMEOUT_MS = 180_000L;
 
+    /** 悬浮窗与 IPC 总线。懒建：用不到 overlay 的模组不该为此付出代价。 */
+    private OverlayWindowManager overlays = null;
+    private OverlayBridge overlayBridge = null;
+
     @Override
     public void load() {
         FoliaNodeRuntime.addListener(this);
@@ -444,6 +448,329 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         forward(call, "ffmpeg-status", new JSObject());
     }
 
+    /* ------------------------------------------------------- overlay 窗口 */
+
+    /**
+     * 建一个系统悬浮窗。参数是桌面端 `new BrowserWindow({...})` 的那套键。
+     *
+     * 对应 Node 宿主里 `BrowserWindow` 替身的构造。返回 null 有两种原因，用 `error`
+     * 区分：没有悬浮窗权限（`no-overlay-permission`）或系统拒绝挂载（`overlay-failed`）。
+     */
+    @PluginMethod
+    public void createOverlayWindow(PluginCall call) {
+        JSObject rawOptions = call.getObject("options");
+        JSONObject options;
+        try {
+            options = rawOptions == null ? new JSONObject() : new JSONObject(rawOptions.toString());
+        } catch (JSONException error) {
+            options = new JSONObject();
+        }
+        OverlayWindowManager.OverlayWindow window = overlayManager().create(options);
+        JSObject result = new JSObject();
+        if (window == null) {
+            result.put("ok", false);
+            result.put("error", overlayManager().canDrawOverlays() ? "overlay-failed" : "no-overlay-permission");
+            call.resolve(result);
+            return;
+        }
+        result.put("ok", true);
+        result.put("id", window.id);
+        call.resolve(result);
+    }
+
+    /** 把 HTML 灌进窗口（`loadURL` 的安卓实现），顺带挂上页面脚本。 */
+    @PluginMethod
+    public void loadOverlayHtml(PluginCall call) {
+        long id = call.getLong("id", -1L);
+        OverlayWindowManager.OverlayWindow window = overlayManager().find(id);
+        JSObject result = new JSObject();
+        if (window == null) {
+            result.put("ok", false);
+            result.put("error", "window-not-found");
+            call.resolve(result);
+            return;
+        }
+        overlayManager().loadHtml(window, call.getString("html", ""), call.getString("injection", ""));
+        window.onPageFinished = () -> notifyOverlayEvent(id, "did-finish-load", null);
+        result.put("ok", true);
+        call.resolve(result);
+    }
+
+    /** 窗口几何 / 穿透 / 显隐。`op` 与桌面端方法名对应。 */
+    @PluginMethod
+    public void controlOverlayWindow(PluginCall call) {
+        long id = call.getLong("id", -1L);
+        String op = call.getString("op", "");
+        OverlayWindowManager.OverlayWindow window = overlayManager().find(id);
+        JSObject result = new JSObject();
+        if (window == null) {
+            result.put("ok", false);
+            result.put("error", "window-not-found");
+            call.resolve(result);
+            return;
+        }
+        switch (op == null ? "" : op) {
+            case "set-bounds":
+                overlayManager().setBounds(window, call.getInt("x", window.params.x),
+                        call.getInt("y", window.params.y),
+                        call.getInt("width", window.params.width),
+                        call.getInt("height", window.params.height));
+                break;
+            case "set-ignore-mouse":
+                overlayManager().setIgnoreMouseEvents(window, Boolean.TRUE.equals(call.getBoolean("ignore", false)));
+                break;
+            case "set-visible":
+                overlayManager().setVisible(window, !Boolean.FALSE.equals(call.getBoolean("visible", true)));
+                break;
+            case "set-draggable":
+                window.draggable = Boolean.TRUE.equals(call.getBoolean("draggable", false));
+                break;
+            case "destroy":
+                overlayManager().destroy(window);
+                break;
+            default:
+                result.put("ok", false);
+                result.put("error", "unknown-op:" + op);
+                call.resolve(result);
+                return;
+        }
+        result.put("ok", true);
+        call.resolve(result);
+    }
+
+    /** 主进程 → 页面（`webContents.send`）。 */
+    @PluginMethod
+    public void sendOverlayMessage(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            overlayBridge.sendToWindow(call.getLong("id", -1L), call.getString("channel", ""),
+                    call.getObject("payload"));
+            result.put("ok", true);
+        } catch (Throwable error) {
+            result.put("ok", false);
+            result.put("error", String.valueOf(error.getMessage()));
+        }
+        call.resolve(result);
+    }
+
+    /** 读窗口几何，给 `getBounds` / `getSize` 用。 */
+    @PluginMethod
+    public void getOverlayBounds(PluginCall call) {
+        OverlayWindowManager.OverlayWindow window = overlayManager().find(call.getLong("id", -1L));
+        JSObject result = new JSObject();
+        if (window == null) {
+            result.put("ok", false);
+            result.put("error", "window-not-found");
+            call.resolve(result);
+            return;
+        }
+        int[] bounds = overlayManager().getBounds(window);
+        result.put("ok", true);
+        result.put("x", bounds[0]);
+        result.put("y", bounds[1]);
+        result.put("width", bounds[2]);
+        result.put("height", bounds[3]);
+        result.put("visible", overlayManager().isVisible(window));
+        call.resolve(result);
+    }
+
+    /** 屏幕工作区与最后落点（`screen.*` 替身）。 */
+    @PluginMethod
+    public void getOverlayScreen(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("workArea", toJsArray(overlayManager().workArea()));
+        result.put("cursor", toJsArray(overlayManager().cursorPoint()));
+        result.put("canDrawOverlays", overlayManager().canDrawOverlays());
+        call.resolve(result);
+    }
+
+    /** 跳系统设置里的「显示在其他应用上层」授权页。 */
+    @PluginMethod
+    public void requestOverlayPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", overlayManager().canDrawOverlays());
+        try {
+            android.content.Intent intent = new android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            result.put("opened", true);
+        } catch (Throwable error) {
+            result.put("opened", false);
+            result.put("error", String.valueOf(error.getMessage()));
+        }
+        call.resolve(result);
+    }
+
+    /**
+     * Node 侧的 `BrowserWindow` 替身发来的请求。
+     *
+     * 形如 `{ id, op, args }`，回 `{ id, ok, result | error }`，走 `overlay-result` 通道。
+     * 必须在主线程碰 View，所以整个处理 post 到 main。
+     */
+    private void handleOverlayRequest(String payload) {
+        JSONObject message;
+        try {
+            message = new JSONObject(payload);
+        } catch (JSONException error) {
+            Log.w(TAG, "overlay 请求解析失败", error);
+            return;
+        }
+        final String requestId = message.optString("id", "");
+        final String op = message.optString("op", "");
+        final JSONObject args = message.optJSONObject("args");
+        getBridge().getActivity().runOnUiThread(() -> {
+            JSObject answer = new JSObject();
+            answer.put("id", requestId);
+            try {
+                answer.put("ok", true);
+                answer.put("result", dispatchOverlayOp(op, args == null ? new JSONObject() : args));
+            } catch (Throwable error) {
+                answer.put("ok", false);
+                answer.put("error", String.valueOf(error.getMessage()));
+            }
+            FoliaNodeRuntime.sendToNode("overlay-result", answer.toString());
+        });
+    }
+
+    /** overlay 操作的实际分派。返回给 Node 的结果对象。 */
+    private JSObject dispatchOverlayOp(String op, JSONObject args) {
+        OverlayWindowManager manager = overlayManager();
+        switch (op) {
+            case "create": {
+                OverlayWindowManager.OverlayWindow window = manager.create(args.optJSONObject("options") == null
+                        ? new JSONObject()
+                        : args.optJSONObject("options"));
+                JSObject result = new JSObject();
+                if (window == null) {
+                    result.put("error", manager.canDrawOverlays() ? "overlay-failed" : "no-overlay-permission");
+                    return result;
+                }
+                result.put("id", window.id);
+                return result;
+            }
+            case "load-html": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                manager.loadHtml(window, args.optString("html", ""), args.optString("injection", ""));
+                return new JSObject();
+            }
+            case "set-bounds": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                manager.setBounds(window, args.optInt("x", window.params.x), args.optInt("y", window.params.y),
+                        args.optInt("width", window.params.width), args.optInt("height", window.params.height));
+                return new JSObject();
+            }
+            case "get-bounds": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                int[] bounds = manager.getBounds(window);
+                JSObject result = new JSObject();
+                result.put("x", bounds[0]);
+                result.put("y", bounds[1]);
+                result.put("width", bounds[2]);
+                result.put("height", bounds[3]);
+                result.put("visible", manager.isVisible(window));
+                return result;
+            }
+            case "set-ignore-mouse": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                manager.setIgnoreMouseEvents(window, args.optBoolean("ignore", false));
+                return new JSObject();
+            }
+            case "set-visible": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                manager.setVisible(window, args.optBoolean("visible", true));
+                return new JSObject();
+            }
+            case "set-draggable": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                window.draggable = args.optBoolean("draggable", false);
+                return new JSObject();
+            }
+            case "destroy": {
+                OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
+                if (window == null) return errorResult("window-not-found");
+                manager.destroy(window);
+                return new JSObject();
+            }
+            case "send": {
+                overlayBridge().sendToWindow(args.optLong("id", -1L), args.optString("channel", ""),
+                        args.optJSONObject("payload"));
+                return new JSObject();
+            }
+            case "screen": {
+                int[] work = manager.workArea();
+                int[] cursor = manager.cursorPoint();
+                JSObject result = new JSObject();
+                result.put("workArea", toJsArray(work));
+                result.put("cursor", toJsArray(cursor));
+                result.put("canDrawOverlays", manager.canDrawOverlays());
+                return result;
+            }
+            case "request-permission": {
+                JSObject result = new JSObject();
+                result.put("granted", manager.canDrawOverlays());
+                if (!manager.canDrawOverlays()) {
+                    try {
+                        android.content.Intent intent = new android.content.Intent(
+                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:" + getContext().getPackageName()));
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        getContext().startActivity(intent);
+                        result.put("opened", true);
+                    } catch (Throwable error) {
+                        result.put("opened", false);
+                        result.put("error", String.valueOf(error.getMessage()));
+                    }
+                }
+                return result;
+            }
+            default:
+                return errorResult("unknown-op:" + op);
+        }
+    }
+
+    private static JSObject errorResult(String message) {
+        JSObject result = new JSObject();
+        result.put("error", message);
+        return result;
+    }
+
+    private OverlayWindowManager overlayManager() {
+        if (overlays == null) {
+            overlays = new OverlayWindowManager(getContext());
+            overlayBridge = new OverlayBridge(getContext(), overlays);
+            overlayBridge.install(overlays);
+        }
+        return overlays;
+    }
+
+    /** 单独取 bridge：`dispatchOverlayOp` 里的 send 分支用它，得保证 manager 先建好。 */
+    private OverlayBridge overlayBridge() {
+        overlayManager();
+        return overlayBridge;
+    }
+
+    private void notifyOverlayEvent(long windowId, String type, JSObject payload) {
+        JSObject event = new JSObject();
+        event.put("type", type);
+        event.put("id", windowId);
+        if (payload != null) event.put("payload", payload);
+        notifyListeners("modsEvent", event);
+    }
+
+    private static com.getcapacitor.JSArray toJsArray(int[] values) {
+        com.getcapacitor.JSArray array = new com.getcapacitor.JSArray();
+        for (int value : values) array.put(value);
+        return array;
+    }
+
     @PluginMethod
     public void getModCallStats(PluginCall call) {
         JSObject args = new JSObject();
@@ -526,6 +853,12 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
 
     @Override
     public void onNodeMessage(String channel, String payload) {
+        if ("overlay".equals(channel)) {
+            // BrowserWindow 替身过来的调用：Node 需要「现在就把窗口建出来」这种
+            // 同步语义，所以走独立通道，不走 host 的请求-应答（那条是给渲染端用的）。
+            handleOverlayRequest(payload);
+            return;
+        }
         if (!"host".equals(channel)) {
             // 日志、状态变化等推送：原样交给渲染端，由它决定怎么用。
             JSObject event = new JSObject();

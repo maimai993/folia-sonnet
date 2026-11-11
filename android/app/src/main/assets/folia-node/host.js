@@ -265,6 +265,67 @@ const installElectronShim = (shim) => {
     }
 };
 
+/*
+ * overlay 请求：Node → Java（`overlay` 通道），Java 回 `overlay-result`。
+ *
+ * 窗口的创建 / 几何 / 显隐 / 穿透要求「发出去就生效」，所以走独立通道，
+ * 不和渲染端那条 host 请求-应答混在一起。
+ */
+const pendingOverlay = new Map();
+let overlaySeq = 0;
+
+const callOverlay = (op, args = {}) => new Promise((resolve, reject) => {
+    const id = `ov-${++overlaySeq}`;
+    const timer = setTimeout(() => {
+        pendingOverlay.delete(id);
+        reject(new Error(`overlay request timed out: ${op}`));
+    }, 8000);
+    pendingOverlay.set(id, { resolve, reject, timer });
+    try {
+        // 用 emit 而不是 send：send 会再包一层 JSON。
+        foliaNode.emit('overlay', JSON.stringify({ id, op, args }));
+    } catch (error) {
+        clearTimeout(timer);
+        pendingOverlay.delete(id);
+        reject(error);
+    }
+});
+
+const settleOverlayResult = (payload) => {
+    let message;
+    try {
+        message = JSON.parse(payload);
+    } catch {
+        return;
+    }
+    const pending = pendingOverlay.get(message && message.id);
+    if (!pending) return;
+    pendingOverlay.delete(message.id);
+    clearTimeout(pending.timer);
+    if (message.ok === false) {
+        pending.reject(new Error(String(message.error || 'overlay-failed')));
+    } else {
+        pending.resolve(message.result || {});
+    }
+};
+
+/** 把 `app` 与窗口替身合成 `require('electron')` 要的那份模块对象。 */
+const buildElectronModule = () => {
+    const shim = require('./electron-shim.cjs');
+    shim.installOverlayBridge(callOverlay, (message) => emitLog('warn', message));
+    // 工作区要真实值：模组按它算初始位置与尺寸上限。
+    void shim.screen.refresh();
+    // `app` 用宿主这份（它带 getPath / getAppMetrics），窗口相关用替身那份。
+    return {
+        app: Object.assign({}, shim.app, app),
+        BrowserWindow: shim.BrowserWindow,
+        ipcMain: shim.ipcMain,
+        screen: shim.screen,
+        shell: { openExternal: async () => undefined },
+        clipboard: { writeText: () => undefined, readText: () => '' },
+    };
+};
+
 const app = {
     getPath: (name) => {        switch (name) {
             case 'userData':
@@ -915,8 +976,11 @@ const main = () => {
     });
     // 模组可能在任何时候 require child_process，装上替身要赶在它们加载之前。
     installNvidiaShim();
+    foliaNode.registerChannel('overlay-result', (payload) => {
+        settleOverlayResult(payload);
+    });
     // 同理：模组的 main 一 require('electron') 就得拿到替身。
-    installElectronShim({ app });
+    installElectronShim(buildElectronModule());
     const list = loadAll();
     foliaNode.ready();
     send('event', { type: 'ready', list });
