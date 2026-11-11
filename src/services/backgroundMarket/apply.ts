@@ -19,7 +19,9 @@ import { isCapacitorAndroid } from '../../platform/runtime';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { useVideoLayerSettingsStore } from '../../stores/useVideoLayerSettingsStore';
 import { resolveMarketMediaUrl, type BackgroundMarketItem } from './index';
+import { emitBackgroundProgress } from './progress';
 import {
+    adoptDownloadedVideoAsWallpaperFile,
     downloadWallpaperImageFromUrl,
     downloadWallpaperVideoFromUrl,
     openLyricsWallpaperPicker,
@@ -56,13 +58,68 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
     try {
         const response = await fetch(url);
         if (!response.ok) return null;
-        const blob = await response.blob();
-        const type = blob.type || 'image/jpeg';
+        /*
+         * 「App 内」这条路原先是没有进度的：一个 `response.blob()` 闷头下完，
+         * 设置页那条进度条只在桌面壁纸（原生下载）时才动 —— 用户看到的就是
+         * 「选桌面会走进度，选 App 内不走」。
+         *
+         * 这里改成按流读、边读边报：总长已知就报真实比例，不知道就按已读字节
+         * 缓慢逼近 0.9（留出编码与写库那一段，和 progress.ts 的 5% 同一个道理）。
+         */
+        const total = Number(response.headers.get('content-length') || 0);
+        if (!response.body) {
+            const fallback = await response.blob();
+            const type = fallback.type || 'image/jpeg';
+            const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+            return new File([fallback], `${name}.${extension}`, { type });
+        }
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+                chunks.push(value);
+                received += value.byteLength;
+                if (total > 0) {
+                    emitBackgroundProgress(Math.min(0.95, received / total));
+                } else {
+                    emitBackgroundProgress(Math.min(0.9, received / (received + 2_000_000)));
+                }
+            }
+        }
+        const type = response.headers.get('content-type') || 'image/jpeg';
+        const blob = new Blob(chunks as BlobPart[], { type });
         const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
         return new File([blob], `${name}.${extension}`, { type });
     } catch {
         return null;
     }
+};
+
+/**
+ * 把图片设成**歌词样式的莫奈背景**的来源，但不动当前选中的歌词样式。
+ *
+ * 和 applyImageToVisualizer 的区别就在这里：那个会顺手把模式切成莫奈，
+ * 而这个只换图 —— 用户可能正用着别的歌词样式，只是想先把莫奈那张图备好。
+ *
+ * 复用同一份上传（uploadMonetBackgroundImage 写的是同一处存储），
+ * 所以两个目标同时勾选时也只会存一张图。
+ */
+const applyImageToMonetSource = async (url: string, itemId: string): Promise<string | null> => {
+    const file = await fetchAsFile(url, itemId);
+    if (!file) return '图片下载失败';
+
+    const uploaded = await uploadMonetBackgroundImage([file]);
+    if (!uploaded.ok) return uploaded.error ?? '图片保存失败';
+
+    const tuning = useVisualizerSettingsStore.getState().monetBackgroundTuning;
+    useVisualizerSettingsStore.getState().handleSetMonetBackgroundTuning({
+        ...tuning,
+        backgroundSource: 'uploaded-global',
+    });
+    return null;
 };
 
 /**
@@ -117,8 +174,12 @@ const applyImageToVisualizer = async (url: string, itemId: string): Promise<stri
  *   3. 不透明度拉满 —— 之前调低过的话视频淡得几乎看不见
  *   4. 背景切到不抢画面的那一档 —— 否则视频被不透明的背景整个盖住
  */
-const applyVideoToVisualizer = async (mediaUrl: string): Promise<string | null> => {
-    const downloaded = await downloadNativeVideoLayerFile(mediaUrl);
+const applyVideoToVisualizer = async (
+    mediaUrl: string,
+    /** 已经下好的那一份（见 applyMarketBackground 里的 sharedVideo），没有就现下。 */
+    shared?: { ok: boolean; url: string | null; error: string | null } | null,
+): Promise<string | null> => {
+    const downloaded = shared ?? await downloadNativeVideoLayerFile(mediaUrl);
     if (!downloaded.ok || !downloaded.url) {
         return downloaded.error ?? '视频下载失败';
     }
@@ -159,6 +220,19 @@ const applyVideoToVisualizer = async (mediaUrl: string): Promise<string | null> 
 };
 
 /**
+ * 把已经下好的那份视频装成桌面壁纸。
+ *
+ * 「桌面壁纸 + App 内」同时勾选时，视频由视频层那一路下一次（带进度），
+ * 壁纸层这里只安装那份文件，不再按地址下一遍 —— 否则同一个几十 MB 的文件
+ * 会下两次，进度条也会来回跳。
+ *
+ * 拿不到文件路径（比如原生没回 path）就返回 false，调用方退回按地址下载。
+ */
+const adoptDownloadedVideoAsWallpaper = async (path: string): Promise<boolean> => (
+    adoptDownloadedVideoAsWallpaperFile(path)
+);
+
+/**
  * 应用一个市场背景。
  *
  * @param item     市场条目
@@ -190,6 +264,23 @@ export const applyMarketBackground = async (
     const problems: string[] = [];
     let notice: string | undefined;
 
+    /*
+     * 视频只下一次，两个目标共用同一份字节。
+     *
+     * 以前是各下各的：桌面壁纸走 `downloadWallpaperVideoFromUrl`、App 内走
+     * `downloadNativeVideoLayerFile`，两个都勾就是**同一个几十 MB 的视频下两遍**，
+     * 进度条还会来回跳。现在先取一次到本地（原生下载，带进度），再把同一个结果
+     * 分发给两边：
+     *   · App 内直接用它的回环地址播放；
+     *   · 桌面壁纸用它的落盘路径安装一份（adoptDownloadedVideoAsWallpaper），不再联网。
+     *
+     * 只勾桌面时不预下载：那条路本来就要壁纸层自己那份（带旋转信息），
+     * 先下一遍再装等于多拷一次。
+     */
+    const sharedVideo = item.kind === 'video' && targets.includes('app')
+        ? await downloadNativeVideoLayerFile(mediaUrl)
+        : null;
+
     // ---- 桌面壁纸（原生层）----
     if (targets.includes('wallpaper')) {
         if (item.kind === 'video') {
@@ -198,8 +289,14 @@ export const applyMarketBackground = async (
              *
              * 旋转也要一起带过去：壁纸站几乎全是横屏，手机竖屏下不转过来
              * 就只能看到中间一条。原生在装载时按 rotation 处理。
+             *
+             * 已经为「App 内」下过一份时不再重复下载：那个文件就在应用的 cache
+             * 目录里，壁纸层读得到，直接拿它上线即可（用落盘路径，不是回环地址）。
              */
-            const downloaded = await downloadWallpaperVideoFromUrl(mediaUrl, rotation);
+            const adopted = sharedVideo?.path
+                ? await adoptDownloadedVideoAsWallpaper(sharedVideo.path)
+                : false;
+            const downloaded = adopted || await downloadWallpaperVideoFromUrl(mediaUrl, rotation);
             if (downloaded) {
                 useVisualizerSettingsStore.getState().handleSetLyricsWallpaperBackground('video');
                 /*
@@ -258,12 +355,38 @@ export const applyMarketBackground = async (
          * App 内那层视频打开 —— 用户看到的就是「桌面也在放视频层的视频」。
          */
         const failure = item.kind === 'video'
-            ? await applyVideoToVisualizer(mediaUrl)
+            ? await applyVideoToVisualizer(mediaUrl, sharedVideo)
             : await applyImageToVisualizer(mediaUrl, item.id);
         if (failure) {
             problems.push(failure);
         } else {
             applied = true;
+        }
+    }
+
+    // ---- 歌词样式·莫奈的自定义图片来源（只有静图能去）----
+    if (targets.includes('monet') && item.kind === 'image') {
+        /*
+         * 「App 内」在上面已经把这张图存成莫奈的来源了（同一处存储），
+         * 这里就不要再下一次、再存一遍：只要把来源指过去。
+         *
+         * 那条路失败时（problems 非空）才自己下一次，免得报「成功」但图没换。
+         */
+        const storedByApp = targets.includes('app') && problems.length === 0;
+        if (storedByApp) {
+            const tuning = useVisualizerSettingsStore.getState().monetBackgroundTuning;
+            useVisualizerSettingsStore.getState().handleSetMonetBackgroundTuning({
+                ...tuning,
+                backgroundSource: 'uploaded-global',
+            });
+            applied = true;
+        } else {
+            const failure = await applyImageToMonetSource(mediaUrl, item.id);
+            if (failure) {
+                problems.push(failure);
+            } else {
+                applied = true;
+            }
         }
     }
 

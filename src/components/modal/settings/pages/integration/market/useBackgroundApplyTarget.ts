@@ -2,16 +2,17 @@
 //
 // 背景「用在哪」的选择与持久化。
 //
-// 两个去处：
+// 三个去处：
 //   · wallpaper  桌面/锁屏的系统壁纸（原生渲染层）
 //   · app        App 内的歌词可视化背景（网页层）
+//   · monet      歌词样式里莫奈背景的自定义图片来源（只有静图能去，见 apply.ts）
 //
 // 和字体那边一样，应用范围要能事后改，所以整体存在一处。
 
 import { useCallback, useEffect, useState } from 'react';
 import type { BackgroundMarketKind } from '../../../../../../services/backgroundMarket';
 
-export type BackgroundTarget = 'wallpaper' | 'app';
+export type BackgroundTarget = 'wallpaper' | 'app' | 'monet';
 
 /** 裁切范围，0..1，相对原图（旋转后）。 */
 export interface BackgroundCrop {

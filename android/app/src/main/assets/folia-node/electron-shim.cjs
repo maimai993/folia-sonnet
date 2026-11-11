@@ -291,11 +291,75 @@ const buildInjection = (windowId) => `(function(){
   window.__foliaIpc = {
     receive: function(raw){
       var msg; try { msg = JSON.parse(raw); } catch (e) { return; }
+      if (msg && msg.channel) { window.__foliaLastIpcAt[msg.channel] = Date.now(); }
       var list = listeners[msg.channel] || [];
       for (var i = 0; i < list.length; i++) {
         try { list[i]({}, msg.payload); } catch (e) { console.error(e); }
       }
     }
+  };
+  /* 每个通道最后一次收到消息的时刻，用来判断「宿主那条链还在不在动」。 */
+  window.__foliaLastIpcAt = {};
+  /*
+   * 原生歌词兜底。
+   *
+   * 模组的歌词由宿主 WebView 经 IPC 推入，**App 一退后台 WebView 被冻结就断**，
+   * 页面上那句歌词从此不再变化。原生侧另有一份常驻的播放快照（壁纸/叠层共用），
+   * 由 OverlayWindowManager 按固定节拍调到 window.foliaNativeLyrics。
+   *
+   * 这里把那份快照转成模组认得的 IPC_DATA 形状，**只在原生数据比 IPC 新时才喂**：
+   * 前台时 IPC 更细（有逐字时间轴），仍然优先；后台 IPC 停了，才由原生接手。
+   */
+  window.__foliaApplyNativeLyrics = function(native){
+    if (!native || typeof native !== 'object') return;
+    var now = Date.now();
+    if (native.playing !== window.__foliaNativePlaying) {
+      window.__foliaNativePlaying = native.playing;
+      window.__foliaNativeSince = now;
+    }
+    window.foliaNativeLyrics = native;
+    if (native.playing) window.__foliaNativeSince = now;
+    /* IPC 刚来过就完全交给它，别抢占。 */
+    var lastIpc = window.__foliaLastIpcAt['lyric-float:data-from-client'] || 0;
+    if (now - lastIpc < 4000) return;
+    var text = typeof native.text === 'string' ? native.text : '';
+    if (!text) return;
+    var key = text + '|' + native.index;
+    if (key === window.__foliaNativeKey) return;
+    window.__foliaNativeKey = key;
+    var payload = {
+      state: native.playing ? 'playing' : 'paused',
+      line: { text: text, translation: native.translation || '' },
+      song: { title: native.title || '', artist: native.artist || '' }
+    };
+    var list = listeners['lyric-float:data-from-client'] || [];
+    for (var i = 0; i < list.length; i++) {
+      try { list[i]({}, payload); } catch (e) { console.error(e); }
+    }
+  };
+  /*
+   * 字体跟随原生那份设置。
+   *
+   * 模组自己的字体栈是桌面端的写法（'Microsoft YaHei UI' / 'PingFang SC' …），安卓上
+   * 一个都没有，于是永远落在兜底字体上 —— 用户在设置里换字体，歌词不会跟着变。
+   *
+   * 原生那边存的是字体**文件**（壁纸渲染器按路径自绘），不是字体名，所以这里拿到的是
+   * 一段 data: 字节，注册成 @font-face 再顶掉页面字体栈。只在换了字体时才推一次。
+   */
+  window.__foliaApplyNativeFont = function(font){
+    if (!font || typeof font.data !== 'string' || !font.data) return;
+    var stamp = String(font.stamp || '');
+    if (stamp && stamp === window.__foliaNativeFontStamp) return;
+    window.__foliaNativeFontStamp = stamp;
+    var family = '__folia_native_font_family';
+    var style = document.getElementById('__folia_native_font');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = '__folia_native_font';
+      (document.head || document.documentElement).appendChild(style);
+    }
+    style.textContent = '@font-face { font-family: "' + family + '"; src: url("' + font.data + '"); }'
+      + 'body, body *:not(script):not(style) { font-family: "' + family + '", system-ui, sans-serif !important; }';
   };
   var ipcRenderer = {
     send: function(channel, payload){

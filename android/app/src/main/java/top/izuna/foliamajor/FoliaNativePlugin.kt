@@ -1653,6 +1653,7 @@ class FoliaNativePlugin : Plugin() {
             var stored = false
             var name: String? = null
             var loopback: String? = null
+            var storedPath: String? = null
             try {
                 val target = java.io.File(getContext().cacheDir, "folia_video_layer_download.mp4")
                 val part = java.io.File(target.absolutePath + ".part")
@@ -1705,6 +1706,7 @@ class FoliaNativePlugin : Plugin() {
                         stored = true
                         name = VideoLayerFile.displayName(getContext())
                         loopback = videoLayerUrl()
+                        storedPath = target.absolutePath
                     }
                 } else {
                     part.delete()
@@ -1715,6 +1717,14 @@ class FoliaNativePlugin : Plugin() {
             }
             out.put("stored", stored)
             if (name != null) out.put("name", name)
+            /*
+             * 落盘后的真实路径。
+             *
+             * 市场里「桌面壁纸」和「App 内」同时勾选时，视频只需下一次：壁纸层可以
+             * 直接拿这份文件安装（FoliaWallpaper.adoptDownloadedVideo），不必再按
+             * 地址下一遍。`url` 是回环播放地址，文件操作要用这个。
+             */
+            if (storedPath != null) out.put("path", storedPath)
             if (loopback != null) out.put("url", loopback)
             call.resolve(out)
         }.start()

@@ -59,10 +59,27 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
      *   · 视频 → App 内走「歌词后方视频层」，填地址并自动打开
      * 所以这里不再禁用任何一项。
      */
-    const choices: ApplyTargetChoice<BackgroundTarget>[] = useMemo(() => [
-        { id: 'wallpaper', label: t('options.marketTargetBackground_wallpaper'), hint: t('options.marketTargetBackgroundWallpaperHint') },
-        { id: 'app', label: t('options.marketTargetBackground_app'), hint: t('options.marketTargetBackgroundAppHint') },
-    ], [t]);
+    /*
+     * 「歌词样式的莫奈背景」只对**图片**开放。
+     *
+     * 莫奈那一层画的是静图（封面派生图 / 上传的图），视频放不进去 ——
+     * 视频要去的是「App 内」的视频层。所以这一项在视频上直接不出现，
+     * 而不是出现了再禁用（禁用的项用户会一直点）。
+     */
+    const choices: ApplyTargetChoice<BackgroundTarget>[] = useMemo(() => {
+        const entries: ApplyTargetChoice<BackgroundTarget>[] = [
+            { id: 'wallpaper', label: t('options.marketTargetBackground_wallpaper'), hint: t('options.marketTargetBackgroundWallpaperHint') },
+            { id: 'app', label: t('options.marketTargetBackground_app'), hint: t('options.marketTargetBackgroundAppHint') },
+        ];
+        if (!pending || pending.kind === 'image') {
+            entries.push({
+                id: 'monet',
+                label: t('options.marketTargetBackground_monet'),
+                hint: t('options.marketTargetBackgroundMonetHint'),
+            });
+        }
+        return entries;
+    }, [t, pending]);
 
     // 订阅下载进度（视频才有，图片通常是瞬时的）
     useEffect(() => {

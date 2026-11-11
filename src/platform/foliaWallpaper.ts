@@ -155,6 +155,13 @@ interface FoliaWallpaperPlugin {
     getBackground(): Promise<{ mode: FoliaWallpaperBackgroundMode }>;
     /** 按地址下载视频当壁纸背景（市场用），几十上百 MB 不能过 JS 桥。 */
     downloadVideo(options: { url: string; rotation?: number; progressId?: string }): Promise<{ downloaded?: boolean }>;
+    /**
+     * 用**已经下载好的**本地文件装成壁纸背景，不再联网。
+     *
+     * 市场里同时勾「桌面壁纸」和「App 内」时，视频由视频层那一路下一次，
+     * 这里直接把那份文件交给壁纸层，避免同一个文件下两遍。
+     */
+    adoptDownloadedVideo(options: { path: string }): Promise<{ downloaded?: boolean }>;
     /** 按地址下载图片当壁纸背景（市场用）。 */
     downloadImage(options: {
         url: string;
@@ -620,6 +627,23 @@ export const downloadWallpaperVideoFromUrl = async (url: string, rotation = 0): 
             rotation,
             progressId: 'background-market',
         });
+        return Boolean(result?.downloaded);
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * 用已下载的本地文件装成壁纸视频（背景市场用，配合 downloadVideoLayerFile）。
+ *
+ * 只做「安装」这一次事：文件已经在本地，壁纸层自己拷一份到它的位置，
+ * 不再联网。失败返回 false，调用方可以退回原来的「按地址下载」那条路。
+ */
+export const adoptDownloadedVideoAsWallpaperFile = async (path: string): Promise<boolean> => {
+    const file = String(path || '').trim();
+    if (!file) return false;
+    try {
+        const result = await FoliaWallpaper.adoptDownloadedVideo({ path: file });
         return Boolean(result?.downloaded);
     } catch {
         return false;

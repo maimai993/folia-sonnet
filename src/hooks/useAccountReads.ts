@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import i18n from '../i18n/config';
 import { omni } from '../services/onlineMusic/omni';
+import { PROVIDER_SESSION_EXPIRED_EVENT } from '../services/onlineMusic/providerSessionEvents';
 import { useAppViewStore } from '../stores/useAppViewStore';
 import { useCollectionNavigationStore } from '../stores/useCollectionNavigationStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
-import type { SongResult } from '../types';
+import type { SongResult, StatusMessage } from '../types';
 
 // src/hooks/useAccountReads.ts
 //
@@ -56,6 +57,27 @@ export const useAccountReads = () => {
             window.removeEventListener('focus', returned);
             document.removeEventListener('visibilitychange', returned);
         };
+    }, []);
+
+    /*
+     * 播放途中会话自己失效了（见 providerSessionEvents）。
+     *
+     * 上面那两个时机只管「进首页 / 窗口回来」，用户一直在播放页时永远等不到提示：
+     * 界面还显示已登录，实际每次都拿不到播放链接。这里立刻说一句，并让账号状态重读一次。
+     */
+    useEffect(() => {
+        const expired = (event: Event) => {
+            const providerId = (event as CustomEvent<string>).detail;
+            if (!providerId) return;
+            setStatusMessage({
+                type: 'error',
+                text: i18n.t('login.signInRanOut'),
+                providerId: providerId as StatusMessage['providerId'],
+            });
+            void omni.readAccount(providerId as Parameters<typeof omni.readAccount>[0], 'sync');
+        };
+        window.addEventListener(PROVIDER_SESSION_EXPIRED_EVENT, expired);
+        return () => window.removeEventListener(PROVIDER_SESSION_EXPIRED_EVENT, expired);
     }, []);
 
     useEffect(() => {

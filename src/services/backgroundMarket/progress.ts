@@ -46,3 +46,14 @@ export const subscribeBackgroundProgress = (listener: Listener): (() => void) =>
         listeners.delete(listener);
     };
 };
+
+/**
+ * 「App 内」那条路自己报进度。
+ *
+ * 桌面壁纸是原生下载、原生发 `videoDownloadProgress`；App 内是网页自己 fetch，
+ * 原生看不见，只能由取字节的地方（apply.ts 的 fetchAsFile）直接报上来。
+ * 两条路共用一个订阅口，设置页那边就不用关心下载发生在哪一侧。
+ */
+export const emitBackgroundProgress = (progress: number): void => {
+    emit(Math.min(1, Math.max(0, progress)));
+};

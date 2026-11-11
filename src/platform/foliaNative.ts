@@ -159,6 +159,8 @@ interface FoliaNativePlugin {
         stored?: boolean;
         name?: string;
         url?: string;
+        /** 落盘后的真实路径（`url` 是回环播放地址，文件操作要用这个）。 */
+        path?: string;
         error?: string;
     }>;
     /**
@@ -376,19 +378,25 @@ export const pickNativeVideoLayerFile = async (): Promise<NativeVideoLayerPick> 
 export const downloadNativeVideoLayerFile = async (
     url: string,
     progressId?: string,
-): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null }> => {
+): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null; path: string | null }> => {
     if (!isCapacitorAndroid()) {
-        return { ok: false, url: null, name: null, error: '仅安卓支持' };
+        return { ok: false, url: null, name: null, error: '仅安卓支持', path: null };
     }
     try {
         const result = await FoliaNative.downloadVideoLayerFile({ url, progressId });
         if (result?.stored && result.url) {
-            return { ok: true, url: result.url, name: result.name ?? '', error: null };
+            /*
+             * path 是落盘后的真实路径，交给壁纸层做「安装」用。
+             *
+             * url 是回环播放地址，文件操作拿不到它。市场里两个目标同时勾选时，
+             * 靠这个路径避免同一个视频下两遍（FoliaWallpaper.adoptDownloadedVideo）。
+             */
+            return { ok: true, url: result.url, name: result.name ?? '', error: null, path: result.path ?? null };
         }
-        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败' };
+        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败', path: null };
     } catch (error) {
         console.warn('[FoliaNative] downloadVideoLayerFile failed', error);
-        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败' };
+        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败', path: null };
     }
 };
 

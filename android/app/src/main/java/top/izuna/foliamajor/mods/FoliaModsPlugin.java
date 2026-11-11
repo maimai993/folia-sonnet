@@ -510,12 +510,18 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             return;
         }
         switch (op == null ? "" : op) {
-            case "set-bounds":
-                overlayManager().setBounds(window, call.getInt("x", window.params.x),
-                        call.getInt("y", window.params.y),
-                        call.getInt("width", window.params.width),
-                        call.getInt("height", window.params.height));
+            case "set-bounds": {
+                // 缺省的几项取窗口**当前**的几何，而 params 里存的是物理像素；
+                // setBounds 收的是 CSS 像素（自己会再换回物理），这里得先换过去，
+                // 否则没传的那一项会被二次放缩（实测窗口尺寸被连乘 density）。
+                int[] current = overlayManager().getBounds(window);
+                overlayManager().setBounds(window,
+                        call.getInt("x", current[0]),
+                        call.getInt("y", current[1]),
+                        call.getInt("width", current[2]),
+                        call.getInt("height", current[3]));
                 break;
+            }
             case "set-ignore-mouse":
                 overlayManager().setIgnoreMouseEvents(window, Boolean.TRUE.equals(call.getBoolean("ignore", false)));
                 break;
@@ -578,7 +584,7 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
     @PluginMethod
     public void getOverlayScreen(PluginCall call) {
         JSObject result = new JSObject();
-        result.put("workArea", toJsArray(overlayManager().workArea()));
+        result.put("workArea", toJsArray(overlayManager().workAreaCss()));
         result.put("cursor", toJsArray(overlayManager().cursorPoint()));
         result.put("canDrawOverlays", overlayManager().canDrawOverlays());
         call.resolve(result);

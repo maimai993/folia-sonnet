@@ -137,8 +137,17 @@ class FoliaPlaybackPlugin : Plugin() {
         if (album != null) intent.putExtra(FoliaPlaybackService.EXTRA_ALBAND, album)
         if (artwork != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK, artwork)
         // 同时把封面地址给过去：原生自己下载，绕开 WebView 的 CORS 限制。
+        //
+        // `blob:` / `data:` 一律丢掉：前者只是 WebView 进程里的一份内存引用，
+        // 原生按地址去下载只会拿到空图，表现就是「第一首有封面、换歌之后一直空白」。
+        // JS 侧已经不再这么传（见 useCapacitorPlaybackBridge），这里再挡一次，
+        // 免得别的调用方又把本地协议塞进来。
         val artworkUrl = call.getString("artworkUrl")
-        if (artworkUrl != null) intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK_URL, artworkUrl)
+        if (artworkUrl != null && artworkUrl.isNotEmpty()
+                && !artworkUrl.startsWith("blob:", ignoreCase = true)
+                && !artworkUrl.startsWith("data:", ignoreCase = true)) {
+            intent.putExtra(FoliaPlaybackService.EXTRA_ARTWORK_URL, artworkUrl)
+        }
         if (duration != null) intent.putExtra(FoliaPlaybackService.EXTRA_DURATION, duration.toLong())
         // 封面角标用哪颗图标：当前播放来源的平台（netease/qq/kugou/bodian/folia）。
         val providerBadge = call.getString("providerBadge")

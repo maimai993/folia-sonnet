@@ -2,7 +2,7 @@ import React from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { isCapacitorAndroid } from '../platform/runtime';
 import type { SongResult } from '../types';
-import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
+import { getProviderSongMetadata, getSongAlbumLabel, getSongArtistLabel } from '../services/onlineMusic/songMetadata';
 import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
 import { applyNativeLikeOverrides, omni, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
@@ -342,7 +342,27 @@ export const useCapacitorPlaybackBridge = ({
       void FoliaPlayback.stop();
       return;
     }
-    const coverUrl = cachedCoverUrl || getSongCoverUrl(currentSong) || '';
+    /*
+     * 封面必须是原生下得动的地址。
+     *
+     * 界面那边为了绕开防盗链 / 缺 CORS，会把封面换成 `blob:`（见
+     * onlineCoverFallback 的字节兜底）。那种 URL 只活在 WebView 进程里，
+     * 原生 `fetchArtwork()` 拿到它只会得到空图 —— 表现就是「第一首有封面，
+     * 换歌之后一直是空白」。
+     *
+     * 所以这里不用界面的那套 `getSongCoverUrl`（它已经过代理 / 字节兜底），
+     * 直接取歌曲自己的原始地址；缓存里那份要是 blob 也一律跳过。
+     */
+    const originalCoverUrl = getProviderSongMetadata(currentSong).coverUrl || '';
+    const nativeArtworkUrl = (value: string | null | undefined) => {
+      const url = String(value || '').trim();
+      if (!url) return '';
+      if (url.startsWith('blob:') || url.startsWith('data:')) return '';
+      return url;
+    };
+    const coverUrl = nativeArtworkUrl(cachedCoverUrl)
+      || nativeArtworkUrl(originalCoverUrl)
+      || '';
     const songKey = getPlaybackSongKey(currentSong);
     const likeIdentity = resolveLikeIdentity(currentSong);
     void FoliaPlayback.update({

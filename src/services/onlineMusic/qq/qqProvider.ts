@@ -19,7 +19,7 @@ import { toSafePlaybackUrl } from '../../../utils/appPlaybackHelpers';
 import { fetchQQLyrics } from './qqLyricProvider';
 import { writeProviderSessionValue } from '../providerStorage';
 import { getQqLyricSearchAlias, normalizeQqCollection, normalizeQqSong, normalizeQqUser } from './qqNormalize';
-import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, requestQq } from './qqTransport';
+import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, readUpstreamRefusalCode, recheckQqSessionAfterEmptyPlayLink, requestQq } from './qqTransport';
 import { canRunLoginSelfCheck, runLoginSelfCheck } from '../loginSelfCheck';
 import { diagnosticLine, formatDiagnosticClock } from '../login/loginDiagnosticReport';
 import { collectQqLoginDiagnostics } from './qqLoginDiagnostics';
@@ -490,6 +490,25 @@ const getAudioSource = async (song: SongResult, quality: AudioQualityPreference)
     // 有会话、所有音质都没给链接：这个账号可能只能听试听片段，不限后端说的可能原因。没会话时后端不给试听，停用的会话也不带
     // （hasUsableQqSession）。
     if (sawEmptyPlayLink && hasUsableQqSession()) {
+        /*
+         * 先确认这不是「登录已经过期」造成的。
+         *
+         * 会话失效时播放接口回的是 200 + 空链接，不是 401 —— 光靠 401 那条路永远清不掉
+         * 过期的 cookie，于是每首歌都拿到空链接，用户看到一大片「无法播放」却没有任何
+         * 登录提示。这里问一次 login_status：确认已经不再认出这个账号，就清掉会话、
+         * 按游客重试一次（免费的歌照常能播）。
+         */
+        let retriedAsGuest = false;
+        try {
+            retriedAsGuest = await recheckQqSessionAfterEmptyPlayLink();
+        } catch {
+            retriedAsGuest = false;
+        }
+        if (retriedAsGuest && !hasUsableQqSession()) {
+            // 会话已经清掉，重试这一次走游客（免费的歌照常能播）。
+            // 带 `!hasUsableQqSession()` 是防递归：万一清理没能生效，这里就不要再进同一个分支。
+            return getAudioSource(song, quality);
+        }
         const preview = await requestQqPreviewSource(songmid, mediaId);
         if (preview) return preview;
     }
@@ -747,6 +766,23 @@ let lastAccountHintKey: string | null = null;
 // 20279 只在主进程钩子记下的 qq-auth.upstream-result 里，桌面版再去那里找本轮最后一次凭据交换。
 const isQqDeviceLimit = async (response: any): Promise<boolean> => {
     if (reportsDeviceLimit(response) || reportsDeviceLimit(response?.primaryFailure)) return true;
+    /*
+     * 安卓兜底：直接读这次响应里带的文本。
+     *
+     * 桌面端下面那段走 `window.electron.getLoginDiagnostics`（主进程环形记录），
+     * 安卓没有 Electron 那一层，取不到快照就直接 false —— 于是「登录设备已达上限」
+     * 永远认不出来，用户在手机上只会看到笼统的「登录失败」，不知道去删设备。
+     *
+     * QQ 通道的凭据交换失败会被后验覆盖，顶层可能只剩一个笼统的拒绝；但后端把
+     * 上游的原话（含 20279）拼在 message / upstreamMessage 里，从文本里认一遍即可。
+     */
+    const said = [response?.message, response?.upstreamMessage, response?.detail]
+        .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+    for (const text of said) {
+        const code = readUpstreamRefusalCode(text);
+        if (Number(code) === QQ_DEVICE_LIMIT_UPSTREAM_CODE) return true;
+        if (text.includes(String(QQ_DEVICE_LIMIT_UPSTREAM_CODE))) return true;
+    }
     if (response?.failureStage !== 'credential-validation') return false;
     const getSnapshot = typeof window === 'undefined' ? undefined : window.electron?.getLoginDiagnostics;
     if (!getSnapshot) return false;

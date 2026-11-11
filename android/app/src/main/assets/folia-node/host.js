@@ -727,6 +727,63 @@ const ffmpegStatus = () => ({
 
 // --------------------------------------------------------------------- 载入
 
+// --------------------------------------------------------------------- 状态文件修正
+
+/**
+ * 把个别模组的状态文件改回「安卓上真的能用」的那一份。
+ *
+ * 目前只有 lyric-float 一家：
+ *
+ * 它有「桌面歌词」与「悬浮窗歌词」两个形态，后者在安卓上跑不起来 —— 窗口能建出来、
+ * 却收不到歌词、整页也不响应拖动，而它又按桌面端的行为一直留在屏上；用户关掉它
+ * 之后下次启动又会被 persisted.surface 拉回来（切换是按存档恢复的）。
+ *
+ * 宿主这边不去动模组的页面或逻辑，只在它读档之前把 `surface` 拨回 `desktop`：
+ * 悬浮窗那一路于是永远不会被创建，配置项与字号也就全部只作用在桌面歌词上。
+ * 写回失败不算错误（文件不存在、只读目录都正常），静默跳过。
+ */
+const STATE_FILE_FIXES = {
+    'lyric-float': { file: 'lyric-float-state.json', overrides: { surface: 'desktop' } },
+};
+
+const normalizeModStateFile = (modId) => {
+    const fix = STATE_FILE_FIXES[modId];
+    if (!fix) {
+        return;
+    }
+    try {
+        const target = path.join(userDataDir, fix.file);
+        if (!fs.existsSync(target)) {
+            return;
+        }
+        const raw = fs.readFileSync(target, 'utf8');
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (error) {
+            // 存档坏了就交给模组自己的兜底逻辑，不在这里猜。
+            return;
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return;
+        }
+        let changed = false;
+        Object.keys(fix.overrides).forEach((key) => {
+            const want = fix.overrides[key];
+            if (parsed[key] !== want) {
+                parsed[key] = want;
+                changed = true;
+            }
+        });
+        if (changed) {
+            fs.writeFileSync(target, JSON.stringify(parsed));
+            emitLog('info', `[${modId}] 已把状态文件的形态改回桌面歌词`);
+        }
+    } catch (error) {
+        emitLog('warn', `[${modId}] 状态文件修正失败：${serializeError(error)}`);
+    }
+};
+
 const loadAll = () => {
     runtimes.forEach((runtime) => runtime.unload());
     runtimes.clear();
@@ -751,6 +808,8 @@ const loadAll = () => {
             return;
         }
         try {
+            // 必须在 runtime.load() 之前跑完：模组在激活时就会读自己的状态文件。
+            normalizeModStateFile(id);
             const runtime = buildModRuntime(item);
             runtimes.set(id, runtime);
             runtime.load((error) => {
@@ -846,6 +905,53 @@ const operations = {
         const { runtime, error } = requireRuntime(modId);
         if (error) {
             return error;
+        }
+        /*
+         * lyric-float 的「切到悬浮窗歌词」在安卓上跑不通：窗口建得出来，但收不到歌词、
+         * 显示不出内容、整页也不响应拖动 —— 用户只能看到一个空壳挂在屏上，而且它的
+         * 显隐状态会跟着存档被带回来。宿主这边直接把这一路关掉，返回一个正常结果
+         * （不是报错），命令面板与「窗」按钮都不会再抛出 rpc-failed。
+         */
+        if (modId === 'lyric-float' && name === 'set-surface'
+            && Array.isArray(args) && String(args[0] || '') === 'window') {
+            return { ok: true, result: { ok: false, code: 'unsupported-on-android', surface: 'desktop' } };
+        }
+        /*
+         * 「固定 / 解锁位置」在安卓上点不动 —— 它靠的是桌面端窗口的置顶与拖动语义，
+         * 这里既没有置顶、拖动也由原生接管，按下去了看不到任何变化，像是坏的。
+         *
+         * 现在这颗键改成模组自己声明的「桌面歌词：显示 / 隐藏」（`toggle-widget`，
+         * 和播放控制条上的「词」按钮同一个开关）：同一个位置、同一颗按钮，按一下
+         * 就把歌词窗收起来 / 叫回来，行为是清楚可见的。
+         */
+        if (modId === 'lyric-float' && name === 'toggle-pin') {
+            const widgetHandler = runtime.rpcHandler('toggle-widget');
+            if (typeof widgetHandler === 'function') {
+                try {
+                    const result = await guard.call(modId, 'rpc toggle-widget',
+                        () => widgetHandler(), true);
+                    return { ok: true, result: result === undefined ? null : safeJson(result) };
+                } catch (caught) {
+                    return { ok: false, error: serializeError(caught) };
+                }
+            }
+        }
+        /*
+         * 窗口里那颗 × 走的是 page → main 的 IPC（`toggle-visibility`），宿主这边
+         * 收不到；它发出的 close/hide 又会被原生当成「关掉窗口」。于是让 × 之后
+         * 的隐藏退回模组自己声明的显隐开关：窗口不销毁，还能被「词」按钮叫回来。
+         */
+        if (modId === 'lyric-float' && name === 'toggle-visibility') {
+            const widgetHandler = runtime.rpcHandler('toggle-widget');
+            if (typeof widgetHandler === 'function') {
+                try {
+                    const result = await guard.call(modId, 'rpc toggle-widget',
+                        () => widgetHandler(), true);
+                    return { ok: true, result: result === undefined ? null : safeJson(result) };
+                } catch (caught) {
+                    return { ok: false, error: serializeError(caught) };
+                }
+            }
         }
         const handler = runtime.rpcHandler(name);
         if (typeof handler !== 'function') {
