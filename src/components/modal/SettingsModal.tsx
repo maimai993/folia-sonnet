@@ -59,6 +59,7 @@ import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../st
 import { useSettingsModalStore } from '../../stores/useSettingsModalStore';
 import { setNavidromeEnabledState, useLibraryStore } from '../../stores/useLibraryStore';
 import MarketMount from './settings/MarketMount';
+import { useOverlayTouchRelease } from './settings/useOverlayTouchRelease';
 
 const DEFAULT_OPENAI_TEMPERATURE = '0.7';
 
@@ -335,7 +336,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [, setAuthorClickCount] = useState(0);
     const [meowEasterEgg, setMeowEasterEgg] = useState<{ id: number; } | null>(null);
     const shouldCloseModalOnSubviewBack = initialSubview !== null;
-
+    useOverlayTouchRelease(); // 悬浮窗让出触摸，否则它会把这一层的点击吃掉
     useEffect(() => {
         setActiveTab(initialTab);
         setShowVisPlayground(initialSubview === 'visualizer');

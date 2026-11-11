@@ -30,6 +30,7 @@ import type {
 /** 原生插件的方法表（FoliaModsPlugin.java）。 */
 interface FoliaModsPluginShape {
     call(options: { op: string; args?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+    setOverlaysInteractive(options: { interactive: boolean }): Promise<{ ok?: boolean }>;
     listMods(): Promise<ModsListPayload>;
     reloadMods(): Promise<{ mods?: ModRuntimeInfo[] }>;
     setModEnabled(options: { id: string; enabled: boolean }): Promise<{ ok?: boolean; error?: string; mods?: ModRuntimeInfo[] }>;
@@ -63,6 +64,24 @@ export const hasAndroidModsPlugin = (): boolean => (
     && Capacitor.isNativePlatform()
     && Capacitor.getPlatform() === 'android'
 );
+
+/**
+ * 让所有模组悬浮窗暂时让出触摸 / 恢复。
+ *
+ * 悬浮窗是 `TYPE_APPLICATION_OVERLAY`，盖在 Activity 之上。应用内弹窗（设置、面板）
+ * 打开时，躺在同一块区域的悬浮窗会把点击吃掉 —— 用户看到的是「设置怎么点都没反应」。
+ * 这里只切触摸标志，不销毁窗口，所以关掉弹窗后模组页面状态还在。
+ *
+ * 失败静默：这是个体验优化，不该因为它让弹窗打不开。
+ */
+export const setModOverlaysInteractive = async (interactive: boolean): Promise<void> => {
+    if (!hasAndroidModsPlugin()) return;
+    try {
+        await FoliaMods.setOverlaysInteractive({ interactive });
+    } catch {
+        // 原生还没准备好（或这个版本没有这个方法）时忽略。
+    }
+};
 
 /*
  * 事件分发：原生侧只有一条 modsEvent 通道，payload 是 Node 发来的 JSON 文本，

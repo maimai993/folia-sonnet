@@ -7,7 +7,9 @@ import android.os.Looper;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -176,15 +178,39 @@ final class OverlayBridge {
     }
 
     private void dispatch(long windowId, String channel, String jsonPayload) {
-        JSONObject payload;
+        /*
+         * 载荷不一定是 JSON 对象 —— 模组之间也常直接传字符串（例如
+         * `lyric-float:data-from-client` 收到的就是 `state=playing line="..."`）。
+         *
+         * 以前这里非对象就 `return`，整条消息被悄悄丢掉；更要紧的是 android 的
+         * JSONObject 解析失败会**抛异常**，那个异常顺着 @JavascriptInterface 的
+         * 调用栈冒回页面，模组侧看起来就是「发出去的消息没人收」，
+         * 有的模组据此判定宿主不可用，窗口直接建不起来。
+         *
+         * 所以这里退一步：解析不出对象就当纯字符串，放进 `value` 里继续往下送。
+         */
+        Object parsed = null;
         try {
-            payload = jsonPayload == null || jsonPayload.isEmpty() || "null".equals(jsonPayload)
-                    ? new JSONObject()
-                    : new JSONObject(jsonPayload);
+            parsed = jsonPayload == null || jsonPayload.isEmpty()
+                    ? null
+                    : new JSONTokener(jsonPayload).nextValue();
         } catch (Exception error) {
-            Log.w(TAG, "IPC 载荷不是对象：" + channel, error);
-            return;
+            Log.w(TAG, "IPC 载荷解析失败，按字符串透传：" + channel, error);
         }
+        JSONObject parsedObject = new JSONObject();
+        if (parsed != null && !"null".equals(jsonPayload)) {
+            if (parsed instanceof JSONObject) {
+                parsedObject = (JSONObject) parsed;
+            } else {
+                try {
+                    parsedObject.put("value", parsed instanceof JSONArray ? parsed : String.valueOf(jsonPayload));
+                } catch (Exception error) {
+                    Log.w(TAG, "IPC 载荷装不进对象：" + channel, error);
+                }
+            }
+        }
+        // lambda 只能捕获 final / 事实上 final 的局部变量，这里定住。
+        final JSONObject payload = parsedObject;
         final String target = channel;
         mainHandler.post(() -> {
             WebContentsStub sender = contents.get(windowId);

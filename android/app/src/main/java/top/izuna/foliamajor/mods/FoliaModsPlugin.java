@@ -659,7 +659,8 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             case "load-html": {
                 OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
                 if (window == null) return errorResult("window-not-found");
-                manager.loadHtml(window, args.optString("html", ""), args.optString("injection", ""));
+                String pageHtml = args.optString("html", "");
+                manager.loadHtml(window, pageHtml, args.optString("injection", ""));
                 return new JSObject();
             }
             case "set-bounds": {
@@ -807,6 +808,35 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
     @PluginMethod
     public void getDeviceMetrics(PluginCall call) {
         forward(call, "device-metrics", new JSObject());
+    }
+
+    /**
+     * 应用内弹窗（设置、面板…）打开/关闭时调用，让悬浮窗让出 / 收回触摸。
+     *
+     * 悬浮窗是 `TYPE_APPLICATION_OVERLAY`，盖在 Activity 之上；开着悬浮窗时点设置页，
+     * 落在悬浮窗那块区域的点击会被它吃掉，用户看到的是「设置怎么点都没反应」。
+     * 只切 `FLAG_NOT_TOUCHABLE`，不销毁窗口，所以恢复后模组页面状态不丢。
+     */
+    @PluginMethod
+    public void setOverlaysInteractive(PluginCall call) {
+        Boolean interactive = call.getBoolean("interactive");
+        if (interactive == null) {
+            call.reject("缺少 interactive");
+            return;
+        }
+        try {
+            OverlayWindowManager manager = overlays;
+            if (manager == null) {
+                call.reject("悬浮窗还没初始化");
+                return;
+            }
+            manager.setAllInteractive(interactive);
+            JSObject result = new JSObject();
+            result.put("ok", true);
+            call.resolve(result);
+        } catch (Throwable error) {
+            call.reject("切换悬浮窗触摸失败：" + error);
+        }
     }
 
     /** Node 起来没有。渲染端在启动早期用它区分「还没好」和「真的没有」。 */

@@ -28,6 +28,17 @@ let callOverlayImpl = async () => {
 };
 let logWarn = () => undefined;
 
+/**
+ * 当前正在执行的模组 id。
+ *
+ * 模组的 `main` 是在宿主里同步求值的，所以「此刻谁在建窗」可以由宿主在调用前后设置。
+ * `new BrowserWindow()` 读它来记 owner，卸载时按 owner 拆窗。
+ */
+let currentOwner = null;
+const setCurrentOwner = (id) => {
+    currentOwner = typeof id === 'string' ? id : null;
+};
+
 const installOverlayBridge = (callOverlay, warn) => {
     if (typeof callOverlay === 'function') callOverlayImpl = callOverlay;
     if (typeof warn === 'function') logWarn = warn;
@@ -35,6 +46,33 @@ const installOverlayBridge = (callOverlay, warn) => {
 
 /** 窗口 id → BrowserWindow 实例。`getAllWindows()` 与 sender 查表都靠它。 */
 const windows = new Map();
+
+/**
+ * 销毁某个模组创建的所有窗口。
+ *
+ * 为什么要有这个：`BrowserWindow` 只有在模组自己调 `destroy()` 时才会通知原生拆窗。
+ * 模组卸载 / 重载 / 崩掉时往往来不及调，原生那边的 `TYPE_APPLICATION_OVERLAY` 窗口
+ * 就一直留在 WindowManager 上 —— 实测重载 lyric-float 之后，屏幕上会叠出**两个**
+ * 尺寸位置完全一样的窗口，而且底下那个还把触摸吃掉了。
+ *
+ * 所以卸载时由宿主兜底统一拆。`owner` 是窗口创建时记下的模组 id；
+ * 老实例没记 owner 的一律视为这个模组的（那时候全局只有一个模组会建窗）。
+ */
+const destroyWindowsOf = (owner) => {
+    const doomed = [];
+    for (const win of windows.values()) {
+        if (!win) continue;
+        if (!owner || !win.__owner || win.__owner === owner) doomed.push(win);
+    }
+    for (const win of doomed) {
+        try {
+            win.destroy();
+        } catch {
+            // 单个窗口拆不掉不该影响其它窗口。
+        }
+    }
+    return doomed.length;
+};
 
 class ShimWebContents extends EventEmitter {
     constructor(windowId) {
@@ -65,6 +103,26 @@ class ShimWebContents extends EventEmitter {
         return undefined;
     }
 
+    /**
+     * `webContents.loadURL` / `webContents.loadFile`。
+     *
+     * 桌面模组有两种起页方式：`win.loadURL(...)` 和 `win.webContents.loadURL(...)`。
+     * 这里以前只实现了前者，后者直接 `TypeError: not a function` —— 桌面歌词
+     * (amll-desktop-lyric) 走的就是后者，于是窗口建出来了、body 却一直是空的，
+     * 一个按钮都没有。转发给持有它的 BrowserWindow 即可。
+     */
+    loadURL(url) {
+        const owner = windows.get(this.__windowId);
+        if (owner) return owner.loadURL(url);
+        return Promise.resolve();
+    }
+
+    loadFile(...args) {
+        const owner = windows.get(this.__windowId);
+        if (owner) return owner.loadFile(...args);
+        return Promise.resolve();
+    }
+
     isLoading() {
         return false;
     }
@@ -89,6 +147,10 @@ class BrowserWindow extends EventEmitter {
             height: Number(this.__options.height) || 200,
         };
         this.webContents = new ShimWebContents(null);
+        // 是谁建的窗：卸载那个模组时要连带拆掉它的窗口（见 destroyWindowsOf）。
+        this.__owner = (options && typeof options.__foliaModId === 'string')
+            ? options.__foliaModId
+            : currentOwner;
         this.__creating = this.__create();
     }
 
@@ -445,4 +507,6 @@ module.exports = {
     app,
     installOverlayBridge,
     buildInjection,
+    destroyWindowsOf,
+    setCurrentOwner,
 };
