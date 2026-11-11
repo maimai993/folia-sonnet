@@ -92,6 +92,11 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
         const type = response.headers.get('content-type') || 'image/jpeg';
         const blob = new Blob(chunks as BlobPart[], { type });
         const extension = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+        /*
+         * 读完了报满。图片通常只有几百 KB，一轮流可能一帧都刷不出来 ——
+         * 不补这一下，进度条会停在 0% 或者停在某个中间值，看起来就是「没动」。
+         */
+        emitBackgroundProgress(0.95);
         return new File([blob], `${name}.${extension}`, { type });
     } catch {
         return null;
@@ -99,25 +104,35 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
 };
 
 /**
- * 把图片设成**歌词样式的莫奈背景**的来源，但不动当前选中的歌词样式。
+ * 把图片设成**歌词样式·莫奈的自定义肖像**，但不动当前选中的歌词样式。
  *
- * 和 applyImageToVisualizer 的区别就在这里：那个会顺手把模式切成莫奈，
- * 而这个只换图 —— 用户可能正用着别的歌词样式，只是想先把莫奈那张图备好。
+ * 注意走的不是背景图那一套：莫奈的肖像（`portraitSource` / `handleUploadMonetPortraitImage`）
+ * 和它的背景图（`backgroundSource` / `handleUploadMonetBackgroundImage`）是两处独立的存储，
+ * 画的位置也不同 —— 市场里选「莫奈」要换的是前面那张肖像。
  *
- * 复用同一份上传（uploadMonetBackgroundImage 写的是同一处存储），
- * 所以两个目标同时勾选时也只会存一张图。
+ * 不切 visualizerMode：用户可能正用着别的歌词样式，只是想先把莫奈这张备好。
  */
-const applyImageToMonetSource = async (url: string, itemId: string): Promise<string | null> => {
+const applyImageToMonetPortrait = async (url: string, itemId: string): Promise<string | null> => {
     const file = await fetchAsFile(url, itemId);
     if (!file) return '图片下载失败';
 
-    const uploaded = await uploadMonetBackgroundImage([file]);
+    const uploadPortrait = useVisualizerSettingsStore.getState().handleUploadMonetPortraitImage;
+    if (!uploadPortrait) return '当前版本不支持设置莫奈肖像';
+
+    // 走莫奈自己那套上传 action（写库 + 更新 store + 提示），这里不另写实现。
+    const uploaded = await uploadPortrait([file]);
     if (!uploaded.ok) return uploaded.error ?? '图片保存失败';
 
-    const tuning = useVisualizerSettingsStore.getState().monetBackgroundTuning;
-    useVisualizerSettingsStore.getState().handleSetMonetBackgroundTuning({
-        ...tuning,
-        backgroundSource: 'uploaded-global',
+    /*
+     * 传完要把开关拨到位，否则用户看到的就是「上传成功但画面上没变」：
+     *   · portraitSource → custom，不然画的还是封面；
+     *   · showPortrait → true，之前关过的话得重新打开。
+     */
+    const store = useVisualizerSettingsStore.getState();
+    store.handleSetMonetTuning({
+        ...store.monetTuning,
+        portraitSource: 'custom',
+        showPortrait: true,
     });
     return null;
 };
@@ -174,26 +189,58 @@ const applyImageToVisualizer = async (url: string, itemId: string): Promise<stri
  *   3. 不透明度拉满 —— 之前调低过的话视频淡得几乎看不见
  *   4. 背景切到不抢画面的那一档 —— 否则视频被不透明的背景整个盖住
  */
+/**
+ * 把视频设成可视化页面的背景。
+ *
+ * 全程「下载到本地 → 走视频层那条上传路径」，不把网络地址直接塞给 <video>：
+ * 视频地址带签名和防盗链，今天能播、过几天就 403 黑屏。
+ *
+ * 设置要一起拨对，否则看起来就是「设了没反应」：
+ *   0. 卸掉并删除旧的本地视频 —— 排在下载之前，见下面的注释
+ *   1. 清掉旧的本地视频 —— 它的优先级高于新文件
+ *   2. 打开开关 —— 没开就一层都不画
+ *   3. 不透明度拉满 —— 之前调低过的话视频淡得几乎看不见
+ *   4. 背景切到不抢画面的那一档 —— 否则视频被不透明的背景整个盖住
+ */
 const applyVideoToVisualizer = async (
     mediaUrl: string,
-    /** 已经下好的那一份（见 applyMarketBackground 里的 sharedVideo），没有就现下。 */
-    shared?: { ok: boolean; url: string | null; error: string | null } | null,
-): Promise<string | null> => {
-    const downloaded = shared ?? await downloadNativeVideoLayerFile(mediaUrl);
-    if (!downloaded.ok || !downloaded.url) {
-        return downloaded.error ?? '视频下载失败';
-    }
-
+): Promise<{ error: string | null; path: string | null }> => {
     /*
-     * 顺序很要紧：先清干净，再写新的。
+     * 顺序很要紧：**先把旧的卸掉并删除，再去下新的**。
      *
-     * 播放时 localFileUrl 的优先级高于 videoLayerUrl（见 VideoLayer），
-     * 所以旧文件的 URL 只要还留着，新下载的这个就永远不会被播放 ——
-     * 用户看到的就是「换了视频但还是旧的 / 直接加载失败」。
+     * 两个原因：
+     *   · 播放时 localFileUrl 的优先级高于 videoLayerUrl（见 VideoLayer），
+     *     旧地址还留着，新下载的这个就永远不会被播放 —— 看起来就是「换了没反应」；
+     *   · 原生那边新文件写的还是同一个 cache 路径，旧文件还在被播放器占着的话
+     *     既删不干净也覆盖不完全，换上去常常还是旧内容。
+     *
+     * clearLocalFile 是视频层自己的清理入口（卸载 + 删 IndexedDB + 删原生副本），
+     * 这里直接用它，不另写一套。
+     */
+    /*
+     * 清理失败也绝不能把下载堵住。
+     *
+     * clearLocalFile 里有原生调用（删私有目录里的副本），原生那侧一旦不 resolve，
+     * 整个应用流程就卡在这一句 —— 表现是「进度条一直 0%，而且压根没在下」。
+     * 所以给它一个上限，超时就往下走：最坏情况只是旧的没删干净，
+     * 但新视频下得下来、也能播。
      */
     const stale = useVideoLayerSettingsStore.getState();
     if (stale.localFileUrl || stale.localFileName) {
-        await stale.clearLocalFile();
+        await Promise.race([
+            stale.clearLocalFile(),
+            new Promise<void>((resolve) => { setTimeout(resolve, 3000); }),
+        ]).catch(() => undefined);
+    }
+
+    /*
+     * 必须带 progressId：原生那边没有它就直接跳过发进度事件，
+     * 几十 MB 的视频在界面上就是「一直转圈、进度条不动」。
+     * 和桌面壁纸那条路用的是同一个 id —— 同一时刻只会有一个背景在下载。
+     */
+    const downloaded = await downloadNativeVideoLayerFile(mediaUrl, 'background-market');
+    if (!downloaded.ok || !downloaded.url) {
+        return { error: downloaded.error ?? '视频下载失败', path: null };
     }
 
     // 重新取一次：clearLocalFile 会改 store，上面那份是旧快照。
@@ -216,7 +263,8 @@ const applyVideoToVisualizer = async (
     if (settings.visualizerBackgroundMode !== VISUALIZER_VIDEO_FRIENDLY_MODE) {
         settings.handleSetVisualizerBackgroundMode(VISUALIZER_VIDEO_FRIENDLY_MODE);
     }
-    return null;
+    // 落盘路径带回给调用方：桌面壁纸要用同一份文件，不再下一次。
+    return { error: null, path: downloaded.path };
 };
 
 /**
@@ -237,13 +285,11 @@ const adoptDownloadedVideoAsWallpaper = async (path: string): Promise<boolean> =
  *
  * @param item     市场条目
  * @param targets  应用到哪些地方（用户在弹窗里勾的，可以多选）
- * @param crop     裁切范围（桌面壁纸用）
- * @param rotation 旋转角度（桌面壁纸用）
+ * @param rotation 旋转角度（桌面壁纸用；取景框已经拿掉，只剩自动轮换会带这个值）
  */
 export const applyMarketBackground = async (
     item: BackgroundMarketItem,
     targets: BackgroundTarget[],
-    crop?: { left: number; top: number; right: number; bottom: number },
     rotation = 0,
 ): Promise<ApplyBackgroundResult> => {
     if (!isCapacitorAndroid()) {
@@ -268,18 +314,46 @@ export const applyMarketBackground = async (
      * 视频只下一次，两个目标共用同一份字节。
      *
      * 以前是各下各的：桌面壁纸走 `downloadWallpaperVideoFromUrl`、App 内走
-     * `downloadNativeVideoLayerFile`，两个都勾就是**同一个几十 MB 的视频下两遍**，
-     * 进度条还会来回跳。现在先取一次到本地（原生下载，带进度），再把同一个结果
-     * 分发给两边：
-     *   · App 内直接用它的回环地址播放；
-     *   · 桌面壁纸用它的落盘路径安装一份（adoptDownloadedVideoAsWallpaper），不再联网。
+     * `downloadNativeVideoLayerFile`，两个都勾就是**同一个几十 MB 的视频下两遍**。
      *
-     * 只勾桌面时不预下载：那条路本来就要壁纸层自己那份（带旋转信息），
-     * 先下一遍再装等于多拷一次。
+     * 现在由「App 内」那一路负责下载：它本来就是先卸旧、再下新（见
+     * applyVideoToVisualizer 开头），拿到的路径再交给桌面壁纸安装。
+     * 所以这里的顺序不能反 —— 先跑 App 内，桌面壁纸那段才有一份可复用的文件。
      */
-    const sharedVideo = item.kind === 'video' && targets.includes('app')
-        ? await downloadNativeVideoLayerFile(mediaUrl)
-        : null;
+    let sharedVideoPath: string | null = null;
+
+    /*
+     * ---- 先做 App 内 ----
+     *
+     * 顺序要紧：视频要先在 App 内这条路上「卸旧 → 下载新」，桌面壁纸才有一份
+     * 干净的本地文件可装。反过来做的话，桌面壁纸装的还是上一次的 cache 文件。
+     */
+    if (targets.includes('app')) {
+        /*
+         * 注意：只有勾了「App 内」才碰视频层。
+         *
+         * 视频层（歌词后方那层跟播放页走的视频）和桌面壁纸是两个东西。
+         * 之前不管勾了什么都去设置视频层，结果「只设桌面壁纸」也会把
+         * App 内那层视频打开 —— 用户看到的就是「桌面也在放视频层的视频」。
+         */
+        if (item.kind === 'video') {
+            const video = await applyVideoToVisualizer(mediaUrl);
+            if (video.error) {
+                problems.push(video.error);
+            } else {
+                applied = true;
+                // 视频层刚下好的那份，桌面壁纸接着用（见下面的 adopt）。
+                sharedVideoPath = video.path;
+            }
+        } else {
+            const failure = await applyImageToVisualizer(mediaUrl, item.id);
+            if (failure) {
+                problems.push(failure);
+            } else {
+                applied = true;
+            }
+        }
+    }
 
     // ---- 桌面壁纸（原生层）----
     if (targets.includes('wallpaper')) {
@@ -293,8 +367,8 @@ export const applyMarketBackground = async (
              * 已经为「App 内」下过一份时不再重复下载：那个文件就在应用的 cache
              * 目录里，壁纸层读得到，直接拿它上线即可（用落盘路径，不是回环地址）。
              */
-            const adopted = sharedVideo?.path
-                ? await adoptDownloadedVideoAsWallpaper(sharedVideo.path)
+            const adopted = sharedVideoPath
+                ? await adoptDownloadedVideoAsWallpaper(sharedVideoPath)
                 : false;
             const downloaded = adopted || await downloadWallpaperVideoFromUrl(mediaUrl, rotation);
             if (downloaded) {
@@ -323,7 +397,14 @@ export const applyMarketBackground = async (
                 problems.push('壁纸视频下载失败');
             }
         } else {
-            const downloaded = await downloadWallpaperImageFromUrl(mediaUrl, { crop, rotation });
+            /*
+             * 取景框已经拿掉：整张图都收（0,0,1,1），只把旋转带过去。
+             * 原生那边默认会按 90° 摆好，所以多数竖屏场景不用额外处理。
+             */
+            const downloaded = await downloadWallpaperImageFromUrl(mediaUrl, {
+                crop: { left: 0, top: 0, right: 1, bottom: 1 },
+                rotation,
+            });
             if (downloaded) {
                 // 素材到位后必须把模式切过去，否则壁纸层还在画上一档。
                 useVisualizerSettingsStore.getState().handleSetLyricsWallpaperBackground('image');
@@ -346,47 +427,17 @@ export const applyMarketBackground = async (
     }
 
     // ---- 可视化页面（网页层）----
-    if (targets.includes('app')) {
+    // ---- 歌词样式·莫奈的自定义肖像（只有静图能去）----
+    if (targets.includes('monet') && item.kind === 'image') {
         /*
-         * 注意：只有勾了「App 内」才碰视频层。
-         *
-         * 视频层（歌词后方那层跟播放页走的视频）和桌面壁纸是两个东西。
-         * 之前不管勾了什么都去设置视频层，结果「只设桌面壁纸」也会把
-         * App 内那层视频打开 —— 用户看到的就是「桌面也在放视频层的视频」。
+         * 不能复用「App 内」存的图：那一份是莫奈的**背景图**，这里要的是**肖像**，
+         * 两处独立存储、画的位置也不同，所以这张图在这里必须自己再存一次。
          */
-        const failure = item.kind === 'video'
-            ? await applyVideoToVisualizer(mediaUrl, sharedVideo)
-            : await applyImageToVisualizer(mediaUrl, item.id);
+        const failure = await applyImageToMonetPortrait(mediaUrl, item.id);
         if (failure) {
             problems.push(failure);
         } else {
             applied = true;
-        }
-    }
-
-    // ---- 歌词样式·莫奈的自定义图片来源（只有静图能去）----
-    if (targets.includes('monet') && item.kind === 'image') {
-        /*
-         * 「App 内」在上面已经把这张图存成莫奈的来源了（同一处存储），
-         * 这里就不要再下一次、再存一遍：只要把来源指过去。
-         *
-         * 那条路失败时（problems 非空）才自己下一次，免得报「成功」但图没换。
-         */
-        const storedByApp = targets.includes('app') && problems.length === 0;
-        if (storedByApp) {
-            const tuning = useVisualizerSettingsStore.getState().monetBackgroundTuning;
-            useVisualizerSettingsStore.getState().handleSetMonetBackgroundTuning({
-                ...tuning,
-                backgroundSource: 'uploaded-global',
-            });
-            applied = true;
-        } else {
-            const failure = await applyImageToMonetSource(mediaUrl, item.id);
-            if (failure) {
-                problems.push(failure);
-            } else {
-                applied = true;
-            }
         }
     }
 

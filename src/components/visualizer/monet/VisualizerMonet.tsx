@@ -223,9 +223,15 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
     const portraitCoverUrl = songHandoff
         ? songHandoff.coverUrl ?? (handoffCrossed ? null : coverUrl)
         : coverUrl;
-    const portraitUrl = monetTuning.portraitSource === 'custom'
-        ? monetPortraitImage?.url ?? portraitCoverUrl
-        : portraitCoverUrl ?? monetPortraitImage?.url;
+    /*
+     * 关掉「显示封面」就整个不画：`portraitUrl` 置空之后，下面所有用到它的地方
+     * 都自然退回没有图的那一支（不画框、不加载、也不占位）。
+     */
+    const portraitUrl = monetTuning.showPortrait === false
+        ? null
+        : monetTuning.portraitSource === 'custom'
+            ? monetPortraitImage?.url ?? portraitCoverUrl
+            : portraitCoverUrl ?? monetPortraitImage?.url;
 
     return (
         <VisualizerShell

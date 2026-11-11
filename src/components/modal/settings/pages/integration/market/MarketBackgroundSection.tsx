@@ -23,7 +23,6 @@ import { useBackgroundApplyTarget, type BackgroundTarget } from './useBackground
 import { applyMarketBackground } from '../../../../../../services/backgroundMarket/apply';
 import { subscribeBackgroundProgress } from '../../../../../../services/backgroundMarket/progress';
 import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
-import type { CropRect } from './CropFrame';
 import MarketRotationSection from './MarketRotationSection';
 
 /**
@@ -87,13 +86,17 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
         return unsubscribe;
     }, []);
 
-    const handleConfirm = async (targets: BackgroundTarget[], crop: CropRect, rotation: number) => {
+    /*
+     * 不再收裁切与旋转：桌面壁纸那边原生已经默认按 90° 摆好（壁纸站几乎全是横屏），
+     * 用户不用再自己框一次，取景框就此拿掉。
+     */
+    const handleConfirm = async (targets: BackgroundTarget[]) => {
         if (!pending) return;
         setApplyError(null);
         setProgress(0);
         setProgressLabel(t('options.marketBackgroundProgress'));
         try {
-            const result = await applyMarketBackground(pending, targets, crop, rotation);
+            const result = await applyMarketBackground(pending, targets);
             if (!result.ok) {
                 setApplyError(result.error ?? t('options.marketRetry'));
                 setProgress(null);
@@ -103,8 +106,6 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 kind: pending.kind,
                 name: pending.name,
                 appliesTo: targets,
-                crop,
-                rotation,
             });
             // 需要去系统设置放行时，别让弹窗一关就没了提示。
             if (result.notice) setNotice(result.notice);
@@ -308,9 +309,6 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 error={applyError}
                 onCancel={closeDialog}
                 onConfirm={handleConfirm}
-                /* 图片和视频都给取景框：视频同样存在「横屏硬塞进竖屏」的问题，
-                   裁切位置由原生渲染层按 focus 应用（不需要转码）。 */
-                cropPreviewUrl={pending?.thumbnailUrl || undefined}
             />
         </div>
     );

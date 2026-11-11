@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import ThemedDialog from '../../../../../shared/ThemedDialog';
 import { Button } from '../../../../../../components/ui';
-import CropFrame, { type CropRect } from './CropFrame';
 
 export interface ApplyTargetChoice<T extends string> {
     id: T;
@@ -39,14 +38,7 @@ interface MarketApplyDialogProps<T extends string> {
     progressLabel: string;
     error: string | null;
     onCancel: () => void;
-    onConfirm: (targets: T[], crop: CropRect, rotation: number) => void;
-    /**
-     * 给了就显示裁切取景框（背景用）。
-     *
-     * 字体不需要裁切，所以这个整体可选 —— 一个对话框同时服务两种条目，
-     * 比拆成两个几乎一样的组件好维护。
-     */
-    cropPreviewUrl?: string;
+    onConfirm: (targets: T[]) => void;
 }
 
 const MarketApplyDialog = <T extends string>({
@@ -61,28 +53,21 @@ const MarketApplyDialog = <T extends string>({
     error,
     onCancel,
     onConfirm,
-    cropPreviewUrl,
 }: MarketApplyDialogProps<T>) => {
     const { t } = useTranslation();
     const [picked, setPicked] = useState<T[]>([]);
     const running = progress !== null;
-    /** 裁切范围与旋转：只对背景有意义。 */
-    const [crop, setCrop] = useState<CropRect>({ left: 0.125, top: 0, right: 0.875, bottom: 1 });
-    const [rotation, setRotation] = useState(0);
 
     /**
      * 只在**打开的那一刻**重置一次。
      *
      * 以前依赖里有 `defaults`（父组件每次渲染都给新数组），于是每次重渲染都重置，
-     * 用户刚转的 90° 会自己转回去 —— 旋转回弹就是这么来的。
-     * 现在只认 isOpen 的上升沿。
+     * 用户刚勾上的目标会自己掉回去。
      */
     const wasOpen = useRef(false);
     useEffect(() => {
         if (isOpen && !wasOpen.current) {
             setPicked([...defaults]);
-            setCrop({ left: 0.125, top: 0, right: 0.875, bottom: 1 });
-            setRotation(0);
         }
         wasOpen.current = isOpen;
         // defaults 只用于首次填充，不该作为重置触发条件。
@@ -157,21 +142,6 @@ const MarketApplyDialog = <T extends string>({
                     })}
                 </div>
 
-                {/* 裁切只对「桌面壁纸」有意义：App 内背景是另一套（改的是可视化底图）。
-                    没勾桌面壁纸就不该出现取景框，否则用户会以为选错了。 */}
-                {cropPreviewUrl && !running && picked.includes('wallpaper' as T) && (
-                    <CropFrame
-                        src={cropPreviewUrl}
-                        aspect={9 / 16}
-                        value={crop}
-                        rotation={rotation}
-                        onChange={setCrop}
-                        onRotationChange={setRotation}
-                        rotateLabel={t('options.marketCropRotate')}
-                        hintLabel={t('options.marketCropHint')}
-                    />
-                )}
-
                 {running && (
                     <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11.5px] text-[var(--st-t2)]">
@@ -197,7 +167,7 @@ const MarketApplyDialog = <T extends string>({
                     <Button onClick={onCancel} disabled={running}>
                         {t('common.cancel')}
                     </Button>
-                    <Button onClick={() => onConfirm(picked, crop, rotation)} variant="primary" disabled={!canConfirm}>
+                    <Button onClick={() => onConfirm(picked)} variant="primary" disabled={!canConfirm}>
                         {running ? t('options.marketApplying') : t('options.marketApplyConfirm')}
                     </Button>
                 </div>

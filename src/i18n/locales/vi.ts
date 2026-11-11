@@ -4585,6 +4585,8 @@ export default {
     "monetBackgroundWashCustom": "Tùy chỉnh",
     "monetBackgroundWashCustomColor": "Màu phai tùy chỉnh",
     "monetPortraitSource": "Nguồn ảnh nhân vật (Portrait) bên phải",
+    "monetShowPortrait": "Hiện ảnh bìa",
+    "monetShowPortraitDesc": "Tắt sẽ không vẽ ảnh bìa hay ảnh nhân vật tuỳ chỉnh bên cạnh lời bài hát",
     "monetPortraitSourceCover": "Ảnh bìa",
     "monetPortraitSourceCustom": "Ảnh tùy chỉnh",
     "monetPortraitStyle": "Hình dạng bìa",

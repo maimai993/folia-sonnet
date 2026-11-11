@@ -13,6 +13,7 @@ import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsSt
 import { useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
 import { useMarketRotationStore, rotationAllows } from '../../stores/useMarketRotationStore';
 import { getMarketSource } from './index';
+import { applyMarketBackground } from './apply';
 import { fetchMarketPage, resolveMarketMediaUrl, type BackgroundMarketItem } from './index';
 import { isCapacitorAndroid } from '../../platform/runtime';
 import {
@@ -41,25 +42,6 @@ export interface RotationStepResult {
     item: BackgroundMarketItem | null;
     error: string | null;
 }
-
-/**
- * 把一张背景设进可视化页面。
- *
- * 网页层没有原生那种「壁纸背景」的概念，它读的是 `customImage` + 背景模式。
- * 所以这里必须两步都做：素材挂上去，模式切到莫奈。
- */
-const applyToVisualizer = (item: BackgroundMarketItem, mediaUrl: string): void => {
-    /*
-     * 可视化页面只能显示静态图。视频在网页层要额外接一套播放器，
-     * 所以视频轮换只落到桌面壁纸上 —— 这里如实跳过，不假装成功。
-     */
-    useVisualizerAssetStore.getState().setMonetBackgroundImage({
-        id: item.id,
-        name: item.name,
-        url: mediaUrl,
-    });
-    useVisualizerSettingsStore.getState().handleSetVisualizerBackgroundMode(CUSTOM_IMAGE_MODE);
-};
 
 /** 把一张背景设进桌面壁纸（原生那层）。 */
 const applyToWallpaper = async (item: BackgroundMarketItem, mediaUrl: string): Promise<boolean> => {
@@ -134,14 +116,24 @@ export const runRotationStep = async (): Promise<RotationStepResult> => {
     }
 
     // 4. 按目标落地
-    let applied = false;
+    /*
+     * 「App 内」直接复用 apply.ts 那条路，图片和视频都交给它：
+     * 图片走莫奈自定义图，视频走歌词后方的视频层。
+     *
+     * 以前这里自己写了一套「只挂 customImage」，视频会被跳过 ——
+     * 表现就是「自动轮换选了视频，App 内那边不动」。
+     */
+    const appTargets = settings.targets.includes('visualizer') ? (['app'] as const) : ([] as const);
+    let appApplied = false;
+    if (appTargets.length > 0) {
+        const result = await applyMarketBackground(item, [...appTargets]);
+        appApplied = result.ok;
+    }
+
+    let applied = appApplied;
     for (const target of settings.targets) {
         if (target === 'wallpaper') {
             applied = (await applyToWallpaper(item, mediaUrl)) || applied;
-        } else if (target === 'visualizer' && item.kind === 'image') {
-            // 视频没法在网页可视化里播，只有图片能挂上去。
-            applyToVisualizer(item, mediaUrl);
-            applied = true;
         }
     }
 

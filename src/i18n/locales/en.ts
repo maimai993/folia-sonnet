@@ -4585,6 +4585,8 @@ export default {
     "monetBackgroundWashCustom": "Custom",
     "monetBackgroundWashCustomColor": "Custom Wash Color",
     "monetPortraitSource": "Right Portrait Source",
+    "monetShowPortrait": "Show cover",
+    "monetShowPortraitDesc": "Off stops drawing the cover or the custom portrait beside the lyrics",
     "monetPortraitSourceCover": "Cover",
     "monetPortraitSourceCustom": "Custom Image",
     "monetPortraitStyle": "Cover Shape",

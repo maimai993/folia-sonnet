@@ -4684,6 +4684,8 @@ export default {
     "monetBackgroundWashCustom": "自定义",
     "monetBackgroundWashCustomColor": "自定义水洗色",
     "monetPortraitSource": "右侧肖像来源",
+    "monetShowPortrait": "显示封面",
+    "monetShowPortraitDesc": "关掉后歌词旁边不再画封面或自定义肖像",
     "monetPortraitSourceCover": "封面",
     "monetPortraitSourceCustom": "自定义图片",
     "monetPortraitStyle": "封面形状",

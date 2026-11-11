@@ -176,6 +176,16 @@ interface FoliaNativePlugin {
         eventName: 'updateDownloadProgress',
         listener: (progress: UpdateDownloadProgress) => void,
     ): Promise<FoliaNativeListenerHandle>;
+    /**
+     * 视频层文件（`downloadVideoLayerFile`）的下载进度，`percent` 是 0-100。
+     *
+     * 原生发在**这个**插件上，和 FoliaWallpaper 那个同名事件不是一个来源，
+     * 两边各订各的（见 services/backgroundMarket/progress.ts）。
+     */
+    addListener(
+        eventName: 'videoDownloadProgress',
+        listener: (progress: { id?: string; percent?: number }) => void,
+    ): Promise<FoliaNativeListenerHandle>;
 }
 
 const FoliaNative = registerPlugin<FoliaNativePlugin>('FoliaNative');
@@ -434,6 +444,38 @@ export const watchUpdateDownloadProgress = (
 export const downloadUpdate = (
     options: { url: string; fileName: string },
 ): Promise<{ path: string; bytes: number }> => FoliaNative.downloadUpdate(options);
+
+/**
+ * 监听 `downloadVideoLayerFile` 的下载进度（0..1）。
+ *
+ * 原生在 `FoliaNativePlugin` 上发 `videoDownloadProgress`，**不是** FoliaWallpaper
+ * 那个同名事件 —— 桌面壁纸和 App 内的视频下载分别发在两处，各自要订各的。
+ * 以前只订了壁纸那一侧，所以「选 App 内」时进度条永远是 0%。
+ *
+ * 返回取消订阅的函数，组件卸载时要调用。
+ */
+export const subscribeNativeVideoLayerProgress = async (
+    listener: (progress: number) => void,
+): Promise<() => void> => {
+    if (!isCapacitorAndroid()) return () => {};
+    try {
+        const handle = await FoliaNative.addListener('videoDownloadProgress', (payload) => {
+            const percent = payload?.percent;
+            if (typeof percent === 'number' && Number.isFinite(percent)) {
+                listener(Math.min(1, Math.max(0, percent / 100)));
+            }
+        });
+        return () => {
+            try {
+                handle?.remove();
+            } catch {
+                // 已经卸载过了。
+            }
+        };
+    } catch {
+        return () => {};
+    }
+};
 
 /** 拉起系统安装器。 */
 export const installUpdate = (

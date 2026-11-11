@@ -4551,6 +4551,8 @@ export default {
     "monetBackgroundWashCustom": "Kustom",
     "monetBackgroundWashCustomColor": "Warna Cuci Kustom",
     "monetPortraitSource": "Sumber Potret Kanan",
+    "monetShowPortrait": "Tampilkan sampul",
+    "monetShowPortraitDesc": "Dimatikan tidak lagi menggambar sampul atau potret khusus di samping lirik",
     "monetPortraitSourceCover": "Sampul",
     "monetPortraitSourceCustom": "Gambar Kustom",
     "monetPortraitStyle": "Bentuk Sampul",

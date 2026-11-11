@@ -1264,6 +1264,13 @@ export interface MonetTuning {
   audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
+  /**
+   * 歌词样式里那张肖像（封面派生图 / 自定义肖像）要不要画。
+   *
+   * 关掉就只剩歌词本身与配色：有人不想让封面出现在歌词旁边。
+   * 不影响 `portraitSource` 的取值，再打开还是原来那张。
+   */
+  showPortrait?: boolean;
   portraitOffsetX?: number;
   portraitStyle?: 'square' | 'rectangular';
   showPortraitDragHanger?: boolean;
@@ -1341,6 +1348,7 @@ export const DEFAULT_MONET_TUNING: MonetTuning = {
   audioStyle: 'bar',
   fontScale: 1.2,
   portraitSource: 'cover',
+  showPortrait: true,
   portraitOffsetX: 0,
   portraitStyle: 'square',
   showPortraitDragHanger: true,

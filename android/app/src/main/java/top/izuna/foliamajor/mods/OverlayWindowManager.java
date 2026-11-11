@@ -362,6 +362,13 @@ final class OverlayWindowManager {
              *
              * 只加样式与类名，不改模组的脚本与逻辑。
              */
+            /*
+             * 各自独立成标签，**不能拼在同一个 <script> 里**。
+             *
+             * 以前是 `injection = touchStyle + forcedHover + injection` 再统一包一层
+             * <script>，结果 <style> 被当成脚本正文 —— 浏览器解析报错，
+             * 于是那一段代码连同样式文本被原样画在页面上（整块乱码）。
+             */
             String touchStyle = "<style>\n"
                     + "/* 安卓宿主注入：触摸没有 hover，控制条不能依赖它才可点。 */\n"
                     + "body .controls { opacity: 1 !important; pointer-events: auto !important;\n"
@@ -374,8 +381,9 @@ final class OverlayWindowManager {
                     + "  if (document.body) document.body.classList.add('hover');\n"
                     + "});\n"
                     + "</script>";
-            injection = touchStyle + forcedHover + injection;
-            String tag = "<script>\n" + injection + "\n</script>";
+            String tag = touchStyle
+                    + forcedHover
+                    + "<script>\n" + injection + "\n</script>";
             String lower = html.toLowerCase(java.util.Locale.ROOT);
             int head = lower.indexOf("<head>");
             if (head >= 0) {
