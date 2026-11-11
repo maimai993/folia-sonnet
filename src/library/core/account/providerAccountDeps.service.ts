@@ -90,7 +90,7 @@ export const windowAccountClock: LibraryAccountClock = {
 
 // 网页版的站点 origin；桌面版页面是 file:// 等本地协议，返回 null。
 const resolveWebOrigin = (): string | null => {
-    if (typeof window === 'undefined' || window.electron) return null;
+    if (typeof window === 'undefined' || typeof window.electron?.platform === 'string') return null;
     const { protocol, origin } = window.location;
     return protocol === 'http:' || protocol === 'https:' ? origin : null;
 };

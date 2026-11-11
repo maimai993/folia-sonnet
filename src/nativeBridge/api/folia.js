@@ -1799,6 +1799,45 @@ export async function handleFoliaApiRequest(input) {
     );
   }
 
+  /*
+   * 「歌曲评论」模组（song-comments）问的两条：
+   *   comment_hot   → weapi POST /api/v1/resource/comments/hotflow              { id, type, limit, offset }
+   *   comment_music → weapi POST /api/v1/resource/comments/R_SO_4_<id>          { limit, offset }
+   *
+   * 和上面那三条一样，原先这里一条都没有，全落到末尾的 ROUTE_NOT_IMPLEMENTED；
+   * 上层见到 `__foliaBridgeError` 就抛错、`raw` 那层一律归成 network，模组界面于是显示
+   * 「无法连接，请稍后重试」—— 看着像断网，其实是桥里没这条路由。
+   *
+   * 两条都走 weapi（与上游 `module/comment_hot.js`、`module/comment_music.js` 一致）：
+   * `type` 是评论所属的資源类型，歌单/歌曲共用这个接口，模组传的是 0（歌曲）。
+   * `R_SO_4_` 是网易给「单曲」的线程前缀，`comment_music` 要拼在路径里而不是放进参数。
+   * 应答原样交回去：`hotComments` / `comments` / `total` 都由上游给。
+   */
+  if (path === '/comment/hot') {
+    const id = firstValue(params.get('id'), body.id);
+    if (!id) return { __foliaBridgeError: 'INVALID_PARAMS', path, message: 'comment_hot 缺少 id' };
+    const payload = {
+      id,
+      // numberValue 取第一个「能转成数字」的值，所以缺省值要放在取值前面。
+      type: numberValue(body.type, params.get('type'), 0),
+      limit: numberValue(params.get('limit'), body.limit, 20),
+      offset: numberValue(params.get('offset'), body.offset, 0),
+    };
+    return await archiveAnswer(path, () => readJson('/api/v1/resource/comments/hotflow', payload, cookie));
+  }
+  if (path === '/comment/music') {
+    const id = firstValue(params.get('id'), body.id);
+    if (!id) return { __foliaBridgeError: 'INVALID_PARAMS', path, message: 'comment_music 缺少 id' };
+    const payload = {
+      limit: numberValue(params.get('limit'), body.limit, 20),
+      offset: numberValue(params.get('offset'), body.offset, 0),
+    };
+    return await archiveAnswer(
+      path,
+      () => readJson(`/api/v1/resource/comments/R_SO_4_${id}`, payload, cookie),
+    );
+  }
+
   return {
     __foliaBridgeError: 'ROUTE_NOT_IMPLEMENTED',
     path,

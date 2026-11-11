@@ -121,7 +121,10 @@ export const useAppFoundation = () => {
         isDevDebugOverlayVisible: state.isDevDebugOverlayVisible,
     })));
     const isDev = import.meta.env.DEV;
-    const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
+    // 只认 platform（只有 Electron 的 preload 会写）。安卓端的模组 shim 装了
+    // `window.electron.mods` 但没有 platform，若按对象存在与否判断，安卓会拿到
+    // 桌面标题栏、桌面快捷键与桌面窗口行为。
+    const isElectronWindow = typeof (window as typeof window & { electron?: { platform?: unknown }; }).electron?.platform === 'string';
 
     // Subscribed only while the debug snapshot is actually being built: a plain subscription
     // re-rendered the whole App on every lyric-line change for a debug-only value.

@@ -203,7 +203,7 @@ export const toSafeRemoteUrl = (url: string | null | undefined): string | null |
 // 无效音频，而这两个运行时都允许明文媒体播放。网页/PWA 必须继续归一成 https（混合内容会被拦）。
 export const toSafePlaybackUrl = (
     url: string | null | undefined,
-    isElectron = typeof window !== 'undefined' && Boolean(window.electron)
+    isElectron = typeof window !== 'undefined' && typeof window.electron?.platform === 'string'
 ): string | null | undefined => {
     if (!url) {
         return url;

@@ -364,9 +364,6 @@ function mountVinyl(folium, container, ctx) {
         }
 
         textCol.style.fontFamily = stack;
-        textCol.style.color = theme.primaryColor;
-        // 暂停 / static 宿主可能不再排帧，换主题这一拍也要同步已唱色。
-        lyricsBox.style.setProperty('--sung', theme.accentColor || '#8a7cff');
         textCol.style.textAlign = s.textAlign;
         const base = typography.base;
         // The song title rides with the lyric size; the artist at 80% of it.
@@ -467,8 +464,7 @@ function mountVinyl(folium, container, ctx) {
         const line = shown >= 0 ? ctx.lines[shown] : null;
         const text = line?.fullText?.trim() || '';
 
-        // 同一行内换主题／字号也会重建；否则缓存留下旧字体尺寸与翻译颜色。
-        const rowsKey = `${shown}|${rows.join(',')}|${text}|${typography.base}|${typography.weight}|${ctx.getTheme()?.secondaryColor}`;
+        const rowsKey = `${shown}|${rows.join(',')}|${text}`;
         if (rowsKey !== lastRowsKey) {
             lastRowsKey = rowsKey;
             lyricsBox.textContent = '';
@@ -699,12 +695,12 @@ function mountVinyl(folium, container, ctx) {
     const offFrame = ctx.onFrame(() => {
         // Karaoke: each word's sung colour sweeps in smoothly across the
         // glyph as the word is sung (--wp 0% -> 100%), with a gentle scale
-        // pop while the word is active. The sung colour follows the current
-        // song theme; asynchronous artwork extraction only controls the halo,
-        // never overwrites AI karaoke colours.
+        // pop while the word is active. The sung colour is the current
+        // artwork's dominant colour (theme accent as a fallback); unsung
+        // parts stay in the theme's lyric colour via currentColor.
         if (activeWordSpans.length) {
             const t = ctx.lyricTime?.get?.() ?? 0;
-            const sungColor = ctx.getTheme()?.accentColor || '#8a7cff';
+            const sungColor = coverColor || ctx.getTheme()?.accentColor || '#8a7cff';
             if (lyricsBox.style.getPropertyValue('--sung') !== sungColor) {
                 lyricsBox.style.setProperty('--sung', sungColor);
             }

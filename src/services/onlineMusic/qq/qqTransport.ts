@@ -666,7 +666,7 @@ const readMusicuCode = (value: unknown): number | undefined => {
 export const requestQqMusicu = async (
     requests: Readonly<Record<string, QqMusicuRequest>>,
 ): Promise<Record<string, QqMusicuAnswer>> => {
-    const direct = typeof window !== 'undefined' && Boolean(window.electron);
+    const direct = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
     const url = direct ? QQ_MUSICU_URL : lyricProxyWebUrl(QQ_MUSICU_URL);
     const init: RequestInit = {
         method: 'POST',

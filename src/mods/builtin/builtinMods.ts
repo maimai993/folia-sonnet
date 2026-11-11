@@ -18,12 +18,25 @@ interface BuiltinModSource {
     /** 实验接口的 opt-in，和 mod.json 的 `experimental` 同义。 */
     experimental?: string[];
     folia: string | null;
+    /** 这个模组带不带 Node 入口（mod.json 里有 `main`）。 */
+    hasMain?: boolean;
 }
 
 /** Where the bundling put them (public/mods/builtin). */
 const BUILTIN_BASE = '/mods/builtin';
 
 const BUILTIN_SOURCES: readonly BuiltinModSource[] = [
+    {
+        id: 'mod-market',
+        name: '模组市场',
+        version: '1.0.1',
+        author: '飛.',
+        description: '把官方模组市场搬进 Folia：首页导航末尾多一个整页「模组市场」，打开就是官方站的全部模组，安装、更新都在应用里完成。直接读官方站公布的 catalog.json（带 ETag 与本地缓存，断网时退回上次的目录），按官方 / 社区 / Beta / 已安装过滤，一键安装会先核对 SHA-256 再交给宿主自己的安装器。',
+        // 与 mod.json 一致：只要 filesystem.data（缓存 catalog 与下载的 zip）。
+        permissions: ['filesystem.data'],
+        folia: '>=0.7.21 <0.8.0',
+        hasMain: true,
+    },
     {
         id: 'vinyl-disc',
         name: '黑胶唱片',
@@ -47,12 +60,13 @@ const BUILTIN_SOURCES: readonly BuiltinModSource[] = [
         name: '听歌档案',
         version: '1.3.3',
         author: 'imicola',
-        description: '本机听歌统计：听多久、最常听什么、什么时候听、单曲轨迹；界面是模组自己的那套页面。',
-        // 主进程侧的 `filesystem.data` 只管模组自己的数据文件，这里没有主进程，存储走 `archive.*` 的渲染进程实现
-        // （builtinRpc.ts）；`stageLayers` 放封面层，`playback.control` 供排行里的播放/排队，剩下的是云端读接口。
+        description: 'Folia 本机听歌统计与网易云榜单、时长报告；云端功能使用官方受控接口，需要 Folium 1.7。',
+        // `stageLayers` 放封面层，`playback.control` 供排行里的播放 / 排队，剩下的是云端读接口。
         permissions: ['filesystem.data', 'stageLayers', 'playback.control', 'platform.netease.read'],
         experimental: ['platform.raw'],
-        folia: '>=0.7.21 <0.8.0',
+        folia: '>=0.7.22',
+        // 原始包带 index.cjs 作为 Node 入口（archive.* 由它回答）。
+        hasMain: true,
     },
 ];
 
@@ -74,7 +88,7 @@ export const builtinModRuntimeInfos = (): ModRuntimeInfo[] => BUILTIN_SOURCES.ma
     experimental: [...(source.experimental ?? [])],
     embedOrigins: [],
     folia: source.folia,
-    hasMain: false,
+    hasMain: source.hasMain ?? false,
     clientUrl: `${BUILTIN_BASE}/${source.id}/client.mjs`,
 }));
 

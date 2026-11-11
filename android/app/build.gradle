@@ -37,6 +37,13 @@ def versionCodeOf = { String name ->
 
 android {
     namespace = "top.izuna.foliamajor"
+    /*
+     * NDK 必须钉死。sdk/ndk 下如果还留着一个残缺的旧版本（只有目录、没有 source.properties），
+     * AGP 会挑到它，然后在配置阶段直接失败：
+     *   [CXX1101] NDK at ...\ndk\27.0.12077973 did not have a source.properties file
+     * 本机的 29 是完整的那一份（CMake 3.22.1 也在用它），所以这里显式指过去。
+     */
+    ndkVersion "29.0.14206865"
     // compileSdk 用 37：Filament 1.77.2 的 AAR 要求 37+，而「莱茵生命」的材质是
     // 用它编的 —— 运行时降到 1.74 会让 .filamat 版本对不上（Filament 会直接 abort）。
     // targetSdk 仍是 36，行为面不变，只是编译时能用新 API。
@@ -90,6 +97,23 @@ android {
          */
         ndk {
             abiFilters 'arm64-v8a'
+        }
+        /*
+         * Node 运行时（nodejs-mobile 18.20.4 移植版，见 src/main/cpp/）。
+         *
+         * Folium 模组系统分两半：渲染端的 client 入口，和主进程的 main 入口。桌面端由
+         * Electron 主进程提供后者；安卓没有主进程，所以带 Node 入口（`main`）的模组
+         * （例如 mod-market 的 catalog 抓取与下载）根本跑不起来。这里把 Node 搬进 App，
+         * 让模组的 main 入口能在真机上真的执行。
+         *
+         * ⚠️ `-DANDROID_STL=c++_shared` 不能去掉：libnode.so 依赖 libc++_shared.so，
+         * 缺了它 dlopen 会失败（UnsatisfiedLinkError）。
+         */
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -fexceptions -frtti"
+            }
         }
     }
     signingConfigs {
@@ -172,6 +196,17 @@ dependencies {
      * 用 onnxruntime-android 走 NNAPI/CPU，跑在后台线程，界面不受影响。
      */
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.31.1"
+    /*
+     * ffmpeg：安卓端没有 ffmpeg 可执行文件，模组面板那条「未找到 ffmpeg」的提示就是因为
+     * 这个。桌面端可以 spawn ffmpeg，安卓只能把 ffmpeg 编进原生库 —— 用社区维护的
+     * ffmpeg-kit fork（包名仍是 com.arthenica.ffmpegkit）。
+     *
+     * 选 full 而不是 min/gpl：min 少了 libass（歌词视频字幕）与 libmp3lame，而 -gpl 变体
+     * 带 x264/x265，是 GPL-3.0 传染性许可 —— 本应用不分发源码，用不得。full 是 LGPL-3.0。
+     *
+     * 代价：arm64 的 .so 约 30MB，APK 会明显变大（模组市场里的预览与导出都要它）。
+     */
+    implementation "dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9"
     implementation project(':capacitor-android')
     // JVM 单测里 android.jar 的 org.json 是空壳（一调用就 "not mocked"），而设置与队列
     // 这两层的数据载体就是 JSONObject —— 它们恰恰最该被单测钉住（合并语义、队列推进）。
@@ -210,6 +245,13 @@ android {
     }
     kotlinOptions {
         jvmTarget = '17'
+    }
+    // Node 运行时的原生库（libfolia-node-native.so）与其预编译依赖（libnode.so）。
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
     }
 }
 

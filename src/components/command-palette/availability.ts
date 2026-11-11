@@ -30,7 +30,9 @@ const detectRuntimePlatform = (): RuntimePlatform | null => {
     }
 
     const electron = (window as any).electron;
-    if (!electron) {
+    // 只认 platform：安卓端的模组 shim 会装 `window.electron.mods` 但不带 platform，
+    // 那样会被误判成「在桌面」—— 桌面命令全亮、安卓命令全灭，是最坏的组合。
+    if (!electron || typeof electron.platform !== 'string') {
         return { isElectron: false, isCapacitorAndroid: isCapacitorAndroid(), os: 'web' };
     }
 

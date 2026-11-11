@@ -48,4 +48,13 @@ describe('Apple Music transport availability', () => {
         vi.stubGlobal('window', {});
         expect(getAppleMusicTransportAvailability()).toEqual({ configured: false, reason: 'runtime-unavailable' });
     });
+
+    // 安卓端本轮只留接口：shim 装了 appleMusicRequest，但它永远回 unsupported，
+    // 且没有 platform。这里必须判成不可用 —— 否则界面会出现一个点了就报错的入口。
+    it('keeps the source closed on Android, where only the stub bridge exists', async () => {
+        const stub = vi.fn(async () => ({ ok: false, error: 'unsupported' }));
+        vi.stubGlobal('window', { electron: { appleMusicRequest: stub } });
+        expect(getAppleMusicTransportAvailability()).toEqual({ configured: false, reason: 'runtime-unavailable' });
+        await expect(requestAppleMusic('accountStatus')).rejects.toMatchObject({ code: 'unsupported' });
+    });
 });

@@ -123,7 +123,7 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
             : 'realeco';
 
 // Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
-const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
+const hasElectronBridge = () => typeof window !== 'undefined' && typeof (window as any).electron?.platform === 'string';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
@@ -425,7 +425,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
-    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
+    const isElectronRuntime = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
     const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
         ? savedElectronAiCredentials.OPENAI_API_KEY
         : savedElectronAiCredentials.GEMINI_API_KEY;
@@ -448,7 +448,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
         const electron = (window as any).electron;
-        if (!electron) {
+        if (!electron || typeof electron.platform !== 'string') {
             return;
         }
         setIsElectron(true);
