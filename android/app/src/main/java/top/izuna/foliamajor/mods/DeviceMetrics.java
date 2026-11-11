@@ -75,7 +75,7 @@ final class DeviceMetrics {
             out.put("memoryKb", memoryKb);
 
             // 温度：CPU 与 GPU 都取各自 zone 的中位数，电池单独一项。
-            putNullable(out, "cpuTempC", medianThermal("cpu-"));
+            putNullable(out, "cpuTempC", medianThermal("cpu-", "cpuss"));
             putNullable(out, "gpuTempC", medianThermal("gpuss"));
             putNullable(out, "batteryTempC", readBatteryTempC(context));
             putNullable(out, "batteryLevel", readBatteryLevel(context));
@@ -260,16 +260,19 @@ final class DeviceMetrics {
      * 否则算出来的最大值永远是 -273°C。
      */
     /**
-     * 匹配前缀的 thermal zone 温度（摄氏度），**取中位数**而不是最大值。
+     * 匹配任一前缀的 thermal zone 温度（摄氏度），**取中位数**而不是最大值。
      *
      * 这台机器（REDMI K80）的 `cpu-*` 有一二十个按核分的 zone，其中个别传感器
      * 读数不可信（偏移未标定、单位不是毫摄氏度）。取 `max` 就等于「哪个传感器坏了
      * 就跟哪个走」——表现是温度飙到早该过热保护的数值，而 `gpuss` 那边正常。
      *
+     * 传多个前缀是因为同一颗硅片在不同 zone 里名字不一样：`cpu-1-0-0` 按簇/核分，
+     * `cpuss-0` 是子系统级。只认前者会漏掉后者，量出来的温度偏低。
+     *
      * 中位数只要求「多数 zone 是好的」，个别离群值带不偏。先按合理区间过滤，
      * 越界的一律丢弃；一个都不剩才回 null（宁可不显示，也不报假数）。
      */
-    private static Double medianThermal(String prefix) {
+    private static Double medianThermal(String... prefixes) {
         File root = new File("/sys/class/thermal");
         File[] zones = root.listFiles();
         if (zones == null) return null;
@@ -278,7 +281,18 @@ final class DeviceMetrics {
             String name = zone.getName();
             if (!name.startsWith("thermal_zone")) continue;
             String type = readFile(new File(zone, "type").getAbsolutePath());
-            if (type == null || !type.trim().startsWith(prefix)) continue;
+            if (type == null) continue;
+            // 传感器名各厂商不同：同一种硅片上既有 `cpu-1-0-0`（按簇/核）也有 `cpuss-0`
+            // （子系统级）。只认前一种会漏掉后者，两者都算才代表整颗 CPU。
+            String trimmed = type.trim();
+            boolean matched = false;
+            for (String prefix : prefixes) {
+                if (trimmed.startsWith(prefix)) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) continue;
             String raw = readFile(new File(zone, "temp").getAbsolutePath());
             if (raw == null) continue;
             try {

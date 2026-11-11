@@ -856,7 +856,7 @@ export function usePlaybackQueueController({
         // count down to the next playable song, or, where there is none or the skips are used up, say what
         // happened, with a retry where asking again may help. The buttons call the newest playSong (the
         // quality, the stage and the queue of the moment they are pressed).
-        const presentOnlineFailure = (shown: OnlineFailure) => {
+        const presentOnlineFailure = async (shown: OnlineFailure) => {
             restoreFmModeIfNotLanded();
             // Whatever is shown below, this play gave up: the song before it, still playing, is no longer
             // overtaken (`onceShown` in currentSong.ts). Its own answer stays, for the countdown's skip and its cancel.
@@ -875,6 +875,36 @@ export function usePlaybackQueueController({
                 return;
             }
             const nextSong = getNextPlayableQueueSong(queueContext, song, asFm());
+            /*
+             * 后台（或已经开着「自动跳过」）：不等倒计时，当场往后探到能播的那一首直接放。
+             *
+             * 这条分支原来是「弹倒计时、到点了再跳」，而后台的定时器会被节流甚至冻结 ——
+             * 表现就是「卡一会儿才停」。这里改成和 handleNextTrack 同一套预探测：逐首要
+             * 播放地址，跳过拿不到的，直接把播放器指过去，不再一首首等它失败。
+             */
+            if (nextSong && (isPlaybackInterfaceHidden() || readAutoSkipUnplayable())) {
+                const probeQueue = readClickTimeQueue() ?? newQueue;
+                const fromIndex = queueIndexOf(queueContext, song);
+                const playableIndex = fromIndex >= 0
+                    ? await findNextPlayableIndex(probeQueue, fromIndex, asFm())
+                    : -1;
+                if (!isLatestPlaybackRequest()) return;
+                const target = playableIndex >= 0
+                    ? probeQueue[playableIndex]
+                    : getNextPlayableQueueSong(probeQueue, song, asFm());
+                if (target) {
+                    notifyBackgroundPlaybackNotice(`${said.text} · ${t('status.autoSkippedNext')}`);
+                    if (onFmLanding && asFm() && playSongCallIdRef.current === playSongCallId) {
+                        registerPersonalFmLanding(probeQueue, onFmLanding);
+                    }
+                    void latestQueueActionsRef.current.playSong(target, probeQueue, asFm(), {
+                        ...deferredPlayOptions,
+                        unavailableSkipCount: skipCount + 1,
+                    });
+                    tellFailure(shown, true);
+                    return;
+                }
+            }
             if (nextSong && skipCount < MAX_UNAVAILABLE_AUTO_SKIP_COUNT) {
                 showTimedSkipPrompt(said, () => {
                     if (!isLatestPlaybackRequest()) return;
@@ -968,7 +998,7 @@ export function usePlaybackQueueController({
                 tellFailure(shown, false);
                 return;
             }
-            presentOnlineFailure(lookupFailure && isPassingFailure(lookupFailure) ? lookupFailure : shown);
+            void presentOnlineFailure(lookupFailure && isPassingFailure(lookupFailure) ? lookupFailure : shown);
         };
 
         if (!isLocal && !isNavidrome && isSongUnavailable(song)) {
@@ -978,7 +1008,7 @@ export function usePlaybackQueueController({
 
         if (isExternal && !omni.canPlaySong(song)) {
             // Reject a known unstreamable row before replacing/pausing the external song that still sounds.
-            presentOnlineFailure(onlineFailureOf({ operation: 'audio', providerId }, { detail: { case: 'no-audio' } }));
+            void presentOnlineFailure(onlineFailureOf({ operation: 'audio', providerId }, { detail: { case: 'no-audio' } }));
             return;
         }
 
@@ -1102,7 +1132,7 @@ export function usePlaybackQueueController({
             if (preloadedOnlineAudioResult?.kind === 'unavailable') {
                 const shown = preloadedOnlineAudioResult.failure;
                 if (shown.case === 'taken-down') await presentTakenDown(shown);
-                else presentOnlineFailure(shown);
+                else await presentOnlineFailure(shown);
                 return;
             }
         } catch (error) {
@@ -1111,7 +1141,7 @@ export function usePlaybackQueueController({
                 return;
             }
             console.error('[App] Failed to fetch song URL:', error);
-            presentOnlineFailure(onlineFailureOf({ operation: 'audio', providerId }, { error }));
+            await presentOnlineFailure(onlineFailureOf({ operation: 'audio', providerId }, { error }));
             return;
         }
 
