@@ -869,7 +869,16 @@ export function usePlaybackQueueController({
                 setPlayerState(PlayerState.IDLE);
                 setStatusMsg(withSignInAction(shown, said, t));
             };
-            if (stopsPlayback(shown, readAutoSkipUnplayable())) {
+            /*
+             * 后台一律放行 VIP / 不可播，理由同下面 mid-playback 那段：
+             * 界面不可见时没有「让用户点一下」的余地，停下来只会让播放无声消失。
+             *
+             * 这条是**开局**播放失败的路径（选了一首放不了的歌开播）。以前这里只有
+             * `readAutoSkipUnplayable()`，默认关闭，于是后台开局撞上 VIP 就停在那儿，
+             * 永远走不到下面第 885 行那条「当场往后探」的分支。
+             */
+            const backgroundAtStart = isPlaybackInterfaceHidden();
+            if (stopsPlayback(shown, readAutoSkipUnplayable() || backgroundAtStart)) {
                 stopHere();
                 tellFailure(shown, false);
                 return;

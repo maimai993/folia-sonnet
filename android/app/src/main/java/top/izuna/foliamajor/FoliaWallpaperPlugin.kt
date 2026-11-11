@@ -539,6 +539,11 @@ class FoliaWallpaperPlugin : Plugin() {
      *
      * 和 downloadVideo 同一个道理：不让 WebView 碰字节，原生下完直接解码压成 JPEG 落盘，
      * 之后壁纸层读的还是那个文件。
+     *
+     * ⚠️ 图片这一路没有像视频那样做「下一次、两边装」：
+     * 壁纸层要的是**压过的高质量 JPEG**（铺满一屏，体积敏感），而 App 内要的是
+     * 原始图片拿去当莫奈来源 —— 两者产物不同，硬凑一份反而会掉画质。
+     * 视频是字节完全一致的同一个文件，才值得共用（见 adoptDownloadedVideo）。
      */
     @PluginMethod
     fun downloadImage(call: PluginCall) {
