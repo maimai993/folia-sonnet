@@ -235,6 +235,19 @@ export const createAndroidModsBridge = () => {
             const response = unwrap<{ mods?: ModRuntimeInfo[] }>(await FoliaMods.reloadMods());
             return { mods: Array.isArray(response?.mods) ? response.mods : [] };
         }, { mods: [] }),
+        /**
+         * 模组系统总开关。宿主会据此重算「哪些模组该跑」，关掉时把运行中的全部卸载
+         * （桌面端在 electron/main.cjs 存设置时做同一件事）。
+         */
+        setModSystemEnabled: (enabled: boolean) => guarded<{ ok: boolean; mods: ModRuntimeInfo[] }>(async () => {
+            const response = unwrap<{ ok?: boolean; list?: { mods?: ModRuntimeInfo[] }; error?: string }>(
+                await FoliaMods.call({ op: 'set-system-enabled', args: { enabled } }),
+            );
+            return {
+                ok: response?.ok !== false,
+                mods: Array.isArray(response?.list?.mods) ? response.list.mods : [],
+            };
+        }, { ok: false, mods: [] }),
         setModEnabled: (modId: string, enabled: boolean) => guarded<ModSetEnabledResult>(async () => {
             /*
              * 宿主的应答是 { ok, list }，list 才是整份清单（与 listMods 同形）。

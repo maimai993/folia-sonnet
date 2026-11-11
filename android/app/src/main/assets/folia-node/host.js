@@ -146,6 +146,12 @@ const settings = readSettings();
 if (!settings.mods || typeof settings.mods !== 'object') {
     settings.mods = {};
 }
+// 模组系统总开关。桌面端由主进程持有（settings 里的 MOD_SYSTEM_ENABLED），
+// 这里跟着存一份，好让宿主自己知道「该不该跑模组」——UI 关掉总开关时下面那个
+// isEnabled 会连带把每个模组都判成未启用，loadAll() 于是真的把运行时卸掉。
+if (typeof settings.systemEnabled !== 'boolean') {
+    settings.systemEnabled = true;
+}
 
 const writeSettings = () => {
     try {
@@ -167,6 +173,9 @@ const writeSettings = () => {
 const BUILTIN_MOD_IDS = new Set(['mod-market', 'vinyl-disc', 'visualizer-jump', 'listening-archive']);
 
 const isEnabled = (modId) => {
+    // 总开关关着的时候，单个模组的开关是「关是关，开也是关」—— 桌面端同理：
+    // 总开关决定「要不要加载模组系统」，单个开关只在系统开着时才有意义。
+    if (settings.systemEnabled !== true) return false;
     const record = settings.mods[modId];
     if (record) return record.enabled === true;
     return BUILTIN_MOD_IDS.has(modId);
@@ -792,6 +801,19 @@ const requireRuntime = (modId) => {
 
 const operations = {
     list: () => buildList(),
+
+    /**
+     * 模组系统总开关。关掉要**真的把已激活的模组卸掉**（走 loadAll → runtime.unload），
+     * 不能只把 UI 藏起来 —— 用户看到的是「关掉了模组还在跑」。
+     * 桌面端在 electron/main.cjs 存设置时做同一件事。
+     */
+    'set-system-enabled': ({ enabled }) => {
+        settings.systemEnabled = enabled === true;
+        writeSettings();
+        const list = loadAll();
+        send('event', { type: 'state-changed', list });
+        return { ok: true, list };
+    },
 
     reload: () => loadAll(),
 
