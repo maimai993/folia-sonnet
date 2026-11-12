@@ -28,8 +28,17 @@
 }
 
 :root[data-bottom-layout='compact'] {
-    /* 紧凑胶囊右边到窗口右边：胶囊居中，两侧至少 12，最宽 520 再加模组的加宽量。 */
-    --dock-capsule-right: max(12px, calc((100vw - 520px - var(--folium-player-bar-extra, 0px)) / 2));
+    /*
+     * 紧凑胶囊右边到窗口右边：胶囊居中，两侧至少 12，最宽 520 再加模组的加宽量。
+     *
+     * 这个算法必须和 FloatingPlayerControls 里胶囊实际用的那一串一致：
+     * `max-w-[min(calc(544px + extra), 100vw)] px-3`。两者差 24 的时候，屏幕比 544 窄
+     * （竖着的手机基本都是）还看不出来 —— 两侧都被压到 12 的下限；可屏幕一宽到 544 以上，
+     * 胶囊真的长到 544，挂件仍按 520 算，就会被推到胶囊右内边外面去。
+     * 所以这里也用 544，并同样带上 px-3 的 12 内边距。
+     */
+    --dock-capsule-width: min(calc(544px + var(--folium-player-bar-extra, 0px)), 100vw);
+    --dock-capsule-right: max(12px, calc((100vw - var(--dock-capsule-width)) / 2));
 }
 
 .dock-companion {

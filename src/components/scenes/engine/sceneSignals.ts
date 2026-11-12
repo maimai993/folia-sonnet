@@ -128,13 +128,13 @@ const DRAG_START_PX = 5;
 /** How far a drag turns the head, radians per CSS pixel: across half a wide window is about half a turn. */
 const LOOK_PER_PX = (0.18 * Math.PI) / 180;
 /**
- * 陀螺仪读数进场景前放大多少倍。
+ * 陀螺仪读数进场景的基准倍数。
  *
  * 背景那边（gyroTilt.ts）要的是「镜头轻轻偏一点」，上限只有 ±9°/±5°；场景里歪手机是想
- * 「看旁边」，这点角度看不出来。放大到 6 倍，歪到读数上限附近才是一眼能看出的转头，
- * 同时保留陀螺仪自己的死区与低通——抖还是被压住的。
+ * 「看旁边」，这点角度看不出来，所以基准放大 6 倍，再乘用户自己的灵敏度
+ * （设置里的「陀螺仪灵敏度」，默认 0.7）。陀螺仪自己的死区与低通照旧，抖还是被压住的。
  */
-const SCENE_GYRO_GAIN = 6;
+const SCENE_GYRO_BASE_GAIN = 6;
 
 /**
  * Drag to look, for every scene alike: a press on the scene that moves turns the head, as a game's mouse
@@ -165,11 +165,13 @@ export const trackLook = (root: HTMLElement) => {
     const startGyro = () => {
         if (unsubscribeGyro || !gyroTiltSupported()) return;
         // 背景那边只要「轻轻偏一点」（±9°/±5°），转镜头要看得见，所以放大再交给场景。
-        // 倍数只作用在场景这一侧，背景的设置一点没动。
+        // 倍数只作用在场景这一侧，背景的设置一点没动。用户的灵敏度每帧读一次：
+        // 拖滑块时立刻生效，不用把场景重挂一遍。
         unsubscribeGyro = subscribeGyroTilt((offsets) => {
+            const gain = SCENE_GYRO_BASE_GAIN * readGyroTiltGain();
             gyro = {
-                azimuth: offsets.azimuth * SCENE_GYRO_GAIN,
-                elevation: offsets.elevation * SCENE_GYRO_GAIN,
+                azimuth: offsets.azimuth * gain,
+                elevation: offsets.elevation * gain,
             };
         });
     };

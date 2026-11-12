@@ -13,6 +13,31 @@ import { create } from 'zustand';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
 
 export const GYRO_TILT_STORAGE_KEY = 'gyro_tilt_enabled';
+/** 灵敏度（场景转镜头的倍数）落盘的键。 */
+export const GYRO_TILT_GAIN_STORAGE_KEY = 'gyro_tilt_gain';
+
+/**
+ * 灵敏度的默认值。
+ *
+ * 0.7 是用户定的默认：场景里歪手机能看出转头，但不会「手腕一动画面就飞过去」。
+ * 背景那边（gyroTilt.ts）自己的倍率是固定的，这里只管场景这一侧再乘多少。
+ */
+export const GYRO_TILT_GAIN_DEFAULT = 0.7;
+/** 滑块两端：0.2 几乎不动，2.5 一动就到头。 */
+export const GYRO_TILT_GAIN_MIN = 0.2;
+export const GYRO_TILT_GAIN_MAX = 2.5;
+
+const readStoredGain = (): number => {
+    try {
+        const raw = localStorage.getItem(GYRO_TILT_GAIN_STORAGE_KEY);
+        if (raw === null) return GYRO_TILT_GAIN_DEFAULT;
+        const value = Number(raw);
+        if (!Number.isFinite(value)) return GYRO_TILT_GAIN_DEFAULT;
+        return Math.min(GYRO_TILT_GAIN_MAX, Math.max(GYRO_TILT_GAIN_MIN, value));
+    } catch {
+        return GYRO_TILT_GAIN_DEFAULT;
+    }
+};
 
 /** 这台设备有没有陀螺仪读数可用（桌面浏览器、部分模拟器没有）。 */
 export const gyroTiltSupported = () => (
@@ -23,6 +48,10 @@ interface GyroSettingsState {
     gyroTiltEnabled: boolean;
     /** 开关一次：落盘并改状态。 */
     handleToggleGyroTilt: (enable: boolean) => void;
+    /** 场景转镜头的灵敏度倍数。 */
+    gyroTiltGain: number;
+    /** 改灵敏度：落盘并改状态。 */
+    handleSetGyroTiltGain: (gain: number) => void;
 }
 
 export const useGyroSettingsStore = create<GyroSettingsState>()((set) => ({
@@ -31,10 +60,22 @@ export const useGyroSettingsStore = create<GyroSettingsState>()((set) => ({
         setStoredBoolean(GYRO_TILT_STORAGE_KEY, enable);
         set({ gyroTiltEnabled: enable });
     },
+    gyroTiltGain: readStoredGain(),
+    handleSetGyroTiltGain: (gain) => {
+        const clamped = Math.min(GYRO_TILT_GAIN_MAX, Math.max(GYRO_TILT_GAIN_MIN, gain));
+        try {
+            localStorage.setItem(GYRO_TILT_GAIN_STORAGE_KEY, String(clamped));
+        } catch {
+            // 存不下就只改这一次的状态，不影响用。
+        }
+        set({ gyroTiltGain: clamped });
+    },
 }));
 
 /** 给非 React 的渲染层读当前值（背景每帧要判断要不要收读数）。 */
 export const readGyroTiltEnabled = () => useGyroSettingsStore.getState().gyroTiltEnabled;
+/** 场景每帧读一次灵敏度：拖滑块时立刻生效，不用重挂。 */
+export const readGyroTiltGain = () => useGyroSettingsStore.getState().gyroTiltGain;
 
 /**
  * iOS 13 起要在用户手势里问一次权限。返回能不能用；不是 iOS（不需要问）时直接算可用。
