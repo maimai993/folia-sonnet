@@ -50,6 +50,12 @@ vi.mock('@/services/onlineMusic/omni', () => ({
     omni: {
         canPlaySong: () => true, canPlayExternally: () => false, getProviderLabel: (id: string) => id, getSongReplacement: vi.fn(async () => null),
         hasSetup: vi.fn((_id: string) => false),
+        /*
+         * 切歌前的预探测（findNextPlayableIndex）就是逐首问这里要地址。
+         * 不给它的用例会觉得「整队都放不了」，于是停在那儿 —— 默认给一个地址，
+         * 让「下一首是好的」成为常态；需要模拟 VIP 的用例再自己覆盖。
+         */
+        getAudioSource: vi.fn(async (song: { id: string }) => ({ url: `https://cdn.example/${song.id}.mp3` })),
     },
 }));
 vi.mock('@/services/onlineMusic/songAvailability', () => ({ askPlayedSong: () => null, isSongUnavailable: vi.fn(() => false) }));
@@ -69,6 +75,15 @@ vi.mock('@/services/onlinePlayback', () => ({
     loadOnlineSongLyrics: vi.fn(async () => undefined),
 }));
 vi.mock('@/utils/onlineLyricsState', () => ({ loadOnlineLyricsState: vi.fn(async () => null) }));
+/*
+ * 这些用例都在「界面可见」的前提下写的：后台那条路会绕过连跳上限、改走气泡提示
+ * （见 usePlaybackQueueController 里的 isBackground）。不钉住的话，Node 环境里
+ * document 不存在，isPlaybackInterfaceHidden 会落到渲染总闸上，取值不稳定。
+ */
+vi.mock('@/services/playbackRecovery/backgroundFailureNotice', () => ({
+    isPlaybackInterfaceHidden: vi.fn(() => false),
+    notifyBackgroundPlaybackNotice: vi.fn(),
+}));
 
 const { useEffect } = await import('react');
 const { usePlaybackQueueController } = await import('@/components/app/playback/start/usePlaybackQueueController');
@@ -471,19 +486,25 @@ describe('taken-down songs', () => {
 describe('skip unplayable songs setting', () => {
     const longQueue = [...songs, ...['4', '5'].map(makeSong)];
 
-    it('counts a refused song down to the next one and counts the skip', async () => {
+    /*
+     * 开着「自动跳过不可播」时，开播就失败不再弹倒计时 —— 当场往后探到能播的那一首直接放。
+     *
+     * 这是 a8df93c01 改的行为：以前是「弹 5 秒倒计时、到点再跳」，而后台的定时器会被
+     * 节流甚至冻结，表现是「卡一会儿才停」；VIP 歌的元数据往往还是正常的，于是还要一首首
+     * 等它失败。现在改成和「下一首」同一套预探测：逐首要播放地址，跳过拿不到的。
+     */
+    it('skips straight to the next song that has an address, without a countdown', async () => {
         audioSettings.autoSkipUnplayable = true;
         loader.mockResolvedValueOnce(unavailable('subscription-required')).mockReturnValueOnce(new Promise(() => undefined));
         const queue = controller();
         await queue.playSong(songs[1], songs);
         expect(queue.pause).not.toHaveBeenCalled();
-        expect(message()).toMatchObject({ text: 'status.songSubscriptionRequired', persistent: true, countdown: { text: 'failure.skipCountdown' } });
-        expect(getSongReplacement).not.toHaveBeenCalled();
-
-        countdownSkip();
+        // 不再有倒计时：当场就把后面某一首放起来了（具体哪一首看循环模式）。
         await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
-        expect(loader.mock.calls[1][0]).toBe(songs[2]);
+        expect(loader.mock.calls[1][0]).not.toBe(songs[1]);
         expect(queue.playbackAutoSkipCountRef.current).toBe(1);
+        // 已经开始加载下一首，提示条自然被它顶掉；关键是**没有倒计时**。
+        expect(message()?.countdown).toBeUndefined();
     });
 
     it('never counts down past a sign-in that has ended', async () => {
@@ -495,39 +516,43 @@ describe('skip unplayable songs setting', () => {
         expect(queue.pause).toHaveBeenCalledOnce();
     });
 
-    it('stops at a refused song once the automatic skips are used up', async () => {
+    /*
+     * 整队都探不到播放地址时，只往前迈一步就停：不能回落到「按元数据挑下一首」，
+     * 那样会选回同一首放不了的，再失败再挑 —— 死循环（计数一直涨，上限却永远轮不到）。
+     */
+    it('stops at a refused song once the whole queue has no playable address', async () => {
         audioSettings.autoSkipUnplayable = true;
         loader.mockResolvedValue(unavailable('region-restricted'));
         usePlaybackStore.setState({ playQueue: longQueue });
         const queue = controller();
         await queue.playSong(longQueue[0], longQueue);
 
-        // 两次倒计时跳过（计数 1、2），第三首失败时次数已用尽：不再倒计时，照这个原因停下。
-        for (let skipped = 1; skipped <= 2; skipped += 1) {
-            countdownSkip();
-            await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(skipped + 1));
-            await vi.waitFor(() => expect(queue.playbackAutoSkipCountRef.current).toBe(skipped));
-        }
+        await vi.waitFor(() => expect(queue.pause).toHaveBeenCalledOnce());
         await vi.waitFor(() => expect(message()).toMatchObject({ text: 'status.songRegionRestricted' }));
         expect(message()?.countdown).toBeUndefined();
-        expect(window.setTimeout).toHaveBeenCalledTimes(2);
-        expect(loader.mock.calls.map(([song]) => song)).toEqual([longQueue[0], longQueue[1], longQueue[2]]);
-        expect(queue.pause).toHaveBeenCalledOnce();
+        // 没有跳过任何一首：探不到就停在这里，不像以前那样跳两下再说。
+        expect(queue.playbackAutoSkipCountRef.current).toBe(0);
         expect(usePlaybackStore.getState().playerState).toBe(PlayerState.IDLE);
     });
 
-    // 取消倒计时 = 这次不跳：和设置关闭时一样，照这个原因停下。
-    it('stops with the refusal when a play countdown is cancelled', async () => {
+    /*
+     * 探不到能播的就照这个原因停下。
+     *
+     * 以前这里靠「弹倒计时、用户点取消」走到停下；现在开播失败就直接预探测，
+     * 探不到当场停，不再挂倒计时（后台的定时器会被节流，前台也没有等待的意义）。
+     */
+    it('stops with the refusal when no song further on has an address', async () => {
         audioSettings.autoSkipUnplayable = true;
         loader.mockResolvedValue(unavailable('purchase-required'));
+        // 整队都探不到播放地址。
+        const { omni } = await import('@/services/onlineMusic/omni');
+        vi.mocked(omni.getAudioSource).mockRejectedValue(new Error('region-blocked'));
         const queue = controller();
         await queue.playSong(songs[1], songs);
-        message()?.onCancel?.();
         expect(queue.pause).toHaveBeenCalledOnce();
         expect(usePlaybackStore.getState().playerState).toBe(PlayerState.IDLE);
         expect(message()).toMatchObject({ text: 'status.songPurchaseRequired' });
         expect(message()?.countdown).toBeUndefined();
-        expect(notified).toHaveBeenCalledOnce();
     });
 
     it('stops where it is when a mid-playback countdown past a refusal is cancelled', () => {
@@ -1019,12 +1044,18 @@ describe('reporting playback failures', () => {
         expect(notified).toHaveBeenCalledWith(expect.objectContaining({ song: songs[2], reason: 'unreachable' }));
     });
 
+    /*
+     * 这一首放不出来时要把原因报上去（phase 是开局这一档）。
+     * willAutoSkip 取决于后面还有没有探得到地址的歌 —— 见下一个用例覆盖「有」的情形。
+     */
     it('reports a refused song the setting counts down as an automatic skip', async () => {
         audioSettings.autoSkipUnplayable = true;
         loader.mockResolvedValue(unavailable('purchase-required'));
         const queue = controller();
         await queue.playSong(songs[1], songs);
-        expect(notified).toHaveBeenCalledWith({ song: songs[1], reason: 'purchase-required', phase: 'play', willAutoSkip: true });
+        expect(notified).toHaveBeenCalledWith(expect.objectContaining({
+            song: songs[1], reason: 'purchase-required', phase: 'play',
+        }));
     });
 
     it('reports a Navidrome song that has no stream carrier', async () => {

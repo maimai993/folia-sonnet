@@ -898,9 +898,15 @@ export function usePlaybackQueueController({
                     ? await findNextPlayableIndex(probeQueue, fromIndex, asFm())
                     : -1;
                 if (!isLatestPlaybackRequest()) return;
-                const target = playableIndex >= 0
-                    ? probeQueue[playableIndex]
-                    : getNextPlayableQueueSong(probeQueue, song, asFm());
+                /*
+                 * 只有**探到确实能播的那一首**才直接跳过去。
+                 *
+                 * 不能回落到 getNextPlayableQueueSong：它只看元数据，VIP 歌的元数据往往
+                 * 还是正常的，于是会选回同一首放不了的，再失败、再进这里 —— 死循环，
+                 * 整队都不可播时尤其明显（计数一直涨，上限检查却永远轮不到）。
+                 * 探不到就往下走，交给「次数用尽就停下」那条路。
+                 */
+                const target = playableIndex >= 0 ? probeQueue[playableIndex] : null;
                 if (target) {
                     notifyBackgroundPlaybackNotice(`${said.text} · ${t('status.autoSkippedNext')}`);
                     if (onFmLanding && asFm() && playSongCallIdRef.current === playSongCallId) {
@@ -913,6 +919,22 @@ export function usePlaybackQueueController({
                     tellFailure(shown, true);
                     return;
                 }
+                /*
+                 * 整队都探不到：直接停在这首上，别再弹倒计时。
+                 *
+                 * 后台的定时器会被节流甚至冻结（这条分支存在的理由），而且没有手可以点它；
+                 * 前台开着「自动跳过」时，用户的意思也是「交给你处理」，探不到就是探不到。
+                 * 说了原因就停，比再挂一个跳不动倒计时干净。
+                 */
+                if (shown && stopsPlayback(shown)) {
+                    stopHere();
+                    tellFailure(shown, false);
+                    return;
+                }
+                if (isPlaybackInterfaceHidden()) notifyBackgroundPlaybackNotice(said.text);
+                setPlayerState(PlayerState.IDLE);
+                tellFailure(shown, false);
+                return;
             }
             if (nextSong && skipCount < MAX_UNAVAILABLE_AUTO_SKIP_COUNT) {
                 showTimedSkipPrompt(said, () => {
