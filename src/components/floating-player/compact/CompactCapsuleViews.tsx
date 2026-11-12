@@ -199,14 +199,16 @@ type CompactExpandedViewProps = {
     slotPrimary: ReactNode;
     slotSecondary: ReactNode;
     playButton: ReactNode;
-    hasCompanion: boolean;
 };
 
 /**
- * 展开的紧凑胶囊。最下一行和收起时那一行一模一样：左边封面，右边播放键、分隔线和挂件位，离底边的距离也一样
- * （下边距 4 + 48 高的一行，中心离底 28）。展开、收起之间封面、播放键、右端按钮都不挪不变，只有中间那一块
- * 换内容：封面旁边是歌手和专辑（歌名已经在标题行），两个槽位靠在播放键左边。和收起时一样左边是封面加字、
- * 右边是控件，中间不留空。
+ * 展开的紧凑胶囊。最下一行是封面、歌手与专辑，然后两个可定制槽位、播放键，右边**不**留挂件位。
+ *
+ * 为什么展开时不留挂件位：挂件（面板按钮 / 墙工具按钮）是绝对定位浮在胶囊右端的，
+ * 它不需要胶囊里有一块空的地方。收起时那一行留 40px 是因为收起态内容少、留出来正好让挂件
+ * 站在胶囊内的右端；展开时这一行本来就有播放键和两个槽位，再留 48px（1px 分隔线 + 40px 占位
+ * 加两处 gap-2）就会把播放键和进度条右端的时间挤出胶囊 —— 窄屏上正是这样：
+ * 时间被右边的设置按钮盖掉半截，播放键右侧悬着一条没有内容的竖线。
  */
 export const CompactExpandedView: React.FC<CompactExpandedViewProps> = ({
     quickRow,
@@ -218,7 +220,6 @@ export const CompactExpandedView: React.FC<CompactExpandedViewProps> = ({
     slotPrimary,
     slotSecondary,
     playButton,
-    hasCompanion,
 }) => (
     <div className={`flex w-full flex-col gap-3 px-1 pb-1 ${quickRow ? 'pt-2' : 'pt-3.5'}`} data-compact-capsule="expanded">
         {/* compact-reveal：随裁切淡入、上浮（bottomDock.css）；快捷行单独长出来时只有它动。 */}
@@ -246,13 +247,6 @@ export const CompactExpandedView: React.FC<CompactExpandedViewProps> = ({
                 </div>
             </div>
             {playButton}
-            {hasCompanion && (
-                <>
-                    <span aria-hidden className="h-6 w-px shrink-0 bg-current opacity-15" />
-                    {/* 挂件（面板按钮 / 墙工具按钮）浮在这 40px 上，和收起时同一个位置。 */}
-                    <span aria-hidden className="h-10 w-10 shrink-0" />
-                </>
-            )}
         </div>
     </div>
 );

@@ -225,7 +225,6 @@ const CompactCapsuleContent: React.FC<CompactCapsuleContentProps> = ({
                 />
             )}
             playButton={playButton('sm')}
-            hasCompanion={hasCompanion}
         />
     );
 };
