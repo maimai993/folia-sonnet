@@ -302,23 +302,45 @@ describe('room sound', () => {
         expect(played[1]).toBe(played[0]);
     });
 
-    it('stays off and never asks when the acoustics process is not available', async () => {
+    /*
+     * 没有声学进程（安卓就是这种情况：#308）时不再是「干声」。
+     *
+     * 桌面端算真 IR 要 Steam Audio，手机上装不了；现在改成从场景几何估一组混响参数，
+     * 交给原生 DSP 的 ReverbStage 去演奏 —— 所以这里要盯的是**两件事都不能发生**：
+     *   · 不给声学进程发请求（`computeRoom` 不该被调用，它本来也答不上来）；
+     *   · 不在 Web Audio 图上加任何节点（原生的房间声音走的是另一条路，
+     *     `stage` 只在真 IR 那条路上建）。
+     * 而 `tier` 现在是 'estimated'，不再是 'off'。
+     */
+    it('estimates the room instead of asking a process that is not there', async () => {
         const { sound, api, played } = make(false);
         sound.setAcoustics(world);
         await settle();
         expect(api.computeRoom).not.toHaveBeenCalled();
+        // 估算这条路不往 Web Audio 图里放东西：没有 IR 就没有可播的。
         expect(played).toHaveLength(0);
-        expect(sound.tier).toBe('off');
+        expect(sound.tier).toBe('estimated');
     });
 
-    it('stays off with no api at all, and adds nothing to the graph', async () => {
+    it('estimates with no api at all, and adds nothing to the graph', async () => {
         const audio = createFakeAudio();
         const before = [...audio.edges];
         const sound = createRoomSound({ anchors: { viewpoints: () => seats, speakers: () => speakers }, api: null, getSlot: () => audio.slot, onSlot: () => () => {} });
         sound.setAcoustics(world);
         await settle();
-        expect(sound.tier).toBe('off');
+        expect(sound.tier).toBe('estimated');
+        // 图上一个节点都没多：房间声音这次是交给原生的，不走 Web Audio。
         expect(audio.edges).toEqual(before);
+        sound.dispose();
+    });
+
+    /* 场景连几何都没有时仍然放干声：估不出房间，也就不该编一个出来。 */
+    it('stays dry when the scene hands over no geometry to measure', async () => {
+        const audio = createFakeAudio();
+        const sound = createRoomSound({ anchors: { viewpoints: () => seats, speakers: () => speakers }, api: null, getSlot: () => audio.slot, onSlot: () => () => {} });
+        sound.setAcoustics({ meshes: [] });
+        await settle();
+        expect(sound.tier).toBe('off');
         sound.dispose();
     });
 });

@@ -1,8 +1,21 @@
 import React from 'react';
 import type { VisualizerSettingsPanelProps } from '../definition';
 import BilibiliAuthCard from './BilibiliAuthCard';
+import { Button } from '../../ui/Button';
+import { Slider } from '../../ui/Slider';
 import { useBilibiliAuthStore } from '../../../stores/useBilibiliAuthStore';
 import { useBilibiliMvStore } from '../../../stores/useBilibiliMvStore';
+
+/** 偏移的调节范围，秒。片头再长也长不过十几秒，±15 够用。 */
+const OFFSET_RANGE_SEC = 15;
+
+/** 秒 → 滑杆的 0..1。 */
+const offsetToUnit = (seconds: number): number => (
+    Math.min(1, Math.max(0, (seconds + OFFSET_RANGE_SEC) / (OFFSET_RANGE_SEC * 2)))
+);
+
+/** 滑杆的 0..1 → 秒。 */
+const unitToOffset = (unit: number): number => unit * OFFSET_RANGE_SEC * 2 - OFFSET_RANGE_SEC;
 
 // src/components/visualizer/bilibili/BilibiliMvSettingsPanel.tsx
 // 「B 站 MV」的设置面板：登录卡片 + 音画偏移 + 重新匹配。
@@ -66,15 +79,20 @@ const BilibiliMvSettingsPanel: React.FC<BilibiliMvSettingsPanelProps> = ({ t }) 
                             {offset >= 0 ? '+' : ''}{offset.toFixed(2)}s
                         </span>
                     </div>
-                    <input
-                        type="range"
-                        min={-15}
-                        max={15}
-                        step={0.05}
-                        value={offset}
+                    {/*
+                     * 用 ui/Slider 而不是浏览器原生滑杆控件：原生那种在安卓上长得
+                     * 和主题完全挂不上钩，而且是「按下即跳」的 —— 面板要能上下滚，手指蹭到
+                     * 滑杆就会把偏移改掉。ui/Slider 先判方向再决定跟不跟手（见它的文件头）。
+                     *
+                     * 它只认 0..1，所以这里把 -15s..+15s 换算过去。
+                     */}
+                    <Slider
+                        value={offsetToUnit(offset)}
+                        label={t('options.bilibiliMvOffset')}
+                        valueText={`${offset >= 0 ? '+' : ''}${offset.toFixed(2)}s`}
                         disabled={!currentKey}
-                        onChange={event => applyOffset(Number(event.target.value))}
-                        className="w-full"
+                        onPreview={unit => applyOffset(unitToOffset(unit))}
+                        onCommit={() => {}}
                     />
                     <p className="text-xs text-[var(--text-secondary)]">
                         {t('options.bilibiliMvOffsetHint')}
@@ -87,22 +105,22 @@ const BilibiliMvSettingsPanel: React.FC<BilibiliMvSettingsPanelProps> = ({ t }) 
                         </p>
                     ) : null}
                     <div className="flex gap-2">
-                        <button
-                            type="button"
+                        <Button
+                            variant="bare"
                             onClick={() => applyOffset(0)}
                             disabled={!currentKey}
                             className="rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-xs disabled:opacity-40"
                         >
                             {t('options.bilibiliMvOffsetReset')}
-                        </button>
-                        <button
-                            type="button"
+                        </Button>
+                        <Button
+                            variant="bare"
                             onClick={rematch}
                             disabled={!currentKey}
                             className="rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-xs disabled:opacity-40"
                         >
                             {t('options.bilibiliMvRematch')}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             ) : null}
