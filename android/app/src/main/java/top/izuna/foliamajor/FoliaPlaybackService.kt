@@ -2976,6 +2976,17 @@ class FoliaPlaybackService : android.app.Service() {
         }
 
         private fun downloadBitmap(url: String): Bitmap? {
+            /*
+             * blob: / data: 只有 WebView 自己认，原生这里没有这条协议。
+             *
+             * 切歌时 Web 层交下来的封面地址常常是页面内的 blob（封面已经抓下来、正在缓存里），
+             * 直接丢给 java.net.URL 就是一次 MalformedURLException：日志里刷一条
+             * "unknown protocol: blob"，封面照样拿不到，只是把「没图」伪装成「下载失败」。
+             * 这两种地址本来就不可能从原生这条路过，看到就安静返回，免得掩盖真正的网络错误。
+             */
+            if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
+                return null
+            }
             var stream: java.io.InputStream? = null
             try {
                 val connection =
