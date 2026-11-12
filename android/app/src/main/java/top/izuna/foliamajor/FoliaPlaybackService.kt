@@ -1844,7 +1844,10 @@ class FoliaPlaybackService : android.app.Service() {
             // 叠层那份 WebView 的封面读的是地址（GLES 那层读 base64，下载完在
             // fetchArtwork 里补），通知栏那张也走这里。
             top.izuna.foliamajor.wallpaper.WallpaperLyricsState.setCoverUrl(artworkUrl)
-            if (artworkUrl != pendingArtworkUrl) {
+            // blob: / data: 不占去重标记，也不必起一次注定失败的下载（见 fetchArtwork）。
+            if (artworkUrl != pendingArtworkUrl
+                    && !artworkUrl.startsWith("blob:", ignoreCase = true)
+                    && !artworkUrl.startsWith("data:", ignoreCase = true)) {
                 pendingArtworkUrl = artworkUrl
                 fetchArtwork(artworkUrl)
             }
@@ -2112,7 +2115,11 @@ class FoliaPlaybackService : android.app.Service() {
 
         // 封面优先走原生下载：Web 层用 fetch 抓远端封面常常被 CORS 挡掉，
         // 通知栏就只剩一个默认图标。原生侧没有同源限制，拿到再补一次通知。
+        // blob: / data: 在这里就挡掉：它们只存在于 WebView 进程里，写进 pendingArtworkUrl
+        // 会把去重标记占住，后面真正的 https 地址反而进不来（见 fetchArtwork）。
         if (artworkUrl != null && !artworkUrl.isEmpty()
+                && !artworkUrl.startsWith("blob:", ignoreCase = true)
+                && !artworkUrl.startsWith("data:", ignoreCase = true)
                 && artworkUrl != pendingArtworkUrl) {
             pendingArtworkUrl = artworkUrl
             fetchArtwork(artworkUrl)
@@ -2159,11 +2166,36 @@ class FoliaPlaybackService : android.app.Service() {
     private var pendingArtworkUrl: String? = null
 
     private fun fetchArtwork(url: String) {
+        /*
+         * blob: / data: 只有 WebView 认，原生没有这条协议。
+         *
+         * 关键不只是「下不到」，而是**别让它占住 pendingArtworkUrl**：那个字段是去重标记，
+         * 被一个本就不可能下载的地址占住之后，紧随其后的真实 https 地址会在调用点被
+         * `artworkUrl != pendingArtworkUrl` 挡掉，这首歌就再也没有封面了。
+         * 在入口直接返回，等于这条永远不进这套状态。
+         */
+        if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
+            return
+        }
         BackgroundWork.io("artwork") {
             val bitmap = downloadBitmap(url)
             // 下载期间可能已经切歌了：pendingArtworkUrl 已经换成新歌的地址，这张晚到的图要丢掉，
             // 否则会把上一首的封面贴到当前歌上。
-            if (bitmap == null || url != pendingArtworkUrl) {
+            if (url != pendingArtworkUrl) {
+                return@io
+            }
+            /*
+             * 没下到就把它从「已发起」里放掉。
+             *
+             * pendingArtworkUrl 同时是**去重标记**：同一个地址不会重复下载。可它原来只在
+             * 成功时才前进，失败就永远占着那个地址 —— 长时间后台时网络断一下、或者碰上
+             * 一个当时取不到的图床，这首歌的封面就再也补不上了（回前台也不会重试，因为
+             * 地址没变、被当成「已经下过了」）。表现正是「后台久了封面没了，退回来也没有」。
+             * 放掉之后，Web 下一次 update 推同一个地址就能重新试一次。
+             */
+            if (bitmap == null) {
+                // 只放掉自己那一个：期间可能已经切歌并换了新地址，别把新歌的标记抹掉。
+                if (pendingArtworkUrl == url) pendingArtworkUrl = null
                 return@io
             }
             cachedArtwork = bitmap
@@ -2283,7 +2315,13 @@ class FoliaPlaybackService : android.app.Service() {
                     cachedLiked = false; cachedCanLike = false
                     cachedArtwork = null; pendingArtworkUrl = null
                     mirroredIndex = playQueue.all().indexOf(entry); playQueue.seekTo(mirroredIndex)
-                    if (entry.coverUrl.isNotEmpty()) { pendingArtworkUrl = entry.coverUrl; fetchArtwork(entry.coverUrl) }
+                    // 镜像里的封面地址同样可能还是页面内的 blob（见 fetchArtwork）：
+                    // 别让它占住去重标记，也别为它起一次注定失败的下载。
+                    if (entry.coverUrl.isNotEmpty()
+                            && !entry.coverUrl.startsWith("blob:", ignoreCase = true)
+                            && !entry.coverUrl.startsWith("data:", ignoreCase = true)) {
+                        pendingArtworkUrl = entry.coverUrl; fetchArtwork(entry.coverUrl)
+                    }
                     nativeLyrics.clear(entry.songKey)
                 }
             }
