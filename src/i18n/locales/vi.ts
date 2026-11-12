@@ -4240,6 +4240,8 @@ export default {
     "gyroTiltSettings": "Nghiêng theo con quay",
     "gyroTilt": "Camera nghiêng theo điện thoại",
     "gyroTiltHint": "Nghiêng điện thoại sang trái hoặc phải và camera lệch theo một chút, như quay bằng tay; giữ yên thì khung hình đứng yên. Một công tắc dùng chung cho mọi nền 3D.",
+    "gyroTiltGain": "Độ nhạy nghiêng",
+    "gyroTiltGainHint": "Cùng một độ nghiêng thì camera xoay bao nhiêu. Nhỏ thì êm hơn, lớn thì một cái vẩy tay là tới biên. Cảnh cũng xoay góc nhìn theo mức này.",
     "gyroTiltUnsupported": "Thiết bị này không cung cấp dữ liệu chuyển động nên không bật được.",
     "machiLevelHigh": "Cao",
     "machiGlow": "Quầng sáng và vệt sáng",

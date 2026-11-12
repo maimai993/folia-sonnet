@@ -4206,6 +4206,8 @@ export default {
     "gyroTiltSettings": "Kemiringan giroskop",
     "gyroTilt": "Kamera mengikuti ponsel",
     "gyroTiltHint": "Miringkan ponsel ke kiri atau kanan dan kamera ikut bergeser sedikit, seperti rekaman tangan; diamkan dan bidikan tetap. Satu sakelar untuk semua latar 3D.",
+    "gyroTiltGain": "Sensitivitas kemiringan",
+    "gyroTiltGainHint": "Sejauh mana kamera berputar untuk kemiringan yang sama. Kecil lebih tenang, besar cukup sekali goyang tangan. Adegan juga memutar sudut pandang sesuai ini.",
     "gyroTiltUnsupported": "Perangkat ini tidak memberi data gerak, jadi tidak bisa dinyalakan.",
     "machiLevelHigh": "Tinggi",
     "machiGlow": "Pendar dan kilau lensa",

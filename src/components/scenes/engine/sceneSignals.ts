@@ -1,6 +1,6 @@
 import { getSongAlbumLabel, getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { beatImpact, handoffProgress } from '../../../stores/motionSignals';
-import { readGyroTiltEnabled, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
+import { readGyroTiltEnabled, readGyroTiltGain, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
 import { selectCoverUrl, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { subscribeGyroTilt, gyroTiltSupported, type GyroTiltOffsets } from '../../visualizer/backgrounds/gyroTilt';
 import type { DualTheme } from '../../../types';

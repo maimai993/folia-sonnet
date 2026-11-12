@@ -1,7 +1,9 @@
 import React from 'react';
 import { Group, type SettingsGroupDef } from '../../modal/settings/kit';
-import { ToggleRow } from '../panelRows';
+import { SliderRow, ToggleRow, times } from '../panelRows';
 import {
+    GYRO_TILT_GAIN_MAX,
+    GYRO_TILT_GAIN_MIN,
     gyroTiltSupported,
     requestGyroTiltPermission,
     useGyroSettingsStore,
@@ -13,6 +15,8 @@ import {
 // 这个开关原先住在町景里，可它要做的事情跟背景长什么样无关：手机往哪边歪，
 // 镜头就跟着轻轻偏一点。粒子 / 星河 / 安魂 / 音域回响用的是同一套轨道相机
 // （backgrounds/orbitStage.ts），所以开关也该是全局的。
+//
+// 场景（scenes/）那边转镜头读的也是这一份灵敏度，所以滑块放在这、放一处就够。
 
 const GYRO_GROUP: SettingsGroupDef = { id: 'bg-gyro-tilt', titleKey: 'options.gyroTiltSettings' };
 
@@ -23,6 +27,8 @@ interface GyroTiltSettingsCardProps {
 const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
     const gyroTiltEnabled = useGyroSettingsStore(state => state.gyroTiltEnabled);
     const toggle = useGyroSettingsStore(state => state.handleToggleGyroTilt);
+    const gyroTiltGain = useGyroSettingsStore(state => state.gyroTiltGain);
+    const setGain = useGyroSettingsStore(state => state.handleSetGyroTiltGain);
     const supported = gyroTiltSupported();
 
     const handleChange = async (enable: boolean) => {
@@ -46,6 +52,18 @@ const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
                 checked={gyroTiltEnabled}
                 disabled={!supported}
                 onChange={enable => { void handleChange(enable); }}
+            />
+            {/* 没开的时候调灵敏度看不出效果，所以跟着开关一起灰掉。 */}
+            <SliderRow
+                label={t('options.gyroTiltGain')}
+                value={gyroTiltGain}
+                min={GYRO_TILT_GAIN_MIN}
+                max={GYRO_TILT_GAIN_MAX}
+                step={0.1}
+                format={times}
+                disabled={!supported || !gyroTiltEnabled}
+                onChange={setGain}
+                note={t('options.gyroTiltGainHint')}
             />
         </Group>
     );

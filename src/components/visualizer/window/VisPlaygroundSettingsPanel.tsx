@@ -25,6 +25,7 @@ import {
 import BackgroundPicture from '../preview/BackgroundPicture';
 import GyroTiltSettingsCard from '../backgrounds/GyroTiltSettingsCard';
 import { hasFreeCamera } from '../backgrounds/freeCameraModes';
+import { useSceneSettingsStore } from '../../scenes/settings/useSceneSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import SmartBeatSettingsCard from '../SmartBeatSettingsCard';
 import BeatEffectsGroup from '../BeatEffectsGroup';
@@ -228,6 +229,13 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
 
     const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const resolvedBackgroundMode = backgroundConfig?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE;
+    /*
+     * 正在用场景时，陀螺仪也一样有用：场景的镜头跟着手机歪，靠的就是这张卡片里那份
+     * 开关与灵敏度（见 scenes/engine/sceneSignals 的 trackLook）。场景不在这份
+     * hasFreeCamera 清单里 —— 那是「3D 背景」的清单 —— 所以单独问一次。
+     */
+    const activeSceneId = useSceneSettingsStore(state => state.sceneId);
+    const gyroRelevant = Boolean(activeSceneId) || hasFreeCamera(resolvedBackgroundMode);
     const backgroundEntry = getVisualizerBackgroundRegistryEntry(resolvedBackgroundMode);
     const backgroundModeOptions = useMemo(() => (
         VISUALIZER_BACKGROUND_REGISTRY.map(entry => ({
@@ -339,7 +347,7 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                     {activeSection === 'global' && (
                         <>
                             <SmartBeatSettingsCard t={t} />
-                            {hasFreeCamera(resolvedBackgroundMode) && <GyroTiltSettingsCard t={t} />}
+                            {gyroRelevant && <GyroTiltSettingsCard t={t} />}
                         </>
                     )}
 

@@ -4240,6 +4240,8 @@ export default {
     "gyroTiltSettings": "Gyroscope tilt",
     "gyroTilt": "Camera follows the phone",
     "gyroTiltHint": "Tip the phone left or right and the camera leans with it, like handheld footage; hold it still and the shot stays put. One switch for every 3D background.",
+    "gyroTiltGain": "Tilt sensitivity",
+    "gyroTiltGainHint": "How far the camera turns for the same tip. Lower keeps it steady; higher reaches the edge on a flick of the wrist. Scenes turn their view by this too.",
     "gyroTiltUnsupported": "This device reports no motion data, so it cannot be turned on.",
     "machiLevelHigh": "High",
     "machiGlow": "Glow and streaks",

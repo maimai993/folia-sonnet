@@ -4338,6 +4338,8 @@ export default {
     "gyroTiltSettings": "陀螺仪适配",
     "gyroTilt": "镜头随手机倾斜",
     "gyroTiltHint": "拿起手机左右晃晃，镜头跟着轻轻偏一点，像举着摄影机在看；放下不动就是固定机位。所有 3D 背景共用这一个开关。",
+    "gyroTiltGain": "倾斜灵敏度",
+    "gyroTiltGainHint": "歪同样的角度，镜头跟着转多少。调小更稳，调大一动手腕就到位；场景里转镜头也按这个来。",
     "gyroTiltUnsupported": "这台设备不提供陀螺仪读数，开不了。",
     "machiLevelHigh": "高",
     "machiGlow": "辉光与光条",
