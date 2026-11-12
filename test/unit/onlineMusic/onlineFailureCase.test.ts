@@ -110,6 +110,37 @@ describe('the table', () => {
         const retrying = ONLINE_FAILURE_CASE_IDS.filter(id => offersRetry(audio({ case: id })));
         expect(retrying.sort()).toEqual(['local-service-stopped', 'refused', 'unknown', 'unreachable']);
     });
+
+    /*
+     * #286：后台遇到 VIP / 不可播的歌曲要自己往后跳，不能停在那儿等一个看不见的按钮。
+     *
+     * 这条语义靠两层兜住，这里各钉一遍：
+     *   1. 「这首歌在这个账号上放不了」的几种（VIP、只给试听、没地址…）都标了 `unplayable`，
+     *      把 `autoSkipUnplayable` 传成 true 就一律放行 —— 后台调用的地方就是这么传的
+     *      （`readAutoSkipUnplayable() || isPlaybackInterfaceHidden()`）；
+     *   2. 「拿不到播放地址」本身（QQ 会话失效 / 不报错但地址为空）归到 `no-audio`，它
+     *      `stops` 就是 false，前后台都直接跳过，不依赖那个开关。
+     *
+     * 所以真正会停下播放的只剩「用户自己能处理」的那几种（去登录、换区、订阅…），
+     * 后台放行它们是对的：卡在那里等按钮，屏幕上根本没人能点。
+     */
+    it('lets every song this account cannot play through once skipping is allowed', () => {
+        const unplayable = ['entitlement-required', 'preview-only', 'purchase-required', 'region-restricted', 'subscription-required'];
+        for (const id of unplayable) {
+            const shown = audio({ case: id as never });
+            expect(stopsPlayback(shown)).toBe(true);
+            // 后台那条路传 true：可见的这些都不再停下。
+            expect(stopsPlayback(shown, true)).toBe(false);
+        }
+    });
+
+    it('never stops for a song that has no playable address at all, foreground or background', () => {
+        // QQ 会话失效 / 后端不报错但给不出地址，最后都落到 no-audio。
+        const noAudio = audio(undefined, new OnlineProviderError('not-playable', 'no play link', 'qq'));
+        expect(noAudio.case).toBe('no-audio');
+        expect(stopsPlayback(noAudio)).toBe(false);
+        expect(stopsPlayback(noAudio, false)).toBe(false);
+    });
 });
 
 describe('the line for maintainers', () => {
