@@ -20,6 +20,19 @@ import {
 
 const GYRO_GROUP: SettingsGroupDef = { id: 'bg-gyro-tilt', titleKey: 'options.gyroTiltSettings' };
 
+/**
+ * 可以单独关掉陀螺仪的背景。
+ *
+ * 场景是同一个入口（'scenes'），因为场景内部共用 sceneSignals 那一套转镜头，
+ * 拆到每个场景各给一个开关反而让人找不着。
+ */
+const GYRO_MODES = [
+    { mode: 'scenes', labelKey: 'options.gyroModeScenes' },
+    { mode: 'particles', labelKey: 'options.gyroModeParticles' },
+    { mode: 'sonic', labelKey: 'options.gyroModeSonic' },
+    { mode: 'machi', labelKey: 'options.gyroModeMachi' },
+] as const;
+
 interface GyroTiltSettingsCardProps {
     t: (key: string) => string;
 }
@@ -29,6 +42,8 @@ const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
     const toggle = useGyroSettingsStore(state => state.handleToggleGyroTilt);
     const gyroTiltGain = useGyroSettingsStore(state => state.gyroTiltGain);
     const setGain = useGyroSettingsStore(state => state.handleSetGyroTiltGain);
+    const perMode = useGyroSettingsStore(state => state.gyroTiltPerMode);
+    const setForMode = useGyroSettingsStore(state => state.handleSetGyroTiltForMode);
     const supported = gyroTiltSupported();
 
     const handleChange = async (enable: boolean) => {
@@ -65,6 +80,20 @@ const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
                 onChange={setGain}
                 note={t('options.gyroTiltGainHint')}
             />
+            {/*
+             * 单独关掉某个背景。没配过就是「跟随全局」，所以 checked 取 ?? true：
+             * 全局开着的时候这些默认都是开的，用户点一下就只关这一个。
+             */}
+            {GYRO_MODES.map(({ mode, labelKey }) => (
+                <ToggleRow
+                    key={mode}
+                    label={t(labelKey)}
+                    checked={perMode[mode] ?? true}
+                    disabled={!supported || !gyroTiltEnabled}
+                    onChange={enable => setForMode(mode, enable)}
+                    note={mode === 'scenes' ? t('options.gyroTiltPerModeHint') : undefined}
+                />
+            ))}
         </Group>
     );
 };

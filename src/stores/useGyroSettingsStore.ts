@@ -6,8 +6,10 @@
 // 星河 / 安魂 / 音域回响）用的是同一套轨道相机，所以这个开关也应该是全局的一份，
 // 而不是某个背景自己的调优项。
 //
-// 读写 localStorage 的 'gyro_tilt_enabled'：默认**关**。陀螺仪读数在部分设备上
-// 抖得厉害，默认开着会让人以为背景在乱晃。
+// 读写 localStorage 的 'gyro_tilt_enabled'：默认**开**。安卓上陀螺仪装上就能用，
+// 没有理由让人先去设置里找一遍。嫌晃的人自己关。
+//
+// 每个背景还能单独关（'gyro_tilt_per_mode'）：有的背景晃着好看，有的一动就晕。
 
 import { create } from 'zustand';
 import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
@@ -15,6 +17,8 @@ import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
 export const GYRO_TILT_STORAGE_KEY = 'gyro_tilt_enabled';
 /** 灵敏度（场景转镜头的倍数）落盘的键。 */
 export const GYRO_TILT_GAIN_STORAGE_KEY = 'gyro_tilt_gain';
+/** 每个背景自己的开关，落盘成一个 JSON 对象。 */
+export const GYRO_TILT_PER_MODE_STORAGE_KEY = 'gyro_tilt_per_mode';
 
 /**
  * 灵敏度的默认值。
@@ -40,9 +44,25 @@ const readStoredGain = (): number => {
     }
 };
 
+const readStoredPerMode = (): Record<string, boolean> => {
+    try {
+        const raw = localStorage.getItem(GYRO_TILT_PER_MODE_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed: unknown = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+        const out: Record<string, boolean> = {};
+        for (const [mode, value] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof value === 'boolean') out[mode] = value;
+        }
+        return out;
+    } catch {
+        // 存坏了就当没配过：全部跟随全局，总好过整份设置读不出来。
+        return {};
+    }
+};
+
 /** 这台设备有没有陀螺仪读数可用（桌面浏览器、部分模拟器没有）。 */
-export const gyroTiltSupported = () => (
-    typeof window !== 'undefined' && typeof window.DeviceOrientationEvent !== 'undefined'
+export const gyroTiltSupported = () => (    typeof window !== 'undefined' && typeof window.DeviceOrientationEvent !== 'undefined'
 );
 
 interface GyroSettingsState {
@@ -53,10 +73,26 @@ interface GyroSettingsState {
     gyroTiltGain: number;
     /** 改灵敏度：落盘并改状态。 */
     handleSetGyroTiltGain: (gain: number) => void;
+    /**
+     * 每个背景自己的开关，键是背景 mode（'particles' / 'sonic' / 'machi' …）。
+     *
+     * 没存过就是「跟随全局」—— 用户从没单独拨过这个背景，就不该因为全局开了
+     * 而他恰好没配过这个背景而被当成关着。
+     */
+    gyroTiltPerMode: Record<string, boolean>;
+    /** 单独开关某个背景。 */
+    handleSetGyroTiltForMode: (mode: string, enable: boolean) => void;
 }
 
 export const useGyroSettingsStore = create<GyroSettingsState>()((set) => ({
-    gyroTiltEnabled: getStoredBoolean(GYRO_TILT_STORAGE_KEY, false),
+    /*
+     * 默认打开。
+     *
+     * iOS 那边真正拿读数还要在用户手势里过一道 requestPermission，没授权时
+     * gyroTilt.ts 自己会静静地什么都不做，所以这里「默认开」不会在
+     * 没授权的平台上留下一个假的「已开启」。安卓不需要这一步，装上就能用。
+     */
+    gyroTiltEnabled: getStoredBoolean(GYRO_TILT_STORAGE_KEY, true),
     handleToggleGyroTilt: (enable) => {
         setStoredBoolean(GYRO_TILT_STORAGE_KEY, enable);
         set({ gyroTiltEnabled: enable });
@@ -71,10 +107,32 @@ export const useGyroSettingsStore = create<GyroSettingsState>()((set) => ({
         }
         set({ gyroTiltGain: clamped });
     },
+    gyroTiltPerMode: readStoredPerMode(),
+    handleSetGyroTiltForMode: (mode, enable) => {
+        const next = { ...useGyroSettingsStore.getState().gyroTiltPerMode, [mode]: enable };
+        try {
+            localStorage.setItem(GYRO_TILT_PER_MODE_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+            // 存不下就只改这一次的状态，不影响用。
+        }
+        set({ gyroTiltPerMode: next });
+    },
 }));
 
 /** 给非 React 的渲染层读当前值（背景每帧要判断要不要收读数）。 */
 export const readGyroTiltEnabled = () => useGyroSettingsStore.getState().gyroTiltEnabled;
+/**
+ * 这个背景现在到底要不要吃陀螺仪。
+ *
+ * 全局关掉就是关；全局开着的时候看这个背景自己有没有被单独关过
+ * （没存过 = 跟随全局，即开）。
+ */
+export const readGyroTiltEnabledForMode = (mode: string | null | undefined) => {
+    const state = useGyroSettingsStore.getState();
+    if (!state.gyroTiltEnabled) return false;
+    if (!mode) return true;
+    return state.gyroTiltPerMode[mode] ?? true;
+};
 /** 场景每帧读一次灵敏度：拖滑块时立刻生效，不用重挂。 */
 export const readGyroTiltGain = () => useGyroSettingsStore.getState().gyroTiltGain;
 

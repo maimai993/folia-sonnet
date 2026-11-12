@@ -267,6 +267,8 @@ const SonicBackground: React.FC<SonicBackgroundProps> = ({
         let stage: OrbitStage | null = null;
         if (orbit) {
             stage = new OrbitStage(camera, {
+                // 让舞台知道自己是「音域回响」，好查这个背景单独的陀螺仪开关。
+                gyroMode: 'sonic',
                 /*
                  * 距离要和上面那个机位对得上：相机 (0,2.2,13) 到 target (0,-5.2,-7)
                  * 的实际距离约 21.9。写成 30 会让 OrbitStage 以为基准更远，

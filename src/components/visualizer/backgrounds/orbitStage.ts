@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { readGyroTiltEnabled } from '../../../stores/useGyroSettingsStore';
+import { readGyroTiltEnabledForMode } from '../../../stores/useGyroSettingsStore';
 import { GYRO_TILT_MAX_STEP, subscribeGyroTilt, type GyroTiltOffsets } from './gyroTilt';
 
 // src/components/visualizer/backgrounds/orbitStage.ts
@@ -53,6 +53,14 @@ export interface OrbitStageOptions {
     autoReturn?: boolean;
     /** 视角变了（每帧至少一次）。 */
     onChange?: () => void;
+    /**
+     * 这个舞台属于哪个背景（'particles' / 'sonic' …）。
+     *
+     * 用来查「这个背景自己有没有单独关掉陀螺仪」—— 同一个 OrbitStage 服务好几个背景，
+     * 各背景的开关互不影响，所以必须由调用方告诉它是哪一个。
+     * 不传就只看全局开关。
+     */
+    gyroMode?: string;
 }
 
 /**
@@ -287,7 +295,7 @@ export class OrbitStage {
         const controls = this.controls;
         if (!controls) return;
 
-        const enabled = readGyroTiltEnabled();
+        const enabled = readGyroTiltEnabledForMode(this.options.gyroMode);
         if (!enabled) {
             /*
              * 关掉时把目标归零，让偏移自己缓回去。

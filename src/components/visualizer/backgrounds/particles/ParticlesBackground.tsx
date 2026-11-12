@@ -383,6 +383,8 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
         if (orbit) {
             stage = new OrbitStage(camera, {
                 distance: baseDistanceRef.current,
+                // 让舞台知道自己是「封面粒子」，好查这个背景单独的陀螺仪开关。
+                gyroMode: 'particles',
                 onChange: () => {
                     /*
                      * 相机动了，可视世界高度与相机距离都得跟着重算 ——

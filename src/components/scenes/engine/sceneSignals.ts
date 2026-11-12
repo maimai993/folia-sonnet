@@ -1,6 +1,6 @@
 import { getSongAlbumLabel, getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { beatImpact, handoffProgress } from '../../../stores/motionSignals';
-import { readGyroTiltEnabled, readGyroTiltGain, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
+import { readGyroTiltEnabledForMode, readGyroTiltGain, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
 import { selectCoverUrl, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { subscribeGyroTilt, gyroTiltSupported, type GyroTiltOffsets } from '../../visualizer/backgrounds/gyroTilt';
 import type { DualTheme } from '../../../types';
@@ -181,10 +181,11 @@ export const trackLook = (root: HTMLElement) => {
         gyro = { azimuth: 0, elevation: 0 };
     };
     const syncGyroSubscription = () => {
-        if (readGyroTiltEnabled()) startGyro();
+        // 全局开关 + 「场景」这一个分组的开关，两个都开才订阅。
+        if (readGyroTiltEnabledForMode('scenes')) startGyro();
         else stopGyro();
     };
-    // 陀螺仪默认关（多数设备读数抖），开了才订阅；开关一变跟着起停。
+    // 订阅与否跟着开关走；开关一变跟着起停。
     syncGyroSubscription();
     const unsubscribeEnabled = useGyroSettingsStore.subscribe(syncGyroSubscription);
     const onDown = (event: PointerEvent) => {
