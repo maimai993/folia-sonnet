@@ -31,8 +31,11 @@ export const GYRO_TILT_RANGE = {
  *
  * 抖动的治法不在这里：读数过了低通滤波，相机跟随也压到 0.28 秒的时间常数，
  * 靠这两条压抖动。灵敏度只管「歪多少对应多少位移」，可以放开。
+ *
+ * ★ 现在从 2.5 收到 1.2：2.5 的时候斜 4° 就顶到上限，手腕稍微一动画面就甩到头，
+ * 手感像「一碰就飞」。1.2 之后斜 8° 左右到顶，正常举着手机歪一下是渐进的。
  */
-const SENSITIVITY = 2.5;
+const SENSITIVITY = 1.2;
 
 /**
  * 死区（度）：小于这个幅度的倾斜当作没动。
@@ -134,7 +137,49 @@ export const subscribeGyroTilt = (onOffsets: (offsets: GyroTiltOffsets) => void)
      * 死区因此作用在真实倾斜上（3° 就是 3°），滤波只负责压噪声。
      */
     let smoothed: GyroTiltOffsets | null = null;
-    const SMOOTHING = 0.25;
+    /** 传感器最近一次给出的目标值；rAF 循环负责把 smoothed 往它那儿推。 */
+    let target: GyroTiltOffsets | null = null;
+    /**
+     * 平滑的时间常数（秒），不是「每次走多少」。
+     *
+     * ★ 原来写的是固定系数 0.25：每来一个 deviceorientation 事件就把当前值往目标挪 25%。
+     * 那套在事件频率稳定时看着还行，可传感器的频率根本不稳定 —— 有的机器 60Hz，有的 10Hz，
+     * 系统还会把一阵子的事件攒起来一次性丢过来。同样的系数，60Hz 时 50ms 就走完，
+     * 10Hz 时一次跳一大格，成串来的时候更是原地抖好几下：手感就是「一顿一顿、很卡」。
+     *
+     * 现在按**真实经过的时间**推进（指数逼近，帧率无关）：不管设备给多少 Hz、
+     * 事件来得有多不均匀，画面在同一条时间曲线上走。
+     */
+    const FOLLOW_SECONDS = 0.06;
+    /** 单帧最多补这么多秒：后台回来或者掉帧时，别一帧走完一大截。 */
+    const MAX_STEP_SECONDS = 0.1;
+    /*
+     * 用 rAF 而不是在事件回调里直接算。
+     *
+     * 传感器事件可能一阵子来好几个、也可能半天不来一个；跟着它走，画面就跟着它抖。
+     * 交给 rAF 之后，事件只负责「更新目标值」，画面永远按屏幕自己的节奏走。
+     */
+    let frame: number | null = null;
+    let lastFrameAt = 0;
+    const tick = (now: number) => {
+        frame = requestAnimationFrame(tick);
+        if (target === null) return;
+        if (smoothed === null) {
+            smoothed = target;
+            lastFrameAt = now;
+            onOffsets(smoothed);
+            return;
+        }
+        const step = Math.min(MAX_STEP_SECONDS, lastFrameAt === 0 ? 1 / 60 : (now - lastFrameAt) / 1000);
+        lastFrameAt = now;
+        // 指数逼近：经过 FOLLOW_SECONDS 之后走过剩余距离的 (1 - 1/e)，与帧率无关。
+        const alpha = 1 - Math.exp(-step / FOLLOW_SECONDS);
+        smoothed = {
+            azimuth: smoothed.azimuth + (target.azimuth - smoothed.azimuth) * alpha,
+            elevation: smoothed.elevation + (target.elevation - smoothed.elevation) * alpha,
+        };
+        onOffsets(smoothed);
+    };
     const clamp = (value: number, limit: number) => Math.min(limit, Math.max(-limit, value));
     /**
      * 手机翻过竖直方向时 beta / gamma 会换系、读数一跳就是几十上百度。这种跳变不能当成「倾斜到极限」，
@@ -146,12 +191,14 @@ export const subscribeGyroTilt = (onOffsets: (offsets: GyroTiltOffsets) => void)
     const rebase = (reading: { beta: number; gamma: number }) => {
         origin = reading;
         smoothed = null;
+        target = null;
         onOffsets(ZERO);
     };
     const reset = () => {
         origin = null;
         last = null;
         smoothed = null;
+        target = null;
     };
     // 转屏后 beta / gamma 的含义会变，重新取基准。Android 上不一定都发 orientationchange，
     // screen.orientation 的 change 也接上（两处都注册，重复 reset 无副作用）。
@@ -175,21 +222,19 @@ export const subscribeGyroTilt = (onOffsets: (offsets: GyroTiltOffsets) => void)
         }
         // 第一步：原始读数差直接进换算（死区与灵敏度作用在真实倾斜上）。
         const mapped = gyroScreenOffsets(reading.beta - origin.beta, reading.gamma - origin.gamma, gyroScreenAngle());
-        const target: GyroTiltOffsets = {
+        // 第二步：只记下目标值，平滑交给 rAF（见 tick）：事件来得多快都不影响画面节奏。
+        target = {
             azimuth: clamp(mapped.azimuth, GYRO_TILT_RANGE.azimuth),
             elevation: clamp(mapped.elevation, GYRO_TILT_RANGE.elevation),
         };
-        // 第二步：输出偏移过低通，抹掉抖动。
-        smoothed = smoothed === null ? target : {
-            azimuth: smoothed.azimuth + (target.azimuth - smoothed.azimuth) * SMOOTHING,
-            elevation: smoothed.elevation + (target.elevation - smoothed.elevation) * SMOOTHING,
-        };
-        onOffsets(smoothed);
     };
     window.addEventListener('deviceorientation', listener);
+    frame = requestAnimationFrame(tick);
     return () => {
         window.removeEventListener('deviceorientation', listener);
         window.removeEventListener('orientationchange', reset);
         screenOrientation?.removeEventListener?.('change', reset);
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
     };
 };

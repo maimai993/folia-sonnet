@@ -19,10 +19,11 @@ export const GYRO_TILT_GAIN_STORAGE_KEY = 'gyro_tilt_gain';
 /**
  * 灵敏度的默认值。
  *
- * 0.7 是用户定的默认：场景里歪手机能看出转头，但不会「手腕一动画面就飞过去」。
+ * 0.4 是默认值：场景里歪手机看得出镜头在动，但不会「手腕轻轻一动画面就甩过去」。
+ * 原来定 0.7，实测仍然偏快，往下压到 0.4；嫌慢的人自己往上拖。
  * 背景那边（gyroTilt.ts）自己的倍率是固定的，这里只管场景这一侧再乘多少。
  */
-export const GYRO_TILT_GAIN_DEFAULT = 0.7;
+export const GYRO_TILT_GAIN_DEFAULT = 0.4;
 /** 滑块两端：0.2 几乎不动，2.5 一动就到头。 */
 export const GYRO_TILT_GAIN_MIN = 0.2;
 export const GYRO_TILT_GAIN_MAX = 2.5;
