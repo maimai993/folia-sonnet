@@ -372,6 +372,18 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
                      */
                     applyCoverDepth(loaded.image as CanvasImageSource | undefined, geometry);
                     coverImage = loaded.image as CanvasImageSource | undefined;
+            }, 3, (reason) => {
+                /*
+                 * 退避重试全部失败（#294）。
+                 *
+                 * 这里**不**再自己去找一张备用图：缺封面的兜底（按歌名去别的平台搜一张）
+                 * 已经在 getSongCoverUrl → onlineCoverFallback 那条路上做过了，这一层再搜一次
+                 * 就是重复请求。这里只用日志把「真的是 QQ 那边的地址取不到」记下来，
+                 * 顺带把 uHasCover 明确置 0 —— 空白封面比上一首的残影好。
+                 */
+                if (disposed) return;
+                uniforms.uHasCover.value = 0;
+                console.warn(`[Particles] no cover for this song (${reason}); the background renders without one`);
             });
         }
 
