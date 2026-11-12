@@ -49,6 +49,7 @@ const MODE_HINTS: Record<string, string> = {
     nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
     machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
     kinetic: '动画 PV 分镜：跳切、故障错位与装饰元素，节奏感极强',
+    bilibili: '歌曲对应的 bilibili 投稿实拍画面铺满全屏，声音仍是歌曲本身，歌词压在上面',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -72,6 +73,7 @@ const MODE_NAMES: Record<string, string> = {
     nebbia: '雾笺',
     machi: '町景',
     kinetic: '文字PV',
+    bilibili: 'B 站 MV',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -95,6 +97,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     nebbia: 'ui.visualizerNebbia',
     machi: 'ui.visualizerMachi',
     kinetic: 'ui.visualizerKinetic',
+    bilibili: 'ui.visualizerBilibili',
 };
 
 export type DirectorParamSpec =
@@ -385,6 +388,9 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
     // 内建清单里有它，`isKnownDirectorMode` 就会放行，所以这里必须有一格空的，
     // 否则「AI 选了提示词却拿不到任何参数」是唯一没有登记的模式。与 still 同形。
     prompt: { setter: null, params: {} },
+    // B 站 MV 也没有可调参数：画面是投稿本身，唯一能调的「音画偏移」需要看着画面拖，
+    // 不适合交给 AI 猜。与 still / prompt 同形。
+    bilibili: { setter: null, params: {} },
 };
 
 /* `key` is the switch, `mustBe` the value it needs (or `not` the one that

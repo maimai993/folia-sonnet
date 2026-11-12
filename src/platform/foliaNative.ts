@@ -689,3 +689,91 @@ export const disposeQishuiNative = async (): Promise<void> => {
         console.warn('[FoliaQishui] dispose failed', error);
     }
 };
+
+// ─── bilibili MV（FoliaBilibili）──────────────────────────────────────
+// api.bilibili.com 不给任意来源 CORS 头，WebView 里直连一定被拦。安卓这边由
+// FoliaBilibili 插件用 OkHttp 代发只读 GET —— 和 FoliaNative.httpRequest 是同一套思路。
+//
+// 不需要登录：实测 nav / search / playurl 在未登录时都回 code=0，只有画质上限停在
+// 480p（1080p 要大会员）。所以这里没有任何账号状态。
+
+interface FoliaBilibiliPlugin {
+    request(options: {
+        url: string;
+        headers?: Record<string, string>;
+    }): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }>;
+    /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
+    authStatus(): Promise<{ signedIn: boolean; uid: string }>;
+    /**
+     * 把扫码登录拿到的 cookie 落进原生 CookieManager。
+     *
+     * 之后所有 request 都会自动带上 —— 插件自己不发登录请求，也不持有凭据。
+     */
+    setCookies(options: { cookie: string }): Promise<{ ok: boolean }>;
+    clearCookies(): Promise<{ ok: boolean }>;
+}
+
+const FoliaBilibili = registerPlugin<FoliaBilibiliPlugin>('FoliaBilibili');
+
+/** 安卓上能不能替我们发 bilibili 请求。 */
+export const isBilibiliNativeAvailable = (): boolean => (
+    isCapacitorAndroid() && typeof FoliaBilibili?.request === 'function'
+);
+
+/**
+ * 通过原生代发一次 bilibili GET。
+ *
+ * 回 `{ ok, status, bodyText }`：`ok` 只表示 HTTP 通不通，业务码（code）由调用方解析。
+ * 这样「bilibili 说没有这条视频」和「网络断了」在 JS 那边分得开。
+ */
+export const requestBilibiliNative = async (
+    url: string,
+    headers?: Record<string, string>,
+): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }> => {
+    if (!isBilibiliNativeAvailable()) {
+        return { ok: false, status: 0, bodyText: '' };
+    }
+    try {
+        const result = await FoliaBilibili.request({ url, headers });
+        if (result && typeof result === 'object' && 'status' in result) return result;
+        return { ok: false, status: 0, bodyText: '' };
+    } catch (error) {
+        console.warn('[FoliaBilibili] request failed', error);
+        return { ok: false, status: 0, bodyText: '' };
+    }
+};
+
+/** 当前 bilibili 登录态。没有原生桥就是未登录。 */
+export const readBilibiliAuthNative = async (): Promise<{ signedIn: boolean; uid: string }> => {
+    if (!isBilibiliNativeAvailable()) return { signedIn: false, uid: '' };
+    try {
+        const result = await FoliaBilibili.authStatus();
+        if (result && typeof result === 'object') return result;
+        return { signedIn: false, uid: '' };
+    } catch (error) {
+        console.warn('[FoliaBilibili] authStatus failed', error);
+        return { signedIn: false, uid: '' };
+    }
+};
+
+/** 保存扫码登录得到的 cookie。 */
+export const saveBilibiliCookiesNative = async (cookie: string): Promise<boolean> => {
+    if (!isBilibiliNativeAvailable()) return false;
+    try {
+        const result = await FoliaBilibili.setCookies({ cookie });
+        return Boolean(result?.ok);
+    } catch (error) {
+        console.warn('[FoliaBilibili] setCookies failed', error);
+        return false;
+    }
+};
+
+/** 清掉 bilibili 登录态。 */
+export const clearBilibiliCookiesNative = async (): Promise<void> => {
+    if (!isBilibiliNativeAvailable()) return;
+    try {
+        await FoliaBilibili.clearCookies();
+    } catch (error) {
+        console.warn('[FoliaBilibili] clearCookies failed', error);
+    }
+};
