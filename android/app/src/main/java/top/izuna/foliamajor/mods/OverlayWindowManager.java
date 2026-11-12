@@ -597,6 +597,20 @@ final class OverlayWindowManager {
         for (OverlayWindow window : new ArrayList<>(windows.values())) {
             destroy(window);
         }
+        /*
+         * 窗口都没了就把歌词泵停掉。
+         *
+         * 泵自己每拍只做 `windows.isEmpty()` 就返回，但那还是 250ms 一次的主线程回调 ——
+         * 模组浮窗关掉之后它没有理由继续存在。下次开窗时 loadHtml 会重新 startLyricsPump。
+         */
+        stopLyricsPump();
+    }
+
+    /** 停掉歌词泵；`lyricsPump` 置空之后正在排队的那一拍醒来会自己退出（见 run 里的判空）。 */
+    private void stopLyricsPump() {
+        Runnable pending = lyricsPump;
+        lyricsPump = null;
+        if (pending != null) mainHandler.removeCallbacks(pending);
     }
 
     private void update(OverlayWindow window) {
@@ -750,10 +764,16 @@ final class OverlayWindowManager {
                 case MotionEvent.ACTION_CANCEL:
                     boolean wasDragging = dragging;
                     dragging = false;
-                    if (wasDragging) {
-                        // 拖完记住位置，并让页面知道「这一下不是点击」。
-                        window.alphaHint = window.alphaHint;
-                    }
+                    /*
+                     * 这里原来写着 `window.alphaHint = window.alphaHint;` —— 一句自我赋值，
+                     * 什么也没做。它的原意大概是「拖完把透明度还原」，但拖动从头到尾没有改过
+                     * `params.alpha`（只挪 x/y，见 ACTION_MOVE），所以没有可还原的东西，删掉。
+                     *
+                     * 也**不**在这里收回 hover：控制条能不能点已经由注入的样式保证
+                     * （`body .controls { pointer-events: auto !important }`，见上面 touchStyle），
+                     * 而收回 `body.hover` 会让模组自己那套「悬停时半透明」的状态跟着抖一下。
+                     * 手指抬起来之后没有「离开窗口」这个事件，保持现状比假装离开更接近触屏的事实。
+                     */
                     return wasDragging || stole;
                 default:
                     return false;
