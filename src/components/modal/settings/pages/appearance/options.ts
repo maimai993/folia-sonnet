@@ -75,6 +75,9 @@ export const WALLPAPER = {
 
 export const O = {
     lyricsAnimation: option(LYRICS, 'lyricsAnimationAdjust', 'options.lyricsAnimationAdjust'),
+    scene: option(LYRICS, 'scene', 'ui.scene'),
+    // Not a row of its own: it lives in the scene window, so a search for it lands on the group with the scene row.
+    soundTracing: option(LYRICS, 'soundTracing', 'ui.soundTracing'),
     // 歌词动态壁纸（fork 独有）：整节只有安卓画，搜索里跟着一起退场（组上的 available）。
     lyricsWallpaper: option(LYRICS_WALLPAPER, 'lyricsWallpaper', 'options.lyricsWallpaperSection'),
     daylight: option(THEME, 'daylightMode', 'options.daylightMode'),

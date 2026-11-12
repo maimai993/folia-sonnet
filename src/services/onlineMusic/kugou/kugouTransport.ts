@@ -485,6 +485,35 @@ const readUserIdFromResponseCookies = (response: any): string => {
     return '';
 };
 
+/**
+ * The one place the web session's account is written (registered for Dedicatus D604): the cookies,
+ * the token and the account id of a confirmed sign-in, the token and the id as a whole pair.
+ */
+const rememberConfirmedSignIn = (signIn: { token: string; userId: string }, cookieEntries: string[]): void => {
+    if (cookieEntries.length) writeProviderSessionValue('kugou', 'cookie', cookieEntries.join('; '));
+    writeProviderSessionValue('kugou', 'token', signIn.token);
+    writeProviderSessionValue('kugou', 'userid', signIn.userId);
+};
+
+const ACCOUNT_COOKIE_ENTRY = /^(token|userid|user_id)=/i;
+
+/**
+ * The cookies any other answer brings (registered for Dedicatus D604): it drops the account ones
+ * itself, which only a confirmed sign-in writes (#1101).
+ */
+const rememberSessionCookies = (cookieEntries: string[]): void => {
+    const kept = cookieEntries.filter(entry => !ACCOUNT_COOKIE_ENTRY.test(entry));
+    if (kept.length) writeProviderSessionValue('kugou', 'cookie', kept.join('; '));
+};
+
+/**
+ * The desktop app's hint of who is signed in (registered for Dedicatus D604): passed only the account id
+ * of a confirmed sign-in, or the one the bridge writes into the profile answer from its own session.
+ */
+const rememberSignedInAccountId = (userId: string): void => {
+    writeProviderSessionValue('kugou', 'userid', userId);
+};
+
 const persistWebSession = (operation: KugouOperation, response: any): void => {
     const signIn = confirmedSignIn(operation, response);
     /*
@@ -524,39 +553,14 @@ const persistWebSession = (operation: KugouOperation, response: any): void => {
         );
     }
     const cookies = response?.cookie || response?.data?.cookie;
-    const cookieEntries: string[] = typeof cookies === 'string' ? cookies.split(';')
-        : Array.isArray(cookies) ? cookies.map(String) : [];
-    // Account cookies of any other answer are left out, like its account fields.
-    const keptCookies = cookieEntries
+    const cookieEntries = (typeof cookies === 'string' ? cookies.split(';')
+        : Array.isArray(cookies) ? cookies.map(String) : [])
         .map(entry => entry.trim())
-        .filter(entry => entry && (signIn?.token || !/^(token|userid|user_id)=/i.test(entry)));
-    if (keptCookies.length) writeProviderSessionValue('kugou', 'cookie', keptCookies.join('; '));
-
-    // 半对不取：缺一半会把上一个账号的另一半留下。
-    // 但「有 userid 没 token」是真实存在的形态（酷狗某些版本只回 userid，token 在 cookie 里），
-    // 这时 userid 一定要落盘 —— getLoginStatus 就是靠它判断有没有登录。
-    if (signIn) {
-        if (signIn.token) writeProviderSessionValue('kugou', 'token', signIn.token);
-        if (signIn.userId) writeProviderSessionValue('kugou', 'userid', signIn.userId);
-        /*
-         * 写完立刻回读一次。
-         *
-         * 「write 调过了、库里却什么都没有」是有可能的（localStorage 不可用、
-         * 键名拼错、被其它模块清掉），只打「accepted」永远发现不了。
-         * 这里直接把落盘后的真值读回来，对不上就说明写这一层有问题。
-         */
-        const readBack = {
-            token: readProviderSessionValue('kugou', 'token'),
-            userid: readProviderSessionValue('kugou', 'userid'),
-            cookie: readProviderSessionValue('kugou', 'cookie'),
-        };
-        console.info(
-            '[KugouTransport] session persisted |'
-            + ' token=' + (readBack.token ? 'yes' : 'NO')
-            + ' userid=' + (readBack.userid || 'EMPTY')
-            + ' cookie=' + (readBack.cookie ? 'yes' : 'NO'),
-        );
-    }
+        .filter(Boolean);
+    // Half of a pair is not taken: the other half would be the previous account's. Account cookies of
+    // any other answer are left out, like its account fields.
+    if (signIn?.token) rememberConfirmedSignIn({ token: signIn.token, userId: signIn.userId }, cookieEntries);
+    else rememberSessionCookies(cookieEntries);
     const dfid = responsePayload(response)?.dfid;
     if (dfid) writeProviderSessionValue('kugou', 'dfid', String(dfid));
     // 会话变了就同步一遍原生网关：原生兜底切歌拼 /v5/url 读的是推送过来的那份
@@ -579,7 +583,7 @@ const persistElectronAccountHint = (operation: KugouOperation, response: any): v
     const userId = operation === 'user_detail'
         ? responsePayload(response)?.userid
         : confirmedSignIn(operation, response)?.userId;
-    if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
+    if (userId) rememberSignedInAccountId(String(userId));
 };
 
 export const getKugouTransportAvailability = () => {

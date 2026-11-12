@@ -161,11 +161,14 @@ describe('Monet tuning and lyric helpers', () => {
             fontScale: 1.5,
             portraitSource: 'custom',
             showDescription: true,
+            descriptionVisibility: 'auto',
             portraitOffsetX: 0,
             portraitStyle: 'square',
             showPortraitDragHanger: true,
-            // 3735963f6 把「显示肖像」也存进 tuning 了，没存的落回默认（开）。
-            showPortrait: true,
+            portraitHangerVisibility: 'auto',
+            // #1124 的镜像与自定义描述：旧存档没写就是原来的方向和主题自带的描述。
+            mirrorLayout: false,
+            customDescription: '',
         });
 
         expect(resolveStoredMonetTuning({

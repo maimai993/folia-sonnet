@@ -176,6 +176,10 @@ describe('store contract', () => {
             // It owns no sound of its own, so it must read both; neither of them imports it back,
             // so the edge cannot close a cycle.
             useAudioProfilesStore: ['useAudioConsoleStore', 'useAudioSettingsStore'],
+            // The explore feed's own memory across sessions (section order, collections taken out):
+            // this fork keeps it in src/utils (the feed store reads it), which is not a store
+            // directory, so it is not an edge here; the row records the intent all the same.
+            useExploreFeedStore: ['exploreFeedMemory'],
         };
         const INFRASTRUCTURE = new Set([
             'storagePrimitives', 'useStatusMessageStore', 'visualizerSettingsPersistence', 'motionSignals',

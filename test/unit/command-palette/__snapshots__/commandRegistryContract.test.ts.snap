@@ -199,7 +199,9 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-toggle-track-switch-buttons",
   "settings-toggle-main-window-titlebar",
   "settings-toggle-player-header-blur",
+  "settings-toggle-titlebar-side",
   "settings-toggle-fullscreen-titlebar-button",
+  "settings-toggle-native-mac-traffic-lights",
   "settings-toggle-native-mac-fullscreen-button",
   "settings-toggle-cursor-auto-hide",
   "settings-toggle-cursor-idle-hide",
@@ -303,5 +305,12 @@ exports[`command palette registry contract > keeps the registered command order 
   "ai-director-decide",
   "ai-director-decide-again",
   "ai-director-restore",
+  "settings-scene",
+  "scene-cinema",
+  "scene-exit",
+  "scene-room-sound",
+  "scene-room-headphones",
+  "scene-room-speakers",
+  "scene-reload",
 ]
 `;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { ChosenSceneName } from '../../../scenes/settings/SceneWindow';
 import { getVisualizerModeLabel } from '../../../visualizer/registry';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { openSettings } from '../../../../stores/useSettingsModalStore';
@@ -21,7 +22,8 @@ import { AiConnectionTestReply, useAiConnectionTest } from './AiConnectionTest';
 import { useSettingsPage, type AiApiKeyName } from './settingsPageContext';
 
 // src/components/modal/settings/pages/AppearancePage.tsx
-// The 外观 page: which lyric animation the player uses, light or dark, the colour theme, how a
+// The 外观 page: which lyric animation the player uses, which scene (its window holds each scene's
+// settings and sound tracing), light or dark, the colour theme, how a
 // song's own theme is made and applied, and (desktop app) the AI provider that makes those themes.
 // The lyric animation workbench and the theme colour editor are the existing overlays; their rows
 // here only open them.
@@ -52,7 +54,7 @@ type DaylightChoice = 'light' | 'dark' | 'system';
 
 const AppearancePage: React.FC = () => {
     const { t } = useTranslation();
-    const { isElectron, themeControls, onOpenVisPlayground, onOpenThemePark } = useSettingsPage();
+    const { isElectron, themeControls, onOpenVisPlayground, onOpenThemePark, onOpenSceneWindow } = useSettingsPage();
     const { isDaylight, followSystemTheme, setDaylightPreference, setFollowSystemTheme } = useThemeSettingsStore(useShallow(state => ({
         isDaylight: state.isDaylight,
         followSystemTheme: state.followSystemTheme,
@@ -71,6 +73,9 @@ const AppearancePage: React.FC = () => {
                 {nativeBlurEnabled && <Row notice={t('options.nativeBlurBackgroundNotice')} />}
                 <Row option={O.lyricsAnimation} hint={t('options.lyricsRendererDesc')} onClick={onOpenVisPlayground}>
                     <Value>{randomEnabled ? t('ui.visualizerRandom') : getVisualizerModeLabel(visualizerMode, t)}</Value>
+                </Row>
+                <Row option={O.scene} tag={t('ui.sceneBeta')} onClick={onOpenSceneWindow}>
+                    <Value><ChosenSceneName /></Value>
                 </Row>
             </Group>
 

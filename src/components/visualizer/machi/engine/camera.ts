@@ -391,6 +391,8 @@ export class MachiCamera {
     attach(element: HTMLElement) {
         if (this.controls) return;
         const controls = new OrbitControls(this.camera, element);
+        // 放在场景里（影厅的荧幕上）时，在这里拖动只转町景的镜头，不转场景的（scenes/engine/sceneSignals.ts）。
+        element.setAttribute('data-takes-drag', '');
         controls.target.copy(this.target);
         controls.enablePan = true;
         controls.screenSpacePanning = false;
@@ -557,6 +559,7 @@ export class MachiCamera {
         this.controls.removeEventListener('start', this.onStart);
         this.controls.removeEventListener('end', this.onEnd);
         this.controls.removeEventListener('change', this.onChange);
+        this.controls.domElement?.removeAttribute('data-takes-drag');
         this.controls.dispose();
         this.controls = null;
     }

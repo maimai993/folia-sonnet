@@ -129,15 +129,16 @@ const applyImageToMonetPortrait = async (
     if (!uploaded.ok) return uploaded.error ?? '图片保存失败';
 
     /*
-     * 传完要把开关拨到位，否则用户看到的就是「上传成功但画面上没变」：
-     *   · portraitSource → custom，不然画的还是封面；
-     *   · showPortrait → true，之前关过的话得重新打开。
+     * 传完要把来源拨到位，否则用户看到的就是「上传成功但画面上没变」：
+     *   portraitSource → custom，不然画的还是封面。
+     *
+     * 不再需要另设 `showPortrait`：#1124 之后「显不显示肖像」就是 `portraitSource`
+     * 的一个取值（`none` 表示不显示），`custom` 本身就意味着要把它画出来。
      */
     const store = useVisualizerSettingsStore.getState();
     store.handleSetMonetTuning({
         ...store.monetTuning,
         portraitSource: 'custom',
-        showPortrait: true,
     });
     return null;
 };

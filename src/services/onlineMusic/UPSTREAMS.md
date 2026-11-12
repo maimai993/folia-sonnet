@@ -135,3 +135,20 @@
 - **我们不改上游**：Folia 不覆盖 fnOS 网页端文件，不保留客户端标识、签名或协议实现，只适配其公开 HTTP 接口。
 - **上游变了怎么跟**：fnOS 网页端改接口或字段后，`fnmusicApiBridge.cjs` 的请求与 `fnmusicProvider.ts` 的归一化要跟着改；登录失败、接口返回变化以 `[FnMusic]` 前缀日志为准。
 - **测试**：`test/unit/fnmusic/` 覆盖归一化、登录参数构造、翻页与可播性检查；桥接层逻辑在 `test/unit/electron/` 下用替身测操作白名单与加密配置恢复。
+
+## 飞牛音乐（`feiniu`，fork 独有）
+
+- **与 `fnmusic` 的关系**：同一台飞牛（fnOS）NAS 的两种接入。`fnmusic` 走主进程桥接（仅桌面端，凭据用 `safeStorage` 加密、播放走 `folia-fnmusic://` 协议）；`feiniu` 是纯渲染进程的 HTTP 层（`feiniuTransport.ts`），地址由用户在登录表单里填，安卓端整条走原生 OkHttp 代发。
+- **上游**：飞牛音乐服务的网页端 HTTP API（`/music/api/v1/...`）。地址不带前缀，发请求时才拼上；翻页一次最多取 300 条。
+- **为什么安卓端要原生代发**：App 里页面跑在 `https://localhost` 上，而 NAS 上的服务几乎不会下发 `Access-Control-Allow-Origin`，WebView 的 fetch 会卡在同源检查上，抛出来的只是一句 `TypeError: Failed to fetch`——和「地址填错」「NAS 没开机」长得完全一样，界面上只能干巴巴报「网络错误」。所以真机上整条 HTTP 都改用原生 OkHttp 代发（没有同源策略这回事），桌面 / 网页端仍是浏览器 fetch。
+- **我们不改上游**：不覆盖 fnOS 网页端文件，只适配其公开 HTTP 接口。
+- **上游变了怎么跟**：网页端改接口或字段后，`feiniuTransport.ts` 的请求与拆包要跟着改；账号或密码错误是服务端的 code `120001`（msg 是英文，界面要换成自己的提示）。
+
+## 洛雪音源（`lxmusic`，fork 独有）
+
+- **上游**：各音乐平台的公开网页接口（`lxPublicApi`），照 LX Music 客户端的分工来——搜索 / 歌单广场 / 榜单 / 歌单与专辑曲目走公开接口，不需要账号；播放地址与歌词优先用公开接口，取不到时交给导入的 LX 音源（LX 自定义音源只干这件事：把 musicUrl / lyric / pic 续出来）。
+- **歌曲 id**：统一编成 `平台:原生id`（`wy:123` / `kg:<hash>` / `kw:456`），providerData 里再留一份，换成别的 provider 也不会丢来源。
+- **音源**：用户自己导入的 LX 音源脚本存在 `lxSourceStore`，健康度记在 `lxSourceHealth`（`web:lxmusic_source_health_v1`）。
+- **上游变了怎么跟**：某家公开接口改版后，改 `lxPublicApi` 里对应平台的那一支；播放取不到地址时先看 `[LxMusic]` 前缀日志和 `lxDiagnostics` 记的尝试记录，再判断是公开接口失效还是导入的音源坏了。
+- **我们不改上游**：不内置、不分发任何第三方音源脚本，也不替用户去爬别家的会员内容；只跑用户自己导入的那份。
+

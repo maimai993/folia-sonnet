@@ -65,6 +65,8 @@ type UseElectronPlaybackBridgeOptions = {
     getDisplayAudioElement?: () => HTMLAudioElement | null;
     effectiveLoopMode: 'off' | 'all' | 'one' | 'shuffle';
     isNowPlayingStageActive: boolean;
+    externalTrackTitle: string | null;
+    externalTrackArtist: string | null;
     mediaSessionPlayRef: RefObject<() => Promise<void>>;
     mediaSessionPauseRef: RefObject<() => void>;
     mediaSessionPrevRef: RefObject<() => void>;
@@ -111,6 +113,8 @@ export const useElectronPlaybackBridge = ({
     getDisplayAudioElement,
     effectiveLoopMode,
     isNowPlayingStageActive,
+    externalTrackTitle,
+    externalTrackArtist,
     mediaSessionPlayRef,
     mediaSessionPauseRef,
     mediaSessionPrevRef,
@@ -449,13 +453,23 @@ export const useElectronPlaybackBridge = ({
             return;
         }
 
-        void window.electron.updateTaskbarControls(
-            buildTaskbarControlsFromPlaybackSyncBridge(buildPlaybackSyncBridgeModelFromCurrentState())
-        ).catch((error) => {
-            console.warn('[Electron] Failed to update Windows taskbar controls', error);
+        const model = buildPlaybackSyncBridgeModelFromCurrentState();
+        void window.electron.updateTaskbarControls({
+            ...buildTaskbarControlsFromPlaybackSyncBridge(model),
+            title: isNowPlayingStageActive ? externalTrackTitle : model.hasTrack ? model.title : null,
+            artist: isNowPlayingStageActive ? externalTrackArtist : model.hasTrack ? model.artist : null,
+            /*
+             * 系统任务栏/缩略图工具条只有 off / all / one 三档，没有 shuffle：
+             * 随机播放时按「列表循环」画那个按钮 —— 它表达的是「还会继续放下去」，
+             * 而 off 会让系统以为这是最后一首。
+             */
+            loopMode: model.loopMode === 'shuffle' ? 'all' : model.loopMode,
+            canCycleLoop: model.hasTrack && !model.isFmMode,
+        }).catch((error) => {
+            console.warn('[Electron] Failed to update playback controls', error);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentSong, effectiveLoopMode, isFmMode, isNowPlayingStageActive, playQueue, playbackRoute, playerState]);
+    }, [currentSong, effectiveLoopMode, externalTrackTitle, externalTrackArtist, isFmMode, isNowPlayingStageActive, playQueue, playbackRoute, playerState]);
 
     // System/IME voice input pauses playback and resumes it afterwards. Resume only
     // fires when this bridge caused the pause and the track is still paused, so a

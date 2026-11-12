@@ -37,7 +37,6 @@ export const useRandomPool = () => {
         /** The saved selection names every registered style. */
         allOn: knownModes.length === VISUALIZER_REGISTRY.length,
         /**
-<<<<<<< HEAD
          * Every registered style. The 全选 button turns disabled under the press, and focus on a disabled
          * button drops to the page, which closes the panel's layer (Popover): the focus goes to the
          * grid's tab stop first, when the grid is given.

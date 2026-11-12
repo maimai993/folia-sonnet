@@ -2,12 +2,14 @@ import { applyVisualizerTuningsToSettings } from '../../../../visualizer/tuningR
 import { importFoliumParams, snapshotFoliumParams } from '../../../../../mods/params/paramStore';
 import { buildVisualSettingsConfig } from '../../../../../services/obs/visualSettingsConfig';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../../../services/themePreferences';
+import { useGlassSurfaceSettingsStore } from '../../../../../stores/useGlassSurfaceSettingsStore';
 import { useLatticeSettingsStore } from '../../../../../stores/useLatticeSettingsStore';
 import { useLibraryWallLookStore } from '../../../../../stores/useLibraryWallLookStore';
 import { usePlayerChromeSettingsStore } from '../../../../../stores/usePlayerChromeSettingsStore';
 import { isScratchpadHandleStyle, useScratchpadSettingsStore } from '../../../../../stores/useScratchpadSettingsStore';
 import { useStageSettingsStore } from '../../../../../stores/useStageSettingsStore';
 import { useThemeSettingsStore } from '../../../../../stores/useThemeSettingsStore';
+import { normalizeLyricRenderQuality } from '../../../../../utils/lyricRenderQuality';
 import { useTypographySettingsStore } from '../../../../../stores/useTypographySettingsStore';
 import { useVisualizerAssetStore } from '../../../../../stores/useVisualizerAssetStore';
 import { useVisualizerSettingsStore } from '../../../../../stores/useVisualizerSettingsStore';
@@ -146,6 +148,32 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     }
     if (has('visualizerOpacity')) {
         storeVisualizer.handleSetVisualizerOpacity(config.visualizerOpacity);
+    }
+    if (has('lyricRenderQuality')) {
+        storeVisualizer.handleSetLyricRenderQuality(normalizeLyricRenderQuality((config as { lyricRenderQuality?: unknown }).lyricRenderQuality));
+    }
+    /*
+     * 液态玻璃（fork 独有）：配置码里是一个整对象，落库按「未给的字段保持现值」整组写入。
+     * 总开关和参数分开处理：开关不是 LiquidGlassParams 的一部分，走自己的 setter。
+     */
+    if (has('liquidGlass')) {
+        const glass = (config as { liquidGlass?: Record<string, unknown> }).liquidGlass;
+        if (glass && typeof glass === 'object') {
+            const storeGlass = useGlassSurfaceSettingsStore.getState();
+            if (typeof glass.enabled === 'boolean') {
+                storeGlass.setLiquidGlassEnabled(glass.enabled);
+            }
+            const patch: Record<string, unknown> = {};
+            for (const key of ['strength', 'blur', 'sat', 'bend'] as const) {
+                if (typeof glass[key] === 'number') patch[key] = glass[key];
+            }
+            for (const key of ['light', 'jelly'] as const) {
+                if (typeof glass[key] === 'boolean') patch[key] = glass[key];
+            }
+            if (Object.keys(patch).length > 0) {
+                storeGlass.handleSetLiquidGlassParams(patch);
+            }
+        }
     }
     if (has('playerHeaderBlur')) {
         usePlayerChromeSettingsStore.getState().handleTogglePlayerHeaderBlur(Boolean(config.playerHeaderBlur));

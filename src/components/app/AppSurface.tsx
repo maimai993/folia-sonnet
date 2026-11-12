@@ -39,7 +39,7 @@ import ReleaseNotesDialog from '../modal/ReleaseNotesDialog';
 import { UserGuideModal } from '../modal/UserGuideModal';
 import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
-import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import SceneHost from '../scenes/engine/SceneHost';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
@@ -93,7 +93,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
         scratchpadPlayback, scratchpadQueue,
         stageActiveEntryKind, stageSource, startupExperience, t, theme, togglePlay, transitionAnimation,
         transitionMode, transparentPlayerBackground, updatePrompt, usesCustomWindowChrome, visualizerAroundWall,
-        visualizerRendererModel, wallHandoff, wallToolsHost, wallpaperMode
+        visualizerRendererModel, songThemePair, wallHandoff, wallToolsHost, wallpaperMode
     } = model;
     const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
     // The two automix decks are identical and interchangeable. Every handler below ignores the
@@ -293,7 +293,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 // If single loop is active, native loop handles it.
                 // If not, we handle queue logic.
                 if (effectiveLoopMode !== 'one') {
-                    void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+                    void handleNextTrack({ allowStopOnMissing: true, playedToEnd: true, shouldNavigateToPlayer: false });
                 }
             }}
             onLoadedMetadata={(e) => {
@@ -355,7 +355,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                         return;
                     }
 
-                    void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+                    void handleNextTrack({ allowStopOnMissing: true, playedToEnd: true, shouldNavigateToPlayer: false });
                     return;
                 }
 
@@ -564,7 +564,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 onPointerCancel={handleSwipePointerCancel}
             >
                 <PlayerBottomBarLayoutContext.Provider value={currentView === 'player'}>
-                    {shouldMountVisualizer && <VisualizerRenderer {...visualizerRendererModel} animateStyleSwitch />}
+                    {shouldMountVisualizer && <SceneHost {...visualizerRendererModel} songThemePair={songThemePair} animateStyleSwitch />}
                 </PlayerBottomBarLayoutContext.Provider>
             </div>
 

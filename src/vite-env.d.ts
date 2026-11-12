@@ -268,6 +268,10 @@ declare global {
     canGoPrevious: boolean;
     canGoNext: boolean;
     isPlaying: boolean;
+    title?: string | null;
+    artist?: string | null;
+    loopMode?: 'off' | 'all' | 'one';
+    canCycleLoop?: boolean;
   }
 
   type ElectronTaskbarControlAction = 'previous' | 'play-pause' | 'next';
@@ -1038,6 +1042,8 @@ declare global {
       quitApp: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
       isWindowFullscreen: () => Promise<boolean>;
+      hasNativeTrafficLights: () => Promise<boolean>;
+      setTrafficLightsVisible: (visible: boolean) => Promise<boolean>;
       onWindowFullscreenChanged: (callback: (fullscreen: boolean) => void) => () => void;
       getWindowTransparentMode: () => Promise<boolean>;
       setWindowTransparentMode: (
@@ -1057,7 +1063,7 @@ declare global {
       setKeyCaptureActive?: (active: boolean) => void;
       getMainWindowClickThroughEnabled: () => Promise<boolean>;
       setMainWindowClickThroughEnabled: (enabled: boolean) => Promise<boolean>;
-      setMainWindowClickThroughUnlockHover: (active: boolean, viewportWidth?: number, coordinates?: { screenX: number; clientX: number }) => Promise<boolean>;
+      setMainWindowClickThroughUnlockHover: (active: boolean, viewportWidth?: number, coordinates?: { screenX: number; clientX: number }, side?: 'left' | 'right') => Promise<boolean>;
       getMainWindowAlwaysOnTop: () => Promise<boolean>;
       setMainWindowAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
       onMainWindowClickThroughChanged: (callback: (state: ElectronMainWindowClickThroughState) => void) => () => void;

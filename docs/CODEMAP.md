@@ -18,9 +18,9 @@
 | library | 256+ |
 | services | 256+ |
 | backend/electron | 128+ |
-| src (其他) | 128+ |
 | utils | 128+ |
 | hooks | 64+ |
+| src (其他) | 64+ |
 | 其他 | 64+ |
 | stores | 32+ |
 | types | 16+ |
@@ -35,7 +35,6 @@
 | --- | --- |
 | 1024+ | `src/types.ts` |
 | 256+ | `src/types/onlineMusic.ts` |
-| 128+ | `src/components/ui/index.ts` |
 | 128+ | `src/stores/usePlaybackStore.ts` |
 | 128+ | `src/types/ponder.ts` |
 | 128+ | `src/utils/appPlaybackGuards.ts` |
@@ -58,9 +57,9 @@
 | 32+ | `src/components/command-palette/commandRegistry.ts` |
 | 32+ | `src/components/modal/settings/kit/kitTheme.ts` |
 | 32+ | `src/components/modal/settings/kit/motion.ts` |
-| 32+ | `src/components/visualizer/definition.ts` |
 | 32+ | `src/components/ponder/surfaces/relativeRectStyle.ts` |
 | 32+ | `src/components/ponder/surfaces/surfaceDeclarations.ts` |
+| 32+ | `src/components/visualizer/backgrounds/definition.ts` |
 | 32+ | `src/components/visualizer/colorMix.ts` |
 | 32+ | `src/components/visualizer/hanabi/types.ts` |
 | 32+ | `src/components/visualizer/machi/engine/materials.ts` |
@@ -73,32 +72,26 @@
 | 32+ | `src/library/core/account/account.contract.ts` |
 | 32+ | `src/library/core/directory/directory.contract.ts` |
 | 32+ | `src/library/core/home/homeModel.contract.ts` |
+| 32+ | `src/library/suites/bravais/bravaisConstants.ts` |
 | 32+ | `src/library/suites/bravais/bravaisLayer.ts` |
 | 32+ | `src/mods/types.ts` |
-| 32+ | `src/platform/runtime.ts` |
 | 32+ | `src/services/baseThemes.ts` |
 | 32+ | `src/services/onlineMusic/failure/onlineFailureCase.ts` |
 | 32+ | `src/services/onlineMusic/providerRegistry.ts` |
 | 32+ | `src/services/onlineMusic/songMetadata.ts` |
 | 32+ | `src/stores/motionSignals.ts` |
-| 32+ | `src/stores/useAudioSettingsStore.ts` |
 | 32+ | `src/stores/useCollectionNavigationStore.ts` |
-| 32+ | `src/stores/useOnlineProviderAccountStore.ts` |
 | 32+ | `src/stores/usePlayerChromeSettingsStore.ts` |
 | 32+ | `src/stores/useSettingsModalStore.ts` |
 | 32+ | `src/stores/useThemeSettingsStore.ts` |
 | 32+ | `src/stores/useVisualizerSettingsStore.ts` |
 | 32+ | `src/types/localLibrary.ts` |
 | 32+ | `src/types/navidrome.ts` |
-| 32+ | `src/utils/appPlaybackHelpers.ts` |
 | 32+ | `src/utils/coverUrl.ts` |
 | 32+ | `src/utils/fontStacks.ts` |
-| 32+ | `src/utils/keyboardTargets.ts` |
 | 32+ | `src/utils/lyricRenderQuality.ts` |
 | 32+ | `src/utils/lyrics/graphemeTiming.ts` |
 | 32+ | `src/utils/lyrics/parserCore.ts` |
-| 32+ | `src/utils/lyrics/renderHints.ts` |
-| 32+ | `src/utils/visualizer/colorMix.ts` |
 | 32+ | `test/component/fixtures.ts` |
 
 ## 动态注册点
@@ -147,7 +140,6 @@
 - `dev/probes/nowPlayingToastTransitionBorder.probe.tsx`
 - `dev/probes/pagePonder.probe.tsx`
 - `dev/probes/pendoloSubtitleDualRow.probe.tsx`
-- `dev/probes/platformColumn.probe.tsx`
 - `dev/probes/playbackLyricsSettings.probe.tsx`
 - `dev/probes/playerBarModButtons.probe.tsx`
 - `dev/probes/playerBottomBar.probe.tsx`
@@ -156,6 +148,7 @@
 - `dev/probes/ponderHint.probe.tsx`
 - `dev/probes/ponderPageSurfaces.probe.tsx`
 - `dev/probes/remoteActions.probe.tsx`
+- `dev/probes/sceneHost.probe.tsx`
 - `dev/probes/settingsHelpActions.probe.tsx`
 - `dev/probes/settingsNavigation.probe.tsx`
 - `dev/probes/subtitleOverlayRows.probe.tsx`
@@ -259,6 +252,10 @@
 - `src/components/ponder/targets/studio/themePark.target.ts`
 - `src/components/ponder/targets/studio/visPlayground.target.ts`
 
+### `src/components/scenes/registry.ts`
+
+- `src/components/scenes/cinema/entry.ts`
+
 ### `src/components/visualizer/backgrounds/registry.tsx`
 
 - `src/components/visualizer/backgrounds/common/entry.tsx`
@@ -283,7 +280,6 @@
 - `src/components/visualizer/nebbia/entry.tsx`
 - `src/components/visualizer/partita/entry.tsx`
 - `src/components/visualizer/pendolo/entry.tsx`
-- `src/components/visualizer/prompt/entry.tsx`
 - `src/components/visualizer/sonnet/entry.tsx`
 - `src/components/visualizer/still/entry.tsx`
 - `src/components/visualizer/tempera/entry.tsx`
@@ -340,17 +336,24 @@
 
 ## 分层边界违规
 
-规则是人定的（见 `codemap.mjs` 的 `BOUNDARY_RULES`），拿真实的值导入图去比对。
+规则是人定的（见 `dev/dedicatus/rules.mjs`），拿真实的值导入图去比对；行首是 Dedicatus 的代码（`npm run dedicatus`）。
 `import type` 不算——它在运行时不存在。
 
 下面这些边的依赖方向本身就是错的：
 
-- `src/hooks/useCapacitorPlaybackBridge.ts` → `src/services/onlineMusic/feiniuTransport.ts`  —— 普通调用应经过 omni，不应直连 provider adapter/transport
+- D101 `src/stores/useVisualizerSettingsStore.ts` → `src/components/visualizer/registry.tsx`  —— store 不应依赖组件
+- D102 `src/utils/lyrics/lyricMatchSources.ts` → `src/stores/useOnlineProviderAccountStore.ts`  —— 纯变换不应依赖 UI 或状态
 
 ### 目录归属存疑
 
 这些边命中了规则，但目标模块在运行时根本不含 UI（不传递依赖 react）。
 依赖方向没问题，是文件住在了 UI 目录（`src/components/`、`src/library/` 的 suites / app）下面。修法是移动文件，不是改依赖。
 
-- `src/stores/useVisualizerSettingsStore.ts` → `src/components/visualizer/tuningRegistry.ts`
+- D190 `src/services/obs/visualSettingsConfig.ts` → `src/components/visualizer/tuningRegistry.ts`
+- D190 `src/services/ponder/pagePonderTarget.ts` → `src/components/modal/settings/navigation/settingsAnchorModel.ts`
+- D190 `src/services/sync/settingsSnapshot.ts` → `src/components/visualizer/tuningRegistry.ts`
+- D190 `src/stores/usePlaybackStore.ts` → `src/components/app/playback/createCoverUrlResolver.ts`
+- D190 `src/stores/useSettingsModalStore.ts` → `src/components/command-palette/pinnedCommandPreferences.ts`
+- D190 `src/stores/useVisualizerSettingsStore.ts` → `src/components/visualizer/tuningRegistry.ts`
+- D190 `src/utils/themeColorMath.ts` → `src/components/visualizer/colorMix.ts`
 
