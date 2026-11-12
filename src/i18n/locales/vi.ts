@@ -1254,6 +1254,7 @@ export default {
     "sceneQuality_high": "Cao",
     "soundTracing": "Dò tia âm thanh",
     "soundTracingUnsupported": "Cảnh này không có dò tia âm thanh",
+    "soundTracingEstimated": "Trên điện thoại đây là bản ước lượng: thời gian vang, tắt dần và trễ trước được tính từ hình học và vật liệu của khán phòng rồi giao cho DSP gốc phát. Nghe như đang ở trong phòng, nhưng không có thông tin hướng — dò tia thật trên máy tính chạy Steam Audio, điện thoại không tải được.",
     "soundTracingOutput": "Thiết bị",
     "soundTracingOutput_headphones": "Tai nghe",
     "soundTracingOutput_speakers": "Loa",

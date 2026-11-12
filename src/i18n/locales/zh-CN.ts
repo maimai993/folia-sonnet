@@ -1266,6 +1266,7 @@ export default {
     "sceneQuality_high": "高",
     "soundTracing": "声线追踪",
     "soundTracingUnsupported": "当前场景不支持声线追踪",
+    "soundTracingEstimated": "手机上用的是估算实现：从影厅的几何和材质算出混响时间、阻尼和预延迟，交给原生 DSP 演奏。听起来是在那个厅里，但没有方位信息 —— 桌面端那套真声线追踪要跑 Steam Audio，装不进手机。",
     "soundTracingOutput": "设备",
     "soundTracingOutput_headphones": "耳机",
     "soundTracingOutput_speakers": "音箱",

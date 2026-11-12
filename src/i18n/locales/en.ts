@@ -1254,6 +1254,7 @@ export default {
     "sceneQuality_high": "High",
     "soundTracing": "Sound tracing",
     "soundTracingUnsupported": "This scene has no sound tracing",
+    "soundTracingEstimated": "On phones this is an estimate: reverb time, damping and pre-delay come from the hall's geometry and materials, played by the native DSP. It sounds like the room, but carries no direction information — the real tracing on desktop runs Steam Audio, which a phone cannot load.",
     "soundTracingOutput": "Device",
     "soundTracingOutput_headphones": "Headphones",
     "soundTracingOutput_speakers": "Speakers",
