@@ -14,10 +14,14 @@ export interface BuiltinRpcResult {
     readonly error?: string;
 }
 
-/** 每个内置模组自己的处理表，按需加载：没用到的模组不进主包。 */
-const TABLES: Readonly<Record<string, () => Promise<BuiltinRpcTable>>> = {
-    'listening-archive': async () => (await import('../../services/listeningArchive/archiveRpc')).listeningArchiveRpc,
-};
+/**
+ * 每个内置模组自己的处理表，按需加载：没用到的模组不进主包。
+ *
+ * 听歌档案曾经有一份渲染进程侧的 `archive.*` 实现（src/services/listeningArchive/archiveRpc.ts）。
+ * 那份是当初误判它「只有 client、没有 main」时补的桥；原始包其实带 `"main": "index.cjs"`，
+ * 十个 `archive.*` 方法全由它自己回答。留着反而遮住模组自己的实现，所以删掉了。
+ */
+const TABLES: Readonly<Record<string, () => Promise<BuiltinRpcTable>>> = {};
 
 const loaded = new Map<string, BuiltinRpcTable>();
 

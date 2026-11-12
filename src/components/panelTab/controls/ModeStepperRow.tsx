@@ -148,12 +148,20 @@ const ModeStepperRow = <Value extends string>({
                     >
                         {/* 和按钮之间留一道缝：按钮悬停、展开时整块铺底色，贴着或压上去会和参数叠在一起。
                             按钮和参数的焦点框都画在自己里面（st-focus-inside），不伸进这道缝。 */}
+                        {/*
+                         * 参数那一行是横排的 chip。**不要 wrap**：
+                         * 手机窄屏下莫奈背景有 5 个 chip（布局 / 来源 / 两条纹理 / 漂移），
+                         * 折行之后加上 `justify-end`，靠前的几个会被挤到行首看不见 ——
+                         * 表现就是「来源那个 chip 不显示」。改成单行横向滚动，
+                         * 放不下的用滑动去看，每个都能摸到。
+                         */}
                         <motion.div
                             key={value}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={kitTransition('move', reduced)}
-                            className="flex min-h-7 flex-wrap items-center justify-end gap-1.5 pt-1"
+                            className="flex min-h-7 items-center justify-start gap-1.5 overflow-x-auto pt-1 st-scroll-thin"
+                            style={{ scrollbarWidth: 'none' }}
                         >
                             {params}
                         </motion.div>

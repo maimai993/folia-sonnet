@@ -283,7 +283,7 @@ export const requestKugouAnonymousSearch = async (
 
     const targetUrl = new URL('http://complexsearch.kugou.com/v2/search/song');
     Object.entries(params).forEach(([key, value]) => targetUrl.searchParams.set(key, String(value)));
-    const requestUrl = typeof window !== 'undefined' && window.electron
+    const requestUrl = typeof window !== 'undefined' && typeof window.electron?.platform === 'string'
         ? targetUrl.toString()
         : resolveProxiedUrl(targetUrl.toString());
     const response = await fetch(requestUrl, {
@@ -368,7 +368,7 @@ export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => 
         }
     }
 
-    const requestUrl = typeof window !== 'undefined' && window.electron
+    const requestUrl = typeof window !== 'undefined' && typeof window.electron?.platform === 'string'
         ? targetUrlString
         : resolveProxiedUrl(targetUrlString);
     const response = await fetch(requestUrl, {

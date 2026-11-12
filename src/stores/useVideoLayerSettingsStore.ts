@@ -64,6 +64,13 @@ export type VideoLayerSettingsState = {
     /** Opens the file picker; resolves to the picked name, or null when cancelled. */
     pickLocalFile: () => Promise<string | null>;
     clearLocalFile: () => Promise<void>;
+    /**
+     * 只把界面上的本地文件摘掉，不动原生那份。
+     *
+     * `clearLocalFile` 里有原生调用，原生不 resolve 时整条链会卡住；市场换视频那条路
+     * 不能等它 —— 等不到就会一直画着上一支视频。这里给一个纯同步的脱手口。
+     */
+    setLocalFileDropped: () => void;
     /** Rebuilds the pick from the stored handle without prompting. */
     restoreLocalFile: () => Promise<void>;
     /** Asks the browser again for a stored pick whose permission lapsed. Needs a user gesture. */
@@ -171,6 +178,12 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
             await clearVideoLayerFileHandle();
             // 安卓那一端删的是私有目录里的副本：不清，下次开回来它又回来了。
             await clearNativeVideoLayerPick();
+        },
+        setLocalFileDropped: () => {
+            // 和 clearLocalFile 一样要把 revision 推上去，否则一个迟到的 restore 会把它写回来。
+            fileRevision += 1;
+            restoreStarted = true;
+            dropFile();
         },
         restoreLocalFile: () => loadStoredFile(false),
         regrantLocalFile: () => loadStoredFile(true),

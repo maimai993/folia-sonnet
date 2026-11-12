@@ -939,7 +939,7 @@ describe('QQ musicu requests', () => {
     });
 
     it('posts straight to musicu on the desktop, without credentials and without the embedded backend', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         const fetchMock = answered();
         vi.stubGlobal('fetch', fetchMock);
         const { requestQqMusicu } = await import('@/services/onlineMusic/qq/qqTransport');
@@ -967,7 +967,7 @@ describe('QQ musicu requests', () => {
     });
 
     it.each([
-        ['the desktop', { electron: {} }],
+        ['the desktop', { electron: { platform: 'win32' } }],
         ['the web', undefined],
     ])('never carries the stored session on %s', async (_where, windowValue) => {
         storage.set('online_provider:qq:cookie', CONFIRMED_COOKIE);
@@ -1050,7 +1050,7 @@ describe('QQ musicu requests', () => {
     });
 
     it("keeps the status of a direct 500, which is QQ's own", async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(musicuAnswer('', { status: 500 })));
         const { requestQqMusicu } = await import('@/services/onlineMusic/qq/qqTransport');
 

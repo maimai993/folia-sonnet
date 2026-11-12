@@ -1,5 +1,4 @@
 import { applyPushedPhoneInsets } from '../services/phoneInsets';
-import { reuseWallpaperContent } from './wallpaperSurfaceContent';
 import type { WallpaperPayload, WallpaperTimedLine } from './wallpaperSurfaceTypes';
 
 // src/entries/wallpaperSurfaceBridge.ts
@@ -38,9 +37,8 @@ const STALE_FALLBACK_MS = 3000;
 let lastHeldThemeFields = '';
 
 window.__foliaWallpaperPush = (incoming) => {
-    if (!incoming || typeof incoming !== 'object') return;
-    // 时间包经 JSON 解码会产生新引用；内容没变时不让主题/歌词依赖误判为换歌。
-    let payload = reuseWallpaperContent(incoming, latest);
+    let payload = incoming;
+    if (!payload || typeof payload !== 'object') return;
     const now = performance.now();
     if ((payload.lines?.length ?? 0) > 0) {
         lastGoodLines = payload.lines ?? null;

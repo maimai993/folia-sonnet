@@ -228,6 +228,32 @@ export const installModFromZip = async (
     return response ?? { ok: false, error: 'no-electron-bridge' };
 };
 
+/**
+ * 从 `<input type=file>` 选出来的 zip（字节以 base64 递进来）安装模组。
+ *
+ * 只有安卓的桥提供这个方法：桌面上拿得到真实路径，走 `installModFromZip` 就够了。
+ */
+export const installModFromZipFile = async (
+    file: { name: string; base64: string },
+): Promise<{ ok: boolean; id?: string; error?: string }> => {
+    const api = bridge() as { installModFromZipFile?: (input: { name: string; base64: string }) => Promise<{ ok: boolean; id?: string; error?: string }> } | undefined;
+    if (typeof api?.installModFromZipFile !== 'function') {
+        return { ok: false, error: 'unsupported-on-platform' };
+    }
+    return (await api.installModFromZipFile(file)) ?? { ok: false, error: 'install-failed' };
+};
+
+/** 卸载一个模组（安卓端删目录并回最新清单）。 */
+export const deleteMod = async (
+    modId: string,
+): Promise<{ ok: boolean; error?: string; mods?: ModRuntimeInfo[] }> => {
+    const api = bridge() as { deleteMod?: (id: string) => Promise<{ ok: boolean; error?: string; mods?: ModRuntimeInfo[] }> } | undefined;
+    if (typeof api?.deleteMod !== 'function') {
+        return { ok: false, error: 'unsupported-on-platform' };
+    }
+    return (await api.deleteMod(modId)) ?? { ok: false, error: 'delete-failed' };
+};
+
 /** Bytes a mod keeps on disk (data and cache); disabled mods included, broken entries refused. */
 export const getModStorageUsage = async (modId: string): Promise<ModStorageUsageResult> => {
     const response = await bridge()?.getModStorageUsage(modId);

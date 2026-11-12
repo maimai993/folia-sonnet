@@ -8,7 +8,7 @@
     "email": "hjm184563@gmail.com"
   },
   "private": true,
-  "version": "0.7.27.5",
+  "version": "0.7.27.6",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -299,7 +299,6 @@
     "music-metadata": "^11.16.1",
     "qishui-music-api": "0.2.2",
     "qrcode": "^1.5.4",
-    "react-easy-crop": "^6.2.4",
     "ws": "^8.21.3",
     "youtubei.js": "18.1.0"
   },

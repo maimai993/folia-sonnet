@@ -27,7 +27,12 @@ export const maybeShowHifiWebRouteNotice = (song: SongResult | null, playerState
     const engine = useHifiEngineStore.getState();
     if (!useHifiSettingsStore.getState().enabled || !engine.supported || engine.runtime?.available !== true) return;
     shown = true;
-    const exclusive = useHifiSettingsStore.getState().exclusive && typeof window !== 'undefined' && window.electron?.platform !== 'linux';
+    // 「桌面且不是 Linux」才算独占——`platform` 缺失（安卓/网页）时 platform !== 'linux'
+    // 也会为真，所以要先确认是桌面，否则安卓会被当成能独占输出的桌面平台。
+    const exclusive = useHifiSettingsStore.getState().exclusive
+        && typeof window !== 'undefined'
+        && typeof window.electron?.platform === 'string'
+        && window.electron.platform !== 'linux';
     setStatusMessage({
         type: 'info',
         text: t('hifi.notice.onlineNotHifi'),

@@ -16,6 +16,7 @@ import { PARTICLE_FRAGMENT, PARTICLE_VERTEX, QUAD_VERTEX } from './particlesShad
 import { OrbitStage } from '../orbitStage';
 import { FORM_CAMERA_SCALE, FORM_INDEX, type ParticlesConcreteForm } from './forms';
 import { applyCoverDepthToGeometry, buildParticleGrid } from './geometry';
+import { loadWithRetry } from './coverLoader';
 
 // src/components/visualizer/backgrounds/particles/ParticlesBackground.tsx
 
@@ -322,19 +323,22 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
          */
         let coverImage: CanvasImageSource | undefined;
         let disposed = false;
+        /*
+         * 封面失败会退避重试几次（见 coverLoader.ts）：部分平台的封面地址是临时
+         * 签名 URL，偶尔 403 / 超时，一次拿不到不该就整场没有封面。
+         */
+        let cancelCoverLoad: (() => void) | null = null;
         if (coverUrl) {
-            loader.load(
-                coverUrl,
-                (loaded) => {
-                    if (disposed) {
-                        loaded.dispose();
-                        return;
-                    }
-                    /*
-                     * flipY 保持 three.js 默认的 true：片元里用
-                     * (vGrid.x, 1.0 - vGrid.y) 采样，两者一正一反正好抵消，
-                     * 画面上封面的上下方向才是对的。改这里要同步改着色器。
-                     */
+            cancelCoverLoad = loadWithRetry<THREE.Texture<HTMLImageElement>>(loader, coverUrl, (loaded) => {
+                if (disposed) {
+                    loaded.dispose();
+                    return;
+                }
+                /*
+                 * flipY 保持 three.js 默认的 true：片元里用
+                 * (vGrid.x, 1.0 - vGrid.y) 采样，两者一正一反正好抵消，
+                 * 画面上封面的上下方向才是对的。改这里要同步改着色器。
+                 */
                     loaded.colorSpace = THREE.SRGBColorSpace;
                     loaded.minFilter = THREE.LinearFilter;
                     loaded.magFilter = THREE.LinearFilter;
@@ -368,12 +372,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
                      */
                     applyCoverDepth(loaded.image as CanvasImageSource | undefined, geometry);
                     coverImage = loaded.image as CanvasImageSource | undefined;
-                },
-                undefined,
-                () => {
-                    // 封面加载失败就只用主题色，不影响效果本身
-                },
-            );
+            });
         }
 
         /*
@@ -745,6 +744,7 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
 
         return () => {
             disposed = true;
+            cancelCoverLoad?.();
             cancelAnimationFrame(raf);
             observer?.disconnect();
             window.removeEventListener('resize', resize);

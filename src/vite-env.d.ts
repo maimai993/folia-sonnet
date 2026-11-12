@@ -900,7 +900,14 @@ declare global {
       resolveLegacyModels?: (action: 'delete' | 'dismiss') => Promise<{ ok: boolean }>;
       /** Opens that folder in the file manager. */
       openLegacyModelsFolder?: () => Promise<boolean>;
-      platform: string;
+      /**
+       * `process.platform`（electron/preload.cjs）。只有 Electron 的 preload 会写它。
+       *
+       * 安卓端为了跑模组的 Node 入口，会装一份 `window.electron.mods` 的 shim，但**不设
+       * 这个字段** —— 于是 `Boolean(window.electron.platform)` 就是「是不是桌面端」的判据，
+       * 而 `Boolean(window.electron.mods)` 是「有没有模组能力」的判据。两者不能混用。
+       */
+      platform?: string;
       isLinuxX11: boolean;
       getSettings: () => Promise<any>;
       saveSettings: (key: string, value: any) => Promise<any>;

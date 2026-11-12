@@ -34,9 +34,10 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/hooks/useExclusiveKeyLayer.ts': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },
     'src/library/core/account/providerAccountDeps.service.ts': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },
     'src/library/suites/bravais/bravaisAccount.css': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },
-    'src/services/listeningArchive/archiveRpc.ts': { n: { netease: 2 }, kind: 'stored', why: 'the mod protocol\'s own rpc names: the platform\'s rows are composed into the mod\'s table here (the rules and the state live in src/services/onlineMusic/netease/neteaseArchiveRpc.ts)' },
     // 模组自己的简介是第三方作者写的话，随包照抄进清单，不是我们这边按平台写的规则。
-    'src/mods/builtin/builtinMods.ts': { n: { netease: 2, qq: 1 }, kind: 'text', why: 'the bundled mods\' own descriptions, copied from their mod.json' },
+    'src/mods/builtin/builtinMods.ts': { n: { netease: 3, qq: 1 }, kind: 'text', why: 'the bundled mods\' own descriptions, copied from their mod.json' },
+    // 安卓桥里那个苹果音乐桩：说明「桌面端有、这边没有」，规则本身就是平台名。
+    'src/mods/android/androidModsBridge.ts': { n: { appleMusic: 6 }, kind: 'text', why: 'the unsupported-on-android stub for appleMusicRequest: it exists to name the capability the desktop has and android does not' },
     'api-ts/lyric-proxy.ts': { n: { qq: 2, kugou: 2 }, kind: 'main', why: 'the hosts the lyric relay may reach; raised by the upstream merge 2026-10-17' },
     'api-ts/qq.ts': { n: { qq: 10 }, kind: 'main', why: 'the serverless entry of the QQ backend; the host finds it by path' },
     'api/lyric-proxy.js': { n: { qq: 2, kugou: 2 }, kind: 'main', why: 'the built copy of api-ts/lyric-proxy.ts; rebuilt 2026-10-25 to match its source again (#58)' },
@@ -112,7 +113,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/nativeBridge/api/bodian.js': { n: { bodian: 61 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/nativeBridge/api/cookies.js': { n: { netease: 9, qq: 48, kugou: 9 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/nativeBridge/api/eapi.js': { n: { netease: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
-    'src/nativeBridge/api/folia.js': { n: { netease: 18, qq: 140, kugou: 15, bodian: 3 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the logout cleanup that lives in the platform folder, which the shared dispatch table has to import (2026-11-02); raised by the cookie hand-off after a QR confirmation; raised by the daily-recommendation fallbacks and the explore route traces 2026-10-20; raised by the guest (anonymous) session 2026-10-21; raised by the trace of which gateway answered 2026-10-21; raised by the three-in-one login channel 2026-10-22 (the backend declares qq/wechat/qqmusic and hands the app channel to qq/appLogin.js)' },
+    'src/nativeBridge/api/folia.js': { n: { netease: 19, qq: 140, kugou: 15, bodian: 3 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the logout cleanup that lives in the platform folder, which the shared dispatch table has to import (2026-11-02); raised by the cookie hand-off after a QR confirmation; raised by the daily-recommendation fallbacks and the explore route traces 2026-10-20; raised by the guest (anonymous) session 2026-10-21; raised by the trace of which gateway answered 2026-10-21; raised by the three-in-one login channel 2026-10-22 (the backend declares qq/wechat/qqmusic and hands the app channel to qq/appLogin.js); raised by the comment routes (/comment/hot, /comment/music) the song-comments mod asks for (2026-11-11)' },
     'src/nativeBridge/api/kugou.js': { n: { kugou: 246 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the playlist writes 2026-10-19; the existing bridge imports its platform-local logout cleanup (2026-11-03, #208)' },
     'src/nativeBridge/api/libraryTrace.js': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc' },
     'src/nativeBridge/api/netease.js': { n: { netease: 72, qq: 14, kugou: 1 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },

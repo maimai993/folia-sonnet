@@ -248,7 +248,7 @@ describe('localMusicService', () => {
         useLyricSettingsStore.setState({ localLyricFormatOrder: [...DEFAULT_LOCAL_LYRIC_FORMAT_ORDER] });
 
         vi.stubGlobal('window', {
-            electron: {},
+            electron: { platform: 'win32' },
             showDirectoryPicker: vi.fn(),
             dispatchEvent: vi.fn(),
         });

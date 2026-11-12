@@ -53,7 +53,7 @@ const fallbackBadge = (provider: ProviderAccountSummary) => ({
 const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {
     const badge = AVATAR_BADGE_BY_PROVIDER[provider.providerId] ?? fallbackBadge(provider);
     return provider.user?.avatarUrl
-        ? <img src={typeof window !== 'undefined' && window.electron ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
+        ? <img src={typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
         : (
             <span
                 aria-label={provider.displayName}

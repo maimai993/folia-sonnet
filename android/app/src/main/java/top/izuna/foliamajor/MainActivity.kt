@@ -275,6 +275,18 @@ class MainActivity : BridgeActivity() {
         // 原生过渡系统：规划 / 分析 / 执行全部在原生侧，WebView 只保留设置 UI 与 cue 动画。
         // 注册本身不碰任何播放行为（与 FoliaNativePlayerPlugin 同一条纪律）。
         registerPlugin(top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin::class.java)
+        // 安卓端的模组系统：渲染端问 window.electron.mods，这个插件把请求转给进程内的
+        // Node 运行时（FoliaNodeRuntime，nodejs-mobile），模组的 main 入口在那里跑。
+        registerPlugin(top.izuna.foliamajor.mods.FoliaModsPlugin::class.java)
+
+        // 模组的 client 入口要从私有目录同源加载：桌面端用 folia-mod:// 协议，安卓靠这里
+        // 把 /mods/<id>/<digest>/<client> 改写成真实文件路径。同样必须在 super 之前
+        // （bridgeBuilder.create() 在 BridgeActivity.onCreate 里）。
+        bridgeBuilder.setRouteProcessor(
+            top.izuna.foliamajor.mods.ModRouteProcessor(
+                java.io.File(top.izuna.foliamajor.mods.FoliaNodeRuntime.getUserDataDir(this), "mods")
+            )
+        )
 
         super.onCreate(savedInstanceState)
 

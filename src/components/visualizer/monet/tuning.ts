@@ -41,6 +41,7 @@ export const resolveStoredMonetTuning = (parsed: Partial<MonetTuning> & Record<s
         DEFAULT_MONET_TUNING.fontScale,
     ),
     portraitSource: portraitSource(parsed.portraitSource),
+    showPortrait: parsed.showPortrait ?? DEFAULT_MONET_TUNING.showPortrait,
     portraitOffsetX: typeof parsed.portraitOffsetX === 'number'
         ? Math.min(0, Math.max(-150, parsed.portraitOffsetX))
         : (DEFAULT_MONET_TUNING.portraitOffsetX ?? 0),

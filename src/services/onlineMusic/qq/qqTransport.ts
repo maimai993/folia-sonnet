@@ -1,5 +1,6 @@
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from '../providerStorage';
+import { announceProviderSessionExpired } from '../providerSessionEvents';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../../foliaExtensionBridge';
@@ -437,7 +438,12 @@ const endpointFor = (operation: QqOperation, params: QqParams): { path: string; 
 
 // The session a request carried is dropped; one that was stored since stays.
 const dropSessionSent = (sent: string): void => {
-    if (getWebSessionCookie() === sent) clearQqSession();
+    if (getWebSessionCookie() === sent) {
+        clearQqSession();
+        // 会话自己没了要说一声：界面只在「进首页 / 窗口回来」时问账号，
+        // 播放途中失效的话用户会一直在播放页撞同一堵墙（见 hooks/useAccountReads）。
+        announceProviderSessionExpired('qq');
+    }
 };
 
 // 一个不是 login_status 的请求带着 session 回了 401：问一次 login_status。后端不再认出这个用户、存着的又还是吃了 401 的
@@ -454,6 +460,45 @@ const checkSessionAfterRefusal = (sent: string): void => {
     }).finally(() => {
         sessionCheck = null;
     });
+};
+
+/**
+ * 主动复核一次会话还能不能用（不是 401 的场景）。
+ *
+ * 为什么需要它：播放接口在会话失效时**不返回 401**，而是回 200 + 空链接。那条路上
+ * `checkSessionAfterRefusal` 根本不会被调用，于是过期的 cookie 一直被带着请求 ——
+ * 表现就是「登录明明过期了却没有提示，而且大部分歌都放不出来」。
+ *
+ * 只在真的像是出了这种事时才调（拿不到播放链接），不要放进常规请求路径。
+ * 返回 true 表示会话已判定失效并清掉了，调用方可以按游客重试一次。
+ */
+export const recheckQqSessionAfterEmptyPlayLink = async (): Promise<boolean> => {
+    const sent = getWebSessionCookie();
+    if (!sent) return false;
+    // 已经有一轮在问就等它，不重复发。
+    if (sessionCheck) {
+        await sessionCheck.catch(() => undefined);
+        return getWebSessionCookie() !== sent;
+    }
+    await checkSessionAfterRefusalAsync(sent);
+    return getWebSessionCookie() !== sent;
+};
+
+const checkSessionAfterRefusalAsync = async (sent: string): Promise<void> => {
+    if (sessionCheck) {
+        await sessionCheck.catch(() => undefined);
+        return;
+    }
+    sessionCheck = requestQq<any>('login_status').then(
+        body => !body?.data?.profile,
+        error => error instanceof OnlineProviderError && error.code === 'auth-required',
+    ).then(ended => {
+        console.info(`[QQ] Playback gave no link; login_status ${ended ? 'no longer names the account, the session goes' : 'did not say the sign-in ended, the session stays'}`);
+        if (ended) dropSessionSent(sent);
+    }).finally(() => {
+        sessionCheck = null;
+    });
+    await sessionCheck.catch(() => undefined);
 };
 
 // Routes one provider request through the embedded Electron server or the configured Web base URL.
@@ -666,7 +711,7 @@ const readMusicuCode = (value: unknown): number | undefined => {
 export const requestQqMusicu = async (
     requests: Readonly<Record<string, QqMusicuRequest>>,
 ): Promise<Record<string, QqMusicuAnswer>> => {
-    const direct = typeof window !== 'undefined' && Boolean(window.electron);
+    const direct = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
     const url = direct ? QQ_MUSICU_URL : lyricProxyWebUrl(QQ_MUSICU_URL);
     const init: RequestInit = {
         method: 'POST',

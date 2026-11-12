@@ -17,7 +17,9 @@ import { useClickThroughPointerLock } from './useClickThroughPointerLock';
 
 export const useElectronWindowChrome = () => {
     const lastPointer = useRef<{ screenX: number; clientX: number } | undefined>(undefined);
-    const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
+    // 只认 platform：安卓端的模组 shim 会装 `window.electron.mods` 但不带 platform，
+    // 按对象存在与否判断会让安卓去走桌面窗口（透明背景、原生窗口行为）那条路。
+    const isElectronWindow = typeof (window as typeof window & { electron?: { platform?: unknown }; }).electron?.platform === 'string';
     const transparentPlayerBackground = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground);
     const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const isPlayerPageTransparent = transparentPlayerBackground || enablePlayerPageNativeBlur;

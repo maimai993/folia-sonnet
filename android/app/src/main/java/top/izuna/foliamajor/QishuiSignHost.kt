@@ -77,6 +77,9 @@ class QishuiSignHost(private val activity: MainActivity) {
         /** assets 下的目录。 */
         private const val ASSET_DIR = "qishui/"
 
+        /** 隐藏 WebView 闲置多久就收掉（毫秒）。见 noteActivity / scheduleIdleDispose。 */
+        private const val IDLE_DISPOSE_MS = 5 * 60 * 1000L
+
         /**
          * 与桌面端 qishui-auth-v6.js 的 UA 保持一致：签名里带了设备指纹，
          * UA 换一套会让风控把这一路判成「换设备」，登录态立刻失效。
@@ -254,6 +257,46 @@ class QishuiSignHost(private val activity: MainActivity) {
         fun resolve(json: String?)
     }
 
+    /**
+     * 闲置回收。
+     *
+     * 这座隐藏 WebView 建出来就占着一个渲染进程（实测 54MB 常驻内存，CPU 基本不动），
+     * 而它只在真正请求汽水接口时才有用。启动时查一次登录态就会把它拉起来，之后
+     * 用户可能一整天都不碰汽水 —— 那 54MB 就一直白占着。
+     *
+     * 所以每次请求进来时记一笔，空闲满 IDLE_DISPOSE_MS 就把它收掉；下次要用时
+     * `ensureStarted()` 重新建，行为和第一次启动完全一样（页面会重新加载 bdms.js）。
+     * 有请求在飞时（pendingCount > 0）不收，免得把正在算的结果掐断。
+     */
+    private val idleHandler = Handler(Looper.getMainLooper())
+    private var idleRunnable: Runnable? = null
+    private val pendingCount = AtomicInteger(0)
+
+    /** 有请求进来（或正在处理）：重置闲置计时，并保证别被回收。 */
+    fun noteActivity() {
+        mainHandler.post { scheduleIdleDispose() }
+    }
+
+    private fun scheduleIdleDispose() {
+        idleRunnable?.let { idleHandler.removeCallbacks(it) }
+        if (webView == null) {
+            idleRunnable = null
+            return
+        }
+        val task = Runnable {
+            idleRunnable = null
+            if (pendingCount.get() > 0) {
+                // 还有请求在算：过一会儿再看。
+                scheduleIdleDispose()
+                return@Runnable
+            }
+            Log.i(TAG, "idle for " + (IDLE_DISPOSE_MS / 1000) + "s; releasing the hidden signing webview")
+            dropWebView()
+        }
+        idleRunnable = task
+        idleHandler.postDelayed(task, IDLE_DISPOSE_MS)
+    }
+
     fun isReady(): Boolean {
         return ready
     }
@@ -304,6 +347,20 @@ class QishuiSignHost(private val activity: MainActivity) {
                 created.setBackgroundColor(Color.TRANSPARENT)
                 created.translationX = -10000f
                 root.addView(created)
+            } else {
+                // 找不到内容视图就等于没挂载：这个 WebView 不会走完整生命周期，
+                // bdms.js 初始化会卡住，而且它还会作为一个**多余的 WebView 实例**
+                // 挂在调试列表里（屏幕上不显示，却照样占一份渲染进程）。
+                // 与其留个半死不活的，不如报错，让调用方等一下再重建。
+                Log.w(TAG, "no content view to attach the hidden signing webview; dropping it")
+                webView = null
+                try {
+                    created.destroy()
+                } catch (error: Throwable) {
+                    Log.w(TAG, "dropping the unattached signing webview failed", error)
+                }
+                _failureReason = "no-content-view"
+                return
             }
         } catch (error: Throwable) {
             Log.w(TAG, "attaching the hidden signing webview failed", error)
@@ -352,8 +409,24 @@ class QishuiSignHost(private val activity: MainActivity) {
      * 原生给一个 ticket，页面算完调 FoliaQishuiHost.resolve(ticket, json)。
      */
     fun request(operation: String, paramsJson: String?, callback: Pending) {
+        // 有活干了：别让闲置回收把正在用的 WebView 收走。
+        pendingCount.incrementAndGet()
+        noteActivity()
         val ticket = ticketSeq.getAndIncrement().toString()
-        pending.put(ticket, callback)
+        // 包一层：不论结果从页面回来、还是超时 / 出错被丢弃，都只减一次计数，
+        // 免得某条异常出口漏减、让闲置回收永远以为「还有活」。
+        val counted = java.util.concurrent.atomic.AtomicBoolean(false)
+        val settle = {
+            if (counted.compareAndSet(false, true)) pendingCount.decrementAndGet()
+        }
+        pending.put(ticket, Pending { json ->
+            try {
+                callback.resolve(json)
+            } finally {
+                settle()
+                noteActivity()
+            }
+        })
         val script = "window.__foliaQishui && window.__foliaQishui.start(" +
             quote(operation) + "," + paramsJson + "," + quote(ticket) + ")"
         val send = Runnable {
@@ -461,6 +534,9 @@ class QishuiSignHost(private val activity: MainActivity) {
 
     fun dispose() {
         mainHandler.post {
+            // 显式关掉就别再等闲置计时了，定时器自己也要撤（不然它还会空跑一次）。
+            idleRunnable?.let { idleHandler.removeCallbacks(it) }
+            idleRunnable = null
             dropWebView()
             audioServer.stop()
             // 还在排队的那几个票据仍挂在 pending 里，下面这一圈会一并把它们结掉。

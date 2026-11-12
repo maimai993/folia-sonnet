@@ -95,6 +95,8 @@ describe('Monet tuning and lyric helpers', () => {
             backgroundDriftEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftEnabled,
             backgroundDriftStrength: DEFAULT_MONET_BACKGROUND_TUNING.backgroundDriftStrength,
             backgroundStreaksEnabled: DEFAULT_MONET_BACKGROUND_TUNING.backgroundStreaksEnabled,
+            // 3735963f6 给莫奈背景加了「显示背景图片」开关，未存过的一律取默认（开）。
+            backgroundShowCover: DEFAULT_MONET_BACKGROUND_TUNING.backgroundShowCover,
         });
 
         expect(resolveStoredMonetBackgroundTuning({
@@ -162,6 +164,8 @@ describe('Monet tuning and lyric helpers', () => {
             portraitOffsetX: 0,
             portraitStyle: 'square',
             showPortraitDragHanger: true,
+            // 3735963f6 把「显示肖像」也存进 tuning 了，没存的落回默认（开）。
+            showPortrait: true,
         });
 
         expect(resolveStoredMonetTuning({

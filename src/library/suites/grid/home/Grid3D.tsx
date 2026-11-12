@@ -401,8 +401,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
 
                     {/* Center Tab Switcher */}
-                    <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
-                        <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
+                    {/*
+                        `min-w-0` 不能省：grid item 的默认 min-width 是 auto，会按内容撑开，
+                        胶囊上的 overflow-x 就永远不会生效，页签依旧被父级 overflow-hidden 裁掉。
+                        窄屏（安卓 480px）下 8 个页签放不进一屏，胶囊自己横向滚，滑得到最后一个。
+                    */}
+                    <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1 min-w-0">
+                        <div
+                            className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain`}
+                            style={{ scrollbarWidth: 'none' }}
+                        >
                             <div className="inline-flex items-center gap-0">
                                 {homeTabs.map((tab) => {
                                     const isActive = homeViewTab === tab.key;

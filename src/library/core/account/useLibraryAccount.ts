@@ -133,7 +133,7 @@ export const translateProviderSwitch = (
 // 构建与运行环境在页面生命周期内不变：构建类别由构建期注入，网页版即没有 Electron 桥。
 const LOGIN_REPORT_ENVIRONMENT: LibraryLoginReportEnvironment = {
     build: getBuildKind(),
-    web: typeof window !== 'undefined' && !window.electron,
+    web: typeof window !== 'undefined' && typeof window.electron?.platform !== 'string',
 };
 
 /** 这一次登录的诊断报告该交给谁（core/account/accountRules 的 resolveLoginReportRoute，环境是这个页面的）。 */

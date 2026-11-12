@@ -1105,6 +1105,14 @@ export interface UrlBackgroundItem {
 
 export interface MonetBackgroundTuning {
   backgroundSource: MonetBackgroundSource;
+  /**
+   * 背景里要不要画那张图（封面派生图 / 上传的图）。
+   *
+   * 关掉就只剩渐变底与纹理：有人只想借莫奈的配色，不想看见封面本身；
+   * 也方便在封面画质差的时候直接藏起来。不影响 `backgroundSource` 的取值，
+   * 所以再打开还是原来那张。
+   */
+  backgroundShowCover: boolean;
   backgroundLayout: MonetBackgroundLayout;
   backgroundBlurPx: number;
   backgroundOverlayOpacity: number;
@@ -1256,6 +1264,13 @@ export interface MonetTuning {
   audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
+  /**
+   * 歌词样式里那张肖像（封面派生图 / 自定义肖像）要不要画。
+   *
+   * 关掉就只剩歌词本身与配色：有人不想让封面出现在歌词旁边。
+   * 不影响 `portraitSource` 的取值，再打开还是原来那张。
+   */
+  showPortrait?: boolean;
   portraitOffsetX?: number;
   portraitStyle?: 'square' | 'rectangular';
   showPortraitDragHanger?: boolean;
@@ -1263,6 +1278,7 @@ export interface MonetTuning {
 
 export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundSource: 'cover-derived',
+  backgroundShowCover: true,
   backgroundLayout: 'full-overlay',
   backgroundBlurPx: 6,
   backgroundOverlayOpacity: 0.74,
@@ -1332,6 +1348,7 @@ export const DEFAULT_MONET_TUNING: MonetTuning = {
   audioStyle: 'bar',
   fontScale: 1.2,
   portraitSource: 'cover',
+  showPortrait: true,
   portraitOffsetX: 0,
   portraitStyle: 'square',
   showPortraitDragHanger: true,

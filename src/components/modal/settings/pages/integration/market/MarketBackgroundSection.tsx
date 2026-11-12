@@ -23,7 +23,6 @@ import { useBackgroundApplyTarget, type BackgroundTarget } from './useBackground
 import { applyMarketBackground } from '../../../../../../services/backgroundMarket/apply';
 import { subscribeBackgroundProgress } from '../../../../../../services/backgroundMarket/progress';
 import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
-import type { CropRect } from './CropFrame';
 import MarketRotationSection from './MarketRotationSection';
 
 /**
@@ -59,10 +58,27 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
      *   · 视频 → App 内走「歌词后方视频层」，填地址并自动打开
      * 所以这里不再禁用任何一项。
      */
-    const choices: ApplyTargetChoice<BackgroundTarget>[] = useMemo(() => [
-        { id: 'wallpaper', label: t('options.marketTargetBackground_wallpaper'), hint: t('options.marketTargetBackgroundWallpaperHint') },
-        { id: 'app', label: t('options.marketTargetBackground_app'), hint: t('options.marketTargetBackgroundAppHint') },
-    ], [t]);
+    /*
+     * 「歌词样式的莫奈背景」只对**图片**开放。
+     *
+     * 莫奈那一层画的是静图（封面派生图 / 上传的图），视频放不进去 ——
+     * 视频要去的是「App 内」的视频层。所以这一项在视频上直接不出现，
+     * 而不是出现了再禁用（禁用的项用户会一直点）。
+     */
+    const choices: ApplyTargetChoice<BackgroundTarget>[] = useMemo(() => {
+        const entries: ApplyTargetChoice<BackgroundTarget>[] = [
+            { id: 'wallpaper', label: t('options.marketTargetBackground_wallpaper'), hint: t('options.marketTargetBackgroundWallpaperHint') },
+            { id: 'app', label: t('options.marketTargetBackground_app'), hint: t('options.marketTargetBackgroundAppHint') },
+        ];
+        if (!pending || pending.kind === 'image') {
+            entries.push({
+                id: 'monet',
+                label: t('options.marketTargetBackground_monet'),
+                hint: t('options.marketTargetBackgroundMonetHint'),
+            });
+        }
+        return entries;
+    }, [t, pending]);
 
     // 订阅下载进度（视频才有，图片通常是瞬时的）
     useEffect(() => {
@@ -70,13 +86,17 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
         return unsubscribe;
     }, []);
 
-    const handleConfirm = async (targets: BackgroundTarget[], crop: CropRect, rotation: number) => {
+    /*
+     * 不再收裁切与旋转：桌面壁纸那边原生已经默认按 90° 摆好（壁纸站几乎全是横屏），
+     * 用户不用再自己框一次，取景框就此拿掉。
+     */
+    const handleConfirm = async (targets: BackgroundTarget[]) => {
         if (!pending) return;
         setApplyError(null);
         setProgress(0);
         setProgressLabel(t('options.marketBackgroundProgress'));
         try {
-            const result = await applyMarketBackground(pending, targets, crop, rotation);
+            const result = await applyMarketBackground(pending, targets);
             if (!result.ok) {
                 setApplyError(result.error ?? t('options.marketRetry'));
                 setProgress(null);
@@ -86,8 +106,6 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 kind: pending.kind,
                 name: pending.name,
                 appliesTo: targets,
-                crop,
-                rotation,
             });
             // 需要去系统设置放行时，别让弹窗一关就没了提示。
             if (result.notice) setNotice(result.notice);
@@ -291,9 +309,6 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 error={applyError}
                 onCancel={closeDialog}
                 onConfirm={handleConfirm}
-                /* 图片和视频都给取景框：视频同样存在「横屏硬塞进竖屏」的问题，
-                   裁切位置由原生渲染层按 focus 应用（不需要转码）。 */
-                cropPreviewUrl={pending?.thumbnailUrl || undefined}
             />
         </div>
     );

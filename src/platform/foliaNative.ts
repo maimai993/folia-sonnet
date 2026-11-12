@@ -159,6 +159,8 @@ interface FoliaNativePlugin {
         stored?: boolean;
         name?: string;
         url?: string;
+        /** 落盘后的真实路径（`url` 是回环播放地址，文件操作要用这个）。 */
+        path?: string;
         error?: string;
     }>;
     /**
@@ -173,6 +175,16 @@ interface FoliaNativePlugin {
     addListener(
         eventName: 'updateDownloadProgress',
         listener: (progress: UpdateDownloadProgress) => void,
+    ): Promise<FoliaNativeListenerHandle>;
+    /**
+     * 视频层文件（`downloadVideoLayerFile`）的下载进度，`percent` 是 0-100。
+     *
+     * 原生发在**这个**插件上，和 FoliaWallpaper 那个同名事件不是一个来源，
+     * 两边各订各的（见 services/backgroundMarket/progress.ts）。
+     */
+    addListener(
+        eventName: 'videoDownloadProgress',
+        listener: (progress: { id?: string; percent?: number }) => void,
     ): Promise<FoliaNativeListenerHandle>;
 }
 
@@ -376,19 +388,25 @@ export const pickNativeVideoLayerFile = async (): Promise<NativeVideoLayerPick> 
 export const downloadNativeVideoLayerFile = async (
     url: string,
     progressId?: string,
-): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null }> => {
+): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null; path: string | null }> => {
     if (!isCapacitorAndroid()) {
-        return { ok: false, url: null, name: null, error: '仅安卓支持' };
+        return { ok: false, url: null, name: null, error: '仅安卓支持', path: null };
     }
     try {
         const result = await FoliaNative.downloadVideoLayerFile({ url, progressId });
         if (result?.stored && result.url) {
-            return { ok: true, url: result.url, name: result.name ?? '', error: null };
+            /*
+             * path 是落盘后的真实路径，交给壁纸层做「安装」用。
+             *
+             * url 是回环播放地址，文件操作拿不到它。市场里两个目标同时勾选时，
+             * 靠这个路径避免同一个视频下两遍（FoliaWallpaper.adoptDownloadedVideo）。
+             */
+            return { ok: true, url: result.url, name: result.name ?? '', error: null, path: result.path ?? null };
         }
-        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败' };
+        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败', path: null };
     } catch (error) {
         console.warn('[FoliaNative] downloadVideoLayerFile failed', error);
-        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败' };
+        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败', path: null };
     }
 };
 
@@ -426,6 +444,38 @@ export const watchUpdateDownloadProgress = (
 export const downloadUpdate = (
     options: { url: string; fileName: string },
 ): Promise<{ path: string; bytes: number }> => FoliaNative.downloadUpdate(options);
+
+/**
+ * 监听 `downloadVideoLayerFile` 的下载进度（0..1）。
+ *
+ * 原生在 `FoliaNativePlugin` 上发 `videoDownloadProgress`，**不是** FoliaWallpaper
+ * 那个同名事件 —— 桌面壁纸和 App 内的视频下载分别发在两处，各自要订各的。
+ * 以前只订了壁纸那一侧，所以「选 App 内」时进度条永远是 0%。
+ *
+ * 返回取消订阅的函数，组件卸载时要调用。
+ */
+export const subscribeNativeVideoLayerProgress = async (
+    listener: (progress: number) => void,
+): Promise<() => void> => {
+    if (!isCapacitorAndroid()) return () => {};
+    try {
+        const handle = await FoliaNative.addListener('videoDownloadProgress', (payload) => {
+            const percent = payload?.percent;
+            if (typeof percent === 'number' && Number.isFinite(percent)) {
+                listener(Math.min(1, Math.max(0, percent / 100)));
+            }
+        });
+        return () => {
+            try {
+                handle?.remove();
+            } catch {
+                // 已经卸载过了。
+            }
+        };
+    } catch {
+        return () => {};
+    }
+};
 
 /** 拉起系统安装器。 */
 export const installUpdate = (

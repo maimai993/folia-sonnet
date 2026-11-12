@@ -20,12 +20,15 @@ export default function WindowControls({
     const [isFullscreen, setIsFullscreen] = useState(false);
     const useNativeMacFullscreenButton = usePlayerChromeSettingsStore(state => state.useNativeMacFullscreenButton);
     const electron = window.electron;
+    // 桌面窗口按钮只在真的桌面窗口里出现：判据是 platform（只有 Electron 的 preload
+    // 会写）。安卓端的模组 shim 没有 platform，也不提供下面那些窗口方法。
+    const isDesktopWindow = typeof electron?.platform === 'string';
     const isMac = electron?.platform === 'darwin';
     const usesNativeFullscreen = isMac && (useNativeMacFullscreenButton || isFullscreen);
     const isExpanded = usesNativeFullscreen ? isFullscreen : isMaximized;
 
     useEffect(() => {
-        if (!electron) return;
+        if (!isDesktopWindow) return;
         let active = true;
         let fullscreenEventReceived = false;
         const unsubscribe = electron.onWindowFullscreenChanged(fullscreen => {
@@ -48,9 +51,9 @@ export default function WindowControls({
             unsubscribe?.();
             window.removeEventListener('resize', checkMaximized);
         };
-    }, [electron]);
+    }, [electron, isDesktopWindow]);
 
-    if (!electron) return null;
+    if (!isDesktopWindow) return null;
 
     const remoteControlVisible = revealed && !isMainWindowClickThroughEnabled;
     const standardControlsVisible = revealed && !isMainWindowClickThroughEnabled;

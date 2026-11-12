@@ -743,7 +743,7 @@ describe('command palette registry', () => {
     });
 
     it('retains settings-desktop command in desktop app environment', () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const matches = getCommandPaletteMatches('desktop');
@@ -866,7 +866,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes desktop window toggle commands', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const context = createContext();
@@ -885,7 +885,7 @@ describe('command palette registry', () => {
     });
 
     it('hides the always-on-top command where the window cannot stay on top (native Wayland)', () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const context = createContext();
@@ -901,7 +901,7 @@ describe('command palette registry', () => {
     it('toggles the desktop-local lyrics API', async () => {
         const getLyricApiStatus = vi.fn().mockResolvedValue({ enabled: false, running: false });
         const setLyricApiEnabled = vi.fn().mockResolvedValue({ enabled: true, running: true });
-        vi.stubGlobal('window', { electron: { getLyricApiStatus, setLyricApiEnabled } });
+        vi.stubGlobal('window', { electron: { platform: 'win32', getLyricApiStatus, setLyricApiEnabled } });
 
         try {
             const context = createContext();
@@ -916,7 +916,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes the desktop display sleep toggle', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         try {
             const context = createContext();
             const [match] = getCommandPaletteMatches('播放时阻止休眠', context);
@@ -929,7 +929,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes the desktop background throttling toggle', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         try {
             const context = createContext();
             const [match] = getCommandPaletteMatches('后台节流', context);

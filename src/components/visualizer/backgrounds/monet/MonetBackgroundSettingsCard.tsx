@@ -93,6 +93,7 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
     const hasBackgroundImage = Boolean(storedBackground) || hasStoredBackground || Boolean(monetBackgroundImage);
     const resolvedTuning = {
         backgroundSource: tuning.backgroundSource ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundSource,
+        backgroundShowCover: tuning.backgroundShowCover ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundShowCover,
         backgroundLayout: tuning.backgroundLayout ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundLayout,
         backgroundBlurPx: clampValue(tuning.backgroundBlurPx ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx, 0, 60, DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx),
         backgroundOverlayOpacity: clampValue(tuning.backgroundOverlayOpacity ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity, 0, 1, DEFAULT_MONET_BACKGROUND_TUNING.backgroundOverlayOpacity),
@@ -151,6 +152,18 @@ export const MonetBackgroundSettingsCard: React.FC<MonetBackgroundSettingsCardPr
                         onChange={(value) => onTuningChange?.({ backgroundSource: value })}
                     />
                 </Row>
+                {/*
+                 * 显示 / 隐藏背景里的那张图。
+                 *
+                 * 关掉只剩渐变底与纹理：想借莫奈的配色又不想看见封面、或者封面画质
+                 * 太差时就把它收起来。不改 `backgroundSource`，再打开还是原来那张。
+                 */}
+                <ToggleRow
+                    label={t('options.monetBackgroundShowCover')}
+                    note={t('options.monetBackgroundShowCoverDesc')}
+                    checked={resolvedTuning.backgroundShowCover}
+                    onChange={(checked) => onTuningChange?.({ backgroundShowCover: checked })}
+                />
                 <Row
                     label={t('options.monetUploadBackground')}
                     hint={feedback || monetBackgroundImage?.name || '-'}

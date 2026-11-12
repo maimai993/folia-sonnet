@@ -11,7 +11,7 @@ import type { OnlineProviderId } from '../../../types/onlineMusic';
 // 两边改图标时一起改，别在组件里再抄一份 providerId → 文件的对照表。
 
 /** 网页版把 http 的头像换成 https（与 grid 的切换器一致，避免混合内容被拦）；桌面版原样。 */
-const resolveAvatarSrc = (url: string) => (typeof window !== 'undefined' && window.electron ? url : url.replace(/^http:/, 'https:'));
+const resolveAvatarSrc = (url: string) => (typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? url : url.replace(/^http:/, 'https:'));
 
 /**
  * 头像、平台图标或平台徽章（圆形，尺寸由 className 定）。装饰性的：可访问名由外面的按钮给，这里 aria-hidden。

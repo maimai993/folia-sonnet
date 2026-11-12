@@ -7,3 +7,4 @@ export { TextArea, type TextAreaProps } from './TextArea';
 export { Checkbox, type CheckboxProps } from './Checkbox';
 export { Slider, type SliderProps } from './Slider';
 export { Select, type SelectOption } from './Select';
+export { FilePicker, type FilePickerHandle, type FilePickerProps } from './FilePicker';

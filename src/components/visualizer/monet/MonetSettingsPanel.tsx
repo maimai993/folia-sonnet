@@ -66,6 +66,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
         audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
+        showPortrait: monetTuning.showPortrait ?? DEFAULT_MONET_TUNING.showPortrait,
         portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
         showPortraitDragHanger: monetTuning.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
     };
@@ -114,6 +115,16 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
             </Group>
 
             <Group def={PORTRAIT_GROUP}>
+                {/*
+                 * 封面显示开关：放在「肖像来源」这一组，因为它管的就是歌词旁边那张图。
+                 * 关掉只是不画，`portraitSource` 的取值不动，再打开还是原来那张。
+                 */}
+                <ToggleRow
+                    label={t('options.monetShowPortrait')}
+                    note={t('options.monetShowPortraitDesc')}
+                    checked={Boolean(resolvedTuning.showPortrait)}
+                    onChange={(value) => onMonetTuningChange?.({ showPortrait: value })}
+                />
                 <Row label={t('options.monetPortraitSource')}>
                     <Segmented<MonetPortraitSource>
                         value={resolvedTuning.portraitSource}

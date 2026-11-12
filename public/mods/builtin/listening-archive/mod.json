@@ -1,20 +1,21 @@
 {
-    "folium": 1,
-    "id": "listening-archive",
-    "name": "听歌档案",
-    "version": "1.3.3",
-    "preview": "preview.jpg",
-    "author": "imicola",
-    "description": "本机听歌统计：听多久、最常听什么、什么时候听、单曲轨迹；界面是模组自己的那套页面。",
-    "client": "client.mjs",
-    "permissions": [
-        "filesystem.data",
-        "stageLayers",
-        "playback.control",
-        "platform.netease.read"
-    ],
-    "experimental": [
-        "platform.raw"
-    ],
-    "folia": ">=0.7.21 <0.8.0"
+  "folium": 1,
+  "id": "listening-archive",
+  "name": "听歌档案",
+  "version": "1.3.3",
+  "preview": "preview.jpg",
+  "author": "imicola",
+  "description": "Folia 本机听歌统计与网易云榜单、时长报告；云端功能使用官方受控接口，需要 Folium 1.7。",
+  "client": "client.mjs",
+  "main": "index.cjs",
+  "permissions": [
+    "filesystem.data",
+    "stageLayers",
+    "playback.control",
+    "platform.netease.read"
+  ],
+  "experimental": [
+    "platform.raw"
+  ],
+  "folia": ">=0.7.22"
 }
