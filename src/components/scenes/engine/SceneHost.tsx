@@ -1,5 +1,9 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { motion } from 'framer-motion';
+import { ChevronLeft } from 'lucide-react';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
+import { useWindowButtonsAtTopLeft } from '../../../hooks/useWindowButtonsAtTopLeft';
 import { selectDisplaySong, selectIsShowingTail, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import type { DualTheme } from '../../../types';
 import { DEFAULT_VISUALIZER_BACKGROUND_MODE } from '../../../types/visualizerModes';
@@ -41,6 +45,9 @@ const valuesOf = (sceneId: string) => useSceneSettingsStore.getState().sceneOpti
 /** Runs one scene; the user's lyric style stands in while it loads and takes over for good when it fails. */
 const SceneStage: React.FC<{ definition: SceneDefinition; rendererProps: RendererProps; songThemePair?: DualTheme }> = ({ definition, rendererProps, songThemePair }) => {
     const { manifest } = definition;
+    const { onBack } = rendererProps;
+    const { t } = useTranslation();
+    const lowerBackButton = useWindowButtonsAtTopLeft();
     const [status, setStatus] = useState<StageStatus>('loading');
     // A lost WebGL context loads the scene once more; a second loss falls back.
     const [attempt, setAttempt] = useState(0);
@@ -303,6 +310,14 @@ const SceneStage: React.FC<{ definition: SceneDefinition; rendererProps: Rendere
         mode: lyricMode,
         showText: lyrics ? rendererProps.showText : false,
         background: { ...rendererProps.background, mode: backgroundMode, transparent: background ? rendererProps.background?.transparent : true },
+        /*
+         * 借来的表面不画返回按钮：这颗按钮由 VisualizerShell 画在样式自己的画布上方，
+         * 而表面对它来说就是一层跟着 3D 变换走的贴图 —— 按钮会一起被 transform 带进画面里，
+         * 看上去就是「返回键跑到墙里面去了」。整个播放页那颗按钮由外层那层 fallback
+         * renderer（hidden 时的 VisualizerRenderer）负责，它不属于任何表面。
+         */
+        onBack: undefined,
+        alwaysShowBackButton: false,
     });
     const surfaceBox = (surface: (typeof plan.surfaces)[number]) => (
         <div
@@ -330,6 +345,10 @@ const SceneStage: React.FC<{ definition: SceneDefinition; rendererProps: Rendere
                 className="absolute inset-0 select-none overflow-hidden"
                 style={{ touchAction: 'none', visibility: hidden ? 'hidden' : undefined }}
                 data-scene={manifest.id}
+                // 场景铺开时整块画面都归镜头：播放页的滑动切歌看到它就不接这一手
+                // （usePlayerSwipeGesture），拖动只用来转头。不是 data-takes-drag ——
+                // 那个是让 trackLook 让位，这里要的正好相反。
+                data-scene-look=""
             >
                 {!hidden && plan.behindBackground && <VisualizerRenderer {...borrowed(false, true)} />}
                 {!hidden && plan.surfaces.filter(surface => surface.background).map(surfaceBox)}
@@ -337,6 +356,24 @@ const SceneStage: React.FC<{ definition: SceneDefinition; rendererProps: Rendere
                 {!hidden && plan.surfaces.filter(surface => !surface.background).map(surfaceBox)}
                 {!hidden && plan.overlayLyrics && <VisualizerRenderer {...borrowed(true, false)} />}
             </div>
+            {/*
+             * 返回到播放页的那颗按钮画在场景之外：场景自己的那一层整块是 3D 变换过的
+             * （每个表面都挂 matrix3d），按钮挂在里面就会跟着画面一起转、一起缩放，
+             * 看上去像陷在墙里。放在这儿和场景盒子是兄弟，层级和位置都不受它影响。
+             * 样式与 VisualizerShell 那颗保持一致，显隐也沿用 alwaysShowBackButton。
+             */}
+            {!hidden && onBack && (
+                <motion.button
+                    type="button"
+                    aria-label={t('ui.back')}
+                    onClick={() => onBack()}
+                    data-folia-safe-top="shift"
+                    data-folia-player-back
+                    className={`absolute ${lowerBackButton ? 'top-12' : 'top-6'} left-6 z-30 h-10 w-10 rounded-full flex items-center justify-center transition-colors backdrop-blur-md bg-black/20 hover:bg-white/10 text-white/60 pointer-events-auto`}
+                >
+                    <ChevronLeft size={20} />
+                </motion.button>
+            )}
         </>
     );
 };

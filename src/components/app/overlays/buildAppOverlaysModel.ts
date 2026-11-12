@@ -308,6 +308,23 @@ export const buildAppOverlaysModel = ({
                 canTogglePlay: canToggleCurrentPlayback,
                 controlsDisabled: isNowPlayingControlDisabled,
                 lyrics,
+                // 展开的紧凑胶囊拿它画封面和封面旁边的字（歌手 / 专辑，预告时是下一首）。
+                // 和上面那个 toast 是同一份数据、同一个「能不能在这一页出现」的判断；
+                // toast 那边几个字段是可选的，胶囊要的是填好的值，所以在这里逐个补齐。
+                card: nowPlayingToast
+                    ? {
+                        song: nowPlayingToast.song,
+                        trackKey: nowPlayingToast.trackKey,
+                        nextUp: nowPlayingToast.nextUp ?? null,
+                        isNextUp: nowPlayingToast.isNextUp ?? false,
+                        mode: nowPlayingToast.mode ?? 'auto',
+                        timeoutSec: nowPlayingToast.timeoutSec ?? 10,
+                        onActivate: nowPlayingToast.onActivate,
+                        activateLabel: nowPlayingToast.activateLabel,
+                    }
+                    : null,
+                // 播放页胶囊上的定位按钮：回到歌曲墙上正在放的那一首。
+                onFocusLatticeCurrentSong: locatePlayingSongOnWall,
                 onSeek: (time) => {
                     if (isNowPlayingControlDisabled) {
                         return;

@@ -1,6 +1,8 @@
 import { getSongAlbumLabel, getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { beatImpact, handoffProgress } from '../../../stores/motionSignals';
+import { readGyroTiltEnabled, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
 import { selectCoverUrl, usePlaybackStore } from '../../../stores/usePlaybackStore';
+import { subscribeGyroTilt, gyroTiltSupported, type GyroTiltOffsets } from '../../visualizer/backgrounds/gyroTilt';
 import type { DualTheme } from '../../../types';
 import type { VisualizerSharedProps } from '../../visualizer/definition';
 import type { LyricPhase, MusicCharacter, SceneContext, SceneEvents, SceneSong } from '../definition';
@@ -125,6 +127,14 @@ export const createSceneSignals = (getProps: () => VisualizerSharedProps, getSon
 const DRAG_START_PX = 5;
 /** How far a drag turns the head, radians per CSS pixel: across half a wide window is about half a turn. */
 const LOOK_PER_PX = (0.18 * Math.PI) / 180;
+/**
+ * 陀螺仪读数进场景前放大多少倍。
+ *
+ * 背景那边（gyroTilt.ts）要的是「镜头轻轻偏一点」，上限只有 ±9°/±5°；场景里歪手机是想
+ * 「看旁边」，这点角度看不出来。放大到 6 倍，歪到读数上限附近才是一眼能看出的转头，
+ * 同时保留陀螺仪自己的死区与低通——抖还是被压住的。
+ */
+const SCENE_GYRO_GAIN = 6;
 
 /**
  * Drag to look, for every scene alike: a press on the scene that moves turns the head, as a game's mouse
@@ -140,6 +150,41 @@ export const trackLook = (root: HTMLElement) => {
     let pitch = 0;
     let press: { id: number; x: number; y: number; dragging: boolean; down: PointerEvent } | null = null;
     let swallowClick = false;
+    /*
+     * 陀螺仪：歪手机和拖动是两种不同性质的输入，不能简单相加。
+     * 拖动给的是**增量**（这一手转了多少），陀螺仪给的是**绝对姿态**（相对拿起手机那一刻歪了多少）。
+     * 所以陀螺仪的数字每帧作为一个「当前姿态」写进 gyro，look() 交出去的是
+     * 「上一次交出去时的姿态」到「这一次的交出去」之间的差，再并上这一帧拖动的增量。
+     * 这样手一直歪着不动、镜头就停在那个角度，不会每帧继续往里拧。
+     */
+    let gyro: GyroTiltOffsets = { azimuth: 0, elevation: 0 };
+    let sentYaw = 0;
+    let sentPitch = 0;
+    // 开关是全局的（背景也用这一份），关掉时不再订阅，读数留着但立刻归零。
+    let unsubscribeGyro: (() => void) | null = null;
+    const startGyro = () => {
+        if (unsubscribeGyro || !gyroTiltSupported()) return;
+        // 背景那边只要「轻轻偏一点」（±9°/±5°），转镜头要看得见，所以放大再交给场景。
+        // 倍数只作用在场景这一侧，背景的设置一点没动。
+        unsubscribeGyro = subscribeGyroTilt((offsets) => {
+            gyro = {
+                azimuth: offsets.azimuth * SCENE_GYRO_GAIN,
+                elevation: offsets.elevation * SCENE_GYRO_GAIN,
+            };
+        });
+    };
+    const stopGyro = () => {
+        unsubscribeGyro?.();
+        unsubscribeGyro = null;
+        gyro = { azimuth: 0, elevation: 0 };
+    };
+    const syncGyroSubscription = () => {
+        if (readGyroTiltEnabled()) startGyro();
+        else stopGyro();
+    };
+    // 陀螺仪默认关（多数设备读数抖），开了才订阅；开关一变跟着起停。
+    syncGyroSubscription();
+    const unsubscribeEnabled = useGyroSettingsStore.subscribe(syncGyroSubscription);
     const onDown = (event: PointerEvent) => {
         swallowClick = false;
         if (!event.isPrimary || event.button !== 0) return;
@@ -195,13 +240,26 @@ export const trackLook = (root: HTMLElement) => {
     root.addEventListener('pointercancel', onEnd);
     root.addEventListener('click', onClick, true);
     return {
+        /**
+         * 这一帧该转多少：拖动的增量 + 陀螺仪姿态相对上次交出去的变化。
+         *
+         * 拖动的 yaw/pitch 每次交出去就清零（是增量）；陀螺仪的 gyro 是绝对姿态，所以这里记下
+         * 上一次交出去的姿态，用差值参与。两者相加让「一边歪着手机、一边拖动」也顺手。
+         */
         look: () => {
-            const turned = { yaw, pitch };
+            const turned = {
+                yaw: yaw + (gyro.azimuth - sentYaw),
+                pitch: pitch + (gyro.elevation - sentPitch),
+            };
             yaw = 0;
             pitch = 0;
+            sentYaw = gyro.azimuth;
+            sentPitch = gyro.elevation;
             return turned;
         },
         dispose: () => {
+            unsubscribeEnabled();
+            stopGyro();
             root.removeEventListener('pointerdown', onDown, true);
             root.removeEventListener('pointermove', onMove);
             root.removeEventListener('pointerup', onEnd);

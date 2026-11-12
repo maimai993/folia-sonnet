@@ -69,6 +69,10 @@ export function usePlayerSwipeGesture({ enabled, onNext, onPrev }: UsePlayerSwip
         }
         suppressClickRef.current = false;
         if (!enabled) return;
+        // 场景（SceneHost）铺满整块播放页时，这一手是拿来转头看的，不是切歌：不接管，
+        // 否则往左划一下歌就换了，而用户以为只是把视线转过去。用场景自己的标记，
+        // 不能借 data-takes-drag —— 那个的意思是「别转视角」，正相反。
+        if (event.target instanceof Element && event.target.closest('[data-scene-look]')) return;
         startRef.current = { x: event.clientX, y: event.clientY };
         pointerIdRef.current = event.pointerId;
         triggeredRef.current = false;

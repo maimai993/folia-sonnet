@@ -5,6 +5,7 @@ import type { Theme } from '../../../types';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import { Button, Group, PictureGrid, Row, Segmented, Tabs, type SettingsGroupDef } from '../../modal/settings/kit';
 import StudioWindow, { StudioColumnBody } from '../../shared/StudioWindow';
+import GyroTiltSettingsCard from '../../visualizer/backgrounds/GyroTiltSettingsCard';
 import { SHELF_COLUMNS } from '../../visualizer/window/VisPlayground';
 import { FoliumParamFields, type FoliumParamFieldToken } from '../../../mods/params/FoliumParamFields';
 import { mergeFoliumParamValues } from '../../../mods/params/params';
@@ -81,6 +82,8 @@ const SceneOwnSettings: React.FC<{ manifest: SceneManifest }> = ({ manifest }) =
                     onChange={quality => setSceneOptions(manifest.id, { quality })}
                 />
             </Row>
+            {/* 陀螺仪：和背景共用同一个全局开关，开了之后歪手机也能转镜头（拖动照旧可用）。 */}
+            <GyroTiltSettingsCard t={t} />
             {schema.length > 0 && (
                 <Row
                     below={(
