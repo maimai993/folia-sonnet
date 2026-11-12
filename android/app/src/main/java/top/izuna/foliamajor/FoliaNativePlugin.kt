@@ -1807,10 +1807,38 @@ class FoliaNativePlugin : Plugin() {
         try {
             if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
             val port = localAudioServer!!.start()
-            return "http://127.0.0.1:" + port + "/video-layer/current"
+            /*
+             * 带上版本参数。
+             *
+             * 路径本身是固定的（/video-layer/current，永远指向「当前那个视频」），
+             * 只靠它的话，换视频之后 URL 一模一样，WebView 会直接复用缓存里的旧字节 ——
+             * 用户看到的就是「换了没反应，必须重启」。服务端那边也加了 no-store，
+             * 这里再给一个每次都不同的地址，双保险。
+             */
+            return "http://127.0.0.1:" + port + "/video-layer/current?v=" + videoLayerVersion()
         } catch (error: Exception) {
             Log.w(TAG, "Could not start the local server for the video layer", error)
             return null
+        }
+    }
+
+    /**
+     * 视频层内容的版本号：换过文件就变。
+     *
+     * 用文件最后修改时间 + 长度，不引入额外的状态 —— 重新 store 之后这两者都会变，
+     * 而不换文件时去取播放地址（比如页面重建）又能命中同一份缓存。
+     */
+    private fun videoLayerVersion(): String {
+        return try {
+            val file = VideoLayerFile.file(getContext())
+            if (file == null || !file.exists()) {
+                "0"
+            } else {
+                file.lastModified().toString() + "-" + file.length()
+            }
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not read the video layer version", error)
+            "0"
         }
     }
 

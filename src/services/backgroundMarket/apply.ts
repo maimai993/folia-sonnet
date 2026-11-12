@@ -112,8 +112,13 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
  *
  * 不切 visualizerMode：用户可能正用着别的歌词样式，只是想先把莫奈这张备好。
  */
-const applyImageToMonetPortrait = async (url: string, itemId: string): Promise<string | null> => {
-    const file = await fetchAsFile(url, itemId);
+const applyImageToMonetPortrait = async (
+    url: string,
+    itemId: string,
+    shared?: File | null,
+): Promise<string | null> => {
+    // 已经为别的目标下过同一张图就直接用，不再走一次网络（见 applyMarketBackground 里的共用逻辑）。
+    const file = shared ?? await fetchAsFile(url, itemId);
     if (!file) return '图片下载失败';
 
     const uploadPortrait = useVisualizerSettingsStore.getState().handleUploadMonetPortraitImage;
@@ -144,12 +149,17 @@ const applyImageToMonetPortrait = async (url: string, itemId: string): Promise<s
  *   1. 切到 monet 模式（当前若停在别的背景样式，图存得再好也不会被画出来）
  *   2. 把 monet 的来源设成 uploaded-global（默认是封面派生图）
  */
-const applyImageToVisualizer = async (url: string, itemId: string): Promise<string | null> => {
-    const file = await fetchAsFile(url, itemId);
-    if (!file) return '图片下载失败';
+const applyImageToVisualizer = async (
+    url: string,
+    itemId: string,
+    shared?: File | null,
+): Promise<{ error: string | null; file: File | null }> => {
+    // 同上：同一张图只下一次。
+    const file = shared ?? await fetchAsFile(url, itemId);
+    if (!file) return { error: '图片下载失败', file: null };
 
     const uploaded = await uploadMonetBackgroundImage([file]);
-    if (!uploaded.ok) return uploaded.error ?? '图片保存失败';
+    if (!uploaded.ok) return { error: uploaded.error ?? '图片保存失败', file: null };
 
     const settings = useVisualizerSettingsStore.getState();
     settings.handleSetVisualizerBackgroundMode(VISUALIZER_IMAGE_MODE);
@@ -174,7 +184,8 @@ const applyImageToVisualizer = async (url: string, itemId: string): Promise<stri
     if (video.videoLayerEnabled) {
         video.setVideoLayerEnabled(false);
     }
-    return null;
+    // 把这份 File 交回去：同一张图还要存进「莫奈肖像」时不必再下一次。
+    return { error: null, file };
 };
 
 /**
@@ -227,10 +238,27 @@ const applyVideoToVisualizer = async (
      */
     const stale = useVideoLayerSettingsStore.getState();
     if (stale.localFileUrl || stale.localFileName) {
+        /*
+         * 清理超时也**必须**把 localFileUrl 从界面上摘掉。
+         *
+         * VideoLayer 取源是 `localFileUrl ?? videoLayerUrl`（见 VideoLayer.tsx），
+         * 前者优先。clearLocalFile 里有一段原生调用，原生不 resolve 时整条链就卡住，
+         * 超时之后我们往下走、视频也下好了 —— 但那个旧的 localFileUrl 还挂着，
+         * 于是画面放的始终是上一支视频，看起来就是「换了没反应，重启才好」。
+         * 先把它清空，让 source 回落到新下载的 videoLayerUrl。
+         */
         await Promise.race([
             stale.clearLocalFile(),
             new Promise<void>((resolve) => { setTimeout(resolve, 3000); }),
         ]).catch(() => undefined);
+        const afterClear = useVideoLayerSettingsStore.getState();
+        if (afterClear.localFileUrl || afterClear.localFileName) {
+            try {
+                afterClear.setLocalFileDropped();
+            } catch {
+                // 极端情况下拿不到这个方法也不该挡住后面的下载。
+            }
+        }
     }
 
     /*
@@ -311,6 +339,15 @@ export const applyMarketBackground = async (
     let notice: string | undefined;
 
     /*
+     * 同一张图只下一次，两个目标共用这份 File。
+     *
+     * 「App 内」和「莫奈」同时勾选时，以前各走一次 fetchAsFile —— 同一张图下两遍，
+     * 进度条来回跳。但两处存储确实是独立的（一个是莫奈的背景图，一个是它的肖像），
+     * 所以**文件要存两份，网络只需要走一次**。
+     */
+    let sharedImage: File | null = null;
+
+    /*
      * 视频只下一次，两个目标共用同一份字节。
      *
      * 以前是各下各的：桌面壁纸走 `downloadWallpaperVideoFromUrl`、App 内走
@@ -346,11 +383,12 @@ export const applyMarketBackground = async (
                 sharedVideoPath = video.path;
             }
         } else {
-            const failure = await applyImageToVisualizer(mediaUrl, item.id);
-            if (failure) {
-                problems.push(failure);
+            const result = await applyImageToVisualizer(mediaUrl, item.id, sharedImage);
+            if (result.error) {
+                problems.push(result.error);
             } else {
                 applied = true;
+                sharedImage = result.file;
             }
         }
     }
@@ -433,7 +471,7 @@ export const applyMarketBackground = async (
          * 不能复用「App 内」存的图：那一份是莫奈的**背景图**，这里要的是**肖像**，
          * 两处独立存储、画的位置也不同，所以这张图在这里必须自己再存一次。
          */
-        const failure = await applyImageToMonetPortrait(mediaUrl, item.id);
+        const failure = await applyImageToMonetPortrait(mediaUrl, item.id, sharedImage);
         if (failure) {
             problems.push(failure);
         } else {

@@ -1146,6 +1146,15 @@ class LocalAudioServer(context: Context) {
         response.append(if (partial) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 200 OK\r\n")
         response.append("Content-Type: ").append(mime).append("\r\n")
         response.append("Accept-Ranges: bytes\r\n")
+        /*
+         * 这些地址是「固定路径 + 换内容」的（视频层永远是 /video-layer/current）。
+         *
+         * 不显式禁用缓存的话，WebView 会按 URL 缓存上一次的响应体 —— 用户换了视频，
+         * 地址没变，<video> 拿到手的还是旧字节，表现就是「换了没反应，重启才生效」
+         * （重启后缓存没了、server 也重开）。no-store 让每次请求都真正读盘。
+         */
+        response.append("Cache-Control: no-store, no-cache, must-revalidate\r\n")
+        response.append("Pragma: no-cache\r\n")
         response.append("Access-Control-Allow-Origin: *\r\n")
         // crossOrigin="anonymous" 的 <audio> 会带 CORS 语义，把 Range 相关头暴露出来，
         // 拖进度条（发 Range、读 Content-Range）才不会在 CORS 检查上被拦。
