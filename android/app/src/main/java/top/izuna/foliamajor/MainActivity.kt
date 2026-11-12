@@ -486,6 +486,16 @@ class MainActivity : BridgeActivity() {
         // 回前台：把渲染放回来。
         FoliaPlaybackService.appUiVisible = true
         FoliaNativePlugin.emitAppBackground(false)
+        /*
+         * 回前台补一次封面（#309 的兜底）。
+         *
+         * 正常情况下服务自己会退避重试（见 fetchArtwork 里的 ARTWORK_MAX_RETRIES）：
+         * App 在后台时 Web 被冻结，不会有「Web 再推一次」的机会，所以重试必须在原生侧。
+         * 但 Doze 里网络可能整段不可用、四次都失败；用户回前台时网络通常已经好了，
+         * 这时补一次几乎立刻就能把封面补上 —— 这也正是用户看到的「切前台立刻恢复」。
+         * 有了它，那个「立刻恢复」不再是碰巧，而是真的去补。
+         */
+        FoliaPlaybackService.activeService()?.retryMissingArtwork()
     }
 
     override fun onStop() {

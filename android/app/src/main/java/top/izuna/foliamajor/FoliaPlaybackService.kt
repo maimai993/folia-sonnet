@@ -2165,7 +2165,36 @@ class FoliaPlaybackService : android.app.Service() {
     @Volatile
     private var pendingArtworkUrl: String? = null
 
-    private fun fetchArtwork(url: String) {
+    /**
+     * 当前这首歌的封面地址，和已经试过几次。
+     *
+     * 重试要能判断「还是不是那张图」：切歌之后 `pendingArtworkUrl` 会被新歌占住，
+     * 定时器醒过来时拿 `retriedUrl` 和它比一下就知道该不该继续。
+     */
+    private var retriedUrl: String? = null
+    private var artworkRetries = 0
+
+    /**
+     * 回前台时补一次封面（#309）。
+     *
+     * 只在**确实缺着**的时候动：有封面、没在放歌、或者这张图本来就是 blob:/data:
+     * （原生下不到，见 fetchArtwork 入口）都不该白跑一趟网络。
+     *
+     * 重试计数一并清零：这是用户主动回到 App，等于是新的一次尝试，不该被后台那几次
+     * 失败卡住。
+     */
+    fun retryMissingArtwork() {
+        if (cachedArtwork != null) return
+        val url = retriedUrl ?: return
+        if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) return
+        if (pendingArtworkUrl != null) return
+        artworkRetries = 0
+        pendingArtworkUrl = url
+        Log.i(TAG, "Back in the foreground without artwork, fetching it again: $url")
+        fetchArtwork(url, retry = true)
+    }
+
+    private fun fetchArtwork(url: String, retry: Boolean = false) {
         /*
          * blob: / data: 只有 WebView 认，原生没有这条协议。
          *
@@ -2176,6 +2205,12 @@ class FoliaPlaybackService : android.app.Service() {
          */
         if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
             return
+        }
+        // 换了一张图就从头数重试次数。重试自己调过来时（retry = true）不清零，
+        // 否则每次走到这里都把计数抹成 0，退避永远退不上去。
+        if (!retry && retriedUrl != url) {
+            retriedUrl = url
+            artworkRetries = 0
         }
         BackgroundWork.io("artwork") {
             val bitmap = downloadBitmap(url)
@@ -2192,10 +2227,36 @@ class FoliaPlaybackService : android.app.Service() {
              * 一个当时取不到的图床，这首歌的封面就再也补不上了（回前台也不会重试，因为
              * 地址没变、被当成「已经下过了」）。表现正是「后台久了封面没了，退回来也没有」。
              * 放掉之后，Web 下一次 update 推同一个地址就能重新试一次。
+             *
+             * 但只放掉是不够的：**App 在后台时 Web 被冻结，根本不会「下一次 update」**。
+             * 于是这里自己排一次重试 —— 否则这套逻辑只在回前台之后才生效，#309 说的
+             * 「切前台立刻恢复」正是这么来的。退避着试（2s、4s、8s、16s），最多四次：
+             * Doze 里网络可能整段不可用，试得太密只是白耗电。
              */
             if (bitmap == null) {
                 // 只放掉自己那一个：期间可能已经切歌并换了新地址，别把新歌的标记抹掉。
-                if (pendingArtworkUrl == url) pendingArtworkUrl = null
+                val stillWanted = pendingArtworkUrl == url
+                if (stillWanted) pendingArtworkUrl = null
+                if (stillWanted && artworkRetries < ARTWORK_MAX_RETRIES) {
+                    val attempt = artworkRetries + 1
+                    val delayMs = ARTWORK_RETRY_BASE_MS shl (artworkRetries)
+                    Log.i(TAG, "Artwork not fetched, retry $attempt/$ARTWORK_MAX_RETRIES in ${delayMs}ms: $url")
+                    mainHandler.postDelayed({
+                        /*
+                         * 到点了再看一眼还该不该要这张图：
+                         *   · 没有别的下载在跑（pendingArtworkUrl 是空的）；
+                         *   · 封面仍然缺着（期间没被别处补上）；
+                         *   · 还是同一张图（没切歌）。
+                         * 三条都成立才重来一次。artworkRetries 在这里加，不在重试里加，
+                         * 这样「被 Web 重新推一次」会把计数清零，而自己的退避能一路退下去。
+                         */
+                        if (pendingArtworkUrl == null && cachedArtwork == null && retriedUrl == url) {
+                            artworkRetries = attempt
+                            pendingArtworkUrl = url
+                            fetchArtwork(url, retry = true)
+                        }
+                    }, delayMs)
+                }
                 return@io
             }
             cachedArtwork = bitmap
@@ -2545,6 +2606,19 @@ class FoliaPlaybackService : android.app.Service() {
         private const val TAG = "FoliaPlaybackService"
         private const val CHANNEL_ID = "folia_playback"
         private const val NOTIFICATION_ID = 0x1F01
+
+        /**
+         * 封面下载失败后自己重试几次、每次等多久。
+         *
+         * 有这条是因为：App 在后台时 Web 被冻结，不会再有「Web 推一次同一地址」的机会，
+         * 于是原来那套「失败就放开去重标记，等下一次推送」只在回前台之后才生效 ——
+         * 表现正是 #309 说的「久后台封面没了，切前台立刻恢复」。
+         *
+         * 2s、4s、8s、16s 退避四次。Doze 省电模式下网络可能整段不可用，试得太密只是白耗电；
+         * 退避到这个量级，一次几十秒的后台抖动基本都能等到网络回来。
+         */
+        private const val ARTWORK_MAX_RETRIES = 4
+        private const val ARTWORK_RETRY_BASE_MS = 2000L
 
         /**
          * 服务是否还活着。
