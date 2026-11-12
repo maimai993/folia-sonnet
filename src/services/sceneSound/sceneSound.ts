@@ -1,5 +1,6 @@
 import { flattenAcoustics, type AcousticMeshes } from './acousticMaterials';
 import { getSceneAcousticsApi, type RoomRequest, type RoomResult, type SceneAcousticsApi, type Vec3 } from './acousticsTypes';
+import { applyRoomReverbToConsole, clearRoomReverbFromConsole, estimateRoomReverb } from './roomEstimate';
 import { loudnessGain, roomRequestKey } from './roomIr';
 import { createRoomStage, getRoomSlot, onRoomSlot, type RoomIr, type RoomSlot, type RoomStage } from './roomStage';
 
@@ -11,7 +12,13 @@ import { createRoomStage, getRoomSlot, onRoomSlot, type RoomIr, type RoomSlot, t
 // room sound switched off, or before the playback graph exists, the music plays dry and tier is 'off'.
 
 export type RoomOutput = RoomRequest['output'];
-export type RoomTier = 'realtime' | 'cached' | 'off';
+/**
+ * 'realtime' / 'cached'：桌面端由 Steam Audio 算出来的真 IR（现算 / 读缓存）。
+ * 'estimated'：安卓上没有 Steam Audio，从场景几何估出混响参数，交给原生 DSP 的
+ * ReverbStage 演奏（见 roomEstimate.ts）。听感是「在那个厅里」，但没有方位信息。
+ * 'off'：干声。
+ */
+export type RoomTier = 'realtime' | 'cached' | 'estimated' | 'off';
 
 type Point = readonly [number, number, number];
 interface ViewpointPoint { id: string; ear: Point; lookAt: Point; preferred?: boolean }
@@ -122,6 +129,8 @@ export const createRoomSound = ({
 
     const goDry = () => {
         stage?.stage.stop();
+        // 安卓上的房间里那次是写进音频控制台的混响，关掉时要一起还回去，别留着一层湿声。
+        if (tier === 'estimated') clearRoomReverbFromConsole();
         tier = 'off';
     };
 
@@ -135,7 +144,29 @@ export const createRoomSound = ({
             return;
         }
         if (!(await isAvailable()) || stale()) {
-            if (!stale()) goDry();
+            if (stale()) return;
+            /*
+             * 没有 Steam Audio（安卓就是这样：那是桌面端的原生库，手机上装不了）。
+             *
+             * 从场景几何估一组混响参数交给原生 DSP，而不是直接放干声 —— 影厅的
+             * 「声线追踪」在手机上要的是「听起来在那个厅里」，不是逐样本还原那条
+             * IR。估出来的参数走音频控制台 → nativeEqualizer → 原生 ReverbStage，
+             * 这条路本来就有，用户手动调混响也走它。
+             */
+            const estimate = estimateRoomReverb(room, room.materials, options.output);
+            if (estimate) {
+                applyRoomReverbToConsole(estimate);
+                tier = 'estimated';
+                console.log(
+                    `[SceneSound] no acoustics process, estimated the room instead: `
+                    + `RT60 ${estimate.rt60Seconds.toFixed(2)} s, mix ${estimate.mix.toFixed(2)}, `
+                    + `damping ${estimate.damping.toFixed(2)}, pre-delay ${Math.round(estimate.preDelayMs)} ms `
+                    + `(volume ${estimate.room.volume.toFixed(0)} m³, surface ${estimate.room.surface.toFixed(0)} m², `
+                    + `mean absorption ${estimate.room.meanAbsorption.toFixed(2)})`,
+                );
+                return;
+            }
+            goDry();
             return;
         }
         const speakerAt = (id: string) => anchors.speakers().find(speaker => speaker.id === id)?.position;
@@ -230,6 +261,7 @@ export const createRoomSound = ({
             disposed = true;
             stopSlot();
             stage?.stage.stop();
+            if (tier === 'estimated') clearRoomReverbFromConsole();
             tier = 'off';
         },
     };

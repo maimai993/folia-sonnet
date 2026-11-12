@@ -1255,6 +1255,7 @@ export default {
     "sceneQuality_high": "Tinggi",
     "soundTracing": "Pelacakan suara",
     "soundTracingUnsupported": "Adegan ini tidak punya pelacakan suara",
+    "soundTracingEstimated": "Di ponsel ini adalah perkiraan: waktu gema, peredaman, dan pra-tunda dihitung dari geometri dan material aula lalu dimainkan DSP bawaan. Terdengar seperti di ruangan itu, tetapi tanpa informasi arah — pelacakan sungguhan di desktop menjalankan Steam Audio, yang tidak bisa dimuat ponsel.",
     "soundTracingOutput": "Perangkat",
     "soundTracingOutput_headphones": "Headphone",
     "soundTracingOutput_speakers": "Speaker",
