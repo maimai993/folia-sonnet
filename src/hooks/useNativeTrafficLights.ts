@@ -8,7 +8,15 @@ let known: boolean | null = null;
 let pending: Promise<boolean> | null = null;
 
 const askWindow = (): Promise<boolean> => {
-    pending ??= (window.electron?.hasNativeTrafficLights() ?? Promise.resolve(false))
+    /*
+     * Both links need the guard: Android's mod-compat layer installs a `window.electron` object
+     * that does not carry this desktop-only method, so `window.electron?.` alone throws a
+     * TypeError — and an uncaught one unmounts the whole tree under React 19, which is a black
+     * screen with no error UI. `typeof` rather than `?.` on the call: on a missing method the
+     * optional-call form still reads the property first.
+     */
+    const ask = window.electron?.hasNativeTrafficLights;
+    pending ??= (typeof ask === 'function' ? ask.call(window.electron) : Promise.resolve(false))
         .then(value => value, () => false)
         .then((value) => {
             known = value;

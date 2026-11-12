@@ -30,7 +30,9 @@ export const useElectronWindowChrome = () => {
 
     useEffect(() => {
         // The main process polls the unlock hotspot itself, so it has to know which side the row is on.
-        void window.electron?.setMainWindowClickThroughUnlockHover(false, window.innerWidth, lastPointer.current, titlebarSide);
+        // Optional call: Android installs a `window.electron` for mod compat that has no window-chrome
+        // methods, and calling one that is missing throws a TypeError that unmounts the whole tree.
+        void window.electron?.setMainWindowClickThroughUnlockHover?.(false, window.innerWidth, lastPointer.current, titlebarSide);
     }, [titlebarSide]);
 
     useEffect(() => {
