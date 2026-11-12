@@ -12,8 +12,6 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.net.http.SslError;
-import android.webkit.SslErrorHandler;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -46,14 +44,6 @@ import java.util.concurrent.atomic.AtomicLong;
 final class OverlayWindowManager {
 
     private static final String TAG = "FoliaOverlay";
-    /**
-     * 悬浮窗页面的基地址。
-     *
-     * 给 null 会让页面落在 `about:blank`，模组里相对路径的引用一个都发不出去。
-     * 用 `https://localhost/`（宿主自己的 origin）当 base：模组页面本来就把样式与脚本
-     * 全部内联，只看 origin 是否合法，所以这里不需要真实可达。
-     */
-    private static final String OVERLAY_BASE_URL = "https://localhost/";
 
     /** overlay 窗口的身份，对应桌面端的 BrowserWindow 实例。 */
     static final class OverlayWindow {
@@ -276,16 +266,6 @@ final class OverlayWindowManager {
         // 模组页面里要 require('electron')，靠 addJavascriptInterface 注入（见 OverlayBridge）。
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
-        /*
-         * 悬浮窗的 HTML 是用 `loadDataWithBaseURL("https://localhost/")` 塞进去的，
-         * 页面里再去取 `/mods/<id>/<digest>/client.mjs`。这属于「不同 origin 取子资源」
-         * （data 文档 → https），不开这两项的话请求会被 WebView 直接掐掉，
-         * 页面就只剩一个空 body。
-         */
-        webView.getSettings().setAllowFileAccess(true);
-        webView.getSettings().setAllowContentAccess(true);
-        webView.getSettings().setAllowFileAccessFromFileURLs(true);
-        webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
         webView.setBackgroundColor(0x00000000);
         // WebViewClient 要先于 OverlayWindow 建（它挂在 webView 上），而回调里又需要窗口，
         // 所以用一个单元素数组把引用留给回调，避免声明顺序打架。
@@ -304,16 +284,6 @@ final class OverlayWindowManager {
             public void onPageFinished(WebView view, String url) {
                 OverlayWindow target = holder[0];
                 if (target != null && target.onPageFinished != null) target.onPageFinished.run();
-            }
-
-            /*
-             * 宿主用的是 Capacitor 的自签证书（https://localhost），WebView 默认会拒掉。
-             * 悬浮窗只是取同一份本地资源，不存在中间人风险，所以这里直接放行。
-             * 不这么做的话，页面里取 client.mjs 会静默失败，窗口就只剩一个空 body。
-             */
-            @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.proceed();
             }
         });
 
@@ -370,9 +340,6 @@ final class OverlayWindowManager {
     /** 把 HTML 交给窗口。用 `loadDataWithBaseURL`：`loadUrl("data:")` 在部分 WebView 上有长度限制。 */
     void loadHtml(OverlayWindow window, String html, String injection) {
         if (window == null || window.destroyed) return;
-        Log.d(TAG, "loadHtml id=" + window.id
-                + " htmlLen=" + (html == null ? -1 : html.length())
-                + " attached=" + window.attached);
         window.injection = injection;
         /*
          * 注入脚本要**先于页面自己的脚本**执行：模组的页面里第一件事就是
@@ -431,14 +398,7 @@ final class OverlayWindowManager {
                 }
             }
         }
-        /*
-         * 用 loadDataWithBaseURL 而不是 loadUrl("data:")：部分 WebView 对 data: URL
-         * 有长度限制，而模组把整页（含样式与脚本）都内联在 HTML 里，动辄几十 KB。
-         *
-         * baseURL 只用来定 origin（模组页面不引外部资源），给宿主自己的 https://localhost/
-         * 即可；给 null 会让文档落在 about:blank，页面里的相对引用全部失效。
-         */
-        window.webView.loadDataWithBaseURL(OVERLAY_BASE_URL, merged, "text/html", "utf-8", null);
+        window.webView.loadDataWithBaseURL(null, merged, "text/html", "utf-8", null);
         // 页面起来之后就开始喂歌词：模组自己的歌词来自宿主 WebView 的 IPC，
         // 一旦 App 退到后台那条链就断了（页面冻结），只有原生这份是常驻的。
         startLyricsPump();
@@ -561,31 +521,6 @@ final class OverlayWindowManager {
             window.params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         }
         update(window);
-    }
-
-    /**
-     * 让**所有**悬浮窗临时让出触摸（`FLAG_NOT_TOUCHABLE`），或者恢复。
-     *
-     * 为什么需要：悬浮窗是 `TYPE_APPLICATION_OVERLAY`，天生盖在 Activity 之上。
-     * 用户打开设置 / 任何应用内弹窗时，躺在那块区域上的悬浮窗会把点击**吃掉** ——
-     * 表现就是「设置页怎么点都没反应」，而关掉悬浮窗就正常。
-     *
-     * 这里不销毁也不隐藏窗口，只切触摸标志，所以恢复时页面状态不会丢。
-     * 模组自己用 `setIgnoreMouseEvents` 设过的值记在 `ignoringMouse` 里，恢复时照原样还原。
-     */
-    void setAllInteractive(boolean interactive) {
-        for (OverlayWindow window : windows.values()) {
-            if (window == null || window.destroyed) continue;
-            boolean ignore = !interactive || window.ignoringMouse;
-            boolean has = (window.params.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0;
-            if (ignore == has) continue;
-            if (ignore) {
-                window.params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            } else {
-                window.params.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            }
-            update(window);
-        }
     }
 
     /** 显示 / 隐藏。用 `alpha` 而不是 removeView：重建 WebView 会丢页面状态。 */
@@ -742,40 +677,20 @@ final class OverlayWindowManager {
                     + "if(el){"
                     + "  var tag=(el.tagName||'').toLowerCase();"
                     + "  if(tag==='button'||tag==='input'||tag==='select'||tag==='textarea'||tag==='a'){hit=true;}"
-                    + "  /*"
-                    + "   * 再看祖先里的 role/内容可编辑/显式 no-drag 标记。"
-                    + "   *"
-                    + "   * 这里**故意不读 CSS 的 -webkit-app-region**：安卓 WebView 不认这个属性，"
-                    + "   * 模组却普遍把整个 body 写成 `-webkit-app-region: no-drag`（桌面端用它是为了"
-                    + "   * 说「这块别用系统拖拽」）。照着它判断的后果是每次按下都算「落在交互区」，"
-                    + "   * ACTION_MOVE 一律被拒 —— 实测桌面歌词窗口就是这么完全拖不动的。"
-                    + "   */"
                     + "  var n=el;"
                     + "  while(!hit&&n&&n.nodeType===1){"
-                    + "    var role=(n.getAttribute&&n.getAttribute('role'))||'';"
-                    + "    if(role==='button'||role==='slider'||role==='switch'){hit=true;break;}"
-                    + "    if(n.isContentEditable){hit=true;break;}"
-                    + "    if(n.hasAttribute&&n.hasAttribute('data-folia-nodrag')){hit=true;break;}"
+                    + "    var r=getComputedStyle(n).getPropertyValue('-webkit-app-region');"
+                    + "    if(r&&r.indexOf('no-drag')>=0){hit=true;break;}"
                     + "    n=n.parentElement;"
                     + "  }"
                     + "}"
                     + "return hit?'1':'0';"
-                    + "}catch(err){return '0';}})()";
+                    + "}catch(err){return '1';}})()";
             try {
                 window.webView.evaluateJavascript(script, value -> {
                     // 只认最新一次按下的答复；旧的迟到答复直接丢掉。
                     if (seq != probeSeq) return;
-                    /*
-                     * `evaluateJavascript` 把脚本的返回**当 JSON 序列化**再交回来：
-                     * 脚本 return '1' / '0' 到这里是字符串字面量 `"1"` / `"0"`（带引号）。
-                     *
-                     * 这里以前写的是 `!(value.indexOf("0") >= 0)`，等于「值里有 0 就算可交互」，
-                     * 而 '0' 恰恰表示**没命中**可交互元素 —— 语义反了，
-                     * 于是每次按下都被判成「落在按钮上」，拖动永远被 ACTION_MOVE 拒掉，
-                     * 表现就是窗口完全拖不动。现在按「是否等于 1」判断。
-                     */
-                    String raw = value == null ? "" : value.replace("\"", "").trim();
-                    downOnInteractive = "1".equals(raw) || "true".equals(raw);
+                    downOnInteractive = !(value != null && value.indexOf("0") >= 0);
                 });
             } catch (Throwable error) {
                 Log.w(TAG, "probing interactive element failed", error);
@@ -783,45 +698,6 @@ final class OverlayWindowManager {
         }
 
         /** 让页面把 hover 收起（模组自己会在 mouseleave 里改 body.hover）。 */
-        /**
-         * 把事件交给页面自己处理。
-         *
-         * `onTouch` 在 ACTION_DOWN 上返回 true 之后，系统就不再往 WebView 派发了，
-         * 所以「不是拖动」的那些手势要在 `onTouch` 里显式转交。
-         *
-         * 注意事件坐标是相对 overlay 窗口左上角的，而 WebView 正好铺满整个窗口，
-         * 所以 getX/getY 可以直接用。
-         */
-        private boolean forwardToPage(MotionEvent event) {
-            if (window == null || window.destroyed) return false;
-            try {
-                window.webView.onTouchEvent(event);
-            } catch (Throwable error) {
-                Log.w(TAG, "转发触摸给页面失败", error);
-            }
-            // 返回 false 让上层继续按自己的逻辑走（比如系统的手势）。
-            return false;
-        }
-
-        /**
-         * 告诉页面「这次按压取消了」。
-         *
-         * 按下那一下总是先转发给页面（否则拼不出点击），等真正判定成拖动时，
-         * 得补一个 CANCEL 把页面那半截手势收掉，不然松手时它还会当成一次点击。
-         */
-        private void cancelInPage() {
-            if (window == null || window.destroyed) return;
-            try {
-                long now = android.os.SystemClock.uptimeMillis();
-                MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL,
-                        downRawX, downRawY, 0);
-                window.webView.onTouchEvent(cancel);
-                cancel.recycle();
-            } catch (Throwable error) {
-                Log.w(TAG, "撤销页面按压失败", error);
-            }
-        }
-
         private void sendHover(boolean on) {
             if (window == null || window.destroyed) return;
             String type = on ? "mouseenter" : "mouseleave";
@@ -851,54 +727,20 @@ final class OverlayWindowManager {
                     startY = window.params.y;
                     dragging = false;
                     stole = false;
-                    /*
-                     * 探测是异步的（要走一趟 evaluateJavascript），而用户按下后往往立刻就开始滑。
-                     * 这里默认**允许拖**：真落在按钮上时，下面 ACTION_UP 会把这次按下当成点击
-                     * 交给页面（`stole` 仍是 false，webView 照常收到事件），并不会误触发拖动。
-                     * 反过来（默认不许拖、等探测结果）在探测迟到时会把整次拖动吞掉 ——
-                     * 那正是「有时候能拖、有时候拖不动」的来源。
-                     */
-                    downOnInteractive = false;
+                    // 先按「可交互」放行；页面回话说不是，才允许后面拖。
+                    downOnInteractive = true;
                     final int seq = ++probeSeq;
                     probeInteractive(downRawX, downRawY, seq);
                     // 按下即悬停：控制条淡入。**不再定时撤回**，只在真正离开时收。
                     sendHover(true);
-                    /*
-                     * 必须返回 true 把这个手势收下来。
-                     *
-                     * View 的 onTouch 一旦在 ACTION_DOWN 返回 false，系统就认为这个 View 不要
-                     * 这串手势了，后面 ACTION_MOVE 不再派发过来 —— 拖动分支永远走不到，
-                     * 表现就是「窗口完全拖不动」。
-                     *
-                     * 但收下来之后，**按下这一下也要先转发给 WebView**：页面要靠 DOWN 才知道
-                     * 手指落下了，只收到后面的 MOVE/UP 是拼不成一次点击的（按钮全都没反应）。
-                     * 真判定成拖动时，再给页面补一个 CANCEL 把它的这次按压撤销掉。
-                     */
-                    forwardToPage(event);
-                    return true;
+                    return false;
                 case MotionEvent.ACTION_MOVE: {
-                    if (dragging && stole) {
-                        // 已经在拖：继续更新窗口位置。
-                        if (!window.draggable || window.ignoringMouse) return false;
-                        float ddx = event.getRawX() - downRawX;
-                        float ddy = event.getRawY() - downRawY;
-                        window.params.x = clampX(startX + (int) ddx, window.params.width);
-                        window.params.y = clampY(startY + (int) ddy, window.params.height);
-                        update(window);
-                        return true;
-                    }
+                    if (!window.draggable || window.ignoringMouse || downOnInteractive) return false;
                     float dx = event.getRawX() - downRawX;
                     float dy = event.getRawY() - downRawY;
-                    if (!window.draggable || window.ignoringMouse || downOnInteractive) {
-                        return forwardToPage(event);
-                    }
-                    if (Math.hypot(dx, dy) < 10) {
-                        return forwardToPage(event);
-                    }
+                    if (!dragging && Math.hypot(dx, dy) < 10) return false;
                     dragging = true;
                     stole = true;
-                    // 认定是拖动：把刚才转发给页面的那一下按下撤销掉，别让它变成一次点击。
-                    cancelInPage();
                     window.params.x = clampX(startX + (int) dx, window.params.width);
                     window.params.y = clampY(startY + (int) dy, window.params.height);
                     update(window);
@@ -908,18 +750,13 @@ final class OverlayWindowManager {
                 case MotionEvent.ACTION_CANCEL:
                     boolean wasDragging = dragging;
                     dragging = false;
-                    if (!wasDragging) {
-                        // 这一下不是拖动：把手势收尾也交给页面，点击才算完整（DOWN 已经转发过）。
-                        forwardToPage(event);
+                    if (wasDragging) {
+                        // 拖完记住位置，并让页面知道「这一下不是点击」。
+                        window.alphaHint = window.alphaHint;
                     }
-                    boolean handled = wasDragging || stole;
-                    stole = false;
-                    if (!handled) {
-                        sendHover(false);
-                    }
-                    return handled;
+                    return wasDragging || stole;
                 default:
-                    return forwardToPage(event);
+                    return false;
             }
         }
     }

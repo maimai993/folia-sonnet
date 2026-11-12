@@ -1,7 +1,7 @@
 {
   "src/components/app/scratchpad/ScratchpadCanvas.tsx": 871,
   "src/components/FloatingPlayerControls.tsx": 989,
-  "src/components/modal/SettingsModal.tsx": 1454,
+  "src/components/modal/SettingsModal.tsx": 1453,
   "src/components/visualizer/settingsPanels.tsx": 867,
   "src/library/suites/grid/artist/ArtistGridView.tsx": 1578,
   "src/library/suites/grid/collection/GridView.tsx": 2294

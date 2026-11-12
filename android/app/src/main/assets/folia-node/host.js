@@ -616,20 +616,7 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
         if (typeof factory !== 'function') {
             throw new Error(`mod main must export a function, got ${typeof factory}`);
         }
-        const activation = guard.call(id, 'activate', () => {
-            /*
-             * 标出「此刻是哪个模组在跑」：模组同步 `new BrowserWindow()` 建窗时，
-             * shim 用这个值记 owner，卸载时才能只拆它自己的窗口。
-             */
-            const shimModule = require('./electron-shim.cjs');
-            shimModule.setCurrentOwner?.(id);
-            try {
-                return factory(api);
-            } finally {
-                // 激活里如果只是同步建了窗口，到这里就已经记好了；异步的再补一次也无妨。
-                shimModule.setCurrentOwner?.(null);
-            }
-        }, true);
+        const activation = guard.call(id, 'activate', () => factory(api), true);
         if (activation && typeof activation.then === 'function') {
             // 激活是异步的：照旧跟随，不等它，桌面端也是这么做的。
             activation.then(keepDisposer, onActivationRejected);
@@ -644,18 +631,6 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
             runDisposer(disposers.pop());
         }
         rpcHandlers.clear();
-        /*
-         * 兜底：把还没拆的悬浮窗一并拆掉。
-         *
-         * 模组往往在 `deactivate` 里才 destroy 自己的窗口，而有些模组根本没注册
-         * deactivate（或者抛错提前退出），原生那边的 APPLICATION_OVERLAY 窗口就留着了。
-         * 实测重载 lyric-float 之后屏幕上叠了两个一模一样的窗口，下面那个还吃触摸。
-         */
-        try {
-            require('./electron-shim.cjs').destroyWindowsOf?.(id);
-        } catch (error) {
-            emitLog('warn', `清理悬浮窗失败：${error && error.message ? error.message : error}`);
-        }
     };
 
     return {
